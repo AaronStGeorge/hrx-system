@@ -40,9 +40,7 @@ typedef struct loom_run_one_shot_value_specs_t {
 typedef struct loom_run_one_shot_binding_specs_t {
   // Textual binding specs in HAL binding ordinal order.
   const iree_string_view_t* values;
-  // Calling-convention character for each binding spec.
-  const char* conventions;
-  // Number of entries in |values| and |conventions|.
+  // Number of entries in |values|.
   iree_host_size_t count;
 } loom_run_one_shot_binding_specs_t;
 

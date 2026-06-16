@@ -36,6 +36,7 @@ from loom.ir import (
     I32,
     I64,
     INDEX,
+    LOCATION_TAG_SANITIZER_SITE,
     OFFSET,
     SYMBOL_FLAG_IMPORT,
     SYMBOL_FLAG_PUBLIC,
@@ -46,6 +47,7 @@ from loom.ir import (
     DynamicDim,
     DynamicEncoding,
     EncodingInstance,
+    FileLocation,
     FunctionType,
     GroupScope,
     GroupType,
@@ -61,6 +63,7 @@ from loom.ir import (
     StorageType,
     Symbol,
     SymbolKind,
+    TaggedLocation,
     TiedResult,
     Type,
     TypeKind,
@@ -847,6 +850,13 @@ class TestAttributeRoundTrips:
     def test_string_with_spaces(self) -> None:
         assert self._roundtrip_attr("v", "hello world") == "hello world"
 
+    # Bytes.
+    def test_bytes_empty(self) -> None:
+        assert self._roundtrip_attr("v", b"") == b""
+
+    def test_bytes_payload(self) -> None:
+        assert self._roundtrip_attr("v", b"\x00\x11\xfe\xff") == b"\x00\x11\xfe\xff"
+
     # Booleans.
     def test_bool_true(self) -> None:
         assert self._roundtrip_attr("v", True) is True
@@ -1504,3 +1514,38 @@ class TestLocationRoundTrips:
         loc = loaded.locations.get(loaded_op.location_id)
         assert isinstance(loc, OpaqueLocation)
         assert loc.data == b"node_id=42"
+
+    def test_tagged_location_survives(self) -> None:
+        module = Module(name="test")
+        module.sources.append("model.loom")
+        child_id = module.locations.add(
+            FileLocation(source_id=0, start_line=5, start_col=6, end_line=5, end_col=6)
+        )
+        loc_id = module.locations.add(
+            TaggedLocation(
+                tag=LOCATION_TAG_SANITIZER_SITE,
+                child=child_id,
+                data=b"\x01\x2a\xff",
+            )
+        )
+        x = module.add_value(Value(name="x", type=F32))
+        yield_op = Operation(
+            name="test.yield",
+            operands=[x],
+            location_id=loc_id,
+        )
+        block = Block(arg_ids=[x], ops=[yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        loaded = _roundtrip(module)
+        loaded_sym_op = loaded.symbols[0].op
+        assert loaded_sym_op is not None
+        assert loaded_sym_op.regions
+        loaded_op = loaded_sym_op.regions[0].blocks[0].ops[0]
+        assert loaded_op.location_id != 0
+        loc = loaded.locations.get(loaded_op.location_id)
+        assert isinstance(loc, TaggedLocation)
+        assert loc.tag == LOCATION_TAG_SANITIZER_SITE
+        assert loc.child == child_id
+        assert loc.data == b"\x01\x2a\xff"

@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
-#include "iree/modules/hal/types.h"
 #include "iree/tooling/buffer_view_matchers.h"
 #include "loom/util/json.h"
 
@@ -159,181 +158,190 @@ iree_string_view_t loom_testbench_expectation_failure_detail(
                                failure->detail_length);
 }
 
-static const char* loom_testbench_vm_value_type_name(
-    iree_vm_value_type_t type) {
-  switch (type) {
-    case IREE_VM_VALUE_TYPE_I8:
-      return "i8";
-    case IREE_VM_VALUE_TYPE_I16:
-      return "i16";
-    case IREE_VM_VALUE_TYPE_I32:
+static const char* loom_testbench_tooling_value_kind_name(
+    iree_tooling_value_kind_t kind) {
+  switch (kind) {
+    case IREE_TOOLING_VALUE_KIND_NONE:
+      return "none";
+    case IREE_TOOLING_VALUE_KIND_I32:
       return "i32";
-    case IREE_VM_VALUE_TYPE_I64:
+    case IREE_TOOLING_VALUE_KIND_U32:
+      return "u32";
+    case IREE_TOOLING_VALUE_KIND_I64:
       return "i64";
-    case IREE_VM_VALUE_TYPE_F32:
+    case IREE_TOOLING_VALUE_KIND_U64:
+      return "u64";
+    case IREE_TOOLING_VALUE_KIND_F32:
       return "f32";
-    case IREE_VM_VALUE_TYPE_F64:
+    case IREE_TOOLING_VALUE_KIND_F64:
       return "f64";
+    case IREE_TOOLING_VALUE_KIND_RAW_U32:
+      return "raw_u32";
     default:
       return "unknown";
   }
 }
 
-static iree_host_size_t loom_testbench_vm_value_storage_size(
-    iree_vm_value_type_t type) {
-  switch (type) {
-    case IREE_VM_VALUE_TYPE_I8:
-      return sizeof(int8_t);
-    case IREE_VM_VALUE_TYPE_I16:
-      return sizeof(int16_t);
-    case IREE_VM_VALUE_TYPE_I32:
-    case IREE_VM_VALUE_TYPE_F32:
-      return sizeof(int32_t);
-    case IREE_VM_VALUE_TYPE_I64:
-    case IREE_VM_VALUE_TYPE_F64:
-      return sizeof(int64_t);
+static iree_host_size_t loom_testbench_tooling_value_storage_size(
+    iree_tooling_value_kind_t kind) {
+  switch (kind) {
+    case IREE_TOOLING_VALUE_KIND_I32:
+    case IREE_TOOLING_VALUE_KIND_U32:
+    case IREE_TOOLING_VALUE_KIND_F32:
+    case IREE_TOOLING_VALUE_KIND_RAW_U32:
+      return sizeof(uint32_t);
+    case IREE_TOOLING_VALUE_KIND_I64:
+    case IREE_TOOLING_VALUE_KIND_U64:
+    case IREE_TOOLING_VALUE_KIND_F64:
+      return sizeof(uint64_t);
     default:
       return 0;
   }
 }
 
-static iree_status_t loom_testbench_append_vm_value(
-    iree_vm_value_t value, iree_string_builder_t* detail_builder) {
-  switch (value.type) {
-    case IREE_VM_VALUE_TYPE_I8:
-      return iree_string_builder_append_format(detail_builder, "%" PRIi8,
-                                               value.i8);
-    case IREE_VM_VALUE_TYPE_I16:
-      return iree_string_builder_append_format(detail_builder, "%" PRIi16,
-                                               value.i16);
-    case IREE_VM_VALUE_TYPE_I32:
+static iree_status_t loom_testbench_append_tooling_value(
+    const iree_tooling_value_t* value, iree_string_builder_t* detail_builder) {
+  switch (value->kind) {
+    case IREE_TOOLING_VALUE_KIND_I32:
       return iree_string_builder_append_format(detail_builder, "%" PRIi32,
-                                               value.i32);
-    case IREE_VM_VALUE_TYPE_I64:
+                                               value->storage.i32);
+    case IREE_TOOLING_VALUE_KIND_U32:
+      return iree_string_builder_append_format(detail_builder, "%" PRIu32,
+                                               value->storage.u32);
+    case IREE_TOOLING_VALUE_KIND_I64:
       return iree_string_builder_append_format(detail_builder, "%" PRIi64,
-                                               value.i64);
-    case IREE_VM_VALUE_TYPE_F32:
+                                               value->storage.i64);
+    case IREE_TOOLING_VALUE_KIND_U64:
+      return iree_string_builder_append_format(detail_builder, "%" PRIu64,
+                                               value->storage.u64);
+    case IREE_TOOLING_VALUE_KIND_F32:
       return iree_string_builder_append_format(detail_builder, "%g",
-                                               (double)value.f32);
-    case IREE_VM_VALUE_TYPE_F64:
-      return iree_string_builder_append_format(detail_builder, "%g", value.f64);
+                                               (double)value->storage.f32);
+    case IREE_TOOLING_VALUE_KIND_F64:
+      return iree_string_builder_append_format(detail_builder, "%g",
+                                               value->storage.f64);
+    case IREE_TOOLING_VALUE_KIND_RAW_U32:
+      return iree_string_builder_append_format(detail_builder, "0x%08" PRIx32,
+                                               value->storage.u32);
     default:
       return iree_string_builder_append_cstring(detail_builder, "<unknown>");
   }
 }
 
-static iree_status_t loom_testbench_append_variant_kind(
-    const iree_vm_variant_t* variant, iree_string_builder_t* detail_builder) {
-  if (iree_vm_variant_is_empty(*variant)) {
+static iree_status_t loom_testbench_append_value_kind(
+    const loom_testbench_value_t* value,
+    iree_string_builder_t* detail_builder) {
+  if (value == NULL || value->kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
     return iree_string_builder_append_string(detail_builder, IREE_SV("empty"));
   }
-  if (iree_vm_variant_is_value(*variant)) {
-    iree_vm_value_t value = iree_vm_variant_value(*variant);
+  if (loom_testbench_value_is_scalar(value)) {
     return iree_string_builder_append_format(
         detail_builder, "scalar %s",
-        loom_testbench_vm_value_type_name(value.type));
+        loom_testbench_tooling_value_kind_name(value->scalar.kind));
   }
-  if (iree_vm_variant_is_ref(*variant) &&
-      iree_hal_buffer_view_isa(variant->ref)) {
+  if (loom_testbench_value_buffer_view(value) != NULL) {
     return iree_string_builder_append_string(detail_builder,
                                              IREE_SV("buffer_view"));
   }
-  if (iree_vm_variant_is_ref(*variant)) {
-    iree_string_view_t type_name = iree_vm_ref_type_name(variant->ref.type);
-    return iree_string_builder_append_format(
-        detail_builder, "ref %.*s", (int)type_name.size, type_name.data);
+  if (loom_testbench_value_is_buffer(value)) {
+    return iree_string_builder_append_string(detail_builder,
+                                             IREE_SV("storage_buffer"));
   }
   return iree_string_builder_append_string(detail_builder, IREE_SV("unknown"));
 }
 
-static iree_status_t loom_testbench_append_variant_kind_mismatch(
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+static iree_status_t loom_testbench_append_value_kind_mismatch(
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder) {
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_string(detail_builder, IREE_SV("actual ")));
   IREE_RETURN_IF_ERROR(
-      loom_testbench_append_variant_kind(actual, detail_builder));
+      loom_testbench_append_value_kind(actual, detail_builder));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
       detail_builder, IREE_SV(" cannot be compared with expected ")));
   IREE_RETURN_IF_ERROR(
-      loom_testbench_append_variant_kind(expected, detail_builder));
+      loom_testbench_append_value_kind(expected, detail_builder));
   return iree_ok_status();
 }
 
 static iree_status_t loom_testbench_compare_scalar_exact(
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   *out_matched = false;
-  iree_vm_value_t actual_value = iree_vm_variant_value(*actual);
-  iree_vm_value_t expected_value = iree_vm_variant_value(*expected);
-  if (actual_value.type != expected_value.type) {
+  const iree_tooling_value_t* actual_value = &actual->scalar;
+  const iree_tooling_value_t* expected_value = &expected->scalar;
+  if (actual_value->kind != expected_value->kind) {
     return iree_string_builder_append_format(
         detail_builder, "actual scalar type %s does not match expected %s",
-        loom_testbench_vm_value_type_name(actual_value.type),
-        loom_testbench_vm_value_type_name(expected_value.type));
+        loom_testbench_tooling_value_kind_name(actual_value->kind),
+        loom_testbench_tooling_value_kind_name(expected_value->kind));
   }
   iree_host_size_t value_size =
-      loom_testbench_vm_value_storage_size(actual_value.type);
+      loom_testbench_tooling_value_storage_size(actual_value->kind);
   if (value_size == 0) {
     return iree_string_builder_append_format(detail_builder,
                                              "unsupported scalar type %u",
-                                             (unsigned)actual_value.type);
+                                             (unsigned)actual_value->kind);
   }
-  if (memcmp(actual_value.value_storage, expected_value.value_storage,
-             value_size) == 0) {
+  if (memcmp(&actual_value->storage, &expected_value->storage, value_size) ==
+      0) {
     *out_matched = true;
     return iree_ok_status();
   }
 
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       detail_builder, "actual %s value ",
-      loom_testbench_vm_value_type_name(actual_value.type)));
+      loom_testbench_tooling_value_kind_name(actual_value->kind)));
   IREE_RETURN_IF_ERROR(
-      loom_testbench_append_vm_value(actual_value, detail_builder));
+      loom_testbench_append_tooling_value(actual_value, detail_builder));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
       detail_builder, IREE_SV(" does not match "
                               "expected ")));
   IREE_RETURN_IF_ERROR(
-      loom_testbench_append_vm_value(expected_value, detail_builder));
+      loom_testbench_append_tooling_value(expected_value, detail_builder));
   return iree_ok_status();
 }
 
 static iree_status_t loom_testbench_compare_scalar_equal(
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   *out_matched = false;
-  iree_vm_value_t actual_value = iree_vm_variant_value(*actual);
-  iree_vm_value_t expected_value = iree_vm_variant_value(*expected);
-  if (actual_value.type != expected_value.type) {
+  const iree_tooling_value_t* actual_value = &actual->scalar;
+  const iree_tooling_value_t* expected_value = &expected->scalar;
+  if (actual_value->kind != expected_value->kind) {
     return iree_string_builder_append_format(
         detail_builder, "actual scalar type %s does not match expected %s",
-        loom_testbench_vm_value_type_name(actual_value.type),
-        loom_testbench_vm_value_type_name(expected_value.type));
+        loom_testbench_tooling_value_kind_name(actual_value->kind),
+        loom_testbench_tooling_value_kind_name(expected_value->kind));
   }
 
-  switch (actual_value.type) {
-    case IREE_VM_VALUE_TYPE_I8:
-      *out_matched = actual_value.i8 == expected_value.i8;
+  switch (actual_value->kind) {
+    case IREE_TOOLING_VALUE_KIND_I32:
+      *out_matched = actual_value->storage.i32 == expected_value->storage.i32;
       break;
-    case IREE_VM_VALUE_TYPE_I16:
-      *out_matched = actual_value.i16 == expected_value.i16;
+    case IREE_TOOLING_VALUE_KIND_U32:
+    case IREE_TOOLING_VALUE_KIND_RAW_U32:
+      *out_matched = actual_value->storage.u32 == expected_value->storage.u32;
       break;
-    case IREE_VM_VALUE_TYPE_I32:
-      *out_matched = actual_value.i32 == expected_value.i32;
+    case IREE_TOOLING_VALUE_KIND_I64:
+      *out_matched = actual_value->storage.i64 == expected_value->storage.i64;
       break;
-    case IREE_VM_VALUE_TYPE_I64:
-      *out_matched = actual_value.i64 == expected_value.i64;
+    case IREE_TOOLING_VALUE_KIND_U64:
+      *out_matched = actual_value->storage.u64 == expected_value->storage.u64;
       break;
-    case IREE_VM_VALUE_TYPE_F32:
-      *out_matched = actual_value.f32 == expected_value.f32;
+    case IREE_TOOLING_VALUE_KIND_F32:
+      *out_matched = actual_value->storage.f32 == expected_value->storage.f32;
       break;
-    case IREE_VM_VALUE_TYPE_F64:
-      *out_matched = actual_value.f64 == expected_value.f64;
+    case IREE_TOOLING_VALUE_KIND_F64:
+      *out_matched = actual_value->storage.f64 == expected_value->storage.f64;
       break;
     default:
       return iree_string_builder_append_format(detail_builder,
                                                "unsupported scalar type %u",
-                                               (unsigned)actual_value.type);
+                                               (unsigned)actual_value->kind);
   }
   if (*out_matched) {
     return iree_ok_status();
@@ -341,13 +349,13 @@ static iree_status_t loom_testbench_compare_scalar_equal(
 
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       detail_builder, "actual %s value ",
-      loom_testbench_vm_value_type_name(actual_value.type)));
+      loom_testbench_tooling_value_kind_name(actual_value->kind)));
   IREE_RETURN_IF_ERROR(
-      loom_testbench_append_vm_value(actual_value, detail_builder));
+      loom_testbench_append_tooling_value(actual_value, detail_builder));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
       detail_builder, IREE_SV(" does not equal expected ")));
   IREE_RETURN_IF_ERROR(
-      loom_testbench_append_vm_value(expected_value, detail_builder));
+      loom_testbench_append_tooling_value(expected_value, detail_builder));
   return iree_ok_status();
 }
 
@@ -367,35 +375,36 @@ static bool loom_testbench_f64_close(double actual, double expected,
 
 static iree_status_t loom_testbench_compare_scalar_close(
     const loom_testbench_close_expectation_plan_t* close_plan,
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   *out_matched = false;
-  iree_vm_value_t actual_value = iree_vm_variant_value(*actual);
-  iree_vm_value_t expected_value = iree_vm_variant_value(*expected);
-  if (actual_value.type != expected_value.type) {
+  const iree_tooling_value_t* actual_value = &actual->scalar;
+  const iree_tooling_value_t* expected_value = &expected->scalar;
+  if (actual_value->kind != expected_value->kind) {
     return iree_string_builder_append_format(
         detail_builder, "actual scalar type %s does not match expected %s",
-        loom_testbench_vm_value_type_name(actual_value.type),
-        loom_testbench_vm_value_type_name(expected_value.type));
+        loom_testbench_tooling_value_kind_name(actual_value->kind),
+        loom_testbench_tooling_value_kind_name(expected_value->kind));
   }
 
   double actual_f64 = 0.0;
   double expected_f64 = 0.0;
-  switch (actual_value.type) {
-    case IREE_VM_VALUE_TYPE_F32:
-      actual_f64 = (double)actual_value.f32;
-      expected_f64 = (double)expected_value.f32;
+  switch (actual_value->kind) {
+    case IREE_TOOLING_VALUE_KIND_F32:
+      actual_f64 = (double)actual_value->storage.f32;
+      expected_f64 = (double)expected_value->storage.f32;
       break;
-    case IREE_VM_VALUE_TYPE_F64:
-      actual_f64 = actual_value.f64;
-      expected_f64 = expected_value.f64;
+    case IREE_TOOLING_VALUE_KIND_F64:
+      actual_f64 = actual_value->storage.f64;
+      expected_f64 = expected_value->storage.f64;
       break;
     default:
       return iree_string_builder_append_format(
           detail_builder,
           "close expectation requires f32/f64 scalar values, "
           "but actual is %s",
-          loom_testbench_vm_value_type_name(actual_value.type));
+          loom_testbench_tooling_value_kind_name(actual_value->kind));
   }
 
   *out_matched = loom_testbench_f64_close(
@@ -408,33 +417,30 @@ static iree_status_t loom_testbench_compare_scalar_close(
       detail_builder,
       "actual %s value %.17g is not close to expected %.17g "
       "(atol=%.17g, rtol=%.17g)",
-      loom_testbench_vm_value_type_name(actual_value.type), actual_f64,
+      loom_testbench_tooling_value_kind_name(actual_value->kind), actual_f64,
       expected_f64, close_plan->absolute_tolerance,
       close_plan->relative_tolerance);
 }
 
-static void loom_testbench_variant_buffer_view(
-    const iree_vm_variant_t* variant,
+static void loom_testbench_expectation_buffer_view(
+    const loom_testbench_value_t* value,
     iree_hal_buffer_view_t** out_buffer_view) {
   *out_buffer_view = NULL;
-  if (!iree_vm_variant_is_ref(*variant) ||
-      !iree_hal_buffer_view_isa(variant->ref)) {
-    return;
-  }
-  *out_buffer_view = iree_hal_buffer_view_deref(variant->ref);
+  *out_buffer_view = loom_testbench_value_buffer_view(value);
 }
 
 static iree_status_t loom_testbench_compare_buffer_exact(
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   *out_matched = false;
   iree_hal_buffer_view_t* actual_buffer_view = NULL;
   iree_hal_buffer_view_t* expected_buffer_view = NULL;
-  loom_testbench_variant_buffer_view(actual, &actual_buffer_view);
-  loom_testbench_variant_buffer_view(expected, &expected_buffer_view);
+  loom_testbench_expectation_buffer_view(actual, &actual_buffer_view);
+  loom_testbench_expectation_buffer_view(expected, &expected_buffer_view);
   if (!actual_buffer_view || !expected_buffer_view) {
-    return loom_testbench_append_variant_kind_mismatch(actual, expected,
-                                                       detail_builder);
+    return loom_testbench_append_value_kind_mismatch(actual, expected,
+                                                     detail_builder);
   }
   iree_hal_buffer_equality_t equality = {
       .mode = IREE_HAL_BUFFER_EQUALITY_EXACT,
@@ -482,16 +488,17 @@ static bool loom_testbench_hal_element_type_is_close_supported(
 
 static iree_status_t loom_testbench_compare_buffer_close(
     const loom_testbench_close_expectation_plan_t* close_plan,
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   *out_matched = false;
   iree_hal_buffer_view_t* actual_buffer_view = NULL;
   iree_hal_buffer_view_t* expected_buffer_view = NULL;
-  loom_testbench_variant_buffer_view(actual, &actual_buffer_view);
-  loom_testbench_variant_buffer_view(expected, &expected_buffer_view);
+  loom_testbench_expectation_buffer_view(actual, &actual_buffer_view);
+  loom_testbench_expectation_buffer_view(expected, &expected_buffer_view);
   if (!actual_buffer_view || !expected_buffer_view) {
-    return loom_testbench_append_variant_kind_mismatch(actual, expected,
-                                                       detail_builder);
+    return loom_testbench_append_value_kind_mismatch(actual, expected,
+                                                     detail_builder);
   }
 
   IREE_RETURN_IF_ERROR(iree_hal_buffer_view_match_metadata_like(
@@ -575,16 +582,17 @@ static iree_status_t loom_testbench_compare_buffer_close(
 }
 
 static iree_status_t loom_testbench_compare_equal(
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
-  if (iree_vm_variant_is_value(*actual) &&
-      iree_vm_variant_is_value(*expected)) {
+  if (loom_testbench_value_is_scalar(actual) &&
+      loom_testbench_value_is_scalar(expected)) {
     return loom_testbench_compare_scalar_equal(actual, expected, detail_builder,
                                                out_matched);
   }
 
   iree_hal_buffer_view_t* actual_buffer_view = NULL;
-  loom_testbench_variant_buffer_view(actual, &actual_buffer_view);
+  loom_testbench_expectation_buffer_view(actual, &actual_buffer_view);
   if (actual_buffer_view &&
       loom_testbench_hal_element_type_is_close_supported(
           iree_hal_buffer_view_element_type(actual_buffer_view))) {
@@ -602,10 +610,11 @@ static iree_status_t loom_testbench_compare_equal(
 }
 
 static iree_status_t loom_testbench_compare_bitwise(
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
-  if (iree_vm_variant_is_value(*actual) &&
-      iree_vm_variant_is_value(*expected)) {
+  if (loom_testbench_value_is_scalar(actual) &&
+      loom_testbench_value_is_scalar(expected)) {
     return loom_testbench_compare_scalar_exact(actual, expected, detail_builder,
                                                out_matched);
   }
@@ -615,10 +624,11 @@ static iree_status_t loom_testbench_compare_bitwise(
 
 static iree_status_t loom_testbench_compare_close(
     const loom_testbench_close_expectation_plan_t* close_plan,
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
-  if (iree_vm_variant_is_value(*actual) &&
-      iree_vm_variant_is_value(*expected)) {
+  if (loom_testbench_value_is_scalar(actual) &&
+      loom_testbench_value_is_scalar(expected)) {
     return loom_testbench_compare_scalar_close(close_plan, actual, expected,
                                                detail_builder, out_matched);
   }
@@ -626,31 +636,10 @@ static iree_status_t loom_testbench_compare_close(
                                              detail_builder, out_matched);
 }
 
-static iree_status_t loom_testbench_variant_as_nonnegative_dim(
-    iree_vm_variant_t variant, iree_hal_dim_t* out_dim) {
-  if (!iree_vm_variant_is_value(variant)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "dynamic dimension is not a scalar value");
-  }
-  iree_vm_value_t value = iree_vm_variant_value(variant);
+static iree_status_t loom_testbench_value_as_nonnegative_dim(
+    const loom_testbench_value_t* value, iree_hal_dim_t* out_dim) {
   int64_t signed_value = 0;
-  switch (value.type) {
-    case IREE_VM_VALUE_TYPE_I8:
-      signed_value = value.i8;
-      break;
-    case IREE_VM_VALUE_TYPE_I16:
-      signed_value = value.i16;
-      break;
-    case IREE_VM_VALUE_TYPE_I32:
-      signed_value = value.i32;
-      break;
-    case IREE_VM_VALUE_TYPE_I64:
-      signed_value = value.i64;
-      break;
-    default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "dynamic dimension is not an integer value");
-  }
+  IREE_RETURN_IF_ERROR(loom_testbench_value_as_i64(value, &signed_value));
   if (signed_value < 0) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "dynamic dimension is negative");
@@ -688,24 +677,25 @@ static iree_status_t loom_testbench_shape_expectation_dimension(
   }
   loom_value_id_t value_id =
       shape_plan->dimension_value_ids[(*inout_dynamic_index)++];
-  const iree_vm_variant_t* variant = NULL;
+  const loom_testbench_value_t* value = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_value_table_lookup_borrow(table, value_id, &variant));
-  return loom_testbench_variant_as_nonnegative_dim(*variant, out_dim);
+      loom_testbench_value_table_lookup_borrow(table, value_id, &value));
+  return loom_testbench_value_as_nonnegative_dim(value, out_dim);
 }
 
 static iree_status_t loom_testbench_compare_shape(
     const loom_testbench_expectation_plan_t* expectation,
-    const loom_testbench_value_table_t* table, const iree_vm_variant_t* actual,
-    iree_string_builder_t* detail_builder, bool* out_matched) {
+    const loom_testbench_value_table_t* table,
+    const loom_testbench_value_t* actual, iree_string_builder_t* detail_builder,
+    bool* out_matched) {
   *out_matched = false;
   iree_hal_buffer_view_t* actual_buffer_view = NULL;
-  loom_testbench_variant_buffer_view(actual, &actual_buffer_view);
+  loom_testbench_expectation_buffer_view(actual, &actual_buffer_view);
   if (!actual_buffer_view) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_string(detail_builder, IREE_SV("actual ")));
     IREE_RETURN_IF_ERROR(
-        loom_testbench_append_variant_kind(actual, detail_builder));
+        loom_testbench_append_value_kind(actual, detail_builder));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
         detail_builder, IREE_SV(" has no buffer-view shape")));
     return iree_ok_status();
@@ -745,8 +735,8 @@ static iree_status_t loom_testbench_compare_shape(
 static iree_status_t loom_testbench_lookup_expectation_values(
     const loom_testbench_expectation_plan_t* expectation,
     const loom_testbench_value_table_t* table,
-    const iree_vm_variant_t** out_actual,
-    const iree_vm_variant_t** out_expected) {
+    const loom_testbench_value_t** out_actual,
+    const loom_testbench_value_t** out_expected) {
   *out_actual = NULL;
   *out_expected = NULL;
   IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
@@ -763,8 +753,8 @@ static iree_status_t loom_testbench_evaluate_single_expectation(
     const loom_testbench_value_table_t* table,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   const loom_testbench_expectation_plan_t* expectation = prepared->plan;
-  const iree_vm_variant_t* actual = NULL;
-  const iree_vm_variant_t* expected = NULL;
+  const loom_testbench_value_t* actual = NULL;
+  const loom_testbench_value_t* expected = NULL;
   IREE_RETURN_IF_ERROR(loom_testbench_lookup_expectation_values(
       expectation, table, &actual, &expected));
 

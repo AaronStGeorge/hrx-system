@@ -10,6 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 
 namespace loom {
 namespace {
@@ -49,11 +50,65 @@ int64_t LoadLeI64(const std::array<uint8_t, 65>& bytes, size_t offset) {
   return (int64_t)value;
 }
 
+bool Bit(uint32_t value, uint32_t bit) { return ((value >> bit) & 1u) != 0; }
+
+uint32_t Field(uint32_t value, uint32_t shift, uint32_t width) {
+  return (value >> shift) & ((1u << width) - 1u);
+}
+
 void ExpectZeroRange(const std::array<uint8_t, 65>& bytes, size_t begin,
                      size_t end) {
   for (size_t i = begin; i < end; ++i) {
     EXPECT_EQ(bytes[i], 0u) << "offset " << i;
   }
+}
+
+constexpr uint32_t kComputePgmRsrc1VgprCountShift = 0;
+constexpr uint32_t kComputePgmRsrc1VgprCountWidth = 6;
+constexpr uint32_t kComputePgmRsrc1SgprCountShift = 6;
+constexpr uint32_t kComputePgmRsrc1SgprCountWidth = 4;
+constexpr uint32_t kComputePgmRsrc1Denorm16_64Shift = 18;
+constexpr uint32_t kComputePgmRsrc1Denorm16_64Width = 2;
+constexpr uint32_t kComputePgmRsrc1Dx10ClampShift = 21;
+constexpr uint32_t kComputePgmRsrc1IeeeModeShift = 23;
+constexpr uint32_t kComputePgmRsrc1WgpModeShift = 29;
+constexpr uint32_t kComputePgmRsrc1MemoryOrderedShift = 30;
+constexpr uint32_t kComputePgmRsrc1ForwardProgressShift = 31;
+
+constexpr uint32_t kComputePgmRsrc2PrivateSegmentShift = 0;
+constexpr uint32_t kComputePgmRsrc2UserSgprCountShift = 1;
+constexpr uint32_t kComputePgmRsrc2UserSgprCountWidth = 5;
+constexpr uint32_t kComputePgmRsrc2WorkgroupIdXShift = 7;
+constexpr uint32_t kComputePgmRsrc2WorkgroupIdYShift = 8;
+constexpr uint32_t kComputePgmRsrc2WorkgroupIdZShift = 9;
+constexpr uint32_t kComputePgmRsrc2WorkgroupInfoShift = 10;
+constexpr uint32_t kComputePgmRsrc2WorkitemIdShift = 11;
+constexpr uint32_t kComputePgmRsrc2WorkitemIdWidth = 2;
+
+constexpr uint32_t kComputePgmRsrc3AccumOffsetShift = 0;
+constexpr uint32_t kComputePgmRsrc3AccumOffsetWidth = 6;
+
+constexpr uint32_t kKernelCodePropertyPrivateSegmentBufferShift = 0;
+constexpr uint32_t kKernelCodePropertyDispatchPtrShift = 1;
+constexpr uint32_t kKernelCodePropertyQueuePtrShift = 2;
+constexpr uint32_t kKernelCodePropertyKernargSegmentPtrShift = 3;
+constexpr uint32_t kKernelCodePropertyDispatchIdShift = 4;
+constexpr uint32_t kKernelCodePropertyFlatScratchInitShift = 5;
+constexpr uint32_t kKernelCodePropertyPrivateSegmentSizeShift = 6;
+constexpr uint32_t kKernelCodePropertyWavefrontSize32Shift = 10;
+constexpr uint32_t kKernelCodePropertyUsesDynamicStackShift = 11;
+
+bool SupportsWgpMode(const loom_amdgpu_processor_info_t* processor) {
+  switch (processor->kernel_descriptor.profile) {
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11:
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12:
+      return true;
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE:
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9:
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125:
+      return false;
+  }
+  return false;
 }
 
 TEST(AmdgpuDescriptorTest, WritesNoArgGfx1100Descriptor) {
@@ -82,6 +137,231 @@ TEST(AmdgpuDescriptorTest, WritesNoArgGfx1100Descriptor) {
   EXPECT_EQ(LoadLeU16(bytes, 58), 0u);
   ExpectZeroRange(bytes, 60, 64);
   EXPECT_EQ(bytes[64], 0xccu);
+}
+
+TEST(AmdgpuDescriptorTest, EncodesNamedComputePgmRsrc1TargetFeatures) {
+  struct Case {
+    const char* processor;
+    uint32_t wavefront_size;
+    uint32_t expected_vgpr_blocks;
+    uint32_t expected_sgpr_blocks;
+    bool expected_dx10_and_ieee;
+    bool expected_wgp_mode;
+    bool expected_memory_ordered;
+    bool expected_forward_progress;
+    bool expected_accum_offset;
+  };
+  static constexpr Case kCases[] = {
+      {"gfx942", 64, 1, 3, true, false, false, false, true},
+      {"gfx950", 64, 1, 3, true, false, false, false, true},
+      {"gfx1100", 32, 1, 0, true, true, true, true, false},
+      {"gfx1200", 32, 1, 0, false, true, true, true, false},
+      {"gfx1250", 32, 0, 0, false, false, true, true, false},
+  };
+  for (const Case& c : kCases) {
+    loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+    metadata.wavefront_size = c.wavefront_size;
+    metadata.sgpr_count = 20;
+    metadata.vgpr_count = 9;
+
+    loom_amdgpu_kernel_descriptor_t descriptor = {};
+    IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+        iree_make_cstring_view(c.processor), &metadata, 0, &descriptor));
+
+    std::array<uint8_t, 65> bytes;
+    bytes.fill(0);
+    IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_write(
+        &descriptor, iree_make_byte_span(bytes.data(), bytes.size())))
+        << c.processor;
+
+    const uint32_t compute_pgm_rsrc1 = LoadLeU32(bytes, 48);
+    EXPECT_EQ(Field(compute_pgm_rsrc1, kComputePgmRsrc1VgprCountShift,
+                    kComputePgmRsrc1VgprCountWidth),
+              c.expected_vgpr_blocks)
+        << c.processor;
+    EXPECT_EQ(Field(compute_pgm_rsrc1, kComputePgmRsrc1SgprCountShift,
+                    kComputePgmRsrc1SgprCountWidth),
+              c.expected_sgpr_blocks)
+        << c.processor;
+    EXPECT_EQ(Field(compute_pgm_rsrc1, kComputePgmRsrc1Denorm16_64Shift,
+                    kComputePgmRsrc1Denorm16_64Width),
+              3u)
+        << c.processor;
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1Dx10ClampShift),
+              c.expected_dx10_and_ieee)
+        << c.processor;
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1IeeeModeShift),
+              c.expected_dx10_and_ieee)
+        << c.processor;
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1WgpModeShift),
+              c.expected_wgp_mode)
+        << c.processor;
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1MemoryOrderedShift),
+              c.expected_memory_ordered)
+        << c.processor;
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1ForwardProgressShift),
+              c.expected_forward_progress)
+        << c.processor;
+
+    const uint32_t compute_pgm_rsrc3 = LoadLeU32(bytes, 44);
+    EXPECT_EQ(Field(compute_pgm_rsrc3, kComputePgmRsrc3AccumOffsetShift,
+                    kComputePgmRsrc3AccumOffsetWidth),
+              c.expected_accum_offset ? 2u : 0u)
+        << c.processor;
+  }
+}
+
+TEST(AmdgpuDescriptorTest, EncodesComputePgmFieldsForEveryDescriptorProfile) {
+  iree_host_size_t checked_count = 0;
+  for (iree_host_size_t i = 0; i < loom_amdgpu_target_info_processor_count();
+       ++i) {
+    const loom_amdgpu_processor_info_t* processor =
+        loom_amdgpu_target_info_processor_at(i);
+    ASSERT_NE(processor, nullptr);
+    if (processor->kernel_descriptor.profile ==
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE) {
+      continue;
+    }
+    ++checked_count;
+
+    loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+    metadata.wavefront_size = processor->wavefront.default_size;
+    metadata.sgpr_count = 20;
+    metadata.vgpr_count = 9;
+
+    loom_amdgpu_kernel_descriptor_t descriptor = {};
+    IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+        processor->name, &metadata, 0, &descriptor))
+        << processor->name.data;
+
+    std::array<uint8_t, 65> bytes;
+    bytes.fill(0);
+    IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_write(
+        &descriptor, iree_make_byte_span(bytes.data(), bytes.size())))
+        << processor->name.data;
+
+    const uint32_t compute_pgm_rsrc1 = LoadLeU32(bytes, 48);
+    const uint32_t vgpr_granule =
+        metadata.wavefront_size == 32
+            ? processor->kernel_descriptor.vgpr_granules.wave32
+            : processor->kernel_descriptor.vgpr_granules.wave64;
+    const uint32_t expected_vgpr_blocks =
+        (metadata.vgpr_count + vgpr_granule - 1) / vgpr_granule - 1;
+    EXPECT_EQ(Field(compute_pgm_rsrc1, kComputePgmRsrc1VgprCountShift,
+                    kComputePgmRsrc1VgprCountWidth),
+              expected_vgpr_blocks)
+        << processor->name.data;
+
+    const uint32_t expected_sgpr_blocks =
+        loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING)
+            ? 0u
+            : 3u;
+    EXPECT_EQ(Field(compute_pgm_rsrc1, kComputePgmRsrc1SgprCountShift,
+                    kComputePgmRsrc1SgprCountWidth),
+              expected_sgpr_blocks)
+        << processor->name.data;
+    EXPECT_EQ(Field(compute_pgm_rsrc1, kComputePgmRsrc1Denorm16_64Shift,
+                    kComputePgmRsrc1Denorm16_64Width),
+              3u)
+        << processor->name.data;
+    const bool has_dx10_clamp_and_ieee_mode =
+        loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE);
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1Dx10ClampShift),
+              has_dx10_clamp_and_ieee_mode)
+        << processor->name.data;
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1IeeeModeShift),
+              has_dx10_clamp_and_ieee_mode)
+        << processor->name.data;
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1WgpModeShift),
+              SupportsWgpMode(processor))
+        << processor->name.data;
+    const bool uses_gfx10_sgpr_encoding =
+        loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING);
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1MemoryOrderedShift),
+              uses_gfx10_sgpr_encoding)
+        << processor->name.data;
+    EXPECT_EQ(Bit(compute_pgm_rsrc1, kComputePgmRsrc1ForwardProgressShift),
+              uses_gfx10_sgpr_encoding)
+        << processor->name.data;
+
+    const uint32_t compute_pgm_rsrc3 = LoadLeU32(bytes, 44);
+    EXPECT_EQ(
+        Field(compute_pgm_rsrc3, kComputePgmRsrc3AccumOffsetShift,
+              kComputePgmRsrc3AccumOffsetWidth),
+        loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor, LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET)
+            ? 2u
+            : 0u)
+        << processor->name.data;
+  }
+  EXPECT_GT(checked_count, 0u);
+}
+
+TEST(AmdgpuDescriptorTest, EncodesNamedSetupAndCodePropertyFields) {
+  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+  metadata.private_segment_fixed_size = 16;
+  metadata.kernarg_segment_size = 24;
+  metadata.sgpr_count = 20;
+  metadata.vgpr_count = 9;
+
+  loom_amdgpu_kernel_descriptor_t descriptor = {};
+  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+      IREE_SV("gfx1100"), &metadata, 0, &descriptor));
+  descriptor.user_sgpr_count = 9;
+  descriptor.flags |=
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_PTR |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_QUEUE_PTR |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_ID |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_SIZE |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Y |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Z |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_INFO |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_USES_DYNAMIC_STACK;
+
+  std::array<uint8_t, 65> bytes;
+  bytes.fill(0);
+  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_write(
+      &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
+
+  const uint32_t compute_pgm_rsrc2 = LoadLeU32(bytes, 52);
+  EXPECT_TRUE(Bit(compute_pgm_rsrc2, kComputePgmRsrc2PrivateSegmentShift));
+  EXPECT_EQ(Field(compute_pgm_rsrc2, kComputePgmRsrc2UserSgprCountShift,
+                  kComputePgmRsrc2UserSgprCountWidth),
+            9u);
+  EXPECT_TRUE(Bit(compute_pgm_rsrc2, kComputePgmRsrc2WorkgroupIdXShift));
+  EXPECT_TRUE(Bit(compute_pgm_rsrc2, kComputePgmRsrc2WorkgroupIdYShift));
+  EXPECT_TRUE(Bit(compute_pgm_rsrc2, kComputePgmRsrc2WorkgroupIdZShift));
+  EXPECT_TRUE(Bit(compute_pgm_rsrc2, kComputePgmRsrc2WorkgroupInfoShift));
+  EXPECT_EQ(Field(compute_pgm_rsrc2, kComputePgmRsrc2WorkitemIdShift,
+                  kComputePgmRsrc2WorkitemIdWidth),
+            2u);
+
+  const uint16_t kernel_code_properties = LoadLeU16(bytes, 56);
+  EXPECT_FALSE(Bit(kernel_code_properties,
+                   kKernelCodePropertyPrivateSegmentBufferShift));
+  EXPECT_TRUE(Bit(kernel_code_properties, kKernelCodePropertyDispatchPtrShift));
+  EXPECT_TRUE(Bit(kernel_code_properties, kKernelCodePropertyQueuePtrShift));
+  EXPECT_TRUE(
+      Bit(kernel_code_properties, kKernelCodePropertyKernargSegmentPtrShift));
+  EXPECT_TRUE(Bit(kernel_code_properties, kKernelCodePropertyDispatchIdShift));
+  EXPECT_FALSE(
+      Bit(kernel_code_properties, kKernelCodePropertyFlatScratchInitShift));
+  EXPECT_TRUE(
+      Bit(kernel_code_properties, kKernelCodePropertyPrivateSegmentSizeShift));
+  EXPECT_TRUE(
+      Bit(kernel_code_properties, kKernelCodePropertyWavefrontSize32Shift));
+  EXPECT_TRUE(
+      Bit(kernel_code_properties, kKernelCodePropertyUsesDynamicStackShift));
 }
 
 TEST(AmdgpuDescriptorTest, EnablesKernargSegmentPointerFromMetadata) {
@@ -444,20 +724,48 @@ TEST(AmdgpuDescriptorTest, RejectsTooFewUserSgprs) {
           &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
 }
 
-TEST(AmdgpuDescriptorTest, RejectsLegacyFlatScratchUserSgprsOnGfx1100) {
-  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
-  loom_amdgpu_kernel_descriptor_t descriptor = {};
-  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
-      IREE_SV("gfx1100"), &metadata, 0, &descriptor));
-  descriptor.user_sgpr_count = 4;
-  descriptor.flags |=
-      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER;
+TEST(AmdgpuDescriptorTest,
+     RejectsLegacyFlatScratchUserSgprsOnArchitectedFlatScratchTargets) {
+  const loom_amdgpu_kernel_descriptor_flags_t legacy_flat_scratch_flags[] = {
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER,
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT,
+  };
+  iree_host_size_t checked_count = 0;
+  for (iree_host_size_t i = 0; i < loom_amdgpu_target_info_processor_count();
+       ++i) {
+    const loom_amdgpu_processor_info_t* processor =
+        loom_amdgpu_target_info_processor_at(i);
+    ASSERT_NE(processor, nullptr);
+    if (processor->kernel_descriptor.profile ==
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE ||
+        !loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH)) {
+      continue;
+    }
+    ++checked_count;
 
-  std::array<uint8_t, 64> bytes;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_amdgpu_kernel_descriptor_write(
-          &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
+    for (const loom_amdgpu_kernel_descriptor_flags_t flag :
+         legacy_flat_scratch_flags) {
+      loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+      metadata.wavefront_size = processor->wavefront.default_size;
+
+      loom_amdgpu_kernel_descriptor_t descriptor = {};
+      IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+          processor->name, &metadata, 0, &descriptor))
+          << processor->name.data;
+      descriptor.user_sgpr_count = 16;
+      descriptor.flags |= flag;
+
+      std::array<uint8_t, 64> bytes;
+      IREE_EXPECT_STATUS_IS(
+          IREE_STATUS_INVALID_ARGUMENT,
+          loom_amdgpu_kernel_descriptor_write(
+              &descriptor, iree_make_byte_span(bytes.data(), bytes.size())))
+          << processor->name.data;
+    }
+  }
+  EXPECT_GT(checked_count, 0u);
 }
 
 TEST(AmdgpuDescriptorTest, RejectsUnsupportedTarget) {

@@ -1,6 +1,5 @@
 build
 .tmp
 .venv
-.notes
 .beads
 history

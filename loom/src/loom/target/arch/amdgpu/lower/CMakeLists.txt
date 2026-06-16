@@ -100,8 +100,12 @@ loom_cc_library(
     "collective_payload.h"
     "constants.h"
     "control.h"
+    "control_packet.h"
+    "data_symbol.h"
+    "descriptor_ref.h"
     "dot.h"
     "emit.h"
+    "feedback.h"
     "legality.h"
     "lower.h"
     "mask.h"
@@ -111,9 +115,14 @@ loom_cc_library(
     "memory_bank_conflict.h"
     "plan.h"
     "preamble.h"
+    "sanitizer.h"
+    "sanitizer_access.h"
+    "sanitizer_report.h"
+    "signal.h"
     "structural.h"
     "subgroup.h"
     "sync.h"
+    "system_memory.h"
     "table.h"
     "topology.h"
     "types.h"
@@ -137,8 +146,12 @@ loom_cc_library(
     "collective_reduce.c"
     "collective_scan.c"
     "control.c"
+    "control_packet.c"
+    "data_symbol.c"
+    "descriptor_ref.c"
     "dot.c"
     "emit_support.c"
+    "feedback.c"
     "lds_layout.c"
     "mask.c"
     "matrix.c"
@@ -152,12 +165,17 @@ loom_cc_library(
     "preamble.c"
     "prefetch.c"
     "registry.c"
+    "sanitizer.c"
+    "sanitizer_access.c"
+    "sanitizer_report.c"
+    "signal.c"
     "structural.c"
     "subgroup_broadcast.c"
     "subgroup_mask.c"
     "subgroup_shuffle.c"
     "support.c"
     "sync.c"
+    "system_memory.c"
     "table.c"
     "values.c"
   DEPS
@@ -168,6 +186,7 @@ loom_cc_library(
     loom::analysis::contract_vector
     loom::analysis::symbolic_expr
     loom::analysis::view_regions
+    loom::codegen::low::builder
     loom::codegen::low::descriptors
     loom::codegen::low::function
     loom::codegen::low::lower
@@ -180,13 +199,21 @@ loom_cc_library(
     loom::ops::cfg
     loom::ops::combining
     loom::ops::encoding
+    loom::ops::global
     loom::ops::index
     loom::ops::kernel
     loom::ops::low
+    loom::ops::op_defs
+    loom::ops::sanitizer
     loom::ops::scalar
     loom::ops::scf
     loom::ops::vector
     loom::ops::view
+    loom::sanitizer::site_collection
+    loom::sanitizer::site_table
+    loom::target::arch::amdgpu::abi::asan
+    loom::target::arch::amdgpu::abi::feedback
+    loom::target::arch::amdgpu::abi::signal
     loom::target::arch::amdgpu::contracts
     loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::hal::kernel_abi
@@ -207,6 +234,186 @@ loom_cc_library(
     loom::util::fact_table
     loom::util::math
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    control_packet_test
+  SRCS
+    "control_packet_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    data_symbol_test
+  SRCS
+    "data_symbol_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    feedback_test
+  SRCS
+    "feedback_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::verify
+    loom::error::renderer
+    loom::ir
+    loom::ops::cache
+    loom::ops::low
+    loom::ops::op_defs
+    loom::ops::op_registry
+    loom::ops::target
+    loom::target::arch::amdgpu::abi::feedback
+    loom::target::arch::amdgpu::abi::signal
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+    loom::verify
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    sanitizer_access_test
+  SRCS
+    "sanitizer_access_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::verify
+    loom::error::renderer
+    loom::ir
+    loom::ops::cache
+    loom::ops::low
+    loom::ops::op_defs
+    loom::ops::op_registry
+    loom::ops::target
+    loom::target::arch::amdgpu::abi::asan
+    loom::target::arch::amdgpu::abi::feedback
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+    loom::verify
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    sanitizer_report_test
+  SRCS
+    "sanitizer_report_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::verify
+    loom::error::renderer
+    loom::ir
+    loom::ops::cache
+    loom::ops::low
+    loom::ops::op_defs
+    loom::ops::op_registry
+    loom::ops::target
+    loom::target::arch::amdgpu::abi::feedback
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+    loom::verify
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    signal_test
+  SRCS
+    "signal_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::cache
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::abi::signal
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    system_memory_test
+  SRCS
+    "system_memory_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::cache
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
 )
 endif()
 

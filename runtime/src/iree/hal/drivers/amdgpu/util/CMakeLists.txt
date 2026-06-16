@@ -455,6 +455,44 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    feedback_channel
+  HDRS
+    "feedback_channel.h"
+  SRCS
+    "feedback_channel.c"
+  DEPS
+    ::libhsa
+    ::topology
+    ::vmem
+    iree::base
+    iree::base::internal
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::device::headers
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    shadow_map
+  HDRS
+    "shadow_map.h"
+  SRCS
+    "shadow_map.c"
+  DEPS
+    ::libhsa
+    ::vmem
+    iree::base
+    iree::base::internal
+    iree::base::threading
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     block_pool
   HDRS
     "block_pool.h"
@@ -529,6 +567,7 @@ iree_cc_library(
     ::block_pool
     ::device_library
     ::device_library_target
+    ::feedback_channel
     ::global_table
     ::info
     ::kfd
@@ -986,8 +1025,8 @@ iree_amdgpu_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
   SRCS
     "queue_benchmark_testdata.c"
   TESTONLY
@@ -1086,6 +1125,102 @@ iree_cc_test(
     ::libhsa
     ::topology
     ::vmem
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    feedback_channel_test
+  SRCS
+    "feedback_channel_test.cc"
+  DEPS
+    ::feedback_channel
+    ::libhsa
+    ::topology
+    iree::base
+    iree::hal::drivers::amdgpu::device::headers
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_amdgpu_binary_variants_embed_data(
+  NAME
+    feedback_channel_test_kernels
+  TARGET
+    amdgcn-amd-amdhsa
+  TARGETS
+    ${IREE_HAL_AMDGPU_TARGETS}
+  BINARY_NAME_PREFIX
+    feedback_channel_test_kernels
+  C_FILE_OUTPUT
+    "feedback_channel_test_kernels.c.embed.c"
+  H_FILE_OUTPUT
+    "feedback_channel_test_kernels.h"
+  IDENTIFIER
+    "iree_hal_amdgpu_feedback_channel_test_kernels"
+  INTERNAL_HDRS
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+  SRCS
+    "feedback_channel_test_kernels.c"
+  TESTONLY
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    feedback_channel_live_test
+  SRCS
+    "feedback_channel_live_test.cc"
+  DEPS
+    ::feedback_channel
+    ::feedback_channel_test_kernels
+    ::libhsa
+    ::packet
+    ::queue_primitives
+    ::target_id
+    ::topology
+    iree::base
+    iree::hal::drivers::amdgpu::abi
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    shadow_map_test
+  SRCS
+    "shadow_map_test.cc"
+  DEPS
+    ::shadow_map
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main

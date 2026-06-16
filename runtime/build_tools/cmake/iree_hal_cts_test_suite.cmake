@@ -142,6 +142,7 @@ function(iree_hal_cts_test_suite)
       "dispatch_tests\;iree::hal::cts::command_buffer::all_dispatch_tests"
       "executable_tests\;iree::hal::cts::core::all_executable_tests"
       "queue_dispatch_tests\;iree::hal::cts::queue::queue_dispatch_test"
+      "sanitizer_tests\;iree::hal::cts::sanitizer::all_tests"
     )
     foreach(_PAIR ${_EXECUTABLE_SUITES})
       list(GET _PAIR 0 _SUFFIX)

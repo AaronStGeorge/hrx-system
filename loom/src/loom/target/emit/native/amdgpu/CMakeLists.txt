@@ -211,6 +211,18 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_library(
   NAME
+    text_fixup
+  HDRS
+    "text_fixup.h"
+  DEPS
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_library(
+  NAME
     encoding
   HDRS
     "encoding.h"
@@ -219,6 +231,7 @@ loom_cc_library(
   DEPS
     ::register_class
     ::storage_layout
+    ::text_fixup
     iree::base
     iree::base::internal::arena
     loom::codegen::low::allocation
@@ -234,6 +247,35 @@ loom_cc_library(
     loom::target::arch::amdgpu::target_info
     loom::target::emit::native::fragment
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_test(
+  NAME
+    encoding_test
+  SRCS
+    "encoding_test.cc"
+  DEPS
+    ::encoding
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::frame
+    loom::codegen::low::function
+    loom::codegen::low::text_asm
+    loom::codegen::low::verify
+    loom::error::diagnostic
+    loom::format::text::parser
+    loom::ir
+    loom::ops::low
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::ops
+    loom::target::arch::amdgpu::planning::packet_plan
+    loom::target::low_descriptor_registry
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.emit.amdgpu"
 )
 endif()
 
@@ -368,12 +410,44 @@ loom_cc_library(
   DEPS
     ::descriptor
     ::metadata
+    ::text_fixup
     iree::base
     iree::base::internal::arena
     iree::io::stream
     loom::target::arch::amdgpu::target_info
     loom::target::emit::native::elf
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_library(
+  NAME
+    runtime_globals
+  HDRS
+    "runtime_globals.h"
+  SRCS
+    "runtime_globals.c"
+  DEPS
+    ::hsaco
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_test(
+  NAME
+    runtime_globals_test
+  SRCS
+    "runtime_globals_test.cc"
+  DEPS
+    ::runtime_globals
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.emit.amdgpu"
 )
 endif()
 
@@ -389,6 +463,7 @@ loom_cc_library(
     ::kernel_assembly
     ::kernel_hsaco
     ::preflight
+    ::runtime_globals
     ::spill_lowering
     iree::base
     iree::base::internal::arena
@@ -401,6 +476,7 @@ loom_cc_library(
     loom::error::error_defs
     loom::ir
     loom::ops::func_symbol_facts
+    loom::ops::global
     loom::ops::low
     loom::ops::target
     loom::target::arch::amdgpu::error_defs
@@ -433,6 +509,7 @@ loom_cc_test(
     "hal_kernel_library_test.cc"
   DEPS
     ::hal_kernel_library
+    ::runtime_globals
     iree::base
     iree::base::internal::arena
     iree::testing::gtest
@@ -442,12 +519,16 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::op_registry
+    loom::ops::sanitizer
+    loom::sanitizer::site_table
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::error_defs
-    loom::target::arch::amdgpu::ops
+    loom::target::arch::amdgpu::provider
     loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::target_info
+    loom::target::emit::native::elf
     loom::testing::diagnostic_matchers
+    loom::tooling::compile::pipeline
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
@@ -486,6 +567,7 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::target::arch::amdgpu::target_info
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"

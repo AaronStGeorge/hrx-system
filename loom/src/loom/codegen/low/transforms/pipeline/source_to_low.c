@@ -13,6 +13,7 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/sanitizer/options_cli.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/low_legality.h"
 
@@ -29,6 +30,10 @@ typedef struct loom_low_source_to_low_pass_state_t {
   loom_target_low_legality_diagnostic_flags_t legality_diagnostic_flags;
   // True when diagnostics was explicitly provided.
   bool has_diagnostics_option;
+  // Sanitizer assertion failure reporting behavior.
+  loom_sanitizer_reporting_mode_t sanitizer_reporting_mode;
+  // True when sanitizer-reporting was explicitly provided.
+  bool has_sanitizer_reporting_option;
 } loom_low_source_to_low_pass_state_t;
 
 typedef struct loom_low_source_to_low_parse_context_t {
@@ -46,6 +51,8 @@ static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
     {IREE_SVL("max-errors"),
      IREE_SVL("Maximum number of source-to-low diagnostics to emit; zero "
               "means no limit.")},
+    {IREE_SVL("sanitizer-reporting"),
+     IREE_SVL("Sanitizer assertion failure reporting mode: default or trap.")},
 };
 
 #define LOOM_LOW_SOURCE_TO_LOW_STATISTICS(V, statistics_type)                \
@@ -135,6 +142,20 @@ static iree_status_t loom_low_source_to_low_parse_diagnostics(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_source_to_low_parse_sanitizer_reporting(
+    iree_string_view_t value, loom_low_source_to_low_parse_context_t* context) {
+  if (context->state->has_sanitizer_reporting_option) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "duplicate option 'sanitizer-reporting' for pass 'source-to-low'");
+  }
+  IREE_RETURN_IF_ERROR(loom_sanitizer_reporting_mode_parse(
+      value, IREE_SV("source-to-low option 'sanitizer-reporting'"),
+      &context->state->sanitizer_reporting_mode));
+  context->state->has_sanitizer_reporting_option = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_source_to_low_parse_option(
     void* user_data, iree_string_view_t name, iree_string_view_t value) {
   loom_low_source_to_low_parse_context_t* context =
@@ -151,6 +172,9 @@ static iree_status_t loom_low_source_to_low_parse_option(
         IREE_SV("source-to-low"), name, value, &max_errors));
     return loom_low_source_to_low_parse_max_errors(max_errors, context);
   }
+  if (iree_string_view_equal(name, IREE_SV("sanitizer-reporting"))) {
+    return loom_low_source_to_low_parse_sanitizer_reporting(value, context);
+  }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "unknown option '%.*s' for pass 'source-to-low'",
                           (int)name.size, name.data);
@@ -164,6 +188,7 @@ iree_status_t loom_low_source_to_low_create(loom_pass_t* pass,
   memset(state, 0, sizeof(*state));
   state->control_flow_lowering = LOOM_LOW_CONTROL_FLOW_LOWERING_CFG;
   state->max_errors = 20;
+  state->sanitizer_reporting_mode = LOOM_SANITIZER_REPORTING_MODE_DEFAULT;
 
   loom_low_source_to_low_parse_context_t context = {
       .state = state,
@@ -192,6 +217,13 @@ iree_status_t loom_low_source_to_low_create(loom_pass_t* pass,
       if (iree_string_view_equal(option->schema->name, IREE_SV("max-errors"))) {
         IREE_RETURN_IF_ERROR(loom_low_source_to_low_parse_max_errors(
             option->uint32_value, &context));
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name,
+                                 IREE_SV("sanitizer-reporting"))) {
+        IREE_RETURN_IF_ERROR(loom_low_source_to_low_parse_sanitizer_reporting(
+            option->schema->enum_values[option->enum_value_index].value,
+            &context));
         continue;
       }
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -237,6 +269,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
+  loom_low_lower_module_state_t* module_state = NULL;
   loom_low_source_selection_list_t selection_list = {0};
   const loom_low_source_selection_options_t selection_options = {
       .policy_registry = policy_registry,
@@ -248,6 +281,10 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   };
   iree_status_t status = loom_low_select_source_symbols(
       module, &selection_options, &selection_arena, &selection_list);
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_low_lower_module_state_create(&selection_arena, &module_state);
+  }
   bool emitted_error_diagnostics = false;
   uint32_t declaration_count = 0;
   for (iree_host_size_t i = 0;
@@ -268,6 +305,10 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .max_errors = state ? state->max_errors : 20,
         .control_flow_lowering = state ? state->control_flow_lowering
                                        : LOOM_LOW_CONTROL_FLOW_LOWERING_CFG,
+        .sanitizer_reporting_mode = state
+                                        ? state->sanitizer_reporting_mode
+                                        : LOOM_SANITIZER_REPORTING_MODE_DEFAULT,
+        .module_state = module_state,
     };
     loom_low_lower_result_t lower_result = {0};
     status = loom_low_lower_import_declaration(module, selection->func,
@@ -320,6 +361,10 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .max_errors = state ? state->max_errors : 20,
         .control_flow_lowering = state ? state->control_flow_lowering
                                        : LOOM_LOW_CONTROL_FLOW_LOWERING_CFG,
+        .sanitizer_reporting_mode = state
+                                        ? state->sanitizer_reporting_mode
+                                        : LOOM_SANITIZER_REPORTING_MODE_DEFAULT,
+        .module_state = module_state,
         .report_allocator = source_low_report_allocator,
     };
     loom_low_lower_result_t lower_result = {0};
@@ -343,6 +388,10 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       ++function_count;
     }
     loom_low_lower_result_deinitialize(&lower_result);
+  }
+  if (iree_status_is_ok(status) && !emitted_error_diagnostics) {
+    status = loom_low_source_selection_finalize_policies(
+        module, &selection_list, module_state, &selection_arena);
   }
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);

@@ -21,6 +21,7 @@
 #include "loomc/iree.h"
 #include "loomc/target.h"
 #include "module.h"
+#include "option_chain.h"
 #include "result.h"
 #include "target.h"
 
@@ -117,9 +118,12 @@ static loomc_status_t loomc_pass_program_validate_target_pipeline_options(
         LOOMC_STATUS_INVALID_ARGUMENT,
         "target pipeline options structure_size is too small");
   }
-  loomc_target_selection_t* target_selection = NULL;
+  loomc_option_chain_t option_chain = {0};
   LOOMC_RETURN_IF_ERROR(
-      loomc_target_selection_options_resolve(options->next, &target_selection));
+      loomc_option_chain_resolve(options->next,
+                                 LOOMC_OPTION_CHAIN_ALLOW_TARGET_SELECTION |
+                                     LOOMC_OPTION_CHAIN_ALLOW_SANITIZER,
+                                 &option_chain));
   LOOMC_RETURN_IF_ERROR(
       loomc_pass_program_validate_string_view(options->identifier));
   switch (options->kind) {
@@ -288,20 +292,27 @@ loomc_pass_program_target_control_flow_lowering(
 
 static loom_target_pipeline_options_t
 loomc_pass_program_target_pipeline_options(
-    const loomc_target_pipeline_options_t* options) {
+    const loomc_target_pipeline_options_t* options,
+    const loomc_option_chain_t* option_chain) {
   if (options == NULL) {
-    return (loom_target_pipeline_options_t){0};
+    return (loom_target_pipeline_options_t){
+        .sanitizer = option_chain ? option_chain->sanitizer
+                                  : (loom_sanitizer_options_t){0},
+    };
   }
   return (loom_target_pipeline_options_t){
       .source_to_low_max_errors = options->source_to_low_max_errors,
       .control_flow_lowering = loomc_pass_program_target_control_flow_lowering(
           options->control_flow_lowering),
+      .sanitizer = option_chain ? option_chain->sanitizer
+                                : (loom_sanitizer_options_t){0},
   };
 }
 
 static loomc_status_t loomc_pass_program_build_target_pipeline(
     loomc_pass_program_t* pass_program,
     const loomc_target_pipeline_options_t* options,
+    const loomc_option_chain_t* option_chain,
     const loomc_pass_program_compile_state_t* state,
     const loom_op_t** out_pipeline_op) {
   *out_pipeline_op = NULL;
@@ -313,7 +324,7 @@ static loomc_status_t loomc_pass_program_build_target_pipeline(
   }
 
   loom_target_pipeline_options_t internal_options =
-      loomc_pass_program_target_pipeline_options(options);
+      loomc_pass_program_target_pipeline_options(options, option_chain);
   loom_op_t* pipeline_op = NULL;
   iree_status_t status = iree_ok_status();
   switch (options ? options->kind : LOOMC_TARGET_PIPELINE_KIND_PREPARED_LOW) {
@@ -597,11 +608,15 @@ loomc_status_t loomc_pass_program_create_from_target_pipeline(
   }
   LOOMC_RETURN_IF_ERROR(
       loomc_pass_program_validate_target_pipeline_options(options));
-  loomc_target_selection_t* target_selection = NULL;
-  LOOMC_RETURN_IF_ERROR(loomc_target_selection_options_resolve(
-      options ? options->next : NULL, &target_selection));
+  loomc_option_chain_t option_chain = {0};
+  LOOMC_RETURN_IF_ERROR(
+      loomc_option_chain_resolve(options ? options->next : NULL,
+                                 LOOMC_OPTION_CHAIN_ALLOW_TARGET_SELECTION |
+                                     LOOMC_OPTION_CHAIN_ALLOW_SANITIZER,
+                                 &option_chain));
   LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
-      target_selection, loomc_context_target_environment(context)));
+      option_chain.target_selection,
+      loomc_context_target_environment(context)));
 
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
@@ -624,12 +639,13 @@ loomc_status_t loomc_pass_program_create_from_target_pipeline(
   if (loomc_status_is_ok(status)) {
     status = loomc_pass_program_compile_state_initialize(
         pass_program,
-        loomc_target_selection_loom_target_selection(target_selection),
+        loomc_target_selection_loom_target_selection(
+            option_chain.target_selection),
         &compile_state);
   }
   if (loomc_status_is_ok(status)) {
     status = loomc_pass_program_build_target_pipeline(
-        pass_program, options, &compile_state, &pipeline_op);
+        pass_program, options, &option_chain, &compile_state, &pipeline_op);
   }
   if (loomc_status_is_ok(status)) {
     status = loomc_pass_program_compile_pipeline_op_with_state(

@@ -150,6 +150,38 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
+    runtime_requirements
+  HDRS
+    "runtime_requirements.h"
+  SRCS
+    "runtime_requirements.c"
+  DEPS
+    iree::base
+    loom::sanitizer::options
+    loom::target::pipeline_options
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    runtime_requirements_test
+  SRCS
+    "runtime_requirements_test.cc"
+  DEPS
+    ::runtime_requirements
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::sanitizer::options
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
     legalization
   HDRS
     "legalization.h"
@@ -274,6 +306,87 @@ loom_cc_test(
     loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::target_info
     loom::target::provider
+    loom::testing::module_ptr
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU AND LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    sanitizer_feedback_test
+  SRCS
+    "sanitizer_feedback_test.cc"
+  DEPS
+    iree::async
+    iree::async::util::proactor_pool
+    iree::base
+    iree::base::internal::arena
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::buffer
+    iree::hal::drivers::amdgpu::registration
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::builder
+    loom::codegen::low::text_asm
+    loom::format::text::parser
+    loom::ir
+    loom::ops::global
+    loom::ops::low
+    loom::ops::op_defs
+    loom::ops::op_registry
+    loom::ops::sanitizer
+    loom::sanitizer::options
+    loom::sanitizer::site_table
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::lower
+    loom::target::arch::amdgpu::ops
+    loom::target::arch::amdgpu::provider
+    loom::target::arch::amdgpu::records::target_records
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+    loom::testing::diagnostic_matchers
+    loom::testing::module_ptr
+    loom::tooling::execution::hal::invocation
+    loom::tooling::target::amdgpu::artifact_provider
+  LABELS
+    "driver=amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+    "iree-build-requirement=loom.target.arch.amdgpu"
+  RESOURCE_GROUP
+    loom-amdgpu-tests
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    sanitizer_site_table_test
+  SRCS
+    "sanitizer_site_table_test.cc"
+  DEPS
+    iree::base
+    iree::base::core_headers
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::pipeline::pass_environment
+    loom::format::text::parser
+    loom::ir
+    loom::ops::global
+    loom::ops::op_registry
+    loom::ops::sanitizer
+    loom::pass::builtin_registry
+    loom::pass::tooling
+    loom::sanitizer::site_table
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::lower
+    loom::target::arch::amdgpu::ops
     loom::testing::module_ptr
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

@@ -337,6 +337,7 @@ TEST_F(SpirvVulkanHalArtifactProviderTest, EmitsRawBdaSpirvArtifact) {
       &loom_spirv_vulkan_hal_artifact_provider, module.get(), &target,
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
+      /*target_pipeline_options=*/nullptr,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
       /*artifact_manifest=*/nullptr, /*report=*/nullptr,
       iree_allocator_system(), &emitted, &artifact));
@@ -376,6 +377,7 @@ TEST_F(SpirvVulkanHalArtifactProviderTest, EmitsAllCompatibleEntries) {
       &loom_spirv_vulkan_hal_artifact_provider, module.get(), &target,
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
+      /*target_pipeline_options=*/nullptr,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
       /*artifact_manifest=*/nullptr, /*report=*/nullptr,
       iree_allocator_system(), &emitted, &artifact));

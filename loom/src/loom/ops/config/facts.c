@@ -11,8 +11,6 @@
 #include "loom/ir/module.h"
 #include "loom/ops/config/ops.h"
 
-#define LOOM_CONFIG_DECL_PREDICATES_ATTR_INDEX 1
-
 static const loom_op_t* loom_config_get_definition(const loom_module_t* module,
                                                    const loom_op_t* op) {
   loom_symbol_ref_t ref = loom_config_get_config(op);
@@ -68,17 +66,10 @@ static bool loom_config_predicate_facts_support_type(loom_type_t type) {
          loom_scalar_type_is_integer(scalar_type);
 }
 
-static loom_attribute_t loom_config_decl_predicate_list(const loom_op_t* op) {
-  if (!op || op->attribute_count <= LOOM_CONFIG_DECL_PREDICATES_ATTR_INDEX) {
-    return loom_attr_absent();
-  }
-  return loom_op_attrs(op)[LOOM_CONFIG_DECL_PREDICATES_ATTR_INDEX];
-}
-
 static void loom_config_get_apply_decl_predicates(
     const loom_module_t* module, const loom_op_t* op,
     const loom_op_t* definition_op, loom_value_facts_t* result_facts) {
-  loom_attribute_t predicates = loom_config_decl_predicate_list(definition_op);
+  loom_attribute_t predicates = loom_config_decl_predicates(definition_op);
   if (predicates.kind != LOOM_ATTR_PREDICATE_LIST || predicates.count == 0 ||
       !predicates.predicate_list) {
     return;

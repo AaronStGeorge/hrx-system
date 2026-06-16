@@ -17,6 +17,7 @@
 #include "iree/hal/drivers/amdgpu/device_spec_builder.h"
 #include "iree/hal/drivers/amdgpu/executable.h"
 #include "iree/hal/drivers/amdgpu/executable_cache.h"
+#include "iree/hal/drivers/amdgpu/feedback_state.h"
 #include "iree/hal/drivers/amdgpu/host_queue_profile.h"
 #include "iree/hal/drivers/amdgpu/host_queue_profile_events.h"
 #include "iree/hal/drivers/amdgpu/physical_device.h"
@@ -173,6 +174,21 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
   out_options->host_queues.upload_capacity =
       IREE_HAL_AMDGPU_PHYSICAL_DEVICE_DEFAULT_HOST_QUEUE_UPLOAD_CAPACITY;
 
+  out_options->asan.shadow_scale_shift =
+      IREE_HAL_AMDGPU_SHADOW_MAP_DEFAULT_SCALE_SHIFT;
+  out_options->asan.report_policy =
+      IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY;
+  out_options->asan.shadow_mode = IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_SPARSE;
+  out_options->asan.shadow_backing =
+      IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL;
+  out_options->asan.shadow_size = IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE;
+  out_options->asan.owned_application_size =
+      IREE_HAL_AMDGPU_ASAN_DEFAULT_OWNED_APPLICATION_SIZE;
+  out_options->asan.shadow_slab_size =
+      IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE;
+  out_options->asan.quarantine_size =
+      IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE;
+
   out_options->preallocate_pools = 1;
 }
 
@@ -183,11 +199,29 @@ IREE_API_EXPORT iree_status_t iree_hal_amdgpu_logical_device_options_parse(
   if (!params.count) return iree_ok_status();
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  const iree_string_pair_t* first_param = &params.pairs[0];
-  iree_status_t status = iree_make_status(
-      IREE_STATUS_INVALID_ARGUMENT,
-      "AMDGPU logical device options do not support key/value parameter '%.*s'",
-      (int)first_param->key.size, first_param->key.data);
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < params.count && iree_status_is_ok(status);
+       ++i) {
+    const iree_string_pair_t* param = &params.pairs[i];
+    if (iree_string_view_equal(param->key, IREE_SV("hal.sanitizer"))) {
+      if (iree_string_view_equal(param->value, IREE_SV("asan"))) {
+        options->asan.enabled = 1;
+      } else if (iree_string_view_equal(param->value, IREE_SV("none"))) {
+        options->asan.enabled = 0;
+      } else {
+        status = iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "unsupported AMDGPU logical device hal.sanitizer value '%.*s'",
+            (int)param->value.size, param->value.data);
+      }
+    } else {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU logical device options do not support key/value parameter "
+          "'%.*s'",
+          (int)param->key.size, param->key.data);
+    }
+  }
 
   IREE_TRACE_ZONE_END(z0);
   return status;
@@ -250,6 +284,104 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU wait_active_for_ns is not implemented; "
                             "use 0");
+  }
+  if (options->asan.enabled) {
+    switch (options->asan.report_policy) {
+      case IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY:
+      case IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE:
+        break;
+      default:
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "invalid AMDGPU ASAN report policy value %u",
+                                (uint32_t)options->asan.report_policy);
+    }
+    switch (options->asan.shadow_mode) {
+      case IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_SPARSE:
+      case IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED:
+        break;
+      default:
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "invalid AMDGPU ASAN shadow mode value %u",
+                                (uint32_t)options->asan.shadow_mode);
+    }
+    switch (options->asan.shadow_backing) {
+      case IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL:
+      case IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL:
+        break;
+      default:
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "invalid AMDGPU ASAN shadow backing value %u",
+                                (uint32_t)options->asan.shadow_backing);
+    }
+    if (options->asan.shadow_scale_shift >
+        IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU ASAN shadow scale shift %u exceeds max "
+                              "representable shift %u",
+                              options->asan.shadow_scale_shift,
+                              IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT);
+    }
+    if (options->asan.shadow_size == 0 ||
+        !iree_device_size_is_power_of_two(options->asan.shadow_size)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN shadow size %" PRIu64
+                              " must be a non-zero power of two",
+                              (uint64_t)options->asan.shadow_size);
+    }
+    if (options->asan.owned_application_size == 0 ||
+        !iree_device_size_is_power_of_two(
+            options->asan.owned_application_size)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN owned application size %" PRIu64
+                              " must be a non-zero power of two",
+                              (uint64_t)options->asan.owned_application_size);
+    }
+    if (options->asan.shadow_slab_size == 0 ||
+        !iree_device_size_is_power_of_two(options->asan.shadow_slab_size)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN shadow slab size %" PRIu64
+                              " must be a non-zero power of two",
+                              (uint64_t)options->asan.shadow_slab_size);
+    }
+    if (options->asan.shadow_slab_size > options->asan.shadow_size ||
+        options->asan.shadow_size % options->asan.shadow_slab_size != 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN shadow slab size %" PRIu64
+                              " must divide shadow size %" PRIu64,
+                              (uint64_t)options->asan.shadow_slab_size,
+                              (uint64_t)options->asan.shadow_size);
+    }
+    if (options->asan.shadow_size >
+        (IREE_DEVICE_SIZE_MAX >> options->asan.shadow_scale_shift)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU ASAN application coverage size "
+                              "overflows: shadow_size=%" PRIu64
+                              ", scale_shift=%u",
+                              (uint64_t)options->asan.shadow_size,
+                              options->asan.shadow_scale_shift);
+    }
+    const iree_device_size_t application_coverage_size =
+        options->asan.shadow_size << options->asan.shadow_scale_shift;
+    if (options->asan.owned_application_size > application_coverage_size) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN owned application size %" PRIu64
+                              " exceeds application coverage size %" PRIu64,
+                              (uint64_t)options->asan.owned_application_size,
+                              (uint64_t)application_coverage_size);
+    }
+    if (IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE >
+            UINT64_MAX - options->asan.owned_application_size ||
+        IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE +
+                options->asan.owned_application_size >
+            application_coverage_size) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU ASAN owned application window [0x%016" PRIx64 ", +%" PRIu64
+          ") is outside application coverage [0x%016" PRIx64 ", +%" PRIu64 ")",
+          IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE,
+          (uint64_t)options->asan.owned_application_size, (uint64_t)0,
+          (uint64_t)application_coverage_size);
+    }
   }
   return iree_ok_status();
 }
@@ -456,6 +588,34 @@ static void iree_hal_amdgpu_logical_device_reset_profile_options(
       logical_device->host_allocator);
   logical_device->profiling.options_storage = NULL;
   logical_device->profiling.options = (iree_hal_device_profiling_options_t){0};
+}
+
+iree_status_t iree_hal_amdgpu_logical_device_allocate_executable_id(
+    iree_hal_device_t* base_device, uint64_t* out_executable_id) {
+  IREE_ASSERT_ARGUMENT(out_executable_id);
+  *out_executable_id = 0;
+  iree_hal_amdgpu_logical_device_t* logical_device =
+      iree_hal_amdgpu_logical_device_cast(base_device);
+
+  uint64_t executable_id = iree_atomic_load(&logical_device->next_executable_id,
+                                            iree_memory_order_relaxed);
+  while (executable_id != 0 && executable_id != UINT64_MAX) {
+    uint64_t next_executable_id = executable_id + 1;
+    if (iree_atomic_compare_exchange_weak(&logical_device->next_executable_id,
+                                          &executable_id, next_executable_id,
+                                          iree_memory_order_relaxed,
+                                          iree_memory_order_relaxed)) {
+      *out_executable_id = executable_id;
+      return iree_ok_status();
+    }
+  }
+  if (IREE_UNLIKELY(executable_id == 0)) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "AMDGPU executable id allocator is invalid");
+  } else {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU executable id space exhausted");
+  }
 }
 
 bool iree_hal_amdgpu_logical_device_should_profile_dispatch(
@@ -1342,6 +1502,14 @@ static void iree_hal_amdgpu_logical_device_error_handler(void* user_data,
   IREE_TRACE_ZONE_END(z0);
 }
 
+static iree_status_t iree_hal_amdgpu_logical_device_check_failure(
+    iree_hal_amdgpu_logical_device_t* logical_device) {
+  iree_status_t failure_status = (iree_status_t)iree_atomic_load(
+      &logical_device->failure_status, iree_memory_order_acquire);
+  if (iree_status_is_ok(failure_status)) return iree_ok_status();
+  return iree_status_clone(failure_status);
+}
+
 static void iree_hal_amdgpu_logical_device_translate_physical_options(
     const iree_hal_amdgpu_logical_device_options_t* options,
     const iree_hal_amdgpu_topology_t* topology,
@@ -1359,6 +1527,16 @@ static void iree_hal_amdgpu_logical_device_translate_physical_options(
   out_options->default_pool.alignment = options->default_pool.alignment;
   out_options->default_pool.frontier_capacity =
       options->default_pool.frontier_capacity;
+  if (options->asan.enabled) {
+    out_options->default_pool.asan = (iree_hal_asan_pool_options_t){
+        .mode = IREE_HAL_ASAN_POOL_MODE_SHADOW,
+        .shadow_granule_size = (iree_device_size_t)1ull
+                               << options->asan.shadow_scale_shift,
+        .redzone_size = options->default_pool.alignment,
+        .backing_alignment = 0,
+        .quarantine_size = options->asan.quarantine_size,
+    };
+  }
   out_options->host_block_pool_initial_capacity =
       options->preallocate_pools ? 16 : 0;
   out_options->host_queue_count = topology->gpu_agent_queue_count;
@@ -1434,6 +1612,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_allocate_storage(
   logical_device->host_allocator = host_allocator;
   logical_device->failure_status = IREE_ATOMIC_VAR_INIT(0);
   iree_atomic_store(&logical_device->epoch, 0, iree_memory_order_relaxed);
+  iree_atomic_store(&logical_device->next_executable_id, 1,
+                    iree_memory_order_relaxed);
   logical_device->next_profile_session_id = 1;
   iree_hal_amdgpu_profile_metadata_initialize(
       host_allocator, &logical_device->profile_metadata);
@@ -1458,9 +1638,10 @@ static iree_status_t iree_hal_amdgpu_logical_device_allocate_storage(
 static iree_status_t iree_hal_amdgpu_logical_device_initialize_host_resources(
     iree_hal_amdgpu_logical_device_t* logical_device,
     const iree_hal_amdgpu_logical_device_options_t* options,
-    iree_async_proactor_pool_t* proactor_pool,
+    const iree_hal_device_create_params_t* create_params,
     iree_allocator_t host_allocator) {
-  logical_device->proactor_pool = proactor_pool;
+  logical_device->proactor_pool = create_params->proactor_pool;
+  logical_device->event_sink = create_params->event_sink;
   iree_async_proactor_pool_retain(logical_device->proactor_pool);
 
   iree_arena_block_pool_initialize(options->host_block_pools.small.block_size,
@@ -1508,7 +1689,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_initialize_physical_devices(
         (iree_hal_device_t*)logical_device, logical_device->system, options,
         logical_device->proactor, host_ordinal,
         &logical_device->system->host_memory_pools[host_ordinal],
-        device_ordinal, host_allocator,
+        device_ordinal, &logical_device->asan, host_allocator,
         logical_device->physical_devices[device_ordinal]));
   }
   return iree_ok_status();
@@ -1526,6 +1707,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_warmup_host_pools(
 
 static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
     iree_hal_amdgpu_logical_device_t* logical_device,
+    const iree_hal_amdgpu_physical_device_options_t* physical_options,
     iree_allocator_t host_allocator) {
   const iree_host_size_t physical_device_count =
       logical_device->physical_device_count;
@@ -1583,6 +1765,12 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
   }
 
   if (iree_status_is_ok(status)) {
+    iree_hal_device_sanitizer_spec_t sanitizer = {0};
+    if (iree_hal_asan_pool_options_is_enabled(
+            &physical_options->default_pool.asan)) {
+      sanitizer.flags = IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN;
+      sanitizer.asan.pool_options = physical_options->default_pool.asan;
+    }
     iree_hal_amdgpu_device_spec_params_t spec_params = {
         .logical_device_id = logical_device->identifier,
         .display_name = logical_device->identifier,
@@ -1592,6 +1780,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
         .physical_devices = physical_devices,
         .device_memory_capacity_bytes = device_memory_capacity_bytes,
         .device_allocator = logical_device->device_allocator,
+        .sanitizer = sanitizer,
         .flags = logical_device->system->info.dmabuf_supported
                      ? IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_DMABUF
                      : IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_NONE,
@@ -1613,10 +1802,13 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
     iree_allocator_t host_allocator, iree_hal_device_t** out_device) {
   IREE_ASSERT_ARGUMENT(options);
   IREE_ASSERT_ARGUMENT(create_params);
-  IREE_ASSERT_ARGUMENT(create_params->proactor_pool);
   IREE_ASSERT_ARGUMENT(out_device);
   IREE_TRACE_ZONE_BEGIN(z0);
   *out_device = NULL;
+
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_device_create_params_verify(create_params),
+      "verifying device creation parameters");
 
   // Verify the topology is valid for a logical device.
   // This may have already been performed by the caller but doing it here
@@ -1652,11 +1844,9 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
       z0, iree_hal_amdgpu_logical_device_allocate_storage(
               identifier, topology, physical_device_size, host_allocator,
               &logical_device));
-  iree_status_t status = iree_ok_status();
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_logical_device_initialize_host_resources(
-        logical_device, options, create_params->proactor_pool, host_allocator);
-  }
+  iree_status_t status =
+      iree_hal_amdgpu_logical_device_initialize_host_resources(
+          logical_device, options, create_params, host_allocator);
   logical_device->command_buffer_mode = options->command_buffer_mode;
   logical_device->pm4_command_buffer_publication_mode =
       options->pm4_command_buffer_publication_mode;
@@ -1671,8 +1861,22 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
         logical_device, topology, &physical_device_options, host_allocator);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_logical_device_create_device_spec(logical_device,
-                                                               host_allocator);
+    status = iree_hal_amdgpu_logical_device_create_device_spec(
+        logical_device, &physical_device_options, host_allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_feedback_state_initialize(
+        options, logical_device->system, logical_device->physical_device_count,
+        logical_device->physical_devices, (iree_hal_device_t*)logical_device,
+        logical_device->identifier, logical_device->event_sink,
+        iree_hal_amdgpu_logical_device_error_handler, logical_device,
+        host_allocator, &logical_device->feedback);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_asan_state_initialize(
+        options, logical_device->system, logical_device->physical_device_count,
+        logical_device->physical_devices, host_allocator,
+        &logical_device->asan);
   }
 
   // If requested then warmup pools that we expect to grow on the first usage of
@@ -1734,6 +1938,8 @@ static void iree_hal_amdgpu_logical_device_destroy(
       &logical_device->profiling.event_streams, logical_device->host_allocator);
 
   iree_hal_amdgpu_logical_device_deassign_frontier(logical_device);
+  iree_hal_amdgpu_feedback_state_deinitialize(&logical_device->feedback);
+  iree_hal_amdgpu_asan_state_deinitialize(&logical_device->asan);
 
   // Devices may hold allocations and need to be cleaned up first.
   for (iree_host_size_t i = 0; i < logical_device->physical_device_count; ++i) {
@@ -1747,6 +1953,10 @@ static void iree_hal_amdgpu_logical_device_destroy(
 
   // This may unload HSA; must come after all resources are released.
   iree_hal_amdgpu_system_free(logical_device->system);
+
+  iree_status_t failure_status = (iree_status_t)iree_atomic_exchange(
+      &logical_device->failure_status, 0, iree_memory_order_acq_rel);
+  iree_status_free(failure_status);
 
   iree_hal_amdgpu_profile_metadata_deinitialize(
       &logical_device->profile_metadata);
@@ -1847,6 +2057,27 @@ static iree_status_t iree_hal_amdgpu_logical_device_sample_observation(
     IREE_RETURN_IF_ERROR(
         iree_hal_device_observation_populate_memory_total_from_spec(
             logical_device->device_spec, out_observation));
+  }
+  if (iree_any_bit_set(requested_flags,
+                       IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER)) {
+    if (!iree_hal_amdgpu_asan_state_is_enabled(&logical_device->asan)) {
+      return iree_ok_status();
+    }
+    iree_hal_amdgpu_asan_state_statistics_t statistics;
+    iree_hal_amdgpu_asan_state_query_statistics(&logical_device->asan,
+                                                &statistics);
+    out_observation->provided_flags |=
+        IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER;
+    out_observation->sanitizer.asan.flags =
+        IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_ALL;
+    out_observation->sanitizer.asan.quarantine_size =
+        statistics.quarantine_size;
+    out_observation->sanitizer.asan.quarantine_eviction_count =
+        statistics.quarantine_eviction_count;
+    out_observation->sanitizer.asan.shadow_mapped_slab_count =
+        (uint64_t)statistics.shadow_mapped_slab_count;
+    out_observation->sanitizer.asan.shadow_committed_size =
+        statistics.shadow_committed_size;
   }
   return iree_ok_status();
 }
@@ -2141,7 +2372,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_assign_topology_info(
     status = iree_hal_amdgpu_physical_device_assign_frontier(
         base_device, system, logical_device->proactor,
         topology_info->frontier.tracker, topology_info->frontier.base_axis,
-        logical_device->host_queue_epoch_table,
+        logical_device->host_queue_epoch_table, &logical_device->feedback,
         &system->host_memory_pools[host_ordinal],
         logical_device->host_allocator,
         logical_device->physical_devices[device_ordinal]);
@@ -2354,9 +2585,9 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_executable_cache(
       iree_hal_amdgpu_logical_device_cast(base_device);
   return iree_hal_amdgpu_executable_cache_create(
       base_device, &logical_device->system->libhsa,
-      &logical_device->system->topology, &logical_device->profile_metadata,
-      identifier, iree_hal_device_host_allocator(base_device),
-      out_executable_cache);
+      &logical_device->system->topology, &logical_device->feedback,
+      &logical_device->asan, &logical_device->profile_metadata, identifier,
+      iree_hal_device_host_allocator(base_device), out_executable_cache);
 }
 
 static iree_status_t iree_hal_amdgpu_logical_device_import_file(
@@ -2410,6 +2641,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_query_queue_pool_backend(
       .fn = iree_hal_amdgpu_logical_device_query_pool_epoch,
       .user_data = logical_device,
   };
+  out_backend->asan = physical_device->default_pool_options.asan;
   return iree_ok_status();
 }
 
@@ -2422,6 +2654,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_alloca(
     iree_hal_buffer_t** IREE_RESTRICT out_buffer) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2437,6 +2671,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_dealloca(
     iree_hal_buffer_t* buffer, iree_hal_dealloca_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2473,6 +2709,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_fill(
 
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2490,6 +2728,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_update(
     iree_device_size_t length, iree_hal_update_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2507,6 +2747,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_copy(
     iree_device_size_t length, iree_hal_copy_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2524,6 +2766,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_read(
     iree_device_size_t length, iree_hal_read_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2541,6 +2785,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_write(
     iree_device_size_t length, iree_hal_write_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2557,6 +2803,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_host_call(
     iree_hal_host_call_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2575,6 +2823,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_dispatch(
     iree_hal_dispatch_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2592,6 +2842,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_execute(
     iree_hal_execute_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2604,6 +2856,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_flush(
     iree_hal_device_t* base_device, iree_hal_queue_affinity_t queue_affinity) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_queue_affinity_normalize(
       logical_device->queue_affinity_mask, queue_affinity, &queue_affinity));
 

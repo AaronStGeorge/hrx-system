@@ -15,6 +15,7 @@
 
 hrx_device_t g_test_device = nullptr;
 hrx_accelerator_type_t g_test_device_type = HRX_ACCELERATOR_CPU;
+std::string g_test_hip_library_path;
 
 namespace {
 
@@ -52,6 +53,7 @@ int main(int argc, char* argv[]) {
   Catch::Session session;
 
   std::string hrx_library;
+  std::string hip_library;
   const char* hrx_device_env = std::getenv("HRX_CTS_DEVICE");
   std::string hrx_device_spec =
       hrx_device_env && hrx_device_env[0] ? hrx_device_env : "cpu:0";
@@ -60,12 +62,15 @@ int main(int argc, char* argv[]) {
   auto cli = session.cli() |
              Catch::Clara::Opt(hrx_library,
                                "path")["--hrx-library"]("Path to libhrx.so") |
+             Catch::Clara::Opt(hip_library, "path")["--hip-library"](
+                 "Path to libamdhip64.so") |
              Catch::Clara::Opt(hrx_device_spec, "spec")["--hrx-device"](
-                 "Device spec (gpu:N or cpu:N)");
+                 "Device spec (gpu:N, cpu:N, or none)");
   session.cli(cli);
 
   int ret = session.applyCommandLine(argc, argv);
   if (ret != 0) return ret;
+  g_test_hip_library_path = hip_library;
 
   seedInstalledCtsSourceDir(argc > 0 ? argv[0] : nullptr);
 
@@ -81,6 +86,11 @@ int main(int argc, char* argv[]) {
     int major, minor, patch;
     loader.runtime_version(&major, &minor, &patch);
     printf("HRX CTS using libhrx v%d.%d.%d\n", major, minor, patch);
+
+    if (hrx_device_spec == "none") {
+      ret = session.run();
+      return ret;
+    }
 
     // Parse device spec.
     hrx_accelerator_type_t type = HRX_ACCELERATOR_CPU;
@@ -132,10 +142,12 @@ int main(int argc, char* argv[]) {
   ret = session.run();
 
   // Shutdown.
-  if (g_test_device_type == HRX_ACCELERATOR_GPU) {
-    hrx().status_ignore(hrx().gpu_shutdown());
-  } else {
-    hrx().status_ignore(hrx().cpu_shutdown());
+  if (g_test_device) {
+    if (g_test_device_type == HRX_ACCELERATOR_GPU) {
+      hrx().status_ignore(hrx().gpu_shutdown());
+    } else {
+      hrx().status_ignore(hrx().cpu_shutdown());
+    }
   }
 
   return ret;

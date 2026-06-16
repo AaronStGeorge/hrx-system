@@ -55,7 +55,7 @@ typedef struct iree_hal_amdgpu_aql_command_buffer_dispatch_summary_t {
   } packets;
   // Correlation metadata used by profiling, timestamps, and diagnostics.
   struct {
-    // Session-local profile executable id used for event attribution.
+    // Logical-device-local executable id used for event attribution.
     uint64_t executable_id;
     // Program-global command index used for profiling/source attribution.
     uint32_t command_index;

@@ -81,6 +81,30 @@ IREE_FLAG(bool, amdgpu_experimental_pm4_command_buffers, false,
           "targets. This is for hardware bring-up only; default automatic PM4 "
           "selection remains limited to validated GPU ISAs.");
 
+IREE_FLAG(bool, amdgpu_asan, false,
+          "Enables AMDGPU ASAN runtime state and config global publication.");
+IREE_FLAG(string, amdgpu_asan_report_policy, "report-only",
+          "AMDGPU ASAN report policy: 'report-only' emits device events and "
+          "keeps the logical device usable; 'fail-device' emits device events "
+          "and then fails the logical device.");
+IREE_FLAG(string, amdgpu_asan_shadow_mode, "sparse",
+          "AMDGPU ASAN shadow mapping mode: 'sparse' maps precise shadow slabs "
+          "on demand; 'premapped' aliases a shared poisoned slab across the "
+          "full shadow reservation so arbitrary covered shadow reads report "
+          "instead of faulting.");
+IREE_FLAG(
+    string, amdgpu_asan_shadow_backing, "device-local",
+    "AMDGPU ASAN physical shadow slab backing: 'device-local' backs shadow "
+    "slabs with GPU VRAM; 'host-local' backs shadow slabs with nearest-CPU "
+    "fine-grained host memory and relies on queue dependency edges for "
+    "dispatch-boundary shadow visibility.");
+IREE_FLAG(
+    int64_t, amdgpu_asan_quarantine_size,
+    IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE,
+    "Freed ASAN allocation mapping budget in bytes kept resident and poisoned "
+    "for stale-pointer checks. Set to 0 to release freed mappings "
+    "immediately.");
+
 IREE_FLAG(bool, amdgpu_suppress_device_fine_memory, false,
           "Suppresses fine-grained GPU-local memory pools even when reported "
           "by HSA. This validates the coarse-grained device-local memory path "
@@ -266,6 +290,43 @@ static iree_status_t iree_hal_amdgpu_driver_factory_try_create(
 
   device_options->enable_experimental_pm4_command_buffers =
       FLAG_amdgpu_experimental_pm4_command_buffers;
+
+  device_options->asan.enabled = FLAG_amdgpu_asan;
+  if (strcmp(FLAG_amdgpu_asan_report_policy, "report-only") == 0) {
+    device_options->asan.report_policy =
+        IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY;
+  } else if (strcmp(FLAG_amdgpu_asan_report_policy, "fail-device") == 0) {
+    device_options->asan.report_policy =
+        IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE;
+  } else {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unrecognized ASAN report policy: '%s'",
+                            FLAG_amdgpu_asan_report_policy);
+  }
+  if (strcmp(FLAG_amdgpu_asan_shadow_mode, "sparse") == 0) {
+    device_options->asan.shadow_mode = IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_SPARSE;
+  } else if (strcmp(FLAG_amdgpu_asan_shadow_mode, "premapped") == 0) {
+    device_options->asan.shadow_mode =
+        IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED;
+  } else {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unrecognized ASAN shadow mode: '%s'",
+                            FLAG_amdgpu_asan_shadow_mode);
+  }
+  if (strcmp(FLAG_amdgpu_asan_shadow_backing, "device-local") == 0) {
+    device_options->asan.shadow_backing =
+        IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL;
+  } else if (strcmp(FLAG_amdgpu_asan_shadow_backing, "host-local") == 0) {
+    device_options->asan.shadow_backing =
+        IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL;
+  } else {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unrecognized ASAN shadow backing: '%s'",
+                            FLAG_amdgpu_asan_shadow_backing);
+  }
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_flag_int64_to_device_size(
+      "amdgpu_asan_quarantine_size", FLAG_amdgpu_asan_quarantine_size,
+      &device_options->asan.quarantine_size));
 
   device_options->suppress_device_fine_memory =
       FLAG_amdgpu_suppress_device_fine_memory;

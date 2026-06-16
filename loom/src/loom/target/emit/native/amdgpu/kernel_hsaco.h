@@ -47,9 +47,20 @@ typedef struct loom_amdgpu_kernel_hsaco_options_t {
   const loom_amdgpu_native_preflight_t* preflight;
   // Optional target-owned packet plan applied during native encoding.
   const struct loom_amdgpu_packet_plan_t* packet_plan;
+  // Optional code-object data symbols emitted by loom_amdgpu_emit_kernel_hsaco.
+  const loom_amdgpu_hsaco_data_symbol_t* data_symbols;
+  // Number of entries in |data_symbols|.
+  iree_host_size_t data_symbol_count;
   // Optional target-owned emission summary populated after successful emission.
   loom_amdgpu_kernel_hsaco_summary_t* summary;
 } loom_amdgpu_kernel_hsaco_options_t;
+
+typedef struct loom_amdgpu_kernel_hsaco_write_options_t {
+  // Optional code-object data symbols emitted alongside the kernels.
+  const loom_amdgpu_hsaco_data_symbol_t* data_symbols;
+  // Number of entries in |data_symbols|.
+  iree_host_size_t data_symbol_count;
+} loom_amdgpu_kernel_hsaco_write_options_t;
 
 typedef struct loom_amdgpu_kernel_hsaco_contribution_t {
   // Full AMDHSA target id such as `amdgcn-amd-amdhsa--gfx1100`.
@@ -82,8 +93,9 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
 // storage remains live for the duration of this call.
 iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
     const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
-    iree_host_size_t contribution_count, iree_io_stream_t* stream,
-    iree_arena_allocator_t* scratch_arena);
+    iree_host_size_t contribution_count,
+    const loom_amdgpu_kernel_hsaco_write_options_t* options,
+    iree_io_stream_t* stream, iree_arena_allocator_t* scratch_arena);
 
 // Emits complete AMDGPU HSACO for one ABI-lowered target-low HAL kernel.
 //

@@ -15,6 +15,7 @@
 #include "loom/codegen/low/transforms/operand_forms.h"
 #include "loom/codegen/low/transforms/pipeline/source_to_low.h"
 #include "loom/codegen/low/transforms/pipeline/target_legalize.h"
+#include "loom/sanitizer/pipeline_passes.h"
 #include "loom/transforms/cfg/branch_fusion.h"
 #include "loom/transforms/cfg/branch_sink.h"
 #include "loom/transforms/cfg/cfg_simplify.h"
@@ -137,6 +138,12 @@ static const loom_pass_option_enum_value_t kLowSourceToLowControlFlowValues[] =
         {.value = IREE_SVL("structured-low")},
 };
 
+static const loom_pass_option_enum_value_t
+    kLowSourceToLowSanitizerReportingValues[] = {
+        {.value = IREE_SVL("default")},
+        {.value = IREE_SVL("trap")},
+};
+
 static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
     {
         .name = IREE_SVL("control-flow"),
@@ -155,6 +162,13 @@ static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
         .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
         .minimum_uint32 = 0,
         .maximum_uint32 = UINT32_MAX,
+    },
+    {
+        .name = IREE_SVL("sanitizer-reporting"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kLowSourceToLowSanitizerReportingValues,
+        .enum_value_count =
+            IREE_ARRAYSIZE(kLowSourceToLowSanitizerReportingValues),
     },
 };
 
@@ -241,6 +255,14 @@ static const loom_pass_option_schema_t kRefineBoundariesOptionSchema[] = {
         .minimum_uint32 = 1,
         .maximum_uint32 = UINT32_MAX,
     },
+};
+
+static const loom_pass_option_schema_t
+    kSanitizerInsertAssertionsOptionSchema[] = {
+        {
+            .name = IREE_SVL("checks"),
+            .kind = LOOM_PASS_OPTION_SCHEMA_STRING,
+        },
 };
 
 static const loom_pass_option_enum_value_t kTemplateSelectionModeValues[] = {
@@ -376,6 +398,20 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .create = loom_refine_boundaries_create,
         .option_schema = kRefineBoundariesOptionSchema,
         .option_schema_count = IREE_ARRAYSIZE(kRefineBoundariesOptionSchema),
+    },
+    {
+        .key = IREE_SVL("sanitizer-insert-assertions"),
+        .info = loom_sanitizer_insert_assertions_pass_info,
+        .function_run = loom_sanitizer_insert_assertions_run,
+        .create = loom_sanitizer_insert_assertions_create,
+        .option_schema = kSanitizerInsertAssertionsOptionSchema,
+        .option_schema_count =
+            IREE_ARRAYSIZE(kSanitizerInsertAssertionsOptionSchema),
+    },
+    {
+        .key = IREE_SVL("sanitizer-materialize-assertions"),
+        .info = loom_sanitizer_materialize_assertions_pass_info,
+        .function_run = loom_sanitizer_materialize_assertions_run,
     },
     {
         .key = IREE_SVL("scf-to-cfg"),

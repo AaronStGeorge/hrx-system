@@ -821,6 +821,14 @@ def _common_scalar_vector_memory_schedule_classes(
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
+        ScheduleClass(
+            _SCHEDULE_MODE_CONTROL,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
     )
 
 
@@ -1335,6 +1343,7 @@ _HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE = Immediate(
 
 _MANUAL_SCALAR_DESCRIPTOR_KEYS = (
     "amdgpu.s_mov_b32",
+    "amdgpu.s_getpc_b64",
     "amdgpu.s_mov_b32_m0",
     "amdgpu.s_mov_b32_m0.imm",
     "amdgpu.s_mov_b64_exec",
@@ -1364,6 +1373,7 @@ def _manual_scalar_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
     s_mov_b32_opcode = _instruction_encoding_opcode(spec, "S_MOV_B32", "ENC_SOP1")
+    s_getpc_b64_opcode = _instruction_encoding_opcode(spec, "S_GETPC_B64", "ENC_SOP1")
     s_mov_b64_opcode = _instruction_encoding_opcode(spec, "S_MOV_B64", "ENC_SOP1")
     s_xor_b64_opcode = _instruction_encoding_opcode(spec, "S_XOR_B64", "ENC_SOP2")
     return (
@@ -1378,6 +1388,28 @@ def _manual_scalar_descriptors(
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             encoding_id=s_mov_b32_opcode,
             constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="amdgpu.s_getpc_b64",
+            mnemonic="s_getpc_b64",
+            semantic_tag="address.pc.get.u64",
+            operands=(
+                Operand(
+                    "pc",
+                    OperandRole.RESULT,
+                    _SGPR_ALT,
+                    encoding_field_id=amdgpu_encoding_field_id("SDST"),
+                    unit_count=2,
+                ),
+            ),
+            encoding_field_values=(
+                EncodingFieldValue(amdgpu_encoding_field_id("SSRC0"), 0),
+            ),
+            asm_forms=_asm(results=("pc",)),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            encoding_id=s_getpc_b64_opcode,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -1837,6 +1869,24 @@ _GLOBAL_PREFETCH_EFFECT = Effect(
     memory_space=MemorySpace.GLOBAL,
     flags=(EffectFlag.DEPENDENCY,),
 )
+
+
+def _generic_memory_effect(kind: EffectKind, width_bits: int) -> Effect:
+    return Effect(
+        kind,
+        memory_space=MemorySpace.GENERIC,
+        flags=(EffectFlag.DEPENDENCY,),
+        width_bits=width_bits,
+    )
+
+
+def _generic_read_effect(width_bits: int) -> Effect:
+    return _generic_memory_effect(EffectKind.READ, width_bits)
+
+
+def _generic_write_effect(width_bits: int) -> Effect:
+    return _generic_memory_effect(EffectKind.WRITE, width_bits)
+
 
 _INSTRUCTION_PREFETCH_EFFECT = Effect(
     EffectKind.READ,
@@ -2368,12 +2418,12 @@ def _global_write_effect(width_bits: int) -> Effect:
 
 
 def _ignore_global_atomic_memory(
-    *, data_format_name: str, is_input: bool
+    *, data_format_name: str, width_bits: int = 32, is_input: bool
 ) -> AmdgpuImplicitOperandOverlay:
     return AmdgpuImplicitOperandOverlay(
         operand_type="OPR_GPUMEM",
         data_format_name=data_format_name,
-        size_bits=32,
+        size_bits=width_bits,
         is_input=is_input,
         is_output=not is_input,
         ignore_reason=(
@@ -2385,18 +2435,35 @@ def _ignore_global_atomic_memory(
 
 
 def _ignore_generic_atomic_memory(
-    *, data_format_name: str, is_input: bool
+    *, data_format_name: str, width_bits: int = 32, is_input: bool
 ) -> AmdgpuImplicitOperandOverlay:
     return AmdgpuImplicitOperandOverlay(
         operand_type="OPR_GPUMEM",
         data_format_name=data_format_name,
-        size_bits=32,
+        size_bits=width_bits,
         is_input=is_input,
         is_output=not is_input,
         ignore_reason=(
             "modeled-by-generic-atomic-read-effect"
             if is_input
             else "modeled-by-generic-atomic-write-effect"
+        ),
+    )
+
+
+def _ignore_generic_memory(
+    *, width_bits: int, is_input: bool, data_format_name: str | None = None
+) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_GPUMEM",
+        data_format_name=data_format_name or f"FMT_NUM_B{width_bits}",
+        size_bits=width_bits,
+        is_input=is_input,
+        is_output=not is_input,
+        ignore_reason=(
+            "modeled-by-generic-read-effect"
+            if is_input
+            else "modeled-by-generic-write-effect"
         ),
     )
 
@@ -2851,6 +2918,9 @@ __all__ = (
     "_exec_state_read",
     "_f32_bits",
     "_generic_atomic_effects",
+    "_generic_memory_effect",
+    "_generic_read_effect",
+    "_generic_write_effect",
     "_global_addr_operand",
     "_global_atomic_effects",
     "_global_read_effect",
@@ -2860,6 +2930,7 @@ __all__ = (
     "_global_write_effect",
     "_hal_buffer_descriptor_pseudos",
     "_ignore_generic_atomic_memory",
+    "_ignore_generic_memory",
     "_ignore_global_atomic_memory",
     "_ignore_global_read_memory",
     "_ignore_global_write_memory",

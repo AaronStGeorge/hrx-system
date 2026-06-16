@@ -401,7 +401,7 @@ static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
                          });
   } else {
     loom_run_hal_profile_summary_record_error(out_profile, status);
-    iree_status_ignore(status);
+    iree_status_free(status);
     status = iree_ok_status();
   }
 
@@ -415,7 +415,8 @@ static iree_status_t loom_run_hal_benchmark_profile_final_batch(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_prepared_candidate_t* candidate,
     const loom_run_hal_invocation_plan_t* plan,
-    iree_host_size_t binding_list_count, iree_vm_list_t* const* binding_lists,
+    iree_host_size_t binding_list_count,
+    const loom_run_hal_binding_list_t* binding_lists,
     const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
     loom_run_hal_profile_summary_t* out_profile) {
   *out_profile = (loom_run_hal_profile_summary_t){
@@ -447,7 +448,7 @@ static iree_status_t loom_run_hal_benchmark_profile_final_batch(
         runtime, &profile_batch, options, allocator, out_profile);
   } else {
     loom_run_hal_profile_summary_record_error(out_profile, status);
-    iree_status_ignore(status);
+    iree_status_free(status);
     status = iree_ok_status();
   }
   loom_run_hal_dispatch_batch_deinitialize(&profile_batch);
@@ -491,7 +492,7 @@ static iree_status_t loom_run_hal_benchmark_profile_final_sequence_batch(
         runtime, &profile_batch, options, allocator, out_profile);
   } else {
     loom_run_hal_profile_summary_record_error(out_profile, status);
-    iree_status_ignore(status);
+    iree_status_free(status);
     status = iree_ok_status();
   }
   loom_run_hal_dispatch_batch_deinitialize(&profile_batch);
@@ -512,9 +513,8 @@ iree_status_t loom_run_hal_benchmark_dispatch_plan(
     const loom_run_hal_invocation_plan_t* plan,
     const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
     loom_run_hal_benchmark_result_t* out_result) {
-  iree_vm_list_t* binding_list = plan->bindings;
   return loom_run_hal_benchmark_dispatch_binding_ring(
-      runtime, candidate, plan, /*binding_list_count=*/1, &binding_list,
+      runtime, candidate, plan, /*binding_list_count=*/1, &plan->bindings,
       options, allocator, out_result);
 }
 
@@ -522,7 +522,8 @@ iree_status_t loom_run_hal_benchmark_dispatch_binding_ring(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_prepared_candidate_t* candidate,
     const loom_run_hal_invocation_plan_t* plan,
-    iree_host_size_t binding_list_count, iree_vm_list_t* const* binding_lists,
+    iree_host_size_t binding_list_count,
+    const loom_run_hal_binding_list_t* binding_lists,
     const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
     loom_run_hal_benchmark_result_t* out_result) {
   loom_run_hal_benchmark_result_initialize(out_result);
@@ -538,9 +539,12 @@ iree_status_t loom_run_hal_benchmark_dispatch_binding_ring(
   loom_run_hal_dispatch_batch_t* batches = NULL;
   iree_status_t status = iree_allocator_malloc_array(
       allocator, command_buffer_ring_count, sizeof(*batches), (void**)&batches);
+  if (iree_status_is_ok(status)) {
+    memset(batches, 0, command_buffer_ring_count * sizeof(*batches));
+  }
   const iree_host_size_t batch_binding_list_count =
       iree_min(binding_list_count, options->dispatch_batch.dispatch_count);
-  iree_vm_list_t** batch_binding_lists = NULL;
+  loom_run_hal_binding_list_t* batch_binding_lists = NULL;
   if (iree_status_is_ok(status)) {
     status = iree_allocator_malloc_array(allocator, batch_binding_list_count,
                                          sizeof(*batch_binding_lists),
@@ -623,6 +627,9 @@ iree_status_t loom_run_hal_benchmark_dispatch_sequence_plan_ring(
   loom_run_hal_dispatch_batch_t* batches = NULL;
   iree_status_t status = iree_allocator_malloc_array(
       allocator, command_buffer_ring_count, sizeof(*batches), (void**)&batches);
+  if (iree_status_is_ok(status)) {
+    memset(batches, 0, command_buffer_ring_count * sizeof(*batches));
+  }
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < command_buffer_ring_count; ++i) {
     const iree_host_size_t plan_ring_offset =

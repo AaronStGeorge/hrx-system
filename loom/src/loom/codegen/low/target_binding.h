@@ -78,6 +78,18 @@ typedef enum loom_low_descriptor_packet_kind_e {
   LOOM_LOW_DESCRIPTOR_PACKET_CONST = 2,
 } loom_low_descriptor_packet_kind_t;
 
+typedef enum loom_low_descriptor_packet_resolution_e {
+  // Not a descriptor-backed low packet.
+  LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_NONE = 0,
+  // Packet key resolved to a descriptor row in the selected target contract.
+  LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_RESOLVED = 1,
+  // Packet key was not present in the selected target contract.
+  LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_MISSING = 2,
+  // Packet carried an explicit descriptor ordinal whose row key differs from
+  // the packet key in the selected target contract.
+  LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_ORDINAL_KEY_MISMATCH = 3,
+} loom_low_descriptor_packet_resolution_t;
+
 // Target-bound descriptor row for one descriptor-backed low packet.
 //
 // Text IR names descriptor packets with stable spellings and stores an
@@ -93,6 +105,12 @@ typedef struct loom_low_resolved_descriptor_packet_t {
   iree_string_view_t key;
   // Attribute index containing |key| in text-form IR.
   uint16_t key_attr_index;
+  // Resolution state for descriptor-backed packets.
+  loom_low_descriptor_packet_resolution_t resolution;
+  // Dense descriptor ordinal used for explicit packet rows or lookup results.
+  uint32_t descriptor_ordinal;
+  // Borrowed descriptor row key, or empty when no row was resolved.
+  iree_string_view_t descriptor_key;
   // Descriptor row in |target->descriptor_set|, or NULL when unresolved.
   const loom_low_descriptor_t* descriptor;
 } loom_low_resolved_descriptor_packet_t;

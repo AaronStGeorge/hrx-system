@@ -133,6 +133,7 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_target, 1)
 LOOM_DEFINE_ATTR_STRING(loom_kernel_def_export_symbol, 2)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_def_export_linkage, 3, loom_target_linkage_t)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_kernel_def_predicates, 4)
 LOOM_DEFINE_REGION(loom_kernel_def_config, 0)
 LOOM_DEFINE_REGION(loom_kernel_def_body, 1)
 enum loom_kernel_def_build_flag_bits_e {

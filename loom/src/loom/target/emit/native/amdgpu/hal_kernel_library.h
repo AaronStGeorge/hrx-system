@@ -18,6 +18,7 @@
 #include "loom/ir/ir.h"
 #include "loom/target/artifact_manifest_collect.h"
 #include "loom/target/compile_report.h"
+#include "loom/target/emit/native/amdgpu/runtime_globals.h"
 #include "loom/target/provider.h"
 #include "loom/target/types.h"
 #include "loom/verify/verify.h"
@@ -36,6 +37,12 @@ typedef struct loom_amdgpu_hal_kernel_library_options_t {
   // target records before entry selection, verification, scheduling, and
   // allocation.
   loom_target_selection_t target_selection;
+  // Optional AMDGPU runtime support globals emitted into the HSACO.
+  loom_amdgpu_runtime_global_flags_t runtime_globals;
+  // Optional caller-owned code-object data symbols emitted into the HSACO.
+  const loom_amdgpu_hsaco_data_symbol_t* data_symbols;
+  // Number of entries in |data_symbols|.
+  iree_host_size_t data_symbol_count;
   // Diagnostic sink used for verification, materialization, scheduling, and
   // allocation diagnostics. A NULL callback still counts diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;

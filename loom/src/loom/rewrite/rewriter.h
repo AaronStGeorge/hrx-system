@@ -183,11 +183,11 @@ iree_status_t loom_rewriter_build_constant(loom_rewriter_t* rewriter,
                                            loom_location_id_t location,
                                            loom_value_id_t* out_value_id);
 
-// Attempts to fold an op to constants using its vtable fact inference function.
-// Gathers operand facts, updates stored facts in the table, and materializes
-// constants via the rewriter's materialize_constant callback when all results
-// produce exact facts. Replaces the original op via RAUW+erase.
-// Sets |*out_folded| to true if the op was erased, false otherwise.
+// Attempts to fold a side-effect-free op to constants using its vtable fact
+// inference function. Gathers operand facts, updates stored facts in the table,
+// and materializes constants via the rewriter's materialize_constant callback
+// when all results produce exact facts. Replaces the original op via
+// RAUW+erase. Sets |*out_folded| to true if the op was erased, false otherwise.
 // No-op if analysis is not enabled or the op has no inference function.
 iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
                                      bool* out_folded);
@@ -278,6 +278,14 @@ iree_status_t loom_rewriter_replace_all_uses_and_erase(
 iree_status_t loom_rewriter_replace_all_uses_with(loom_rewriter_t* rewriter,
                                                   loom_value_id_t old_value,
                                                   loom_value_id_t new_value);
+
+// Replaces operand uses of one value with another value except uses by
+// |except_op|, and adds affected users to the worklist. Does not erase the
+// defining op and intentionally does not rewrite type or attribute references.
+iree_status_t loom_rewriter_replace_all_uses_except(loom_rewriter_t* rewriter,
+                                                    loom_value_id_t old_value,
+                                                    loom_value_id_t new_value,
+                                                    const loom_op_t* except_op);
 
 // Materializes one replacement value per result using |materialize_value|,
 // preserves existing result names, replaces all uses, and erases |op|.

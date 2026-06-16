@@ -252,6 +252,33 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
+    sanitizer
+  GENERATOR
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
+  ARGS
+    "--contract-fragment=amdgpu.sanitizer"
+  DEPS
+    loom::target::contract
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_target_table_cc_library(
+  NAME
+    sanitizer_lower_rules
+  GENERATOR
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.sanitizer"
+  DEPS
+    loom::codegen::low::lower
+    loom::ops::sanitizer
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_target_table_cc_library(
+  NAME
     view
   GENERATOR
     loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
@@ -298,6 +325,8 @@ loom_cc_library(
     "matrix.h"
     "reduce.h"
     "reduce_lower_rules.h"
+    "sanitizer.h"
+    "sanitizer_lower_rules.h"
     "view.h"
     "view_lower_rules.h"
   DEPS
@@ -318,6 +347,8 @@ loom_cc_library(
     ::matrix
     ::reduce
     ::reduce_lower_rules
+    ::sanitizer
+    ::sanitizer_lower_rules
     ::view
     ::view_lower_rules
   PUBLIC

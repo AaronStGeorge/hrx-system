@@ -94,6 +94,7 @@ from loom.ir import (
     Symbol,
     SymbolKind,
     SymbolName,
+    TaggedLocation,
     TiedResult,
     Type,
     TypeKind,
@@ -476,6 +477,12 @@ class TestFileHeader:
             write_module(
                 Module(name="test"), location_mode=LOCATION_MODE_FULL_LOCATIONS
             )
+
+    def test_tagged_location_invalid_tag_rejected(self) -> None:
+        module = Module(name="test")
+        module.locations.add(TaggedLocation(tag=0, data=b""))
+        with pytest.raises(ValueError, match="tagged location tag"):
+            write_module(module)
 
     def test_module_count_one(self) -> None:
         data = write_module(Module(name="test"))
@@ -1058,6 +1065,14 @@ class TestAttributeValues:
 
     def test_string_empty(self) -> None:
         assert self._roundtrip_attr("label", "") == ""
+
+    def test_bytes_empty(self) -> None:
+        assert self._roundtrip_attr("payload", b"") == b""
+
+    def test_bytes_payload(self) -> None:
+        assert (
+            self._roundtrip_attr("payload", b"\x00\x11\xfe\xff") == b"\x00\x11\xfe\xff"
+        )
 
     def test_bool_true(self) -> None:
         assert self._roundtrip_attr("flag", True) is True
@@ -2013,11 +2028,23 @@ class TestPredicateBytecodeRoundTrip:
                     PredicateArg(tag="const", value=512),
                 ),
             ),
+            Predicate(
+                kind="not_nan",
+                args=(PredicateArg(tag="value", value="A"),),
+            ),
+            Predicate(
+                kind="not_inf",
+                args=(PredicateArg(tag="value", value="A"),),
+            ),
+            Predicate(
+                kind="finite",
+                args=(PredicateArg(tag="value", value="A"),),
+            ),
         ]
         m_id = module.add_value(Value(name="M", type=INDEX))
         k_id = module.add_value(Value(name="K", type=INDEX))
         n_id = module.add_value(Value(name="N", type=INDEX))
-        arg_id = module.add_value(Value(name="", type=F32))
+        arg_id = module.add_value(Value(name="A", type=F32))
         result_id = module.add_value(Value(name="", type=F32))
         func_op = Operation(
             name="func.decl",
@@ -2034,7 +2061,7 @@ class TestPredicateBytecodeRoundTrip:
         loaded_op = loaded.symbols[0].op
         assert loaded_op is not None
         loaded_preds = loaded_op.attributes.get("predicates", [])
-        assert len(loaded_preds) == 5
+        assert len(loaded_preds) == 8
 
         # Verify each predicate survived.
         assert loaded_preds[0].kind == "mul"
@@ -2055,6 +2082,18 @@ class TestPredicateBytecodeRoundTrip:
 
         assert loaded_preds[4].kind == "range"
         assert len(loaded_preds[4].args) == 3
+
+        assert loaded_preds[5].kind == "not_nan"
+        assert len(loaded_preds[5].args) == 1
+        assert loaded_preds[5].args[0].value == "A"
+
+        assert loaded_preds[6].kind == "not_inf"
+        assert len(loaded_preds[6].args) == 1
+        assert loaded_preds[6].args[0].value == "A"
+
+        assert loaded_preds[7].kind == "finite"
+        assert len(loaded_preds[7].args) == 1
+        assert loaded_preds[7].args[0].value == "A"
 
     def test_empty_predicates_roundtrip(self) -> None:
         """Function with no predicates survives bytecode round-trip."""

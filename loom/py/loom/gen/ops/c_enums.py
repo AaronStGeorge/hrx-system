@@ -292,6 +292,7 @@ ATTR_KIND_MAP: dict[str, str] = {
     "bool": "LOOM_ATTR_BOOL",
     "enum": "LOOM_ATTR_ENUM",
     "i64_array": "LOOM_ATTR_I64_ARRAY",
+    "bytes": "LOOM_ATTR_BYTES",
     "symbol": "LOOM_ATTR_SYMBOL",
     "type": "LOOM_ATTR_TYPE",
     "encoding": "LOOM_ATTR_ENCODING",

@@ -7,6 +7,7 @@
 #include "loom/format/text/parser/attrs.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "loom/error/error_catalog.h"
@@ -98,6 +99,65 @@ static iree_status_t loom_parse_i64_array_attr(loom_parser_t* parser,
   }
   *out_attr = loom_attr_i64_array(arena_values, count);
   return iree_ok_status();
+}
+
+static int8_t loom_parse_hex_nibble(uint8_t c) {
+  if (c >= '0' && c <= '9') return (int8_t)(c - '0');
+  if (c >= 'a' && c <= 'f') return (int8_t)(10 + c - 'a');
+  if (c >= 'A' && c <= 'F') return (int8_t)(10 + c - 'A');
+  return -1;
+}
+
+static iree_status_t loom_parse_bytes_attr_hex(loom_parser_t* parser,
+                                               loom_token_t hex_token,
+                                               loom_attribute_t* out_attr) {
+  iree_string_view_t hex = hex_token.text;
+  if ((hex.size & 1) != 0 || hex.size > ((uint64_t)UINT32_MAX * 2u)) {
+    return loom_parser_emit_unexpected_token(
+        parser, hex_token, IREE_SV("an even-length hex byte string"));
+  }
+  for (iree_host_size_t i = 0; i < hex.size; ++i) {
+    if (loom_parse_hex_nibble((uint8_t)hex.data[i]) < 0) {
+      return loom_parser_emit_unexpected_token(
+          parser, hex_token, IREE_SV("an even-length hex byte string"));
+    }
+  }
+
+  const uint32_t byte_length = (uint32_t)(hex.size / 2u);
+  uint8_t* bytes = NULL;
+  if (byte_length != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        &parser->module->arena, byte_length, sizeof(uint8_t), (void**)&bytes));
+    for (uint32_t i = 0; i < byte_length; ++i) {
+      int8_t high = loom_parse_hex_nibble((uint8_t)hex.data[i * 2u]);
+      int8_t low = loom_parse_hex_nibble((uint8_t)hex.data[i * 2u + 1u]);
+      bytes[i] = (uint8_t)((high << 4) | low);
+    }
+  }
+  *out_attr = loom_attr_bytes(bytes, byte_length);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_bytes_attr(loom_parser_t* parser,
+                                           loom_attribute_t* out_attr) {
+  if (!loom_tokenizer_try_consume_keyword(&parser->tokenizer,
+                                          IREE_SV("bytes"))) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'bytes'"));
+  }
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LPAREN, NULL);
+  loom_token_t hex_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_STRING, &hex_token);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RPAREN, NULL);
+  return loom_parse_bytes_attr_hex(parser, hex_token, out_attr);
+}
+
+static bool loom_parse_next_generic_attr_is_bytes(loom_parser_t* parser) {
+  loom_tokenizer_t lookahead = parser->tokenizer;
+  if (!loom_tokenizer_try_consume_keyword(&lookahead, IREE_SV("bytes"))) {
+    return false;
+  }
+  return loom_tokenizer_at(&lookahead, LOOM_TOKEN_LPAREN);
 }
 
 iree_status_t loom_parse_attr_value(loom_parser_t* parser,
@@ -201,6 +261,9 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
     case LOOM_ATTR_I64_ARRAY: {
       return loom_parse_i64_array_attr(parser, out_attr);
     }
+    case LOOM_ATTR_BYTES: {
+      return loom_parse_bytes_attr(parser, out_attr);
+    }
     case LOOM_ATTR_TYPE: {
       loom_type_t type = {0};
       IREE_RETURN_IF_ERROR(
@@ -289,6 +352,15 @@ static const struct {
     {(const uint8_t*)"\x05"
                      "range",
      LOOM_PREDICATE_RANGE},
+    {(const uint8_t*)"\x07"
+                     "not_nan",
+     LOOM_PREDICATE_NOT_NAN},
+    {(const uint8_t*)"\x07"
+                     "not_inf",
+     LOOM_PREDICATE_NOT_INF},
+    {(const uint8_t*)"\x06"
+                     "finite",
+     LOOM_PREDICATE_FINITE},
 };
 
 iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
@@ -484,6 +556,9 @@ iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
     case LOOM_TOKEN_SYMBOL:
       return loom_parse_symbol_ref_attr(parser, out_attr);
     case LOOM_TOKEN_BARE_IDENT: {
+      if (loom_parse_next_generic_attr_is_bytes(parser)) {
+        return loom_parse_bytes_attr(parser, out_attr);
+      }
       double special_value = 0.0;
       if (loom_parse_special_f64_spelling(value_token.text, &special_value)) {
         loom_tokenizer_next(&parser->tokenizer);

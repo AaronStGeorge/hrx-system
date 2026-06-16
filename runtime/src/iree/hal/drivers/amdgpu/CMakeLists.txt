@@ -148,6 +148,22 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    source_context
+  HDRS
+    "source_context.h"
+  SRCS
+    "source_context.c"
+  DEPS
+    iree::base
+    iree::hal
+    iree::hal::drivers::amdgpu::util::loaded_code_object
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     amdgpu
   HDRS
     "api.h"
@@ -169,12 +185,16 @@ iree_cc_library(
     "aql_program_builder.h"
     "aql_program_validation.c"
     "aql_program_validation.h"
+    "asan_state.c"
+    "asan_state.h"
     "driver.c"
     "driver.h"
     "executable.c"
     "executable.h"
     "executable_cache.c"
     "executable_cache.h"
+    "feedback_state.c"
+    "feedback_state.h"
     "host_queue.c"
     "host_queue.h"
     "host_queue_blit.c"
@@ -254,6 +274,7 @@ iree_cc_library(
     ::kernarg_layout
     ::profile_events
     ::queue_affinity
+    ::source_context
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -273,6 +294,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::util::code_object_target
     iree::hal::drivers::amdgpu::util::device_clock
     iree::hal::drivers::amdgpu::util::device_library
+    iree::hal::drivers::amdgpu::util::feedback_channel
     iree::hal::drivers::amdgpu::util::global_table
     iree::hal::drivers::amdgpu::util::hsaco_metadata
     iree::hal::drivers::amdgpu::util::info
@@ -284,6 +306,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::util::pm4_dispatch
     iree::hal::drivers::amdgpu::util::pm4_program
     iree::hal::drivers::amdgpu::util::queue_primitives
+    iree::hal::drivers::amdgpu::util::shadow_map
     iree::hal::drivers::amdgpu::util::target_id
     iree::hal::drivers::amdgpu::util::topology
     iree::hal::drivers::amdgpu::util::vmem
@@ -311,10 +334,12 @@ iree_cc_library(
     "aql_prepublished_kernarg_storage.h"
     "aql_program_builder.h"
     "aql_program_validation.h"
+    "asan_state.h"
     "buffer.h"
     "driver.h"
     "executable.h"
     "executable_cache.h"
+    "feedback_state.h"
     "host_queue.h"
     "host_queue_blit.h"
     "host_queue_command_buffer.h"
@@ -362,12 +387,14 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::device::headers
     iree::hal::drivers::amdgpu::util::block_pool
     iree::hal::drivers::amdgpu::util::device_library
+    iree::hal::drivers::amdgpu::util::feedback_channel
     iree::hal::drivers::amdgpu::util::info
     iree::hal::drivers::amdgpu::util::libhsa
     iree::hal::drivers::amdgpu::util::packet
     iree::hal::drivers::amdgpu::util::pm4_dispatch
     iree::hal::drivers::amdgpu::util::pm4_program
     iree::hal::drivers::amdgpu::util::queue_primitives
+    iree::hal::drivers::amdgpu::util::shadow_map
     iree::hal::drivers::amdgpu::util::target_id
     iree::hal::drivers::amdgpu::util::topology
     iree::hal::drivers::amdgpu::util::vmem
@@ -675,6 +702,27 @@ iree_cc_test(
 )
 endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    source_context_test
+  SRCS
+    "source_context_test.cc"
+  DEPS
+    ::source_context
+    iree::base
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
 if(TARGET iree::hal::drivers::amdgpu::cts::testdata_amdgpu)
   iree_amdgpu_expand_target_selectors(
     _IREE_HAL_AMDGPU_EXACT_TARGETS
@@ -760,8 +808,8 @@ iree_amdgpu_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
   SRCS
     "pm4_command_buffer_benchmark_testdata.c"
   TESTONLY

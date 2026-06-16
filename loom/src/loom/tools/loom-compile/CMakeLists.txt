@@ -58,6 +58,7 @@ loom_cc_binary(
     loom::ir
     loom::ops::kernel
     loom::ops::op_defs
+    loom::sanitizer::options_cli
     loom::target::artifact_manifest
     loom::target::entry_selection
     loom::target::low_descriptor_registry

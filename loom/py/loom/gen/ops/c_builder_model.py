@@ -123,6 +123,7 @@ _C_ATTR_TYPE_MAP: dict[str, str] = {
     "enum": "uint8_t",
     "symbol": "loom_symbol_ref_t",
     "i64_array": "const int64_t*",
+    "bytes": "iree_const_byte_span_t",
     "type": "uint32_t",
     "encoding": "uint16_t",
     "dict": "loom_named_attr_slice_t",

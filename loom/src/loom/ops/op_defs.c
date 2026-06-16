@@ -6,6 +6,7 @@
 
 #include "loom/ops/op_defs.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
@@ -1594,6 +1595,38 @@ iree_status_t loom_builder_copy_predicate_list_attr_storage(
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       builder->arena, count, sizeof(**out_storage), (void**)out_storage));
   memcpy(*out_storage, predicates, count * sizeof(**out_storage));
+  return iree_ok_status();
+}
+
+iree_status_t loom_builder_copy_bytes_attr_storage(
+    loom_builder_t* builder, iree_const_byte_span_t bytes,
+    iree_string_view_t label, const uint8_t** out_storage) {
+  if (!out_storage) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "byte storage output is NULL");
+  }
+  *out_storage = NULL;
+  if (bytes.data_length == 0) return iree_ok_status();
+  if (bytes.data_length > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "%.*s byte length %" PRIhsz " exceeds max %u",
+                            (int)label.size, label.data, bytes.data_length,
+                            UINT32_MAX);
+  }
+  if (!builder || !builder->arena) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "builder has no arena");
+  }
+  if (!bytes.data) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "%.*s storage is NULL for non-zero byte length",
+                            (int)label.size, label.data);
+  }
+  uint8_t* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      builder->arena, bytes.data_length, sizeof(*storage), (void**)&storage));
+  memcpy(storage, bytes.data, bytes.data_length);
+  *out_storage = storage;
   return iree_ok_status();
 }
 

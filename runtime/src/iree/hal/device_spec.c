@@ -19,7 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #define IREE_HAL_DEVICE_SPEC_MAGIC 0x43505344u  // DSPC
-#define IREE_HAL_DEVICE_SPEC_VERSION 2u
+#define IREE_HAL_DEVICE_SPEC_VERSION 3u
 #define IREE_HAL_DEVICE_SPEC_FNV1A64_OFFSET_BASIS 0xcbf29ce484222325ull
 #define IREE_HAL_DEVICE_SPEC_FNV1A64_PRIME 0x100000001b3ull
 
@@ -86,6 +86,8 @@ typedef struct iree_hal_device_spec_serialized_header_t {
   uint64_t timing_offset;
   // Serialized executable record.
   uint64_t executables_offset;
+  // Serialized sanitizer record.
+  uint64_t sanitizer_offset;
 } iree_hal_device_spec_serialized_header_t;
 
 typedef struct iree_hal_device_spec_serialized_string_t {
@@ -338,6 +340,8 @@ struct iree_hal_device_spec_t {
   iree_hal_device_timing_spec_t timing;
   // Executable capability facet.
   iree_hal_device_executable_spec_t executables;
+  // Sanitizer configuration facet.
+  iree_hal_device_sanitizer_spec_t sanitizer;
 };
 
 static uint64_t iree_hal_device_spec_digest_update(
@@ -473,6 +477,35 @@ static iree_status_t iree_hal_device_spec_validate_params(
                                 " has invalid kind %" PRIu32,
                                 i, executables->targets[i].kind);
       }
+    }
+  }
+  const iree_hal_device_sanitizer_spec_t* sanitizer = params->sanitizer;
+  if (sanitizer) {
+    const iree_hal_device_sanitizer_flags_t known_flags =
+        IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN;
+    if (sanitizer->flags & ~known_flags) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "device spec sanitizer flags 0x%" PRIx32
+                              " contain unsupported bits 0x%" PRIx32,
+                              sanitizer->flags,
+                              sanitizer->flags & ~known_flags);
+    }
+    const bool asan_flag_set =
+        iree_any_bit_set(sanitizer->flags, IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN);
+    const bool asan_options_enabled =
+        iree_hal_asan_pool_options_is_enabled(&sanitizer->asan.pool_options);
+    if (asan_flag_set) {
+      IREE_RETURN_IF_ERROR(
+          iree_hal_asan_pool_options_validate(&sanitizer->asan.pool_options));
+      if (!asan_options_enabled) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "device spec enables ASAN without enabled ASAN pool options");
+      }
+    } else if (asan_options_enabled) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "device spec has ASAN pool options without ASAN enabled");
     }
   }
   IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_count_pointer(
@@ -776,6 +809,9 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_create(
           source->metadata_schema, string_storage, &string_offset);
     }
   }
+  if (iree_status_is_ok(status) && params && params->sanitizer) {
+    spec->sanitizer = *params->sanitizer;
+  }
   if (iree_status_is_ok(status) && params && params->facet_count) {
     spec->facet_count = params->facet_count;
     status = iree_hal_device_spec_clone_array(
@@ -945,6 +981,10 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_serialize(
       sizeof(iree_hal_serialized_device_executable_spec_t),
       iree_alignof(iree_hal_serialized_device_executable_spec_t), &offset,
       &header.executables_offset));
+  IREE_RETURN_IF_ERROR(iree_hal_device_spec_layout_bytes(
+      sizeof(iree_hal_device_sanitizer_spec_t),
+      iree_alignof(iree_hal_device_sanitizer_spec_t), &offset,
+      &header.sanitizer_offset));
   IREE_RETURN_IF_ERROR(iree_hal_device_spec_layout_section(
       spec->identity.physical_device_count,
       sizeof(iree_hal_serialized_physical_device_spec_t),
@@ -1209,6 +1249,9 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_serialize(
     };
   }
 
+  memcpy(bytes + header.sanitizer_offset, &spec->sanitizer,
+         sizeof(spec->sanitizer));
+
   iree_hal_serialized_device_spec_facet_t* facets =
       (iree_hal_serialized_device_spec_facet_t*)(bytes + header.facets.offset);
   for (iree_host_size_t i = 0; i < spec->facet_count; ++i) {
@@ -1449,6 +1492,9 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
       sizeof(iree_hal_serialized_device_executable_spec_t),
       iree_alignof(iree_hal_serialized_device_executable_spec_t),
       "executables"));
+  IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_serialized_range(
+      bytes, header.sanitizer_offset, sizeof(iree_hal_device_sanitizer_spec_t),
+      iree_alignof(iree_hal_device_sanitizer_spec_t), "sanitizer"));
   IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_serialized_section(
       bytes, header.physical_devices,
       sizeof(iree_hal_serialized_physical_device_spec_t),
@@ -1835,6 +1881,9 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
     }
   }
 
+  iree_hal_device_sanitizer_spec_t sanitizer;
+  memcpy(&sanitizer, bytes.data + header.sanitizer_offset, sizeof(sanitizer));
+
   for (iree_host_size_t i = 0;
        i < (iree_host_size_t)header.facets.count && iree_status_is_ok(status);
        ++i) {
@@ -1859,6 +1908,7 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
         .dispatch = &dispatch,
         .timing = &timing,
         .executables = &executables,
+        .sanitizer = &sanitizer,
         .facet_count = (iree_host_size_t)header.facets.count,
         .facets = facets,
     };
@@ -2034,6 +2084,12 @@ IREE_API_EXPORT const iree_hal_device_executable_spec_t*
 iree_hal_device_spec_executables(const iree_hal_device_spec_t* spec) {
   IREE_ASSERT_ARGUMENT(spec);
   return &spec->executables;
+}
+
+IREE_API_EXPORT const iree_hal_device_sanitizer_spec_t*
+iree_hal_device_spec_sanitizer(const iree_hal_device_spec_t* spec) {
+  IREE_ASSERT_ARGUMENT(spec);
+  return &spec->sanitizer;
 }
 
 IREE_API_EXPORT iree_host_size_t

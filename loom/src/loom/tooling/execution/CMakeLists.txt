@@ -33,6 +33,7 @@ loom_cc_library(
     loom::error::diagnostic
     loom::target::artifact_manifest
     loom::target::compile_report
+    loom::target::pipeline_options
     loom::verify
   PUBLIC
 )

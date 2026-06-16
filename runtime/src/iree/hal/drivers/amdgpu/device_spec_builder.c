@@ -423,6 +423,13 @@ static iree_status_t iree_hal_amdgpu_device_spec_populate_executables(
   return iree_hal_device_spec_builder_set_executables(builder, &executables);
 }
 
+static iree_status_t iree_hal_amdgpu_device_spec_populate_sanitizer(
+    const iree_hal_amdgpu_device_spec_params_t* params,
+    iree_hal_device_spec_builder_t* builder) {
+  return iree_hal_device_spec_builder_set_sanitizer(builder,
+                                                    &params->sanitizer);
+}
+
 IREE_API_EXPORT iree_status_t iree_hal_amdgpu_device_spec_create(
     const iree_hal_amdgpu_device_spec_params_t* params,
     iree_allocator_t host_allocator, iree_hal_device_spec_t** out_spec) {
@@ -448,6 +455,9 @@ IREE_API_EXPORT iree_status_t iree_hal_amdgpu_device_spec_create(
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_device_spec_populate_executables(params, &builder);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_device_spec_populate_sanitizer(params, &builder);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_device_spec_builder_finalize(&builder, out_spec);

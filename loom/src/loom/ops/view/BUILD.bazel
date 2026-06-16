@@ -15,12 +15,14 @@ package(
 loom_generated_cc_library(
     name = "view",
     srcs = [
+        "access_verifier.c",
         "facts.c",
         "reference.c",
         "type_transfer.c",
         "verify.c",
     ],
     hdrs = [
+        "access_verifier.h",
         "ops.h",
         "reference.h",
     ],

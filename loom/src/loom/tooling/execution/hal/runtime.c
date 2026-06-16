@@ -10,7 +10,6 @@
 #include "iree/async/util/proactor_pool.h"
 #include "iree/base/threading/numa.h"
 #include "iree/hal/api.h"
-#include "iree/tooling/context_util.h"
 #include "iree/tooling/device_util.h"
 
 iree_status_t loom_run_hal_runtime_initialize(
@@ -20,13 +19,9 @@ iree_status_t loom_run_hal_runtime_initialize(
 
   iree_async_proactor_pool_t* proactor_pool = NULL;
   iree_async_frontier_tracker_t* frontier_tracker = NULL;
-  iree_status_t status =
-      iree_tooling_create_instance(allocator, &out_runtime->instance);
-  if (iree_status_is_ok(status)) {
-    status = iree_async_proactor_pool_create(
-        iree_numa_node_count(), /*node_ids=*/NULL,
-        iree_async_proactor_pool_options_default(), allocator, &proactor_pool);
-  }
+  iree_status_t status = iree_async_proactor_pool_create(
+      iree_numa_node_count(), /*node_ids=*/NULL,
+      iree_async_proactor_pool_options_default(), allocator, &proactor_pool);
   if (iree_status_is_ok(status)) {
     status = iree_async_frontier_tracker_create(
         iree_async_frontier_tracker_options_default(), allocator,
@@ -64,6 +59,5 @@ void loom_run_hal_runtime_deinitialize(loom_run_hal_runtime_t* runtime) {
   iree_hal_executable_cache_release(runtime->executable_cache);
   iree_hal_device_group_release(runtime->device_group);
   iree_hal_device_release(runtime->device);
-  iree_vm_instance_release(runtime->instance);
   *runtime = (loom_run_hal_runtime_t){0};
 }

@@ -52,6 +52,7 @@ iree_cc_library(
     iree::hal
     iree::hal::drivers::local_task::task_driver
     iree::hal::local::loaders::registration
+    iree::hal::memory::tlsf_pool
     iree::hal::utils::profile_file
     iree::hal::utils::resource_set
     iree::io::file_handle

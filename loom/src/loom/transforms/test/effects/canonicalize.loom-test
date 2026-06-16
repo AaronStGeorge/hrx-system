@@ -86,6 +86,23 @@ func.def @dead_read_only_load_dies(%buffer: buffer, %offset: offset) {
 
 // ====
 
+// Exact facts produced by an unknown-effect op can fold downstream pure users,
+// but generic fact folding must not erase the effectful producer itself.
+func.def @effectful_exact_facts_do_not_erase_producer() -> (i64) {
+  %value = test.effectful_constant 42 : i64
+  %observed = test.fact_range_lo %value : i64 -> i64
+  func.return %observed : i64
+}
+
+// ----
+func.def @effectful_exact_facts_do_not_erase_producer() -> (i64) {
+  %value = test.effectful_constant 42 : i64
+  %observed = scalar.constant 42 : i64
+  func.return %observed : i64
+}
+
+// ====
+
 // Function-level canonicalization runs over every root region. Projected
 // regions keep distinct SSA values, but use the same logical signature facts.
 test.split_func @split_func_all_regions_canonicalize(%arg: i32) {

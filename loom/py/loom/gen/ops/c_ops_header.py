@@ -203,6 +203,8 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
                 "string": "LOOM_DEFINE_ATTR_STRING",
                 "bool": "LOOM_DEFINE_ATTR_BOOL",
                 "i64_array": "LOOM_DEFINE_ATTR_I64_ARRAY",
+                "bytes": "LOOM_DEFINE_ATTR_BYTES",
+                "predicate_list": "LOOM_DEFINE_ATTR_PREDICATE_LIST",
                 "dict": "LOOM_DEFINE_ATTR_DICT",
                 "encoding": "LOOM_DEFINE_ATTR_ENCODING",
                 "enum": "LOOM_DEFINE_ATTR_ENUM",

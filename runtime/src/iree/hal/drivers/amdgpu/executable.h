@@ -16,6 +16,9 @@
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
 #include "iree/hal/drivers/amdgpu/util/pm4_dispatch.h"
 
+typedef struct iree_hal_amdgpu_asan_state_t iree_hal_amdgpu_asan_state_t;
+typedef struct iree_hal_amdgpu_feedback_state_t
+    iree_hal_amdgpu_feedback_state_t;
 typedef struct iree_hal_amdgpu_topology_t iree_hal_amdgpu_topology_t;
 
 #ifdef __cplusplus
@@ -110,6 +113,17 @@ iree_status_t iree_hal_amdgpu_executable_infer_format(
 // |libhsa| and |topology| are captured by-reference and must remain valid for
 // the lifetime of the cache.
 //
+// |executable_id| is a non-zero logical-device-local identifier assigned to
+// this executable before it is visible to profiling or device-originated
+// diagnostics.
+//
+// |asan_state| is captured by-reference for this load and used to publish ASAN
+// config globals when enabled. It may be NULL when ASAN is unavailable.
+//
+// |feedback_state| is captured by-reference for this load and used to publish
+// feedback config globals when enabled. It may be NULL when feedback is
+// unavailable.
+//
 // Exact code-object image bytes and loader load ranges are retained in profile
 // metadata for offline trace/disassembly workflows. Executable trace profiling
 // may begin after executable preparation, so this cold-path metadata is always
@@ -118,12 +132,13 @@ iree_status_t iree_hal_amdgpu_executable_create(
     iree_hal_device_t* device, const iree_hal_amdgpu_libhsa_t* libhsa,
     const iree_hal_amdgpu_topology_t* topology,
     const iree_hal_executable_params_t* executable_params,
+    uint64_t executable_id, iree_hal_amdgpu_feedback_state_t* feedback_state,
+    iree_hal_amdgpu_asan_state_t* asan_state,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_allocator_t host_allocator, iree_hal_executable_t** out_executable);
 
-// Returns the producer-local profile executable id assigned at creation.
-uint64_t iree_hal_amdgpu_executable_profile_id(
-    iree_hal_executable_t* executable);
+// Returns the logical-device-local executable id assigned at creation.
+uint64_t iree_hal_amdgpu_executable_id(iree_hal_executable_t* executable);
 
 // Returns metadata about an exported kernel function in host memory.
 // The returned pointers will remain valid for the lifetime of the executable.

@@ -236,6 +236,7 @@ loom_cc_library(
     visibility = [
         "//loom/binding/c:__pkg__",
         "//loom/src/loom/codegen/low:__pkg__",
+        "//loom/src/loom/target/arch/amdgpu:__pkg__",
         "//loom/src/loom/tooling/compile:__pkg__",
         "//loom/src/loom/tools/loom-check:__pkg__",
         "//loom/src/loom/tools/loom-opt:__pkg__",
@@ -249,6 +250,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/transforms:operand_forms",
         "//loom/src/loom/codegen/low/transforms/pipeline:source_to_low",
         "//loom/src/loom/codegen/low/transforms/pipeline:target_legalize",
+        "//loom/src/loom/sanitizer:pipeline_passes",
         "//loom/src/loom/transforms/cfg:branch_fusion",
         "//loom/src/loom/transforms/cfg:branch_sink",
         "//loom/src/loom/transforms/cfg:cfg_simplify",

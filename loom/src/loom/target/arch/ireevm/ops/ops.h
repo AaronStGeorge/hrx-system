@@ -190,6 +190,7 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_ireevm_import_decl_target, 2)
 LOOM_DEFINE_ATTR_STRING(loom_ireevm_import_decl_import_symbol, 3)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_ireevm_import_decl_cc, 4, loom_ireevm_import_decl_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_ireevm_import_decl_purity, 5, loom_ireevm_import_decl_purity_t)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_ireevm_import_decl_predicates, 6)
 enum loom_ireevm_import_decl_build_flag_bits_e {
   LOOM_IREEVM_IMPORT_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_IREEVM_IMPORT_DECL_BUILD_FLAG_HAS_CC = 1u << 1,

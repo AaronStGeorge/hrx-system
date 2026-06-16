@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import replace
 from typing import cast
 
 import pytest
 
+from loom.gen.target.low import compiler
 from loom.gen.target.low.low_descriptors import (
     DescriptorAllowlist,
     generate_descriptor_set,
@@ -53,6 +55,14 @@ from loom.target.test.descriptors import (
     TEST_LOW_CORE_DESCRIPTOR_SET,
     TEST_LOW_MUL_I32_DESCRIPTOR,
 )
+
+
+def _compiled_slice(
+    rows: Sequence[object],
+    start: int,
+    count: int,
+) -> tuple[object, ...]:
+    return tuple(rows[start : start + count])
 
 
 def test_descriptor_category_validates_stable_key_spelling() -> None:
@@ -265,6 +275,73 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
     assert '"test.scalar.alu"' in generated.source
     assert '"test.scalar"' in generated.source
     assert "test.call.i32" not in generated.source
+
+
+def test_compiler_descriptor_rows_span_source_tables() -> None:
+    compiled = compiler.compile_descriptor_set(TEST_LOW_CORE_DESCRIPTOR_SET)
+
+    assert len(compiled.descriptor_rows) == len(compiled.descriptors)
+    for descriptor, row in zip(
+        compiled.descriptors,
+        compiled.descriptor_rows,
+        strict=True,
+    ):
+        assert (
+            _compiled_slice(
+                compiled.operands,
+                row["operand_start"],
+                row["operand_count"],
+            )
+            == descriptor.operands
+        )
+        assert (
+            _compiled_slice(
+                compiled.immediates,
+                row["immediate_start"],
+                row["immediate_count"],
+            )
+            == descriptor.immediates
+        )
+        assert (
+            _compiled_slice(
+                compiled.effects,
+                row["effect_start"],
+                row["effect_count"],
+            )
+            == descriptor.effects
+        )
+        assert (
+            _compiled_slice(
+                compiled.constraints,
+                row["constraint_start"],
+                row["constraint_count"],
+            )
+            == descriptor.constraints
+        )
+        assert (
+            _compiled_slice(
+                compiled.storage_leases,
+                row["storage_lease_start"],
+                row["storage_lease_count"],
+            )
+            == descriptor.storage_leases
+        )
+        assert (
+            _compiled_slice(
+                compiled.feature_mask_words,
+                row["feature_mask_word_start"],
+                row["feature_mask_word_count"],
+            )
+            == descriptor.feature_mask_words
+        )
+        assert (
+            _compiled_slice(
+                compiled.encoding_field_values,
+                row["encoding_field_value_start"],
+                row["encoding_field_value_count"],
+            )
+            == descriptor.encoding_field_values
+        )
 
 
 def test_allowlist_closes_over_operand_form_replacements() -> None:

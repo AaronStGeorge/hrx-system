@@ -55,6 +55,15 @@ iree_status_t loom_test_constant_facts(loom_fact_context_t* context,
   return iree_ok_status();
 }
 
+iree_status_t loom_test_effectful_constant_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_attribute_t attr = loom_op_attrs(op)[0];
+  result_facts[0] = loom_value_facts_exact_i64(loom_attr_as_i64(attr));
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // test.fact_* — value facts inspection ops
 //===----------------------------------------------------------------------===//

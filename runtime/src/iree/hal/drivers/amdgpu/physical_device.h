@@ -28,6 +28,9 @@ typedef struct iree_hal_amdgpu_host_memory_pools_t
     iree_hal_amdgpu_host_memory_pools_t;
 typedef struct iree_hal_amdgpu_pm4_command_buffer_resident_pool_t
     iree_hal_amdgpu_pm4_command_buffer_resident_pool_t;
+typedef struct iree_hal_amdgpu_asan_state_t iree_hal_amdgpu_asan_state_t;
+typedef struct iree_hal_amdgpu_feedback_state_t
+    iree_hal_amdgpu_feedback_state_t;
 
 //===----------------------------------------------------------------------===//
 // iree_hal_amdgpu_physical_device_options_t
@@ -147,6 +150,9 @@ typedef struct iree_hal_amdgpu_physical_device_options_t {
 
     // Maximum death-frontier entry count stored per free TLSF block.
     uint8_t frontier_capacity;
+
+    // ASAN allocation-shaping policy for default pools.
+    iree_hal_asan_pool_options_t asan;
   } default_pool;
 
   // Fixed-size queue_read/queue_write staging policy.
@@ -322,7 +328,8 @@ iree_status_t iree_hal_amdgpu_physical_device_initialize(
     const iree_hal_amdgpu_physical_device_options_t* options,
     iree_async_proactor_t* proactor, iree_host_size_t host_ordinal,
     const iree_hal_amdgpu_host_memory_pools_t* host_memory_pools,
-    iree_host_size_t device_ordinal, iree_allocator_t host_allocator,
+    iree_host_size_t device_ordinal, iree_hal_amdgpu_asan_state_t* asan_state,
+    iree_allocator_t host_allocator,
     iree_hal_amdgpu_physical_device_t* out_physical_device);
 
 // Binds and initializes this physical device's host queues after the logical
@@ -333,6 +340,7 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
     iree_async_frontier_tracker_t* frontier_tracker,
     iree_async_axis_t base_axis,
     iree_hal_amdgpu_epoch_signal_table_t* epoch_signal_table,
+    iree_hal_amdgpu_feedback_state_t* feedback_state,
     const iree_hal_amdgpu_host_memory_pools_t* host_memory_pools,
     iree_allocator_t host_allocator,
     iree_hal_amdgpu_physical_device_t* physical_device);

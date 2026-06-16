@@ -264,6 +264,9 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_compile_report_options_t`.
   LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS = 31,
+
+  /// `loomc_sanitizer_options_t`.
+  LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS = 32,
 } loomc_structure_type_t;
 
 /// One loose string option entry.

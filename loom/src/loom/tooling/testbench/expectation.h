@@ -6,17 +6,16 @@
 
 // Prepared expectation evaluation for check testbench cases.
 //
-// This layer evaluates check.expect.* operations over materialized VM/HAL
-// values and records structured failure data. It is target-free: builtin
-// expectations handle VM scalars and HAL buffer views, while custom validators
-// are injected by name during schedule preparation.
+// This layer evaluates check.expect.* operations over materialized values and
+// records structured failure data. It is target-free: builtin expectations
+// handle scalars and HAL buffer views, while custom validators are injected by
+// name during schedule preparation.
 
 #ifndef LOOM_TOOLING_TESTBENCH_EXPECTATION_H_
 #define LOOM_TOOLING_TESTBENCH_EXPECTATION_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
-#include "iree/vm/api.h"
 #include "loom/tooling/testbench/value_materializer.h"
 #include "loom/util/stream.h"
 
@@ -26,7 +25,8 @@ extern "C" {
 
 typedef iree_status_t(IREE_API_PTR* loom_testbench_expectation_fn_t)(
     void* user_data, const loom_testbench_expectation_plan_t* expectation,
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched);
 
 typedef struct loom_testbench_expectation_callback_t {

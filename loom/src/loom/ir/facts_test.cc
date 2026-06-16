@@ -9,6 +9,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 #include "iree/testing/gtest.h"
 
@@ -115,6 +116,8 @@ TEST(FactsExactF64, Pi) {
   loom_value_facts_t f = loom_value_facts_exact_f64(3.14159265358979);
   EXPECT_TRUE(loom_value_facts_is_exact(f));
   EXPECT_TRUE(loom_value_facts_is_float(f));
+  EXPECT_TRUE(loom_value_facts_is_not_nan(f));
+  EXPECT_TRUE(loom_value_facts_is_finite(f));
   EXPECT_DOUBLE_EQ(loom_value_facts_as_f64(f), 3.14159265358979);
 }
 
@@ -122,7 +125,27 @@ TEST(FactsExactF64, Zero) {
   loom_value_facts_t f = loom_value_facts_exact_f64(0.0);
   EXPECT_TRUE(loom_value_facts_is_exact(f));
   EXPECT_TRUE(loom_value_facts_is_float(f));
+  EXPECT_TRUE(loom_value_facts_is_not_nan(f));
+  EXPECT_TRUE(loom_value_facts_is_finite(f));
   EXPECT_DOUBLE_EQ(loom_value_facts_as_f64(f), 0.0);
+}
+
+TEST(FactsExactF64, NaN) {
+  loom_value_facts_t f =
+      loom_value_facts_exact_f64(std::numeric_limits<double>::quiet_NaN());
+  EXPECT_TRUE(loom_value_facts_is_exact(f));
+  EXPECT_TRUE(loom_value_facts_is_float(f));
+  EXPECT_FALSE(loom_value_facts_is_not_nan(f));
+  EXPECT_FALSE(loom_value_facts_is_finite(f));
+}
+
+TEST(FactsExactF64, Infinity) {
+  loom_value_facts_t f =
+      loom_value_facts_exact_f64(std::numeric_limits<double>::infinity());
+  EXPECT_TRUE(loom_value_facts_is_exact(f));
+  EXPECT_TRUE(loom_value_facts_is_float(f));
+  EXPECT_TRUE(loom_value_facts_is_not_nan(f));
+  EXPECT_FALSE(loom_value_facts_is_finite(f));
 }
 
 TEST(FactsExactF64, NegativeZeroDiffersFromPositive) {
@@ -371,6 +394,22 @@ static loom_predicate_t make_predicate_pow2(void) {
   return pred;
 }
 
+static loom_predicate_t make_predicate_not_nan(void) {
+  loom_predicate_t pred = {0};
+  pred.kind = (uint8_t)LOOM_PREDICATE_NOT_NAN;
+  pred.arg_count = 1;
+  pred.arg_tags[0] = LOOM_PRED_ARG_VALUE;
+  return pred;
+}
+
+static loom_predicate_t make_predicate_finite(void) {
+  loom_predicate_t pred = {0};
+  pred.kind = (uint8_t)LOOM_PREDICATE_FINITE;
+  pred.arg_count = 1;
+  pred.arg_tags[0] = LOOM_PRED_ARG_VALUE;
+  return pred;
+}
+
 TEST(FactsApplyPredicate, Eq) {
   loom_value_facts_t f = loom_value_facts_unknown();
   loom_predicate_t pred = make_predicate_1(LOOM_PREDICATE_EQ, 42);
@@ -394,6 +433,23 @@ TEST(FactsApplyPredicate, NeIsRepresentedButDoesNotTightenInterval) {
   loom_predicate_t pred = make_predicate_1(LOOM_PREDICATE_NE, 42);
   loom_value_facts_apply_predicate(&f, &pred);
   EXPECT_TRUE(loom_value_facts_is_unknown(f));
+}
+
+TEST(FactsApplyPredicate, NeZeroSetsNonzeroWithoutTighteningInterval) {
+  loom_value_facts_t f = loom_value_facts_unknown();
+  loom_predicate_t ne_pred = make_predicate_1(LOOM_PREDICATE_NE, 0);
+  loom_value_facts_apply_predicate(&f, &ne_pred);
+  EXPECT_EQ(f.range_lo, INT64_MIN);
+  EXPECT_EQ(f.range_hi, INT64_MAX);
+  EXPECT_TRUE(loom_value_facts_is_non_zero(f));
+  EXPECT_FALSE(loom_value_facts_is_positive(f));
+
+  loom_predicate_t max_pred = make_predicate_1(LOOM_PREDICATE_MAX, 1024);
+  loom_value_facts_apply_predicate(&f, &max_pred);
+  EXPECT_EQ(f.range_lo, INT64_MIN);
+  EXPECT_EQ(f.range_hi, 1024);
+  EXPECT_TRUE(loom_value_facts_is_non_zero(f));
+  EXPECT_FALSE(loom_value_facts_is_positive(f));
 }
 
 TEST(FactsApplyPredicate, Ge) {
@@ -454,6 +510,22 @@ TEST(FactsApplyPredicate, Pow2) {
   loom_predicate_t pred = make_predicate_pow2();
   loom_value_facts_apply_predicate(&f, &pred);
   EXPECT_TRUE(loom_value_facts_is_power_of_two(f));
+}
+
+TEST(FactsApplyPredicate, NotNan) {
+  loom_value_facts_t f = loom_value_facts_unknown();
+  loom_predicate_t pred = make_predicate_not_nan();
+  loom_value_facts_apply_predicate(&f, &pred);
+  EXPECT_TRUE(loom_value_facts_is_not_nan(f));
+  EXPECT_FALSE(loom_value_facts_is_finite(f));
+}
+
+TEST(FactsApplyPredicate, Finite) {
+  loom_value_facts_t f = loom_value_facts_unknown();
+  loom_predicate_t pred = make_predicate_finite();
+  loom_value_facts_apply_predicate(&f, &pred);
+  EXPECT_TRUE(loom_value_facts_is_not_nan(f));
+  EXPECT_TRUE(loom_value_facts_is_finite(f));
 }
 
 TEST(FactsApplyPredicate, Range) {

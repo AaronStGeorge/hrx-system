@@ -252,3 +252,35 @@ iree_status_t loom_low_select_source_funcs(
       module, options, LOOM_LOW_SOURCE_SELECTION_FILTER_FUNCTION, arena,
       out_selection_list);
 }
+
+static bool loom_low_source_selection_policy_seen_before(
+    const loom_low_source_selection_list_t* selection_list,
+    const loom_low_lower_policy_t* policy, iree_host_size_t limit) {
+  for (iree_host_size_t i = 0; i < limit; ++i) {
+    if (selection_list->values[i].policy == policy) {
+      return true;
+    }
+  }
+  return false;
+}
+
+iree_status_t loom_low_source_selection_finalize_policies(
+    loom_module_t* module,
+    const loom_low_source_selection_list_t* selection_list,
+    loom_low_lower_module_state_t* module_state,
+    iree_arena_allocator_t* scratch_arena) {
+  for (iree_host_size_t i = 0; i < selection_list->count; ++i) {
+    const loom_low_lower_policy_t* policy = selection_list->values[i].policy;
+    if (policy == NULL || policy->finalize_module.fn == NULL) {
+      continue;
+    }
+    if (loom_low_source_selection_policy_seen_before(selection_list, policy,
+                                                     i)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        policy->finalize_module.fn(policy->finalize_module.user_data, module,
+                                   module_state, scratch_arena));
+  }
+  return iree_ok_status();
+}

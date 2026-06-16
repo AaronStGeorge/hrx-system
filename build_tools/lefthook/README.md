@@ -9,7 +9,7 @@ routing. Project-specific policy stays in each project under
 ## Commit Contract
 
 A successful Git commit must not commit stale formatter or generated-file
-output. The Git `pre-commit` hook uses commit scope: files staged for commit
+output. The generated Git commit hook uses commit scope: files staged for commit
 plus files changed by `HEAD`, so `git commit --amend` validates the commit being
 replaced without scanning the full feature branch. Test-bearing hook profiles
 run a mechanical fix pass first, stage files owned by those fixers, and then run
@@ -90,9 +90,8 @@ python dev.py cmake presubmit --profile default
 
 ## Lefthook Groups
 
-`pre-commit` is the installed Git hook. With `paranoid` or `ci` it runs fixups
-first and then validates the same commit-scope set; with `default` it is
-check-only.
+The installed Git commit hook runs fixups first with `paranoid` or `ci` and
+then validates the same commit-scope set; with `default` it is check-only.
 
 `dev.py` installs lane-specific local hook policy into ignored
 `lefthook-local.yml`:

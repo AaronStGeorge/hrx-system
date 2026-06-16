@@ -10,7 +10,6 @@
 
 #include "iree/base/internal/math.h"
 #include "iree/base/internal/prng.h"
-#include "iree/modules/hal/types.h"
 #include "iree/tooling/numpy_io.h"
 #include "loom/util/math.h"
 
@@ -223,7 +222,7 @@ static iree_status_t loom_testbench_value_table_include_value_callback(
   table->slots[slot_index] = (loom_testbench_value_slot_t){
       .value_id = value_id,
       .flags = 0,
-      .variant = iree_vm_variant_empty(),
+      .value = {0},
   };
   ++table->slot_count;
   return iree_ok_status();
@@ -288,8 +287,7 @@ void loom_testbench_value_table_reset(loom_testbench_value_table_t* table) {
     loom_testbench_value_slot_t* slot = &table->slots[slot_index];
     if (iree_any_bit_set(slot->flags,
                          LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED)) {
-      iree_vm_variant_reset(&slot->variant);
-      slot->variant = iree_vm_variant_empty();
+      loom_testbench_value_deinitialize(&slot->value);
       slot->flags &= ~LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED;
     }
   }
@@ -303,9 +301,101 @@ bool loom_testbench_value_table_contains(
          iree_any_bit_set(slot->flags, LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED);
 }
 
+void loom_testbench_value_deinitialize(loom_testbench_value_t* value) {
+  if (value == NULL) {
+    return;
+  }
+  if (value->kind == LOOM_TESTBENCH_VALUE_KIND_BUFFER) {
+    iree_tooling_buffer_binding_deinitialize(&value->buffer);
+  }
+  memset(value, 0, sizeof(*value));
+}
+
+bool loom_testbench_value_is_scalar(const loom_testbench_value_t* value) {
+  return value != NULL && value->kind == LOOM_TESTBENCH_VALUE_KIND_SCALAR;
+}
+
+bool loom_testbench_value_is_buffer(const loom_testbench_value_t* value) {
+  return value != NULL && value->kind == LOOM_TESTBENCH_VALUE_KIND_BUFFER;
+}
+
+iree_hal_buffer_view_t* loom_testbench_value_buffer_view(
+    const loom_testbench_value_t* value) {
+  if (!loom_testbench_value_is_buffer(value)) {
+    return NULL;
+  }
+  return value->buffer.buffer_view;
+}
+
+void loom_testbench_value_retain(const loom_testbench_value_t* source,
+                                 loom_testbench_value_t* out_value) {
+  *out_value = (loom_testbench_value_t){0};
+  if (source == NULL) {
+    return;
+  }
+  *out_value = *source;
+  if (source->kind == LOOM_TESTBENCH_VALUE_KIND_BUFFER) {
+    iree_hal_buffer_retain(out_value->buffer.buffer);
+    iree_hal_buffer_view_retain(out_value->buffer.buffer_view);
+  }
+}
+
+iree_status_t loom_testbench_value_as_i64(const loom_testbench_value_t* value,
+                                          int64_t* out_value) {
+  if (!loom_testbench_value_is_scalar(value)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value is not a scalar");
+  }
+  switch (value->scalar.kind) {
+    case IREE_TOOLING_VALUE_KIND_I32:
+      *out_value = value->scalar.storage.i32;
+      return iree_ok_status();
+    case IREE_TOOLING_VALUE_KIND_U32:
+    case IREE_TOOLING_VALUE_KIND_RAW_U32:
+      *out_value = value->scalar.storage.u32;
+      return iree_ok_status();
+    case IREE_TOOLING_VALUE_KIND_I64:
+      *out_value = value->scalar.storage.i64;
+      return iree_ok_status();
+    case IREE_TOOLING_VALUE_KIND_U64:
+      if (value->scalar.storage.u64 > (uint64_t)INT64_MAX) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "unsigned scalar does not fit int64");
+      }
+      *out_value = (int64_t)value->scalar.storage.u64;
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "value is not an integer scalar");
+  }
+}
+
+iree_status_t loom_testbench_value_set_buffer_view_move(
+    iree_hal_buffer_view_t* buffer_view, loom_testbench_value_t* out_value) {
+  *out_value = (loom_testbench_value_t){0};
+  if (!buffer_view) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "buffer view is required");
+  }
+  iree_hal_buffer_t* buffer = iree_hal_buffer_view_buffer(buffer_view);
+  *out_value = (loom_testbench_value_t){
+      .kind = LOOM_TESTBENCH_VALUE_KIND_BUFFER,
+      .buffer =
+          {
+              .kind = IREE_TOOLING_BUFFER_BINDING_KIND_BUFFER_VIEW,
+              .buffer = buffer,
+              .buffer_view = buffer_view,
+              .byte_offset = 0,
+              .byte_length = iree_hal_buffer_view_byte_length(buffer_view),
+          },
+  };
+  iree_hal_buffer_retain(buffer);
+  return iree_ok_status();
+}
+
 iree_status_t loom_testbench_value_table_assign_move(
     loom_testbench_value_table_t* table, loom_value_id_t value_id,
-    iree_vm_variant_t* variant) {
+    loom_testbench_value_t* value) {
   loom_testbench_value_slot_t* slot =
       loom_testbench_value_table_lookup_slot_mut(table, value_id);
   if (!slot) {
@@ -314,25 +404,28 @@ iree_status_t loom_testbench_value_table_assign_move(
                             (unsigned)value_id);
   }
   if (iree_any_bit_set(slot->flags, LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED)) {
-    iree_vm_variant_reset(&slot->variant);
+    loom_testbench_value_deinitialize(&slot->value);
   }
-  slot->variant = *variant;
+  slot->value = *value;
   slot->flags |= LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED;
-  *variant = iree_vm_variant_empty();
+  *value = (loom_testbench_value_t){0};
   return iree_ok_status();
 }
 
 static iree_status_t loom_testbench_value_table_set_value(
     loom_testbench_value_table_t* table, loom_value_id_t value_id,
-    iree_vm_value_t value) {
-  iree_vm_variant_t variant = iree_vm_make_variant_value(value);
-  return loom_testbench_value_table_assign_move(table, value_id, &variant);
+    iree_tooling_value_t scalar) {
+  loom_testbench_value_t value = {
+      .kind = LOOM_TESTBENCH_VALUE_KIND_SCALAR,
+      .scalar = scalar,
+  };
+  return loom_testbench_value_table_assign_move(table, value_id, &value);
 }
 
 iree_status_t loom_testbench_value_table_lookup_borrow(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
-    const iree_vm_variant_t** out_variant) {
-  *out_variant = NULL;
+    const loom_testbench_value_t** out_value) {
+  *out_value = NULL;
   const loom_testbench_value_slot_t* slot =
       loom_testbench_value_table_lookup_slot(table, value_id);
   if (!slot ||
@@ -341,21 +434,18 @@ iree_status_t loom_testbench_value_table_lookup_borrow(
                             "value ID %u has not been materialized",
                             (unsigned)value_id);
   }
-  *out_variant = &slot->variant;
+  *out_value = &slot->value;
   return iree_ok_status();
 }
 
 iree_status_t loom_testbench_value_table_lookup_retain(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
-    iree_vm_variant_t* out_variant) {
-  *out_variant = iree_vm_variant_empty();
-  const iree_vm_variant_t* borrowed_variant = NULL;
+    loom_testbench_value_t* out_value) {
+  *out_value = (loom_testbench_value_t){0};
+  const loom_testbench_value_t* borrowed_value = NULL;
   IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
-      table, value_id, &borrowed_variant));
-  *out_variant = *borrowed_variant;
-  if (iree_vm_variant_is_ref(*out_variant)) {
-    iree_vm_ref_retain_inplace(&out_variant->ref);
-  }
+      table, value_id, &borrowed_value));
+  loom_testbench_value_retain(borrowed_value, out_value);
   return iree_ok_status();
 }
 
@@ -381,9 +471,9 @@ static bool loom_testbench_attr_as_f64(loom_attribute_t attr,
   return false;
 }
 
-static iree_status_t loom_testbench_attr_to_vm_value(
+static iree_status_t loom_testbench_attr_to_scalar_value(
     loom_attribute_t attr, loom_scalar_type_t scalar_type,
-    iree_vm_value_t* out_value) {
+    iree_tooling_value_t* out_value) {
   loom_attr_kind_t expected_kind = LOOM_ATTR_ABSENT;
   if (!loom_attr_matches_scalar_type(attr, scalar_type, &expected_kind)) {
     return iree_make_status(
@@ -397,32 +487,47 @@ static iree_status_t loom_testbench_attr_to_vm_value(
   switch (scalar_type) {
     case LOOM_SCALAR_TYPE_I1:
       if (attr.kind == LOOM_ATTR_BOOL) {
-        *out_value = iree_vm_value_make_i8((int8_t)(attr.raw ? 1 : 0));
+        *out_value = (iree_tooling_value_t){
+            .kind = IREE_TOOLING_VALUE_KIND_I32,
+            .storage.i32 = attr.raw ? 1 : 0,
+        };
         return iree_ok_status();
       }
       if (loom_testbench_attr_as_i64(attr, &integer_value)) {
-        *out_value = iree_vm_value_make_i8((int8_t)(integer_value != 0));
+        *out_value = (iree_tooling_value_t){
+            .kind = IREE_TOOLING_VALUE_KIND_I32,
+            .storage.i32 = integer_value != 0 ? 1 : 0,
+        };
         return iree_ok_status();
       }
       break;
     case LOOM_SCALAR_TYPE_I8:
       if (loom_testbench_attr_as_i64(attr, &integer_value) &&
           integer_value >= INT8_MIN && integer_value <= INT8_MAX) {
-        *out_value = iree_vm_value_make_i8((int8_t)integer_value);
+        *out_value = (iree_tooling_value_t){
+            .kind = IREE_TOOLING_VALUE_KIND_I32,
+            .storage.i32 = (int32_t)integer_value,
+        };
         return iree_ok_status();
       }
       break;
     case LOOM_SCALAR_TYPE_I16:
       if (loom_testbench_attr_as_i64(attr, &integer_value) &&
           integer_value >= INT16_MIN && integer_value <= INT16_MAX) {
-        *out_value = iree_vm_value_make_i16((int16_t)integer_value);
+        *out_value = (iree_tooling_value_t){
+            .kind = IREE_TOOLING_VALUE_KIND_I32,
+            .storage.i32 = (int32_t)integer_value,
+        };
         return iree_ok_status();
       }
       break;
     case LOOM_SCALAR_TYPE_I32:
       if (loom_testbench_attr_as_i64(attr, &integer_value) &&
           integer_value >= INT32_MIN && integer_value <= INT32_MAX) {
-        *out_value = iree_vm_value_make_i32((int32_t)integer_value);
+        *out_value = (iree_tooling_value_t){
+            .kind = IREE_TOOLING_VALUE_KIND_I32,
+            .storage.i32 = (int32_t)integer_value,
+        };
         return iree_ok_status();
       }
       break;
@@ -430,19 +535,28 @@ static iree_status_t loom_testbench_attr_to_vm_value(
     case LOOM_SCALAR_TYPE_OFFSET:
     case LOOM_SCALAR_TYPE_I64:
       if (loom_testbench_attr_as_i64(attr, &integer_value)) {
-        *out_value = iree_vm_value_make_i64(integer_value);
+        *out_value = (iree_tooling_value_t){
+            .kind = IREE_TOOLING_VALUE_KIND_I64,
+            .storage.i64 = integer_value,
+        };
         return iree_ok_status();
       }
       break;
     case LOOM_SCALAR_TYPE_F32:
       if (loom_testbench_attr_as_f64(attr, &floating_value)) {
-        *out_value = iree_vm_value_make_f32((float)floating_value);
+        *out_value = (iree_tooling_value_t){
+            .kind = IREE_TOOLING_VALUE_KIND_F32,
+            .storage.f32 = (float)floating_value,
+        };
         return iree_ok_status();
       }
       break;
     case LOOM_SCALAR_TYPE_F64:
       if (loom_testbench_attr_as_f64(attr, &floating_value)) {
-        *out_value = iree_vm_value_make_f64(floating_value);
+        *out_value = (iree_tooling_value_t){
+            .kind = IREE_TOOLING_VALUE_KIND_F64,
+            .storage.f64 = floating_value,
+        };
         return iree_ok_status();
       }
       break;
@@ -454,31 +568,10 @@ static iree_status_t loom_testbench_attr_to_vm_value(
                           loom_scalar_type_name(scalar_type));
 }
 
-static iree_status_t loom_testbench_variant_as_nonnegative_dim(
-    iree_vm_variant_t variant, iree_hal_dim_t* out_dim) {
-  if (!iree_vm_variant_is_value(variant)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "dynamic dimension is not a scalar value");
-  }
-  iree_vm_value_t value = iree_vm_variant_value(variant);
+static iree_status_t loom_testbench_value_as_nonnegative_dim(
+    const loom_testbench_value_t* value, iree_hal_dim_t* out_dim) {
   int64_t signed_value = 0;
-  switch (value.type) {
-    case IREE_VM_VALUE_TYPE_I8:
-      signed_value = value.i8;
-      break;
-    case IREE_VM_VALUE_TYPE_I16:
-      signed_value = value.i16;
-      break;
-    case IREE_VM_VALUE_TYPE_I32:
-      signed_value = value.i32;
-      break;
-    case IREE_VM_VALUE_TYPE_I64:
-      signed_value = value.i64;
-      break;
-    default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "dynamic dimension is not an integer value");
-  }
+  IREE_RETURN_IF_ERROR(loom_testbench_value_as_i64(value, &signed_value));
   if (signed_value < 0) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "dynamic dimension is negative");
@@ -503,11 +596,11 @@ static iree_status_t loom_testbench_resolve_shape(
   for (iree_host_size_t dim_index = 0; dim_index < rank; ++dim_index) {
     if (loom_type_dim_is_dynamic_at(type, dim_index)) {
       loom_value_id_t dim_value_id = loom_type_dim_value_id_at(type, dim_index);
-      const iree_vm_variant_t* dim_variant = NULL;
+      const loom_testbench_value_t* dim_value = NULL;
       IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
-          table, dim_value_id, &dim_variant));
-      IREE_RETURN_IF_ERROR(loom_testbench_variant_as_nonnegative_dim(
-          *dim_variant, &out_shape[dim_index]));
+          table, dim_value_id, &dim_value));
+      IREE_RETURN_IF_ERROR(loom_testbench_value_as_nonnegative_dim(
+          dim_value, &out_shape[dim_index]));
     } else {
       int64_t static_size = loom_type_dim_static_size_at(type, dim_index);
       if (static_size < 0) {
@@ -573,32 +666,10 @@ static iree_status_t loom_testbench_scalar_type_to_hal_element_type(
 static iree_status_t loom_testbench_get_i64_value(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
     int64_t* out_value) {
-  const iree_vm_variant_t* variant = NULL;
+  const loom_testbench_value_t* value = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_value_table_lookup_borrow(table, value_id, &variant));
-  if (!iree_vm_variant_is_value(*variant)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "value ID %u is not a scalar", (unsigned)value_id);
-  }
-  iree_vm_value_t value = iree_vm_variant_value(*variant);
-  switch (value.type) {
-    case IREE_VM_VALUE_TYPE_I8:
-      *out_value = value.i8;
-      return iree_ok_status();
-    case IREE_VM_VALUE_TYPE_I16:
-      *out_value = value.i16;
-      return iree_ok_status();
-    case IREE_VM_VALUE_TYPE_I32:
-      *out_value = value.i32;
-      return iree_ok_status();
-    case IREE_VM_VALUE_TYPE_I64:
-      *out_value = value.i64;
-      return iree_ok_status();
-    default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "value ID %u is not an integer scalar",
-                              (unsigned)value_id);
-  }
+      loom_testbench_value_table_lookup_borrow(table, value_id, &value));
+  return loom_testbench_value_as_i64(value, out_value);
 }
 
 static uint64_t loom_testbench_random_bounded_u64(
@@ -954,10 +1025,21 @@ static iree_status_t loom_testbench_materialize_generated_source(
       loom_testbench_buffer_params(options), loom_testbench_generate_buffer,
       generator_state, &buffer_view));
 
-  iree_vm_ref_t buffer_view_ref = iree_hal_buffer_view_move_ref(buffer_view);
-  iree_vm_variant_t variant = iree_vm_make_variant_ref_assign(buffer_view_ref);
-  return loom_testbench_value_table_assign_move(table, source->value_id,
-                                                &variant);
+  loom_testbench_value_t value = {0};
+  iree_status_t status =
+      loom_testbench_value_set_buffer_view_move(buffer_view, &value);
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_testbench_value_table_assign_move(table, source->value_id, &value);
+  }
+  if (!iree_status_is_ok(status)) {
+    if (value.kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
+      iree_hal_buffer_view_release(buffer_view);
+    } else {
+      loom_testbench_value_deinitialize(&value);
+    }
+  }
+  return status;
 }
 
 static iree_status_t loom_testbench_validate_buffer_view_type(
@@ -1037,10 +1119,20 @@ static iree_status_t loom_testbench_materialize_file_read_npy(
     iree_hal_buffer_view_release(buffer_view);
     return status;
   }
-  iree_vm_ref_t buffer_view_ref = iree_hal_buffer_view_move_ref(buffer_view);
-  iree_vm_variant_t variant = iree_vm_make_variant_ref_assign(buffer_view_ref);
-  return loom_testbench_value_table_assign_move(table, source->value_id,
-                                                &variant);
+  loom_testbench_value_t value = {0};
+  status = loom_testbench_value_set_buffer_view_move(buffer_view, &value);
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_testbench_value_table_assign_move(table, source->value_id, &value);
+  }
+  if (!iree_status_is_ok(status)) {
+    if (value.kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
+      iree_hal_buffer_view_release(buffer_view);
+    } else {
+      loom_testbench_value_deinitialize(&value);
+    }
+  }
+  return status;
 }
 
 static iree_status_t loom_testbench_materialize_value_source(
@@ -1053,8 +1145,8 @@ static iree_status_t loom_testbench_materialize_value_source(
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "check.literal requires a scalar result type");
       }
-      iree_vm_value_t value = iree_vm_value_make_none();
-      IREE_RETURN_IF_ERROR(loom_testbench_attr_to_vm_value(
+      iree_tooling_value_t value = {0};
+      IREE_RETURN_IF_ERROR(loom_testbench_attr_to_scalar_value(
           source->literal.value, loom_type_element_type(source->type), &value));
       return loom_testbench_value_table_set_value(table, source->value_id,
                                                   value);
@@ -1127,8 +1219,8 @@ iree_status_t loom_testbench_materialize_case_sample(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "check.param.* requires a scalar result type");
     }
-    iree_vm_value_t value = iree_vm_value_make_none();
-    IREE_RETURN_IF_ERROR(loom_testbench_attr_to_vm_value(
+    iree_tooling_value_t value = {0};
+    IREE_RETURN_IF_ERROR(loom_testbench_attr_to_scalar_value(
         attr, loom_type_element_type(parameter->type), &value));
     IREE_RETURN_IF_ERROR(loom_testbench_value_table_set_value(
         table, parameter->value_id, value));
@@ -1150,22 +1242,19 @@ static iree_status_t loom_testbench_write_single_file(
     return iree_make_status(IREE_STATUS_UNAVAILABLE,
                             "no check.file.write provider is configured");
   }
-  iree_vm_variant_t variant = iree_vm_variant_empty();
+  loom_testbench_value_t value = {0};
   IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_retain(
-      table, file_write->value_id, &variant));
-  if (!iree_vm_variant_is_ref(variant)) {
-    iree_vm_variant_reset(&variant);
+      table, file_write->value_id, &value));
+  iree_hal_buffer_view_t* buffer_view =
+      loom_testbench_value_buffer_view(&value);
+  if (!buffer_view) {
+    loom_testbench_value_deinitialize(&value);
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "check.file.write.npy requires a buffer view "
                             "value");
   }
-  iree_hal_buffer_view_t* buffer_view = NULL;
-  iree_status_t status =
-      iree_hal_buffer_view_check_deref(variant.ref, &buffer_view);
-  if (iree_status_is_ok(status)) {
-    status = loom_testbench_validate_buffer_view_type(table, file_write->type,
-                                                      buffer_view);
-  }
+  iree_status_t status = loom_testbench_validate_buffer_view_type(
+      table, file_write->type, buffer_view);
 
   iree_io_stream_t* stream = NULL;
   if (iree_status_is_ok(status)) {
@@ -1182,7 +1271,7 @@ static iree_status_t loom_testbench_write_single_file(
                                     buffer_view, options->host_allocator);
   }
   iree_io_stream_release(stream);
-  iree_vm_variant_reset(&variant);
+  loom_testbench_value_deinitialize(&value);
   return status;
 }
 

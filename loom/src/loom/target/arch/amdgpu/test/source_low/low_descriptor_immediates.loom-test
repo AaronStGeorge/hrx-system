@@ -185,6 +185,15 @@ low.func.def target(@gfx11_target) @global_vaddr_named_offset(%addr: reg<amdgpu.
 
 // ====
 
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @cdna_flat_load_u8_spells_m0(%addr: reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
+  %m0 = s_mov_b32_m0_imm 0
+  %loaded = flat_load_ubyte %addr, %m0 {sc0 = 1, sc1 = 1} : reg<amdgpu.vgpr>
+  return
+}
+
+// ====
+
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @vop3_inline_source_shift_out_of_range(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   // ERROR@+1: STRUCTURE/014 {attr_name="imm32", actual_value="65", expected_constraint="0..64"}

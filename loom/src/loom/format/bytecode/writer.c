@@ -2050,6 +2050,15 @@ static iree_status_t loom_bytecode_write_attr_value(
       }
       break;
     }
+    case LOOM_ATTR_BYTES: {
+      iree_const_byte_span_t bytes = loom_attr_as_bytes(attr);
+      IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(writer, 11));
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_page_writer_write_uvarint(writer, bytes.data_length));
+      IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write(writer, bytes.data,
+                                                           bytes.data_length));
+      break;
+    }
     case LOOM_ATTR_SYMBOL: {
       loom_symbol_ref_t ref = attr.symbol;
       uint32_t string_writer_id = 0;
@@ -2206,6 +2215,18 @@ static iree_status_t loom_bytecode_emit_attr_value(
       for (uint16_t i = 0; i < attr.count; ++i) {
         IREE_RETURN_IF_ERROR(
             loom_bytecode_emit_svarint(builder, attr.i64_array[i]));
+      }
+      break;
+    }
+    case LOOM_ATTR_BYTES: {
+      iree_const_byte_span_t bytes = loom_attr_as_bytes(attr);
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 11));
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_emit_uvarint(builder, bytes.data_length));
+      if (bytes.data_length > 0) {
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+            builder,
+            iree_make_string_view((const char*)bytes.data, bytes.data_length)));
       }
       break;
     }
@@ -3630,6 +3651,29 @@ static iree_status_t loom_bytecode_write_locations_section(
         if (entry->opaque.data_length > 0) {
           IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write(
               page_writer, entry->opaque.data, entry->opaque.data_length));
+        }
+        break;
+      }
+      case LOOM_LOCATION_TAGGED: {
+        if (entry->tagged.tag == LOOM_LOCATION_TAG_INVALID) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "tagged location has invalid tag 0");
+        }
+        IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+            page_writer, entry->tagged.tag));
+        IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+            page_writer, entry->tagged.child));
+        IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+            page_writer, entry->tagged.data_length));
+        if (entry->tagged.data_length > 0) {
+          if (!entry->tagged.data) {
+            return iree_make_status(
+                IREE_STATUS_INVALID_ARGUMENT,
+                "tagged location has data_length %u but NULL data",
+                entry->tagged.data_length);
+          }
+          IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write(
+              page_writer, entry->tagged.data, entry->tagged.data_length));
         }
         break;
       }

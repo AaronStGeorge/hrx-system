@@ -6,8 +6,11 @@
 
 #include "loom/ir/facts.h"
 
-// Computes flags from range. Does not set POWER_OF_TWO or FLOAT —
-// those are preserved by the caller when appropriate.
+#include <math.h>
+
+// Computes flags from integer range facts. Does not set floating-point, float
+// predicate, or execution distribution flags; those are preserved by the caller
+// when appropriate.
 static uint32_t loom_value_facts_compute_flags(int64_t lo, int64_t hi) {
   uint32_t flags = 0;
   if (lo == hi) flags |= LOOM_VALUE_FACT_EXACT;
@@ -95,6 +98,12 @@ loom_value_facts_t loom_value_facts_exact_f64(double value) {
   facts.range_hi = facts.range_lo;
   facts.known_divisor = 1;
   facts.flags = LOOM_VALUE_FACT_EXACT | LOOM_VALUE_FACT_FLOAT;
+  if (!isnan(value)) facts.flags |= LOOM_VALUE_FACT_NOT_NAN;
+  if (!isinf(value)) facts.flags |= LOOM_VALUE_FACT_NOT_INF;
+  if (isfinite(value)) {
+    facts.flags |= LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_NOT_INF |
+                   LOOM_VALUE_FACT_FINITE;
+  }
   loom_value_facts_mark_uniform(&facts);
   return facts;
 }
@@ -268,8 +277,10 @@ void loom_value_facts_recompute_flags(loom_value_facts_t* facts) {
   uint32_t preserved =
       facts->flags &
       (LOOM_VALUE_FACT_POWER_OF_TWO | LOOM_VALUE_FACT_FLOAT |
-       LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
-       LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
+       LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_NOT_INF |
+       LOOM_VALUE_FACT_FINITE | LOOM_VALUE_FACT_UNIFORM |
+       LOOM_VALUE_FACT_LANE_VARYING | LOOM_VALUE_FACT_LANE_PREDICATE |
+       LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
   facts->flags =
       loom_value_facts_compute_flags(facts->range_lo, facts->range_hi) |
       preserved;
@@ -284,7 +295,10 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
   // This scalar fact lattice can consume predicates with literal bounds. Value
   // operands are still useful to symbolic relation analysis, but treating a
   // value ID as an integer literal here would corrupt range facts.
-  if (predicate->kind == LOOM_PREDICATE_POW2) {
+  if (predicate->kind == LOOM_PREDICATE_POW2 ||
+      predicate->kind == LOOM_PREDICATE_NOT_NAN ||
+      predicate->kind == LOOM_PREDICATE_NOT_INF ||
+      predicate->kind == LOOM_PREDICATE_FINITE) {
     if (predicate->arg_count < 1 ||
         predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE) {
       return;
@@ -305,6 +319,7 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
   // The constant argument is in args[1] for most predicates. For RANGE, lo is
   // in args[1] and hi is in args[2].
   int64_t constant = predicate->args[1];
+  uint32_t preserved_predicate_flags = facts->flags & LOOM_VALUE_FACT_NON_ZERO;
 
   switch ((loom_predicate_kind_t)predicate->kind) {
     case LOOM_PREDICATE_EQ:
@@ -315,7 +330,10 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
       // A not-equal predicate excludes one value. This lattice has intervals
       // rather than disjoint ranges, so there is no generally-sound tightening
       // unless another predicate has already excluded the value by range.
-      break;
+      if (constant == 0) {
+        facts->flags |= LOOM_VALUE_FACT_NON_ZERO;
+      }
+      return;
 
     case LOOM_PREDICATE_LT:
       // a < N → range_hi = min(range_hi, N - 1).
@@ -363,6 +381,25 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
       facts->flags |= LOOM_VALUE_FACT_POWER_OF_TWO;
       break;
 
+    case LOOM_PREDICATE_NOT_NAN:
+      facts->flags |= LOOM_VALUE_FACT_NOT_NAN;
+      if (loom_value_facts_is_not_inf(*facts)) {
+        facts->flags |= LOOM_VALUE_FACT_FINITE;
+      }
+      return;
+
+    case LOOM_PREDICATE_NOT_INF:
+      facts->flags |= LOOM_VALUE_FACT_NOT_INF;
+      if (loom_value_facts_is_not_nan(*facts)) {
+        facts->flags |= LOOM_VALUE_FACT_FINITE;
+      }
+      return;
+
+    case LOOM_PREDICATE_FINITE:
+      facts->flags |= LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_NOT_INF |
+                      LOOM_VALUE_FACT_FINITE;
+      return;
+
     case LOOM_PREDICATE_RANGE: {
       int64_t lo = predicate->args[1];
       int64_t hi = predicate->args[2];
@@ -376,6 +413,7 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
   }
 
   loom_value_facts_recompute_flags(facts);
+  facts->flags |= preserved_predicate_flags;
 }
 
 //===----------------------------------------------------------------------===//

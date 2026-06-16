@@ -389,7 +389,7 @@ static void iree_hal_task_queue_profile_record_memory_event(
     event.offset = reservation->offset;
     if (type != IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_QUEUE_ALLOCA &&
         type != IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_QUEUE_DEALLOCA) {
-      event.length = reservation->length;
+      event.length = reservation->byte_length;
     }
   }
   iree_hal_task_queue_profile_populate_memory_event_pool_stats(pool, &event);
@@ -1919,8 +1919,9 @@ static iree_status_t iree_hal_task_queue_drain_alloca(
       operation, &reservation, &acquire_info, acquire_result);
 }
 
-// Handles a DEALLOCA operation: decommits the transient buffer and releases the
-// reservation with a queue frontier that gates future pool reuse.
+// Handles a DEALLOCA operation after all wait semaphores are satisfied:
+// decommits target-visible backing, releases the reservation with a queue
+// frontier that gates future pool reuse, then publishes dealloca completion.
 static void iree_hal_task_queue_drain_dealloca(
     iree_hal_task_queue_op_t* operation) {
   iree_hal_pool_t* pool = NULL;

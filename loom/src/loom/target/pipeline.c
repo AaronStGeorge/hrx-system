@@ -8,6 +8,7 @@
 
 #include "loom/codegen/low/pipeline/pipeline.h"
 #include "loom/pass/builder.h"
+#include "loom/sanitizer/options_cli.h"
 
 typedef struct loom_target_pipeline_build_context_t {
   // Target providers linked into the current compile driver.
@@ -18,6 +19,8 @@ typedef struct loom_target_pipeline_build_context_t {
   const loom_target_pipeline_options_t* options;
   // True when source-low output is a required-asm artifact surface.
   bool source_low_artifact_preparation;
+  // Sanitizer options resolved for the pipeline being built.
+  loom_sanitizer_options_t sanitizer_options;
 } loom_target_pipeline_build_context_t;
 
 typedef struct loom_target_pipeline_function_body_t {
@@ -51,6 +54,11 @@ static iree_status_t loom_target_pipeline_build_run(loom_builder_t* builder,
   loom_op_t* run_op = NULL;
   return loom_pass_ir_build_run(builder, key, loom_named_attr_slice_empty(),
                                 &run_op);
+}
+
+static bool loom_target_pipeline_sanitizer_enabled(
+    const loom_target_pipeline_build_context_t* context) {
+  return loom_sanitizer_options_is_enabled(&context->sanitizer_options);
 }
 
 static iree_status_t loom_target_pipeline_build_string_attr(
@@ -93,6 +101,18 @@ static iree_status_t loom_target_pipeline_build_authoring_expansion(
   return loom_target_pipeline_build_run(builder, IREE_SV("inline-callables"));
 }
 
+static iree_status_t loom_target_pipeline_build_sanitizer_assertion_selection(
+    loom_builder_t* builder, void* user_data) {
+  const loom_target_pipeline_build_context_t* context =
+      (const loom_target_pipeline_build_context_t*)user_data;
+  iree_string_view_t checks_value = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_sanitizer_checks_format(
+      context->sanitizer_options.checks, &checks_value));
+  return loom_target_pipeline_build_run_with_string_option(
+      builder, IREE_SV("sanitizer-insert-assertions"), IREE_SV("checks"),
+      checks_value);
+}
+
 static iree_status_t loom_target_pipeline_build_target_function_body(
     loom_builder_t* builder, void* user_data) {
   const loom_target_pipeline_function_body_t* body =
@@ -117,7 +137,7 @@ static iree_status_t loom_target_pipeline_build_for_target_functions(
 
 static iree_status_t loom_target_pipeline_build_source_to_low(
     loom_builder_t* builder, const loom_target_pipeline_options_t* options) {
-  loom_named_attr_t option_attrs[3] = {0};
+  loom_named_attr_t option_attrs[4] = {0};
   loom_named_attr_slice_t option_slice = loom_named_attr_slice_empty();
   iree_host_size_t option_count = 0;
   loom_target_control_flow_lowering_t control_flow_lowering =
@@ -158,6 +178,17 @@ static iree_status_t loom_target_pipeline_build_source_to_low(
     }
     IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
         builder, IREE_SV("diagnostics"), diagnostics_value,
+        &option_attrs[option_count++]));
+  }
+  const loom_sanitizer_reporting_mode_t sanitizer_reporting_mode =
+      options != NULL ? options->sanitizer.reporting_mode
+                      : LOOM_SANITIZER_REPORTING_MODE_DEFAULT;
+  if (sanitizer_reporting_mode != LOOM_SANITIZER_REPORTING_MODE_DEFAULT) {
+    iree_string_view_t reporting_value = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_sanitizer_reporting_mode_format(
+        sanitizer_reporting_mode, &reporting_value));
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
+        builder, IREE_SV("sanitizer-reporting"), reporting_value,
         &option_attrs[option_count++]));
   }
   if (option_count != 0) {
@@ -262,6 +293,10 @@ static iree_status_t loom_target_pipeline_build_low_preparation(
       (const loom_target_pipeline_build_context_t*)user_data;
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION));
+  if (loom_target_pipeline_sanitizer_enabled(context)) {
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
+        builder, IREE_SV("sanitizer-materialize-assertions")));
+  }
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_PREPARATION));
@@ -291,6 +326,11 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       builder, source_finish_body, user_data, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
+  if (loom_target_pipeline_sanitizer_enabled(context)) {
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
+        builder, loom_target_pipeline_build_sanitizer_assertion_selection,
+        user_data, &for_op));
+  }
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW));
   IREE_RETURN_IF_ERROR(
@@ -341,10 +381,14 @@ iree_status_t loom_target_pipeline_build_to_source_low(
   IREE_ASSERT_ARGUMENT(out_pipeline_op);
   *out_pipeline_op = NULL;
 
+  const loom_sanitizer_options_t sanitizer_options =
+      options ? options->sanitizer : (loom_sanitizer_options_t){0};
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_validate(&sanitizer_options));
   const loom_target_pipeline_build_context_t context = {
       .target_environment = target_environment,
       .pass_environment = pass_environment,
       .options = options,
+      .sanitizer_options = sanitizer_options,
   };
   return loom_pass_ir_build_pipeline(pipeline_module, name,
                                      LOOM_PASS_ANCHOR_MODULE,
@@ -383,11 +427,15 @@ iree_status_t loom_target_pipeline_build_to_source_low_artifacts(
   IREE_ASSERT_ARGUMENT(out_pipeline_op);
   *out_pipeline_op = NULL;
 
+  const loom_sanitizer_options_t sanitizer_options =
+      options ? options->sanitizer : (loom_sanitizer_options_t){0};
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_validate(&sanitizer_options));
   const loom_target_pipeline_build_context_t context = {
       .target_environment = target_environment,
       .pass_environment = pass_environment,
       .options = options,
       .source_low_artifact_preparation = true,
+      .sanitizer_options = sanitizer_options,
   };
   return loom_pass_ir_build_pipeline(pipeline_module, name,
                                      LOOM_PASS_ANCHOR_MODULE,
@@ -405,10 +453,14 @@ iree_status_t loom_target_pipeline_build_to_prepared_low(
   IREE_ASSERT_ARGUMENT(out_pipeline_op);
   *out_pipeline_op = NULL;
 
+  const loom_sanitizer_options_t sanitizer_options =
+      options ? options->sanitizer : (loom_sanitizer_options_t){0};
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_validate(&sanitizer_options));
   const loom_target_pipeline_build_context_t context = {
       .target_environment = target_environment,
       .pass_environment = pass_environment,
       .options = options,
+      .sanitizer_options = sanitizer_options,
   };
   return loom_pass_ir_build_pipeline(
       pipeline_module, name, LOOM_PASS_ANCHOR_MODULE,

@@ -23,6 +23,7 @@ from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
 from loom.dialect.llvmir import ALL_LLVMIR_OPS
 from loom.dialect.pool import ALL_POOL_OPS
+from loom.dialect.sanitizer import ALL_SANITIZER_OPS
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scf import ALL_SCF_OPS
 from loom.dialect.test import ALL_TEST_OPS
@@ -40,6 +41,7 @@ ALL_OPS = (
     *ALL_FUNC_OPS,
     *ALL_ENCODING_OPS,
     *ALL_POOL_OPS,
+    *ALL_SANITIZER_OPS,
     *ALL_GLOBAL_OPS,
     *ALL_SCF_OPS,
     *ALL_CHECK_OPS,

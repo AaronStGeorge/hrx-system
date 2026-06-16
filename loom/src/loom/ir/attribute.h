@@ -56,30 +56,56 @@ static inline loom_symbol_ref_t loom_symbol_ref_null(void) {
 // Predicates
 //===----------------------------------------------------------------------===//
 
-// Predicate kind. Evaluated at runtime for dynamic dimensions. Stored in the
-// kind field of loom_predicate_t.
-typedef enum loom_predicate_kind_e {
-  LOOM_PREDICATE_EQ = 0,      // eq(a, b)
-  LOOM_PREDICATE_NE = 1,      // ne(a, b)
-  LOOM_PREDICATE_LT = 2,      // lt(a, b)
-  LOOM_PREDICATE_LE = 3,      // le(a, b)
-  LOOM_PREDICATE_GT = 4,      // gt(a, b)
-  LOOM_PREDICATE_GE = 5,      // ge(a, b)
-  LOOM_PREDICATE_MUL = 6,     // mul(a, n): a is multiple of n.
-  LOOM_PREDICATE_MIN = 7,     // min(a, n): a >= n.
-  LOOM_PREDICATE_MAX = 8,     // max(a, n): a <= n.
-  LOOM_PREDICATE_POW2 = 9,    // pow2(a): a is power of 2.
-  LOOM_PREDICATE_RANGE = 10,  // range(a, lo, hi): lo <= a <= hi.
-  LOOM_PREDICATE_COUNT_,
-} loom_predicate_kind_t;
+// Predicate kind byte. Evaluated at runtime for dynamic dimensions and stored
+// in loom_predicate_t::kind.
+typedef uint8_t loom_predicate_kind_t;
 
-// Predicate argument tag: immediate constant or SSA value reference.
-typedef enum loom_predicate_arg_tag_e {
-  LOOM_PRED_ARG_NONE = 0,   // Unused slot.
-  LOOM_PRED_ARG_VALUE = 1,  // SSA value ID.
-  LOOM_PRED_ARG_CONST = 2,  // Integer constant.
+enum loom_predicate_kind_e {
+  // eq(a, b)
+  LOOM_PREDICATE_EQ = 0,
+  // ne(a, b)
+  LOOM_PREDICATE_NE = 1,
+  // lt(a, b)
+  LOOM_PREDICATE_LT = 2,
+  // le(a, b)
+  LOOM_PREDICATE_LE = 3,
+  // gt(a, b)
+  LOOM_PREDICATE_GT = 4,
+  // ge(a, b)
+  LOOM_PREDICATE_GE = 5,
+  // mul(a, n): a is multiple of n.
+  LOOM_PREDICATE_MUL = 6,
+  // min(a, n): a >= n.
+  LOOM_PREDICATE_MIN = 7,
+  // max(a, n): a <= n.
+  LOOM_PREDICATE_MAX = 8,
+  // pow2(a): a is power of 2.
+  LOOM_PREDICATE_POW2 = 9,
+  // range(a, lo, hi): lo <= a <= hi.
+  LOOM_PREDICATE_RANGE = 10,
+  // not_nan(a): a is not NaN.
+  LOOM_PREDICATE_NOT_NAN = 11,
+  // not_inf(a): a is not positive or negative infinity.
+  LOOM_PREDICATE_NOT_INF = 12,
+  // finite(a): a is not NaN or infinity.
+  LOOM_PREDICATE_FINITE = 13,
+  // Number of predicate kinds.
+  LOOM_PREDICATE_COUNT_,
+};
+
+// Predicate argument tag byte: immediate constant or SSA value reference.
+typedef uint8_t loom_predicate_arg_tag_t;
+
+enum loom_predicate_arg_tag_e {
+  // Unused slot.
+  LOOM_PRED_ARG_NONE = 0,
+  // SSA value ID.
+  LOOM_PRED_ARG_VALUE = 1,
+  // Integer constant.
+  LOOM_PRED_ARG_CONST = 2,
+  // Number of predicate argument tags.
   LOOM_PRED_ARG_COUNT_,
-} loom_predicate_arg_tag_t;
+};
 
 // A single predicate constraint. 32 bytes, arena-allocated.
 //
@@ -88,12 +114,17 @@ typedef enum loom_predicate_arg_tag_e {
 // and 1-3 arguments. Arguments are tagged: SSA value references or
 // integer constants.
 typedef struct loom_predicate_t {
-  uint8_t kind;         // loom_predicate_kind_t
-  uint8_t arg_count;    // 1-3
-  uint8_t arg_tags[3];  // loom_predicate_arg_tag_t per arg slot.
-  uint8_t reserved[3];  // Pad to 8-byte boundary.
-  int64_t args[3];      // value_id or constant per slot.
-} loom_predicate_t;     // 32 bytes
+  // Predicate kind.
+  loom_predicate_kind_t kind;
+  // Number of active argument slots.
+  uint8_t arg_count;
+  // Argument tag per active argument slot.
+  loom_predicate_arg_tag_t arg_tags[3];
+  // Pad to an 8-byte boundary.
+  uint8_t reserved[3];
+  // SSA value ID or constant payload per active argument slot.
+  int64_t args[3];
+} loom_predicate_t;
 
 static_assert(sizeof(loom_predicate_t) == 32,
               "loom_predicate_t must be 32 bytes");
@@ -169,9 +200,14 @@ typedef enum loom_attr_kind_e {
   LOOM_ATTR_DICT = 10,
   // Static encoding table index (1-based uint16_t in payload).
   LOOM_ATTR_ENCODING = 11,
+  // Arena-allocated arbitrary byte payload (length in reserved_1, pointer in
+  // payload). Used for compact compiler-owned metadata blobs and small
+  // executable data payloads. Large externally stored resources should use the
+  // bytecode resource table once materialized instead of this inline form.
+  LOOM_ATTR_BYTES = 12,
   // Descriptor wildcard for format/parser/verification metadata. This is not a
   // concrete payload kind in loom_attribute_t values.
-  LOOM_ATTR_ANY = 12,
+  LOOM_ATTR_ANY = 13,
   LOOM_ATTR_COUNT_,
 } loom_attr_kind_t;
 
@@ -184,8 +220,10 @@ typedef enum loom_attr_kind_e {
 // parameters, and anywhere a typed scalar/aggregate is needed.
 //
 // The kind tag (byte 0) determines which union member is active.
-// For I64_ARRAY, the count field holds the element count and the
-// payload holds a pointer to an arena-allocated int64_t array.
+// For I64_ARRAY and PREDICATE_LIST, the count field holds the element count and
+// the payload holds a pointer to arena-allocated storage. For BYTES, reserved_1
+// holds the byte length and the payload holds a pointer to arena-allocated
+// immutable bytes.
 typedef struct loom_attribute_t {
   uint8_t kind;
   uint8_t reserved_0;
@@ -201,6 +239,7 @@ typedef struct loom_attribute_t {
     uint32_t encoding_id;
     loom_predicate_t* predicate_list;
     const loom_named_attr_t* dict_entries;
+    const uint8_t* bytes;
     uint64_t raw;
   };
 } loom_attribute_t;
@@ -276,6 +315,16 @@ static inline loom_attribute_t loom_attr_type(loom_type_id_t type_id) {
 static inline loom_attribute_t loom_attr_encoding(uint16_t encoding_id) {
   loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_ENCODING);
   attr.encoding_id = encoding_id;
+  return attr;
+}
+
+// Constructs a byte payload attribute. The bytes array must be arena-allocated
+// and outlive the attribute.
+static inline loom_attribute_t loom_attr_bytes(const uint8_t* bytes,
+                                               uint32_t byte_length) {
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_BYTES);
+  attr.reserved_1 = byte_length;
+  attr.bytes = byte_length > 0 ? bytes : NULL;
   return attr;
 }
 
@@ -442,6 +491,15 @@ static inline loom_type_id_t loom_attr_as_type_id(loom_attribute_t attr) {
 // Returns the 1-based module encoding ID of an ENCODING attribute.
 static inline uint16_t loom_attr_as_encoding_id(loom_attribute_t attr) {
   return (uint16_t)attr.encoding_id;
+}
+
+// Returns the byte payload of a BYTES attribute.
+static inline iree_const_byte_span_t loom_attr_as_bytes(loom_attribute_t attr) {
+  if (loom_attr_is_absent(attr)) {
+    return iree_make_const_byte_span(NULL, 0);
+  }
+  IREE_ASSERT(attr.kind == LOOM_ATTR_BYTES);
+  return iree_make_const_byte_span(attr.bytes, attr.reserved_1);
 }
 
 // Returns the dictionary entries of a DICT attribute.

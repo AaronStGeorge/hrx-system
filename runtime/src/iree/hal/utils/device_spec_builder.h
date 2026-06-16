@@ -74,6 +74,11 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_builder_set_executables(
     iree_hal_device_spec_builder_t* builder,
     const iree_hal_device_executable_spec_t* executables);
 
+// Copies the sanitizer facet into |builder|.
+IREE_API_EXPORT iree_status_t iree_hal_device_spec_builder_set_sanitizer(
+    iree_hal_device_spec_builder_t* builder,
+    const iree_hal_device_sanitizer_spec_t* sanitizer);
+
 // Adds a driver-local extension facet to |builder|.
 IREE_API_EXPORT iree_status_t iree_hal_device_spec_builder_add_facet(
     iree_hal_device_spec_builder_t* builder,

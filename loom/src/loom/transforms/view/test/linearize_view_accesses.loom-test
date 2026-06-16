@@ -21,6 +21,29 @@ func.def @linearize_dense_load(%input: buffer, %zero_bytes: offset, %head: index
 
 // ====
 
+// RUN: with-locations pass linearize-view-accesses,canonicalize,cse
+
+func.def @linearize_dense_load_preserves_sanitizer_site_location(%input: buffer, %zero_bytes: offset, %head: index, %head_dim: index) {
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<4x128xf16, #dense> loc("linearize.loom":2:1)
+  %value = view.load %input_view[%head, %head_dim] : view<4x128xf16, #dense> -> f16 loc(tagged<sanitizer_site, "0304", "linearize.loom":3:1>)
+  test.use %value : f16 loc("linearize.loom":4:1)
+  func.return loc("linearize.loom":5:1)
+} loc("linearize.loom":1:1 to 6:1)
+
+// ----
+func.def @linearize_dense_load_preserves_sanitizer_site_location(%input: buffer, %zero_bytes: offset, %head: index, %head_dim: index) {
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<512xf16, #dense> loc("linearize.loom":2:1)
+  %head_dim_bounded = index.assume %head_dim [range(%head_dim, 0, 127)] : index loc(tagged<sanitizer_site, "0304", "linearize.loom":3:1>)
+  %head_bounded = index.assume %head [range(%head, 0, 3)] : index loc(tagged<sanitizer_site, "0304", "linearize.loom":3:1>)
+  %8 = index.constant 128 : index loc(tagged<sanitizer_site, "0304", "linearize.loom":3:1>)
+  %9 = index.madd %head_bounded, %8, %head_dim_bounded : index loc(tagged<sanitizer_site, "0304", "linearize.loom":3:1>)
+  %value = view.load %input_view[%9] : view<512xf16, #dense> -> f16 loc(tagged<sanitizer_site, "0304", "linearize.loom":3:1>)
+  test.use %value : f16 loc("linearize.loom":4:1)
+  func.return loc("linearize.loom":5:1)
+} loc("linearize.loom":1:1 to 6:1)
+
+// ====
+
 func.def @linearize_dense_store_shares_inner_index(%key_input: buffer, %value_input: buffer, %key_output: buffer, %value_output: buffer, %zero_bytes: offset, %position: index, %head: index, %head_dim: index) {
   %key_input_view = buffer.view %key_input[%zero_bytes] : buffer -> view<4x128xf16, #dense>
   %value_input_view = buffer.view %value_input[%zero_bytes] : buffer -> view<4x128xf16, #dense>

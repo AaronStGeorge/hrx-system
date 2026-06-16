@@ -110,6 +110,14 @@ iree_status_t loom_low_select_source_funcs(
     iree_arena_allocator_t* arena,
     loom_low_source_selection_list_t* out_selection_list);
 
+// Invokes each distinct selected policy's module finalizer once in first-use
+// order. Policies without module finalizers are skipped.
+iree_status_t loom_low_source_selection_finalize_policies(
+    loom_module_t* module,
+    const loom_low_source_selection_list_t* selection_list,
+    loom_low_lower_module_state_t* module_state,
+    iree_arena_allocator_t* scratch_arena);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

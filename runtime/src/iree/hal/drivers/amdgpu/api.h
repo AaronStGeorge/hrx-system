@@ -67,6 +67,64 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
       3,
 } iree_hal_amdgpu_pm4_command_buffer_publication_mode_t;
 
+// Device-visible virtual shadow reservation size used by ASAN by default.
+#define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE \
+  ((iree_device_size_t)32ull << 40)
+
+// HAL-owned application virtual address window size used by ASAN by default.
+#define IREE_HAL_AMDGPU_ASAN_DEFAULT_OWNED_APPLICATION_SIZE \
+  ((iree_device_size_t)8ull << 40)
+
+// Preferred base address for the ASAN-owned application allocation window.
+#define IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE \
+  ((uint64_t)0x0000600000000000ull)
+
+// Maximum log2 application bytes representable by one shadow byte while
+// keeping poison magic values distinguishable from partial-granule lengths.
+#define IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT 7u
+
+// Physical shadow slab size used by ASAN by default.
+#define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE \
+  ((iree_device_size_t)128 * 1024 * 1024)
+
+// Freed ASAN allocation mapping budget kept resident for stale-pointer checks.
+#define IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE \
+  ((iree_device_size_t)256 * 1024 * 1024)
+
+// Selects how AMDGPU ASAN reports affect the owning logical device.
+typedef enum iree_hal_amdgpu_asan_report_policy_e {
+  // Emit ASAN reports through the device event sink and keep the logical device
+  // usable for subsequent work.
+  IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY = 0,
+  // Emit ASAN reports through the device event sink and then fail the logical
+  // device so queue users observe the violation as device loss.
+  IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE = 1,
+} iree_hal_amdgpu_asan_report_policy_t;
+
+// Selects how ASAN shadow virtual address space is mapped.
+typedef enum iree_hal_amdgpu_asan_shadow_mode_e {
+  // Reserve shadow virtual address space and map physical shadow slabs only
+  // when allocation/import publication touches them.
+  IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_SPARSE = 0,
+  // Premap every shadow slab to a shared poisoned physical slab, then replace
+  // aliases with precise writable slabs as allocation/import publication
+  // touches them.
+  IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED = 1,
+} iree_hal_amdgpu_asan_shadow_mode_t;
+
+// Selects the physical memory backing ASAN shadow slabs.
+typedef enum iree_hal_amdgpu_asan_shadow_backing_e {
+  // Back shadow slabs with device-local VRAM from the representative physical
+  // device. This keeps instrumented shadow reads local to the GPU and is the
+  // default production policy.
+  IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL = 0,
+  // Back shadow slabs with nearest-CPU fine-grained host memory mapped for the
+  // logical-device topology. Host-local shadow updates must happen before
+  // queue submissions whose dispatches read them, or after waited work retires
+  // before release poisoning mutates them.
+  IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL = 1,
+} iree_hal_amdgpu_asan_shadow_backing_t;
+
 // Parameters configuring an iree_hal_amdgpu_logical_device_t.
 // Must be initialized with iree_hal_amdgpu_logical_device_options_initialize
 // prior to use.
@@ -152,6 +210,36 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
     // command-buffer fixup inputs without using the file staging pool.
     uint32_t upload_capacity;
   } host_queues;
+
+  // Optional ASAN device-side checking support.
+  struct {
+    // True to reserve ASAN shadow state for the logical device.
+    uint64_t enabled : 1;
+
+    // Policy applied after a valid ASAN report is emitted.
+    iree_hal_amdgpu_asan_report_policy_t report_policy;
+
+    // Shadow mapping policy used for the reserved shadow address space.
+    iree_hal_amdgpu_asan_shadow_mode_t shadow_mode;
+
+    // Physical memory placement policy used for shadow slabs.
+    iree_hal_amdgpu_asan_shadow_backing_t shadow_backing;
+
+    // Log2 application bytes represented by one shadow byte.
+    uint32_t shadow_scale_shift;
+
+    // Device-visible virtual shadow reservation size in bytes.
+    iree_device_size_t shadow_size;
+
+    // HAL-owned application virtual address reservation size in bytes.
+    iree_device_size_t owned_application_size;
+
+    // Physical shadow slab size in bytes.
+    iree_device_size_t shadow_slab_size;
+
+    // Freed allocation mapping budget in bytes kept resident and poisoned.
+    iree_device_size_t quarantine_size;
+  } asan;
 
   // Preallocates a reasonable number of resources in pools to reduce initial
   // execution latency.

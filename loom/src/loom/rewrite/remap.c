@@ -468,6 +468,49 @@ static iree_status_t loom_ir_remap_location_entry(
       return iree_ok_status();
     }
 
+    case LOOM_LOCATION_TAGGED: {
+      if (source_entry.tagged.tag == LOOM_LOCATION_TAG_INVALID) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "tagged location has invalid tag 0");
+      }
+      if (source_entry.tagged.child != LOOM_LOCATION_UNKNOWN) {
+        if (source_entry.tagged.child >=
+            remap->source_module->locations.count) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "tagged location child id %u out of range (source module has "
+              "%" PRIhsz " locations)",
+              source_entry.tagged.child, remap->source_module->locations.count);
+        }
+        loom_location_entry_t target_child_entry = {0};
+        IREE_RETURN_IF_ERROR(loom_ir_remap_location_entry(
+            remap,
+            remap->source_module->locations.entries[source_entry.tagged.child],
+            depth + 1, &target_child_entry));
+        IREE_RETURN_IF_ERROR(
+            loom_module_add_location(remap->target_module, target_child_entry,
+                                     &target_entry.tagged.child));
+      }
+      if (source_entry.tagged.data_length > 0) {
+        if (!source_entry.tagged.data) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "tagged location has data but a NULL data payload");
+        }
+        uint8_t* target_data = NULL;
+        IREE_RETURN_IF_ERROR(iree_arena_allocate(
+            &remap->target_module->arena, source_entry.tagged.data_length,
+            (void**)&target_data));
+        memcpy(target_data, source_entry.tagged.data,
+               source_entry.tagged.data_length);
+        target_entry.tagged.data = target_data;
+      } else {
+        target_entry.tagged.data = NULL;
+      }
+      *out_target_entry = target_entry;
+      return iree_ok_status();
+    }
+
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown location kind %u",

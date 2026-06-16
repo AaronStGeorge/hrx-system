@@ -124,6 +124,26 @@ func.def public @entry_b(%arg: i32) -> (i32) {
 
 // ====
 
+// RUN: with-locations pass inline-callables
+
+func.def inline @sanitizer_site_source(%value: i32) -> (i32) {
+  %doubled = test.addi %value, %value : i32 loc(tagged<sanitizer_site, "0102", "source.loom":7:8>)
+  func.return %doubled : i32 loc("callee.loom":3:1)
+} loc("callee.loom":1:1 to 4:1)
+
+func.def public @preserves_sanitizer_site_location(%arg: i32) -> (i32) {
+  %result = func.call @sanitizer_site_source(%arg) : (i32) -> (i32) loc("entry.loom":2:1)
+  func.return %result : i32 loc("entry.loom":3:1)
+} loc("entry.loom":1:1 to 4:1)
+
+// ----
+func.def public @preserves_sanitizer_site_location(%arg: i32) -> (i32) {
+  %doubled = test.addi %arg, %arg : i32 loc(tagged<sanitizer_site, "0102", "source.loom":7:8>)
+  func.return %doubled : i32 loc("entry.loom":3:1)
+} loc("entry.loom":1:1 to 4:1)
+
+// ====
+
 // RUN: pass inline-callables
 
 func.template<test.addi> hot inline @double_template(%value: i32) -> (i32) {

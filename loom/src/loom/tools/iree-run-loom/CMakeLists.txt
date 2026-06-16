@@ -20,6 +20,7 @@ loom_cc_library(
     iree::base
     iree::base::tooling::flags
     iree::io::file_handle
+    iree::tooling::value_io
     loom::error::diagnostic
     loom::ir
     loom::tooling::cli::help

@@ -83,6 +83,12 @@ global.variable @bad_flag : i1 = 2
 
 // ====
 
+// Read-only artifact alignment must be either absent or a positive power of two.
+// ERROR@+1: STRUCTURE/014 "alignment" "3" "positive power-of-two byte alignment"
+global.rodata @bad_rodata_alignment = bytes("00"), align 3
+
+// ====
+
 // Dynamic vector globals match structurally; declaration-local dim names do not
 // need to be the same SSA ids as use-site co-results.
 global.variable @vec_state : vector<[%n]xf32>

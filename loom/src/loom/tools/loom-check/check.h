@@ -24,8 +24,12 @@
 //
 // Directives:
 //   // RUN: roundtrip       Parse -> print -> compare (default).
+//   // RUN: with-locations roundtrip
+//                           Parse -> print with loc() annotations -> compare.
 //   // RUN: verify          Parse -> verify -> match annotations.
 //   // RUN: pass <pipeline> Parse -> run pipeline -> print -> compare.
+//   // RUN: with-locations pass <pipeline>
+//                           Run pipeline and print loc() annotations.
 //   // RUN: pass-report <pipeline>
 //                           Parse -> run pipeline -> compile report -> compare.
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
@@ -44,6 +48,7 @@
 //                           placement-decisions, and low-packet-json @function.
 //                           Source-to-low tests use source-low
 //                           [output=module|low]
+//                           [sanitizer=none|access|value|operation|all]
 //                           [diagnostics=none|memory|all]. Linked providers
 //                           may add target-specific emit forms.
 //                           Low schedule diagnostics are one of none,
@@ -135,6 +140,13 @@ typedef enum loom_check_mode_e {
   LOOM_CHECK_MODE_EMIT = 4,    // Parse -> emit target/check output -> compare.
   LOOM_CHECK_MODE_PASS_REPORT = 5,  // Parse -> run pipeline -> report.
 } loom_check_mode_t;
+
+// Flags controlling optional textual output surfaces for a test case.
+enum loom_check_output_flag_bits_e {
+  // Emit trailing loc() annotations in canonical IR output.
+  LOOM_CHECK_OUTPUT_LOCATIONS = 1u << 0,
+};
+typedef uint32_t loom_check_output_flags_t;
 
 // Returns a human-readable name for the mode.
 static inline const char* loom_check_mode_name(loom_check_mode_t mode) {
@@ -240,6 +252,8 @@ typedef struct loom_check_annotation_t {
 typedef struct loom_check_case_t {
   // What operation to perform.
   loom_check_mode_t mode;
+  // Optional output surfaces enabled for this case.
+  loom_check_output_flags_t output_flags;
   // Source range of the complete case text, excluding the preceding case
   // separator line when present.
   loom_check_source_range_t source_range;
@@ -314,6 +328,7 @@ typedef struct loom_check_file_t {
   // File-level default mode inherited by cases without their own // RUN:
   // directive. Defaults to ROUNDTRIP when no default // RUN: directive exists.
   loom_check_mode_t default_mode;
+  loom_check_output_flags_t default_output_flags;
   iree_string_view_t default_pipeline;
   iree_string_view_t default_format_target;
   iree_string_view_t default_emit_target;

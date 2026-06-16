@@ -30,6 +30,31 @@ iree_amdgpu_binary_variants_embed_data(
   PUBLIC
 )
 
+iree_amdgpu_binary_variants_embed_data(
+  NAME
+    amdgpu_asan_hip_module_test_kernels
+  TARGET
+    amdgcn-amd-amdhsa
+  TARGETS
+    ${IREE_HAL_AMDGPU_TARGETS}
+  BINARY_NAME_PREFIX
+    hrx_cts_asan_kernel
+  C_FILE_OUTPUT
+    "amdgpu_asan_hip_module_test_kernels.c"
+  H_FILE_OUTPUT
+    "amdgpu_asan_hip_module_test_kernels.h"
+  IDENTIFIER
+    "hrx_cts_amdgpu_asan_test_kernels"
+  SRCS
+    "tests/asan/hip_asan_kernels.c"
+  DEPS
+    runtime::src::iree::hal::drivers::amdgpu::device::asanrtl_{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}
+  INTERNALIZE
+    OFF
+  TESTONLY
+  PUBLIC
+)
+
 iree_cc_library(
   NAME
     core
@@ -58,6 +83,8 @@ hrx_cc_test(
     hrx_cts_host_allocator
   SRCS
     "tests/host_allocator/host_allocator_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -72,6 +99,8 @@ hrx_cc_test(
     hrx_cts_lifecycle
   SRCS
     "tests/lifecycle/lifecycle_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -88,6 +117,8 @@ hrx_cc_test(
     hrx_cts_device
   SRCS
     "tests/device/device_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -104,6 +135,8 @@ hrx_cc_test(
     hrx_cts_allocator
   SRCS
     "tests/allocator/allocator_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -120,6 +153,8 @@ hrx_cc_test(
     hrx_cts_semaphore
   SRCS
     "tests/semaphore/semaphore_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -136,6 +171,8 @@ hrx_cc_test(
     hrx_cts_stream
   SRCS
     "tests/stream/stream_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -152,6 +189,8 @@ hrx_cc_test(
     hrx_cts_memory
   SRCS
     "tests/memory/memory_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -168,6 +207,8 @@ hrx_cc_test(
     hrx_cts_transfer
   SRCS
     "tests/transfer/transfer_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -184,6 +225,8 @@ hrx_cc_test(
     hrx_cts_stream_ops
   SRCS
     "tests/stream_ops/stream_ops_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -200,6 +243,8 @@ hrx_cc_test(
     hrx_cts_executable
   SRCS
     "tests/executable/executable_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::amdgpu_executable_test_kernels
     ::core
@@ -214,9 +259,37 @@ hrx_cc_test(
 
 hrx_cc_test(
   NAME
+    hrx_cts_hip_asan
+  SRCS
+    "tests/asan/hip_asan_test.cpp"
+  DATA
+    libhrx::src::binding::hip::amdhip64
+    libhrx::src::libhrx::hrx
+  DEPS
+    ::amdgpu_asan_hip_module_test_kernels
+    ::core
+    iree::third_party::catch2
+    libhrx_defs
+  ARGS
+    "--hrx-library"
+    "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
+    "--hrx-device"
+    "none"
+    "--hip-library"
+    "$<TARGET_FILE:libhrx::src::binding::hip::amdhip64>"
+  ENV
+    "HRX_HAL_SANITIZER=asan"
+  LABELS
+    "runtime-resource=amd-gpu"
+)
+
+hrx_cc_test(
+  NAME
     hrx_cts_queue_ops
   SRCS
     "tests/queue_ops/queue_ops_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -233,6 +306,8 @@ hrx_cc_test(
     hrx_cts_status
   SRCS
     "tests/status/status_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -247,6 +322,8 @@ hrx_cc_test(
     hrx_cts_refcount
   SRCS
     "tests/refcount/refcount_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -263,6 +340,8 @@ hrx_cc_test(
     hrx_cts_virtual_memory
   SRCS
     "tests/virtual_memory/virtual_memory_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2
@@ -279,6 +358,8 @@ hrx_cc_test(
     hrx_cts_cxx_api
   SRCS
     "tests/cxx_api/cxx_api_test.cpp"
+  DATA
+    libhrx::src::libhrx::hrx
   DEPS
     ::core
     iree::third_party::catch2

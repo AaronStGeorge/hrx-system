@@ -229,6 +229,10 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
   if (!rewriter->materialize_constant) return iree_ok_status();
   if (!vtable->infer_facts) return iree_ok_status();
   if (vtable->traits & LOOM_TRAIT_CONSTANT_LIKE) return iree_ok_status();
+  if (loom_traits_has_side_effects(
+          loom_op_effective_traits(rewriter->module, op))) {
+    return iree_ok_status();
+  }
 
   // Check if all results are now exact constants.
   const loom_value_id_t* results = loom_op_const_results(op);
@@ -524,6 +528,21 @@ static iree_status_t loom_rewriter_add_users_to_worklist(
   return iree_ok_status();
 }
 
+static iree_status_t loom_rewriter_add_operand_users_except_to_worklist(
+    loom_rewriter_t* rewriter, loom_value_id_t value_id,
+    const loom_op_t* except_op) {
+  loom_value_t* value = loom_module_value(rewriter->module, value_id);
+  const loom_use_t* uses = loom_value_uses(value);
+  for (uint32_t i = 0; i < value->use_count; ++i) {
+    loom_op_t* user_op = loom_use_user_op(uses[i]);
+    if (user_op == except_op) continue;
+    IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, user_op));
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, user_op));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_rewriter_replace_all_uses_and_erase(
     loom_rewriter_t* rewriter, loom_op_t* op,
     const loom_value_id_t* replacements, uint16_t count) {
@@ -556,6 +575,23 @@ iree_status_t loom_rewriter_replace_all_uses_with(loom_rewriter_t* rewriter,
       loom_rewriter_add_users_to_worklist(rewriter, old_value));
   IREE_RETURN_IF_ERROR(
       loom_value_replace_all_uses_with(rewriter->module, old_value, new_value));
+  rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
+  return iree_ok_status();
+}
+
+iree_status_t loom_rewriter_replace_all_uses_except(
+    loom_rewriter_t* rewriter, loom_value_id_t old_value,
+    loom_value_id_t new_value, const loom_op_t* except_op) {
+  if (old_value == new_value) return iree_ok_status();
+  if (old_value == LOOM_VALUE_ID_INVALID ||
+      new_value == LOOM_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "replacement values must be valid");
+  }
+  IREE_RETURN_IF_ERROR(loom_rewriter_add_operand_users_except_to_worklist(
+      rewriter, old_value, except_op));
+  IREE_RETURN_IF_ERROR(loom_value_replace_all_uses_except(
+      rewriter->module, old_value, new_value, except_op));
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
 }

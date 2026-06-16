@@ -20,10 +20,6 @@ extern "C" {
 // LOOM_VALUE_ID_INVALID for non-config ops.
 loom_value_id_t loom_config_symbol_result_value(const loom_op_t* op);
 
-// Returns the config.decl predicate-list attribute, or absent when |op| is not
-// a config.decl or has no predicates.
-loom_attribute_t loom_config_decl_predicates(const loom_op_t* op);
-
 // Checks that |value| satisfies the remapped predicates from a config.decl.
 // |config_value| is the value id predicates refer to after remapping.
 iree_status_t loom_config_check_value_constraints(

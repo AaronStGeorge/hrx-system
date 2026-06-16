@@ -10,6 +10,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/sanitizer/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -31,6 +32,8 @@
 #include "loom/target/arch/amdgpu/contracts/matrix.h"
 #include "loom/target/arch/amdgpu/contracts/reduce.h"
 #include "loom/target/arch/amdgpu/contracts/reduce_lower_rules.h"
+#include "loom/target/arch/amdgpu/contracts/sanitizer.h"
+#include "loom/target/arch/amdgpu/contracts/sanitizer_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/view.h"
 #include "loom/target/arch/amdgpu/contracts/view_lower_rules.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
@@ -47,6 +50,7 @@
 #include "loom/target/arch/amdgpu/lower/matrix_fragment.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/preamble.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer.h"
 #include "loom/target/arch/amdgpu/lower/structural.h"
 #include "loom/target/arch/amdgpu/lower/subgroup.h"
 #include "loom/target/arch/amdgpu/lower/sync.h"
@@ -605,6 +609,15 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
                              loom_amdgpu_prefetch_plan_t,
                              loom_amdgpu_lower_view_prefetch)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_sanitizer_assert_access_dispatch,
+    loom_amdgpu_sanitizer_access_plan_t,
+    loom_amdgpu_select_sanitizer_assert_access_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_sanitizer_assert_access_dispatch,
+                             loom_amdgpu_sanitizer_access_plan_t,
+                             loom_amdgpu_lower_sanitizer_assert_access)
+
 #undef LOOM_AMDGPU_DEFINE_DATA_SELECT
 #undef LOOM_AMDGPU_DEFINE_DATA_EMIT
 
@@ -767,6 +780,8 @@ static const loom_amdgpu_lower_dispatch_table_t
         [LOOM_DIALECT_SCALAR] =
             LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuScalarDispatchRows),
         [LOOM_DIALECT_SCF] = LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuScfDispatchRows),
+        [LOOM_DIALECT_SANITIZER] =
+            LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuSanitizerDispatchRows),
         [LOOM_DIALECT_BUFFER] =
             LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuBufferDispatchRows),
         [LOOM_DIALECT_VIEW] =
@@ -1131,6 +1146,21 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
   return row->emit(context, source_op, row, plan);
 }
 
+static iree_status_t loom_amdgpu_finalize_function(
+    void* user_data, loom_low_lower_context_t* context) {
+  (void)user_data;
+  return loom_amdgpu_finalize_sanitizer_function(context);
+}
+
+static iree_status_t loom_amdgpu_finalize_module(
+    void* user_data, loom_module_t* module,
+    loom_low_lower_module_state_t* module_state,
+    iree_arena_allocator_t* scratch_arena) {
+  (void)user_data;
+  return loom_amdgpu_finalize_sanitizer_module(module, module_state,
+                                               scratch_arena);
+}
+
 static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
@@ -1160,6 +1190,8 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     loom_amdgpu_reduce_lower_rule_set)                                      \
   F(ASYNC, loom_amdgpu_async_contract_fragment,                             \
     loom_amdgpu_async_lower_rule_set)                                       \
+  F(SANITIZER, loom_amdgpu_sanitizer_contract_fragment,                     \
+    loom_amdgpu_sanitizer_lower_rule_set)                                   \
   F(VIEW, loom_amdgpu_view_contract_fragment, loom_amdgpu_view_lower_rule_set)
 
 // clang-format off
@@ -1224,6 +1256,9 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
                                   .user_data = NULL},
     .plan_key = {.fn = loom_amdgpu_plan_key, .user_data = NULL},
     .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
+    .finalize_function = {.fn = loom_amdgpu_finalize_function,
+                          .user_data = NULL},
+    .finalize_module = {.fn = loom_amdgpu_finalize_module, .user_data = NULL},
 };
 
 const loom_target_low_legality_provider_t
@@ -1231,8 +1266,9 @@ const loom_target_low_legality_provider_t
         .name = IREE_SVL("amdgpu"),
         .builtin_dialect_bits =
             (1u << LOOM_DIALECT_INDEX) | (1u << LOOM_DIALECT_BUFFER) |
-            (1u << LOOM_DIALECT_SCALAR) | (1u << LOOM_DIALECT_VIEW) |
-            (1u << LOOM_DIALECT_VECTOR) | (1u << LOOM_DIALECT_KERNEL),
+            (1u << LOOM_DIALECT_SCALAR) | (1u << LOOM_DIALECT_SANITIZER) |
+            (1u << LOOM_DIALECT_VIEW) | (1u << LOOM_DIALECT_VECTOR) |
+            (1u << LOOM_DIALECT_KERNEL),
         .try_verify_op = loom_amdgpu_low_legality_try_verify_op,
 };
 

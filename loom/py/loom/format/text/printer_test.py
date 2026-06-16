@@ -29,6 +29,8 @@ from loom.ir import (
     I8,
     I32,
     INDEX,
+    LOCATION_TAG_SANITIZER_SITE,
+    LOCATION_TAG_USER_BASE,
     NONE_TYPE,
     OFFSET,
     Block,
@@ -53,6 +55,7 @@ from loom.ir import (
     StaticDim,
     StorageSpace,
     StorageType,
+    TaggedLocation,
     Type,
     TypeKind,
     Value,
@@ -707,11 +710,16 @@ class TestPrintAttrDict:
             name="test.attrs",
             operands=[x],
             results=[r],
-            attributes={"dict": {"label": "foo", "axis": 0}},
+            attributes={
+                "dict": {"label": "foo", "axis": 0, "payload": b"\x00\x11\xfe\xff"}
+            },
         )
         assert isinstance(op.attributes["dict"], CanonicalAttrDict)
         text = _printer().print_operation(op, module)
-        assert text == '%r = test.attrs %x {axis = 0, label = "foo"} : f32'
+        assert (
+            text == '%r = test.attrs %x {axis = 0, label = "foo", '
+            'payload = bytes("0011feff")} : f32'
+        )
 
     def test_empty_dict(self) -> None:
         module, [x, r] = _module_with(("x", F32), ("r", F32))
@@ -934,6 +942,64 @@ class TestLocationPrinting:
             location_id=location_id,
         )
         with pytest.raises(ValueError, match="opaque location data is not valid UTF-8"):
+            _module_printer(print_locations=True).print_operation(op, module)
+
+    def test_tagged_location_prints_hex_payload(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        source_id = len(module.sources)
+        module.sources.append("model.loom")
+        child_id = module.add_location(
+            FileLocation(
+                source_id=source_id,
+                start_line=5,
+                start_col=6,
+                end_line=5,
+                end_col=6,
+            )
+        )
+        location_id = module.add_location(
+            TaggedLocation(
+                tag=LOCATION_TAG_SANITIZER_SITE,
+                child=child_id,
+                data=b"\x01\x2a\xff",
+            )
+        )
+        op = Operation(
+            name="test.neg",
+            operands=[x],
+            results=[r],
+            location_id=location_id,
+        )
+        text = _module_printer(print_locations=True).print_operation(op, module)
+        assert (
+            text
+            == '%r = test.neg %x : f32 loc(tagged<sanitizer_site, "012aff", "model.loom":5:6>)'
+        )
+
+    def test_tagged_location_prints_numeric_user_tag(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        location_id = module.add_location(
+            TaggedLocation(tag=LOCATION_TAG_USER_BASE, data=b"")
+        )
+        op = Operation(
+            name="test.neg",
+            operands=[x],
+            results=[r],
+            location_id=location_id,
+        )
+        text = _module_printer(print_locations=True).print_operation(op, module)
+        assert text == '%r = test.neg %x : f32 loc(tagged<32768, "">)'
+
+    def test_tagged_location_invalid_tag_fails_loud(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        location_id = module.add_location(TaggedLocation(tag=0, data=b""))
+        op = Operation(
+            name="test.neg",
+            operands=[x],
+            results=[r],
+            location_id=location_id,
+        )
+        with pytest.raises(ValueError, match="tagged location tag"):
             _module_printer(print_locations=True).print_operation(op, module)
 
 

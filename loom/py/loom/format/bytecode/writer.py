@@ -57,6 +57,7 @@ from loom.ir import (
     StorageType,
     SymbolKind,
     SymbolName,
+    TaggedLocation,
     Type,
     TypeKind,
     Value,
@@ -128,6 +129,7 @@ ATTR_KIND_TYPE = 7
 ATTR_KIND_PREDICATE_LIST = 8
 ATTR_KIND_DICT = 9
 ATTR_KIND_ENCODING = 10
+ATTR_KIND_BYTES = 11
 
 # Type kind bytes. These must match loom_bytecode_type_kind_e, not just the
 # current Python enum spelling.
@@ -154,7 +156,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 14
+FORMAT_VERSION = 15
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -605,6 +607,8 @@ class BytecodeWriter:
             return
         if isinstance(value, str):
             self._ctx.intern_string(value)
+        elif isinstance(value, bytes | bytearray):
+            pass
         elif isinstance(value, _IR_TYPE_CLASSES):
             self._ctx.intern_type(cast(Type, value))
         elif isinstance(value, EncodingInstance):
@@ -823,6 +827,15 @@ class BytecodeWriter:
                 buf.write_u8(3)  # OPAQUE
                 buf.write_u8(loc.flags)
                 buf.write_varint(loc.source_id)
+                buf.write_varint(len(loc.data))
+                buf.write_bytes(loc.data)
+            elif isinstance(loc, TaggedLocation):
+                if loc.tag <= 0 or loc.tag > 0xFFFF:
+                    raise ValueError("tagged location tag must be in [1, 65535]")
+                buf.write_u8(4)  # TAGGED
+                buf.write_u8(loc.flags)
+                buf.write_varint(loc.tag)
+                buf.write_varint(loc.child)
                 buf.write_varint(len(loc.data))
                 buf.write_bytes(loc.data)
         return buf.get_bytes()
@@ -1180,6 +1193,14 @@ class BytecodeWriter:
             buf.write_u8(ATTR_KIND_TYPE)
             buf.write_varint(self._ctx.intern_type(cast(Type, value)))
             return
+        if attr_type == "bytes":
+            if not isinstance(value, bytes | bytearray):
+                raise TypeError(f"bytes attribute value must be bytes, got {value!r}")
+            data = bytes(value)
+            buf.write_u8(ATTR_KIND_BYTES)
+            buf.write_varint(len(data))
+            buf.write_bytes(data)
+            return
         if isinstance(value, SymbolName):
             buf.write_u8(ATTR_KIND_SYMBOL)
             buf.write_varint(self._ctx.strings[str(value)])
@@ -1196,6 +1217,11 @@ class BytecodeWriter:
         elif isinstance(value, str):
             buf.write_u8(ATTR_KIND_STRING)
             buf.write_varint(self._ctx.strings[value])
+        elif isinstance(value, bytes | bytearray):
+            data = bytes(value)
+            buf.write_u8(ATTR_KIND_BYTES)
+            buf.write_varint(len(data))
+            buf.write_bytes(data)
         elif isinstance(value, Mapping):
             buf.write_u8(ATTR_KIND_DICT)
             buf.write_varint(len(value))
@@ -1238,6 +1264,9 @@ class BytecodeWriter:
         "max": 8,
         "pow2": 9,
         "range": 10,
+        "not_nan": 11,
+        "not_inf": 12,
+        "finite": 13,
     }
 
     def _write_predicate_list(

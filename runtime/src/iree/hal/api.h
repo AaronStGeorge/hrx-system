@@ -18,6 +18,7 @@
 #include "iree/hal/channel_provider.h"  // IWYU pragma: export
 #include "iree/hal/command_buffer.h"    // IWYU pragma: export
 #include "iree/hal/device.h"            // IWYU pragma: export
+#include "iree/hal/device_event.h"      // IWYU pragma: export
 #include "iree/hal/device_group.h"      // IWYU pragma: export
 #include "iree/hal/device_spec.h"       // IWYU pragma: export
 #include "iree/hal/driver.h"            // IWYU pragma: export

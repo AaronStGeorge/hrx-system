@@ -17,11 +17,13 @@
 #include "iree/hal/channel.h"
 #include "iree/hal/channel_provider.h"
 #include "iree/hal/command_buffer.h"
+#include "iree/hal/device_event.h"
 #include "iree/hal/device_spec.h"
 #include "iree/hal/event.h"
 #include "iree/hal/executable_cache.h"
 #include "iree/hal/fence.h"
 #include "iree/hal/file.h"
+#include "iree/hal/memory/asan.h"
 #include "iree/hal/pool.h"
 #include "iree/hal/profile_options.h"
 #include "iree/hal/queue.h"
@@ -112,15 +114,26 @@ typedef struct iree_hal_device_create_params_t {
   // Callers must always provide a valid pool.
   iree_async_proactor_pool_t* proactor_pool;
 
+  // Programmatic sink receiving device-originated events. Defaults to discard.
+  // The sink is copied into the device and |event_sink.user_data| must outlive
+  // the device.
+  iree_hal_device_event_sink_t event_sink;
+
 } iree_hal_device_create_params_t;
 
-// Returns default device creation parameters (all zeros).
+// Returns default device creation parameters with a discard event sink.
 static inline iree_hal_device_create_params_t
 iree_hal_device_create_params_default(void) {
   iree_hal_device_create_params_t params;
   memset(&params, 0, sizeof(params));
+  params.event_sink = iree_hal_device_event_sink_discard();
   return params;
 }
+
+// Verifies that |params| contains all device-creation inputs required by every
+// HAL backend.
+IREE_API_EXPORT iree_status_t iree_hal_device_create_params_verify(
+    const iree_hal_device_create_params_t* params);
 
 // Bitfield selecting external capture behavior.
 typedef uint64_t iree_hal_device_external_capture_flags_t;
@@ -273,18 +286,27 @@ typedef struct iree_hal_host_call_t {
 // device memory domain.
 //
 // |slab_provider| and |notification| are borrowed from the device. Pool
-// constructors retain those objects, but the objects themselves and
-// |epoch_query| may still read backend-owned state. The device must therefore
-// outlive all pools created from this bundle.
+// constructors retain those objects, but the objects themselves,
+// |epoch_query|, and |asan| may still read or describe backend-owned state. The
+// device must therefore outlive all pools created from this bundle.
 //
 // |notification| may be shared by multiple pools in the same physical-memory
 // domain and can wake callers whose own pool state did not change. Callers
 // should always retry reservations after wakeup instead of assuming precise
 // notification routing.
 typedef struct iree_hal_queue_pool_backend_t {
+  // Slab provider for the selected queue memory domain.
   iree_hal_slab_provider_t* slab_provider;
+
+  // Notification shared by pools over the selected queue memory domain.
   iree_async_notification_t* notification;
+
+  // Optional host-side epoch query for zero-sync block reuse.
   iree_hal_pool_epoch_query_t epoch_query;
+
+  // Active ASAN allocation-shaping policy for custom pools over this backend.
+  // Disabled when the device does not support or has not enabled ASAN pools.
+  iree_hal_asan_pool_options_t asan;
 } iree_hal_queue_pool_backend_t;
 
 // Returns a host call bound to the given function pointer and user data.
@@ -373,9 +395,12 @@ typedef enum iree_hal_device_observation_flag_bits_e {
   // Device memory availability and total allocation budget fields are requested
   // or populated.
   IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY = 1ull << 0,
+  // Device sanitizer state fields are requested or populated.
+  IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER = 1ull << 1,
   // All currently defined observation groups.
   IREE_HAL_DEVICE_OBSERVATION_FLAG_ALL =
-      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY,
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY |
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER,
 } iree_hal_device_observation_flag_bits_t;
 
 // Memory fields populated in an observation sample.
@@ -408,6 +433,47 @@ typedef struct iree_hal_device_memory_observation_t {
   iree_device_size_t available_bytes;
 } iree_hal_device_memory_observation_t;
 
+// ASAN fields populated in an observation sample.
+typedef uint64_t iree_hal_device_asan_observation_flags_t;
+typedef enum iree_hal_device_asan_observation_flag_bits_e {
+  // No ASAN observation fields are populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_NONE = 0ull,
+  // The quarantine_size field is populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_QUARANTINE_SIZE = 1ull << 0,
+  // The quarantine_eviction_count field is populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_QUARANTINE_EVICTION_COUNT = 1ull << 1,
+  // The shadow_mapped_slab_count field is populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_SHADOW_MAPPED_SLAB_COUNT = 1ull << 2,
+  // The shadow_committed_size field is populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_SHADOW_COMMITTED_SIZE = 1ull << 3,
+  // All currently defined ASAN observation fields.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_ALL =
+      IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_QUARANTINE_SIZE |
+      IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_QUARANTINE_EVICTION_COUNT |
+      IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_SHADOW_MAPPED_SLAB_COUNT |
+      IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_SHADOW_COMMITTED_SIZE,
+} iree_hal_device_asan_observation_flag_bits_t;
+
+// Sampled ASAN state.
+typedef struct iree_hal_device_asan_observation_t {
+  // ASAN fields populated by the device.
+  iree_hal_device_asan_observation_flags_t flags;
+  // Current total bytes retained by the ASAN quarantine FIFO.
+  iree_device_size_t quarantine_size;
+  // Cumulative count of mappings released due to ASAN quarantine pressure.
+  uint64_t quarantine_eviction_count;
+  // Number of precise physical shadow slabs currently mapped.
+  uint64_t shadow_mapped_slab_count;
+  // Physical shadow bytes currently committed.
+  iree_device_size_t shadow_committed_size;
+} iree_hal_device_asan_observation_t;
+
+// Sampled device sanitizer state.
+typedef struct iree_hal_device_sanitizer_observation_t {
+  // Sampled ASAN state.
+  iree_hal_device_asan_observation_t asan;
+} iree_hal_device_sanitizer_observation_t;
+
 // Point-in-time device state observation.
 //
 // Observations contain sampled device state that may change over the lifetime
@@ -422,6 +488,8 @@ typedef struct iree_hal_device_observation_t {
   iree_time_t sample_time_ns;
   // Sampled memory state.
   iree_hal_device_memory_observation_t memory;
+  // Sampled sanitizer state.
+  iree_hal_device_sanitizer_observation_t sanitizer;
 } iree_hal_device_observation_t;
 
 //===----------------------------------------------------------------------===//
@@ -625,8 +693,11 @@ IREE_API_EXPORT iree_status_t iree_hal_device_queue_alloca(
 // been reached. Once the storage is available for reuse the
 // |signal_semaphore_list| will be signaled. After all waits have been resolved
 // the contents of the buffer are immediately undefined even if the signal has
-// not yet occurred. If the buffer was not allocated asynchronously a barrier
-// will be inserted to preserve fence timelines.
+// not yet occurred. Queue implementations must perform target-visible release
+// effects such as decommit, sanitizer poisoning, or guard-page updates after
+// all waits are satisfied and before any signals are published. If the buffer
+// was not allocated asynchronously a barrier will be inserted to preserve fence
+// timelines.
 //
 // Deallocations will only be queue-ordered if the |buffer| was originally
 // allocated with iree_hal_device_queue_alloca. Any synchronous allocations will

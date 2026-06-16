@@ -95,27 +95,23 @@ iree_status_t loom_testbench_prepare_case_invocations(
   return iree_ok_status();
 }
 
-static iree_status_t loom_testbench_allocate_variant_array(
+static iree_status_t loom_testbench_allocate_value_array(
     iree_allocator_t allocator, iree_host_size_t count,
-    iree_vm_variant_t** out_variants) {
-  *out_variants = NULL;
+    loom_testbench_value_t** out_values) {
+  *out_values = NULL;
   if (count == 0) {
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-      allocator, count, sizeof(**out_variants), (void**)out_variants));
-  for (iree_host_size_t variant_index = 0; variant_index < count;
-       ++variant_index) {
-    (*out_variants)[variant_index] = iree_vm_variant_empty();
-  }
+      allocator, count, sizeof(**out_values), (void**)out_values));
+  memset(*out_values, 0, count * sizeof(**out_values));
   return iree_ok_status();
 }
 
-static void loom_testbench_reset_variants(iree_vm_variant_t* variants,
-                                          iree_host_size_t count) {
-  for (iree_host_size_t variant_index = 0; variant_index < count;
-       ++variant_index) {
-    iree_vm_variant_reset(&variants[variant_index]);
+static void loom_testbench_reset_values(loom_testbench_value_t* values,
+                                        iree_host_size_t count) {
+  for (iree_host_size_t value_index = 0; value_index < count; ++value_index) {
+    loom_testbench_value_deinitialize(&values[value_index]);
   }
 }
 
@@ -132,10 +128,10 @@ iree_status_t loom_testbench_invocation_executor_initialize(
   out_executor->input_capacity = schedule->max_input_count;
   out_executor->result_capacity = schedule->max_result_count;
 
-  iree_status_t status = loom_testbench_allocate_variant_array(
+  iree_status_t status = loom_testbench_allocate_value_array(
       host_allocator, out_executor->input_capacity, &out_executor->inputs);
   if (iree_status_is_ok(status)) {
-    status = loom_testbench_allocate_variant_array(
+    status = loom_testbench_allocate_value_array(
         host_allocator, out_executor->result_capacity, &out_executor->results);
   }
   if (!iree_status_is_ok(status)) {
@@ -151,11 +147,11 @@ void loom_testbench_invocation_executor_deinitialize(
     return;
   }
   if (executor->inputs) {
-    loom_testbench_reset_variants(executor->inputs, executor->input_capacity);
+    loom_testbench_reset_values(executor->inputs, executor->input_capacity);
     iree_allocator_free(executor->host_allocator, executor->inputs);
   }
   if (executor->results) {
-    loom_testbench_reset_variants(executor->results, executor->result_capacity);
+    loom_testbench_reset_values(executor->results, executor->result_capacity);
     iree_allocator_free(executor->host_allocator, executor->results);
   }
   memset(executor, 0, sizeof(*executor));
@@ -163,7 +159,7 @@ void loom_testbench_invocation_executor_deinitialize(
 
 static iree_status_t loom_testbench_load_invocation_inputs(
     const loom_testbench_invocation_plan_t* invocation,
-    const loom_testbench_value_table_t* table, iree_vm_variant_t* inputs) {
+    const loom_testbench_value_table_t* table, loom_testbench_value_t* inputs) {
   for (iree_host_size_t input_index = 0; input_index < invocation->input_count;
        ++input_index) {
     IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_retain(
@@ -174,10 +170,10 @@ static iree_status_t loom_testbench_load_invocation_inputs(
 
 static iree_status_t loom_testbench_store_invocation_results(
     const loom_testbench_invocation_plan_t* invocation,
-    loom_testbench_value_table_t* table, iree_vm_variant_t* results) {
+    loom_testbench_value_table_t* table, loom_testbench_value_t* results) {
   for (iree_host_size_t result_index = 0;
        result_index < invocation->result_count; ++result_index) {
-    if (iree_vm_variant_is_empty(results[result_index])) {
+    if (results[result_index].kind == LOOM_TESTBENCH_VALUE_KIND_NONE) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                               "invocation result %zu was not assigned",
                               result_index);
@@ -213,12 +209,12 @@ iree_status_t loom_testbench_run_case_invocations(
                                    invocation->input_count, executor->inputs,
                                    invocation->result_count, executor->results);
     }
-    loom_testbench_reset_variants(executor->inputs, invocation->input_count);
+    loom_testbench_reset_values(executor->inputs, invocation->input_count);
     if (iree_status_is_ok(status)) {
       status = loom_testbench_store_invocation_results(invocation, table,
                                                        executor->results);
     }
-    loom_testbench_reset_variants(executor->results, invocation->result_count);
+    loom_testbench_reset_values(executor->results, invocation->result_count);
   }
   return status;
 }

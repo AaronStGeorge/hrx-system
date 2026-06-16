@@ -52,6 +52,65 @@ pass.pipeline<module> @__loom_check_source_low pipeline {
 }
 
 // ====
+// RUN: emit source-low output=pipeline sanitizer=access
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @sanitizer_pipeline_probe(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+// ----
+pass.pipeline<module> @__loom_check_source_low pipeline {
+  for func {
+    where target {
+      legalize-math
+      normalize-kernel-resources
+      promote-private-fragments
+      canonicalize
+      cse
+    }
+  }
+  select-templates(mode = "final")
+  inline-callables
+  target-legalize(mode = "eager")
+  for func {
+    where target {
+      vector-gather-to-scalar
+      linearize-view-accesses
+      canonicalize
+      cse
+      unroll-scf-for
+      canonicalize
+      cse
+      promote-private-fragments
+      canonicalize
+      cse
+      scf-to-cfg
+      cfg-simplify
+      canonicalize
+      cse
+      branch-sink
+    }
+  }
+  target-legalize(mode = "eager")
+  for func {
+    where target {
+      sanitizer-insert-assertions(checks = "access")
+    }
+  }
+  source-to-low
+  for func {
+    where target {
+      cfg-simplify
+      canonicalize
+      cse
+      low-dce
+    }
+  }
+}
+
+// ====
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx1100> @gfx11

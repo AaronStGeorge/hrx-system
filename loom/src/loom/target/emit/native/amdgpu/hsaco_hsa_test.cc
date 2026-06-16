@@ -50,6 +50,11 @@ using StreamPtr =
 
 using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
 
+constexpr char kAsanConfigGlobalName[] = "iree_asan_config";
+constexpr uint32_t kAsanConfigByteLength = 96;
+constexpr char kFeedbackConfigGlobalName[] = "iree_feedback_config";
+constexpr uint32_t kFeedbackConfigByteLength = 64;
+
 void RegisterDialect(loom_context_t* context, uint8_t dialect_id,
                      DialectVtablesFn dialect_vtables_fn) {
   iree_host_size_t count = 0;
@@ -914,6 +919,82 @@ iree_status_t EmitB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
   return emitter.EmitKernel(processor, source, out_hsaco, arena.arena());
 }
 
+std::string AmdhsaTargetIdForProcessor(
+    const loom_amdgpu_processor_info_t* processor) {
+  return std::string("amdgcn-amd-amdhsa--") +
+         std::string(processor->name.data, processor->name.size);
+}
+
+loom_amdgpu_metadata_kernel_t MinimalKernel(iree_string_view_t name,
+                                            iree_string_view_t symbol,
+                                            uint32_t wavefront_size) {
+  return {
+      /*.name=*/name,
+      /*.descriptor_symbol=*/symbol,
+      /*.kernarg_segment_size=*/0,
+      /*.kernarg_segment_alignment=*/8,
+      /*.wavefront_size=*/wavefront_size,
+      /*.group_segment_fixed_size=*/0,
+      /*.private_segment_fixed_size=*/0,
+      /*.sgpr_count=*/4,
+      /*.vgpr_count=*/1,
+      /*.max_flat_workgroup_size=*/64,
+      /*.required_workgroup_size=*/{/*.x=*/64, /*.y=*/1, /*.z=*/1},
+      /*.has_required_workgroup_size=*/true,
+      /*.arguments=*/nullptr,
+      /*.argument_count=*/0,
+  };
+}
+
+iree_status_t EmitRuntimeGlobalKernelForAmdgpu(const AmdgpuHsaTarget& target,
+                                               std::string* out_hsaco) {
+  IREE_ASSERT_ARGUMENT(out_hsaco);
+  *out_hsaco = {};
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_RETURN_IF_ERROR(PrepareTargetProcessorForLowHsaco(target, &processor));
+
+  const uint8_t s_endpgm[] = {0x00, 0x00, 0x81, 0xbf};
+  const loom_amdgpu_hsaco_kernel_t kernel = {
+      /*.metadata=*/MinimalKernel(IREE_SV("loom_kernel"),
+                                  IREE_SV("loom_kernel.kd"),
+                                  processor->wavefront.default_size),
+      /*.descriptor_options=*/{},
+      /*.text=*/iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
+  };
+  const loom_amdgpu_hsaco_data_symbol_t data_symbols[] = {
+      {
+          /*.name=*/IREE_SV(kAsanConfigGlobalName),
+          /*.initial_contents=*/{},
+          /*.byte_length=*/kAsanConfigByteLength,
+          /*.alignment=*/8,
+          /*.flags=*/LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+      },
+      {
+          /*.name=*/IREE_SV(kFeedbackConfigGlobalName),
+          /*.initial_contents=*/{},
+          /*.byte_length=*/kFeedbackConfigByteLength,
+          /*.alignment=*/8,
+          /*.flags=*/LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+      },
+  };
+  const std::string target_id = AmdhsaTargetIdForProcessor(processor);
+  const loom_amdgpu_hsaco_file_t file = {
+      /*.target=*/iree_make_string_view(target_id.data(), target_id.size()),
+      /*.processor=*/processor->name,
+      /*.kernels=*/&kernel,
+      /*.kernel_count=*/1,
+      /*.data_symbols=*/data_symbols,
+      /*.data_symbol_count=*/IREE_ARRAYSIZE(data_symbols),
+  };
+
+  StreamPtr stream = CreateStream();
+  TestArena arena;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
+  *out_hsaco = StreamBytes(stream.get());
+  return iree_ok_status();
+}
+
 iree_status_t CheckHsaStatus(const HsaApi& api, hsa_status_t status,
                              const char* call_name) {
   if (status == HSA_STATUS_SUCCESS) {
@@ -923,26 +1004,10 @@ iree_status_t CheckHsaStatus(const HsaApi& api, hsa_status_t status,
                           HsaStatusString(api, status).c_str());
 }
 
-struct LoadedKernelInfo {
-  // Kernel object value to put in AQL dispatch packets.
-  uint64_t kernel_object = 0;
-  // Kernarg segment size reported by the HSA loader.
-  uint32_t kernarg_segment_size = 0;
-  // Group segment size reported by the HSA loader.
-  uint32_t group_segment_size = 0;
-  // Private segment size reported by the HSA loader.
-  uint32_t private_segment_size = 0;
-};
-
-iree_status_t LoadKernelExecutable(const HsaApi& api,
-                                   const AmdgpuHsaTarget& target,
-                                   const std::string& hsaco,
-                                   const char* symbol_name,
-                                   HsaExecutable* executable,
-                                   LoadedKernelInfo* out_info) {
+iree_status_t LoadExecutable(const HsaApi& api, const AmdgpuHsaTarget& target,
+                             const std::string& hsaco,
+                             HsaExecutable* executable) {
   IREE_ASSERT_ARGUMENT(executable);
-  IREE_ASSERT_ARGUMENT(out_info);
-  *out_info = {};
 
   HsaCodeObjectReader reader(&api);
   IREE_RETURN_IF_ERROR(
@@ -963,9 +1028,43 @@ iree_status_t LoadKernelExecutable(const HsaApi& api,
               target.agent, reader.get(), nullptr, nullptr),
       "hsa_executable_load_agent_code_object"));
   reader.Reset();
-  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+  return CheckHsaStatus(
       api, CallHsa(api.hsa_executable_freeze, executable->get(), nullptr),
-      "hsa_executable_freeze"));
+      "hsa_executable_freeze");
+}
+
+struct LoadedKernelInfo {
+  // Kernel object value to put in AQL dispatch packets.
+  uint64_t kernel_object = 0;
+  // Kernarg segment size reported by the HSA loader.
+  uint32_t kernarg_segment_size = 0;
+  // Group segment size reported by the HSA loader.
+  uint32_t group_segment_size = 0;
+  // Private segment size reported by the HSA loader.
+  uint32_t private_segment_size = 0;
+};
+
+struct LoadedVariableInfo {
+  // HAL global publication relies on variable kind, address, and byte length.
+  // Device-visible variable address reported after executable freeze.
+  uint64_t address = 0;
+  // HSA variable segment.
+  hsa_variable_segment_t segment = HSA_VARIABLE_SEGMENT_READONLY;
+  // Byte length reported by the HSA loader.
+  uint32_t byte_length = 0;
+};
+
+iree_status_t LoadKernelExecutable(const HsaApi& api,
+                                   const AmdgpuHsaTarget& target,
+                                   const std::string& hsaco,
+                                   const char* symbol_name,
+                                   HsaExecutable* executable,
+                                   LoadedKernelInfo* out_info) {
+  IREE_ASSERT_ARGUMENT(executable);
+  IREE_ASSERT_ARGUMENT(out_info);
+  *out_info = {};
+
+  IREE_RETURN_IF_ERROR(LoadExecutable(api, target, hsaco, executable));
 
   hsa_executable_symbol_t symbol = {};
   IREE_RETURN_IF_ERROR(CheckHsaStatus(
@@ -997,6 +1096,50 @@ iree_status_t LoadKernelExecutable(const HsaApi& api,
               HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE,
               &out_info->private_segment_size),
       "hsa_executable_symbol_get_info(PRIVATE_SEGMENT_SIZE)");
+}
+
+iree_status_t QueryLoadedVariable(const HsaApi& api,
+                                  const AmdgpuHsaTarget& target,
+                                  HsaExecutable* executable,
+                                  const char* symbol_name,
+                                  LoadedVariableInfo* out_info) {
+  IREE_ASSERT_ARGUMENT(executable);
+  IREE_ASSERT_ARGUMENT(out_info);
+  *out_info = {};
+
+  hsa_executable_symbol_t symbol = {};
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_get_symbol_by_name, executable->get(),
+              symbol_name, &target.agent, &symbol),
+      "hsa_executable_get_symbol_by_name"));
+
+  hsa_symbol_kind_t symbol_kind = HSA_SYMBOL_KIND_KERNEL;
+  IREE_RETURN_IF_ERROR(
+      CheckHsaStatus(api,
+                     CallHsa(api.hsa_executable_symbol_get_info, symbol,
+                             HSA_EXECUTABLE_SYMBOL_INFO_TYPE, &symbol_kind),
+                     "hsa_executable_symbol_get_info(TYPE)"));
+  if (symbol_kind != HSA_SYMBOL_KIND_VARIABLE) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "HSA symbol '%s' is not a variable", symbol_name);
+  }
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_symbol_get_info, symbol,
+              HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS, &out_info->address),
+      "hsa_executable_symbol_get_info(VARIABLE_ADDRESS)"));
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_symbol_get_info, symbol,
+              HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_SEGMENT, &out_info->segment),
+      "hsa_executable_symbol_get_info(VARIABLE_SEGMENT)"));
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_symbol_get_info, symbol,
+              HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_SIZE, &out_info->byte_length),
+      "hsa_executable_symbol_get_info(VARIABLE_SIZE)"));
+  return iree_ok_status();
 }
 
 iree_status_t InitializeCurrentAmdgpuTarget(HsaRuntime* runtime,
@@ -1058,12 +1201,56 @@ void LoadLowKernelForCurrentTargetOrSkip(
   EXPECT_EQ(kernel.private_segment_size, 0u);
 }
 
+void LoadRuntimeGlobalsForCurrentTargetOrSkip() {
+  HsaRuntime runtime;
+  AmdgpuHsaTarget target = {};
+  iree_status_t target_status =
+      InitializeCurrentAmdgpuTarget(&runtime, &target);
+  if (iree_status_is_not_found(target_status) ||
+      iree_status_is_unavailable(target_status) ||
+      iree_status_is_unimplemented(target_status)) {
+    GTEST_SKIP() << StatusToStringAndFree(target_status);
+  }
+  IREE_ASSERT_OK(target_status);
+
+  std::string hsaco;
+  iree_status_t emit_status = EmitRuntimeGlobalKernelForAmdgpu(target, &hsaco);
+  if (iree_status_is_unimplemented(emit_status)) {
+    GTEST_SKIP() << "Loom AMDGPU HSACO emitter does not support current ISA '"
+                 << target.isa_name << "' from HSA agent '" << target.agent_name
+                 << "': " << StatusToStringAndFree(emit_status);
+  }
+  IREE_ASSERT_OK(emit_status);
+
+  const HsaApi& api = runtime.api();
+  HsaExecutable executable(&api);
+  IREE_ASSERT_OK(LoadExecutable(api, target, hsaco, &executable));
+
+  LoadedVariableInfo asan_config = {};
+  IREE_ASSERT_OK(QueryLoadedVariable(api, target, &executable,
+                                     kAsanConfigGlobalName, &asan_config));
+  EXPECT_NE(asan_config.address, 0u);
+  EXPECT_EQ(asan_config.segment, HSA_VARIABLE_SEGMENT_GLOBAL);
+  EXPECT_EQ(asan_config.byte_length, kAsanConfigByteLength);
+
+  LoadedVariableInfo feedback_config = {};
+  IREE_ASSERT_OK(QueryLoadedVariable(
+      api, target, &executable, kFeedbackConfigGlobalName, &feedback_config));
+  EXPECT_NE(feedback_config.address, 0u);
+  EXPECT_EQ(feedback_config.segment, HSA_VARIABLE_SEGMENT_GLOBAL);
+  EXPECT_EQ(feedback_config.byte_length, kFeedbackConfigByteLength);
+}
+
 TEST(AmdgpuHsacoHsaTest, LoadsWorkitemIndexedStoreKernel) {
   LoadLowKernelForCurrentTargetOrSkip(EmitWorkitemStoreKernelForAmdgpu, 8);
 }
 
 TEST(AmdgpuHsacoHsaTest, LoadsB128CopyKernel) {
   LoadLowKernelForCurrentTargetOrSkip(EmitB128CopyKernelForAmdgpu, 16);
+}
+
+TEST(AmdgpuHsacoHsaTest, LoadsWritableRuntimeDataSymbols) {
+  LoadRuntimeGlobalsForCurrentTargetOrSkip();
 }
 
 }  // namespace

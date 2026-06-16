@@ -79,6 +79,7 @@ from loom.ir import (
     Symbol,
     SymbolKind,
     SymbolName,
+    TaggedLocation,
     TiedResult,
     Type,
     TypeKind,
@@ -664,6 +665,17 @@ class BytecodeReader:
                     opaque_data = data[offset : offset + data_length]
                     offset += data_length
                     module.locations.add(OpaqueLocation(source_id, opaque_data, flags))
+                case 4:  # TAGGED
+                    tag, offset = decode_varint(data, offset)
+                    child, offset = decode_varint(data, offset)
+                    data_length, offset = decode_varint(data, offset)
+                    tagged_data = data[offset : offset + data_length]
+                    offset += data_length
+                    module.locations.add(
+                        TaggedLocation(
+                            tag=tag, child=child, data=tagged_data, flags=flags
+                        )
+                    )
 
     def _read_comment_list(
         self, data: bytes, offset: int
@@ -1511,6 +1523,14 @@ class BytecodeReader:
                         f"(encoding table has {len(self._encodings)} entries)"
                     )
                 return self._encodings[encoding_id - 1], offset
+            case 11:  # BYTES
+                byte_length, offset = decode_varint(data, offset)
+                end_offset = offset + byte_length
+                if end_offset > len(data):
+                    raise BytecodeError(
+                        f"bytes attr length {byte_length} exceeds payload size"
+                    )
+                return data[offset:end_offset], end_offset
             case _:
                 raise BytecodeError(f"unknown attr value kind: {kind}")
 
@@ -1598,6 +1618,9 @@ class BytecodeReader:
         "max",
         "pow2",
         "range",
+        "not_nan",
+        "not_inf",
+        "finite",
     ]
 
     def _read_predicate_list(

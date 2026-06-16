@@ -99,6 +99,7 @@ __all__ = [
     "ATTR_TYPE_ENUM",
     "ATTR_TYPE_TYPE",
     "ATTR_TYPE_I64_ARRAY",
+    "ATTR_TYPE_BYTES",
     "ATTR_TYPE_ENCODING",
     "ATTR_TYPE_ANY",
     "ATTR_TYPE_SYMBOL",
@@ -474,6 +475,7 @@ ATTR_TYPE_BOOL = "bool"
 ATTR_TYPE_ENUM = "enum"
 ATTR_TYPE_TYPE = "type"
 ATTR_TYPE_I64_ARRAY = "i64_array"
+ATTR_TYPE_BYTES = "bytes"
 ATTR_TYPE_ENCODING = "encoding"
 ATTR_TYPE_ANY = "any"
 ATTR_TYPE_SYMBOL = "symbol"
@@ -490,6 +492,7 @@ _VALID_ATTR_TYPES = frozenset(
         ATTR_TYPE_ENUM,
         ATTR_TYPE_TYPE,
         ATTR_TYPE_I64_ARRAY,
+        ATTR_TYPE_BYTES,
         ATTR_TYPE_ENCODING,
         ATTR_TYPE_ANY,
         ATTR_TYPE_SYMBOL,
@@ -603,7 +606,7 @@ class AttrDef:
           positional in the format spec).
     attr_type: The kind of attribute value. Must be one of the
         ATTR_TYPE_* constants: "i64", "f64", "string", "bool",
-        "enum", "type", "i64_array", "encoding", "any".
+        "enum", "type", "i64_array", "bytes", "encoding", "any".
     doc: Human-readable description.
     default: Default value (None = required, not optional).
     enum_def: For enum attrs, the EnumDef describing valid values.

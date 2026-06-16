@@ -11,20 +11,10 @@
 #include "loom/ir/attribute.h"
 #include "loom/ops/config/ops.h"
 
-#define LOOM_CONFIG_DECL_PREDICATES_ATTR_INDEX 1
-
 loom_value_id_t loom_config_symbol_result_value(const loom_op_t* op) {
   if (loom_config_decl_isa(op)) return loom_config_decl_type(op);
   if (loom_config_def_isa(op)) return loom_config_def_type(op);
   return LOOM_VALUE_ID_INVALID;
-}
-
-loom_attribute_t loom_config_decl_predicates(const loom_op_t* op) {
-  if (!op || !loom_config_decl_isa(op) ||
-      op->attribute_count <= LOOM_CONFIG_DECL_PREDICATES_ATTR_INDEX) {
-    return loom_attr_absent();
-  }
-  return loom_op_const_attrs(op)[LOOM_CONFIG_DECL_PREDICATES_ATTR_INDEX];
 }
 
 static bool loom_config_value_to_i64(loom_type_t type, loom_attribute_t value,

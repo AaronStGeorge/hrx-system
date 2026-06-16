@@ -3255,6 +3255,7 @@ LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_fragment_params, 3)
 LOOM_DEFINE_RESULT(loom_vector_fragment_result, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_fragment_role, 0, loom_vector_role_t)
 LOOM_DEFINE_ATTR_DICT(loom_vector_fragment_param_names, 1)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_vector_fragment_predicates, 2)
 iree_status_t loom_vector_fragment_build(
     loom_builder_t* builder,
     loom_vector_role_t role,

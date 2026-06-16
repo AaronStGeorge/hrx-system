@@ -6,10 +6,10 @@
 
 // Runtime value materialization for check testbench cases.
 //
-// This layer turns target-free check case plans into typed VM/HAL values that
+// This layer turns target-free check case plans into typed runtime values that
 // execution, oracle, comparison, and fixture-writing layers can consume. It is
 // intentionally separate from testbench.h so pure case discovery remains free
-// of HAL, VM, and file-format dependencies.
+// of HAL and file-format dependencies.
 
 #ifndef LOOM_TOOLING_TESTBENCH_VALUE_MATERIALIZER_H_
 #define LOOM_TOOLING_TESTBENCH_VALUE_MATERIALIZER_H_
@@ -17,7 +17,7 @@
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 #include "iree/io/stream.h"
-#include "iree/vm/api.h"
+#include "iree/tooling/value_io.h"
 #include "loom/tooling/testbench/testbench.h"
 
 #ifdef __cplusplus
@@ -25,18 +25,39 @@ extern "C" {
 #endif
 
 typedef enum loom_testbench_value_slot_flag_bits_e {
-  // Slot currently owns a materialized variant.
+  // Slot currently owns a materialized value.
   LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED = 1u << 0,
 } loom_testbench_value_slot_flag_bits_t;
 typedef uint8_t loom_testbench_value_slot_flags_t;
+
+typedef uint8_t loom_testbench_value_kind_t;
+enum loom_testbench_value_kind_e {
+  // No materialized value is present.
+  LOOM_TESTBENCH_VALUE_KIND_NONE = 0,
+  // Scalar value stored in |scalar|.
+  LOOM_TESTBENCH_VALUE_KIND_SCALAR = 1,
+  // HAL buffer binding stored in |buffer|.
+  LOOM_TESTBENCH_VALUE_KIND_BUFFER = 2,
+};
+
+typedef struct loom_testbench_value_t {
+  // Active payload discriminator.
+  loom_testbench_value_kind_t kind;
+  union {
+    // Scalar payload used for check parameters and literals.
+    iree_tooling_value_t scalar;
+    // Retained HAL buffer payload used for shaped values.
+    iree_tooling_buffer_binding_t buffer;
+  };
+} loom_testbench_value_t;
 
 typedef struct loom_testbench_value_slot_t {
   // Source Loom SSA value represented by this slot.
   loom_value_id_t value_id;
   // Slot state flags.
   loom_testbench_value_slot_flags_t flags;
-  // Materialized VM/HAL value owned by this slot when ASSIGNED is set.
-  iree_vm_variant_t variant;
+  // Materialized value owned by this slot when ASSIGNED is set.
+  loom_testbench_value_t value;
 } loom_testbench_value_slot_t;
 
 // Case-local table of materialized runtime values.
@@ -107,23 +128,52 @@ void loom_testbench_value_table_reset(loom_testbench_value_table_t* table);
 bool loom_testbench_value_table_contains(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id);
 
-// Looks up |value_id| and returns a borrowed variant valid until the table is
+// Releases any resources owned by |value| and resets it to empty.
+void loom_testbench_value_deinitialize(loom_testbench_value_t* value);
+
+// Returns true when |value| is a scalar.
+bool loom_testbench_value_is_scalar(const loom_testbench_value_t* value);
+
+// Returns true when |value| carries a HAL buffer.
+bool loom_testbench_value_is_buffer(const loom_testbench_value_t* value);
+
+// Returns the HAL buffer view carried by |value|, or NULL when none exists.
+iree_hal_buffer_view_t* loom_testbench_value_buffer_view(
+    const loom_testbench_value_t* value);
+
+// Retains |source| into |out_value|. The caller must deinitialize |out_value|.
+void loom_testbench_value_retain(const loom_testbench_value_t* source,
+                                 loom_testbench_value_t* out_value);
+
+// Interprets |value| as an integer scalar and stores it as signed i64.
+iree_status_t loom_testbench_value_as_i64(const loom_testbench_value_t* value,
+                                          int64_t* out_value);
+
+// Moves a freshly-created HAL buffer view into |out_value| as a buffer binding.
+//
+// On success |out_value| owns |buffer_view| plus a retain of its underlying HAL
+// buffer and must be deinitialized by the caller. On failure |buffer_view|
+// remains caller-owned.
+iree_status_t loom_testbench_value_set_buffer_view_move(
+    iree_hal_buffer_view_t* buffer_view, loom_testbench_value_t* out_value);
+
+// Looks up |value_id| and returns a borrowed value valid until the table is
 // reset or deinitialized.
 iree_status_t loom_testbench_value_table_lookup_borrow(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
-    const iree_vm_variant_t** out_variant);
+    const loom_testbench_value_t** out_value);
 
-// Looks up |value_id| and retains any contained ref for the caller. The caller
-// must reset |out_variant| with iree_vm_variant_reset.
+// Looks up |value_id| and retains any contained resources for the caller. The
+// caller must deinitialize |out_value|.
 iree_status_t loom_testbench_value_table_lookup_retain(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
-    iree_vm_variant_t* out_variant);
+    loom_testbench_value_t* out_value);
 
-// Assigns |variant| to |value_id|, replacing any previous value. On success,
-// ownership moves into |table| and |variant| is reset to empty.
+// Assigns |value| to |value_id|, replacing any previous value. On success,
+// ownership moves into |table| and |value| is reset to empty.
 iree_status_t loom_testbench_value_table_assign_move(
     loom_testbench_value_table_t* table, loom_value_id_t value_id,
-    iree_vm_variant_t* variant);
+    loom_testbench_value_t* value);
 
 // Materializes parameters and source values for one concrete case sample.
 iree_status_t loom_testbench_materialize_case_sample(

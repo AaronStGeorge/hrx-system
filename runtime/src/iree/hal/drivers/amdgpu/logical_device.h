@@ -12,6 +12,8 @@
 #include "iree/base/internal/arena.h"
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/amdgpu/api.h"
+#include "iree/hal/drivers/amdgpu/asan_state.h"
+#include "iree/hal/drivers/amdgpu/feedback_state.h"
 #include "iree/hal/drivers/amdgpu/profile_events.h"
 #include "iree/hal/drivers/amdgpu/profile_metadata.h"
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
@@ -87,6 +89,10 @@ typedef struct iree_hal_amdgpu_logical_device_t {
 
   // Proactor pool retained from create_params; provides async I/O proactors.
   iree_async_proactor_pool_t* proactor_pool;
+
+  // Programmatic sink receiving device-originated events.
+  iree_hal_device_event_sink_t event_sink;
+
   // Proactor borrowed from the pool for this device's async operations.
   iree_async_proactor_t* proactor;
 
@@ -99,6 +105,9 @@ typedef struct iree_hal_amdgpu_logical_device_t {
 
   // Logical-device epoch counter for frontier tracking.
   iree_atomic_int64_t epoch;
+
+  // Next non-zero executable identifier assigned by this device.
+  iree_atomic_uint64_t next_executable_id;
 
   // Next process-local profile session identifier allocated by this device.
   uint64_t next_profile_session_id;
@@ -117,6 +126,12 @@ typedef struct iree_hal_amdgpu_logical_device_t {
   // This retains our fixed resources (like the device library) on the subset of
   // the agents available in HSA that are represented as physical devices.
   iree_hal_amdgpu_system_t* system;
+
+  // Optional ASAN state shared by allocator, executable, and queue paths.
+  iree_hal_amdgpu_asan_state_t asan;
+
+  // Optional feedback channels shared by instrumented executable code.
+  iree_hal_amdgpu_feedback_state_t feedback;
 
   // Shared epoch-signal table used by all host queues on this logical device
   // for local cross-queue barrier emission. Owned by the logical device and
@@ -227,6 +242,14 @@ bool iree_hal_amdgpu_logical_device_should_record_profile_memory_events(
 bool iree_hal_amdgpu_logical_device_lookup_host_queue_epoch_wait(
     iree_hal_amdgpu_logical_device_t* logical_device, iree_async_axis_t axis,
     iree_hal_amdgpu_host_queue_epoch_wait_t* out_wait_state);
+
+// Allocates a non-zero logical-device-local executable identifier.
+//
+// The identifier is assigned at executable creation and may be used by
+// profiling, sanitizer reports, and other device-originated diagnostics to
+// correlate events with the executable that produced them.
+iree_status_t iree_hal_amdgpu_logical_device_allocate_executable_id(
+    iree_hal_device_t* base_device, uint64_t* out_executable_id);
 
 // Returns true when the active profile capture should emit heavy dispatch
 // artifacts for the given executable export and queue location.

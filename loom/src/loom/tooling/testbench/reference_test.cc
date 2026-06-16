@@ -11,10 +11,8 @@
 
 #include "iree/base/internal/math.h"
 #include "iree/hal/api.h"
-#include "iree/modules/hal/types.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "iree/vm/api.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 
@@ -47,9 +45,6 @@ class ReferenceTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("reference_test"),
                                         &block_pool_, nullptr, host_allocator_,
                                         &module_));
-    IREE_ASSERT_OK(iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,
-                                           host_allocator_, &vm_instance_));
-    IREE_ASSERT_OK(iree_hal_module_register_all_types(vm_instance_));
     IREE_ASSERT_OK(
         iree_hal_allocator_create_heap(IREE_SV("testbench"), host_allocator_,
                                        host_allocator_, &device_allocator_));
@@ -63,7 +58,6 @@ class ReferenceTest : public ::testing::Test {
 
   void TearDown() override {
     iree_hal_allocator_release(device_allocator_);
-    iree_vm_instance_release(vm_instance_);
     loom_module_free(module_);
     loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
@@ -81,9 +75,9 @@ class ReferenceTest : public ::testing::Test {
   }
 
   template <typename T>
-  iree_vm_variant_t MakeBufferView(std::vector<iree_hal_dim_t> shape,
-                                   iree_hal_element_type_t element_type,
-                                   const std::vector<T>& values) {
+  loom_testbench_value_t MakeBufferView(std::vector<iree_hal_dim_t> shape,
+                                        iree_hal_element_type_t element_type,
+                                        const std::vector<T>& values) {
     BufferContents<T> contents = {
         /*.values=*/values.data(),
         /*.count=*/values.size(),
@@ -93,16 +87,17 @@ class ReferenceTest : public ::testing::Test {
         /*device=*/nullptr, device_allocator_, shape.size(), shape.data(),
         element_type, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR, BufferParams(),
         FillBufferView<T>, &contents, &buffer_view));
-    iree_vm_ref_t buffer_view_ref = iree_hal_buffer_view_move_ref(buffer_view);
-    return iree_vm_make_variant_ref_assign(buffer_view_ref);
+    loom_testbench_value_t value = {};
+    IREE_CHECK_OK(
+        loom_testbench_value_set_buffer_view_move(buffer_view, &value));
+    return value;
   }
 
-  void ExpectF32BufferView(const iree_vm_variant_t& variant,
+  void ExpectF32BufferView(const loom_testbench_value_t& value,
                            const std::vector<iree_hal_dim_t>& expected_shape,
                            std::vector<float> expected_values) {
-    ASSERT_TRUE(iree_vm_variant_is_ref(variant));
-    iree_hal_buffer_view_t* buffer_view = nullptr;
-    IREE_ASSERT_OK(iree_hal_buffer_view_check_deref(variant.ref, &buffer_view));
+    iree_hal_buffer_view_t* buffer_view =
+        loom_testbench_value_buffer_view(&value);
     ASSERT_NE(buffer_view, nullptr);
     EXPECT_EQ(iree_hal_buffer_view_shape_rank(buffer_view),
               expected_shape.size());
@@ -120,12 +115,11 @@ class ReferenceTest : public ::testing::Test {
     EXPECT_EQ(actual_values, expected_values);
   }
 
-  void ExpectS32BufferView(const iree_vm_variant_t& variant,
+  void ExpectS32BufferView(const loom_testbench_value_t& value,
                            const std::vector<iree_hal_dim_t>& expected_shape,
                            std::vector<int32_t> expected_values) {
-    ASSERT_TRUE(iree_vm_variant_is_ref(variant));
-    iree_hal_buffer_view_t* buffer_view = nullptr;
-    IREE_ASSERT_OK(iree_hal_buffer_view_check_deref(variant.ref, &buffer_view));
+    iree_hal_buffer_view_t* buffer_view =
+        loom_testbench_value_buffer_view(&value);
     ASSERT_NE(buffer_view, nullptr);
     EXPECT_EQ(iree_hal_buffer_view_shape_rank(buffer_view),
               expected_shape.size());
@@ -188,7 +182,6 @@ class ReferenceTest : public ::testing::Test {
   iree_arena_block_pool_t block_pool_ = {};
   loom_context_t context_ = {};
   loom_module_t* module_ = nullptr;
-  iree_vm_instance_t* vm_instance_ = nullptr;
   iree_hal_allocator_t* device_allocator_ = nullptr;
   loom_testbench_reference_matmul_oracle_options_t reference_options_ = {};
 };
@@ -206,7 +199,7 @@ TEST_F(ReferenceTest, ComputesF16MatmulWithF32Accumulator) {
   };
   std::vector<float> init_values = {0.5f, 1.0f, 1.5f, 2.0f};
 
-  iree_vm_variant_t inputs[3] = {
+  loom_testbench_value_t inputs[3] = {
       MakeBufferView<uint16_t>({2, 3}, IREE_HAL_ELEMENT_TYPE_FLOAT_16,
                                lhs_values),
       MakeBufferView<uint16_t>({3, 2}, IREE_HAL_ELEMENT_TYPE_FLOAT_16,
@@ -219,7 +212,7 @@ TEST_F(ReferenceTest, ComputesF16MatmulWithF32Accumulator) {
   loom_testbench_reference_matmul_oracle_provider_initialize(
       &reference_options_, &provider);
 
-  iree_vm_variant_t results[1] = {iree_vm_variant_empty()};
+  loom_testbench_value_t results[1] = {};
   loom_testbench_invocation_plan_t invocation = {
       /*.kind=*/{},
       /*.module=*/module_,
@@ -229,9 +222,9 @@ TEST_F(ReferenceTest, ComputesF16MatmulWithF32Accumulator) {
                                     IREE_ARRAYSIZE(results), results));
   ExpectF32BufferView(results[0], {2, 2}, {58.5f, 65.0f, 140.5f, 156.0f});
 
-  iree_vm_variant_reset(&results[0]);
+  loom_testbench_value_deinitialize(&results[0]);
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(inputs); ++i) {
-    iree_vm_variant_reset(&inputs[i]);
+    loom_testbench_value_deinitialize(&inputs[i]);
   }
 }
 
@@ -240,7 +233,7 @@ TEST_F(ReferenceTest, ComputesU8MatmulWithF32Accumulator) {
   std::vector<int8_t> rhs_values = {1, 2, 3, 4, 5, 6};
   std::vector<float> init_values = {0.5f, 1.0f, 1.5f, 2.0f};
 
-  iree_vm_variant_t inputs[3] = {
+  loom_testbench_value_t inputs[3] = {
       MakeBufferView<int8_t>({2, 3}, IREE_HAL_ELEMENT_TYPE_SINT_8, lhs_values),
       MakeBufferView<int8_t>({3, 2}, IREE_HAL_ELEMENT_TYPE_SINT_8, rhs_values),
       MakeBufferView<float>({2, 2}, IREE_HAL_ELEMENT_TYPE_FLOAT_32,
@@ -251,7 +244,7 @@ TEST_F(ReferenceTest, ComputesU8MatmulWithF32Accumulator) {
   loom_testbench_reference_matmul_oracle_provider_initialize(
       &reference_options_, &provider);
 
-  iree_vm_variant_t results[1] = {iree_vm_variant_empty()};
+  loom_testbench_value_t results[1] = {};
   loom_testbench_invocation_plan_t invocation = {
       /*.kind=*/{},
       /*.module=*/module_,
@@ -268,9 +261,9 @@ TEST_F(ReferenceTest, ComputesU8MatmulWithF32Accumulator) {
                                     IREE_ARRAYSIZE(results), results));
   ExpectF32BufferView(results[0], {2, 2}, {1531.5f, 2043.0f, 1281.5f, 1542.0f});
 
-  iree_vm_variant_reset(&results[0]);
+  loom_testbench_value_deinitialize(&results[0]);
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(inputs); ++i) {
-    iree_vm_variant_reset(&inputs[i]);
+    loom_testbench_value_deinitialize(&inputs[i]);
   }
 }
 
@@ -289,7 +282,7 @@ TEST_F(ReferenceTest, ComputesTilePackedF16MatmulWithF32Accumulator) {
   };
   std::vector<float> init_values = {0.5f, 1.0f, 1.5f, 2.0f};
 
-  iree_vm_variant_t inputs[3] = {
+  loom_testbench_value_t inputs[3] = {
       MakeBufferView<uint16_t>({1, 2, 2, 2}, IREE_HAL_ELEMENT_TYPE_FLOAT_16,
                                lhs_values),
       MakeBufferView<uint16_t>({2, 1, 2, 2}, IREE_HAL_ELEMENT_TYPE_FLOAT_16,
@@ -302,7 +295,7 @@ TEST_F(ReferenceTest, ComputesTilePackedF16MatmulWithF32Accumulator) {
   loom_testbench_reference_tiled_matmul_oracle_provider_initialize(
       &reference_options_, &provider);
 
-  iree_vm_variant_t results[1] = {iree_vm_variant_empty()};
+  loom_testbench_value_t results[1] = {};
   loom_testbench_invocation_plan_t invocation = {
       /*.kind=*/{},
       /*.module=*/module_,
@@ -313,9 +306,9 @@ TEST_F(ReferenceTest, ComputesTilePackedF16MatmulWithF32Accumulator) {
   ExpectF32BufferView(results[0], {1, 1, 2, 2},
                       {186.5f, 201.0f, 283.5f, 306.0f});
 
-  iree_vm_variant_reset(&results[0]);
+  loom_testbench_value_deinitialize(&results[0]);
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(inputs); ++i) {
-    iree_vm_variant_reset(&inputs[i]);
+    loom_testbench_value_deinitialize(&inputs[i]);
   }
 }
 
@@ -334,7 +327,7 @@ TEST_F(ReferenceTest, ComputesTilePackedBF16MatmulWithF32Accumulator) {
   };
   std::vector<float> init_values = {0.5f, 1.0f, 1.5f, 2.0f};
 
-  iree_vm_variant_t inputs[3] = {
+  loom_testbench_value_t inputs[3] = {
       MakeBufferView<uint16_t>({1, 1, 2, 2}, IREE_HAL_ELEMENT_TYPE_BFLOAT_16,
                                lhs_values),
       MakeBufferView<uint16_t>({1, 1, 2, 2}, IREE_HAL_ELEMENT_TYPE_BFLOAT_16,
@@ -347,7 +340,7 @@ TEST_F(ReferenceTest, ComputesTilePackedBF16MatmulWithF32Accumulator) {
   loom_testbench_reference_tiled_matmul_oracle_provider_initialize(
       &reference_options_, &provider);
 
-  iree_vm_variant_t results[1] = {iree_vm_variant_empty()};
+  loom_testbench_value_t results[1] = {};
   loom_testbench_invocation_plan_t invocation = {
       /*.kind=*/{},
       /*.module=*/module_,
@@ -357,9 +350,9 @@ TEST_F(ReferenceTest, ComputesTilePackedBF16MatmulWithF32Accumulator) {
                                     IREE_ARRAYSIZE(results), results));
   ExpectF32BufferView(results[0], {1, 1, 2, 2}, {19.5f, 23.0f, 44.5f, 52.0f});
 
-  iree_vm_variant_reset(&results[0]);
+  loom_testbench_value_deinitialize(&results[0]);
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(inputs); ++i) {
-    iree_vm_variant_reset(&inputs[i]);
+    loom_testbench_value_deinitialize(&inputs[i]);
   }
 }
 
@@ -368,7 +361,7 @@ TEST_F(ReferenceTest, ComputesTilePackedU8MatmulWithI32Accumulator) {
   std::vector<int8_t> rhs_values = {1, 2, 3, 4, 5, 6, 7, 8};
   std::vector<int32_t> init_values = {10, 20, 30, 40};
 
-  iree_vm_variant_t inputs[3] = {
+  loom_testbench_value_t inputs[3] = {
       MakeBufferView<int8_t>({1, 2, 2, 2}, IREE_HAL_ELEMENT_TYPE_SINT_8,
                              lhs_values),
       MakeBufferView<int8_t>({2, 1, 2, 2}, IREE_HAL_ELEMENT_TYPE_SINT_8,
@@ -381,7 +374,7 @@ TEST_F(ReferenceTest, ComputesTilePackedU8MatmulWithI32Accumulator) {
   loom_testbench_reference_tiled_matmul_oracle_provider_initialize(
       &reference_options_, &provider);
 
-  iree_vm_variant_t results[1] = {iree_vm_variant_empty()};
+  loom_testbench_value_t results[1] = {};
   loom_testbench_invocation_plan_t invocation = {
       /*.kind=*/{},
       /*.module=*/module_,
@@ -398,9 +391,9 @@ TEST_F(ReferenceTest, ComputesTilePackedU8MatmulWithI32Accumulator) {
                                     IREE_ARRAYSIZE(results), results));
   ExpectS32BufferView(results[0], {1, 1, 2, 2}, {2062, 2586, 2082, 2606});
 
-  iree_vm_variant_reset(&results[0]);
+  loom_testbench_value_deinitialize(&results[0]);
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(inputs); ++i) {
-    iree_vm_variant_reset(&inputs[i]);
+    loom_testbench_value_deinitialize(&inputs[i]);
   }
 }
 
@@ -409,7 +402,7 @@ TEST_F(ReferenceTest, RejectsIntegerAccumulatorOverflow) {
   std::vector<int8_t> rhs_values = {2};
   std::vector<int8_t> init_values = {0};
 
-  iree_vm_variant_t inputs[3] = {
+  loom_testbench_value_t inputs[3] = {
       MakeBufferView<int8_t>({1, 1, 1, 1}, IREE_HAL_ELEMENT_TYPE_SINT_8,
                              lhs_values),
       MakeBufferView<int8_t>({1, 1, 1, 1}, IREE_HAL_ELEMENT_TYPE_SINT_8,
@@ -422,7 +415,7 @@ TEST_F(ReferenceTest, RejectsIntegerAccumulatorOverflow) {
   loom_testbench_reference_tiled_matmul_oracle_provider_initialize(
       &reference_options_, &provider);
 
-  iree_vm_variant_t results[1] = {iree_vm_variant_empty()};
+  loom_testbench_value_t results[1] = {};
   loom_testbench_invocation_plan_t invocation = {
       /*.kind=*/{},
       /*.module=*/module_,
@@ -441,7 +434,7 @@ TEST_F(ReferenceTest, RejectsIntegerAccumulatorOverflow) {
                          IREE_ARRAYSIZE(results), results));
 
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(inputs); ++i) {
-    iree_vm_variant_reset(&inputs[i]);
+    loom_testbench_value_deinitialize(&inputs[i]);
   }
 }
 

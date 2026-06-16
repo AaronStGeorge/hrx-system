@@ -32,6 +32,7 @@ loom_cc_library(
     "include/loomc/module.h"
     "include/loomc/pass.h"
     "include/loomc/result.h"
+    "include/loomc/sanitizer.h"
     "include/loomc/source.h"
     "include/loomc/status.h"
     "include/loomc/target.h"
@@ -41,6 +42,7 @@ loom_cc_library(
     "src/diagnostic.h"
     "src/link_index.h"
     "src/module.h"
+    "src/option_chain.h"
     "src/pass_program.h"
     "src/result.h"
     "src/source.h"
@@ -63,6 +65,7 @@ loom_cc_library(
     "src/module.c"
     "src/module_function.c"
     "src/module_global.c"
+    "src/option_chain.c"
     "src/pass_program.c"
     "src/result.c"
     "src/source.c"
@@ -103,6 +106,7 @@ loom_cc_library(
     loom::pass::program
     loom::pass::registry
     loom::pass::tooling
+    loom::sanitizer::options
     loom::target::artifact_manifest
     loom::target::compile_report
     loom::target::compile_report_format
@@ -145,6 +149,7 @@ loom_cc_library(
     "include/loomc/module.h"
     "include/loomc/pass.h"
     "include/loomc/result.h"
+    "include/loomc/sanitizer.h"
     "include/loomc/source.h"
     "include/loomc/status.h"
     "include/loomc/target.h"

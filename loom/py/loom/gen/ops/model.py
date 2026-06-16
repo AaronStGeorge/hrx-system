@@ -149,6 +149,12 @@ def _load_config_generation() -> DialectGeneration:
     return DialectGeneration(config_ops, list(ALL_CONFIG_OPS), None)
 
 
+def _load_sanitizer_generation() -> DialectGeneration:
+    from loom.dialect.sanitizer import ALL_SANITIZER_OPS, sanitizer_ops
+
+    return DialectGeneration(sanitizer_ops, list(ALL_SANITIZER_OPS), None)
+
+
 def _load_amdgpu_generation() -> DialectGeneration:
     from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS, amdgpu_ops
 
@@ -199,6 +205,7 @@ _DIALECT_GENERATION_LOADERS: tuple[tuple[str, DialectGenerationLoader], ...] = (
     ("low", _load_low_generation),
     ("pass", _load_pass_generation),
     ("config", _load_config_generation),
+    ("sanitizer", _load_sanitizer_generation),
     ("amdgpu", _load_amdgpu_generation),
     ("x86", _load_x86_generation),
     ("spirv", _load_spirv_generation),

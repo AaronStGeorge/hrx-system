@@ -19,6 +19,7 @@ blocks, and CFG successor edges reference their target blocks directly.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum, unique
@@ -74,9 +75,15 @@ __all__ = [
     "binding_element_type",
     # Locations.
     "LocationKind",
+    "LOCATION_TAG_SANITIZER_SITE",
+    "LOCATION_TAG_TEMPLATE_INSTANTIATION",
+    "LOCATION_TAG_TILE_LOWERING",
+    "LOCATION_TAG_UKERNEL_SELECTION",
+    "LOCATION_TAG_USER_BASE",
     "FileLocation",
     "FusedLocation",
     "OpaqueLocation",
+    "TaggedLocation",
     "LocationData",
     "LOCATION_UNKNOWN",
     "LOCATION_FLAG_SYNTHETIC",
@@ -749,10 +756,18 @@ class LocationKind(IntEnum):
     FILE = 1
     FUSED = 2
     OPAQUE = 3
+    TAGGED = 4
 
 
 # Location flag bits (matches loom_location_flag_bits_e in ir.h).
 LOCATION_FLAG_SYNTHETIC = 1 << 0
+
+# Built-in tagged location payload tags (matches loom_location_tag_e).
+LOCATION_TAG_SANITIZER_SITE = 0x0001
+LOCATION_TAG_TEMPLATE_INSTANTIATION = 0x0002
+LOCATION_TAG_TILE_LOWERING = 0x0003
+LOCATION_TAG_UKERNEL_SELECTION = 0x0004
+LOCATION_TAG_USER_BASE = 0x8000
 
 
 @dataclass(frozen=True, slots=True)
@@ -784,8 +799,20 @@ class OpaqueLocation:
     flags: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class TaggedLocation:
+    """Compiler-owned compact metadata payload with optional child location."""
+
+    tag: int
+    child: int = 0
+    data: bytes = b""
+    flags: int = 0
+
+
 # Union of location data.
-type LocationData = FileLocation | FusedLocation | OpaqueLocation | None
+type LocationData = (
+    FileLocation | FusedLocation | OpaqueLocation | TaggedLocation | None
+)
 
 LOCATION_UNKNOWN = 0  # Location ID 0 is always unknown.
 
@@ -897,6 +924,9 @@ PREDICATE_KINDS: dict[str, int] = {
     "max": 2,  # max(a, n) — a <= n.
     "pow2": 1,  # pow2(a) — a is a power of 2.
     "range": 3,  # range(a, lo, hi) — lo <= a <= hi.
+    "not_nan": 1,  # not_nan(a) — a is not NaN.
+    "not_inf": 1,  # not_inf(a) — a is not positive or negative infinity.
+    "finite": 1,  # finite(a) — a is not NaN or infinity.
 }
 
 
@@ -928,8 +958,10 @@ class Predicate:
     args: tuple[PredicateArg, ...]
 
 
-def _resolve_predicate_arg(arg: PredicateArg, values: dict[str, int]) -> int | None:
-    """Resolve a predicate argument to a concrete integer.
+def _resolve_predicate_arg(
+    arg: PredicateArg, values: dict[str, int | float]
+) -> int | float | None:
+    """Resolve a predicate argument to a concrete scalar.
 
     Returns None if the value name is not in the values dict.
     """
@@ -943,10 +975,10 @@ def _resolve_predicate_arg(arg: PredicateArg, values: dict[str, int]) -> int | N
             raise ValueError(f"unknown predicate arg tag: {arg.tag!r}")
 
 
-def evaluate_predicate(predicate: Predicate, values: dict[str, int]) -> bool:
+def evaluate_predicate(predicate: Predicate, values: dict[str, int | float]) -> bool:
     """Evaluate a predicate against concrete dimension values.
 
-    values maps bare SSA names ("M", "K") to their integer values.
+    values maps bare SSA names ("M", "K") to their concrete scalar values.
     Returns True if the predicate is satisfied or if any argument
     cannot be resolved (value name not in the dict).
     """
@@ -975,14 +1007,23 @@ def evaluate_predicate(predicate: Predicate, values: dict[str, int]) -> bool:
         case "max":
             return args[0] <= args[1]
         case "pow2":
-            return args[0] > 0 and (args[0] & (args[0] - 1)) == 0
+            value = args[0]
+            return isinstance(value, int) and value > 0 and (value & (value - 1)) == 0
         case "range":
             return args[1] <= args[0] <= args[2]
+        case "not_nan":
+            return not math.isnan(args[0])
+        case "not_inf":
+            return not math.isinf(args[0])
+        case "finite":
+            return math.isfinite(args[0])
         case _:
             raise ValueError(f"unknown predicate kind: {predicate.kind!r}")
 
 
-def evaluate_predicates(predicates: list[Predicate], values: dict[str, int]) -> bool:
+def evaluate_predicates(
+    predicates: list[Predicate], values: dict[str, int | float]
+) -> bool:
     """Evaluate all predicates. Returns True iff all are satisfied."""
     return all(evaluate_predicate(p, values) for p in predicates)
 

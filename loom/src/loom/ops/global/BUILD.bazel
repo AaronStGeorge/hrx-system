@@ -15,6 +15,7 @@ package(
 loom_generated_cc_library(
     name = "global",
     srcs = [
+        "canonicalize.c",
         "facts.c",
         "verify.c",
     ],
@@ -35,5 +36,8 @@ loom_generated_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/util:fact_table",
+        "//loom/src/loom/util:math",
     ],
 )

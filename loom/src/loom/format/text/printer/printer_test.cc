@@ -1852,10 +1852,11 @@ TEST(PredicateLayout, FieldOffsets) {
 TEST(PredicateLayout, AllKindsValid) {
   // Verify all predicate kinds can be stored and retrieved.
   loom_predicate_kind_t kinds[] = {
-      LOOM_PREDICATE_EQ,   LOOM_PREDICATE_NE,    LOOM_PREDICATE_LT,
-      LOOM_PREDICATE_LE,   LOOM_PREDICATE_GT,    LOOM_PREDICATE_GE,
-      LOOM_PREDICATE_MUL,  LOOM_PREDICATE_MIN,   LOOM_PREDICATE_MAX,
-      LOOM_PREDICATE_POW2, LOOM_PREDICATE_RANGE,
+      LOOM_PREDICATE_EQ,      LOOM_PREDICATE_NE,     LOOM_PREDICATE_LT,
+      LOOM_PREDICATE_LE,      LOOM_PREDICATE_GT,     LOOM_PREDICATE_GE,
+      LOOM_PREDICATE_MUL,     LOOM_PREDICATE_MIN,    LOOM_PREDICATE_MAX,
+      LOOM_PREDICATE_POW2,    LOOM_PREDICATE_RANGE,  LOOM_PREDICATE_NOT_NAN,
+      LOOM_PREDICATE_NOT_INF, LOOM_PREDICATE_FINITE,
   };
   for (int i = 0; i < (int)IREE_ARRAYSIZE(kinds); ++i) {
     loom_predicate_t predicate = {0};
@@ -2173,9 +2174,10 @@ TEST_F(PrintPredicateTest, EmptyPredicateList) {
 
 TEST_F(PrintPredicateTest, AllPredicateKinds) {
   // Verify all predicate kinds print their correct name.
-  const char* expected_names[] = {"eq",  "ne",  "lt",  "le",   "gt",   "ge",
-                                  "mul", "min", "max", "pow2", "range"};
-  for (int kind = 0; kind <= LOOM_PREDICATE_RANGE; ++kind) {
+  const char* expected_names[] = {
+      "eq",  "ne",  "lt",   "le",    "gt",      "ge",      "mul",
+      "min", "max", "pow2", "range", "not_nan", "not_inf", "finite"};
+  for (int kind = 0; kind < LOOM_PREDICATE_COUNT_; ++kind) {
     loom_predicate_t predicates[1] = {};
     predicates[0].kind = (uint8_t)kind;
     predicates[0].arg_count = loom_predicate_kind_argument_count((uint8_t)kind);
@@ -2484,6 +2486,86 @@ TEST_F(PrintOpTest, LocationOpaqueRejectsInvalidUtf8Data) {
   loom_value_id_t input = def(f32);
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));
+}
+
+TEST_F(PrintOpTest, LocationTagged) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_register_source(module_, IREE_SV("model.loom"), &source_id));
+
+  loom_location_id_t child_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(
+      module_, loom_location_file_range(source_id, 42, 3, 42, 58), &child_id));
+
+  const uint8_t data[] = {0x01, 0x2A, 0xFF};
+  loom_location_entry_t tagged_loc = loom_location_tagged(
+      LOOM_LOCATION_TAG_SANITIZER_SITE, child_id, data, IREE_ARRAYSIZE(data));
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, tagged_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+
+  std::string output =
+      print_op(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_NE(output.find("loc(tagged<sanitizer_site, \"012aff\", "
+                        "\"model.loom\":42:3 to 42:58>)"),
+            std::string::npos)
+      << "Expected tagged location, got: " << output;
+}
+
+TEST_F(PrintOpTest, LocationTaggedPrintsNumericUserTag) {
+  loom_location_entry_t tagged_loc =
+      loom_location_tagged(LOOM_LOCATION_TAG_USER_BASE, LOOM_LOCATION_UNKNOWN,
+                           /*data=*/NULL, /*data_length=*/0);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, tagged_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+
+  std::string output =
+      print_op(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_NE(output.find("loc(tagged<32768, \"\">)"), std::string::npos)
+      << "Expected numeric user tag, got: " << output;
+}
+
+TEST_F(PrintOpTest, LocationTaggedRejectsInvalidTag) {
+  loom_location_entry_t tagged_loc =
+      loom_location_tagged(LOOM_LOCATION_TAG_INVALID, LOOM_LOCATION_UNKNOWN,
+                           /*data=*/NULL, /*data_length=*/0);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, tagged_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));
+}
+
+TEST_F(PrintOpTest, LocationTaggedRejectsOutOfRangeChildId) {
+  loom_location_entry_t tagged_loc = loom_location_tagged(
+      LOOM_LOCATION_TAG_SANITIZER_SITE, /*child=*/42, /*data=*/NULL,
+      /*data_length=*/0);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, tagged_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));

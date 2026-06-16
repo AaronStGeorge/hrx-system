@@ -187,6 +187,77 @@ def _s_delay_alu_descriptor() -> Descriptor:
     )
 
 
+def _s_sendmsg_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_sendmsg",
+        instruction_name="S_SENDMSG",
+        mnemonic="s_sendmsg",
+        encoding_name="ENC_SOPP",
+        semantic_tag="control.message.send",
+        schedule_class=_SCHEDULE_MODE_CONTROL,
+        operands=(),
+        immediate_fields=("SIMM16",),
+        immediates=(_u32_immediate("message"),),
+        implicit_operands=(_implicit_m0_input(),),
+        effects=(_CACHE_CONTROL_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=_asm(
+            mnemonic="s_sendmsg",
+            operands=("m0",),
+            immediates=("message",),
+            named_immediates=True,
+        ),
+    )
+
+
+def _s_sendmsg_rtn_b32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_sendmsg_rtn_b32",
+        instruction_name="S_SENDMSG_RTN_B32",
+        mnemonic="s_sendmsg_rtn_b32",
+        encoding_name="ENC_SOP1",
+        semantic_tag="control.message.send.return.u32",
+        schedule_class=_SCHEDULE_MODE_CONTROL,
+        operands=(AmdgpuOperandOverlay("SDST", _sgpr_result()),),
+        immediate_fields=("SSRC0",),
+        immediates=(_source_inline_u32_immediate("message"),),
+        effects=(_CACHE_CONTROL_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_sethalt_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_sethalt",
+        instruction_name="S_SETHALT",
+        mnemonic="s_sethalt",
+        encoding_name="ENC_SOPP",
+        semantic_tag="control.halt",
+        schedule_class=_SCHEDULE_MODE_CONTROL,
+        operands=(),
+        immediate_fields=("SIMM16",),
+        immediates=(_u32_immediate("reason"),),
+        effects=(_CACHE_CONTROL_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_trap_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_trap",
+        instruction_name="S_TRAP",
+        mnemonic="s_trap",
+        encoding_name="ENC_SOPP",
+        semantic_tag="control.trap",
+        schedule_class=_SCHEDULE_MODE_CONTROL,
+        operands=(),
+        immediate_fields=("SIMM16",),
+        immediates=(_u32_immediate("trapid"),),
+        effects=(_CACHE_CONTROL_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _s_set_vgpr_msb_descriptor() -> Descriptor:
     return Descriptor(
         key="amdgpu.s_set_vgpr_msb",
@@ -371,6 +442,7 @@ def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_inv",
             encoding_name="ENC_MUBUF",
             semantic_tag="memory.cache.invalidate.buffer",
+            cache_fields=(("SC0", 1), ("SC1", 1)),
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.buffer_wbl2",
@@ -378,6 +450,7 @@ def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_wbl2",
             encoding_name="ENC_MUBUF",
             semantic_tag="memory.cache.writeback.buffer.l2",
+            cache_fields=(("SC0", 1), ("SC1", 1)),
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.s_dcache_inv",
@@ -523,8 +596,12 @@ __all__ = (
     "_s_delay_alu_descriptor",
     "_s_dcache_discard_overlay",
     "_s_prefetch_overlay",
+    "_s_sendmsg_overlay",
+    "_s_sendmsg_rtn_b32_overlay",
+    "_s_sethalt_overlay",
     "_s_set_inst_prefetch_distance_overlay",
     "_s_set_vgpr_msb_descriptor",
+    "_s_trap_overlay",
     "_s_wait_alu_overlay",
     "_s_wait_dscnt_overlay",
     "_s_wait_idle_overlay",

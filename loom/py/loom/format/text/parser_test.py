@@ -835,16 +835,22 @@ class TestParseAttrDictOp:
     def test_with_attrs(self) -> None:
         module, scope = _setup_scope(("x", F32))
         op = _parse_op(
-            '%r = test.attrs %x {axis = 0, label = "foo"} : f32',
+            '%r = test.attrs %x {axis = 0, label = "foo", '
+            'payload = bytes("0011feFF")} : f32',
             module=module,
             scope=scope,
         )
         assert "dict" in op.attributes
         d = op.attributes["dict"]
         assert isinstance(d, CanonicalAttrDict)
-        assert list(d.items()) == [("axis", 0), ("label", "foo")]
+        assert list(d.items()) == [
+            ("axis", 0),
+            ("label", "foo"),
+            ("payload", b"\x00\x11\xfe\xff"),
+        ]
         assert d["axis"] == 0
         assert d["label"] == "foo"
+        assert d["payload"] == b"\x00\x11\xfe\xff"
 
     def test_empty_dict(self) -> None:
         module, scope = _setup_scope(("x", F32))
@@ -2251,6 +2257,41 @@ class TestLocationParsing:
         assert isinstance(loc, OpaqueLocation)
         assert module.sources[loc.source_id] == 'torch "aten"'
         assert loc.data == b"node\\id\n\x01\xce\xbb"
+
+    def test_tagged_location(self) -> None:
+        """Parse a TAGGED location annotation."""
+        from loom.ir import LOCATION_TAG_SANITIZER_SITE, FileLocation, TaggedLocation
+
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(
+            '%r = test.neg %x : f32 loc(tagged<sanitizer_site, "012aff", "model.loom":5:6>)',
+            module=module,
+            scope=scope,
+        )
+        loc = module.locations.get(op.location_id)
+        assert isinstance(loc, TaggedLocation)
+        assert loc.tag == LOCATION_TAG_SANITIZER_SITE
+        assert loc.data == b"\x01\x2a\xff"
+        child = module.locations.get(loc.child)
+        assert isinstance(child, FileLocation)
+        assert module.sources[child.source_id] == "model.loom"
+        assert child.start_line == 5
+        assert child.start_col == 6
+
+    def test_tagged_location_numeric_tag(self) -> None:
+        """Parse a TAGGED location annotation with a user tag."""
+        from loom.ir import TaggedLocation
+
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(
+            '%r = test.neg %x : f32 loc(tagged<32768, "", "model.loom":5:6>)',
+            module=module,
+            scope=scope,
+        )
+        loc = module.locations.get(op.location_id)
+        assert isinstance(loc, TaggedLocation)
+        assert loc.tag == 32768
+        assert loc.data == b""
 
     def test_no_location(self) -> None:
         """Ops without explicit location use implicit source position."""

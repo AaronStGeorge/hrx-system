@@ -16,11 +16,9 @@
 #include "iree/base/tooling/flags.h"
 #include "iree/hal/api.h"
 #include "iree/io/file_contents.h"
-#include "iree/modules/hal/types.h"
 #include "iree/testing/benchmark.h"
 #include "iree/tooling/device_util.h"
-#include "iree/tooling/function_io.h"
-#include "iree/vm/api.h"
+#include "iree/tooling/value_io.h"
 
 IREE_FLAG(
     int32_t, batch_size, 64,
@@ -65,7 +63,6 @@ struct {
 
   int32_t binding_count;
   iree_string_view_t binding_specs[IREE_HAL_MAX_BINDING_COUNT];
-  char binding_cconv[IREE_HAL_MAX_BINDING_COUNT];
 } parsed_params = {
     .executable_constant_count = 0,
     .constant_count = 0,
@@ -148,7 +145,6 @@ static iree_status_t parse_binding(iree_string_view_t flag_name, void* storage,
                  "too many bindings");
   int32_t i = parsed_params.binding_count++;
   parsed_params.binding_specs[i] = value;
-  parsed_params.binding_cconv[i] = 'r';
   return iree_ok_status();
 }
 static void print_binding(iree_string_view_t flag_name, void* storage,
@@ -168,19 +164,20 @@ IREE_FLAG_CALLBACK(
     parse_binding, print_binding, &parsed_params, binding,
     "Appends a binding to the dispatch parameters.\n"
     "Bindings are defined by their shape, element type, and their data.\n"
+    "Prefix with & to pass a storage buffer instead of a buffer view.\n"
     "There must be one binding for every declared layout binding.\n"
     "Examples:\n"
     "  # 16 4-byte elements zero-initialized:\n"
     "  --binding=2x8xi32\n"
     "  # 10000 bytes all initialized to 123:\n"
     "  --binding=10000xi8=123\n"
+    "  # 10000-byte in-place storage buffer all initialized to 123:\n"
+    "  --binding=&10000xi8=123\n"
     "  # 2 4-byte floating-point values with contents [[1.4], [2.1]]:\n"
     "  --binding=2x1xf32=1.4,2.1\n"
     "  # First array from a numpy file followed by the second:\n"
     "  --binding=@file.npy\n"
     "  --binding=+file.npy\n"
-    "  # All arrays from a numpy file\n"
-    "  --binding=*file.npy\n"
     "  # Binary tensor<2x2xf32> and tensor<4xf32> read from a single file\n"
     "  --binding=2x2xf32=@file.ext\n"
     "  --binding=4xf32=+file.ext");
@@ -348,17 +345,14 @@ static iree_status_t iree_benchmark_executable_from_flags(
                             "--entry_point must be non-negative");
   }
 
-  iree_vm_instance_t* instance = NULL;
-  IREE_RETURN_IF_ERROR(iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,
-                                               host_allocator, &instance));
-  IREE_RETURN_IF_ERROR(iree_hal_module_register_inline_types(instance));
+  iree_status_t status = iree_ok_status();
 
   // Create a proactor pool for async I/O on the device.
   iree_async_proactor_pool_t* proactor_pool = NULL;
-  IREE_RETURN_IF_ERROR(iree_async_proactor_pool_create(
+  status = iree_async_proactor_pool_create(
       iree_numa_node_count(), /*node_ids=*/NULL,
       iree_async_proactor_pool_options_default(), host_allocator,
-      &proactor_pool));
+      &proactor_pool);
 
   // Create the HAL device we'll be using during execution.
   // Devices can be very expensive to create and we want to avoid doing it
@@ -366,65 +360,72 @@ static iree_status_t iree_benchmark_executable_from_flags(
   iree_hal_device_create_params_t create_params =
       iree_hal_device_create_params_default();
   create_params.proactor_pool = proactor_pool;
+  create_params.event_sink = iree_hal_device_event_sink_stderr();
   iree_hal_device_t* device = NULL;
-  iree_status_t device_status = iree_hal_create_device_from_flags(
-      iree_hal_available_driver_registry(), iree_hal_default_device_uri(),
-      &create_params, host_allocator, &device);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_create_device_from_flags(
+        iree_hal_available_driver_registry(), iree_hal_default_device_uri(),
+        &create_params, host_allocator, &device);
+  }
   iree_async_proactor_pool_release(proactor_pool);
-  IREE_RETURN_IF_ERROR(device_status);
 
   // Queue operations require devices to be assigned to a causal frontier. Keep
   // the single-device group alive for the benchmark so direct queue execution
   // has the same ordering contract as VM HAL module execution.
   iree_async_frontier_tracker_t* frontier_tracker = NULL;
-  iree_status_t topology_status = iree_async_frontier_tracker_create(
-      iree_async_frontier_tracker_options_default(), host_allocator,
-      &frontier_tracker);
   iree_hal_device_group_t* device_group = NULL;
-  if (iree_status_is_ok(topology_status)) {
-    topology_status = iree_hal_device_group_create_from_device(
+  if (iree_status_is_ok(status)) {
+    status = iree_async_frontier_tracker_create(
+        iree_async_frontier_tracker_options_default(), host_allocator,
+        &frontier_tracker);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_group_create_from_device(
         device, frontier_tracker, host_allocator, &device_group);
   }
   iree_async_frontier_tracker_release(frontier_tracker);
-  IREE_RETURN_IF_ERROR(topology_status);
 
   // We'll reuse the same executable cache so that once we load the executable
   // we'll be able to reuse any driver-side optimizations.
   iree_hal_executable_cache_t* executable_cache = NULL;
-  IREE_RETURN_IF_ERROR(iree_hal_executable_cache_create(
-      device, iree_make_cstring_view("cache"), &executable_cache));
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_executable_cache_create(
+        device, iree_make_cstring_view("cache"), &executable_cache);
+  }
 
   // Allocate storage for buffers and populate them.
   // They only need to remain valid for the duration of the invocation and all
   // memory accessed by the invocation will come from here.
   // Note that we do this parsing first so that we can reflect on the I/O to
   // infer the pipeline layout.
-  iree_hal_allocator_t* device_allocator = iree_hal_device_allocator(device);
-  iree_vm_list_t* binding_list = NULL;
-  IREE_RETURN_IF_ERROR(iree_tooling_parse_variants(
-      iree_make_string_view(parsed_params.binding_cconv,
-                            parsed_params.binding_count),
-      (iree_string_view_list_t){parsed_params.binding_count,
-                                parsed_params.binding_specs},
-      device, device_allocator, host_allocator, &binding_list));
+  iree_hal_allocator_t* device_allocator =
+      device ? iree_hal_device_allocator(device) : NULL;
   iree_hal_buffer_ref_t bindings[IREE_HAL_MAX_BINDING_COUNT];
-  for (iree_host_size_t i = 0; i < parsed_params.binding_count; ++i) {
-    iree_vm_ref_t value = iree_vm_ref_null();
-    IREE_RETURN_IF_ERROR(iree_vm_list_get_ref_assign(binding_list, i, &value));
-    iree_hal_buffer_t* buffer = NULL;
-    if (iree_hal_buffer_isa(value)) {
-      buffer = iree_hal_buffer_deref(value);
-    } else if (iree_hal_buffer_view_isa(value)) {
-      buffer = iree_hal_buffer_view_buffer(iree_hal_buffer_view_deref(value));
-    } else {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "bindings must be shaped types (4xf32, etc), binding %" PRIhsz
-          " is not",
-          i);
-    }
-    bindings[i] = iree_hal_make_buffer_ref(buffer, 0, IREE_HAL_WHOLE_BUFFER);
+  memset(bindings, 0, sizeof(bindings));
+  iree_tooling_buffer_binding_t binding_storage[IREE_HAL_MAX_BINDING_COUNT];
+  memset(binding_storage, 0, sizeof(binding_storage));
+  iree_tooling_value_io_context_t* value_io_context = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_tooling_value_io_context_allocate(host_allocator,
+                                                    &value_io_context);
   }
+  for (iree_host_size_t i = 0;
+       i < parsed_params.binding_count && iree_status_is_ok(status); ++i) {
+    status = iree_status_annotate_f(
+        iree_tooling_buffer_binding_spec_parse(
+            value_io_context, parsed_params.binding_specs[i], device,
+            device_allocator, &binding_storage[i]),
+        "parsing binding %" PRIhsz " `%.*s`", i,
+        (int)parsed_params.binding_specs[i].size,
+        parsed_params.binding_specs[i].data);
+    if (iree_status_is_ok(status)) {
+      bindings[i] = iree_hal_make_buffer_ref(binding_storage[i].buffer,
+                                             binding_storage[i].byte_offset,
+                                             binding_storage[i].byte_length);
+    }
+  }
+  iree_tooling_value_io_context_free(value_io_context);
+  value_io_context = NULL;
 
   // Setup the specification used to perform the executable load.
   // This information is normally used to select the appropriate loader but in
@@ -440,17 +441,20 @@ static iree_status_t iree_benchmark_executable_from_flags(
   // In normal usage this would be mapped from the containing module file (which
   // itself may be mapped from disk).
   iree_io_file_contents_t* file_contents = NULL;
-  if (strcmp(FLAG_executable_file, "-") == 0) {
-    IREE_RETURN_IF_ERROR(
-        iree_io_file_contents_read_stdin(host_allocator, &file_contents));
-  } else {
-    IREE_RETURN_IF_ERROR(
-        iree_io_file_contents_read(iree_make_cstring_view(FLAG_executable_file),
-                                   host_allocator, &file_contents));
+  if (iree_status_is_ok(status)) {
+    if (strcmp(FLAG_executable_file, "-") == 0) {
+      status = iree_io_file_contents_read_stdin(host_allocator, &file_contents);
+    } else {
+      status = iree_io_file_contents_read(
+          iree_make_cstring_view(FLAG_executable_file), host_allocator,
+          &file_contents);
+    }
   }
   executable_params.executable_format =
       iree_make_cstring_view(FLAG_executable_format);
-  executable_params.executable_data = file_contents->const_buffer;
+  if (file_contents) {
+    executable_params.executable_data = file_contents->const_buffer;
+  }
 
   // Executable-level constants allow us to perform some basic load-time value
   // propagation - usually dependent on device features or tuning parameters.
@@ -460,17 +464,23 @@ static iree_status_t iree_benchmark_executable_from_flags(
   // Perform the load, which will fail if the executable cannot be loaded or
   // there was an issue with the layouts.
   iree_hal_executable_t* executable = NULL;
-  IREE_RETURN_IF_ERROR(iree_hal_executable_cache_prepare_executable(
-      executable_cache, &executable_params, &executable));
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_executable_cache_prepare_executable(
+        executable_cache, &executable_params, &executable);
+  }
   iree_hal_executable_function_t function =
       iree_hal_executable_function_from_index((uint32_t)FLAG_entry_point);
 
   // Register one benchmark per workgroup count specified.
   iree_benchmark_executable_args_t* args = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      host_allocator, sizeof(*args) * FLAG_workgroup_count_list().count,
-      (void**)&args));
-  for (iree_host_size_t i = 0; i < FLAG_workgroup_count_list().count; ++i) {
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc(
+        host_allocator, sizeof(*args) * FLAG_workgroup_count_list().count,
+        (void**)&args);
+  }
+  for (iree_host_size_t i = 0;
+       i < FLAG_workgroup_count_list().count && iree_status_is_ok(status);
+       ++i) {
     args[i] = (iree_benchmark_executable_args_t){
         .device = device,
         .executable = executable,
@@ -478,8 +488,9 @@ static iree_status_t iree_benchmark_executable_from_flags(
         .bindings = bindings,
         .workgroup_count = {1, 1, 1},
     };
-    IREE_RETURN_IF_ERROR(iree_parse_workgroup_count(
-        FLAG_workgroup_count_list().values[i], args[i].workgroup_count));
+    status = iree_parse_workgroup_count(FLAG_workgroup_count_list().values[i],
+                                        args[i].workgroup_count);
+    if (!iree_status_is_ok(status)) break;
     iree_benchmark_def_t benchmark_def = {
         .flags = IREE_BENCHMARK_FLAG_MEASURE_PROCESS_CPU_TIME |
                  IREE_BENCHMARK_FLAG_USE_REAL_TIME,
@@ -496,18 +507,21 @@ static iree_status_t iree_benchmark_executable_from_flags(
     iree_benchmark_register(iree_make_cstring_view(benchmark_name),
                             &benchmark_def);
   }
-  iree_benchmark_run_specified();
+  if (iree_status_is_ok(status)) {
+    iree_benchmark_run_specified();
+  }
   iree_allocator_free(host_allocator, args);
 
-  iree_vm_list_release(binding_list);
   iree_hal_executable_release(executable);
   iree_io_file_contents_free(file_contents);
   iree_hal_executable_cache_release(executable_cache);
   iree_hal_device_group_release(device_group);
   iree_hal_device_release(device);
-  iree_vm_instance_release(instance);
+  for (iree_host_size_t i = 0; i < parsed_params.binding_count; ++i) {
+    iree_tooling_buffer_binding_deinitialize(&binding_storage[i]);
+  }
 
-  return iree_ok_status();
+  return status;
 }
 
 int main(int argc, char** argv) {

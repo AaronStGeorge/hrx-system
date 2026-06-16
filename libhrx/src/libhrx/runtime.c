@@ -7,6 +7,7 @@
 // driver-based creation via iree_hal_task_driver_create +
 // iree_hal_driver_create_default_device.
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,10 +32,136 @@
 static hrx_shared_state_t g_shared = {0};
 static hrx_gpu_state_t g_gpu = {0};
 static hrx_cpu_state_t g_cpu = {0};
+static hrx_device_event_sink_t g_device_event_sink = {0};
+
+_Static_assert(HRX_DEVICE_EVENT_ABI_VERSION_0 ==
+                   IREE_HAL_DEVICE_EVENT_ABI_VERSION_0,
+               "device event ABI version mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_TYPE_DRIVER_FAILURE ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_TYPE_DRIVER_FAILURE,
+               "device event type mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_TYPE_ASAN_REPORT ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT,
+               "device event type mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_TYPE_UBSAN_REPORT ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_TYPE_UBSAN_REPORT,
+               "device event type mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_TYPE_PRINTF ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_TYPE_PRINTF,
+               "device event type mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_TYPE_HOST_CALL ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_TYPE_HOST_CALL,
+               "device event type mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_TYPE_USER ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_TYPE_USER,
+               "device event type mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_SEVERITY_TRACE ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_SEVERITY_TRACE,
+               "device event severity mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_SEVERITY_INFO ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_SEVERITY_INFO,
+               "device event severity mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_SEVERITY_WARNING ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_SEVERITY_WARNING,
+               "device event severity mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_SEVERITY_ERROR ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_SEVERITY_ERROR,
+               "device event severity mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_EVENT_SEVERITY_FATAL ==
+                   (uint32_t)IREE_HAL_DEVICE_EVENT_SEVERITY_FATAL,
+               "device event severity mismatch");
+_Static_assert(HRX_DEVICE_ASAN_REPORT_ABI_VERSION_0 ==
+                   IREE_HAL_DEVICE_ASAN_REPORT_ABI_VERSION_0,
+               "ASAN report ABI version mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_ASAN_ACCESS_KIND_UNKNOWN ==
+                   (uint32_t)IREE_HAL_DEVICE_ASAN_ACCESS_KIND_UNKNOWN,
+               "ASAN access kind mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_ASAN_ACCESS_KIND_READ ==
+                   (uint32_t)IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ,
+               "ASAN access kind mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_ASAN_ACCESS_KIND_WRITE ==
+                   (uint32_t)IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE,
+               "ASAN access kind mismatch");
+_Static_assert((uint32_t)HRX_DEVICE_ASAN_ACCESS_KIND_ATOMIC ==
+                   (uint32_t)IREE_HAL_DEVICE_ASAN_ACCESS_KIND_ATOMIC,
+               "ASAN access kind mismatch");
+_Static_assert(sizeof(hrx_device_asan_report_t) ==
+                   sizeof(iree_hal_device_asan_report_t),
+               "ASAN report layout mismatch");
+_Static_assert(offsetof(hrx_device_asan_report_t, source_dispatch_ptr) ==
+                   offsetof(iree_hal_device_asan_report_t, source_dispatch_ptr),
+               "ASAN report layout mismatch");
 
 hrx_shared_state_t* hrx_get_shared_state(void) { return &g_shared; }
 hrx_gpu_state_t* hrx_get_gpu_state(void) { return &g_gpu; }
 hrx_cpu_state_t* hrx_get_cpu_state(void) { return &g_cpu; }
+
+static hrx_string_view_t hrx_string_view_from_iree(iree_string_view_t value) {
+  hrx_string_view_t view;
+  view.data = value.data;
+  view.size = value.size;
+  return view;
+}
+
+static hrx_const_byte_span_t hrx_const_byte_span_from_iree(
+    iree_const_byte_span_t value) {
+  hrx_const_byte_span_t span;
+  span.data = value.data;
+  span.data_length = value.data_length;
+  return span;
+}
+
+static void hrx_hal_device_event_sink_thunk(
+    void* user_data, const iree_hal_device_event_t* hal_event) {
+  const hrx_device_event_sink_t* sink =
+      (const hrx_device_event_sink_t*)user_data;
+  hrx_device_event_t event;
+  memset(&event, 0, sizeof(event));
+  event.record_length = sizeof(event);
+  event.abi_version = HRX_DEVICE_EVENT_ABI_VERSION_0;
+  event.type = (hrx_device_event_type_t)hal_event->type;
+  event.severity = (hrx_device_event_severity_t)hal_event->severity;
+  event.flags = (hrx_device_event_flags_t)hal_event->flags;
+  event.sequence = hal_event->sequence;
+  event.host_time_ns = hal_event->host_time_ns;
+  event.source.device_id =
+      hrx_string_view_from_iree(hal_event->source.device_id);
+  event.source.driver_id =
+      hrx_string_view_from_iree(hal_event->source.driver_id);
+  event.source.physical_device_ordinal =
+      hal_event->source.physical_device_ordinal;
+  event.source.queue_ordinal = hal_event->source.queue_ordinal;
+  event.source.executable_id = hal_event->source.executable_id;
+  event.source.export_ordinal = hal_event->source.export_ordinal;
+  event.payload = hrx_const_byte_span_from_iree(hal_event->payload);
+  event.implementation_payload =
+      hrx_const_byte_span_from_iree(hal_event->implementation_payload);
+  sink->fn(sink->user_data, &event);
+}
+
+static iree_hal_device_event_sink_t hrx_hal_device_event_sink(void) {
+  if (!g_device_event_sink.fn) {
+    return iree_hal_device_event_sink_discard();
+  }
+  iree_hal_device_event_sink_t sink;
+  sink.fn = hrx_hal_device_event_sink_thunk;
+  sink.user_data = &g_device_event_sink;
+  return sink;
+}
+
+hrx_status_t hrx_runtime_set_device_event_sink(hrx_device_event_sink_t sink) {
+  if (!sink.fn) {
+    return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
+                           "device event sink callback is NULL");
+  }
+  if (g_shared.shared_initialized || g_gpu.initialized || g_cpu.initialized) {
+    return hrx_make_status(HRX_STATUS_FAILED_PRECONDITION,
+                           "device event sink must be set before accelerator "
+                           "initialization");
+  }
+  g_device_event_sink = sink;
+  return hrx_ok_status();
+}
 
 static iree_status_t hrx_create_single_device_group(
     iree_hal_device_t* device, iree_allocator_t host_allocator,
@@ -236,6 +363,7 @@ static hrx_status_t hrx_create_local_task_device(
   iree_hal_device_create_params_t device_params =
       iree_hal_device_create_params_default();
   device_params.proactor_pool = g_shared.proactor_pool;
+  device_params.event_sink = hrx_hal_device_event_sink();
 
   iree_hal_device_t* hal_device = NULL;
   status = iree_hal_driver_create_default_device(driver, &device_params, alloc,
@@ -264,14 +392,42 @@ static const char* hrx_get_gpu_driver_name(void) {
   return (value && value[0]) ? value : "amdgpu";
 }
 
-static bool hrx_gpu_debug_enabled(void) {
-  const char* value = getenv("HRX_GPU_DEBUG");
+static bool hrx_getenv_enabled(const char* name) {
+  const char* value = getenv(name);
   return value && value[0] && strcmp(value, "0") != 0;
+}
+
+static bool hrx_gpu_debug_enabled(void) {
+  return hrx_getenv_enabled("HRX_GPU_DEBUG");
 }
 
 static const char* hrx_get_profile_file_path(void) {
   const char* value = getenv("HRX_PROFILE_FILE");
   return (value && value[0]) ? value : NULL;
+}
+
+#define HRX_HAL_DEVICE_PARAMETER_CAPACITY 1
+
+typedef struct hrx_hal_device_parameters_t {
+  // Count of populated parameter pairs in |pairs|.
+  iree_host_size_t count;
+  // Inline storage for HAL device creation parameters.
+  iree_string_pair_t pairs[HRX_HAL_DEVICE_PARAMETER_CAPACITY];
+} hrx_hal_device_parameters_t;
+
+static iree_status_t hrx_hal_device_parameters_from_environment(
+    hrx_hal_device_parameters_t* out_parameters) {
+  memset(out_parameters, 0, sizeof(*out_parameters));
+
+  const char* sanitizer = getenv("HRX_HAL_SANITIZER");
+  if (!sanitizer || !sanitizer[0]) return iree_ok_status();
+  if (strcmp(sanitizer, "asan") != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported HRX_HAL_SANITIZER '%s'", sanitizer);
+  }
+  out_parameters->pairs[out_parameters->count++] =
+      iree_make_cstring_pair("hal.sanitizer", "asan");
+  return iree_ok_status();
 }
 
 static iree_status_t hrx_profile_file_sink_create(
@@ -391,27 +547,21 @@ static void hrx_debug_print_iree_status(const char* label,
 #ifdef HRX_HAS_IREE_AMDGPU_DRIVER
 static hrx_status_t hrx_create_iree_amdgpu_driver(
     iree_allocator_t alloc, iree_hal_driver_t** out_driver) {
-  iree_status_t status = iree_hal_amdgpu_driver_module_register(
-      iree_hal_driver_registry_default());
-  if (iree_status_is_already_exists(status)) {
-    iree_status_ignore(status);
-    status = iree_ok_status();
+  *out_driver = NULL;
+  iree_hal_driver_registry_t* registry = NULL;
+  iree_status_t status = iree_hal_driver_registry_allocate(alloc, &registry);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_driver_module_register(registry);
   }
-  hrx_debug_print_iree_status("amdgpu driver module register", status);
-  if (!iree_status_is_ok(status)) {
-    return hrx_status_from_iree(status);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_driver_registry_try_create(
+        registry, iree_make_cstring_view("amdgpu"), alloc, out_driver);
   }
-
-  iree_hal_driver_t* driver = NULL;
-  status = iree_hal_driver_registry_try_create(
-      iree_hal_driver_registry_default(), iree_make_cstring_view("amdgpu"),
-      alloc, &driver);
+  iree_hal_driver_registry_free(registry);
   hrx_debug_print_iree_status("amdgpu driver create", status);
   if (!iree_status_is_ok(status)) {
     return hrx_status_from_iree(status);
   }
-
-  *out_driver = driver;
   return hrx_ok_status();
 }
 #endif
@@ -611,9 +761,19 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
   int count =
       physical_count < HRX_MAX_DEVICES ? physical_count : HRX_MAX_DEVICES;
 
+  hrx_hal_device_parameters_t device_parameters;
+  iree_status = hrx_hal_device_parameters_from_environment(&device_parameters);
+  if (!iree_status_is_ok(iree_status)) {
+    iree_allocator_free(alloc, device_infos);
+    iree_hal_driver_release(driver);
+    hrx_release_shared_state();
+    return hrx_status_from_iree(iree_status);
+  }
+
   iree_hal_device_create_params_t create_params =
       iree_hal_device_create_params_default();
   create_params.proactor_pool = g_shared.proactor_pool;
+  create_params.event_sink = hrx_hal_device_event_sink();
 
   iree_hal_profile_sink_t* profile_sink = NULL;
   const char* profile_file_path = hrx_get_profile_file_path();
@@ -636,8 +796,8 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
 
     iree_hal_device_t* hal_device = NULL;
     iree_status = iree_hal_driver_create_device_by_ordinal(
-        driver, info_index, /*param_count=*/0, /*params=*/NULL, &create_params,
-        alloc, &hal_device);
+        driver, info_index, device_parameters.count, device_parameters.pairs,
+        &create_params, alloc, &hal_device);
     hrx_debug_print_iree_status("create device by ordinal", iree_status);
     if (!iree_status_is_ok(iree_status)) {
       hrx_gpu_release_created_devices(created_count);

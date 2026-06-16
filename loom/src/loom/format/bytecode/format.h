@@ -62,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 13)
+//   4       1     format_version (currently 15)
 //   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 14
+#define LOOM_BYTECODE_FORMAT_VERSION 15
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -425,7 +425,7 @@ typedef enum loom_bytecode_section_kind_e {
 //
 //   [location_count: varint]
 //   For each location:
-//     [kind: byte]   (0=none, 1=file, 2=fused, 3=opaque)
+//     [kind: byte]   (0=none, 1=file, 2=fused, 3=opaque, 4=tagged)
 //     [flags: byte]
 //     (FILE:
 //       [source_index: varint]  (index into SOURCES section)
@@ -438,6 +438,11 @@ typedef enum loom_bytecode_section_kind_e {
 //       For each child: [location_index: varint])
 //     (OPAQUE:
 //       [source_index: varint]  (tag: "torch", "jax", etc.)
+//       [data_length: varint]
+//       [data: bytes])
+//     (TAGGED:
+//       [tag: varint]
+//       [child_location_index: varint]  (0 if no child)
 //       [data_length: varint]
 //       [data: bytes])
 
@@ -722,11 +727,12 @@ typedef enum loom_bytecode_section_kind_e {
 //
 // Attribute value_kind bytes are dense wire tags, not loom_attr_kind_t enum
 // values: 0=I64, 1=F64, 2=STRING, 3=BOOL, 4=ENUM, 5=I64_ARRAY, 6=SYMBOL,
-// 7=TYPE, 8=PREDICATE_LIST, 9=DICT, 10=ENCODING. ABSENT is never encoded as a
-// payload value. ENUM value_data is the raw uint8 case ordinal; bytecode
-// readers preserve it without consulting enum case tables so open enum attrs
-// can survive tools whose op tables do not yet name the ordinal. Closed enum
-// policy remains a verifier contract.
+// 7=TYPE, 8=PREDICATE_LIST, 9=DICT, 10=ENCODING, 11=BYTES. ABSENT is never
+// encoded as a payload value. ENUM value_data is the raw uint8 case ordinal;
+// bytecode readers preserve it without consulting enum case tables so open enum
+// attrs can survive tools whose op tables do not yet name the ordinal. Closed
+// enum policy remains a verifier contract. BYTES value_data is
+// [byte_length: varint] followed by that many uninterpreted bytes.
 //       [region_count: varint]
 //       For each region:
 //         (recursive: block_count, blocks...)

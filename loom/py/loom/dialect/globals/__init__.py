@@ -6,8 +6,9 @@
 
 """Global dialect: module-level state operations.
 
-Provides global.constant, global.variable, global.load, and global.store
-for managing immutable and mutable module-level state.
+Provides global.constant, global.variable, global.rodata, global.load, and
+global.store for managing immutable/mutable module-level state and named
+read-only artifact payloads.
 """
 
 from loom.dialect.globals.defs import (
@@ -15,6 +16,7 @@ from loom.dialect.globals.defs import (
     global_constant,
     global_load,
     global_ops,
+    global_rodata,
     global_store,
     global_variable,
 )
@@ -23,6 +25,7 @@ __all__ = [
     "global_ops",
     "global_constant",
     "global_variable",
+    "global_rodata",
     "global_load",
     "global_store",
     "ALL_GLOBAL_OPS",

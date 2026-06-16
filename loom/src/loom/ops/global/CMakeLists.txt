@@ -15,6 +15,7 @@ loom_generated_cc_library(
   GENERATOR
     loom::py::loom::gen::ops::c_tables_global_generator
   SRCS
+    "canonicalize.c"
     "facts.c"
     "verify.c"
   GENERATED_SRC_FLAGS
@@ -33,6 +34,9 @@ loom_generated_cc_library(
     loom::ir
     loom::ir::facts
     loom::ops::op_defs
+    loom::rewrite::rewriter
+    loom::util::fact_table
+    loom::util::math
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -10,7 +10,7 @@
 // debug info generation. Locations are interned per module and referenced by a
 // 4-byte loom_location_id_t on each operation.
 //
-// Three kinds of location:
+// Four kinds of location:
 //
 //   File:    Source range from a .loom file. Stores file:start:end so tooling
 //            can extract exact text spans for diagnostics, diffs, and
@@ -21,6 +21,9 @@
 //            from several inputs (inlining, fusion, rewrites).
 //   Opaque:  External system identifier for JIT (torch node ID, JAX trace
 //            position). Round-trips through compilation.
+//   Tagged:  Compact compiler-owned metadata payload attached to an optional
+//            child location. Tags are integer IDs so common tags do not touch
+//            module string tables during JIT compilation.
 //
 // Locations can be stripped for release/embedded builds. A stripped location
 // preserves the interned ID (for bytecode stability) but carries no data.
@@ -30,6 +33,7 @@
 //   loc("model.loom":42:3 to 42:58)
 //   loc(fused<"model.loom":42:3, "recipe.loom":15:1>)
 //   loc(opaque<"torch", "node_id=42">)
+//   loc(tagged<sanitizer_site, "0102ff", "model.loom":42:3>)
 
 #ifndef LOOM_IR_LOCATION_H_
 #define LOOM_IR_LOCATION_H_
@@ -56,6 +60,26 @@ typedef uint32_t loom_location_id_t;
 typedef uint16_t loom_source_id_t;
 #define LOOM_SOURCE_ID_INVALID ((loom_source_id_t)UINT16_MAX)
 
+// Integer tag identifying a compact tagged location payload.
+typedef uint16_t loom_location_tag_t;
+
+// Built-in tagged location payload tags. Values >= LOOM_LOCATION_TAG_USER_BASE
+// are reserved for embedders and user-defined tooling.
+typedef enum loom_location_tag_e {
+  // Invalid tag sentinel. Serialized tagged locations must not use it.
+  LOOM_LOCATION_TAG_INVALID = 0x0000,
+  // Sanitizer assertion/reporting site metadata.
+  LOOM_LOCATION_TAG_SANITIZER_SITE = 0x0001,
+  // Template instantiation provenance metadata.
+  LOOM_LOCATION_TAG_TEMPLATE_INSTANTIATION = 0x0002,
+  // Tile dialect lowering provenance metadata.
+  LOOM_LOCATION_TAG_TILE_LOWERING = 0x0003,
+  // UKernel selection provenance metadata.
+  LOOM_LOCATION_TAG_UKERNEL_SELECTION = 0x0004,
+  // First tag value available to external users.
+  LOOM_LOCATION_TAG_USER_BASE = 0x8000,
+} loom_location_tag_e;
+
 // Module-owned source table. Entries are interned copies of source names
 // (filenames, system tags). The table is append-only and deduplicates by exact
 // string match.
@@ -80,6 +104,9 @@ typedef enum loom_location_kind_e {
   // External system identifier (torch node ID, JAX trace).
   // Tag + opaque data blob, round-tripped verbatim.
   LOOM_LOCATION_OPAQUE = 3,
+  // Compiler-owned compact metadata payload attached to an optional child
+  // location.
+  LOOM_LOCATION_TAGGED = 4,
   LOOM_LOCATION_COUNT_,
 } loom_location_kind_t;
 
@@ -150,6 +177,18 @@ typedef struct loom_location_entry_t {
       uint32_t data_length;
       const uint8_t* data;
     } opaque;
+
+    // LOOM_LOCATION_TAGGED: compact metadata payload with optional child.
+    struct {
+      // Integer tag identifying the payload schema.
+      loom_location_tag_t tag;
+      // Byte length of the payload pointed to by data.
+      uint32_t data_length;
+      // Optional child location preserving source or provenance context.
+      loom_location_id_t child;
+      // Borrowed payload bytes owned by the containing module arena.
+      const uint8_t* data;
+    } tagged;
   };
 } loom_location_entry_t;
 
@@ -175,6 +214,20 @@ loom_location_entry_t loom_location_file_range(loom_source_id_t source_id,
                                                uint16_t start_col,
                                                uint16_t end_line,
                                                uint16_t end_col);
+
+// Constructs a tagged metadata location. The data payload is borrowed from the
+// caller and must outlive the containing module entry.
+loom_location_entry_t loom_location_tagged(loom_location_tag_t tag,
+                                           loom_location_id_t child,
+                                           const uint8_t* data,
+                                           uint32_t data_length);
+
+// Returns the canonical textual name for a built-in location tag.
+iree_string_view_t loom_location_tag_name(loom_location_tag_t tag);
+
+// Parses a canonical built-in location tag name.
+bool loom_location_tag_parse(iree_string_view_t name,
+                             loom_location_tag_t* out_tag);
 
 #ifdef __cplusplus
 }

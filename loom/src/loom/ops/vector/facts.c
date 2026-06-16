@@ -1425,6 +1425,10 @@ static void loom_vector_clampf_ieee_transfer(const loom_value_facts_t* value,
 
 static void loom_vector_isnanf_transfer(const loom_value_facts_t* input,
                                         loom_value_facts_t* out) {
+  if (loom_value_facts_is_not_nan(*input)) {
+    *out = loom_value_facts_exact_i64(0);
+    return;
+  }
   double value = 0.0;
   if (!loom_vector_facts_query_exact_f64(*input, &value)) {
     *out = loom_value_facts_make(0, 1, 1);
@@ -1435,6 +1439,14 @@ static void loom_vector_isnanf_transfer(const loom_value_facts_t* input,
 
 static void loom_vector_isinff_transfer(const loom_value_facts_t* input,
                                         loom_value_facts_t* out) {
+  if (loom_value_facts_is_finite(*input)) {
+    *out = loom_value_facts_exact_i64(0);
+    return;
+  }
+  if (loom_value_facts_is_not_inf(*input)) {
+    *out = loom_value_facts_exact_i64(0);
+    return;
+  }
   double value = 0.0;
   if (!loom_vector_facts_query_exact_f64(*input, &value)) {
     *out = loom_value_facts_make(0, 1, 1);
@@ -1445,6 +1457,15 @@ static void loom_vector_isinff_transfer(const loom_value_facts_t* input,
 
 static void loom_vector_isfinitef_transfer(const loom_value_facts_t* input,
                                            loom_value_facts_t* out) {
+  if (loom_value_facts_is_finite(*input)) {
+    *out = loom_value_facts_exact_i64(1);
+    return;
+  }
+  if (loom_value_facts_is_not_nan(*input) &&
+      loom_value_facts_is_not_inf(*input)) {
+    *out = loom_value_facts_exact_i64(1);
+    return;
+  }
   double value = 0.0;
   if (!loom_vector_facts_query_exact_f64(*input, &value)) {
     *out = loom_value_facts_make(0, 1, 1);

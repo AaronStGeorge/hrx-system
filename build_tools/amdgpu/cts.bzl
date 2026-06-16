@@ -34,6 +34,17 @@ def _source_stem(src):
         fail("AMDGPU CTS executable source must be a C file: {}".format(src))
     return filename[:-2]
 
+def _target_deps(deps, exact_target, code_object_target):
+    exact_target_fragment = iree_amdgpu_target_label_fragment(exact_target)
+    code_object_target_fragment = iree_amdgpu_target_label_fragment(code_object_target)
+    return [
+        dep.replace("{AMDGPU_TARGET}", exact_target)
+            .replace("{AMDGPU_TARGET_FRAGMENT}", exact_target_fragment)
+            .replace("{AMDGPU_CODE_OBJECT_TARGET}", code_object_target)
+            .replace("{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}", code_object_target_fragment)
+        for dep in deps
+    ]
+
 def _registration_impl(ctx):
     ctx.actions.expand_template(
         template = ctx.file.template,
@@ -86,7 +97,9 @@ def iree_amdgpu_hal_cts_testdata(
         identifier,
         backend_name = "amdgpu",
         target = "amdgcn-amd-amdhsa",
+        deps = [],
         internal_hdrs = [],
+        internalize = True,
         testonly = True,
         tags = []):
     """Builds and registers AMDGPU HAL CTS executable testdata.
@@ -101,7 +114,14 @@ def iree_amdgpu_hal_cts_testdata(
       identifier: C identifier prefix for generated TOC functions.
       backend_name: CTS backend name.
       target: LLVM target triple.
+      deps: Bitcode archives passed to each generated executable. Labels may
+        use `{AMDGPU_TARGET}`, `{AMDGPU_TARGET_FRAGMENT}`,
+        `{AMDGPU_CODE_OBJECT_TARGET}`, or
+        `{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}` placeholders to refer to the
+        exact target or code-object target being generated.
       internal_hdrs: Headers that should invalidate device compilation.
+      internalize: whether to internalize linked dependency symbols after lazy
+        archive extraction.
       testonly: Whether generated targets are test-only.
       tags: Tags applied to generated device binaries and libraries.
     """
@@ -114,6 +134,7 @@ def iree_amdgpu_hal_cts_testdata(
     variant_token = "{AMDGPU_TARGET}"
     for exact_target in IREE_AMDGPU_EXACT_TARGETS:
         target_fragment = iree_amdgpu_target_label_fragment(exact_target)
+        code_object_target = IREE_AMDGPU_EXACT_TARGET_CODE_OBJECTS[exact_target]
         target_identifier = "%s_%s" % (identifier, target_fragment)
         target_compatible_with = select({
             requested[exact_target]: [],
@@ -127,9 +148,11 @@ def iree_amdgpu_hal_cts_testdata(
             iree_amdgpu_binary(
                 name = binary_name,
                 target = target,
-                arch = IREE_AMDGPU_EXACT_TARGET_CODE_OBJECTS[exact_target],
+                arch = code_object_target,
                 srcs = [src],
+                deps = _target_deps(deps, exact_target, code_object_target),
                 internal_hdrs = internal_hdrs,
+                internalize = internalize,
                 out = binary_out,
                 testonly = testonly,
                 tags = tags,

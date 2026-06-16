@@ -45,14 +45,15 @@ extern "C" {
 // Flags
 //===----------------------------------------------------------------------===//
 
-// Cached predicate flags derived from range, divisor, or target-independent
-// execution distribution. Range flags are always consistent with the scalar
-// range/divisor fields. Distribution flags describe whether all lanes in an
-// invocation group observe the same SSA value.
+// Cached predicate flags derived from range, divisor, floating-point
+// predicates, or target-independent execution distribution. Range flags are
+// always consistent with the scalar range/divisor fields. Distribution flags
+// describe whether all lanes in an invocation group observe the same SSA value.
 enum loom_value_fact_flag_bits_e {
   // The signed range lower bound is >= 0.
   LOOM_VALUE_FACT_NON_NEGATIVE = 1u << 0,
-  // The range does not include zero (lo > 0 or hi < 0).
+  // The value cannot be zero. This may be range-derived or asserted by a
+  // nonzero predicate.
   LOOM_VALUE_FACT_NON_ZERO = 1u << 1,
   // The signed range lower bound is > 0. Implies NON_NEGATIVE and
   // NON_ZERO.
@@ -71,9 +72,19 @@ enum loom_value_fact_flag_bits_e {
   LOOM_VALUE_FACT_BOOLEAN = 1u << 5,
   // The value has a floating-point type. When EXACT is also set,
   // range_lo/range_hi contain the IEEE 754 double bit pattern (via
-  // memcpy), not an integer range. Without EXACT, float facts are
-  // unknown (no float range analysis).
+  // memcpy), not an integer range. Non-exact float facts do not carry range
+  // bounds, but may carry semantic predicate facts such as NOT_NAN or FINITE.
   LOOM_VALUE_FACT_FLOAT = 1u << 6,
+  // The value cannot be NaN. This may come from an exact float value or a
+  // checked predicate; it is meaningful only for floating-point typed values.
+  LOOM_VALUE_FACT_NOT_NAN = 1u << 11,
+  // The value cannot be positive or negative infinity. This may come from an
+  // exact float value or a checked predicate; it is meaningful only for
+  // floating-point typed values.
+  LOOM_VALUE_FACT_NOT_INF = 1u << 12,
+  // The value cannot be NaN or infinity. This may come from an exact float
+  // value or a checked predicate and implies NOT_NAN and NOT_INF.
+  LOOM_VALUE_FACT_FINITE = 1u << 13,
   // The value is known to be identical for every active lane observing it.
   LOOM_VALUE_FACT_UNIFORM = 1u << 7,
   // The value may differ between active lanes observing it.
@@ -162,8 +173,9 @@ static inline loom_value_facts_t loom_value_facts_unknown(void) {
 // Exact integer value. Computes all flags from the value.
 loom_value_facts_t loom_value_facts_exact_i64(int64_t value);
 
-// Exact float value. Stores the IEEE 754 bit pattern in range_lo.
-// Float facts are exact-only (no float range analysis).
+// Exact float value. Stores the IEEE 754 bit pattern in range_lo. Loom does not
+// perform float range analysis, but non-exact float values may still carry
+// predicate facts such as NOT_NAN or FINITE.
 loom_value_facts_t loom_value_facts_exact_f64(double value);
 
 // Extracts the double from an exact float fact.
@@ -267,6 +279,18 @@ static inline bool loom_value_facts_is_boolean(loom_value_facts_t facts) {
 
 static inline bool loom_value_facts_is_float(loom_value_facts_t facts) {
   return (facts.flags & LOOM_VALUE_FACT_FLOAT) != 0;
+}
+
+static inline bool loom_value_facts_is_not_nan(loom_value_facts_t facts) {
+  return (facts.flags & LOOM_VALUE_FACT_NOT_NAN) != 0;
+}
+
+static inline bool loom_value_facts_is_not_inf(loom_value_facts_t facts) {
+  return (facts.flags & LOOM_VALUE_FACT_NOT_INF) != 0;
+}
+
+static inline bool loom_value_facts_is_finite(loom_value_facts_t facts) {
+  return (facts.flags & LOOM_VALUE_FACT_FINITE) != 0;
 }
 
 static inline bool loom_value_facts_is_uniform(loom_value_facts_t facts) {
@@ -458,13 +482,14 @@ static inline void loom_value_facts_meet(
 // Predicate application
 //===----------------------------------------------------------------------===//
 
-// Recomputes the cached flags from range_lo, range_hi, and
-// known_divisor. Preserves POWER_OF_TWO and FLOAT flags if already
-// set (they may come from predicates, not just range analysis).
+// Recomputes the cached flags from range_lo, range_hi, and known_divisor.
+// Preserves facts that are not derived from the integer range, such as
+// predicate, floating-point type, and execution distribution flags.
 void loom_value_facts_recompute_flags(loom_value_facts_t* facts);
 
-// Tightens facts using a single predicate constraint. Modifies the
-// facts in place and recomputes flags afterward.
+// Tightens facts using a single predicate constraint. Modifies the facts in
+// place and recomputes flags afterward. The caller is responsible for enforcing
+// that the predicate is legal for the value type.
 void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
                                       const loom_predicate_t* predicate);
 

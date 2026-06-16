@@ -616,6 +616,66 @@ loom_check_test_suite(
         self.assertIn("    lsan", converter.body)
         self.assertIn("    vulkan", converter.body)
 
+    def test_cc_test_converts_location_args(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+
+        functions.cc_binary(
+            name="fixture_tool",
+            srcs=["fixture_tool.cc"],
+        )
+        functions.cc_test(
+            name="location_test",
+            srcs=["location_test.cc"],
+            args=[
+                "$(location input.txt)",
+                "--tool=$(location //pkg:fixture_tool)",
+                "--runner=$(location //tools:runner)",
+            ],
+        )
+
+        self.assertIn('"${PROJECT_SOURCE_DIR}/pkg/input.txt"', converter.body)
+        self.assertIn(
+            '"--tool=${PROJECT_SOURCE_DIR}/pkg/fixture_tool"',
+            converter.body,
+        )
+        self.assertIn(
+            '"--runner=$<TARGET_FILE:iree::tools::runner>"',
+            converter.body,
+        )
+        self.assertNotIn("$(location", converter.body)
+
+    def test_cc_test_converts_env(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+
+        functions.cc_test(
+            name="env_test",
+            srcs=["env_test.cc"],
+            env={
+                "FEATURE": "enabled",
+                "FIXTURE": "$(location input.txt)",
+            },
+        )
+
+        self.assertIn("ENV", converter.body)
+        self.assertIn('"FEATURE=enabled"', converter.body)
+        self.assertIn(
+            '"FIXTURE=${PROJECT_SOURCE_DIR}/pkg/input.txt"',
+            converter.body,
+        )
+        self.assertNotIn("$(location", converter.body)
+
     def test_execution_test_suite_emits_target_compatible_guard(self):
         converter = SimpleNamespace(body="")
         functions = bazel_to_cmake_converter.BuildFileFunctions(

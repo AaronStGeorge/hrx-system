@@ -278,7 +278,10 @@ static iree_status_t iree_hal_streaming_module_extract_metadata(
 
     // Initialize parameter info.
     iree_hal_streaming_parameter_info_t* parameter_info = &symbol->parameters;
-    parameter_info->binding_count = export_infos[i].binding_count;
+    // Executable binding_count describes normal HAL dispatch bindings. HRX's
+    // unpacker needs the number of reflected BINDING parameters it will
+    // resolve from the HIP launch ABI.
+    parameter_info->binding_count = symbol_op_counts[i].resolve_count;
     parameter_info->copy_count = symbol_op_counts[i].copy_count;
     parameter_info->ops = current_ops;
     const uint16_t parameter_count = export_infos[i].parameter_count;

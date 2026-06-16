@@ -24,6 +24,22 @@
 
 IREE_HAL_API_RETAIN_RELEASE(device);
 
+IREE_API_EXPORT iree_status_t iree_hal_device_create_params_verify(
+    const iree_hal_device_create_params_t* params) {
+  IREE_ASSERT_ARGUMENT(params);
+  if (IREE_UNLIKELY(!params->proactor_pool)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL device creation requires a valid proactor pool");
+  }
+  if (IREE_UNLIKELY(!iree_hal_device_event_sink_is_valid(params->event_sink))) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL device creation requires a valid device event sink");
+  }
+  return iree_ok_status();
+}
+
 IREE_API_EXPORT iree_string_view_t
 iree_hal_device_id(iree_hal_device_t* device) {
   IREE_ASSERT_ARGUMENT(device);

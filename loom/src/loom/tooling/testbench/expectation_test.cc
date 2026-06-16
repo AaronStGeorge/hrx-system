@@ -10,10 +10,8 @@
 
 #include "iree/base/internal/arena.h"
 #include "iree/hal/api.h"
-#include "iree/modules/hal/types.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "iree/vm/api.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -35,9 +33,6 @@ class ExpectationTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_CHECK, loom_check_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
 
-    IREE_ASSERT_OK(iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,
-                                           host_allocator_, &vm_instance_));
-    IREE_ASSERT_OK(iree_hal_module_register_all_types(vm_instance_));
     IREE_ASSERT_OK(
         iree_hal_allocator_create_heap(IREE_SV("testbench"), host_allocator_,
                                        host_allocator_, &device_allocator_));
@@ -45,7 +40,6 @@ class ExpectationTest : public ::testing::Test {
 
   void TearDown() override {
     iree_hal_allocator_release(device_allocator_);
-    iree_vm_instance_release(vm_instance_);
     iree_arena_deinitialize(&schedule_arena_);
     iree_arena_deinitialize(&plan_arena_);
     loom_context_deinitialize(&context_);
@@ -100,7 +94,6 @@ class ExpectationTest : public ::testing::Test {
   iree_arena_allocator_t plan_arena_;
   iree_arena_allocator_t schedule_arena_;
   loom_context_t context_;
-  iree_vm_instance_t* vm_instance_ = nullptr;
   iree_hal_allocator_t* device_allocator_ = nullptr;
 };
 
@@ -278,7 +271,8 @@ check.case @buffer_mismatch {
 
 static iree_status_t AlwaysFailsExpectation(
     void* user_data, const loom_testbench_expectation_plan_t* expectation,
-    const iree_vm_variant_t* actual, const iree_vm_variant_t* expected,
+    const loom_testbench_value_t* actual,
+    const loom_testbench_value_t* expected,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   (void)user_data;
   (void)actual;

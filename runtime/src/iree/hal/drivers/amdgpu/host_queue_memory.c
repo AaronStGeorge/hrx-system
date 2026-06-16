@@ -72,7 +72,7 @@ static void iree_hal_amdgpu_host_queue_record_memory_event(
     event.offset = reservation->offset;
     if (type != IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_QUEUE_ALLOCA &&
         type != IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_QUEUE_DEALLOCA) {
-      event.length = reservation->length;
+      event.length = reservation->byte_length;
     }
   }
   iree_hal_amdgpu_host_queue_populate_memory_event_pool_stats(pool, &event);
@@ -82,9 +82,9 @@ static void iree_hal_amdgpu_host_queue_record_memory_event(
 }
 
 typedef struct iree_hal_amdgpu_host_queue_release_reservation_state_t {
-  // Queue whose frontier owns the release.
+  // Queue whose frontier owns the reuse metadata release.
   iree_hal_amdgpu_host_queue_t* queue;
-  // Transient buffer whose reservation is released.
+  // Transient buffer whose reservation metadata is released.
   iree_hal_buffer_t* buffer;
 } iree_hal_amdgpu_host_queue_release_reservation_state_t;
 
@@ -669,6 +669,9 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_dealloca(
       .queue = queue,
       .buffer = buffer,
   };
+  // The pre-signal action performs target-visible release effects after waits
+  // resolve. The post-commit callback only publishes pool reuse metadata with
+  // the queue death frontier so later submissions can reason about reuse.
   const uint64_t submission_epoch =
       iree_hal_amdgpu_host_queue_finish_barrier_submission(
           queue, resolution, signal_semaphore_list,

@@ -217,6 +217,20 @@ bool loom_low_source_memory_access_plan_build(
     const loom_op_t* source_op, loom_low_source_memory_access_plan_t* out_plan,
     loom_low_source_memory_access_diagnostic_t* out_diagnostic);
 
+// Builds a target-independent source memory plan for an indexed view access.
+//
+// This is the component-level sibling of vector.load/store planning for source
+// ops that are not themselves memory transfers but still name a logical view
+// element or vector footprint, such as sanitizer access assertions.
+bool loom_low_source_memory_access_plan_build_indexed(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_low_source_memory_operation_kind_t operation_kind,
+    loom_value_id_t view_value_id, loom_value_slice_t dynamic_indices,
+    loom_attribute_t static_indices, loom_type_t vector_type,
+    loom_vector_memory_cache_policy_t cache_policy,
+    loom_low_source_memory_access_plan_t* out_plan,
+    loom_low_source_memory_access_diagnostic_t* out_diagnostic);
+
 // Builds a target-independent source memory plan for a whole typed view.
 //
 // This is the view-payload sibling of vector.load/store planning. It treats the

@@ -241,6 +241,31 @@ static iree_status_t loom_low_verify_emit_missing_descriptor(
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
+static iree_status_t loom_low_verify_emit_packet_contract_mismatch(
+    loom_low_function_verify_state_t* function_state,
+    const loom_low_resolved_descriptor_packet_t* packet) {
+  const loom_low_resolved_target_t* target = function_state->target;
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_with_field_ref(
+          loom_param_string(packet->key),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    packet->key_attr_index)),
+      loom_param_u32(packet->descriptor_ordinal),
+      loom_param_string(packet->descriptor_key),
+      loom_param_string(target->descriptor_set_key),
+  };
+  loom_diagnostic_related_op_t related[] = {{
+      .label = IREE_SV("target contract selected here"),
+      .op = target->target_op,
+      .field_ref = loom_diagnostic_field_ref_none(),
+  }};
+  return loom_low_verify_emit(function_state->state, packet->op,
+                              LOOM_ERR_STRUCTURE_037, params,
+                              IREE_ARRAYSIZE(params), related,
+                              target->target_op ? IREE_ARRAYSIZE(related) : 0);
+}
+
 static iree_status_t loom_low_verify_emit_missing_immediate(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     iree_string_view_t opcode, uint16_t opcode_attr_index,
@@ -1655,6 +1680,12 @@ static iree_status_t loom_low_verify_packet(
   const loom_op_t* op = packet->op;
   const iree_string_view_t opcode = packet->key;
   const uint16_t opcode_attr_index = packet->key_attr_index;
+  if (packet->resolution ==
+      LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_ORDINAL_KEY_MISMATCH) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_emit_packet_contract_mismatch(function_state, packet));
+    return loom_low_verify_define_full_register_results(function_state, op);
+  }
   if (packet->descriptor == NULL) {
     IREE_RETURN_IF_ERROR(loom_low_verify_emit_missing_descriptor(
         function_state, op, packet->key, packet->key_attr_index));
@@ -1901,7 +1932,10 @@ static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
     }
     return iree_ok_status();
   }
-  if (packet.descriptor == NULL) {
+  if (packet.resolution ==
+      LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_ORDINAL_KEY_MISMATCH) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_packet(function_state, &packet));
+  } else if (packet.descriptor == NULL) {
     bool handled = false;
     IREE_RETURN_IF_ERROR(loom_low_verify_run_missing_descriptor_providers(
         function_state, &packet, &handled));

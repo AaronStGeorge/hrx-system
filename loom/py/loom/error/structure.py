@@ -601,6 +601,30 @@ ERR_STRUCTURE_036 = ErrorDef(
     ),
 )
 
+# ERR_STRUCTURE_037: Low packet descriptor ordinal conflicts with target.
+ERR_STRUCTURE_037 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=37,
+    severity=Severity.ERROR,
+    summary="Low packet descriptor ordinal conflicts with target.",
+    message=(
+        "low function '{function_name}' packet '{packet_key}' stores descriptor "
+        "ordinal {descriptor_ordinal}, which resolves to '{descriptor_key}' in "
+        "target contract '{descriptor_set_key}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("packet_key", ParamKind.STRING),
+        ErrorParam("descriptor_ordinal", ParamKind.U32),
+        ErrorParam("descriptor_key", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Regenerate the packet for the selected target contract or leave the "
+        "descriptor ordinal unresolved so the verifier can resolve the key"
+    ),
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -638,4 +662,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_034,
     ERR_STRUCTURE_035,
     ERR_STRUCTURE_036,
+    ERR_STRUCTURE_037,
 )

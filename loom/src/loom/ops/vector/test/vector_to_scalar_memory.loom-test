@@ -19,6 +19,27 @@ func.def @load_static(%buffer: buffer, %byte_offset: offset) -> (vector<2xf32>) 
 
 // ====
 
+// RUN: with-locations pass vector-to-scalar
+
+func.def @load_static_preserves_sanitizer_site_location(%buffer: buffer, %byte_offset: offset) -> (vector<2xf32>) {
+  %layout = encoding.layout.dense : encoding<layout> loc("vector.loom":2:1)
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout> loc("vector.loom":3:1)
+  %loaded = vector.load %view[3] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> vector<2xf32> loc(tagged<sanitizer_site, "0203", "vector.loom":4:1>)
+  func.return %loaded : vector<2xf32> loc("vector.loom":5:1)
+} loc("vector.loom":1:1 to 6:1)
+
+// ----
+func.def @load_static_preserves_sanitizer_site_location(%buffer: buffer, %byte_offset: offset) -> (vector<2xf32>) {
+  %layout = encoding.layout.dense : encoding<layout> loc("vector.loom":2:1)
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout> loc("vector.loom":3:1)
+  %6 = view.load %view[3] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> f32 loc(tagged<sanitizer_site, "0203", "vector.loom":4:1>)
+  %7 = view.load %view[4] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> f32 loc(tagged<sanitizer_site, "0203", "vector.loom":4:1>)
+  %loaded = vector.from_elements %6, %7 : vector<2xf32> loc(tagged<sanitizer_site, "0203", "vector.loom":4:1>)
+  func.return %loaded : vector<2xf32> loc("vector.loom":5:1)
+} loc("vector.loom":1:1 to 6:1)
+
+// ====
+
 func.def @load_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %origin: index) -> (vector<[%n]xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%n]xf32, %layout>

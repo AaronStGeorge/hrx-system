@@ -49,6 +49,7 @@ loom_cc_library(
     loom::ops::scf
     loom::ops::target
     loom::ops::vector
+    loom::sanitizer::options
     loom::target::contract
     loom::target::low_descriptor_registry
     loom::target::low_legality

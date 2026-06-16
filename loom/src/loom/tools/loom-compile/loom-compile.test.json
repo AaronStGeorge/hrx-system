@@ -152,6 +152,45 @@
       ]
     },
     {
+      "name": "enables sanitizer checks in default pipeline",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/sanitizer.loom",
+            "text": "ireevm.target<core> @vm_target\n\nfunc.def public target(@vm_target) @sanitizer(%lhs: i32, %rhs: i32) -> (i32) {\n  %sum = scalar.addi %lhs, %rhs : i32\n  func.return %sum : i32\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/sanitizer.loom",
+              "--output={tmp}/sanitizer.vmfb",
+              "--sanitizer=access",
+              "--dump-ir-before=sanitizer-insert-assertions",
+              "--dump-ir-format=jsonl",
+              "--dump-ir-output=stderr"
+            ]
+          },
+          "stderr": {
+            "contains": [
+              "\"tool\":\"loom-compile\"",
+              "\"pass\":\"sanitizer-insert-assertions\"",
+              "\"point\":\"before\""
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/sanitizer.vmfb",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "writes detailed compile report file",
       "steps": [
         {

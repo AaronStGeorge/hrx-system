@@ -82,8 +82,9 @@ static iree_status_t loom_run_hal_candidate_emit_selected_target(
   iree_status_t status = provider->emit_artifact(
       provider, run_module->module, &candidate->device_target,
       options->diagnostic_sink, options->source_resolver, options->max_errors,
-      options->artifact_flags, &options->artifact_manifest, report, allocator,
-      &candidate->compiled, &candidate->artifact);
+      &options->target_pipeline_options, options->artifact_flags,
+      &options->artifact_manifest, report, allocator, &candidate->compiled,
+      &candidate->artifact);
   if (iree_status_is_ok(status) && candidate->compiled &&
       candidate->artifact.target_bundle == NULL) {
     candidate->artifact.target_bundle = candidate->device_target.target_bundle;

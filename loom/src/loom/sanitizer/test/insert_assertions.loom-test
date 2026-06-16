@@ -1,0 +1,166 @@
+// RUN: pass sanitizer-insert-assertions{checks=value}
+
+// Explicit assumes become checked aliases instead of duplicated assume/assert
+// pairs. Predicates already proven by the incoming alias are omitted from the
+// new runtime assertion.
+func.def @assume_predicates_filter_to_missing_proof(%n: index) -> (index) {
+  %known = index.assume %n [range(%n, 0, 1024)] : index
+  %checked = index.assume %known [range(%known, 0, 2048), mul(%known, 16)] : index
+  func.return %checked : index
+}
+
+// ----
+func.def @assume_predicates_filter_to_missing_proof(%n: index) -> (index) {
+  %known = sanitizer.assert.value %n [range(%n, 0, 1024)] : index
+  %checked = sanitizer.assert.value %known [mul(%known, 16)] : index
+  func.return %checked : index
+}
+
+// ====
+
+// A fully proven assume has no runtime work left; it becomes the source alias.
+func.def @assume_with_only_proven_predicates_erases(%n: index) -> (index) {
+  %known = index.assume %n [range(%n, 0, 1024)] : index
+  %checked = index.assume %known [range(%known, 0, 2048)] : index
+  func.return %checked : index
+}
+
+// ----
+func.def @assume_with_only_proven_predicates_erases(%n: index) -> (index) {
+  %known = sanitizer.assert.value %n [range(%n, 0, 1024)] : index
+  func.return %known : index
+}
+
+// ====
+
+// Predicate SSA operands that are not themselves checked aliases are still
+// listed on the assertion so the predicate remains verifiable and reportable.
+func.def @assume_with_relational_rhs_value(%n: index) -> (index) {
+  %limit = index.constant 128 : index
+  %bounded = index.assume %n [lt(%n, %limit)] : index
+  func.return %bounded : index
+}
+
+// ----
+func.def @assume_with_relational_rhs_value(%n: index) -> (index) {
+  %limit = index.constant 128 : index
+  %bounded, %5 = sanitizer.assert.value %n, %limit [lt(%n, %limit)] : index, index
+  func.return %bounded : index
+}
+
+// ====
+
+// Scalar floating-point assumes use the same assertion vocabulary as fast-math
+// checks.
+func.def @float_assume_becomes_value_assertion(%x: f32) -> (f32) {
+  %checked = scalar.assume %x [not_nan(%x), not_inf(%x)] : f32
+  func.return %checked : f32
+}
+
+// ----
+func.def @float_assume_becomes_value_assertion(%x: f32) -> (f32) {
+  %checked = sanitizer.assert.value %x [not_nan(%x), not_inf(%x)] : f32
+  func.return %checked : f32
+}
+
+// ====
+
+// Fast-math nnan+ninf is a finite contract on both operands and the result.
+func.def @fastmath_finite_instruments_inputs_and_result(%x: f32, %y: f32) -> (f32) {
+  %sum = scalar.addf<nnan|ninf> %x, %y : f32
+  func.return %sum : f32
+}
+
+// ----
+func.def @fastmath_finite_instruments_inputs_and_result(%x: f32, %y: f32) -> (f32) {
+  %4, %5 = sanitizer.assert.value %x, %y [finite(%x), finite(%y)] : f32, f32
+  %sum$3 = scalar.addf<nnan|ninf> %4, %5 : f32
+  %sum$6 = sanitizer.assert.value %sum$3 [finite(%sum$3)] : f32
+  func.return %sum$6 : f32
+}
+
+// ====
+
+// ninf without nnan maps to not_inf, not finite.
+func.def @fastmath_ninf_instruments_not_inf(%x: f32) -> (f32) {
+  %neg = scalar.negf<ninf> %x : f32
+  func.return %neg : f32
+}
+
+// ----
+func.def @fastmath_ninf_instruments_not_inf(%x: f32) -> (f32) {
+  %3 = sanitizer.assert.value %x [not_inf(%x)] : f32
+  %neg$2 = scalar.negf<ninf> %3 : f32
+  %neg$4 = sanitizer.assert.value %neg$2 [not_inf(%neg$2)] : f32
+  func.return %neg$4 : f32
+}
+
+// ====
+
+// Non-value check selections are precise and do not enable value assertions.
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_selection_leaves_value_ir_unchanged(%n: index) -> (index) {
+  %checked = index.assume %n [range(%n, 0, 1024)] : index
+  func.return %checked : index
+}
+
+// ----
+func.def @access_only_selection_leaves_value_ir_unchanged(%n: index) -> (index) {
+  %checked = index.assume %n [range(%n, 0, 1024)] : index
+  func.return %checked : index
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_keeps_existing_scalar_view_assertions(%layout: encoding<layout>, %input: view<16xf32, %layout>, %i: index) -> (f32) {
+  sanitizer.assert.access<read> %input[%i] : view<16xf32, %layout>
+  %value = view.load %input[%i] : view<16xf32, %layout> -> f32
+  func.return %value : f32
+}
+
+// ----
+func.def @access_only_keeps_existing_scalar_view_assertions(%layout: encoding<layout>, %input: view<16xf32, %layout>, %i: index) -> (f32) {
+  sanitizer.assert.access<read> %input[%i] : view<16xf32, %layout>
+  %value = view.load %input[%i] : view<16xf32, %layout> -> f32
+  func.return %value : f32
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_scalar_view_memory(%layout: encoding<layout>, %input: view<16xf32, %layout>, %output: view<16xf32, %layout>, %i: index) {
+  %value = view.load %input[%i] : view<16xf32, %layout> -> f32
+  view.store %value, %output[%i] : f32, view<16xf32, %layout>
+  func.return
+}
+
+// ----
+func.def @access_only_instruments_scalar_view_memory(%layout: encoding<layout>, %input: view<16xf32, %layout>, %output: view<16xf32, %layout>, %i: index) {
+  sanitizer.assert.access<read> %input[%i] : view<16xf32, %layout>
+  %value = view.load %input[%i] : view<16xf32, %layout> -> f32
+  sanitizer.assert.access<write> %output[%i] : view<16xf32, %layout>
+  view.store %value, %output[%i] : f32, view<16xf32, %layout>
+  func.return
+}
+
+// ====
+
+// RUN: with-locations pass sanitizer-insert-assertions{checks=value}
+
+// Inserted assertions carry compact sanitizer site payloads while keeping the
+// source location as the tagged location child.
+func.def @assertion_site_payload_locations(%n: index, %x: f32) -> (index, f32) {
+  %bounded = index.assume %n [range(%n, 0, 1024)] : index loc("sanitizer.loom":2:1)
+  %neg = scalar.negf<ninf> %x : f32 loc("sanitizer.loom":3:1)
+  func.return %bounded, %neg : index, f32 loc("sanitizer.loom":4:1)
+} loc("sanitizer.loom":1:1 to 5:1)
+
+// ----
+func.def @assertion_site_payload_locations(%n: index, %x: f32) -> (index, f32) {
+  %bounded = sanitizer.assert.value %n [range(%n, 0, 1024)] : index loc(tagged<sanitizer_site, "0002030201010000", "sanitizer.loom":2:1>)
+  %6 = sanitizer.assert.value %x [not_inf(%x)] : f32 loc(tagged<sanitizer_site, "00020a0601010000", "sanitizer.loom":3:1>)
+  %neg$5 = scalar.negf<ninf> %6 : f32 loc("sanitizer.loom":3:1)
+  %neg$7 = sanitizer.assert.value %neg$5 [not_inf(%neg$5)] : f32 loc(tagged<sanitizer_site, "00020a0601010000", "sanitizer.loom":3:1>)
+  func.return %bounded, %neg$7 : index, f32 loc("sanitizer.loom":4:1)
+} loc("sanitizer.loom":1:1 to 5:1)

@@ -798,6 +798,34 @@ static iree_status_t loom_print_location_source(
   return iree_ok_status();
 }
 
+static iree_status_t loom_print_byte_hex_string_literal(
+    loom_output_stream_t* stream, const uint8_t* data, uint32_t data_length) {
+  static const char kHexDigits[] = "0123456789abcdef";
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '"'));
+  for (uint32_t i = 0; i < data_length; ++i) {
+    char encoded[] = {
+        kHexDigits[data[i] >> 4],
+        kHexDigits[data[i] & 0x0F],
+    };
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(
+        stream, iree_make_string_view(encoded, IREE_ARRAYSIZE(encoded))));
+  }
+  return loom_output_stream_write_char(stream, '"');
+}
+
+static iree_status_t loom_print_location_tag(loom_output_stream_t* stream,
+                                             loom_location_tag_t tag) {
+  if (tag == LOOM_LOCATION_TAG_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "tagged location has invalid tag 0");
+  }
+  iree_string_view_t name = loom_location_tag_name(tag);
+  if (!iree_string_view_is_empty(name)) {
+    return loom_output_stream_write(stream, name);
+  }
+  return loom_output_stream_write_format(stream, "%u", (unsigned)tag);
+}
+
 static iree_status_t loom_print_location_body(loom_output_stream_t* stream,
                                               const loom_module_t* module,
                                               loom_location_id_t location_id) {
@@ -857,6 +885,25 @@ static iree_status_t loom_print_location_body(loom_output_stream_t* stream,
       IREE_RETURN_IF_ERROR(loom_print_string_literal(
           stream, iree_make_string_view((const char*)entry->opaque.data,
                                         entry->opaque.data_length)));
+      return loom_output_stream_write_char(stream, '>');
+    }
+    case LOOM_LOCATION_TAGGED: {
+      if (entry->tagged.data_length > 0 && !entry->tagged.data) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "tagged location has data_length %u but NULL data",
+            entry->tagged.data_length);
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "tagged<"));
+      IREE_RETURN_IF_ERROR(loom_print_location_tag(stream, entry->tagged.tag));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      IREE_RETURN_IF_ERROR(loom_print_byte_hex_string_literal(
+          stream, entry->tagged.data, entry->tagged.data_length));
+      if (entry->tagged.child != LOOM_LOCATION_UNKNOWN) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+        IREE_RETURN_IF_ERROR(
+            loom_print_location_body(stream, module, entry->tagged.child));
+      }
       return loom_output_stream_write_char(stream, '>');
     }
     default:
@@ -961,6 +1008,21 @@ iree_status_t loom_print_attr(loom_output_stream_t* stream,
             stream, "%" PRId64, attr->i64_array[i]));
       }
       return loom_output_stream_write_char(stream, ']');
+    }
+    case LOOM_ATTR_BYTES: {
+      static const char kHexDigits[] = "0123456789abcdef";
+      iree_const_byte_span_t bytes = loom_attr_as_bytes(*attr);
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "bytes(\""));
+      for (iree_host_size_t i = 0; i < bytes.data_length; ++i) {
+        char hex[2] = {
+            kHexDigits[bytes.data[i] >> 4],
+            kHexDigits[bytes.data[i] & 0x0F],
+        };
+        IREE_RETURN_IF_ERROR(loom_output_stream_write(
+            stream, iree_make_string_view(hex, IREE_ARRAYSIZE(hex))));
+      }
+      return loom_output_stream_write_cstring(stream, "\")");
     }
     case LOOM_ATTR_TYPE:
       if (module && attr->type_id < module->types.count) {

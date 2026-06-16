@@ -6,6 +6,8 @@
 
 """Tests for loom.ir — in-memory IR representation."""
 
+import math
+
 import pytest
 
 from loom.ir import (
@@ -64,6 +66,7 @@ from loom.ir import (
     Symbol,
     SymbolKind,
     SymbolRef,
+    TaggedLocation,
     TiedResult,
     TypeKind,
     TypeTable,
@@ -458,6 +461,13 @@ class TestLocations:
         assert loc.data == b"node_id=42"
         assert loc.flags == 0
 
+    def test_tagged_location(self) -> None:
+        loc = TaggedLocation(tag=1, child=2, data=b"\x01\x2a\xff")
+        assert loc.tag == 1
+        assert loc.child == 2
+        assert loc.data == b"\x01\x2a\xff"
+        assert loc.flags == 0
+
     def test_unknown_is_zero(self) -> None:
         assert LOCATION_UNKNOWN == 0
 
@@ -472,6 +482,13 @@ class TestLocations:
     def test_fused_location_hashable(self) -> None:
         a = FusedLocation(children=(1, 2))
         b = FusedLocation(children=(1, 2))
+        assert hash(a) == hash(b)
+        s = {a, b}
+        assert len(s) == 1
+
+    def test_tagged_location_hashable(self) -> None:
+        a = TaggedLocation(tag=1, child=2, data=b"\x01")
+        b = TaggedLocation(tag=1, child=2, data=b"\x01")
         assert hash(a) == hash(b)
         s = {a, b}
         assert len(s) == 1
@@ -1030,6 +1047,12 @@ class TestLocationTable:
         b = FusedLocation(children=(1, 2))
         assert lt.add(a) == lt.add(b)
 
+    def test_tagged_dedup(self) -> None:
+        lt = LocationTable()
+        a = TaggedLocation(tag=1, child=2, data=b"\x01")
+        b = TaggedLocation(tag=1, child=2, data=b"\x01")
+        assert lt.add(a) == lt.add(b)
+
     def test_iteration(self) -> None:
         lt = LocationTable()
         lt.add(FileLocation(0, 1, 1, 1, 10))
@@ -1077,7 +1100,7 @@ class TestPredicateEvaluation:
             args=tuple(PredicateArg(tag=t, value=v) for t, v in args),
         )
 
-    def _vals(self, **kwargs: int) -> dict[str, int]:
+    def _vals(self, **kwargs: int | float) -> dict[str, int | float]:
         """Build a values dict with bare name keys."""
         return dict(kwargs)
 
@@ -1185,6 +1208,12 @@ class TestPredicateEvaluation:
                 self._vals(N=n),
             ), f"pow2({n}) should be false"
 
+    def test_pow2_rejects_float(self) -> None:
+        assert not evaluate_predicate(
+            self._pred("pow2", ("value", "N")),
+            self._vals(N=8.0),
+        )
+
     def test_range_inside(self) -> None:
         assert evaluate_predicate(
             self._pred("range", ("value", "M"), ("const", 32), ("const", 512)),
@@ -1200,6 +1229,40 @@ class TestPredicateEvaluation:
         pred = self._pred("range", ("value", "M"), ("const", 32), ("const", 512))
         assert not evaluate_predicate(pred, self._vals(M=31))
         assert not evaluate_predicate(pred, self._vals(M=513))
+
+    def test_not_nan(self) -> None:
+        assert evaluate_predicate(
+            self._pred("not_nan", ("value", "X")),
+            self._vals(X=math.inf),
+        )
+        assert not evaluate_predicate(
+            self._pred("not_nan", ("value", "X")),
+            self._vals(X=math.nan),
+        )
+
+    def test_not_inf(self) -> None:
+        assert evaluate_predicate(
+            self._pred("not_inf", ("value", "X")),
+            self._vals(X=math.nan),
+        )
+        assert not evaluate_predicate(
+            self._pred("not_inf", ("value", "X")),
+            self._vals(X=math.inf),
+        )
+
+    def test_finite(self) -> None:
+        assert evaluate_predicate(
+            self._pred("finite", ("value", "X")),
+            self._vals(X=1.0),
+        )
+        assert not evaluate_predicate(
+            self._pred("finite", ("value", "X")),
+            self._vals(X=math.inf),
+        )
+        assert not evaluate_predicate(
+            self._pred("finite", ("value", "X")),
+            self._vals(X=math.nan),
+        )
 
     def test_missing_value_always_true(self) -> None:
         """Missing values can't be evaluated — defer judgment."""

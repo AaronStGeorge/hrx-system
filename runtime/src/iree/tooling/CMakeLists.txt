@@ -136,12 +136,45 @@ iree_cc_library(
     "function_io.c"
   DEPS
     ::numpy_io
+    ::value_io
     iree::base
     iree::hal
     iree::io::stream
     iree::modules::hal
     iree::vm
   PUBLIC
+)
+
+iree_cc_library(
+  NAME
+    value_io
+  HDRS
+    "value_io.h"
+  SRCS
+    "value_io.c"
+  DEPS
+    ::numpy_io
+    iree::base
+    iree::hal
+    iree::io::stream
+  PUBLIC
+)
+
+iree_cc_test(
+  NAME
+    value_io_test
+  SRCS
+    "value_io_test.cc"
+  DEPS
+    ::value_io
+    iree::base
+    iree::hal
+    iree::io::file_handle
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::testing::temp_file
+  LABELS
+    "requires-filesystem"
 )
 
 iree_cc_test(

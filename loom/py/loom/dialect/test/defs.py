@@ -256,6 +256,25 @@ test_constant = Op(
 )
 
 # ============================================================================
+# test.effectful_constant — exact facts behind an observable boundary
+# ============================================================================
+
+test_effectful_constant = Op(
+    "test.effectful_constant",
+    group=test_ops,
+    doc=("Unknown-effect test op with exact result facts. This guards the canonicalizer contract that fact folding may use exact facts from an effectful op without erasing the op itself."),
+    results=[Result("result", INTEGER)],
+    attrs=[AttrDef("value", "any", doc="The exact integer value fact.")],
+    traits=[UNKNOWN_EFFECTS],
+    facts="loom_test_effectful_constant_facts",
+    verify="loom_test_constant_verify",
+    format=[Attr("value"), COLON, TypeOf("result")],
+    examples=[
+        "%value = test.effectful_constant 42 : i64",
+    ],
+)
+
+# ============================================================================
 # test.clause_* — named clause format helpers
 # ============================================================================
 
@@ -2337,6 +2356,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_neg,
     test_cast,
     test_constant,
+    test_effectful_constant,
     test_use,
     test_convergent,
     test_cmp,

@@ -13,6 +13,7 @@
 #include "iree/hal/allocator.h"
 #include "iree/hal/buffer.h"
 #include "iree/hal/executable_cache.h"
+#include "iree/hal/memory/asan.h"
 #include "iree/hal/semaphore.h"
 #include "iree/hal/topology.h"
 
@@ -577,6 +578,33 @@ typedef struct iree_hal_device_timing_spec_t {
 } iree_hal_device_timing_spec_t;
 
 //===----------------------------------------------------------------------===//
+// Sanitizer facts
+//===----------------------------------------------------------------------===//
+
+// Enabled sanitizer families for a realized HAL device.
+typedef uint32_t iree_hal_device_sanitizer_flags_t;
+typedef enum iree_hal_device_sanitizer_flag_bits_e {
+  // No sanitizer support is enabled for this device instance.
+  IREE_HAL_DEVICE_SANITIZER_FLAG_NONE = 0u,
+  // HAL address-sanitizer support is enabled for this device instance.
+  IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN = 1u << 0,
+} iree_hal_device_sanitizer_flag_bits_t;
+
+// Immutable ASAN configuration for a realized HAL device.
+typedef struct iree_hal_device_asan_spec_t {
+  // Allocation-shaping policy used by HAL pools on this device.
+  iree_hal_asan_pool_options_t pool_options;
+} iree_hal_device_asan_spec_t;
+
+// Immutable sanitizer configuration for a realized HAL device.
+typedef struct iree_hal_device_sanitizer_spec_t {
+  // Enabled sanitizer families for this device instance.
+  iree_hal_device_sanitizer_flags_t flags;
+  // ASAN configuration when IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN is set.
+  iree_hal_device_asan_spec_t asan;
+} iree_hal_device_sanitizer_spec_t;
+
+//===----------------------------------------------------------------------===//
 // Executable target facts
 //===----------------------------------------------------------------------===//
 
@@ -760,6 +788,8 @@ typedef struct iree_hal_device_spec_params_t {
   const iree_hal_device_timing_spec_t* timing;
   // Executable capability facet.
   const iree_hal_device_executable_spec_t* executables;
+  // Sanitizer configuration facet.
+  const iree_hal_device_sanitizer_spec_t* sanitizer;
   // Number of driver-local extension facets.
   iree_host_size_t facet_count;
   // Driver-local extension facets.
@@ -842,6 +872,10 @@ iree_hal_device_spec_timing(const iree_hal_device_spec_t* spec);
 // Returns the executable capability facet.
 IREE_API_EXPORT const iree_hal_device_executable_spec_t*
 iree_hal_device_spec_executables(const iree_hal_device_spec_t* spec);
+
+// Returns the sanitizer configuration facet.
+IREE_API_EXPORT const iree_hal_device_sanitizer_spec_t*
+iree_hal_device_spec_sanitizer(const iree_hal_device_spec_t* spec);
 
 // Returns the number of driver-local extension facets.
 IREE_API_EXPORT iree_host_size_t

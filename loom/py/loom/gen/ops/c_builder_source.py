@@ -67,6 +67,21 @@ def _emit_builder_predicate_list_storage(
     lines.append(f"          &{storage}));")
 
 
+def _emit_builder_bytes_storage(
+    lines: list[str],
+    *,
+    source: str,
+    storage: str,
+    op_name: str,
+    field_name: str,
+) -> None:
+    """Emits C code that copies a byte attr payload into the builder."""
+    lines.append(f"  const uint8_t* {storage} = NULL;")
+    lines.append("  IREE_RETURN_IF_ERROR(loom_builder_copy_bytes_attr_storage(")
+    lines.append(f'      builder, {source}, IREE_SV("{op_name} {field_name}"),')
+    lines.append(f"      &{storage}));")
+
+
 def _generate_builder_implementation(
     op: Op,
     prefix: str,
@@ -585,6 +600,7 @@ def _generate_builder_implementation(
                 "symbol": f"loom_attr_symbol({name})",
                 "type": f"loom_attr_type({name})",
                 "encoding": f"loom_attr_encoding({name})",
+                "bytes": f"loom_attr_bytes(_{name}_storage, (uint32_t){name}.data_length)",
                 "any": name,
             }
             constructor = constructor_map.get(attr_type, name)
@@ -618,6 +634,21 @@ def _generate_builder_implementation(
                     lines.append("      loom_module_make_canonical_attr_dict(")
                     lines.append(f"          builder->module, {name},")
                     lines.append(f"          &loom_op_attrs(*out_op)[{idx}]));")
+            elif attr_type == "bytes":
+                storage = f"_{name}_storage"
+                _emit_builder_bytes_storage(
+                    lines,
+                    source=name,
+                    storage=storage,
+                    op_name=op.name,
+                    field_name=name,
+                )
+                if is_optional:
+                    lines.append(f"  if ({name}.data_length > 0) {{")
+                    lines.append(f"    loom_op_attrs(*out_op)[{idx}] = {constructor};")
+                    lines.append("  }")
+                else:
+                    lines.append(f"  loom_op_attrs(*out_op)[{idx}] = {constructor};")
             elif optional_flag:
                 lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
                 lines.append(f"    loom_op_attrs(*out_op)[{idx}] = {constructor};")

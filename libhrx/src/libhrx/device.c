@@ -8,8 +8,14 @@
 
 #include "hrx_internal.h"
 
-static hrx_status_t hrx_device_total_memory_from_spec(
-    hrx_device_t device, iree_device_size_t* out_total) {
+hrx_status_t hrx_device_query_total_memory_from_spec(
+    hrx_device_t device, bool* out_known, iree_device_size_t* out_total) {
+  if (!device || !out_known || !out_total) {
+    return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "NULL argument");
+  }
+  *out_known = false;
+  *out_total = 0;
+
   iree_hal_device_observation_t observation;
   iree_hal_device_observation_initialize(
       IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY, &observation);
@@ -17,13 +23,11 @@ static hrx_status_t hrx_device_total_memory_from_spec(
       iree_hal_device_observation_populate_memory_total_from_spec(
           iree_hal_device_spec(device->hal_device), &observation);
   if (!iree_status_is_ok(status)) return hrx_status_from_iree(status);
-  if (!iree_all_bits_set(observation.memory.flags,
-                         IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_TOTAL_BYTES)) {
-    return hrx_make_status(
-        HRX_STATUS_UNAVAILABLE,
-        "HAL device spec did not provide a known total memory capacity");
+  if (iree_all_bits_set(observation.memory.flags,
+                        IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_TOTAL_BYTES)) {
+    *out_known = true;
+    *out_total = observation.memory.total_bytes;
   }
-  *out_total = observation.memory.total_bytes;
   return hrx_ok_status();
 }
 
@@ -91,9 +95,15 @@ hrx_status_t hrx_device_get_property(hrx_device_t device,
                                "buffer too small for uint64_t");
       }
       iree_device_size_t total_bytes = 0;
-      hrx_status_t status =
-          hrx_device_total_memory_from_spec(device, &total_bytes);
+      bool total_memory_known = false;
+      hrx_status_t status = hrx_device_query_total_memory_from_spec(
+          device, &total_memory_known, &total_bytes);
       if (!hrx_status_is_ok(status)) return status;
+      if (!total_memory_known) {
+        return hrx_make_status(
+            HRX_STATUS_UNAVAILABLE,
+            "HAL device spec did not provide a known total memory capacity");
+      }
       *(uint64_t*)value = (uint64_t)total_bytes;
       return status;
     }

@@ -65,7 +65,7 @@ function(iree_cc_test)
     _RULE
     ""
     "NAME;RESOURCE_GROUP"
-    "ARGS;SRCS;COPTS;DEFINES;LINKOPTS;DATA;DEPS;LABELS;GROUP;TIMEOUT;SANITIZER_SUPPRESSIONS"
+    "ARGS;SRCS;COPTS;DEFINES;LINKOPTS;DATA;DEPS;LABELS;GROUP;TIMEOUT;ENV;SANITIZER_SUPPRESSIONS"
     ${ARGN}
   )
 
@@ -152,6 +152,7 @@ function(iree_cc_test)
       ${_RULE_SANITIZER_SUPPRESSIONS}
     )
   endif()
+  list(APPEND _ENVIRONMENT_VARS ${_RULE_ENV})
 
   # Case for cross-compiling towards Android.
   if(ANDROID)

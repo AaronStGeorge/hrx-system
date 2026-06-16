@@ -73,9 +73,11 @@ void iree_hal_amdgpu_transient_buffer_pool_deinitialize(
 // The wrapper is returned by queue_alloca before its backing allocation becomes
 // user-visible. The queue stages a borrowed provider buffer view immediately so
 // later queue submissions can resolve device pointers, then commits that staged
-// backing in the notification ring's pre-signal phase. queue_dealloca releases
-// the pool reservation at submit time with a death frontier and decommits the
-// wrapper in the pre-signal phase before publishing dealloca completion.
+// backing in the notification ring's pre-signal phase. queue_dealloca may
+// publish pool reuse metadata with a death frontier during submission, but
+// target-visible release effects such as decommit, sanitizer poisoning, or VMM
+// state changes happen in the notification ring's pre-signal phase after
+// dealloca waits are satisfied and before dealloca signals are published.
 iree_status_t iree_hal_amdgpu_transient_buffer_create(
     iree_hal_buffer_placement_t placement, iree_hal_buffer_params_t params,
     iree_device_size_t allocation_size, iree_device_size_t byte_length,
@@ -135,8 +137,8 @@ void iree_hal_amdgpu_transient_buffer_abort_dealloca(iree_hal_buffer_t* buffer);
 // Returns the attached pool reservation without transferring ownership.
 //
 // Used by cold diagnostic/profiling paths that need to describe the reservation
-// before queue_dealloca releases it. Returns false if |buffer| has no armed
-// reservation.
+// before queue_dealloca releases its reuse metadata. Returns false if |buffer|
+// has no armed reservation.
 bool iree_hal_amdgpu_transient_buffer_query_reservation(
     iree_hal_buffer_t* buffer, iree_hal_pool_t** out_pool,
     iree_hal_pool_reservation_t* out_reservation);

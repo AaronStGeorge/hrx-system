@@ -2211,6 +2211,45 @@ static bool loom_amdgpu_memory_access_select_packet(
       descriptor_domain, kind, allow_global_smem, access, out_diagnostic);
 }
 
+bool loom_amdgpu_memory_access_select_flat_global_address(
+    const loom_module_t* module,
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_memory_operation_kind_t kind,
+    const loom_low_source_memory_access_plan_t* source, loom_type_t vector_type,
+    loom_amdgpu_memory_access_t* out_access,
+    loom_amdgpu_memory_access_diagnostic_t* out_diagnostic) {
+  *out_access = (loom_amdgpu_memory_access_t){
+      .source = *source,
+      .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
+      .descriptor = NULL,
+  };
+  *out_diagnostic = (loom_amdgpu_memory_access_diagnostic_t){0};
+  if (source->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL &&
+      source->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT &&
+      source->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR) {
+    out_diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_MEMORY_SPACE;
+    return false;
+  }
+  if (!loom_amdgpu_memory_access_register_footprint(vector_type, out_access,
+                                                    out_diagnostic)) {
+    return false;
+  }
+  if (out_access->source.vector_lane_byte_stride <= 0 ||
+      out_access->source.vector_lane_byte_stride > UINT32_MAX ||
+      !loom_amdgpu_memory_access_has_contiguous_vector_lanes(out_access)) {
+    out_diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE;
+    return false;
+  }
+  if (!loom_amdgpu_memory_access_static_byte_offset_is_usable(
+          out_access->source.static_byte_offset, out_diagnostic)) {
+    return false;
+  }
+  return loom_amdgpu_memory_access_try_select_global_flat(
+      module, descriptor_set, kind, out_access, out_diagnostic);
+}
+
 static bool loom_amdgpu_memory_access_make_32bit_chunk_source(
     const loom_low_source_memory_access_plan_t* source,
     uint32_t source_register_offset, uint32_t source_register_count,

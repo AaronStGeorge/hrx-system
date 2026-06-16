@@ -34,6 +34,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _SCHEDULE_SALU,
     _SCHEDULE_SMEM_STORE,
     _SCHEDULE_VALU,
+    _SCHEDULE_VMEM_LOAD,
     _SCHEDULE_VMEM_LOAD_LDS,
     _SCHEDULE_WAIT_ALU,
     _SOURCE_INLINE_F32_ENCODING_ID,
@@ -67,6 +68,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _gfx940_core_overlays,
     _gfx950_core_overlays,
     _gfx1250_core_overlays,
+    _predefined,
     _record_amdgpu_atomic_candidate,
     _validate_address_immediate_units,
     _with_execution_mask_state_read,
@@ -110,6 +112,7 @@ from loom.target.low_descriptors import (
     RegClassAlt,
     RegClassAltFlag,
     RegClassFlag,
+    ScheduleClassFlag,
 )
 
 
@@ -256,6 +259,17 @@ def test_trans_schedule_classes_accept_descriptor_latency_overrides() -> None:
             latency_cycles_by_descriptor_key={"amdgpu.v_bad_f32": 4}
         ),
     )
+
+
+def test_mode_control_schedule_class_covers_generated_descriptors() -> None:
+    for descriptor_set in _amdgpu_core_descriptor_set_bases():
+        schedule_classes = {
+            schedule_class.name: schedule_class
+            for schedule_class in descriptor_set.schedule_classes
+        }
+        schedule_class = schedule_classes[_SCHEDULE_MODE_CONTROL]
+
+        assert ScheduleClassFlag.CONTROL in schedule_class.flags
 
 
 def test_trans_descriptors_read_exec_state() -> None:
@@ -663,6 +677,287 @@ def test_atomic_descriptor_candidates_have_descriptor_refs() -> None:
     }.issubset(descriptor_ref_keys)
 
 
+def _assert_s_sendmsg_low_asm_form(descriptor: AmdgpuDescriptorOverlay) -> None:
+    assert descriptor.asm_forms is not None
+    assert len(descriptor.asm_forms) == 1
+    asm_form = descriptor.asm_forms[0]
+    assert asm_form.mnemonic == "s_sendmsg"
+    assert asm_form.operands == ("m0",)
+    assert tuple(immediate.field_name for immediate in asm_form.immediates) == (
+        "message",
+    )
+    assert tuple(immediate.name for immediate in asm_form.immediates) == ("message",)
+
+
+def test_feedback_control_descriptors_cover_execution_families() -> None:
+    for overlays in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        for descriptor_key in (
+            "amdgpu.s_sendmsg",
+            "amdgpu.s_sethalt",
+            "amdgpu.s_trap",
+        ):
+            descriptor = descriptors[descriptor_key]
+            assert descriptor.schedule_class == _SCHEDULE_MODE_CONTROL
+            assert descriptor.semantic_tag.startswith("control.")
+            if descriptor_key == "amdgpu.s_sendmsg":
+                _assert_s_sendmsg_low_asm_form(descriptor)
+
+        assert "amdgpu.s_sendmsg_rtn_b32" not in descriptors
+
+    for overlays in (
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        for descriptor_key in (
+            "amdgpu.s_sendmsg",
+            "amdgpu.s_sendmsg_rtn_b32",
+            "amdgpu.s_sethalt",
+            "amdgpu.s_trap",
+        ):
+            descriptor = descriptors[descriptor_key]
+            assert descriptor.schedule_class == _SCHEDULE_MODE_CONTROL
+            assert descriptor.semantic_tag.startswith("control.")
+            if descriptor_key == "amdgpu.s_sendmsg":
+                _assert_s_sendmsg_low_asm_form(descriptor)
+
+        assert descriptors["amdgpu.s_sendmsg_rtn_b32"].immediate_fields == ("SSRC0",)
+
+
+def test_symbol_relative_salu_descriptors_have_lossless_low_asm_forms() -> None:
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+
+        add_lo = descriptors["amdgpu.s_add_u32.rhs_symbol_rel32_lo"]
+        assert add_lo.asm_forms is not None
+        assert add_lo.asm_forms[0].mnemonic == "s_add_u32_rhs_symbol_rel32_lo"
+        assert add_lo.asm_forms[0].results == ("dst",)
+        assert add_lo.asm_forms[0].operands == ("lhs",)
+        assert tuple(
+            immediate.field_name for immediate in add_lo.asm_forms[0].immediates
+        ) == ("symbol", "byte_offset")
+
+        addc_hi = descriptors["amdgpu.s_addc_u32.rhs_symbol_rel32_hi"]
+        assert addc_hi.asm_forms is not None
+        assert addc_hi.asm_forms[0].mnemonic == "s_addc_u32_rhs_symbol_rel32_hi"
+        assert addc_hi.asm_forms[0].results == ("sum",)
+        assert addc_hi.asm_forms[0].operands == ("lhs",)
+        assert tuple(
+            immediate.field_name for immediate in addc_hi.asm_forms[0].immediates
+        ) == ("symbol", "byte_offset")
+
+
+def _assert_feedback_atomic64_overlay(
+    descriptor: AmdgpuDescriptorOverlay,
+    *,
+    mnemonic: str,
+    semantic_tag: str,
+    memory_space: MemorySpace,
+    payload_field_name: str,
+    payload_units: int,
+) -> None:
+    assert descriptor.mnemonic == mnemonic
+    assert descriptor.semantic_tag == semantic_tag
+    assert tuple(effect.memory_space for effect in descriptor.effects) == (
+        memory_space,
+        memory_space,
+    )
+    assert tuple(effect.width_bits for effect in descriptor.effects) == (64, 64)
+    payload_operand = next(
+        operand.descriptor_operand
+        for operand in descriptor.operands
+        if operand.descriptor_operand.field_name == payload_field_name
+    )
+    assert payload_operand.unit_count == payload_units
+    assert any(
+        operand.operand_type == "OPR_GPUMEM"
+        and operand.data_format_name == "FMT_NUM_U64"
+        and operand.size_bits == 64
+        for operand in descriptor.implicit_operands
+    )
+
+
+def test_feedback_atomic64_descriptors_cover_execution_families() -> None:
+    for overlays, wide_mnemonic_suffix in (
+        (_gfx940_core_overlays(), "x2"),
+        (_gfx950_core_overlays(), "x2"),
+        (_gfx11_core_overlays(), "u64"),
+        (_gfx12_core_overlays(), "u64"),
+        (_gfx1250_core_overlays(), "u64"),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+
+        _assert_feedback_atomic64_overlay(
+            descriptors["amdgpu.flat_atomic_add_u64"],
+            mnemonic=f"flat_atomic_add_{wide_mnemonic_suffix}",
+            semantic_tag="memory.generic.atomic.add.u64",
+            memory_space=MemorySpace.GENERIC,
+            payload_field_name="value",
+            payload_units=2,
+        )
+        _assert_feedback_atomic64_overlay(
+            descriptors["amdgpu.flat_atomic_add_u64_rtn"],
+            mnemonic=f"flat_atomic_add_{wide_mnemonic_suffix}",
+            semantic_tag="memory.generic.atomic.add.u64.return",
+            memory_space=MemorySpace.GENERIC,
+            payload_field_name="value",
+            payload_units=2,
+        )
+        _assert_feedback_atomic64_overlay(
+            descriptors["amdgpu.flat_atomic_cmpswap_b64_rtn"],
+            mnemonic=f"flat_atomic_cmpswap_{'x2' if wide_mnemonic_suffix == 'x2' else 'b64'}",
+            semantic_tag="memory.generic.atomic.compare_exchange.b64.return",
+            memory_space=MemorySpace.GENERIC,
+            payload_field_name="value",
+            payload_units=4,
+        )
+
+        _assert_feedback_atomic64_overlay(
+            descriptors["amdgpu.global_atomic_add_u64_saddr"],
+            mnemonic=f"global_atomic_add_{wide_mnemonic_suffix}",
+            semantic_tag="memory.global.atomic.add.u64",
+            memory_space=MemorySpace.GLOBAL,
+            payload_field_name="value",
+            payload_units=2,
+        )
+        _assert_feedback_atomic64_overlay(
+            descriptors["amdgpu.global_atomic_add_u64_rtn_saddr"],
+            mnemonic=f"global_atomic_add_{wide_mnemonic_suffix}",
+            semantic_tag="memory.global.atomic.add.u64.return",
+            memory_space=MemorySpace.GLOBAL,
+            payload_field_name="value",
+            payload_units=2,
+        )
+        _assert_feedback_atomic64_overlay(
+            descriptors["amdgpu.global_atomic_cmpswap_b64_rtn_saddr"],
+            mnemonic=(
+                f"global_atomic_cmpswap_{'x2' if wide_mnemonic_suffix == 'x2' else 'b64'}"
+            ),
+            semantic_tag="memory.global.atomic.compare_exchange.b64.return",
+            memory_space=MemorySpace.GLOBAL,
+            payload_field_name="value",
+            payload_units=4,
+        )
+
+
+def test_feedback_atomic64_descriptors_do_not_expand_source_atomic_candidates() -> None:
+    keys = {
+        candidate.descriptor_key for candidate in amdgpu_atomic_descriptor_candidates()
+    }
+
+    assert "amdgpu.flat_atomic_add_u64" not in keys
+    assert "amdgpu.flat_atomic_add_u64_rtn" not in keys
+    assert "amdgpu.flat_atomic_cmpswap_b64_rtn" not in keys
+    assert "amdgpu.global_atomic_add_u64_saddr" not in keys
+    assert "amdgpu.global_atomic_add_u64_rtn_saddr" not in keys
+    assert "amdgpu.global_atomic_cmpswap_b64_rtn_saddr" not in keys
+
+
+def test_flat_u8_load_descriptor_covers_execution_families() -> None:
+    for (
+        overlays,
+        mnemonic,
+        uses_flat_scratch,
+        uses_m0,
+        expected_saddr_fields,
+        expected_asm_immediates,
+    ) in (
+        (
+            _gfx940_core_overlays(),
+            "flat_load_ubyte",
+            True,
+            True,
+            (),
+            ("offset", "nt", "sc0", "sc1"),
+        ),
+        (
+            _gfx950_core_overlays(),
+            "flat_load_ubyte",
+            True,
+            True,
+            (),
+            ("offset", "nt", "sc0", "sc1"),
+        ),
+        (
+            _gfx11_core_overlays(),
+            "flat_load_u8",
+            True,
+            False,
+            (("SADDR", _predefined("NULL", "OPR_SREG")),),
+            ("offset", "glc", "slc", "dlc"),
+        ),
+        (
+            _gfx12_core_overlays(),
+            "flat_load_u8",
+            False,
+            False,
+            (),
+            ("offset", "nv", "scope", "th"),
+        ),
+        (
+            _gfx1250_core_overlays(),
+            "flat_load_u8",
+            False,
+            False,
+            (),
+            ("offset", "nv", "scope", "th"),
+        ),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        descriptor = descriptors["amdgpu.flat_load_u8"]
+        _assert_memory_width_overlay(
+            descriptor,
+            width_bits=8,
+            semantic_tag="memory.generic.load.u8.zero_extend",
+            mnemonic=mnemonic,
+            operand_units=1,
+            payload_field_name="dst",
+            effect_kind=EffectKind.READ,
+            memory_space=MemorySpace.GENERIC,
+            implicit_data_format="FMT_NUM_U8",
+            implicit_ignore_reason="modeled-by-generic-read-effect",
+        )
+        assert descriptor.schedule_class == _SCHEDULE_VMEM_LOAD
+        assert descriptor.asm_forms is not None
+        assert len(descriptor.asm_forms) == 1
+        asm_form = descriptor.asm_forms[0]
+        assert asm_form.mnemonic == mnemonic
+        assert asm_form.results == ("dst",)
+        expected_asm_operands = ("addr", "m0") if uses_m0 else ("addr",)
+        assert asm_form.operands == expected_asm_operands
+        assert (
+            tuple(immediate.field_name for immediate in asm_form.immediates)
+            == expected_asm_immediates
+        )
+        assert (
+            tuple(immediate.name for immediate in asm_form.immediates)
+            == expected_asm_immediates
+        )
+        assert (
+            any(
+                operand.operand_type == "OPR_FLAT_SCRATCH"
+                for operand in descriptor.implicit_operands
+            )
+            == uses_flat_scratch
+        )
+        assert descriptor.fixed_encoding_fields == expected_saddr_fields
+        assert (
+            any(
+                operand.operand_type == "OPR_SDST_M0"
+                for operand in descriptor.implicit_operands
+            )
+            == uses_m0
+        )
+
+
 def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:
     for overlays in (_gfx12_core_overlays(), _gfx1250_core_overlays()):
         for descriptor_prefix, descriptor_suffix in (
@@ -701,6 +996,21 @@ def test_gfx12_global_cache_controls_expose_scope_immediate() -> None:
                 if overlay.descriptor_key == descriptor_key
             )
             assert _immediate_default(descriptor.immediates, "scope") == 0
+
+
+def test_cdna_scoped_cache_controls_expose_sc_immediates() -> None:
+    for overlays in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+        for descriptor_key in (
+            "amdgpu.buffer_inv",
+            "amdgpu.buffer_wbl2",
+        ):
+            descriptor = next(
+                overlay
+                for overlay in overlays
+                if overlay.descriptor_key == descriptor_key
+            )
+            assert _immediate_default(descriptor.immediates, "sc0") == 0
+            assert _immediate_default(descriptor.immediates, "sc1") == 0
 
 
 def test_vop3_shift_immediate_is_constrained_to_inline_source_selector() -> None:

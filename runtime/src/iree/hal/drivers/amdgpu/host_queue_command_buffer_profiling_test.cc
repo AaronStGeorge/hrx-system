@@ -1443,8 +1443,7 @@ TEST_F(HostQueueCommandBufferProfilingTest,
                              "bin"),
       &executable_cache, &executable));
 
-  const uint64_t executable_id =
-      iree_hal_amdgpu_executable_profile_id(executable);
+  const uint64_t executable_id = iree_hal_amdgpu_executable_id(executable);
   EXPECT_TRUE(iree_hal_amdgpu_logical_device_should_profile_dispatch(
       test_device.logical_device(), executable_id, /*function_ordinal=*/0,
       /*command_buffer_id=*/0, /*command_index=*/0,

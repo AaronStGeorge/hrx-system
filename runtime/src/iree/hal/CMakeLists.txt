@@ -23,6 +23,7 @@ iree_cc_library(
     "channel_provider.h"
     "command_buffer.h"
     "device.h"
+    "device_event.h"
     "device_group.h"
     "device_spec.h"
     "driver.h"
@@ -62,6 +63,7 @@ iree_cc_library(
     "command_buffer_validation.h"
     "detail.h"
     "device.c"
+    "device_event.c"
     "device_group.c"
     "device_spec.c"
     "driver.c"
@@ -87,6 +89,7 @@ iree_cc_library(
     iree::base::internal
     iree::base::internal::path
     iree::base::threading
+    iree::hal::memory::asan
     iree::hal::utils::platform_topology
     iree::io::file_handle
   PUBLIC
