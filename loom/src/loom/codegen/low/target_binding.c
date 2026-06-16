@@ -343,6 +343,8 @@ iree_status_t loom_low_resolve_descriptor_packet(
   *out_packet = (loom_low_resolved_descriptor_packet_t){
       .op = op,
       .kind = LOOM_LOW_DESCRIPTOR_PACKET_NONE,
+      .resolution = LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_NONE,
+      .descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
   };
 
   loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
@@ -363,6 +365,7 @@ iree_status_t loom_low_resolve_descriptor_packet(
 
   out_packet->key = loom_low_string_or_empty(module, key_id);
   if (target->descriptor_set == NULL) {
+    out_packet->resolution = LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_MISSING;
     return iree_ok_status();
   }
   if (packet_descriptor_ordinal < -1) {
@@ -385,8 +388,10 @@ iree_status_t loom_low_resolve_descriptor_packet(
         target->descriptor_set, out_packet->key);
   }
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    out_packet->resolution = LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_MISSING;
     return iree_ok_status();
   }
+  out_packet->descriptor_ordinal = descriptor_ordinal;
 
   const loom_low_descriptor_t* descriptor =
       loom_low_descriptor_set_descriptor_at(target->descriptor_set,
@@ -397,18 +402,17 @@ iree_status_t loom_low_resolve_descriptor_packet(
                             " is out of range",
                             descriptor_ordinal);
   }
+  iree_string_view_t descriptor_key = loom_low_descriptor_set_string(
+      target->descriptor_set, descriptor->key_string_offset);
+  out_packet->descriptor_key = descriptor_key;
   if (packet_descriptor_ordinal >= 0) {
-    iree_string_view_t descriptor_key = loom_low_descriptor_set_string(
-        target->descriptor_set, descriptor->key_string_offset);
     if (!iree_string_view_equal(out_packet->key, descriptor_key)) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "low packet descriptor ordinal %" PRIu32
-                              " names '%.*s' but packet key is '%.*s'",
-                              descriptor_ordinal, (int)descriptor_key.size,
-                              descriptor_key.data, (int)out_packet->key.size,
-                              out_packet->key.data);
+      out_packet->resolution =
+          LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_ORDINAL_KEY_MISMATCH;
+      return iree_ok_status();
     }
   }
+  out_packet->resolution = LOOM_LOW_DESCRIPTOR_PACKET_RESOLUTION_RESOLVED;
   out_packet->descriptor = descriptor;
   return iree_ok_status();
 }
