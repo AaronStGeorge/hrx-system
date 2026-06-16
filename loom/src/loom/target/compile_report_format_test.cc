@@ -62,6 +62,25 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           /*.emitted_low_op_count=*/1,
       },
   };
+  loom_target_compile_report_source_low_memory_row_t source_low_memory_rows[] =
+      {
+          {
+              /*.function_name=*/IREE_SVL("branchy"),
+              /*.source_op_name=*/IREE_SVL("vector.load"),
+              /*.source_op_kind=*/43,
+              /*.memory_space=*/IREE_SVL("workgroup"),
+              /*.operation_kind=*/IREE_SVL("load"),
+              /*.packet_key=*/IREE_SVL("amdgpu.ds_read2_b32"),
+              /*.descriptor_id=*/11,
+              /*.element_byte_count=*/4,
+              /*.vector_lane_count=*/2,
+              /*.dynamic_stride_bytes=*/32,
+              /*.vector_lane_stride_bytes=*/8,
+              /*.bank_stride_words=*/8,
+              /*.bank_conflict_degree=*/8,
+              /*.bank_conflict_kind=*/IREE_SVL("bank-conflict-risk"),
+          },
+      };
   loom_target_compile_report_legalization_row_t target_legalization_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
@@ -176,6 +195,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   report.source_low_emitted_op_count = 5;
   IREE_ASSERT_OK(loom_target_compile_report_record_source_low_row(
       &report, &source_low_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_source_low_memory_row(
+      &report, &source_low_memory_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_legalization_row(
       &report, &target_legalization_rows[0]));
 
@@ -249,8 +270,23 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("source_low selected_ops=4"), 0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("source_low_memory rows=1"), 0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("source_low[0] function=branchy"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("source_low_memory[0] function=branchy "
+                        "source_op=vector.load memory_space=workgroup "
+                        "operation=load packet=amdgpu.ds_read2_b32 "
+                        "descriptor=11 element_bytes=4 vector_lanes=2 "
+                        "dynamic_stride_bytes=32 "
+                        "vector_lane_stride_bytes=8 bank_stride_words=8 "
+                        "bank_conflict_degree=8 "
+                        "bank_conflict_kind=bank-conflict-risk"),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("target_legalization legal=0 "
@@ -333,12 +369,29 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"source_low\":{\"selected_op_count\":4"), 0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"memory_count\":1"), 0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("\"rule_set_index\":0,"
                                           "\"rule_index\":1,\"plan_id\":null,"
                                           "\"plan_key\":null,"
                                           "\"descriptor_id\":7"),
                                   0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"memory_rows\":[{\"index\":0,\"function\":"
+                        "\"branchy\",\"source_op\":\"vector.load\","
+                        "\"source_op_kind\":43,\"memory_space\":\"workgroup\","
+                        "\"operation\":\"load\",\"packet\":"
+                        "\"amdgpu.ds_read2_b32\",\"descriptor_id\":11,"
+                        "\"element_bytes\":4,\"vector_lanes\":2,"
+                        "\"dynamic_stride_bytes\":32,"
+                        "\"vector_lane_stride_bytes\":8,"
+                        "\"bank_stride_words\":8,"
+                        "\"bank_conflict_degree\":8,\"bank_conflict_kind\":"
+                        "\"bank-conflict-risk\"}]"),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,

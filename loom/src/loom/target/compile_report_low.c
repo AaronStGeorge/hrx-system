@@ -622,6 +622,29 @@ iree_status_t loom_target_compile_report_record_low_lowering(
           loom_target_compile_report_record_source_low_row(report, &row));
     }
   }
+  for (iree_host_size_t i = 0; i < lower_result->memory_report_rows.count;
+       ++i) {
+    const loom_low_lower_memory_report_row_t* source_row =
+        &lower_result->memory_report_rows.rows[i];
+    const loom_target_compile_report_source_low_memory_row_t row = {
+        .function_name = source_row->function_name,
+        .source_op_name = source_row->source_op_name,
+        .source_op_kind = source_row->source_op_kind,
+        .memory_space = source_row->memory_space,
+        .operation_kind = source_row->operation_kind,
+        .packet_key = source_row->packet_key,
+        .descriptor_id = source_row->descriptor_id,
+        .element_byte_count = source_row->element_byte_count,
+        .vector_lane_count = source_row->vector_lane_count,
+        .dynamic_stride_bytes = source_row->dynamic_stride_bytes,
+        .vector_lane_stride_bytes = source_row->vector_lane_stride_bytes,
+        .bank_stride_words = source_row->bank_stride_words,
+        .bank_conflict_degree = source_row->bank_conflict_degree,
+        .bank_conflict_kind = source_row->bank_conflict_kind,
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_record_source_low_memory_row(report, &row));
+  }
   return iree_ok_status();
 }
 

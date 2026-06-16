@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "loom/ir/context.h"
 #include "loom/ops/cache.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/low/ops.h"
@@ -15,6 +16,7 @@
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
+#include "loom/target/arch/amdgpu/lower/memory_bank_conflict.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
@@ -141,6 +143,59 @@ static bool loom_amdgpu_memory_saddr_offset_facts(
   return true;
 }
 
+static uint32_t loom_amdgpu_memory_report_positive_u32(int64_t value) {
+  return value > 0 && value <= UINT32_MAX ? (uint32_t)value : 0;
+}
+
+static uint32_t loom_amdgpu_memory_report_dynamic_stride_bytes(
+    const loom_low_source_memory_access_plan_t* source) {
+  return source->dynamic_term_count == 1
+             ? loom_amdgpu_memory_report_positive_u32(
+                   source->dynamic_terms[0].byte_stride)
+             : 0;
+}
+
+static iree_status_t loom_amdgpu_record_memory_packet_report(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_packet_plan_t* packet) {
+  const loom_low_source_memory_access_plan_t* source = &packet->access.source;
+  if (!loom_low_lower_context_wants_report_rows(context) ||
+      source->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    return iree_ok_status();
+  }
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  const iree_string_view_t packet_key = loom_low_descriptor_set_string(
+      descriptor_set, packet->access.descriptor->key_string_offset);
+  const loom_amdgpu_memory_operation_kind_t operation_kind =
+      loom_amdgpu_memory_operation_kind_from_source(source);
+  const loom_amdgpu_memory_bank_conflict_summary_t bank_summary =
+      loom_amdgpu_memory_access_bank_conflict_summary(
+          &packet->access, loom_amdgpu_memory_bank_default_lds_geometry());
+  const loom_low_lower_memory_report_row_t row = {
+      .function_name = loom_low_lower_context_function_name(context),
+      .source_op_name =
+          loom_op_name(loom_low_lower_context_module(context), source_op),
+      .source_op_kind = source_op->kind,
+      .memory_space = loom_amdgpu_memory_space_name(source->memory_space),
+      .operation_kind = loom_amdgpu_memory_operation_name(operation_kind),
+      .packet_key = packet_key,
+      .descriptor_id = packet->access.descriptor->stable_id,
+      .element_byte_count = source->element_byte_count,
+      .vector_lane_count = source->vector_lane_count,
+      .dynamic_stride_bytes =
+          loom_amdgpu_memory_report_dynamic_stride_bytes(source),
+      .vector_lane_stride_bytes = loom_amdgpu_memory_report_positive_u32(
+          source->vector_lane_byte_stride),
+      .bank_stride_words = bank_summary.bank_stride_words,
+      .bank_conflict_degree = bank_summary.conflict_degree,
+      .bank_conflict_kind =
+          loom_amdgpu_memory_bank_conflict_kind_key(bank_summary.kind),
+  };
+  return loom_low_lower_record_memory_report_row(context, &row);
+}
+
 static iree_status_t loom_amdgpu_emit_memory_packet(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_packet_plan_t* packet,
@@ -158,8 +213,9 @@ static iree_status_t loom_amdgpu_emit_memory_packet(
       context, &descriptor, operands, operand_count, attrs, result_types,
       result_count, /*tied_results=*/NULL, /*tied_result_count=*/0,
       source_op->location, out_op));
-  return loom_low_lower_record_source_memory_access(context, *out_op,
-                                                    &packet->access.source);
+  IREE_RETURN_IF_ERROR(loom_low_lower_record_source_memory_access(
+      context, *out_op, &packet->access.source));
+  return loom_amdgpu_record_memory_packet_report(context, source_op, packet);
 }
 
 static bool loom_amdgpu_memory_descriptor_has_implicit_resource_operand(

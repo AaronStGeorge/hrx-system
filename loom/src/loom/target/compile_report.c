@@ -47,6 +47,8 @@ void loom_target_compile_report_deinitialize(
   loom_target_compile_report_row_list_deinitialize(allocator,
                                                    &report->source_low_rows);
   loom_target_compile_report_row_list_deinitialize(
+      allocator, &report->source_low_memory_rows);
+  loom_target_compile_report_row_list_deinitialize(
       allocator, &report->target_legalization_rows);
   *report = (loom_target_compile_report_t){0};
 }
@@ -55,6 +57,7 @@ static bool loom_target_compile_report_has_rows(
     const loom_target_compile_report_t* report) {
   return report->pressure_rows.count != 0 || report->spill_rows.count != 0 ||
          report->entry_rows.count != 0 || report->source_low_rows.count != 0 ||
+         report->source_low_memory_rows.count != 0 ||
          report->target_legalization_rows.count != 0;
 }
 
@@ -145,9 +148,11 @@ iree_status_t loom_target_compile_report_clone(
   target.pressure_rows = (loom_target_compile_report_row_list_t){0};
   target.spill_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_rows = (loom_target_compile_report_row_list_t){0};
+  target.source_low_memory_rows = (loom_target_compile_report_row_list_t){0};
   target.target_legalization_rows = (loom_target_compile_report_row_list_t){0};
   if (source->entry_rows.count == 0 && source->pressure_rows.count == 0 &&
       source->spill_rows.count == 0 && source->source_low_rows.count == 0 &&
+      source->source_low_memory_rows.count == 0 &&
       source->target_legalization_rows.count == 0) {
     *out_target = target;
     return iree_ok_status();
@@ -175,6 +180,12 @@ iree_status_t loom_target_compile_report_clone(
         &source->source_low_rows,
         sizeof(loom_target_compile_report_source_low_row_t), allocator,
         &target.source_low_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->source_low_memory_rows,
+        sizeof(loom_target_compile_report_source_low_memory_row_t), allocator,
+        &target.source_low_memory_rows);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_row_list_clone(
@@ -535,6 +546,14 @@ iree_status_t loom_target_compile_report_record_source_low_row(
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
   return loom_target_compile_report_row_list_append(
       &report->source_low_rows, sizeof(*row), report->allocator, row);
+}
+
+iree_status_t loom_target_compile_report_record_source_low_memory_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_source_low_memory_row_t* row) {
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
+  return loom_target_compile_report_row_list_append(
+      &report->source_low_memory_rows, sizeof(*row), report->allocator, row);
 }
 
 static void loom_target_compile_report_count_legalization_action(

@@ -92,8 +92,8 @@ iree-bazel-run \
     loom/py/loom/importers/tilelang/testdata/tileops.py
 ```
 
-The shared fixture runner and source annotation format are documented in
-`../check/README.md`.
+The shared fixture runner and source annotation format are documented in the
+[importer check README](/loom/py/loom/importers/check/README.md).
 
 ## Cooperative Grid Boundary
 
@@ -144,6 +144,25 @@ iree-bazel-run --config=asan \
 
 The checked stdout remains imported Loom IR. Oracle output is retained only
 when `--oracle-output-dir` or `--dump-temp-dir` is supplied.
+
+## Shared-Memory Feedback
+
+TileLang and Triton kernels are valuable shared-memory corpus inputs because
+they often encode padding, swizzling, staging, and vectorization choices that
+came from real tuning work. The importer path should preserve that useful
+layout intent where it can, then use Loom's AMDGPU feedback to explain the
+selected LDS packets and bank pattern. That is an onramp for ported kernels and
+kernel authors, not a promise that every TileLang surface becomes a permanent
+Loom product API.
+
+The canonical workflow and classification table live in the authoring guide's
+[AMDGPU shared-memory feedback](/loom/src/loom/test/corpus/authoring/README.md#amdgpu-shared-memory-feedback)
+section. For imported TileLang-style kernels, run the normal importer check or
+differential capture, keep the Loom compile report, and inspect the
+`source_low.memory_rows` array when source layout intent and selected packet
+consequence do not line up. Runtime profiling still decides final performance,
+but the compile report moves a large part of the tuning loop before
+code-object profiling and source reverse-mapping.
 
 ## AMDGPU Differential Reports
 
