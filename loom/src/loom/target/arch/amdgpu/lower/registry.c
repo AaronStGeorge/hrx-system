@@ -82,7 +82,7 @@ typedef uint8_t loom_amdgpu_report_key_kind_t;
 typedef uint8_t loom_amdgpu_lower_policy_bits_t;
 
 enum loom_amdgpu_storage_policy_e {
-  // Conservative callback-plan behavior: keep every source operand available.
+  // Conservative target-plan behavior: keep every source operand available.
   LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS = 0,
   // Structural value lowering owns its source operand demand policy.
   LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN = 1,
@@ -113,11 +113,11 @@ enum loom_amdgpu_preselect_policy_e {
   LOOM_AMDGPU_PRESELECT_NONE = 0,
   // Invoke structural value preselection for value-constructor special cases.
   LOOM_AMDGPU_PRESELECT_STRUCTURAL_VALUE_PLAN = 1,
-  // Invoke the ordinary callback selector before generated rules.
-  LOOM_AMDGPU_PRESELECT_PLAN_ID = 2,
-  // Invoke the ordinary callback selector and emit FMA literal diagnostics when
-  // no plan is selected.
-  LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC = 3,
+  // Invoke the target-owned plan selector before generated rules.
+  LOOM_AMDGPU_PRESELECT_TARGET_PLAN = 2,
+  // Invoke the target-owned plan selector and emit FMA literal diagnostics when
+  // no target plan is selected.
+  LOOM_AMDGPU_PRESELECT_TARGET_PLAN_FMA_DIAGNOSTIC = 3,
   // Maximum preselect-policy value accepted by dispatch row policy bits.
   LOOM_AMDGPU_PRESELECT_MAX = 3,
 };
@@ -156,11 +156,11 @@ typedef struct loom_amdgpu_lower_dispatch_row_t {
   uint8_t leading_source_count;
   // Compile-report plan-key family, or NONE when this row reports no plan key.
   loom_amdgpu_report_key_kind_t report_key_kind;
-  // Optional source-to-low plan selection hook.
+  // Optional source-to-low plan selection entrypoint.
   loom_amdgpu_lower_select_fn_t select;
-  // Optional source-to-low plan emission hook.
+  // Optional source-to-low plan emission entrypoint.
   loom_amdgpu_lower_emit_fn_t emit;
-  // Optional target-low legality verifier hook.
+  // Optional target-low legality provider entrypoint.
   loom_amdgpu_lower_verify_fn_t verify;
 } loom_amdgpu_lower_dispatch_row_t;
 static_assert(sizeof(loom_amdgpu_lower_dispatch_row_t) == 32,
@@ -1076,7 +1076,7 @@ static iree_status_t loom_amdgpu_select_dispatch_row(
   return row->select(context, source_op, row, out_plan);
 }
 
-static iree_status_t loom_amdgpu_select_plan_id(
+static iree_status_t loom_amdgpu_select_target_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
   const loom_amdgpu_lower_dispatch_row_t* row =
@@ -1089,7 +1089,7 @@ static iree_status_t loom_amdgpu_select_op(void* user_data,
                                            const loom_op_t* source_op,
                                            loom_low_lower_plan_t* out_plan) {
   (void)user_data;
-  return loom_amdgpu_select_plan_id(context, source_op, out_plan);
+  return loom_amdgpu_select_target_plan(context, source_op, out_plan);
 }
 
 static iree_status_t loom_amdgpu_preselect_op(void* user_data,
@@ -1106,11 +1106,12 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
     case LOOM_AMDGPU_PRESELECT_STRUCTURAL_VALUE_PLAN:
       return loom_amdgpu_preselect_structural_value_plan(context, source_op,
                                                          out_plan);
-    case LOOM_AMDGPU_PRESELECT_PLAN_ID:
-    case LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC: {
+    case LOOM_AMDGPU_PRESELECT_TARGET_PLAN:
+    case LOOM_AMDGPU_PRESELECT_TARGET_PLAN_FMA_DIAGNOSTIC: {
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_select_dispatch_row(context, source_op, row, out_plan));
-      if (preselect_policy == LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC &&
+      if (preselect_policy ==
+              LOOM_AMDGPU_PRESELECT_TARGET_PLAN_FMA_DIAGNOSTIC &&
           loom_low_lower_plan_is_empty(*out_plan)) {
         IREE_RETURN_IF_ERROR(
             loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(context,

@@ -76,7 +76,7 @@ def test_parse_dispatch_rows_captures_arguments() -> None:
                 loom_amdgpu_select_vector_packed_fmaf_dispatch,
                 loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL,
                 3,
-                LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC),
+                LOOM_AMDGPU_PRESELECT_TARGET_PLAN_FMA_DIAGNOSTIC),
     """
 
     rows = parse_dispatch_rows(source)
@@ -93,7 +93,7 @@ def test_parse_dispatch_rows_captures_arguments() -> None:
                 "loom_amdgpu_emit_vector_packed_ternary_dispatch",
                 "NULL",
                 "3",
-                "LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC",
+                "LOOM_AMDGPU_PRESELECT_TARGET_PLAN_FMA_DIAGNOSTIC",
             ),
         ),
     )
@@ -145,8 +145,8 @@ def test_validate_dispatch_rows_rejects_wrong_policy_namespace() -> None:
                 "select",
                 "emit",
                 "verify",
-                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
-                "LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC",
+                "LOOM_AMDGPU_PRESELECT_TARGET_PLAN",
+                "LOOM_AMDGPU_PRESELECT_TARGET_PLAN_FMA_DIAGNOSTIC",
             ),
         ),
     )
@@ -328,7 +328,7 @@ def test_validate_dispatch_rows_accepts_structural_value_policy() -> None:
     validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_dispatch_rows_accepts_structural_hook_policy() -> None:
+def test_validate_dispatch_rows_accepts_structural_storage_policy() -> None:
     rows = (
         DispatchRow(
             op_kind="LOOM_OP_KERNEL_BARRIER",
@@ -360,7 +360,7 @@ def test_validate_dispatch_rows_accepts_generated_preselect() -> None:
                 "emit",
                 "verify",
                 "3",
-                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+                "LOOM_AMDGPU_PRESELECT_TARGET_PLAN",
             ),
         ),
     )
@@ -383,7 +383,7 @@ def test_validate_dispatch_rows_accepts_generated_direct_preselect() -> None:
                 "emit",
                 "verify",
                 "LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN",
-                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+                "LOOM_AMDGPU_PRESELECT_TARGET_PLAN",
             ),
         ),
     )
@@ -429,7 +429,7 @@ def test_validate_dispatch_rows_accepts_value_data_source_policy() -> None:
                 "emit",
                 "verify",
                 "1",
-                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+                "LOOM_AMDGPU_PRESELECT_TARGET_PLAN",
             ),
         ),
     )
@@ -450,7 +450,7 @@ def test_validate_dispatch_rows_rejects_unowned_preselect() -> None:
                 "emit",
                 "verify",
                 "3",
-                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+                "LOOM_AMDGPU_PRESELECT_TARGET_PLAN",
             ),
         ),
     )
