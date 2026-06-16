@@ -253,7 +253,9 @@
           "bench_shared_memory_wave_i32_roundtrip",
           "case_shared_memory_wave_i32_roundtrip",
           "bench_shared_memory_wave_i32_roundtrip_static_offset",
-          "case_shared_memory_wave_i32_roundtrip_static_offset"
+          "case_shared_memory_wave_i32_roundtrip_static_offset",
+          "bench_shared_memory_cross_wave_i32_roundtrip_two_regions",
+          "case_shared_memory_cross_wave_i32_roundtrip_two_regions"
         ]
       }
     },
@@ -275,7 +277,11 @@
             "kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}",
             "view.load %scratch_view[%lane] : view<32xi32, #dense> -> i32",
             "view.store %value, %scratch_view[%scratch_index] : i32, view<40xi32, #dense>",
-            "view.load %scratch_view[%scratch_index] : view<40xi32, #dense> -> i32"
+            "view.load %scratch_view[%scratch_index] : view<40xi32, #dense> -> i32",
+            "vector.store %word0, %scratch_view[%lane] : vector<1xi32>, view<256xi32, #dense>",
+            "vector.store %word1, %scratch_view[%second_region_index] : vector<1xi32>, view<256xi32, #dense>",
+            "vector.load %scratch_view[%lane] : view<256xi32, #dense> -> vector<1xi32>",
+            "vector.load %scratch_view[%second_region_index] : view<256xi32, #dense> -> vector<1xi32>"
           ]
         }
       ]
@@ -302,9 +308,11 @@
             "\"status\":\"OK\"",
             "\"function\":\"shared_memory_wave_i32_roundtrip\"",
             "\"function\":\"shared_memory_wave_i32_roundtrip_static_offset\"",
+            "\"function\":\"shared_memory_cross_wave_i32_roundtrip_two_regions\"",
             "\"local_memory_bytes\":128",
             "\"local_memory_bytes\":160",
-            "\"local_memory_count\":4"
+            "\"local_memory_bytes\":1024",
+            "\"local_memory_count\":8"
           ]
         }
       },
