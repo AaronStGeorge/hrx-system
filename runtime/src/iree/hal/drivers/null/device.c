@@ -228,21 +228,6 @@ static iree_status_t iree_hal_null_device_trim(iree_hal_device_t* base_device) {
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_null_device_query_capabilities(
-    iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  // TODO(null): populate capabilities based on device features.
-  // For the null driver, we return a zeroed struct indicating no special
-  // hardware capabilities. Implementations should populate this with:
-  // - physical_device_uuid: A unique identifier for the physical device
-  // - flags: Capability bits (timeline semaphores, unified memory, etc.)
-  // - semaphore/buffer import/export types: External handle support
-  // - numa_node: NUMA node assignment for the device
-  // - driver_device_handle: Opaque handle to the underlying device
-  memset(out_capabilities, 0, sizeof(*out_capabilities));
-  return iree_ok_status();
-}
-
 static const iree_hal_device_spec_t* iree_hal_null_device_spec(
     iree_hal_device_t* base_device) {
   iree_hal_null_device_t* device = iree_hal_null_device_cast(base_device);
@@ -699,7 +684,6 @@ static const iree_hal_device_vtable_t iree_hal_null_device_vtable = {
     .replace_device_allocator = iree_hal_null_replace_device_allocator,
     .replace_channel_provider = iree_hal_null_replace_channel_provider,
     .trim = iree_hal_null_device_trim,
-    .query_capabilities = iree_hal_null_device_query_capabilities,
     .device_spec = iree_hal_null_device_spec,
     .sample_observation = iree_hal_null_device_sample_observation,
     .topology_info = iree_hal_null_device_topology_info,

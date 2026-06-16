@@ -71,8 +71,6 @@ IREE_API_EXPORT const char* iree_hal_replay_operation_code_string(
       return "replay.scope_end";
     case IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_TRIM:
       return "device.trim";
-    case IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_QUERY_CAPABILITIES:
-      return "device.query_capabilities";
     case IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_REFINE_TOPOLOGY_EDGE:
       return "device.refine_topology_edge";
     case IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_ASSIGN_TOPOLOGY_INFO:

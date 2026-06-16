@@ -8,11 +8,11 @@
 // on devices without needing real hardware or a full driver stack.
 //
 // The mock device implements the topology-related vtable methods (id,
-// query_capabilities, device_spec, topology_info, refine_topology_edge, and
-// assign_topology_info) with configurable behavior. It can optionally expose a
-// tiny metadata-only executable cache for tests that need executable objects
-// without real compiled kernels. All other vtable methods return
-// IREE_STATUS_UNIMPLEMENTED or zero/NULL as appropriate.
+// device_spec, topology_info, refine_topology_edge, and assign_topology_info)
+// with configurable behavior. It can optionally expose a tiny metadata-only
+// executable cache for tests that need executable objects without real compiled
+// kernels. All other vtable methods return IREE_STATUS_UNIMPLEMENTED or
+// zero/NULL as appropriate.
 //
 // This is intended for testing code that coordinates devices (device groups,
 // topology construction, multi-device scheduling) rather than code that
@@ -34,10 +34,6 @@ typedef struct iree_hal_mock_device_options_t {
   // this as its logical id and display name.
   iree_string_view_t identifier;
 
-  // Capabilities returned by iree_hal_device_query_capabilities().
-  // Zero-initialized is valid (no special capabilities).
-  iree_hal_device_capabilities_t capabilities;
-
   // Optional immutable spec returned by iree_hal_device_spec().
   // Retained by the mock when provided; otherwise a minimal spec is created.
   iree_hal_device_spec_t* device_spec;
@@ -50,8 +46,7 @@ typedef struct iree_hal_mock_device_options_t {
   bool executable_cache_enabled;
 } iree_hal_mock_device_options_t;
 
-// Initializes |out_options| with safe defaults (empty identifier, zeroed
-// capabilities).
+// Initializes |out_options| with safe defaults and an empty identifier.
 void iree_hal_mock_device_options_initialize(
     iree_hal_mock_device_options_t* out_options);
 

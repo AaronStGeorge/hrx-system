@@ -307,93 +307,6 @@ enum iree_hal_execute_flag_bits_t {
   IREE_HAL_EXECUTE_FLAG_BORROW_BINDING_TABLE_LIFETIME = 1ull << 0,
 };
 
-// Device capability flags bitfield.
-// These flags describe boolean device features used for topology construction.
-typedef uint64_t iree_hal_device_capability_bits_t;
-enum iree_hal_device_capability_bits_e {
-  IREE_HAL_DEVICE_CAPABILITY_NONE = 0,
-
-  // Native timeline semaphore support (not binary emulation).
-  IREE_HAL_DEVICE_CAPABILITY_TIMELINE_SEMAPHORES = 1ull << 0,
-
-  // Device memory is transparently accessible through one address space without
-  // driver-specific per-range access programming.
-  IREE_HAL_DEVICE_CAPABILITY_UNIFIED_MEMORY = 1ull << 1,
-  // Host accesses to device-visible memory are coherent without explicit
-  // application-managed cache maintenance.
-  IREE_HAL_DEVICE_CAPABILITY_HOST_COHERENT = 1ull << 2,
-  // Same-driver peer memory accesses are coherent without explicit
-  // application-managed cache maintenance.
-  IREE_HAL_DEVICE_CAPABILITY_PEER_COHERENT = 1ull << 3,
-
-  // Transfer capabilities.
-  // P2P DMA engine can copy directly between this device and peers.
-  // Does NOT imply load/store addressability — see PEER_ADDRESSABLE.
-  IREE_HAL_DEVICE_CAPABILITY_P2P_COPY = 1ull << 4,
-  IREE_HAL_DEVICE_CAPABILITY_HOST_ZERO_COPY_OK = 1ull << 5,
-  // Peer memory is load/store addressable (mapped BARs, unified memory, etc.).
-  // When set with P2P_COPY, buffers on this device can be directly accessed
-  // by peer devices without issuing a transfer command (NATIVE mode).
-  // When P2P_COPY is set without this flag, only the DMA engine can access
-  // peer memory — shader/host load/store will fault.
-  // Example: NVLink with large BAR → PEER_ADDRESSABLE + P2P_COPY.
-  // Example: PCIe P2P without BAR mapping → P2P_COPY only.
-  IREE_HAL_DEVICE_CAPABILITY_PEER_ADDRESSABLE = 1ull << 10,
-  // Shared virtual addressing is available across devices. This means a
-  // driver can make matching virtual addresses meaningful, but it does not
-  // imply those addresses are accessible by default; some runtimes require
-  // per-allocation or per-range access programming before device use.
-  IREE_HAL_DEVICE_CAPABILITY_SHARED_VIRTUAL_ADDRESS = 1ull << 11,
-
-  // Concurrency and atomics.
-  IREE_HAL_DEVICE_CAPABILITY_CONCURRENT_SAFE = 1ull << 6,
-  IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_DEVICE = 1ull << 7,
-  IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_SYSTEM = 1ull << 8,
-
-  // Isolation (MIG, SR-IOV, etc.).
-  IREE_HAL_DEVICE_CAPABILITY_ISOLATED = 1ull << 9,
-
-  // Reserved for future use (bits 12-63).
-};
-
-// Legacy scalar device capability snapshot.
-//
-// New topology construction uses cached immutable device specs plus
-// driver-local refinement. This scalar snapshot remains for drivers and tests
-// that have not yet been migrated to the richer spec surface.
-typedef struct iree_hal_device_capabilities_t {
-  // Capability flags bitfield.
-  iree_hal_device_capability_bits_t flags;
-
-  // External handle types this device supports.
-  iree_hal_topology_handle_type_t semaphore_export_types;
-  iree_hal_topology_handle_type_t semaphore_import_types;
-  iree_hal_topology_handle_type_t buffer_export_types;
-  iree_hal_topology_handle_type_t buffer_import_types;
-
-  // NUMA affinity (for CPU topology integration).
-  uint8_t numa_node;
-  uint8_t reserved[3];  // Padding to 4 bytes.
-
-  // Physical device identification (for detecting same physical GPU).
-  // Vulkan: VkPhysicalDeviceIDProperties.deviceUUID
-  // CUDA: cuDeviceGetUuid()
-  // AMDGPU: HSA_AMD_AGENT_INFO_DRIVER_UID
-  // D3D12: DXGI adapter LUID (expanded to 16 bytes)
-  uint8_t physical_device_uuid[16];
-  bool has_physical_device_uuid;
-
-  // Opaque driver-specific handle for same-driver aliasing detection.
-  // 0 means "not set." When two same-driver devices report the same non-zero
-  // handle, they are wrapping the same underlying driver object. Also
-  // available to refine_topology_edge for driver-specific refinement.
-  uintptr_t driver_device_handle;
-
-  // Device group index (for same-driver multi-device groups).
-  uint32_t device_group_index;
-  bool has_device_group;
-} iree_hal_device_capabilities_t;
-
 // Device's cached view of topology for fast compatibility checks.
 //
 // The bitmaps provide O(1) "can I interact with device X?" answers for the
@@ -579,14 +492,6 @@ IREE_API_EXPORT void iree_hal_device_replace_channel_provider(
 // suspending/parking instances.
 IREE_API_EXPORT
 iree_status_t iree_hal_device_trim(iree_hal_device_t* device);
-
-// Queries legacy scalar device capabilities.
-//
-// Immutable device specs are the source facts for topology construction; this
-// scalar surface remains for code that has not yet moved to specs.
-IREE_API_EXPORT iree_status_t iree_hal_device_query_capabilities(
-    iree_hal_device_t* device,
-    iree_hal_device_capabilities_t* out_capabilities);
 
 // Returns immutable facts for |device|.
 //
@@ -1075,10 +980,6 @@ typedef struct iree_hal_device_vtable_t {
       iree_hal_device_t* device, iree_hal_channel_provider_t* new_provider);
 
   iree_status_t(IREE_API_PTR* trim)(iree_hal_device_t* device);
-
-  iree_status_t(IREE_API_PTR* query_capabilities)(
-      iree_hal_device_t* device,
-      iree_hal_device_capabilities_t* out_capabilities);
 
   const iree_hal_device_spec_t*(IREE_API_PTR* device_spec)(
       iree_hal_device_t* device);

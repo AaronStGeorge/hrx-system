@@ -742,32 +742,6 @@ iree_hal_vulkan_device_query_cooperative_matrix_properties(
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_vulkan_logical_device_query_capabilities(
-    iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  iree_hal_vulkan_logical_device_t* device =
-      iree_hal_vulkan_logical_device_cast(base_device);
-  memset(out_capabilities, 0, sizeof(*out_capabilities));
-
-  memcpy(out_capabilities->physical_device_uuid,
-         device->physical_device.id_properties.deviceUUID,
-         sizeof(out_capabilities->physical_device_uuid));
-  out_capabilities->has_physical_device_uuid = true;
-  out_capabilities->driver_device_handle =
-      (uintptr_t)device->physical_device.handle;
-  out_capabilities->flags |= IREE_HAL_DEVICE_CAPABILITY_TIMELINE_SEMAPHORES |
-                             IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_DEVICE;
-  if (iree_all_bits_set(
-          device->enabled_extensions,
-          IREE_HAL_VULKAN_DEVICE_EXTENSION_KHR_EXTERNAL_MEMORY_FD)) {
-    out_capabilities->buffer_export_types |=
-        IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD;
-    out_capabilities->buffer_import_types |=
-        IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD;
-  }
-  return iree_ok_status();
-}
-
 static const iree_hal_device_spec_t* iree_hal_vulkan_logical_device_spec(
     iree_hal_device_t* base_device) {
   iree_hal_vulkan_logical_device_t* device =
@@ -2231,7 +2205,6 @@ static const iree_hal_device_vtable_t iree_hal_vulkan_logical_device_vtable = {
     .replace_device_allocator = iree_hal_vulkan_replace_device_allocator,
     .replace_channel_provider = iree_hal_vulkan_replace_channel_provider,
     .trim = iree_hal_vulkan_logical_device_trim,
-    .query_capabilities = iree_hal_vulkan_logical_device_query_capabilities,
     .device_spec = iree_hal_vulkan_logical_device_spec,
     .sample_observation = iree_hal_vulkan_logical_device_sample_observation,
     .topology_info = iree_hal_vulkan_logical_device_topology_info,

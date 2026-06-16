@@ -1828,105 +1828,6 @@ static iree_status_t iree_hal_amdgpu_logical_device_trim(
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_amdgpu_logical_device_query_capabilities(
-    iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  iree_hal_amdgpu_logical_device_t* logical_device =
-      iree_hal_amdgpu_logical_device_cast(base_device);
-  memset(out_capabilities, 0, sizeof(*out_capabilities));
-
-  if (logical_device->physical_device_count == 0) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "logical device has no physical devices (initialization incomplete)");
-  }
-
-  // A multi-GPU logical device is a composite HAL device. Generic HAL topology
-  // has only one node for it, so do not expose a physical-device-0 identity as
-  // though it represented the entire composite. Exact internal physical device
-  // identity is reported through AMDGPU profile/device metadata and queue
-  // affinity records.
-  const bool is_composite_device = logical_device->physical_device_count > 1;
-  iree_hal_amdgpu_physical_device_t* physical_device =
-      logical_device->physical_devices[0];
-
-  memset(out_capabilities->physical_device_uuid, 0,
-         sizeof(out_capabilities->physical_device_uuid));
-  if (!is_composite_device && physical_device->has_physical_device_uuid) {
-    memcpy(out_capabilities->physical_device_uuid,
-           physical_device->physical_device_uuid,
-           sizeof(out_capabilities->physical_device_uuid));
-    out_capabilities->has_physical_device_uuid = true;
-  }
-
-  // Report a NUMA affinity only when the composite has a single nearest host
-  // node that fits the generic HAL uint8_t representation. Mixed-NUMA
-  // composites intentionally leave the default 0 because generic topology
-  // cannot express one logical device spanning multiple CPU NUMA nodes.
-  uint32_t host_numa_node = physical_device->host_numa_node;
-  bool has_representative_numa_node = host_numa_node <= UINT8_MAX;
-  for (iree_host_size_t i = 1; i < logical_device->physical_device_count &&
-                               has_representative_numa_node;
-       ++i) {
-    has_representative_numa_node =
-        logical_device->physical_devices[i]->host_numa_node == host_numa_node;
-  }
-  if (has_representative_numa_node) {
-    out_capabilities->numa_node = (uint8_t)host_numa_node;
-  }
-
-  // External handle types (DMA-BUF support from system info).
-  if (logical_device->system->info.dmabuf_supported) {
-    out_capabilities->buffer_export_types |=
-        IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF;
-    out_capabilities->buffer_import_types |=
-        IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF;
-  }
-
-  // Memory-system capability flags are the intersection across the physical
-  // devices in this logical device. SVM/pageable-memory facts are distinct
-  // from peer-pool addressability; refine_topology_edge owns the latter.
-  iree_hal_device_capability_bits_t memory_system_flags =
-      iree_hal_amdgpu_select_memory_system_device_capability_flags(
-          &physical_device->memory_system);
-  for (iree_host_size_t i = 1; i < logical_device->physical_device_count; ++i) {
-    memory_system_flags &=
-        iree_hal_amdgpu_select_memory_system_device_capability_flags(
-            &logical_device->physical_devices[i]->memory_system);
-  }
-  out_capabilities->flags |= memory_system_flags;
-
-  // AMDGPU semaphores are native async timeline semaphores (not binary
-  // emulation).
-  out_capabilities->flags |= IREE_HAL_DEVICE_CAPABILITY_TIMELINE_SEMAPHORES;
-
-  // Fine-grained memory provides host coherency without explicit flushes.
-  // Coarse-grained memory requires fences, but the driver manages that
-  // transparently.
-  out_capabilities->flags |= IREE_HAL_DEVICE_CAPABILITY_HOST_COHERENT;
-
-  // All AMDGPU devices support device-scope atomics. System-scope atomics are
-  // supported on fine-grained memory when callers explicitly opt into
-  // host-visible placement.
-  out_capabilities->flags |= IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_DEVICE;
-  out_capabilities->flags |= IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_SYSTEM;
-
-  // All AMD GPUs support peer-to-peer DMA (through XGMI or PCIe). The actual
-  // access mode for a specific GPU pair is determined by
-  // refine_topology_edge — here we declare the capability in principle.
-  out_capabilities->flags |= IREE_HAL_DEVICE_CAPABILITY_P2P_COPY;
-
-  // Driver handle (HSA agent handle for same-driver refinement). Composite
-  // devices intentionally leave this unset: a single HSA agent handle would
-  // make generic topology alias detection treat a composite as one GPU.
-  if (!is_composite_device) {
-    out_capabilities->driver_device_handle =
-        (uintptr_t)physical_device->device_agent.handle;
-  }
-
-  return iree_ok_status();
-}
-
 static const iree_hal_device_spec_t* iree_hal_amdgpu_logical_device_spec(
     iree_hal_device_t* base_device) {
   iree_hal_amdgpu_logical_device_t* logical_device =
@@ -3074,7 +2975,6 @@ static const iree_hal_device_vtable_t iree_hal_amdgpu_logical_device_vtable = {
     .replace_device_allocator = iree_hal_amdgpu_replace_device_allocator,
     .replace_channel_provider = iree_hal_amdgpu_replace_channel_provider,
     .trim = iree_hal_amdgpu_logical_device_trim,
-    .query_capabilities = iree_hal_amdgpu_logical_device_query_capabilities,
     .device_spec = iree_hal_amdgpu_logical_device_spec,
     .sample_observation = iree_hal_amdgpu_logical_device_sample_observation,
     .topology_info = iree_hal_amdgpu_logical_device_topology_info,

@@ -353,9 +353,6 @@ typedef struct iree_hal_mock_device_t {
   // Identifier string (backed by trailing storage).
   iree_string_view_t identifier;
 
-  // Capabilities returned by query_capabilities.
-  iree_hal_device_capabilities_t capabilities;
-
   // Status returned by assign_topology_info.
   iree_status_code_t assign_topology_info_status_code;
 
@@ -397,7 +394,6 @@ iree_status_t iree_hal_mock_device_create(
   memset(device, 0, sizeof(*device));
   iree_hal_resource_initialize(&iree_hal_mock_device_vtable, &device->resource);
   device->host_allocator = host_allocator;
-  device->capabilities = options->capabilities;
   device->assign_topology_info_status_code =
       options->assign_topology_info_status_code;
   device->executable_cache_enabled = options->executable_cache_enabled;
@@ -446,14 +442,6 @@ static iree_allocator_t iree_hal_mock_device_host_allocator(
     iree_hal_device_t* base_device) {
   iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
   return device->host_allocator;
-}
-
-static iree_status_t iree_hal_mock_device_query_capabilities(
-    iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
-  *out_capabilities = device->capabilities;
-  return iree_ok_status();
 }
 
 static const iree_hal_device_spec_t* iree_hal_mock_device_spec(
@@ -728,7 +716,6 @@ static const iree_hal_device_vtable_t iree_hal_mock_device_vtable = {
     .replace_device_allocator = iree_hal_mock_device_replace_device_allocator,
     .replace_channel_provider = iree_hal_mock_device_replace_channel_provider,
     .trim = iree_hal_mock_device_trim,
-    .query_capabilities = iree_hal_mock_device_query_capabilities,
     .device_spec = iree_hal_mock_device_spec,
     .sample_observation = iree_hal_mock_device_sample_observation,
     .topology_info = iree_hal_mock_device_topology_info,

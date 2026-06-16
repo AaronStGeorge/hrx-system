@@ -467,12 +467,6 @@ TEST_F(PhysicalDeviceCapabilitiesTest, SvmDefaultAccessDoesNotImplyPeerFlags) {
   EXPECT_TRUE(capability.device_local.fine_host_visible);
   EXPECT_FALSE(capability.device_local.coarse_cpu_visible);
 
-  iree_hal_device_capability_bits_t flags =
-      iree_hal_amdgpu_select_memory_system_device_capability_flags(&capability);
-  EXPECT_TRUE(flags & IREE_HAL_DEVICE_CAPABILITY_SHARED_VIRTUAL_ADDRESS);
-  EXPECT_TRUE(flags & IREE_HAL_DEVICE_CAPABILITY_UNIFIED_MEMORY);
-  EXPECT_FALSE(flags & IREE_HAL_DEVICE_CAPABILITY_PEER_ADDRESSABLE);
-  EXPECT_FALSE(flags & IREE_HAL_DEVICE_CAPABILITY_PEER_COHERENT);
   EXPECT_FALSE(iree_hal_amdgpu_memory_system_requires_svm_access_attributes(
       &capability));
 }
@@ -500,12 +494,6 @@ TEST_F(PhysicalDeviceCapabilitiesTest,
   EXPECT_TRUE(capability.device_local.fine_host_visible);
   EXPECT_TRUE(capability.device_local.coarse_cpu_visible);
 
-  iree_hal_device_capability_bits_t flags =
-      iree_hal_amdgpu_select_memory_system_device_capability_flags(&capability);
-  EXPECT_TRUE(flags & IREE_HAL_DEVICE_CAPABILITY_SHARED_VIRTUAL_ADDRESS);
-  EXPECT_FALSE(flags & IREE_HAL_DEVICE_CAPABILITY_UNIFIED_MEMORY);
-  EXPECT_FALSE(flags & IREE_HAL_DEVICE_CAPABILITY_PEER_ADDRESSABLE);
-  EXPECT_FALSE(flags & IREE_HAL_DEVICE_CAPABILITY_PEER_COHERENT);
   EXPECT_TRUE(iree_hal_amdgpu_memory_system_requires_svm_access_attributes(
       &capability));
 }

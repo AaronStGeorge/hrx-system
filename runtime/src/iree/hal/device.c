@@ -63,19 +63,6 @@ iree_status_t iree_hal_device_trim(iree_hal_device_t* device) {
   return status;
 }
 
-IREE_API_EXPORT iree_status_t iree_hal_device_query_capabilities(
-    iree_hal_device_t* device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  IREE_ASSERT_ARGUMENT(device);
-  IREE_ASSERT_ARGUMENT(out_capabilities);
-  IREE_TRACE_ZONE_BEGIN(z0);
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0,
-      _VTABLE_DISPATCH(device, query_capabilities)(device, out_capabilities));
-  IREE_TRACE_ZONE_END(z0);
-  return iree_ok_status();
-}
-
 IREE_API_EXPORT const iree_hal_device_spec_t* iree_hal_device_spec(
     iree_hal_device_t* device) {
   IREE_ASSERT_ARGUMENT(device);

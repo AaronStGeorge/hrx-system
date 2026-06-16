@@ -684,19 +684,6 @@ static iree_status_t iree_hal_replay_device_trim(
       &pending_record, iree_hal_device_trim(device->base_device));
 }
 
-static iree_status_t iree_hal_replay_device_query_capabilities(
-    iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  iree_hal_replay_device_t* device = iree_hal_replay_device_cast(base_device);
-  iree_hal_replay_pending_record_t pending_record;
-  IREE_RETURN_IF_ERROR(iree_hal_replay_device_begin_operation(
-      device, IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_QUERY_CAPABILITIES,
-      &pending_record));
-  return iree_hal_replay_device_complete_operation(
-      &pending_record, iree_hal_device_query_capabilities(device->base_device,
-                                                          out_capabilities));
-}
-
 static const iree_hal_device_spec_t* iree_hal_replay_device_spec(
     iree_hal_device_t* base_device) {
   iree_hal_replay_device_t* device = iree_hal_replay_device_cast(base_device);
@@ -2057,7 +2044,6 @@ static const iree_hal_device_vtable_t iree_hal_replay_device_vtable = {
     .replace_device_allocator = iree_hal_replay_replace_device_allocator,
     .replace_channel_provider = iree_hal_replay_replace_channel_provider,
     .trim = iree_hal_replay_device_trim,
-    .query_capabilities = iree_hal_replay_device_query_capabilities,
     .device_spec = iree_hal_replay_device_spec,
     .sample_observation = iree_hal_replay_device_sample_observation,
     .topology_info = iree_hal_replay_device_topology_info,
