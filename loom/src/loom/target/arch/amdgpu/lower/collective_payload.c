@@ -91,18 +91,6 @@ iree_status_t loom_amdgpu_collective_bind_payload_result(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_result, uint32_t register_count,
     const loom_value_id_t* result_registers) {
-  if (register_count == 1) {
-    return loom_low_lower_bind_value(context, source_result,
-                                     result_registers[0]);
-  }
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-      context, source_op, source_result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), result_registers, register_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, source_result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, source_result,
+                                             result_registers, register_count);
 }

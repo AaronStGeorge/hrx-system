@@ -16,7 +16,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_target_table_cc_library",
+    "loom_generated_cc_library",
 )
 
 package(
@@ -162,6 +162,7 @@ loom_cc_library(
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",
     ],
 )
@@ -249,9 +250,12 @@ loom_cc_test(
     ],
 )
 
-loom_target_table_cc_library(
-    name = "occupancy_tables",
+loom_generated_cc_library(
+    name = "occupancy_model",
+    srcs = ["occupancy_model.c"],
+    hdrs = ["occupancy_model.h"],
     generator = _AMDGPU_OCCUPANCY_TABLE_GENERATOR,
+    source = "occupancy_model_tables.c",
     visibility = _AMDGPU_ROOT_VISIBILITY,
     deps = [
         "//loom/src/loom/target/arch/amdgpu:target_info",
@@ -265,7 +269,7 @@ loom_cc_library(
     hdrs = ["occupancy.h"],
     visibility = _AMDGPU_NATIVE_PLANNING_VISIBILITY,
     deps = [
-        ":occupancy_tables",
+        ":occupancy_model",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low/schedule",

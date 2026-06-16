@@ -95,6 +95,7 @@ loom_cc_library(
     name = "target_info_defs",
     hdrs = ["target_info_defs.h"],
     visibility = (
+        _AMDGPU_LOWER_VISIBILITY +
         _AMDGPU_MATRIX_VISIBILITY +
         _AMDGPU_PLANNING_VISIBILITY +
         _AMDGPU_TOOLING_VISIBILITY + [
@@ -163,7 +164,7 @@ loom_cc_test(
         ":target_info",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
-        "//loom/src/loom/target/arch/amdgpu/planning:occupancy_tables",
+        "//loom/src/loom/target/arch/amdgpu/planning:occupancy_model",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -174,7 +175,6 @@ loom_cc_library(
     name = "math_policy",
     srcs = ["math_policy.c"],
     hdrs = ["math_policy.h"],
-    textual_hdrs = ["math_policy_tables.inl"],
     deps = [
         "//loom/src/loom/target:math_policy",
         "//runtime/src/iree/base",
@@ -318,6 +318,7 @@ loom_check_test_suite(
         "test/source_low/source_low_bitfield.loom-test",
         "test/source_low/source_low_bitpack.loom-test",
         "test/source_low/source_low_bitpack_diagnostics.loom-test",
+        "test/source_low/source_low_bitstream_report.loom-test",
         "test/source_low/source_low_bitunpack.loom-test",
         "test/source_low/source_low_bitunpack_diagnostics.loom-test",
         "test/source_low/source_low_bitunpack_gfx950.loom-test",

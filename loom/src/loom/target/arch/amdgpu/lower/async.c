@@ -62,13 +62,6 @@ typedef struct loom_amdgpu_async_wait_diagnostic_t {
   loom_amdgpu_async_wait_rejection_flags_t rejection_bits;
 } loom_amdgpu_async_wait_diagnostic_t;
 
-typedef struct loom_amdgpu_async_gather_descriptor_candidate_t {
-  // Number of bytes moved by the async packet.
-  uint32_t packet_byte_count;
-  // Stable descriptor ref selected for the active descriptor set.
-  loom_amdgpu_descriptor_ref_t descriptor_ref;
-} loom_amdgpu_async_gather_descriptor_candidate_t;
-
 typedef struct loom_amdgpu_async_gather_selection_t {
   // Source global-like view access transferred into LDS.
   loom_low_source_memory_access_plan_t source;
@@ -88,25 +81,6 @@ typedef struct loom_amdgpu_async_gather_selection_t {
   // Stable descriptor ref selected for the active descriptor set.
   loom_amdgpu_descriptor_ref_t descriptor_ref;
 } loom_amdgpu_async_gather_selection_t;
-
-static const loom_amdgpu_async_gather_descriptor_candidate_t
-    kAmdgpuAsyncGatherDescriptors[] = {
-        {
-            .packet_byte_count = 4,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORD_SADDR,
-        },
-        {
-            .packet_byte_count = 12,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORDX3_SADDR,
-        },
-        {
-            .packet_byte_count = 16,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORDX4_SADDR,
-        },
-};
 
 static bool loom_amdgpu_async_gather_exact_i64(loom_value_facts_t facts,
                                                int64_t* out_value) {
@@ -132,29 +106,39 @@ static bool loom_amdgpu_async_gather_source_memory_space_is_global_like(
   }
 }
 
+static loom_amdgpu_descriptor_ref_t loom_amdgpu_async_gather_descriptor_ref(
+    uint32_t packet_byte_count) {
+  switch (packet_byte_count) {
+    case 4:
+      return LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORD_SADDR;
+    case 12:
+      return LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORDX3_SADDR;
+    case 16:
+      return LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORDX4_SADDR;
+    default:
+      return LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  }
+}
+
 static bool loom_amdgpu_async_gather_select_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, uint32_t packet_byte_count,
     loom_amdgpu_descriptor_ref_t* out_descriptor_ref,
     uint32_t* out_descriptor_ordinal) {
   *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   *out_descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kAmdgpuAsyncGatherDescriptors); ++i) {
-    const loom_amdgpu_async_gather_descriptor_candidate_t* candidate =
-        &kAmdgpuAsyncGatherDescriptors[i];
-    if (candidate->packet_byte_count != packet_byte_count) {
-      continue;
-    }
-    const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
-        descriptor_set, candidate->descriptor_ref);
-    if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-      continue;
-    }
-    *out_descriptor_ref = candidate->descriptor_ref;
-    *out_descriptor_ordinal = descriptor_ordinal;
-    return true;
+  const loom_amdgpu_descriptor_ref_t descriptor_ref =
+      loom_amdgpu_async_gather_descriptor_ref(packet_byte_count);
+  if (descriptor_ref == LOOM_AMDGPU_DESCRIPTOR_REF_NONE) {
+    return false;
   }
-  return false;
+  const uint32_t descriptor_ordinal =
+      loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return false;
+  }
+  *out_descriptor_ref = descriptor_ref;
+  *out_descriptor_ordinal = descriptor_ordinal;
+  return true;
 }
 
 static bool loom_amdgpu_async_gather_select_source(
@@ -360,8 +344,6 @@ static iree_status_t loom_amdgpu_async_gather_resolve_selection(
     loom_amdgpu_async_gather_plan_t* out_plan) {
   *out_plan = (loom_amdgpu_async_gather_plan_t){
       .source = selection->source,
-      .source_view = selection->source_view,
-      .dest_view = selection->dest_view,
       .dest_byte_offset = selection->dest_byte_offset,
       .source_immediate_offset = selection->source_immediate_offset,
       .packet_byte_count = selection->packet_byte_count,
@@ -602,8 +584,8 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
       context, source_op, &access, LOOM_VALUE_ID_INVALID, &low_vaddr));
 
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, plan->source_view, &low_resource));
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, plan->source.root_value_id, &low_resource));
   loom_value_id_t low_saddr = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_saddr(
       context, source_op, &access, low_resource, &low_saddr));
@@ -625,6 +607,14 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
       /*tied_result_count=*/0, source_op->location, &low_op));
   return loom_low_lower_elide_value(context,
                                     loom_kernel_async_gather_token(source_op));
+}
+
+void loom_amdgpu_mark_async_gather_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_async_gather_plan_t* plan) {
+  (void)source_op;
+  loom_amdgpu_mark_source_memory_plan_root_storage_demands(context,
+                                                           &plan->source);
 }
 
 iree_status_t loom_amdgpu_lower_kernel_async_wait(

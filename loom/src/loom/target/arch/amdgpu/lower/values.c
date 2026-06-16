@@ -47,6 +47,13 @@ typedef struct loom_amdgpu_constant_plan_t {
   bool i1_value;
 } loom_amdgpu_constant_plan_t;
 
+typedef uint32_t loom_amdgpu_vector_iota_plan_flags_t;
+
+enum {
+  LOOM_AMDGPU_VECTOR_IOTA_PLAN_BASE_EXACT = 1u << 0,
+  LOOM_AMDGPU_VECTOR_IOTA_PLAN_STEP_EXACT = 1u << 1,
+};
+
 typedef struct loom_amdgpu_vector_iota_plan_t {
   // Descriptor row selected for each lane constant packet.
   loom_low_lower_resolved_descriptor_t descriptor;
@@ -58,19 +65,47 @@ typedef struct loom_amdgpu_vector_iota_plan_t {
   loom_value_id_t step;
   // Result vector receiving the generated i32 lane constants.
   loom_value_id_t result;
+  // Exact base value when BASE_EXACT is set.
+  int32_t exact_base;
+  // Exact step value when STEP_EXACT is set.
+  int32_t exact_step;
+  // Static operand facts selected by the planner.
+  loom_amdgpu_vector_iota_plan_flags_t flags;
   // Static number of generated lanes.
   uint32_t lane_count;
   // Precomputed lane bit patterns emitted as VGPR constants.
   uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-  // True when one or more iota operands must be materialized dynamically.
-  bool is_dynamic;
 } loom_amdgpu_vector_iota_plan_t;
+
+static bool loom_amdgpu_vector_iota_plan_has_exact_base(
+    const loom_amdgpu_vector_iota_plan_t* plan) {
+  return iree_any_bit_set(plan->flags, LOOM_AMDGPU_VECTOR_IOTA_PLAN_BASE_EXACT);
+}
+
+static bool loom_amdgpu_vector_iota_plan_has_exact_step(
+    const loom_amdgpu_vector_iota_plan_t* plan) {
+  return iree_any_bit_set(plan->flags, LOOM_AMDGPU_VECTOR_IOTA_PLAN_STEP_EXACT);
+}
+
+static bool loom_amdgpu_vector_iota_plan_is_dynamic(
+    const loom_amdgpu_vector_iota_plan_t* plan) {
+  return !iree_all_bits_set(plan->flags,
+                            LOOM_AMDGPU_VECTOR_IOTA_PLAN_BASE_EXACT |
+                                LOOM_AMDGPU_VECTOR_IOTA_PLAN_STEP_EXACT);
+}
+
+typedef enum loom_amdgpu_vector_from_elements_materialization_kind_e {
+  LOOM_AMDGPU_VECTOR_FROM_ELEMENTS_MATERIALIZATION_OPERANDS = 0,
+  LOOM_AMDGPU_VECTOR_FROM_ELEMENTS_MATERIALIZATION_EXACT_PACKED_INTEGER = 1,
+} loom_amdgpu_vector_from_elements_materialization_kind_t;
 
 typedef struct loom_amdgpu_vector_from_elements_plan_t {
   // Result vector assembled from the selected source elements.
   loom_value_id_t result;
   // Physical storage selected for the result vector.
   loom_amdgpu_vector_storage_kind_t storage_kind;
+  // Materialization path selected from storage shape and value facts.
+  loom_amdgpu_vector_from_elements_materialization_kind_t materialization_kind;
   // Static source element count.
   uint32_t element_count;
   // Static result register count after source elements are packed.
@@ -81,8 +116,14 @@ typedef struct loom_amdgpu_vector_from_elements_plan_t {
   uint32_t element_bit_count;
   // Source and result scalar element type.
   loom_scalar_type_t element_type;
-  // Source scalar values in result lane order.
-  loom_value_id_t elements[LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES];
+  // State consumed by the selected materialization path.
+  union {
+    // Source scalar values in result lane order for operand materialization.
+    loom_value_id_t elements[LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES];
+    // Exact packed-register bit patterns for constant materialization.
+    uint32_t
+        packed_register_bit_patterns[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
+  } payload;
 } loom_amdgpu_vector_from_elements_plan_t;
 
 typedef enum loom_amdgpu_vector_insert_value_kind_e {
@@ -121,6 +162,89 @@ typedef struct loom_amdgpu_vector_insert_plan_t {
   // True when insertion uses |dynamic_index| instead of |lane_offset|.
   bool is_dynamic;
 } loom_amdgpu_vector_insert_plan_t;
+
+static uint32_t loom_amdgpu_integer_bit_mask(uint32_t bit_count) {
+  IREE_ASSERT_GT(bit_count, 0);
+  IREE_ASSERT_LE(bit_count, 32);
+  return bit_count == 32 ? UINT32_MAX : ((UINT32_C(1) << bit_count) - 1u);
+}
+
+static uint32_t loom_amdgpu_integer_low_bits(int64_t value,
+                                             uint32_t bit_count) {
+  return (uint32_t)((uint64_t)value & loom_amdgpu_integer_bit_mask(bit_count));
+}
+
+static bool loom_amdgpu_exact_integer_lane_bits(
+    loom_low_lower_context_t* context, loom_value_id_t source_value,
+    uint32_t bit_count, uint32_t* out_bits) {
+  *out_bits = 0;
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
+  if (fact_table == NULL) {
+    return false;
+  }
+  int64_t value = 0;
+  if (!loom_value_facts_as_exact_i64(
+          loom_value_fact_table_lookup(fact_table, source_value), &value)) {
+    return false;
+  }
+  *out_bits = loom_amdgpu_integer_low_bits(value, bit_count);
+  return true;
+}
+
+static bool loom_amdgpu_pack_exact_integer_elements(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_vector_from_elements_plan_t* plan,
+    uint32_t* out_bit_patterns) {
+  if (plan->element_bit_count != 8 && plan->element_bit_count != 16) {
+    return false;
+  }
+  const uint32_t element_bit_count = plan->element_bit_count;
+  const uint32_t elements_per_register = 32u / element_bit_count;
+  const uint32_t element_mask = loom_amdgpu_integer_bit_mask(element_bit_count);
+  for (uint32_t register_index = 0; register_index < plan->register_count;
+       ++register_index) {
+    uint32_t bit_pattern = 0;
+    const uint32_t lane_base = register_index * elements_per_register;
+    for (uint32_t lane_index = 0; lane_index < elements_per_register;
+         ++lane_index) {
+      const uint32_t element_index = lane_base + lane_index;
+      if (element_index >= plan->element_count) {
+        break;
+      }
+      uint32_t lane_bits = 0;
+      if (!loom_amdgpu_exact_integer_lane_bits(
+              context, plan->payload.elements[element_index], element_bit_count,
+              &lane_bits)) {
+        return false;
+      }
+      bit_pattern |= (lane_bits & element_mask)
+                     << (lane_index * element_bit_count);
+    }
+    out_bit_patterns[register_index] = bit_pattern;
+  }
+  return true;
+}
+
+static void loom_amdgpu_select_vector_from_elements_materialization(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_vector_from_elements_plan_t* plan) {
+  plan->materialization_kind =
+      LOOM_AMDGPU_VECTOR_FROM_ELEMENTS_MATERIALIZATION_OPERANDS;
+  if (plan->storage_kind != LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_INTEGER) {
+    return;
+  }
+
+  uint32_t bit_patterns[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
+  if (!loom_amdgpu_pack_exact_integer_elements(context, plan, bit_patterns)) {
+    return;
+  }
+  plan->materialization_kind =
+      LOOM_AMDGPU_VECTOR_FROM_ELEMENTS_MATERIALIZATION_EXACT_PACKED_INTEGER;
+  for (uint32_t i = 0; i < plan->register_count; ++i) {
+    plan->payload.packed_register_bit_patterns[i] = bit_patterns[i];
+  }
+}
 
 typedef enum loom_amdgpu_vector_bf16_conversion_kind_e {
   LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_NONE = 0,
@@ -202,6 +326,49 @@ typedef enum loom_amdgpu_scalar_conversion_kind_e {
   LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
 } loom_amdgpu_scalar_conversion_kind_t;
 
+typedef enum loom_amdgpu_scalar_conversion_op_group_e {
+  LOOM_AMDGPU_SCALAR_CONVERSION_OP_TRUNCI = 0,
+  LOOM_AMDGPU_SCALAR_CONVERSION_OP_EXTSI,
+  LOOM_AMDGPU_SCALAR_CONVERSION_OP_EXTUI,
+  LOOM_AMDGPU_SCALAR_CONVERSION_OP_UITOFP,
+  LOOM_AMDGPU_SCALAR_CONVERSION_OP_FPTOSI,
+  LOOM_AMDGPU_SCALAR_CONVERSION_OP_FPTOUI,
+  LOOM_AMDGPU_SCALAR_CONVERSION_OP_COUNT_,
+} loom_amdgpu_scalar_conversion_op_group_t;
+
+typedef enum loom_amdgpu_scalar_conversion_rule_index_e {
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_NONE = 0,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I16_TO_I8,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I32_TO_I8,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I32_TO_I16,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I8,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I16,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I16,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I64,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I16_TO_I32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I16_TO_I64,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I32_TO_I64,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I16,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I64,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I16_TO_I32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I16_TO_I64,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I32_TO_I64,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_UITOFP_I8_TO_F32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_UITOFP_I16_TO_F32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I8,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I16,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I8,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I16,
+  LOOM_AMDGPU_SCALAR_CONVERSION_RULE_COUNT_,
+} loom_amdgpu_scalar_conversion_rule_index_t;
+static_assert(LOOM_AMDGPU_SCALAR_CONVERSION_RULE_COUNT_ <= UINT8_MAX,
+              "conversion rule indexes must fit in the byte selector table");
+
 typedef struct loom_amdgpu_scalar_conversion_plan_t {
   // Lowering strategy selected for the source/result type pair.
   loom_amdgpu_scalar_conversion_kind_t kind;
@@ -218,12 +385,6 @@ typedef struct loom_amdgpu_scalar_conversion_plan_t {
 } loom_amdgpu_scalar_conversion_plan_t;
 
 typedef struct loom_amdgpu_scalar_conversion_rule_t {
-  // Source operation kind matched by the rule.
-  loom_op_kind_t op_kind;
-  // Source scalar type matched by the rule.
-  loom_scalar_type_t source_type;
-  // Result scalar type matched by the rule.
-  loom_scalar_type_t result_type;
   // Lowering strategy selected when the rule matches.
   loom_amdgpu_scalar_conversion_kind_t kind;
   // Descriptor emitted by strategies that perform a conversion packet.
@@ -409,11 +570,6 @@ static bool loom_amdgpu_is_scalar_conversion_op_kind(loom_op_kind_t op_kind) {
     default:
       return false;
   }
-}
-
-bool loom_amdgpu_value_plan_needs_preselection(const loom_op_t* source_op) {
-  return loom_scalar_cmpi_isa(source_op) || loom_vector_insert_isa(source_op) ||
-         loom_amdgpu_is_scalar_conversion_op_kind(source_op->kind);
 }
 
 static loom_scalar_type_t loom_amdgpu_scalar_type_or_none(loom_type_t type) {
@@ -864,17 +1020,6 @@ static iree_status_t loom_amdgpu_select_i32_constant_plan(
       out_selected);
 }
 
-static uint32_t loom_amdgpu_integer_bit_mask(uint32_t bit_count) {
-  IREE_ASSERT_GT(bit_count, 0);
-  IREE_ASSERT_LE(bit_count, 32);
-  return bit_count == 32 ? UINT32_MAX : ((UINT32_C(1) << bit_count) - 1u);
-}
-
-static uint32_t loom_amdgpu_integer_low_bits(int64_t value,
-                                             uint32_t bit_count) {
-  return (uint32_t)((uint64_t)value & loom_amdgpu_integer_bit_mask(bit_count));
-}
-
 static uint32_t loom_amdgpu_integer_sign_extended_bits(int64_t value,
                                                        uint32_t bit_count) {
   IREE_ASSERT_GT(bit_count, 0);
@@ -1270,6 +1415,14 @@ static iree_status_t loom_amdgpu_select_vector_iota_plan(
   out_plan->step = step_id;
   out_plan->result = result;
   out_plan->lane_count = element_count;
+  if (has_static_base) {
+    out_plan->flags |= LOOM_AMDGPU_VECTOR_IOTA_PLAN_BASE_EXACT;
+    out_plan->exact_base = (int32_t)base;
+  }
+  if (has_static_step) {
+    out_plan->flags |= LOOM_AMDGPU_VECTOR_IOTA_PLAN_STEP_EXACT;
+    out_plan->exact_step = (int32_t)step;
+  }
 
   iree_string_view_t constraint_key = iree_string_view_empty();
   if (!loom_amdgpu_vector_iota_source_supported(
@@ -1280,7 +1433,6 @@ static iree_status_t loom_amdgpu_select_vector_iota_plan(
   }
 
   if (!has_static_base || !has_static_step) {
-    out_plan->is_dynamic = true;
     *out_selected = true;
     return iree_ok_status();
   }
@@ -1609,7 +1761,7 @@ static bool loom_amdgpu_select_vector_from_elements_plan(
   loom_amdgpu_vector_storage_t storage = {0};
   if (!loom_amdgpu_type_vector_storage(result_type, &storage) ||
       elements.count != storage.element_count ||
-      elements.count > IREE_ARRAYSIZE(out_plan->elements)) {
+      elements.count > IREE_ARRAYSIZE(out_plan->payload.elements)) {
     return false;
   }
   for (uint32_t i = 0; i < elements.count; ++i) {
@@ -1623,7 +1775,7 @@ static bool loom_amdgpu_select_vector_from_elements_plan(
         !loom_amdgpu_value_can_materialize_as_vgpr_i32(context, element)) {
       return false;
     }
-    out_plan->elements[i] = element;
+    out_plan->payload.elements[i] = element;
   }
   out_plan->result = result;
   out_plan->element_count = elements.count;
@@ -1632,6 +1784,7 @@ static bool loom_amdgpu_select_vector_from_elements_plan(
   out_plan->element_register_count = storage.element_register_count;
   out_plan->element_bit_count = storage.element_bit_count;
   out_plan->element_type = storage.element_type;
+  loom_amdgpu_select_vector_from_elements_materialization(context, out_plan);
   return true;
 }
 
@@ -1644,7 +1797,7 @@ static bool loom_amdgpu_select_vector_splat_plan(
   const loom_type_t result_type = loom_module_value_type(module, result);
   loom_amdgpu_vector_storage_t storage = {0};
   if (!loom_amdgpu_type_vector_storage(result_type, &storage) ||
-      storage.element_count > IREE_ARRAYSIZE(out_plan->elements)) {
+      storage.element_count > IREE_ARRAYSIZE(out_plan->payload.elements)) {
     return false;
   }
   const loom_value_id_t scalar = loom_vector_splat_scalar(source_op);
@@ -1658,7 +1811,7 @@ static bool loom_amdgpu_select_vector_splat_plan(
     return false;
   }
   for (uint32_t i = 0; i < storage.element_count; ++i) {
-    out_plan->elements[i] = scalar;
+    out_plan->payload.elements[i] = scalar;
   }
   out_plan->result = result;
   out_plan->storage_kind = storage.kind;
@@ -1667,6 +1820,7 @@ static bool loom_amdgpu_select_vector_splat_plan(
   out_plan->element_register_count = storage.element_register_count;
   out_plan->element_bit_count = storage.element_bit_count;
   out_plan->element_type = storage.element_type;
+  loom_amdgpu_select_vector_from_elements_materialization(context, out_plan);
   return true;
 }
 
@@ -1719,8 +1873,8 @@ static iree_status_t loom_amdgpu_emit_fma_mix_half_result_diagnostic(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_descriptor_ref_t descriptor_ref,
     uint32_t destination_lane_index, iree_string_view_t result_half,
-    const iree_string_view_t* source_kind_names, iree_string_view_t decision,
-    iree_string_view_t reason) {
+    const iree_string_view_t* source_kind_names,
+    iree_string_view_t decision_key, iree_string_view_t reason_key) {
   if (!iree_any_bit_set(loom_low_lower_context_diagnostic_flags(context),
                         LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM)) {
     return iree_ok_status();
@@ -1756,8 +1910,8 @@ static iree_status_t loom_amdgpu_emit_fma_mix_half_result_diagnostic(
       loom_param_string(source_kind_names[1]),
       loom_param_string(source_kind_names[2]),
       loom_param_string(IREE_SV("f32_to_f16_fptrunc")),
-      loom_param_string(decision),
-      loom_param_string(reason),
+      loom_param_string(decision_key),
+      loom_param_string(reason_key),
   };
   return loom_low_lower_emit_error_ref(context, source_op,
                                        LOOM_ERR_AMDGPU_029_REF, params,
@@ -1781,7 +1935,7 @@ static iree_status_t loom_amdgpu_select_vector_insert_fma_mix_half_result(
           ? IREE_SV("dynamic")
           : ((inout_plan->lane_offset & 1u) != 0 ? IREE_SV("high")
                                                  : IREE_SV("low"));
-  iree_string_view_t source_kind_names[3] = {
+  iree_string_view_t source_kind_names[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT] = {
       IREE_SV("unknown"),
       IREE_SV("unknown"),
       IREE_SV("unknown"),
@@ -1829,23 +1983,25 @@ static iree_status_t loom_amdgpu_select_vector_insert_fma_mix_half_result(
     return iree_ok_status();
   }
 
-  const loom_value_id_t operands[3] = {
+  const loom_value_id_t operands[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT] = {
       loom_scalar_fmaf_a(fmaf_op),
       loom_scalar_fmaf_b(fmaf_op),
       loom_scalar_fmaf_c(fmaf_op),
   };
-  loom_value_id_t sources[3] = {
+  loom_value_id_t sources[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT] = {
       LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
   };
-  uint32_t source_register_offsets[3] = {0, 0, 0};
-  loom_amdgpu_fma_mix_source_kind_t source_kinds[3] = {
-      LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
-      LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
-      LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
-  };
-  for (uint32_t i = 0; i < 3; ++i) {
+  uint32_t source_register_offsets[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT] = {0, 0,
+                                                                        0};
+  loom_amdgpu_fma_mix_source_kind_t
+      source_kinds[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT] = {
+          LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
+          LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
+          LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
+      };
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(operands); ++i) {
     if (!loom_amdgpu_select_fma_mix_source(module, operands[i], &sources[i],
                                            &source_kinds[i],
                                            &source_register_offsets[i])) {
@@ -2368,163 +2524,278 @@ static iree_status_t loom_amdgpu_select_scalar_cmpi_i64_plan(
       LOOM_AMDGPU_DESCRIPTOR_REF_NONE,                         \
   }
 
+static const uint8_t kLoomAmdgpuScalarConversionRuleIndexes
+    [LOOM_AMDGPU_SCALAR_CONVERSION_OP_COUNT_][LOOM_SCALAR_TYPE_COUNT_]
+    [LOOM_SCALAR_TYPE_COUNT_] = {
+        [LOOM_AMDGPU_SCALAR_CONVERSION_OP_TRUNCI] =
+            {
+                [LOOM_SCALAR_TYPE_I16][LOOM_SCALAR_TYPE_I8] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I16_TO_I8,
+                [LOOM_SCALAR_TYPE_I32][LOOM_SCALAR_TYPE_I8] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I32_TO_I8,
+                [LOOM_SCALAR_TYPE_I32][LOOM_SCALAR_TYPE_I16] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I32_TO_I16,
+                [LOOM_SCALAR_TYPE_I64][LOOM_SCALAR_TYPE_I8] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I8,
+                [LOOM_SCALAR_TYPE_I64][LOOM_SCALAR_TYPE_I16] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I16,
+                [LOOM_SCALAR_TYPE_I64][LOOM_SCALAR_TYPE_I32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I32,
+            },
+        [LOOM_AMDGPU_SCALAR_CONVERSION_OP_EXTSI] =
+            {
+                [LOOM_SCALAR_TYPE_I8][LOOM_SCALAR_TYPE_I16] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I16,
+                [LOOM_SCALAR_TYPE_I8][LOOM_SCALAR_TYPE_I32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I32,
+                [LOOM_SCALAR_TYPE_I8][LOOM_SCALAR_TYPE_I64] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I64,
+                [LOOM_SCALAR_TYPE_I16][LOOM_SCALAR_TYPE_I32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I16_TO_I32,
+                [LOOM_SCALAR_TYPE_I16][LOOM_SCALAR_TYPE_I64] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I16_TO_I64,
+                [LOOM_SCALAR_TYPE_I32][LOOM_SCALAR_TYPE_I64] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I32_TO_I64,
+            },
+        [LOOM_AMDGPU_SCALAR_CONVERSION_OP_EXTUI] =
+            {
+                [LOOM_SCALAR_TYPE_I8][LOOM_SCALAR_TYPE_I16] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I16,
+                [LOOM_SCALAR_TYPE_I8][LOOM_SCALAR_TYPE_I32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I32,
+                [LOOM_SCALAR_TYPE_I8][LOOM_SCALAR_TYPE_I64] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I64,
+                [LOOM_SCALAR_TYPE_I16][LOOM_SCALAR_TYPE_I32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I16_TO_I32,
+                [LOOM_SCALAR_TYPE_I16][LOOM_SCALAR_TYPE_I64] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I16_TO_I64,
+                [LOOM_SCALAR_TYPE_I32][LOOM_SCALAR_TYPE_I64] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I32_TO_I64,
+            },
+        [LOOM_AMDGPU_SCALAR_CONVERSION_OP_UITOFP] =
+            {
+                [LOOM_SCALAR_TYPE_I8][LOOM_SCALAR_TYPE_F32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_UITOFP_I8_TO_F32,
+                [LOOM_SCALAR_TYPE_I16][LOOM_SCALAR_TYPE_F32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_UITOFP_I16_TO_F32,
+            },
+        [LOOM_AMDGPU_SCALAR_CONVERSION_OP_FPTOSI] =
+            {
+                [LOOM_SCALAR_TYPE_F32][LOOM_SCALAR_TYPE_I32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I32,
+                [LOOM_SCALAR_TYPE_F32][LOOM_SCALAR_TYPE_I8] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I8,
+                [LOOM_SCALAR_TYPE_F32][LOOM_SCALAR_TYPE_I16] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I16,
+            },
+        [LOOM_AMDGPU_SCALAR_CONVERSION_OP_FPTOUI] =
+            {
+                [LOOM_SCALAR_TYPE_F32][LOOM_SCALAR_TYPE_I32] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I32,
+                [LOOM_SCALAR_TYPE_F32][LOOM_SCALAR_TYPE_I8] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I8,
+                [LOOM_SCALAR_TYPE_F32][LOOM_SCALAR_TYPE_I16] =
+                    LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I16,
+            },
+};
+
 static const loom_amdgpu_scalar_conversion_rule_t
-    kLoomAmdgpuScalarConversionRules[] = {
-        {LOOM_OP_SCALAR_TRUNCI, LOOM_SCALAR_TYPE_I16, LOOM_SCALAR_TYPE_I8,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_TRUNCI, LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_I8,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_TRUNCI, LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_I16,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_TRUNCI, LOOM_SCALAR_TYPE_I64, LOOM_SCALAR_TYPE_I8,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW_LOW_32,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_TRUNCI, LOOM_SCALAR_TYPE_I64, LOOM_SCALAR_TYPE_I16,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW_LOW_32,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_TRUNCI, LOOM_SCALAR_TYPE_I64, LOOM_SCALAR_TYPE_I32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_TRUNCATE_LOW_32,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0()},
+    kLoomAmdgpuScalarConversionRules
+        [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_COUNT_] = {
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I16_TO_I8] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I32_TO_I8] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I32_TO_I16] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I8] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW_LOW_32,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I16] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW_LOW_32,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_TRUNCI_I64_TO_I32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_TRUNCATE_LOW_32,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0()},
 
-        {LOOM_OP_SCALAR_EXTSI, LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_I16,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ALIAS,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0()},
-        {LOOM_OP_SCALAR_EXTSI, LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_I32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ALIAS,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0()},
-        {LOOM_OP_SCALAR_EXTSI, LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_I64,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_I64,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_EXTSI, LOOM_SCALAR_TYPE_I16, LOOM_SCALAR_TYPE_I32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ALIAS,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0()},
-        {LOOM_OP_SCALAR_EXTSI, LOOM_SCALAR_TYPE_I16, LOOM_SCALAR_TYPE_I64,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_I64,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_EXTSI, LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_I64,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_I64,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_S_ASHR_I32_RHS_INLINE)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I16] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ALIAS,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0()},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ALIAS,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0()},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I8_TO_I64] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_I64,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I16_TO_I32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ALIAS,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0()},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I16_TO_I64] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_I64,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTSI_I32_TO_I64] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_I64,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_S_ASHR_I32_RHS_INLINE)},
 
-        {LOOM_OP_SCALAR_EXTUI, LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_I16,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT)},
-        {LOOM_OP_SCALAR_EXTUI, LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_I32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT)},
-        {LOOM_OP_SCALAR_EXTUI, LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_I64,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)},
-        {LOOM_OP_SCALAR_EXTUI, LOOM_SCALAR_TYPE_I16, LOOM_SCALAR_TYPE_I32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT)},
-        {LOOM_OP_SCALAR_EXTUI, LOOM_SCALAR_TYPE_I16, LOOM_SCALAR_TYPE_I64,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)},
-        {LOOM_OP_SCALAR_EXTUI, LOOM_SCALAR_TYPE_I32, LOOM_SCALAR_TYPE_I64,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
-         LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
-             LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I16] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I8_TO_I64] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I16_TO_I32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I16_TO_I64] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_EXTUI_I32_TO_I64] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32)},
 
-        {LOOM_OP_SCALAR_UITOFP, LOOM_SCALAR_TYPE_I8, LOOM_SCALAR_TYPE_F32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_UITOFP_NARROW_TO_F32,
-         LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F32_U32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F32_U32)},
-        {LOOM_OP_SCALAR_UITOFP, LOOM_SCALAR_TYPE_I16, LOOM_SCALAR_TYPE_F32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_UITOFP_NARROW_TO_F32,
-         LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F32_U32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F32_U32)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_UITOFP_I8_TO_F32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_UITOFP_NARROW_TO_F32,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F32_U32,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F32_U32)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_UITOFP_I16_TO_F32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_UITOFP_NARROW_TO_F32,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F32_U32,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F32_U32)},
 
-        {LOOM_OP_SCALAR_FPTOSI, LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_I32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_I32,
-         LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32)},
-        {LOOM_OP_SCALAR_FPTOSI, LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_I8,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
-         LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_FPTOSI, LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_I16,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
-         LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_FPTOUI, LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_I32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_I32,
-         LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32)},
-        {LOOM_OP_SCALAR_FPTOUI, LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_I8,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
-         LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
-        {LOOM_OP_SCALAR_FPTOUI, LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_I16,
-         LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
-         LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
-         LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3(
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_I32,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I8] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOSI_F32_TO_I16] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_I32_F32,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I32] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_I32,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I8] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
+            [LOOM_AMDGPU_SCALAR_CONVERSION_RULE_FPTOUI_F32_TO_I16] =
+                {LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
+                 LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3(
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_U32_F32,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+                     LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT)},
 };
 
 #undef LOOM_AMDGPU_SCALAR_CONVERSION_REFS_0
 #undef LOOM_AMDGPU_SCALAR_CONVERSION_REFS_1
 #undef LOOM_AMDGPU_SCALAR_CONVERSION_REFS_2
 #undef LOOM_AMDGPU_SCALAR_CONVERSION_REFS_3
+
+static loom_amdgpu_scalar_conversion_op_group_t
+loom_amdgpu_scalar_conversion_op_group(loom_op_kind_t op_kind) {
+  switch (op_kind) {
+    case LOOM_OP_SCALAR_TRUNCI:
+      return LOOM_AMDGPU_SCALAR_CONVERSION_OP_TRUNCI;
+    case LOOM_OP_SCALAR_EXTSI:
+      return LOOM_AMDGPU_SCALAR_CONVERSION_OP_EXTSI;
+    case LOOM_OP_SCALAR_EXTUI:
+      return LOOM_AMDGPU_SCALAR_CONVERSION_OP_EXTUI;
+    case LOOM_OP_SCALAR_UITOFP:
+      return LOOM_AMDGPU_SCALAR_CONVERSION_OP_UITOFP;
+    case LOOM_OP_SCALAR_FPTOSI:
+      return LOOM_AMDGPU_SCALAR_CONVERSION_OP_FPTOSI;
+    case LOOM_OP_SCALAR_FPTOUI:
+      return LOOM_AMDGPU_SCALAR_CONVERSION_OP_FPTOUI;
+    default:
+      return LOOM_AMDGPU_SCALAR_CONVERSION_OP_COUNT_;
+  }
+}
+
+static const loom_amdgpu_scalar_conversion_rule_t*
+loom_amdgpu_scalar_conversion_rule_for(
+    loom_amdgpu_scalar_conversion_op_group_t op_group,
+    loom_scalar_type_t source_type, loom_scalar_type_t result_type) {
+  if (op_group >= LOOM_AMDGPU_SCALAR_CONVERSION_OP_COUNT_ ||
+      source_type >= LOOM_SCALAR_TYPE_COUNT_ ||
+      result_type >= LOOM_SCALAR_TYPE_COUNT_) {
+    return NULL;
+  }
+  const uint8_t rule_index =
+      kLoomAmdgpuScalarConversionRuleIndexes[op_group][source_type]
+                                            [result_type];
+  if (rule_index == LOOM_AMDGPU_SCALAR_CONVERSION_RULE_NONE) {
+    return NULL;
+  }
+  IREE_ASSERT(rule_index < IREE_ARRAYSIZE(kLoomAmdgpuScalarConversionRules));
+  return &kLoomAmdgpuScalarConversionRules[rule_index];
+}
 
 static bool loom_amdgpu_select_scalar_conversion_plan_from_table(
     const loom_module_t* module,
@@ -2546,30 +2817,27 @@ static bool loom_amdgpu_select_scalar_conversion_plan_from_table(
     return false;
   }
 
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kLoomAmdgpuScalarConversionRules); ++i) {
-    const loom_amdgpu_scalar_conversion_rule_t* rule =
-        &kLoomAmdgpuScalarConversionRules[i];
-    if (rule->op_kind != source_op->kind || rule->source_type != source_type ||
-        rule->result_type != result_type ||
-        !loom_amdgpu_descriptor_refs_present(
-            descriptor_set, rule->required_descriptor_refs,
-            IREE_ARRAYSIZE(rule->required_descriptor_refs))) {
-      continue;
-    }
-    *out_plan = (loom_amdgpu_scalar_conversion_plan_t){
-        .kind = rule->kind,
-        .source = source,
-        .result = result,
-        .source_bit_count =
-            loom_amdgpu_scalar_type_integer_bit_count(source_type),
-        .result_bit_count =
-            loom_amdgpu_scalar_type_integer_bit_count(result_type),
-        .convert_descriptor_ref = rule->convert_descriptor_ref,
-    };
-    return true;
+  const loom_amdgpu_scalar_conversion_op_group_t op_group =
+      loom_amdgpu_scalar_conversion_op_group(source_op->kind);
+  const loom_amdgpu_scalar_conversion_rule_t* rule =
+      loom_amdgpu_scalar_conversion_rule_for(op_group, source_type,
+                                             result_type);
+  if (rule == NULL || !loom_amdgpu_descriptor_refs_present(
+                          descriptor_set, rule->required_descriptor_refs,
+                          IREE_ARRAYSIZE(rule->required_descriptor_refs))) {
+    return false;
   }
-  return false;
+  *out_plan = (loom_amdgpu_scalar_conversion_plan_t){
+      .kind = rule->kind,
+      .source = source,
+      .result = result,
+      .source_bit_count =
+          loom_amdgpu_scalar_type_integer_bit_count(source_type),
+      .result_bit_count =
+          loom_amdgpu_scalar_type_integer_bit_count(result_type),
+      .convert_descriptor_ref = rule->convert_descriptor_ref,
+  };
+  return true;
 }
 
 static bool loom_amdgpu_select_scalar_conversion_plan(
@@ -2853,17 +3121,11 @@ static iree_status_t loom_amdgpu_bind_register_u32_lane_constants(
         lane_bit_patterns[i], lane_type, &low_lane_values[i]));
   }
 
-  if (lane_count == 1) {
-    return loom_low_lower_bind_value(context, source_result,
-                                     low_lane_values[0]);
-  }
-
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), low_lane_values, lane_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, source_result,
-                                   loom_low_concat_result(concat_op));
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_low_register_range(
+      context, source_op, low_lane_values, lane_count, result_type,
+      &low_result));
+  return loom_low_lower_bind_value(context, source_result, low_result);
 }
 
 static iree_status_t loom_amdgpu_lower_u32_constant(
@@ -2958,7 +3220,7 @@ static iree_status_t loom_amdgpu_lower_constant_plan(
 static iree_status_t loom_amdgpu_lower_vector_iota(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_iota_plan_t* plan) {
-  if (!plan->is_dynamic) {
+  if (!loom_amdgpu_vector_iota_plan_is_dynamic(plan)) {
     return loom_amdgpu_bind_register_u32_lane_constants(
         context, source_op, plan->result, &plan->descriptor,
         plan->imm32_attr_name_id, plan->lane_bit_patterns, plan->lane_count);
@@ -2967,12 +3229,17 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
   loom_value_id_t low_base = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
-      context, source_op, plan->base, &low_base));
+  if (loom_amdgpu_vector_iota_plan_has_exact_base(plan)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
+        (uint32_t)plan->exact_base, lane_type, &low_base));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
+        context, source_op, plan->base, &low_base));
+  }
 
-  int64_t exact_step = 0;
-  const bool has_exact_step =
-      loom_amdgpu_value_as_i32_constant(context, plan->step, &exact_step);
+  const bool has_exact_step = loom_amdgpu_vector_iota_plan_has_exact_step(plan);
+  const int32_t exact_step = plan->exact_step;
   loom_value_id_t low_step = LOOM_VALUE_ID_INVALID;
   if (!has_exact_step) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
@@ -3007,18 +3274,8 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
         scaled_step, lane_type, &lanes[i]));
   }
 
-  if (plan->lane_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, lanes[0]);
-  }
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, plan->lane_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             lanes, plan->lane_count);
 }
 
 static iree_status_t loom_amdgpu_extract_register_unit(
@@ -3145,14 +3402,6 @@ static iree_status_t loom_amdgpu_lower_static_vector_extract(
     IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &register_type));
   }
 
-  if (plan->result_register_count == 1) {
-    loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_extract_vector_register_unit(
-        context, source_op, low_source, plan, plan->lane_offset, 0,
-        register_type, &low_result));
-    return loom_low_lower_bind_value(context, plan->result, low_result);
-  }
-
   loom_value_id_t registers[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < plan->result_register_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_extract_vector_register_unit(
@@ -3160,16 +3409,8 @@ static iree_status_t loom_amdgpu_lower_static_vector_extract(
         register_type, &registers[i]));
   }
 
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_low_concat_build(loom_low_lower_context_builder(context), registers,
-                            plan->result_register_count, result_type,
-                            source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(
+      context, source_op, plan->result, registers, plan->result_register_count);
 }
 
 static iree_status_t loom_amdgpu_lower_dynamic_vector_extract(
@@ -3253,21 +3494,9 @@ static iree_status_t loom_amdgpu_lower_dynamic_vector_extract(
           loom_value_slice_get(loom_low_op_results(select_op), 0);
     }
   }
-  if (plan->result_register_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result,
-                                     selected_registers[0]);
-  }
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_low_concat_build(loom_low_lower_context_builder(context),
-                            selected_registers, plan->result_register_count,
-                            result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             selected_registers,
+                                             plan->result_register_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_extract(
@@ -3342,12 +3571,13 @@ static iree_status_t loom_amdgpu_lower_vector_from_16bit_elements(
     const uint32_t lane_base = register_index * 2u;
     loom_value_id_t packed = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_compose_vgpr_16bit_float(
-        context, source_op, plan->elements[lane_base], 0, lane_type, &packed));
+        context, source_op, plan->payload.elements[lane_base], 0, lane_type,
+        &packed));
     if (lane_base + 1u < plan->element_count) {
       loom_value_id_t high_lane = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_compose_vgpr_16bit_float(
-          context, source_op, plan->elements[lane_base + 1u], 16, lane_type,
-          &high_lane));
+          context, source_op, plan->payload.elements[lane_base + 1u], 16,
+          lane_type, &high_lane));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
           context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, packed,
           high_lane, lane_type, &packed));
@@ -3355,70 +3585,8 @@ static iree_status_t loom_amdgpu_lower_vector_from_16bit_elements(
     registers[register_index] = packed;
   }
 
-  if (plan->register_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, registers[0]);
-  }
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), registers, plan->register_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
-}
-
-static bool loom_amdgpu_exact_integer_lane_bits(
-    loom_low_lower_context_t* context, loom_value_id_t source_value,
-    uint32_t bit_count, uint32_t* out_bits) {
-  *out_bits = 0;
-  const loom_value_fact_table_t* fact_table =
-      loom_low_lower_context_fact_table(context);
-  if (fact_table == NULL) {
-    return false;
-  }
-  int64_t value = 0;
-  if (!loom_value_facts_as_exact_i64(
-          loom_value_fact_table_lookup(fact_table, source_value), &value)) {
-    return false;
-  }
-  *out_bits = loom_amdgpu_integer_low_bits(value, bit_count);
-  return true;
-}
-
-static bool loom_amdgpu_pack_exact_integer_elements(
-    loom_low_lower_context_t* context,
-    const loom_amdgpu_vector_from_elements_plan_t* plan,
-    uint32_t* out_bit_patterns) {
-  if (plan->element_bit_count != 8 && plan->element_bit_count != 16) {
-    return false;
-  }
-  const uint32_t element_bit_count = plan->element_bit_count;
-  const uint32_t elements_per_register = 32u / element_bit_count;
-  const uint32_t element_mask = loom_amdgpu_integer_bit_mask(element_bit_count);
-  for (uint32_t register_index = 0; register_index < plan->register_count;
-       ++register_index) {
-    uint32_t bit_pattern = 0;
-    const uint32_t lane_base = register_index * elements_per_register;
-    for (uint32_t lane_index = 0; lane_index < elements_per_register;
-         ++lane_index) {
-      const uint32_t element_index = lane_base + lane_index;
-      if (element_index >= plan->element_count) {
-        break;
-      }
-      uint32_t lane_bits = 0;
-      if (!loom_amdgpu_exact_integer_lane_bits(context,
-                                               plan->elements[element_index],
-                                               element_bit_count, &lane_bits)) {
-        return false;
-      }
-      bit_pattern |= (lane_bits & element_mask)
-                     << (lane_index * element_bit_count);
-    }
-    out_bit_patterns[register_index] = bit_pattern;
-  }
-  return true;
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             registers, plan->register_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_from_packed_integer_elements(
@@ -3432,8 +3600,8 @@ static iree_status_t loom_amdgpu_lower_vector_from_packed_integer_elements(
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
 
-  uint32_t bit_patterns[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
-  if (loom_amdgpu_pack_exact_integer_elements(context, plan, bit_patterns)) {
+  if (plan->materialization_kind ==
+      LOOM_AMDGPU_VECTOR_FROM_ELEMENTS_MATERIALIZATION_EXACT_PACKED_INTEGER) {
     loom_low_lower_resolved_descriptor_t descriptor = {0};
     loom_string_id_t imm32_attr_name_id = LOOM_STRING_ID_INVALID;
     bool descriptor_present = false;
@@ -3447,7 +3615,7 @@ static iree_status_t loom_amdgpu_lower_vector_from_packed_integer_elements(
     }
     return loom_amdgpu_bind_register_u32_lane_constants(
         context, source_op, plan->result, &descriptor, imm32_attr_name_id,
-        bit_patterns, plan->register_count);
+        plan->payload.packed_register_bit_patterns, plan->register_count);
   }
 
   loom_value_id_t registers[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
@@ -3464,7 +3632,7 @@ static iree_status_t loom_amdgpu_lower_vector_from_packed_integer_elements(
 
       loom_value_id_t low_element = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-          context, plan->elements[element_index], &low_element));
+          context, plan->payload.elements[element_index], &low_element));
       IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
           context, source_op, low_element, &low_element));
 
@@ -3487,19 +3655,8 @@ static iree_status_t loom_amdgpu_lower_vector_from_packed_integer_elements(
     registers[register_index] = packed;
   }
 
-  if (plan->register_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, registers[0]);
-  }
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), registers, plan->register_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             registers, plan->register_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_from_register_elements(
@@ -3509,7 +3666,7 @@ static iree_status_t loom_amdgpu_lower_vector_from_register_elements(
   for (uint32_t i = 0; i < plan->element_count; ++i) {
     bool reused = false;
     for (uint32_t j = 0; j < i; ++j) {
-      if (plan->elements[j] == plan->elements[i]) {
+      if (plan->payload.elements[j] == plan->payload.elements[i]) {
         elements[i] = elements[j];
         reused = true;
         break;
@@ -3518,8 +3675,8 @@ static iree_status_t loom_amdgpu_lower_vector_from_register_elements(
     if (reused) {
       continue;
     }
-    IREE_RETURN_IF_ERROR(
-        loom_low_lower_lookup_value(context, plan->elements[i], &elements[i]));
+    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+        context, plan->payload.elements[i], &elements[i]));
     if (plan->storage_kind == LOOM_AMDGPU_VECTOR_STORAGE_KIND_I1_MASK) {
       continue;
     }
@@ -3527,19 +3684,8 @@ static iree_status_t loom_amdgpu_lower_vector_from_register_elements(
         context, source_op, elements[i], &elements[i]));
   }
 
-  if (plan->element_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, elements[0]);
-  }
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), elements, plan->element_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             elements, plan->element_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_from_elements(
@@ -3740,18 +3886,8 @@ static iree_status_t loom_amdgpu_lower_packed_vector_insert(
     registers[register_index] = selected_register;
   }
 
-  if (plan->register_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, registers[0]);
-  }
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), registers, plan->register_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             registers, plan->register_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_insert(
@@ -3817,15 +3953,8 @@ static iree_status_t loom_amdgpu_lower_vector_insert(
         mask_lane_type, &lanes[i]));
   }
 
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, plan->lane_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             lanes, plan->lane_count);
 }
 
 static iree_status_t loom_amdgpu_extract_16bit_float_lane(
@@ -3957,57 +4086,93 @@ iree_status_t loom_amdgpu_emit_f32_pair_to_packed_bf16(
 void loom_amdgpu_mark_value_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t plan) {
-  if ((plan.id == LOOM_OP_VECTOR_IOTA ||
-       plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS) &&
-      plan.target_data == NULL) {
-    return;
-  }
-
-  if (plan.id == LOOM_OP_VECTOR_IOTA) {
-    loom_low_lower_require_source_operands_storage(context, source_op);
-    return;
-  }
-
-  if (plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS ||
-      plan.id == LOOM_OP_VECTOR_SPLAT) {
-    const loom_amdgpu_vector_from_elements_plan_t* vector_plan =
-        (const loom_amdgpu_vector_from_elements_plan_t*)plan.target_data;
-    uint32_t unused_bit_patterns[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
-    if (vector_plan->storage_kind ==
-            LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_INTEGER &&
-        loom_amdgpu_pack_exact_integer_elements(context, vector_plan,
-                                                unused_bit_patterns)) {
+  switch (plan.id) {
+    case LOOM_OP_INDEX_CAST: {
+      const loom_amdgpu_index_cast_plan_t* index_cast_plan =
+          (const loom_amdgpu_index_cast_plan_t*)plan.target_data;
+      switch (index_cast_plan->kind) {
+        case LOOM_AMDGPU_INDEX_CAST_KIND_ALIAS:
+        case LOOM_AMDGPU_INDEX_CAST_KIND_PRESERVING_LOW_32:
+          loom_low_lower_require_source_value_storage(context,
+                                                      index_cast_plan->source);
+          return;
+        case LOOM_AMDGPU_INDEX_CAST_KIND_DIAGNOSTIC_REJECTED:
+          return;
+        case LOOM_AMDGPU_INDEX_CAST_KIND_NONE:
+          break;
+      }
+      IREE_ASSERT_UNREACHABLE("unknown AMDGPU index cast plan kind");
       return;
     }
-    loom_low_lower_require_source_operands_storage(context, source_op);
-    return;
-  }
-
-  if (plan.id == LOOM_OP_INDEX_CMP || plan.id == LOOM_OP_SCALAR_CMPI) {
-    const loom_amdgpu_i64_compare_plan_t* compare_plan =
-        (const loom_amdgpu_i64_compare_plan_t*)plan.target_data;
-    loom_low_lower_require_source_value_storage(context, compare_plan->lhs);
-    loom_low_lower_require_source_value_storage(context, compare_plan->rhs);
-    return;
-  }
-
-  if (plan.id != LOOM_OP_VECTOR_INSERT) {
-    loom_low_lower_require_source_operands_storage(context, source_op);
-    return;
-  }
-
-  const loom_amdgpu_vector_insert_plan_t* insert_plan =
-      (const loom_amdgpu_vector_insert_plan_t*)plan.target_data;
-  if (insert_plan->value_kind !=
-      LOOM_AMDGPU_VECTOR_INSERT_VALUE_KIND_FMA_MIX_HALF_RESULT) {
-    loom_low_lower_require_source_operands_storage(context, source_op);
-    return;
-  }
-
-  loom_low_lower_require_source_value_storage(context, insert_plan->dest);
-  for (uint32_t i = 0; i < IREE_ARRAYSIZE(insert_plan->fma_mix.sources); ++i) {
-    loom_low_lower_require_source_value_storage(
-        context, insert_plan->fma_mix.sources[i]);
+    case LOOM_OP_VECTOR_EXTRACT: {
+      const loom_amdgpu_vector_extract_plan_t* extract_plan =
+          (const loom_amdgpu_vector_extract_plan_t*)plan.target_data;
+      loom_low_lower_require_source_value_storage(context,
+                                                  extract_plan->source);
+      if (extract_plan->is_dynamic) {
+        loom_low_lower_require_source_value_storage(
+            context, extract_plan->dynamic_index);
+      }
+      return;
+    }
+    case LOOM_OP_VECTOR_EXTF:
+    case LOOM_OP_VECTOR_FPTRUNC: {
+      const loom_amdgpu_vector_bf16_conversion_plan_t* conversion_plan =
+          (const loom_amdgpu_vector_bf16_conversion_plan_t*)plan.target_data;
+      loom_low_lower_require_source_value_storage(context,
+                                                  conversion_plan->source);
+      return;
+    }
+    case LOOM_OP_VECTOR_IOTA: {
+      if (plan.target_data == NULL) {
+        return;
+      }
+      const loom_amdgpu_vector_iota_plan_t* iota_plan =
+          (const loom_amdgpu_vector_iota_plan_t*)plan.target_data;
+      if (!loom_amdgpu_vector_iota_plan_is_dynamic(iota_plan)) {
+        return;
+      }
+      if (!loom_amdgpu_vector_iota_plan_has_exact_base(iota_plan)) {
+        loom_low_lower_require_source_value_storage(context, iota_plan->base);
+      }
+      if (!loom_amdgpu_vector_iota_plan_has_exact_step(iota_plan)) {
+        loom_low_lower_require_source_value_storage(context, iota_plan->step);
+      }
+      return;
+    }
+    case LOOM_OP_VECTOR_FROM_ELEMENTS:
+    case LOOM_OP_VECTOR_SPLAT: {
+      if (plan.target_data == NULL) {
+        return;
+      }
+      const loom_amdgpu_vector_from_elements_plan_t* vector_plan =
+          (const loom_amdgpu_vector_from_elements_plan_t*)plan.target_data;
+      if (vector_plan->materialization_kind ==
+          LOOM_AMDGPU_VECTOR_FROM_ELEMENTS_MATERIALIZATION_EXACT_PACKED_INTEGER) {
+        return;
+      }
+      loom_low_lower_require_source_operands_storage(context, source_op);
+      return;
+    }
+    case LOOM_OP_VECTOR_INSERT: {
+      const loom_amdgpu_vector_insert_plan_t* insert_plan =
+          (const loom_amdgpu_vector_insert_plan_t*)plan.target_data;
+      if (insert_plan->value_kind !=
+          LOOM_AMDGPU_VECTOR_INSERT_VALUE_KIND_FMA_MIX_HALF_RESULT) {
+        loom_low_lower_require_source_operands_storage(context, source_op);
+        return;
+      }
+      loom_low_lower_require_source_value_storage(context, insert_plan->dest);
+      for (uint32_t i = 0; i < IREE_ARRAYSIZE(insert_plan->fma_mix.sources);
+           ++i) {
+        loom_low_lower_require_source_value_storage(
+            context, insert_plan->fma_mix.sources[i]);
+      }
+      return;
+    }
+    default:
+      loom_low_lower_require_source_operands_storage(context, source_op);
+      return;
   }
 }
 
@@ -4035,18 +4200,8 @@ static iree_status_t loom_amdgpu_lower_vector_bf16_extf(
         source_lane_type, result_lane_type, &lanes[i]));
   }
 
-  if (plan->lane_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, lanes[0]);
-  }
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, plan->lane_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             lanes, plan->lane_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_bf16_fptrunc(
@@ -4133,20 +4288,9 @@ static iree_status_t loom_amdgpu_lower_vector_bf16_fptrunc(
     packed_registers[register_index] = packed;
   }
 
-  if (plan->result_register_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result,
-                                     packed_registers[0]);
-  }
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_low_concat_build(loom_low_lower_context_builder(context),
-                            packed_registers, plan->result_register_count,
-                            result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             packed_registers,
+                                             plan->result_register_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_bf16_conversion(
@@ -4516,12 +4660,11 @@ static iree_status_t loom_amdgpu_bind_register64_lanes(
       low_bits,
       high_bits,
   };
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, IREE_ARRAYSIZE(lanes),
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, source_result,
-                                   loom_low_concat_result(concat_op));
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_low_register_range(
+      context, source_op, lanes, IREE_ARRAYSIZE(lanes), result_type,
+      &low_result));
+  return loom_low_lower_bind_value(context, source_result, low_result);
 }
 
 static iree_status_t loom_amdgpu_bind_sign_extended_i64(

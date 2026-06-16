@@ -614,7 +614,7 @@ iree_status_t loom_target_compile_report_record_low_lowering(
           .rule_set_index = source_row->rule_set_index,
           .rule_index = source_row->rule_index,
           .plan_id = source_row->plan_id,
-          .plan_detail = source_row->plan_detail,
+          .plan_key = source_row->plan_key,
           .descriptor_id = source_row->descriptor_id,
           .emitted_low_op_count = source_row->emitted_low_op_count,
       };

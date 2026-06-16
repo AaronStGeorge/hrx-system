@@ -26,21 +26,6 @@
   (UINT32_MAX / LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE)
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_ARG_MAX_UNIT_COUNT 2u
 
-typedef enum loom_amdgpu_hal_kernel_abi_source_kind_e {
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN = 0,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_KERNARG_SEGMENT_PTR = 1,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_PTR = 2,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_X = 3,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Y = 4,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Z = 5,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_X = 6,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_Y = 7,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_Z = 8,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_PACKED_XY = 9,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_PACKED_XYZ = 10,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_M0 = 11,
-} loom_amdgpu_hal_kernel_abi_source_kind_t;
-
 static iree_string_view_t loom_amdgpu_hal_kernel_abi_source_name(
     loom_amdgpu_hal_kernel_abi_source_kind_t source_kind) {
   switch (source_kind) {
@@ -165,26 +150,30 @@ static loom_type_t loom_amdgpu_hal_kernel_abi_type_attr(
   return module->types.entries[type_id];
 }
 
-static bool loom_amdgpu_hal_kernel_abi_is_live_in_source_kind(
-    const loom_module_t* module, loom_value_id_t value_id,
-    loom_amdgpu_hal_kernel_abi_source_kind_t expected_source_kind) {
+loom_amdgpu_hal_kernel_abi_source_kind_t
+loom_amdgpu_hal_kernel_abi_live_in_source_kind(const loom_module_t* module,
+                                               loom_value_id_t value_id) {
   if (module == NULL || value_id >= module->values.count) {
-    return false;
-  }
-  if (expected_source_kind == LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN) {
-    return false;
+    return LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN;
   }
   const loom_value_t* value = loom_module_value(module, value_id);
   if (loom_value_is_block_arg(value)) {
-    return false;
+    return LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN;
   }
   const loom_op_t* def_op = loom_value_def_op(value);
   if (def_op == NULL || !loom_low_live_in_isa(def_op)) {
-    return false;
+    return LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN;
   }
   return loom_amdgpu_hal_kernel_abi_source_kind_from_stable_id(
-             (uint64_t)loom_low_live_in_source_id(def_op)) ==
-         expected_source_kind;
+      (uint64_t)loom_low_live_in_source_id(def_op));
+}
+
+static bool loom_amdgpu_hal_kernel_abi_is_live_in_source_kind(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_amdgpu_hal_kernel_abi_source_kind_t expected_source_kind) {
+  return expected_source_kind != LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN &&
+         loom_amdgpu_hal_kernel_abi_live_in_source_kind(module, value_id) ==
+             expected_source_kind;
 }
 
 bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(

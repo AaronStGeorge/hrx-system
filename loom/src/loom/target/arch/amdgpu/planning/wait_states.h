@@ -59,6 +59,8 @@ typedef enum loom_amdgpu_wait_state_reason_e {
   LOOM_AMDGPU_WAIT_STATE_REASON_DST_SEL_FORWARDING_USE = 7,
   // An RDNA3+ ALU packet consumes storage written by a recent ALU packet.
   LOOM_AMDGPU_WAIT_STATE_REASON_DELAY_ALU_DEPENDENCY = 8,
+  // Number of wait-state reasons, including UNKNOWN.
+  LOOM_AMDGPU_WAIT_STATE_REASON_COUNT_ = 9,
 } loom_amdgpu_wait_state_reason_t;
 
 typedef enum loom_amdgpu_wait_state_action_e {

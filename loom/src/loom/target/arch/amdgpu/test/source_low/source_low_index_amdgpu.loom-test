@@ -331,11 +331,11 @@ func.def target(@target) @dynamic_base_iota_i32(%start: i32) -> (vector<4xi32>) 
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @dynamic_base_iota_i32(%start: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.rdna3.core> {
-  %7 = v_mov_b32_copy %start
-  %8 = v_add_u32_src0_inline %7, 1
-  %9 = v_add_u32_src0_inline %7, 2
-  %10 = v_add_u32_src0_inline %7, 3
-  %lanes = concat(%7, %8, %9, %10) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %6 = v_mov_b32_copy %start
+  %7 = v_add_u32_src0_inline %6, 1
+  %8 = v_add_u32_src0_inline %6, 2
+  %9 = v_add_u32_src0_inline %6, 3
+  %lanes = concat(%6, %7, %8, %9) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   return %lanes
 }
 

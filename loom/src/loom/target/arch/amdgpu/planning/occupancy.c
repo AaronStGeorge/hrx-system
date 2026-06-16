@@ -12,7 +12,7 @@
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
-#include "loom/target/arch/amdgpu/planning/occupancy_tables.h"
+#include "loom/target/arch/amdgpu/planning/occupancy_model.h"
 #include "loom/target/arch/amdgpu/target_id/target_id.h"
 #include "loom/target/launch.h"
 #include "loom/target/types.h"
@@ -93,6 +93,25 @@ static iree_status_t loom_amdgpu_occupancy_next_cliff_units(
   return iree_ok_status();
 }
 
+static uint32_t loom_amdgpu_occupancy_next_model_cliff_units(
+    const loom_amdgpu_occupancy_pressure_cliff_model_t* pressure_cliffs,
+    iree_host_size_t pressure_cliff_count, uint32_t allocated_units,
+    uint32_t current_wave_limit) {
+  if (current_wave_limit == 0) {
+    return 0;
+  }
+  for (iree_host_size_t i = 0; i < pressure_cliff_count; ++i) {
+    const loom_amdgpu_occupancy_pressure_cliff_model_t* cliff =
+        &pressure_cliffs[i];
+    if (cliff->cliff_units <= allocated_units) {
+      continue;
+    }
+    IREE_ASSERT(cliff->tier_before == current_wave_limit);
+    return cliff->cliff_units;
+  }
+  return 0;
+}
+
 static iree_status_t loom_amdgpu_occupancy_select_model(
     uint16_t descriptor_set_ordinal, iree_string_view_t descriptor_set_key,
     const loom_amdgpu_occupancy_model_t** out_model) {
@@ -154,21 +173,13 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
   const loom_amdgpu_occupancy_model_t* model = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_select_model(
       descriptor_set->descriptor_set_ordinal, descriptor_set_key, &model));
-  if (model->register_class_count == 0 || model->max_waves_per_simd == 0) {
+  if (model->pressure_cliff_count == 0) {
     return iree_ok_status();
   }
 
-  iree_host_size_t max_cliff_count = 0;
-  if (!iree_host_size_checked_mul(model->register_class_count,
-                                  model->max_waves_per_simd,
-                                  &max_cliff_count)) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU schedule pressure cliff capacity exceeds host size");
-  }
   loom_low_schedule_pressure_cliff_t* cliffs = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, max_cliff_count, sizeof(*cliffs), (void**)&cliffs));
+      arena, model->pressure_cliff_count, sizeof(*cliffs), (void**)&cliffs));
   iree_host_size_t cliff_count = 0;
 
   for (iree_host_size_t class_index = 0;
@@ -178,39 +189,19 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
     uint16_t descriptor_reg_class_id = LOOM_LOW_ID_NONE;
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_lookup_register_class(
         descriptor_set, class_model->register_class, &descriptor_reg_class_id));
-    uint32_t previous_wave_limit = model->max_waves_per_simd;
-    uint64_t stop_candidate =
-        (uint64_t)class_model->pool_units + class_model->allocation_granularity;
-    if (stop_candidate > UINT32_MAX) {
-      stop_candidate = UINT32_MAX;
-    }
-    for (uint64_t candidate = 1; candidate <= stop_candidate; ++candidate) {
-      uint32_t ignored_rounded_units = 0;
-      uint32_t candidate_wave_limit = 0;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_wave_limit(
-          class_model->pool_units, class_model->allocation_granularity,
-          model->max_waves_per_simd, (uint32_t)candidate,
-          &ignored_rounded_units, &candidate_wave_limit));
-      if (candidate_wave_limit >= previous_wave_limit) {
-        continue;
-      }
-      if (cliff_count >= max_cliff_count) {
-        return iree_make_status(
-            IREE_STATUS_INTERNAL,
-            "AMDGPU schedule pressure cliff capacity was underestimated");
-      }
+    for (iree_host_size_t i = 0; i < class_model->pressure_cliff_count; ++i) {
+      const loom_amdgpu_occupancy_pressure_cliff_model_t* cliff_model =
+          &class_model->pressure_cliffs[i];
+      IREE_ASSERT(cliff_count < model->pressure_cliff_count);
       cliffs[cliff_count++] = (loom_low_schedule_pressure_cliff_t){
           .descriptor_reg_class_id = descriptor_reg_class_id,
-          .cliff_units = (uint32_t)candidate,
-          .tier_before = previous_wave_limit,
-          .tier_after = candidate_wave_limit,
+          .cliff_units = cliff_model->cliff_units,
+          .tier_before = cliff_model->tier_before,
+          .tier_after = cliff_model->tier_after,
       };
-      previous_wave_limit = candidate_wave_limit;
-      if (candidate_wave_limit == 0) {
-        break;
-      }
     }
   }
+  IREE_ASSERT(cliff_count == model->pressure_cliff_count);
 
   *out_pressure_cliffs = (loom_low_schedule_pressure_cliff_list_t){
       .values = cliffs,
@@ -379,14 +370,22 @@ static iree_status_t loom_amdgpu_occupancy_flat_workgroup_size(
 static iree_status_t loom_amdgpu_occupancy_finalize_resource_limit(
     uint32_t pool_units, uint32_t allocation_granularity,
     uint32_t max_waves_per_simd, uint32_t allocated_units,
-    uint32_t* out_rounded_units, uint32_t* out_wave_limit,
-    uint32_t* out_next_cliff_units, uint32_t* out_units_until_next_cliff) {
+    const loom_amdgpu_occupancy_pressure_cliff_model_t* pressure_cliffs,
+    iree_host_size_t pressure_cliff_count, uint32_t* out_rounded_units,
+    uint32_t* out_wave_limit, uint32_t* out_next_cliff_units,
+    uint32_t* out_units_until_next_cliff) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_wave_limit(
       pool_units, allocation_granularity, max_waves_per_simd, allocated_units,
       out_rounded_units, out_wave_limit));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_next_cliff_units(
-      pool_units, allocation_granularity, max_waves_per_simd, allocated_units,
-      *out_wave_limit, out_next_cliff_units));
+  if (pressure_cliffs != NULL) {
+    *out_next_cliff_units = loom_amdgpu_occupancy_next_model_cliff_units(
+        pressure_cliffs, pressure_cliff_count, allocated_units,
+        *out_wave_limit);
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_next_cliff_units(
+        pool_units, allocation_granularity, max_waves_per_simd, allocated_units,
+        *out_wave_limit, out_next_cliff_units));
+  }
   *out_units_until_next_cliff = *out_next_cliff_units == 0
                                     ? UINT32_MAX
                                     : *out_next_cliff_units - allocated_units;
@@ -409,6 +408,7 @@ static iree_status_t loom_amdgpu_occupancy_finalize_limits(
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_finalize_resource_limit(
         class_model->pool_units, class_model->allocation_granularity,
         table->max_waves_per_simd, class_summary->allocated_units,
+        class_model->pressure_cliffs, class_model->pressure_cliff_count,
         &class_summary->rounded_units, &class_summary->wave_limit,
         &class_summary->next_cliff_units,
         &class_summary->units_until_next_cliff));
@@ -439,6 +439,7 @@ static iree_status_t loom_amdgpu_occupancy_finalize_limits(
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_finalize_resource_limit(
         resource_model->pool_units, resource_model->allocation_granularity,
         table->max_waves_per_simd, pressure_resource->allocated_units,
+        /*pressure_cliffs=*/NULL, /*pressure_cliff_count=*/0,
         &pressure_resource->rounded_units, &pressure_resource->wave_limit,
         &pressure_resource->next_cliff_units,
         &pressure_resource->units_until_next_cliff));

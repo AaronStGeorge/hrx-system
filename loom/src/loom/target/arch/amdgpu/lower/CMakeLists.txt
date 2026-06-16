@@ -42,7 +42,6 @@ loom_cc_library(
     "abi.h"
     "arithmetic.h"
     "async.h"
-    "bitfield.h"
     "bitpack.h"
     "buffer.h"
     "collective_combine.h"
@@ -74,7 +73,6 @@ loom_cc_library(
     "arithmetic.c"
     "async.c"
     "atomic.c"
-    "bitfield.c"
     "bitpack.c"
     "buffer.c"
     "collective_combine.c"
@@ -143,6 +141,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_id
     loom::target::arch::amdgpu::target_info
+    loom::target::arch::amdgpu::target_info_defs
     loom::target::low_legality
     loom::target::registers
     loom::util::fact_table

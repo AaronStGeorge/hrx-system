@@ -160,7 +160,7 @@ static bool loom_low_allocation_placement_relation_range_fits(
          unit_count <= assignment->unit_count - unit_offset;
 }
 
-static iree_string_view_t loom_low_allocation_placement_decision_reason(
+static iree_string_view_t loom_low_allocation_placement_decision_reason_key(
     const loom_low_allocation_table_t* table,
     const loom_low_placement_relation_t* relation,
     const loom_low_allocation_assignment_t* source_assignment,
@@ -214,8 +214,8 @@ static iree_status_t loom_low_allocation_emit_placement_decisions(
         loom_low_allocation_assignment_for_value_ordinal(
             table, relation->result_ordinal, NULL);
     bool accepted = false;
-    const iree_string_view_t reason =
-        loom_low_allocation_placement_decision_reason(
+    const iree_string_view_t reason_key =
+        loom_low_allocation_placement_decision_reason_key(
             table, relation, source_assignment, result_assignment, &accepted);
     const iree_string_view_t value_class_name =
         result_assignment
@@ -250,7 +250,7 @@ static iree_status_t loom_low_allocation_emit_placement_decisions(
         loom_param_string(loom_low_allocation_placement_relation_weight_name(
             relation->flags)),
         loom_param_string(accepted ? IREE_SV("accepted") : IREE_SV("rejected")),
-        loom_param_string(reason),
+        loom_param_string(reason_key),
         loom_param_u32(relation->result_unit_offset),
         loom_param_u32(relation->source_unit_offset),
         loom_param_u32(relation->unit_count),

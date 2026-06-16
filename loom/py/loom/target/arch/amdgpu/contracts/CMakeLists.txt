@@ -17,6 +17,7 @@ iree_py_library(
     "arithmetic.py"
     "async.py"
     "buffer.py"
+    "callback_ownership.py"
     "compare.py"
     "config.py"
     "dot.py"
@@ -35,8 +36,24 @@ iree_py_library(
     loom::py::loom::dialect::scalar::scalar
     loom::py::loom::dialect::vector::vector
     loom::py::loom::dialect::view::view
+    loom::py::loom::target::contract_fragments
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::contracts::contracts
+)
+
+iree_py_test(
+  NAME
+    contracts_test
+  SRCS
+    "../../../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.target.arch.amdgpu.contracts.arithmetic_test"
+    "loom.target.arch.amdgpu.contracts.callback_ownership_test"
+  DEPS
+    loom::py::loom::target::arch::amdgpu::contracts::contracts
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

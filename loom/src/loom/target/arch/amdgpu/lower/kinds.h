@@ -55,12 +55,14 @@ typedef enum loom_amdgpu_memory_address_form_e {
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID = 4,
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT = 5,
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM = 6,
+  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_COUNT_,
 } loom_amdgpu_memory_address_form_t;
 
 typedef enum loom_amdgpu_atomic_operation_kind_e {
   LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE = 0,
   LOOM_AMDGPU_ATOMIC_OPERATION_RMW = 1,
   LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG = 2,
+  LOOM_AMDGPU_ATOMIC_OPERATION_COUNT_,
 } loom_amdgpu_atomic_operation_kind_t;
 
 #ifdef __cplusplus

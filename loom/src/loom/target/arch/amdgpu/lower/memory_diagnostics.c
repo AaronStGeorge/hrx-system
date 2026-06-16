@@ -65,6 +65,8 @@ static iree_string_view_t loom_amdgpu_memory_operation_name(
       return IREE_SV("load");
     case LOOM_AMDGPU_MEMORY_OPERATION_STORE:
       return IREE_SV("store");
+    case LOOM_AMDGPU_MEMORY_OPERATION_COUNT_:
+      break;
   }
   return IREE_SV("invalid");
 }

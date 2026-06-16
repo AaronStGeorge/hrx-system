@@ -27,8 +27,6 @@ loom_cc_library(
     math_policy
   HDRS
     "math_policy.h"
-  TEXTUAL_HDRS
-    "math_policy_tables.inl"
   SRCS
     "math_policy.c"
   DEPS

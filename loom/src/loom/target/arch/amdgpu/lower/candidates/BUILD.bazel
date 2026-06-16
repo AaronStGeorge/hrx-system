@@ -6,7 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_target_table_cc_library",
+    "loom_generated_cc_library",
 )
 
 package(
@@ -17,8 +17,9 @@ package(
 
 _AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
 
-loom_target_table_cc_library(
+loom_generated_cc_library(
     name = "atomic_candidates",
+    hdrs = ["atomic_candidates.h"],
     generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:atomic_candidates",
     visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
@@ -30,15 +31,14 @@ loom_target_table_cc_library(
     ],
 )
 
-loom_target_table_cc_library(
+loom_generated_cc_library(
     name = "compare_candidates",
+    hdrs = ["compare_candidates.h"],
     generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:compare_candidates",
     visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
-        "//loom/src/loom/ir",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
-        "//runtime/src/iree/base",
     ],
 )

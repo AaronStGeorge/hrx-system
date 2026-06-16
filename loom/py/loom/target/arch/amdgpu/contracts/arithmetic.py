@@ -23,6 +23,7 @@ from loom.target.arch.amdgpu.contracts.materializers import (
 )
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
+    AttrProject,
     ContractCase,
     ContractFragment,
     DescriptorEmitForm,
@@ -30,6 +31,7 @@ from loom.target.contracts import (
     EmitDescriptorOp,
     Guard,
     GuardDiagnostic,
+    RecipeRule,
     Scalar,
     TypePattern,
     ValueAliasRule,
@@ -91,21 +93,27 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_min_u32",
     "amdgpu.v_max_u32",
     "amdgpu.v_and_b32",
+    "amdgpu.v_and_b32.src0_inline",
     "amdgpu.v_and_b32.lit",
     "amdgpu.v_or_b32",
     "amdgpu.v_or_b32.lit",
     "amdgpu.v_xor_b32",
     "amdgpu.v_xor_b32.lit",
     "amdgpu.v_lshlrev_b32",
+    "amdgpu.v_lshlrev_b32.src0_inline",
     "amdgpu.v_lshlrev_b32.lit",
     "amdgpu.v_lshlrev_b32.src0_16_low16",
     "amdgpu.v_lshlrev_b32.vop3_imm",
     "amdgpu.v_lshl_add_u32.shift_imm",
     "amdgpu.v_bfe_u32.offset_0_width_16_low16",
+    "amdgpu.v_bfe_i32.offset_width_inline",
+    "amdgpu.v_bfe_u32.offset_width_inline",
     "amdgpu.v_bfi_b32.src0_lit",
     "amdgpu.v_ashrrev_i32",
+    "amdgpu.v_ashrrev_i32.src0_inline",
     "amdgpu.v_ashrrev_i32.lit",
     "amdgpu.v_lshrrev_b32",
+    "amdgpu.v_lshrrev_b32.src0_inline",
     "amdgpu.v_lshrrev_b32.lit",
 )
 
@@ -133,6 +141,11 @@ _VEC_I16_PACKED = Vector(
     "i16",
     minimum_lanes=2,
     maximum_lanes="LOOM_AMDGPU_MAX_PACKED_I16_LANES",
+)
+_VEC_I8_PACKED = Vector(
+    "i8",
+    minimum_lanes=1,
+    maximum_lanes="LOOM_AMDGPU_MAX_PACKED_I8_LANES",
 )
 _I8 = Scalar("i8")
 _I16 = Scalar("i16")
@@ -177,6 +190,11 @@ _VEC_I16_PACKED_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
     subject_name="vector<i16>",
     constraint_key="amdgpu.arithmetic.vector_i16_packed",
+)
+_VEC_I8_PACKED_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="vector<i8>",
+    constraint_key="amdgpu.arithmetic.vector_i8_packed",
 )
 _VEC_I16_PACKED_EVEN_LANES_DIAGNOSTIC = GuardDiagnostic(
     subject_role="lane-count",
@@ -288,6 +306,36 @@ _LITERAL_I32_BITS_DIAGNOSTIC = GuardDiagnostic(
     subject_name="i32",
     constraint_key="amdgpu.literal.i32_bits",
 )
+_BITFIELD_OFFSET_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="bitfield-offset",
+    subject_name="i32",
+    constraint_key="amdgpu.bitfield.offset_i32",
+)
+_BITFIELD_WIDTH_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="bitfield-width",
+    subject_name="i32",
+    constraint_key="amdgpu.bitfield.width_i32",
+)
+_BITSTREAM_WIDTH_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="bitstream-width",
+    subject_name="i32",
+    constraint_key="amdgpu.bitstream.width_i32",
+)
+_BITSTREAM_BITPACK_STORAGE_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="bitstream-storage",
+    subject_name="vector.bitpack",
+    constraint_key="amdgpu.bitstream.bitpack_i32_to_i8",
+)
+_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="bitstream-storage",
+    subject_name="vector.bitunpack",
+    constraint_key="amdgpu.bitstream.bitunpack_i32_lanes",
+)
+_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="bitstream-storage",
+    subject_name="vector.bitunpack",
+    constraint_key="amdgpu.bitstream.bitunpack_i8_lanes",
+)
 
 
 def _descriptor(key: str) -> Descriptor:
@@ -303,6 +351,8 @@ def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
         return _VEC_F16_PACKED_DIAGNOSTIC
     if type_pattern == _VEC_I16_PACKED:
         return _VEC_I16_PACKED_DIAGNOSTIC
+    if type_pattern == _VEC_I8_PACKED:
+        return _VEC_I8_PACKED_DIAGNOSTIC
     if type_pattern == _I32:
         return _I32_DIAGNOSTIC
     if type_pattern == _I64:
@@ -493,6 +543,617 @@ def _f32_abs_rule(
             ),
         ),
     )
+
+
+_BITFIELD_INLINE_MASK_WIDTHS = (1, 2, 3, 4, 5, 6)
+
+
+def _bitfield_low_mask(width: int) -> int:
+    return 0xFFFFFFFF if width == 32 else (1 << width) - 1
+
+
+def _bitfield_attr_guards(
+    *,
+    offset_min: int,
+    offset_max: int,
+    width_min: int,
+    width_max: int,
+) -> tuple[Guard, ...]:
+    return (
+        Guard.i64_range(
+            "offset",
+            offset_min,
+            offset_max,
+            diagnostic=_BITFIELD_OFFSET_DIAGNOSTIC,
+        ),
+        Guard.i64_range(
+            "width",
+            width_min,
+            width_max,
+            diagnostic=_BITFIELD_WIDTH_DIAGNOSTIC,
+        ),
+    )
+
+
+def _bitstream_width_guard(maximum: int) -> Guard:
+    return Guard.i64_range(
+        "width",
+        1,
+        maximum,
+        diagnostic=_BITSTREAM_WIDTH_DIAGNOSTIC,
+    )
+
+
+def _vector_bitpack_recipe_rule() -> RecipeRule:
+    return RecipeRule(
+        source_op=vector.vector_bitpack,
+        guards=(
+            _value_type("source", _VEC_I32),
+            _value_type("result", _VEC_I8_PACKED),
+            _bitstream_width_guard(8),
+            Guard.bitpack_storage(
+                "source",
+                "result",
+                "width",
+                register_bit_width=32,
+                result_payload_multiple=32,
+                diagnostic=_BITSTREAM_BITPACK_STORAGE_DIAGNOSTIC,
+            ),
+        ),
+    )
+
+
+def _vector_bitunpack_recipe_rule(
+    source_op: Op,
+    result_type: TypePattern,
+    *,
+    maximum_width: int,
+    diagnostic: GuardDiagnostic,
+) -> RecipeRule:
+    return RecipeRule(
+        source_op=source_op,
+        guards=(
+            _value_type("result", result_type),
+            _bitstream_width_guard(maximum_width),
+            Guard.bitunpack_storage(
+                "source",
+                "result",
+                "width",
+                register_bit_width=32,
+                maximum_source_registers=16,
+                maximum_result_lanes=32,
+                diagnostic=diagnostic,
+            ),
+        ),
+    )
+
+
+def _vector_bitstream_recipe_rules() -> tuple[RecipeRule, ...]:
+    return (
+        _vector_bitpack_recipe_rule(),
+        _vector_bitunpack_recipe_rule(
+            vector.vector_bitunpacku,
+            _VEC_I32,
+            maximum_width=32,
+            diagnostic=_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC,
+        ),
+        _vector_bitunpack_recipe_rule(
+            vector.vector_bitunpacku,
+            _VEC_I8_PACKED,
+            maximum_width=8,
+            diagnostic=_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC,
+        ),
+        _vector_bitunpack_recipe_rule(
+            vector.vector_bitunpacks,
+            _VEC_I32,
+            maximum_width=32,
+            diagnostic=_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC,
+        ),
+        _vector_bitunpack_recipe_rule(
+            vector.vector_bitunpacks,
+            _VEC_I8_PACKED,
+            maximum_width=8,
+            diagnostic=_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC,
+        ),
+    )
+
+
+def _vector_bitfield_extract_alias_rule(source_op: Op) -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=source_op,
+        source=ValueRef.operand("source"),
+        result=ValueRef.result("result"),
+        guards=(
+            *_typed_guards(("source", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=0,
+                offset_max=0,
+                width_min=32,
+                width_max=32,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_extract_bfe_rule(
+    source_op: Op,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("source", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=0,
+                offset_max=31,
+                width_min=1,
+                width_max=31,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"value": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "offset": AttrProject.direct("offset"),
+                    "width": AttrProject.direct("width"),
+                },
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_extractu_offset0_inline_rule(width: int) -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_and_b32.src0_inline")
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_extractu,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("source", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=0,
+                offset_max=0,
+                width_min=width,
+                width_max=width,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"rhs": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": _bitfield_low_mask(width)},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_extractu_offset0_literal_rule() -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_and_b32.lit")
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_extractu,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("source", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=0,
+                offset_max=0,
+                width_min=1,
+                width_max=31,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"rhs": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": AttrProject.i64_low_bit_mask("width")},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_extractu_shift_inline_mask_rule(width: int) -> DescriptorRule:
+    shift = _descriptor("amdgpu.v_lshrrev_b32.src0_inline")
+    mask = _descriptor("amdgpu.v_and_b32.src0_inline")
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_extractu,
+        descriptor=shift,
+        guards=(
+            *_typed_guards(("source", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=1,
+                offset_max=31,
+                width_min=width,
+                width_max=width,
+            ),
+            Guard.descriptor_available(shift),
+            Guard.descriptor_available(mask),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=shift,
+                operands={"value": ValueRef.operand("source")},
+                results={"dst": ValueRef.temporary("shifted")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": AttrProject.direct("offset")},
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+            EmitDescriptorOp(
+                descriptor=mask,
+                operands={"rhs": ValueRef.temporary("shifted")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": _bitfield_low_mask(width)},
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_extractu_shift_literal_mask_rule() -> DescriptorRule:
+    shift = _descriptor("amdgpu.v_lshrrev_b32.src0_inline")
+    mask = _descriptor("amdgpu.v_and_b32.lit")
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_extractu,
+        descriptor=shift,
+        guards=(
+            *_typed_guards(("source", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=1,
+                offset_max=31,
+                width_min=1,
+                width_max=31,
+            ),
+            Guard.descriptor_available(shift),
+            Guard.descriptor_available(mask),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=shift,
+                operands={"value": ValueRef.operand("source")},
+                results={"dst": ValueRef.temporary("shifted")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": AttrProject.direct("offset")},
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+            EmitDescriptorOp(
+                descriptor=mask,
+                operands={"rhs": ValueRef.temporary("shifted")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": AttrProject.i64_low_bit_mask("width")},
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_extracts_top_aligned_rule(width: int) -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_ashrrev_i32.src0_inline")
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_extracts,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("source", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=32 - width,
+                offset_max=32 - width,
+                width_min=width,
+                width_max=width,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"value": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": 32 - width},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_extracts_shift_rule() -> DescriptorRule:
+    shift_left = _descriptor("amdgpu.v_lshlrev_b32.src0_inline")
+    shift_right = _descriptor("amdgpu.v_ashrrev_i32.src0_inline")
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_extracts,
+        descriptor=shift_left,
+        guards=(
+            *_typed_guards(("source", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=0,
+                offset_max=31,
+                width_min=1,
+                width_max=31,
+            ),
+            Guard.descriptor_available(shift_left),
+            Guard.descriptor_available(shift_right),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=shift_left,
+                operands={"value": ValueRef.operand("source")},
+                results={"dst": ValueRef.temporary("shifted_left")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": AttrProject.i64_literal_minus_attrs(
+                        "offset",
+                        other_source_attr="width",
+                        literal=32,
+                    )
+                },
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+            EmitDescriptorOp(
+                descriptor=shift_right,
+                operands={"value": ValueRef.temporary("shifted_left")},
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": AttrProject.i64_literal_minus_attr(
+                        "width",
+                        literal=32,
+                    )
+                },
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_insert_alias_rule() -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=vector.vector_bitfield_insert,
+        source=ValueRef.operand("field"),
+        result=ValueRef.result("result"),
+        guards=(
+            *_typed_guards(("field", "base", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=0,
+                offset_max=0,
+                width_min=32,
+                width_max=32,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_insert_bfi_offset0_rule() -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_bfi_b32.src0_lit")
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_insert,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("field", "base", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=0,
+                offset_max=0,
+                width_min=1,
+                width_max=31,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "insert": ValueRef.operand("field"),
+                    "base": ValueRef.operand("base"),
+                },
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": AttrProject.i64_low_bit_mask("width")},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_insert_bfi_shift_rule() -> DescriptorRule:
+    shift = _descriptor("amdgpu.v_lshlrev_b32.src0_inline")
+    insert = _descriptor("amdgpu.v_bfi_b32.src0_lit")
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_insert,
+        descriptor=shift,
+        guards=(
+            *_typed_guards(("field", "base", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=1,
+                offset_max=31,
+                width_min=1,
+                width_max=31,
+            ),
+            Guard.descriptor_available(shift),
+            Guard.descriptor_available(insert),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=shift,
+                operands={"value": ValueRef.operand("field")},
+                results={"dst": ValueRef.temporary("shifted_field")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": AttrProject.direct("offset")},
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+            EmitDescriptorOp(
+                descriptor=insert,
+                operands={
+                    "insert": ValueRef.temporary("shifted_field"),
+                    "base": ValueRef.operand("base"),
+                },
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": AttrProject.i64_shifted_low_bit_mask(
+                        "width",
+                        offset_attr="offset",
+                    )
+                },
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_insert_fallback_rule(
+    *,
+    offset_min: int,
+    offset_max: int,
+    inline_field_mask_width: int | None,
+) -> DescriptorRule:
+    field_mask = _descriptor(
+        "amdgpu.v_and_b32.src0_inline"
+        if inline_field_mask_width is not None
+        else "amdgpu.v_and_b32.lit"
+    )
+    shift = _descriptor("amdgpu.v_lshlrev_b32.src0_inline")
+    clear_base = _descriptor("amdgpu.v_and_b32.lit")
+    merge = _descriptor("amdgpu.v_or_b32")
+    has_shift = offset_max != 0
+    width_min = inline_field_mask_width if inline_field_mask_width is not None else 1
+    width_max = inline_field_mask_width if inline_field_mask_width is not None else 31
+    shifted_field = (
+        ValueRef.temporary("shifted_field")
+        if has_shift
+        else ValueRef.temporary("field_low_bits")
+    )
+    shift_emit = (
+        (
+            EmitDescriptorOp(
+                descriptor=shift,
+                operands={"value": ValueRef.temporary("field_low_bits")},
+                results={"dst": shifted_field},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": AttrProject.direct("offset")},
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+        )
+        if has_shift
+        else ()
+    )
+    return DescriptorRule(
+        source_op=vector.vector_bitfield_insert,
+        descriptor=field_mask,
+        guards=(
+            *_typed_guards(("field", "base", "result"), _VEC_I32),
+            *_bitfield_attr_guards(
+                offset_min=offset_min,
+                offset_max=offset_max,
+                width_min=width_min,
+                width_max=width_max,
+            ),
+            Guard.descriptor_available(field_mask),
+            *((Guard.descriptor_available(shift),) if has_shift else ()),
+            Guard.descriptor_available(clear_base),
+            Guard.descriptor_available(merge),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=field_mask,
+                operands={"rhs": ValueRef.operand("field")},
+                results={"dst": ValueRef.temporary("field_low_bits")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": _bitfield_low_mask(inline_field_mask_width)
+                    if inline_field_mask_width is not None
+                    else AttrProject.i64_low_bit_mask("width")
+                },
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+            *shift_emit,
+            EmitDescriptorOp(
+                descriptor=clear_base,
+                operands={"rhs": ValueRef.operand("base")},
+                results={"dst": ValueRef.temporary("cleared_base")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": AttrProject.i64_shifted_low_bit_clear_mask(
+                        "width",
+                        offset_attr="offset",
+                    )
+                },
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+            EmitDescriptorOp(
+                descriptor=merge,
+                operands={
+                    "lhs": ValueRef.temporary("cleared_base"),
+                    "rhs": shifted_field,
+                },
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+            ),
+        ),
+    )
+
+
+def _vector_bitfield_rules() -> tuple[ContractCase, ...]:
+    rules: list[ContractCase] = [
+        _vector_bitfield_extract_alias_rule(vector.vector_bitfield_extractu),
+        *(
+            _vector_bitfield_extractu_offset0_inline_rule(width)
+            for width in _BITFIELD_INLINE_MASK_WIDTHS
+        ),
+        _vector_bitfield_extractu_offset0_literal_rule(),
+        _vector_bitfield_extract_bfe_rule(
+            vector.vector_bitfield_extractu,
+            "amdgpu.v_bfe_u32.offset_width_inline",
+        ),
+        *(
+            _vector_bitfield_extractu_shift_inline_mask_rule(width)
+            for width in _BITFIELD_INLINE_MASK_WIDTHS
+        ),
+        _vector_bitfield_extractu_shift_literal_mask_rule(),
+        _vector_bitfield_extract_alias_rule(vector.vector_bitfield_extracts),
+        *(_vector_bitfield_extracts_top_aligned_rule(width) for width in range(1, 32)),
+        _vector_bitfield_extract_bfe_rule(
+            vector.vector_bitfield_extracts,
+            "amdgpu.v_bfe_i32.offset_width_inline",
+        ),
+        _vector_bitfield_extracts_shift_rule(),
+        _vector_bitfield_insert_alias_rule(),
+        _vector_bitfield_insert_bfi_offset0_rule(),
+        _vector_bitfield_insert_bfi_shift_rule(),
+    ]
+    rules.extend(
+        _vector_bitfield_insert_fallback_rule(
+            offset_min=0,
+            offset_max=0,
+            inline_field_mask_width=width,
+        )
+        for width in _BITFIELD_INLINE_MASK_WIDTHS
+    )
+    rules.append(
+        _vector_bitfield_insert_fallback_rule(
+            offset_min=0,
+            offset_max=0,
+            inline_field_mask_width=None,
+        )
+    )
+    rules.extend(
+        _vector_bitfield_insert_fallback_rule(
+            offset_min=1,
+            offset_max=31,
+            inline_field_mask_width=width,
+        )
+        for width in _BITFIELD_INLINE_MASK_WIDTHS
+    )
+    rules.append(
+        _vector_bitfield_insert_fallback_rule(
+            offset_min=1,
+            offset_max=31,
+            inline_field_mask_width=None,
+        )
+    )
+    return tuple(rules)
 
 
 def _ternary_rule(
@@ -1863,6 +2524,8 @@ def _rules() -> tuple[ContractCase, ...]:
                 ),
             )
         )
+    rules.extend(_vector_bitfield_rules())
+    rules.extend(_vector_bitstream_recipe_rules())
     for source_op, descriptor_key in (
         (scalar_arithmetic.scalar_addf, "amdgpu.v_add_f32.lit"),
         (scalar_arithmetic.scalar_mulf, "amdgpu.v_mul_f32.lit"),

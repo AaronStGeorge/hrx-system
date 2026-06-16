@@ -52,11 +52,19 @@ if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
   list(APPEND _target_refs_platform_args "--descriptor-set=amdgpu.rdna3_5.core")
   list(APPEND _target_refs_platform_args "--isa-xml=rdna3_5:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3_5.xml")
 endif()
-loom_target_table_cc_library(
+loom_generated_cc_library(
   NAME
     target_refs
   GENERATOR
     loom::py::loom::gen::target::arch::amdgpu::refs::target_refs
+  SOURCE
+    "target_refs_data.c"
+  SRCS
+    "target_refs.c"
+  GENERATED_HDR_FLAGS
+    "--header"
+  GENERATED_HDRS
+    "target_refs.h"
   ARGS
     "--public-header=loom/target/arch/amdgpu/refs/target_refs.h"
     ${_target_refs_platform_args}

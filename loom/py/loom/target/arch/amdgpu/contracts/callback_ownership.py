@@ -1,0 +1,344 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""AMDGPU callback-registry ownership checks."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Iterable
+from dataclasses import dataclass
+from enum import Enum, unique
+
+from loom.dsl import Op
+from loom.target.contract_fragments import (
+    ContractFragmentRegistration,
+    iter_contract_fragment_registrations,
+)
+from loom.target.contracts import LOWER_RULE_FLAG_CONTRACT_ONLY, compile_lower_rule_set
+
+
+@unique
+class CallbackDispatchRole(Enum):
+    """Ownership class declared by an AMDGPU callback dispatch row macro."""
+
+    VALUE = "value"
+    MEMORY = "memory"
+    RECIPE = "recipe"
+    GENERATED_PRESELECT = "generated_preselect"
+    LEGALITY = "legality"
+
+
+@dataclass(frozen=True, slots=True)
+class CallbackDispatchRow:
+    """Parsed callback dispatch row from the AMDGPU registry table."""
+
+    op_kind: str
+    role: CallbackDispatchRole
+    macro_name: str
+    arguments: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _RowMacroSignature:
+    argument_count: int
+    storage_policy_argument: int | None = None
+    preselect_policy_argument: int | None = None
+    report_policy_argument: int | None = None
+
+
+_ROW_RE = re.compile(
+    r"\[LOOM_AMDGPU_OP_INDEX\((LOOM_OP_[A-Z0-9_]+)\)\]\s*=\s*"
+    r"LOOM_AMDGPU_([A-Z0-9_]+ROW)\("
+)
+
+_ROW_MACRO_SIGNATURES = {
+    "VALUE_DIRECT_ROW": _RowMacroSignature(argument_count=4),
+    "VALUE_DIRECT_STORAGE_ROW": _RowMacroSignature(
+        argument_count=5, storage_policy_argument=4
+    ),
+    "VALUE_DIRECT_POLICY_ROW": _RowMacroSignature(
+        argument_count=6, storage_policy_argument=4, preselect_policy_argument=5
+    ),
+    "MEMORY_DATA_STORAGE_ROW": _RowMacroSignature(
+        argument_count=6, storage_policy_argument=5
+    ),
+    "RECIPE_DIRECT_ROW": _RowMacroSignature(argument_count=4),
+    "RECIPE_DATA_ROW": _RowMacroSignature(argument_count=5),
+    "RECIPE_DATA_STORAGE_ROW": _RowMacroSignature(
+        argument_count=6, storage_policy_argument=5
+    ),
+    "RECIPE_DATA_STORAGE_REPORT_ROW": _RowMacroSignature(
+        argument_count=7, storage_policy_argument=5, report_policy_argument=6
+    ),
+    "GENERATED_PRESELECT_DIRECT_POLICY_ROW": _RowMacroSignature(
+        argument_count=6, storage_policy_argument=4, preselect_policy_argument=5
+    ),
+    "GENERATED_PRESELECT_DATA_POLICY_ROW": _RowMacroSignature(
+        argument_count=7, storage_policy_argument=5, preselect_policy_argument=6
+    ),
+    "LEGALITY_ROW": _RowMacroSignature(argument_count=2),
+}
+
+_STORAGE_POLICY_NAMES = frozenset(
+    {
+        "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+        "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1",
+        "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2",
+        "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3",
+        "LOOM_AMDGPU_STORAGE_MEMORY_PLAN",
+        "LOOM_AMDGPU_STORAGE_ATOMIC",
+        "LOOM_AMDGPU_STORAGE_PREFETCH",
+        "LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY",
+        "LOOM_AMDGPU_STORAGE_SUBGROUP_BROADCAST",
+        "LOOM_AMDGPU_STORAGE_NONE",
+        "LOOM_AMDGPU_STORAGE_ASYNC_GATHER",
+    }
+)
+
+_PRESELECT_POLICY_NAMES = frozenset(
+    {
+        "LOOM_AMDGPU_PRESELECT_VALUE_PLAN",
+        "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+        "LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC",
+    }
+)
+
+_REPORT_POLICY_NAMES = frozenset(
+    {
+        "LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION",
+    }
+)
+
+_POLICY_NAMES_BY_KIND = {
+    "storage": _STORAGE_POLICY_NAMES,
+    "preselect": _PRESELECT_POLICY_NAMES,
+    "report": _REPORT_POLICY_NAMES,
+}
+
+_POLICY_PREFIXES = (
+    "LOOM_AMDGPU_STORAGE_",
+    "LOOM_AMDGPU_PRESELECT_",
+    "LOOM_AMDGPU_REPORT_",
+)
+
+
+def amdgpu_generated_lower_rule_op_kinds(
+    *,
+    registrations: Iterable[ContractFragmentRegistration] | None = None,
+) -> frozenset[str]:
+    """Returns C op-kind names owned by generated AMDGPU lower-rule rows."""
+
+    op_kinds: set[str] = set()
+    if registrations is None:
+        registrations = iter_contract_fragment_registrations()
+    for registration in registrations:
+        if not registration.key.startswith("amdgpu."):
+            continue
+        fragment = registration.load()
+        compiled = compile_lower_rule_set(
+            fragment, dialect_ops=registration.load_dialect_ops()
+        )
+        for rule in compiled.rules:
+            if rule.flags & LOWER_RULE_FLAG_CONTRACT_ONLY:
+                continue
+            op_kinds.add(_op_kind_c_name(rule.source_op))
+    return frozenset(op_kinds)
+
+
+def parse_callback_dispatch_rows(source: str) -> tuple[CallbackDispatchRow, ...]:
+    """Parses classified AMDGPU callback dispatch rows from registry source."""
+
+    rows: list[CallbackDispatchRow] = []
+    for match in _ROW_RE.finditer(source):
+        macro_name = match.group(2)
+        arguments = _parse_callback_dispatch_arguments(source, match.end())
+        rows.append(
+            CallbackDispatchRow(
+                op_kind=match.group(1),
+                role=_callback_dispatch_role(macro_name),
+                macro_name=macro_name,
+                arguments=arguments,
+            )
+        )
+    return tuple(rows)
+
+
+def callback_dispatch_policy_names_by_kind() -> dict[str, frozenset[str]]:
+    """Returns explicit policy tokens accepted by callback dispatch rows."""
+
+    return dict(_POLICY_NAMES_BY_KIND)
+
+
+def callback_dispatch_row_macro_names() -> frozenset[str]:
+    """Returns public callback dispatch row macros accepted by the validator."""
+
+    return frozenset(_ROW_MACRO_SIGNATURES)
+
+
+def validate_callback_dispatch_rows(
+    rows: Iterable[CallbackDispatchRow],
+    *,
+    generated_lower_rule_op_kinds: Iterable[str],
+) -> None:
+    """Validates callback rows against Python-authored generated ownership."""
+
+    rows = tuple(rows)
+    for row in rows:
+        _validate_callback_dispatch_row_shape(row)
+
+    generated_op_kinds = frozenset(generated_lower_rule_op_kinds)
+    bad_generated_callbacks = tuple(
+        row
+        for row in rows
+        if row.op_kind in generated_op_kinds
+        and row.role
+        not in (
+            CallbackDispatchRole.GENERATED_PRESELECT,
+            CallbackDispatchRole.LEGALITY,
+        )
+    )
+    if bad_generated_callbacks:
+        raise ValueError(
+            "AMDGPU callback rows for generated lower-rule ops must be "
+            "generated-preselect or legality-only rows: "
+            + _format_rows(bad_generated_callbacks)
+        )
+
+    bad_preselect_callbacks = tuple(
+        row
+        for row in rows
+        if row.role == CallbackDispatchRole.GENERATED_PRESELECT
+        and row.op_kind not in generated_op_kinds
+    )
+    if bad_preselect_callbacks:
+        raise ValueError(
+            "AMDGPU generated-preselect callback rows need a generated lower-rule "
+            "fallback owner: " + _format_rows(bad_preselect_callbacks)
+        )
+
+
+def _callback_dispatch_role(macro_name: str) -> CallbackDispatchRole:
+    if macro_name == "LEGALITY_ROW":
+        return CallbackDispatchRole.LEGALITY
+    if macro_name.startswith("GENERATED_PRESELECT_"):
+        return CallbackDispatchRole.GENERATED_PRESELECT
+    if macro_name.startswith("VALUE_"):
+        return CallbackDispatchRole.VALUE
+    if macro_name.startswith("MEMORY_"):
+        return CallbackDispatchRole.MEMORY
+    if macro_name.startswith("RECIPE_"):
+        return CallbackDispatchRole.RECIPE
+    raise ValueError(f"AMDGPU callback row macro '{macro_name}' has no role prefix")
+
+
+def _validate_callback_dispatch_row_shape(row: CallbackDispatchRow) -> None:
+    signature = _ROW_MACRO_SIGNATURES.get(row.macro_name)
+    if signature is None:
+        raise ValueError(
+            f"AMDGPU callback row macro '{row.macro_name}' has no registered "
+            "dispatch-row schema"
+        )
+    if len(row.arguments) != signature.argument_count:
+        raise ValueError(
+            f"AMDGPU callback row {row.op_kind} via {row.macro_name} has "
+            f"{len(row.arguments)} arguments, expected {signature.argument_count}"
+        )
+    if row.arguments[0] != row.op_kind:
+        raise ValueError(
+            f"AMDGPU callback row index {row.op_kind} does not match macro "
+            f"op-kind argument {row.arguments[0]}"
+        )
+
+    expected_policy_arguments: dict[int, str] = {}
+    if signature.storage_policy_argument is not None:
+        expected_policy_arguments[signature.storage_policy_argument] = "storage"
+    if signature.preselect_policy_argument is not None:
+        expected_policy_arguments[signature.preselect_policy_argument] = "preselect"
+    if signature.report_policy_argument is not None:
+        expected_policy_arguments[signature.report_policy_argument] = "report"
+
+    for argument_index, policy_kind in expected_policy_arguments.items():
+        argument = row.arguments[argument_index]
+        if argument not in _POLICY_NAMES_BY_KIND[policy_kind]:
+            raise ValueError(
+                f"AMDGPU callback row {row.op_kind} via {row.macro_name} "
+                f"expects a {policy_kind} policy at argument {argument_index + 1}, "
+                f"got {argument}"
+            )
+
+    for argument_index, argument in enumerate(row.arguments):
+        if not argument.startswith(_POLICY_PREFIXES):
+            continue
+        if argument_index in expected_policy_arguments:
+            continue
+        raise ValueError(
+            f"AMDGPU callback row {row.op_kind} via {row.macro_name} has policy "
+            f"token {argument} in non-policy argument {argument_index + 1}"
+        )
+
+
+def _parse_callback_dispatch_arguments(
+    source: str, argument_start: int
+) -> tuple[str, ...]:
+    arguments: list[str] = []
+    depth = 0
+    current_start = argument_start
+    index = argument_start
+    while index < len(source):
+        char = source[index]
+        if char in ("'", '"'):
+            index = _skip_c_quoted_literal(source, index)
+            continue
+        if char == "/" and index + 1 < len(source):
+            next_char = source[index + 1]
+            if next_char == "/":
+                newline_index = source.find("\n", index + 2)
+                index = len(source) if newline_index == -1 else newline_index + 1
+                continue
+            if next_char == "*":
+                comment_end = source.find("*/", index + 2)
+                if comment_end == -1:
+                    raise ValueError("unterminated C block comment in callback row")
+                index = comment_end + 2
+                continue
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            if depth == 0:
+                if char != ")":
+                    raise ValueError(
+                        f"unexpected '{char}' while parsing callback row arguments"
+                    )
+                arguments.append(source[current_start:index].strip())
+                return tuple(arguments)
+            depth -= 1
+        elif char == "," and depth == 0:
+            arguments.append(source[current_start:index].strip())
+            current_start = index + 1
+        index += 1
+    raise ValueError("unterminated AMDGPU callback row macro invocation")
+
+
+def _skip_c_quoted_literal(source: str, quote_index: int) -> int:
+    quote = source[quote_index]
+    index = quote_index + 1
+    while index < len(source):
+        if source[index] == "\\":
+            index += 2
+            continue
+        if source[index] == quote:
+            return index + 1
+        index += 1
+    raise ValueError("unterminated C quoted literal in callback row")
+
+
+def _format_rows(rows: Iterable[CallbackDispatchRow]) -> str:
+    return ", ".join(f"{row.op_kind} via {row.macro_name}" for row in rows)
+
+
+def _op_kind_c_name(op: Op) -> str:
+    return "LOOM_OP_" + op.name.replace(".", "_").upper()

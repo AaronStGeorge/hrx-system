@@ -260,7 +260,7 @@ amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @f16_fma_mixlo_insert_f32(%dest: vector<2xf16>, %a: f32, %b: f32, %c: f32) -> (vector<2xf16>) {
   %fma = scalar.fmaf %a, %b, %c : f32
   %half = scalar.fptrunc %fma : f32 to f16
-  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_fma_mixlo_f16.f32_f32_f32", destination_lane_index="0", result_half="low", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision="selected", reason="static_destination_lane"}
+  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_fma_mixlo_f16.f32_f32_f32", destination_lane_index="0", result_half="low", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision_key="selected", reason_key="static_destination_lane"}
   %result = vector.insert %half into %dest[0] : f16, vector<2xf16>
   func.return %result : vector<2xf16>
 }
@@ -279,7 +279,7 @@ func.def target(@gfx11_target) @f16_fma_mixhi_insert_extract_source(%dest: vecto
   %a = scalar.extf %a_half : f16 to f32
   %fma = scalar.fmaf %a, %b, %c : f32
   %half = scalar.fptrunc %fma : f32 to f16
-  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_fma_mixhi_f16.f16hi_f32_f32", destination_lane_index="1", result_half="high", source0_kind="f16hi", source1_kind="f32", source2_kind="f32", decision="selected", reason="static_destination_lane"}
+  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_fma_mixhi_f16.f16hi_f32_f32", destination_lane_index="1", result_half="high", source0_kind="f16hi", source1_kind="f32", source2_kind="f32", decision_key="selected", reason_key="static_destination_lane"}
   %result = vector.insert %half into %dest[1] : f16, vector<2xf16>
   func.return %result : vector<2xf16>
 }
@@ -296,7 +296,7 @@ amdgpu.target<gfx942> @gfx942_target
 func.def target(@gfx942_target) @f16_mad_mixlo_insert_f32(%dest: vector<2xf16>, %a: f32, %b: f32, %c: f32) -> (vector<2xf16>) {
   %fma = scalar.fmaf %a, %b, %c : f32
   %half = scalar.fptrunc %fma : f32 to f16
-  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_mad_mixlo_f16.f32_f32_f32", destination_lane_index="0", result_half="low", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision="selected", reason="static_destination_lane"}
+  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_mad_mixlo_f16.f32_f32_f32", destination_lane_index="0", result_half="low", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision_key="selected", reason_key="static_destination_lane"}
   %result = vector.insert %half into %dest[0] : f16, vector<2xf16>
   func.return %result : vector<2xf16>
 }
@@ -313,7 +313,7 @@ amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @f16_fma_mix_dynamic_insert_rejected(%dest: vector<2xf16>, %a: f32, %b: f32, %c: f32, %lane: index) -> (vector<2xf16>) {
   %fma = scalar.fmaf %a, %b, %c : f32
   %half = scalar.fptrunc %fma : f32 to f16
-  // REMARK@+1: AMDGPU/029 {descriptor_name="<none>", destination_lane_index="4294967295", result_half="dynamic", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision="rejected", reason="dynamic_destination_lane"}
+  // REMARK@+1: AMDGPU/029 {descriptor_name="<none>", destination_lane_index="4294967295", result_half="dynamic", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision_key="rejected", reason_key="dynamic_destination_lane"}
   %result = vector.insert %half into %dest[%lane] : f16, vector<2xf16>
   func.return %result : vector<2xf16>
 }
@@ -344,7 +344,7 @@ amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @f16_fma_mix_source_not_fmaf_rejected(%dest: vector<2xf16>, %a: f32, %b: f32) -> (vector<2xf16>) {
   %product = scalar.mulf %a, %b : f32
   %half = scalar.fptrunc %product : f32 to f16
-  // REMARK@+1: AMDGPU/029 {descriptor_name="<none>", destination_lane_index="0", result_half="low", source0_kind="unknown", source1_kind="unknown", source2_kind="unknown", decision="rejected", reason="rounding_source_not_fmaf"}
+  // REMARK@+1: AMDGPU/029 {descriptor_name="<none>", destination_lane_index="0", result_half="low", source0_kind="unknown", source1_kind="unknown", source2_kind="unknown", decision_key="rejected", reason_key="rounding_source_not_fmaf"}
   %result = vector.insert %half into %dest[0] : f16, vector<2xf16>
   func.return %result : vector<2xf16>
 }
@@ -380,7 +380,7 @@ low.func.def target(@gfx11_target) abi(hal_kernel) @f32_mulf_extf_requires_relax
 amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @f32_mulf_extf_literal_zero_diagnostics(%a: f32, %scale_half: f16) -> (f32) {
   %scale = scalar.extf %scale_half : f16 to f32
-  // REMARK@+1: AMDGPU/027 {descriptor_name="amdgpu.v_fma_mix_f32.f16lo_f32_f32.src2_lit", source_operand_index="2", descriptor_set_name="amdgpu.rdna3.core", constant_form="exact_f32_positive_zero", decision="selected", reason="literal_descriptor_available"}
+  // REMARK@+1: AMDGPU/027 {descriptor_name="amdgpu.v_fma_mix_f32.f16lo_f32_f32.src2_lit", source_operand_index="2", descriptor_set_name="amdgpu.rdna3.core", constant_form="exact_f32_positive_zero", decision_key="selected", reason_key="literal_descriptor_available"}
   %result = scalar.mulf<nnan|nsz|contract> %a, %scale : f32
   func.return %result : f32
 }
@@ -397,7 +397,7 @@ amdgpu.target<gfx942> @gfx942_target
 func.def target(@gfx942_target) @vector_f32_mulf_splat_extf_cdna(%q: vector<2xf32>, %scale_half: f16) -> (vector<2xf32>) {
   %scale = scalar.extf %scale_half : f16 to f32
   %scale_vector = vector.splat %scale : vector<2xf32>
-  // REMARK@+1: AMDGPU/027 {descriptor_name="amdgpu.v_mad_mix_f32.f16lo_f32_f32", source_operand_index="2", descriptor_set_name="amdgpu.cdna3.core", constant_form="exact_f32_positive_zero", decision="rejected", reason="literal_descriptor_unavailable"}
+  // REMARK@+1: AMDGPU/027 {descriptor_name="amdgpu.v_mad_mix_f32.f16lo_f32_f32", source_operand_index="2", descriptor_set_name="amdgpu.cdna3.core", constant_form="exact_f32_positive_zero", decision_key="rejected", reason_key="literal_descriptor_unavailable"}
   %result = vector.mulf<nnan|nsz|contract> %q, %scale_vector : vector<2xf32>
   func.return %result : vector<2xf32>
 }
@@ -420,7 +420,7 @@ func.def target(@gfx11_target) @vector_f32_mulf_splat_extract_high_half(%q: vect
   %scale_half = vector.extract %packed_scale[1] : vector<2xf16> -> f16
   %scale = scalar.extf %scale_half : f16 to f32
   %scale_vector = vector.splat %scale : vector<2xf32>
-  // REMARK@+1: AMDGPU/027 {descriptor_name="amdgpu.v_fma_mix_f32.f16hi_f32_f32.src2_lit", source_operand_index="2", descriptor_set_name="amdgpu.rdna3.core", constant_form="exact_f32_positive_zero", decision="selected", reason="literal_descriptor_available"}
+  // REMARK@+1: AMDGPU/027 {descriptor_name="amdgpu.v_fma_mix_f32.f16hi_f32_f32.src2_lit", source_operand_index="2", descriptor_set_name="amdgpu.rdna3.core", constant_form="exact_f32_positive_zero", decision_key="selected", reason_key="literal_descriptor_available"}
   %result = vector.mulf<nnan|nsz|contract> %q, %scale_vector : vector<2xf32>
   func.return %result : vector<2xf32>
 }

@@ -15,6 +15,7 @@ from loom.gen.target.contracts import lower_rule_spelling
 from loom.target.contracts import (
     LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
     LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN,
+    LOWER_RULE_FLAG_CONTRACT_ONLY,
     LOWER_SOURCE_MEMORY_NONE,
     CompiledLowerRuleSet,
     ContractFragment,
@@ -34,6 +35,69 @@ from loom.target.contracts import (
 )
 from loom.target.contracts.diagnostics import DiagnosticParamKind
 from loom.target.low_descriptors import Descriptor
+
+_GUARD_VALUE_REF_KINDS = frozenset(
+    (
+        GuardKind.VALUE_TYPE,
+        GuardKind.VALUE_MATERIALIZABLE,
+        GuardKind.LOW_VALUE_REGISTER_CLASS,
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
+        GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+        GuardKind.VALUE_SIGNED_BIT_COUNT,
+        GuardKind.VALUE_UNSIGNED_BIT_COUNT,
+        GuardKind.VALUE_EXACT_I64,
+        GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
+        GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
+        GuardKind.VALUE_EXACT_F64,
+        GuardKind.VALUE_I64_RANGE,
+        GuardKind.VALUE_I64_RANGE_LE,
+        GuardKind.VALUE_I64_RANGE_GE,
+        GuardKind.VALUE_F64_EQUALS,
+        GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+        GuardKind.VALUE_NO_USES,
+        GuardKind.BITPACK_STORAGE,
+        GuardKind.BITUNPACK_STORAGE,
+    )
+)
+
+_GUARD_OTHER_VALUE_REF_KINDS = frozenset(
+    (
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+        GuardKind.VALUE_I64_RANGE_LE,
+        GuardKind.VALUE_I64_RANGE_GE,
+        GuardKind.BITPACK_STORAGE,
+        GuardKind.BITUNPACK_STORAGE,
+    )
+)
+
+_ATTR_COPY_VALUE_REF_KINDS = frozenset(
+    (
+        LowerAttrCopyKind.VALUE_EXACT_I64,
+        LowerAttrCopyKind.VALUE_EXACT_I64_NEGATE,
+        LowerAttrCopyKind.VALUE_EXACT_I64_LOG2,
+        LowerAttrCopyKind.VALUE_EXACT_I64_MINUS_ONE,
+        LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_MULTIPLIER,
+        LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_SHIFT,
+        LowerAttrCopyKind.VALUE_I32_AS_U32_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_F16_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_BF16_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_F32_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_F64_BITS,
+    )
+)
+
+
+def guard_uses_value_ref(kind: GuardKind) -> bool:
+    return kind in _GUARD_VALUE_REF_KINDS
+
+
+def guard_uses_other_value_ref(kind: GuardKind) -> bool:
+    return kind in _GUARD_OTHER_VALUE_REF_KINDS
+
+
+def attr_copy_uses_value_ref(kind: LowerAttrCopyKind) -> bool:
+    return kind in _ATTR_COPY_VALUE_REF_KINDS
 
 
 def emit_optional_array(
@@ -236,36 +300,19 @@ def _descriptor_ref_index(descriptor_refs: Mapping[str, int], descriptor: Descri
     return descriptor_refs[descriptor.key]
 
 
+def _rule_flags_c_expression(flags: int) -> str:
+    if flags == LOWER_RULE_FLAG_CONTRACT_ONLY:
+        return "LOOM_LOW_LOWER_RULE_FLAG_CONTRACT_ONLY"
+    return f"0x{flags:X}"
+
+
 def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
     fields: list[str] = []
     _append_field(fields, "kind", lower_rule_spelling.GUARD_KIND_C_NAMES[row.kind], always=True)
 
-    if row.kind in (
-        GuardKind.VALUE_TYPE,
-        GuardKind.VALUE_MATERIALIZABLE,
-        GuardKind.LOW_VALUE_REGISTER_CLASS,
-        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
-        GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
-        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
-        GuardKind.VALUE_SIGNED_BIT_COUNT,
-        GuardKind.VALUE_UNSIGNED_BIT_COUNT,
-        GuardKind.VALUE_EXACT_I64,
-        GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
-        GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
-        GuardKind.VALUE_EXACT_F64,
-        GuardKind.VALUE_I64_RANGE,
-        GuardKind.VALUE_I64_RANGE_LE,
-        GuardKind.VALUE_I64_RANGE_GE,
-        GuardKind.VALUE_F64_EQUALS,
-        GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
-        GuardKind.VALUE_NO_USES,
-    ):
+    if guard_uses_value_ref(row.kind):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
-    if row.kind in (
-        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
-        GuardKind.VALUE_I64_RANGE_LE,
-        GuardKind.VALUE_I64_RANGE_GE,
-    ):
+    if guard_uses_other_value_ref(row.kind):
         _append_field(
             fields,
             "other_value_ref_index",
@@ -281,6 +328,8 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.I64_ARRAY_COUNT,
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
+        GuardKind.BITPACK_STORAGE,
+        GuardKind.BITUNPACK_STORAGE,
     ):
         _append_field(fields, "attr_index", row.attr_index, always=True)
 
@@ -307,6 +356,8 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
         GuardKind.VALUE_F64_EQUALS,
         GuardKind.INSTANCE_FLAGS_HAS_ALL,
+        GuardKind.BITPACK_STORAGE,
+        GuardKind.BITUNPACK_STORAGE,
     ):
         _append_field(fields, "u64", lower_rule_spelling.u64_c_literal(row.u64), always=True)
     if row.kind == GuardKind.VALUE_STORAGE_ELEMENT_FORMAT:
@@ -327,6 +378,8 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
         GuardKind.VALUE_I64_RANGE,
+        GuardKind.BITPACK_STORAGE,
+        GuardKind.BITUNPACK_STORAGE,
     ):
         _append_field(fields, "minimum_i64", row.minimum_i64, always=True)
         _append_field(fields, "maximum_i64", row.maximum_i64, always=True)
@@ -349,8 +402,24 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
         LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
+        LowerAttrCopyKind.I64_LOW_BIT_MASK,
+        LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_MASK,
+        LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTR,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS,
     ):
         _append_field(fields, "source_attr_index", row.source_attr_index, always=True)
+    if row.kind in (
+        LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_MASK,
+        LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS,
+    ):
+        _append_field(
+            fields,
+            "other_source_attr_index",
+            row.other_source_attr_index,
+            always=True,
+        )
     if row.kind in (
         LowerAttrCopyKind.I64_ARRAY_ELEMENT,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
@@ -384,23 +453,13 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
             always=True,
         )
     _append_field(fields, "target_bit_offset", row.target_bit_offset)
-    if row.kind in (
-        LowerAttrCopyKind.VALUE_EXACT_I64,
-        LowerAttrCopyKind.VALUE_EXACT_I64_NEGATE,
-        LowerAttrCopyKind.VALUE_EXACT_I64_LOG2,
-        LowerAttrCopyKind.VALUE_EXACT_I64_MINUS_ONE,
-        LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_MULTIPLIER,
-        LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_SHIFT,
-        LowerAttrCopyKind.VALUE_I32_AS_U32_BITS,
-        LowerAttrCopyKind.VALUE_F64_AS_F16_BITS,
-        LowerAttrCopyKind.VALUE_F64_AS_BF16_BITS,
-        LowerAttrCopyKind.VALUE_F64_AS_F32_BITS,
-        LowerAttrCopyKind.VALUE_F64_AS_F64_BITS,
-    ):
+    if attr_copy_uses_value_ref(row.kind):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
     if row.kind in (
         LowerAttrCopyKind.I64_LITERAL,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTR,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS,
     ):
         _append_field(fields, "literal_i64", row.literal_i64, always=True)
     if row.kind == LowerAttrCopyKind.SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE:
@@ -481,6 +540,8 @@ def emit_row(descriptor_refs: Mapping[str, int], row: LowerEmit) -> list[str]:
 def rule_row(row: LowerRule) -> list[str]:
     fields: list[str] = []
     _append_field(fields, "source_op_kind", lower_rule_spelling.op_c_name(row.source_op), always=True)
+    if row.flags:
+        _append_field(fields, "flags", _rule_flags_c_expression(row.flags), always=True)
     _append_field(fields, "temporary_count", row.temporary_count)
     if row.guard_count:
         _append_field(fields, "guard_start", row.guard_start, always=True)

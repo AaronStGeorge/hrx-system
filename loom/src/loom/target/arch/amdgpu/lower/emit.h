@@ -63,6 +63,19 @@ iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,
                                           loom_value_id_t source_result,
                                           loom_type_t* out_low_type);
 
+// Builds a low register range value from one or more already-emitted register
+// units.
+iree_status_t loom_amdgpu_build_low_register_range(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_value_id_t* low_registers, uint32_t register_count,
+    loom_type_t result_type, loom_value_id_t* out_low_result);
+
+// Binds a source result to one or more already-emitted low register units.
+iree_status_t loom_amdgpu_bind_low_register_range(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_result, const loom_value_id_t* low_registers,
+    uint32_t register_count);
+
 // Resolves an optional AMDGPU descriptor ref against the active descriptor set.
 iree_status_t loom_amdgpu_resolve_descriptor_ref_if_present(
     loom_low_lower_context_t* context,
@@ -82,6 +95,15 @@ iree_status_t loom_amdgpu_resolve_descriptor_refs_if_present(
     loom_low_lower_context_t* context,
     const loom_amdgpu_descriptor_resolution_t* resolutions,
     iree_host_size_t resolution_count, bool* out_present);
+
+// Resolves selected v_cndmask_b32 descriptor forms against the active
+// descriptor set. Required flags must be present for |out_present| to become
+// true; optional flags are resolved when available and otherwise left empty.
+iree_status_t loom_amdgpu_resolve_cndmask_b32_descriptors(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t required_flags,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t optional_flags,
+    loom_amdgpu_cndmask_b32_descriptors_t* out_descriptors, bool* out_present);
 
 // Resolves a required AMDGPU descriptor ref against the active descriptor set.
 iree_status_t loom_amdgpu_resolve_descriptor_ref(

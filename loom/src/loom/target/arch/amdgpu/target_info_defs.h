@@ -96,6 +96,19 @@ typedef enum loom_amdgpu_processor_scheduling_bit_e {
 // Bitset of loom_amdgpu_processor_scheduling_bit_t values.
 typedef uint32_t loom_amdgpu_processor_scheduling_bits_t;
 
+typedef enum loom_amdgpu_wavefront_size_flag_bits_e {
+  // Processor supports wavefront-size-32 kernels.
+  LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32 = 1u << 0,
+  // Processor supports wavefront-size-64 kernels.
+  LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64 = 1u << 1,
+  // Wavefront-size flags known by the AMDGPU target package.
+  LOOM_AMDGPU_WAVEFRONT_SIZE_KNOWN_FLAGS =
+      LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32 | LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64,
+} loom_amdgpu_wavefront_size_flag_bits_t;
+
+// Bitset of loom_amdgpu_wavefront_size_flag_bits_t values.
+typedef uint32_t loom_amdgpu_wavefront_size_flags_t;
+
 typedef enum loom_amdgpu_descriptor_set_info_flag_bits_e {
   // Descriptor packets have implemented native binary encoding.
   LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING = UINT64_C(1)
@@ -208,6 +221,8 @@ typedef struct loom_amdgpu_processor_elf_info_t {
 typedef struct loom_amdgpu_processor_wavefront_info_t {
   // Default metadata wavefront size in lanes.
   uint32_t default_size;
+  // Wavefront-size modes supported by the processor kernel descriptor ABI.
+  loom_amdgpu_wavefront_size_flags_t supported_sizes;
 } loom_amdgpu_processor_wavefront_info_t;
 
 typedef struct loom_amdgpu_kernel_descriptor_vgpr_granules_t {
@@ -255,26 +270,33 @@ typedef struct loom_amdgpu_amdhsa_target_id_t {
   iree_string_view_t feature_suffix;
 } loom_amdgpu_amdhsa_target_id_t;
 
+// Returns the support flag for |wavefront_size|, or zero when unsupported.
+static inline loom_amdgpu_wavefront_size_flags_t
+loom_amdgpu_wavefront_size_flag(uint32_t wavefront_size) {
+  switch (wavefront_size) {
+    case 32:
+      return LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32;
+    case 64:
+      return LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64;
+    default:
+      return 0;
+  }
+}
+
+// Returns true for wavefront sizes represented by AMDGPU target lowering.
+static inline bool loom_amdgpu_wavefront_size_is_valid(
+    uint32_t wavefront_size) {
+  return loom_amdgpu_wavefront_size_flag(wavefront_size) != 0;
+}
+
 // Returns true when |processor| can execute kernels with |wavefront_size|.
 static inline bool loom_amdgpu_processor_supports_wavefront_size(
     const loom_amdgpu_processor_info_t* processor, uint32_t wavefront_size) {
-  if (processor == NULL) {
-    return false;
-  }
-  switch (wavefront_size) {
-    case 32:
-      return processor->kernel_descriptor.profile !=
-                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE &&
-             processor->kernel_descriptor.profile !=
-                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9;
-    case 64:
-      return processor->kernel_descriptor.profile !=
-                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE &&
-             processor->kernel_descriptor.profile !=
-                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125;
-    default:
-      return false;
-  }
+  const loom_amdgpu_wavefront_size_flags_t requested_size =
+      loom_amdgpu_wavefront_size_flag(wavefront_size);
+  return processor != NULL && requested_size != 0 &&
+         iree_all_bits_set(processor->wavefront.supported_sizes,
+                           requested_size);
 }
 
 // Returns true when |processor| advertises every requested kernel descriptor

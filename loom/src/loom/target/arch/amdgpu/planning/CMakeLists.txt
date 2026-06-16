@@ -152,6 +152,7 @@ loom_cc_library(
   DEPS
     ::wait_plan
     iree::base
+    iree::base::internal
     iree::base::internal::arena
     loom::codegen::low::descriptors
     loom::codegen::low::function
@@ -270,11 +271,17 @@ loom_cc_test(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
+loom_generated_cc_library(
   NAME
-    occupancy_tables
+    occupancy_model
   GENERATOR
     loom::py::loom::gen::target::arch::amdgpu::planning::occupancy_tables
+  SOURCE
+    "occupancy_model_tables.c"
+  SRCS
+    "occupancy_model.c"
+  HDRS
+    "occupancy_model.h"
   DEPS
     iree::base
     loom::target::arch::amdgpu::target_info
@@ -290,7 +297,7 @@ loom_cc_library(
   SRCS
     "occupancy.c"
   DEPS
-    ::occupancy_tables
+    ::occupancy_model
     iree::base
     iree::base::internal::arena
     loom::codegen::low::allocation

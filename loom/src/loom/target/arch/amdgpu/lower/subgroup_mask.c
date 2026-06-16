@@ -15,11 +15,6 @@
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
-static bool loom_amdgpu_subgroup_wavefront_size_is_supported(
-    uint32_t wavefront_size) {
-  return wavefront_size == 32 || wavefront_size == 64;
-}
-
 static bool loom_amdgpu_subgroup_mask_bit_count(const loom_module_t* module,
                                                 loom_value_id_t value_id,
                                                 uint32_t* out_bit_count) {
@@ -58,7 +53,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
     return iree_ok_status();
   }
 
@@ -106,7 +101,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
     return iree_ok_status();
   }
 
@@ -155,7 +150,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
     return iree_ok_status();
   }
 
@@ -202,7 +197,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_all_plan(
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
     return iree_ok_status();
   }
 
@@ -277,13 +272,11 @@ static iree_status_t loom_amdgpu_bind_subgroup_lane_mask_result(
       IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_range_type(
           context, /*unit_count=*/2, &source_mask_type));
       loom_value_id_t zero_extended_halves[] = {low_half, zero_high};
-      loom_op_t* concat_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_concat_build(
-          loom_low_lower_context_builder(context), zero_extended_halves,
-          IREE_ARRAYSIZE(zero_extended_halves), source_mask_type,
-          source_op->location, &concat_op));
-      return loom_low_lower_bind_value(context, source_mask,
-                                       loom_low_concat_result(concat_op));
+      loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_build_low_register_range(
+          context, source_op, zero_extended_halves,
+          IREE_ARRAYSIZE(zero_extended_halves), source_mask_type, &low_result));
+      return loom_low_lower_bind_value(context, source_mask, low_result);
     }
     return loom_low_lower_bind_value(context, source_mask, low_mask);
   }
@@ -319,12 +312,9 @@ static iree_status_t loom_amdgpu_emit_subgroup_zero_lane_mask(
   loom_type_t mask_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_make_sgpr_range_type(context, /*unit_count=*/2, &mask_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), zero_halves,
-      IREE_ARRAYSIZE(zero_halves), mask_type, source_op->location, &concat_op));
-  *out_mask = loom_low_concat_result(concat_op);
-  return iree_ok_status();
+  return loom_amdgpu_build_low_register_range(context, source_op, zero_halves,
+                                              IREE_ARRAYSIZE(zero_halves),
+                                              mask_type, out_mask);
 }
 
 static iree_status_t loom_amdgpu_emit_subgroup_resolved_mask_compare(
@@ -408,7 +398,7 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
   const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_wavefront_size(bundle, out_wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(*out_wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(*out_wavefront_size)) {
     return loom_amdgpu_low_legality_reject(context, op, constraint_key);
   }
   return iree_ok_status();

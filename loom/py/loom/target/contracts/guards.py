@@ -35,6 +35,8 @@ from loom.target.contracts.source import (
 )
 from loom.target.low_descriptors import Descriptor
 
+_MAX_U32 = 0xFFFFFFFF
+
 
 @unique
 class GuardKind(Enum):
@@ -67,6 +69,16 @@ class GuardKind(Enum):
     VALUE_STORAGE_ELEMENT_FORMAT = "value_storage_element_format"
     VALUE_NO_USES = "value_no_uses"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
+    BITPACK_STORAGE = "bitpack_storage"
+    BITUNPACK_STORAGE = "bitunpack_storage"
+
+
+_LOW_VALUE_GUARD_KINDS = (
+    GuardKind.LOW_VALUE_REGISTER_CLASS,
+    GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
+    GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
+    GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +118,7 @@ class Guard:
     kind: GuardKind
     field: str
     other_field: str | None = None
+    attr_field: str | None = None
     type_pattern: TypePattern | None = None
     attr_type: str | None = None
     enum_keyword: str | None = None
@@ -500,11 +513,57 @@ class Guard:
             diagnostic=diagnostic,
         )
 
+    @classmethod
+    def bitpack_storage(
+        cls,
+        source_field: str,
+        result_field: str,
+        width_attr: str,
+        *,
+        register_bit_width: int,
+        result_payload_multiple: int,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.BITPACK_STORAGE,
+            field=source_field,
+            other_field=result_field,
+            attr_field=width_attr,
+            minimum=register_bit_width,
+            count=result_payload_multiple,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def bitunpack_storage(
+        cls,
+        source_field: str,
+        result_field: str,
+        width_attr: str,
+        *,
+        register_bit_width: int,
+        maximum_source_registers: int,
+        maximum_result_lanes: int,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.BITUNPACK_STORAGE,
+            field=source_field,
+            other_field=result_field,
+            attr_field=width_attr,
+            count=maximum_source_registers,
+            minimum=register_bit_width,
+            maximum=maximum_result_lanes,
+            diagnostic=diagnostic,
+        )
+
     def __post_init__(self) -> None:
         if not self.field:
             raise ValueError(f"{self.kind.value} guard requires a field")
         if self.other_field is not None and not self.other_field:
             raise ValueError(f"{self.kind.value} other field must be non-empty")
+        if self.attr_field is not None and not self.attr_field:
+            raise ValueError(f"{self.kind.value} attr field must be non-empty")
         if self.attr_type is not None and not self.attr_type:
             raise ValueError(f"{self.kind.value} attr type must be non-empty")
         if self.enum_keyword is not None and not self.enum_keyword:
@@ -585,30 +644,8 @@ class Guard:
             if self.materializer is None:
                 raise ValueError(f"{source_op.name}: {subject} needs a materializer")
             return
-        if self.kind == GuardKind.LOW_VALUE_REGISTER_CLASS:
-            _require_value(source_op, self.field, subject)
-            if self.register_class is None:
-                raise ValueError(f"{source_op.name}: {subject} needs a register class")
-            return
-        if self.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT:
-            _require_value(source_op, self.field, subject)
-            if self.count is None or self.count <= 0:
-                raise ValueError(
-                    f"{source_op.name}: {subject} needs a positive unit count"
-                )
-            return
-        if self.kind == GuardKind.VALUE_STATIC_DIM0_MULTIPLE:
-            _require_value(source_op, self.field, subject)
-            if self.count is None or self.count <= 0:
-                raise ValueError(
-                    f"{source_op.name}: {subject} needs a positive multiple"
-                )
-            return
-        if self.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ:
-            _require_value(source_op, self.field, subject)
-            if self.other_field is None:
-                raise ValueError(f"{source_op.name}: {subject} needs another value")
-            _require_value(source_op, self.other_field, subject)
+        if self.kind in _LOW_VALUE_GUARD_KINDS:
+            _validate_low_value_guard(self, source_op, subject)
             return
         if self.kind == GuardKind.OPERAND_SEGMENT_COUNT:
             operand = _require_operand(source_op, self.field, subject)
@@ -659,7 +696,92 @@ class Guard:
                     f"has no enum case '{self.enum_keyword}'"
                 )
             return
+        if self.kind in (GuardKind.BITPACK_STORAGE, GuardKind.BITUNPACK_STORAGE):
+            _validate_bitstream_storage_guard(self, source_op, subject)
+            return
         _validate_i64_array_guard(self, source_op, subject)
+
+
+def _validate_low_value_guard(
+    guard: Guard,
+    source_op: Op,
+    subject: str,
+) -> None:
+    _require_value(source_op, guard.field, subject)
+    if guard.kind == GuardKind.LOW_VALUE_REGISTER_CLASS:
+        if guard.register_class is None:
+            raise ValueError(f"{source_op.name}: {subject} needs a register class")
+        return
+    if guard.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT:
+        if guard.count is None or guard.count <= 0:
+            raise ValueError(f"{source_op.name}: {subject} needs a positive unit count")
+        return
+    if guard.kind == GuardKind.VALUE_STATIC_DIM0_MULTIPLE:
+        if guard.count is None or guard.count <= 0:
+            raise ValueError(f"{source_op.name}: {subject} needs a positive multiple")
+        return
+    if guard.other_field is None:
+        raise ValueError(f"{source_op.name}: {subject} needs another value")
+    _require_value(source_op, guard.other_field, subject)
+
+
+def _validate_bitstream_storage_guard(
+    guard: Guard,
+    source_op: Op,
+    subject: str,
+) -> None:
+    _require_value(source_op, guard.field, subject)
+    if guard.other_field is None:
+        raise ValueError(f"{source_op.name}: {subject} needs another value field")
+    _require_value(source_op, guard.other_field, subject)
+    if guard.attr_field is None:
+        raise ValueError(f"{source_op.name}: {subject} needs an attr field")
+    attr = _require_attr(source_op, guard.attr_field, subject)
+    if attr.attr_type != ATTR_TYPE_I64:
+        raise ValueError(
+            f"{source_op.name}: {subject} attr field "
+            f"'{guard.attr_field}' must be an i64 attr"
+        )
+
+    _require_positive_u32(
+        guard.minimum,
+        source_op,
+        subject,
+        "register bit width",
+    )
+    if guard.kind == GuardKind.BITPACK_STORAGE:
+        _require_positive_u32(
+            guard.count,
+            source_op,
+            subject,
+            "result payload multiple",
+        )
+        return
+
+    _require_positive_u32(
+        guard.count,
+        source_op,
+        subject,
+        "maximum source register count",
+    )
+    _require_positive_u32(
+        guard.maximum,
+        source_op,
+        subject,
+        "maximum result lane count",
+    )
+
+
+def _require_positive_u32(
+    value: int | None,
+    source_op: Op,
+    subject: str,
+    name: str,
+) -> None:
+    if value is None or value <= 0:
+        raise ValueError(f"{source_op.name}: {subject} needs a positive {name}")
+    if value > _MAX_U32:
+        raise ValueError(f"{source_op.name}: {subject} {name} must fit in u32")
 
 
 def _validate_value_fact_guard(

@@ -116,6 +116,20 @@ static const loom_amdgpu_matrix_wait_result_row_t
 
 #undef LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW
 
+enum {
+  LOOM_AMDGPU_MATRIX_WAIT_PASS_2_INDEX = 0,
+  LOOM_AMDGPU_MATRIX_WAIT_PASS_4_INDEX,
+  LOOM_AMDGPU_MATRIX_WAIT_PASS_8_INDEX,
+  LOOM_AMDGPU_MATRIX_WAIT_PASS_16_INDEX,
+  LOOM_AMDGPU_MATRIX_WAIT_PASS_COUNT_,
+};
+
+static_assert(IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultRows) ==
+                  (LOOM_AMDGPU_MATRIX_WAIT_PROFILE_COUNT_ - 1u) *
+                      (LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_COUNT_ - 1u) *
+                      LOOM_AMDGPU_MATRIX_WAIT_PASS_COUNT_,
+              "matrix wait rows must cover each concrete profile/use/pass");
+
 static const iree_string_view_t kAmdgpuMatrixWaitProfileNames[] = {
     [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN] = IREE_SVL("unknown"),
     [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950] =
@@ -199,19 +213,52 @@ loom_amdgpu_matrix_wait_result_row_at(iree_host_size_t index) {
   return &kAmdgpuMatrixWaitResultRows[index];
 }
 
+static bool loom_amdgpu_matrix_wait_pass_index(
+    uint16_t pass_count, iree_host_size_t* out_pass_index) {
+  switch (pass_count) {
+    case 2:
+      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_2_INDEX;
+      return true;
+    case 4:
+      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_4_INDEX;
+      return true;
+    case 8:
+      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_8_INDEX;
+      return true;
+    case 16:
+      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_16_INDEX;
+      return true;
+    default:
+      return false;
+  }
+}
+
 const loom_amdgpu_matrix_wait_result_row_t* loom_amdgpu_matrix_wait_result_find(
     loom_amdgpu_matrix_wait_profile_t profile, uint16_t pass_count,
     loom_amdgpu_matrix_wait_result_use_t use) {
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultRows);
-       ++i) {
-    const loom_amdgpu_matrix_wait_result_row_t* row =
-        &kAmdgpuMatrixWaitResultRows[i];
-    if (row->profile == profile && row->pass_count == pass_count &&
-        row->use == use) {
-      return row;
-    }
+  if (profile == LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN ||
+      profile >= LOOM_AMDGPU_MATRIX_WAIT_PROFILE_COUNT_ ||
+      use == LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN ||
+      use >= LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_COUNT_) {
+    return NULL;
   }
-  return NULL;
+  iree_host_size_t pass_index = 0;
+  if (!loom_amdgpu_matrix_wait_pass_index(pass_count, &pass_index)) {
+    return NULL;
+  }
+  const iree_host_size_t row_index =
+      (((iree_host_size_t)profile - 1u) *
+           (LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_COUNT_ - 1u) +
+       ((iree_host_size_t)use - 1u)) *
+          LOOM_AMDGPU_MATRIX_WAIT_PASS_COUNT_ +
+      pass_index;
+  IREE_ASSERT_LT(row_index, IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultRows));
+  const loom_amdgpu_matrix_wait_result_row_t* row =
+      &kAmdgpuMatrixWaitResultRows[row_index];
+  IREE_ASSERT_EQ(row->profile, profile);
+  IREE_ASSERT_EQ(row->use, use);
+  IREE_ASSERT_EQ(row->pass_count, pass_count);
+  return row;
 }
 
 bool loom_amdgpu_matrix_wait_result_cycle_count(

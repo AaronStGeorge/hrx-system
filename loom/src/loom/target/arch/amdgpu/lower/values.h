@@ -28,10 +28,6 @@ iree_status_t loom_amdgpu_preselect_value_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan);
 
-// Returns true when value lowering may preselect |source_op| before generated
-// source-lowering contracts see it.
-bool loom_amdgpu_value_plan_needs_preselection(const loom_op_t* source_op);
-
 // Lowers a value-construction source op using its selected plan.
 iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,

@@ -285,6 +285,22 @@ iree_status_t loom_amdgpu_lower_memory_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_plan_t* plan);
 
+// Marks source values required by a selected source memory access plan.
+void loom_amdgpu_mark_source_memory_plan_storage_demands(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_access_plan_t* source);
+
+// Marks the storage root and dynamic address terms required by a selected
+// source memory access plan.
+void loom_amdgpu_mark_source_memory_plan_root_storage_demands(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_access_plan_t* source);
+
+// Marks the physical source values needed by a selected AMDGPU memory plan.
+void loom_amdgpu_mark_memory_access_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_plan_t* plan);
+
 // Selects an AMDGPU atomic packet plan.
 iree_status_t loom_amdgpu_select_atomic_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -308,6 +324,11 @@ iree_status_t loom_amdgpu_select_view_prefetch_plan(
 // Lowers a source view.prefetch to an AMDGPU scalar-buffer data prefetch
 // packet.
 iree_status_t loom_amdgpu_lower_view_prefetch(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_prefetch_plan_t* plan);
+
+// Marks the physical source values needed by a selected AMDGPU prefetch plan.
+void loom_amdgpu_mark_prefetch_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_prefetch_plan_t* plan);
 

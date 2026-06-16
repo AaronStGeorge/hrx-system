@@ -143,6 +143,12 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_broadcast_plan_t* plan);
 
+// Marks the physical source values needed by a selected AMDGPU subgroup
+// broadcast plan.
+void loom_amdgpu_mark_subgroup_broadcast_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_broadcast_plan_t* plan);
+
 // Verifies source subgroup broadcast legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast(
     const loom_target_low_legality_provider_t* provider,

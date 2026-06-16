@@ -300,7 +300,7 @@ iree_status_t loom_amdgpu_lower_view_prefetch(
     const loom_amdgpu_prefetch_plan_t* plan) {
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_view_prefetch_view(source_op), &low_resource));
+      context, plan->source.view_value_id, &low_resource));
 
   const loom_value_id_t dynamic_index =
       plan->dynamic_term_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
@@ -342,4 +342,11 @@ iree_status_t loom_amdgpu_lower_view_prefetch(
       loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)),
       /*result_types=*/NULL, /*result_count=*/0, /*tied_results=*/NULL,
       /*tied_result_count=*/0, source_op->location, &low_op);
+}
+
+void loom_amdgpu_mark_prefetch_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_prefetch_plan_t* plan) {
+  (void)source_op;
+  loom_amdgpu_mark_source_memory_plan_storage_demands(context, &plan->source);
 }

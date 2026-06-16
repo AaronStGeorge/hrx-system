@@ -143,6 +143,13 @@ typedef struct loom_low_lower_rule_match_descriptor_ref_callback_t {
   void* user_data;
 } loom_low_lower_rule_match_descriptor_ref_callback_t;
 
+typedef uint16_t loom_low_lower_rule_match_flags_t;
+
+// Match contract-only rule rows that are visible to read-only legality queries
+// but never execute as source-to-low emission programs.
+#define LOOM_LOW_LOWER_RULE_MATCH_FLAG_CONTRACT_ONLY \
+  ((loom_low_lower_rule_match_flags_t)1u << 0)
+
 struct loom_low_lower_rule_match_context_t {
   // Source module being matched.
   const loom_module_t* module;
@@ -163,6 +170,8 @@ struct loom_low_lower_rule_match_context_t {
   loom_low_lower_rule_match_descriptor_ref_callback_t descriptor_ref;
   // Optional dense source value facts used by fact-backed guard rows.
   const loom_value_fact_table_t* fact_table;
+  // Match behavior flags.
+  loom_low_lower_rule_match_flags_t flags;
 };
 
 typedef struct loom_low_lower_rule_descriptor_ref_t {
@@ -237,6 +246,16 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Packs contiguous i64 source op attributes into an i64 attribute, with the
   // first source attribute occupying the least-significant bitfield.
   LOOM_LOW_LOWER_ATTR_COPY_I64_ATTRS_PACK_CONSECUTIVE = 20,
+  // Emits a u32 low-bit mask with width read from one i64 source attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_LOW_BIT_MASK = 21,
+  // Emits a u32 low-bit mask shifted by another i64 source attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_MASK = 22,
+  // Emits the u32 inverse of a shifted low-bit mask.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_CLEAR_MASK = 23,
+  // Emits literal_i64 minus one i64 source attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTR = 24,
+  // Emits literal_i64 minus two i64 source attributes.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTRS = 25,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -244,8 +263,10 @@ typedef struct loom_low_lower_attr_copy_t {
   loom_low_lower_attr_copy_kind_t kind;
   // Target low packet attribute name to emit.
   iree_string_view_t target_name;
-  // Source op attribute ordinal copied into the emitted low packet.
+  // Primary source op attribute ordinal consumed by projection rows.
   uint16_t source_attr_index;
+  // Second source op attribute ordinal consumed by two-attr projections.
+  uint16_t other_source_attr_index;
   // First source i64_array element ordinal consumed by array projection rows.
   uint16_t source_element_index;
   // Number of source elements consumed by PACK_ELEMENTS rows or byte stride
@@ -263,6 +284,8 @@ typedef struct loom_low_lower_attr_copy_t {
   // I64_ARRAY_LANE_BYTE rows.
   int64_t literal_i64;
 } loom_low_lower_attr_copy_t;
+static_assert(sizeof(loom_low_lower_attr_copy_t) == 48,
+              "loom_low_lower_attr_copy_t must be 48 bytes");
 
 typedef uint8_t loom_low_lower_diagnostic_param_kind_t;
 
@@ -481,6 +504,11 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 26,
   // Source value ref must map to a low register with exactly |u64| units.
   LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 27,
+  // Bitpack source/result storage must match the width attr and target policy.
+  LOOM_LOW_LOWER_GUARD_BITPACK_STORAGE = 28,
+  // Bitunpack source/result storage must match the width attr and target
+  // policy.
+  LOOM_LOW_LOWER_GUARD_BITUNPACK_STORAGE = 29,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -500,15 +528,18 @@ typedef struct loom_low_lower_guard_t {
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
   // Required enum value, divisor, count, element index, bit-count payload,
-  // register unit count, or exact f64 bit pattern.
+  // register unit count, exact f64 bit pattern, result payload multiple, or
+  // maximum source register count.
   uint64_t u64;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;
   // Rule-set-local descriptor ref used by DESCRIPTOR_AVAILABLE guards.
   loom_low_lower_descriptor_ref_t descriptor_ref;
-  // Inclusive lower i64 bound for ATTR_I64_RANGE and VALUE_I64_RANGE guards.
+  // Inclusive lower i64 bound for range guards or register bit width for
+  // bitstream storage guards.
   int64_t minimum_i64;
-  // Inclusive upper i64 bound for ATTR_I64_RANGE and VALUE_I64_RANGE guards.
+  // Inclusive upper i64 bound for range guards or maximum result lanes for
+  // bitunpack storage guards.
   int64_t maximum_i64;
 } loom_low_lower_guard_t;
 
@@ -525,10 +556,13 @@ typedef enum loom_low_lower_emit_kind_e {
   // Slices register-range operands, emits one descriptor-backed low.op per
   // register lane, and concatenates the lane results.
   LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE = 4,
+  // Executes a rule's whole emit program once per register lane using
+  // lane-local temporaries, then concatenates the final lane results.
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE_SEQUENCE = 5,
   // Slices register-range operands, emits one descriptor-backed low.op per
   // register lane, and threads one scalar accumulator operand through the
   // emitted results.
-  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES = 5,
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES = 6,
 } loom_low_lower_emit_kind_t;
 
 typedef uint16_t loom_low_lower_emit_flags_t;
@@ -602,9 +636,18 @@ typedef struct loom_low_lower_resolved_emit_t {
   loom_low_lower_resolved_descriptor_t descriptor;
 } loom_low_lower_resolved_emit_t;
 
+typedef uint16_t loom_low_lower_rule_flags_t;
+
+// Rule row is a read-only target contract case and must not be selected as an
+// emission program by source-to-low.
+#define LOOM_LOW_LOWER_RULE_FLAG_CONTRACT_ONLY \
+  ((loom_low_lower_rule_flags_t)1u << 0)
+
 typedef struct loom_low_lower_rule_t {
   // Source op kind this rule accepts.
   loom_op_kind_t source_op_kind;
+  // Rule behavior flags.
+  loom_low_lower_rule_flags_t flags;
   // Number of rule-local temporary low values available while emitting this
   // rule.
   uint16_t temporary_count;

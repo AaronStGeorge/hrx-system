@@ -28,6 +28,11 @@ class AttrProjectKind(Enum):
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     I64_ATTRS_PACK_CONSECUTIVE = "i64_attrs_pack_consecutive"
+    I64_LOW_BIT_MASK = "i64_low_bit_mask"
+    I64_SHIFTED_LOW_BIT_MASK = "i64_shifted_low_bit_mask"
+    I64_SHIFTED_LOW_BIT_CLEAR_MASK = "i64_shifted_low_bit_clear_mask"
+    I64_LITERAL_MINUS_ATTR = "i64_literal_minus_attr"
+    I64_LITERAL_MINUS_ATTRS = "i64_literal_minus_attrs"
     EXPAND_LANE_I64_ARRAY_TO_BYTE_LANES = "expand_lane_i64_array_to_byte_lanes"
 
 
@@ -69,6 +74,8 @@ class AttrProject:
 
     kind: AttrProjectKind
     source_attr: str
+    other_source_attr: str = ""
+    literal_i64: int = 0
     element: int | None = None
     count: int | None = None
     bit_width: int | None = None
@@ -137,6 +144,54 @@ class AttrProject:
         )
 
     @classmethod
+    def i64_low_bit_mask(cls, width_attr: str) -> Self:
+        return cls(kind=AttrProjectKind.I64_LOW_BIT_MASK, source_attr=width_attr)
+
+    @classmethod
+    def i64_shifted_low_bit_mask(cls, width_attr: str, *, offset_attr: str) -> Self:
+        return cls(
+            kind=AttrProjectKind.I64_SHIFTED_LOW_BIT_MASK,
+            source_attr=width_attr,
+            other_source_attr=offset_attr,
+        )
+
+    @classmethod
+    def i64_shifted_low_bit_clear_mask(
+        cls,
+        width_attr: str,
+        *,
+        offset_attr: str,
+    ) -> Self:
+        return cls(
+            kind=AttrProjectKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+            source_attr=width_attr,
+            other_source_attr=offset_attr,
+        )
+
+    @classmethod
+    def i64_literal_minus_attr(cls, source_attr: str, *, literal: int) -> Self:
+        return cls(
+            kind=AttrProjectKind.I64_LITERAL_MINUS_ATTR,
+            source_attr=source_attr,
+            literal_i64=literal,
+        )
+
+    @classmethod
+    def i64_literal_minus_attrs(
+        cls,
+        source_attr: str,
+        *,
+        other_source_attr: str,
+        literal: int,
+    ) -> Self:
+        return cls(
+            kind=AttrProjectKind.I64_LITERAL_MINUS_ATTRS,
+            source_attr=source_attr,
+            other_source_attr=other_source_attr,
+            literal_i64=literal,
+        )
+
+    @classmethod
     def expand_lane_i64_array_to_byte_lanes(
         cls,
         *,
@@ -156,6 +211,28 @@ class AttrProject:
     def __post_init__(self) -> None:
         if not self.source_attr:
             raise ValueError(f"{self.kind.value} projection requires a source attr")
+        shifted_mask_kinds = (
+            AttrProjectKind.I64_SHIFTED_LOW_BIT_MASK,
+            AttrProjectKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+        )
+        two_attr_kinds = (
+            *shifted_mask_kinds,
+            AttrProjectKind.I64_LITERAL_MINUS_ATTRS,
+        )
+        if self.kind in two_attr_kinds and not self.other_source_attr:
+            raise ValueError(
+                f"{self.kind.value} projection requires another source attr"
+            )
+        if self.kind not in two_attr_kinds and self.other_source_attr:
+            raise ValueError(
+                f"{self.kind.value} projection must not name another source attr"
+            )
+        literal_kinds = (
+            AttrProjectKind.I64_LITERAL_MINUS_ATTR,
+            AttrProjectKind.I64_LITERAL_MINUS_ATTRS,
+        )
+        if self.kind not in literal_kinds and self.literal_i64 != 0:
+            raise ValueError(f"{self.kind.value} projection must not name a literal")
         if self.element is not None and self.element < 0:
             raise ValueError(f"{self.kind.value} element must be non-negative")
         if self.count is not None and self.count <= 0:
@@ -165,6 +242,15 @@ class AttrProject:
         if self.target_bit_offset < 0:
             raise ValueError(
                 f"{self.kind.value} target bit offset must be non-negative"
+            )
+        mask_kinds = (
+            AttrProjectKind.I64_LOW_BIT_MASK,
+            AttrProjectKind.I64_SHIFTED_LOW_BIT_MASK,
+            AttrProjectKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+        )
+        if self.kind in (*mask_kinds, *literal_kinds) and self.target_bit_offset != 0:
+            raise ValueError(
+                f"{self.kind.value} projection must not use target bit offset"
             )
         if self.count is not None and self.bit_width is not None:
             packed_bit_count = self.count * self.bit_width
@@ -237,6 +323,32 @@ class AttrProject:
                         f"'{element_attr.name}' must be an i64 attr"
                     )
             return
+        mask_kinds = (
+            AttrProjectKind.I64_LOW_BIT_MASK,
+            AttrProjectKind.I64_SHIFTED_LOW_BIT_MASK,
+            AttrProjectKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+        )
+        if self.kind in mask_kinds:
+            self._validate_i64_attr_projection(
+                source_op,
+                descriptor,
+                bound_immediate_name,
+                subject,
+                require_unsigned_immediate=True,
+            )
+            return
+        literal_minus_kinds = (
+            AttrProjectKind.I64_LITERAL_MINUS_ATTR,
+            AttrProjectKind.I64_LITERAL_MINUS_ATTRS,
+        )
+        if self.kind in literal_minus_kinds:
+            self._validate_i64_attr_projection(
+                source_op,
+                descriptor,
+                bound_immediate_name,
+                subject,
+            )
+            return
         if attr.attr_type != ATTR_TYPE_I64_ARRAY:
             raise ValueError(
                 f"{source_op.name}: {subject} source attr '{self.source_attr}' "
@@ -280,6 +392,40 @@ class AttrProject:
             )
         for name in self.target_names:
             _require_immediate(descriptor, name, subject)
+
+    def _validate_i64_attr_projection(
+        self,
+        source_op: Op,
+        descriptor: Descriptor,
+        bound_immediate_name: str | None,
+        subject: str,
+        *,
+        require_unsigned_immediate: bool = False,
+    ) -> None:
+        if bound_immediate_name is None:
+            raise ValueError(
+                f"{source_op.name}: {subject} must bind one descriptor immediate"
+            )
+        immediate = _require_immediate(descriptor, bound_immediate_name, subject)
+        if require_unsigned_immediate and immediate.kind != ImmediateKind.UNSIGNED:
+            raise ValueError(
+                f"{source_op.name}: {subject} descriptor immediate "
+                f"'{bound_immediate_name}' must be an unsigned immediate"
+            )
+        attr = _require_attr(source_op, self.source_attr, subject)
+        if attr.attr_type != ATTR_TYPE_I64:
+            raise ValueError(
+                f"{source_op.name}: {subject} source attr '{self.source_attr}' "
+                "must be an i64 attr"
+            )
+        if not self.other_source_attr:
+            return
+        other_attr = _require_attr(source_op, self.other_source_attr, subject)
+        if other_attr.attr_type != ATTR_TYPE_I64:
+            raise ValueError(
+                f"{source_op.name}: {subject} source attr "
+                f"'{self.other_source_attr}' must be an i64 attr"
+            )
 
 
 @dataclass(frozen=True, slots=True)

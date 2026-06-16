@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuDescriptorOverlay,
     AmdgpuOperandPredefinedValueRef,
@@ -47,6 +49,7 @@ from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL,
     AMDGPU_MEMORY_DESCRIPTOR_CATEGORY,
     AMDGPU_VECTOR_DESCRIPTOR_CATEGORY,
+    AmdgpuAtomicDescriptorCandidate,
     AmdgpuAtomicKind,
     AmdgpuAtomicMemorySpace,
     AmdgpuAtomicOperationKind,
@@ -63,6 +66,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _gfx940_core_overlays,
     _gfx950_core_overlays,
     _gfx1250_core_overlays,
+    _record_amdgpu_atomic_candidate,
     _validate_address_immediate_units,
     _with_execution_mask_state_read,
     _with_gfx125x_vgpr_msb_address_state,
@@ -597,6 +601,39 @@ def test_atomic_descriptor_candidates_model_packed_half_rows() -> None:
         candidates["amdgpu.ds_pk_add_rtn_f16"].value_kind
         == AmdgpuAtomicValueKind.PACKED_F16
     )
+
+
+def test_atomic_descriptor_candidates_reject_conflicting_duplicate_metadata() -> None:
+    candidates_by_key: dict[str, AmdgpuAtomicDescriptorCandidate] = {}
+    candidate = AmdgpuAtomicDescriptorCandidate(
+        memory_space=AmdgpuAtomicMemorySpace.GLOBAL,
+        address_form=AmdgpuMemoryAddressForm.DEFAULT,
+        operation_kind=AmdgpuAtomicOperationKind.REDUCE,
+        atomic_kind=AmdgpuAtomicKind.ADDI,
+        value_kind=AmdgpuAtomicValueKind.I32,
+        descriptor_key="amdgpu.buffer_atomic_add_u32",
+    )
+    _record_amdgpu_atomic_candidate(candidates_by_key, candidate)
+    _record_amdgpu_atomic_candidate(candidates_by_key, candidate)
+
+    conflicting_candidate = AmdgpuAtomicDescriptorCandidate(
+        memory_space=AmdgpuAtomicMemorySpace.GLOBAL,
+        address_form=AmdgpuMemoryAddressForm.GLOBAL_SADDR,
+        operation_kind=AmdgpuAtomicOperationKind.REDUCE,
+        atomic_kind=AmdgpuAtomicKind.ADDI,
+        value_kind=AmdgpuAtomicValueKind.I32,
+        descriptor_key="amdgpu.buffer_atomic_add_u32",
+    )
+    with pytest.raises(ValueError, match="conflicting metadata"):
+        _record_amdgpu_atomic_candidate(candidates_by_key, conflicting_candidate)
+
+
+def test_atomic_descriptor_candidates_have_descriptor_refs() -> None:
+    descriptor_ref_keys = set(amdgpu_descriptor_ref_keys())
+
+    assert {
+        candidate.descriptor_key for candidate in amdgpu_atomic_descriptor_candidates()
+    }.issubset(descriptor_ref_keys)
 
 
 def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:

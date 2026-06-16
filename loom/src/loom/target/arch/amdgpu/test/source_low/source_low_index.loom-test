@@ -167,9 +167,9 @@ low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_madd_constant_adde
   %row = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
-  %17 = v_lshlrev_b32_src0_inline %row, 4
-  %loaded = global_load_b32_saddr %17, %input_view {offset = 4}
-  global_store_b32_saddr %17, %loaded, %output_view {offset = 4}
+  %15 = v_lshlrev_b32_src0_inline %row, 4
+  %loaded = global_load_b32_saddr %15, %input_view {offset = 4}
+  global_store_b32_saddr %15, %loaded, %output_view {offset = 4}
   return
 }
 
@@ -197,9 +197,9 @@ low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_shli_global_b32() 
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
-  %15 = v_lshlrev_b32_src0_inline %lane, 4
-  %loaded = global_load_b32_saddr %15, %input_view
-  global_store_b32_saddr %15, %loaded, %output_view
+  %14 = v_lshlrev_b32_src0_inline %lane, 4
+  %loaded = global_load_b32_saddr %14, %input_view
+  global_store_b32_saddr %14, %loaded, %output_view
   return
 }
 
@@ -227,9 +227,9 @@ low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_scale_byte_offset_
   %element = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %18 = v_lshlrev_b32_src0_inline %element, 2
-  %loaded = global_load_b32_saddr %18, %input_view
-  global_store_b32_saddr %18, %loaded, %output_view
+  %17 = v_lshlrev_b32_src0_inline %element, 2
+  %loaded = global_load_b32_saddr %17, %input_view
+  global_store_b32_saddr %17, %loaded, %output_view
   return
 }
 
@@ -260,9 +260,9 @@ low.kernel.def target(@target) workgroup_size(31, 1, 1) @index_shli_previous_row
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
-  %18 = v_lshlrev_b32_src0_inline %lane, 4
-  %loaded = global_load_b128_saddr %18, %input_view
-  global_store_b128_saddr %18, %loaded, %output_view
+  %17 = v_lshlrev_b32_src0_inline %lane, 4
+  %loaded = global_load_b128_saddr %17, %input_view
+  global_store_b128_saddr %17, %loaded, %output_view
   return
 }
 

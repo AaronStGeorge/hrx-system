@@ -19,6 +19,7 @@ class ContractSystem(Enum):
     SOURCE_MEMORY = "source_memory"
     ENVIRONMENT = "environment"
     DESCRIPTOR_MATRIX = "descriptor_matrix"
+    RECIPE_RULE = "recipe_rule"
 
 
 @unique

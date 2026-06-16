@@ -37,6 +37,12 @@ iree_status_t loom_amdgpu_lower_vector_fragment_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_fragment_memory_plan_t* plan);
 
+// Marks the physical source values needed by a selected AMDGPU fragment memory
+// plan.
+void loom_amdgpu_mark_fragment_memory_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_fragment_memory_plan_t* plan);
+
 // Verifies source vector.fragment.load/store legality for AMDGPU target-low
 // selection.
 iree_status_t loom_amdgpu_low_legality_verify_vector_fragment_memory(

@@ -1008,7 +1008,7 @@ ERR_BACKEND_042 = ErrorDef(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "{decision} operand form '{replacement_descriptor_key}' for "
         "'@{function_name}' op '{op_name}' from descriptor "
-        "'{source_descriptor_key}': reason '{reason}', source operand "
+        "'{source_descriptor_key}': reason key '{reason_key}', source operand "
         "'{source_operand_name}', immediate '{immediate_name}' value "
         "{immediate_value}, destructive tied operand '{tied_operand_name}' "
         "value '{tied_value_name}'"
@@ -1022,7 +1022,7 @@ ERR_BACKEND_042 = ErrorDef(
         ErrorParam("source_descriptor_key", ParamKind.STRING),
         ErrorParam("replacement_descriptor_key", ParamKind.STRING),
         ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("reason_key", ParamKind.STRING),
         ErrorParam("source_operand_name", ParamKind.STRING),
         ErrorParam("immediate_name", ParamKind.STRING),
         ErrorParam("immediate_value", ParamKind.I64),
@@ -1044,7 +1044,8 @@ ERR_BACKEND_043 = ErrorDef(
         "'{result_value_name}' for value class '{value_class}' in "
         "'@{function_name}' op '{op_name}' with relation kind "
         "'{relation_kind}', result offset {result_unit_offset}, source offset "
-        "{source_unit_offset}, unit count {unit_count}, and reason '{reason}'"
+        "{source_unit_offset}, unit count {unit_count}, and reason key "
+        "'{reason_key}'"
     ),
     params=(
         ErrorParam("target_key", ParamKind.STRING),
@@ -1059,7 +1060,7 @@ ERR_BACKEND_043 = ErrorDef(
         ErrorParam("relation_kind", ParamKind.STRING),
         ErrorParam("relation_weight", ParamKind.STRING),
         ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("reason_key", ParamKind.STRING),
         ErrorParam("result_unit_offset", ParamKind.U32),
         ErrorParam("source_unit_offset", ParamKind.U32),
         ErrorParam("unit_count", ParamKind.U32),

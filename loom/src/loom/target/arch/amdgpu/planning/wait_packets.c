@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "iree/base/internal/math.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
@@ -18,7 +19,6 @@
 #include "loom/util/stream.h"
 
 #define LOOM_AMDGPU_WAIT_PACKET_TARGET_COUNT_NONE UINT16_MAX
-#define LOOM_AMDGPU_WAIT_PACKET_COUNTER_COUNT 5
 #define LOOM_AMDGPU_WAIT_PACKET_DESCRIPTOR_CAPACITY 16
 #define LOOM_AMDGPU_WAIT_PACKET_DESCRIPTOR_IMMEDIATE_CAPACITY 4
 
@@ -40,6 +40,8 @@ typedef struct loom_amdgpu_wait_packet_descriptor_t {
   iree_string_view_t key;
   // Logical counters this descriptor can drain.
   uint32_t counter_mask;
+  // Number of logical counters this descriptor can drain.
+  uint8_t counter_count;
   // Per-immediate logical counter mappings.
   loom_amdgpu_wait_packet_descriptor_immediate_t
       immediates[LOOM_AMDGPU_WAIT_PACKET_DESCRIPTOR_IMMEDIATE_CAPACITY];
@@ -71,7 +73,7 @@ typedef struct loom_amdgpu_wait_packet_group_t {
   // Logical counters required by this group.
   uint32_t counter_mask;
   // Target wait count per logical wait-counter slot.
-  uint16_t target_counts[LOOM_AMDGPU_WAIT_PACKET_COUNTER_COUNT];
+  uint16_t target_counts[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT];
 } loom_amdgpu_wait_packet_group_t;
 
 typedef struct loom_amdgpu_wait_packet_builder_t {
@@ -243,6 +245,7 @@ static iree_status_t loom_amdgpu_wait_packet_append_target_descriptor(
       .descriptor = descriptor,
       .key = key,
       .counter_mask = counter_mask,
+      .counter_count = (uint8_t)iree_math_count_ones_u32(counter_mask),
       .immediate_count = descriptor->immediate_count,
   };
   uint32_t mapped_counter_mask = 0;
@@ -396,15 +399,6 @@ static iree_status_t loom_amdgpu_wait_packet_append_immediate(
   return iree_ok_status();
 }
 
-static uint32_t loom_amdgpu_wait_packet_popcount(uint32_t value) {
-  uint32_t count = 0;
-  while (value != 0) {
-    value &= value - 1;
-    ++count;
-  }
-  return count;
-}
-
 static iree_status_t loom_amdgpu_wait_packet_append_packet(
     loom_amdgpu_wait_packet_builder_t* builder,
     const loom_amdgpu_wait_packet_group_t* group,
@@ -462,9 +456,8 @@ loom_amdgpu_wait_packet_select_descriptor(
       continue;
     }
     const uint32_t covered_count =
-        loom_amdgpu_wait_packet_popcount(covered_counter_mask);
-    const uint32_t extra_count = loom_amdgpu_wait_packet_popcount(
-        descriptor->counter_mask & ~remaining_counter_mask);
+        (uint32_t)iree_math_count_ones_u32(covered_counter_mask);
+    const uint32_t extra_count = descriptor->counter_count - covered_count;
     if (best_descriptor == NULL || covered_count > best_covered_count ||
         (covered_count == best_covered_count &&
          extra_count < best_extra_count) ||
@@ -714,8 +707,7 @@ static iree_status_t loom_amdgpu_wait_packet_json_write_counters(
     loom_output_stream_t* stream, uint32_t counter_mask) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
   bool needs_comma = false;
-  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_PACKET_COUNTER_COUNT;
-       ++slot) {
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++slot) {
     const uint32_t slot_mask = 1u << slot;
     if ((counter_mask & slot_mask) == 0) {
       continue;

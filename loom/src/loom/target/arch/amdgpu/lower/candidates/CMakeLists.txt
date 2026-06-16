@@ -10,11 +10,13 @@
 iree_add_all_subdirs()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
+loom_generated_cc_library(
   NAME
     atomic_candidates
   GENERATOR
     loom::py::loom::gen::target::arch::amdgpu::lower::candidates::atomic_candidates
+  HDRS
+    "atomic_candidates.h"
   DEPS
     iree::base
     loom::ops::atomic
@@ -25,14 +27,14 @@ loom_target_table_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
+loom_generated_cc_library(
   NAME
     compare_candidates
   GENERATOR
     loom::py::loom::gen::target::arch::amdgpu::lower::candidates::compare_candidates
+  HDRS
+    "compare_candidates.h"
   DEPS
-    iree::base
-    loom::ir
     loom::ops::scalar
     loom::ops::vector
     loom::target::arch::amdgpu::refs::target_refs

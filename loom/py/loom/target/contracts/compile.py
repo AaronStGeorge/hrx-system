@@ -18,6 +18,7 @@ from loom.target.contracts.rules import (
     ContractCase,
     DescriptorMatrixRule,
     DescriptorRule,
+    RecipeRule,
     ValueAliasRule,
     ValueElideRule,
 )
@@ -211,6 +212,16 @@ def _compile_case(
             )
         return CompiledCase(
             system=ContractSystem.VALUE_ELIDE,
+            row_index=lower_rule_index,
+        )
+    if isinstance(contract_case, RecipeRule):
+        if lower_rule_index == CONTRACT_ROW_NONE:
+            raise ValueError(
+                f"{contract_case.source_op.name}: recipe case has no "
+                "compiled lower rule"
+            )
+        return CompiledCase(
+            system=ContractSystem.RECIPE_RULE,
             row_index=lower_rule_index,
         )
     if isinstance(contract_case, DescriptorMatrixRule):

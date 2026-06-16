@@ -363,6 +363,7 @@ iree_status_t loom_low_lower_query_target_contract(
       .can_materialize = options->can_materialize,
       .descriptor_ref = options->descriptor_ref,
       .fact_table = environment->fact_table,
+      .flags = LOOM_LOW_LOWER_RULE_MATCH_FLAG_CONTRACT_ONLY,
   };
 
   return loom_low_lower_query_target_contract_index(

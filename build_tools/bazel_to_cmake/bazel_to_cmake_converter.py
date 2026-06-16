@@ -682,6 +682,16 @@ class BuildFileFunctions(object):
             raise ValueError(f"filegroup label {label} was not expanded")
         return f"${{PROJECT_SOURCE_DIR}}/{package}/{name}"
 
+    def _is_source_data_label(self, label):
+        if not self._repo_root:
+            return False
+        package, name = self._split_location_label(label)
+        if name in self._filegroup_srcs and package == self._current_package():
+            return all(
+                self._is_source_data_label(src) for src in self._filegroup_srcs[name]
+            )
+        return os.path.exists(os.path.join(self._repo_root, package, name))
+
     def _canonical_python_label(self, label, current_package=None):
         if label.startswith("@"):
             return label
@@ -1174,8 +1184,14 @@ class BuildFileFunctions(object):
                     raise NotImplementedError(f"iree_py_test data: {name}")
         if data:
             location_labels = self._location_label_keys(args)
-            data_labels = {self._split_location_label(label) for label in data}
-            if not data_labels.issubset(location_labels):
+            unlocated_data = [
+                label
+                for label in data
+                if self._split_location_label(label) not in location_labels
+            ]
+            if unlocated_data and not all(
+                self._is_source_data_label(label) for label in unlocated_data
+            ):
                 raise NotImplementedError(f"iree_py_test data: {name}")
         source_list = list(srcs or [])
         main_source = None

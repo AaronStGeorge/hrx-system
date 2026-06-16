@@ -281,12 +281,9 @@ static iree_status_t loom_amdgpu_materialize_branch_address(
       context, source_op, zero_descriptor, 0, lane_type, &high_zero));
 
   const loom_value_id_t lanes[] = {*out_low_value_id, high_zero};
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, IREE_ARRAYSIZE(lanes),
-      required_low_type, source_op->location, &concat_op));
-  *out_low_value_id = loom_low_concat_result(concat_op);
-  return iree_ok_status();
+  return loom_amdgpu_build_low_register_range(
+      context, source_op, lanes, IREE_ARRAYSIZE(lanes), required_low_type,
+      out_low_value_id);
 }
 
 iree_status_t loom_amdgpu_materialize_branch_arg(
@@ -1464,12 +1461,8 @@ static iree_status_t loom_amdgpu_emit_zero_vgpr_value(
   for (uint32_t i = 0; i < lane_count; ++i) {
     lanes[i] = zero_lane;
   }
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, lane_count, value_type,
-      source_op->location, &concat_op));
-  *out_value = loom_low_concat_result(concat_op);
-  return iree_ok_status();
+  return loom_amdgpu_build_low_register_range(
+      context, source_op, lanes, lane_count, value_type, out_value);
 }
 
 static iree_status_t loom_amdgpu_emit_zero_native_i1_mask(
@@ -1489,12 +1482,8 @@ static iree_status_t loom_amdgpu_emit_zero_native_i1_mask(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 0, lane_type,
       &zero_lane));
   const loom_value_id_t lanes[] = {zero_lane, zero_lane};
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, IREE_ARRAYSIZE(lanes),
-      value_type, source_op->location, &concat_op));
-  *out_value = loom_low_concat_result(concat_op);
-  return iree_ok_status();
+  return loom_amdgpu_build_low_register_range(
+      context, source_op, lanes, IREE_ARRAYSIZE(lanes), value_type, out_value);
 }
 
 static iree_status_t loom_amdgpu_emit_zero_merge_value(
@@ -1704,12 +1693,8 @@ static iree_status_t loom_amdgpu_emit_masked_merge_value(
         &lanes[i]));
   }
 
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, lane_count, value_type,
-      source_op->location, &concat_op));
-  *out_merged_value = loom_low_concat_result(concat_op);
-  return iree_ok_status();
+  return loom_amdgpu_build_low_register_range(
+      context, source_op, lanes, lane_count, value_type, out_merged_value);
 }
 
 static iree_status_t loom_amdgpu_emit_masked_merge_restore_block(

@@ -1382,7 +1382,7 @@ static iree_status_t loom_low_lower_record_report_row(
       .rule_set_index = UINT16_MAX,
       .rule_index = UINT16_MAX,
       .plan_id = selected_plan->plan.id,
-      .plan_detail = iree_string_view_empty(),
+      .plan_key = iree_string_view_empty(),
       .descriptor_id = LOOM_LOW_STABLE_ID_NONE,
       .emitted_low_op_count = emitted_low_op_count,
   };
@@ -1403,11 +1403,10 @@ static iree_status_t loom_low_lower_record_report_row(
             selected_plan->plan.target_data;
     row.descriptor_id = plan->descriptor.descriptor->stable_id;
   }
-  if (selected_plan->rule == NULL &&
-      context->policy->describe_plan.fn != NULL) {
-    row.plan_detail = context->policy->describe_plan.fn(
-        context->policy->describe_plan.user_data, context,
-        selected_plan->source_op, selected_plan->plan);
+  if (selected_plan->rule == NULL && context->policy->plan_key.fn != NULL) {
+    row.plan_key = context->policy->plan_key.fn(
+        context->policy->plan_key.user_data, context, selected_plan->source_op,
+        selected_plan->plan);
   }
   return loom_low_lower_report_row_list_append(&result->report_rows,
                                                result->report_allocator, &row);

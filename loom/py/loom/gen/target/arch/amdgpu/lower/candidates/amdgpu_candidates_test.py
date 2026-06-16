@@ -1,0 +1,70 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+from __future__ import annotations
+
+from loom.gen.target.arch.amdgpu.lower.candidates import (
+    amdgpu_atomic_candidates,
+    amdgpu_compare_candidates,
+)
+
+_ATOMIC_HEADER = "loom/target/arch/amdgpu/lower/candidates/atomic_candidates.h"
+_COMPARE_HEADER = "loom/target/arch/amdgpu/lower/candidates/compare_candidates.h"
+
+
+def test_atomic_generator_emits_data_source_only() -> None:
+    source = amdgpu_atomic_candidates._emit_source(public_header=_ATOMIC_HEADER)
+
+    assert f'#include "{_ATOMIC_HEADER}"' in source
+    assert "typedef " not in source
+    assert "#ifndef " not in source
+    assert "\nif " not in source
+    assert "\nreturn " not in source
+    assert "kLoomAmdgpuAtomicDescriptorCandidates[]" in source
+    assert "kLoomAmdgpuAtomicDescriptorCandidateCount" in source
+    assert "kLoomAmdgpuAtomicDescriptorCandidateRanges" in source
+    assert ".memory_space" not in source
+    assert ".address_form" not in source
+    assert ".operation_kind" not in source
+    assert ".atomic_kind" not in source
+    assert ".value_kind" in source
+    assert ".descriptor_ref" in source
+
+
+def test_atomic_generator_builds_contiguous_candidate_ranges() -> None:
+    candidates = amdgpu_atomic_candidates.amdgpu_atomic_descriptor_candidates()
+    ranges = amdgpu_atomic_candidates._candidate_ranges(candidates)
+
+    assert ranges
+    assert len(ranges) < len(candidates)
+    covered_candidate_count = sum(candidate_count for _, _, candidate_count in ranges)
+    assert covered_candidate_count == len(candidates)
+
+
+def test_compare_generator_emits_data_source_only() -> None:
+    source = amdgpu_compare_candidates._emit_source(public_header=_COMPARE_HEADER)
+
+    assert f'#include "{_COMPARE_HEADER}"' in source
+    assert "typedef " not in source
+    assert "#ifndef " not in source
+    assert "\nif " not in source
+    assert "\nreturn " not in source
+    assert "kLoomAmdgpuVectorCmpiCompareDescriptorCandidates" in source
+    assert "kLoomAmdgpuScalarCmpfCompareDescriptorCandidates" in source
+    assert "kLoomAmdgpuVectorCmpfCompareDescriptorCandidates" in source
+    assert ".op_kind" not in source
+    assert ".predicate" not in source
+    assert "[LOOM_VECTOR_CMPI_PREDICATE_EQ]" in source
+    assert "[LOOM_SCALAR_CMPF_PREDICATE_OLT]" in source
+    assert "[LOOM_VECTOR_CMPF_PREDICATE_OLT]" in source
+
+
+def test_compare_generator_covers_predicate_rows() -> None:
+    candidates = amdgpu_compare_candidates._compare_candidates()
+
+    assert candidates
+    assert any(family.source_op_name == "vector.cmpi" and predicate == "eq" for family, predicate, _ in candidates)
+    assert any(family.source_op_name == "vector.cmpf" and predicate == "olt" for family, predicate, _ in candidates)

@@ -76,7 +76,11 @@ static const loom_target_math_policy_t kIreeVmMathPolicy = {
     .query = loom_ireevm_math_policy_query,
 };
 
-#include "loom/target/arch/ireevm/math_policy_tables.inl"
+static const loom_target_math_policy_registry_entry_t
+    kIreeVmMathPolicyEntries[] = {
+        {/*.contract_set_key=*/IREE_SVL("ireevm.core"),
+         /*.policy=*/&kIreeVmMathPolicy},
+};
 
 void loom_ireevm_math_policy_registry_initialize(
     loom_target_math_policy_registry_t* out_registry) {

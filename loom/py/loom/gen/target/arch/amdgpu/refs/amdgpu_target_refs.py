@@ -155,6 +155,7 @@ def _emit_header() -> str:
         "",
         "#define LOOM_AMDGPU_DESCRIPTOR_REF_NONE UINT16_MAX",
         f"#define LOOM_AMDGPU_DESCRIPTOR_REF_COUNT {_u16_literal(len(descriptor_ref_keys))}",
+        f"#define LOOM_AMDGPU_TARGET_REF_DESCRIPTOR_SET_ORDINAL_COUNT {_u16_literal(len(sorted_descriptor_set_infos()))}",
         "",
     ]
     lines.extend(f"#define {_descriptor_ref_constant_name(key)} {_u16_literal(index)}" for index, key in enumerate(descriptor_ref_keys))
@@ -213,48 +214,12 @@ def _emit_source(
         lines.append("};")
         lines.append("")
 
-    max_descriptor_set_ordinal = max(descriptor_set_ordinal for descriptor_set_ordinal, _, _ in descriptor_set_tables)
     tables_by_ordinal = {descriptor_set_ordinal: descriptor_set_key for descriptor_set_ordinal, descriptor_set_key, _ in descriptor_set_tables}
-    lines.append("static const uint32_t* const kAmdgpuDescriptorRefOrdinalTables[] = {")
-    for descriptor_set_ordinal in range(max_descriptor_set_ordinal + 1):
-        ordinal_descriptor_set_key = tables_by_ordinal.get(descriptor_set_ordinal)
-        table_expr = _descriptor_set_table_name(ordinal_descriptor_set_key) if ordinal_descriptor_set_key is not None else "NULL"
-        lines.append(f"    {table_expr},")
+    lines.append("const uint32_t* const kLoomAmdgpuDescriptorRefOrdinalTables[LOOM_AMDGPU_TARGET_REF_DESCRIPTOR_SET_ORDINAL_COUNT] = {")
+    for descriptor_set_ordinal, descriptor_set_key in tables_by_ordinal.items():
+        table_expr = _descriptor_set_table_name(descriptor_set_key)
+        lines.append(f"    [{_u16_literal(descriptor_set_ordinal)}] = {table_expr},")
     lines.append("};")
-    lines.append("")
-    lines.extend(
-        [
-            "uint32_t loom_amdgpu_descriptor_ref_ordinal(",
-            "    const loom_low_descriptor_set_t* descriptor_set,",
-            "    loom_amdgpu_descriptor_ref_t descriptor_ref) {",
-            "  if (descriptor_set == NULL ||",
-            "      descriptor_ref >= LOOM_AMDGPU_DESCRIPTOR_REF_COUNT) {",
-            "    return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;",
-            "  }",
-            "  const uint16_t descriptor_set_ordinal =",
-            "      descriptor_set->descriptor_set_ordinal;",
-            "  if (descriptor_set_ordinal >=",
-            "      sizeof(kAmdgpuDescriptorRefOrdinalTables) /",
-            "          sizeof(kAmdgpuDescriptorRefOrdinalTables[0])) {",
-            "    return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;",
-            "  }",
-            "  const uint32_t* descriptor_ordinals =",
-            "      kAmdgpuDescriptorRefOrdinalTables[descriptor_set_ordinal];",
-            "  if (descriptor_ordinals == NULL) {",
-            "    return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;",
-            "  }",
-            "  return descriptor_ordinals[descriptor_ref];",
-            "}",
-            "",
-            "const loom_low_descriptor_t* loom_amdgpu_descriptor_ref_descriptor(",
-            "    const loom_low_descriptor_set_t* descriptor_set,",
-            "    loom_amdgpu_descriptor_ref_t descriptor_ref) {",
-            "  return loom_low_descriptor_set_descriptor_at(",
-            "      descriptor_set,",
-            "      loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref));",
-            "}",
-        ]
-    )
     return "\n".join(lines) + "\n"
 
 

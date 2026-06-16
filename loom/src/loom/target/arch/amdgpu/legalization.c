@@ -20,11 +20,6 @@ static bool loom_amdgpu_legalizer_descriptor_set_is_amdgpu(
          descriptor_set->target_stable_id == LOOM_AMDGPU_TARGET_STABLE_ID;
 }
 
-static bool loom_amdgpu_subgroup_wavefront_size_is_supported(
-    uint32_t wavefront_size) {
-  return wavefront_size == 32 || wavefront_size == 64;
-}
-
 static bool loom_amdgpu_subgroup_mask_type_covers_wavefront(
     loom_type_t mask_type, uint32_t wavefront_size) {
   if (!loom_type_is_scalar(mask_type)) {
@@ -193,7 +188,7 @@ static iree_status_t loom_amdgpu_legalize_kernel_subgroup_match_any(
   const loom_type_t mask_type = loom_module_value_type(context->module, mask);
   const uint32_t wavefront_size = loom_amdgpu_legalizer_wavefront_size(context);
   if (!loom_amdgpu_match_value_type_is_supported(value_type) ||
-      !loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size) ||
+      !loom_amdgpu_wavefront_size_is_valid(wavefront_size) ||
       !loom_amdgpu_subgroup_mask_type_covers_wavefront(mask_type,
                                                        wavefront_size)) {
     *out_result = (loom_target_legalizer_result_t){

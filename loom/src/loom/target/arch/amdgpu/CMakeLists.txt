@@ -125,7 +125,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::descriptors
     loom::target::arch::amdgpu::descriptors::low_registry
-    loom::target::arch::amdgpu::planning::occupancy_tables
+    loom::target::arch::amdgpu::planning::occupancy_model
     loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
@@ -138,8 +138,6 @@ loom_cc_library(
     math_policy
   HDRS
     "math_policy.h"
-  TEXTUAL_HDRS
-    "math_policy_tables.inl"
   SRCS
     "math_policy.c"
   DEPS
@@ -1224,6 +1222,57 @@ iree_native_test(
     "source_low_bitpack_diagnostics"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitpack_diagnostics.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/index_addressing.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/lookup_table.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_cache_policy_non_temporal.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_cache_policy_scopes.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_generic_atomic.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_global.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_global_atomic.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_global_atomic_ordering.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_prefetch.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_workgroup_atomic.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_workgroup_b128.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_workgroup_indexed.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/memory_workgroup_packed16.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/ml_attention.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/ml_contraction.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_conversion.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_f32_memory.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_i32_memory.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_minmax.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_reduce.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_i32.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_i64.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_bitfield.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_bitpack.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_bitunpack.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_float8.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_i4_mixed.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_integer.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_payload_offsets.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_q8_dequant_dot.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/sync_barrier.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_bitcast.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_dot.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_mask_select.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_slice.loom-test"
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+iree_native_test(
+  NAME
+    "source_low_bitstream_report"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitstream_report.loom-test"
   SRC
     loom::tools::loom-check::loom-check
   DATA

@@ -4,3 +4,24 @@ func.def @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
   %packed = vector.bitpack<8> %codes : vector<4xi32> -> vector<4xi8>
   func.return %packed : vector<4xi8>
 }
+
+// ====
+
+func.def @i32x8_to_i4x8_bitpack(%codes: vector<8xi32>) -> (vector<4xi8>) {
+  %packed = vector.bitpack<4> %codes : vector<8xi32> -> vector<4xi8>
+  func.return %packed : vector<4xi8>
+}
+
+// ====
+
+func.def @i32x16_to_i2x16_bitpack(%codes: vector<16xi32>) -> (vector<4xi8>) {
+  %packed = vector.bitpack<2> %codes : vector<16xi32> -> vector<4xi8>
+  func.return %packed : vector<4xi8>
+}
+
+// ====
+
+func.def @i32x32_to_i1x32_bitpack(%mask: vector<32xi32>) -> (vector<4xi8>) {
+  %packed = vector.bitpack<1> %mask : vector<32xi32> -> vector<4xi8>
+  func.return %packed : vector<4xi8>
+}

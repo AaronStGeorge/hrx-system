@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from .api import amdgpu_descriptor_ref_keys
 from .common import *
 from .sets import *
 
@@ -162,6 +163,21 @@ def _amdgpu_atomic_candidate_sort_key(
     )
 
 
+def _record_amdgpu_atomic_candidate(
+    candidates_by_key: dict[str, AmdgpuAtomicDescriptorCandidate],
+    candidate: AmdgpuAtomicDescriptorCandidate,
+) -> None:
+    existing = candidates_by_key.get(candidate.descriptor_key)
+    if existing is None:
+        candidates_by_key[candidate.descriptor_key] = candidate
+        return
+    if existing != candidate:
+        raise ValueError(
+            "AMDGPU atomic descriptor candidate "
+            f"'{candidate.descriptor_key}' has conflicting metadata"
+        )
+
+
 def amdgpu_atomic_descriptor_candidates() -> tuple[
     AmdgpuAtomicDescriptorCandidate, ...
 ]:
@@ -179,7 +195,18 @@ def amdgpu_atomic_descriptor_candidates() -> tuple[
             candidate = _amdgpu_atomic_candidate_from_overlay(overlay)
             if candidate is None:
                 continue
-            candidates_by_key.setdefault(candidate.descriptor_key, candidate)
+            _record_amdgpu_atomic_candidate(candidates_by_key, candidate)
+    descriptor_ref_keys = set(amdgpu_descriptor_ref_keys())
+    missing_descriptor_refs = sorted(
+        descriptor_key
+        for descriptor_key in candidates_by_key
+        if descriptor_key not in descriptor_ref_keys
+    )
+    if missing_descriptor_refs:
+        raise ValueError(
+            "AMDGPU atomic descriptor candidates require missing descriptor "
+            f"refs: {', '.join(missing_descriptor_refs)}"
+        )
     return tuple(
         sorted(candidates_by_key.values(), key=_amdgpu_atomic_candidate_sort_key)
     )
@@ -195,5 +222,6 @@ __all__ = (
     "_amdgpu_atomic_candidate_from_overlay",
     "_amdgpu_atomic_candidate_sort_key",
     "_atomic_address_form",
+    "_record_amdgpu_atomic_candidate",
     "amdgpu_atomic_descriptor_candidates",
 )

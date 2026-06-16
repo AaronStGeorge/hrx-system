@@ -17,8 +17,10 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.contracts import (
+    LOWER_RULE_FLAG_CONTRACT_ONLY,
     AttrProject,
     ContractFragment,
+    DescriptorEmitForm,
     DescriptorRule,
     DirectDescriptorCase,
     EmitDescriptorOp,
@@ -26,6 +28,7 @@ from loom.target.contracts import (
     GuardKind,
     LowerAttrCopyKind,
     LowerEmitKind,
+    RecipeRule,
     Scalar,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
@@ -151,6 +154,118 @@ def test_compile_lower_rule_set_infers_vector_per_lane_emit() -> None:
     assert compiled.emits[0].descriptor is TEST_LOW_ADD_I32_DESCRIPTOR
 
 
+def test_compile_lower_rule_set_compiles_per_lane_sequence_emit() -> None:
+    table = ContractFragment(
+        name="test.vector",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=vector.vector_addi,
+                descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                guards=(
+                    Guard.value_type("lhs", Vector("i32", lanes=4)),
+                    Guard.value_type("rhs", Vector("i32", lanes=4)),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.temporary("partial")},
+                        result_types={"dst": ValueRef.result("result")},
+                        form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+                    ),
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.temporary("partial"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                        form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert len(compiled.rules) == 1
+    assert compiled.rules[0].emit_count == 2
+    assert compiled.rules[0].temporary_count == 1
+    assert tuple(emit.kind for emit in compiled.emits) == (
+        LowerEmitKind.DESCRIPTOR_OP_PER_LANE_SEQUENCE,
+        LowerEmitKind.DESCRIPTOR_OP_PER_LANE_SEQUENCE,
+    )
+
+
+def test_descriptor_rule_rejects_mixed_per_lane_sequence_emit() -> None:
+    _expect_value_error(
+        lambda: DescriptorRule(
+            source_op=vector.vector_addi,
+            descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+            emit=(
+                EmitDescriptorOp(
+                    descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                    operands={
+                        "lhs": ValueRef.operand("lhs"),
+                        "rhs": ValueRef.operand("rhs"),
+                    },
+                    results={"dst": ValueRef.temporary("partial")},
+                    result_types={"dst": ValueRef.result("result")},
+                    form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+                ),
+                EmitDescriptorOp(
+                    descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                    operands={
+                        "lhs": ValueRef.temporary("partial"),
+                        "rhs": ValueRef.operand("rhs"),
+                    },
+                    results={"dst": ValueRef.result("result")},
+                    form=DescriptorEmitForm.PER_LANE,
+                ),
+            ),
+        ).validate(TEST_LOW_CORE_DESCRIPTOR_SET),
+        "per-lane-sequence emit programs cannot mix emission forms",
+    )
+
+
+def test_descriptor_rule_rejects_per_lane_sequence_without_final_result() -> None:
+    _expect_value_error(
+        lambda: DescriptorRule(
+            source_op=vector.vector_addi,
+            descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+            emit=(
+                EmitDescriptorOp(
+                    descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                    operands={
+                        "lhs": ValueRef.operand("lhs"),
+                        "rhs": ValueRef.operand("rhs"),
+                    },
+                    results={"dst": ValueRef.temporary("partial")},
+                    result_types={"dst": ValueRef.result("result")},
+                    form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+                ),
+                EmitDescriptorOp(
+                    descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                    operands={
+                        "lhs": ValueRef.temporary("partial"),
+                        "rhs": ValueRef.operand("rhs"),
+                    },
+                    results={"dst": ValueRef.temporary("discarded")},
+                    result_types={"dst": ValueRef.result("result")},
+                    form=DescriptorEmitForm.PER_LANE_SEQUENCE,
+                ),
+            ),
+        ).validate(TEST_LOW_CORE_DESCRIPTOR_SET),
+        "per-lane-sequence final emit must bind a source result",
+    )
+
+
 def test_compile_lower_rule_set_compiles_value_alias_cases() -> None:
     table = ContractFragment(
         name="test.alias",
@@ -226,6 +341,73 @@ def test_compile_lower_rule_set_compiles_guarded_value_elide_cases() -> None:
     assert compiled.guards[0].value_ref_index == compiled.rules[0].elide_ref_start
     assert len(compiled.value_refs) == 1
     assert compiled.spans[0].source_op is vector.vector_extract
+
+
+def test_compile_lower_rule_set_compiles_recipe_cases() -> None:
+    table = ContractFragment(
+        name="test.recipe",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitpack,
+                guards=(
+                    Guard.value_type("source", Vector("i32", lanes=4)),
+                    Guard.value_type("result", Vector("i8", lanes=4)),
+                    Guard.i64_range("width", 8, 8),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.authored_case_indices == (0,)
+    assert len(compiled.rules) == 1
+    assert compiled.rules[0].source_op is vector.vector_bitpack
+    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert compiled.rules[0].guard_count == 3
+    assert compiled.rules[0].emit_count == 0
+    assert compiled.rules[0].alias_ref_count == 0
+    assert compiled.rules[0].elide_ref_count == 0
+    assert compiled.spans[0].source_op is vector.vector_bitpack
+
+
+def test_compile_lower_rule_set_compiles_bitstream_storage_guards() -> None:
+    table = ContractFragment(
+        name="test.recipe.bitstream",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitunpacku,
+                guards=(
+                    Guard.bitunpack_storage(
+                        "source",
+                        "result",
+                        "width",
+                        register_bit_width=32,
+                        maximum_source_registers=16,
+                        maximum_result_lanes=32,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert len(compiled.rules) == 1
+    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert len(compiled.guards) == 1
+    guard = compiled.guards[0]
+    assert guard.kind == GuardKind.BITUNPACK_STORAGE
+    assert guard.value_ref_index == 0
+    assert guard.other_value_ref_index == 1
+    assert guard.attr_index == vector.vector_bitunpacku.attrs.index(
+        vector.vector_bitunpacku.attr("width")
+    )
+    assert guard.u64 == 16
+    assert guard.minimum_i64 == 32
+    assert guard.maximum_i64 == 32
 
 
 def test_compile_lower_rule_set_offsets_variadic_operand_elements() -> None:
@@ -428,6 +610,105 @@ def test_compile_lower_rule_set_compiles_consecutive_i64_attr_pack() -> None:
             ],
         ),
         "source attr 'overflow' must be an i64 attr",
+    )
+
+
+def test_compile_lower_rule_set_compiles_i64_bit_mask_attr_projection() -> None:
+    descriptor = replace(
+        TEST_LOW_CONST_I32_DESCRIPTOR,
+        key="test.const.u32-mask",
+        immediates=(
+            Immediate("low", ImmediateKind.UNSIGNED, bit_width=32),
+            Immediate("target", ImmediateKind.UNSIGNED, bit_width=32),
+            Immediate("clear", ImmediateKind.UNSIGNED, bit_width=32),
+            Immediate("shift", ImmediateKind.UNSIGNED, bit_width=8),
+            Immediate("align", ImmediateKind.UNSIGNED, bit_width=8),
+        ),
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(*TEST_LOW_CORE_DESCRIPTOR_SET.descriptors, descriptor),
+    )
+    table = ContractFragment(
+        name="test.attr-bitmask",
+        descriptor_set=descriptor_set,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_bitwise.scalar_bitfield_extractu,
+                descriptor=descriptor,
+                guards=(Guard.value_type("result", Scalar("i32")),),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=descriptor,
+                        results={"dst": ValueRef.result("result")},
+                        immediates={
+                            "low": AttrProject.i64_low_bit_mask("width"),
+                            "target": AttrProject.i64_shifted_low_bit_mask(
+                                "width",
+                                offset_attr="offset",
+                            ),
+                            "clear": AttrProject.i64_shifted_low_bit_clear_mask(
+                                "width",
+                                offset_attr="offset",
+                            ),
+                            "shift": AttrProject.i64_literal_minus_attr(
+                                "width",
+                                literal=32,
+                            ),
+                            "align": AttrProject.i64_literal_minus_attrs(
+                                "offset",
+                                other_source_attr="width",
+                                literal=32,
+                            ),
+                        },
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert len(compiled.attr_copies) == 5
+    low, target, clear, shift, align = compiled.attr_copies
+    assert low.kind == LowerAttrCopyKind.I64_LOW_BIT_MASK
+    assert low.source_attr_index == 1
+    assert target.kind == LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_MASK
+    assert target.source_attr_index == 1
+    assert target.other_source_attr_index == 0
+    assert clear.kind == LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK
+    assert clear.source_attr_index == 1
+    assert clear.other_source_attr_index == 0
+    assert shift.kind == LowerAttrCopyKind.I64_LITERAL_MINUS_ATTR
+    assert shift.source_attr_index == 1
+    assert shift.literal_i64 == 32
+    assert align.kind == LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS
+    assert align.source_attr_index == 0
+    assert align.other_source_attr_index == 1
+    assert align.literal_i64 == 32
+
+    _expect_value_error(
+        lambda: ContractFragment(
+            name="test.bad-attr-bitmask",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                DescriptorRule(
+                    source_op=scalar_bitwise.scalar_bitfield_extractu,
+                    descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                    guards=(Guard.value_type("result", Scalar("i32")),),
+                    emit=(
+                        EmitDescriptorOp(
+                            descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                            results={"dst": ValueRef.result("result")},
+                            immediates={
+                                "i32_value": AttrProject.i64_low_bit_mask("width")
+                            },
+                        ),
+                    ),
+                )
+            ],
+        ),
+        "descriptor immediate 'i32_value' must be an unsigned immediate",
     )
 
 

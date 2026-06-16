@@ -1997,3 +1997,38 @@ iree_status_t loom_amdgpu_lower_vector_fragment_store(
   }
   return iree_ok_status();
 }
+
+void loom_amdgpu_mark_fragment_memory_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_fragment_memory_plan_t* plan) {
+  (void)source_op;
+  if (plan->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    loom_low_lower_require_source_value_storage(context, plan->view);
+  }
+  if (plan->dynamic_base_byte_offset != LOOM_VALUE_ID_INVALID) {
+    loom_low_lower_require_source_value_storage(context,
+                                                plan->dynamic_base_byte_offset);
+  }
+  for (uint8_t axis = 0; axis < plan->view_rank; ++axis) {
+    const loom_value_id_t dynamic_origin = plan->origins[axis].dynamic_index;
+    if (dynamic_origin != LOOM_VALUE_ID_INVALID) {
+      loom_low_lower_require_source_value_storage(context, dynamic_origin);
+    }
+  }
+
+  switch (plan->operation_kind) {
+    case LOOM_AMDGPU_MEMORY_OPERATION_LOAD:
+      return;
+    case LOOM_AMDGPU_MEMORY_OPERATION_STORE:
+      if (plan->narrowed_result_round_source != LOOM_VALUE_ID_INVALID) {
+        loom_low_lower_require_source_value_storage(
+            context, plan->narrowed_result_round_source);
+      } else {
+        loom_low_lower_require_source_value_storage(context, plan->payload);
+      }
+      return;
+    case LOOM_AMDGPU_MEMORY_OPERATION_COUNT_:
+      break;
+  }
+  IREE_ASSERT_UNREACHABLE("unknown AMDGPU fragment memory operation kind");
+}

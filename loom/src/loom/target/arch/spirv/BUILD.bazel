@@ -198,7 +198,6 @@ loom_cc_library(
     name = "math_policy",
     srcs = ["math_policy.c"],
     hdrs = ["math_policy.h"],
-    textual_hdrs = ["math_policy_tables.inl"],
     deps = [
         "//loom/src/loom/target:math_policy",
         "//runtime/src/iree/base",

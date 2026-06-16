@@ -27,6 +27,7 @@ from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
     AmdgpuOccupancyModelInfo,
+    AmdgpuOccupancyRegisterClassInfo,
     amdgpu_descriptor_set_ordinal,
     sorted_descriptor_set_infos,
     sorted_occupancy_model_infos,
@@ -78,6 +79,52 @@ def _u32_expr(value: int) -> str:
     return f"UINT32_C({value})"
 
 
+def _round_up(value: int, multiple: int) -> int:
+    if value == 0 or multiple <= 1:
+        return value
+    return ((value + multiple - 1) // multiple) * multiple
+
+
+def _wave_limit(
+    pool_units: int,
+    allocation_granularity: int,
+    max_waves_per_simd: int,
+    allocated_units: int,
+) -> int:
+    if allocated_units == 0:
+        return max_waves_per_simd
+    rounded_units = _round_up(allocated_units, allocation_granularity)
+    if rounded_units == 0:
+        return 0
+    return min(pool_units // rounded_units, max_waves_per_simd)
+
+
+def _pressure_cliffs(
+    register_class: AmdgpuOccupancyRegisterClassInfo,
+    max_waves_per_simd: int,
+) -> tuple[tuple[int, int, int], ...]:
+    previous_wave_limit = max_waves_per_simd
+    cliffs: list[tuple[int, int, int]] = []
+    stop_candidate = min(
+        register_class.pool_units + register_class.allocation_granularity,
+        0xFFFFFFFF,
+    )
+    for candidate in range(1, stop_candidate + 1):
+        candidate_wave_limit = _wave_limit(
+            register_class.pool_units,
+            register_class.allocation_granularity,
+            max_waves_per_simd,
+            candidate,
+        )
+        if candidate_wave_limit >= previous_wave_limit:
+            continue
+        cliffs.append((candidate, previous_wave_limit, candidate_wave_limit))
+        previous_wave_limit = candidate_wave_limit
+        if candidate_wave_limit == 0:
+            break
+    return tuple(cliffs)
+
+
 def _validate_models(models: Sequence[AmdgpuOccupancyModelInfo]) -> None:
     descriptor_set_keys = {info.key for info in sorted_descriptor_set_infos()}
     model_keys = [info.descriptor_set_key for info in models]
@@ -122,89 +169,6 @@ def _validate_models(models: Sequence[AmdgpuOccupancyModelInfo]) -> None:
                     raise ValueError(f"AMDGPU occupancy resource {resource.resource} member {member.register_class} granularity must be positive")
 
 
-def _emit_header() -> str:
-    guard = "LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_TABLES_H_"
-    lines = [
-        "// Copyright 2026 The IREE Authors",
-        "//",
-        "// Licensed under the Apache License v2.0 with LLVM Exceptions.",
-        "// See https://llvm.org/LICENSE.txt for license information.",
-        "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
-        "",
-        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.planning.amdgpu_occupancy_tables"),
-        "",
-        f"#ifndef {guard}",
-        f"#define {guard}",
-        "",
-        "#include <stdint.h>",
-        "",
-        '#include "iree/base/api.h"',
-        '#include "loom/target/arch/amdgpu/target_info.h"',
-        "",
-        "#ifdef __cplusplus",
-        'extern "C" {',
-        "#endif",
-        "",
-        "typedef struct loom_amdgpu_occupancy_register_class_model_t {",
-        "  // Stable target-low register-class name.",
-        "  iree_string_view_t register_class;",
-        "  // Occupancy register-file pool shared by resident waves.",
-        "  uint32_t pool_units;",
-        "  // Allocation granularity used by occupancy calculations.",
-        "  uint32_t allocation_granularity;",
-        "} loom_amdgpu_occupancy_register_class_model_t;",
-        "",
-        "typedef struct loom_amdgpu_occupancy_resource_member_model_t {",
-        "  // Index into loom_amdgpu_occupancy_model_t::register_classes.",
-        "  uint16_t register_class_index;",
-        "  // Member contribution granularity applied before summing pressure.",
-        "  uint32_t contribution_granularity;",
-        "} loom_amdgpu_occupancy_resource_member_model_t;",
-        "",
-        "typedef struct loom_amdgpu_occupancy_resource_model_t {",
-        "  // Stable target-low resource name.",
-        "  iree_string_view_t resource;",
-        "  // Occupancy resource pool shared by resident waves.",
-        "  uint32_t pool_units;",
-        "  // Allocation granularity used by occupancy calculations.",
-        "  uint32_t allocation_granularity;",
-        "  // Register-class members contributing to this resource.",
-        "  const loom_amdgpu_occupancy_resource_member_model_t* members;",
-        "  // Number of entries in members.",
-        "  iree_host_size_t member_count;",
-        "} loom_amdgpu_occupancy_resource_model_t;",
-        "",
-        "typedef struct loom_amdgpu_occupancy_model_t {",
-        "  // Dense generated AMDGPU descriptor-set ordinal.",
-        "  uint16_t descriptor_set_ordinal;",
-        "  // AMDGPU wave size used by this model.",
-        "  uint32_t wave_size;",
-        "  // Maximum resident waves per SIMD.",
-        "  uint32_t max_waves_per_simd;",
-        "  // Register-class occupancy models in diagnostic order.",
-        "  const loom_amdgpu_occupancy_register_class_model_t* register_classes;",
-        "  // Number of entries in register_classes.",
-        "  iree_host_size_t register_class_count;",
-        "  // Derived occupancy resources in diagnostic order.",
-        "  const loom_amdgpu_occupancy_resource_model_t* resources;",
-        "  // Number of entries in resources.",
-        "  iree_host_size_t resource_count;",
-        "} loom_amdgpu_occupancy_model_t;",
-        "",
-        "// Returns the generated occupancy model for descriptor_set_ordinal.",
-        "const loom_amdgpu_occupancy_model_t*",
-        "loom_amdgpu_occupancy_model_for_descriptor_set_ordinal(",
-        "    uint16_t descriptor_set_ordinal);",
-        "",
-        "#ifdef __cplusplus",
-        '}  // extern "C"',
-        "#endif",
-        "",
-        f"#endif  // {guard}",
-    ]
-    return "\n".join(lines) + "\n"
-
-
 def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -215,13 +179,37 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
         "",
         *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.planning.amdgpu_occupancy_tables"),
         "",
-        '#include "loom/target/arch/amdgpu/planning/occupancy_tables.h"',
+        '#include "loom/target/arch/amdgpu/planning/occupancy_model.h"',
         "",
         "// clang-format off",
     ]
     for model in models:
         suffix = _model_c_suffix(model.descriptor_set_key)
         register_class_indices = {row.register_class: index for index, row in enumerate(model.register_classes)}
+        pressure_cliffs_by_register_class = {row.register_class: _pressure_cliffs(row, model.max_waves_per_simd) for row in model.register_classes}
+        pressure_cliff_count = sum(len(cliffs) for cliffs in pressure_cliffs_by_register_class.values())
+        for row in model.register_classes:
+            cliffs = pressure_cliffs_by_register_class[row.register_class]
+            register_class_suffix = _resource_c_suffix(row.register_class)
+            if not cliffs:
+                continue
+            lines.extend(
+                [
+                    "",
+                    f"static const loom_amdgpu_occupancy_pressure_cliff_model_t kAmdgpu{suffix}{register_class_suffix}PressureCliffs[] = {{",
+                ]
+            )
+            for cliff_units, tier_before, tier_after in cliffs:
+                lines.extend(
+                    [
+                        "  {",
+                        f"    .cliff_units = {_u32_expr(cliff_units)},",
+                        f"    .tier_before = {_u32_expr(tier_before)},",
+                        f"    .tier_after = {_u32_expr(tier_after)},",
+                        "  },",
+                    ]
+                )
+            lines.append("};")
         lines.extend(
             [
                 "",
@@ -229,12 +217,22 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
             ]
         )
         for row in model.register_classes:
+            cliffs = pressure_cliffs_by_register_class[row.register_class]
+            register_class_suffix = _resource_c_suffix(row.register_class)
+            if cliffs:
+                pressure_cliffs_initializer = f"kAmdgpu{suffix}{register_class_suffix}PressureCliffs"
+                pressure_cliff_count_initializer = f"IREE_ARRAYSIZE(kAmdgpu{suffix}{register_class_suffix}PressureCliffs)"
+            else:
+                pressure_cliffs_initializer = "NULL"
+                pressure_cliff_count_initializer = "0"
             lines.extend(
                 [
                     "  {",
                     f'    .register_class = IREE_SVL("{_c_string_literal(row.register_class)}"),',
                     f"    .pool_units = {_u32_expr(row.pool_units)},",
                     f"    .allocation_granularity = {_u32_expr(row.allocation_granularity)},",
+                    f"    .pressure_cliffs = {pressure_cliffs_initializer},",
+                    f"    .pressure_cliff_count = {pressure_cliff_count_initializer},",
                     "  },",
                 ]
             )
@@ -290,6 +288,7 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
                 f"  .descriptor_set_ordinal = {_u16_expr(amdgpu_descriptor_set_ordinal(model.descriptor_set_key))},",
                 f"  .wave_size = {_u32_expr(model.wave_size)},",
                 f"  .max_waves_per_simd = {_u32_expr(model.max_waves_per_simd)},",
+                f"  .pressure_cliff_count = {pressure_cliff_count},",
                 f"  .register_classes = kAmdgpu{suffix}RegisterClasses,",
                 f"  .register_class_count = IREE_ARRAYSIZE(kAmdgpu{suffix}RegisterClasses),",
                 f"  .resources = {resource_initializer},",
@@ -300,7 +299,7 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
     lines.extend(
         [
             "",
-            "static const loom_amdgpu_occupancy_model_t* const kAmdgpuOccupancyModels[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {",
+            "const loom_amdgpu_occupancy_model_t* const kLoomAmdgpuOccupancyModels[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {",
         ]
     )
     for model in models:
@@ -315,35 +314,23 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
             "};",
             "",
             "// clang-format on",
-            "",
-            "const loom_amdgpu_occupancy_model_t*",
-            "loom_amdgpu_occupancy_model_for_descriptor_set_ordinal(",
-            "    uint16_t descriptor_set_ordinal) {",
-            "  if (descriptor_set_ordinal >= IREE_ARRAYSIZE(kAmdgpuOccupancyModels)) {",
-            "    return NULL;",
-            "  }",
-            "  return kAmdgpuOccupancyModels[descriptor_set_ordinal];",
-            "}",
         ]
     )
     return "\n".join(lines) + "\n"
 
 
-def write_occupancy_tables_to_paths(header_path: Path, source_path: Path) -> None:
+def write_occupancy_tables_to_path(source_path: Path) -> None:
     models = sorted_occupancy_model_infos()
     _validate_models(models)
-    header_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.parent.mkdir(parents=True, exist_ok=True)
-    header_path.write_text(_emit_header(), encoding="utf-8")
     source_path.write_text(_emit_source(models), encoding="utf-8")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate AMDGPU occupancy model C tables.")
-    parser.add_argument("--header", required=True, type=Path)
     parser.add_argument("--source", required=True, type=Path)
     args = parser.parse_args(argv)
-    write_occupancy_tables_to_paths(args.header, args.source)
+    write_occupancy_tables_to_path(args.source)
     return 0
 
 

@@ -1221,6 +1221,25 @@ static iree_status_t loom_x86_append_cond_branch_packet(
       context->schedule, loom_low_cond_br_false_dest(op), context->builder);
 }
 
+static iree_status_t loom_x86_append_structural_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  switch (op->kind) {
+    case LOOM_OP_LOW_COPY:
+      return loom_x86_append_copy_packet(user_data, context);
+    case LOOM_OP_LOW_RETURN:
+      return loom_x86_append_return_packet(user_data, context);
+    case LOOM_OP_LOW_BR:
+      return loom_x86_append_branch_packet(user_data, context);
+    case LOOM_OP_LOW_COND_BR:
+      return loom_x86_append_cond_branch_packet(user_data, context);
+    default:
+      break;
+  }
+  return loom_native_assembly_make_unsupported_structural_packet_status(
+      IREE_SV("x86"), context);
+}
+
 iree_status_t loom_x86_emit_assembly_fragment(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
@@ -1234,50 +1253,17 @@ iree_status_t loom_x86_emit_assembly_fragment(
                             "x86 assembly emitter received target '%.*s'",
                             (int)target_key.size, target_key.data);
   }
-  const loom_native_assembly_structural_packet_callback_t
-      structural_packet_callbacks[] = {
-          {
-              .op_kind = LOOM_OP_LOW_COPY,
-              .append_packet =
-                  {
-                      .fn = loom_x86_append_copy_packet,
-                      .user_data = NULL,
-                  },
-          },
-          {
-              .op_kind = LOOM_OP_LOW_RETURN,
-              .append_packet =
-                  {
-                      .fn = loom_x86_append_return_packet,
-                      .user_data = NULL,
-                  },
-          },
-          {
-              .op_kind = LOOM_OP_LOW_BR,
-              .append_packet =
-                  {
-                      .fn = loom_x86_append_branch_packet,
-                      .user_data = NULL,
-                  },
-          },
-          {
-              .op_kind = LOOM_OP_LOW_COND_BR,
-              .append_packet =
-                  {
-                      .fn = loom_x86_append_cond_branch_packet,
-                      .user_data = NULL,
-                  },
-          },
-      };
   const loom_native_assembly_format_options_t options = {
       .append_descriptor_packet =
           {
               .fn = loom_x86_append_descriptor_packet,
               .user_data = NULL,
           },
-      .structural_packet_callbacks = structural_packet_callbacks,
-      .structural_packet_callback_count =
-          IREE_ARRAYSIZE(structural_packet_callbacks),
+      .append_structural_packet =
+          {
+              .fn = loom_x86_append_structural_packet,
+              .user_data = NULL,
+          },
   };
   return loom_native_assembly_format_fragment(schedule, allocation, &options,
                                               builder, scratch_arena);

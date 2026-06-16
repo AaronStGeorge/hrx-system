@@ -45,6 +45,14 @@ loom_cc_library(
     ],
 )
 
+exports_files(
+    [
+        "registry.c",
+        "registry_tables.inl",
+    ],
+    visibility = ["//loom/py/loom/target/arch/amdgpu/contracts:__pkg__"],
+)
+
 loom_cc_library(
     name = "lower",
     srcs = [
@@ -52,7 +60,6 @@ loom_cc_library(
         "arithmetic.c",
         "async.c",
         "atomic.c",
-        "bitfield.c",
         "bitpack.c",
         "buffer.c",
         "collective_combine.c",
@@ -87,7 +94,6 @@ loom_cc_library(
         "abi.h",
         "arithmetic.h",
         "async.h",
-        "bitfield.h",
         "bitpack.h",
         "buffer.h",
         "collective_combine.h",
@@ -147,6 +153,7 @@ loom_cc_library(
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/arch/amdgpu:error_defs",
         "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu:target_info_defs",
         "//loom/src/loom/target/arch/amdgpu/contracts",
         "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
         "//loom/src/loom/target/arch/amdgpu/lower/candidates:atomic_candidates",

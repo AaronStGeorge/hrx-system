@@ -18,7 +18,6 @@
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_id/target_id.h"
 
-#define LOOM_AMDGPU_WAIT_COUNTER_COUNT 5
 #define LOOM_AMDGPU_WAIT_TRANS_RESULT_MAX_VALU_INTERVAL 5u
 #define LOOM_AMDGPU_WAIT_TRANS_RESULT_MAX_TRANS_INTERVAL 1u
 
@@ -36,7 +35,7 @@ typedef struct loom_amdgpu_wait_node_state_t {
   // Write counters whose effects are visible to workgroup-memory barriers.
   uint32_t workgroup_write_counter_mask;
   // Epoch for each counter produced by this node.
-  uint32_t produced_counter_epoch[LOOM_AMDGPU_WAIT_COUNTER_COUNT];
+  uint32_t produced_counter_epoch[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT];
   // Read counters whose result was drained before control left the producing
   // block.
   uint32_t drained_after_production_counter_mask;
@@ -127,15 +126,16 @@ typedef struct loom_amdgpu_wait_plan_builder_t {
   // Canonical packet hazard table populated after wait actions are known.
   loom_low_packet_hazard_plan_t hazard_plan;
   // Current epoch per wait counter.
-  uint32_t counter_epochs[LOOM_AMDGPU_WAIT_COUNTER_COUNT];
+  uint32_t counter_epochs[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT];
   // Current block epoch for lazy invalidation of physical-register state.
   uint64_t block_epoch;
   // Outstanding packet count per wait counter.
-  uint32_t outstanding_counts[LOOM_AMDGPU_WAIT_COUNTER_COUNT];
+  uint32_t outstanding_counts[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT];
   // Outstanding packet count per wait counter for memory writes.
-  uint32_t outstanding_write_counts[LOOM_AMDGPU_WAIT_COUNTER_COUNT];
+  uint32_t outstanding_write_counts[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT];
   // Outstanding packet count per wait counter for workgroup memory writes.
-  uint32_t outstanding_workgroup_write_counts[LOOM_AMDGPU_WAIT_COUNTER_COUNT];
+  uint32_t
+      outstanding_workgroup_write_counts[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT];
   // Per-physical-VGPR state for outstanding RDNA TRANS result hazards.
   loom_amdgpu_wait_trans_result_vgpr_t* trans_result_vgprs;
   // Number of entries in |trans_result_vgprs|.
@@ -295,6 +295,17 @@ static bool loom_amdgpu_wait_plan_reason_has_consumer(
   }
 }
 
+static bool loom_amdgpu_wait_plan_reason_is_storage_release(
+    loom_amdgpu_wait_plan_reason_t reason) {
+  switch (reason) {
+    case LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE:
+    case LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_amdgpu_wait_plan_allocate(
     loom_amdgpu_wait_plan_builder_t* builder) {
   const loom_low_schedule_table_t* schedule = builder->schedule;
@@ -339,7 +350,7 @@ static iree_status_t loom_amdgpu_wait_plan_allocate(
                                    allocation->storage_release_action_count,
                                    &action_input_capacity)) ||
       !iree_host_size_checked_mul(action_input_capacity,
-                                  LOOM_AMDGPU_WAIT_COUNTER_COUNT,
+                                  LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT,
                                   &builder->action_capacity)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "AMDGPU wait-plan action capacity overflows");
@@ -1127,7 +1138,7 @@ static iree_status_t loom_amdgpu_wait_plan_drain_mask(
     loom_amdgpu_wait_plan_action_kind_t kind,
     loom_amdgpu_wait_plan_reason_t reason, uint32_t node_index,
     uint32_t producer_node, uint32_t counter_mask) {
-  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_COUNT; ++slot) {
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++slot) {
     if ((counter_mask & loom_amdgpu_wait_counter_mask_from_slot(slot)) == 0) {
       continue;
     }
@@ -1141,18 +1152,17 @@ static iree_status_t loom_amdgpu_wait_plan_drain_mask(
 static iree_status_t loom_amdgpu_wait_plan_storage_release_reason(
     const loom_low_storage_release_action_t* action,
     loom_amdgpu_wait_plan_reason_t* out_reason) {
-  switch (action->release_reason_id) {
-    case LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE:
-    case LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE:
-      *out_reason = (loom_amdgpu_wait_plan_reason_t)action->release_reason_id;
-      return iree_ok_status();
-    default:
-      *out_reason = LOOM_AMDGPU_WAIT_PLAN_REASON_UNKNOWN;
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU storage release action has unsupported reason id %" PRIu16,
-          action->release_reason_id);
+  loom_amdgpu_wait_plan_reason_t reason =
+      (loom_amdgpu_wait_plan_reason_t)action->release_reason_id;
+  if (!loom_amdgpu_wait_plan_reason_is_storage_release(reason)) {
+    *out_reason = LOOM_AMDGPU_WAIT_PLAN_REASON_UNKNOWN;
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU storage release action has unsupported reason id %" PRIu16,
+        action->release_reason_id);
   }
+  *out_reason = reason;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_wait_plan_storage_release_is_satisfied(
@@ -1255,10 +1265,10 @@ static iree_status_t loom_amdgpu_wait_plan_handle_storage_release_actions(
 }
 
 static uint32_t loom_amdgpu_wait_plan_outstanding_counter_mask(
-    const uint32_t outstanding_counts[LOOM_AMDGPU_WAIT_COUNTER_COUNT],
+    const uint32_t outstanding_counts[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT],
     uint32_t counter_mask) {
   uint32_t outstanding_counter_mask = 0;
-  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_COUNT; ++slot) {
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++slot) {
     const uint32_t slot_mask = loom_amdgpu_wait_counter_mask_from_slot(slot);
     if ((counter_mask & slot_mask) != 0 && outstanding_counts[slot] != 0) {
       outstanding_counter_mask |= slot_mask;
@@ -1270,11 +1280,10 @@ static uint32_t loom_amdgpu_wait_plan_outstanding_counter_mask(
 static iree_status_t loom_amdgpu_wait_plan_handle_consumer(
     loom_amdgpu_wait_plan_builder_t* builder, uint32_t node_index) {
   uint32_t active_counter_mask = 0;
-  uint32_t active_producers[LOOM_AMDGPU_WAIT_COUNTER_COUNT] = {
-      LOOM_LOW_SCHEDULE_NODE_NONE, LOOM_LOW_SCHEDULE_NODE_NONE,
-      LOOM_LOW_SCHEDULE_NODE_NONE, LOOM_LOW_SCHEDULE_NODE_NONE,
-      LOOM_LOW_SCHEDULE_NODE_NONE,
-  };
+  uint32_t active_producers[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT];
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++slot) {
+    active_producers[slot] = LOOM_LOW_SCHEDULE_NODE_NONE;
+  }
   for (uint32_t link_index =
            builder->first_dependency_link_by_consumer[node_index];
        link_index != LOOM_LOW_SCHEDULE_NODE_NONE;) {
@@ -1282,7 +1291,8 @@ static iree_status_t loom_amdgpu_wait_plan_handle_consumer(
         &builder->dependency_links[link_index];
     const loom_amdgpu_wait_node_state_t* producer_state =
         &builder->node_states[link->producer_node];
-    for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_COUNT; ++slot) {
+    for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT;
+         ++slot) {
       const uint32_t counter_mask =
           loom_amdgpu_wait_counter_mask_from_slot(slot);
       if ((link->counter_mask & counter_mask) == 0) {
@@ -1316,7 +1326,7 @@ static iree_status_t loom_amdgpu_wait_plan_handle_consumer(
     link_index = link->next_link;
   }
 
-  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_COUNT; ++slot) {
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++slot) {
     const uint32_t counter_mask = loom_amdgpu_wait_counter_mask_from_slot(slot);
     if ((active_counter_mask & counter_mask) == 0) {
       continue;
@@ -1481,9 +1491,9 @@ static iree_status_t loom_amdgpu_wait_plan_handle_barrier(
 }
 
 static iree_status_t loom_amdgpu_wait_plan_increment_outstanding_counts(
-    uint32_t outstanding_counts[LOOM_AMDGPU_WAIT_COUNTER_COUNT],
+    uint32_t outstanding_counts[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT],
     uint32_t counter_mask) {
-  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_COUNT; ++slot) {
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++slot) {
     const uint32_t slot_mask = loom_amdgpu_wait_counter_mask_from_slot(slot);
     if ((counter_mask & slot_mask) == 0) {
       continue;
@@ -1576,7 +1586,7 @@ static iree_status_t loom_amdgpu_wait_plan_note_producer(
   const uint32_t counter_mask = node_state->read_counter_mask |
                                 node_state->write_counter_mask |
                                 node_state->trans_result_counter_mask;
-  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_COUNT; ++slot) {
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++slot) {
     if ((counter_mask & loom_amdgpu_wait_counter_mask_from_slot(slot)) == 0) {
       continue;
     }
@@ -1683,7 +1693,7 @@ static iree_status_t loom_amdgpu_wait_plan_emit_counter_progress_mask(
     loom_low_packet_progress_emit_fn_t emit, void* emit_user_data,
     uint32_t counter_mask, loom_low_packet_progress_action_t action,
     uint32_t units) {
-  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_COUNT; ++slot) {
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++slot) {
     if ((counter_mask & loom_amdgpu_wait_counter_mask_from_slot(slot)) == 0) {
       continue;
     }
@@ -1771,8 +1781,7 @@ static iree_status_t loom_amdgpu_wait_plan_hazard_query(
         !loom_amdgpu_wait_plan_action_matches_packet(action, packet)) {
       continue;
     }
-    if (action->reason == LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE ||
-        action->reason == LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE) {
+    if (loom_amdgpu_wait_plan_reason_is_storage_release(action->reason)) {
       continue;
     }
     IREE_RETURN_IF_ERROR(

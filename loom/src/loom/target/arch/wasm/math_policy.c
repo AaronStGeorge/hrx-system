@@ -59,7 +59,11 @@ static const loom_target_math_policy_t kWasmMathPolicy = {
     .query = loom_wasm_math_policy_query,
 };
 
-#include "loom/target/arch/wasm/math_policy_tables.inl"
+static const loom_target_math_policy_registry_entry_t kWasmMathPolicyEntries[] =
+    {
+        {/*.contract_set_key=*/IREE_SVL("wasm.core.simd128"),
+         /*.policy=*/&kWasmMathPolicy},
+};
 
 void loom_wasm_math_policy_registry_initialize(
     loom_target_math_policy_registry_t* out_registry) {
