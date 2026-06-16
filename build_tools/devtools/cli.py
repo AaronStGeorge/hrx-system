@@ -31,6 +31,7 @@ from build_tools.devtools.environment import (
 
 LANES = ("bazel", "cmake")
 DEFAULT_BAZEL_TARGETS = ("//runtime/...", "//libhrx/...")
+BAZEL_TEST_UPDATE_STRATEGY_ARGS = ("--strategy=TestRunner=standalone",)
 BAZEL_TARGET_PATTERN_PREFIXES = ("//", "@", ":", "...")
 BAZEL_NEGATIVE_TARGET_PATTERN_PREFIXES = ("-//", "-@")
 PASSTHROUGH_COMMANDS = {
@@ -160,6 +161,19 @@ def bazel_args_with_target_separator(backend_args: list[str]) -> list[str]:
         if is_bazel_target_pattern(arg):
             return [*backend_args[:index], "--", *backend_args[index:]]
     return backend_args
+
+
+def bazel_test_requests_update(backend_args: list[str]) -> bool:
+    for index, arg in enumerate(backend_args):
+        if arg == "--test_arg=--update":
+            return True
+        if (
+            arg == "--test_arg"
+            and index + 1 < len(backend_args)
+            and backend_args[index + 1] == "--update"
+        ):
+            return True
+    return False
 
 
 def selected_cmake_build_dir(args: argparse.Namespace) -> Path | None:
@@ -1026,7 +1040,18 @@ def handle_test(args: argparse.Namespace) -> CommandPlan:
         targets = bazel_args_with_target_separator(
             bazel_targets_or_defaults(backend_args)
         )
-        command = [tool_env.tool("bazel"), "test", "--config=presubmit", *targets]
+        update_strategy_args = (
+            list(BAZEL_TEST_UPDATE_STRATEGY_ARGS)
+            if bazel_test_requests_update(backend_args)
+            else []
+        )
+        command = [
+            tool_env.tool("bazel"),
+            "test",
+            "--config=presubmit",
+            *update_strategy_args,
+            *targets,
+        ]
         return CommandPlan(
             [
                 ExecCommandStep(
