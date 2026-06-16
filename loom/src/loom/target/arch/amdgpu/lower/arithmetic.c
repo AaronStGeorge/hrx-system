@@ -1457,30 +1457,3 @@ iree_status_t loom_amdgpu_lower_mulf_mix(
       &low_result));
   return loom_low_lower_bind_value(context, plan->result, low_result);
 }
-
-void loom_amdgpu_mark_fma_mix_plan_storage_demands(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_fma_mix_plan_t* plan) {
-  (void)source_op;
-  for (uint32_t i = 0; i < LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT; ++i) {
-    loom_low_lower_require_source_value_storage(context, plan->sources[i]);
-  }
-}
-
-void loom_amdgpu_mark_packed_ternary_plan_storage_demands(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_packed_ternary_plan_t* plan) {
-  (void)source_op;
-  for (uint32_t i = 0; i < LOOM_AMDGPU_PACKED_TERNARY_SOURCE_COUNT; ++i) {
-    loom_low_lower_require_source_value_storage(context, plan->sources[i]);
-  }
-}
-
-void loom_amdgpu_mark_mulf_mix_plan_storage_demands(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_mulf_mix_plan_t* plan) {
-  (void)source_op;
-  for (uint32_t i = 0; i < LOOM_AMDGPU_MULF_MIX_SOURCE_COUNT; ++i) {
-    loom_low_lower_require_source_value_storage(context, plan->sources[i]);
-  }
-}

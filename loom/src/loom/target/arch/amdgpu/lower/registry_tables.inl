@@ -89,13 +89,14 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_OP_SCALAR_MULF, loom_amdgpu_mulf_mix_plan_t,
                 loom_amdgpu_select_scalar_mulf_mix_dispatch,
                 loom_amdgpu_emit_scalar_mulf_mix_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_MULF_MIX, LOOM_AMDGPU_PRESELECT_PLAN_ID),
+                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2,
+                LOOM_AMDGPU_PRESELECT_PLAN_ID),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_FMAF)] =
             LOOM_AMDGPU_DATA_POLICY_ROW(
                 LOOM_OP_SCALAR_FMAF, loom_amdgpu_fma_mix_plan_t,
                 loom_amdgpu_select_scalar_fmaf_mix_dispatch,
                 loom_amdgpu_emit_scalar_fmaf_mix_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_FMA_MIX,
+                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC),
 };
 
@@ -182,20 +183,21 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_OP_VECTOR_MULF, loom_amdgpu_mulf_mix_plan_t,
                 loom_amdgpu_select_vector_mulf_mix_dispatch,
                 loom_amdgpu_emit_vector_mulf_mix_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_MULF_MIX, LOOM_AMDGPU_PRESELECT_PLAN_ID),
+                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2,
+                LOOM_AMDGPU_PRESELECT_PLAN_ID),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAF)] =
             LOOM_AMDGPU_DATA_POLICY_ROW(
                 LOOM_OP_VECTOR_FMAF, loom_amdgpu_packed_ternary_plan_t,
                 loom_amdgpu_select_vector_packed_fmaf_dispatch,
                 loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PACKED_TERNARY,
+                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAI)] =
             LOOM_AMDGPU_DATA_POLICY_ROW(
                 LOOM_OP_VECTOR_FMAI, loom_amdgpu_packed_ternary_plan_t,
                 loom_amdgpu_select_vector_packed_fmai_dispatch,
                 loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PACKED_TERNARY,
+                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CMPI)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_CMPI, loom_amdgpu_vector_compare_plan_t,

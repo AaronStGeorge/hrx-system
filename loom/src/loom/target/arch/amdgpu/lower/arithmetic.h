@@ -92,21 +92,6 @@ iree_status_t loom_amdgpu_lower_mulf_mix(
 iree_status_t loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(
     loom_low_lower_context_t* context, const loom_op_t* source_op);
 
-// Marks the exact source values consumed by a selected mixed FMA plan.
-void loom_amdgpu_mark_fma_mix_plan_storage_demands(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_fma_mix_plan_t* plan);
-
-// Marks the exact source values consumed by a selected packed ternary plan.
-void loom_amdgpu_mark_packed_ternary_plan_storage_demands(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_packed_ternary_plan_t* plan);
-
-// Marks the exact source values consumed by a selected mixed multiply plan.
-void loom_amdgpu_mark_mulf_mix_plan_storage_demands(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_mulf_mix_plan_t* plan);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

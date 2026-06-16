@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "loom/ops/buffer/ops.h"
@@ -81,14 +82,12 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS = 0,
   // Value lowering owns its source operand demand policy.
   LOOM_AMDGPU_STORAGE_VALUE_PLAN = 1,
-  // Mixed scalar fma plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_FMA_MIX = 2,
-  // Packed ternary fma/mad plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_PACKED_TERNARY = 3,
-  // Mixed multiply plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_MULF_MIX = 4,
+  // Target plan data starts with a 2-value source array.
+  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2 = 2,
+  // Target plan data starts with a 3-value source array.
+  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3 = 3,
   // Atomic plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_ATOMIC = 5,
+  LOOM_AMDGPU_STORAGE_ATOMIC = 4,
   // Maximum storage-policy value accepted by dispatch row policy bits.
   LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_ATOMIC,
 };
@@ -788,6 +787,23 @@ static loom_amdgpu_report_policy_t loom_amdgpu_dispatch_row_report_policy(
          LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT;
 }
 
+static_assert(offsetof(loom_amdgpu_fma_mix_plan_t, sources) == 0,
+              "fma mix plan storage policy reads the leading sources array");
+static_assert(
+    offsetof(loom_amdgpu_packed_ternary_plan_t, sources) == 0,
+    "packed ternary plan storage policy reads the leading sources array");
+static_assert(offsetof(loom_amdgpu_mulf_mix_plan_t, sources) == 0,
+              "mulf mix plan storage policy reads the leading sources array");
+
+static void loom_amdgpu_mark_plan_sources_storage(
+    loom_low_lower_context_t* context, const void* plan_data,
+    uint8_t source_count) {
+  const loom_value_id_t* sources = (const loom_value_id_t*)plan_data;
+  for (uint8_t i = 0; i < source_count; ++i) {
+    loom_low_lower_require_source_value_storage(context, sources[i]);
+  }
+}
+
 static iree_status_t loom_amdgpu_select_dispatch_row(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_lower_dispatch_row_t* row,
@@ -854,20 +870,11 @@ static void loom_amdgpu_mark_plan_storage_demands(
   const loom_amdgpu_storage_policy_t storage_policy =
       loom_amdgpu_dispatch_row_storage_policy(row);
   switch (storage_policy) {
-    case LOOM_AMDGPU_STORAGE_FMA_MIX:
-      loom_amdgpu_mark_fma_mix_plan_storage_demands(
-          context, source_op,
-          (const loom_amdgpu_fma_mix_plan_t*)plan.target_data);
+    case LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2:
+      loom_amdgpu_mark_plan_sources_storage(context, plan.target_data, 2);
       return;
-    case LOOM_AMDGPU_STORAGE_PACKED_TERNARY:
-      loom_amdgpu_mark_packed_ternary_plan_storage_demands(
-          context, source_op,
-          (const loom_amdgpu_packed_ternary_plan_t*)plan.target_data);
-      return;
-    case LOOM_AMDGPU_STORAGE_MULF_MIX:
-      loom_amdgpu_mark_mulf_mix_plan_storage_demands(
-          context, source_op,
-          (const loom_amdgpu_mulf_mix_plan_t*)plan.target_data);
+    case LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3:
+      loom_amdgpu_mark_plan_sources_storage(context, plan.target_data, 3);
       return;
     case LOOM_AMDGPU_STORAGE_ATOMIC:
       loom_amdgpu_mark_atomic_plan_storage_demands(
