@@ -18,9 +18,9 @@ iree_py_library(
         "arithmetic.py",
         "async.py",
         "buffer.py",
-        "callback_ownership.py",
         "compare.py",
         "config.py",
+        "dispatch_ownership.py",
         "dot.py",
         "integer.py",
         "materializers.py",
@@ -50,12 +50,12 @@ iree_py_test(
     name = "contracts_test",
     srcs = [
         "arithmetic_test.py",
-        "callback_ownership_test.py",
+        "dispatch_ownership_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
         "loom.target.arch.amdgpu.contracts.arithmetic_test",
-        "loom.target.arch.amdgpu.contracts.callback_ownership_test",
+        "loom.target.arch.amdgpu.contracts.dispatch_ownership_test",
     ],
     data = [
         "//loom/src/loom/target/arch/amdgpu/lower:registry.c",

@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Tests for AMDGPU callback-registry ownership guardrails."""
+"""Tests for AMDGPU lower-dispatch ownership guardrails."""
 
 from __future__ import annotations
 
@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from loom.target.arch.amdgpu.contracts.callback_ownership import (
-    CallbackDispatchRole,
-    CallbackDispatchRow,
+from loom.target.arch.amdgpu.contracts.dispatch_ownership import (
+    DispatchRow,
+    DispatchRowRole,
     amdgpu_generated_lower_rule_op_kinds,
-    callback_dispatch_row_macro_names,
-    callback_dispatch_row_tag_names_by_kind,
-    parse_callback_dispatch_rows,
-    validate_callback_dispatch_rows,
+    dispatch_row_macro_names,
+    dispatch_row_tag_names_by_kind,
+    parse_dispatch_rows,
+    validate_dispatch_rows,
 )
 
 _REGISTRY_SOURCE_PATH = Path("loom/src/loom/target/arch/amdgpu/lower/registry.c")
@@ -58,17 +58,17 @@ _ROW_TAG_SENTINELS_BY_KIND = {
 }
 
 
-def test_parse_callback_dispatch_rows_requires_role_prefix() -> None:
+def test_parse_dispatch_rows_requires_role_prefix() -> None:
     source = """
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITPACK)] =
             LOOM_AMDGPU_DATA_ROW(LOOM_OP_VECTOR_BITPACK, plan_t, select, emit, NULL),
     """
 
     with pytest.raises(ValueError, match="has no role prefix"):
-        parse_callback_dispatch_rows(source)
+        parse_dispatch_rows(source)
 
 
-def test_parse_callback_dispatch_rows_captures_arguments() -> None:
+def test_parse_dispatch_rows_captures_arguments() -> None:
     source = """
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAF)] =
             LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW(
@@ -79,12 +79,12 @@ def test_parse_callback_dispatch_rows_captures_arguments() -> None:
                 LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC),
     """
 
-    rows = parse_callback_dispatch_rows(source)
+    rows = parse_dispatch_rows(source)
 
     assert rows == (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_FMAF",
-            role=CallbackDispatchRole.GENERATED_PRESELECT,
+            role=DispatchRowRole.GENERATED_PRESELECT,
             macro_name="GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_FMAF",
@@ -99,25 +99,25 @@ def test_parse_callback_dispatch_rows_captures_arguments() -> None:
     )
 
 
-def test_validate_callback_dispatch_rows_rejects_unknown_schema() -> None:
+def test_validate_dispatch_rows_rejects_unknown_schema() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_BITPACK",
-            role=CallbackDispatchRole.VALUE,
+            role=DispatchRowRole.VALUE,
             macro_name="VALUE_UNKNOWN_ROW",
             arguments=("LOOM_OP_VECTOR_BITPACK",),
         ),
     )
 
     with pytest.raises(ValueError, match="no registered dispatch-row schema"):
-        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+        validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_rejects_op_kind_mismatch() -> None:
+def test_validate_dispatch_rows_rejects_op_kind_mismatch() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_BITPACK",
-            role=CallbackDispatchRole.RECIPE,
+            role=DispatchRowRole.RECIPE,
             macro_name="RECIPE_DATA_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_BITUNPACKU",
@@ -130,14 +130,14 @@ def test_validate_callback_dispatch_rows_rejects_op_kind_mismatch() -> None:
     )
 
     with pytest.raises(ValueError, match="does not match macro op-kind argument"):
-        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+        validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_rejects_wrong_policy_namespace() -> None:
+def test_validate_dispatch_rows_rejects_wrong_policy_namespace() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_FMAF",
-            role=CallbackDispatchRole.GENERATED_PRESELECT,
+            role=DispatchRowRole.GENERATED_PRESELECT,
             macro_name="GENERATED_PRESELECT_DATA_POLICY_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_FMAF",
@@ -152,16 +152,16 @@ def test_validate_callback_dispatch_rows_rejects_wrong_policy_namespace() -> Non
     )
 
     with pytest.raises(ValueError, match="expects a storage policy"):
-        validate_callback_dispatch_rows(
+        validate_dispatch_rows(
             rows, generated_lower_rule_op_kinds={"LOOM_OP_VECTOR_FMAF"}
         )
 
 
-def test_validate_callback_dispatch_rows_rejects_wrong_report_key_namespace() -> None:
+def test_validate_dispatch_rows_rejects_wrong_report_key_namespace() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_KERNEL_WORKGROUP_REDUCE",
-            role=CallbackDispatchRole.RECIPE,
+            role=DispatchRowRole.RECIPE,
             macro_name="RECIPE_DATA_SOURCE_REPORT_KEY_ROW",
             arguments=(
                 "LOOM_OP_KERNEL_WORKGROUP_REDUCE",
@@ -176,14 +176,14 @@ def test_validate_callback_dispatch_rows_rejects_wrong_report_key_namespace() ->
     )
 
     with pytest.raises(ValueError, match="expects a report key"):
-        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+        validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_accepts_report_key() -> None:
+def test_validate_dispatch_rows_accepts_report_key() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_KERNEL_WORKGROUP_REDUCE",
-            role=CallbackDispatchRole.RECIPE,
+            role=DispatchRowRole.RECIPE,
             macro_name="RECIPE_DATA_SOURCE_REPORT_KEY_ROW",
             arguments=(
                 "LOOM_OP_KERNEL_WORKGROUP_REDUCE",
@@ -197,14 +197,14 @@ def test_validate_callback_dispatch_rows_accepts_report_key() -> None:
         ),
     )
 
-    validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+    validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_rejects_bad_source_count() -> None:
+def test_validate_dispatch_rows_rejects_bad_source_count() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_BITPACK",
-            role=CallbackDispatchRole.RECIPE,
+            role=DispatchRowRole.RECIPE,
             macro_name="RECIPE_DATA_SOURCE_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_BITPACK",
@@ -218,30 +218,28 @@ def test_validate_callback_dispatch_rows_rejects_bad_source_count() -> None:
     )
 
     with pytest.raises(ValueError, match="expects a leading source count"):
-        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+        validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_callback_row_tag_names_match_registry_enums() -> None:
+def test_dispatch_row_tag_names_match_registry_enums() -> None:
     registry_source = _read_repo_file(_REGISTRY_SOURCE_PATH)
 
-    assert callback_dispatch_row_tag_names_by_kind() == _parse_registry_row_tag_enums(
+    assert dispatch_row_tag_names_by_kind() == _parse_registry_row_tag_enums(
         registry_source
     )
 
 
-def test_callback_row_macro_schemas_match_registry_macros() -> None:
+def test_dispatch_row_macro_schemas_match_registry_macros() -> None:
     registry_source = _read_repo_file(_REGISTRY_SOURCE_PATH)
 
-    assert callback_dispatch_row_macro_names() == _parse_public_row_macros(
-        registry_source
-    )
+    assert dispatch_row_macro_names() == _parse_public_row_macros(registry_source)
 
 
-def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> None:
+def test_validate_dispatch_rows_rejects_policy_in_non_policy_slot() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_CONCAT",
-            role=CallbackDispatchRole.RECIPE,
+            role=DispatchRowRole.RECIPE,
             macro_name="RECIPE_DATA_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_CONCAT",
@@ -254,16 +252,14 @@ def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> 
     )
 
     with pytest.raises(ValueError, match=r"row tag token .* in non-tag argument"):
-        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+        validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_rejects_removed_direct_default_macros() -> (
-    None
-):
+def test_validate_dispatch_rows_rejects_removed_direct_default_macros() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_CONSTANT",
-            role=CallbackDispatchRole.VALUE,
+            role=DispatchRowRole.VALUE,
             macro_name="VALUE_DIRECT_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_CONSTANT",
@@ -272,9 +268,9 @@ def test_validate_callback_dispatch_rows_rejects_removed_direct_default_macros()
                 "verify",
             ),
         ),
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_KERNEL_BARRIER",
-            role=CallbackDispatchRole.RECIPE,
+            role=DispatchRowRole.RECIPE,
             macro_name="RECIPE_DIRECT_ROW",
             arguments=(
                 "LOOM_OP_KERNEL_BARRIER",
@@ -286,14 +282,14 @@ def test_validate_callback_dispatch_rows_rejects_removed_direct_default_macros()
     )
 
     with pytest.raises(ValueError, match="no registered dispatch-row schema"):
-        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+        validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_rejects_generated_recipe() -> None:
+def test_validate_dispatch_rows_rejects_generated_recipe() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_BITFIELD_EXTRACTU",
-            role=CallbackDispatchRole.RECIPE,
+            role=DispatchRowRole.RECIPE,
             macro_name="RECIPE_DATA_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_BITFIELD_EXTRACTU",
@@ -306,17 +302,17 @@ def test_validate_callback_dispatch_rows_rejects_generated_recipe() -> None:
     )
 
     with pytest.raises(ValueError, match="generated-preselect or legality-only"):
-        validate_callback_dispatch_rows(
+        validate_dispatch_rows(
             rows,
             generated_lower_rule_op_kinds={"LOOM_OP_VECTOR_BITFIELD_EXTRACTU"},
         )
 
 
-def test_validate_callback_dispatch_rows_accepts_structural_value_policy() -> None:
+def test_validate_dispatch_rows_accepts_structural_value_policy() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_INSERT",
-            role=CallbackDispatchRole.VALUE,
+            role=DispatchRowRole.VALUE,
             macro_name="VALUE_STRUCTURAL_DIRECT_POLICY_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_INSERT",
@@ -329,14 +325,33 @@ def test_validate_callback_dispatch_rows_accepts_structural_value_policy() -> No
         ),
     )
 
-    validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+    validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_accepts_generated_preselect() -> None:
+def test_validate_dispatch_rows_accepts_structural_hook_policy() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
+            op_kind="LOOM_OP_KERNEL_BARRIER",
+            role=DispatchRowRole.STRUCTURAL,
+            macro_name="STRUCTURAL_DIRECT_STORAGE_ROW",
+            arguments=(
+                "LOOM_OP_KERNEL_BARRIER",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_NONE",
+            ),
+        ),
+    )
+
+    validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
+def test_validate_dispatch_rows_accepts_generated_preselect() -> None:
+    rows = (
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_FMAF",
-            role=CallbackDispatchRole.GENERATED_PRESELECT,
+            role=DispatchRowRole.GENERATED_PRESELECT,
             macro_name="GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_FMAF",
@@ -350,17 +365,17 @@ def test_validate_callback_dispatch_rows_accepts_generated_preselect() -> None:
         ),
     )
 
-    validate_callback_dispatch_rows(
+    validate_dispatch_rows(
         rows,
         generated_lower_rule_op_kinds={"LOOM_OP_VECTOR_FMAF"},
     )
 
 
-def test_validate_callback_dispatch_rows_accepts_generated_direct_preselect() -> None:
+def test_validate_dispatch_rows_accepts_generated_direct_preselect() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_INDEX_ADD",
-            role=CallbackDispatchRole.GENERATED_PRESELECT,
+            role=DispatchRowRole.GENERATED_PRESELECT,
             macro_name="GENERATED_PRESELECT_DIRECT_POLICY_ROW",
             arguments=(
                 "LOOM_OP_INDEX_ADD",
@@ -373,17 +388,17 @@ def test_validate_callback_dispatch_rows_accepts_generated_direct_preselect() ->
         ),
     )
 
-    validate_callback_dispatch_rows(
+    validate_dispatch_rows(
         rows,
         generated_lower_rule_op_kinds={"LOOM_OP_INDEX_ADD"},
     )
 
 
-def test_validate_callback_dispatch_rows_accepts_bounded_recipe() -> None:
+def test_validate_dispatch_rows_accepts_bounded_recipe() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_BITPACK",
-            role=CallbackDispatchRole.RECIPE,
+            role=DispatchRowRole.RECIPE,
             macro_name="RECIPE_DATA_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_BITPACK",
@@ -395,17 +410,17 @@ def test_validate_callback_dispatch_rows_accepts_bounded_recipe() -> None:
         ),
     )
 
-    validate_callback_dispatch_rows(
+    validate_dispatch_rows(
         rows,
         generated_lower_rule_op_kinds={"LOOM_OP_VECTOR_FMAF"},
     )
 
 
-def test_validate_callback_dispatch_rows_accepts_value_data_source_policy() -> None:
+def test_validate_dispatch_rows_accepts_value_data_source_policy() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_SCALAR_TRUNCI",
-            role=CallbackDispatchRole.VALUE,
+            role=DispatchRowRole.VALUE,
             macro_name="VALUE_DATA_SOURCE_POLICY_ROW",
             arguments=(
                 "LOOM_OP_SCALAR_TRUNCI",
@@ -419,14 +434,14 @@ def test_validate_callback_dispatch_rows_accepts_value_data_source_policy() -> N
         ),
     )
 
-    validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+    validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_rejects_unowned_preselect() -> None:
+def test_validate_dispatch_rows_rejects_unowned_preselect() -> None:
     rows = (
-        CallbackDispatchRow(
+        DispatchRow(
             op_kind="LOOM_OP_VECTOR_BITPACK",
-            role=CallbackDispatchRole.GENERATED_PRESELECT,
+            role=DispatchRowRole.GENERATED_PRESELECT,
             macro_name="GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_BITPACK",
@@ -441,17 +456,17 @@ def test_validate_callback_dispatch_rows_rejects_unowned_preselect() -> None:
     )
 
     with pytest.raises(ValueError, match="fallback owner"):
-        validate_callback_dispatch_rows(
+        validate_dispatch_rows(
             rows,
             generated_lower_rule_op_kinds={"LOOM_OP_VECTOR_FMAF"},
         )
 
 
-def test_amdgpu_registry_callback_rows_have_generated_ownership() -> None:
+def test_amdgpu_registry_dispatch_rows_have_generated_ownership() -> None:
     source = _read_repo_file(_REGISTRY_TABLE_PATH)
-    rows = parse_callback_dispatch_rows(source)
+    rows = parse_dispatch_rows(source)
 
-    validate_callback_dispatch_rows(
+    validate_dispatch_rows(
         rows,
         generated_lower_rule_op_kinds=amdgpu_generated_lower_rule_op_kinds(),
     )
