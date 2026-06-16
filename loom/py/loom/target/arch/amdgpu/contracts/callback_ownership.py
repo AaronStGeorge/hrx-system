@@ -165,6 +165,12 @@ def parse_callback_dispatch_rows(source: str) -> tuple[CallbackDispatchRow, ...]
     return tuple(rows)
 
 
+def callback_dispatch_policy_names_by_kind() -> dict[str, frozenset[str]]:
+    """Returns explicit policy tokens accepted by callback dispatch rows."""
+
+    return dict(_POLICY_NAMES_BY_KIND)
+
+
 def validate_callback_dispatch_rows(
     rows: Iterable[CallbackDispatchRow],
     *,

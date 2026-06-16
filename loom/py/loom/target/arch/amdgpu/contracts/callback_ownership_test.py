@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -16,13 +17,30 @@ from loom.target.arch.amdgpu.contracts.callback_ownership import (
     CallbackDispatchRole,
     CallbackDispatchRow,
     amdgpu_generated_lower_rule_op_kinds,
+    callback_dispatch_policy_names_by_kind,
     parse_callback_dispatch_rows,
     validate_callback_dispatch_rows,
 )
 
+_REGISTRY_SOURCE_PATH = Path("loom/src/loom/target/arch/amdgpu/lower/registry.c")
 _REGISTRY_TABLE_PATH = Path(
     "loom/src/loom/target/arch/amdgpu/lower/registry_tables.inl"
 )
+
+_POLICY_ENUM_RE = re.compile(
+    r"enum loom_amdgpu_(storage|preselect|report)_policy_e\s*\{(?P<body>.*?)\};",
+    re.DOTALL,
+)
+_POLICY_NAME_RE = re.compile(
+    r"\b(LOOM_AMDGPU_(?:STORAGE|PRESELECT|REPORT)_[A-Z0-9_]+)\b"
+)
+_POLICY_SENTINELS_BY_KIND = {
+    "storage": frozenset(
+        {"LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS", "LOOM_AMDGPU_STORAGE_MAX"}
+    ),
+    "preselect": frozenset({"LOOM_AMDGPU_PRESELECT_NONE", "LOOM_AMDGPU_PRESELECT_MAX"}),
+    "report": frozenset({"LOOM_AMDGPU_REPORT_NONE", "LOOM_AMDGPU_REPORT_MAX"}),
+}
 
 
 def test_parse_callback_dispatch_rows_requires_role_prefix() -> None:
@@ -167,6 +185,14 @@ def test_validate_callback_dispatch_rows_accepts_report_policy() -> None:
     validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
+def test_callback_policy_names_match_registry_enums() -> None:
+    registry_source = _read_repo_file(_REGISTRY_SOURCE_PATH)
+
+    assert callback_dispatch_policy_names_by_kind() == _parse_registry_policy_enums(
+        registry_source
+    )
+
+
 def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> None:
     rows = (
         CallbackDispatchRow(
@@ -302,3 +328,13 @@ def _read_repo_file(path: Path) -> str:
         if candidate.is_file():
             return candidate.read_text(encoding="utf-8")
     raise FileNotFoundError(path)
+
+
+def _parse_registry_policy_enums(source: str) -> dict[str, frozenset[str]]:
+    policy_names_by_kind: dict[str, frozenset[str]] = {}
+    for match in _POLICY_ENUM_RE.finditer(source):
+        kind = match.group(1)
+        policy_names = frozenset(_POLICY_NAME_RE.findall(match.group("body")))
+        policy_names_by_kind[kind] = policy_names - _POLICY_SENTINELS_BY_KIND[kind]
+    assert policy_names_by_kind.keys() == _POLICY_SENTINELS_BY_KIND.keys()
+    return policy_names_by_kind
