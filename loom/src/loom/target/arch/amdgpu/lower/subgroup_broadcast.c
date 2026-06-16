@@ -223,6 +223,16 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast(
       context, source_op, plan->result, plan->register_count, result_registers);
 }
 
+void loom_amdgpu_mark_subgroup_broadcast_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_broadcast_plan_t* plan) {
+  (void)source_op;
+  loom_low_lower_require_source_value_storage(context, plan->value);
+  if (plan->exact_source_lane == UINT32_MAX) {
+    loom_low_lower_require_source_value_storage(context, plan->source_lane);
+  }
+}
+
 iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast_first(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_broadcast_first_plan_t* plan) {
