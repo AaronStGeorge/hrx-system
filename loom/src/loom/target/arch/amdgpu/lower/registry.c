@@ -667,24 +667,11 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
                                          verify_fn, storage_policy_value, \
                                          LOOM_AMDGPU_PRESELECT_NONE)
 
-#define LOOM_AMDGPU_INTERNAL_DIRECT_PRESELECT_ROW(                  \
-    op_kind, select_fn, emit_fn, verify_fn, preselect_policy_value) \
-  LOOM_AMDGPU_INTERNAL_DIRECT_POLICY_ROW(                           \
-      op_kind, select_fn, emit_fn, verify_fn,                       \
-      LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS, preselect_policy_value)
-
 #define LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW(                                \
     op_kind, plan_type, select_fn, emit_fn, verify_fn, storage_policy_value, \
     preselect_policy_value)                                                  \
   LOOM_AMDGPU_INTERNAL_ROW(op_kind, storage_policy_value,                    \
                            preselect_policy_value, LOOM_AMDGPU_REPORT_NONE,  \
-                           LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type), select_fn, \
-                           emit_fn, verify_fn)
-
-#define LOOM_AMDGPU_INTERNAL_DATA_REPORT_ROW(                                \
-    op_kind, plan_type, select_fn, emit_fn, verify_fn, report_policy_value)  \
-  LOOM_AMDGPU_INTERNAL_ROW(op_kind, LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS,     \
-                           LOOM_AMDGPU_PRESELECT_NONE, report_policy_value,  \
                            LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type), select_fn, \
                            emit_fn, verify_fn)
 
@@ -708,12 +695,6 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
                                        verify_fn, storage_policy_value,        \
                                        LOOM_AMDGPU_PRESELECT_NONE)
 
-#define LOOM_AMDGPU_INTERNAL_DATA_PRESELECT_ROW(                               \
-    op_kind, plan_type, select_fn, emit_fn, verify_fn, preselect_policy_value) \
-  LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW(                                        \
-      op_kind, plan_type, select_fn, emit_fn, verify_fn,                       \
-      LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS, preselect_policy_value)
-
 #define LOOM_AMDGPU_VALUE_DIRECT_ROW LOOM_AMDGPU_INTERNAL_DIRECT_ROW
 #define LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW \
   LOOM_AMDGPU_INTERNAL_DIRECT_STORAGE_ROW
@@ -728,12 +709,9 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
 #define LOOM_AMDGPU_RECIPE_DATA_ROW LOOM_AMDGPU_INTERNAL_DATA_ROW
 #define LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
-#define LOOM_AMDGPU_RECIPE_DATA_REPORT_ROW LOOM_AMDGPU_INTERNAL_DATA_REPORT_ROW
 #define LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_ROW
 
-#define LOOM_AMDGPU_GENERATED_PRESELECT_DATA_PRESELECT_ROW \
-  LOOM_AMDGPU_INTERNAL_DATA_PRESELECT_ROW
 #define LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW
 
@@ -774,10 +752,8 @@ static const loom_amdgpu_lower_dispatch_table_t
 #undef LOOM_AMDGPU_DISPATCH_TABLE
 
 #undef LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW
-#undef LOOM_AMDGPU_GENERATED_PRESELECT_DATA_PRESELECT_ROW
 #undef LOOM_AMDGPU_LEGALITY_ROW
 #undef LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_ROW
-#undef LOOM_AMDGPU_RECIPE_DATA_REPORT_ROW
 #undef LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_RECIPE_DATA_ROW
 #undef LOOM_AMDGPU_RECIPE_DIRECT_ROW
@@ -786,13 +762,10 @@ static const loom_amdgpu_lower_dispatch_table_t
 #undef LOOM_AMDGPU_VALUE_DIRECT_POLICY_ROW
 #undef LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW
 #undef LOOM_AMDGPU_VALUE_DIRECT_ROW
-#undef LOOM_AMDGPU_INTERNAL_DATA_PRESELECT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_ROW
-#undef LOOM_AMDGPU_INTERNAL_DATA_REPORT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW
-#undef LOOM_AMDGPU_INTERNAL_DIRECT_PRESELECT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DIRECT_STORAGE_ROW
 #undef LOOM_AMDGPU_INTERNAL_DIRECT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DIRECT_POLICY_ROW
