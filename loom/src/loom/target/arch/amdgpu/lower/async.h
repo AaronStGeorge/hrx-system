@@ -40,6 +40,12 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_async_gather_plan_t* plan);
 
+// Marks the physical source values needed by a selected AMDGPU async gather
+// plan.
+void loom_amdgpu_mark_async_gather_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_async_gather_plan_t* plan);
+
 // Lowers a source kernel.async.wait to an explicit wait packet when the source
 // group contains target-visible async transfers.
 iree_status_t loom_amdgpu_lower_kernel_async_wait(

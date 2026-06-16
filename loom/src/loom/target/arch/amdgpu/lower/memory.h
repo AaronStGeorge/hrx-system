@@ -290,6 +290,12 @@ void loom_amdgpu_mark_source_memory_plan_storage_demands(
     loom_low_lower_context_t* context,
     const loom_low_source_memory_access_plan_t* source);
 
+// Marks the storage root and dynamic address terms required by a selected
+// source memory access plan.
+void loom_amdgpu_mark_source_memory_plan_root_storage_demands(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_access_plan_t* source);
+
 // Marks the physical source values needed by a selected AMDGPU memory plan.
 void loom_amdgpu_mark_memory_access_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

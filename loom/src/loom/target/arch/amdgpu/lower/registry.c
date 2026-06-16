@@ -98,8 +98,12 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY = 8,
   // Subgroup broadcast plans own their source operand demand policy.
   LOOM_AMDGPU_STORAGE_SUBGROUP_BROADCAST = 9,
+  // Selected plans require no source operand storage.
+  LOOM_AMDGPU_STORAGE_NONE = 10,
+  // Async gather plans own their source operand demand policy.
+  LOOM_AMDGPU_STORAGE_ASYNC_GATHER = 11,
   // Maximum storage-policy value accepted by dispatch row policy bits.
-  LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_SUBGROUP_BROADCAST,
+  LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_ASYNC_GATHER,
 };
 
 enum loom_amdgpu_preselect_policy_e {
@@ -1033,6 +1037,13 @@ static void loom_amdgpu_mark_plan_storage_demands(
       loom_amdgpu_mark_subgroup_broadcast_plan_storage_demands(
           context, source_op,
           (const loom_amdgpu_subgroup_broadcast_plan_t*)plan.target_data);
+      return;
+    case LOOM_AMDGPU_STORAGE_NONE:
+      return;
+    case LOOM_AMDGPU_STORAGE_ASYNC_GATHER:
+      loom_amdgpu_mark_async_gather_plan_storage_demands(
+          context, source_op,
+          (const loom_amdgpu_async_gather_plan_t*)plan.target_data);
       return;
     case LOOM_AMDGPU_STORAGE_MEMORY_PLAN:
       loom_amdgpu_mark_memory_access_plan_storage_demands(

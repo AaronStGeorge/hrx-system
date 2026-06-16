@@ -344,8 +344,6 @@ static iree_status_t loom_amdgpu_async_gather_resolve_selection(
     loom_amdgpu_async_gather_plan_t* out_plan) {
   *out_plan = (loom_amdgpu_async_gather_plan_t){
       .source = selection->source,
-      .source_view = selection->source_view,
-      .dest_view = selection->dest_view,
       .dest_byte_offset = selection->dest_byte_offset,
       .source_immediate_offset = selection->source_immediate_offset,
       .packet_byte_count = selection->packet_byte_count,
@@ -586,8 +584,8 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
       context, source_op, &access, LOOM_VALUE_ID_INVALID, &low_vaddr));
 
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, plan->source_view, &low_resource));
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, plan->source.root_value_id, &low_resource));
   loom_value_id_t low_saddr = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_saddr(
       context, source_op, &access, low_resource, &low_saddr));
@@ -609,6 +607,14 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
       /*tied_result_count=*/0, source_op->location, &low_op));
   return loom_low_lower_elide_value(context,
                                     loom_kernel_async_gather_token(source_op));
+}
+
+void loom_amdgpu_mark_async_gather_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_async_gather_plan_t* plan) {
+  (void)source_op;
+  loom_amdgpu_mark_source_memory_plan_root_storage_demands(context,
+                                                           &plan->source);
 }
 
 iree_status_t loom_amdgpu_lower_kernel_async_wait(

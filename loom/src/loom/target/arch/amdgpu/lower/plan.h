@@ -974,10 +974,6 @@ typedef struct loom_amdgpu_async_gather_plan_t {
   // Target operand path selected for each source dynamic address term.
   loom_amdgpu_memory_dynamic_index_kind_t
       source_dynamic_term_kinds[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
-  // Source SSA view value passed to kernel.async.gather.
-  loom_value_id_t source_view;
-  // Destination LDS view value passed to kernel.async.gather.
-  loom_value_id_t dest_view;
   // Static LDS byte offset materialized into M0.
   uint32_t dest_byte_offset;
   // Static global byte offset encoded in the packet immediate.
