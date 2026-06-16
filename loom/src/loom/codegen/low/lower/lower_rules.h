@@ -143,6 +143,13 @@ typedef struct loom_low_lower_rule_match_descriptor_ref_callback_t {
   void* user_data;
 } loom_low_lower_rule_match_descriptor_ref_callback_t;
 
+typedef uint16_t loom_low_lower_rule_match_flags_t;
+
+// Match contract-only rule rows that are visible to read-only legality queries
+// but never execute as source-to-low emission programs.
+#define LOOM_LOW_LOWER_RULE_MATCH_FLAG_CONTRACT_ONLY \
+  ((loom_low_lower_rule_match_flags_t)1u << 0)
+
 struct loom_low_lower_rule_match_context_t {
   // Source module being matched.
   const loom_module_t* module;
@@ -163,6 +170,8 @@ struct loom_low_lower_rule_match_context_t {
   loom_low_lower_rule_match_descriptor_ref_callback_t descriptor_ref;
   // Optional dense source value facts used by fact-backed guard rows.
   const loom_value_fact_table_t* fact_table;
+  // Match behavior flags.
+  loom_low_lower_rule_match_flags_t flags;
 };
 
 typedef struct loom_low_lower_rule_descriptor_ref_t {
@@ -495,6 +504,11 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 26,
   // Source value ref must map to a low register with exactly |u64| units.
   LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 27,
+  // Bitpack source/result storage must match the width attr and target policy.
+  LOOM_LOW_LOWER_GUARD_BITPACK_STORAGE = 28,
+  // Bitunpack source/result storage must match the width attr and target
+  // policy.
+  LOOM_LOW_LOWER_GUARD_BITUNPACK_STORAGE = 29,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -514,15 +528,18 @@ typedef struct loom_low_lower_guard_t {
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
   // Required enum value, divisor, count, element index, bit-count payload,
-  // register unit count, or exact f64 bit pattern.
+  // register unit count, exact f64 bit pattern, result payload multiple, or
+  // maximum source register count.
   uint64_t u64;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;
   // Rule-set-local descriptor ref used by DESCRIPTOR_AVAILABLE guards.
   loom_low_lower_descriptor_ref_t descriptor_ref;
-  // Inclusive lower i64 bound for ATTR_I64_RANGE and VALUE_I64_RANGE guards.
+  // Inclusive lower i64 bound for range guards or register bit width for
+  // bitstream storage guards.
   int64_t minimum_i64;
-  // Inclusive upper i64 bound for ATTR_I64_RANGE and VALUE_I64_RANGE guards.
+  // Inclusive upper i64 bound for range guards or maximum result lanes for
+  // bitunpack storage guards.
   int64_t maximum_i64;
 } loom_low_lower_guard_t;
 
@@ -619,9 +636,18 @@ typedef struct loom_low_lower_resolved_emit_t {
   loom_low_lower_resolved_descriptor_t descriptor;
 } loom_low_lower_resolved_emit_t;
 
+typedef uint16_t loom_low_lower_rule_flags_t;
+
+// Rule row is a read-only target contract case and must not be selected as an
+// emission program by source-to-low.
+#define LOOM_LOW_LOWER_RULE_FLAG_CONTRACT_ONLY \
+  ((loom_low_lower_rule_flags_t)1u << 0)
+
 typedef struct loom_low_lower_rule_t {
   // Source op kind this rule accepts.
   loom_op_kind_t source_op_kind;
+  // Rule behavior flags.
+  loom_low_lower_rule_flags_t flags;
   // Number of rule-local temporary low values available while emitting this
   // rule.
   uint16_t temporary_count;

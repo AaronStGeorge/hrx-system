@@ -40,8 +40,9 @@ typedef struct loom_low_lower_contract_query_options_t {
 } loom_low_lower_contract_query_options_t;
 
 // Returns true and assigns the generated lower-rule row referenced by a
-// composed target-contract case. Cases without source-to-low lowering payloads
-// return false so callers can leave target-owned cases unhandled.
+// composed target-contract case. The row may be an emission program or a
+// contract-only guard recipe. Target-owned systems without lower-rule rows
+// return false so callers can leave them unhandled.
 static inline bool loom_low_lower_contract_case_lower_rule_index(
     const loom_target_contract_index_t* index,
     const loom_target_contract_case_t* contract_case,
@@ -57,6 +58,7 @@ static inline bool loom_low_lower_contract_case_lower_rule_index(
     }
     case LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ALIAS:
     case LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ELIDE:
+    case LOOM_TARGET_CONTRACT_SYSTEM_RECIPE_RULE:
       *out_rule_index = contract_case->row_index;
       return *out_rule_index != LOOM_TARGET_CONTRACT_ROW_NONE;
     case LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX:

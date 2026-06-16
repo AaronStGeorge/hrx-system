@@ -21,6 +21,7 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
+    RecipeRule,
     ValueAliasRule,
     ValueElideRule,
     ValueRef,
@@ -159,6 +160,38 @@ def test_compile_contract_fragment_records_value_elide_cases() -> None:
     assert extract_entry.case_count == 1
     assert compiled.cases[0].system == ContractSystem.VALUE_ELIDE
     assert compiled.cases[0].row_index == 7
+
+
+def test_compile_contract_fragment_records_recipe_cases() -> None:
+    table = ContractFragment(
+        name="test-low.recipe",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitpack,
+                guards=(
+                    Guard.value_type("source", Vector("i32", lanes=4)),
+                    Guard.value_type("result", Vector("i8", lanes=4)),
+                    Guard.i64_range("width", 8, 8),
+                ),
+            ),
+        ],
+    )
+
+    compiled = compile_contract_fragment(
+        table,
+        dialect_ops={"vector": ALL_VECTOR_OPS},
+        descriptor_rule_rows={},
+        lower_rule_indices={0: 11},
+    )
+
+    bitpack_entry = compiled.dialects[0].op_entries[
+        ALL_VECTOR_OPS.index(vector.vector_bitpack)
+    ]
+    assert bitpack_entry.case_start == 0
+    assert bitpack_entry.case_count == 1
+    assert compiled.cases[0].system == ContractSystem.RECIPE_RULE
+    assert compiled.cases[0].row_index == 11
 
 
 def test_compile_contract_fragment_records_descriptor_matrix_cases() -> None:

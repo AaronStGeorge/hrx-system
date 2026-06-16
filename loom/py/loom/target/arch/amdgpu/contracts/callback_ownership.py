@@ -18,7 +18,7 @@ from loom.target.contract_fragments import (
     ContractFragmentRegistration,
     iter_contract_fragment_registrations,
 )
-from loom.target.contracts import compile_lower_rule_set
+from loom.target.contracts import LOWER_RULE_FLAG_CONTRACT_ONLY, compile_lower_rule_set
 
 
 @unique
@@ -143,6 +143,8 @@ def amdgpu_generated_lower_rule_op_kinds(
             fragment, dialect_ops=registration.load_dialect_ops()
         )
         for rule in compiled.rules:
+            if rule.flags & LOWER_RULE_FLAG_CONTRACT_ONLY:
+                continue
             op_kinds.add(_op_kind_c_name(rule.source_op))
     return frozenset(op_kinds)
 

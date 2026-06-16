@@ -110,6 +110,8 @@ enum loom_target_contract_system_e {
   LOOM_TARGET_CONTRACT_SYSTEM_ENVIRONMENT = 5,
   // Descriptor-matrix row selected from a generated matrix-contract pool.
   LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX = 6,
+  // Guard-only lower-rule row for a bounded non-descriptor recipe.
+  LOOM_TARGET_CONTRACT_SYSTEM_RECIPE_RULE = 7,
 };
 
 #define LOOM_TARGET_CONTRACT_ROW_NONE ((uint16_t)UINT16_MAX)

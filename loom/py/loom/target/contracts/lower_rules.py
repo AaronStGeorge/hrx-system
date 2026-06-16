@@ -54,7 +54,12 @@ from loom.target.contracts.immediates import (
 )
 from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
-from loom.target.contracts.rules import DescriptorRule, ValueAliasRule, ValueElideRule
+from loom.target.contracts.rules import (
+    DescriptorRule,
+    RecipeRule,
+    ValueAliasRule,
+    ValueElideRule,
+)
 from loom.target.contracts.source import ValueRef
 from loom.target.contracts.source_memory import (
     SourceMemoryByteOffsetMaterializer,
@@ -114,6 +119,14 @@ LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE = 1 << 3
 LOWER_EMIT_FLAG_ACCUMULATE_TREE_BALANCED = 1 << 4
 LOWER_EMIT_FLAG_ACCUMULATE_SKIP_FIRST_LANE = 1 << 5
 LOWER_SOURCE_MEMORY_NONE = 0
+LOWER_RULE_FLAG_CONTRACT_ONLY = 1 << 0
+
+_LOW_VALUE_GUARD_KINDS = (
+    GuardKind.LOW_VALUE_REGISTER_CLASS,
+    GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
+    GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
+    GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +254,7 @@ class LowerRule:
     guard_count: int
     emit_start: int
     emit_count: int
+    flags: int = 0
     alias_ref_start: int = 0
     alias_ref_count: int = 0
     elide_ref_start: int = 0
@@ -322,6 +336,8 @@ class _LowerRuleSetCompiler:
                 self._append_alias_rule(authored_case_index, contract_case)
             elif isinstance(contract_case, ValueElideRule):
                 self._append_elide_rule(authored_case_index, contract_case)
+            elif isinstance(contract_case, RecipeRule):
+                self._append_recipe_rule(authored_case_index, contract_case)
 
         spans = _build_spans(self._rules, self._op_ordinals)
         return CompiledLowerRuleSet(
@@ -429,6 +445,28 @@ class _LowerRuleSetCompiler:
                 emit_count=0,
                 elide_ref_start=elide_ref_start,
                 elide_ref_count=len(rule.values),
+            )
+        )
+        self._authored_case_indices.append(authored_case_index)
+
+    def _append_recipe_rule(
+        self,
+        authored_case_index: int,
+        rule: RecipeRule,
+    ) -> None:
+        guard_start = len(self._guards)
+        type_patterns_by_field: dict[str, TypePattern] = {}
+        for guard in rule.guards:
+            self._append_guard(rule.source_op, guard, type_patterns_by_field)
+        self._rules.append(
+            LowerRule(
+                source_op=rule.source_op,
+                temporary_count=0,
+                guard_start=guard_start,
+                guard_count=len(self._guards) - guard_start,
+                emit_start=0,
+                emit_count=0,
+                flags=LOWER_RULE_FLAG_CONTRACT_ONLY,
             )
         )
         self._authored_case_indices.append(authored_case_index)
@@ -581,122 +619,12 @@ class _LowerRuleSetCompiler:
             )
             return
 
-        if guard.kind == GuardKind.LOW_VALUE_REGISTER_CLASS:
-            if guard.register_class is None:
-                raise ValueError(
-                    f"{source_op.name}: register-class guard needs a class"
-                )
-            register_class_id = self._register_class_ordinals.get(guard.register_class)
-            if register_class_id is None:
-                raise ValueError(
-                    f"{source_op.name}: descriptor set has no register class "
-                    f"'{guard.register_class}'"
-                )
-            self._guards.append(
-                LowerGuard(
-                    kind=guard.kind,
-                    value_ref_index=self._append_value_ref(
-                        source_op,
-                        _value_ref_for_source_field(source_op, guard.field),
-                    ),
-                    register_class_id=register_class_id,
-                    diagnostic_index=self._append_diagnostic_ref(
-                        source_op,
-                        _guard_diagnostic(
-                            guard,
-                            _register_class_diagnostic(
-                                guard.field,
-                                guard.register_class,
-                            ),
-                        ),
-                    ),
-                )
-            )
+        if guard.kind in _LOW_VALUE_GUARD_KINDS:
+            self._append_low_value_guard(source_op, guard)
             return
 
-        if guard.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT:
-            if guard.count is None or guard.count <= 0:
-                raise ValueError(
-                    f"{source_op.name}: register-unit-count guard needs a "
-                    "positive count"
-                )
-            self._guards.append(
-                LowerGuard(
-                    kind=guard.kind,
-                    value_ref_index=self._append_value_ref(
-                        source_op,
-                        _value_ref_for_source_field(source_op, guard.field),
-                    ),
-                    diagnostic_index=self._append_diagnostic_ref(
-                        source_op,
-                        _guard_diagnostic(
-                            guard,
-                            _register_unit_count_exact_diagnostic(
-                                guard.field,
-                                guard.count,
-                            ),
-                        ),
-                    ),
-                    u64=guard.count,
-                )
-            )
-            return
-
-        if guard.kind == GuardKind.VALUE_STATIC_DIM0_MULTIPLE:
-            if guard.count is None or guard.count <= 0:
-                raise ValueError(
-                    f"{source_op.name}: static-dim multiple guard needs a divisor"
-                )
-            self._guards.append(
-                LowerGuard(
-                    kind=guard.kind,
-                    value_ref_index=self._append_value_ref(
-                        source_op,
-                        _value_ref_for_source_field(source_op, guard.field),
-                    ),
-                    diagnostic_index=self._append_diagnostic_ref(
-                        source_op,
-                        _guard_diagnostic(
-                            guard,
-                            _static_dim0_multiple_diagnostic(
-                                guard.field,
-                                guard.count,
-                            ),
-                        ),
-                    ),
-                    u64=guard.count,
-                )
-            )
-            return
-
-        if guard.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ:
-            if guard.other_field is None:
-                raise ValueError(
-                    f"{source_op.name}: unit-count guard needs another value"
-                )
-            self._guards.append(
-                LowerGuard(
-                    kind=guard.kind,
-                    value_ref_index=self._append_value_ref(
-                        source_op,
-                        _value_ref_for_source_field(source_op, guard.field),
-                    ),
-                    other_value_ref_index=self._append_value_ref(
-                        source_op,
-                        _value_ref_for_source_field(source_op, guard.other_field),
-                    ),
-                    diagnostic_index=self._append_diagnostic_ref(
-                        source_op,
-                        _guard_diagnostic(
-                            guard,
-                            _register_unit_count_diagnostic(
-                                guard.field,
-                                guard.other_field,
-                            ),
-                        ),
-                    ),
-                )
-            )
+        if guard.kind in (GuardKind.BITPACK_STORAGE, GuardKind.BITUNPACK_STORAGE):
+            self._append_bitstream_storage_guard(source_op, guard)
             return
 
         if guard.kind == GuardKind.OPERAND_SEGMENT_COUNT:
@@ -862,6 +790,158 @@ class _LowerRuleSetCompiler:
         raise ValueError(
             f"{source_op.name}: guard kind '{guard.kind.value}' is not "
             "representable by generated descriptor rules yet"
+        )
+
+    def _append_low_value_guard(self, source_op: Op, guard: Guard) -> None:
+        value_ref_index = self._append_value_ref(
+            source_op,
+            _value_ref_for_source_field(source_op, guard.field),
+        )
+        if guard.kind == GuardKind.LOW_VALUE_REGISTER_CLASS:
+            if guard.register_class is None:
+                raise ValueError(
+                    f"{source_op.name}: register-class guard needs a class"
+                )
+            register_class_id = self._register_class_ordinals.get(guard.register_class)
+            if register_class_id is None:
+                raise ValueError(
+                    f"{source_op.name}: descriptor set has no register class "
+                    f"'{guard.register_class}'"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    register_class_id=register_class_id,
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _register_class_diagnostic(
+                                guard.field,
+                                guard.register_class,
+                            ),
+                        ),
+                    ),
+                )
+            )
+            return
+
+        if guard.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT:
+            if guard.count is None or guard.count <= 0:
+                raise ValueError(
+                    f"{source_op.name}: register-unit-count guard needs a "
+                    "positive count"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _register_unit_count_exact_diagnostic(
+                                guard.field,
+                                guard.count,
+                            ),
+                        ),
+                    ),
+                    u64=guard.count,
+                )
+            )
+            return
+
+        if guard.kind == GuardKind.VALUE_STATIC_DIM0_MULTIPLE:
+            if guard.count is None or guard.count <= 0:
+                raise ValueError(
+                    f"{source_op.name}: static-dim multiple guard needs a divisor"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _static_dim0_multiple_diagnostic(
+                                guard.field,
+                                guard.count,
+                            ),
+                        ),
+                    ),
+                    u64=guard.count,
+                )
+            )
+            return
+
+        if guard.other_field is None:
+            raise ValueError(f"{source_op.name}: unit-count guard needs another value")
+        self._guards.append(
+            LowerGuard(
+                kind=guard.kind,
+                value_ref_index=value_ref_index,
+                other_value_ref_index=self._append_value_ref(
+                    source_op,
+                    _value_ref_for_source_field(source_op, guard.other_field),
+                ),
+                diagnostic_index=self._append_diagnostic_ref(
+                    source_op,
+                    _guard_diagnostic(
+                        guard,
+                        _register_unit_count_diagnostic(
+                            guard.field,
+                            guard.other_field,
+                        ),
+                    ),
+                ),
+            )
+        )
+
+    def _append_bitstream_storage_guard(self, source_op: Op, guard: Guard) -> None:
+        if guard.other_field is None or guard.attr_field is None:
+            raise ValueError(
+                f"{source_op.name}: {guard.kind.value} guard needs source, "
+                "result, and attr fields"
+            )
+        if guard.count is None or guard.minimum is None:
+            raise ValueError(
+                f"{source_op.name}: {guard.kind.value} guard needs "
+                "storage policy parameters"
+            )
+        if guard.kind == GuardKind.BITUNPACK_STORAGE and guard.maximum is None:
+            raise ValueError(
+                f"{source_op.name}: {guard.kind.value} guard needs a "
+                "maximum result lane count"
+            )
+        self._guards.append(
+            LowerGuard(
+                kind=guard.kind,
+                value_ref_index=self._append_value_ref(
+                    source_op,
+                    _value_ref_for_source_field(source_op, guard.field),
+                ),
+                other_value_ref_index=self._append_value_ref(
+                    source_op,
+                    _value_ref_for_source_field(source_op, guard.other_field),
+                ),
+                attr_index=_source_attr_index(source_op, guard.attr_field),
+                diagnostic_index=self._append_diagnostic_ref(
+                    source_op,
+                    _guard_diagnostic(
+                        guard,
+                        _named_constraint_diagnostic(
+                            "value",
+                            guard.field,
+                            guard.kind.value,
+                        ),
+                    ),
+                ),
+                u64=guard.count,
+                minimum_i64=guard.minimum,
+                maximum_i64=guard.maximum or 0,
+            )
         )
 
     def _append_value_fact_guard(self, source_op: Op, guard: Guard) -> None:

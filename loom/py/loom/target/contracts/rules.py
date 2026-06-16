@@ -197,6 +197,32 @@ class ValueElideRule:
 
 
 @dataclass(frozen=True, slots=True)
+class RecipeRule:
+    """Contract case for a bounded non-descriptor target recipe."""
+
+    source_op: Op
+    guards: tuple[Guard, ...] = ()
+
+    def __init__(
+        self,
+        *,
+        source_op: Op,
+        guards: Sequence[Guard] = (),
+    ) -> None:
+        object.__setattr__(self, "source_op", source_op)
+        object.__setattr__(self, "guards", tuple(guards))
+
+    @property
+    def system(self) -> ContractSystem:
+        return ContractSystem.RECIPE_RULE
+
+    def validate(self, descriptor_set: DescriptorSet) -> None:
+        del descriptor_set
+        for guard in self.guards:
+            guard.validate(self.source_op)
+
+
+@dataclass(frozen=True, slots=True)
 class DescriptorMatrixRule:
     """Contract case handled by the shared descriptor-matrix system."""
 
@@ -225,5 +251,5 @@ class DescriptorMatrixRule:
 
 
 type ContractCase = (
-    DescriptorRule | ValueAliasRule | ValueElideRule | DescriptorMatrixRule
+    DescriptorRule | ValueAliasRule | ValueElideRule | RecipeRule | DescriptorMatrixRule
 )

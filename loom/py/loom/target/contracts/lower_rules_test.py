@@ -17,6 +17,7 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.contracts import (
+    LOWER_RULE_FLAG_CONTRACT_ONLY,
     AttrProject,
     ContractFragment,
     DescriptorEmitForm,
@@ -27,6 +28,7 @@ from loom.target.contracts import (
     GuardKind,
     LowerAttrCopyKind,
     LowerEmitKind,
+    RecipeRule,
     Scalar,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
@@ -339,6 +341,73 @@ def test_compile_lower_rule_set_compiles_guarded_value_elide_cases() -> None:
     assert compiled.guards[0].value_ref_index == compiled.rules[0].elide_ref_start
     assert len(compiled.value_refs) == 1
     assert compiled.spans[0].source_op is vector.vector_extract
+
+
+def test_compile_lower_rule_set_compiles_recipe_cases() -> None:
+    table = ContractFragment(
+        name="test.recipe",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitpack,
+                guards=(
+                    Guard.value_type("source", Vector("i32", lanes=4)),
+                    Guard.value_type("result", Vector("i8", lanes=4)),
+                    Guard.i64_range("width", 8, 8),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.authored_case_indices == (0,)
+    assert len(compiled.rules) == 1
+    assert compiled.rules[0].source_op is vector.vector_bitpack
+    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert compiled.rules[0].guard_count == 3
+    assert compiled.rules[0].emit_count == 0
+    assert compiled.rules[0].alias_ref_count == 0
+    assert compiled.rules[0].elide_ref_count == 0
+    assert compiled.spans[0].source_op is vector.vector_bitpack
+
+
+def test_compile_lower_rule_set_compiles_bitstream_storage_guards() -> None:
+    table = ContractFragment(
+        name="test.recipe.bitstream",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitunpacku,
+                guards=(
+                    Guard.bitunpack_storage(
+                        "source",
+                        "result",
+                        "width",
+                        register_bit_width=32,
+                        maximum_source_registers=16,
+                        maximum_result_lanes=32,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert len(compiled.rules) == 1
+    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert len(compiled.guards) == 1
+    guard = compiled.guards[0]
+    assert guard.kind == GuardKind.BITUNPACK_STORAGE
+    assert guard.value_ref_index == 0
+    assert guard.other_value_ref_index == 1
+    assert guard.attr_index == vector.vector_bitunpacku.attrs.index(
+        vector.vector_bitunpacku.attr("width")
+    )
+    assert guard.u64 == 16
+    assert guard.minimum_i64 == 32
+    assert guard.maximum_i64 == 32
 
 
 def test_compile_lower_rule_set_offsets_variadic_operand_elements() -> None:
