@@ -82,12 +82,14 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS = 0,
   // Value lowering owns its source operand demand policy.
   LOOM_AMDGPU_STORAGE_VALUE_PLAN = 1,
+  // Target plan data starts with one source value.
+  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1 = 2,
   // Target plan data starts with a 2-value source array.
-  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2 = 2,
+  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2 = 3,
   // Target plan data starts with a 3-value source array.
-  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3 = 3,
+  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3 = 4,
   // Atomic plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_ATOMIC = 4,
+  LOOM_AMDGPU_STORAGE_ATOMIC = 5,
   // Maximum storage-policy value accepted by dispatch row policy bits.
   LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_ATOMIC,
 };
@@ -122,6 +124,18 @@ enum loom_amdgpu_lower_policy_bits_e {
   LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT = 5u,
   LOOM_AMDGPU_LOWER_POLICY_REPORT_MASK = 0x60u,
 };
+
+static_assert((LOOM_AMDGPU_STORAGE_MAX &
+               ~LOOM_AMDGPU_LOWER_POLICY_STORAGE_MASK) == 0,
+              "AMDGPU storage policy values must fit dispatch row bits");
+static_assert(((LOOM_AMDGPU_PRESELECT_MAX
+                << LOOM_AMDGPU_LOWER_POLICY_PRESELECT_SHIFT) &
+               ~LOOM_AMDGPU_LOWER_POLICY_PRESELECT_MASK) == 0,
+              "AMDGPU preselect policy values must fit dispatch row bits");
+static_assert(((LOOM_AMDGPU_REPORT_MAX
+                << LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT) &
+               ~LOOM_AMDGPU_LOWER_POLICY_REPORT_MASK) == 0,
+              "AMDGPU report policy values must fit dispatch row bits");
 
 typedef struct loom_amdgpu_lower_dispatch_row_t {
   // Source op kind covered by this AMDGPU lowering row.
@@ -835,6 +849,36 @@ static_assert(
 static_assert(offsetof(loom_amdgpu_mulf_mix_plan_t, sources) == 0,
               "mulf mix plan storage policy reads the leading sources array");
 
+#define LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(plan_type, field, index) \
+  static_assert(                                                         \
+      offsetof(plan_type, field) == sizeof(loom_value_id_t) * (index),   \
+      #plan_type "." #field " must match dispatch row storage policy")
+
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_bitpack_plan_t, source, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_bitunpack_plan_t, source,
+                                        0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_dotf_plan_t, lhs, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_dotf_plan_t, rhs, 1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_dotf_plan_t, init, 2);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_bitcast_plan_t,
+                                        source, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_deinterleave_plan_t,
+                                        source, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_interleave_plan_t,
+                                        even, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_interleave_plan_t,
+                                        odd, 1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_permutation_plan_t,
+                                        source, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_table_lookup_plan_t, table,
+                                        0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_table_lookup_plan_t,
+                                        indices, 1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_slice_plan_t, source,
+                                        0);
+
+#undef LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD
+
 static void loom_amdgpu_mark_plan_sources_storage(
     loom_low_lower_context_t* context, const void* plan_data,
     uint8_t source_count) {
@@ -910,6 +954,9 @@ static void loom_amdgpu_mark_plan_storage_demands(
   const loom_amdgpu_storage_policy_t storage_policy =
       loom_amdgpu_dispatch_row_storage_policy(row);
   switch (storage_policy) {
+    case LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1:
+      loom_amdgpu_mark_plan_sources_storage(context, plan.target_data, 1);
+      return;
     case LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2:
       loom_amdgpu_mark_plan_sources_storage(context, plan.target_data, 2);
       return;
