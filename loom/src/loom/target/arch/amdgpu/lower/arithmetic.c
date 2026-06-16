@@ -658,9 +658,9 @@ iree_status_t loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(
       loom_low_lower_context_descriptor_set(context);
   const iree_string_view_t descriptor_set_name =
       loom_amdgpu_descriptor_set_key(descriptor_set);
-  const iree_string_view_t decision =
+  const iree_string_view_t decision_key =
       selected_literal ? IREE_SV("selected") : IREE_SV("rejected");
-  const iree_string_view_t reason =
+  const iree_string_view_t reason_key =
       selected_literal ? IREE_SV("literal_descriptor_selected")
                        : (loom_amdgpu_descriptor_set_has_key(
                               descriptor_set, literal_form.descriptor_key)
@@ -680,8 +680,8 @@ iree_status_t loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(
       loom_param_string(literal_form.literal_role),
       loom_param_string(descriptor_set_name),
       loom_param_string(IREE_SV("exact_f32_literal")),
-      loom_param_string(decision),
-      loom_param_string(reason),
+      loom_param_string(decision_key),
+      loom_param_string(reason_key),
   };
   return loom_low_lower_emit_error_ref(context, source_op,
                                        LOOM_ERR_AMDGPU_030_REF, params,
@@ -705,9 +705,9 @@ static iree_status_t loom_amdgpu_emit_mulf_mix_operand_form_diagnostic(
       descriptor_set, descriptor.descriptor->key_string_offset);
   const iree_string_view_t descriptor_set_name =
       loom_amdgpu_descriptor_set_key(descriptor_set);
-  const iree_string_view_t decision =
+  const iree_string_view_t decision_key =
       plan->addend_literal_zero ? IREE_SV("selected") : IREE_SV("rejected");
-  const iree_string_view_t reason =
+  const iree_string_view_t reason_key =
       plan->addend_literal_zero ? IREE_SV("literal_descriptor_available")
                                 : IREE_SV("literal_descriptor_unavailable");
   loom_module_t* module = loom_low_lower_context_module(context);
@@ -721,8 +721,8 @@ static iree_status_t loom_amdgpu_emit_mulf_mix_operand_form_diagnostic(
       loom_param_u32(2),
       loom_param_string(descriptor_set_name),
       loom_param_string(IREE_SV("exact_f32_positive_zero")),
-      loom_param_string(decision),
-      loom_param_string(reason),
+      loom_param_string(decision_key),
+      loom_param_string(reason_key),
   };
   return loom_low_lower_emit_error_ref(context, source_op,
                                        LOOM_ERR_AMDGPU_027_REF, params,

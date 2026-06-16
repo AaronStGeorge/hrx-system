@@ -228,7 +228,7 @@ static iree_status_t loom_amdgpu_dotf_emit_tied_accumulator_diagnostic(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t lane,
     bool accumulator_is_dot_local, bool selected_tied_form,
-    iree_string_view_t reason) {
+    iree_string_view_t reason_key) {
   if (!iree_any_bit_set(loom_low_lower_context_diagnostic_flags(context),
                         LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM)) {
     return iree_ok_status();
@@ -245,7 +245,7 @@ static iree_status_t loom_amdgpu_dotf_emit_tied_accumulator_diagnostic(
       loom_amdgpu_dotf_descriptor_set_key(descriptor_set);
   const iree_string_view_t accumulator_kind =
       accumulator_is_dot_local ? IREE_SV("dot_local") : IREE_SV("incoming");
-  const iree_string_view_t decision =
+  const iree_string_view_t decision_key =
       selected_tied_form ? IREE_SV("selected") : IREE_SV("rejected");
   loom_module_t* module = loom_low_lower_context_module(context);
   const loom_diagnostic_param_t params[] = {
@@ -258,8 +258,8 @@ static iree_status_t loom_amdgpu_dotf_emit_tied_accumulator_diagnostic(
       loom_param_u32(lane),
       loom_param_string(descriptor_set_name),
       loom_param_string(accumulator_kind),
-      loom_param_string(decision),
-      loom_param_string(reason),
+      loom_param_string(decision_key),
+      loom_param_string(reason_key),
   };
   return loom_low_lower_emit_error_ref(context, source_op,
                                        LOOM_ERR_AMDGPU_028_REF, params,

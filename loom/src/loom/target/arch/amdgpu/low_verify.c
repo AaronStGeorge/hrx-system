@@ -58,8 +58,8 @@ static iree_status_t loom_amdgpu_low_emit_blocked_alias(
       loom_param_string(alias->alias_semantics),
       loom_param_string(alias->replacement_descriptor_name),
       loom_param_string(alias->replacement_mnemonic),
-      loom_param_string(alias->decision),
-      loom_param_string(alias->reason),
+      loom_param_string(alias->decision_key),
+      loom_param_string(alias->reason_key),
   };
   return loom_low_verify_context_emit(context, packet->op, LOOM_ERR_AMDGPU_031,
                                       params, IREE_ARRAYSIZE(params));

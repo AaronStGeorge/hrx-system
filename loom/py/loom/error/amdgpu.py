@@ -502,9 +502,10 @@ ERR_AMDGPU_027 = ErrorDef(
     message=(
         "AMDGPU target '{target_key}' export '{export_name}' config "
         "'{config_key}' selected mixed FMA descriptor '{descriptor_name}' for "
-        "'{op_name}' in '@{function_name}' and {decision} source operand "
+        "'{op_name}' in '@{function_name}' with decision key '{decision_key}' "
+        "for source operand "
         "{source_operand_index} constant form '{constant_form}' in descriptor "
-        "set '{descriptor_set_name}': reason '{reason}'"
+        "set '{descriptor_set_name}': reason key '{reason_key}'"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
@@ -512,8 +513,8 @@ ERR_AMDGPU_027 = ErrorDef(
         ErrorParam("source_operand_index", ParamKind.U32),
         ErrorParam("descriptor_set_name", ParamKind.STRING),
         ErrorParam("constant_form", ParamKind.STRING),
-        ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("decision_key", ParamKind.STRING),
+        ErrorParam("reason_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use the recorded descriptor and operand-form fields to explain why "
@@ -531,9 +532,10 @@ ERR_AMDGPU_028 = ErrorDef(
         "AMDGPU target '{target_key}' export '{export_name}' config "
         "'{config_key}' selected dot accumulation descriptor "
         "'{descriptor_name}' for '{op_name}' in '@{function_name}' and "
-        "{decision} tied accumulator form at lane {lane_index} in descriptor "
+        "recorded decision key '{decision_key}' for tied accumulator form at "
+        "lane {lane_index} in descriptor "
         "set '{descriptor_set_name}': accumulator '{accumulator_kind}', "
-        "reason '{reason}'"
+        "reason key '{reason_key}'"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
@@ -541,8 +543,8 @@ ERR_AMDGPU_028 = ErrorDef(
         ErrorParam("lane_index", ParamKind.U32),
         ErrorParam("descriptor_set_name", ParamKind.STRING),
         ErrorParam("accumulator_kind", ParamKind.STRING),
-        ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("decision_key", ParamKind.STRING),
+        ErrorParam("reason_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use the recorded descriptor, lane, and accumulator fields to explain "
@@ -558,12 +560,13 @@ ERR_AMDGPU_029 = ErrorDef(
     summary="AMDGPU half-result mixed FMA lane decision was recorded.",
     message=(
         "AMDGPU target '{target_key}' export '{export_name}' config "
-        "'{config_key}' {decision} half-result mixed FMA descriptor "
+        "'{config_key}' recorded decision key '{decision_key}' for "
+        "half-result mixed FMA descriptor "
         "'{descriptor_name}' for '{op_name}' in '@{function_name}' at "
         "destination lane {destination_lane_index} ({result_half}) in "
         "descriptor set '{descriptor_set_name}': sources [{source0_kind}, "
         "{source1_kind}, {source2_kind}], rounding '{rounding_contract}', "
-        "reason '{reason}'"
+        "reason key '{reason_key}'"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
@@ -575,8 +578,8 @@ ERR_AMDGPU_029 = ErrorDef(
         ErrorParam("source1_kind", ParamKind.STRING),
         ErrorParam("source2_kind", ParamKind.STRING),
         ErrorParam("rounding_contract", ParamKind.STRING),
-        ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("decision_key", ParamKind.STRING),
+        ErrorParam("reason_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use the recorded lane, source-kind, and rounding-contract fields to "
@@ -593,11 +596,12 @@ ERR_AMDGPU_030 = ErrorDef(
     summary="AMDGPU literal FMA operand-form decision was recorded.",
     message=(
         "AMDGPU target '{target_key}' export '{export_name}' config "
-        "'{config_key}' {decision} literal FMA descriptor "
+        "'{config_key}' recorded decision key '{decision_key}' for literal "
+        "FMA descriptor "
         "'{descriptor_name}' for '{op_name}' in '@{function_name}' using "
         "{operand_form} source operand {source_operand_index} ({literal_role}) "
         "constant form '{constant_form}' in descriptor set "
-        "'{descriptor_set_name}': reason '{reason}'"
+        "'{descriptor_set_name}': reason key '{reason_key}'"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
@@ -607,8 +611,8 @@ ERR_AMDGPU_030 = ErrorDef(
         ErrorParam("literal_role", ParamKind.STRING),
         ErrorParam("descriptor_set_name", ParamKind.STRING),
         ErrorParam("constant_form", ParamKind.STRING),
-        ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("decision_key", ParamKind.STRING),
+        ErrorParam("reason_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use the recorded descriptor, operand-form, and literal-role fields to "
@@ -629,7 +633,8 @@ ERR_AMDGPU_031 = ErrorDef(
         "mnemonic '{alias_mnemonic}' has '{alias_semantics}' compatibility "
         "semantics and is not an ordinary f32 FMA; use descriptor "
         "'{replacement_descriptor_name}' with mnemonic "
-        "'{replacement_mnemonic}' instead: {decision}, reason '{reason}'"
+        "'{replacement_mnemonic}' instead: decision key '{decision_key}', "
+        "reason key '{reason_key}'"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
@@ -639,8 +644,8 @@ ERR_AMDGPU_031 = ErrorDef(
         ErrorParam("alias_semantics", ParamKind.STRING),
         ErrorParam("replacement_descriptor_name", ParamKind.STRING),
         ErrorParam("replacement_mnemonic", ParamKind.STRING),
-        ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("decision_key", ParamKind.STRING),
+        ErrorParam("reason_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use ordinary v_fma_f32 or v_fmac_f32 descriptors for IEEE f32 FMA; "
@@ -660,7 +665,8 @@ ERR_AMDGPU_032 = ErrorDef(
         "'{alias_mnemonic}': it has '{alias_semantics}' compatibility "
         "semantics and is not an ordinary f32 FMA; use descriptor "
         "'{replacement_descriptor_name}' with mnemonic "
-        "'{replacement_mnemonic}' instead: {decision}, reason '{reason}'"
+        "'{replacement_mnemonic}' instead: decision key '{decision_key}', "
+        "reason key '{reason_key}'"
     ),
     params=(
         ErrorParam("descriptor_set_name", ParamKind.STRING),
@@ -668,8 +674,8 @@ ERR_AMDGPU_032 = ErrorDef(
         ErrorParam("alias_semantics", ParamKind.STRING),
         ErrorParam("replacement_descriptor_name", ParamKind.STRING),
         ErrorParam("replacement_mnemonic", ParamKind.STRING),
-        ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("decision_key", ParamKind.STRING),
+        ErrorParam("reason_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use ordinary v_fma_f32 or v_fmac_f32 mnemonics for IEEE f32 FMA; "

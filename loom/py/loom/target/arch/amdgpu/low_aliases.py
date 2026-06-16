@@ -34,8 +34,8 @@ class AmdgpuBlockedLowAlias:
     alias_semantics: str
     replacement_descriptor_key: str
     replacement_mnemonic: str
-    decision: str = "rejected"
-    reason: str = "compatibility_zero_semantics"
+    decision_key: str = "rejected"
+    reason_key: str = "compatibility_zero_semantics"
 
     @property
     def lookup_names(self) -> tuple[str, str]:
@@ -47,8 +47,8 @@ class AmdgpuBlockedLowAlias:
         _validate_token("alias semantics", self.alias_semantics)
         _validate_token("replacement descriptor key", self.replacement_descriptor_key)
         _validate_token("replacement mnemonic", self.replacement_mnemonic)
-        _validate_token("decision", self.decision)
-        _validate_token("reason", self.reason)
+        _validate_token("decision key", self.decision_key)
+        _validate_token("reason key", self.reason_key)
         if not self.descriptor_key.startswith(_AMDGPU_DESCRIPTOR_PREFIX):
             raise ValueError(
                 f"alias descriptor key {self.descriptor_key!r} must be qualified"

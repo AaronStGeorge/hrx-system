@@ -48,8 +48,8 @@ static iree_status_t loom_amdgpu_low_asm_try_unknown_mnemonic(
   out_diagnostic->params[3] =
       loom_param_string(alias->replacement_descriptor_name);
   out_diagnostic->params[4] = loom_param_string(alias->replacement_mnemonic);
-  out_diagnostic->params[5] = loom_param_string(alias->decision);
-  out_diagnostic->params[6] = loom_param_string(alias->reason);
+  out_diagnostic->params[5] = loom_param_string(alias->decision_key);
+  out_diagnostic->params[6] = loom_param_string(alias->reason_key);
   out_diagnostic->param_count = 7;
   return iree_ok_status();
 }

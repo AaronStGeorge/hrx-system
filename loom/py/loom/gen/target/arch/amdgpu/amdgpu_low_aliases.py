@@ -98,22 +98,22 @@ def _emit_alias_rows(rows: Sequence[_AliasLookupRow]) -> list[str]:
     semantics_width = max(len(_c_string_arg(row.alias.alias_semantics)) for row in rows)
     replacement_key_width = max(len(_c_string_arg(row.alias.replacement_descriptor_key)) for row in rows)
     replacement_mnemonic_width = max(len(_c_string_arg(row.alias.replacement_mnemonic)) for row in rows)
-    decision_width = max(len(_c_string_arg(row.alias.decision)) for row in rows)
+    decision_key_width = max(len(_c_string_arg(row.alias.decision_key)) for row in rows)
     lines = [
-        "#define LOOM_AMDGPU_LOW_BLOCKED_ALIAS(lookup_name_, alias_mnemonic_, alias_semantics_, replacement_descriptor_name_, replacement_mnemonic_, decision_, reason_) \\",
+        "#define LOOM_AMDGPU_LOW_BLOCKED_ALIAS(lookup_name_, alias_mnemonic_, alias_semantics_, replacement_descriptor_name_, replacement_mnemonic_, decision_key_, reason_key_) \\",
         "  { \\",
         "    .alias_name = IREE_SVL(lookup_name_), \\",
         "    .alias_mnemonic = IREE_SVL(alias_mnemonic_), \\",
         "    .alias_semantics = IREE_SVL(alias_semantics_), \\",
         "    .replacement_descriptor_name = IREE_SVL(replacement_descriptor_name_), \\",
         "    .replacement_mnemonic = IREE_SVL(replacement_mnemonic_), \\",
-        "    .decision = IREE_SVL(decision_), \\",
-        "    .reason = IREE_SVL(reason_), \\",
+        "    .decision_key = IREE_SVL(decision_key_), \\",
+        "    .reason_key = IREE_SVL(reason_key_), \\",
         "  }",
         "",
         "static const loom_amdgpu_low_blocked_alias_t",
         "    kLoomAmdgpuLowBlockedAliases[] = {",
-        "  // lookup_name                      alias_mnemonic        semantics replacement_descriptor_name replacement_mnemonic decision reason",
+        "  // lookup_name                      alias_mnemonic        semantics replacement_descriptor_name replacement_mnemonic decision_key reason_key",
     ]
 
     def alias_row_expr(row: _AliasLookupRow) -> str:
@@ -122,8 +122,8 @@ def _emit_alias_rows(rows: Sequence[_AliasLookupRow]) -> list[str]:
         alias_semantics = _c_string_arg(row.alias.alias_semantics)
         replacement_descriptor_key = _c_string_arg(row.alias.replacement_descriptor_key)
         replacement_mnemonic = _c_string_arg(row.alias.replacement_mnemonic)
-        decision = _c_string_arg(row.alias.decision)
-        reason = _c_string_arg(row.alias.reason)
+        decision_key = _c_string_arg(row.alias.decision_key)
+        reason_key = _c_string_arg(row.alias.reason_key)
         return (
             "  LOOM_AMDGPU_LOW_BLOCKED_ALIAS("
             f"{_padded_arg(lookup_name, lookup_name_width)}"
@@ -131,8 +131,8 @@ def _emit_alias_rows(rows: Sequence[_AliasLookupRow]) -> list[str]:
             f"{_padded_arg(alias_semantics, semantics_width)}"
             f"{_padded_arg(replacement_descriptor_key, replacement_key_width)}"
             f"{_padded_arg(replacement_mnemonic, replacement_mnemonic_width)}"
-            f"{_padded_arg(decision, decision_width)}"
-            f"{reason}),"
+            f"{_padded_arg(decision_key, decision_key_width)}"
+            f"{reason_key}),"
         )
 
     lines.extend(alias_row_expr(row) for row in rows)

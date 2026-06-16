@@ -241,9 +241,9 @@ low.func.def target(@gfx950_target) @sdwa_selector_out_of_range(%value: reg<amdg
 
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @dx9_zero_fma_alias_rejected(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) {
-  // ERROR@+1: AMDGPU/031 {descriptor_name="amdgpu.v_fma_dx9_zero_f32", descriptor_set_name="amdgpu.rdna3.core", alias_mnemonic="v_fma_dx9_zero_f32", alias_semantics="dx9_zero", replacement_descriptor_name="amdgpu.v_fma_f32", replacement_mnemonic="v_fma_f32", decision="rejected", reason="compatibility_zero_semantics"}
+  // ERROR@+1: AMDGPU/031 {descriptor_name="amdgpu.v_fma_dx9_zero_f32", descriptor_set_name="amdgpu.rdna3.core", alias_mnemonic="v_fma_dx9_zero_f32", alias_semantics="dx9_zero", replacement_descriptor_name="amdgpu.v_fma_f32", replacement_mnemonic="v_fma_f32", decision_key="rejected", reason_key="compatibility_zero_semantics"}
   %fma = low.op<amdgpu.v_fma_dx9_zero_f32>(%a, %b, %c) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  // ERROR@+1: AMDGPU/031 {descriptor_name="amdgpu.v_fmac_dx9_zero_f32", descriptor_set_name="amdgpu.rdna3.core", alias_mnemonic="v_fmac_dx9_zero_f32", alias_semantics="dx9_zero", replacement_descriptor_name="amdgpu.v_fmac_f32", replacement_mnemonic="v_fmac_f32", decision="rejected", reason="compatibility_zero_semantics"}
+  // ERROR@+1: AMDGPU/031 {descriptor_name="amdgpu.v_fmac_dx9_zero_f32", descriptor_set_name="amdgpu.rdna3.core", alias_mnemonic="v_fmac_dx9_zero_f32", alias_semantics="dx9_zero", replacement_descriptor_name="amdgpu.v_fmac_f32", replacement_mnemonic="v_fmac_f32", decision_key="rejected", reason_key="compatibility_zero_semantics"}
   %fmac = low.op<amdgpu.v_fmac_dx9_zero_f32>(%acc, %a, %b) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> %acc as reg<amdgpu.vgpr>
   low.return
 }
@@ -252,7 +252,7 @@ low.func.def target(@gfx11_target) @dx9_zero_fma_alias_rejected(%acc: reg<amdgpu
 
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @dx9_zero_fma_asm_alias_rejected(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
-  // ERROR@+1: AMDGPU/032 {descriptor_set_name="amdgpu.rdna3.core", alias_mnemonic="v_fma_dx9_zero_f32", alias_semantics="dx9_zero", replacement_descriptor_name="amdgpu.v_fma_f32", replacement_mnemonic="v_fma_f32", decision="rejected", reason="compatibility_zero_semantics"}
+  // ERROR@+1: AMDGPU/032 {descriptor_set_name="amdgpu.rdna3.core", alias_mnemonic="v_fma_dx9_zero_f32", alias_semantics="dx9_zero", replacement_descriptor_name="amdgpu.v_fma_f32", replacement_mnemonic="v_fma_f32", decision_key="rejected", reason_key="compatibility_zero_semantics"}
   %fma = v_fma_dx9_zero_f32 %a, %b, %c
   return
 }
@@ -261,7 +261,7 @@ low.func.def target(@gfx11_target) @dx9_zero_fma_asm_alias_rejected(%acc: reg<am
 
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @dx9_zero_fmac_asm_alias_rejected(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
-  // ERROR@+1: AMDGPU/032 {descriptor_set_name="amdgpu.rdna3.core", alias_mnemonic="v_fmac_dx9_zero_f32", alias_semantics="dx9_zero", replacement_descriptor_name="amdgpu.v_fmac_f32", replacement_mnemonic="v_fmac_f32", decision="rejected", reason="compatibility_zero_semantics"}
+  // ERROR@+1: AMDGPU/032 {descriptor_set_name="amdgpu.rdna3.core", alias_mnemonic="v_fmac_dx9_zero_f32", alias_semantics="dx9_zero", replacement_descriptor_name="amdgpu.v_fmac_f32", replacement_mnemonic="v_fmac_f32", decision_key="rejected", reason_key="compatibility_zero_semantics"}
   %fmac = v_fmac_dx9_zero_f32 %acc, %a, %b
   return
 }

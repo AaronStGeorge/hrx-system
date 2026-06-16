@@ -1873,8 +1873,8 @@ static iree_status_t loom_amdgpu_emit_fma_mix_half_result_diagnostic(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_descriptor_ref_t descriptor_ref,
     uint32_t destination_lane_index, iree_string_view_t result_half,
-    const iree_string_view_t* source_kind_names, iree_string_view_t decision,
-    iree_string_view_t reason) {
+    const iree_string_view_t* source_kind_names,
+    iree_string_view_t decision_key, iree_string_view_t reason_key) {
   if (!iree_any_bit_set(loom_low_lower_context_diagnostic_flags(context),
                         LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM)) {
     return iree_ok_status();
@@ -1910,8 +1910,8 @@ static iree_status_t loom_amdgpu_emit_fma_mix_half_result_diagnostic(
       loom_param_string(source_kind_names[1]),
       loom_param_string(source_kind_names[2]),
       loom_param_string(IREE_SV("f32_to_f16_fptrunc")),
-      loom_param_string(decision),
-      loom_param_string(reason),
+      loom_param_string(decision_key),
+      loom_param_string(reason_key),
   };
   return loom_low_lower_emit_error_ref(context, source_op,
                                        LOOM_ERR_AMDGPU_029_REF, params,
