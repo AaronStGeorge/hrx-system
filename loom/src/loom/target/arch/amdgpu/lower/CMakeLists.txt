@@ -35,6 +35,32 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    memory_descriptor_candidate_ranges_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::memory_candidates
+  OUTPUT
+    "memory_descriptor_candidate_ranges.inl"
+  OUTPUT_FLAG
+    "--candidate-ranges"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    memory_descriptor_candidates_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::memory_candidates
+  OUTPUT
+    "memory_descriptor_candidates.inl"
+  OUTPUT_FLAG
+    "--candidate-rows"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     lower
@@ -67,6 +93,8 @@ loom_cc_library(
     "values.h"
     "workgroup.h"
   TEXTUAL_HDRS
+    "memory_descriptor_candidate_ranges.inl"
+    "memory_descriptor_candidates.inl"
     "registry_tables.inl"
   SRCS
     "abi.c"

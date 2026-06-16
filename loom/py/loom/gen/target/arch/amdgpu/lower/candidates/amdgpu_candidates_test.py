@@ -13,6 +13,7 @@ import pytest
 from loom.gen.target.arch.amdgpu.lower.candidates import (
     amdgpu_atomic_candidates,
     amdgpu_compare_candidates,
+    amdgpu_memory_candidates,
 )
 from loom.gen.target.arch.amdgpu.lower.candidates.validation import (
     dense_candidate_ranges,
@@ -82,6 +83,91 @@ def test_candidate_range_validation_rejects_uint16_overflow() -> None:
             lambda value: value,
             owner="AMDGPU test candidates",
         )
+
+
+def test_memory_generator_emits_data_fragments_only() -> None:
+    candidate_rows = amdgpu_memory_candidates._emit_candidate_rows()
+    candidate_ranges = amdgpu_memory_candidates._emit_candidate_ranges()
+
+    for source in (candidate_rows, candidate_ranges):
+        assert "typedef " not in source
+        assert "#ifndef " not in source
+        assert "#include " not in source
+        assert "\nif " not in source
+        assert "\nreturn " not in source
+    assert "LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(" in candidate_rows
+    assert "LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_RANGE(" in candidate_ranges
+    assert "LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_B64" in candidate_rows
+    assert "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE" in candidate_ranges
+
+
+def test_memory_generator_builds_dense_candidate_ranges() -> None:
+    memory_candidates = amdgpu_memory_candidates.amdgpu_memory_descriptor_candidates()
+    candidates = amdgpu_memory_candidates._ordered_candidates(memory_candidates)
+    ranges = amdgpu_memory_candidates._candidate_ranges(candidates)
+
+    assert ranges
+    assert len(ranges) < len(candidates)
+    covered_candidate_count = sum(candidate_count for _, _, candidate_count in ranges)
+    assert covered_candidate_count == len(candidates)
+    packed_key = amdgpu_memory_candidates._range_key_packed_value
+    packed_keys = [packed_key(key) for key, _, _ in ranges]
+    assert packed_keys == sorted(packed_keys)
+
+
+def test_memory_generator_preserves_same_key_fallback_order() -> None:
+    memory_candidates = amdgpu_memory_candidates.amdgpu_memory_descriptor_candidates()
+    candidates = amdgpu_memory_candidates._ordered_candidates(memory_candidates)
+    domain = amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.BUFFER_RESOURCE
+    address_form = amdgpu_memory_candidates.AmdgpuMemoryAddressForm.DEFAULT
+    operation_kind = amdgpu_memory_candidates.AmdgpuMemoryOperationKind.LOAD
+    register_class = amdgpu_memory_candidates.AmdgpuMemoryPayloadRegisterClass.VGPR
+    payload_format = amdgpu_memory_candidates.AmdgpuMemoryPayloadFormat.GENERIC
+
+    buffer_load8_candidates = [
+        candidate.descriptor_key
+        for candidate in candidates
+        if candidate.domain == domain
+        and candidate.address_form == address_form
+        and candidate.operation_kind == operation_kind
+        and candidate.packet_byte_count == 8
+        and candidate.payload_register_class == register_class
+        and candidate.payload_format == payload_format
+        and candidate.payload_register_count == 2
+    ]
+
+    assert buffer_load8_candidates == [
+        "amdgpu.buffer_load_b64",
+        "amdgpu.buffer_load_dwordx2",
+    ]
+
+
+def test_memory_generator_rejects_missing_descriptor_ref() -> None:
+    candidates = amdgpu_memory_candidates.amdgpu_memory_descriptor_candidates()
+    bad_candidate = replace(candidates[0], descriptor_key="amdgpu.missing")
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"AMDGPU memory descriptor candidate table requires missing "
+            r"descriptor refs: amdgpu\.missing"
+        ),
+    ):
+        amdgpu_memory_candidates._ordered_candidates((bad_candidate,))
+
+
+def test_memory_generator_rejects_out_of_range_packet_shape() -> None:
+    candidates = amdgpu_memory_candidates.amdgpu_memory_descriptor_candidates()
+    bad_candidate = replace(candidates[0], packet_byte_count=32)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"AMDGPU memory descriptor candidate amdgpu\.buffer_load_i8 "
+            r"has packet_byte_count 32"
+        ),
+    ):
+        amdgpu_memory_candidates._ordered_candidates((bad_candidate,))
 
 
 def test_compare_generator_emits_data_source_only() -> None:

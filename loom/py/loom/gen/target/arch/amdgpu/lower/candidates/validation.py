@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Hashable, Iterable, Sequence
+from typing import Any
 
 from loom.target.arch.amdgpu.descriptors import amdgpu_descriptor_ref_keys
 from loom.target.low_descriptors import target_relative_name
@@ -69,6 +70,7 @@ def dense_candidate_ranges[T, K: Hashable](
     key_fn: Callable[[T], K],
     *,
     owner: str,
+    range_sort_key: Callable[[K], Any] | None = None,
 ) -> tuple[tuple[K, int, int], ...]:
     ranges: dict[K, tuple[int, int]] = {}
     for candidate_index, candidate in enumerate(candidates):
@@ -84,4 +86,10 @@ def dense_candidate_ranges[T, K: Hashable](
         next_candidate_count = candidate_count + 1
         _validate_uint16_field(owner, "candidate count", next_candidate_count)
         ranges[key] = (first_candidate, next_candidate_count)
-    return tuple((key, first_candidate, candidate_count) for key, (first_candidate, candidate_count) in sorted(ranges.items()))
+    return tuple(
+        (key, first_candidate, candidate_count)
+        for key, (first_candidate, candidate_count) in sorted(
+            ranges.items(),
+            key=lambda item: range_sort_key(item[0]) if range_sort_key is not None else item[0],
+        )
+    )

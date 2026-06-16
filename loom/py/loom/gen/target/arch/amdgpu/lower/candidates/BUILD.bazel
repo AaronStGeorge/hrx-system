@@ -51,6 +51,22 @@ iree_py_binary(
     ],
 )
 
+iree_py_binary(
+    name = "memory_candidates",
+    srcs = [
+        "__init__.py",
+        "amdgpu_memory_candidates.py",
+        "validation.py",
+    ],
+    main = "amdgpu_memory_candidates.py",
+    visibility = GENERATOR_VISIBILITY,
+    deps = [
+        "//loom/py/loom/gen/support",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+    ],
+)
+
 iree_py_test(
     name = "candidates_test",
     srcs = [
@@ -62,5 +78,6 @@ iree_py_test(
     deps = [
         ":atomic_candidates",
         ":compare_candidates",
+        ":memory_candidates",
     ],
 )

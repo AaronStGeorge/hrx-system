@@ -529,8 +529,36 @@ class AmdgpuAtomicMemorySpace(CEnum):
 
 class AmdgpuMemoryAddressForm(CEnum):
     DEFAULT = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT"
+    BUFFER_OFF_ZERO = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO"
+    DS_2ADDR = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR"
     GLOBAL_SADDR = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR"
+    DS_ADDTID = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID"
     FLAT = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT"
+    GLOBAL_SMEM = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM"
+
+
+class AmdgpuMemoryDescriptorDomain(CEnum):
+    BUFFER_RESOURCE = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE"
+    GLOBAL_SADDR = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR"
+    LDS = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS"
+    GLOBAL_FLAT = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT"
+    GLOBAL_SMEM = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SMEM"
+
+
+class AmdgpuMemoryOperationKind(CEnum):
+    LOAD = "LOOM_AMDGPU_MEMORY_OPERATION_LOAD"
+    STORE = "LOOM_AMDGPU_MEMORY_OPERATION_STORE"
+
+
+class AmdgpuMemoryPayloadRegisterClass(CEnum):
+    VGPR = "LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_VGPR"
+    SGPR = "LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_SGPR"
+
+
+class AmdgpuMemoryPayloadFormat(CEnum):
+    GENERIC = "LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_GENERIC"
+    LOW_16BIT_FLOAT = "LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT"
+    SIGNED_16BIT_INTEGER = "LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER"
 
 
 class AmdgpuAtomicOperationKind(CEnum):
@@ -570,6 +598,18 @@ class AmdgpuAtomicDescriptorCandidate:
     operation_kind: AmdgpuAtomicOperationKind
     atomic_kind: AmdgpuAtomicKind
     value_kind: AmdgpuAtomicValueKind
+    descriptor_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuMemoryDescriptorCandidate:
+    domain: AmdgpuMemoryDescriptorDomain
+    address_form: AmdgpuMemoryAddressForm
+    operation_kind: AmdgpuMemoryOperationKind
+    packet_byte_count: int
+    payload_register_class: AmdgpuMemoryPayloadRegisterClass
+    payload_format: AmdgpuMemoryPayloadFormat
+    payload_register_count: int
     descriptor_key: str
 
 
@@ -2474,6 +2514,8 @@ __all__ = (
     "AmdgpuAtomicMemorySpace",
     "AmdgpuAtomicOperationKind",
     "AmdgpuAtomicValueKind",
+    "AmdgpuMemoryDescriptorCandidate",
+    "AmdgpuMemoryDescriptorDomain",
     "AmdgpuDescriptorOverlay",
     "AmdgpuEncodingFieldAllOnes",
     "AmdgpuFixedEncodingValue",
@@ -2481,6 +2523,9 @@ __all__ = (
     "AmdgpuImplicitOperandOverlay",
     "AmdgpuIsaFactSource",
     "AmdgpuMemoryAddressForm",
+    "AmdgpuMemoryOperationKind",
+    "AmdgpuMemoryPayloadFormat",
+    "AmdgpuMemoryPayloadRegisterClass",
     "AmdgpuOperandOverlay",
     "AmdgpuOperandPredefinedValueRef",
     "AsmForm",

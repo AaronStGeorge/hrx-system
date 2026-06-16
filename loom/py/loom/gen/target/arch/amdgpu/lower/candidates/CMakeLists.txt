@@ -41,6 +41,21 @@ iree_py_library(
     loom::py::loom::target::arch::amdgpu::descriptors
 )
 
+iree_py_library(
+  NAME
+    memory_candidates
+  MAIN
+    "amdgpu_memory_candidates.py"
+  SRCS
+    "__init__.py"
+    "amdgpu_memory_candidates.py"
+    "validation.py"
+  DEPS
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::low_descriptors
+    loom::py::loom::target::arch::amdgpu::descriptors
+)
+
 iree_py_test(
   NAME
     candidates_test
@@ -51,6 +66,7 @@ iree_py_test(
   DEPS
     loom::py::loom::gen::target::arch::amdgpu::lower::candidates::atomic_candidates
     loom::py::loom::gen::target::arch::amdgpu::lower::candidates::compare_candidates
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::memory_candidates
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
