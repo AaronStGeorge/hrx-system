@@ -22,6 +22,7 @@ iree_py_binary(
     srcs = [
         "__init__.py",
         "amdgpu_atomic_candidates.py",
+        "validation.py",
     ],
     main = "amdgpu_atomic_candidates.py",
     visibility = GENERATOR_VISIBILITY,
@@ -37,6 +38,7 @@ iree_py_binary(
     srcs = [
         "__init__.py",
         "amdgpu_compare_candidates.py",
+        "validation.py",
     ],
     main = "amdgpu_compare_candidates.py",
     visibility = GENERATOR_VISIBILITY,

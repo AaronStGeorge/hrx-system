@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -27,8 +26,12 @@ _ensure_runtime_py_on_path()
 
 from loom.dialect.scalar.comparison import CmpFPredicate, CmpIPredicate  # noqa: E402
 from loom.gen.support.generated_file import line_comment_header  # noqa: E402
+from loom.gen.target.arch.amdgpu.lower.candidates.validation import (  # noqa: E402
+    c_identifier,
+    optional_descriptor_ref_constant_name,
+    required_descriptor_ref_constant_name,
+)
 from loom.target.arch.amdgpu.descriptors import amdgpu_descriptor_ref_keys  # noqa: E402
-from loom.target.low_descriptors import target_relative_name  # noqa: E402
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,19 +75,6 @@ _COMPARE_FAMILIES = (
 )
 
 
-def _c_identifier(value: str) -> str:
-    identifier = re.sub(r"[^0-9A-Za-z_]", "_", value).strip("_")
-    if not identifier:
-        return "EMPTY"
-    if identifier[0].isdigit():
-        identifier = "_" + identifier
-    return identifier.upper()
-
-
-def _descriptor_ref_constant_name(key: str) -> str:
-    return f"LOOM_AMDGPU_DESCRIPTOR_REF_{_c_identifier(target_relative_name('amdgpu', key))}"
-
-
 def _descriptor_element_type(predicate: str, element_type: str) -> str:
     if element_type == "i32" and predicate[0] == "u":
         return "u32"
@@ -96,14 +86,8 @@ def _descriptor_key(predicate: str, element_type: str) -> str:
     return f"amdgpu.v_cmp_{predicate}_{descriptor_element_type}"
 
 
-def _optional_descriptor_ref_constant_name(key: str, key_set: set[str]) -> str:
-    if key not in key_set:
-        return "LOOM_AMDGPU_DESCRIPTOR_REF_NONE"
-    return _descriptor_ref_constant_name(key)
-
-
 def _predicate_constant(family: _CompareFamily, predicate: str) -> str:
-    return f"{family.predicate_c_prefix}_{_c_identifier(predicate)}"
+    return f"{family.predicate_c_prefix}_{c_identifier(predicate)}"
 
 
 def _compare_candidates() -> tuple[tuple[_CompareFamily, str, str], ...]:
@@ -112,8 +96,11 @@ def _compare_candidates() -> tuple[tuple[_CompareFamily, str, str], ...]:
     for family in _COMPARE_FAMILIES:
         for predicate in family.predicates:
             descriptor_key = _descriptor_key(predicate, family.descriptor_element_type)
-            if descriptor_key not in descriptor_ref_key_set:
-                raise ValueError(f"compare candidate for {family.source_op_name} {predicate} requires missing descriptor '{descriptor_key}'")
+            required_descriptor_ref_constant_name(
+                f"AMDGPU compare candidate {family.source_op_name} {predicate}",
+                descriptor_key,
+                descriptor_ref_key_set,
+            )
             candidates.append((family, predicate, descriptor_key))
     return tuple(candidates)
 
@@ -124,12 +111,13 @@ def _candidate_initializer(
     descriptor_key: str,
     descriptor_ref_key_set: set[str],
 ) -> str:
+    owner = f"AMDGPU compare candidate {family.source_op_name} {predicate}"
     return "\n".join(
         [
             f"    [{_predicate_constant(family, predicate)}] = {{",
-            f"        .descriptor_ref = {_descriptor_ref_constant_name(descriptor_key)},",
-            f"        .src0_inline_descriptor_ref = {_optional_descriptor_ref_constant_name(f'{descriptor_key}.src0_inline', descriptor_ref_key_set)},",
-            f"        .src1_inline_descriptor_ref = {_optional_descriptor_ref_constant_name(f'{descriptor_key}.src1_inline', descriptor_ref_key_set)},",
+            f"        .descriptor_ref = {required_descriptor_ref_constant_name(owner, descriptor_key, descriptor_ref_key_set)},",
+            f"        .src0_inline_descriptor_ref = {optional_descriptor_ref_constant_name(f'{descriptor_key}.src0_inline', descriptor_ref_key_set)},",
+            f"        .src1_inline_descriptor_ref = {optional_descriptor_ref_constant_name(f'{descriptor_key}.src1_inline', descriptor_ref_key_set)},",
             "    },",
         ]
     )
@@ -165,7 +153,10 @@ def _emit_source(*, public_header: str) -> str:
         "// See https://llvm.org/LICENSE.txt for license information.",
         "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
         "",
-        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.lower.candidates.amdgpu_compare_candidates"),
+        *line_comment_header(
+            "//",
+            generator=("loom.gen.target.arch.amdgpu.lower.candidates.amdgpu_compare_candidates"),
+        ),
         "",
         f'#include "{public_header}"',
         "",

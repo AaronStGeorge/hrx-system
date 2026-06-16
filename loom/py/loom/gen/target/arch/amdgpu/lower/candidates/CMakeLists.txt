@@ -17,6 +17,7 @@ iree_py_library(
   SRCS
     "__init__.py"
     "amdgpu_atomic_candidates.py"
+    "validation.py"
   DEPS
     loom::py::loom::gen::support::support
     loom::py::loom::target::low_descriptors
@@ -31,6 +32,7 @@ iree_py_library(
   SRCS
     "__init__.py"
     "amdgpu_compare_candidates.py"
+    "validation.py"
   DEPS
     loom::py::loom::dialect::scalar::scalar
     loom::py::loom::dialect::vector::vector
