@@ -18,189 +18,11 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/contracts/arithmetic_lower_rules.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
+#include "loom/target/arch/amdgpu/lower/candidates/arithmetic_candidates.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/util/fact_table.h"
-
-#define MIX_F32 LOOM_AMDGPU_FMA_MIX_SOURCE_F32
-#define MIX_F16LO LOOM_AMDGPU_FMA_MIX_SOURCE_F16LO
-#define MIX_F16HI LOOM_AMDGPU_FMA_MIX_SOURCE_F16HI
-#define FMA_MIX_F32(a, b, c) \
-  LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_MIX_F32_##a##_##b##_##c
-#define FMA_MIX_F32_SRC2_LIT(a, b) \
-  LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_MIX_F32_##a##_##b##_F32_SRC2_LIT
-#define FMA_MIXLO_F16(a, b, c) \
-  LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_MIXLO_F16_##a##_##b##_##c
-#define FMA_MIXHI_F16(a, b, c) \
-  LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_MIXHI_F16_##a##_##b##_##c
-#define MAD_MIX_F32(a, b, c) \
-  LOOM_AMDGPU_DESCRIPTOR_REF_V_MAD_MIX_F32_##a##_##b##_##c
-#define MAD_MIXLO_F16(a, b, c) \
-  LOOM_AMDGPU_DESCRIPTOR_REF_V_MAD_MIXLO_F16_##a##_##b##_##c
-#define MAD_MIXHI_F16(a, b, c) \
-  LOOM_AMDGPU_DESCRIPTOR_REF_V_MAD_MIXHI_F16_##a##_##b##_##c
-
-#define FMA_MIXLO_F16_ALL_F32 FMA_MIXLO_F16(F32, F32, F32)
-#define FMA_MIXHI_F16_ALL_F32 FMA_MIXHI_F16(F32, F32, F32)
-#define MAD_MIXLO_F16_ALL_F32 MAD_MIXLO_F16(F32, F32, F32)
-#define MAD_MIXHI_F16_ALL_F32 MAD_MIXHI_F16(F32, F32, F32)
-
-#define LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(REF, ALL_F32_REF) \
-  {                                                                \
-      [MIX_F32] =                                                  \
-          {                                                        \
-              [MIX_F32] =                                          \
-                  {                                                \
-                      [MIX_F32] = ALL_F32_REF,                     \
-                      [MIX_F16LO] = REF(F32, F32, F16LO),          \
-                      [MIX_F16HI] = REF(F32, F32, F16HI),          \
-                  },                                               \
-              [MIX_F16LO] =                                        \
-                  {                                                \
-                      [MIX_F32] = REF(F32, F16LO, F32),            \
-                      [MIX_F16LO] = REF(F32, F16LO, F16LO),        \
-                      [MIX_F16HI] = REF(F32, F16LO, F16HI),        \
-                  },                                               \
-              [MIX_F16HI] =                                        \
-                  {                                                \
-                      [MIX_F32] = REF(F32, F16HI, F32),            \
-                      [MIX_F16LO] = REF(F32, F16HI, F16LO),        \
-                      [MIX_F16HI] = REF(F32, F16HI, F16HI),        \
-                  },                                               \
-          },                                                       \
-      [MIX_F16LO] =                                                \
-          {                                                        \
-              [MIX_F32] =                                          \
-                  {                                                \
-                      [MIX_F32] = REF(F16LO, F32, F32),            \
-                      [MIX_F16LO] = REF(F16LO, F32, F16LO),        \
-                      [MIX_F16HI] = REF(F16LO, F32, F16HI),        \
-                  },                                               \
-              [MIX_F16LO] =                                        \
-                  {                                                \
-                      [MIX_F32] = REF(F16LO, F16LO, F32),          \
-                      [MIX_F16LO] = REF(F16LO, F16LO, F16LO),      \
-                      [MIX_F16HI] = REF(F16LO, F16LO, F16HI),      \
-                  },                                               \
-              [MIX_F16HI] =                                        \
-                  {                                                \
-                      [MIX_F32] = REF(F16LO, F16HI, F32),          \
-                      [MIX_F16LO] = REF(F16LO, F16HI, F16LO),      \
-                      [MIX_F16HI] = REF(F16LO, F16HI, F16HI),      \
-                  },                                               \
-          },                                                       \
-      [MIX_F16HI] =                                                \
-          {                                                        \
-              [MIX_F32] =                                          \
-                  {                                                \
-                      [MIX_F32] = REF(F16HI, F32, F32),            \
-                      [MIX_F16LO] = REF(F16HI, F32, F16LO),        \
-                      [MIX_F16HI] = REF(F16HI, F32, F16HI),        \
-                  },                                               \
-              [MIX_F16LO] =                                        \
-                  {                                                \
-                      [MIX_F32] = REF(F16HI, F16LO, F32),          \
-                      [MIX_F16LO] = REF(F16HI, F16LO, F16LO),      \
-                      [MIX_F16HI] = REF(F16HI, F16LO, F16HI),      \
-                  },                                               \
-              [MIX_F16HI] =                                        \
-                  {                                                \
-                      [MIX_F32] = REF(F16HI, F16HI, F32),          \
-                      [MIX_F16LO] = REF(F16HI, F16HI, F16LO),      \
-                      [MIX_F16HI] = REF(F16HI, F16HI, F16HI),      \
-                  },                                               \
-          },                                                       \
-  }
-
-static const loom_amdgpu_descriptor_ref_t
-    kFmaMixF32DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
-                                LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
-                                    FMA_MIX_F32,
-                                    LOOM_AMDGPU_DESCRIPTOR_REF_NONE);
-
-static const loom_amdgpu_descriptor_ref_t kFmaMixF32Src2LiteralDescriptorRefs
-    [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-    [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] = {
-        [MIX_F32] =
-            {
-                [MIX_F32] = LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
-                [MIX_F16LO] = FMA_MIX_F32_SRC2_LIT(F32, F16LO),
-                [MIX_F16HI] = FMA_MIX_F32_SRC2_LIT(F32, F16HI),
-            },
-        [MIX_F16LO] =
-            {
-                [MIX_F32] = FMA_MIX_F32_SRC2_LIT(F16LO, F32),
-                [MIX_F16LO] = FMA_MIX_F32_SRC2_LIT(F16LO, F16LO),
-                [MIX_F16HI] = FMA_MIX_F32_SRC2_LIT(F16LO, F16HI),
-            },
-        [MIX_F16HI] =
-            {
-                [MIX_F32] = FMA_MIX_F32_SRC2_LIT(F16HI, F32),
-                [MIX_F16LO] = FMA_MIX_F32_SRC2_LIT(F16HI, F16LO),
-                [MIX_F16HI] = FMA_MIX_F32_SRC2_LIT(F16HI, F16HI),
-            },
-};
-
-static const loom_amdgpu_descriptor_ref_t
-    kMadMixF32DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
-                                LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
-                                    MAD_MIX_F32,
-                                    LOOM_AMDGPU_DESCRIPTOR_REF_NONE);
-
-static const loom_amdgpu_descriptor_ref_t
-    kFmaMixloF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
-                                  LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
-                                      FMA_MIXLO_F16, FMA_MIXLO_F16_ALL_F32);
-
-static const loom_amdgpu_descriptor_ref_t
-    kFmaMixhiF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
-                                  LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
-                                      FMA_MIXHI_F16, FMA_MIXHI_F16_ALL_F32);
-
-static const loom_amdgpu_descriptor_ref_t
-    kMadMixloF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
-                                  LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
-                                      MAD_MIXLO_F16, MAD_MIXLO_F16_ALL_F32);
-
-static const loom_amdgpu_descriptor_ref_t
-    kMadMixhiF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
-                                  LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
-                                      MAD_MIXHI_F16, MAD_MIXHI_F16_ALL_F32);
-
-typedef const loom_amdgpu_descriptor_ref_t
-    loom_amdgpu_fma_mix_descriptor_ref_cube_t
-        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
-        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_];
-
-#undef LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE
-#undef MAD_MIXHI_F16_ALL_F32
-#undef MAD_MIXLO_F16_ALL_F32
-#undef FMA_MIXHI_F16_ALL_F32
-#undef FMA_MIXLO_F16_ALL_F32
-#undef MAD_MIXHI_F16
-#undef MAD_MIXLO_F16
-#undef MAD_MIX_F32
-#undef FMA_MIXHI_F16
-#undef FMA_MIXLO_F16
-#undef FMA_MIX_F32_SRC2_LIT
-#undef FMA_MIX_F32
-#undef MIX_F16HI
-#undef MIX_F16LO
-#undef MIX_F32
 
 static bool loom_amdgpu_type_is_f16(loom_type_t type) {
   return loom_type_is_scalar(type) &&
@@ -431,8 +253,8 @@ static bool loom_amdgpu_select_fma_mix_descriptor(
     const loom_amdgpu_fma_mix_source_kind_t* source_kinds,
     loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
   return loom_amdgpu_select_fma_mix_descriptor_from_cubes(
-      context, source_kinds, &kFmaMixF32DescriptorRefs,
-      &kMadMixF32DescriptorRefs, out_descriptor_ref);
+      context, source_kinds, &kLoomAmdgpuFmaMixF32DescriptorRefs,
+      &kLoomAmdgpuMadMixF32DescriptorRefs, out_descriptor_ref);
 }
 
 bool loom_amdgpu_select_fma_mix_half_result_descriptor(
@@ -441,8 +263,10 @@ bool loom_amdgpu_select_fma_mix_half_result_descriptor(
     loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
   return loom_amdgpu_select_fma_mix_descriptor_from_cubes(
       context, source_kinds,
-      high_result ? &kFmaMixhiF16DescriptorRefs : &kFmaMixloF16DescriptorRefs,
-      high_result ? &kMadMixhiF16DescriptorRefs : &kMadMixloF16DescriptorRefs,
+      high_result ? &kLoomAmdgpuFmaMixhiF16DescriptorRefs
+                  : &kLoomAmdgpuFmaMixloF16DescriptorRefs,
+      high_result ? &kLoomAmdgpuMadMixhiF16DescriptorRefs
+                  : &kLoomAmdgpuMadMixloF16DescriptorRefs,
       out_descriptor_ref);
 }
 
@@ -460,7 +284,8 @@ static bool loom_amdgpu_select_fma_mix_zero_addend_descriptor(
 
   if (source_kinds[2] == LOOM_AMDGPU_FMA_MIX_SOURCE_F32) {
     const loom_amdgpu_descriptor_ref_t literal_ref =
-        kFmaMixF32Src2LiteralDescriptorRefs[source_kinds[0]][source_kinds[1]];
+        kLoomAmdgpuFmaMixF32Src2LiteralDescriptorRefs[source_kinds[0]]
+                                                     [source_kinds[1]];
     if (loom_amdgpu_descriptor_ref_is_present(context, literal_ref)) {
       *out_descriptor_ref = literal_ref;
       *out_addend_literal_zero = true;

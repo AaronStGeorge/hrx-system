@@ -11,6 +11,21 @@ iree_add_all_subdirs()
 
 iree_py_library(
   NAME
+    arithmetic_candidates
+  MAIN
+    "amdgpu_arithmetic_candidates.py"
+  SRCS
+    "__init__.py"
+    "amdgpu_arithmetic_candidates.py"
+    "validation.py"
+  DEPS
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::low_descriptors
+    loom::py::loom::target::arch::amdgpu::descriptors
+)
+
+iree_py_library(
+  NAME
     async_gather_candidates
   MAIN
     "amdgpu_async_gather_candidates.py"
@@ -79,6 +94,7 @@ iree_py_test(
   ARGS
     "loom.gen.target.arch.amdgpu.lower.candidates.amdgpu_candidates_test"
   DEPS
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::arithmetic_candidates
     loom::py::loom::gen::target::arch::amdgpu::lower::candidates::async_gather_candidates
     loom::py::loom::gen::target::arch::amdgpu::lower::candidates::atomic_candidates
     loom::py::loom::gen::target::arch::amdgpu::lower::candidates::compare_candidates
