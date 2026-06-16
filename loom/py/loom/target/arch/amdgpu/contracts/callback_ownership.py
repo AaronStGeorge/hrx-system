@@ -57,7 +57,6 @@ _ROW_RE = re.compile(
 )
 
 _ROW_MACRO_SIGNATURES = {
-    "VALUE_DIRECT_ROW": _RowMacroSignature(argument_count=4),
     "VALUE_DIRECT_STORAGE_ROW": _RowMacroSignature(
         argument_count=5, storage_policy_argument=4
     ),
@@ -67,7 +66,6 @@ _ROW_MACRO_SIGNATURES = {
     "MEMORY_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5
     ),
-    "RECIPE_DIRECT_ROW": _RowMacroSignature(argument_count=4),
     "RECIPE_DIRECT_STORAGE_ROW": _RowMacroSignature(
         argument_count=5, storage_policy_argument=4
     ),

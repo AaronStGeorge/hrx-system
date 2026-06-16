@@ -240,12 +240,13 @@ def test_callback_row_macro_schemas_match_registry_macros() -> None:
 def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> None:
     rows = (
         CallbackDispatchRow(
-            op_kind="LOOM_OP_VECTOR_CONSTANT",
-            role=CallbackDispatchRole.VALUE,
-            macro_name="VALUE_DIRECT_ROW",
+            op_kind="LOOM_OP_VECTOR_CONCAT",
+            role=CallbackDispatchRole.RECIPE,
+            macro_name="RECIPE_DATA_ROW",
             arguments=(
-                "LOOM_OP_VECTOR_CONSTANT",
+                "LOOM_OP_VECTOR_CONCAT",
                 "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "select",
                 "emit",
                 "verify",
             ),
@@ -253,6 +254,38 @@ def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> 
     )
 
     with pytest.raises(ValueError, match=r"row tag token .* in non-tag argument"):
+        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
+def test_validate_callback_dispatch_rows_rejects_removed_direct_default_macros() -> (
+    None
+):
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_CONSTANT",
+            role=CallbackDispatchRole.VALUE,
+            macro_name="VALUE_DIRECT_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_CONSTANT",
+                "select",
+                "emit",
+                "verify",
+            ),
+        ),
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_KERNEL_BARRIER",
+            role=CallbackDispatchRole.RECIPE,
+            macro_name="RECIPE_DIRECT_ROW",
+            arguments=(
+                "LOOM_OP_KERNEL_BARRIER",
+                "select",
+                "emit",
+                "verify",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="no registered dispatch-row schema"):
         validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
