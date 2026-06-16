@@ -57,7 +57,7 @@ class TileLangTypeConverter:
 
     def view_type(self, buffer: object) -> ShapedType:
         dtype = _attribute(buffer, "dtype")
-        element_type, encoding = _storage_element_type(dtype)
+        element_type = _storage_element_type(dtype)
         if not isinstance(element_type, ScalarType):
             raise TileLangTypeConversionError(
                 f"buffer element dtype must be scalar, got {dtype!r}"
@@ -70,7 +70,14 @@ class TileLangTypeConverter:
                 f"buffer shape must be iterable, got {shape!r}"
             )
         dims = tuple(_shape_dim(dim) for dim in shape)
-        return ShapedType(TypeKind.VIEW, element_type, dims, encoding=encoding)
+        return ShapedType(TypeKind.VIEW, element_type, dims)
+
+    def buffer_storage_schema(self, buffer: object) -> EncodingInstance | None:
+        dtype = _attribute(buffer, "dtype")
+        schema_name = _FP8_STORAGE_SCHEMAS.get(str(dtype))
+        if schema_name is None:
+            return None
+        return EncodingInstance(name=schema_name)
 
     def buffer_byte_length(self, buffer: object) -> int | None:
         view_type = self.view_type(buffer)
@@ -117,23 +124,17 @@ def _parse_vector_dtype(text: str) -> ShapedType | None:
     return ShapedType(TypeKind.VECTOR, element_type, (StaticDim(int(tail)),))
 
 
-def _storage_element_type(
-    dtype: object,
-) -> tuple[Type, EncodingInstance | None]:
+def _storage_element_type(dtype: object) -> Type:
     text = str(dtype)
     fp8_format = _FP8_FORMATS.get(text)
     if fp8_format is None:
-        return _map_scalar_or_vector_dtype(text), None
-    element_type, format_name = fp8_format
-    encoding = EncodingInstance(
-        name="tilelang.fp8",
-        params=(("format", format_name),),
-    )
-    return element_type, encoding
+        return _map_scalar_or_vector_dtype(text)
+    element_type, _format_name = fp8_format
+    return element_type
 
 
 def _map_scalar_or_vector_dtype(text: str) -> Type:
-    if text in _FORMAT_PRESERVING_FP8_DTYPES:
+    if _is_format_preserving_fp8_dtype(text):
         raise TileLangTypeConversionError(
             f"TileLang dtype `{text}` carries numeric-format semantics that "
             "cannot be represented as a bare Loom scalar/register type"
@@ -144,6 +145,15 @@ def _map_scalar_or_vector_dtype(text: str) -> Type:
     if mapped is None:
         raise TileLangTypeConversionError(f"unsupported TileLang dtype `{text}`")
     return mapped
+
+
+def _is_format_preserving_fp8_dtype(text: str) -> bool:
+    if text in _FORMAT_PRESERVING_FP8_DTYPES:
+        return True
+    head, separator, tail = text.rpartition("x")
+    return bool(
+        separator and tail.isdecimal() and head in _FORMAT_PRESERVING_FP8_DTYPES
+    )
 
 
 F8E4M3 = ScalarType(ScalarTypeKind.F8E4M3)
@@ -183,6 +193,12 @@ _FP8_FORMATS: dict[str, tuple[ScalarType, str]] = {
     "float8_e4m3fnuz": (F8E4M3, "e4m3fnuz"),
     "float8_e5m2": (F8E5M2, "e5m2"),
     "float8_e5m2fnuz": (F8E5M2, "e5m2fnuz"),
+}
+
+_FP8_STORAGE_SCHEMAS: dict[str, str] = {
+    "float8_e4m3fn": "fp8_e4m3fn",
+    "float8_e4m3fnuz": "fp8_e4m3fnuz",
+    "float8_e5m2fnuz": "fp8_e5m2fnuz",
 }
 
 _FORMAT_PRESERVING_FP8_DTYPES = set(_FP8_FORMATS) - set(_DTYPE_MAP)

@@ -140,12 +140,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
   %hash_local_bytes = index.constant 8 : offset
   %hash_local_buffer = buffer.alloca %hash_local_bytes {base_alignment = 8, memory_space = private} : buffer
   %hash_local = buffer.view %hash_local_buffer[%c0_bytes] : buffer -> view<1xi64, %layout>
-  %c0 = index.constant 0 : index
-  %const = scalar.constant 0 : i64
   %c32 = index.constant 32 : index
   %madd = index.madd %by, %c32, %tid : index
   %cmp = index.cmp sge, %madd, %num_tokens_idx : index
   kernel.exit %cmp : i1
+  %const = scalar.constant 0 : i64
+  %c0 = index.constant 0 : index
   %c3 = index.constant 3 : index
   %c1 = index.constant 1 : index
   %hash_local_state_next = scf.for %ngram_idx = [%c0 to %c3 step %c1](%hash_local_state_iter = %const : i64) -> (i64) unroll {
@@ -164,7 +164,16 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
         %load_3 = view.load %vocab_sizes[%bx, %sub_2, %j] : view<2x2x4xi32, %layout> -> i32
         %extsi_2 = scalar.extsi %load_3 : i32 to i64
         %remsi = scalar.remsi %xori, %extsi_2 : i64
-        %trunci = scalar.trunci %remsi : i64 to i32
+        %divisor_nonnegative = scalar.cmpi sge, %extsi_2, %const : i64
+        %remainder_nonnegative = scalar.cmpi sge, %remsi, %const : i64
+        %positive_floor_mod = scalar.andi %divisor_nonnegative, %remainder_nonnegative : i1
+        %divisor_negative = scalar.cmpi slt, %extsi_2, %const : i64
+        %remainder_nonpositive = scalar.cmpi sle, %remsi, %const : i64
+        %negative_floor_mod = scalar.andi %divisor_negative, %remainder_nonpositive : i1
+        %floor_mod_keep_remainder = scalar.ori %positive_floor_mod, %negative_floor_mod : i1
+        %floor_mod_adjusted = scalar.addi %remsi, %extsi_2 : i64
+        %floor_mod = scf.select %floor_mod_keep_remainder, %remsi, %floor_mod_adjusted : i64
+        %trunci = scalar.trunci %floor_mod : i64 to i32
         %load_4 = view.load %offsets[%bx, %madd_2] : view<2x8xi32, %layout> -> i32
         %addi = scalar.addi %trunci, %load_4 : i32
         view.store %addi, %output[%bx, %madd, %madd_2] : i32, view<2x[%num_tokens_idx]x8xi32, %layout>

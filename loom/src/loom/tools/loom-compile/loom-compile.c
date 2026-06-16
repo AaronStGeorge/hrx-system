@@ -582,6 +582,20 @@ static iree_status_t loom_compile_write_report(
   return status;
 }
 
+static void loom_compile_record_terminal_report_status(
+    loom_target_compile_report_t* report, iree_status_code_t status_code,
+    int exit_code) {
+  if (report == NULL) {
+    return;
+  }
+  if (status_code != IREE_STATUS_OK) {
+    loom_target_compile_report_record_status(report, status_code);
+  } else if (exit_code != 0) {
+    loom_target_compile_report_record_status(report,
+                                             IREE_STATUS_FAILED_PRECONDITION);
+  }
+}
+
 static iree_status_t loom_compile_emit_hal(
     const loom_run_hal_artifact_provider_t* artifact_provider,
     const loom_run_hal_device_target_t* hal_target,
@@ -642,12 +656,15 @@ static iree_status_t loom_compile_emit_hal(
   if (iree_status_is_ok(status)) {
     *out_emitted = candidate.compiled;
   }
-  if (iree_status_is_ok(status)) {
-    status = loom_compile_write_report(
-        compile_report_capture, artifact_manifest_output_path, allocator);
-    if (iree_status_is_ok(status)) {
-      *out_report_written = true;
-    }
+  if (loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
+    loom_compile_record_terminal_report_status(compile_options->report,
+                                               iree_status_code(status),
+                                               candidate.compiled ? 0 : 1);
+    status = iree_status_join(
+        status,
+        loom_compile_write_report(compile_report_capture,
+                                  artifact_manifest_output_path, allocator));
+    *out_report_written = true;
   }
   loom_run_hal_candidate_deinitialize(&candidate);
   return status;
@@ -1004,11 +1021,11 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "\n"
       "```shell\n"
       "loom-compile kernel.loom --backend=vm --output=kernel.vmfb\n"
-      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "loom-compile kernel.loom --backend=amdgpu-hal --target=gfx1100 \\\n"
       "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
       "loom-compile kernel.loom --backend=llvmir-text --output=kernel.ll\n"
       "loom-compile kernel.loom --backend=llvmir-bitcode --output=kernel.bc\n"
-      "loom-compile kernel.loombc --backend=amdgpu --target=gfx1100 \\\n"
+      "loom-compile kernel.loombc --backend=amdgpu-hal --target=gfx1100 \\\n"
       "  --artifact-manifest=summary --emit-artifact-manifest=kernel.json\n"
       "loom-compile kernel.loom --backend=vm --pipeline=none\n"
       "loom-compile kernel.loom --backend=vm --pipeline=@my_pipeline\n"
@@ -1018,7 +1035,7 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "\n"
       "`--backend=vm` emits a VM bytecode archive. HAL/native backends such "
       "as\n"
-      "`--backend=amdgpu` select a target provider and can emit a "
+      "`--backend=amdgpu-hal` selects a target provider and can emit a "
       "target-native\n"
       "artifact with `--emit-target-artifact=path`. Use `--target=gfx1100` or\n"
       "another backend-owned target key when roots omit explicit "
@@ -1037,12 +1054,12 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "### Reports, manifests, and IR traces\n"
       "\n"
       "```shell\n"
-      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "loom-compile kernel.loom --backend=amdgpu-hal --target=gfx1100 \\\n"
       "  --compile-report=summary --compile-report-output=report.json \\\n"
       "  --artifact-manifest=details --emit-artifact-manifest=manifest.json "
       "\\\n"
       "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
-      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "loom-compile kernel.loom --backend=amdgpu-hal --target=gfx1100 \\\n"
       "  --dump-ir-after-all --dump-ir-format=jsonl "
       "--dump-ir-output=trace.jsonl\n"
       "jq '.functions[] | {name, target, workgroup_size}' manifest.json\n"
@@ -1225,6 +1242,10 @@ int main(int argc, char** argv) {
     status =
         iree_status_join(status, loom_tooling_pass_trace_close(&pass_trace));
     if (iree_status_is_ok(status) && pass_run_result.error_count != 0) {
+      if (compile_options.report != NULL) {
+        loom_target_compile_report_record_status(
+            compile_options.report, IREE_STATUS_FAILED_PRECONDITION);
+      }
       exit_code = 1;
     }
   }
@@ -1249,15 +1270,22 @@ int main(int argc, char** argv) {
                                     &emitted);
     }
   }
-  if (iree_status_is_ok(status) && !report_written) {
-    status = loom_compile_write_report(
-        &compile_report_capture, artifact_manifest_output_path, allocator);
-  }
   if (iree_status_is_ok(status) && exit_code == 0 && !emitted) {
+    if (compile_options.report != NULL) {
+      loom_target_compile_report_record_status(compile_options.report,
+                                               IREE_STATUS_FAILED_PRECONDITION);
+    }
     exit_code = 1;
   }
-
   status = iree_status_join(status, loom_tooling_pass_trace_close(&pass_trace));
+  if (!report_written) {
+    loom_compile_record_terminal_report_status(
+        compile_options.report, iree_status_code(status), exit_code);
+    status = iree_status_join(
+        status,
+        loom_compile_write_report(&compile_report_capture,
+                                  artifact_manifest_output_path, allocator));
+  }
   if (!iree_status_is_ok(status)) {
     iree_status_fprint(stderr, status);
     iree_status_free(status);

@@ -30,6 +30,7 @@ from loom.importers.core.kernel import (
     normalize_launch_tuple,
     normalize_workgroup_size,
     target_preset_amdgpu_kind,
+    target_preset_amdgpu_subgroup_size,
 )
 from loom.importers.core.names import (
     NameAllocator,
@@ -79,4 +80,5 @@ __all__ = [
     "source_name",
     "source_key",
     "target_preset_amdgpu_kind",
+    "target_preset_amdgpu_subgroup_size",
 ]

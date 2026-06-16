@@ -1013,6 +1013,43 @@ static bool loom_canonicalize_is_edge_assume_op(
   return false;
 }
 
+static bool loom_canonicalize_region_contains_block(
+    const loom_region_t* region, const loom_block_t* target_block) {
+  if (!region || !target_block) return false;
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    if (block == target_block) return true;
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      loom_region_t** regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        if (loom_canonicalize_region_contains_block(regions[i], target_block)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+static loom_op_t* loom_canonicalize_edge_assume_insertion_anchor(
+    const loom_module_t* module, const loom_region_t* region,
+    loom_value_id_t source) {
+  if (!module || source == LOOM_VALUE_ID_INVALID ||
+      source >= module->values.count) {
+    return NULL;
+  }
+  const loom_value_t* value = loom_module_value(module, source);
+  if (loom_value_is_block_arg(value)) return NULL;
+
+  loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op || !defining_op->parent_block) return NULL;
+  return loom_canonicalize_region_contains_block(region,
+                                                 defining_op->parent_block)
+             ? defining_op
+             : NULL;
+}
+
 typedef struct loom_canonicalize_region_replacement_t {
   // Rewriter used for operand updates.
   loom_rewriter_t* rewriter;
@@ -1127,7 +1164,6 @@ static iree_status_t loom_canonicalize_materialize_edge_assumes(
 
   iree_status_t status = iree_ok_status();
   loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
-  loom_builder_set_before(&rewriter->builder, entry_block->first_op);
   for (uint16_t candidate_index = 0;
        iree_status_is_ok(status) &&
        candidate_index < assume_set->candidate_count;
@@ -1148,6 +1184,15 @@ static iree_status_t loom_canonicalize_materialize_edge_assumes(
     if (!iree_status_is_ok(status)) break;
     memcpy(predicates, source_predicates,
            candidate->predicate_count * sizeof(loom_predicate_t));
+
+    loom_op_t* insertion_anchor =
+        loom_canonicalize_edge_assume_insertion_anchor(rewriter->module, region,
+                                                       candidate->source);
+    if (insertion_anchor) {
+      loom_builder_set_after(&rewriter->builder, insertion_anchor);
+    } else {
+      loom_builder_set_before(&rewriter->builder, entry_block->first_op);
+    }
     if (candidate->uses_index_assume) {
       status = loom_index_assume_build(
           &rewriter->builder, &value, 1, predicates, candidate->predicate_count,

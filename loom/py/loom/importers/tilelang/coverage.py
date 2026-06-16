@@ -680,9 +680,10 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tl.sync_grid",
         OpFamily.TILELANG_OP,
-        CoverageState.DEFERRED,
-        "Grid/cluster synchronization needs an explicit Loom cluster-sync "
-        "import policy.",
+        CoverageState.REJECTED,
+        "Cooperative-grid synchronization is recognized and rejected with a "
+        "grid-contract diagnostic until Loom has a grid sync operation and "
+        "launch residency contract.",
     ),
     OpCoverage(
         "tl.device_assert",
@@ -755,6 +756,12 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         OpFamily.TILELANG_OP,
         CoverageState.SUPPORTED,
         "Warp scalar bitwise-or reduction; maps to kernel.subgroup.reduce<ori>.",
+    ),
+    OpCoverage(
+        "tl.match_any_sync",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Full-mask warp match-any; maps to kernel.subgroup.match.any.",
     ),
     OpCoverage(
         "tl.access_ptr",

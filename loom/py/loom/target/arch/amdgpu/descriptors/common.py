@@ -535,6 +535,7 @@ class AmdgpuMemoryAddressForm(CEnum):
     DS_ADDTID = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID"
     FLAT = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT"
     GLOBAL_SMEM = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM"
+    SCRATCH_VADDR = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_SCRATCH_VADDR"
 
 
 class AmdgpuMemoryDescriptorDomain(CEnum):
@@ -543,6 +544,7 @@ class AmdgpuMemoryDescriptorDomain(CEnum):
     LDS = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS"
     GLOBAL_FLAT = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT"
     GLOBAL_SMEM = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SMEM"
+    SCRATCH = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_SCRATCH"
 
 
 class AmdgpuMemoryOperationKind(CEnum):
@@ -1084,6 +1086,26 @@ def _scc_state_read(field_name: str = "scc_in") -> Operand:
         _SCC_ALT,
         flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
         unit_count=1,
+    )
+
+
+def _vcc_state_read(field_name: str = "vcc_in") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _SGPR_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        unit_count=2,
+    )
+
+
+def _vcc_predicate(field_name: str) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.PREDICATE,
+        _SGPR_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        unit_count=2,
     )
 
 
@@ -2072,6 +2094,17 @@ def _scc_input(descriptor_operand: Operand) -> AmdgpuImplicitOperandOverlay:
     )
 
 
+def _vcc_input(descriptor_operand: Operand) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_VCC",
+        descriptor_operand=descriptor_operand,
+        data_format_name="FMT_NUM_M64",
+        size_bits=64,
+        is_input=True,
+        is_output=False,
+    )
+
+
 _SCC_CLOBBER_OUTPUT = _scc_output(_scc_clobber())
 
 _IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
@@ -2876,6 +2909,9 @@ __all__ = (
     "_source_inline_u32_immediate",
     "_stack_memory_effect",
     "_u32_immediate",
+    "_vcc_input",
+    "_vcc_predicate",
+    "_vcc_state_read",
     "_vgpr_agpr_const_operand",
     "_vgpr_agpr_operand",
     "_vgpr_agpr_result",

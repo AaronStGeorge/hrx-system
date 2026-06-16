@@ -11,6 +11,7 @@ from loom.importers.core import (
     create_kernel_module,
     kernel_module_ops,
     print_loom_module,
+    target_preset_amdgpu_subgroup_size,
 )
 from loom.ir import I32
 from loom.verify import verify_module
@@ -69,6 +70,11 @@ def test_create_kernel_module_splits_config_and_body_arguments() -> None:
     assert body_arg.name == "n"
     assert config_arg.type == I32
     assert body_arg.type == I32
+    with shell.builder.insertion_block(shell.body_block):
+        shell.builder.kernel.return_()
+    assert "} launch(%n: i32) {\n  kernel.return\n}" in print_loom_module(
+        shell.module, ops=kernel_module_ops("hip -mcpu=gfx1100")
+    )
 
 
 def test_create_kernel_module_uses_supported_amdgpu_target_record() -> None:
@@ -159,3 +165,10 @@ def test_create_kernel_module_uses_generic_amdgpu_target_record() -> None:
     assert _printed_kernel_module_for_target_preset(
         "hip -mcpu=gfx11-generic"
     ).startswith("amdgpu.target<gfx11-generic> @hip_mcpu_gfx11_generic\n")
+
+
+def test_target_preset_amdgpu_subgroup_size_uses_processor_facts() -> None:
+    assert target_preset_amdgpu_subgroup_size("hip -mcpu=gfx1100") == 32
+    assert target_preset_amdgpu_subgroup_size("hip -mcpu=gfx942") == 64
+    assert target_preset_amdgpu_subgroup_size("hip -mcpu=gfx11-generic") == 32
+    assert target_preset_amdgpu_subgroup_size("reference") is None

@@ -18,6 +18,7 @@ from loom.importers.tilelang.converter import (
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.nodes import dtype, node_kind, node_text, source_name
+from loom.importers.tilelang.ops.topology import integer_value
 from loom.ir import I1, INDEX, ShapedType, Type, TypeKind
 
 
@@ -257,6 +258,23 @@ def convert_binary_expr(
     if lhs is None:
         context.record_blocked(node_text(expr), "binary operands are not mapped")
         return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    if (
+        not index_like
+        and kind == "FloorMod"
+        and _is_integer_type(str(result_type))
+        and not _is_unsigned_dtype(dtype(expr))
+        and not _is_vector_type(lhs.type)
+        and _is_integer_type(str(lhs.type))
+    ):
+        result = _convert_signed_floor_mod_power_of_two_expr(
+            expr,
+            context,
+            lhs,
+            result_type,
+        )
+        if result is not None:
+            return result
     rhs_index_like = index_like or _is_index_type(lhs.type)
     rhs = converter.convert_expr(
         source_rhs,
@@ -293,11 +311,12 @@ def convert_binary_expr(
         )
         context.map_value(expr, result, "index")
         return result
-    result_type = context.type_converter.map_dtype(dtype(expr))
     if str(result_type).startswith("f"):
         scalar_builder_name = _BINARY_FLOAT_OPS.get(kind)
     elif _is_unsigned_dtype(dtype(expr)):
         scalar_builder_name = _BINARY_UNSIGNED_INTEGER_OPS.get(kind)
+    elif kind == "FloorMod" and _is_integer_type(str(result_type)):
+        return _convert_signed_floor_mod_expr(expr, context, lhs, rhs, result_type)
     else:
         scalar_builder_name = _BINARY_INTEGER_OPS.get(kind)
     if scalar_builder_name is None:
@@ -316,6 +335,113 @@ def convert_binary_expr(
             name=context.fresh_name(scalar_builder_name),
             **builder_kwargs,
         ),
+    )
+    context.map_value(expr, result, str(result_type))
+    return result
+
+
+def _convert_signed_floor_mod_power_of_two_expr(
+    expr: object,
+    context: TileLangConversionContext,
+    lhs: ValueRef,
+    result_type: Type,
+) -> ValueRef | None:
+    divisor = integer_value(getattr(expr, "b", None))
+    if divisor is None or divisor <= 0 or divisor & (divisor - 1) != 0:
+        return None
+    mask = context.ensure_typed_constant(
+        divisor - 1,
+        result_type,
+        "floor_mod_mask",
+    )
+    result = cast(
+        ValueRef,
+        context.builder.scalar.andi(
+            lhs=lhs,
+            rhs=mask,
+            results=[result_type],
+            name=context.fresh_name("floor_mod"),
+        ),
+    )
+    context.map_value(expr, result, str(result_type))
+    return result
+
+
+def _convert_signed_floor_mod_expr(
+    expr: object,
+    context: TileLangConversionContext,
+    lhs: ValueRef,
+    rhs: ValueRef,
+    result_type: Type,
+) -> ValueRef:
+    remainder = cast(
+        ValueRef,
+        context.builder.scalar.remsi(
+            lhs=lhs,
+            rhs=rhs,
+            results=[result_type],
+            name=context.fresh_name("remsi"),
+        ),
+    )
+    zero = context.ensure_typed_constant("0", result_type, "zero")
+    divisor_nonnegative = context.builder.scalar.cmpi(
+        predicate="sge",
+        lhs=rhs,
+        rhs=zero,
+        results=[I1],
+        name=context.fresh_name("divisor_nonnegative"),
+    )
+    remainder_nonnegative = context.builder.scalar.cmpi(
+        predicate="sge",
+        lhs=remainder,
+        rhs=zero,
+        results=[I1],
+        name=context.fresh_name("remainder_nonnegative"),
+    )
+    positive_case = context.builder.scalar.andi(
+        lhs=divisor_nonnegative,
+        rhs=remainder_nonnegative,
+        results=[I1],
+        name=context.fresh_name("positive_floor_mod"),
+    )
+    divisor_negative = context.builder.scalar.cmpi(
+        predicate="slt",
+        lhs=rhs,
+        rhs=zero,
+        results=[I1],
+        name=context.fresh_name("divisor_negative"),
+    )
+    remainder_nonpositive = context.builder.scalar.cmpi(
+        predicate="sle",
+        lhs=remainder,
+        rhs=zero,
+        results=[I1],
+        name=context.fresh_name("remainder_nonpositive"),
+    )
+    negative_case = context.builder.scalar.andi(
+        lhs=divisor_negative,
+        rhs=remainder_nonpositive,
+        results=[I1],
+        name=context.fresh_name("negative_floor_mod"),
+    )
+    keep_remainder = context.builder.scalar.ori(
+        lhs=positive_case,
+        rhs=negative_case,
+        results=[I1],
+        name=context.fresh_name("floor_mod_keep_remainder"),
+    )
+    adjusted = context.builder.scalar.addi(
+        lhs=remainder,
+        rhs=rhs,
+        results=[result_type],
+        name=context.fresh_name("floor_mod_adjusted"),
+    )
+    result = context.builder.scf.select(
+        condition=keep_remainder,
+        true_value=remainder,
+        false_value=adjusted,
+        results=[result_type],
+        name=context.fresh_name("floor_mod"),
     )
     context.map_value(expr, result, str(result_type))
     return result
@@ -690,7 +816,12 @@ def _is_float_type(value_type: str) -> bool:
 
 
 def _is_integer_type(value_type: str) -> bool:
-    return value_type != "i1" and value_type.startswith("i")
+    return (
+        value_type != "i1"
+        and len(value_type) > 1
+        and value_type[0] == "i"
+        and value_type[1].isdigit()
+    )
 
 
 def _is_unsigned_dtype(source_dtype: object) -> bool:
@@ -761,7 +892,6 @@ _BINARY_INTEGER_OPS = {
     "Sub": "subi",
     "Mul": "muli",
     "FloorDiv": "floordivsi",
-    "FloorMod": "remsi",
     "Mod": "remsi",
     "Div": "divsi",
     "Min": "minsi",

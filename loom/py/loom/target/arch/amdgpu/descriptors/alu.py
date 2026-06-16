@@ -695,6 +695,45 @@ def _v_add_co_ci_u32_overlay(
     )
 
 
+def _v_sub_co_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_sub_co_u32",
+        instruction_name="V_SUB_CO_U32",
+        mnemonic="v_sub_co_u32",
+        encoding_name="VOP3_SDST_ENC",
+        semantic_tag="integer.sub.borrow_out.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result("difference")),
+            AmdgpuOperandOverlay("SDST", _sgpr_result("borrow", units=2)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_sub_co_ci_u32_overlay(
+    *, instruction_name: str = "V_SUB_CO_CI_U32", mnemonic: str = "v_sub_co_ci_u32"
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_sub_co_ci_u32",
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="VOP3_SDST_ENC",
+        semantic_tag="integer.sub.borrow_in_out.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result("difference")),
+            AmdgpuOperandOverlay("SDST", _sgpr_result("borrow", units=2)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_operand("borrow_in", units=2)),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_sub_u32_overlay(instruction_name: str, mnemonic: str) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_sub_u32",
@@ -1458,6 +1497,23 @@ def _v_lshlrev_b32_vop3_immediate_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_lshlrev_b64_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_lshlrev_b64",
+        instruction_name="V_LSHLREV_B64",
+        mnemonic="v_lshlrev_b64",
+        encoding_name="ENC_VOP3",
+        semantic_tag="integer.shl.u64",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=2)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("shift")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("value", units=2)),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_lshl_add_u32_shift_immediate_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_lshl_add_u32.shift_imm",
@@ -1722,6 +1778,7 @@ def _integer_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_lshlrev_b32_src0_16_low16_overlay(),
         _v_lshlrev_b32_literal_overlay(),
         _v_lshlrev_b32_vop3_immediate_overlay(),
+        _v_lshlrev_b64_overlay(),
         _v_lshl_add_u32_shift_immediate_overlay(),
         _v_bfe_offset_width_inline_overlay(is_signed=False),
         _v_bfe_offset_width_inline_overlay(is_signed=True),
@@ -3239,6 +3296,66 @@ def _v_rcp_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_div_scale_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_div_scale_f32",
+        instruction_name="V_DIV_SCALE_F32",
+        mnemonic="v_div_scale_f32",
+        encoding_name="VOP3_SDST_ENC",
+        semantic_tag="float.div.scale.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SDST", _sgpr_result("mask", units=2)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("value")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("denominator")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("numerator")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_div_fmas_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_div_fmas_f32",
+        instruction_name="V_DIV_FMAS_F32",
+        mnemonic="v_div_fmas_f32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="float.div.fmas.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("c")),
+        ),
+        implicit_operands=(_vcc_input(_vcc_predicate("scale_mask")),),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "b", "c", "scale_mask"),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_div_fixup_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_div_fixup_f32",
+        instruction_name="V_DIV_FIXUP_F32",
+        mnemonic="v_div_fixup_f32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="float.div.fixup.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("quotient")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("denominator")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("numerator")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_cvt_f32_i32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_cvt_f32_i32",
@@ -4119,6 +4236,9 @@ __all__ = (
     "_v_cvt_pk_bf16_f32_overlay",
     "_v_cvt_pk_u16_u32_overlay",
     "_v_cvt_u32_f32_overlay",
+    "_v_div_fixup_f32_overlay",
+    "_v_div_fmas_f32_overlay",
+    "_v_div_scale_f32_overlay",
     "_v_cos_f32_overlay",
     "_v_exp_f32_overlay",
     "_s_fmaak_f32_overlay",
@@ -4156,6 +4276,7 @@ __all__ = (
     "_v_lshlrev_b32_src0_16_low16_overlay",
     "_v_lshlrev_b32_src0_inline_overlay",
     "_v_lshlrev_b32_vop3_immediate_overlay",
+    "_v_lshlrev_b64_overlay",
     "_v_lshrrev_b32_literal_overlay",
     "_v_lshrrev_b32_overlay",
     "_v_lshrrev_b32_src0_inline_overlay",
@@ -4207,6 +4328,8 @@ __all__ = (
     "_v_sub_f32_literal_overlay",
     "_v_sub_f32_overlay",
     "_v_sub_f32_src0_inline_overlay",
+    "_v_sub_co_ci_u32_overlay",
+    "_v_sub_co_u32_overlay",
     "_v_subrev_f32_literal_overlay",
     "_v_subrev_f32_overlay",
     "_v_subrev_f32_overlays",

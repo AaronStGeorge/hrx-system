@@ -210,6 +210,19 @@ class _DynamicScalarCollector:
 
     def _visit_structured(self, value: object, bound_keys: set[object]) -> None:
         kind = node_kind(value)
+        if kind == "SeqStmt":
+            seq_bound = bound_keys
+            for child in tuple(getattr(value, "seq", ()) or ()):
+                self.visit(child, seq_bound)
+                if node_kind(child) == "Bind":
+                    seq_bound = self._extend_bound(
+                        seq_bound,
+                        getattr(child, "var", None),
+                    )
+            return
+        if kind == "Bind":
+            self.visit(getattr(value, "value", None), bound_keys)
+            return
         if kind == "For":
             self.visit(getattr(value, "min", None), bound_keys)
             self.visit(getattr(value, "extent", None), bound_keys)
@@ -436,11 +449,10 @@ def _collect_nonrestrict_param_keys_from_stmt(
         )
         return
     if kind == "SeqStmt":
-        _collect_nonrestrict_param_keys_from_stmt(
-            getattr(value, "seq", ()),
-            keys,
-            visited=visited,
-        )
+        for child in tuple(getattr(value, "seq", ()) or ()):
+            _collect_nonrestrict_param_keys_from_stmt(child, keys, visited=visited)
+        return
+    if kind == "Bind":
         return
     if kind in (
         "Allocate",

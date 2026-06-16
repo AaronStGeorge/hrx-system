@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 LOOM_EXECUTE_SUBSTRATES = ("iree_hal", "iree_vm")
+LOOM_IMPORTERS = ("mlir", "tilelang")
 LOOM_TARGETS = ("amdgpu", "iree_vm", "llvmir", "spirv", "wasm", "x86")
 LOOM_EMITTERS = ("amdgpu", "iree_vm", "llvmir", "spirv", "wasm")
 HOST_DRIVERS = ("local-sync", "local-task", "null")
@@ -88,6 +89,10 @@ LOOM_EXECUTE_DEFINES = {
     "LOOM_EXECUTE_IREE_HAL": "iree_hal",
     "LOOM_EXECUTE_IREE_VM": "iree_vm",
 }
+LOOM_IMPORT_DEFINES = {
+    "LOOM_IMPORT_MLIR": "mlir",
+    "LOOM_IMPORT_TILELANG": "tilelang",
+}
 UNSUPPORTED_DRIVER_DEFINES = {
     "IREE_HAL_DRIVER_CUDA": "cuda",
     "IREE_HAL_DRIVER_METAL": "metal",
@@ -99,6 +104,7 @@ NATIVE_DRIVER_FLAG = "--//runtime/config/hal:drivers"
 NATIVE_LOOM_TARGET_FLAG = "--//loom/config/target:enable"
 NATIVE_LOOM_EMIT_FLAG = "--//loom/config/emit:enable"
 NATIVE_LOOM_EXECUTE_FLAG = "--//loom/config/execute:enable"
+NATIVE_LOOM_IMPORT_FLAG = "--//loom/config/import:enable"
 NATIVE_REPO_ENV_PREFIX = "--repo_env="
 TRUE_VALUES = frozenset(("1", "ON", "TRUE", "YES"))
 FALSE_VALUES = frozenset(("0", "OFF", "FALSE", "NO"))
@@ -119,8 +125,10 @@ class ConfigRequest:
     )
     loom_execute_source: str | None = None
     loom_emit_source: str | None = None
+    loom_import_source: str | None = None
     loom_target_source: str | None = None
     enabled_loom_emitters: set[str] = field(default_factory=set)
+    enabled_loom_importers: set[str] = field(default_factory=set)
     rocm_path: str | None = None
 
     def set_driver(self, driver: str, enabled: bool) -> None:
@@ -233,6 +241,34 @@ class ConfigRequest:
         self.loom_execute_source = "native"
         self.enabled_loom_execute = set(execute_values)
 
+    def set_loom_importer(self, importer: str, enabled: bool) -> None:
+        if self.loom_import_source == "native":
+            raise SystemExit(
+                "Do not mix portable -DLOOM_IMPORT_* options with the "
+                f"native {NATIVE_LOOM_IMPORT_FLAG}=... Bazel option."
+            )
+        self.loom_import_source = "portable"
+        if enabled:
+            self.enabled_loom_importers.add(importer)
+        else:
+            self.enabled_loom_importers.discard(importer)
+
+    def set_loom_importer_list(self, importers: set[str]) -> None:
+        if self.loom_import_source == "portable":
+            raise SystemExit(
+                "Do not mix portable -DLOOM_IMPORT_* options with the "
+                f"native {NATIVE_LOOM_IMPORT_FLAG}=... Bazel option."
+            )
+        unknown_importers = importers.difference(LOOM_IMPORTERS)
+        if unknown_importers:
+            raise SystemExit(
+                "Unknown Loom importer(s): {}".format(
+                    ", ".join(sorted(unknown_importers))
+                )
+            )
+        self.loom_import_source = "native"
+        self.enabled_loom_importers = set(importers)
+
     def set_rocm_path(self, path: str) -> None:
         rocm_path = resolve_rocm_path(path)
         if self.rocm_path is not None and self.rocm_path != rocm_path:
@@ -282,6 +318,7 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
   python build_tools/bazel/configure.py -DLOOM_TARGET_SPIRV=OFF
   python build_tools/bazel/configure.py -DLOOM_TARGET_AMDGPU=ON -DLOOM_EXECUTE_IREE_HAL=ON -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
   python build_tools/bazel/configure.py -DLOOM_TARGET_AMDGPU=ON -DLOOM_EMIT_LLVMIR=ON
+  python build_tools/bazel/configure.py -DLOOM_IMPORT_TILELANG=ON
 
 Portable -D project options are documented in BUILDING.md. Other Bazel-native
 overrides belong in .bazelrc.local.""",
@@ -373,6 +410,9 @@ def apply_define(request: ConfigRequest, define: str) -> None:
     if name in LOOM_EXECUTE_DEFINES:
         request.set_loom_execute(LOOM_EXECUTE_DEFINES[name], parse_bool(name, value))
         return
+    if name in LOOM_IMPORT_DEFINES:
+        request.set_loom_importer(LOOM_IMPORT_DEFINES[name], parse_bool(name, value))
+        return
     if name == "IREE_ROCM_PATH":
         request.set_rocm_path(value)
         return
@@ -424,6 +464,11 @@ def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
         return
     if arg == NATIVE_LOOM_EXECUTE_FLAG:
         raise SystemExit(f"{NATIVE_LOOM_EXECUTE_FLAG} must use --flag=value syntax.")
+    if arg.startswith(NATIVE_LOOM_IMPORT_FLAG + "="):
+        request.set_loom_importer_list(parse_string_list(arg.split("=", 1)[1]))
+        return
+    if arg == NATIVE_LOOM_IMPORT_FLAG:
+        raise SystemExit(f"{NATIVE_LOOM_IMPORT_FLAG} must use --flag=value syntax.")
     if arg.startswith(NATIVE_REPO_ENV_PREFIX):
         repo_env = arg[len(NATIVE_REPO_ENV_PREFIX) :]
         if "=" not in repo_env:
@@ -476,6 +521,10 @@ def ordered_loom_emitter_set(values: set[str]) -> list[str]:
 
 def ordered_loom_execute_set(values: set[str]) -> list[str]:
     return [execute for execute in LOOM_EXECUTE_SUBSTRATES if execute in values]
+
+
+def ordered_loom_importer_set(values: set[str]) -> list[str]:
+    return [importer for importer in LOOM_IMPORTERS if importer in values]
 
 
 def bazelrc_line(command: str, option: str) -> str:
@@ -532,7 +581,7 @@ def generate_config(args: argparse.Namespace) -> str:
             "--repo_env=IREE_DEPENDENCY_MODE=" + request.dependency_mode,
         ),
         "",
-        "# Loom target, execute substrate, and explicit debug emitter scope.",
+        "# Loom target, execute substrate, importer, and explicit debug emitter scope.",
         bazelrc_line(
             "build",
             "--//loom/config/target:enable="
@@ -542,6 +591,11 @@ def generate_config(args: argparse.Namespace) -> str:
             "build",
             "--//loom/config/execute:enable="
             + ",".join(ordered_loom_execute_set(request.enabled_loom_execute)),
+        ),
+        bazelrc_line(
+            "build",
+            "--//loom/config/import:enable="
+            + ",".join(ordered_loom_importer_set(request.enabled_loom_importers)),
         ),
         bazelrc_line(
             "build",

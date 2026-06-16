@@ -17,6 +17,7 @@ iree_execution_test_suite(
     "hip_authoring.test.json"
   TOOLS
     "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
+    "loom-compile=loom::tools::loom-compile"
     "loom-opt=loom::tools::loom-opt"
   DATA
     "lane_distribution.loom"
@@ -25,9 +26,87 @@ iree_execution_test_suite(
     "q8_hip_shaped_unroll_unresolved.loom"
     "q8_load_width.loom"
     "q8_q4_signedness.loom"
+    "shared_memory_tile.loom"
+    "shared_memory_transpose.loom"
+    "shared_memory_vector_tile.loom"
     "target_provider_selection.loom"
   LABELS
     "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "shared_memory_tile_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/hip/shared_memory_tile.loom}}"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--sample-compilation=per_sample"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "shared_memory_transpose_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/hip/shared_memory_transpose.loom}}"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--sample-compilation=per_sample"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "shared_memory_vector_tile_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/hip/shared_memory_vector_tile.loom}}"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--sample-compilation=per_sample"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 endif()
 

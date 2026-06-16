@@ -224,10 +224,12 @@ typedef struct loom_amdgpu_vector_extract_plan_t {
 } loom_amdgpu_vector_extract_plan_t;
 
 typedef struct loom_amdgpu_buffer_alloca_plan_t {
-  // Exact LDS allocation byte length proven during planning.
+  // Exact allocation byte length proven during planning.
   int64_t byte_length;
-  // Power-of-two LDS allocation byte alignment proven during planning.
+  // Power-of-two allocation byte alignment proven during planning.
   int64_t base_alignment;
+  // Low storage space reserved for the source allocation.
+  loom_storage_space_t storage_space;
 } loom_amdgpu_buffer_alloca_plan_t;
 
 typedef enum loom_amdgpu_table_index_kind_e {

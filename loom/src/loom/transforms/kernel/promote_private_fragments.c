@@ -31,7 +31,9 @@
     "Number of private scalar loads replaced with vector.extract.")   \
   V(statistics_type, loads_forwarded, "loads-forwarded",              \
     "Number of private scalar loads forwarded from a dominated "      \
-    "single store.")
+    "single store.")                                                  \
+  V(statistics_type, noop_stores_erased, "noop-stores-erased",        \
+    "Number of private load-store no-op pairs erased.")
 
 LOOM_PASS_STATISTICS_DEFINE(loom_promote_private_fragments_statistics,
                             loom_promote_private_fragments_statistics_t,
@@ -824,6 +826,74 @@ static iree_status_t loom_promote_private_fragments_try_static_slot_forward(
   return iree_ok_status();
 }
 
+static iree_status_t
+loom_promote_private_fragments_try_erase_static_slot_noop_stores(
+    loom_promote_private_fragments_context_t* context,
+    loom_value_id_t private_view, int64_t fragment_length, bool* out_changed) {
+  *out_changed = false;
+
+  loom_promote_private_fragments_op_list_t loads = {0};
+  loom_promote_private_fragments_op_list_t stores = {0};
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_initialize(
+      context->pass->arena, &loads));
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_initialize(
+      context->pass->arena, &stores));
+
+  const loom_value_t* view_value =
+      loom_module_value(context->module, private_view);
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(view_value, use) {
+    loom_op_t* store_op = loom_use_user_op(*use);
+    if (!loom_view_store_isa(store_op) || loom_use_operand_index(*use) != 1) {
+      continue;
+    }
+    int64_t store_slot_index = 0;
+    if (!loom_promote_private_fragments_is_static_slot_store(
+            context->module, store_op, private_view, fragment_length,
+            &store_slot_index)) {
+      continue;
+    }
+
+    loom_value_id_t stored_value = loom_view_store_value(store_op);
+    const loom_value_t* stored =
+        loom_module_value(context->module, stored_value);
+    if (loom_value_is_block_arg(stored) || !loom_value_has_single_use(stored)) {
+      continue;
+    }
+    loom_op_t* load_op = loom_value_def_op(stored);
+    int64_t load_slot_index = 0;
+    if (!loom_promote_private_fragments_is_static_slot_load(
+            context->module, load_op, private_view, fragment_length,
+            &load_slot_index) ||
+        load_slot_index != store_slot_index) {
+      continue;
+    }
+    if (load_op->parent_block != store_op->parent_block ||
+        load_op->next_op != store_op) {
+      continue;
+    }
+
+    IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_push(
+        context->pass->arena, &loads, load_op));
+    IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_push(
+        context->pass->arena, &stores, store_op));
+  }
+
+  for (iree_host_size_t i = 0; i < stores.count; ++i) {
+    loom_op_t* store_op = stores.ops[i];
+    loom_op_t* load_op = loads.ops[i];
+    if (iree_any_bit_set(store_op->flags, LOOM_OP_FLAG_DEAD) ||
+        iree_any_bit_set(load_op->flags, LOOM_OP_FLAG_DEAD)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_rewriter_erase(context->rewriter, store_op));
+    IREE_RETURN_IF_ERROR(loom_rewriter_erase(context->rewriter, load_op));
+    ++context->statistics->noop_stores_erased;
+    *out_changed = true;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_promote_private_fragments_process_view(
     loom_promote_private_fragments_context_t* context, loom_op_t* view_op,
     bool* out_changed) {
@@ -839,6 +909,11 @@ static iree_status_t loom_promote_private_fragments_process_view(
   }
 
   loom_value_id_t private_view = loom_buffer_view_result(view_op);
+  IREE_RETURN_IF_ERROR(
+      loom_promote_private_fragments_try_erase_static_slot_noop_stores(
+          context, private_view, fragment_length, out_changed));
+  if (*out_changed) return iree_ok_status();
+
   loom_promote_private_fragments_copy_loop_t copy_loop = {0};
   loom_promote_private_fragments_op_list_t loads = {0};
   bool promotable = false;

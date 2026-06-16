@@ -61,7 +61,8 @@ python dev.py cmake build hrx --parallel 8
 python dev.py cmake test -R hrx
 ```
 
-Generated aliases follow the same shape:
+After setup, generated aliases follow the same shape. They are the stable
+spelling for docs, scripts, and agent instructions:
 
 ```bash
 iree-bazel-build //runtime/... --config=presubmit
@@ -72,13 +73,12 @@ iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON
 iree-cmake-test -R hrx
 ```
 
-The repo also checks in POSIX Bazel launchers under `build_tools/bin/` for
-paths that need a stable source-tree wrapper:
+PATH aliases are also the stable spelling for launcher-backed commands:
 
 ```bash
-build_tools/bin/iree-bazel-query 'rdeps(//runtime/..., //runtime/src/iree/base)'
-build_tools/bin/iree-bazel-cquery --output=files //runtime/src/iree/base
-build_tools/bin/iree-bazel-try -e 'int main() { return 0; }'
+iree-bazel-query 'rdeps(//runtime/..., //runtime/src/iree/base)'
+iree-bazel-cquery --output=files //runtime/src/iree/base
+iree-bazel-try -e 'int main() { return 0; }'
 ```
 
 `iree-bazel-run`, `iree-bazel-try`, and `iree-bazel-fuzz` build first and then
@@ -106,8 +106,10 @@ python dev.py bazel test //runtime/src/iree/async/... --config=tsan
 
 ## IREE CI Reproduction
 
-IREE source-tree CI is run through `build_tools/devtools/ci.py` so GitHub
-workflow failures have copyable local commands. Command names are
+IREE source-tree CI is run through the repo-local CI command script so GitHub
+workflow failures have copyable local commands. This is the script-backed
+surface; ordinary build/test docs use the `iree-bazel-*` and `iree-cmake-*`
+PATH aliases above. Command names are
 `iree-<build-system>-<target-group>[-<configuration>]`. Bazel jobs take explicit
 target patterns. CMake jobs use generated CTest names and labels directly.
 
@@ -360,6 +362,21 @@ target set plus explicit debug emitters and execution substrates.
 
 Other Bazel-native overrides belong in `.bazelrc.local`.
 
+## Loom Importers
+
+Importer frontends are optional dependency lanes. Start with the importer-local
+docs instead of expanding the root build surface:
+
+```bash
+ls loom/py/loom/importers
+```
+
+The entry point is `loom/py/loom/importers/README.md`. It explains importer
+build selection, managed importer Python environments, and the current
+TileLang/MLIR split. Managed importer environments are selected with
+`python dev.py importers setup <name>` and consumed by Bazel/CMake through
+`--importer-env <name>`.
+
 ## Project Availability
 
 CMake has project availability options because it configures a package build
@@ -403,11 +420,6 @@ using a different tree.
 ```bash
 python dev.py bazel build //runtime/...
 bazel build //runtime/...
-```
-
-```bash
-python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=pinned
-python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=pinned
 ```
 
 ```bash

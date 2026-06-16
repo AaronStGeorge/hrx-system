@@ -21,6 +21,7 @@ def test_parse_amdgpu_mnemonic_accepts_objdump_address_forms() -> None:
     )
     assert parse_amdgpu_mnemonic("0000000000000000 <kernel>:") is None
     assert parse_amdgpu_mnemonic("Disassembly of section .text:") is None
+    assert parse_amdgpu_mnemonic("      s_code_end") is None
 
 
 def test_summarize_amdgpu_disassembly_reports_families_and_mnemonics() -> None:
@@ -35,6 +36,7 @@ def test_summarize_amdgpu_disassembly_reports_families_and_mnemonics() -> None:
       v_mfma_f32_16x16x16f16 a[0:7], v[0:1], v[2:3], a[0:7]
       v_add_u32_e32 v0, v1, v2
       s_endpgm
+      s_code_end
 """
     )
 

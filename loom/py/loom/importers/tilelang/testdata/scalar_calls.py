@@ -143,6 +143,58 @@ kernel.def target(@hip_mcpu_gfx1100) export("bitwise_not") @bitwise_not() {
 
 
 # ====
+@tilelang_case(
+    name="signed_floormod_power_of_two",
+    category="op",
+    tags=("call", "integer"),
+)
+def signed_floormod_power_of_two(tir: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir, dtype="int64")
+    load = tir.BufferLoad(src_buffer, [tir.IntImm("int32", 0)])
+    body = tir.BufferStore(
+        dst_buffer,
+        load % tir.IntImm("int64", 64),
+        [tir.IntImm("int32", 0)],
+    )
+    prim_func = _prim_func(
+        tir,
+        name="signed_floormod_power_of_two",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
+    )
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip -mcpu=gfx1100",
+        name="signed_floormod_power_of_two",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("signed_floormod_power_of_two") @signed_floormod_power_of_two() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch(%src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xi64, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi64, %layout>
+  %c0 = index.constant 0 : index
+  %load = view.load %src_view[%c0] : view<4xi64, %layout> -> i64
+  %floor_mod_mask = scalar.constant 63 : i64
+  %floor_mod = scalar.andi %load, %floor_mod_mask : i64
+  view.store %floor_mod, %dst_view[%c0] : i64, view<4xi64, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(name="dynamic_loop_bound", category="op", tags=("index", "loop"))
 def dynamic_loop_bound(tir: Any) -> TileLangImportInput:
     n = tir.Var("n", "int32")

@@ -176,9 +176,11 @@ def configure_plan(
     *,
     configured_build_dir: Path | None,
     backend_args: list[str],
+    env: dict[str, str] | None = None,
 ) -> CommandPlan:
     requested_build_dir = build_dir(configured_build_dir)
     codemodel_query_path = cmake_file_api.codemodel_query_path(requested_build_dir)
+    command_env = tool_env.path_env() if env is None else env
     return CommandPlan(
         [
             EnsureDirectoryStep(codemodel_query_path.parent),
@@ -197,7 +199,7 @@ def configure_plan(
                     *backend_args,
                 ],
                 cwd=REPO_ROOT,
-                env=tool_env.path_env(),
+                env=command_env,
                 label="configure cmake",
             ),
             EnsureDirectoryStep(CMAKE_STATE_DIR),
@@ -279,6 +281,7 @@ def run_plan(
     configured_build_dir: Path | None,
     backend_args: list[str],
     run_cwd: Path | None = None,
+    env: dict[str, str] | None = None,
 ) -> CommandPlan:
     command = parse_run_args(backend_args, run_cwd=run_cwd)
     return CommandPlan(
@@ -286,7 +289,7 @@ def run_plan(
             CMakeRunStep(
                 command,
                 build_dir(configured_build_dir),
-                env=tool_env.path_env(),
+                env=tool_env.path_env() if env is None else env,
             )
         ]
     )
@@ -383,6 +386,7 @@ def build_plan(
     *,
     configured_build_dir: Path | None,
     backend_args: list[str],
+    env: dict[str, str] | None = None,
 ) -> CommandPlan:
     return CommandPlan(
         [
@@ -397,7 +401,7 @@ def build_plan(
                     ),
                 ],
                 cwd=REPO_ROOT,
-                env=tool_env.path_env(),
+                env=tool_env.path_env() if env is None else env,
                 label="cmake build",
             )
         ]
@@ -409,6 +413,7 @@ def test_plan(
     *,
     configured_build_dir: Path | None,
     backend_args: list[str],
+    env: dict[str, str] | None = None,
 ) -> CommandPlan:
     return CommandPlan(
         [
@@ -421,7 +426,7 @@ def test_plan(
                     *backend_args,
                 ],
                 cwd=REPO_ROOT,
-                env=tool_env.path_env(),
+                env=tool_env.path_env() if env is None else env,
                 label="cmake test",
             )
         ]

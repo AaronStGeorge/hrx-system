@@ -289,10 +289,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
       %const_2 = scalar.constant 0 : i64
       %cmp = scalar.cmpi sge, %group_idx_assumed, %const_2 : i64
       %const_3 = scalar.constant 1 : i64
-      %const_4 = scalar.constant 64 : i64
-      %remsi = scalar.remsi %group_idx_assumed, %const_4 : i64
-      %shli = scalar.shli %const_3, %remsi : i64
+      %floor_mod_mask = scalar.constant 63 : i64
+      %floor_mod = scalar.andi %group_idx_assumed, %floor_mod_mask : i64
+      %shli = scalar.shli %const_3, %floor_mod : i64
       %select = scf.select %cmp, %shli, %const_2 : i64
+      %const_4 = scalar.constant 64 : i64
       %cmp_2 = scalar.cmpi slt, %group_idx_assumed, %const_4 : i64
       %select_2 = scf.select %cmp_2, %select, %const_2 : i64
       %cmp_3 = scalar.cmpi sge, %group_idx_assumed, %const_4 : i64

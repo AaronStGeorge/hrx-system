@@ -12,8 +12,19 @@ from dataclasses import dataclass
 from typing import cast
 
 from loom.builder import ValueRef
-from loom.importers.tilelang.buffers import resolve_buffer_access
-from loom.importers.tilelang.context import TileLangConversionContext
+from loom.importers.core import (
+    target_preset_amdgpu_kind,
+    target_preset_amdgpu_subgroup_size,
+)
+from loom.importers.tilelang.buffers import (
+    TileLangBufferAccess,
+    convert_index_sequence,
+    resolve_buffer_access,
+)
+from loom.importers.tilelang.context import (
+    TileLangConversionContext,
+    TileLangFragmentVector,
+)
 from loom.importers.tilelang.converter import (
     ExpressionOptions,
     TileLangConverter,
@@ -29,7 +40,18 @@ from loom.importers.tilelang.ops.tileops import (
     is_tileop_call,
 )
 from loom.importers.tilelang.ops.topology import integer_value
-from loom.ir import I1, I32, INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
+from loom.ir import (
+    I1,
+    I32,
+    INDEX,
+    EncodingInstance,
+    ScalarType,
+    ScalarTypeKind,
+    ShapedType,
+    StaticDim,
+    Type,
+    TypeKind,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +86,38 @@ class AccessPtrValue:
     rw_mask: int
 
 
+@dataclass(frozen=True, slots=True)
+class TvmMfmaDescriptor:
+    """Decoded TileLang MFMA intrinsic descriptor."""
+
+    m: int
+    n: int
+    k: int
+    lhs_family: str
+    rhs_family: str
+    accumulator_dtype: str
+
+
+@dataclass(frozen=True, slots=True)
+class TvmMfmaOperandFormat:
+    """TileLang operand dtype interpreted as a packed matrix operand."""
+
+    element_format: str
+    lane_count: int
+    payload_register_count: int
+    source_element_type: ScalarType
+    payload_type: ShapedType
+
+
+@dataclass(frozen=True, slots=True)
+class TvmMfmaAccumulatorPayload:
+    """Accumulator payload plus the destination chunk it updates."""
+
+    init: ValueRef
+    view: ValueRef
+    store_indices: tuple[ValueRef, ...] | None = None
+
+
 def register(registry: TileLangConverterRegistry) -> None:
     registry.register_expression("Call", convert_call)
 
@@ -82,6 +136,14 @@ def convert_call(
         return None
     if is_tileop_call(op_name):
         return convert_tileop_call(expr, context, converter, options, op_name)
+    if op_name in _TVM_MFMA_CALLS:
+        return _convert_tvm_mfma_call(
+            expr,
+            context,
+            converter,
+            op_name,
+            options=options,
+        )
     if _annotations(expr):
         context.record_blocked(
             node_text(expr),
@@ -149,6 +211,8 @@ def convert_call(
         return _convert_warp_shuffle_call(expr, context, converter, op_name)
     if op_name in _WARP_REDUCE_CALLS:
         return _convert_warp_reduce_call(expr, context, converter, op_name)
+    if op_name in _WARP_MATCH_ANY_CALLS:
+        return _convert_warp_match_any_call(expr, context, converter, op_name)
     if op_name in _INFINITY_CALLS:
         return _convert_infinity_call(expr, context, op_name)
     if op_name in _REINTERPRET_CALLS:
@@ -187,16 +251,16 @@ def call_op_name(call: object) -> str | None:
         return None
     name = getattr(op, "name", None)
     if name:
-        return str(name)
+        return _canonical_op_name(str(name))
     get_name = getattr(op, "get_name", None)
     if get_name is not None:
         resolved_name = get_name()
         if resolved_name:
-            return str(resolved_name)
+            return _canonical_op_name(str(resolved_name))
     if isinstance(op, str):
-        return op
+        return _canonical_op_name(op)
     text = str(op)
-    return text if text else None
+    return _canonical_op_name(text) if text else None
 
 
 def is_thread_return_call(call: object) -> bool:
@@ -666,6 +730,8 @@ def _convert_warp_reduce_call(
             f"call `{op_name}` operand type {value.type} is not supported",
         )
         return None
+    if not _require_tilelang_warp_matches_target(expr, context, op_name):
+        return None
     result = context.builder.kernel.subgroup_reduce(
         kind=kind,
         value=value,
@@ -695,6 +761,8 @@ def _convert_warp_shuffle_call(
             node_text(expr),
             f"call `{op_name}` mask must be the full warp mask",
         )
+        return None
+    if not _require_tilelang_warp_matches_target(expr, context, op_name):
         return None
     value = converter.convert_expr(args[1], context)
     offset = converter.convert_expr(args[2], context)
@@ -939,6 +1007,8 @@ def _convert_match_any_sync_call_extern(
             ),
         )
         return None
+    if not _require_tilelang_warp_matches_target(expr, context, f"{op_name}:{callee}"):
+        return None
     value = converter.convert_expr(args[2], context)
     if value is None:
         context.record_blocked(
@@ -965,6 +1035,649 @@ def _convert_match_any_sync_call_extern(
     return result
 
 
+def _convert_tvm_mfma_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+    *,
+    options: ExpressionOptions,
+) -> ValueRef | None:
+    if not options.effect:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` is effect-only and must appear under tir.Evaluate",
+        )
+        return None
+    args = _args(expr)
+    if len(args) != 12:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects 12 descriptor operands",
+        )
+        return None
+    amdgpu_kind = target_preset_amdgpu_kind(context.target_preset)
+    if amdgpu_kind not in _CDNA_FP8_TARGET_KINDS:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` requires an AMDGPU CDNA FP8 target",
+        )
+        return None
+    descriptor = _decode_tvm_mfma_descriptor(expr, context, op_name, args[0])
+    if descriptor is None:
+        return None
+    lhs_format = _decode_tvm_mfma_operand_format(expr, context, op_name, args[3])
+    rhs_format = _decode_tvm_mfma_operand_format(expr, context, op_name, args[4])
+    accumulator_type = context.type_converter.map_dtype(_string_value(args[5]))
+    if lhs_format is None or rhs_format is None:
+        return None
+    if descriptor.lhs_family != "fp8" or descriptor.rhs_family != "fp8":
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` only imports fp8/fp8 MFMA operands",
+        )
+        return None
+    if str(accumulator_type) != "vector<4xf32>":
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` requires a float32x4 accumulator payload",
+        )
+        return None
+    lhs = _load_tvm_mfma_fragment_payload(
+        expr,
+        context,
+        converter,
+        op_name,
+        role="lhs",
+        buffer=args[8],
+        index=args[9],
+        logical_rows=descriptor.m,
+        logical_columns=descriptor.k,
+        operand_format=lhs_format,
+    )
+    rhs = _load_tvm_mfma_fragment_payload(
+        expr,
+        context,
+        converter,
+        op_name,
+        role="rhs",
+        buffer=args[6],
+        index=args[7],
+        logical_rows=descriptor.k,
+        logical_columns=descriptor.n,
+        operand_format=rhs_format,
+    )
+    accumulator = _load_tvm_mfma_accumulator_payload(
+        expr,
+        context,
+        converter,
+        op_name,
+        buffer=args[10],
+        index=args[11],
+        logical_rows=descriptor.m,
+        logical_columns=descriptor.n,
+        payload_type=accumulator_type,
+    )
+    if lhs is None or rhs is None or accumulator is None:
+        return None
+
+    result = context.builder.vector.mma(
+        lhs=lhs,
+        rhs=rhs,
+        init=accumulator.init,
+        results=[accumulator_type],
+        name=context.fresh_name("mfma"),
+    )
+    context.clear_matrix_fragment(accumulator.view)
+    if accumulator.store_indices is None:
+        context.map_fragment_vector(
+            accumulator.view,
+            TileLangFragmentVector(value=result, lane_count=4),
+        )
+    else:
+        context.clear_fragment_vector(accumulator.view)
+        context.invalidate_buffer_accesses(accumulator.view)
+        context.builder.vector.store(
+            value=result,
+            view=accumulator.view,
+            indices=list(accumulator.store_indices),
+        )
+    context.record_converted(node_text(expr), "tl.tvm_mfma cdna fp8")
+    return None
+
+
+def _decode_tvm_mfma_descriptor(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+    descriptor_source: object,
+) -> TvmMfmaDescriptor | None:
+    descriptor = _string_value(descriptor_source)
+    parts = descriptor.split("_")
+    if len(parts) != 4:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` descriptor `{descriptor}` is not imported",
+        )
+        return None
+    accumulator_dtype, shape_text, lhs_family, rhs_family = parts
+    shape_parts = shape_text.split("x")
+    if len(shape_parts) != 3 or not all(part.isdecimal() for part in shape_parts):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` descriptor `{descriptor}` has an unknown shape",
+        )
+        return None
+    m, n, k = (int(part) for part in shape_parts)
+    if (accumulator_dtype, m, n, k) != ("f32", 16, 16, 32):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` only imports f32_16x16x32 MFMA descriptors",
+        )
+        return None
+    return TvmMfmaDescriptor(
+        m=m,
+        n=n,
+        k=k,
+        lhs_family=lhs_family,
+        rhs_family=rhs_family,
+        accumulator_dtype=accumulator_dtype,
+    )
+
+
+def _decode_tvm_mfma_operand_format(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+    dtype_source: object,
+) -> TvmMfmaOperandFormat | None:
+    dtype_text = _string_value(dtype_source)
+    element_dtype, separator, lane_count_text = dtype_text.rpartition("x")
+    if not separator or not lane_count_text.isdecimal():
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` operand dtype `{dtype_text}` is not a vector dtype",
+        )
+        return None
+    lane_count = int(lane_count_text)
+    if lane_count != 8:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` only imports fp8x8 MFMA operands",
+        )
+        return None
+    element_type = _TVM_MFMA_FP8_ELEMENT_TYPES.get(element_dtype)
+    element_format = _TVM_MFMA_FP8_ELEMENT_FORMATS.get(element_dtype)
+    if element_type is None or element_format is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` operand dtype `{dtype_text}` is not imported",
+        )
+        return None
+    return TvmMfmaOperandFormat(
+        element_format=element_format,
+        lane_count=lane_count,
+        payload_register_count=2,
+        source_element_type=element_type,
+        payload_type=context.type_converter.vector_type(I32, 2),
+    )
+
+
+def _load_tvm_mfma_fragment_payload(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+    *,
+    role: str,
+    buffer: object,
+    index: object,
+    logical_rows: int,
+    logical_columns: int,
+    operand_format: TvmMfmaOperandFormat,
+) -> ValueRef | None:
+    access = _resolve_tvm_mfma_fragment_access(
+        expr,
+        context,
+        converter,
+        op_name,
+        buffer=buffer,
+        index=index,
+        role=role,
+    )
+    if access is None:
+        return None
+    fragment_value = context.fragment_vector(access.view)
+    if fragment_value is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` {role} operand has no tracked local.fragment value",
+        )
+        return None
+    payload = _slice_tvm_mfma_source_payload(
+        expr,
+        context,
+        op_name,
+        role=role,
+        access=access,
+        fragment_value=fragment_value,
+        operand_format=operand_format,
+    )
+    if payload is None:
+        return None
+    rows = context.ensure_constant(str(logical_rows), "index", f"c{logical_rows}")
+    columns = context.ensure_constant(
+        str(logical_columns),
+        "index",
+        f"c{logical_columns}",
+    )
+    schema = _tvm_mfma_matrix_schema(context, operand_format)
+    return context.builder.vector.fragment(
+        role=role,
+        data=payload,
+        rows=rows,
+        columns=columns,
+        params={"schema": schema},
+        results=[operand_format.payload_type],
+        name=context.fresh_name(role),
+    )
+
+
+def _resolve_tvm_mfma_fragment_access(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+    *,
+    buffer: object,
+    index: object,
+    role: str,
+) -> TileLangBufferAccess | None:
+    access = _resolve_tvm_mfma_named_buffer_access(
+        expr,
+        context,
+        converter,
+        buffer=buffer,
+        index=index,
+    )
+    if access is None:
+        access = resolve_buffer_access(
+            buffer,
+            (index,),
+            context,
+            converter,
+            diagnostic_owner=expr,
+        )
+    if access is None:
+        return None
+    if (
+        access.memory_scope != "local.fragment"
+        and context.fragment_vector(access.view) is None
+        and context.matrix_fragment(access.view) is None
+    ):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` {role} operand must read tracked fragment storage",
+        )
+        return None
+    return access
+
+
+def _resolve_tvm_mfma_named_buffer_access(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    buffer: object,
+    index: object,
+) -> TileLangBufferAccess | None:
+    named_buffer = context.mapped_named_buffer(buffer)
+    if named_buffer is None:
+        return None
+    view, source_buffer = named_buffer
+    indices = convert_index_sequence(
+        (index,),
+        expr,
+        context,
+        converter,
+        what="tl.tvm_mfma buffer index",
+    )
+    if indices is None:
+        return None
+    return TileLangBufferAccess(
+        view=view,
+        indices=indices,
+        memory_scope=_buffer_scope(source_buffer),
+    )
+
+
+def _slice_tvm_mfma_source_payload(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+    *,
+    role: str,
+    access: TileLangBufferAccess,
+    fragment_value: TileLangFragmentVector,
+    operand_format: TvmMfmaOperandFormat,
+) -> ValueRef | None:
+    if str(fragment_value.value.type) == str(operand_format.payload_type):
+        if not _access_is_static_zero(access, context):
+            context.record_blocked(
+                node_text(expr),
+                f"call `{op_name}` {role} packed fragment index is not zero",
+            )
+            return None
+        return fragment_value.value
+    source_vector_type = context.type_converter.vector_type(
+        operand_format.source_element_type,
+        operand_format.lane_count,
+    )
+    if not _fragment_value_can_slice_as(fragment_value, source_vector_type):
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` {role} operand source type "
+                f"{fragment_value.value.type} does not match {source_vector_type}"
+            ),
+        )
+        return None
+    payload_lanes = context.builder.vector.slice(
+        source=fragment_value.value,
+        offsets=list(access.indices),
+        results=[source_vector_type],
+        name=context.fresh_name(f"{role}_lanes"),
+    )
+    return context.builder.vector.bitcast(
+        input=payload_lanes,
+        results=[operand_format.payload_type],
+        name=context.fresh_name(f"{role}_payload"),
+    )
+
+
+def _fragment_value_can_slice_as(
+    fragment_value: TileLangFragmentVector,
+    slice_type: ShapedType,
+) -> bool:
+    source_type = fragment_value.value.type
+    if (
+        not isinstance(source_type, ShapedType)
+        or source_type.type_kind != TypeKind.VECTOR
+    ):
+        return False
+    if source_type.element_type != slice_type.element_type:
+        return False
+    return len(source_type.dims) == len(slice_type.dims) == 1
+
+
+def _load_tvm_mfma_accumulator_payload(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+    *,
+    buffer: object,
+    index: object,
+    logical_rows: int,
+    logical_columns: int,
+    payload_type: Type,
+) -> TvmMfmaAccumulatorPayload | None:
+    access = _resolve_tvm_mfma_fragment_access(
+        expr,
+        context,
+        converter,
+        op_name,
+        buffer=buffer,
+        index=index,
+        role="accumulator",
+    )
+    if access is None:
+        return None
+    fragment_value = context.fragment_vector(access.view)
+    if fragment_value is not None:
+        if str(fragment_value.value.type) != str(payload_type):
+            context.record_blocked(
+                node_text(expr),
+                (
+                    f"call `{op_name}` accumulator source type "
+                    f"{fragment_value.value.type} does not match {payload_type}"
+                ),
+            )
+            return None
+        if not _access_is_static_zero(access, context):
+            context.record_blocked(
+                node_text(expr),
+                f"call `{op_name}` cannot update a partial accumulator fragment yet",
+            )
+            return None
+        return TvmMfmaAccumulatorPayload(
+            init=_wrap_tvm_mfma_accumulator_fragment(
+                context,
+                fragment_value.value,
+                logical_rows,
+                logical_columns,
+            ),
+            view=access.view,
+        )
+    matrix_fragment = context.matrix_fragment(access.view)
+    if matrix_fragment is not None and _access_is_static_zero(access, context):
+        return TvmMfmaAccumulatorPayload(init=matrix_fragment.value, view=access.view)
+    chunk_origin = _tvm_mfma_accumulator_chunk_origin(
+        expr,
+        context,
+        op_name,
+        access,
+        payload_type,
+    )
+    if chunk_origin is None:
+        return None
+    payload = context.builder.vector.load(
+        view=access.view,
+        indices=list(chunk_origin),
+        results=[payload_type],
+        name=context.fresh_name("acc_payload"),
+    )
+    return TvmMfmaAccumulatorPayload(
+        init=_wrap_tvm_mfma_accumulator_fragment(
+            context,
+            payload,
+            logical_rows,
+            logical_columns,
+        ),
+        view=access.view,
+        store_indices=chunk_origin,
+    )
+
+
+def _tvm_mfma_accumulator_chunk_origin(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+    access: TileLangBufferAccess,
+    payload_type: Type,
+) -> tuple[ValueRef, ...] | None:
+    view_type = context.builder.module.values[access.view.id].type
+    if not isinstance(view_type, ShapedType) or view_type.type_kind != TypeKind.VIEW:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` accumulator target is not a shaped view",
+        )
+        return None
+    if (
+        not isinstance(payload_type, ShapedType)
+        or payload_type.type_kind != TypeKind.VECTOR
+        or len(payload_type.dims) != 1
+        or not isinstance(payload_type.dims[0], StaticDim)
+    ):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` accumulator payload is not a static vector chunk",
+        )
+        return None
+    if len(access.indices) != 1:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` accumulator chunk index is not rank-1",
+        )
+        return None
+    chunk_lanes = payload_type.dims[0].size
+    if chunk_lanes <= 0:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` accumulator chunk has no lanes",
+        )
+        return None
+    if len(view_type.dims) == 1:
+        chunk_offset = context.builder.index.mul(
+            lhs=access.indices[0],
+            rhs=context.ensure_constant(str(chunk_lanes), "index", f"c{chunk_lanes}"),
+            results=[INDEX],
+            name=context.fresh_name("acc_offset"),
+        )
+        return (chunk_offset,)
+    if len(view_type.dims) != 2:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` accumulator view rank {len(view_type.dims)} "
+                "is not imported"
+            ),
+        )
+        return None
+    columns = view_type.dims[1]
+    if not isinstance(columns, StaticDim):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` accumulator trailing dimension is not static",
+        )
+        return None
+    if columns.size % chunk_lanes != 0:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` accumulator trailing dimension {columns.size} "
+                f"is not divisible by vector chunk {chunk_lanes}"
+            ),
+        )
+        return None
+    chunks_per_row = columns.size // chunk_lanes
+    chunks_per_row_value = context.ensure_constant(
+        str(chunks_per_row),
+        "index",
+        f"c{chunks_per_row}",
+    )
+    row = context.builder.index.div(
+        lhs=access.indices[0],
+        rhs=chunks_per_row_value,
+        results=[INDEX],
+        name=context.fresh_name("acc_row"),
+    )
+    chunk = context.builder.index.rem(
+        lhs=access.indices[0],
+        rhs=chunks_per_row_value,
+        results=[INDEX],
+        name=context.fresh_name("acc_chunk"),
+    )
+    column = context.builder.index.mul(
+        lhs=chunk,
+        rhs=context.ensure_constant(str(chunk_lanes), "index", f"c{chunk_lanes}"),
+        results=[INDEX],
+        name=context.fresh_name("acc_column"),
+    )
+    return (row, column)
+
+
+def _wrap_tvm_mfma_accumulator_fragment(
+    context: TileLangConversionContext,
+    payload: ValueRef,
+    logical_rows: int,
+    logical_columns: int,
+) -> ValueRef:
+    rows = context.ensure_constant(str(logical_rows), "index", f"c{logical_rows}")
+    columns = context.ensure_constant(
+        str(logical_columns),
+        "index",
+        f"c{logical_columns}",
+    )
+    return context.builder.vector.fragment(
+        role="init",
+        data=payload,
+        rows=rows,
+        columns=columns,
+        results=[payload.type],
+        name=context.fresh_name("init"),
+    )
+
+
+def _tvm_mfma_matrix_schema(
+    context: TileLangConversionContext,
+    operand_format: TvmMfmaOperandFormat,
+) -> ValueRef:
+    return context.storage_schema_value(
+        EncodingInstance(
+            name="matrix_operand",
+            params=(
+                ("element_format", operand_format.element_format),
+                ("payload_elements", operand_format.lane_count),
+                ("payload_registers", operand_format.payload_register_count),
+            ),
+        )
+    )
+
+
+def _access_is_static_zero(
+    access: TileLangBufferAccess,
+    context: TileLangConversionContext,
+) -> bool:
+    zero = context.constants.get(("index", "0"))
+    return zero is not None and all(index.id == zero.id for index in access.indices)
+
+
+def _convert_warp_match_any_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+) -> ValueRef | None:
+    args = _args(expr)
+    if len(args) != 2:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects mask and value",
+        )
+        return None
+    mask = integer_value(args[0])
+    if mask != _FULL_WARP_MASK:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` mask must be the full warp mask",
+        )
+        return None
+    if not _require_tilelang_warp_matches_target(expr, context, op_name):
+        return None
+    value = converter.convert_expr(args[1], context)
+    if value is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` value is not mapped",
+        )
+        return None
+    if _is_vector_type(value.type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` vector values are not imported",
+        )
+        return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    result = context.builder.kernel.subgroup_match_any(
+        value=value,
+        results=[result_type],
+        name=context.fresh_name("match_any"),
+    )
+    _map_call_result(expr, context, result, op_name)
+    return result
+
+
 def _convert_effect_call(
     expr: object,
     context: TileLangConversionContext,
@@ -987,6 +1700,9 @@ def _convert_effect_call(
         return None
     if op_name in _WARP_SYNC_CALLS:
         _convert_warp_sync_call(expr, context, op_name)
+        return None
+    if op_name in _GRID_SYNC_CALLS:
+        _convert_grid_sync_call(expr, context, op_name)
         return None
     if op_name in _DEVICE_ASSERT_CALLS:
         _convert_device_assert_call(expr, context, converter, op_name)
@@ -1332,6 +2048,21 @@ def _convert_storage_sync_call(
     context.record_converted(node_text(expr), "kernel.barrier<workgroup>")
 
 
+def _convert_grid_sync_call(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+) -> None:
+    context.record_blocked(
+        node_text(expr),
+        (
+            f"call `{op_name}` requires cooperative-grid launch residency and "
+            "a Loom grid synchronization contract; it cannot be imported as a "
+            "workgroup barrier"
+        ),
+    )
+
+
 def _convert_warp_sync_call(
     expr: object,
     context: TileLangConversionContext,
@@ -1350,6 +2081,8 @@ def _convert_warp_sync_call(
             node_text(expr),
             f"call `{op_name}` mask must be the full warp mask",
         )
+        return
+    if not _require_tilelang_warp_matches_target(expr, context, op_name):
         return
     context.builder.kernel.barrier(
         memory_space="workgroup",
@@ -1397,6 +2130,24 @@ def _record_unsupported_call(
         node_text(expr),
         f"call `{op_name}` coverage state is {row.state.value}: {row.note}",
     )
+
+
+def _require_tilelang_warp_matches_target(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+) -> bool:
+    target_subgroup_size = target_preset_amdgpu_subgroup_size(context.target_preset)
+    if target_subgroup_size is None or target_subgroup_size == _TILELANG_WARP_WIDTH:
+        return True
+    context.record_blocked(
+        node_text(expr),
+        (
+            f"call `{op_name}` TileLang warp width {_TILELANG_WARP_WIDTH} does "
+            f"not match AMDGPU target subgroup width {target_subgroup_size}"
+        ),
+    )
+    return False
 
 
 def _scalar_integer_builder(builder_name: str, source_dtype: object) -> str:
@@ -1507,6 +2258,35 @@ def _string_value(value: object) -> str:
     return str(payload)
 
 
+def _canonical_op_name(name: str) -> str:
+    if name.startswith("tirx."):
+        return "tir." + name[len("tirx.") :]
+    return name
+
+
+_CDNA_FP8_TARGET_KINDS = frozenset(("gfx940", "gfx941", "gfx942"))
+
+_TVM_MFMA_CALLS = {
+    "tl.tvm_mfma",
+}
+
+_TVM_MFMA_FP8_ELEMENT_TYPES = {
+    "float8_e4m3": ScalarType(ScalarTypeKind.F8E4M3),
+    "float8_e4m3fn": ScalarType(ScalarTypeKind.F8E4M3),
+    "float8_e4m3fnuz": ScalarType(ScalarTypeKind.F8E4M3),
+    "float8_e5m2": ScalarType(ScalarTypeKind.F8E5M2),
+    "float8_e5m2fnuz": ScalarType(ScalarTypeKind.F8E5M2),
+}
+
+_TVM_MFMA_FP8_ELEMENT_FORMATS = {
+    "float8_e4m3": "f8e4m3",
+    "float8_e4m3fn": "f8e4m3fn",
+    "float8_e4m3fnuz": "f8e4m3fnuz",
+    "float8_e5m2": "f8e5m2",
+    "float8_e5m2fnuz": "f8e5m2fnuz",
+}
+
+
 _UNARY_FLOAT_CALLS = {
     "tir.acos": UnaryCallSpec("acosf"),
     "tir.acosh": UnaryCallSpec("acoshf"),
@@ -1599,6 +2379,7 @@ _IF_THEN_ELSE_CALLS = {
     "tir.if_then_else",
 }
 
+_TILELANG_WARP_WIDTH = 32
 _FULL_WARP_MASK = 0xFFFFFFFF
 
 _WARP_SHUFFLE_CALLS = {
@@ -1614,6 +2395,10 @@ _WARP_REDUCE_CALLS = {
     "tl.warp_reduce_max",
     "tl.warp_reduce_min",
     "tl.warp_reduce_sum",
+}
+
+_WARP_MATCH_ANY_CALLS = {
+    "tl.match_any_sync",
 }
 
 _INFINITY_CALLS = {
@@ -1654,11 +2439,17 @@ _WARP_SYNC_CALLS = {
     "tl.sync_warp",
 }
 
+_GRID_SYNC_CALLS = {
+    "tl.sync_grid",
+}
+
 _ASSUME_CALLS = {
     "tir.assume",
 }
 
 _DEVICE_ASSERT_CALLS = {
+    "tir.device_assert",
+    "tir.device_assert_with_msg",
     "tl.device_assert",
     "tl.device_assert_with_msg",
 }
@@ -1670,6 +2461,7 @@ _THREAD_RETURN_CALLS = {
 _EFFECT_CALLS = (
     _STORAGE_SYNC_CALLS
     | _WARP_SYNC_CALLS
+    | _GRID_SYNC_CALLS
     | _ASSUME_CALLS
     | _DEVICE_ASSERT_CALLS
     | _THREAD_RETURN_CALLS

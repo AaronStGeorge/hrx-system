@@ -25,6 +25,8 @@ bool loom_contract_numeric_type_from_encoded_format(
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FNUZ:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2FNUZ:
       *out_numeric_type = LOOM_CONTRACT_NUMERIC_FP8;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8:
@@ -113,6 +115,8 @@ static bool loom_contract_encoded_format_requires_selector(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3 |
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2 |
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FNUZ |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2FNUZ |
       LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8 |
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E3M2 |
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E2M3 |
@@ -218,9 +222,6 @@ loom_contract_required_capability_flags_from_storage_schema(
   if (iree_any_bit_set(operand.sparsity_policy,
                        LOOM_VALUE_FACT_SPARSITY_POLICY_ALL)) {
     flags |= LOOM_CONTRACT_CAPABILITY_SPARSE_METADATA;
-  }
-  if (loom_contract_encoded_format_requires_selector(operand.element_format)) {
-    flags |= LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS;
   }
   return flags;
 }

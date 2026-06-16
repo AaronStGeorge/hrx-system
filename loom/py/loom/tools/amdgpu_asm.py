@@ -99,7 +99,7 @@ def parse_amdgpu_mnemonic(line: str) -> str | None:
     if match is None:
         return None
     mnemonic = match.group(0)
-    if mnemonic in {"Disassembly", "file", "format"}:
+    if mnemonic in {"Disassembly", "file", "format", "s_code_end"}:
         return None
     return mnemonic
 

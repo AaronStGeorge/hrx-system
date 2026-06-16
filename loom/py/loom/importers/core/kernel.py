@@ -121,22 +121,21 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         ]
     )
     body = builder.region()
-    builder.kernel.def_(
-        target=target_symbol,
-        export_symbol=spec.export_symbol,
-        callee=spec.callee,
-        config_args=[
-            (
-                config_arguments_by_ordinal[argument.ordinal].name,
-                config_arguments_by_ordinal[argument.ordinal].type,
-            )
-            for argument in spec.config_arguments
-        ],
-        args=[
+    attributes = {
+        "callee": spec.callee,
+        "target": target_symbol,
+        "export_symbol": spec.export_symbol,
+    }
+    builder.ir.build(
+        "kernel.def",
+        attributes=attributes,
+        func_args=[
             body_arguments_by_ordinal[argument.ordinal] for argument in spec.arguments
         ],
-        config=config,
-        body=body,
+        regions=[
+            config,
+            body,
+        ],
     )
     if spec.launch_config is not None:
         build_static_launch_config(builder, config, spec.launch_config)
@@ -252,6 +251,19 @@ def target_preset_amdgpu_kind(target_preset: str) -> str | None:
     """Return the canonical AMDGPU target kind selected by a target preset."""
     selection = _amdgpu_target_selection(target_preset)
     return selection.kind if selection is not None else None
+
+
+def target_preset_amdgpu_subgroup_size(target_preset: str) -> int | None:
+    """Return the fixed AMDGPU subgroup size selected by a target preset."""
+    selection = _amdgpu_target_selection(target_preset)
+    if selection is None:
+        return None
+    from loom.target.arch.amdgpu.target_info import amdgpu_processor_info_by_name
+
+    processor_info = amdgpu_processor_info_by_name(
+        selection.processor or selection.kind
+    )
+    return processor_info.wavefront.default_size if processor_info is not None else None
 
 
 def _build_target_record(

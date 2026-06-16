@@ -29,6 +29,7 @@ ROOT_COMMAND_EPILOG = """Common build-system commands:
   python dev.py bazel fuzz
   python dev.py bazel compile-commands
   python dev.py bazel clang-tidy
+  python dev.py importers setup tilelang
 
   python dev.py cmake configure
   python dev.py cmake build
@@ -45,7 +46,10 @@ Most developer scratch/state defaults under .tmp/. Set IREE_DEVTOOLS_TMP to
 redirect scratch that does not need to be a Bazel workspace package.
 
 Use `python dev.py bazel --help` or `python dev.py cmake --help` for the full
-subcommand list for that build system."""
+subcommand list for that build system. Optional importer environments use
+locked requirement files outside the base Bazel module lock; set one up with
+`python dev.py importers setup <name>` and select it for build-system commands
+with `--importer-env <name>`."""
 
 
 def root_command_help(command: str) -> CommandHelp:
@@ -68,6 +72,23 @@ tool environment.""",
   python dev.py doctor
   python dev.py doctor --system
   python dev.py doctor --tool-root ../.tools/iree-x""",
+        )
+    if command == "importers":
+        return CommandHelp(
+            description="Manage optional importer Python environments.",
+            epilog="""Examples:
+  python dev.py importers setup tilelang
+  python dev.py importers setup mlir
+  python dev.py importers doctor tilelang
+  python dev.py importers doctor mlir
+  python dev.py importers env tilelang
+  python dev.py importers env mlir --format shell
+
+Importer environments are explicit, locked Python environments under .tmp/.
+They keep heavyweight frontend packages out of the base Bazel module lock while
+still giving Bazel, CMake, and CI one deterministic package surface. Select a
+ready environment for build-system commands with `--importer-env <name>`.
+Importer docs live under loom/py/loom/importers/.""",
         )
     return CommandHelp(description=f"Run {command}.")
 
@@ -116,10 +137,14 @@ validate the commit being replaced.""",
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON
   python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=pinned
   python dev.py bazel configure -DLOOM_TARGET_AMDGPU=ON
+  python dev.py bazel configure --importer-env tilelang
+  python dev.py bazel configure --importer-env mlir
   python dev.py bazel configure --//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null --repo_env=IREE_ROCM_PATH=/opt/rocm
 
 This writes .bazelrc.configured. Published portable build options live in
-BUILDING.md. Use .bazelrc.local for checkout-specific Bazel overrides.""",
+BUILDING.md. Use .bazelrc.local for checkout-specific Bazel overrides.
+`--importer-env <name>` writes the matching Loom importer build setting
+without adding frontend packages to the base module lock.""",
             )
         return CommandHelp(
             description="Configure the CMake package/install-test build tree.",
@@ -130,13 +155,17 @@ BUILDING.md. Use .bazelrc.local for checkout-specific Bazel overrides.""",
   python dev.py cmake configure -DCMAKE_BUILD_TYPE=Debug
   python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DLIBHRX_BUILD=OFF
   python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=package
+  python dev.py cmake configure --importer-env tilelang
+  python dev.py cmake configure --importer-env mlir
   python dev.py --cmake-build-dir build/cmake-asan cmake configure -DIREE_ENABLE_ASAN=ON
 
 The first configure uses build/cmake unless --cmake-build-dir or
 IREE_CMAKE_BUILD_DIR selects another tree. The selected tree is recorded for
 later iree-cmake-build, iree-cmake-test, iree-cmake-run, iree-cmake-try, and
 iree-cmake-fuzz invocations.
-Published project build options live in BUILDING.md.""",
+Published project build options live in BUILDING.md. `--importer-env <name>`
+adds the matching `-DLOOM_IMPORT_<NAME>=ON` option and runs configure with the
+locked importer environment on PYTHONPATH.""",
         )
     if command == "build":
         if lane == "bazel":
@@ -172,7 +201,12 @@ CMake.""",
                 epilog="""Examples:
   python dev.py bazel test
   python dev.py bazel test //build_tools/devtools:cli_test
-  python dev.py bazel test //libhrx/...""",
+  python dev.py bazel test //libhrx/...
+  python dev.py bazel test --importer-env tilelang //loom/py/loom/importers/tilelang:tilelang_import_test
+  python dev.py bazel test --importer-env mlir //loom/py/loom/importers/mlir:mlir_import_test
+
+`--importer-env <name>` selects the Bazel importer config and forwards the
+locked importer site-packages path through Bazel test_env.""",
             )
         return CommandHelp(
             description="Run CTest in the configured CMake build tree.",
@@ -181,8 +215,12 @@ CMake.""",
   python dev.py cmake test
   python dev.py cmake test -R hrx
   python dev.py cmake test --rerun-failed
+  python dev.py cmake test --importer-env tilelang -R tilelang
+  python dev.py cmake test --importer-env mlir -R mlir
 
-CTest runs in the selected CMake build tree with --output-on-failure.""",
+CTest runs in the selected CMake build tree with --output-on-failure.
+`--importer-env <name>` runs CTest with the locked importer site-packages path
+on PYTHONPATH.""",
         )
     if command == "query" and lane == "bazel":
         return CommandHelp(
@@ -498,10 +536,10 @@ def agent_markdown_header() -> str:
     return """## Developer Commands
 
 Run from the repository root. Prefer generated wrapper aliases such as
-`iree-bazel-build` and `iree-cmake-build`; checked-in
-`build_tools/bin/iree-*-*` launchers are available for root-relative scripts and
-unconfigured shells. Common wrapper flags accept hyphen or underscore spellings,
-such as `--dry-run` and `--dry_run`, and work after the wrapper name:
+`iree-bazel-build` and `iree-cmake-build`; use `python dev.py ...` for
+bootstrapping before setup has generated those aliases. Common wrapper flags
+accept hyphen or underscore spellings, such as `--dry-run` and `--dry_run`, and
+work after the wrapper name:
 `-n/--dry-run`, `-v/--verbose`, `--system`, `--venv`, `--tool-root DIR`, and
 `--cmake-build-dir DIR`. Command-specific debugging flags include
 `iree-bazel-run -p/--print-path` and `iree-bazel-try -k/--keep`. Use `--`

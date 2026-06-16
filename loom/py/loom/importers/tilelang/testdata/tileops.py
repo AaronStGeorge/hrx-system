@@ -286,9 +286,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %c1 = index.constant 1 : index
   %reduce = vector.reduce<addf> %copy, %f32_zero : vector<4xf32>, f32
   %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
-  %c1 = index.constant 1 : index
   %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -361,9 +361,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_fastmath_kernel")
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %c1 = index.constant 1 : index
   %reduce = vector.reduce<addf, reassoc|nnan|ninf|nsz|arcp|contract|afn> %copy, %f32_zero : vector<4xf32>, f32
   %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
-  %c1 = index.constant 1 : index
   %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -427,10 +427,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tile
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %c1 = index.constant 1 : index
   %abs = vector.absf %copy : vector<4xf32>
   %reduce = vector.reduce<addf> %abs, %f32_zero : vector<4xf32>, f32
   %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
-  %c1 = index.constant 1 : index
   %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -494,10 +494,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tile
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %c1 = index.constant 1 : index
   %abs = vector.absf %copy : vector<4xf32>
   %reduce = vector.reduce<maxnumf> %abs, %f32_zero : vector<4xf32>, f32
   %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
-  %c1 = index.constant 1 : index
   %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -562,11 +562,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_widen_kernel")
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf16, %layout> -> vector<4xf16>
+  %c1 = index.constant 1 : index
   %reduce_cast = vector.extf %copy : vector<4xf16> to vector<4xf32>
   %abs = vector.absf %reduce_cast : vector<4xf32>
   %reduce = vector.reduce<maxnumf> %abs, %f32_zero : vector<4xf32>, f32
   %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
-  %c1 = index.constant 1 : index
   %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -787,7 +787,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_cumsum_shared_1d_kernel") @t
   %load = view.load %src[%thread_index] : view<4xi32, %layout> -> i32
   view.store %load, %shared[%thread_index] : i32, view<4xi32, %layout>
   kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
-  %c1 = index.constant 1 : index
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %cumsum_value = view.load %shared[%thread_index] : view<4xi32, %layout> -> i32

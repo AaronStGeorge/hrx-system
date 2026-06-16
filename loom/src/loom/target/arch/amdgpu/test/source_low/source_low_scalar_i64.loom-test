@@ -2,6 +2,120 @@
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_i64_bitwise_sgpr(%lhs: i64, %rhs: i64) -> (i64, i64, i64) {
+  %and = scalar.andi %lhs, %rhs : i64
+  %or = scalar.ori %and, %lhs : i64
+  %xor = scalar.xori %or, %rhs : i64
+  func.return %and, %or, %xor : i64, i64, i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i64_bitwise_sgpr(%lhs: reg<amdgpu.sgpr x2>, %rhs: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  %and = s_and_b64 %lhs, %rhs
+  %or = s_or_b64 %and, %lhs
+  %xor = s_xor_b64 %or, %rhs
+  return %and, %or, %xor
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_i64_addi_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2xi64>) -> (i64) {
+  %lhs = vector.extract %lhs_values[0] : vector<2xi64> -> i64
+  %rhs = vector.extract %rhs_values[0] : vector<2xi64> -> i64
+  %sum = scalar.addi %lhs, %rhs : i64
+  func.return %sum : i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i64_addi_vgpr(%lhs_values: reg<amdgpu.vgpr x4>, %rhs_values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %9 = slice %lhs_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %10 = slice %lhs_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %12 = slice %rhs_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %13 = slice %rhs_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19, %20 = v_add_co_u32 %9, %12
+  %21, %22 = v_add_co_ci_u32 %10, %13, %20
+  %sum = concat(%19, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %sum
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_i64_subi_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2xi64>) -> (i64) {
+  %lhs = vector.extract %lhs_values[0] : vector<2xi64> -> i64
+  %rhs = vector.extract %rhs_values[0] : vector<2xi64> -> i64
+  %difference = scalar.subi %lhs, %rhs : i64
+  func.return %difference : i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i64_subi_vgpr(%lhs_values: reg<amdgpu.vgpr x4>, %rhs_values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %9 = slice %lhs_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %10 = slice %lhs_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %12 = slice %rhs_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %13 = slice %rhs_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19, %20 = v_sub_co_u32 %9, %12
+  %21, %22 = v_sub_co_ci_u32 %10, %13, %20
+  %difference = concat(%19, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %difference
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_i64_shli_vgpr(%value_values: vector<2xi64>, %shift_values: vector<2xi64>) -> (i64) {
+  %value = vector.extract %value_values[0] : vector<2xi64> -> i64
+  %shift = vector.extract %shift_values[0] : vector<2xi64> -> i64
+  %shifted = scalar.shli %value, %shift : i64
+  func.return %shifted : i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i64_shli_vgpr(%value_values: reg<amdgpu.vgpr x4>, %shift_values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %9 = slice %value_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %10 = slice %value_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %value = concat(%9, %10) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %12 = slice %shift_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %shifted = v_lshlrev_b64 %12, %value
+  return %shifted
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_i64_muli_bitwise_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2xi64>, %mask_values: vector<2xi64>) -> (i64) {
+  %lhs = vector.extract %lhs_values[0] : vector<2xi64> -> i64
+  %rhs = vector.extract %rhs_values[0] : vector<2xi64> -> i64
+  %mask = vector.extract %mask_values[0] : vector<2xi64> -> i64
+  %product = scalar.muli %lhs, %rhs : i64
+  %mixed = scalar.xori %product, %mask : i64
+  func.return %mixed : i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i64_muli_bitwise_vgpr(%lhs_values: reg<amdgpu.vgpr x4>, %rhs_values: reg<amdgpu.vgpr x4>, %mask_values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %13 = slice %lhs_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %14 = slice %lhs_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %16 = slice %rhs_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %17 = slice %rhs_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19 = slice %mask_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %20 = slice %mask_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %26 = v_mul_lo_u32 %13, %16
+  %27 = v_mul_hi_u32 %13, %16
+  %28 = v_mul_lo_u32 %13, %17
+  %29 = v_mul_lo_u32 %14, %16
+  %30 = v_add_u32 %27, %28
+  %31 = v_add_u32 %30, %29
+  %35 = v_xor_b32 %26, %19
+  %38 = v_xor_b32 %31, %20
+  %mixed = concat(%35, %38) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %mixed
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @scalar_i64_compare_eq_scc(%lhs: i64, %rhs: i64) -> (i1) {
   %cmp = scalar.cmpi eq, %lhs, %rhs : i64
   func.return %cmp : i1

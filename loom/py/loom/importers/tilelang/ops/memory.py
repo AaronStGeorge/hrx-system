@@ -220,7 +220,6 @@ def _parallel_store_value_is_vectorizable(
         return False
     return (
         index_map.is_identity
-        and index_map.memory_scope == "local.fragment"
         and source_axis_position == index_map.logical_rank - 1
         and context.fragment_vector(index_map.view) is not None
     )
@@ -304,6 +303,7 @@ def map_alloc_buffer(
     )
     context.bind_buffer_view_layout(view, buffer)
     context.map_value(buffer, view, str(view.type))
+    context.map_named_buffer(buffer, view)
     data = getattr(buffer, "data", None)
     if data is not None:
         context.map_buffer_data(data, view, buffer=buffer)
@@ -325,7 +325,7 @@ def _map_initial_fragment_vector(
     buffer_name: str,
     context: TileLangConversionContext,
 ) -> None:
-    if _buffer_scope(buffer) != "local.fragment":
+    if not _should_track_fragment_vector(buffer):
         return
     if not isinstance(view_type, ShapedType) or view_type.type_kind != TypeKind.VIEW:
         return
@@ -347,6 +347,15 @@ def _map_initial_fragment_vector(
     context.map_fragment_vector(
         view,
         TileLangFragmentVector(value=initial, lane_count=lane_count),
+    )
+
+
+def _should_track_fragment_vector(buffer: object) -> bool:
+    if _buffer_scope(buffer) == "local.fragment":
+        return True
+    return (
+        _buffer_scope(buffer) == "local"
+        and str(getattr(buffer, "dtype", "")) in _FORMAT_PRESERVING_FP8_DTYPES
     )
 
 
@@ -385,6 +394,14 @@ def convert_buffer_store(
     source_indices = tuple(getattr(stmt, "indices", ()))
     buffer = getattr(stmt, "buffer", None)
     if _try_convert_distributed_fragment_store(
+        stmt,
+        buffer,
+        source_indices,
+        context,
+        converter,
+    ):
+        return
+    if _try_convert_format_preserving_fragment_store(
         stmt,
         buffer,
         source_indices,
@@ -435,10 +452,7 @@ def convert_buffer_store(
     )
     if access is None:
         return
-    if (
-        access.memory_scope == "local.fragment"
-        and context.fragment_vector(access.view) is not None
-    ):
+    if context.fragment_vector(access.view) is not None:
         fragment_value = _try_convert_fragment_vector_store(
             stmt,
             value,
@@ -470,7 +484,7 @@ def convert_buffer_store(
             f"{context.ssa(value)} = local.var",
         )
         return
-    if access.memory_scope == "local.fragment":
+    if context.fragment_vector(access.view) is not None:
         context.clear_fragment_vector(access.view)
     value = _coerce_store_value(value, access.view, stmt, context)
     if value is None:
@@ -559,10 +573,7 @@ def convert_buffer_load(
     )
     if access is None:
         return None
-    if (
-        access.memory_scope == "local.fragment"
-        and context.fragment_vector(access.view) is not None
-    ):
+    if context.fragment_vector(access.view) is not None:
         fragment_result = _try_convert_fragment_vector_load(
             expr,
             access,
@@ -677,6 +688,84 @@ def _try_convert_distributed_fragment_store(
     return True
 
 
+def _try_convert_format_preserving_fragment_store(
+    stmt: object,
+    buffer: object,
+    source_indices: tuple[object, ...],
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> bool:
+    value_expr = getattr(stmt, "value", None)
+    source_element_type = _format_preserving_fp8_element_type(dtype(value_expr))
+    if source_element_type is None:
+        return False
+    access = resolve_buffer_access(
+        buffer,
+        source_indices,
+        context,
+        converter,
+        diagnostic_owner=stmt,
+    )
+    if access is None:
+        return True
+    if context.fragment_vector(access.view) is None:
+        return False
+    value = _try_convert_format_preserving_fp8_load(
+        value_expr,
+        source_element_type,
+        context,
+        converter,
+    )
+    if value is None:
+        return False
+    fragment_value = _try_convert_fragment_vector_store(stmt, value, access, context)
+    if fragment_value is None:
+        return True
+    context.map_fragment_vector(access.view, fragment_value)
+    context.record_converted(
+        node_text(stmt),
+        f"{context.ssa(fragment_value.value)} = vector.insert<fp8-format>",
+    )
+    return True
+
+
+def _try_convert_format_preserving_fp8_load(
+    expr: object,
+    element_type: ScalarType,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> ValueRef | None:
+    if node_kind(expr) != "BufferLoad":
+        return None
+    access = resolve_buffer_access(
+        getattr(expr, "buffer", None),
+        tuple(getattr(expr, "indices", ())),
+        context,
+        converter,
+        diagnostic_owner=expr,
+    )
+    if access is None:
+        return None
+    if access.memory_scope in ("shared", "shared.dyn"):
+        context.flush_pending_workgroup_memory_barrier()
+    result = context.builder.view.load(
+        view=access.view,
+        indices=list(access.indices),
+        results=[element_type],
+        name=context.fresh_name("load"),
+    )
+    context.map_value(expr, result, str(element_type))
+    context.map_buffer_access(
+        expr,
+        access.view,
+        access.indices,
+        access.memory_scope,
+        result,
+    )
+    context.record_converted(node_text(expr), f"{context.ssa(result)} = view.load")
+    return result
+
+
 def _try_convert_fragment_vector_load(
     expr: object,
     access: TileLangBufferAccess,
@@ -779,7 +868,7 @@ def _fragment_vector_value_for_load(
         converter,
         diagnostic_owner=expr,
     )
-    if access is None or access.memory_scope != "local.fragment":
+    if access is None:
         return None
     lane = _single_distributed_index(access.indices, context)
     if lane is None or lane.lane < 0:
@@ -811,7 +900,7 @@ def _try_convert_fragment_vector_memory_load(
         converter,
         diagnostic_owner=expr,
     )
-    if index_map is None or index_map.memory_scope != "local.fragment":
+    if index_map is None:
         return None
     fragment_value = context.fragment_vector(index_map.view)
     if fragment_value is None:
@@ -971,6 +1060,10 @@ def _integer_bit_width(type_text: str) -> int | None:
     return int(type_text[1:])
 
 
+def _format_preserving_fp8_element_type(dtype_text: str) -> ScalarType | None:
+    return _FORMAT_PRESERVING_FP8_DTYPES.get(dtype_text)
+
+
 def _view_type(view: ValueRef, context: TileLangConversionContext) -> object:
     return context.builder.module.values[view.id].type
 
@@ -1050,3 +1143,10 @@ def _buffer_memory_space(buffer: object) -> str | None:
     if scope in ("shared", "shared.dyn"):
         return "workgroup"
     return None
+
+
+_FORMAT_PRESERVING_FP8_DTYPES = {
+    "float8_e4m3fn": ScalarType(ScalarTypeKind.F8E4M3),
+    "float8_e4m3fnuz": ScalarType(ScalarTypeKind.F8E4M3),
+    "float8_e5m2fnuz": ScalarType(ScalarTypeKind.F8E5M2),
+}

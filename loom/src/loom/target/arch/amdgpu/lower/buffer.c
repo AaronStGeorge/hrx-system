@@ -17,9 +17,17 @@ static bool loom_amdgpu_select_buffer_alloca_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_buffer_alloca_plan_t* out_plan) {
   *out_plan = (loom_amdgpu_buffer_alloca_plan_t){0};
-  if (loom_buffer_alloca_memory_space(source_op) !=
-      LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
-    return false;
+  const loom_value_fact_memory_space_t memory_space =
+      loom_buffer_alloca_memory_space(source_op);
+  switch (memory_space) {
+    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
+      out_plan->storage_space = LOOM_STORAGE_SPACE_WORKGROUP;
+      break;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE:
+      out_plan->storage_space = LOOM_STORAGE_SPACE_PRIVATE;
+      break;
+    default:
+      return false;
   }
   const int64_t base_alignment = loom_buffer_alloca_base_alignment(source_op);
   if (base_alignment <= 0 || base_alignment > UINT32_MAX ||
@@ -71,7 +79,7 @@ static iree_status_t loom_amdgpu_lower_buffer_alloca(
   loom_op_t* storage_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_storage_reserve_build(
       builder, plan->byte_length, plan->base_alignment,
-      loom_type_storage(LOOM_STORAGE_SPACE_WORKGROUP), source_op->location,
+      loom_type_storage(plan->storage_space), source_op->location,
       &storage_op));
 
   loom_type_t vgpr_type = loom_type_none();

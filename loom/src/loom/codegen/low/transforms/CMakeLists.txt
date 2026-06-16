@@ -64,6 +64,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::analysis::consumption
     loom::codegen::low::builder
     loom::codegen::low::descriptor_traits
     loom::codegen::low::descriptors

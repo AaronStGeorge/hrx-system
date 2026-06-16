@@ -81,14 +81,14 @@ iree_py_test(
 )
 endif()
 
-add_custom_command(OUTPUT import_tests.stamp
-    COMMAND ${CMAKE_COMMAND} -E touch import_tests.stamp
+add_custom_command(OUTPUT mlir_import_tests.stamp
+    COMMAND ${CMAKE_COMMAND} -E touch mlir_import_tests.stamp
   DEPENDS
     "testdata/vector_reduce_amdgpu.mlir"
 )
 
-add_custom_target(import_tests
-    DEPENDS import_tests.stamp
+add_custom_target(mlir_import_tests
+    DEPENDS mlir_import_tests.stamp
 )
 
 if(LOOM_IMPORT_MLIR)

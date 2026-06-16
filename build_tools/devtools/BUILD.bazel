@@ -27,6 +27,7 @@ py_library(
         "fuzz.py",
         "help_text.py",
         "hooks.py",
+        "importers.py",
         "presubmit.py",
         "project_presubmit.py",
         "setup.py",
@@ -88,6 +89,7 @@ py_test(
     ],
     data = [
         "//:.github/scripts/check_vulkan_hardware_environment.sh",
+        "//:.github/workflows/ci_importers.yml",
         "//:.github/workflows/ci_iree_bazel.yml",
         "//:.github/workflows/ci_iree_cmake.yml",
     ],
@@ -111,6 +113,7 @@ py_test(
         "fuzz.py",
         "help_text.py",
         "hooks.py",
+        "importers.py",
         "presubmit.py",
         "setup.py",
     ],

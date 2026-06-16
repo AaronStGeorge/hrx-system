@@ -122,8 +122,8 @@ TEST(ContractStorageTest, MapsMatrixStorageSchemaToGenericOperand) {
       loom_contract_required_capability_flags_from_storage_schema(schema);
   EXPECT_TRUE(iree_any_bit_set(required_flags,
                                LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS));
-  EXPECT_TRUE(iree_any_bit_set(required_flags,
-                               LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS));
+  EXPECT_FALSE(iree_any_bit_set(required_flags,
+                                LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS));
   EXPECT_FALSE(iree_any_bit_set(required_flags,
                                 LOOM_CONTRACT_CAPABILITY_ZERO_SCALE_FALLBACK));
 }
@@ -199,8 +199,10 @@ TEST(ContractStorageTest, BuildsMatrixRequestFromPayloadFacts) {
           LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS));
   EXPECT_TRUE(iree_all_bits_set(
       loom_contract_request_required_capability_flags(&request),
-      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS |
-          LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS));
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS));
+  EXPECT_FALSE(iree_any_bit_set(
+      loom_contract_request_required_capability_flags(&request),
+      LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS));
 }
 
 TEST(ContractStorageTest, BuildsMatrixRequestWithDynamicShapeRefs) {

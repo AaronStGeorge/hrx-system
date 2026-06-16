@@ -64,11 +64,21 @@ class TileLangBackend:
             ),
         )
         parser.add_argument(
+            "--loom-compile",
+            type=Path,
+            help=("loom-compile binary for --oracle=differential; defaults to PATH"),
+        )
+        parser.add_argument(
+            "--llvm-objdump",
+            type=Path,
+            help=("llvm-objdump binary for code-object disassembly; defaults to PATH"),
+        )
+        parser.add_argument(
             "--oracle-output-dir",
             type=Path,
             help=(
-                "directory for TileLang oracle artifacts; code-object capture "
-                "requires this or --dump-temp-dir"
+                "directory for TileLang oracle artifacts; code-object and "
+                "differential capture require this or --dump-temp-dir"
             ),
         )
 
@@ -87,6 +97,8 @@ class TileLangBackend:
             oracle=TileLangOracleCheckOptions(
                 mode=args.oracle,
                 output_directory=args.oracle_output_dir or args.dump_temp_dir,
+                loom_compile=args.loom_compile,
+                llvm_objdump=args.llvm_objdump,
             ),
         )
         return tuple(

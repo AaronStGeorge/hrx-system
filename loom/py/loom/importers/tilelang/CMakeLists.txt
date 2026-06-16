@@ -32,6 +32,7 @@ iree_py_library(
   NAME
     oracle
   SRCS
+    "differential.py"
     "oracle.py"
   DEPS
     loom::py::loom::importers::tilelang::core
@@ -65,8 +66,11 @@ iree_py_test(
     "../../tools/pytest_style_runner.py"
   ARGS
     "loom.importers.tilelang.analysis_test"
+    "loom.importers.tilelang.calls_test"
     "loom.importers.tilelang.context_test"
+    "loom.importers.tilelang.corpus_test"
     "loom.importers.tilelang.coverage_test"
+    "loom.importers.tilelang.differential_test"
     "loom.importers.tilelang.oracle_test"
     "loom.importers.tilelang.types_test"
   DEPS
@@ -80,13 +84,14 @@ iree_py_test(
 )
 endif()
 
-add_custom_command(OUTPUT import_tests.stamp
-    COMMAND ${CMAKE_COMMAND} -E touch import_tests.stamp
+add_custom_command(OUTPUT tilelang_import_tests.stamp
+    COMMAND ${CMAKE_COMMAND} -E touch tilelang_import_tests.stamp
   DEPENDS
     "testdata/allocations.py"
     "testdata/analysis.py"
     "testdata/control_flow.py"
     "testdata/diagnostics.py"
+    "testdata/fp8.py"
     "testdata/lowered_metadata.py"
     "testdata/memory_effects.py"
     "testdata/scalar_calls.py"
@@ -106,8 +111,8 @@ add_custom_command(OUTPUT import_tests.stamp
     "testdata/vector_memory.py"
 )
 
-add_custom_target(import_tests
-    DEPENDS import_tests.stamp
+add_custom_target(tilelang_import_tests
+    DEPENDS tilelang_import_tests.stamp
 )
 
 if(LOOM_IMPORT_TILELANG)
@@ -120,7 +125,7 @@ iree_py_test(
     "tilelang"
     "--fail-on-skip"
     "--loom-opt=$<TARGET_FILE:loom::tools::loom-opt::loom-opt>"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/allocations.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/analysis.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/control_flow.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/diagnostics.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/lowered_metadata.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/memory_effects.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/scalar_calls.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/engram.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/mhc.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_expand.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_gate.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_histogram.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_normalize.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_reduce.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_routing.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/transpose.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tileops.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/topology.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_arithmetic.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_casts.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_memory.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/allocations.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/analysis.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/control_flow.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/diagnostics.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/fp8.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/lowered_metadata.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/memory_effects.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/scalar_calls.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/engram.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/mhc.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_expand.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_gate.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_histogram.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_normalize.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_reduce.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/moe_routing.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels/transpose.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tileops.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/topology.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_arithmetic.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_casts.py ${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_memory.py"
   DEPS
     loom::py::loom::importers::tilelang::tilelang_packages
     loom::py::loom::importers::check::check

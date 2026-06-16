@@ -130,6 +130,91 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32_arcp_div() asm<amdg
 // ====
 
 amdgpu.target<gfx1100> @target
+kernel.def target(@target) @f32_exact_vector_div() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %lane = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>
+  %lhs = vector.load %lhs_view[%lane] : view<64xf32, #dense> -> vector<1xf32>
+  %rhs = vector.load %rhs_view[%lane] : view<64xf32, #dense> -> vector<1xf32>
+  %quotient = vector.divf %lhs, %rhs : vector<1xf32>
+  vector.store %quotient, %output_view[%lane] : vector<1xf32>, view<64xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32_exact_vector_div() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %17 = v_lshlrev_b32_src0_inline %lane, 2
+  %lhs = global_load_b32_saddr %17, %lhs_view
+  %rhs = global_load_b32_saddr %17, %rhs_view
+  %21, %22 = v_div_scale_f32 %rhs, %rhs, %lhs
+  %23 = v_rcp_f32 %21
+  %24 = v_xor_b32_lit %21, 2147483648
+  %25 = v_fmaak_f32 %24, %23, 1065353216
+  %26 = v_fma_f32 %25, %23, %23
+  %27, %28 = v_div_scale_f32 %lhs, %rhs, %lhs
+  %29 = v_mul_f32 %27, %26
+  %30 = v_fma_f32 %24, %29, %27
+  %31 = v_fma_f32 %30, %26, %29
+  %32 = v_fma_f32 %24, %31, %27
+  %33 = v_div_fmas_f32 %32, %26, %31, %28
+  %quotient = v_div_fixup_f32 %33, %rhs, %lhs
+  global_store_b32_saddr %17, %quotient, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @f32_exact_scalar_div(%lhs_buffer: buffer, %rhs_buffer: buffer) -> (f32) {
+  %base = index.constant 0 : offset
+  %lhs_global = buffer.assume.memory_space<global> %lhs_buffer : buffer
+  %rhs_global = buffer.assume.memory_space<global> %rhs_buffer : buffer
+  %lhs_noalias, %rhs_noalias = buffer.assume.noalias %lhs_global, %rhs_global : buffer, buffer
+  %lhs_view = buffer.view %lhs_noalias[%base] : buffer -> view<1xf32, #dense>
+  %rhs_view = buffer.view %rhs_noalias[%base] : buffer -> view<1xf32, #dense>
+  %lhs = view.load %lhs_view[0] : view<1xf32, #dense> -> f32
+  %rhs = view.load %rhs_view[0] : view<1xf32, #dense> -> f32
+  %quotient = scalar.divf %lhs, %rhs : f32
+  func.return %quotient : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32_exact_scalar_div() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %16 = s_mov_b32 0
+  %lhs = s_load_dword %lhs_view, %16
+  %rhs = s_load_dword %rhs_view, %16
+  %20 = v_mov_b32_copy %rhs
+  %22 = v_mov_b32_copy %lhs
+  %23, %24 = v_div_scale_f32 %20, %20, %22
+  %25 = v_rcp_f32 %23
+  %26 = v_xor_b32_lit %23, 2147483648
+  %27 = v_fmaak_f32 %26, %25, 1065353216
+  %28 = v_fma_f32 %27, %25, %25
+  %32, %33 = v_div_scale_f32 %22, %20, %22
+  %34 = v_mul_f32 %32, %28
+  %35 = v_fma_f32 %26, %34, %32
+  %36 = v_fma_f32 %35, %28, %34
+  %37 = v_fma_f32 %26, %36, %32
+  %38 = v_div_fmas_f32 %37, %28, %36, %33
+  %quotient = v_div_fixup_f32 %38, %20, %22
+  return %quotient
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @f32_scalarized() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 64 : index

@@ -68,6 +68,7 @@ typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
   ((uint32_t)1u << 21)
 #define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SIGNED_I16_REPAIR_DESCRIPTOR_MISSING \
   ((uint32_t)1u << 22)
+#define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PRIVATE_ROOT ((uint32_t)1u << 23)
 
 typedef struct loom_amdgpu_memory_access_diagnostic_t {
   // Rejection bits explaining why an access is not legal for this target.
@@ -134,7 +135,8 @@ bool loom_amdgpu_memory_access_plan_select(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_view_region_table_t* view_regions,
-    loom_func_like_t source_function, const loom_op_t* source_op,
+    loom_func_like_t source_function, const loom_target_bundle_t* bundle,
+    const loom_op_t* source_op,
     loom_low_source_memory_access_plan_t* out_source,
     loom_amdgpu_memory_access_plan_t* out_plan,
     loom_low_source_memory_access_diagnostic_t* out_source_diagnostic,

@@ -14,7 +14,8 @@ from collections.abc import Mapping
 def node_kind(node: object) -> str:
     """Returns the source class name used as the importer dispatch key."""
 
-    return type(node).__name__
+    name = type(node).__name__
+    return _NODE_KIND_ALIASES.get(name, name)
 
 
 def node_text(node: object) -> str:
@@ -79,3 +80,9 @@ def mapping_items(value: object) -> tuple[tuple[object, object], ...]:
     if items is None:
         return ()
     return tuple(items())
+
+
+_NODE_KIND_ALIASES = {
+    "SBlock": "Block",
+    "SBlockRealize": "BlockRealize",
+}

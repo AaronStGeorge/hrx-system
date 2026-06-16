@@ -206,6 +206,42 @@ func.def @forward_static_private_slots(%input: buffer, %output: buffer) {
 
 // ====
 
+func.def @erase_noop_private_slot_before_static_forward(%output: buffer, %lhs: i64, %rhs: i64) {
+  %zero_bytes = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<1xi64, #dense>
+  %slot_bytes = index.constant 16 : offset
+  %slot_buffer = buffer.alloca %slot_bytes {base_alignment = 8, memory_space = private} : buffer
+  %slots = buffer.view %slot_buffer[%zero_bytes] : buffer -> view<2xi64, #dense>
+  %slot0 = index.constant 0 : index
+  %slot1 = index.constant 1 : index
+  %initial = scalar.constant 0 : i64
+  view.store %initial, %slots[%slot0] : i64, view<2xi64, #dense>
+  %loaded_initial = view.load %slots[%slot0] : view<2xi64, #dense> -> i64
+  %sum = scalar.addi %loaded_initial, %lhs : i64
+  view.store %sum, %slots[%slot0] : i64, view<2xi64, #dense>
+  %dead_slot = view.load %slots[%slot1] : view<2xi64, #dense> -> i64
+  view.store %dead_slot, %slots[%slot1] : i64, view<2xi64, #dense>
+  %loaded_sum = view.load %slots[%slot0] : view<2xi64, #dense> -> i64
+  %result = scalar.xori %loaded_sum, %rhs : i64
+  view.store %result, %slots[%slot0] : i64, view<2xi64, #dense>
+  view.store %result, %output_view[%slot0] : i64, view<1xi64, #dense>
+  func.return
+}
+
+// ----
+func.def @erase_noop_private_slot_before_static_forward(%output: buffer, %lhs: i64, %rhs: i64) {
+  %zero_bytes = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<1xi64, #dense>
+  %slot0 = index.constant 0 : index
+  %initial = scalar.constant 0 : i64
+  %sum = scalar.addi %initial, %lhs : i64
+  %result = scalar.xori %sum, %rhs : i64
+  view.store %result, %output_view[%slot0] : i64, view<1xi64, #dense>
+  func.return
+}
+
+// ====
+
 func.def @keeps_conditionally_stored_scalar_slot(%output: buffer, %value: i64, %cond: i1) {
   %zero_bytes = index.constant 0 : offset
   %output_view = buffer.view %output[%zero_bytes] : buffer -> view<1xi64, #dense>
