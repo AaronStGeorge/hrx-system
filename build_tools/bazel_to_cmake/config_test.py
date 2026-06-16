@@ -19,6 +19,11 @@ import bazel_to_cmake_requirements
 import bazel_to_cmake_targets
 
 
+class _PythonBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
+    def _should_emit_python_target(self):
+        return True
+
+
 class ConfigTest(unittest.TestCase):
     def test_selects_longest_matching_project_for_build_path(self):
         runtime = bazel_to_cmake_config.ProjectConfig(
@@ -324,6 +329,47 @@ class ConfigTest(unittest.TestCase):
             converter.body,
         )
         self.assertNotIn("$<TARGET_FILE:", converter.body)
+
+    def test_py_test_allows_unlocated_source_data(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        converter = SimpleNamespace(body="")
+        functions = _PythonBuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="build_tools/bazel_to_cmake",
+            repo_root=str(repo_root),
+        )
+
+        functions.iree_py_test(
+            name="source_data_test",
+            srcs=["config_test.py"],
+            args=["bazel_to_cmake_config_test"],
+            data=["//build_tools/bazel_to_cmake:config_test.py"],
+            main="config_test.py",
+            deps=[],
+        )
+
+        self.assertIn("iree_py_test(", converter.body)
+
+    def test_py_test_rejects_unlocated_generated_data(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        converter = SimpleNamespace(body="")
+        functions = _PythonBuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="build_tools/bazel_to_cmake",
+            repo_root=str(repo_root),
+        )
+
+        with self.assertRaisesRegex(NotImplementedError, "iree_py_test data"):
+            functions.iree_py_test(
+                name="generated_data_test",
+                srcs=["config_test.py"],
+                args=["bazel_to_cmake_config_test"],
+                data=["//build_tools/bazel_to_cmake:generated_data.txt"],
+                main="config_test.py",
+                deps=[],
+            )
 
     def test_requirement_policy_loads_cross_project_requirement_defs(self):
         repo_root = Path(__file__).resolve().parents[2]
