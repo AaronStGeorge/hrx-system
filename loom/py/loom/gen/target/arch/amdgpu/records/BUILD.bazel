@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:python.bzl", "iree_py_binary")
+load("//build_tools/bazel:python.bzl", "iree_py_binary", "iree_py_test")
 
 package(
     default_visibility = ["//loom/py/loom/gen:__subpackages__"],
@@ -27,6 +27,20 @@ iree_py_binary(
     visibility = GENERATOR_VISIBILITY,
     deps = [
         "//loom/py/loom/gen/support",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_test(
+    name = "target_records_test",
+    srcs = [
+        "amdgpu_target_records_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.target.arch.amdgpu.records.amdgpu_target_records_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":target_records",
         "//loom/py/loom/target/arch/amdgpu:target_info",
     ],
 )
