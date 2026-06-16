@@ -112,24 +112,24 @@ iree_status_t loom_amdgpu_lower_vector_bf16_conversion(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_bf16_conversion_plan_t* plan);
 
-// Selects a plan for value-construction source ops.
-iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            loom_low_lower_plan_t* out_plan);
-
-// Preselects target-owned value-construction combines that must claim their
-// producer before generated source-lowering contracts see it.
-iree_status_t loom_amdgpu_preselect_value_plan(
+// Selects a plan for structural value-construction source ops.
+iree_status_t loom_amdgpu_select_structural_value_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan);
 
-// Lowers a value-construction source op using its selected plan.
-iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op,
-                                         loom_low_lower_plan_t plan);
+// Preselects target-owned value-construction combines that must claim their
+// producer before generated source-lowering contracts see it.
+iree_status_t loom_amdgpu_preselect_structural_value_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_plan_t* out_plan);
 
-// Marks the exact source values consumed by a selected value plan.
-void loom_amdgpu_mark_value_plan_storage_demands(
+// Lowers a structural value-construction source op using its selected plan.
+iree_status_t loom_amdgpu_lower_structural_value_op(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_plan_t plan);
+
+// Marks the exact source values consumed by a selected structural value plan.
+void loom_amdgpu_mark_structural_value_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t plan);
 

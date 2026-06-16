@@ -57,11 +57,14 @@ _ROW_RE = re.compile(
 )
 
 _ROW_MACRO_SIGNATURES = {
-    "VALUE_DIRECT_STORAGE_ROW": _RowMacroSignature(
+    "VALUE_STRUCTURAL_DIRECT_STORAGE_ROW": _RowMacroSignature(
         argument_count=5, storage_policy_argument=4
     ),
-    "VALUE_DIRECT_POLICY_ROW": _RowMacroSignature(
+    "VALUE_STRUCTURAL_DIRECT_POLICY_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=4, preselect_policy_argument=5
+    ),
+    "VALUE_STRUCTURAL_DATA_STORAGE_ROW": _RowMacroSignature(
+        argument_count=6, storage_policy_argument=5
     ),
     "VALUE_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5
@@ -105,7 +108,7 @@ _ROW_MACRO_SIGNATURES = {
 
 _STORAGE_POLICY_NAMES = frozenset(
     {
-        "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+        "LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN",
         "LOOM_AMDGPU_STORAGE_MEMORY_PLAN",
         "LOOM_AMDGPU_STORAGE_ATOMIC",
         "LOOM_AMDGPU_STORAGE_PREFETCH",
@@ -118,7 +121,7 @@ _STORAGE_POLICY_NAMES = frozenset(
 
 _PRESELECT_POLICY_NAMES = frozenset(
     {
-        "LOOM_AMDGPU_PRESELECT_VALUE_PLAN",
+        "LOOM_AMDGPU_PRESELECT_STRUCTURAL_VALUE_PLAN",
         "LOOM_AMDGPU_PRESELECT_PLAN_ID",
         "LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC",
     }

@@ -3064,9 +3064,9 @@ iree_status_t loom_amdgpu_low_legality_verify_scalar_conversion(
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            loom_low_lower_plan_t* out_plan) {
+iree_status_t loom_amdgpu_select_structural_value_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_plan_t* out_plan) {
   *out_plan = loom_low_lower_plan_empty();
   switch (source_op->kind) {
     case LOOM_OP_VECTOR_IOTA: {
@@ -3123,7 +3123,7 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
   }
 }
 
-iree_status_t loom_amdgpu_preselect_value_plan(
+iree_status_t loom_amdgpu_preselect_structural_value_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
   *out_plan = loom_low_lower_plan_empty();
@@ -4178,7 +4178,7 @@ iree_status_t loom_amdgpu_emit_f32_pair_to_packed_bf16(
       high_bits, lane_type, out_packed);
 }
 
-void loom_amdgpu_mark_value_plan_storage_demands(
+void loom_amdgpu_mark_structural_value_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t plan) {
   switch (plan.id) {
@@ -4976,9 +4976,9 @@ iree_status_t loom_amdgpu_lower_scalar_conversion(
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op,
-                                         loom_low_lower_plan_t plan) {
+iree_status_t loom_amdgpu_lower_structural_value_op(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_plan_t plan) {
   switch (source_op->kind) {
     case LOOM_OP_VECTOR_IOTA:
       if (plan.target_data == NULL) {

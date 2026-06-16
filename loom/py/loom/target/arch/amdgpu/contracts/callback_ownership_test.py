@@ -170,7 +170,7 @@ def test_validate_callback_dispatch_rows_rejects_wrong_report_key_namespace() ->
                 "emit",
                 "verify",
                 "1",
-                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN",
             ),
         ),
     )
@@ -212,7 +212,7 @@ def test_validate_callback_dispatch_rows_rejects_bad_source_count() -> None:
                 "select",
                 "emit",
                 "verify",
-                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN",
             ),
         ),
     )
@@ -245,7 +245,7 @@ def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> 
             macro_name="RECIPE_DATA_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_CONCAT",
-                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN",
                 "select",
                 "emit",
                 "verify",
@@ -312,6 +312,26 @@ def test_validate_callback_dispatch_rows_rejects_generated_recipe() -> None:
         )
 
 
+def test_validate_callback_dispatch_rows_accepts_structural_value_policy() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_INSERT",
+            role=CallbackDispatchRole.VALUE,
+            macro_name="VALUE_STRUCTURAL_DIRECT_POLICY_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_INSERT",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN",
+                "LOOM_AMDGPU_PRESELECT_STRUCTURAL_VALUE_PLAN",
+            ),
+        ),
+    )
+
+    validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
 def test_validate_callback_dispatch_rows_accepts_generated_preselect() -> None:
     rows = (
         CallbackDispatchRow(
@@ -347,7 +367,7 @@ def test_validate_callback_dispatch_rows_accepts_generated_direct_preselect() ->
                 "select",
                 "emit",
                 "verify",
-                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN",
                 "LOOM_AMDGPU_PRESELECT_PLAN_ID",
             ),
         ),
