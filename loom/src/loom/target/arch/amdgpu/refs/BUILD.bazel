@@ -83,10 +83,11 @@ loom_low_descriptor_data_archive(
 loom_generated_cc_library(
     name = "target_refs",
     srcs = ["target_refs.c"],
+    hdrs = ["target_refs.h"],
     args = ["--public-header=loom/target/arch/amdgpu/refs/target_refs.h"] +
            loom_amdgpu_selected_descriptor_set_generator_args(_AMDGPU_TARGET_REF_ARGS),
     generated_hdr_flags = ["--header"],
-    generated_hdrs = ["target_refs.h"],
+    generated_hdrs = ["target_refs_tables.h"],
     generator = _AMDGPU_TARGET_REF_GENERATOR,
     inputs = [
         "@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml",

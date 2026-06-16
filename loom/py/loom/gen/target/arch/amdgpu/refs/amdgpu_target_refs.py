@@ -129,7 +129,7 @@ def _materialize_descriptor_ref_tables(
     return descriptor_set_tables
 
 
-def _emit_header() -> str:
+def _emit_tables_header() -> str:
     descriptor_ref_keys = amdgpu_descriptor_ref_keys()
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -140,18 +140,10 @@ def _emit_header() -> str:
         "",
         *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.refs.amdgpu_target_refs"),
         "",
-        "#ifndef LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_H_",
-        "#define LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_H_",
+        "#ifndef LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_TABLES_H_",
+        "#define LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_TABLES_H_",
         "",
         "#include <stdint.h>",
-        "",
-        '#include "loom/codegen/low/descriptors.h"',
-        "",
-        "#ifdef __cplusplus",
-        'extern "C" {',
-        "#endif",
-        "",
-        "typedef uint16_t loom_amdgpu_descriptor_ref_t;",
         "",
         "#define LOOM_AMDGPU_DESCRIPTOR_REF_NONE UINT16_MAX",
         f"#define LOOM_AMDGPU_DESCRIPTOR_REF_COUNT {_u16_literal(len(descriptor_ref_keys))}",
@@ -166,19 +158,7 @@ def _emit_header() -> str:
     lines.extend(
         [
             "",
-            "uint32_t loom_amdgpu_descriptor_ref_ordinal(",
-            "    const loom_low_descriptor_set_t* descriptor_set,",
-            "    loom_amdgpu_descriptor_ref_t descriptor_ref);",
-            "",
-            "const loom_low_descriptor_t* loom_amdgpu_descriptor_ref_descriptor(",
-            "    const loom_low_descriptor_set_t* descriptor_set,",
-            "    loom_amdgpu_descriptor_ref_t descriptor_ref);",
-            "",
-            "#ifdef __cplusplus",
-            '}  // extern "C"',
-            "#endif",
-            "",
-            "#endif  // LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_H_",
+            "#endif  // LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_TABLES_H_",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -260,7 +240,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
-        _emit_header(),
+        _emit_tables_header(),
         encoding="utf-8",
     )
     args.source.write_text(
