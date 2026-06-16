@@ -431,6 +431,28 @@ static bool loom_scalar_integer_value_is_all_ones(loom_type_t type,
          value == maximum;
 }
 
+static bool loom_scalar_integer_value_is_low_bit_mask(int64_t value,
+                                                      uint8_t* out_bit_count) {
+  *out_bit_count = 0;
+  if (value <= 0) return false;
+  const uint64_t unsigned_value = (uint64_t)value;
+  if (((unsigned_value + 1) & unsigned_value) != 0) return false;
+  *out_bit_count =
+      (uint8_t)iree_math_count_trailing_zeros_u64(unsigned_value + 1);
+  return *out_bit_count != 0;
+}
+
+static bool loom_scalar_value_facts_fit_low_bit_mask(loom_rewriter_t* rewriter,
+                                                     loom_value_id_t value_id,
+                                                     int64_t mask_value) {
+  uint8_t bit_count = 0;
+  if (!loom_scalar_integer_value_is_low_bit_mask(mask_value, &bit_count)) {
+    return false;
+  }
+  return loom_value_facts_fit_unsigned_bit_count(
+      loom_rewriter_value_facts(rewriter, value_id), bit_count);
+}
+
 static bool loom_scalar_shift_amount_is_valid(loom_type_t type,
                                               int64_t amount) {
   int32_t bitwidth = loom_scalar_type_bitwidth(loom_type_element_type(type));
@@ -1266,14 +1288,22 @@ iree_status_t loom_scalar_andi_canonicalize(loom_op_t* op,
   }
   loom_type_t type = loom_scalar_single_result_type(rewriter, op);
   int64_t lhs_value = 0;
-  if (loom_scalar_query_exact_i64(rewriter, lhs, &lhs_value) &&
-      loom_scalar_integer_value_is_all_ones(type, lhs_value)) {
-    return loom_scalar_replace_single_result_with_value(op, rewriter, rhs);
+  if (loom_scalar_query_exact_i64(rewriter, lhs, &lhs_value)) {
+    if (loom_scalar_integer_value_is_all_ones(type, lhs_value)) {
+      return loom_scalar_replace_single_result_with_value(op, rewriter, rhs);
+    }
+    if (loom_scalar_value_facts_fit_low_bit_mask(rewriter, rhs, lhs_value)) {
+      return loom_scalar_replace_single_result_with_value(op, rewriter, rhs);
+    }
   }
   int64_t rhs_value = 0;
-  if (loom_scalar_query_exact_i64(rewriter, rhs, &rhs_value) &&
-      loom_scalar_integer_value_is_all_ones(type, rhs_value)) {
-    return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
+  if (loom_scalar_query_exact_i64(rewriter, rhs, &rhs_value)) {
+    if (loom_scalar_integer_value_is_all_ones(type, rhs_value)) {
+      return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
+    }
+    if (loom_scalar_value_facts_fit_low_bit_mask(rewriter, lhs, rhs_value)) {
+      return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
+    }
   }
   return iree_ok_status();
 }

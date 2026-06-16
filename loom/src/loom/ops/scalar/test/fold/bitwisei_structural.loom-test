@@ -24,6 +24,25 @@ func.def @bitwise_identities(%x: i32) -> (i32, i32, i32, i32, i32, i32, i32, i32
 
 // ====
 
+func.def @andi_low_bit_mask_identity_from_facts(%x: i8) -> (i32, i32) {
+  %wide = scalar.extui %x : i8 to i32
+  %byte_mask = scalar.constant 255 : i32
+  %nybble_mask = scalar.constant 15 : i32
+  %byte = scalar.andi %wide, %byte_mask : i32
+  %nybble = scalar.andi %wide, %nybble_mask : i32
+  func.return %byte, %nybble : i32, i32
+}
+
+// ----
+func.def @andi_low_bit_mask_identity_from_facts(%x: i8) -> (i32, i32) {
+  %wide = scalar.extui %x : i8 to i32
+  %nybble_mask = scalar.constant 15 : i32
+  %nybble = scalar.andi %wide, %nybble_mask : i32
+  func.return %wide, %nybble : i32, i32
+}
+
+// ====
+
 func.def @xori_cancels_nested_operand(%x: i32, %y: i32) -> (i32, i32) {
   %lhs_nested = scalar.xori %x, %y : i32
   %lhs_cancel = scalar.xori %lhs_nested, %y : i32
