@@ -32,6 +32,10 @@ typedef struct loom_amdgpu_bitpack_plan_t {
   loom_value_id_t source;
   // Result vector value containing packed i8 lanes.
   loom_value_id_t result;
+  // Number of low bits packed from each source lane.
+  uint32_t width;
+  // Number of unpacked source lanes.
+  uint32_t lane_count;
   // Number of packed 32-bit registers in the result.
   uint32_t result_register_count;
 } loom_amdgpu_bitpack_plan_t;

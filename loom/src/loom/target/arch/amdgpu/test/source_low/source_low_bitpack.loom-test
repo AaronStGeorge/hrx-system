@@ -22,3 +22,39 @@ low.func.def target(@target) abi(hal_kernel) @i32x4_to_i8x4_bitpack(%codes: reg<
   %packed = v_lshl_add_u32_shift_imm %14, %12, 24
   return %packed
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i32x8_to_i4x8_bitpack(%codes: vector<8xi32>) -> (vector<4xi8>) {
+  %packed = vector.bitpack<4> %codes : vector<8xi32> -> vector<4xi8>
+  func.return %packed : vector<4xi8>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i32x8_to_i4x8_bitpack(%codes: reg<amdgpu.vgpr x8>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %5 = slice %codes[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %6 = v_and_b32_src0_inline %5, 15
+  %7 = slice %codes[1] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %8 = v_and_b32_src0_inline %7, 15
+  %9 = v_lshl_add_u32_shift_imm %8, %6, 4
+  %10 = slice %codes[2] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %11 = v_and_b32_src0_inline %10, 15
+  %12 = v_lshl_add_u32_shift_imm %11, %9, 8
+  %13 = slice %codes[3] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %14 = v_and_b32_src0_inline %13, 15
+  %15 = v_lshl_add_u32_shift_imm %14, %12, 12
+  %16 = slice %codes[4] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %17 = v_and_b32_src0_inline %16, 15
+  %18 = v_lshl_add_u32_shift_imm %17, %15, 16
+  %19 = slice %codes[5] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %20 = v_and_b32_src0_inline %19, 15
+  %21 = v_lshl_add_u32_shift_imm %20, %18, 20
+  %22 = slice %codes[6] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %23 = v_and_b32_src0_inline %22, 15
+  %24 = v_lshl_add_u32_shift_imm %23, %21, 24
+  %25 = slice %codes[7] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %26 = v_and_b32_src0_inline %25, 15
+  %packed = v_lshl_add_u32_shift_imm %26, %24, 28
+  return %packed
+}
