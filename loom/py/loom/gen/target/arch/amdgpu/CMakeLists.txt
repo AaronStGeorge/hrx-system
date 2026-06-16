@@ -23,6 +23,20 @@ iree_py_library(
     loom::py::loom::target::arch::amdgpu::target_info
 )
 
+iree_py_test(
+  NAME
+    config_tables_test
+  SRCS
+    "../../../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.target.arch.amdgpu.amdgpu_config_tables_test"
+  DEPS
+    loom::py::loom::gen::target::arch::amdgpu::config_tables
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+)
+
 iree_py_library(
   NAME
     low_aliases

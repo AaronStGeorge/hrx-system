@@ -188,33 +188,13 @@ def _emit_encoding_tables(
     return "\n".join(lines)
 
 
-def _emit_encoding_field_ids_header() -> str:
-    guard = "LOOM_TARGET_ARCH_AMDGPU_ENCODING_ENCODING_FIELD_IDS_H_"
-    lines = [
-        "// Copyright 2026 The IREE Authors",
-        "//",
-        "// Licensed under the Apache License v2.0 with LLVM Exceptions.",
-        "// See https://llvm.org/LICENSE.txt for license information.",
-        "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
-        "",
-        *line_comment_header(
-            "//",
-            generator="loom.gen.target.arch.amdgpu.amdgpu_config_tables",
-        ),
-        "",
-        f"#ifndef {guard}",
-        f"#define {guard}",
-        "",
-        "// Stable target-owned encoding field identifiers used in",
-        "// loom_amdgpu_encoding_field_value_t arrays.",
-        "enum {",
-    ]
+def _emit_encoding_field_ids() -> str:
+    lines: list[str] = []
     for name in AMDGPU_ENCODING_FIELD_NAMES:
         field_id = AMDGPU_ENCODING_FIELD_IDS[name]
-        field_suffix = c_identifier(name, case=CIdentifierCase.UPPER, empty="EMPTY")
-        lines.append(f"  LOOM_AMDGPU_ENCODING_FIELD_{field_suffix} = {field_id},")
-    lines.extend(["};", "", f"#endif  // {guard}", ""])
-    return "\n".join(lines)
+        suffix = c_identifier(name, case=CIdentifierCase.UPPER, empty="EMPTY")
+        lines.append(f"LOOM_AMDGPU_ENCODING_FIELD(LOOM_AMDGPU_ENCODING_FIELD_{suffix}, {field_id})")
+    return "\n".join(lines) + "\n"
 
 
 def _write(path: Path, content: str) -> None:
@@ -235,22 +215,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Generated encoding table X-macro table path.",
     )
     parser.add_argument(
-        "--encoding-field-ids-header",
+        "--encoding-field-ids",
         type=Path,
-        help="Generated encoding field-id header path.",
+        help="Generated encoding field ID X-macro row fragment path.",
     )
     args = parser.parse_args(argv)
 
-    if not (args.low_registry_tables or args.encoding_tables or args.encoding_field_ids_header):
+    if not (args.low_registry_tables or args.encoding_tables or args.encoding_field_ids):
         parser.error("at least one output flag is required")
 
-    descriptor_sets = _selected_descriptor_set_infos()
+    descriptor_sets: tuple[AmdgpuDescriptorSetInfo, ...] = ()
+    if args.low_registry_tables or args.encoding_tables:
+        descriptor_sets = _selected_descriptor_set_infos()
     if args.low_registry_tables:
         _write(args.low_registry_tables, _emit_low_registry_tables(descriptor_sets))
     if args.encoding_tables:
         _write(args.encoding_tables, _emit_encoding_tables(descriptor_sets))
-    if args.encoding_field_ids_header:
-        _write(args.encoding_field_ids_header, _emit_encoding_field_ids_header())
+    if args.encoding_field_ids:
+        _write(args.encoding_field_ids, _emit_encoding_field_ids())
     return 0
 
 

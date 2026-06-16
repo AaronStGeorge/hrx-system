@@ -32,6 +32,17 @@ iree_py_binary(
     ],
 )
 
+iree_py_test(
+    name = "config_tables_test",
+    srcs = [
+        "amdgpu_config_tables_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.target.arch.amdgpu.amdgpu_config_tables_test"],
+    main = "pytest_style_runner.py",
+    deps = [":config_tables"],
+)
+
 iree_py_binary(
     name = "low_aliases",
     srcs = [
