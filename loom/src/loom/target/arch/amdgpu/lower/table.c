@@ -455,7 +455,7 @@ iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
   return iree_ok_status();
 }
 
-static bool loom_amdgpu_table_lookup_plan_descriptors_present(
+static bool loom_amdgpu_table_lookup_strategy_descriptors_present(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_table_lookup_strategy_row_t* row) {
   if (iree_any_bit_set(row->descriptor_flags,
@@ -812,7 +812,7 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_table(
   if (loom_amdgpu_table_lookup_plan_from_op(
           module, loom_target_low_legality_fact_table(context), op, &row,
           &unused_plan) &&
-      loom_amdgpu_table_lookup_plan_descriptors_present(
+      loom_amdgpu_table_lookup_strategy_descriptors_present(
           loom_target_low_legality_descriptor_set(context), row)) {
     return iree_ok_status();
   }

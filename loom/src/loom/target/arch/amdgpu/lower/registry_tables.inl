@@ -279,12 +279,13 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_vector_clampf_dispatch, NULL,
                 LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_TABLE_LOOKUP)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_ROW(
                 LOOM_OP_VECTOR_TABLE_LOOKUP, loom_amdgpu_table_lookup_plan_t,
                 loom_amdgpu_select_vector_table_lookup_dispatch,
                 loom_amdgpu_emit_vector_table_lookup_dispatch,
                 loom_amdgpu_low_legality_verify_vector_table,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2),
+                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2,
+                LOOM_AMDGPU_REPORT_TABLE_LOOKUP_STRATEGY),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITPACK)] =
             LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_BITPACK, loom_amdgpu_bitpack_plan_t,

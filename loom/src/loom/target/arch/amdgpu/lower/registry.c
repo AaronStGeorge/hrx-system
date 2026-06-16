@@ -125,8 +125,10 @@ enum loom_amdgpu_report_policy_e {
   LOOM_AMDGPU_REPORT_NONE = 0,
   // Report the workgroup-reduce publication strategy selected by the plan.
   LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION = 1,
+  // Report the bounded table-lookup strategy selected by the plan.
+  LOOM_AMDGPU_REPORT_TABLE_LOOKUP_STRATEGY = 2,
   // Maximum report-policy value accepted by dispatch row policy bits.
-  LOOM_AMDGPU_REPORT_MAX = LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION,
+  LOOM_AMDGPU_REPORT_MAX = LOOM_AMDGPU_REPORT_TABLE_LOOKUP_STRATEGY,
 };
 
 enum loom_amdgpu_lower_policy_bits_e {
@@ -1045,6 +1047,20 @@ static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_key(
   }
 }
 
+static iree_string_view_t loom_amdgpu_table_lookup_plan_key(
+    const loom_amdgpu_table_lookup_plan_t* plan) {
+  switch (plan->strategy) {
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_F32_LADDER:
+      return IREE_SV("amdgpu.table_lookup.strategy.f32_ladder");
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE:
+      return IREE_SV("amdgpu.table_lookup.strategy.packed_i8_permute");
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_U4_PERMUTE:
+      return IREE_SV("amdgpu.table_lookup.strategy.packed_i8_u4_permute");
+    default:
+      return iree_string_view_empty();
+  }
+}
+
 static iree_string_view_t loom_amdgpu_plan_key(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_low_lower_plan_t plan) {
@@ -1060,6 +1076,12 @@ static iree_string_view_t loom_amdgpu_plan_key(
       }
       return loom_amdgpu_workgroup_reduce_plan_key(
           (const loom_amdgpu_workgroup_reduce_plan_t*)plan.target_data);
+    case LOOM_AMDGPU_REPORT_TABLE_LOOKUP_STRATEGY:
+      if (plan.target_data == NULL) {
+        return iree_string_view_empty();
+      }
+      return loom_amdgpu_table_lookup_plan_key(
+          (const loom_amdgpu_table_lookup_plan_t*)plan.target_data);
     default:
       return iree_string_view_empty();
   }
