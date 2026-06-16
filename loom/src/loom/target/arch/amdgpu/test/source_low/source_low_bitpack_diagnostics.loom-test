@@ -16,3 +16,23 @@ func.def target(@target) @bitpack_source_type_rejected(%codes: vector<4xi8>) -> 
   %packed = vector.bitpack<8> %codes : vector<4xi8> -> vector<4xi8>
   func.return %packed : vector<4xi8>
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @bitpack_result_type_rejected(%codes: vector<4xi32>) -> (vector<2xi16>) {
+  // ERROR@+1: AMDGPU/040 {recipe_key="amdgpu.bitstream.pack_i8_from_i32", constraint_key="result_type"}
+  %packed = vector.bitpack<8> %codes : vector<4xi32> -> vector<2xi16>
+  func.return %packed : vector<2xi16>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @bitpack_lane_group_rejected(%codes: vector<3xi32>) -> (vector<3xi8>) {
+  // ERROR@+1: AMDGPU/040 {recipe_key="amdgpu.bitstream.pack_i8_from_i32", constraint_key="lane_group"}
+  %packed = vector.bitpack<8> %codes : vector<3xi32> -> vector<3xi8>
+  func.return %packed : vector<3xi8>
+}

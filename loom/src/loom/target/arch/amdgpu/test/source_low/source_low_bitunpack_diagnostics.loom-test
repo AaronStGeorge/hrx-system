@@ -11,6 +11,16 @@ func.def target(@target) @q3_width_rejected(%packed: vector<3xi8>) -> (vector<8x
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @bitunpack_source_storage_rejected(%packed: vector<65xi8>) -> (vector<65xi32>) {
+  // ERROR@+1: AMDGPU/040 {recipe_key="amdgpu.bitstream.unpacku", constraint_key="source_storage"}
+  %unpacked = vector.bitunpacku<8> %packed : vector<65xi8> -> vector<65xi32>
+  func.return %unpacked : vector<65xi32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @bitunpack_lane_count_rejected(%packed: vector<17xi8>) -> (vector<34xi32>) {
   // ERROR@+1: AMDGPU/040 {recipe_key="amdgpu.bitstream.unpacku", constraint_key="lane_count"}
   %unpacked = vector.bitunpacku<4> %packed : vector<17xi8> -> vector<34xi32>
