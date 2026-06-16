@@ -29,9 +29,18 @@ iree_status_t loom_sanitizer_options_parse_checks(
     iree_string_view_t value, iree_string_view_t diagnostic_name,
     loom_sanitizer_options_t* out_options);
 
+// Parses a sanitizer reporting mode such as "default" or "trap".
+iree_status_t loom_sanitizer_reporting_mode_parse(
+    iree_string_view_t value, iree_string_view_t diagnostic_name,
+    loom_sanitizer_reporting_mode_t* out_mode);
+
 // Formats a sanitizer check set in canonical pass-pipeline spelling.
 iree_status_t loom_sanitizer_checks_format(loom_sanitizer_checks_t checks,
                                            iree_string_view_t* out_value);
+
+// Formats a sanitizer reporting mode in canonical pass-pipeline spelling.
+iree_status_t loom_sanitizer_reporting_mode_format(
+    loom_sanitizer_reporting_mode_t mode, iree_string_view_t* out_value);
 
 #ifdef __cplusplus
 }  // extern "C"

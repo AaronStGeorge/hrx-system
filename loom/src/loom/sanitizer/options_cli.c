@@ -104,6 +104,25 @@ iree_status_t loom_sanitizer_options_parse_checks(
   return iree_ok_status();
 }
 
+iree_status_t loom_sanitizer_reporting_mode_parse(
+    iree_string_view_t value, iree_string_view_t diagnostic_name,
+    loom_sanitizer_reporting_mode_t* out_mode) {
+  diagnostic_name = loom_sanitizer_diagnostic_name(diagnostic_name);
+  value = iree_string_view_trim(value);
+  if (iree_string_view_equal(value, IREE_SV("default"))) {
+    *out_mode = LOOM_SANITIZER_REPORTING_MODE_DEFAULT;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("trap"))) {
+    *out_mode = LOOM_SANITIZER_REPORTING_MODE_TRAP;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "%.*s expected 'default' or 'trap', got '%.*s'",
+                          (int)diagnostic_name.size, diagnostic_name.data,
+                          (int)value.size, value.data);
+}
+
 iree_status_t loom_sanitizer_checks_format(loom_sanitizer_checks_t checks,
                                            iree_string_view_t* out_value) {
   switch (checks) {
@@ -135,5 +154,20 @@ iree_status_t loom_sanitizer_checks_format(loom_sanitizer_checks_t checks,
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown sanitizer check bits");
+  }
+}
+
+iree_status_t loom_sanitizer_reporting_mode_format(
+    loom_sanitizer_reporting_mode_t mode, iree_string_view_t* out_value) {
+  switch (mode) {
+    case LOOM_SANITIZER_REPORTING_MODE_DEFAULT:
+      *out_value = IREE_SV("default");
+      return iree_ok_status();
+    case LOOM_SANITIZER_REPORTING_MODE_TRAP:
+      *out_value = IREE_SV("trap");
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown sanitizer reporting mode");
   }
 }

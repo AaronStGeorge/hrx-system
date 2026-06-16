@@ -25,6 +25,7 @@
 #include "loom/ir/ir.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/sanitizer/options.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/types.h"
 #include "loom/util/fact_table.h"
@@ -655,6 +656,8 @@ typedef struct loom_low_lower_options_t {
   uint32_t max_errors;
   // Control-flow shape expected at the source-to-low boundary.
   loom_low_control_flow_lowering_t control_flow_lowering;
+  // Target failure reporting behavior for lowered sanitizer assertions.
+  loom_sanitizer_reporting_mode_t sanitizer_reporting_mode;
   // Optional arena receiving production tables that must outlive lowering,
   // such as source-derived memory access summaries consumed by packetization.
   iree_arena_allocator_t* table_arena;
@@ -847,6 +850,10 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
 // Returns source value facts computed before planning. The table describes
 // the source function being lowered and remains valid only during callbacks.
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
+    const loom_low_lower_context_t* context);
+
+// Returns target failure reporting behavior for lowered sanitizer assertions.
+loom_sanitizer_reporting_mode_t loom_low_lower_context_sanitizer_reporting_mode(
     const loom_low_lower_context_t* context);
 
 // Returns a lazily analyzed view-region table for the source function being

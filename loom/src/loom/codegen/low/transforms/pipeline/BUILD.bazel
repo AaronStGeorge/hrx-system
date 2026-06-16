@@ -31,6 +31,7 @@ loom_cc_library(
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:types",
         "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/sanitizer:options_cli",
         "//loom/src/loom/target:compile_report_low",
         "//loom/src/loom/target:low_legality",
         "//runtime/src/iree/base",

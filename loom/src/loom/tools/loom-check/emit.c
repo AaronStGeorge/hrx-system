@@ -157,6 +157,8 @@ typedef struct loom_check_emit_request_t {
   loom_sanitizer_options_t source_low_sanitizer_options;
   // True once a source-low sanitizer option has been parsed.
   bool has_source_low_sanitizer_option;
+  // True once a source-low sanitizer-reporting option has been parsed.
+  bool has_source_low_sanitizer_reporting_option;
 } loom_check_emit_request_t;
 
 static iree_status_t loom_check_emit_parse_json_output_option(
@@ -317,10 +319,22 @@ static iree_status_t loom_check_emit_parse_source_low_option(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "duplicate source-low option 'sanitizer'");
     }
-    IREE_RETURN_IF_ERROR(loom_sanitizer_options_parse_checks(
+    IREE_RETURN_IF_ERROR(loom_sanitizer_checks_parse(
         value, IREE_SV("source-low option 'sanitizer'"),
-        &request->source_low_sanitizer_options));
+        &request->source_low_sanitizer_options.checks));
     request->has_source_low_sanitizer_option = true;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(name, IREE_SV("sanitizer-reporting"))) {
+    if (request->has_source_low_sanitizer_reporting_option) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "duplicate source-low option 'sanitizer-reporting'");
+    }
+    IREE_RETURN_IF_ERROR(loom_sanitizer_reporting_mode_parse(
+        value, IREE_SV("source-low option 'sanitizer-reporting'"),
+        &request->source_low_sanitizer_options.reporting_mode));
+    request->has_source_low_sanitizer_reporting_option = true;
     return iree_ok_status();
   }
   if (!iree_string_view_equal(name, IREE_SV("output"))) {
@@ -660,6 +674,7 @@ static iree_status_t loom_check_emit_parse_request(
       .has_source_low_control_flow_option = false,
       .source_low_sanitizer_options = {0},
       .has_source_low_sanitizer_option = false,
+      .has_source_low_sanitizer_reporting_option = false,
   };
   iree_string_view_t target_name = iree_string_view_empty();
   iree_string_view_t target_options = iree_string_view_empty();

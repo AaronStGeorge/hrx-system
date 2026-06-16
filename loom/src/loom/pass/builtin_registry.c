@@ -138,6 +138,12 @@ static const loom_pass_option_enum_value_t kLowSourceToLowControlFlowValues[] =
         {.value = IREE_SVL("structured-low")},
 };
 
+static const loom_pass_option_enum_value_t
+    kLowSourceToLowSanitizerReportingValues[] = {
+        {.value = IREE_SVL("default")},
+        {.value = IREE_SVL("trap")},
+};
+
 static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
     {
         .name = IREE_SVL("control-flow"),
@@ -156,6 +162,13 @@ static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
         .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
         .minimum_uint32 = 0,
         .maximum_uint32 = UINT32_MAX,
+    },
+    {
+        .name = IREE_SVL("sanitizer-reporting"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kLowSourceToLowSanitizerReportingValues,
+        .enum_value_count =
+            IREE_ARRAYSIZE(kLowSourceToLowSanitizerReportingValues),
     },
 };
 

@@ -19,6 +19,7 @@ TEST(SanitizerOptionsCliTest, ParsesNamedCheckSets) {
   EXPECT_EQ(options.checks,
             LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_OPERATION);
   EXPECT_EQ(options.flags, 0u);
+  EXPECT_EQ(options.reporting_mode, LOOM_SANITIZER_REPORTING_MODE_DEFAULT);
 
   IREE_ASSERT_OK(loom_sanitizer_options_parse_checks(
       IREE_SV("all"), IREE_SV("--sanitizer"), &options));
@@ -57,6 +58,37 @@ TEST(SanitizerOptionsCliTest, FormatsCanonicalCheckSets) {
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_sanitizer_checks_format(1ull << 63, &formatted));
+}
+
+TEST(SanitizerOptionsCliTest, ParsesReportingModes) {
+  loom_sanitizer_reporting_mode_t mode = LOOM_SANITIZER_REPORTING_MODE_DEFAULT;
+  IREE_ASSERT_OK(loom_sanitizer_reporting_mode_parse(
+      IREE_SV("trap"), IREE_SV("--sanitizer-reporting"), &mode));
+  EXPECT_EQ(mode, LOOM_SANITIZER_REPORTING_MODE_TRAP);
+
+  IREE_ASSERT_OK(loom_sanitizer_reporting_mode_parse(
+      IREE_SV("default"), IREE_SV("--sanitizer-reporting"), &mode));
+  EXPECT_EQ(mode, LOOM_SANITIZER_REPORTING_MODE_DEFAULT);
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_sanitizer_reporting_mode_parse(
+          IREE_SV("printf"), IREE_SV("--sanitizer-reporting"), &mode));
+}
+
+TEST(SanitizerOptionsCliTest, FormatsReportingModes) {
+  iree_string_view_t formatted = iree_string_view_empty();
+  IREE_ASSERT_OK(loom_sanitizer_reporting_mode_format(
+      LOOM_SANITIZER_REPORTING_MODE_TRAP, &formatted));
+  EXPECT_TRUE(iree_string_view_equal(formatted, IREE_SV("trap")));
+
+  IREE_ASSERT_OK(loom_sanitizer_reporting_mode_format(
+      LOOM_SANITIZER_REPORTING_MODE_DEFAULT, &formatted));
+  EXPECT_TRUE(iree_string_view_equal(formatted, IREE_SV("default")));
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_sanitizer_reporting_mode_format(
+                            (loom_sanitizer_reporting_mode_t)99, &formatted));
 }
 
 }  // namespace

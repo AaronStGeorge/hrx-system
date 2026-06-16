@@ -34,6 +34,13 @@ enum loom_sanitizer_flag_bit_e {
 // Bitset of loom_sanitizer_flag_bit_e values controlling sanitizer behavior.
 typedef uint32_t loom_sanitizer_flags_t;
 
+typedef enum loom_sanitizer_reporting_mode_e {
+  // Use the target's default structured sanitizer report path.
+  LOOM_SANITIZER_REPORTING_MODE_DEFAULT = 0,
+  // Trap directly on sanitizer failures without emitting structured reports.
+  LOOM_SANITIZER_REPORTING_MODE_TRAP = 1,
+} loom_sanitizer_reporting_mode_t;
+
 // Check bits understood by this compiler.
 #define LOOM_SANITIZER_CHECKS_KNOWN                        \
   ((loom_sanitizer_checks_t)(LOOM_SANITIZER_CHECK_ACCESS | \
@@ -48,6 +55,8 @@ typedef struct loom_sanitizer_options_t {
   loom_sanitizer_checks_t checks;
   // Additional behavior flags enabled by the caller.
   loom_sanitizer_flags_t flags;
+  // Target failure reporting behavior for lowered sanitizer assertions.
+  loom_sanitizer_reporting_mode_t reporting_mode;
 } loom_sanitizer_options_t;
 
 // Returns true when sanitizer instrumentation is enabled.
@@ -69,6 +78,15 @@ static inline iree_status_t loom_sanitizer_options_validate(
   if ((options->flags & ~LOOM_SANITIZER_FLAGS_KNOWN) != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "sanitizer options contain unknown flag bits");
+  }
+  switch (options->reporting_mode) {
+    case LOOM_SANITIZER_REPORTING_MODE_DEFAULT:
+    case LOOM_SANITIZER_REPORTING_MODE_TRAP:
+      break;
+    default:
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "sanitizer options contain unknown reporting mode");
   }
   return iree_ok_status();
 }

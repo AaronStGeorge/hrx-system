@@ -235,6 +235,11 @@ const loom_value_fact_table_t* loom_low_lower_context_fact_table(
   return context->lowering.fact_table;
 }
 
+loom_sanitizer_reporting_mode_t loom_low_lower_context_sanitizer_reporting_mode(
+    const loom_low_lower_context_t* context) {
+  return context->options->sanitizer_reporting_mode;
+}
+
 iree_status_t loom_low_lower_context_view_regions(
     loom_low_lower_context_t* context,
     const loom_view_region_table_t** out_view_regions) {

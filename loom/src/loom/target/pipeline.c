@@ -137,7 +137,7 @@ static iree_status_t loom_target_pipeline_build_for_target_functions(
 
 static iree_status_t loom_target_pipeline_build_source_to_low(
     loom_builder_t* builder, const loom_target_pipeline_options_t* options) {
-  loom_named_attr_t option_attrs[3] = {0};
+  loom_named_attr_t option_attrs[4] = {0};
   loom_named_attr_slice_t option_slice = loom_named_attr_slice_empty();
   iree_host_size_t option_count = 0;
   loom_target_control_flow_lowering_t control_flow_lowering =
@@ -178,6 +178,17 @@ static iree_status_t loom_target_pipeline_build_source_to_low(
     }
     IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
         builder, IREE_SV("diagnostics"), diagnostics_value,
+        &option_attrs[option_count++]));
+  }
+  const loom_sanitizer_reporting_mode_t sanitizer_reporting_mode =
+      options != NULL ? options->sanitizer.reporting_mode
+                      : LOOM_SANITIZER_REPORTING_MODE_DEFAULT;
+  if (sanitizer_reporting_mode != LOOM_SANITIZER_REPORTING_MODE_DEFAULT) {
+    iree_string_view_t reporting_value = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_sanitizer_reporting_mode_format(
+        sanitizer_reporting_mode, &reporting_value));
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
+        builder, IREE_SV("sanitizer-reporting"), reporting_value,
         &option_attrs[option_count++]));
   }
   if (option_count != 0) {
