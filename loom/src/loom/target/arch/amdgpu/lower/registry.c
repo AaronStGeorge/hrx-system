@@ -676,6 +676,14 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
                            LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type), select_fn, \
                            emit_fn, verify_fn)
 
+#define LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_ROW(                        \
+    op_kind, plan_type, select_fn, emit_fn, verify_fn, storage_policy_value, \
+    report_policy_value)                                                     \
+  LOOM_AMDGPU_INTERNAL_ROW(op_kind, storage_policy_value,                    \
+                           LOOM_AMDGPU_PRESELECT_NONE, report_policy_value,  \
+                           LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type), select_fn, \
+                           emit_fn, verify_fn)
+
 #define LOOM_AMDGPU_INTERNAL_DATA_ROW(op_kind, plan_type, select_fn, emit_fn, \
                                       verify_fn)                              \
   LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW(                                       \
@@ -711,6 +719,8 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
 #define LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
 #define LOOM_AMDGPU_RECIPE_DATA_REPORT_ROW LOOM_AMDGPU_INTERNAL_DATA_REPORT_ROW
+#define LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_ROW \
+  LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_ROW
 
 #define LOOM_AMDGPU_GENERATED_PRESELECT_DIRECT_ROW \
   LOOM_AMDGPU_INTERNAL_DIRECT_PRESELECT_ROW
@@ -759,6 +769,7 @@ static const loom_amdgpu_lower_dispatch_table_t
 #undef LOOM_AMDGPU_GENERATED_PRESELECT_DATA_PRESELECT_ROW
 #undef LOOM_AMDGPU_GENERATED_PRESELECT_DIRECT_ROW
 #undef LOOM_AMDGPU_LEGALITY_ROW
+#undef LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_ROW
 #undef LOOM_AMDGPU_RECIPE_DATA_REPORT_ROW
 #undef LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_RECIPE_DATA_ROW
@@ -772,6 +783,7 @@ static const loom_amdgpu_lower_dispatch_table_t
 #undef LOOM_AMDGPU_INTERNAL_DATA_PRESELECT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_ROW
+#undef LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_REPORT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW
 #undef LOOM_AMDGPU_INTERNAL_DIRECT_PRESELECT_ROW
@@ -889,6 +901,24 @@ LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_table_lookup_plan_t,
                                         indices, 1);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_slice_plan_t, source,
                                         0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_subgroup_shuffle_plan_t,
+                                        value, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(
+    loom_amdgpu_subgroup_broadcast_first_plan_t, value, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_subgroup_reduce_plan_t,
+                                        value, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_workgroup_reduce_plan_t,
+                                        value, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_subgroup_scan_plan_t, value,
+                                        0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_workgroup_scan_plan_t,
+                                        value, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_subgroup_ballot_plan_t,
+                                        predicate, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_subgroup_vote_any_plan_t,
+                                        predicate, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_subgroup_vote_all_plan_t,
+                                        predicate, 0);
 
 #undef LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD
 

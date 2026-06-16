@@ -447,10 +447,10 @@ typedef struct loom_amdgpu_subgroup_broadcast_plan_t {
 } loom_amdgpu_subgroup_broadcast_plan_t;
 
 typedef struct loom_amdgpu_subgroup_broadcast_first_plan_t {
-  // Descriptor row selected to read the first active lane into an SGPR.
-  loom_low_lower_resolved_descriptor_t descriptor;
   // Source value broadcast from the first active subgroup lane.
   loom_value_id_t value;
+  // Descriptor row selected to read the first active lane into an SGPR.
+  loom_low_lower_resolved_descriptor_t descriptor;
   // Result value receiving the broadcast payload.
   loom_value_id_t result;
   // Source/result payload shape selected during planning.
@@ -460,10 +460,10 @@ typedef struct loom_amdgpu_subgroup_broadcast_first_plan_t {
 } loom_amdgpu_subgroup_broadcast_first_plan_t;
 
 typedef struct loom_amdgpu_subgroup_shuffle_plan_t {
-  // Descriptor row selected for the native cross-lane read.
-  loom_low_lower_resolved_descriptor_t descriptor;
   // Source value moved across subgroup lanes.
   loom_value_id_t value;
+  // Descriptor row selected for the native cross-lane read.
+  loom_low_lower_resolved_descriptor_t descriptor;
   // Result value receiving the moved payload.
   loom_value_id_t result;
   // Per-lane mask reporting whether the selected source lane is valid.
@@ -488,6 +488,8 @@ typedef enum loom_amdgpu_subgroup_reduce_crosslane_kind_e {
 } loom_amdgpu_subgroup_reduce_crosslane_kind_t;
 
 typedef struct loom_amdgpu_subgroup_reduce_plan_t {
+  // Source value reduced across subgroup lanes.
+  loom_value_id_t value;
   // Descriptor row selected for each native cross-lane read.
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
   // Descriptor row selected for all-lane DPP row moves.
@@ -498,8 +500,6 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t guard_descriptor;
   // Descriptor row selected to replace inactive source lanes with identity.
   loom_low_lower_resolved_descriptor_t select_descriptor;
-  // Source value reduced across subgroup lanes.
-  loom_value_id_t value;
   // Result value receiving the reduced payload.
   loom_value_id_t result;
   // Source/result payload shape selected during planning.
@@ -532,6 +532,8 @@ typedef enum loom_amdgpu_workgroup_reduce_publication_kind_e {
 } loom_amdgpu_workgroup_reduce_publication_kind_t;
 
 typedef struct loom_amdgpu_workgroup_reduce_plan_t {
+  // Source value reduced across workgroup lanes.
+  loom_value_id_t value;
   // Descriptor row selected for each native cross-lane read.
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
   // Descriptor row selected for all-lane DPP row moves.
@@ -554,8 +556,6 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t saveexec_descriptor;
   // Descriptor row selected to restore EXEC after producer-wave publication.
   loom_low_lower_resolved_descriptor_t restore_exec_descriptor;
-  // Source value reduced across workgroup lanes.
-  loom_value_id_t value;
   // Result value receiving the reduced payload.
   loom_value_id_t result;
   // Source/result payload shape selected during planning.
@@ -575,6 +575,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
 } loom_amdgpu_workgroup_reduce_plan_t;
 
 typedef struct loom_amdgpu_subgroup_scan_plan_t {
+  // Source value scanned across subgroup lanes.
+  loom_value_id_t value;
   // Descriptor row selected for each native cross-lane read.
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
   // Descriptor row selected for each native lane combine.
@@ -583,8 +585,6 @@ typedef struct loom_amdgpu_subgroup_scan_plan_t {
   loom_low_lower_resolved_descriptor_t guard_descriptor;
   // Descriptor row selected to merge guarded prefix-step results.
   loom_low_lower_resolved_descriptor_t select_descriptor;
-  // Source value scanned across subgroup lanes.
-  loom_value_id_t value;
   // Result value receiving the scanned payload.
   loom_value_id_t result;
   // Source/result payload shape selected during planning.
@@ -604,6 +604,8 @@ typedef struct loom_amdgpu_subgroup_scan_plan_t {
 } loom_amdgpu_subgroup_scan_plan_t;
 
 typedef struct loom_amdgpu_workgroup_scan_plan_t {
+  // Source value scanned across workgroup lanes.
+  loom_value_id_t value;
   // Descriptor row selected for each native cross-lane read.
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
   // Descriptor row selected for each native lane combine.
@@ -626,8 +628,6 @@ typedef struct loom_amdgpu_workgroup_scan_plan_t {
   loom_low_lower_resolved_descriptor_t saveexec_descriptor;
   // Descriptor row selected to restore EXEC after lane-restricted regions.
   loom_low_lower_resolved_descriptor_t restore_exec_descriptor;
-  // Source value scanned across workgroup lanes.
-  loom_value_id_t value;
   // Result value receiving the scanned payload.
   loom_value_id_t result;
   // Source/result payload shape selected during planning.
@@ -669,23 +669,23 @@ typedef struct loom_amdgpu_subgroup_ballot_plan_t {
 } loom_amdgpu_subgroup_ballot_plan_t;
 
 typedef struct loom_amdgpu_subgroup_vote_any_plan_t {
+  // Source predicate already materialized as a native EXEC-width mask.
+  loom_value_id_t predicate;
   // Descriptor row selected to compare the predicate mask against zero.
   loom_low_lower_resolved_descriptor_t compare_descriptor;
   // Descriptor row selected to materialize each half of the zero mask.
   loom_low_lower_resolved_descriptor_t zero_descriptor;
-  // Source predicate already materialized as a native EXEC-width mask.
-  loom_value_id_t predicate;
   // Subgroup-uniform i1 source result receiving SCC.
   loom_value_id_t result;
 } loom_amdgpu_subgroup_vote_any_plan_t;
 
 typedef struct loom_amdgpu_subgroup_vote_all_plan_t {
+  // Source predicate already materialized as a native EXEC-width mask.
+  loom_value_id_t predicate;
   // Descriptor row selected to compare predicate and active EXEC masks.
   loom_low_lower_resolved_descriptor_t compare_descriptor;
   // Descriptor row selected to read the native EXEC lane mask.
   loom_low_lower_resolved_descriptor_t exec_read_descriptor;
-  // Source predicate already materialized as a native EXEC-width mask.
-  loom_value_id_t predicate;
   // Subgroup-uniform i1 source result receiving SCC.
   loom_value_id_t result;
 } loom_amdgpu_subgroup_vote_all_plan_t;

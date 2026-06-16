@@ -78,6 +78,9 @@ _ROW_MACRO_SIGNATURES = {
     "RECIPE_DATA_REPORT_ROW": _RowMacroSignature(
         argument_count=6, report_policy_argument=5
     ),
+    "RECIPE_DATA_STORAGE_REPORT_ROW": _RowMacroSignature(
+        argument_count=7, storage_policy_argument=5, report_policy_argument=6
+    ),
     "GENERATED_PRESELECT_DIRECT_ROW": _RowMacroSignature(
         argument_count=5, preselect_policy_argument=4
     ),

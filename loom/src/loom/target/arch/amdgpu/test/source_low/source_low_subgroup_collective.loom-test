@@ -136,10 +136,10 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_index_
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32_saddr %20, %input_view
-  %26 = v_mov_b32 20
-  %result = ds_bpermute_b32 %26, %value
-  %28 = v_lshlrev_b32_src0_inline %tid, 2
-  global_store_b32_saddr %28, %result, %output_view
+  %24 = v_mov_b32 20
+  %result = ds_bpermute_b32 %24, %value
+  %26 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %26, %result, %output_view
   return
 }
 
@@ -173,13 +173,13 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_up_i32
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32_saddr %20, %input_view
-  %24 = v_and_b32_src0_inline %tid, 31
-  %25 = v_mov_b32 2
-  %26 = v_sub_nc_u32 %24, %25
-  %28 = v_lshlrev_b32_src0_inline %26, 2
-  %result = ds_bpermute_b32 %28, %value
-  %30 = v_lshlrev_b32_src0_inline %tid, 2
-  global_store_b32_saddr %30, %result, %output_view
+  %22 = v_and_b32_src0_inline %tid, 31
+  %23 = v_mov_b32 2
+  %24 = v_sub_nc_u32 %22, %23
+  %26 = v_lshlrev_b32_src0_inline %24, 2
+  %result = ds_bpermute_b32 %26, %value
+  %28 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %28, %result, %output_view
   return
 }
 
@@ -253,21 +253,21 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_down_f
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %28 = v_lshlrev_b32_src0_inline %tid, 4
   %loaded = global_load_b128_saddr %28, %input_view
-  %32 = v_and_b32_src0_inline %tid, 31
-  %33 = v_mov_b32 4
-  %34 = v_add_u32 %32, %33
-  %37 = v_lshlrev_b32_src0_inline %34, 2
-  %38 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %39 = ds_bpermute_b32 %37, %38
-  %40 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %41 = ds_bpermute_b32 %37, %40
-  %42 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %43 = ds_bpermute_b32 %37, %42
-  %44 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %45 = ds_bpermute_b32 %37, %44
-  %shuffle = concat(%39, %41, %43, %45) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %48 = v_lshlrev_b32_src0_inline %tid, 4
-  global_store_b128_saddr %48, %shuffle, %output_view
+  %30 = v_and_b32_src0_inline %tid, 31
+  %31 = v_mov_b32 4
+  %32 = v_add_u32 %30, %31
+  %35 = v_lshlrev_b32_src0_inline %32, 2
+  %36 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %37 = ds_bpermute_b32 %35, %36
+  %38 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %39 = ds_bpermute_b32 %35, %38
+  %40 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %41 = ds_bpermute_b32 %35, %40
+  %42 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %43 = ds_bpermute_b32 %35, %42
+  %shuffle = concat(%37, %39, %41, %43) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %46 = v_lshlrev_b32_src0_inline %tid, 4
+  global_store_b128_saddr %46, %shuffle, %output_view
   return
 }
 
@@ -3156,11 +3156,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_xor_i3
   %20 = v_lshlrev_b32_src0_inline %tid, 2
   %21 = s_mov_b32_m0_imm 0
   %value = global_load_dword_saddr %20, %input_view, %21
-  %25 = v_xor_b32_src0_inline %tid, 32
-  %28 = v_lshlrev_b32_src0_inline %25, 2
-  %result = ds_bpermute_b32 %28, %value
-  %30 = v_lshlrev_b32_src0_inline %tid, 2
-  %31 = s_mov_b32_m0_imm 0
-  global_store_dword_saddr %30, %result, %output_view, %31
+  %23 = v_xor_b32_src0_inline %tid, 32
+  %26 = v_lshlrev_b32_src0_inline %23, 2
+  %result = ds_bpermute_b32 %26, %value
+  %28 = v_lshlrev_b32_src0_inline %tid, 2
+  %29 = s_mov_b32_m0_imm 0
+  global_store_dword_saddr %28, %result, %output_view, %29
   return
 }
