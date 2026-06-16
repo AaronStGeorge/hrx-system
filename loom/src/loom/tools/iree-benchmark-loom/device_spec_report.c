@@ -140,24 +140,6 @@ static iree_status_t iree_benchmark_loom_write_physical_device_specs_json(
   return loom_output_stream_write_cstring(stream, "]");
 }
 
-static iree_status_t iree_benchmark_loom_write_device_spec_topology_json(
-    const iree_hal_device_topology_spec_t* topology,
-    loom_output_stream_t* stream) {
-  bool first_field = true;
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u32_field(
-      stream, &first_field, "device_count", topology->device_count));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u32_field(
-      stream, &first_field, "device_ordinal", topology->device_ordinal));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-      stream, &first_field, "edge_count", topology->edge_count));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u64_field(
-      stream, &first_field, "local_device_mask", topology->local_device_mask));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u32_field(
-      stream, &first_field, "flags", topology->flags));
-  return loom_output_stream_write_cstring(stream, "}");
-}
-
 static iree_status_t iree_benchmark_loom_write_device_spec_memory_json(
     const iree_hal_device_memory_spec_t* memory, loom_output_stream_t* stream) {
   bool first_field = true;
@@ -410,8 +392,6 @@ iree_status_t iree_benchmark_loom_write_device_spec_json(
   }
   const iree_hal_device_identity_spec_t* identity =
       iree_hal_device_spec_identity(device_spec);
-  const iree_hal_device_topology_spec_t* topology =
-      iree_hal_device_spec_topology(device_spec);
   const iree_hal_device_memory_spec_t* memory =
       iree_hal_device_spec_memory(device_spec);
   const iree_hal_device_virtual_memory_spec_t* virtual_memory =
@@ -440,10 +420,6 @@ iree_status_t iree_benchmark_loom_write_device_spec_json(
       stream, &first_field, "physical_devices"));
   IREE_RETURN_IF_ERROR(
       iree_benchmark_loom_write_physical_device_specs_json(identity, stream));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
-      stream, &first_field, "topology"));
-  IREE_RETURN_IF_ERROR(
-      iree_benchmark_loom_write_device_spec_topology_json(topology, stream));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
       stream, &first_field, "memory"));
   IREE_RETURN_IF_ERROR(

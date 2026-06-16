@@ -19,7 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #define IREE_HAL_DEVICE_SPEC_MAGIC 0x43505344u  // DSPC
-#define IREE_HAL_DEVICE_SPEC_VERSION 1u
+#define IREE_HAL_DEVICE_SPEC_VERSION 2u
 #define IREE_HAL_DEVICE_SPEC_FNV1A64_OFFSET_BASIS 0xcbf29ce484222325ull
 #define IREE_HAL_DEVICE_SPEC_FNV1A64_PRIME 0x100000001b3ull
 
@@ -50,8 +50,6 @@ typedef struct iree_hal_device_spec_serialized_header_t {
   uint64_t total_length;
   // Serialized physical device records.
   iree_hal_device_spec_serialized_section_t physical_devices;
-  // Serialized topology edge records.
-  iree_hal_device_spec_serialized_section_t topology_edges;
   // Serialized memory heap records.
   iree_hal_device_spec_serialized_section_t memory_heaps;
   // Serialized memory type records.
@@ -76,8 +74,6 @@ typedef struct iree_hal_device_spec_serialized_header_t {
   iree_hal_device_spec_serialized_range_t facet_payloads;
   // Serialized logical device identity record.
   uint64_t identity_offset;
-  // Serialized topology record.
-  uint64_t topology_offset;
   // Serialized memory record.
   uint64_t memory_offset;
   // Serialized virtual memory record.
@@ -166,17 +162,6 @@ typedef struct iree_hal_serialized_device_identity_spec_t {
   // Logical device identity flags.
   iree_hal_device_identity_flags_t flags;
 } iree_hal_serialized_device_identity_spec_t;
-
-typedef struct iree_hal_serialized_device_topology_spec_t {
-  // Number of devices in the topology edge matrix.
-  uint32_t device_count;
-  // Device ordinal represented by this logical device.
-  uint32_t device_ordinal;
-  // Bitmap of devices directly covered by this logical device.
-  iree_hal_topology_device_bitmap_t local_device_mask;
-  // Topology fact flags.
-  iree_hal_device_topology_spec_flags_t flags;
-} iree_hal_serialized_device_topology_spec_t;
 
 typedef struct iree_hal_serialized_memory_heap_spec_t {
   // Human-readable heap name.
@@ -315,8 +300,6 @@ struct iree_hal_device_spec_t {
   iree_host_size_t string_table_length;
   // Owned physical device records.
   iree_hal_physical_device_spec_t* physical_devices;
-  // Owned topology edge records.
-  iree_hal_topology_edge_t* topology_edges;
   // Owned memory heap records.
   iree_hal_memory_heap_spec_t* memory_heaps;
   // Owned memory type records.
@@ -343,8 +326,6 @@ struct iree_hal_device_spec_t {
   iree_host_size_t facet_payload_storage_length;
   // Logical device identity facet.
   iree_hal_device_identity_spec_t identity;
-  // Device topology facet.
-  iree_hal_device_topology_spec_t topology;
   // Memory capability facet.
   iree_hal_device_memory_spec_t memory;
   // Virtual memory capability facet.
@@ -439,19 +420,6 @@ static iree_status_t iree_hal_device_spec_validate_params(
     IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_count_pointer(
         identity->physical_device_count, identity->physical_devices,
         "identity.physical_devices"));
-  }
-  const iree_hal_device_topology_spec_t* topology = params->topology;
-  if (topology) {
-    IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_count_pointer(
-        topology->edge_count, topology->edges, "topology.edges"));
-    if (topology->edge_count &&
-        topology->edge_count !=
-            (iree_host_size_t)topology->device_count * topology->device_count) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "device spec topology edge count %" PRIhsz
-                              " does not match device_count %u",
-                              topology->edge_count, topology->device_count);
-    }
   }
   const iree_hal_device_memory_spec_t* memory = params->memory;
   if (memory) {
@@ -605,7 +573,6 @@ static void iree_hal_device_spec_destroy(iree_hal_device_spec_t* spec) {
   iree_allocator_t host_allocator = spec->host_allocator;
   iree_allocator_free(host_allocator, spec->string_table);
   iree_allocator_free(host_allocator, spec->physical_devices);
-  iree_allocator_free(host_allocator, spec->topology_edges);
   iree_allocator_free(host_allocator, spec->memory_heaps);
   iree_allocator_free(host_allocator, spec->memory_types);
   iree_allocator_free(host_allocator, spec->external_buffer_handles);
@@ -701,14 +668,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_create(
               params->identity->physical_devices[i].identity.backend_path,
               string_storage, &string_offset);
     }
-  }
-  if (iree_status_is_ok(status) && params && params->topology) {
-    spec->topology = *params->topology;
-    status = iree_hal_device_spec_clone_array(
-        host_allocator, params->topology->edge_count,
-        sizeof(*spec->topology_edges), params->topology->edges,
-        (void**)&spec->topology_edges);
-    spec->topology.edges = spec->topology_edges;
   }
   if (iree_status_is_ok(status) && params && params->memory) {
     spec->memory = *params->memory;
@@ -963,10 +922,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_serialize(
       iree_alignof(iree_hal_serialized_device_identity_spec_t), &offset,
       &header.identity_offset));
   IREE_RETURN_IF_ERROR(iree_hal_device_spec_layout_bytes(
-      sizeof(iree_hal_serialized_device_topology_spec_t),
-      iree_alignof(iree_hal_serialized_device_topology_spec_t), &offset,
-      &header.topology_offset));
-  IREE_RETURN_IF_ERROR(iree_hal_device_spec_layout_bytes(
       sizeof(iree_hal_serialized_device_memory_spec_t),
       iree_alignof(iree_hal_serialized_device_memory_spec_t), &offset,
       &header.memory_offset));
@@ -995,9 +950,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_serialize(
       sizeof(iree_hal_serialized_physical_device_spec_t),
       iree_alignof(iree_hal_serialized_physical_device_spec_t), &offset,
       &header.physical_devices));
-  IREE_RETURN_IF_ERROR(iree_hal_device_spec_layout_section(
-      spec->topology.edge_count, sizeof(iree_hal_topology_edge_t),
-      iree_alignof(iree_hal_topology_edge_t), &offset, &header.topology_edges));
   IREE_RETURN_IF_ERROR(iree_hal_device_spec_layout_section(
       spec->memory.heap_count, sizeof(iree_hal_serialized_memory_heap_spec_t),
       iree_alignof(iree_hal_serialized_memory_heap_spec_t), &offset,
@@ -1120,19 +1072,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_serialize(
         .partition_count = source->partition_count,
         .physical_device_affinity = source->physical_device_affinity,
     };
-  }
-
-  *(iree_hal_serialized_device_topology_spec_t*)(bytes +
-                                                 header.topology_offset) =
-      (iree_hal_serialized_device_topology_spec_t){
-          .device_count = spec->topology.device_count,
-          .device_ordinal = spec->topology.device_ordinal,
-          .local_device_mask = spec->topology.local_device_mask,
-          .flags = spec->topology.flags,
-      };
-  if (spec->topology.edge_count) {
-    memcpy(bytes + header.topology_edges.offset, spec->topology.edges,
-           spec->topology.edge_count * sizeof(*spec->topology.edges));
   }
 
   *(iree_hal_serialized_device_memory_spec_t*)(bytes + header.memory_offset) =
@@ -1419,7 +1358,6 @@ static void iree_hal_device_spec_copy_serialized_element(
 static void iree_hal_device_spec_free_parse_arrays(
     iree_allocator_t host_allocator,
     iree_hal_physical_device_spec_t* physical_devices,
-    iree_hal_topology_edge_t* topology_edges,
     iree_hal_memory_heap_spec_t* memory_heaps,
     iree_hal_memory_type_spec_t* memory_types,
     iree_hal_external_buffer_handle_spec_t* external_buffer_handles,
@@ -1430,7 +1368,6 @@ static void iree_hal_device_spec_free_parse_arrays(
     iree_hal_executable_target_t* executable_targets,
     iree_hal_device_spec_facet_t* facets) {
   iree_allocator_free(host_allocator, physical_devices);
-  iree_allocator_free(host_allocator, topology_edges);
   iree_allocator_free(host_allocator, memory_heaps);
   iree_allocator_free(host_allocator, memory_types);
   iree_allocator_free(host_allocator, external_buffer_handles);
@@ -1489,10 +1426,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
       sizeof(iree_hal_serialized_device_identity_spec_t),
       iree_alignof(iree_hal_serialized_device_identity_spec_t), "identity"));
   IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_serialized_range(
-      bytes, header.topology_offset,
-      sizeof(iree_hal_serialized_device_topology_spec_t),
-      iree_alignof(iree_hal_serialized_device_topology_spec_t), "topology"));
-  IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_serialized_range(
       bytes, header.memory_offset,
       sizeof(iree_hal_serialized_device_memory_spec_t),
       iree_alignof(iree_hal_serialized_device_memory_spec_t), "memory"));
@@ -1521,9 +1454,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
       sizeof(iree_hal_serialized_physical_device_spec_t),
       iree_alignof(iree_hal_serialized_physical_device_spec_t),
       "physical_devices"));
-  IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_serialized_section(
-      bytes, header.topology_edges, sizeof(iree_hal_topology_edge_t),
-      iree_alignof(iree_hal_topology_edge_t), "topology_edges"));
   IREE_RETURN_IF_ERROR(iree_hal_device_spec_validate_serialized_section(
       bytes, header.memory_heaps,
       sizeof(iree_hal_serialized_memory_heap_spec_t),
@@ -1573,7 +1503,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
 
   iree_status_t status = iree_ok_status();
   iree_hal_physical_device_spec_t* physical_devices = NULL;
-  iree_hal_topology_edge_t* topology_edges = NULL;
   iree_hal_memory_heap_spec_t* memory_heaps = NULL;
   iree_hal_memory_type_spec_t* memory_types = NULL;
   iree_hal_external_buffer_handle_spec_t* external_buffer_handles = NULL;
@@ -1587,11 +1516,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
   status = iree_hal_device_spec_allocate_parse_array(
       host_allocator, header.physical_devices, sizeof(*physical_devices),
       (void**)&physical_devices);
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_device_spec_allocate_parse_array(
-        host_allocator, header.topology_edges, sizeof(*topology_edges),
-        (void**)&topology_edges);
-  }
   if (iree_status_is_ok(status)) {
     status = iree_hal_device_spec_allocate_parse_array(
         host_allocator, header.memory_heaps, sizeof(*memory_heaps),
@@ -1639,10 +1563,10 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
   }
   if (!iree_status_is_ok(status)) {
     iree_hal_device_spec_free_parse_arrays(
-        host_allocator, physical_devices, topology_edges, memory_heaps,
-        memory_types, external_buffer_handles, virtual_memory_classes,
-        queue_families, external_timepoint_handles, executable_formats,
-        executable_targets, facets);
+        host_allocator, physical_devices, memory_heaps, memory_types,
+        external_buffer_handles, virtual_memory_classes, queue_families,
+        external_timepoint_handles, executable_formats, executable_targets,
+        facets);
     return status;
   }
 
@@ -1723,23 +1647,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
           bytes, header, serialized_physical_device.identity.backend_path,
           &physical_devices[i].identity.backend_path);
     }
-  }
-
-  iree_hal_serialized_device_topology_spec_t serialized_topology;
-  memcpy(&serialized_topology, bytes.data + header.topology_offset,
-         sizeof(serialized_topology));
-  iree_hal_device_topology_spec_t topology = {
-      .device_count = serialized_topology.device_count,
-      .device_ordinal = serialized_topology.device_ordinal,
-      .edge_count = (iree_host_size_t)header.topology_edges.count,
-      .edges = topology_edges,
-      .local_device_mask = serialized_topology.local_device_mask,
-      .flags = serialized_topology.flags,
-  };
-  for (iree_host_size_t i = 0; i < topology.edge_count; ++i) {
-    iree_hal_device_spec_copy_serialized_element(bytes, header.topology_edges,
-                                                 i, sizeof(topology_edges[i]),
-                                                 &topology_edges[i]);
   }
 
   iree_hal_serialized_device_memory_spec_t serialized_memory;
@@ -1946,7 +1853,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
   if (iree_status_is_ok(status)) {
     iree_hal_device_spec_params_t params = {
         .identity = &identity,
-        .topology = &topology,
         .memory = &memory,
         .virtual_memory = &virtual_memory,
         .queues = &queues,
@@ -1960,10 +1866,10 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
   }
 
   iree_hal_device_spec_free_parse_arrays(
-      host_allocator, physical_devices, topology_edges, memory_heaps,
-      memory_types, external_buffer_handles, virtual_memory_classes,
-      queue_families, external_timepoint_handles, executable_formats,
-      executable_targets, facets);
+      host_allocator, physical_devices, memory_heaps, memory_types,
+      external_buffer_handles, virtual_memory_classes, queue_families,
+      external_timepoint_handles, executable_formats, executable_targets,
+      facets);
   return status;
 }
 
@@ -1982,12 +1888,6 @@ IREE_API_EXPORT const iree_hal_device_identity_spec_t*
 iree_hal_device_spec_identity(const iree_hal_device_spec_t* spec) {
   IREE_ASSERT_ARGUMENT(spec);
   return &spec->identity;
-}
-
-IREE_API_EXPORT const iree_hal_device_topology_spec_t*
-iree_hal_device_spec_topology(const iree_hal_device_spec_t* spec) {
-  IREE_ASSERT_ARGUMENT(spec);
-  return &spec->topology;
 }
 
 IREE_API_EXPORT const iree_hal_device_memory_spec_t*

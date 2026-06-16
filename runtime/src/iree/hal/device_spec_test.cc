@@ -22,8 +22,6 @@ static void ExpectStringViewEq(iree_string_view_t actual,
 static iree_hal_device_spec_params_t MakeTestSpecParams(
     iree_hal_device_identity_spec_t* out_identity,
     iree_hal_physical_device_spec_t* out_physical_devices,
-    iree_hal_device_topology_spec_t* out_topology,
-    iree_hal_topology_edge_t* out_topology_edges,
     iree_hal_device_memory_spec_t* out_memory,
     iree_hal_memory_heap_spec_t* out_memory_heaps,
     iree_hal_memory_type_spec_t* out_memory_types,
@@ -69,16 +67,6 @@ static iree_hal_device_spec_params_t MakeTestSpecParams(
       /*.physical_device_count=*/1,
       /*.physical_devices=*/out_physical_devices,
       /*.flags=*/IREE_HAL_DEVICE_IDENTITY_FLAG_NONE,
-  };
-
-  out_topology_edges[0] = iree_hal_topology_edge_make_self();
-  *out_topology = {
-      /*.device_count=*/1,
-      /*.device_ordinal=*/0,
-      /*.edge_count=*/1,
-      /*.edges=*/out_topology_edges,
-      /*.local_device_mask=*/1,
-      /*.flags=*/IREE_HAL_DEVICE_TOPOLOGY_SPEC_FLAG_NONE,
   };
 
   out_memory_heaps[0] = {
@@ -212,7 +200,6 @@ static iree_hal_device_spec_params_t MakeTestSpecParams(
 
   return {
       /*.identity=*/out_identity,
-      /*.topology=*/out_topology,
       /*.memory=*/out_memory,
       /*.virtual_memory=*/NULL,
       /*.queues=*/out_queues,
@@ -228,8 +215,6 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
   uint8_t facet_payload_storage[] = {0x01, 0x02, 0x03};
   iree_hal_device_identity_spec_t identity;
   iree_hal_physical_device_spec_t physical_devices[1];
-  iree_hal_device_topology_spec_t topology;
-  iree_hal_topology_edge_t topology_edges[1];
   iree_hal_device_memory_spec_t memory;
   iree_hal_memory_heap_spec_t memory_heaps[1];
   iree_hal_memory_type_spec_t memory_types[1];
@@ -242,9 +227,9 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
   iree_hal_executable_target_t executable_targets[3];
   iree_hal_device_spec_facet_t facets[1];
   iree_hal_device_spec_params_t params = MakeTestSpecParams(
-      &identity, physical_devices, &topology, topology_edges, &memory,
-      memory_heaps, memory_types, &queues, queue_families, &dispatch, &timing,
-      &executables, executable_formats, executable_targets, facets,
+      &identity, physical_devices, &memory, memory_heaps, memory_types, &queues,
+      queue_families, &dispatch, &timing, &executables, executable_formats,
+      executable_targets, facets,
       iree_make_const_byte_span(facet_payload_storage,
                                 sizeof(facet_payload_storage)));
 
@@ -309,8 +294,6 @@ TEST(DeviceObservationTest, MemoryTotalFromSpecSumsKnownHeaps) {
   uint8_t facet_payload_storage[] = {0x01, 0x02, 0x03};
   iree_hal_device_identity_spec_t identity;
   iree_hal_physical_device_spec_t physical_devices[1];
-  iree_hal_device_topology_spec_t topology;
-  iree_hal_topology_edge_t topology_edges[1];
   iree_hal_device_memory_spec_t memory;
   iree_hal_memory_heap_spec_t memory_heaps[1];
   iree_hal_memory_type_spec_t memory_types[1];
@@ -323,9 +306,9 @@ TEST(DeviceObservationTest, MemoryTotalFromSpecSumsKnownHeaps) {
   iree_hal_executable_target_t executable_targets[3];
   iree_hal_device_spec_facet_t facets[1];
   iree_hal_device_spec_params_t params = MakeTestSpecParams(
-      &identity, physical_devices, &topology, topology_edges, &memory,
-      memory_heaps, memory_types, &queues, queue_families, &dispatch, &timing,
-      &executables, executable_formats, executable_targets, facets,
+      &identity, physical_devices, &memory, memory_heaps, memory_types, &queues,
+      queue_families, &dispatch, &timing, &executables, executable_formats,
+      executable_targets, facets,
       iree_make_const_byte_span(facet_payload_storage,
                                 sizeof(facet_payload_storage)));
 
@@ -352,8 +335,6 @@ TEST(DeviceObservationTest, MemoryTotalFromSpecSkipsUnknownCapacity) {
   uint8_t facet_payload_storage[] = {0x01, 0x02, 0x03};
   iree_hal_device_identity_spec_t identity;
   iree_hal_physical_device_spec_t physical_devices[1];
-  iree_hal_device_topology_spec_t topology;
-  iree_hal_topology_edge_t topology_edges[1];
   iree_hal_device_memory_spec_t memory;
   iree_hal_memory_heap_spec_t memory_heaps[1];
   iree_hal_memory_type_spec_t memory_types[1];
@@ -366,9 +347,9 @@ TEST(DeviceObservationTest, MemoryTotalFromSpecSkipsUnknownCapacity) {
   iree_hal_executable_target_t executable_targets[3];
   iree_hal_device_spec_facet_t facets[1];
   iree_hal_device_spec_params_t params = MakeTestSpecParams(
-      &identity, physical_devices, &topology, topology_edges, &memory,
-      memory_heaps, memory_types, &queues, queue_families, &dispatch, &timing,
-      &executables, executable_formats, executable_targets, facets,
+      &identity, physical_devices, &memory, memory_heaps, memory_types, &queues,
+      queue_families, &dispatch, &timing, &executables, executable_formats,
+      executable_targets, facets,
       iree_make_const_byte_span(facet_payload_storage,
                                 sizeof(facet_payload_storage)));
   memory_heaps[0].flags = IREE_HAL_MEMORY_HEAP_SPEC_FLAG_CAPACITY_UNKNOWN;
@@ -520,7 +501,6 @@ TEST(DeviceSpecTest, FindsVirtualMemoryAndExternalHandleRecords) {
 
   iree_hal_device_spec_params_t params = {
       /*.identity=*/NULL,
-      /*.topology=*/NULL,
       /*.memory=*/&memory,
       /*.virtual_memory=*/&virtual_memory,
       /*.queues=*/&queues,

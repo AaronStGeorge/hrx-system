@@ -44,11 +44,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_builder_set_identity(
     iree_hal_device_spec_builder_t* builder,
     const iree_hal_device_identity_spec_t* identity);
 
-// Copies the topology facet into |builder|.
-IREE_API_EXPORT iree_status_t iree_hal_device_spec_builder_set_topology(
-    iree_hal_device_spec_builder_t* builder,
-    const iree_hal_device_topology_spec_t* topology);
-
 // Copies the memory facet into |builder|.
 IREE_API_EXPORT iree_status_t iree_hal_device_spec_builder_set_memory(
     iree_hal_device_spec_builder_t* builder,

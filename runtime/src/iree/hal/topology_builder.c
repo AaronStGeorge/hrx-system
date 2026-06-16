@@ -6,12 +6,154 @@
 
 #include "iree/hal/topology_builder.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "iree/base/internal/atomics.h"
 #include "iree/hal/device.h"
 #include "iree/hal/utils/platform_topology.h"
+
+//===----------------------------------------------------------------------===//
+// iree_hal_topology_t storage
+//===----------------------------------------------------------------------===//
+
+typedef struct iree_hal_topology_storage_layout_t {
+  iree_host_size_t total_size;
+  iree_host_size_t nodes_offset;
+  iree_host_size_t links_offset;
+} iree_hal_topology_storage_layout_t;
+
+static iree_status_t iree_hal_topology_storage_layout_append_array(
+    iree_host_size_t count, iree_host_size_t element_size,
+    iree_host_size_t alignment, iree_host_size_t* inout_total_size,
+    iree_host_size_t* out_offset) {
+  IREE_ASSERT_ARGUMENT(inout_total_size);
+  IREE_ASSERT_ARGUMENT(out_offset);
+  *out_offset = 0;
+  if (!count) return iree_ok_status();
+  *inout_total_size = iree_host_align(*inout_total_size, alignment);
+  if (IREE_UNLIKELY(count >
+                    (IREE_HOST_SIZE_MAX - *inout_total_size) / element_size)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "topology storage size overflow");
+  }
+  *out_offset = *inout_total_size;
+  *inout_total_size += count * element_size;
+  return iree_ok_status();
+}
+
+static iree_status_t iree_hal_topology_storage_layout_calculate(
+    uint32_t device_count, iree_host_size_t node_count,
+    iree_host_size_t link_count,
+    iree_hal_topology_storage_layout_t* out_layout) {
+  IREE_ASSERT_ARGUMENT(out_layout);
+  if (IREE_UNLIKELY(device_count == 0 ||
+                    device_count > IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "device count %u out of range [1,%u]", device_count,
+                            IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT);
+  }
+  const iree_host_size_t edge_count =
+      (iree_host_size_t)device_count * device_count;
+  iree_host_size_t total_size = offsetof(iree_hal_topology_t, device_edges);
+  iree_host_size_t device_edges_offset = 0;
+  IREE_RETURN_IF_ERROR(iree_hal_topology_storage_layout_append_array(
+      edge_count, sizeof(iree_hal_topology_edge_t),
+      iree_alignof(iree_hal_topology_edge_t), &total_size,
+      &device_edges_offset));
+  IREE_ASSERT_EQ(device_edges_offset,
+                 offsetof(iree_hal_topology_t, device_edges));
+  total_size = iree_host_align(total_size, iree_alignof(iree_max_align_t));
+
+  iree_host_size_t nodes_offset = 0;
+  IREE_RETURN_IF_ERROR(iree_hal_topology_storage_layout_append_array(
+      node_count, sizeof(iree_hal_topology_node_t),
+      iree_alignof(iree_hal_topology_node_t), &total_size, &nodes_offset));
+
+  iree_host_size_t links_offset = 0;
+  IREE_RETURN_IF_ERROR(iree_hal_topology_storage_layout_append_array(
+      link_count, sizeof(iree_hal_topology_link_t),
+      iree_alignof(iree_hal_topology_link_t), &total_size, &links_offset));
+
+  out_layout->total_size = total_size;
+  out_layout->nodes_offset = nodes_offset;
+  out_layout->links_offset = links_offset;
+  return iree_ok_status();
+}
+
+static iree_status_t iree_hal_topology_create_with_storage(
+    uint32_t device_count, const uint8_t* device_numa_nodes,
+    const iree_hal_topology_edge_t* device_edges, iree_host_size_t node_count,
+    const iree_hal_topology_node_t* nodes, iree_host_size_t link_count,
+    const iree_hal_topology_link_t* links, iree_allocator_t host_allocator,
+    iree_hal_topology_t** out_topology) {
+  IREE_ASSERT_ARGUMENT(device_numa_nodes);
+  IREE_ASSERT_ARGUMENT(device_edges);
+  IREE_ASSERT_ARGUMENT(out_topology);
+  *out_topology = NULL;
+
+  iree_hal_topology_storage_layout_t layout = {0};
+  IREE_RETURN_IF_ERROR(iree_hal_topology_storage_layout_calculate(
+      device_count, node_count, link_count, &layout));
+  if (IREE_UNLIKELY(node_count && !nodes)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "topology node array is required for %" PRIhsz " nodes", node_count);
+  }
+  if (IREE_UNLIKELY(link_count && !links)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "topology link array is required for %" PRIhsz " links", link_count);
+  }
+
+  iree_hal_topology_t* topology = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, layout.total_size,
+                                             (void**)&topology));
+  memset(topology, 0, layout.total_size);
+
+  topology->device_count = device_count;
+  memcpy(topology->device_numa_nodes, device_numa_nodes,
+         device_count * sizeof(*topology->device_numa_nodes));
+  memcpy(topology->device_edges, device_edges,
+         (iree_host_size_t)device_count * device_count *
+             sizeof(*topology->device_edges));
+
+  topology->node_count = node_count;
+  if (node_count) {
+    iree_hal_topology_node_t* target_nodes =
+        (iree_hal_topology_node_t*)((uint8_t*)topology + layout.nodes_offset);
+    memcpy(target_nodes, nodes, node_count * sizeof(*nodes));
+    topology->nodes = target_nodes;
+  }
+
+  topology->link_count = link_count;
+  if (link_count) {
+    iree_hal_topology_link_t* target_links =
+        (iree_hal_topology_link_t*)((uint8_t*)topology + layout.links_offset);
+    memcpy(target_links, links, link_count * sizeof(*links));
+    topology->links = target_links;
+  }
+
+  *out_topology = topology;
+  return iree_ok_status();
+}
+
+IREE_API_EXPORT iree_status_t iree_hal_topology_clone(
+    const iree_hal_topology_t* topology, iree_allocator_t host_allocator,
+    iree_hal_topology_t** out_topology) {
+  IREE_ASSERT_ARGUMENT(topology);
+  IREE_ASSERT_ARGUMENT(out_topology);
+  return iree_hal_topology_create_with_storage(
+      topology->device_count, topology->device_numa_nodes,
+      topology->device_edges, topology->node_count, topology->nodes,
+      topology->link_count, topology->links, host_allocator, out_topology);
+}
+
+IREE_API_EXPORT void iree_hal_topology_destroy(
+    iree_hal_topology_t* topology, iree_allocator_t host_allocator) {
+  iree_allocator_free(host_allocator, topology);
+}
 
 //===----------------------------------------------------------------------===//
 // iree_hal_topology_builder_t
@@ -27,13 +169,12 @@ void iree_hal_topology_builder_initialize(iree_hal_topology_builder_t* builder,
   // Zero the entire builder.
   memset(builder, 0, sizeof(*builder));
 
-  // Initialize topology.
-  builder->topology.device_count = device_count;
+  builder->device_count = device_count;
 
   // Initialize self-edges.
   for (uint32_t i = 0; i < device_count; ++i) {
     uint32_t idx = i * device_count + i;
-    builder->topology.edges[idx] = iree_hal_topology_edge_make_self();
+    builder->device_edges[idx] = iree_hal_topology_edge_make_self();
     builder->edges_set[idx] = true;
   }
 
@@ -46,13 +187,12 @@ iree_status_t iree_hal_topology_builder_set_edge(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   // Validate ordinals.
-  if (src_ordinal >= builder->topology.device_count ||
-      dst_ordinal >= builder->topology.device_count) {
+  if (src_ordinal >= builder->device_count ||
+      dst_ordinal >= builder->device_count) {
     IREE_TRACE_ZONE_END(z0);
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "device ordinals [%u,%u] out of range [0,%u)",
-                            src_ordinal, dst_ordinal,
-                            builder->topology.device_count);
+                            src_ordinal, dst_ordinal, builder->device_count);
   }
 
   // Validate self-edges are optimal.
@@ -69,8 +209,8 @@ iree_status_t iree_hal_topology_builder_set_edge(
   }
 
   // Store edge.
-  uint32_t idx = src_ordinal * builder->topology.device_count + dst_ordinal;
-  builder->topology.edges[idx] = edge;
+  uint32_t idx = src_ordinal * builder->device_count + dst_ordinal;
+  builder->device_edges[idx] = edge;
   builder->edges_set[idx] = true;
 
   IREE_TRACE_ZONE_END(z0);
@@ -80,13 +220,13 @@ iree_status_t iree_hal_topology_builder_set_edge(
 iree_status_t iree_hal_topology_builder_set_numa_node(
     iree_hal_topology_builder_t* builder, uint32_t device_ordinal,
     uint8_t numa_node) {
-  if (device_ordinal >= builder->topology.device_count) {
+  if (device_ordinal >= builder->device_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "device ordinal %u out of range [0,%u)",
-                            device_ordinal, builder->topology.device_count);
+                            device_ordinal, builder->device_count);
   }
 
-  builder->topology.numa_nodes[device_ordinal] = numa_node;
+  builder->device_numa_nodes[device_ordinal] = numa_node;
   return iree_ok_status();
 }
 
@@ -95,7 +235,7 @@ static iree_status_t iree_hal_topology_builder_validate(
     iree_hal_topology_builder_t* builder) {
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  uint32_t device_count = builder->topology.device_count;
+  uint32_t device_count = builder->device_count;
 
   // Check all edges are set.
   for (uint32_t i = 0; i < device_count; ++i) {
@@ -116,9 +256,9 @@ static iree_status_t iree_hal_topology_builder_validate(
       uint32_t ji_idx = j * device_count + i;
 
       iree_hal_topology_link_class_t ij_link =
-          iree_hal_topology_edge_link_class(builder->topology.edges[ij_idx].lo);
+          iree_hal_topology_edge_link_class(builder->device_edges[ij_idx].lo);
       iree_hal_topology_link_class_t ji_link =
-          iree_hal_topology_edge_link_class(builder->topology.edges[ji_idx].lo);
+          iree_hal_topology_edge_link_class(builder->device_edges[ji_idx].lo);
 
       if (ij_link != ji_link) {
         IREE_TRACE_ZONE_END(z0);
@@ -135,8 +275,11 @@ static iree_status_t iree_hal_topology_builder_validate(
 }
 
 iree_status_t iree_hal_topology_builder_finalize(
-    iree_hal_topology_builder_t* builder, iree_hal_topology_t* out_topology) {
+    iree_hal_topology_builder_t* builder, iree_allocator_t host_allocator,
+    iree_hal_topology_t** out_topology) {
   IREE_TRACE_ZONE_BEGIN(z0);
+  IREE_ASSERT_ARGUMENT(out_topology);
+  *out_topology = NULL;
 
   // Validate the topology.
   iree_status_t status = iree_hal_topology_builder_validate(builder);
@@ -145,11 +288,22 @@ iree_status_t iree_hal_topology_builder_finalize(
     return status;
   }
 
-  // Copy the embedded topology.
-  memcpy(out_topology, &builder->topology, sizeof(iree_hal_topology_t));
+  iree_hal_topology_node_t device_nodes[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
+  for (uint32_t i = 0; i < builder->device_count; ++i) {
+    device_nodes[i] = (iree_hal_topology_node_t){
+        .ordinal = i,
+        .parent_ordinal = IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID,
+        .device_ordinal = i,
+        .kind = IREE_HAL_TOPOLOGY_NODE_KIND_LOGICAL_DEVICE,
+    };
+  }
+  status = iree_hal_topology_create_with_storage(
+      builder->device_count, builder->device_numa_nodes, builder->device_edges,
+      builder->device_count, device_nodes, /*link_count=*/0, /*links=*/NULL,
+      host_allocator, out_topology);
 
   IREE_TRACE_ZONE_END(z0);
-  return iree_ok_status();
+  return status;
 }
 
 //===----------------------------------------------------------------------===//

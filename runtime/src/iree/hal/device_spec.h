@@ -73,7 +73,7 @@ typedef enum iree_hal_external_handle_capability_flag_bits_e {
 } iree_hal_external_handle_capability_flag_bits_t;
 
 //===----------------------------------------------------------------------===//
-// Identity and topology facts
+// Identity facts
 //===----------------------------------------------------------------------===//
 
 // Availability flags for physical-device identity fields.
@@ -163,29 +163,6 @@ typedef struct iree_hal_device_identity_spec_t {
   // Logical device identity flags.
   iree_hal_device_identity_flags_t flags;
 } iree_hal_device_identity_spec_t;
-
-// Topology facts scoped to this logical device.
-typedef uint32_t iree_hal_device_topology_spec_flags_t;
-typedef enum iree_hal_device_topology_spec_flag_bits_e {
-  // No topology spec flags are present.
-  IREE_HAL_DEVICE_TOPOLOGY_SPEC_FLAG_NONE = 0u,
-} iree_hal_device_topology_spec_flag_bits_t;
-
-// Immutable topology facts associated with the logical device.
-typedef struct iree_hal_device_topology_spec_t {
-  // Number of devices in the topology edge matrix.
-  uint32_t device_count;
-  // Device ordinal represented by this logical device.
-  uint32_t device_ordinal;
-  // Number of topology edges in row-major order.
-  iree_host_size_t edge_count;
-  // Row-major topology edge matrix.
-  const iree_hal_topology_edge_t* edges;
-  // Bitmap of devices directly covered by this logical device.
-  iree_hal_topology_device_bitmap_t local_device_mask;
-  // Topology fact flags.
-  iree_hal_device_topology_spec_flags_t flags;
-} iree_hal_device_topology_spec_t;
 
 //===----------------------------------------------------------------------===//
 // Memory and virtual memory facts
@@ -769,8 +746,6 @@ typedef struct iree_hal_device_spec_t iree_hal_device_spec_t;
 typedef struct iree_hal_device_spec_params_t {
   // Logical device identity facet.
   const iree_hal_device_identity_spec_t* identity;
-  // Device topology facet.
-  const iree_hal_device_topology_spec_t* topology;
   // Memory capability facet.
   const iree_hal_device_memory_spec_t* memory;
   // Virtual memory capability facet.
@@ -823,10 +798,6 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
 // Returns the logical device identity facet.
 IREE_API_EXPORT const iree_hal_device_identity_spec_t*
 iree_hal_device_spec_identity(const iree_hal_device_spec_t* spec);
-
-// Returns the device topology facet.
-IREE_API_EXPORT const iree_hal_device_topology_spec_t*
-iree_hal_device_spec_topology(const iree_hal_device_spec_t* spec);
 
 // Returns the memory capability facet.
 IREE_API_EXPORT const iree_hal_device_memory_spec_t*

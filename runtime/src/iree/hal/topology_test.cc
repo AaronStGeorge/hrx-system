@@ -8,6 +8,7 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
+#include "iree/hal/topology_builder.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -18,6 +19,15 @@ using ::iree::testing::status::IsOk;
 using ::iree::testing::status::StatusIs;
 using ::testing::Eq;
 using ::testing::Ne;
+
+static iree_hal_topology_t* CreateSingleDeviceTopology() {
+  iree_hal_topology_builder_t builder;
+  iree_hal_topology_builder_initialize(&builder, 1);
+  iree_hal_topology_t* topology = NULL;
+  IREE_CHECK_OK(iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology));
+  return topology;
+}
 
 //===----------------------------------------------------------------------===//
 // Scheduling word bitfield overlap tests
@@ -400,16 +410,18 @@ TEST(Topology, MatrixFormatting) {
     }
   }
 
-  iree_hal_topology_t topology;
-  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(&builder, &topology));
+  iree_hal_topology_t* topology = NULL;
+  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology));
 
   // Dump the matrix for debugging.
   iree_string_builder_t sb;
   iree_string_builder_initialize(iree_allocator_system(), &sb);
-  IREE_ASSERT_OK(iree_hal_topology_dump_matrix(&topology, &sb));
+  IREE_ASSERT_OK(iree_hal_topology_dump_matrix(topology, &sb));
   printf("%.*s\n", (int)iree_string_builder_size(&sb),
          iree_string_builder_buffer(&sb));
   iree_string_builder_deinitialize(&sb);
+  iree_hal_topology_destroy(topology, iree_allocator_system());
 }
 
 //===----------------------------------------------------------------------===//
@@ -486,19 +498,20 @@ TEST(TopologyInfo, QueryEdgeSameTopology) {
   IREE_ASSERT_OK(iree_hal_topology_builder_set_edge(&builder, 0, 1, cross));
   IREE_ASSERT_OK(iree_hal_topology_builder_set_edge(&builder, 1, 0, cross));
 
-  iree_hal_topology_t topology;
-  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(&builder, &topology));
+  iree_hal_topology_t* topology = NULL;
+  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology));
 
   // Simulate two devices pointing at the same topology.
   iree_hal_device_topology_info_t info0 = {0};
-  info0.self_edge = topology.edges[0].lo;
+  info0.self_edge = iree_hal_topology_query_edge(topology, 0, 0).lo;
   info0.topology_index = 0;
-  info0.topology = &topology;
+  info0.topology = topology;
 
   iree_hal_device_topology_info_t info1 = {0};
-  info1.self_edge = topology.edges[3].lo;
+  info1.self_edge = iree_hal_topology_query_edge(topology, 1, 1).lo;
   info1.topology_index = 1;
-  info1.topology = &topology;
+  info1.topology = topology;
 
   // Query the edge from device 0 to device 1.
   iree_hal_topology_edge_t queried =
@@ -515,29 +528,29 @@ TEST(TopologyInfo, QueryEdgeSameTopology) {
   EXPECT_EQ(iree_hal_topology_edge_wait_mode(self.lo),
             IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE);
   EXPECT_EQ(iree_hal_topology_edge_copy_cost(self.lo), 0);
+  iree_hal_topology_destroy(topology, iree_allocator_system());
 }
 
 // Tests that iree_hal_device_topology_query_edge returns empty when devices
 // are in different topologies or not in any topology.
 TEST(TopologyInfo, QueryEdgeDifferentTopologies) {
-  iree_hal_topology_t topology_a = {/*.device_count=*/1};
-  topology_a.edges[0] = iree_hal_topology_edge_make_self();
-
-  iree_hal_topology_t topology_b = {/*.device_count=*/1};
-  topology_b.edges[0] = iree_hal_topology_edge_make_self();
+  iree_hal_topology_t* topology_a = CreateSingleDeviceTopology();
+  iree_hal_topology_t* topology_b = CreateSingleDeviceTopology();
 
   iree_hal_device_topology_info_t info_a = {0};
   info_a.topology_index = 0;
-  info_a.topology = &topology_a;
+  info_a.topology = topology_a;
 
   iree_hal_device_topology_info_t info_b = {0};
   info_b.topology_index = 0;
-  info_b.topology = &topology_b;
+  info_b.topology = topology_b;
 
   // Different topologies: should return empty edge.
   iree_hal_topology_edge_t edge =
       iree_hal_device_topology_query_edge(&info_a, &info_b);
   EXPECT_TRUE(iree_hal_topology_edge_is_empty(edge));
+  iree_hal_topology_destroy(topology_b, iree_allocator_system());
+  iree_hal_topology_destroy(topology_a, iree_allocator_system());
 }
 
 // Tests that iree_hal_device_topology_query_edge returns empty when the
@@ -546,10 +559,9 @@ TEST(TopologyInfo, QueryEdgeStandaloneDevice) {
   iree_hal_device_topology_info_t info_standalone = {0};
   info_standalone.topology = NULL;
 
-  iree_hal_topology_t topology = {/*.device_count=*/1};
-  topology.edges[0] = iree_hal_topology_edge_make_self();
+  iree_hal_topology_t* topology = CreateSingleDeviceTopology();
   iree_hal_device_topology_info_t info_grouped = {0};
-  info_grouped.topology = &topology;
+  info_grouped.topology = topology;
 
   // NULL topology: should return empty edge.
   iree_hal_topology_edge_t edge =
@@ -561,6 +573,7 @@ TEST(TopologyInfo, QueryEdgeStandaloneDevice) {
   edge =
       iree_hal_device_topology_query_edge(&info_standalone, &info_standalone2);
   EXPECT_TRUE(iree_hal_topology_edge_is_empty(edge));
+  iree_hal_topology_destroy(topology, iree_allocator_system());
 }
 
 }  // namespace

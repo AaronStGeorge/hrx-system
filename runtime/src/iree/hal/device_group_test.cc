@@ -396,8 +396,8 @@ TEST(DeviceGroup, NumaNodeAssignment) {
       &builder, iree_allocator_system(), &group));
 
   const iree_hal_topology_t* topology = iree_hal_device_group_topology(group);
-  EXPECT_EQ(topology->numa_nodes[0], 0u);
-  EXPECT_EQ(topology->numa_nodes[1], 1u);
+  EXPECT_EQ(iree_hal_topology_device_numa_node(topology, 0), 0u);
+  EXPECT_EQ(iree_hal_topology_device_numa_node(topology, 1), 1u);
 
   iree_hal_device_group_release(group);
   iree_hal_device_release(device_a);

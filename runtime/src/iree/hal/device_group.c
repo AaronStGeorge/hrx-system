@@ -37,9 +37,7 @@ struct iree_hal_device_group_t {
   iree_string_view_t driver_names[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
 
   // Immutable topology matrix built during creation.
-  // Embedded (not heap-allocated) so devices can hold a stable pointer to it
-  // for the group's lifetime.
-  iree_hal_topology_t topology;
+  iree_hal_topology_t* topology;
 };
 
 IREE_API_EXPORT iree_status_t iree_hal_device_group_create_from_device(
@@ -70,6 +68,7 @@ static void iree_hal_device_group_destroy(iree_hal_device_group_t* group) {
     iree_hal_device_release(group->devices[i]);
   }
   iree_async_frontier_tracker_release(group->frontier_tracker);
+  iree_hal_topology_destroy(group->topology, group->host_allocator);
 
   iree_allocator_t host_allocator = group->host_allocator;
   iree_allocator_free(host_allocator, group);
@@ -107,7 +106,7 @@ IREE_API_EXPORT iree_hal_device_t* iree_hal_device_group_device_at(
 IREE_API_EXPORT const iree_hal_topology_t* iree_hal_device_group_topology(
     const iree_hal_device_group_t* group) {
   IREE_ASSERT_ARGUMENT(group);
-  return &group->topology;
+  return group->topology;
 }
 
 //===----------------------------------------------------------------------===//
@@ -232,7 +231,8 @@ IREE_API_EXPORT iree_status_t iree_hal_device_group_create_with_replacements(
   group->device_count = device_count;
   group->frontier_tracker = source_group->frontier_tracker;
   iree_async_frontier_tracker_retain(group->frontier_tracker);
-  group->topology = source_group->topology;
+  status = iree_hal_topology_clone(source_group->topology, host_allocator,
+                                   &group->topology);
 
   for (iree_host_size_t i = 0; i < device_count && iree_status_is_ok(status);
        ++i) {
@@ -259,9 +259,9 @@ IREE_API_EXPORT iree_status_t iree_hal_device_group_create_with_replacements(
     iree_hal_device_topology_info_t topology_info;
     memset(&topology_info, 0, sizeof(topology_info));
     topology_info.topology_index = (uint32_t)i;
-    topology_info.topology = &group->topology;
+    topology_info.topology = group->topology;
     topology_info.self_edge =
-        iree_hal_topology_query_edge(&group->topology, (uint32_t)i, (uint32_t)i)
+        iree_hal_topology_query_edge(group->topology, (uint32_t)i, (uint32_t)i)
             .lo;
     topology_info.frontier.tracker = group->frontier_tracker;
     topology_info.frontier.base_axis = iree_async_axis_make_queue(
@@ -269,7 +269,7 @@ IREE_API_EXPORT iree_status_t iree_hal_device_group_create_with_replacements(
         iree_async_frontier_tracker_machine_index(group->frontier_tracker),
         (uint8_t)i, /*queue_index=*/0);
 
-    iree_hal_device_group_compute_bitmaps(&group->topology, (uint32_t)i,
+    iree_hal_device_group_compute_bitmaps(group->topology, (uint32_t)i,
                                           &topology_info);
 
     status =
@@ -385,8 +385,8 @@ IREE_API_EXPORT iree_status_t iree_hal_device_group_builder_finalize(
 
   // Finalize topology.
   if (iree_status_is_ok(status)) {
-    status =
-        iree_hal_topology_builder_finalize(&topology_builder, &group->topology);
+    status = iree_hal_topology_builder_finalize(
+        &topology_builder, host_allocator, &group->topology);
   }
 
   // Assign topology info to each device.
@@ -396,9 +396,9 @@ IREE_API_EXPORT iree_status_t iree_hal_device_group_builder_finalize(
     iree_hal_device_topology_info_t topology_info;
     memset(&topology_info, 0, sizeof(topology_info));
     topology_info.topology_index = (uint32_t)i;
-    topology_info.topology = &group->topology;
+    topology_info.topology = group->topology;
     topology_info.self_edge =
-        iree_hal_topology_query_edge(&group->topology, (uint32_t)i, (uint32_t)i)
+        iree_hal_topology_query_edge(group->topology, (uint32_t)i, (uint32_t)i)
             .lo;
     topology_info.frontier.tracker = group->frontier_tracker;
     topology_info.frontier.base_axis = iree_async_axis_make_queue(
@@ -406,7 +406,7 @@ IREE_API_EXPORT iree_status_t iree_hal_device_group_builder_finalize(
         iree_async_frontier_tracker_machine_index(group->frontier_tracker),
         (uint8_t)i, /*queue_index=*/0);
 
-    iree_hal_device_group_compute_bitmaps(&group->topology, (uint32_t)i,
+    iree_hal_device_group_compute_bitmaps(group->topology, (uint32_t)i,
                                           &topology_info);
 
     status =

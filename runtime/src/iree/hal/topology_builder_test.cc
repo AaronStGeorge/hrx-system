@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "iree/hal/topology_builder.h"
+
 #include <cstring>
 
 #include "iree/base/api.h"
@@ -29,18 +31,17 @@ TEST(TopologyBuilder, Initialize) {
   iree_hal_topology_builder_initialize(&builder, 4);
 
   // Verify device count was set.
-  EXPECT_EQ(builder.topology.device_count, 4);
+  EXPECT_EQ(builder.device_count, 4);
 
   // Verify self-edges were initialized with optimal scheduling settings.
   for (uint32_t i = 0; i < 4; ++i) {
     uint32_t idx = i * 4 + i;
     EXPECT_TRUE(builder.edges_set[idx]);
-    EXPECT_EQ(iree_hal_topology_edge_wait_mode(builder.topology.edges[idx].lo),
+    EXPECT_EQ(iree_hal_topology_edge_wait_mode(builder.device_edges[idx].lo),
               IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE);
-    EXPECT_EQ(
-        iree_hal_topology_edge_signal_mode(builder.topology.edges[idx].lo),
-        IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE);
-    EXPECT_EQ(iree_hal_topology_edge_link_class(builder.topology.edges[idx].lo),
+    EXPECT_EQ(iree_hal_topology_edge_signal_mode(builder.device_edges[idx].lo),
+              IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE);
+    EXPECT_EQ(iree_hal_topology_edge_link_class(builder.device_edges[idx].lo),
               IREE_HAL_TOPOLOGY_LINK_CLASS_SAME_DIE);
   }
 
@@ -48,10 +49,10 @@ TEST(TopologyBuilder, Initialize) {
   for (uint32_t i = 0; i < 4; ++i) {
     uint32_t idx = i * 4 + i;
     EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(
-                  builder.topology.edges[idx].hi),
+                  builder.device_edges[idx].hi),
               IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
     EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(
-                  builder.topology.edges[idx].hi),
+                  builder.device_edges[idx].hi),
               IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
   }
 }
@@ -92,23 +93,61 @@ TEST(TopologyBuilder, SetEdges) {
       iree_hal_topology_builder_set_edge(&builder, 1, 0, cross_edge));
 
   // Build and get topology.
-  iree_hal_topology_t topology;
-  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(&builder, &topology));
+  iree_hal_topology_t* topology = NULL;
+  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology));
 
   // Check the scheduling word in the topology.
-  EXPECT_EQ(topology.device_count, 2);
-  EXPECT_EQ(iree_hal_topology_edge_wait_mode(topology.edges[0 * 2 + 0].lo),
+  EXPECT_EQ(topology->device_count, 2);
+  EXPECT_EQ(iree_hal_topology_edge_wait_mode(topology->device_edges[0].lo),
             IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE);
-  EXPECT_EQ(iree_hal_topology_edge_wait_mode(topology.edges[0 * 2 + 1].lo),
+  EXPECT_EQ(iree_hal_topology_edge_wait_mode(topology->device_edges[1].lo),
             IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
 
   // Check the interop word survived the finalize copy.
   EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(
-                topology.edges[0 * 2 + 1].hi),
+                topology->device_edges[1].hi),
             IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD);
   EXPECT_EQ(
-      iree_hal_topology_edge_buffer_import_types(topology.edges[0 * 2 + 1].hi),
+      iree_hal_topology_edge_buffer_import_types(topology->device_edges[1].hi),
       IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF);
+  iree_hal_topology_destroy(topology, iree_allocator_system());
+}
+
+// Tests that finalized topologies expose normalized logical-device nodes.
+TEST(TopologyBuilder, LogicalDeviceNodes) {
+  iree_hal_topology_builder_t builder;
+  iree_hal_topology_builder_initialize(&builder, 2);
+
+  iree_hal_topology_edge_t cross_edge =
+      iree_hal_topology_edge_make_cross_driver();
+  IREE_ASSERT_OK(
+      iree_hal_topology_builder_set_edge(&builder, 0, 1, cross_edge));
+  IREE_ASSERT_OK(
+      iree_hal_topology_builder_set_edge(&builder, 1, 0, cross_edge));
+
+  iree_hal_topology_t* topology = NULL;
+  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology));
+
+  EXPECT_EQ(iree_hal_topology_node_count(topology), 2);
+  const iree_hal_topology_node_t* node0 =
+      iree_hal_topology_node_at(topology, 0);
+  ASSERT_NE(node0, nullptr);
+  EXPECT_EQ(node0->ordinal, 0u);
+  EXPECT_EQ(node0->parent_ordinal, IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID);
+  EXPECT_EQ(node0->device_ordinal, 0u);
+  EXPECT_EQ(node0->kind, IREE_HAL_TOPOLOGY_NODE_KIND_LOGICAL_DEVICE);
+  const iree_hal_topology_node_t* node1 =
+      iree_hal_topology_node_at(topology, 1);
+  ASSERT_NE(node1, nullptr);
+  EXPECT_EQ(node1->ordinal, 1u);
+  EXPECT_EQ(node1->device_ordinal, 1u);
+  EXPECT_EQ(iree_hal_topology_node_at(topology, 2), nullptr);
+  EXPECT_EQ(iree_hal_topology_link_count(topology), 0);
+  EXPECT_EQ(iree_hal_topology_link_at(topology, 0), nullptr);
+
+  iree_hal_topology_destroy(topology, iree_allocator_system());
 }
 
 // Tests that both words of an edge are preserved through set_edge and finalize.
@@ -144,11 +183,12 @@ TEST(TopologyBuilder, FullEdgePreservation) {
   IREE_ASSERT_OK(iree_hal_topology_builder_set_edge(&builder, 0, 1, edge));
   IREE_ASSERT_OK(iree_hal_topology_builder_set_edge(&builder, 1, 0, edge));
 
-  iree_hal_topology_t topology;
-  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(&builder, &topology));
+  iree_hal_topology_t* topology = NULL;
+  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology));
 
   // Verify the entire scheduling word survived.
-  iree_hal_topology_edge_t result = topology.edges[0 * 2 + 1];
+  iree_hal_topology_edge_t result = topology->device_edges[1];
   EXPECT_EQ(iree_hal_topology_edge_wait_mode(result.lo),
             IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
   EXPECT_EQ(iree_hal_topology_edge_signal_mode(result.lo),
@@ -172,6 +212,7 @@ TEST(TopologyBuilder, FullEdgePreservation) {
   EXPECT_EQ(iree_hal_topology_edge_buffer_export_types(result.hi),
             IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR |
                 IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
+  iree_hal_topology_destroy(topology, iree_allocator_system());
 }
 
 //===----------------------------------------------------------------------===//
@@ -189,9 +230,9 @@ TEST(TopologyBuilder, ValidationFailsIncomplete) {
   builder.edges_set[0 * 2 + 1] = false;  // mark [0,1] as not set
   builder.edges_set[1 * 2 + 0] = false;  // mark [1,0] as not set
 
-  iree_hal_topology_t topology;
-  iree_status_t status =
-      iree_hal_topology_builder_finalize(&builder, &topology);
+  iree_hal_topology_t* topology = NULL;
+  iree_status_t status = iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology);
   EXPECT_THAT(status, StatusIs(iree::StatusCode::kInvalidArgument));
   iree_status_ignore(status);
 }
@@ -213,9 +254,9 @@ TEST(TopologyBuilder, ValidationFailsAsymmetricLinks) {
   IREE_ASSERT_OK(iree_hal_topology_builder_set_edge(&builder, 0, 1, edge1));
   IREE_ASSERT_OK(iree_hal_topology_builder_set_edge(&builder, 1, 0, edge2));
 
-  iree_hal_topology_t topology;
-  iree_status_t status =
-      iree_hal_topology_builder_finalize(&builder, &topology);
+  iree_hal_topology_t* topology = NULL;
+  iree_status_t status = iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology);
   EXPECT_THAT(status, StatusIs(iree::StatusCode::kInvalidArgument));
   iree_status_ignore(status);
 }
@@ -259,9 +300,8 @@ TEST(TopologyBuilder, NumaNodes) {
             iree_hal_topology_edge_make_cross_driver();
         // Same NUMA node = lower cost (costs are 4-bit, max 15).
         uint8_t cost =
-            (builder.topology.numa_nodes[i] == builder.topology.numa_nodes[j])
-                ? 5
-                : 12;
+            (builder.device_numa_nodes[i] == builder.device_numa_nodes[j]) ? 5
+                                                                           : 12;
         cross.lo = iree_hal_topology_edge_set_copy_cost(cross.lo, cost);
         IREE_ASSERT_OK(
             iree_hal_topology_builder_set_edge(&builder, i, j, cross));
@@ -269,20 +309,22 @@ TEST(TopologyBuilder, NumaNodes) {
     }
   }
 
-  iree_hal_topology_t topology;
-  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(&builder, &topology));
+  iree_hal_topology_t* topology = NULL;
+  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology));
 
   // Check NUMA nodes.
-  EXPECT_EQ(topology.numa_nodes[0], 0);
-  EXPECT_EQ(topology.numa_nodes[1], 0);
-  EXPECT_EQ(topology.numa_nodes[2], 1);
-  EXPECT_EQ(topology.numa_nodes[3], 1);
+  EXPECT_EQ(iree_hal_topology_device_numa_node(topology, 0), 0);
+  EXPECT_EQ(iree_hal_topology_device_numa_node(topology, 1), 0);
+  EXPECT_EQ(iree_hal_topology_device_numa_node(topology, 2), 1);
+  EXPECT_EQ(iree_hal_topology_device_numa_node(topology, 3), 1);
 
   // Check that intra-NUMA transfers have lower cost.
-  EXPECT_EQ(iree_hal_topology_edge_copy_cost(topology.edges[0 * 4 + 1].lo),
+  EXPECT_EQ(iree_hal_topology_edge_copy_cost(topology->device_edges[1].lo),
             5);  // same NUMA
-  EXPECT_EQ(iree_hal_topology_edge_copy_cost(topology.edges[0 * 4 + 2].lo),
+  EXPECT_EQ(iree_hal_topology_edge_copy_cost(topology->device_edges[2].lo),
             12);  // different NUMA
+  iree_hal_topology_destroy(topology, iree_allocator_system());
 }
 
 //===----------------------------------------------------------------------===//
@@ -312,14 +354,15 @@ TEST(TopologyBuilder, QueryEdges) {
     }
   }
 
-  iree_hal_topology_t topology;
-  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(&builder, &topology));
+  iree_hal_topology_t* topology = NULL;
+  IREE_ASSERT_OK(iree_hal_topology_builder_finalize(
+      &builder, iree_allocator_system(), &topology));
 
   // Query each edge and verify the copy cost encodes the (i,j) pair.
   for (uint32_t i = 0; i < 3; ++i) {
     for (uint32_t j = 0; j < 3; ++j) {
       iree_hal_topology_edge_t queried =
-          iree_hal_topology_query_edge(&topology, i, j);
+          iree_hal_topology_query_edge(topology, i, j);
       if (i == j) {
         // Self-edges have zero copy cost.
         EXPECT_EQ(iree_hal_topology_edge_copy_cost(queried.lo), 0);
@@ -328,6 +371,7 @@ TEST(TopologyBuilder, QueryEdges) {
       }
     }
   }
+  iree_hal_topology_destroy(topology, iree_allocator_system());
 }
 
 }  // namespace

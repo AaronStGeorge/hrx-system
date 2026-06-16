@@ -17,8 +17,6 @@ struct iree_hal_device_spec_builder_storage_t {
   iree_hal_device_spec_params_t params;
   // Builder-owned logical device identity facet.
   iree_hal_device_identity_spec_t identity;
-  // Builder-owned topology facet.
-  iree_hal_device_topology_spec_t topology;
   // Builder-owned memory capability facet.
   iree_hal_device_memory_spec_t memory;
   // Builder-owned virtual memory capability facet.
@@ -33,8 +31,6 @@ struct iree_hal_device_spec_builder_storage_t {
   iree_hal_device_executable_spec_t executables;
   // Builder-owned physical device identity records.
   iree_hal_physical_device_spec_t* physical_devices;
-  // Builder-owned topology edge records.
-  iree_hal_topology_edge_t* topology_edges;
   // Builder-owned memory heap records.
   iree_hal_memory_heap_spec_t* memory_heaps;
   // Builder-owned memory type records.
@@ -147,16 +143,6 @@ static void iree_hal_device_spec_builder_reset_identity(
   builder->storage->physical_devices = NULL;
   memset(identity, 0, sizeof(*identity));
   builder->storage->params.identity = NULL;
-}
-
-static void iree_hal_device_spec_builder_reset_topology(
-    iree_hal_device_spec_builder_t* builder) {
-  if (!builder->storage) return;
-  iree_allocator_free(builder->host_allocator,
-                      builder->storage->topology_edges);
-  builder->storage->topology_edges = NULL;
-  memset(&builder->storage->topology, 0, sizeof(builder->storage->topology));
-  builder->storage->params.topology = NULL;
 }
 
 static void iree_hal_device_spec_builder_reset_memory(
@@ -291,7 +277,6 @@ static void iree_hal_device_spec_builder_reset_facets(
 static void iree_hal_device_spec_builder_reset_all(
     iree_hal_device_spec_builder_t* builder) {
   iree_hal_device_spec_builder_reset_identity(builder);
-  iree_hal_device_spec_builder_reset_topology(builder);
   iree_hal_device_spec_builder_reset_memory(builder);
   iree_hal_device_spec_builder_reset_virtual_memory(builder);
   iree_hal_device_spec_builder_reset_queues(builder);
@@ -380,29 +365,6 @@ iree_status_t iree_hal_device_spec_builder_set_identity(
     builder->storage->params.identity = target;
   } else {
     iree_hal_device_spec_builder_reset_identity(builder);
-  }
-  return status;
-}
-
-iree_status_t iree_hal_device_spec_builder_set_topology(
-    iree_hal_device_spec_builder_t* builder,
-    const iree_hal_device_topology_spec_t* topology) {
-  IREE_ASSERT_ARGUMENT(builder);
-  IREE_ASSERT_ARGUMENT(topology);
-  IREE_RETURN_IF_ERROR(iree_hal_device_spec_builder_ensure_storage(builder));
-  iree_hal_device_spec_builder_reset_topology(builder);
-
-  iree_status_t status = iree_ok_status();
-  builder->storage->topology = *topology;
-  status = iree_hal_device_spec_builder_copy_array(
-      builder->host_allocator, topology->edge_count,
-      sizeof(*builder->storage->topology_edges), topology->edges,
-      (void**)&builder->storage->topology_edges);
-  builder->storage->topology.edges = builder->storage->topology_edges;
-  if (iree_status_is_ok(status)) {
-    builder->storage->params.topology = &builder->storage->topology;
-  } else {
-    iree_hal_device_spec_builder_reset_topology(builder);
   }
   return status;
 }

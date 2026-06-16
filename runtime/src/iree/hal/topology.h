@@ -283,6 +283,91 @@ enum iree_hal_topology_capability_bits_t {
 };
 typedef uint16_t iree_hal_topology_capability_t;
 
+// Kinds of nodes in a normalized HAL topology graph.
+typedef uint32_t iree_hal_topology_node_kind_t;
+typedef enum iree_hal_topology_node_kind_e {
+  // Node kind is not known or not represented by the backend.
+  IREE_HAL_TOPOLOGY_NODE_KIND_UNKNOWN = 0,
+  // A host NUMA node that may contain CPUs and memory controllers.
+  IREE_HAL_TOPOLOGY_NODE_KIND_HOST_NUMA = 1,
+  // A physical device such as a GPU or accelerator package.
+  IREE_HAL_TOPOLOGY_NODE_KIND_PHYSICAL_DEVICE = 2,
+  // A logical HAL device exposed to applications.
+  IREE_HAL_TOPOLOGY_NODE_KIND_LOGICAL_DEVICE = 3,
+  // A memory domain such as device-local, host-visible, or managed memory.
+  IREE_HAL_TOPOLOGY_NODE_KIND_MEMORY_DOMAIN = 4,
+  // A queue family or execution engine exposed by a logical device.
+  IREE_HAL_TOPOLOGY_NODE_KIND_QUEUE_FAMILY = 5,
+  // A fabric endpoint such as an RDMA-capable NIC or switch port.
+  IREE_HAL_TOPOLOGY_NODE_KIND_FABRIC_ENDPOINT = 6,
+} iree_hal_topology_node_kind_e;
+
+// Normalized topology node ordinal sentinel value.
+#define IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID UINT32_MAX
+
+// Normalized topology node.
+typedef struct iree_hal_topology_node_t {
+  // Stable ordinal of this node within the topology node array.
+  uint32_t ordinal;
+  // Parent node ordinal or IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID.
+  uint32_t parent_ordinal;
+  // HAL device ordinal represented by this node or
+  // IREE_HAL_TOPOLOGY_DEVICE_ORDINAL_INVALID.
+  uint32_t device_ordinal;
+  // Kind of topology object represented by this node.
+  iree_hal_topology_node_kind_t kind;
+} iree_hal_topology_node_t;
+
+// Kinds of links in a normalized HAL topology graph.
+typedef uint32_t iree_hal_topology_link_kind_t;
+typedef enum iree_hal_topology_link_kind_e {
+  // Link kind is not known or not represented by the backend.
+  IREE_HAL_TOPOLOGY_LINK_KIND_UNKNOWN = 0,
+  // Containment or ownership relationship between two nodes.
+  IREE_HAL_TOPOLOGY_LINK_KIND_CONTAINS = 1,
+  // Memory access path between a device and memory domain.
+  IREE_HAL_TOPOLOGY_LINK_KIND_MEMORY = 2,
+  // Command submission path between a logical device and queue family.
+  IREE_HAL_TOPOLOGY_LINK_KIND_QUEUE = 3,
+  // Physical interconnect such as PCIe, Infinity Fabric, or NVLink.
+  IREE_HAL_TOPOLOGY_LINK_KIND_INTERCONNECT = 4,
+  // Network or cluster fabric path.
+  IREE_HAL_TOPOLOGY_LINK_KIND_FABRIC = 5,
+} iree_hal_topology_link_kind_e;
+
+// Normalized topology link property flags.
+typedef uint32_t iree_hal_topology_link_flags_t;
+typedef enum iree_hal_topology_link_flag_bits_e {
+  // No known link properties.
+  IREE_HAL_TOPOLOGY_LINK_FLAG_NONE = 0u,
+  // The reverse direction is represented by an equivalent link.
+  IREE_HAL_TOPOLOGY_LINK_FLAG_BIDIRECTIONAL = 1u << 0,
+  // Memory accessed through this link is coherent without explicit flushing.
+  IREE_HAL_TOPOLOGY_LINK_FLAG_COHERENT = 1u << 1,
+  // The link supports direct peer addressing.
+  IREE_HAL_TOPOLOGY_LINK_FLAG_PEER_ADDRESSABLE = 1u << 2,
+  // The link supports direct peer copies.
+  IREE_HAL_TOPOLOGY_LINK_FLAG_P2P_COPY = 1u << 3,
+} iree_hal_topology_link_flag_bits_e;
+
+// Normalized topology link between two nodes.
+typedef struct iree_hal_topology_link_t {
+  // Source node ordinal in the topology node array.
+  uint32_t source_node_ordinal;
+  // Target node ordinal in the topology node array.
+  uint32_t target_node_ordinal;
+  // Kind of relationship represented by this link.
+  iree_hal_topology_link_kind_t kind;
+  // Flags describing stable link capabilities.
+  iree_hal_topology_link_flags_t flags;
+  // Relative distance or hop count; 0 means same node or unknown.
+  uint32_t distance;
+  // Estimated one-way bandwidth in bytes per second, or 0 if unknown.
+  uint64_t bandwidth_bytes_per_second;
+  // Estimated one-way latency in nanoseconds, or 0 if unknown.
+  uint64_t latency_nanoseconds;
+} iree_hal_topology_link_t;
+
 //===----------------------------------------------------------------------===//
 // iree_hal_resource_origin_t
 //===----------------------------------------------------------------------===//
@@ -322,7 +407,7 @@ static inline iree_hal_resource_origin_t iree_hal_resource_origin_undefined(
 // iree_hal_topology_t
 //===----------------------------------------------------------------------===//
 
-// Immutable device topology describing relationships between devices.
+// Immutable topology describing relationships between devices.
 //
 // The topology is a pure data structure (POD) that encodes a directed graph
 // of device relationships. Each edge in the graph describes how one device
@@ -334,33 +419,37 @@ static inline iree_hal_resource_origin_t iree_hal_resource_origin_undefined(
 // (1-3ns) compatibility queries without pointer chasing or synchronization.
 //
 // Memory layout is optimized for cache efficiency:
-// - Edge matrix is row-major (all edges from device i are contiguous)
+// - Device edge matrix is row-major (all edges from device i are contiguous)
 // - Self-edges (diagonal) encode device capabilities
 // - Symmetric properties (link_class) must match in both directions
 //
 // Thread safety: The topology is immutable after creation and can be
 // queried concurrently from any thread without synchronization.
 typedef struct iree_hal_topology_t {
+  // Number of normalized topology nodes.
+  iree_host_size_t node_count;
+
+  // Borrowed immutable node array owned by this topology allocation.
+  const iree_hal_topology_node_t* nodes;
+
+  // Number of normalized topology links.
+  iree_host_size_t link_count;
+
+  // Borrowed immutable link array owned by this topology allocation.
+  const iree_hal_topology_link_t* links;
+
+  // NUMA node assignment for each device (0-255).
+  uint8_t device_numa_nodes[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
+
   // Number of devices in this topology (1 to
   // IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT).
   uint32_t device_count;
 
-  // Edge matrix in row-major order.
-  // Edge from device i to device j is at edges[i * device_count + j].
-  // Self-edges (i == j) encode device capabilities.
-  iree_hal_topology_edge_t edges[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT *
-                                 IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
-
-  // NUMA node assignment for each device (0-255).
-  // Used for memory placement optimization.
-  uint8_t numa_nodes[IREE_HAL_TOPOLOGY_MAX_DEVICE_COUNT];
+  // Device edge matrix in row-major order.
+  // Edge from device i to device j is at
+  // device_edges[i * device_count + j].
+  iree_hal_topology_edge_t device_edges[];
 } iree_hal_topology_t;
-
-// Returns an empty topology.
-static inline iree_hal_topology_t iree_hal_topology_empty(void) {
-  iree_hal_topology_t topology = {0};
-  return topology;
-}
 
 // Returns true if the topology is empty (no devices).
 static inline bool iree_hal_topology_is_empty(
@@ -374,6 +463,40 @@ static inline uint32_t iree_hal_topology_device_count(
   return topology->device_count;
 }
 
+// Returns the NUMA node assigned to |device_ordinal|.
+static inline uint8_t iree_hal_topology_device_numa_node(
+    const iree_hal_topology_t* topology, uint32_t device_ordinal) {
+  IREE_ASSERT_LT(device_ordinal, topology->device_count);
+  if (device_ordinal >= topology->device_count) return 0;
+  return topology->device_numa_nodes[device_ordinal];
+}
+
+// Returns the number of normalized nodes in the topology.
+static inline iree_host_size_t iree_hal_topology_node_count(
+    const iree_hal_topology_t* topology) {
+  return topology->node_count;
+}
+
+// Returns the normalized node at |index| or NULL if out of range.
+static inline const iree_hal_topology_node_t* iree_hal_topology_node_at(
+    const iree_hal_topology_t* topology, iree_host_size_t index) {
+  if (index >= topology->node_count) return NULL;
+  return &topology->nodes[index];
+}
+
+// Returns the number of normalized links in the topology.
+static inline iree_host_size_t iree_hal_topology_link_count(
+    const iree_hal_topology_t* topology) {
+  return topology->link_count;
+}
+
+// Returns the normalized link at |index| or NULL if out of range.
+static inline const iree_hal_topology_link_t* iree_hal_topology_link_at(
+    const iree_hal_topology_t* topology, iree_host_size_t index) {
+  if (index >= topology->link_count) return NULL;
+  return &topology->links[index];
+}
+
 // Queries the edge from |src_ordinal| to |dst_ordinal|.
 // Returns an empty edge if either ordinal is out of range.
 static inline iree_hal_topology_edge_t iree_hal_topology_query_edge(
@@ -383,10 +506,10 @@ static inline iree_hal_topology_edge_t iree_hal_topology_query_edge(
   IREE_ASSERT_LT(dst_ordinal, topology->device_count);
   if (src_ordinal >= topology->device_count ||
       dst_ordinal >= topology->device_count) {
-    iree_hal_topology_edge_t empty = {0, 0};
-    return empty;
+    return iree_hal_topology_edge_empty();
   }
-  return topology->edges[src_ordinal * topology->device_count + dst_ordinal];
+  return topology
+      ->device_edges[src_ordinal * topology->device_count + dst_ordinal];
 }
 
 //===----------------------------------------------------------------------===//
