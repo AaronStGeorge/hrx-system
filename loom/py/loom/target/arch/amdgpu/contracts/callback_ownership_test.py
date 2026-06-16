@@ -124,6 +124,49 @@ def test_validate_callback_dispatch_rows_rejects_wrong_policy_namespace() -> Non
         )
 
 
+def test_validate_callback_dispatch_rows_rejects_wrong_report_policy_namespace() -> (
+    None
+):
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_KERNEL_WORKGROUP_REDUCE",
+            role=CallbackDispatchRole.RECIPE,
+            macro_name="RECIPE_DATA_REPORT_ROW",
+            arguments=(
+                "LOOM_OP_KERNEL_WORKGROUP_REDUCE",
+                "loom_amdgpu_workgroup_reduce_plan_t",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="expects a report policy"):
+        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
+def test_validate_callback_dispatch_rows_accepts_report_policy() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_KERNEL_WORKGROUP_REDUCE",
+            role=CallbackDispatchRole.RECIPE,
+            macro_name="RECIPE_DATA_REPORT_ROW",
+            arguments=(
+                "LOOM_OP_KERNEL_WORKGROUP_REDUCE",
+                "loom_amdgpu_workgroup_reduce_plan_t",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION",
+            ),
+        ),
+    )
+
+    validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
 def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> None:
     rows = (
         CallbackDispatchRow(

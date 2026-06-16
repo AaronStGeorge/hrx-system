@@ -107,7 +107,7 @@ enum loom_amdgpu_preselect_policy_e {
 };
 
 enum loom_amdgpu_report_policy_e {
-  // The row has no target-owned compile-report detail.
+  // The row has no target-owned compile-report plan key.
   LOOM_AMDGPU_REPORT_NONE = 0,
   // Report the workgroup-reduce publication strategy selected by the plan.
   LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION = 1,
