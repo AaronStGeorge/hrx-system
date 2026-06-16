@@ -229,19 +229,21 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_vector_cmpf_dispatch, NULL,
                 LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FRAGMENT_LOAD)] =
-            LOOM_AMDGPU_MEMORY_DATA_ROW(
+            LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_FRAGMENT_LOAD,
                 loom_amdgpu_fragment_memory_plan_t,
                 loom_amdgpu_select_vector_fragment_load_dispatch,
                 loom_amdgpu_emit_vector_fragment_load_dispatch,
-                loom_amdgpu_low_legality_verify_vector_fragment_memory),
+                loom_amdgpu_low_legality_verify_vector_fragment_memory,
+                LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FRAGMENT_STORE)] =
-            LOOM_AMDGPU_MEMORY_DATA_ROW(
+            LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_FRAGMENT_STORE,
                 loom_amdgpu_fragment_memory_plan_t,
                 loom_amdgpu_select_vector_fragment_store_dispatch,
                 loom_amdgpu_emit_vector_fragment_store_dispatch,
-                loom_amdgpu_low_legality_verify_vector_fragment_memory),
+                loom_amdgpu_low_legality_verify_vector_fragment_memory,
+                LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_ATOMIC_REDUCE)] =
             LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_ATOMIC_REDUCE, loom_amdgpu_atomic_plan_t,

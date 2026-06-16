@@ -94,8 +94,10 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_ATOMIC = 6,
   // Prefetch plans own their source operand demand policy.
   LOOM_AMDGPU_STORAGE_PREFETCH = 7,
+  // Fragment memory plans own their source operand demand policy.
+  LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY = 8,
   // Maximum storage-policy value accepted by dispatch row policy bits.
-  LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_PREFETCH,
+  LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY,
 };
 
 enum loom_amdgpu_preselect_policy_e {
@@ -122,11 +124,11 @@ enum loom_amdgpu_report_policy_e {
 };
 
 enum loom_amdgpu_lower_policy_bits_e {
-  LOOM_AMDGPU_LOWER_POLICY_STORAGE_MASK = 0x07u,
-  LOOM_AMDGPU_LOWER_POLICY_PRESELECT_SHIFT = 3u,
-  LOOM_AMDGPU_LOWER_POLICY_PRESELECT_MASK = 0x18u,
-  LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT = 5u,
-  LOOM_AMDGPU_LOWER_POLICY_REPORT_MASK = 0x60u,
+  LOOM_AMDGPU_LOWER_POLICY_STORAGE_MASK = 0x0Fu,
+  LOOM_AMDGPU_LOWER_POLICY_PRESELECT_SHIFT = 4u,
+  LOOM_AMDGPU_LOWER_POLICY_PRESELECT_MASK = 0x30u,
+  LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT = 6u,
+  LOOM_AMDGPU_LOWER_POLICY_REPORT_MASK = 0xC0u,
 };
 
 static_assert((LOOM_AMDGPU_STORAGE_MAX &
@@ -1019,6 +1021,11 @@ static void loom_amdgpu_mark_plan_storage_demands(
       loom_amdgpu_mark_prefetch_plan_storage_demands(
           context, source_op,
           (const loom_amdgpu_prefetch_plan_t*)plan.target_data);
+      return;
+    case LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY:
+      loom_amdgpu_mark_fragment_memory_plan_storage_demands(
+          context, source_op,
+          (const loom_amdgpu_fragment_memory_plan_t*)plan.target_data);
       return;
     case LOOM_AMDGPU_STORAGE_MEMORY_PLAN:
       loom_amdgpu_mark_memory_access_plan_storage_demands(
