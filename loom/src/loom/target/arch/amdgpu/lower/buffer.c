@@ -47,13 +47,16 @@ iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,
   *out_plan = loom_low_lower_plan_empty();
   switch (source_op->kind) {
     case LOOM_OP_BUFFER_ALLOCA: {
+      loom_amdgpu_buffer_alloca_plan_t local_plan = {0};
+      if (!loom_amdgpu_select_buffer_alloca_plan(context, source_op,
+                                                 &local_plan)) {
+        return iree_ok_status();
+      }
       loom_amdgpu_buffer_alloca_plan_t* plan_data = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
           context, sizeof(*plan_data), (void**)&plan_data));
-      if (loom_amdgpu_select_buffer_alloca_plan(context, source_op,
-                                                plan_data)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-      }
+      *plan_data = local_plan;
+      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
       return iree_ok_status();
     }
     default:

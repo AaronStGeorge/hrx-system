@@ -87,15 +87,17 @@ iree_status_t loom_amdgpu_select_kernel_barrier_plan(
     return iree_ok_status();
   }
 
-  loom_amdgpu_kernel_barrier_plan_t* plan = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_allocate_plan_data(context, sizeof(*plan), (void**)&plan));
+  loom_amdgpu_kernel_barrier_plan_t local_plan = {0};
 
   if (loom_amdgpu_kernel_barrier_has_single_wave_workgroup(context)) {
     bool selected = false;
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_select_kernel_barrier_lds_wait(context, plan, &selected));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_select_kernel_barrier_lds_wait(
+        context, &local_plan, &selected));
     if (selected) {
+      loom_amdgpu_kernel_barrier_plan_t* plan = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+          context, sizeof(*plan), (void**)&plan));
+      *plan = local_plan;
       *out_plan = loom_low_lower_plan_make(source_op->kind, plan);
       return iree_ok_status();
     }
@@ -108,7 +110,12 @@ iree_status_t loom_amdgpu_select_kernel_barrier_plan(
     return iree_ok_status();
   }
 
-  plan->kind = LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_S_BARRIER;
+  loom_amdgpu_kernel_barrier_plan_t* plan = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_allocate_plan_data(context, sizeof(*plan), (void**)&plan));
+  *plan = (loom_amdgpu_kernel_barrier_plan_t){
+      .kind = LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_S_BARRIER,
+  };
   *out_plan = loom_low_lower_plan_make(source_op->kind, plan);
   return iree_ok_status();
 }
