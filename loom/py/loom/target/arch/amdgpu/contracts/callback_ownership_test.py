@@ -35,12 +35,127 @@ def test_parse_callback_dispatch_rows_requires_role_prefix() -> None:
         parse_callback_dispatch_rows(source)
 
 
+def test_parse_callback_dispatch_rows_captures_arguments() -> None:
+    source = """
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAF)] =
+            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW(
+                LOOM_OP_VECTOR_FMAF, loom_amdgpu_packed_ternary_plan_t,
+                loom_amdgpu_select_vector_packed_fmaf_dispatch,
+                loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
+                LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC),
+    """
+
+    rows = parse_callback_dispatch_rows(source)
+
+    assert rows == (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_FMAF",
+            role=CallbackDispatchRole.GENERATED_PRESELECT,
+            macro_name="GENERATED_PRESELECT_DATA_POLICY_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_FMAF",
+                "loom_amdgpu_packed_ternary_plan_t",
+                "loom_amdgpu_select_vector_packed_fmaf_dispatch",
+                "loom_amdgpu_emit_vector_packed_ternary_dispatch",
+                "NULL",
+                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3",
+                "LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC",
+            ),
+        ),
+    )
+
+
+def test_validate_callback_dispatch_rows_rejects_unknown_schema() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_BITPACK",
+            role=CallbackDispatchRole.VALUE,
+            macro_name="VALUE_UNKNOWN_ROW",
+            arguments=("LOOM_OP_VECTOR_BITPACK",),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="no registered dispatch-row schema"):
+        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
+def test_validate_callback_dispatch_rows_rejects_op_kind_mismatch() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_BITPACK",
+            role=CallbackDispatchRole.RECIPE,
+            macro_name="RECIPE_DATA_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_BITUNPACKU",
+                "loom_amdgpu_bitpack_plan_t",
+                "select",
+                "emit",
+                "verify",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="does not match macro op-kind argument"):
+        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
+def test_validate_callback_dispatch_rows_rejects_wrong_policy_namespace() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_FMAF",
+            role=CallbackDispatchRole.GENERATED_PRESELECT,
+            macro_name="GENERATED_PRESELECT_DATA_POLICY_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_FMAF",
+                "loom_amdgpu_packed_ternary_plan_t",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+                "LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="expects a storage policy"):
+        validate_callback_dispatch_rows(
+            rows, generated_lower_rule_op_kinds={"LOOM_OP_VECTOR_FMAF"}
+        )
+
+
+def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_CONSTANT",
+            role=CallbackDispatchRole.VALUE,
+            macro_name="VALUE_DIRECT_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_CONSTANT",
+                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "emit",
+                "verify",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match=r"policy token .* in non-policy argument"):
+        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
 def test_validate_callback_dispatch_rows_rejects_generated_recipe() -> None:
     rows = (
         CallbackDispatchRow(
             op_kind="LOOM_OP_VECTOR_BITFIELD_EXTRACTU",
             role=CallbackDispatchRole.RECIPE,
             macro_name="RECIPE_DATA_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_BITFIELD_EXTRACTU",
+                "loom_amdgpu_bitfield_extract_plan_t",
+                "select",
+                "emit",
+                "verify",
+            ),
         ),
     )
 
@@ -57,6 +172,15 @@ def test_validate_callback_dispatch_rows_accepts_generated_preselect() -> None:
             op_kind="LOOM_OP_VECTOR_FMAF",
             role=CallbackDispatchRole.GENERATED_PRESELECT,
             macro_name="GENERATED_PRESELECT_DATA_POLICY_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_FMAF",
+                "loom_amdgpu_packed_ternary_plan_t",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3",
+                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+            ),
         ),
     )
 
@@ -72,6 +196,13 @@ def test_validate_callback_dispatch_rows_accepts_bounded_recipe() -> None:
             op_kind="LOOM_OP_VECTOR_BITPACK",
             role=CallbackDispatchRole.RECIPE,
             macro_name="RECIPE_DATA_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_BITPACK",
+                "loom_amdgpu_bitpack_plan_t",
+                "select",
+                "emit",
+                "verify",
+            ),
         ),
     )
 
@@ -87,6 +218,15 @@ def test_validate_callback_dispatch_rows_rejects_unowned_preselect() -> None:
             op_kind="LOOM_OP_VECTOR_BITPACK",
             role=CallbackDispatchRole.GENERATED_PRESELECT,
             macro_name="GENERATED_PRESELECT_DATA_POLICY_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_BITPACK",
+                "loom_amdgpu_bitpack_plan_t",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3",
+                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+            ),
         ),
     )
 
