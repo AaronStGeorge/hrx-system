@@ -24,6 +24,7 @@ from loom.target.contracts import (
     ValueElideRule,
     ValueRef,
     Vector,
+    contract_fragment_public_header,
     descriptor_by_semantic_tag,
 )
 from loom.target.test.descriptors import (
@@ -36,6 +37,31 @@ from loom.target.test.descriptors import (
     TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
     TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR,
 )
+
+
+def test_contract_fragment_uses_explicit_public_header() -> None:
+    table = ContractFragment(
+        name="test-low.binary",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header="loom/target/test/contracts/binary.h",
+    )
+
+    assert (
+        contract_fragment_public_header(table) == "loom/target/test/contracts/binary.h"
+    )
+
+
+def test_contract_fragment_requires_explicit_public_header() -> None:
+    table = ContractFragment(
+        name="test-low.binary",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"contract fragment 'test-low\.binary' requires public_header",
+    ):
+        contract_fragment_public_header(table)
 
 
 def test_alias_rule_validates_source_and_result() -> None:

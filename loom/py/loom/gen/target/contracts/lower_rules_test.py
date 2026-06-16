@@ -55,6 +55,8 @@ from loom.target.test.descriptors import (
     TEST_LOW_CORE_DESCRIPTOR_SET,
 )
 
+_TEST_PUBLIC_HEADER = "loom/target/test/contracts/generated.h"
+
 
 def _expect_value_error(callable_obj: Callable[[], object], message: str) -> None:
     error: ValueError | None = None
@@ -97,6 +99,7 @@ def _c_shape_contract() -> ContractFragment:
     return ContractFragment(
         name="test.low.generated_c_shape",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
     )
 
 
@@ -321,6 +324,7 @@ def test_generate_lower_rule_set_emits_value_ref_for_f64_equals_guard() -> None:
     table = ContractFragment(
         name="test.low.f64_equals",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=scalar_arithmetic.scalar_mulf,
@@ -358,6 +362,7 @@ def test_generate_lower_rule_set_emits_storage_element_format_guard() -> None:
     table = ContractFragment(
         name="test.low.storage_schema",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=vector.vector_fragment_load,
@@ -397,6 +402,7 @@ def test_generate_lower_rule_set_emits_source_instance_flags_projection() -> Non
     table = ContractFragment(
         name="test.low.flags",
         descriptor_set=descriptor_set,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=scalar_arithmetic.scalar_divf,
@@ -431,6 +437,7 @@ def test_generate_lower_rule_set_emits_balanced_accumulator_flag() -> None:
     table = ContractFragment(
         name="test.low.accumulate_tree",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=vector.vector_reduce,
@@ -469,6 +476,7 @@ def test_generate_lower_rule_set_emits_balanced_operand_seed() -> None:
     table = ContractFragment(
         name="test.low.accumulate_operand_tree",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=vector.vector_reduce,
@@ -506,6 +514,7 @@ def test_generate_lower_rule_set_emits_divisor_magic_projection() -> None:
     table = ContractFragment(
         name="test.low.divisor_magic",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=scalar_arithmetic.scalar_addi,

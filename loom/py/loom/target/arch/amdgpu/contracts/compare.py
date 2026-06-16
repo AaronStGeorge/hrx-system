@@ -474,6 +474,7 @@ AMDGPU_COMPARE_CONTRACT_DIALECT_OPS = {
 AMDGPU_COMPARE_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.compare",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/compare.h",
     materializers=(I32_VGPR_MATERIALIZER, ADDRESS_VGPR_MATERIALIZER),
     cases=_rules(),
 )

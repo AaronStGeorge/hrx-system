@@ -1609,6 +1609,7 @@ AMDGPU_INTEGER_CONTRACT_DIALECT_OPS = {
 AMDGPU_INTEGER_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.integer",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/integer.h",
     materializers=(
         I32_VGPR_MATERIALIZER,
         ADDRESS_VGPR_MATERIALIZER,

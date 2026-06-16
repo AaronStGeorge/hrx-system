@@ -553,6 +553,7 @@ WASM_CORE_SIMD128_CONTRACT_DIALECT_OPS = {
 WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
     name="wasm.core.simd128",
     descriptor_set=WASM_CORE_SIMD128_DESCRIPTOR_SET,
+    public_header="loom/target/emit/wasm/contracts/core_simd128.h",
     cases=(
         _buffer_view_rule(),
         _binary_rule(scalar_arithmetic.scalar_addi, _I32, "wasm.i32.add"),

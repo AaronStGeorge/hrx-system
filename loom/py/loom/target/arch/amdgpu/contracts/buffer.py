@@ -46,6 +46,7 @@ AMDGPU_BUFFER_CONTRACT_DIALECT_OPS = {
 AMDGPU_BUFFER_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.buffer",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/buffer.h",
     cases=(
         ValueAliasRule(
             source_op=buffer.buffer_view,

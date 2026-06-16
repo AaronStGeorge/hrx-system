@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -62,17 +61,6 @@ def contract_fragment_public_header(fragment: ContractFragment) -> str:
 
     if fragment.public_header:
         return fragment.public_header
-    name_parts = _identifier_parts(fragment.name)
-    if name_parts[:2] == ("iree", "vm"):
-        return f"loom/target/arch/ireevm/contracts/{'_'.join(name_parts[2:])}.h"
-    if name_parts[:1] == ("wasm",):
-        return f"loom/target/emit/wasm/contracts/{'_'.join(name_parts[1:])}.h"
-    if name_parts[:2] == ("test", "low"):
-        return f"loom/target/test/contracts/{'_'.join(name_parts[2:])}.h"
-    if len(name_parts) >= 2 and name_parts[0] in ("amdgpu", "x86"):
-        target_name = name_parts[0]
-        family_name = "_".join(name_parts[1:])
-        return f"loom/target/arch/{target_name}/contracts/{family_name}.h"
     raise ValueError(f"contract fragment '{fragment.name}' requires public_header")
 
 
@@ -92,7 +80,3 @@ def _validate_materializer_names(
                 f"contract fragment materializer '{materializer.name}' is duplicated"
             )
         seen.add(materializer.name)
-
-
-def _identifier_parts(value: str) -> tuple[str, ...]:
-    return tuple(part for part in re.split(r"[^0-9A-Za-z]+", value) if part)

@@ -2726,6 +2726,7 @@ AMDGPU_ARITHMETIC_CONTRACT_DIALECT_OPS = {
 AMDGPU_ARITHMETIC_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.arithmetic",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/arithmetic.h",
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
     materializers=(ADDRESS_VGPR_MATERIALIZER, F32_VGPR_MATERIALIZER),
     cases=_rules(),

@@ -32,6 +32,7 @@ AMDGPU_VIEW_CONTRACT_DIALECT_OPS = {
 AMDGPU_VIEW_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.view",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/view.h",
     cases=(
         ValueAliasRule(
             source_op=view.view_subview,
