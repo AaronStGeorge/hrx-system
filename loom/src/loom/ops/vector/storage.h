@@ -38,6 +38,28 @@ typedef struct loom_vector_packed_integer_storage_shape_t {
   uint32_t storage_unit_count;
 } loom_vector_packed_integer_storage_shape_t;
 
+// Storage relationship for a vector.bitpack source/result pair.
+typedef struct loom_vector_bitpack_storage_match_t {
+  // Shape of the logical source lanes before packing.
+  loom_vector_packed_integer_storage_shape_t source_shape;
+  // Shape of the integer storage lanes after packing.
+  loom_vector_packed_integer_storage_shape_t result_shape;
+  // Bit width packed from each source lane.
+  uint32_t width;
+} loom_vector_bitpack_storage_match_t;
+
+// Storage relationship for a vector.bitunpack source/result pair.
+typedef struct loom_vector_bitunpack_storage_match_t {
+  // Shape of the integer storage lanes before unpacking.
+  loom_vector_packed_integer_storage_shape_t source_shape;
+  // Shape of the logical result lanes after unpacking.
+  loom_vector_packed_integer_storage_shape_t result_shape;
+  // Bit width unpacked from each storage field.
+  uint32_t width;
+  // Number of logical result lanes produced from the source payload.
+  uint32_t lane_count;
+} loom_vector_bitunpack_storage_match_t;
+
 // Returns the rank-1 static lane count for |type| when it has |element_type|
 // and is within |maximum_lane_count|. Returns zero for dynamic, non-rank-1,
 // wrong-element, empty, or over-limit vectors.
@@ -53,6 +75,25 @@ bool loom_vector_packed_integer_storage_shape(
     loom_type_t type, uint32_t storage_unit_bit_count,
     uint32_t maximum_storage_unit_count,
     loom_vector_packed_integer_storage_shape_t* out_shape);
+
+// Returns true when |source_type| and |result_type| describe a vector.bitpack
+// storage relationship under the given storage unit size and result storage
+// limit. The caller owns target-specific type patterns and any additional
+// payload multiple constraints.
+bool loom_vector_bitpack_storage_match(
+    loom_type_t source_type, loom_type_t result_type, uint32_t width,
+    uint32_t storage_unit_bit_count, uint32_t maximum_result_storage_unit_count,
+    loom_vector_bitpack_storage_match_t* out_match);
+
+// Returns true when |source_type| and |result_type| describe a
+// vector.bitunpack storage relationship under the given storage unit size,
+// source storage limit, and lane limit. The caller owns target-specific type
+// patterns.
+bool loom_vector_bitunpack_storage_match(
+    loom_type_t source_type, loom_type_t result_type, uint32_t width,
+    uint32_t storage_unit_bit_count, uint32_t maximum_source_storage_unit_count,
+    uint32_t maximum_lane_count,
+    loom_vector_bitunpack_storage_match_t* out_match);
 
 #ifdef __cplusplus
 }  // extern "C"

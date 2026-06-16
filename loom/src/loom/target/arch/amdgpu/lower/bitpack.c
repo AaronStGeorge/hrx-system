@@ -16,41 +16,6 @@
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
-typedef struct loom_amdgpu_bitstream_storage_shape_t {
-  // Source IR value type being matched.
-  loom_type_t type;
-  // Static i32 lane count accepted by the scalarized 32-bit vector path.
-  uint32_t i32_lane_count;
-  // Static i8 lane count accepted by the packed byte vector path.
-  uint32_t i8_lane_count;
-  // Payload bits occupied by packed integer storage.
-  uint32_t payload_bit_count;
-  // Number of 32-bit registers occupied by packed integer storage.
-  uint32_t register_count;
-  // True when |payload_bit_count| and |register_count| are valid.
-  bool has_packed_integer_storage;
-} loom_amdgpu_bitstream_storage_shape_t;
-
-static loom_amdgpu_bitstream_storage_shape_t
-loom_amdgpu_bitstream_storage_shape_from_type(loom_type_t type) {
-  loom_amdgpu_bitstream_storage_shape_t shape = {
-      .type = type,
-      .i32_lane_count = loom_vector_static_rank1_lane_count(
-          type, LOOM_SCALAR_TYPE_I32, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES),
-      .i8_lane_count = loom_vector_static_rank1_lane_count(
-          type, LOOM_SCALAR_TYPE_I8, LOOM_AMDGPU_MAX_PACKED_I8_LANES),
-  };
-  loom_vector_packed_integer_storage_shape_t storage_shape;
-  shape.has_packed_integer_storage = loom_vector_packed_integer_storage_shape(
-      type, /*storage_unit_bit_count=*/32,
-      LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS, &storage_shape);
-  if (shape.has_packed_integer_storage) {
-    shape.payload_bit_count = storage_shape.payload_bit_count;
-    shape.register_count = storage_shape.storage_unit_count;
-  }
-  return shape;
-}
-
 static void loom_amdgpu_bitpack_plan_from_accepted_op(
     const loom_module_t* module, const loom_op_t* source_op,
     loom_amdgpu_bitpack_plan_t* out_plan) {
@@ -59,27 +24,23 @@ static void loom_amdgpu_bitpack_plan_from_accepted_op(
   const int64_t width = loom_vector_bitpack_width(source_op);
   const loom_value_id_t source = loom_vector_bitpack_source(source_op);
   const loom_value_id_t result = loom_vector_bitpack_result(source_op);
-  const loom_amdgpu_bitstream_storage_shape_t source_shape =
-      loom_amdgpu_bitstream_storage_shape_from_type(
-          loom_module_value_type(module, source));
-  const loom_amdgpu_bitstream_storage_shape_t result_shape =
-      loom_amdgpu_bitstream_storage_shape_from_type(
-          loom_module_value_type(module, result));
-  IREE_ASSERT(width >= 1 && width <= 8);
-  IREE_ASSERT_EQ(32 % width, 0);
-  IREE_ASSERT_NE(source_shape.i32_lane_count, 0);
-  IREE_ASSERT_NE(result_shape.i8_lane_count, 0);
-  const uint32_t packed_payload_bit_count =
-      source_shape.i32_lane_count * (uint32_t)width;
-  IREE_ASSERT_EQ(result_shape.payload_bit_count, packed_payload_bit_count);
-  IREE_ASSERT_EQ(result_shape.payload_bit_count % 32u, 0);
-  IREE_ASSERT_NE(result_shape.register_count, 0);
+  loom_vector_bitpack_storage_match_t match = {0};
+  const bool matched = loom_vector_bitpack_storage_match(
+      loom_module_value_type(module, source),
+      loom_module_value_type(module, result), (uint32_t)width,
+      /*storage_unit_bit_count=*/32, LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS,
+      &match);
+  IREE_ASSERT(matched);
+  IREE_ASSERT_EQ(match.source_shape.element_type, LOOM_SCALAR_TYPE_I32);
+  IREE_ASSERT_EQ(match.result_shape.element_type, LOOM_SCALAR_TYPE_I8);
+  IREE_ASSERT_EQ(match.result_shape.payload_bit_count % 32u, 0);
+  IREE_ASSERT_NE(match.result_shape.storage_unit_count, 0);
 
   out_plan->source = source;
   out_plan->result = result;
   out_plan->width = (uint32_t)width;
-  out_plan->lane_count = source_shape.i32_lane_count;
-  out_plan->result_register_count = result_shape.register_count;
+  out_plan->lane_count = match.source_shape.lane_count;
+  out_plan->result_register_count = match.result_shape.storage_unit_count;
 }
 
 static void loom_amdgpu_bitunpack_plan_from_accepted_op(
@@ -104,37 +65,29 @@ static void loom_amdgpu_bitunpack_plan_from_accepted_op(
     IREE_BUILTIN_UNREACHABLE();
   }
 
-  const loom_amdgpu_bitstream_storage_shape_t source_shape =
-      loom_amdgpu_bitstream_storage_shape_from_type(
-          loom_module_value_type(module, out_plan->source));
-  const loom_amdgpu_bitstream_storage_shape_t result_shape =
-      loom_amdgpu_bitstream_storage_shape_from_type(
-          loom_module_value_type(module, out_plan->result));
-  IREE_ASSERT(width >= 1 && width <= 32);
-  IREE_ASSERT_EQ(32 % width, 0);
-  IREE_ASSERT(source_shape.has_packed_integer_storage);
-  IREE_ASSERT_EQ(source_shape.payload_bit_count % (uint32_t)width, 0);
+  loom_vector_bitunpack_storage_match_t match = {0};
+  const bool matched = loom_vector_bitunpack_storage_match(
+      loom_module_value_type(module, out_plan->source),
+      loom_module_value_type(module, out_plan->result), (uint32_t)width,
+      /*storage_unit_bit_count=*/32, LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS,
+      LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES, &match);
+  IREE_ASSERT(matched);
 
-  const uint32_t lane_count = source_shape.payload_bit_count / (uint32_t)width;
-  IREE_ASSERT(lane_count != 0);
-  IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
-
-  if (result_shape.i32_lane_count == lane_count) {
+  if (match.result_shape.element_type == LOOM_SCALAR_TYPE_I32) {
     out_plan->result_kind = LOOM_AMDGPU_BITUNPACK_RESULT_KIND_I32_LANES;
-    out_plan->result_register_count = lane_count;
+    out_plan->result_register_count = match.lane_count;
   } else {
     IREE_ASSERT_LE(width, 8);
-    IREE_ASSERT_EQ(result_shape.i8_lane_count, lane_count);
-    IREE_ASSERT(result_shape.has_packed_integer_storage);
-    IREE_ASSERT_EQ(result_shape.payload_bit_count, lane_count * 8u);
+    IREE_ASSERT_EQ(match.result_shape.element_type, LOOM_SCALAR_TYPE_I8);
+    IREE_ASSERT_EQ(match.result_shape.payload_bit_count, match.lane_count * 8u);
     out_plan->result_kind = LOOM_AMDGPU_BITUNPACK_RESULT_KIND_PACKED_I8;
-    out_plan->result_register_count = result_shape.register_count;
+    out_plan->result_register_count = match.result_shape.storage_unit_count;
   }
   IREE_ASSERT_NE(out_plan->result_kind, LOOM_AMDGPU_BITUNPACK_RESULT_KIND_NONE);
 
   out_plan->width = (uint32_t)width;
-  out_plan->source_register_count = source_shape.register_count;
-  out_plan->lane_count = lane_count;
+  out_plan->source_register_count = match.source_shape.storage_unit_count;
+  out_plan->lane_count = match.lane_count;
 }
 
 static iree_status_t loom_amdgpu_select_vector_bitstream_contract(

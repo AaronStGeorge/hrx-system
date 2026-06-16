@@ -1387,22 +1387,15 @@ static bool loom_low_lower_rule_packed_integer_payload_from_lanes_matches(
       rule_set, source_op, guard->value_ref_index);
   const loom_value_id_t storage_value_id = loom_low_lower_rule_source_value(
       rule_set, source_op, guard->other_value_ref_index);
-  loom_vector_packed_integer_storage_shape_t lane_shape = {0};
-  loom_vector_packed_integer_storage_shape_t storage_shape = {0};
-  if (!loom_vector_packed_integer_storage_shape(
+  loom_vector_bitpack_storage_match_t match = {0};
+  if (!loom_vector_bitpack_storage_match(
           loom_module_value_type(match_context->module, lane_value_id),
-          storage_unit_bit_count, UINT32_MAX, &lane_shape) ||
-      !loom_vector_packed_integer_storage_shape(
           loom_module_value_type(match_context->module, storage_value_id),
-          storage_unit_bit_count, UINT32_MAX, &storage_shape) ||
-      width > lane_shape.element_bit_count) {
+          width, storage_unit_bit_count, UINT32_MAX, &match)) {
     return false;
   }
 
-  const uint64_t expected_payload_bit_count =
-      (uint64_t)lane_shape.lane_count * width;
-  return expected_payload_bit_count == storage_shape.payload_bit_count &&
-         (storage_shape.payload_bit_count % (uint32_t)guard->u64) == 0;
+  return (match.result_shape.payload_bit_count % (uint32_t)guard->u64) == 0;
 }
 
 static bool loom_low_lower_rule_packed_integer_lanes_from_payload_matches(
@@ -1424,22 +1417,14 @@ static bool loom_low_lower_rule_packed_integer_lanes_from_payload_matches(
       rule_set, source_op, guard->value_ref_index);
   const loom_value_id_t lane_value_id = loom_low_lower_rule_source_value(
       rule_set, source_op, guard->other_value_ref_index);
-  loom_vector_packed_integer_storage_shape_t storage_shape = {0};
-  loom_vector_packed_integer_storage_shape_t lane_shape = {0};
-  if (!loom_vector_packed_integer_storage_shape(
+  if (!loom_vector_bitunpack_storage_match(
           loom_module_value_type(match_context->module, storage_value_id),
-          storage_unit_bit_count, (uint32_t)guard->u64, &storage_shape) ||
-      !loom_vector_packed_integer_storage_shape(
-          loom_module_value_type(match_context->module, lane_value_id),
-          storage_unit_bit_count, UINT32_MAX, &lane_shape) ||
-      (storage_shape.payload_bit_count % width) != 0 ||
-      width > lane_shape.element_bit_count) {
+          loom_module_value_type(match_context->module, lane_value_id), width,
+          storage_unit_bit_count, (uint32_t)guard->u64,
+          (uint32_t)guard->maximum_i64, NULL)) {
     return false;
   }
-
-  const uint32_t lane_count = storage_shape.payload_bit_count / width;
-  return lane_count != 0 && lane_count <= (uint32_t)guard->maximum_i64 &&
-         lane_shape.lane_count == lane_count;
+  return true;
 }
 
 static iree_status_t loom_low_lower_rule_guard_matches(

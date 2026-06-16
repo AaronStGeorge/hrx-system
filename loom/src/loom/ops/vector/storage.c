@@ -77,3 +77,85 @@ bool loom_vector_packed_integer_storage_shape(
   };
   return true;
 }
+
+bool loom_vector_bitpack_storage_match(
+    loom_type_t source_type, loom_type_t result_type, uint32_t width,
+    uint32_t storage_unit_bit_count, uint32_t maximum_result_storage_unit_count,
+    loom_vector_bitpack_storage_match_t* out_match) {
+  if (out_match != NULL) {
+    *out_match = (loom_vector_bitpack_storage_match_t){0};
+  }
+  if (width == 0 || storage_unit_bit_count == 0 ||
+      (storage_unit_bit_count % width) != 0) {
+    return false;
+  }
+
+  loom_vector_packed_integer_storage_shape_t source_shape = {0};
+  loom_vector_packed_integer_storage_shape_t result_shape = {0};
+  if (!loom_vector_packed_integer_storage_shape(
+          source_type, storage_unit_bit_count, UINT32_MAX, &source_shape) ||
+      !loom_vector_packed_integer_storage_shape(
+          result_type, storage_unit_bit_count,
+          maximum_result_storage_unit_count, &result_shape) ||
+      width > source_shape.element_bit_count) {
+    return false;
+  }
+
+  const uint64_t expected_payload_bit_count =
+      (uint64_t)source_shape.lane_count * width;
+  if (expected_payload_bit_count > UINT32_MAX ||
+      expected_payload_bit_count != result_shape.payload_bit_count) {
+    return false;
+  }
+
+  if (out_match != NULL) {
+    *out_match = (loom_vector_bitpack_storage_match_t){
+        .source_shape = source_shape,
+        .result_shape = result_shape,
+        .width = width,
+    };
+  }
+  return true;
+}
+
+bool loom_vector_bitunpack_storage_match(
+    loom_type_t source_type, loom_type_t result_type, uint32_t width,
+    uint32_t storage_unit_bit_count, uint32_t maximum_source_storage_unit_count,
+    uint32_t maximum_lane_count,
+    loom_vector_bitunpack_storage_match_t* out_match) {
+  if (out_match != NULL) {
+    *out_match = (loom_vector_bitunpack_storage_match_t){0};
+  }
+  if (width == 0 || maximum_lane_count == 0 || storage_unit_bit_count == 0 ||
+      (storage_unit_bit_count % width) != 0) {
+    return false;
+  }
+
+  loom_vector_packed_integer_storage_shape_t source_shape = {0};
+  loom_vector_packed_integer_storage_shape_t result_shape = {0};
+  if (!loom_vector_packed_integer_storage_shape(
+          source_type, storage_unit_bit_count,
+          maximum_source_storage_unit_count, &source_shape) ||
+      !loom_vector_packed_integer_storage_shape(
+          result_type, storage_unit_bit_count, UINT32_MAX, &result_shape) ||
+      (source_shape.payload_bit_count % width) != 0 ||
+      width > result_shape.element_bit_count) {
+    return false;
+  }
+
+  const uint32_t lane_count = source_shape.payload_bit_count / width;
+  if (lane_count == 0 || lane_count > maximum_lane_count ||
+      result_shape.lane_count != lane_count) {
+    return false;
+  }
+
+  if (out_match != NULL) {
+    *out_match = (loom_vector_bitunpack_storage_match_t){
+        .source_shape = source_shape,
+        .result_shape = result_shape,
+        .width = width,
+        .lane_count = lane_count,
+    };
+  }
+  return true;
+}
