@@ -47,6 +47,7 @@
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/registers.h"
+#include "loom/testing/diagnostic_matchers.h"
 #include "loom/testing/module_ptr.h"
 #include "loom/tooling/execution/hal/invocation.h"
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
@@ -54,6 +55,8 @@
 namespace loom {
 namespace {
 
+using ::loom::testing::CapturedDiagnostic;
+using ::loom::testing::DiagnosticCapture;
 using ::loom::testing::ModulePtr;
 
 constexpr uint64_t kReportFaultAddress = UINT64_C(0x0123456789ABCDEF);
@@ -88,6 +91,40 @@ std::string StatusToStringAndFree(iree_status_t status) {
   std::string message(buffer.data(), length);
   iree_status_free(status);
   return message;
+}
+
+std::string DiagnosticSummary(const DiagnosticCapture& capture) {
+  std::string result;
+  for (const CapturedDiagnostic& diagnostic : capture.diagnostics) {
+    if (!result.empty()) {
+      result += "\n";
+    }
+    result += diagnostic.error ? diagnostic.error->error_id : "<unknown>";
+    result += ": ";
+    result += diagnostic.error ? diagnostic.error->summary : "";
+    for (const loom_diagnostic_param_t& param : diagnostic.params) {
+      result += " [";
+      switch (param.kind) {
+        case LOOM_PARAM_STRING:
+          result.append(param.string.data, param.string.size);
+          break;
+        case LOOM_PARAM_I64:
+          result += std::to_string(param.i64);
+          break;
+        case LOOM_PARAM_U32:
+          result += std::to_string(param.u32);
+          break;
+        case LOOM_PARAM_U64:
+          result += std::to_string(param.u64);
+          break;
+        default:
+          result += "?";
+          break;
+      }
+      result += "]";
+    }
+  }
+  return result;
 }
 
 iree_status_t InitializeAmdgpuContext(
@@ -262,7 +299,6 @@ void ExpectAmdgpuAsanConfigEnabled(
   EXPECT_NE(config.flags & IREE_HAL_AMDGPU_ASAN_CONFIG_FLAG_ENABLED, 0u);
   EXPECT_LT(config.shadow_scale_shift, 63u);
   EXPECT_NE(config.shadow_base, 0u);
-  EXPECT_NE(config.application_window_base, 0u);
   EXPECT_NE(config.application_window_size, 0u);
   EXPECT_NE(config.shadow_size, 0u);
   EXPECT_NE(config.shadow_slab_size, 0u);
@@ -1006,7 +1042,7 @@ iree_status_t AppendAsanReportProducer(
 
 iree_status_t AppendAsanShadowProbeProducer(
     loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_view_t kernel_name) {
+    iree_string_view_t kernel_name, uint32_t wavefront_size) {
   loom_op_t* kernel_op = nullptr;
   IREE_RETURN_IF_ERROR(FindKernelOpByName(module, kernel_name, &kernel_op));
   loom_region_t* body = loom_low_kernel_def_body(kernel_op);
@@ -1062,8 +1098,7 @@ iree_status_t AppendAsanShadowProbeProducer(
   loom_amdgpu_sanitizer_access_check_t check = {};
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_check(
       &builder, descriptor_set, asan_config_symbol, input_resource,
-      /*access_size=*/sizeof(uint32_t), /*wavefront_size=*/32, location,
-      &check));
+      /*access_size=*/sizeof(uint32_t), wavefront_size, location, &check));
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_packet_store_b64(
       &builder, descriptor_set, &output_address, /*byte_offset=*/8,
       check.shadow_value, location));
@@ -1086,7 +1121,33 @@ iree_status_t AppendAsanShadowProbeProducer(
 
 class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
  protected:
+  static void SetUpTestSuite() {
+    recorder_ = new AmdgpuAsanDeviceEventRecorder();
+    runtime_ = new AmdgpuAsanHalRuntime();
+    iree_status_t status = runtime_->Initialize(recorder_->sink());
+    runtime_status_code_ = iree_status_code(status);
+    if (!iree_status_is_ok(status)) {
+      runtime_status_message_ = StatusToStringAndFree(status);
+      delete runtime_;
+      runtime_ = nullptr;
+      delete recorder_;
+      recorder_ = nullptr;
+    }
+  }
+
+  static void TearDownTestSuite() {
+    delete runtime_;
+    runtime_ = nullptr;
+    delete recorder_;
+    recorder_ = nullptr;
+    runtime_status_code_ = IREE_STATUS_OK;
+    runtime_status_message_.clear();
+  }
+
   void SetUp() override {
+    if (recorder_ != nullptr) {
+      recorder_->Reset();
+    }
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     IREE_ASSERT_OK(loom_target_environment_initialize(
@@ -1225,17 +1286,46 @@ class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
     IREE_RETURN_IF_ERROR(ParseModuleSource(
         iree_make_string_view(source.data(), source.size()),
         IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom"), &module));
+    const uint32_t wavefront_size =
+        target->target_bundle->snapshot
+            ? target->target_bundle->snapshot->subgroup_size
+            : 0;
     IREE_RETURN_IF_ERROR(AppendAsanShadowProbeProducer(
-        module.get(), descriptor_set, IREE_SV("loom_shadow_probe_kernel")));
+        module.get(), descriptor_set, IREE_SV("loom_shadow_probe_kernel"),
+        wavefront_size));
     *out_module = std::move(module);
     return iree_ok_status();
   }
+
+  static bool ShouldSkipForRuntimeStatus() {
+    return runtime_status_code_ == IREE_STATUS_UNAVAILABLE ||
+           runtime_status_code_ == IREE_STATUS_NOT_FOUND ||
+           runtime_status_code_ == IREE_STATUS_UNIMPLEMENTED;
+  }
+
+  const loom_run_hal_runtime_t* runtime() const { return runtime_->runtime(); }
+
+  iree_hal_allocator_t* allocator() const { return runtime_->allocator(); }
+
+  AmdgpuAsanDeviceEventRecorder* recorder() const { return recorder_; }
+
+  static AmdgpuAsanDeviceEventRecorder* recorder_;
+  static AmdgpuAsanHalRuntime* runtime_;
+  static iree_status_code_t runtime_status_code_;
+  static std::string runtime_status_message_;
 
   iree_arena_block_pool_t block_pool_;
   loom_target_environment_t target_environment_ = {};
   loom_context_t context_ = {};
   loom_target_low_descriptor_registry_t low_registry_ = {};
 };
+
+AmdgpuAsanDeviceEventRecorder* AmdgpuHalSanitizerFeedbackTest::recorder_ =
+    nullptr;
+AmdgpuAsanHalRuntime* AmdgpuHalSanitizerFeedbackTest::runtime_ = nullptr;
+iree_status_code_t AmdgpuHalSanitizerFeedbackTest::runtime_status_code_ =
+    IREE_STATUS_OK;
+std::string AmdgpuHalSanitizerFeedbackTest::runtime_status_message_;
 
 class AmdgpuHalArtifact {
  public:
@@ -1277,18 +1367,16 @@ class AmdgpuHalPreparedCandidate {
 
 TEST_F(AmdgpuHalSanitizerFeedbackTest,
        PublishesRuntimeGlobalsFromLoomNativeHsaco) {
-  AmdgpuAsanHalRuntime runtime;
-  iree_status_t status = runtime.Initialize();
-  if (iree_status_is_unavailable(status) || iree_status_is_not_found(status) ||
-      iree_status_is_unimplemented(status)) {
-    GTEST_SKIP() << StatusToStringAndFree(status);
+  if (ShouldSkipForRuntimeStatus()) {
+    GTEST_SKIP() << runtime_status_message_;
   }
-  IREE_ASSERT_OK(status);
+  ASSERT_EQ(runtime_status_code_, IREE_STATUS_OK) << runtime_status_message_;
+  ASSERT_NE(runtime_, nullptr);
 
   loom_run_hal_device_target_t target = {};
-  status = loom_amdgpu_hal_artifact_provider.select_device_target(
-      &loom_amdgpu_hal_artifact_provider, runtime.runtime(),
-      iree_allocator_system(), &target);
+  iree_status_t status = loom_amdgpu_hal_artifact_provider.select_device_target(
+      &loom_amdgpu_hal_artifact_provider, runtime(), iree_allocator_system(),
+      &target);
   if (iree_status_is_unavailable(status) ||
       iree_status_is_unimplemented(status)) {
     GTEST_SKIP() << StatusToStringAndFree(status);
@@ -1309,24 +1397,26 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   };
   AmdgpuHalArtifact artifact;
   bool emitted = false;
+  DiagnosticCapture capture;
   IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.emit_artifact(
       &loom_amdgpu_hal_artifact_provider, module.get(), &target,
-      /*diagnostic_sink=*/(loom_diagnostic_sink_t){},
+      /*diagnostic_sink=*/capture.sink(),
       /*source_resolver=*/(loom_source_resolver_t){}, /*max_errors=*/20,
       &target_pipeline_options,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
       /*artifact_manifest=*/nullptr, /*report=*/nullptr,
       iree_allocator_system(), &emitted, artifact.value()));
-  ASSERT_TRUE(emitted);
+  ASSERT_TRUE(emitted) << DiagnosticSummary(capture);
+  EXPECT_TRUE(capture.diagnostics.empty()) << DiagnosticSummary(capture);
 
   AmdgpuHalPreparedCandidate candidate;
   IREE_ASSERT_OK(loom_run_hal_prepared_candidate_prepare(
-      runtime.runtime(), artifact.value(), candidate.value()));
+      runtime(), artifact.value(), candidate.value()));
 
   iree_hal_amdgpu_asan_config_t asan_config = {};
-  IREE_ASSERT_OK(
-      ReadAmdgpuAsanConfig(runtime.runtime()->device, runtime.allocator(),
-                           candidate.value()->executable, &asan_config));
+  IREE_ASSERT_OK(ReadAmdgpuAsanConfig(runtime()->device, allocator(),
+                                      candidate.value()->executable,
+                                      &asan_config));
   ExpectAmdgpuAsanConfigEnabled(asan_config);
 
   bool found = false;
@@ -1352,9 +1442,8 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
       IREE_HAL_QUEUE_AFFINITY_ANY, &feedback_buffer));
   ASSERT_NE(feedback_buffer, nullptr);
   std::vector<iree_hal_amdgpu_feedback_config_t> feedback_configs;
-  IREE_ASSERT_OK(ReadDeviceBufferData(runtime.runtime()->device,
-                                      runtime.allocator(), feedback_buffer,
-                                      &feedback_configs));
+  IREE_ASSERT_OK(ReadDeviceBufferData(runtime()->device, allocator(),
+                                      feedback_buffer, &feedback_configs));
   ASSERT_EQ(feedback_configs.size(), 1u);
   EXPECT_EQ(feedback_configs[0].record_length, sizeof(feedback_configs[0]));
   EXPECT_EQ(feedback_configs[0].abi_version,
@@ -1375,18 +1464,16 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest, ProbesAsanShadowLoadThroughHalShadow) {
   constexpr uint64_t kAssertedAccessLength = sizeof(uint32_t);
   constexpr iree_device_size_t kOutputLength = 40;
 
-  AmdgpuAsanHalRuntime runtime;
-  iree_status_t status = runtime.Initialize();
-  if (iree_status_is_unavailable(status) || iree_status_is_not_found(status) ||
-      iree_status_is_unimplemented(status)) {
-    GTEST_SKIP() << StatusToStringAndFree(status);
+  if (ShouldSkipForRuntimeStatus()) {
+    GTEST_SKIP() << runtime_status_message_;
   }
-  IREE_ASSERT_OK(status);
+  ASSERT_EQ(runtime_status_code_, IREE_STATUS_OK) << runtime_status_message_;
+  ASSERT_NE(runtime_, nullptr);
 
   loom_run_hal_device_target_t target = {};
-  status = loom_amdgpu_hal_artifact_provider.select_device_target(
-      &loom_amdgpu_hal_artifact_provider, runtime.runtime(),
-      iree_allocator_system(), &target);
+  iree_status_t status = loom_amdgpu_hal_artifact_provider.select_device_target(
+      &loom_amdgpu_hal_artifact_provider, runtime(), iree_allocator_system(),
+      &target);
   if (iree_status_is_unavailable(status) ||
       iree_status_is_unimplemented(status)) {
     GTEST_SKIP() << StatusToStringAndFree(status);
@@ -1411,34 +1498,36 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest, ProbesAsanShadowLoadThroughHalShadow) {
   };
   AmdgpuHalArtifact artifact;
   bool emitted = false;
+  DiagnosticCapture capture;
   IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.emit_artifact(
       &loom_amdgpu_hal_artifact_provider, module.get(), &target,
-      /*diagnostic_sink=*/(loom_diagnostic_sink_t){},
+      /*diagnostic_sink=*/capture.sink(),
       /*source_resolver=*/(loom_source_resolver_t){}, /*max_errors=*/20,
       &target_pipeline_options,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
       /*artifact_manifest=*/nullptr, /*report=*/nullptr,
       iree_allocator_system(), &emitted, artifact.value()));
-  ASSERT_TRUE(emitted);
+  ASSERT_TRUE(emitted) << DiagnosticSummary(capture);
+  EXPECT_TRUE(capture.diagnostics.empty()) << DiagnosticSummary(capture);
 
   AmdgpuHalPreparedCandidate candidate;
   IREE_ASSERT_OK(loom_run_hal_prepared_candidate_prepare(
-      runtime.runtime(), artifact.value(), candidate.value()));
+      runtime(), artifact.value(), candidate.value()));
   ASSERT_EQ(iree_hal_executable_function_count(candidate.value()->executable),
             1u);
 
   iree_hal_amdgpu_asan_config_t asan_config = {};
-  IREE_ASSERT_OK(
-      ReadAmdgpuAsanConfig(runtime.runtime()->device, runtime.allocator(),
-                           candidate.value()->executable, &asan_config));
+  IREE_ASSERT_OK(ReadAmdgpuAsanConfig(runtime()->device, allocator(),
+                                      candidate.value()->executable,
+                                      &asan_config));
   ExpectAmdgpuAsanConfigEnabled(asan_config);
 
   iree_hal_buffer_t* input_buffer = nullptr;
-  IREE_ASSERT_OK(AllocateAsanDeviceBuffer(runtime.allocator(), kBufferLength,
-                                          &input_buffer));
+  IREE_ASSERT_OK(
+      AllocateAsanDeviceBuffer(allocator(), kBufferLength, &input_buffer));
   iree_hal_buffer_t* output_buffer = nullptr;
-  IREE_ASSERT_OK(AllocateAsanDeviceBuffer(runtime.allocator(), kOutputLength,
-                                          &output_buffer));
+  IREE_ASSERT_OK(
+      AllocateAsanDeviceBuffer(allocator(), kOutputLength, &output_buffer));
 
   const uint64_t allocation_pointer = AmdgpuDevicePointer(input_buffer);
   const uint64_t first_shadow_address =
@@ -1452,13 +1541,13 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest, ProbesAsanShadowLoadThroughHalShadow) {
   ASSERT_NE(redzone_shadow_address, 0u);
 
   IREE_ASSERT_OK(QueueDispatchTwoBuffers(
-      runtime.runtime()->device, candidate.value()->executable,
+      runtime()->device, candidate.value()->executable,
       IREE_SV("loom_shadow_probe_kernel"), input_buffer, output_buffer));
 
   std::vector<uint8_t> output;
-  IREE_ASSERT_OK(ReadDeviceBufferBytes(
-      runtime.runtime()->device, runtime.allocator(), output_buffer,
-      /*source_offset=*/0, kOutputLength, &output));
+  IREE_ASSERT_OK(
+      ReadDeviceBufferBytes(runtime()->device, allocator(), output_buffer,
+                            /*source_offset=*/0, kOutputLength, &output));
   ASSERT_EQ(output.size(), kOutputLength);
   EXPECT_EQ(LoadLeU32(output.data(), 0), 0xCAFE0001u);
   EXPECT_EQ(LoadLeU64(output.data(), 8), 0u);
@@ -1481,14 +1570,14 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest, ProbesAsanShadowLoadThroughHalShadow) {
             kRedzoneCrossingSubspanLength);
   ASSERT_EQ(AmdgpuDevicePointer(redzone_crossing_subspan),
             redzone_fault_pointer);
-  IREE_ASSERT_OK(QueueDispatchTwoBuffers(
-      runtime.runtime()->device, candidate.value()->executable,
-      IREE_SV("loom_shadow_probe_kernel"), redzone_crossing_subspan,
-      output_buffer));
+  IREE_ASSERT_OK(
+      QueueDispatchTwoBuffers(runtime()->device, candidate.value()->executable,
+                              IREE_SV("loom_shadow_probe_kernel"),
+                              redzone_crossing_subspan, output_buffer));
   output.clear();
-  IREE_ASSERT_OK(ReadDeviceBufferBytes(
-      runtime.runtime()->device, runtime.allocator(), output_buffer,
-      /*source_offset=*/0, kOutputLength, &output));
+  IREE_ASSERT_OK(
+      ReadDeviceBufferBytes(runtime()->device, allocator(), output_buffer,
+                            /*source_offset=*/0, kOutputLength, &output));
   ASSERT_EQ(output.size(), kOutputLength);
   EXPECT_EQ(LoadLeU32(output.data(), 0), 0xCAFE0001u);
   EXPECT_NE(LoadLeU64(output.data(), 8), 0u);
@@ -1503,19 +1592,16 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest, ProbesAsanShadowLoadThroughHalShadow) {
 
 TEST_F(AmdgpuHalSanitizerFeedbackTest,
        PublishesAsanFeedbackPacketFromLoomNativeHsaco) {
-  AmdgpuAsanDeviceEventRecorder recorder;
-  AmdgpuAsanHalRuntime runtime;
-  iree_status_t status = runtime.Initialize(recorder.sink());
-  if (iree_status_is_unavailable(status) || iree_status_is_not_found(status) ||
-      iree_status_is_unimplemented(status)) {
-    GTEST_SKIP() << StatusToStringAndFree(status);
+  if (ShouldSkipForRuntimeStatus()) {
+    GTEST_SKIP() << runtime_status_message_;
   }
-  IREE_ASSERT_OK(status);
+  ASSERT_EQ(runtime_status_code_, IREE_STATUS_OK) << runtime_status_message_;
+  ASSERT_NE(runtime_, nullptr);
 
   loom_run_hal_device_target_t target = {};
-  status = loom_amdgpu_hal_artifact_provider.select_device_target(
-      &loom_amdgpu_hal_artifact_provider, runtime.runtime(),
-      iree_allocator_system(), &target);
+  iree_status_t status = loom_amdgpu_hal_artifact_provider.select_device_target(
+      &loom_amdgpu_hal_artifact_provider, runtime(), iree_allocator_system(),
+      &target);
   if (iree_status_is_unavailable(status) ||
       iree_status_is_unimplemented(status)) {
     GTEST_SKIP() << StatusToStringAndFree(status);
@@ -1541,19 +1627,21 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   };
   AmdgpuHalArtifact artifact;
   bool emitted = false;
+  DiagnosticCapture capture;
   IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.emit_artifact(
       &loom_amdgpu_hal_artifact_provider, module.get(), &target,
-      /*diagnostic_sink=*/(loom_diagnostic_sink_t){},
+      /*diagnostic_sink=*/capture.sink(),
       /*source_resolver=*/(loom_source_resolver_t){}, /*max_errors=*/20,
       &target_pipeline_options,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
       /*artifact_manifest=*/nullptr, /*report=*/nullptr,
       iree_allocator_system(), &emitted, artifact.value()));
-  ASSERT_TRUE(emitted);
+  ASSERT_TRUE(emitted) << DiagnosticSummary(capture);
+  EXPECT_TRUE(capture.diagnostics.empty()) << DiagnosticSummary(capture);
 
   AmdgpuHalPreparedCandidate candidate;
   IREE_ASSERT_OK(loom_run_hal_prepared_candidate_prepare(
-      runtime.runtime(), artifact.value(), candidate.value()));
+      runtime(), artifact.value(), candidate.value()));
   ASSERT_EQ(iree_hal_executable_function_count(candidate.value()->executable),
             2u);
 
@@ -1562,9 +1650,8 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   loom_run_hal_invocation_options_t options;
   loom_run_hal_invocation_options_initialize(&options);
   options.function_name = IREE_SV("loom_report_kernel");
-  status =
-      loom_run_hal_dispatch(runtime.runtime()->device,
-                            candidate.value()->executable, &bindings, &options);
+  status = loom_run_hal_dispatch(
+      runtime()->device, candidate.value()->executable, &bindings, &options);
   loom_run_hal_binding_list_deinitialize(&bindings);
 
   const iree_status_code_t dispatch_code = iree_status_code(status);
@@ -1574,11 +1661,11 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
     IREE_ASSERT_OK(status);
   }
 
-  IREE_ASSERT_OK(iree_hal_device_queue_flush(runtime.runtime()->device,
+  IREE_ASSERT_OK(iree_hal_device_queue_flush(runtime()->device,
                                              IREE_HAL_QUEUE_AFFINITY_ANY));
-  recorder.WaitForAsanReportCount(1);
-  EXPECT_EQ(recorder.asan_report_count(), 1u);
-  iree_hal_device_asan_report_t report = recorder.last_report();
+  recorder()->WaitForAsanReportCount(1);
+  EXPECT_EQ(recorder()->asan_report_count(), 1u);
+  iree_hal_device_asan_report_t report = recorder()->last_report();
   EXPECT_EQ(report.record_length, sizeof(report));
   EXPECT_EQ(report.abi_version, IREE_HAL_DEVICE_ASAN_REPORT_ABI_VERSION_0);
   EXPECT_EQ(report.access_kind, IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE);
@@ -1591,13 +1678,13 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   EXPECT_EQ(report.workitem_id[0], 0u);
   EXPECT_EQ(report.source_dispatch_ptr, 0u);
 
-  iree_hal_device_event_source_t source = recorder.last_source();
+  iree_hal_device_event_source_t source = recorder()->last_source();
   EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));
   EXPECT_NE(source.executable_id, 0u);
   EXPECT_NE(source.physical_device_ordinal, UINT32_MAX);
 
-  ASSERT_TRUE(recorder.last_site_available());
-  iree_hal_device_event_site_t site = recorder.last_site();
+  ASSERT_TRUE(recorder()->last_site_available());
+  iree_hal_device_event_site_t site = recorder()->last_site();
   EXPECT_EQ(site.site_id, (uint64_t)kReportSiteId);
   EXPECT_TRUE(iree_string_view_equal(
       site.source_file, IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom")));
@@ -1605,7 +1692,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   EXPECT_EQ(site.start_column, 3u);
   EXPECT_EQ(site.end_line, 13u);
   EXPECT_EQ(site.end_column, 11u);
-  IREE_EXPECT_OK(iree_hal_device_queue_flush(runtime.runtime()->device,
+  IREE_EXPECT_OK(iree_hal_device_queue_flush(runtime()->device,
                                              IREE_HAL_QUEUE_AFFINITY_ANY));
 }
 

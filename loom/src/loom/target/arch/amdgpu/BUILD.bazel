@@ -341,6 +341,7 @@ loom_cc_test(
         "//loom/src/loom/target/arch/amdgpu/ops",
         "//loom/src/loom/target/arch/amdgpu/records:target_records",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//loom/src/loom/testing:diagnostic_matchers",
         "//loom/src/loom/testing:module_ptr",
         "//loom/src/loom/tooling/execution/hal:invocation",
         "//loom/src/loom/tooling/target/amdgpu:artifact_provider",

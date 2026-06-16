@@ -348,6 +348,7 @@ loom_cc_test(
     loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
+    loom::testing::diagnostic_matchers
     loom::testing::module_ptr
     loom::tooling::execution::hal::invocation
     loom::tooling::target::amdgpu::artifact_provider
