@@ -801,11 +801,8 @@ iree_hal_topology_edge_t iree_hal_topology_edge_make_self(void) {
   lo = iree_hal_topology_edge_set_latency_class(lo, 0);
   lo = iree_hal_topology_edge_set_numa_distance(lo, 0);
 
-  // Set handle types to native.
-  hi = iree_hal_topology_edge_set_semaphore_import_types(
-      hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
-  hi = iree_hal_topology_edge_set_semaphore_export_types(
-      hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
+  // Native semaphore interop is represented by the scheduling word. No
+  // external timepoint handles are required for same-device synchronization.
   hi = iree_hal_topology_edge_set_buffer_import_types(
       hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
   hi = iree_hal_topology_edge_set_buffer_export_types(
@@ -866,9 +863,4 @@ void iree_hal_topology_edge_refine_same_runtime_domain(
                   IREE_HAL_TOPOLOGY_CAPABILITY_TIMELINE_SEMAPHORE;
   edge->lo =
       iree_hal_topology_edge_set_capability_flags(edge->lo, capabilities);
-
-  edge->hi = iree_hal_topology_edge_set_semaphore_import_types(
-      edge->hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
-  edge->hi = iree_hal_topology_edge_set_semaphore_export_types(
-      edge->hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
 }

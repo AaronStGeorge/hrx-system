@@ -193,27 +193,29 @@ iree_hal_topology_edge_set_link_class(
 // Interop word (hi) setters
 //===----------------------------------------------------------------------===//
 
-// Sets semaphore import handle types in an interop word.
+// Sets semaphore import timepoint types in an interop word.
 static inline iree_hal_topology_edge_interop_word_t
-iree_hal_topology_edge_set_semaphore_import_types(
+iree_hal_topology_edge_set_semaphore_import_timepoint_types(
     iree_hal_topology_edge_interop_word_t word,
-    iree_hal_topology_handle_type_t types) {
-  word &= ~(IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TYPES_MASK
-            << IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TYPES_SHIFT);
-  word |= ((uint64_t)types & IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TYPES_MASK)
-          << IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TYPES_SHIFT;
+    iree_hal_external_timepoint_type_mask_t types) {
+  word &= ~(IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TIMEPOINT_TYPES_MASK
+            << IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TIMEPOINT_TYPES_SHIFT);
+  word |= ((uint64_t)types &
+           IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TIMEPOINT_TYPES_MASK)
+          << IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TIMEPOINT_TYPES_SHIFT;
   return word;
 }
 
-// Sets semaphore export handle types in an interop word.
+// Sets semaphore export timepoint types in an interop word.
 static inline iree_hal_topology_edge_interop_word_t
-iree_hal_topology_edge_set_semaphore_export_types(
+iree_hal_topology_edge_set_semaphore_export_timepoint_types(
     iree_hal_topology_edge_interop_word_t word,
-    iree_hal_topology_handle_type_t types) {
-  word &= ~(IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TYPES_MASK
-            << IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TYPES_SHIFT);
-  word |= ((uint64_t)types & IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TYPES_MASK)
-          << IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TYPES_SHIFT;
+    iree_hal_external_timepoint_type_mask_t types) {
+  word &= ~(IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TIMEPOINT_TYPES_MASK
+            << IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TIMEPOINT_TYPES_SHIFT);
+  word |= ((uint64_t)types &
+           IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TIMEPOINT_TYPES_MASK)
+          << IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TIMEPOINT_TYPES_SHIFT;
   return word;
 }
 

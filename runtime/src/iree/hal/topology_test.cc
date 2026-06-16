@@ -177,15 +177,17 @@ TEST(TopologyEdge, SchedulingWordBitfieldOverlap) {
 TEST(TopologyEdge, InteropWordBitfieldOverlap) {
   iree_hal_topology_edge_interop_word_t hi = 0;
 
-  // Set each handle type field to its maximum value (8 bits = 0xFF).
-  hi = iree_hal_topology_edge_set_semaphore_import_types(hi, 0xFF);
-  hi = iree_hal_topology_edge_set_semaphore_export_types(hi, 0xFF);
+  // Set each field to its maximum value.
+  hi = iree_hal_topology_edge_set_semaphore_import_timepoint_types(hi, 0xFFFF);
+  hi = iree_hal_topology_edge_set_semaphore_export_timepoint_types(hi, 0xFFFF);
   hi = iree_hal_topology_edge_set_buffer_import_types(hi, 0xFF);
   hi = iree_hal_topology_edge_set_buffer_export_types(hi, 0xFF);
 
   // Verify all fields retained their values.
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(hi), 0xFF);
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_types(hi), 0xFF);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(hi),
+            0xFFFF);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_timepoint_types(hi),
+            0xFFFF);
   EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(hi), 0xFF);
   EXPECT_EQ(iree_hal_topology_edge_buffer_export_types(hi), 0xFF);
 }
@@ -214,14 +216,15 @@ TEST(TopologyEdge, SchedulingWordBitfieldIndependence) {
 TEST(TopologyEdge, InteropWordBitfieldIndependence) {
   iree_hal_topology_edge_interop_word_t hi = 0;
 
-  // Set semaphore import types.
-  hi = iree_hal_topology_edge_set_semaphore_import_types(
-      hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD |
-              IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR);
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD |
-                IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR);
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_types(hi), 0);
+  // Set semaphore import timepoint types.
+  hi = iree_hal_topology_edge_set_semaphore_import_timepoint_types(
+      hi, IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_CUDA_EVENT |
+              IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_CUDA_EVENT |
+                IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_timepoint_types(hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
   EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(hi), 0);
 
   // Set buffer export types and verify semaphore import unchanged.
@@ -229,9 +232,9 @@ TEST(TopologyEdge, InteropWordBitfieldIndependence) {
       hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF);
   EXPECT_EQ(iree_hal_topology_edge_buffer_export_types(hi),
             IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF);
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD |
-                IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_CUDA_EVENT |
+                IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT);
 }
 
 //===----------------------------------------------------------------------===//
@@ -281,11 +284,12 @@ TEST(TopologyEdge, CreateSelf) {
   EXPECT_EQ(iree_hal_topology_edge_link_class(edge.lo),
             IREE_HAL_TOPOLOGY_LINK_CLASS_SAME_DIE);
 
-  // Self-edges should have NATIVE handle types.
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(edge.hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_types(edge.hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
+  // Self-edges require no external semaphore handles. Native synchronization is
+  // represented by the scheduling word.
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
   EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(edge.hi),
             IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
   EXPECT_EQ(iree_hal_topology_edge_buffer_export_types(edge.hi),
@@ -322,7 +326,8 @@ TEST(TopologyEdge, CreateHostStaged) {
   EXPECT_EQ(iree_hal_topology_edge_link_class(edge.lo),
             IREE_HAL_TOPOLOGY_LINK_CLASS_HOST_STAGED);
 
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(edge.hi), 0);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
   EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(edge.hi), 0);
 }
 
@@ -355,8 +360,8 @@ TEST(TopologyEdge, SameBackendSpecDoesNotImplyNativeSynchronization) {
   EXPECT_FALSE(capabilities & IREE_HAL_TOPOLOGY_CAPABILITY_ATOMIC_SYSTEM);
   EXPECT_EQ(iree_hal_topology_edge_link_class(edge.lo),
             IREE_HAL_TOPOLOGY_LINK_CLASS_HOST_STAGED);
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(edge.hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_NONE);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
   EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(edge.hi),
             IREE_HAL_TOPOLOGY_HANDLE_TYPE_NONE);
 
@@ -382,8 +387,8 @@ TEST(TopologyEdge, RefineSameRuntimeDomainUsesNativeSynchronizationOnly) {
   EXPECT_TRUE(capabilities & IREE_HAL_TOPOLOGY_CAPABILITY_TIMELINE_SEMAPHORE);
   EXPECT_FALSE(capabilities & IREE_HAL_TOPOLOGY_CAPABILITY_P2P_COPY);
   EXPECT_FALSE(capabilities & IREE_HAL_TOPOLOGY_CAPABILITY_PEER_COHERENT);
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(edge.hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
   EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(edge.hi),
             IREE_HAL_TOPOLOGY_HANDLE_TYPE_NONE);
 }
@@ -590,32 +595,33 @@ TEST(TopologyEdge, NewHandleTypes) {
   EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(hi), 0xFF);
 }
 
-// Tests RDMA-specific handle types in a realistic configuration.
-TEST(TopologyEdge, RdmaHandleTypes) {
+// Tests that buffer handle types and semaphore timepoint types are separate
+// fields even when they are used by the same edge.
+TEST(TopologyEdge, BufferHandlesAndTimepointTypesAreIndependent) {
   iree_hal_topology_edge_interop_word_t hi = 0;
 
-  // An RDMA-capable edge would support MR for buffers and SHM for semaphores.
+  // An RDMA-capable edge may support MR for buffers while semaphore interop
+  // uses API-specific timepoint objects.
   hi = iree_hal_topology_edge_set_buffer_import_types(
       hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR |
               IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
   hi = iree_hal_topology_edge_set_buffer_export_types(
       hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR |
               IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
-  hi = iree_hal_topology_edge_set_semaphore_import_types(
-      hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
-  hi = iree_hal_topology_edge_set_semaphore_export_types(
-      hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
+  hi = iree_hal_topology_edge_set_semaphore_import_timepoint_types(
+      hi, IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT);
+  hi = iree_hal_topology_edge_set_semaphore_export_timepoint_types(
+      hi, IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT);
 
-  // Verify RDMA_MR is set for buffers but not semaphores.
+  // Verify RDMA_MR is set for buffers while semaphores retain only the
+  // requested timepoint type.
   EXPECT_TRUE(iree_hal_topology_edge_buffer_import_types(hi) &
               IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR);
-  EXPECT_FALSE(iree_hal_topology_edge_semaphore_import_types(hi) &
-               IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT);
 
-  // Verify SHM is set for both.
+  // Verify SHM is retained as a buffer handle.
   EXPECT_TRUE(iree_hal_topology_edge_buffer_import_types(hi) &
-              IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
-  EXPECT_TRUE(iree_hal_topology_edge_semaphore_import_types(hi) &
               IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
 }
 

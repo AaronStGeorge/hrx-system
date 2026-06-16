@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include "iree/base/api.h"
+#include "iree/hal/semaphore.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -116,25 +117,27 @@ typedef uint64_t iree_hal_topology_edge_scheduling_word_t;
 #define IREE_HAL_TOPOLOGY_EDGE_LINK_CLASS_SHIFT                      48
 #define IREE_HAL_TOPOLOGY_EDGE_LINK_CLASS_MASK                       0x7ull
 // Interop word layout constants.
-#define IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TYPES_SHIFT          0
-#define IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TYPES_MASK           0xFFull
-#define IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TYPES_SHIFT          8
-#define IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TYPES_MASK           0xFFull
-#define IREE_HAL_TOPOLOGY_EDGE_BUFFER_IMPORT_TYPES_SHIFT             16
+#define IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TIMEPOINT_TYPES_SHIFT 0
+#define IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TIMEPOINT_TYPES_MASK  0xFFFFull
+#define IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TIMEPOINT_TYPES_SHIFT 16
+#define IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TIMEPOINT_TYPES_MASK  0xFFFFull
+#define IREE_HAL_TOPOLOGY_EDGE_BUFFER_IMPORT_TYPES_SHIFT             32
 #define IREE_HAL_TOPOLOGY_EDGE_BUFFER_IMPORT_TYPES_MASK              0xFFull
-#define IREE_HAL_TOPOLOGY_EDGE_BUFFER_EXPORT_TYPES_SHIFT             24
+#define IREE_HAL_TOPOLOGY_EDGE_BUFFER_EXPORT_TYPES_SHIFT             40
 #define IREE_HAL_TOPOLOGY_EDGE_BUFFER_EXPORT_TYPES_MASK              0xFFull
 // clang-format on
 
-// Interop word: external handle type bitmasks for resource sharing.
+// Interop word: external handle/timepoint bitmasks for resource sharing.
 // This is cold-path data read only during resource import/export negotiation.
 //
 // Layout (64 bits):
-//  Bits  0-7:  semaphore_import_types (8 bits) - handle types dst can import
-//  Bits  8-15: semaphore_export_types (8 bits) - handle types src can export
-//  Bits 16-23: buffer_import_types (8 bits) - buffer types dst can import
-//  Bits 24-31: buffer_export_types (8 bits) - buffer types src can export
-//  Bits 32-63: reserved (32 bits) - must be zero
+//  Bits  0-15: semaphore_import_timepoint_types (16 bits)
+//               iree_hal_external_timepoint_type_t bits dst can import.
+//  Bits 16-31: semaphore_export_timepoint_types (16 bits)
+//               iree_hal_external_timepoint_type_t bits src can export.
+//  Bits 32-39: buffer_import_types (8 bits) - buffer types dst can import.
+//  Bits 40-47: buffer_export_types (8 bits) - buffer types src can export.
+//  Bits 48-63: reserved (16 bits) - must be zero.
 typedef uint64_t iree_hal_topology_edge_interop_word_t;
 
 // 128-bit packed edge descriptor encoding directional device capabilities.
@@ -219,10 +222,10 @@ enum iree_hal_topology_link_class_bits_t {
 };
 typedef uint8_t iree_hal_topology_link_class_t;
 
-// External handle type bits for import/export operations.
+// External buffer handle type bits for import/export operations.
 // These map to platform-specific handle types used for cross-device and
-// cross-driver resource sharing. Each bit represents a handle format that
-// may be supported for semaphore or buffer import/export.
+// cross-driver resource sharing. Each bit represents a buffer handle format.
+// Semaphore interop uses iree_hal_external_timepoint_type_mask_t instead.
 enum iree_hal_topology_handle_type_bits_t {
   // No external handle support.
   IREE_HAL_TOPOLOGY_HANDLE_TYPE_NONE = 0,
@@ -776,33 +779,38 @@ static inline iree_hal_topology_link_class_t iree_hal_topology_edge_link_class(
 // Interop word (hi) getters
 //===----------------------------------------------------------------------===//
 //
-// These getters operate on the interop word (edge.hi). They extract handle
-// type bitmasks used during resource import/export negotiation.
+// These getters operate on the interop word (edge.hi). They extract external
+// handle/timepoint bitmasks used during resource import/export negotiation.
 
-// Returns semaphore import handle types from an interop word.
-// Bitfield of iree_hal_topology_handle_type_t values indicating which external
-// semaphore handle types can be imported for waiting by the destination device.
-// Common values include OPAQUE_FD (Linux), OPAQUE_WIN32 (Windows), or
-// RDMA_MR for remote memory regions.
+// Returns semaphore import timepoint types from an interop word.
+// An iree_hal_external_timepoint_type_mask_t value indicating which external
+// semaphore timepoint types can be imported for waiting by the destination
+// device.
 //
 // Implementations should query platform capabilities (e.g., Vulkan/CUDA/ROCm
 // external semaphore support) and set corresponding bits for supported types.
-static inline iree_hal_topology_handle_type_t
-iree_hal_topology_edge_semaphore_import_types(
+static inline iree_hal_external_timepoint_type_mask_t
+iree_hal_topology_edge_semaphore_import_timepoint_types(
     iree_hal_topology_edge_interop_word_t word) {
-  return (word >> 0) & 0xFFull;
+  const uint64_t raw_types =
+      (word >> IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TIMEPOINT_TYPES_SHIFT) &
+      IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_IMPORT_TIMEPOINT_TYPES_MASK;
+  return (iree_hal_external_timepoint_type_mask_t)raw_types;
 }
 
-// Returns semaphore export handle types from an interop word.
-// Bitfield of iree_hal_topology_handle_type_t values indicating which external
-// semaphore handle types can be exported for signaling by the source device.
+// Returns semaphore export timepoint types from an interop word.
+// An iree_hal_external_timepoint_type_mask_t value indicating which external
+// semaphore timepoint types can be exported for signaling by the source device.
 //
 // Implementations should advertise handle types that other drivers can import.
 // Asymmetric from import types when devices have different export capabilities.
-static inline iree_hal_topology_handle_type_t
-iree_hal_topology_edge_semaphore_export_types(
+static inline iree_hal_external_timepoint_type_mask_t
+iree_hal_topology_edge_semaphore_export_timepoint_types(
     iree_hal_topology_edge_interop_word_t word) {
-  return (word >> 8) & 0xFFull;
+  const uint64_t raw_types =
+      (word >> IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TIMEPOINT_TYPES_SHIFT) &
+      IREE_HAL_TOPOLOGY_EDGE_SEMAPHORE_EXPORT_TIMEPOINT_TYPES_MASK;
+  return (iree_hal_external_timepoint_type_mask_t)raw_types;
 }
 
 // Returns buffer import handle types from an interop word.
@@ -816,7 +824,10 @@ iree_hal_topology_edge_semaphore_export_types(
 static inline iree_hal_topology_handle_type_t
 iree_hal_topology_edge_buffer_import_types(
     iree_hal_topology_edge_interop_word_t word) {
-  return (word >> 16) & 0xFFull;
+  const uint64_t raw_types =
+      (word >> IREE_HAL_TOPOLOGY_EDGE_BUFFER_IMPORT_TYPES_SHIFT) &
+      IREE_HAL_TOPOLOGY_EDGE_BUFFER_IMPORT_TYPES_MASK;
+  return (iree_hal_topology_handle_type_t)raw_types;
 }
 
 // Returns buffer export handle types from an interop word.
@@ -828,7 +839,10 @@ iree_hal_topology_edge_buffer_import_types(
 static inline iree_hal_topology_handle_type_t
 iree_hal_topology_edge_buffer_export_types(
     iree_hal_topology_edge_interop_word_t word) {
-  return (word >> 24) & 0xFFull;
+  const uint64_t raw_types =
+      (word >> IREE_HAL_TOPOLOGY_EDGE_BUFFER_EXPORT_TYPES_SHIFT) &
+      IREE_HAL_TOPOLOGY_EDGE_BUFFER_EXPORT_TYPES_MASK;
+  return (iree_hal_topology_handle_type_t)raw_types;
 }
 
 //===----------------------------------------------------------------------===//

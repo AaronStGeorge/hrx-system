@@ -91,12 +91,13 @@ TEST(TopologyBuilder, Initialize) {
               IREE_HAL_TOPOLOGY_LINK_CLASS_SAME_DIE);
   }
 
-  // Verify self-edges have native handle types in the interop word.
+  // Verify self-edges require no external semaphore handles and retain native
+  // buffer handles in the interop word.
   for (uint32_t i = 0; i < 4; ++i) {
     uint32_t idx = i * 4 + i;
-    EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(
+    EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(
                   builder.device_edges[idx].hi),
-              IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
+              IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
     EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(
                   builder.device_edges[idx].hi),
               IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
@@ -127,9 +128,9 @@ TEST(TopologyBuilder, SetEdges) {
   cross_edge.lo = iree_hal_topology_edge_set_link_class(
       cross_edge.lo, IREE_HAL_TOPOLOGY_LINK_CLASS_NVLINK_IF);
 
-  // Set interop handle types for the cross-device edge.
-  cross_edge.hi = iree_hal_topology_edge_set_semaphore_import_types(
-      cross_edge.hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD);
+  // Set interop types for the cross-device edge.
+  cross_edge.hi = iree_hal_topology_edge_set_semaphore_import_timepoint_types(
+      cross_edge.hi, IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_ASYNC_PRIMITIVE);
   cross_edge.hi = iree_hal_topology_edge_set_buffer_import_types(
       cross_edge.hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF);
 
@@ -151,9 +152,9 @@ TEST(TopologyBuilder, SetEdges) {
             IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
 
   // Check the interop word survived the finalize copy.
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(
                 topology->device_edges[1].hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD);
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_ASYNC_PRIMITIVE);
   EXPECT_EQ(
       iree_hal_topology_edge_buffer_import_types(topology->device_edges[1].hi),
       IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF);
@@ -282,10 +283,10 @@ TEST(TopologyBuilder, FullEdgePreservation) {
   edge.lo = iree_hal_topology_edge_set_link_class(
       edge.lo, IREE_HAL_TOPOLOGY_LINK_CLASS_FABRIC);
 
-  edge.hi = iree_hal_topology_edge_set_semaphore_import_types(
-      edge.hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
-  edge.hi = iree_hal_topology_edge_set_semaphore_export_types(
-      edge.hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
+  edge.hi = iree_hal_topology_edge_set_semaphore_import_timepoint_types(
+      edge.hi, IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_CUDA_EVENT);
+  edge.hi = iree_hal_topology_edge_set_semaphore_export_timepoint_types(
+      edge.hi, IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_CUDA_EVENT);
   edge.hi = iree_hal_topology_edge_set_buffer_import_types(
       edge.hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR |
                    IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
@@ -315,10 +316,10 @@ TEST(TopologyBuilder, FullEdgePreservation) {
             IREE_HAL_TOPOLOGY_LINK_CLASS_FABRIC);
 
   // Verify the entire interop word survived.
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_types(result.hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
-  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_types(result.hi),
-            IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(result.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_CUDA_EVENT);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_timepoint_types(result.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_CUDA_EVENT);
   EXPECT_EQ(iree_hal_topology_edge_buffer_import_types(result.hi),
             IREE_HAL_TOPOLOGY_HANDLE_TYPE_RDMA_MR |
                 IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM);
