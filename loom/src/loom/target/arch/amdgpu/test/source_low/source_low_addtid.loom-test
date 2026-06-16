@@ -21,11 +21,11 @@ kernel.def target(@target) @workgroup_memory_workitem_x_b32() {
 
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() asm<amdgpu.rdna3.core> {
-  %11 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %10 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
   %one = v_mov_b32 1
-  %14 = s_mov_b32_m0_imm 0
-  ds_write_addtid_b32 %one, %14
-  %loaded = ds_read_addtid_b32 %14
-  ds_write_addtid_b32 %loaded, %14
+  %13 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %one, %13
+  %loaded = ds_read_addtid_b32 %13
+  ds_write_addtid_b32 %loaded, %13
   return
 }

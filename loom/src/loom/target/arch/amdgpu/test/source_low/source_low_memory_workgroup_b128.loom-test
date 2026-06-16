@@ -26,12 +26,12 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b128_roundtrip() as
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %38 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %40 = v_lshlrev_b32_src0_inline %lane, 4
-  %loaded = global_load_b128_saddr %40, %input_view
-  ds_write_b128 %40, %loaded
-  %roundtrip = ds_read_b128 %40
-  global_store_b128_saddr %40, %roundtrip, %output_view
+  %37 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %39 = v_lshlrev_b32_src0_inline %lane, 4
+  %loaded = global_load_b128_saddr %39, %input_view
+  ds_write_b128 %39, %loaded
+  %roundtrip = ds_read_b128 %39
+  global_store_b128_saddr %39, %roundtrip, %output_view
   return
 }
 
@@ -67,17 +67,17 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b128_xor_swizzle_ro
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %43 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %42 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
   %shifted = v_lshrrev_b32_lit %lane, 4
-  %47 = v_mov_b32 3
-  %swizzle_bits = v_and_b32 %shifted, %47
+  %46 = v_mov_b32 3
+  %swizzle_bits = v_and_b32 %shifted, %46
   %swizzled = v_xor_b32 %lane, %swizzle_bits
-  %50 = v_lshlrev_b32_src0_inline %lane, 4
-  %loaded = global_load_b128_saddr %50, %input_view
-  %52 = v_lshlrev_b32_src0_inline %swizzled, 4
-  ds_write_b128 %52, %loaded
-  %roundtrip = ds_read_b128 %52
-  global_store_b128_saddr %50, %roundtrip, %output_view
+  %49 = v_lshlrev_b32_src0_inline %lane, 4
+  %loaded = global_load_b128_saddr %49, %input_view
+  %51 = v_lshlrev_b32_src0_inline %swizzled, 4
+  ds_write_b128 %51, %loaded
+  %roundtrip = ds_read_b128 %51
+  global_store_b128_saddr %49, %roundtrip, %output_view
   return
 }
 
@@ -109,11 +109,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b128_large_static_o
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %39 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
-  %41 = v_lshlrev_b32_src0_inline %lane, 4
-  %loaded = global_load_b128_saddr %41, %input_view
-  ds_write_b128 %41, %loaded {offset = 1024}
-  %roundtrip = ds_read_b128 %41 {offset = 1024}
-  global_store_b128_saddr %41, %roundtrip, %output_view
+  %38 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
+  %40 = v_lshlrev_b32_src0_inline %lane, 4
+  %loaded = global_load_b128_saddr %40, %input_view
+  ds_write_b128 %40, %loaded {offset = 1024}
+  %roundtrip = ds_read_b128 %40 {offset = 1024}
+  global_store_b128_saddr %40, %roundtrip, %output_view
   return
 }

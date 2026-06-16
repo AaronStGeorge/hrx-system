@@ -68,6 +68,9 @@ _ROW_MACRO_SIGNATURES = {
         argument_count=6, storage_policy_argument=5
     ),
     "RECIPE_DIRECT_ROW": _RowMacroSignature(argument_count=4),
+    "RECIPE_DIRECT_STORAGE_ROW": _RowMacroSignature(
+        argument_count=5, storage_policy_argument=4
+    ),
     "RECIPE_DATA_ROW": _RowMacroSignature(argument_count=5),
     "RECIPE_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5

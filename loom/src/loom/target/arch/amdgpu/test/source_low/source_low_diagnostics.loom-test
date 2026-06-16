@@ -25,13 +25,13 @@ kernel.def target(@target) @lds_b32_diagnostics() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b32_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %14 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %13 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
   %one = v_mov_b32 1
-  %17 = s_mov_b32_m0_imm 0
-  ds_write_addtid_b32 %one, %17
-  %loaded = ds_read_addtid_b32 %17
-  %20 = v_lshlrev_b32_src0_inline %tid, 2
-  global_store_b32_saddr %20, %loaded, %output_view
+  %16 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %one, %16
+  %loaded = ds_read_addtid_b32 %16
+  %19 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %19, %loaded, %output_view
   return
 }
 
@@ -64,15 +64,15 @@ kernel.def target(@target) @lds_padded_diagnostics() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_padded_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %15 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
-  %17 = v_mov_b32 1
-  %one = concat(%17, %17, %17, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %22 = v_mov_b32 20
-  %23 = v_mul_lo_u32 %tid, %22
-  ds_write_b128 %23, %one
-  %loaded = ds_read_b128 %23
-  %27 = v_lshlrev_b32_src0_inline %tid, 4
-  global_store_b128_saddr %27, %loaded, %output_view
+  %14 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
+  %16 = v_mov_b32 1
+  %one = concat(%16, %16, %16, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %21 = v_mov_b32 20
+  %22 = v_mul_lo_u32 %tid, %21
+  ds_write_b128 %22, %one
+  %loaded = ds_read_b128 %22
+  %26 = v_lshlrev_b32_src0_inline %tid, 4
+  global_store_b128_saddr %26, %loaded, %output_view
   return
 }
 
@@ -105,13 +105,13 @@ kernel.def target(@target) @lds_read2_write2_diagnostics() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_read2_write2_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
-  %15 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
-  %17 = v_mov_b32 1
-  %20 = v_lshlrev_b32_src0_inline %tid, 5
-  ds_write2_b32 %20, %17, %17 {offset1 = 2}
-  %loaded = ds_read2_b32 %20 {offset1 = 2}
-  %25 = v_lshlrev_b32_src0_inline %tid, 3
-  global_store_b64_saddr %25, %loaded, %output_view
+  %14 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
+  %16 = v_mov_b32 1
+  %19 = v_lshlrev_b32_src0_inline %tid, 5
+  ds_write2_b32 %19, %16, %16 {offset1 = 2}
+  %loaded = ds_read2_b32 %19 {offset1 = 2}
+  %24 = v_lshlrev_b32_src0_inline %tid, 3
+  global_store_b64_saddr %24, %loaded, %output_view
   return
 }
 
@@ -143,13 +143,13 @@ kernel.def target(@target) @lds_conflict_risk_diagnostics() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_conflict_risk_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %14 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %16 = v_mov_b32 1
-  %one = concat(%16, %16, %16, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %21 = v_lshlrev_b32_src0_inline %tid, 4
-  ds_write_b128 %21, %one
-  %loaded = ds_read_b128 %21
-  global_store_b128_saddr %21, %loaded, %output_view
+  %13 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %15 = v_mov_b32 1
+  %one = concat(%15, %15, %15, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %20 = v_lshlrev_b32_src0_inline %tid, 4
+  ds_write_b128 %20, %one
+  %loaded = ds_read_b128 %20
+  global_store_b128_saddr %20, %loaded, %output_view
   return
 }
 
