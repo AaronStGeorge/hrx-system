@@ -72,6 +72,7 @@ class GuardKind(Enum):
     VALUE_NO_USES = "value_no_uses"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
     VECTOR_EXTRACT_SHAPE = "vector_extract_shape"
+    VALUE_STATIC_ELEMENT_COUNT_EQ = "value_static_element_count_eq"
 
 
 _LOW_VALUE_GUARD_KINDS = (
@@ -281,6 +282,21 @@ class Guard:
     ) -> Self:
         return cls(
             kind=GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+            field=field,
+            other_field=other_field,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def value_static_element_count_eq(
+        cls,
+        field: str,
+        other_field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
             field=field,
             other_field=other_field,
             diagnostic=diagnostic,
@@ -690,6 +706,7 @@ class Guard:
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
             GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
             GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+            GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
         ):
             _validate_value_fact_guard(self, source_op, subject)
             return
@@ -783,6 +800,7 @@ def _validate_value_fact_guard(
     if guard.kind in (
         GuardKind.VALUE_I64_RANGE_LE,
         GuardKind.VALUE_I64_RANGE_GE,
+        GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
     ):
         if guard.other_field is None:
             raise ValueError(f"{source_op.name}: {subject} needs another value")

@@ -734,6 +734,7 @@ class _LowerRuleSetCompiler:
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
             GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
             GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+            GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
         ):
             self._append_value_fact_guard(source_op, guard)
             return
@@ -1050,16 +1051,33 @@ class _LowerRuleSetCompiler:
         if guard.kind in (
             GuardKind.VALUE_I64_RANGE_LE,
             GuardKind.VALUE_I64_RANGE_GE,
+            GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
         ):
             if guard.other_field is None:
+                relation_name = (
+                    "static-element-count relation"
+                    if guard.kind == GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ
+                    else "value range relation"
+                )
                 raise ValueError(
-                    f"{source_op.name}: value range relation guard needs another value"
+                    f"{source_op.name}: {relation_name} guard needs another value"
                 )
             other_value_ref_index = self._append_value_ref(
                 source_op,
                 _value_ref_for_source_field(source_op, guard.other_field),
             )
-            relation = "le" if guard.kind == GuardKind.VALUE_I64_RANGE_LE else "ge"
+            if guard.kind == GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ:
+                diagnostic = _static_element_count_relation_diagnostic(
+                    guard.field,
+                    guard.other_field,
+                )
+            else:
+                relation = "le" if guard.kind == GuardKind.VALUE_I64_RANGE_LE else "ge"
+                diagnostic = _integer_range_relation_diagnostic(
+                    guard.field,
+                    guard.other_field,
+                    relation,
+                )
             self._guards.append(
                 LowerGuard(
                     kind=guard.kind,
@@ -1069,11 +1087,7 @@ class _LowerRuleSetCompiler:
                         source_op,
                         _guard_diagnostic(
                             guard,
-                            _integer_range_relation_diagnostic(
-                                guard.field,
-                                guard.other_field,
-                                relation,
-                            ),
+                            diagnostic,
                         ),
                     ),
                 )
@@ -2033,6 +2047,18 @@ def _register_unit_count_diagnostic(
         field,
         other_field,
         "low_register_unit_count_eq",
+    )
+
+
+def _static_element_count_relation_diagnostic(
+    field: str,
+    other_field: str,
+) -> DiagnosticRef:
+    return _relation_constraint_diagnostic(
+        "field",
+        field,
+        other_field,
+        "static_element_count_eq",
     )
 
 

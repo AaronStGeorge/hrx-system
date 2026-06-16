@@ -973,6 +973,31 @@ def test_compile_lower_rule_set_compiles_value_range_relation_guard() -> None:
     assert compiled.guards[0].other_value_ref_index == 1
 
 
+def test_compile_lower_rule_set_compiles_static_element_count_relation_guard() -> None:
+    table = ContractFragment(
+        name="test.static-element-count-relation",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_extf,
+                guards=(
+                    Guard.value_static_element_count_eq("input", "result"),
+                    Guard.value_type("input", Vector("f16", lanes=4)),
+                    Guard.value_type("result", Vector("f32", lanes=4)),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert compiled.rules[0].guard_count == 3
+    assert compiled.guards[0].kind == GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ
+    assert compiled.guards[0].value_ref_index == 0
+    assert compiled.guards[0].other_value_ref_index == 1
+
+
 def test_compile_lower_rule_set_compiles_value_fact_immediate_emit() -> None:
     table = ContractFragment(
         name="test.value-immediate",

@@ -522,6 +522,8 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 29,
   // Source vector.extract op must have a supported source/result/index shape.
   LOOM_LOW_LOWER_GUARD_VECTOR_EXTRACT_SHAPE = 30,
+  // Source value refs must have equal static shaped element counts.
+  LOOM_LOW_LOWER_GUARD_VALUE_STATIC_ELEMENT_COUNT_EQ = 31,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {

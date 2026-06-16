@@ -1572,6 +1572,24 @@ static iree_status_t loom_low_lower_rule_guard_matches(
           lhs_value.register_unit_count == rhs_value.register_unit_count;
       return iree_ok_status();
     }
+    case LOOM_LOW_LOWER_GUARD_VALUE_STATIC_ELEMENT_COUNT_EQ: {
+      const loom_value_id_t lhs_id = loom_low_lower_rule_source_value(
+          rule_set, source_op, guard->value_ref_index);
+      const loom_value_id_t rhs_id = loom_low_lower_rule_source_value(
+          rule_set, source_op, guard->other_value_ref_index);
+      uint64_t lhs_count = 0;
+      uint64_t rhs_count = 0;
+      if (!loom_type_static_element_count(
+              loom_module_value_type(match_context->module, lhs_id),
+              &lhs_count) ||
+          !loom_type_static_element_count(
+              loom_module_value_type(match_context->module, rhs_id),
+              &rhs_count)) {
+        return iree_ok_status();
+      }
+      *out_matches = lhs_count == rhs_count;
+      return iree_ok_status();
+    }
     case LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ: {
       if (guard->attr_index > source_op->operand_count) {
         return iree_ok_status();
