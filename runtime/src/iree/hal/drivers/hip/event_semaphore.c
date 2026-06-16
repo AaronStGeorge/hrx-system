@@ -862,7 +862,7 @@ static iree_status_t iree_hal_hip_semaphore_export_timepoint(
     iree_hal_external_timepoint_flags_t requested_flags,
     iree_hal_external_timepoint_t* IREE_RESTRICT out_external_timepoint) {
   memset(out_external_timepoint, 0x00, sizeof(*out_external_timepoint));
-  if ((requested_type & IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT) == 0) {
+  if (requested_type != IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "HIP only supports the export of DEVICE_WAIT timepoints");

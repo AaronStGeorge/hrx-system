@@ -94,6 +94,30 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
   ASSERT_EQ(queues->family_count, 1);
   EXPECT_EQ(queues->families[0].queue_count, 1);
   EXPECT_EQ(queues->families[0].timestamp_frequency_hz, 1000000000ull);
+  ASSERT_EQ(queues->external_timepoint_handle_count, 1);
+  const iree_hal_external_timepoint_handle_spec_t* hip_event_timepoint =
+      &queues->external_timepoint_handles[0];
+  EXPECT_EQ(hip_event_timepoint->handle_type,
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT);
+  EXPECT_TRUE(
+      iree_all_bits_set(hip_event_timepoint->direction_flags,
+                        IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT |
+                            IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT));
+  EXPECT_TRUE(
+      iree_all_bits_set(hip_event_timepoint->compatibility,
+                        IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT |
+                            IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT));
+  EXPECT_EQ(hip_event_timepoint->flags,
+            IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_NONE);
+  iree_hal_external_timepoint_handle_selection_t timepoint_selection = {
+      /*.handle_type=*/IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT,
+      /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT,
+      /*.compatibility=*/IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT,
+      /*.capability_flags=*/IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_NONE,
+  };
+  EXPECT_EQ(iree_hal_device_spec_find_external_timepoint_handle(
+                device_spec, &timepoint_selection),
+            hip_event_timepoint);
 
   const iree_hal_device_dispatch_spec_t* dispatch =
       iree_hal_device_spec_dispatch(device_spec);

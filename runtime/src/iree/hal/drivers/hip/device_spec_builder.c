@@ -308,9 +308,22 @@ static iree_status_t iree_hal_hip_device_spec_populate_queues(
     };
   }
 
+  iree_hal_external_timepoint_handle_spec_t external_timepoint_handles[1] = {
+      {
+          .handle_type = IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT,
+          .direction_flags = IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT |
+                             IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT,
+          .compatibility = IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT |
+                           IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT,
+          .flags = IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_NONE,
+      },
+  };
   iree_hal_device_queue_spec_t queues = {
       .family_count = params->physical_device_count,
       .families = families,
+      .external_timepoint_handle_count =
+          IREE_ARRAYSIZE(external_timepoint_handles),
+      .external_timepoint_handles = external_timepoint_handles,
       .flags = IREE_HAL_DEVICE_QUEUE_SPEC_FLAG_NONE,
   };
   iree_status_t status =
