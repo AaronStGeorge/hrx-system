@@ -87,41 +87,36 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_AMDGPU_STORAGE_VALUE_PLAN,
                 LOOM_AMDGPU_PRESELECT_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_CMPF)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_SCALAR_CMPF, loom_amdgpu_vector_compare_plan_t,
                 loom_amdgpu_select_scalar_cmpf_dispatch,
-                loom_amdgpu_emit_scalar_cmpf_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2),
+                loom_amdgpu_emit_scalar_cmpf_dispatch, NULL, 2),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_CLAMPF)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_SCALAR_CLAMPF, loom_amdgpu_clampf_plan_t,
                 loom_amdgpu_select_scalar_clampf_dispatch,
-                loom_amdgpu_emit_scalar_clampf_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3),
+                loom_amdgpu_emit_scalar_clampf_dispatch, NULL, 3),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_MULF)] =
-            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW(
+            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW(
                 LOOM_OP_SCALAR_MULF, loom_amdgpu_mulf_mix_plan_t,
                 loom_amdgpu_select_scalar_mulf_mix_dispatch,
-                loom_amdgpu_emit_scalar_mulf_mix_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2,
+                loom_amdgpu_emit_scalar_mulf_mix_dispatch, NULL, 2,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_FMAF)] =
-            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW(
+            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW(
                 LOOM_OP_SCALAR_FMAF, loom_amdgpu_fma_mix_plan_t,
                 loom_amdgpu_select_scalar_fmaf_mix_dispatch,
-                loom_amdgpu_emit_scalar_fmaf_mix_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
+                loom_amdgpu_emit_scalar_fmaf_mix_dispatch, NULL, 3,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuScfDispatchRows[LOOM_OP_SCF_COUNT_] = {
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCF_SELECT)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_SCF_SELECT, loom_amdgpu_vector_select_plan_t,
                 loom_amdgpu_select_scf_select_dispatch,
-                loom_amdgpu_emit_scf_select_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3),
+                loom_amdgpu_emit_scf_select_dispatch, NULL, 3),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t
@@ -196,45 +191,39 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_value_dispatch, NULL,
                 LOOM_AMDGPU_STORAGE_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_DOTF)] =
-            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW(
+            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW(
                 LOOM_OP_VECTOR_DOTF, loom_amdgpu_dotf_plan_t,
                 loom_amdgpu_select_vector_dotf_dispatch,
-                loom_amdgpu_emit_vector_dotf_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
+                loom_amdgpu_emit_vector_dotf_dispatch, NULL, 3,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_MULF)] =
-            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW(
+            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW(
                 LOOM_OP_VECTOR_MULF, loom_amdgpu_mulf_mix_plan_t,
                 loom_amdgpu_select_vector_mulf_mix_dispatch,
-                loom_amdgpu_emit_vector_mulf_mix_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2,
+                loom_amdgpu_emit_vector_mulf_mix_dispatch, NULL, 2,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAF)] =
-            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW(
+            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW(
                 LOOM_OP_VECTOR_FMAF, loom_amdgpu_packed_ternary_plan_t,
                 loom_amdgpu_select_vector_packed_fmaf_dispatch,
-                loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
+                loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL, 3,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAI)] =
-            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW(
+            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW(
                 LOOM_OP_VECTOR_FMAI, loom_amdgpu_packed_ternary_plan_t,
                 loom_amdgpu_select_vector_packed_fmai_dispatch,
-                loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
+                loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL, 3,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CMPI)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_CMPI, loom_amdgpu_vector_compare_plan_t,
                 loom_amdgpu_select_vector_cmpi_dispatch,
-                loom_amdgpu_emit_vector_cmpi_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2),
+                loom_amdgpu_emit_vector_cmpi_dispatch, NULL, 2),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CMPF)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_CMPF, loom_amdgpu_vector_compare_plan_t,
                 loom_amdgpu_select_vector_cmpf_dispatch,
-                loom_amdgpu_emit_vector_cmpf_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2),
+                loom_amdgpu_emit_vector_cmpf_dispatch, NULL, 2),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FRAGMENT_LOAD)] =
             LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_FRAGMENT_LOAD,
@@ -266,51 +255,44 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_low_legality_verify_atomic,
                 LOOM_AMDGPU_STORAGE_ATOMIC),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SELECT)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_SELECT, loom_amdgpu_vector_select_plan_t,
                 loom_amdgpu_select_vector_select_dispatch,
                 loom_amdgpu_emit_vector_select_dispatch,
-                loom_amdgpu_low_legality_verify_vector_select,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3),
+                loom_amdgpu_low_legality_verify_vector_select, 3),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CLAMPF)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_CLAMPF, loom_amdgpu_clampf_plan_t,
                 loom_amdgpu_select_vector_clampf_dispatch,
-                loom_amdgpu_emit_vector_clampf_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3),
+                loom_amdgpu_emit_vector_clampf_dispatch, NULL, 3),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_TABLE_LOOKUP)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_KEY_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_REPORT_KEY_ROW(
                 LOOM_OP_VECTOR_TABLE_LOOKUP, loom_amdgpu_table_lookup_plan_t,
                 loom_amdgpu_select_vector_table_lookup_dispatch,
                 loom_amdgpu_emit_vector_table_lookup_dispatch,
-                loom_amdgpu_low_legality_verify_vector_table,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2,
+                loom_amdgpu_low_legality_verify_vector_table, 2,
                 LOOM_AMDGPU_REPORT_KEY_TABLE_LOOKUP_STRATEGY),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITPACK)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_BITPACK, loom_amdgpu_bitpack_plan_t,
                 loom_amdgpu_select_vector_bitpack_dispatch,
-                loom_amdgpu_emit_vector_bitpack_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_emit_vector_bitpack_dispatch, NULL, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITUNPACKS)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_BITUNPACKS, loom_amdgpu_bitunpack_plan_t,
                 loom_amdgpu_select_vector_bitunpack_dispatch,
-                loom_amdgpu_emit_vector_bitunpack_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_emit_vector_bitunpack_dispatch, NULL, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITUNPACKU)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_BITUNPACKU, loom_amdgpu_bitunpack_plan_t,
                 loom_amdgpu_select_vector_bitunpack_dispatch,
-                loom_amdgpu_emit_vector_bitunpack_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_emit_vector_bitunpack_dispatch, NULL, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITCAST)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_BITCAST, loom_amdgpu_vector_bitcast_plan_t,
                 loom_amdgpu_select_vector_bitcast_dispatch,
                 loom_amdgpu_emit_vector_bitcast_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_vector_structural, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CONCAT)] =
             LOOM_AMDGPU_RECIPE_DATA_ROW(
                 LOOM_OP_VECTOR_CONCAT, loom_amdgpu_vector_concat_plan_t,
@@ -318,41 +300,36 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_vector_concat_dispatch,
                 loom_amdgpu_low_legality_verify_vector_structural),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_DEINTERLEAVE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_DEINTERLEAVE,
                 loom_amdgpu_vector_deinterleave_plan_t,
                 loom_amdgpu_select_vector_deinterleave_dispatch,
                 loom_amdgpu_emit_vector_deinterleave_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_vector_structural, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_INTERLEAVE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_INTERLEAVE, loom_amdgpu_vector_interleave_plan_t,
                 loom_amdgpu_select_vector_interleave_dispatch,
                 loom_amdgpu_emit_vector_interleave_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2),
+                loom_amdgpu_low_legality_verify_vector_structural, 2),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SHUFFLE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_SHUFFLE, loom_amdgpu_vector_permutation_plan_t,
                 loom_amdgpu_select_vector_shuffle_dispatch,
                 loom_amdgpu_emit_vector_permutation_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_vector_structural, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_TRANSPOSE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_TRANSPOSE, loom_amdgpu_vector_permutation_plan_t,
                 loom_amdgpu_select_vector_transpose_dispatch,
                 loom_amdgpu_emit_vector_permutation_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_vector_structural, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SLICE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_SLICE, loom_amdgpu_vector_slice_plan_t,
                 loom_amdgpu_select_vector_slice_dispatch,
                 loom_amdgpu_emit_vector_slice_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_vector_structural, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_EXTRACT)] =
             LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
                 LOOM_OP_VECTOR_EXTRACT, loom_amdgpu_select_value_dispatch,
@@ -459,13 +436,12 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_preamble_dispatch,
                 loom_amdgpu_low_legality_verify_kernel_preamble),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_SHUFFLE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_SHUFFLE,
                 loom_amdgpu_subgroup_shuffle_plan_t,
                 loom_amdgpu_select_kernel_subgroup_shuffle_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_shuffle_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_BROADCAST)] =
             LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_BROADCAST,
@@ -475,52 +451,47 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast,
                 LOOM_AMDGPU_STORAGE_SUBGROUP_BROADCAST),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_BROADCAST_FIRST)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_BROADCAST_FIRST,
                 loom_amdgpu_subgroup_broadcast_first_plan_t,
                 loom_amdgpu_select_kernel_subgroup_broadcast_first_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_broadcast_first_dispatch,
                 loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast_first,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_REDUCE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_REDUCE,
                 loom_amdgpu_subgroup_reduce_plan_t,
                 loom_amdgpu_select_kernel_subgroup_reduce_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_reduce_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_subgroup_reduce,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_kernel_subgroup_reduce, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_SCAN)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_SCAN, loom_amdgpu_subgroup_scan_plan_t,
                 loom_amdgpu_select_kernel_subgroup_scan_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_scan_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_subgroup_scan,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_kernel_subgroup_scan, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_VOTE_ANY)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_VOTE_ANY,
                 loom_amdgpu_subgroup_vote_any_plan_t,
                 loom_amdgpu_select_kernel_subgroup_vote_any_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_vote_any_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_VOTE_ALL)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_VOTE_ALL,
                 loom_amdgpu_subgroup_vote_all_plan_t,
                 loom_amdgpu_select_kernel_subgroup_vote_all_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_vote_all_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_VOTE_BALLOT)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_VOTE_BALLOT,
                 loom_amdgpu_subgroup_ballot_plan_t,
                 loom_amdgpu_select_kernel_subgroup_ballot_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_ballot_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_subgroup_ballot,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_kernel_subgroup_ballot, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK)] =
             LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK,
@@ -538,22 +509,20 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_OP_KERNEL_SUBGROUP_MATCH_ALL,
                 loom_amdgpu_low_legality_verify_kernel_subgroup_match),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_WORKGROUP_REDUCE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_KEY_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_REPORT_KEY_ROW(
                 LOOM_OP_KERNEL_WORKGROUP_REDUCE,
                 loom_amdgpu_workgroup_reduce_plan_t,
                 loom_amdgpu_select_kernel_workgroup_reduce_dispatch,
                 loom_amdgpu_emit_kernel_workgroup_reduce_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_workgroup_reduce,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1,
+                loom_amdgpu_low_legality_verify_kernel_workgroup_reduce, 1,
                 LOOM_AMDGPU_REPORT_KEY_WORKGROUP_REDUCE_PUBLICATION),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_WORKGROUP_SCAN)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_WORKGROUP_SCAN,
                 loom_amdgpu_workgroup_scan_plan_t,
                 loom_amdgpu_select_kernel_workgroup_scan_dispatch,
                 loom_amdgpu_emit_kernel_workgroup_scan_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_workgroup_scan,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
+                loom_amdgpu_low_legality_verify_kernel_workgroup_scan, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY)] =
             LOOM_AMDGPU_LEGALITY_ROW(
                 LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY,

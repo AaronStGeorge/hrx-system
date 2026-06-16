@@ -46,6 +46,7 @@ class CallbackDispatchRow:
 class _RowMacroSignature:
     argument_count: int
     storage_policy_argument: int | None = None
+    source_count_argument: int | None = None
     preselect_policy_argument: int | None = None
     report_key_argument: int | None = None
 
@@ -74,11 +75,20 @@ _ROW_MACRO_SIGNATURES = {
     "RECIPE_DATA_STORAGE_REPORT_KEY_ROW": _RowMacroSignature(
         argument_count=7, storage_policy_argument=5, report_key_argument=6
     ),
+    "RECIPE_DATA_SOURCE_ROW": _RowMacroSignature(
+        argument_count=6, source_count_argument=5
+    ),
+    "RECIPE_DATA_SOURCE_REPORT_KEY_ROW": _RowMacroSignature(
+        argument_count=7, source_count_argument=5, report_key_argument=6
+    ),
     "GENERATED_PRESELECT_DIRECT_POLICY_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=4, preselect_policy_argument=5
     ),
     "GENERATED_PRESELECT_DATA_POLICY_ROW": _RowMacroSignature(
         argument_count=7, storage_policy_argument=5, preselect_policy_argument=6
+    ),
+    "GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW": _RowMacroSignature(
+        argument_count=7, source_count_argument=5, preselect_policy_argument=6
     ),
     "LEGALITY_ROW": _RowMacroSignature(argument_count=2),
 }
@@ -86,9 +96,6 @@ _ROW_MACRO_SIGNATURES = {
 _STORAGE_POLICY_NAMES = frozenset(
     {
         "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
-        "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1",
-        "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2",
-        "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3",
         "LOOM_AMDGPU_STORAGE_MEMORY_PLAN",
         "LOOM_AMDGPU_STORAGE_ATOMIC",
         "LOOM_AMDGPU_STORAGE_PREFETCH",
@@ -131,6 +138,7 @@ _ROW_TAG_PREFIXES = (
     "LOOM_AMDGPU_PRESELECT_",
     "LOOM_AMDGPU_REPORT_KEY_",
 )
+_SOURCE_COUNT_NAMES = frozenset({"1", "2", "3"})
 
 
 def amdgpu_generated_lower_rule_op_kinds(
@@ -267,6 +275,16 @@ def _validate_callback_dispatch_row_shape(row: CallbackDispatchRow) -> None:
         expected_row_tag_arguments[signature.preselect_policy_argument] = "preselect"
     if signature.report_key_argument is not None:
         expected_row_tag_arguments[signature.report_key_argument] = "report_key"
+    if (
+        signature.source_count_argument is not None
+        and row.arguments[signature.source_count_argument] not in _SOURCE_COUNT_NAMES
+    ):
+        raise ValueError(
+            f"AMDGPU callback row {row.op_kind} via {row.macro_name} expects "
+            f"a leading source count at argument "
+            f"{signature.source_count_argument + 1}, got "
+            f"{row.arguments[signature.source_count_argument]}"
+        )
 
     for argument_index, row_tag_kind in expected_row_tag_arguments.items():
         argument = row.arguments[argument_index]
