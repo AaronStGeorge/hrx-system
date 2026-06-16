@@ -283,6 +283,16 @@ class AmdgpuArithmeticLowerRulesTest : public ::testing::Test {
       }
       ASSERT_LT(emit->descriptor_ref,
                 loom_amdgpu_arithmetic_lower_rule_set.descriptor_ref_count);
+      const loom_low_descriptor_t* resolved_descriptor = nullptr;
+      IREE_ASSERT_OK(
+          ResolveDescriptorRef(&resolver_state, &match_context,
+                               &loom_amdgpu_arithmetic_lower_rule_set,
+                               emit->descriptor_ref, &resolved_descriptor));
+      ASSERT_NE(resolved_descriptor, nullptr)
+          << "selected rule emits hidden descriptor "
+          << ToString(loom_amdgpu_arithmetic_lower_rule_set
+                          .descriptor_refs[emit->descriptor_ref]
+                          .key);
       actual_descriptor_keys.push_back(
           loom_amdgpu_arithmetic_lower_rule_set
               .descriptor_refs[emit->descriptor_ref]
@@ -299,6 +309,44 @@ class AmdgpuArithmeticLowerRulesTest : public ::testing::Test {
           << ToString(expected_descriptor_keys[i]) << ", got "
           << ToString(actual_descriptor_keys[i]);
     }
+  }
+
+  void ExpectNoSelection(
+      iree_string_view_t source, loom_op_kind_t op_kind,
+      std::vector<iree_string_view_t> hidden_descriptor_keys) {
+    ModulePtr module = Parse(source);
+    loom_op_t* function_op = FindFirstOp(module->body, LOOM_OP_FUNC_DEF);
+    ASSERT_NE(function_op, nullptr);
+    loom_func_like_t function = loom_func_like_cast(module.get(), function_op);
+    ASSERT_TRUE(loom_func_like_isa(function));
+    loom_op_t* op = FindFirstOp(module->body, op_kind);
+    ASSERT_NE(op, nullptr);
+
+    DescriptorResolverState resolver_state = {
+        /*.hidden_keys=*/std::move(hidden_descriptor_keys),
+    };
+    const loom_low_lower_rule_match_context_t match_context = {
+        /*.module=*/module.get(),
+        /*.function=*/function,
+        /*.bundle=*/&kTargetBundle,
+        /*.descriptor_set=*/nullptr,
+        /*.feature_bits=*/0,
+        /*.map_value=*/{},
+        /*.can_materialize=*/{},
+        /*.descriptor_ref=*/
+        {
+            /*.fn=*/ResolveDescriptorRef,
+            /*.user_data=*/&resolver_state,
+        },
+        /*.fact_table=*/nullptr,
+    };
+
+    loom_low_lower_rule_selection_t selection = {};
+    IREE_ASSERT_OK(loom_low_lower_rule_set_select_with_match_context(
+        &match_context, &loom_amdgpu_arithmetic_lower_rule_set, op,
+        &selection));
+    EXPECT_TRUE(selection.has_source_op_span);
+    EXPECT_EQ(selection.rule, nullptr);
   }
 
   loom_context_t context_;
@@ -331,6 +379,21 @@ func.def @extractu(%source: vector<1xi32>) -> (vector<1xi32>) {
           IREE_SV("amdgpu.v_lshrrev_b32.src0_inline"),
           IREE_SV("amdgpu.v_and_b32.src0_inline"),
       });
+}
+
+TEST_F(AmdgpuArithmeticLowerRulesTest,
+       RejectsUnsignedBitfieldExtractWhenFallbackDescriptorsMissing) {
+  ExpectNoSelection(IREE_SV(R"(
+func.def @extractu(%source: vector<1xi32>) -> (vector<1xi32>) {
+  %bits = vector.bitfield.extractu %source {offset = 4, width = 4} : vector<1xi32> -> vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+)"),
+                    LOOM_OP_VECTOR_BITFIELD_EXTRACTU,
+                    {
+                        IREE_SV("amdgpu.v_bfe_u32.offset_width_inline"),
+                        IREE_SV("amdgpu.v_lshrrev_b32.src0_inline"),
+                    });
 }
 
 TEST_F(AmdgpuArithmeticLowerRulesTest, SelectsNativeSignedBitfieldExtract) {
@@ -390,6 +453,21 @@ func.def @insert(%field: vector<1xi32>, %base: vector<1xi32>) -> (vector<1xi32>)
                                    IREE_SV("amdgpu.v_and_b32.lit"),
                                    IREE_SV("amdgpu.v_or_b32"),
                                });
+}
+
+TEST_F(AmdgpuArithmeticLowerRulesTest,
+       RejectsBitfieldInsertWhenFallbackDescriptorsMissing) {
+  ExpectNoSelection(IREE_SV(R"(
+func.def @insert(%field: vector<1xi32>, %base: vector<1xi32>) -> (vector<1xi32>) {
+  %bits = vector.bitfield.insert %field into %base {offset = 8, width = 4} : vector<1xi32>, vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+)"),
+                    LOOM_OP_VECTOR_BITFIELD_INSERT,
+                    {
+                        IREE_SV("amdgpu.v_bfi_b32.src0_lit"),
+                        IREE_SV("amdgpu.v_lshlrev_b32.src0_inline"),
+                    });
 }
 
 }  // namespace
