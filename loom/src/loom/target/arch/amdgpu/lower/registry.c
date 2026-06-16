@@ -109,7 +109,7 @@ enum loom_amdgpu_storage_policy_e {
 enum loom_amdgpu_preselect_policy_e {
   // The row does not need target-owned preselection before generated rules.
   LOOM_AMDGPU_PRESELECT_NONE = 0,
-  // Invoke value lowering preselection for conversion and value-shaping plans.
+  // Invoke value lowering preselection for value-constructor special cases.
   LOOM_AMDGPU_PRESELECT_VALUE_PLAN = 1,
   // Invoke the ordinary callback selector before generated rules.
   LOOM_AMDGPU_PRESELECT_PLAN_ID = 2,
@@ -218,6 +218,83 @@ static iree_status_t loom_amdgpu_emit_value_dispatch(
   (void)row;
   return loom_amdgpu_lower_value_op(context, source_op, plan);
 }
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_index_constant_dispatch,
+                               loom_amdgpu_constant_plan_t,
+                               loom_amdgpu_select_index_constant_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_constant_dispatch,
+                               loom_amdgpu_constant_plan_t,
+                               loom_amdgpu_select_scalar_constant_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_constant_dispatch,
+                               loom_amdgpu_constant_plan_t,
+                               loom_amdgpu_select_vector_constant_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_constant_dispatch,
+                             loom_amdgpu_constant_plan_t,
+                             loom_amdgpu_lower_constant_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_index_cast_dispatch,
+                               loom_amdgpu_index_cast_plan_t,
+                               loom_amdgpu_select_index_cast_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_index_cast_dispatch,
+                             loom_amdgpu_index_cast_plan_t,
+                             loom_amdgpu_lower_index_cast)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_offset_add_dispatch,
+                               loom_amdgpu_offset_add_plan_t,
+                               loom_amdgpu_select_offset_add_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_offset_add_dispatch,
+                             loom_amdgpu_offset_add_plan_t,
+                             loom_amdgpu_lower_offset_add)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_index_cmp_i64_dispatch,
+                               loom_amdgpu_i64_compare_plan_t,
+                               loom_amdgpu_select_index_cmp_i64_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_cmpi_i64_dispatch,
+                               loom_amdgpu_i64_compare_plan_t,
+                               loom_amdgpu_select_scalar_cmpi_i64_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_i64_compare_dispatch,
+                             loom_amdgpu_i64_compare_plan_t,
+                             loom_amdgpu_lower_i64_compare)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_i64_alu_dispatch,
+                               loom_amdgpu_scalar_i64_alu_plan_t,
+                               loom_amdgpu_select_scalar_i64_alu_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_i64_alu_dispatch,
+                             loom_amdgpu_scalar_i64_alu_plan_t,
+                             loom_amdgpu_lower_scalar_i64_alu)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_conversion_dispatch,
+                               loom_amdgpu_scalar_conversion_plan_t,
+                               loom_amdgpu_select_scalar_conversion_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_conversion_dispatch,
+                             loom_amdgpu_scalar_conversion_plan_t,
+                             loom_amdgpu_lower_scalar_conversion)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_extract_dispatch,
+                               loom_amdgpu_vector_extract_plan_t,
+                               loom_amdgpu_select_vector_extract_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_extract_dispatch,
+                             loom_amdgpu_vector_extract_plan_t,
+                             loom_amdgpu_lower_vector_extract)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_vector_bf16_conversion_dispatch,
+    loom_amdgpu_vector_bf16_conversion_plan_t,
+    loom_amdgpu_select_vector_bf16_conversion_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bf16_conversion_dispatch,
+                             loom_amdgpu_vector_bf16_conversion_plan_t,
+                             loom_amdgpu_lower_vector_bf16_conversion)
 
 static iree_status_t loom_amdgpu_select_buffer_dispatch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -734,6 +811,8 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_sanitizer_assert_access_dispatch,
   LOOM_AMDGPU_INTERNAL_DIRECT_STORAGE_ROW
 #define LOOM_AMDGPU_VALUE_DIRECT_POLICY_ROW \
   LOOM_AMDGPU_INTERNAL_DIRECT_POLICY_ROW
+#define LOOM_AMDGPU_VALUE_DATA_STORAGE_ROW LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
+#define LOOM_AMDGPU_VALUE_DATA_POLICY_ROW LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW
 
 #define LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
@@ -805,6 +884,8 @@ static const loom_amdgpu_lower_dispatch_table_t
 #undef LOOM_AMDGPU_RECIPE_DATA_ROW
 #undef LOOM_AMDGPU_RECIPE_DIRECT_STORAGE_ROW
 #undef LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW
+#undef LOOM_AMDGPU_VALUE_DATA_POLICY_ROW
+#undef LOOM_AMDGPU_VALUE_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_VALUE_DIRECT_POLICY_ROW
 #undef LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW

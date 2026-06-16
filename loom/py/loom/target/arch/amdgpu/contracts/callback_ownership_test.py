@@ -381,6 +381,27 @@ def test_validate_callback_dispatch_rows_accepts_bounded_recipe() -> None:
     )
 
 
+def test_validate_callback_dispatch_rows_accepts_value_data_policy() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_SCALAR_TRUNCI",
+            role=CallbackDispatchRole.VALUE,
+            macro_name="VALUE_DATA_POLICY_ROW",
+            arguments=(
+                "LOOM_OP_SCALAR_TRUNCI",
+                "loom_amdgpu_scalar_conversion_plan_t",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+            ),
+        ),
+    )
+
+    validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
 def test_validate_callback_dispatch_rows_rejects_unowned_preselect() -> None:
     rows = (
         CallbackDispatchRow(

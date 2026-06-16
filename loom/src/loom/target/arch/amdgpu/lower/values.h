@@ -17,6 +17,101 @@
 extern "C" {
 #endif
 
+// Selects an AMDGPU constant materialization plan for index.constant.
+iree_status_t loom_amdgpu_select_index_constant_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_constant_plan_t* out_plan, bool* out_selected);
+
+// Selects an AMDGPU constant materialization plan for scalar.constant.
+iree_status_t loom_amdgpu_select_scalar_constant_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_constant_plan_t* out_plan, bool* out_selected);
+
+// Selects an AMDGPU constant materialization plan for vector.constant.
+iree_status_t loom_amdgpu_select_vector_constant_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_constant_plan_t* out_plan, bool* out_selected);
+
+// Lowers an AMDGPU constant materialization plan.
+iree_status_t loom_amdgpu_lower_constant_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_constant_plan_t* plan);
+
+// Selects an AMDGPU index.cast plan.
+iree_status_t loom_amdgpu_select_index_cast_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_index_cast_plan_t* out_plan, bool* out_selected);
+
+// Lowers an AMDGPU index.cast plan.
+iree_status_t loom_amdgpu_lower_index_cast(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_index_cast_plan_t* plan);
+
+// Selects an AMDGPU full-width offset addition plan.
+iree_status_t loom_amdgpu_select_offset_add_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_offset_add_plan_t* out_plan, bool* out_selected);
+
+// Lowers an AMDGPU full-width offset addition plan.
+iree_status_t loom_amdgpu_lower_offset_add(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_offset_add_plan_t* plan);
+
+// Selects an AMDGPU full-width offset comparison plan.
+iree_status_t loom_amdgpu_select_index_cmp_i64_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_i64_compare_plan_t* out_plan, bool* out_selected);
+
+// Selects an AMDGPU scalar i64 comparison plan.
+iree_status_t loom_amdgpu_select_scalar_cmpi_i64_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_i64_compare_plan_t* out_plan, bool* out_selected);
+
+// Lowers an AMDGPU i64 comparison plan.
+iree_status_t loom_amdgpu_lower_i64_compare(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_i64_compare_plan_t* plan);
+
+// Selects an AMDGPU scalar i64 ALU plan.
+iree_status_t loom_amdgpu_select_scalar_i64_alu_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_scalar_i64_alu_plan_t* out_plan, bool* out_selected);
+
+// Lowers an AMDGPU scalar i64 ALU plan.
+iree_status_t loom_amdgpu_lower_scalar_i64_alu(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_scalar_i64_alu_plan_t* plan);
+
+// Selects an AMDGPU scalar conversion plan.
+iree_status_t loom_amdgpu_select_scalar_conversion_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_scalar_conversion_plan_t* out_plan, bool* out_selected);
+
+// Lowers an AMDGPU scalar conversion plan.
+iree_status_t loom_amdgpu_lower_scalar_conversion(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_scalar_conversion_plan_t* plan);
+
+// Selects an AMDGPU vector.extract plan.
+iree_status_t loom_amdgpu_select_vector_extract_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_extract_plan_t* out_plan, bool* out_selected);
+
+// Lowers an AMDGPU vector.extract plan.
+iree_status_t loom_amdgpu_lower_vector_extract(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_extract_plan_t* plan);
+
+// Selects an AMDGPU vector bf16 conversion plan.
+iree_status_t loom_amdgpu_select_vector_bf16_conversion_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_bf16_conversion_plan_t* out_plan, bool* out_selected);
+
+// Lowers an AMDGPU vector bf16 conversion plan.
+iree_status_t loom_amdgpu_lower_vector_bf16_conversion(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_bf16_conversion_plan_t* plan);
+
 // Selects a plan for value-construction source ops.
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,

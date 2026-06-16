@@ -27,6 +27,146 @@
 extern "C" {
 #endif
 
+typedef enum loom_amdgpu_constant_plan_kind_e {
+  LOOM_AMDGPU_CONSTANT_PLAN_KIND_NONE = 0,
+  LOOM_AMDGPU_CONSTANT_PLAN_KIND_U32_BITS = 1,
+  LOOM_AMDGPU_CONSTANT_PLAN_KIND_I1_SCC = 2,
+  LOOM_AMDGPU_CONSTANT_PLAN_KIND_I1_MASK = 3,
+} loom_amdgpu_constant_plan_kind_t;
+
+typedef struct loom_amdgpu_constant_plan_t {
+  // Representation-specific lowering selected for the constant.
+  loom_amdgpu_constant_plan_kind_t kind;
+  // Source result value receiving the emitted low constant.
+  loom_value_id_t result;
+  // Primary descriptor row selected for the constant packet.
+  loom_low_lower_resolved_descriptor_t descriptor;
+  // Descriptor row selected for an auxiliary zero constant.
+  loom_low_lower_resolved_descriptor_t zero_descriptor;
+  // Module string ID for the descriptor's imm32 attribute.
+  loom_string_id_t imm32_attr_name_id;
+  // Number of 32-bit registers receiving immediate bit patterns.
+  uint32_t register_count;
+  // Immediate bit patterns emitted into selected result registers.
+  uint32_t bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+  // Boolean payload for i1 constants.
+  bool i1_value;
+} loom_amdgpu_constant_plan_t;
+
+typedef enum loom_amdgpu_vector_bf16_conversion_kind_e {
+  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_NONE = 0,
+  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_EXTF = 1,
+  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_FPTRUNC = 2,
+} loom_amdgpu_vector_bf16_conversion_kind_t;
+
+typedef struct loom_amdgpu_vector_bf16_conversion_plan_t {
+  // Conversion operation selected for the source/result type pair.
+  loom_amdgpu_vector_bf16_conversion_kind_t kind;
+  // Source vector value being converted.
+  loom_value_id_t source;
+  // Result vector value receiving the converted lane payload.
+  loom_value_id_t result;
+  // Static vector lane count.
+  uint32_t lane_count;
+  // Number of 32-bit source registers occupied by the source vector.
+  uint32_t source_register_count;
+  // Number of 32-bit result registers occupied by the result vector.
+  uint32_t result_register_count;
+} loom_amdgpu_vector_bf16_conversion_plan_t;
+
+typedef enum loom_amdgpu_index_cast_kind_e {
+  LOOM_AMDGPU_INDEX_CAST_KIND_NONE = 0,
+  LOOM_AMDGPU_INDEX_CAST_KIND_ALIAS = 1,
+  LOOM_AMDGPU_INDEX_CAST_KIND_PRESERVING_LOW_32 = 2,
+  LOOM_AMDGPU_INDEX_CAST_KIND_DIAGNOSTIC_REJECTED = 3,
+} loom_amdgpu_index_cast_kind_t;
+
+typedef struct loom_amdgpu_index_cast_plan_t {
+  // Lowering strategy selected for the index cast.
+  loom_amdgpu_index_cast_kind_t kind;
+  // Source value being cast.
+  loom_value_id_t source;
+  // Result value receiving the cast payload.
+  loom_value_id_t result;
+  // Target index bit width used by preserving narrowing checks.
+  uint32_t index_bitwidth;
+} loom_amdgpu_index_cast_plan_t;
+
+typedef struct loom_amdgpu_offset_add_plan_t {
+  // Left-hand offset value.
+  loom_value_id_t lhs;
+  // Right-hand offset value.
+  loom_value_id_t rhs;
+  // Result offset value receiving the full-width sum.
+  loom_value_id_t result;
+  // True when the result is a VGPR x2 value instead of an SGPR x2 value.
+  bool result_is_vgpr;
+} loom_amdgpu_offset_add_plan_t;
+
+typedef struct loom_amdgpu_i64_compare_plan_t {
+  // Left-hand 64-bit source value.
+  loom_value_id_t lhs;
+  // Right-hand 64-bit source value.
+  loom_value_id_t rhs;
+  // Result i1 value receiving the native lane mask.
+  loom_value_id_t result;
+  // Descriptor comparing high 32-bit lanes.
+  loom_amdgpu_descriptor_ref_t high_descriptor_ref;
+  // Descriptor comparing low 32-bit lanes.
+  loom_amdgpu_descriptor_ref_t low_descriptor_ref;
+  // Descriptor combining high and low lane masks.
+  loom_amdgpu_descriptor_ref_t combine_descriptor_ref;
+  // True when low-lane comparison is guarded by high-lane equality.
+  bool needs_high_equal;
+} loom_amdgpu_i64_compare_plan_t;
+
+typedef enum loom_amdgpu_scalar_i64_alu_kind_e {
+  LOOM_AMDGPU_SCALAR_I64_ALU_KIND_NONE = 0,
+  LOOM_AMDGPU_SCALAR_I64_ALU_KIND_VGPR_ADD = 1,
+  LOOM_AMDGPU_SCALAR_I64_ALU_KIND_VGPR_SUB = 2,
+  LOOM_AMDGPU_SCALAR_I64_ALU_KIND_VGPR_MUL_LO = 3,
+  LOOM_AMDGPU_SCALAR_I64_ALU_KIND_VGPR_SHL = 4,
+} loom_amdgpu_scalar_i64_alu_kind_t;
+
+typedef struct loom_amdgpu_scalar_i64_alu_plan_t {
+  // Lowering strategy selected for the scalar i64 ALU op.
+  loom_amdgpu_scalar_i64_alu_kind_t kind;
+  // Left-hand 64-bit source value.
+  loom_value_id_t lhs;
+  // Right-hand 64-bit source value.
+  loom_value_id_t rhs;
+  // Source result value receiving the emitted low result.
+  loom_value_id_t result;
+} loom_amdgpu_scalar_i64_alu_plan_t;
+
+typedef enum loom_amdgpu_scalar_conversion_kind_e {
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_NONE = 0,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ALIAS,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_TRUNCATE_LOW_32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_NARROW_LOW_32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_SIGN_EXTEND_I64,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_ZERO_EXTEND,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_UITOFP_NARROW_TO_F32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_I32,
+  LOOM_AMDGPU_SCALAR_CONVERSION_KIND_FPTOI_F32_TO_NARROW,
+} loom_amdgpu_scalar_conversion_kind_t;
+
+typedef struct loom_amdgpu_scalar_conversion_plan_t {
+  // Lowering strategy selected for the source/result type pair.
+  loom_amdgpu_scalar_conversion_kind_t kind;
+  // Source value being converted.
+  loom_value_id_t source;
+  // Result value receiving the converted payload.
+  loom_value_id_t result;
+  // Static source integer payload bit count, or zero for non-integer sources.
+  uint32_t source_bit_count;
+  // Static result integer payload bit count, or zero for non-integer results.
+  uint32_t result_bit_count;
+  // Descriptor selected for conversion packets used by the strategy.
+  loom_amdgpu_descriptor_ref_t convert_descriptor_ref;
+} loom_amdgpu_scalar_conversion_plan_t;
+
 typedef struct loom_amdgpu_bitpack_plan_t {
   // Source vector value containing unpacked i32 lanes.
   loom_value_id_t source;
