@@ -3,7 +3,6 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
-#include <cctype>
 #include <cstdint>
 #include <iterator>
 #include <string>
@@ -18,11 +17,15 @@ std::string gpu_architecture(hrx_device_t device) {
   std::array<char, 64> arch = {};
   REQUIRE_OK(hrx().device_get_property(device, HRX_DEVICE_PROPERTY_ARCHITECTURE,
                                        arch.data(), arch.size()));
-  std::string value(arch.data());
-  for (char c : value) {
-    REQUIRE((std::isalnum(static_cast<unsigned char>(c)) || c == '_'));
+  return std::string(arch.data());
+}
+
+std::string base_gpu_target(std::string arch) {
+  const size_t feature_pos = arch.find(':');
+  if (feature_pos != std::string::npos) {
+    arch.resize(feature_pos);
   }
-  return value;
+  return arch;
 }
 
 const iree_file_toc_t* find_hsaco_for_target(const std::string& target) {
@@ -62,7 +65,7 @@ TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch") {
     return;
   }
 
-  std::string arch = gpu_architecture(device_);
+  std::string arch = base_gpu_target(gpu_architecture(device_));
   if (arch.empty() || arch == "unknown") {
     SUCCEED("Skipping native executable CTS: unknown GPU architecture");
     return;

@@ -15,6 +15,89 @@
 // Module management
 //===----------------------------------------------------------------------===//
 
+static iree_string_view_t iree_hal_streaming_executable_target_value(
+    const iree_hal_executable_target_t* target) {
+  if (!iree_string_view_is_empty(target->loader_target)) {
+    return target->loader_target;
+  }
+  return target->processor;
+}
+
+static iree_status_t iree_hal_streaming_fat_binary_target_append_unique(
+    iree_hal_streaming_fat_binary_target_t* targets,
+    iree_host_size_t target_capacity, iree_host_size_t* target_count,
+    iree_string_view_t value) {
+  if (iree_string_view_is_empty(value)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "fat-binary target value is empty");
+  }
+  for (iree_host_size_t i = 0; i < *target_count; ++i) {
+    if (iree_string_view_equal(targets[i].value, value)) {
+      return iree_ok_status();
+    }
+  }
+  if (*target_count >= target_capacity) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "fat-binary target capacity exceeded");
+  }
+  targets[*target_count].value = value;
+  *target_count += 1;
+  return iree_ok_status();
+}
+
+static iree_status_t iree_hal_streaming_fat_binary_targets_from_device(
+    iree_hal_device_t* device, iree_host_size_t target_capacity,
+    iree_hal_streaming_fat_binary_target_t* targets,
+    iree_host_size_t* out_target_count) {
+  IREE_ASSERT_ARGUMENT(device);
+  IREE_ASSERT_ARGUMENT(targets);
+  IREE_ASSERT_ARGUMENT(out_target_count);
+
+  iree_host_size_t target_count = 0;
+  const iree_hal_device_spec_t* device_spec = iree_hal_device_spec(device);
+
+  iree_hal_executable_target_selection_t selection = {
+      .policy = IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_EXACT_DEVICE,
+      .family = IREE_SV("amdgpu"),
+  };
+  const iree_hal_executable_target_t* target = NULL;
+  iree_hal_executable_target_selection_result_t result =
+      iree_hal_device_spec_select_executable_target(device_spec, &selection,
+                                                    &target);
+  if (result == IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_NO_MATCH) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU HAL device spec does not report an exact executable target");
+  }
+  if (result == IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_AMBIGUOUS) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU HAL device spec reports ambiguous exact executable targets");
+  }
+  IREE_RETURN_IF_ERROR(iree_hal_streaming_fat_binary_target_append_unique(
+      targets, target_capacity, &target_count,
+      iree_hal_streaming_executable_target_value(target)));
+
+  selection.policy =
+      IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_COMPATIBLE_GENERIC;
+  target = NULL;
+  result = iree_hal_device_spec_select_executable_target(device_spec,
+                                                         &selection, &target);
+  if (result == IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_AMBIGUOUS) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU HAL device spec reports ambiguous generic executable targets");
+  }
+  if (result == IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_SELECTED) {
+    IREE_RETURN_IF_ERROR(iree_hal_streaming_fat_binary_target_append_unique(
+        targets, target_capacity, &target_count,
+        iree_hal_streaming_executable_target_value(target)));
+  }
+
+  *out_target_count = target_count;
+  return iree_ok_status();
+}
+
 static iree_status_t iree_hal_streaming_module_extract_metadata(
     iree_hal_streaming_module_t* module) {
   IREE_ASSERT_ARGUMENT(module);
@@ -336,10 +419,15 @@ iree_status_t iree_hal_streaming_module_create_from_memory(
                               iree_hal_streaming_fat_binary_is_supported(image);
   iree_status_t status = iree_ok_status();
   if (try_fat_unwrap) {
-    iree_string_view_t target_arch =
-        iree_make_cstring_view(context->device_entry->gcn_arch_name);
-    status = iree_hal_streaming_fat_binary_extract_for_target(
-        image, target_arch, host_allocator, &module->fat_extract);
+    iree_hal_streaming_fat_binary_target_t targets[2] = {0};
+    iree_host_size_t target_count = 0;
+    status = iree_hal_streaming_fat_binary_targets_from_device(
+        context->device_entry->hal_device, IREE_ARRAYSIZE(targets), targets,
+        &target_count);
+    if (iree_status_is_ok(status)) {
+      status = iree_hal_streaming_fat_binary_extract_for_targets(
+          image, target_count, targets, host_allocator, &module->fat_extract);
+    }
     if (iree_status_is_ok(status)) {
       // Multiple matches are possible (e.g. Tensile feature-specialized
       // kernels). Load all of them below and merge their exports into one HIP

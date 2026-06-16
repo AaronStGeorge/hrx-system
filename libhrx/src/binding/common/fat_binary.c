@@ -265,10 +265,11 @@ static iree_status_t hrx_fat_parse_ccob(iree_const_byte_span_t data,
 //   host-x86_64-unknown-linux-gnu
 //   hipv4-amdgcn-amd-amdhsa--gfx942:sramecc+:xnack-
 //   openmp-amdgcn-amd-amdhsa--gfx1100
+//   gfx11-generic
 // We take whatever trails the last "--" (or lacking that, the trailing
-// token of the triple) as the target arch component, strip any
-// feature-suffix (":sramecc+", ":xnack-", ...) and compare case-sensitive
-// against the (similarly stripped) |target_arch| passed in.
+// bare gfx target or final "-" token) as the target arch component, strip
+// any feature-suffix (":sramecc+", ":xnack-", ...) and compare
+// case-sensitive against the (similarly stripped) candidate target.
 
 static iree_string_view_t hrx_fat_strip_feature_suffix(iree_string_view_t sv) {
   // Features always start at the first ':'.
@@ -289,6 +290,9 @@ static iree_string_view_t hrx_fat_triple_target(iree_string_view_t triple) {
       }
     }
   }
+  if (triple.size >= 3 && memcmp(triple.data, "gfx", 3) == 0) {
+    return triple;
+  }
   // Fall back to the last '-'-delimited token.
   for (iree_host_size_t i = triple.size; i > 0; --i) {
     if (triple.data[i - 1] == '-') {
@@ -298,10 +302,10 @@ static iree_string_view_t hrx_fat_triple_target(iree_string_view_t triple) {
   return triple;
 }
 
-// Returns true if |triple| targets |target_arch| (base gfx name, without
+// Returns true if |triple| targets |target_value| (base gfx name, without
 // feature suffixes). Host entries and non-gfx triples return false.
 static bool hrx_fat_triple_matches(iree_string_view_t triple,
-                                   iree_string_view_t target_arch) {
+                                   iree_string_view_t target_value) {
   // Drop host entries entirely.
   static const char kHostPrefix[] = "host-";
   if (triple.size >= sizeof(kHostPrefix) - 1 &&
@@ -313,12 +317,37 @@ static bool hrx_fat_triple_matches(iree_string_view_t triple,
   // Only consider gfx-flavoured targets — the streaming layer exclusively
   // feeds AMDGPU today.
   if (target.size < 3 || memcmp(target.data, "gfx", 3) != 0) return false;
-  return iree_string_view_equal(target, target_arch);
+  return iree_string_view_equal(target,
+                                hrx_fat_strip_feature_suffix(target_value));
+}
+
+static bool hrx_fat_triple_matches_any_target(
+    iree_string_view_t triple, iree_host_size_t target_count,
+    const iree_hal_streaming_fat_binary_target_t* targets,
+    iree_host_size_t* out_target_index) {
+  for (iree_host_size_t i = 0; i < target_count; ++i) {
+    if (iree_string_view_is_empty(targets[i].value)) continue;
+    if (hrx_fat_triple_matches(triple, targets[i].value)) {
+      *out_target_index = i;
+      return true;
+    }
+  }
+  return false;
 }
 
 //===----------------------------------------------------------------------===//
 // Match collection
 //===----------------------------------------------------------------------===//
+
+static void hrx_fat_extract_clear_matches(
+    iree_hal_streaming_fat_binary_extract_t* extract) {
+  if (extract->matches) {
+    iree_allocator_free(extract->host_allocator, extract->matches);
+  }
+  extract->matches = NULL;
+  extract->match_count = 0;
+  extract->match_capacity = 0;
+}
 
 static iree_status_t hrx_fat_extract_push(
     iree_hal_streaming_fat_binary_extract_t* extract,
@@ -345,10 +374,11 @@ static iree_status_t hrx_fat_extract_push(
 }
 
 // Walks an uncompressed __CLANG_OFFLOAD_BUNDLE__ and appends every entry
-// whose triple matches |target_arch| into |extract|. Entry payloads must
-// be valid AMDGPU ELFs; other entries (host, cpu, ...) are simply skipped.
+// whose triple matches the best-ranked target into |extract|. Entry payloads
+// must be valid AMDGPU ELFs; other entries (host, cpu, ...) are simply skipped.
 static iree_status_t hrx_fat_extract_from_bundle(
-    iree_const_byte_span_t bundle, iree_string_view_t target_arch,
+    iree_const_byte_span_t bundle, iree_host_size_t target_count,
+    const iree_hal_streaming_fat_binary_target_t* targets,
     iree_hal_streaming_fat_binary_extract_t* extract) {
   const uint8_t* p = bundle.data + HRX_OFFLOAD_BUNDLE_MAGIC_SIZE;
   const bool is_unbounded = bundle.data_length == 0;
@@ -364,6 +394,7 @@ static iree_status_t hrx_fat_extract_from_bundle(
   p += sizeof(num_entries);
   remaining -= sizeof(num_entries);
 
+  iree_host_size_t selected_target_index = IREE_HOST_SIZE_MAX;
   for (uint64_t i = 0; i < num_entries; ++i) {
     if (remaining < sizeof(hrx_bundle_entry_t)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -390,7 +421,16 @@ static iree_status_t hrx_fat_extract_from_bundle(
                               "offload bundle entry[%" PRIu64 "] out of range",
                               i);
     }
-    if (!hrx_fat_triple_matches(triple, target_arch)) continue;
+    iree_host_size_t target_index = IREE_HOST_SIZE_MAX;
+    if (!hrx_fat_triple_matches_any_target(triple, target_count, targets,
+                                           &target_index)) {
+      continue;
+    }
+    if (target_index > selected_target_index) continue;
+    if (target_index < selected_target_index) {
+      hrx_fat_extract_clear_matches(extract);
+      selected_target_index = target_index;
+    }
 
     iree_const_byte_span_t entry_bytes =
         iree_make_const_byte_span(bundle.data + (iree_host_size_t)entry.offset,
@@ -452,7 +492,8 @@ static iree_status_t hrx_fat_extract_concatenated_elves(
 // parses the result as either a raw ELF or an offload bundle and collects
 // matching ELFs.
 static iree_status_t hrx_fat_extract_from_ccob(
-    iree_const_byte_span_t ccob, iree_string_view_t target_arch,
+    iree_const_byte_span_t ccob, iree_host_size_t target_count,
+    const iree_hal_streaming_fat_binary_target_t* targets,
     iree_hal_streaming_fat_binary_extract_t* extract) {
   uint16_t version = 0, method = 0;
   uint64_t uncompressed_size = 0;
@@ -517,7 +558,8 @@ static iree_status_t hrx_fat_extract_from_ccob(
     return hrx_fat_extract_concatenated_elves(decompressed, extract);
   }
   if (hrx_fat_is_uncompressed_bundle(decompressed)) {
-    return hrx_fat_extract_from_bundle(decompressed, target_arch, extract);
+    return hrx_fat_extract_from_bundle(decompressed, target_count, targets,
+                                       extract);
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
@@ -541,18 +583,19 @@ void iree_hal_streaming_fat_binary_extract_reset(
   memset(extract, 0, sizeof(*extract));
 }
 
-iree_status_t iree_hal_streaming_fat_binary_extract_for_target(
-    iree_const_byte_span_t data, iree_string_view_t target_arch,
+iree_status_t iree_hal_streaming_fat_binary_extract_for_targets(
+    iree_const_byte_span_t data, iree_host_size_t target_count,
+    const iree_hal_streaming_fat_binary_target_t* targets,
     iree_allocator_t host_allocator,
     iree_hal_streaming_fat_binary_extract_t* out_extract) {
   IREE_ASSERT_ARGUMENT(out_extract);
   memset(out_extract, 0, sizeof(*out_extract));
   out_extract->host_allocator = host_allocator;
 
-  // Normalize the device-supplied arch (e.g. "gfx942:sramecc+:xnack-")
-  // to a bare "gfxNNN" for apples-to-apples comparison with bundle triples.
-  iree_string_view_t normalized_target =
-      hrx_fat_strip_feature_suffix(target_arch);
+  if (!target_count || !targets) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "at least one fat-binary target is required");
+  }
 
   // Peel the HIP fat-binary wrapper if present.
   iree_const_byte_span_t inner = data;
@@ -576,9 +619,11 @@ iree_status_t iree_hal_streaming_fat_binary_extract_for_target(
 
   iree_status_t status = iree_ok_status();
   if (hrx_fat_is_ccob(inner)) {
-    status = hrx_fat_extract_from_ccob(inner, normalized_target, out_extract);
+    status =
+        hrx_fat_extract_from_ccob(inner, target_count, targets, out_extract);
   } else if (hrx_fat_is_uncompressed_bundle(inner)) {
-    status = hrx_fat_extract_from_bundle(inner, normalized_target, out_extract);
+    status =
+        hrx_fat_extract_from_bundle(inner, target_count, targets, out_extract);
   } else if (hrx_fat_is_elf(inner)) {
     iree_host_size_t elf_size = 0;
     status = hrx_fat_validate_elf(inner, &elf_size);
@@ -601,11 +646,11 @@ iree_status_t iree_hal_streaming_fat_binary_extract_for_target(
   }
 
   if (iree_status_is_ok(status) && out_extract->match_count == 0) {
-    status = iree_make_status(
-        IREE_STATUS_NOT_FOUND,
-        "no ELF in fat binary matches target '%.*s' (normalized '%.*s')",
-        (int)target_arch.size, target_arch.data, (int)normalized_target.size,
-        normalized_target.data);
+    status = iree_make_status(IREE_STATUS_NOT_FOUND,
+                              "no ELF in fat binary matches any of %" PRIhsz
+                              " target candidates (first '%.*s')",
+                              target_count, (int)targets[0].value.size,
+                              targets[0].value.data);
   }
   if (!iree_status_is_ok(status)) {
     iree_hal_streaming_fat_binary_extract_reset(out_extract);
