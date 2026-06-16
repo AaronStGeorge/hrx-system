@@ -368,6 +368,38 @@ typedef struct loom_low_lower_report_row_t {
   uint32_t emitted_low_op_count;
 } loom_low_lower_report_row_t;
 
+// One emitted source-memory packet row captured for production diagnostics.
+typedef struct loom_low_lower_memory_report_row_t {
+  // Source function symbol containing the lowered source operation.
+  iree_string_view_t function_name;
+  // Source operation mnemonic that emitted this memory packet.
+  iree_string_view_t source_op_name;
+  // Numeric source operation kind that emitted this memory packet.
+  loom_op_kind_t source_op_kind;
+  // Target-independent memory-space key selected by the target.
+  iree_string_view_t memory_space;
+  // Source memory operation kind selected by the target.
+  iree_string_view_t operation_kind;
+  // Stable target packet key selected for this emitted low operation.
+  iree_string_view_t packet_key;
+  // Stable descriptor id for the emitted packet, or none when unavailable.
+  uint64_t descriptor_id;
+  // Byte count of one addressed source element.
+  uint32_t element_byte_count;
+  // Number of source vector lanes moved by this packet.
+  uint32_t vector_lane_count;
+  // Byte stride between adjacent dynamic workitem terms, or zero when unknown.
+  uint32_t dynamic_stride_bytes;
+  // Byte stride between adjacent source vector lanes.
+  uint32_t vector_lane_stride_bytes;
+  // Distance between adjacent workitems in target bank words.
+  uint32_t bank_stride_words;
+  // Estimated bank conflict degree across one bank cycle, or zero if unknown.
+  uint32_t bank_conflict_degree;
+  // Stable target-owned bank-conflict classification key.
+  iree_string_view_t bank_conflict_kind;
+} loom_low_lower_memory_report_row_t;
+
 // Linked storage block for homogeneous source-to-low report rows.
 typedef struct loom_low_lower_report_row_vec_t {
   // Next row block in allocation order, or NULL for the final block.
@@ -387,6 +419,16 @@ typedef struct loom_low_lower_report_row_list_t {
   // Total number of rows stored across all blocks.
   iree_host_size_t count;
 } loom_low_lower_report_row_list_t;
+
+// Owned contiguous storage for source-memory packet report rows.
+typedef struct loom_low_lower_memory_report_row_list_t {
+  // Allocated source-memory packet report rows, or NULL when empty.
+  loom_low_lower_memory_report_row_t* rows;
+  // Number of rows stored in |rows|.
+  iree_host_size_t count;
+  // Maximum number of rows that fit in |rows|.
+  iree_host_size_t capacity;
+} loom_low_lower_memory_report_row_list_t;
 
 // Returns mutable row storage for |vec|.
 static inline loom_low_lower_report_row_t* loom_low_lower_report_row_vec_rows(
@@ -607,8 +649,12 @@ typedef struct loom_low_lower_result_t {
   uint64_t emitted_low_op_count;
   // Allocator used for owned source-low report rows.
   iree_allocator_t report_allocator;
+  // Allocator used for owned source-memory packet report row storage.
+  iree_allocator_t memory_report_row_allocator;
   // Owned source-low report rows.
   loom_low_lower_report_row_list_t report_rows;
+  // Owned source-memory packet report rows.
+  loom_low_lower_memory_report_row_list_t memory_report_rows;
   // Source-derived memory access summaries for emitted low memory packets.
   loom_low_memory_access_table_t memory_access_table;
 } loom_low_lower_result_t;
@@ -703,6 +749,10 @@ uint32_t loom_low_lower_context_error_count(
 // Returns enabled source-to-low diagnostic categories.
 loom_target_low_legality_diagnostic_flags_t
 loom_low_lower_context_diagnostic_flags(
+    const loom_low_lower_context_t* context);
+
+// Returns true when the caller requested source-low detail report rows.
+bool loom_low_lower_context_wants_report_rows(
     const loom_low_lower_context_t* context);
 
 // Returns the selected target bundle.
@@ -925,6 +975,11 @@ iree_status_t loom_low_lower_record_memory_access_summary(
 iree_status_t loom_low_lower_record_source_memory_access(
     loom_low_lower_context_t* context, const loom_op_t* low_op,
     const loom_low_source_memory_access_plan_t* source_plan);
+
+// Records an emitted source-memory packet report row.
+iree_status_t loom_low_lower_record_memory_report_row(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_memory_report_row_t* row);
 
 // Emits ERR_TARGET_033 for a source value type rejected by the active
 // target-low policy.

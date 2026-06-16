@@ -210,6 +210,11 @@ loom_low_lower_context_diagnostic_flags(
   return context->options->legality_diagnostic_flags;
 }
 
+bool loom_low_lower_context_wants_report_rows(
+    const loom_low_lower_context_t* context) {
+  return !iree_allocator_is_null(context->options->report_allocator);
+}
+
 const loom_target_bundle_t* loom_low_lower_context_bundle(
     const loom_low_lower_context_t* context) {
   return context->options->bundle;

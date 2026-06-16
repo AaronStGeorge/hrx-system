@@ -371,6 +371,38 @@ typedef struct loom_target_compile_report_source_low_row_t {
   uint32_t emitted_low_op_count;
 } loom_target_compile_report_source_low_row_t;
 
+// One emitted source-memory packet row copied into a compile report.
+typedef struct loom_target_compile_report_source_low_memory_row_t {
+  // Source function symbol containing the lowered source operation.
+  iree_string_view_t function_name;
+  // Source operation mnemonic that emitted this memory packet.
+  iree_string_view_t source_op_name;
+  // Numeric source operation kind that emitted this memory packet.
+  uint32_t source_op_kind;
+  // Target-independent memory-space key selected by the target.
+  iree_string_view_t memory_space;
+  // Source memory operation kind selected by the target.
+  iree_string_view_t operation_kind;
+  // Stable target packet key selected for this emitted low operation.
+  iree_string_view_t packet_key;
+  // Stable descriptor id for the emitted packet, or none when unavailable.
+  uint64_t descriptor_id;
+  // Byte count of one addressed source element.
+  uint32_t element_byte_count;
+  // Number of source vector lanes moved by this packet.
+  uint32_t vector_lane_count;
+  // Byte stride between adjacent dynamic workitem terms, or zero when unknown.
+  uint32_t dynamic_stride_bytes;
+  // Byte stride between adjacent source vector lanes.
+  uint32_t vector_lane_stride_bytes;
+  // Distance between adjacent workitems in target bank words.
+  uint32_t bank_stride_words;
+  // Estimated bank conflict degree across one bank cycle, or zero if unknown.
+  uint32_t bank_conflict_degree;
+  // Stable target-owned bank-conflict classification key.
+  iree_string_view_t bank_conflict_kind;
+} loom_target_compile_report_source_low_memory_row_t;
+
 // One target-legalization decision row copied into a compile report.
 typedef struct loom_target_compile_report_legalization_row_t {
   // Source function symbol containing the legalized source operation.
@@ -573,6 +605,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t spill_rows;
   // Owned source-to-low selection rows.
   loom_target_compile_report_row_list_t source_low_rows;
+  // Owned emitted source-memory packet rows.
+  loom_target_compile_report_row_list_t source_low_memory_rows;
   // Owned target-legalization decision rows.
   loom_target_compile_report_row_list_t target_legalization_rows;
   // Estimated target private memory bytes.
@@ -679,6 +713,11 @@ iree_status_t loom_target_compile_report_record_spill_row(
 iree_status_t loom_target_compile_report_record_source_low_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_row_t* row);
+
+// Records one emitted source-memory packet row.
+iree_status_t loom_target_compile_report_record_source_low_memory_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_source_low_memory_row_t* row);
 
 // Records one target-legalization decision for summary counters without
 // materializing a detailed row.

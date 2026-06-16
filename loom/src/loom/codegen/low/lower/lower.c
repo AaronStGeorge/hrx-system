@@ -1234,6 +1234,7 @@ iree_status_t loom_low_lower_source_query_scope_create(
   };
   if (!iree_allocator_is_null(options->report_allocator)) {
     scope->result.report_allocator = options->report_allocator;
+    scope->result.memory_report_row_allocator = module->allocator;
   }
   scope->context = (loom_low_lower_context_t){
       .module = module,
@@ -1311,13 +1312,22 @@ static void loom_low_lower_report_row_list_deinitialize(
   *list = (loom_low_lower_report_row_list_t){0};
 }
 
+static void loom_low_lower_memory_report_row_list_deinitialize(
+    iree_allocator_t allocator, loom_low_lower_memory_report_row_list_t* list) {
+  iree_allocator_free(allocator, list->rows);
+  *list = (loom_low_lower_memory_report_row_list_t){0};
+}
+
 void loom_low_lower_result_deinitialize(loom_low_lower_result_t* result) {
   if (result == NULL) {
     return;
   }
   loom_low_lower_report_row_list_deinitialize(result->report_allocator,
                                               &result->report_rows);
+  loom_low_lower_memory_report_row_list_deinitialize(
+      result->memory_report_row_allocator, &result->memory_report_rows);
   result->report_allocator = iree_allocator_null();
+  result->memory_report_row_allocator = iree_allocator_null();
 }
 
 static iree_status_t loom_low_lower_report_row_list_append(
@@ -1361,6 +1371,37 @@ static iree_status_t loom_low_lower_report_row_list_append(
   rows[list->tail->count++] = *row;
   ++list->count;
   return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_memory_report_row_list_append(
+    loom_low_lower_memory_report_row_list_t* list, iree_allocator_t allocator,
+    const loom_low_lower_memory_report_row_t* row) {
+  if (iree_allocator_is_null(allocator)) {
+    return iree_ok_status();
+  }
+  if (list->count == list->capacity) {
+    iree_host_size_t minimum_capacity =
+        LOOM_LOW_LOWER_REPORT_ROW_VEC_DEFAULT_BYTE_LENGTH / sizeof(*row);
+    minimum_capacity = iree_max((iree_host_size_t)1, minimum_capacity);
+    iree_host_size_t capacity = list->capacity;
+    IREE_RETURN_IF_ERROR(iree_allocator_grow_array(allocator, minimum_capacity,
+                                                   sizeof(*row), &capacity,
+                                                   (void**)&list->rows));
+    list->capacity = capacity;
+  }
+  list->rows[list->count++] = *row;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_record_memory_report_row(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_memory_report_row_t* row) {
+  if (!loom_low_lower_context_wants_report_rows(context)) {
+    return iree_ok_status();
+  }
+  return loom_low_lower_memory_report_row_list_append(
+      &context->result->memory_report_rows,
+      context->result->memory_report_row_allocator, row);
 }
 
 static iree_status_t loom_low_lower_record_report_row(
@@ -1878,6 +1919,7 @@ iree_status_t loom_low_lower_import_declaration(
   };
   if (!iree_allocator_is_null(options->report_allocator)) {
     out_result->report_allocator = options->report_allocator;
+    out_result->memory_report_row_allocator = module->allocator;
   }
 
   const loom_symbol_ref_t low_func_ref =
@@ -2987,6 +3029,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
   };
   if (!iree_allocator_is_null(options->report_allocator)) {
     out_result->report_allocator = options->report_allocator;
+    out_result->memory_report_row_allocator = module->allocator;
   }
 
   loom_region_t* source_body = loom_func_like_body(source_function);

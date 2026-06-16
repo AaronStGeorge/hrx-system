@@ -208,6 +208,10 @@ bool loom_amdgpu_memory_cache_policy_can_lower(
 iree_string_view_t loom_amdgpu_memory_space_name(
     loom_value_fact_memory_space_t memory_space);
 
+// Returns the stable report/diagnostic name for a memory operation kind.
+iree_string_view_t loom_amdgpu_memory_operation_name(
+    loom_amdgpu_memory_operation_kind_t kind);
+
 // Returns the stable diagnostic name for a cache scope.
 iree_string_view_t loom_amdgpu_cache_scope_name(uint8_t scope);
 

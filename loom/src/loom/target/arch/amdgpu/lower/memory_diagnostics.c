@@ -37,7 +37,7 @@ iree_string_view_t loom_amdgpu_memory_space_name(
   return IREE_SV("invalid");
 }
 
-static iree_string_view_t loom_amdgpu_memory_operation_name(
+iree_string_view_t loom_amdgpu_memory_operation_name(
     loom_amdgpu_memory_operation_kind_t kind) {
   switch (kind) {
     case LOOM_AMDGPU_MEMORY_OPERATION_LOAD:
