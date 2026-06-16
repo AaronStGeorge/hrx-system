@@ -78,12 +78,12 @@ bool loom_vector_packed_integer_storage_shape(
   return true;
 }
 
-bool loom_vector_bitpack_storage_match(
+bool loom_vector_packed_integer_payload_from_lanes_match(
     loom_type_t source_type, loom_type_t result_type, uint32_t width,
     uint32_t storage_unit_bit_count, uint32_t maximum_result_storage_unit_count,
-    loom_vector_bitpack_storage_match_t* out_match) {
+    loom_vector_packed_integer_payload_from_lanes_match_t* out_match) {
   if (out_match != NULL) {
-    *out_match = (loom_vector_bitpack_storage_match_t){0};
+    *out_match = (loom_vector_packed_integer_payload_from_lanes_match_t){0};
   }
   if (width == 0 || storage_unit_bit_count == 0 ||
       (storage_unit_bit_count % width) != 0) {
@@ -109,7 +109,7 @@ bool loom_vector_bitpack_storage_match(
   }
 
   if (out_match != NULL) {
-    *out_match = (loom_vector_bitpack_storage_match_t){
+    *out_match = (loom_vector_packed_integer_payload_from_lanes_match_t){
         .source_shape = source_shape,
         .result_shape = result_shape,
         .width = width,
@@ -118,13 +118,13 @@ bool loom_vector_bitpack_storage_match(
   return true;
 }
 
-bool loom_vector_bitunpack_storage_match(
+bool loom_vector_packed_integer_lanes_from_payload_match(
     loom_type_t source_type, loom_type_t result_type, uint32_t width,
     uint32_t storage_unit_bit_count, uint32_t maximum_source_storage_unit_count,
     uint32_t maximum_lane_count,
-    loom_vector_bitunpack_storage_match_t* out_match) {
+    loom_vector_packed_integer_lanes_from_payload_match_t* out_match) {
   if (out_match != NULL) {
-    *out_match = (loom_vector_bitunpack_storage_match_t){0};
+    *out_match = (loom_vector_packed_integer_lanes_from_payload_match_t){0};
   }
   if (width == 0 || maximum_lane_count == 0 || storage_unit_bit_count == 0 ||
       (storage_unit_bit_count % width) != 0) {
@@ -150,7 +150,7 @@ bool loom_vector_bitunpack_storage_match(
   }
 
   if (out_match != NULL) {
-    *out_match = (loom_vector_bitunpack_storage_match_t){
+    *out_match = (loom_vector_packed_integer_lanes_from_payload_match_t){
         .source_shape = source_shape,
         .result_shape = result_shape,
         .width = width,

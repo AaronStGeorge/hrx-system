@@ -24,8 +24,8 @@ static void loom_amdgpu_bitpack_plan_from_accepted_op(
   const int64_t width = loom_vector_bitpack_width(source_op);
   const loom_value_id_t source = loom_vector_bitpack_source(source_op);
   const loom_value_id_t result = loom_vector_bitpack_result(source_op);
-  loom_vector_bitpack_storage_match_t match = {0};
-  const bool matched = loom_vector_bitpack_storage_match(
+  loom_vector_packed_integer_payload_from_lanes_match_t match = {0};
+  const bool matched = loom_vector_packed_integer_payload_from_lanes_match(
       loom_module_value_type(module, source),
       loom_module_value_type(module, result), (uint32_t)width,
       /*storage_unit_bit_count=*/32, LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS,
@@ -65,8 +65,8 @@ static void loom_amdgpu_bitunpack_plan_from_accepted_op(
     IREE_BUILTIN_UNREACHABLE();
   }
 
-  loom_vector_bitunpack_storage_match_t match = {0};
-  const bool matched = loom_vector_bitunpack_storage_match(
+  loom_vector_packed_integer_lanes_from_payload_match_t match = {0};
+  const bool matched = loom_vector_packed_integer_lanes_from_payload_match(
       loom_module_value_type(module, out_plan->source),
       loom_module_value_type(module, out_plan->result), (uint32_t)width,
       /*storage_unit_bit_count=*/32, LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS,

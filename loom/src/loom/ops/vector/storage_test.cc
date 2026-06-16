@@ -83,14 +83,14 @@ TEST(VectorStorageTest, PackedIntegerStorageShapeRejectsInvalidShapes) {
       loom_vector_packed_integer_storage_shape(over_limit_type, 32, 0, &shape));
 }
 
-TEST(VectorStorageTest, BitpackStorageMatchAcceptsPackedPayload) {
+TEST(VectorStorageTest, PackedIntegerPayloadFromLanesAcceptsPackedPayload) {
   loom_type_t source_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
   loom_type_t result_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8, loom_dim_pack_static(4), 0);
 
-  loom_vector_bitpack_storage_match_t match;
-  ASSERT_TRUE(loom_vector_bitpack_storage_match(
+  loom_vector_packed_integer_payload_from_lanes_match_t match;
+  ASSERT_TRUE(loom_vector_packed_integer_payload_from_lanes_match(
       source_type, result_type, /*width=*/4,
       /*storage_unit_bit_count=*/32, /*maximum_result_storage_unit_count=*/1,
       &match));
@@ -100,7 +100,8 @@ TEST(VectorStorageTest, BitpackStorageMatchAcceptsPackedPayload) {
   EXPECT_EQ(match.result_shape.storage_unit_count, 1u);
 }
 
-TEST(VectorStorageTest, BitpackStorageMatchRejectsInvalidStorageRelations) {
+TEST(VectorStorageTest,
+     PackedIntegerPayloadFromLanesRejectsInvalidStorageRelations) {
   loom_type_t source_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
   loom_type_t result_type = loom_type_shaped_1d(
@@ -108,23 +109,23 @@ TEST(VectorStorageTest, BitpackStorageMatchRejectsInvalidStorageRelations) {
   loom_type_t oversized_result_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8, loom_dim_pack_static(8), 0);
 
-  EXPECT_FALSE(loom_vector_bitpack_storage_match(
+  EXPECT_FALSE(loom_vector_packed_integer_payload_from_lanes_match(
       source_type, result_type, /*width=*/3, /*storage_unit_bit_count=*/32,
       /*maximum_result_storage_unit_count=*/1, NULL));
-  EXPECT_FALSE(loom_vector_bitpack_storage_match(
+  EXPECT_FALSE(loom_vector_packed_integer_payload_from_lanes_match(
       source_type, oversized_result_type, /*width=*/4,
       /*storage_unit_bit_count=*/32, /*maximum_result_storage_unit_count=*/1,
       NULL));
 }
 
-TEST(VectorStorageTest, BitunpackStorageMatchAcceptsUnpackedLanes) {
+TEST(VectorStorageTest, PackedIntegerLanesFromPayloadAcceptsUnpackedLanes) {
   loom_type_t source_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(1), 0);
   loom_type_t result_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
 
-  loom_vector_bitunpack_storage_match_t match;
-  ASSERT_TRUE(loom_vector_bitunpack_storage_match(
+  loom_vector_packed_integer_lanes_from_payload_match_t match;
+  ASSERT_TRUE(loom_vector_packed_integer_lanes_from_payload_match(
       source_type, result_type, /*width=*/4, /*storage_unit_bit_count=*/32,
       /*maximum_source_storage_unit_count=*/1, /*maximum_lane_count=*/8,
       &match));
@@ -134,14 +135,14 @@ TEST(VectorStorageTest, BitunpackStorageMatchAcceptsUnpackedLanes) {
   EXPECT_EQ(match.result_shape.lane_count, 8u);
 }
 
-TEST(VectorStorageTest, BitunpackStorageMatchAcceptsPackedResultLanes) {
+TEST(VectorStorageTest, PackedIntegerLanesFromPayloadAcceptsPackedResultLanes) {
   loom_type_t source_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(1), 0);
   loom_type_t result_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8, loom_dim_pack_static(4), 0);
 
-  loom_vector_bitunpack_storage_match_t match;
-  ASSERT_TRUE(loom_vector_bitunpack_storage_match(
+  loom_vector_packed_integer_lanes_from_payload_match_t match;
+  ASSERT_TRUE(loom_vector_packed_integer_lanes_from_payload_match(
       source_type, result_type, /*width=*/8, /*storage_unit_bit_count=*/32,
       /*maximum_source_storage_unit_count=*/1, /*maximum_lane_count=*/4,
       &match));
@@ -150,7 +151,8 @@ TEST(VectorStorageTest, BitunpackStorageMatchAcceptsPackedResultLanes) {
   EXPECT_EQ(match.result_shape.storage_unit_count, 1u);
 }
 
-TEST(VectorStorageTest, BitunpackStorageMatchRejectsInvalidStorageRelations) {
+TEST(VectorStorageTest,
+     PackedIntegerLanesFromPayloadRejectsInvalidStorageRelations) {
   loom_type_t source_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(1), 0);
   loom_type_t result_type = loom_type_shaped_1d(
@@ -158,13 +160,13 @@ TEST(VectorStorageTest, BitunpackStorageMatchRejectsInvalidStorageRelations) {
   loom_type_t short_result_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(7), 0);
 
-  EXPECT_FALSE(loom_vector_bitunpack_storage_match(
+  EXPECT_FALSE(loom_vector_packed_integer_lanes_from_payload_match(
       source_type, result_type, /*width=*/3, /*storage_unit_bit_count=*/32,
       /*maximum_source_storage_unit_count=*/1, /*maximum_lane_count=*/8, NULL));
-  EXPECT_FALSE(loom_vector_bitunpack_storage_match(
+  EXPECT_FALSE(loom_vector_packed_integer_lanes_from_payload_match(
       source_type, result_type, /*width=*/4, /*storage_unit_bit_count=*/32,
       /*maximum_source_storage_unit_count=*/1, /*maximum_lane_count=*/7, NULL));
-  EXPECT_FALSE(loom_vector_bitunpack_storage_match(
+  EXPECT_FALSE(loom_vector_packed_integer_lanes_from_payload_match(
       source_type, short_result_type, /*width=*/4,
       /*storage_unit_bit_count=*/32, /*maximum_source_storage_unit_count=*/1,
       /*maximum_lane_count=*/8, NULL));

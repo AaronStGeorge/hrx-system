@@ -1387,8 +1387,8 @@ static bool loom_low_lower_rule_packed_integer_payload_from_lanes_matches(
       rule_set, source_op, guard->value_ref_index);
   const loom_value_id_t storage_value_id = loom_low_lower_rule_source_value(
       rule_set, source_op, guard->other_value_ref_index);
-  loom_vector_bitpack_storage_match_t match = {0};
-  if (!loom_vector_bitpack_storage_match(
+  loom_vector_packed_integer_payload_from_lanes_match_t match = {0};
+  if (!loom_vector_packed_integer_payload_from_lanes_match(
           loom_module_value_type(match_context->module, lane_value_id),
           loom_module_value_type(match_context->module, storage_value_id),
           width, storage_unit_bit_count, UINT32_MAX, &match)) {
@@ -1417,7 +1417,7 @@ static bool loom_low_lower_rule_packed_integer_lanes_from_payload_matches(
       rule_set, source_op, guard->value_ref_index);
   const loom_value_id_t lane_value_id = loom_low_lower_rule_source_value(
       rule_set, source_op, guard->other_value_ref_index);
-  if (!loom_vector_bitunpack_storage_match(
+  if (!loom_vector_packed_integer_lanes_from_payload_match(
           loom_module_value_type(match_context->module, storage_value_id),
           loom_module_value_type(match_context->module, lane_value_id), width,
           storage_unit_bit_count, (uint32_t)guard->u64,
