@@ -191,14 +191,21 @@ class AmdgpuFeedbackTest : public ::testing::Test {
     if (descriptor == nullptr) {
       return 0;
     }
-    EXPECT_LT(descriptor->canonical_asm_form_ordinal,
-              descriptor_set_->asm_form_count);
-    if (descriptor->canonical_asm_form_ordinal >=
-        descriptor_set_->asm_form_count) {
-      return 0;
+    iree_host_size_t count = 0;
+    for (uint16_t i = descriptor->result_count; i < descriptor->operand_count;
+         ++i) {
+      const uint32_t operand_row = descriptor->operand_start + i;
+      EXPECT_LT(operand_row, descriptor_set_->operand_count);
+      if (operand_row >= descriptor_set_->operand_count) {
+        return count;
+      }
+      const loom_low_operand_t* operand =
+          &descriptor_set_->operands[operand_row];
+      if (loom_low_operand_role_is_packet_operand(operand->role)) {
+        ++count;
+      }
     }
-    return descriptor_set_->asm_forms[descriptor->canonical_asm_form_ordinal]
-        .operand_index_count;
+    return count;
   }
 
   void ExpectLowOpDescriptorRef(
@@ -312,12 +319,29 @@ class AmdgpuFeedbackTest : public ::testing::Test {
     FAIL() << "expected attr not found: " << ToString(name);
   }
 
+  void ExpectAttrAbsent(loom_named_attr_slice_t attrs,
+                        iree_string_view_t name) const {
+    for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+      EXPECT_FALSE(
+          iree_string_view_equal(String(attrs.entries[i].name_id), name))
+          << "unexpected attr found: " << ToString(name);
+    }
+  }
+
   void ExpectLowConstU32(loom_value_id_t value, uint32_t expected_value) const {
+    ExpectLowConstU32(value, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
+                      expected_value);
+  }
+
+  void ExpectLowConstU32(loom_value_id_t value,
+                         loom_amdgpu_descriptor_ref_t descriptor_ref,
+                         uint32_t expected_value) const {
     const loom_value_t* ir_value = loom_module_value(module_, value);
     ASSERT_FALSE(loom_value_is_block_arg(ir_value));
     const loom_op_t* op = loom_value_def_op(ir_value);
+    ASSERT_NE(op, nullptr);
     ASSERT_TRUE(loom_low_const_isa(op));
-    ExpectLowConstDescriptorRef(op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32);
+    ExpectLowConstDescriptorRef(op, descriptor_ref);
     loom_named_attr_slice_t attrs = loom_low_const_attrs(op);
     ASSERT_EQ(attrs.count, 1u);
     EXPECT_EQ(ToString(String(attrs.entries[0].name_id)), "imm32");
@@ -351,6 +375,55 @@ class AmdgpuFeedbackTest : public ::testing::Test {
         descriptor_set_->stable_id, register_class, unit_count);
     EXPECT_TRUE(
         loom_type_equal(expected_type, loom_module_value_type(module_, value)));
+  }
+
+  void ExpectSgprByteOffsetPart(loom_value_id_t actual_part,
+                                loom_value_id_t expected_base,
+                                int64_t expected_base_slice_offset,
+                                loom_amdgpu_descriptor_ref_t descriptor_ref,
+                                uint32_t expected_addend) const {
+    const loom_op_t* add_op = DefiningOp(actual_part);
+    ASSERT_NE(add_op, nullptr);
+    ExpectLowOpDescriptorRef(add_op, descriptor_ref);
+    loom_value_slice_t add_operands = loom_low_op_operands(add_op);
+    ASSERT_EQ(add_operands.count, 2u);
+    ASSERT_EQ(loom_low_op_results(add_op).count, 1u);
+    EXPECT_EQ(loom_value_slice_get(loom_low_op_results(add_op), 0),
+              actual_part);
+
+    const loom_op_t* slice_op = DefiningOp(add_operands.values[0]);
+    ASSERT_NE(slice_op, nullptr);
+    ASSERT_TRUE(loom_low_slice_isa(slice_op));
+    EXPECT_EQ(loom_low_slice_source(slice_op), expected_base);
+    EXPECT_EQ(loom_low_slice_offset(slice_op), expected_base_slice_offset);
+
+    ExpectLowConstU32(add_operands.values[1],
+                      LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, expected_addend);
+    ExpectRegisterType(actual_part, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
+  }
+
+  void ExpectSgprByteOffsetAddress(loom_value_id_t actual_address,
+                                   loom_value_id_t expected_base,
+                                   uint32_t expected_byte_offset) const {
+    ExpectRegisterType(actual_address, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+    if (expected_byte_offset == 0) {
+      EXPECT_EQ(actual_address, expected_base);
+      return;
+    }
+
+    const loom_op_t* concat_op = DefiningOp(actual_address);
+    ASSERT_NE(concat_op, nullptr);
+    ASSERT_TRUE(loom_low_concat_isa(concat_op));
+    loom_value_slice_t address_parts = loom_low_concat_sources(concat_op);
+    ASSERT_EQ(address_parts.count, 2u);
+    ExpectSgprByteOffsetPart(address_parts.values[0], expected_base,
+                             /*expected_base_slice_offset=*/0,
+                             LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
+                             expected_byte_offset);
+    ExpectSgprByteOffsetPart(address_parts.values[1], expected_base,
+                             /*expected_base_slice_offset=*/1,
+                             LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32,
+                             /*expected_addend=*/0);
   }
 
   void ExpectRel32Attrs(const loom_op_t* op, loom_symbol_ref_t expected_symbol,
@@ -531,7 +604,8 @@ class AmdgpuFeedbackTest : public ::testing::Test {
     ASSERT_EQ(operands.count,
               PacketOperandCountForRef(
                   LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR));
-    EXPECT_EQ(operands.values[2], expected_base);
+    ExpectSgprByteOffsetAddress(operands.values[2], expected_base,
+                                expected_byte_offset);
     if (operands.count == 4) {
       const loom_value_t* m0_value =
           loom_module_value(module_, operands.values[3]);
@@ -550,8 +624,7 @@ class AmdgpuFeedbackTest : public ::testing::Test {
         loom_type_equal(expected_value_type,
                         loom_module_value_type(module_, operands.values[1])));
     ASSERT_EQ(loom_low_op_results(op).count, 0u);
-    ExpectAttrI64(loom_low_op_attrs(op), IREE_SV("offset"),
-                  expected_byte_offset);
+    ExpectAttrAbsent(loom_low_op_attrs(op), IREE_SV("offset"));
   }
 
   void ExpectGlobalAtomicCompareExchangeU64(
@@ -564,7 +637,8 @@ class AmdgpuFeedbackTest : public ::testing::Test {
         operands.count,
         PacketOperandCountForRef(
             LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_CMPSWAP_B64_RTN_SADDR));
-    EXPECT_EQ(operands.values[2], expected_base);
+    ExpectSgprByteOffsetAddress(operands.values[2], expected_base,
+                                expected_byte_offset);
     if (operands.count == 4) {
       const loom_value_t* m0_value =
           loom_module_value(module_, operands.values[3]);
@@ -594,8 +668,7 @@ class AmdgpuFeedbackTest : public ::testing::Test {
     EXPECT_TRUE(
         loom_type_equal(expected_result_type,
                         loom_module_value_type(module_, expected_result)));
-    ExpectAttrI64(loom_low_op_attrs(op), IREE_SV("offset"),
-                  expected_byte_offset);
+    ExpectAttrAbsent(loom_low_op_attrs(op), IREE_SV("offset"));
   }
 
   void ExpectGlobalLoadB64(const loom_op_t* op, loom_value_id_t expected_base,
@@ -798,7 +871,7 @@ TEST_F(AmdgpuFeedbackTest, IncrementsDroppedPacketCount) {
   ExpectGlobalAtomicAddU64(
       atomic_ops[0], channel_values.address,
       LOOM_AMDGPU_FEEDBACK_CHANNEL_DROPPED_PACKET_COUNT_OFFSET);
-  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 1u);
+  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 0u);
 }
 
 TEST_F(AmdgpuFeedbackTest, IncrementsDroppedPacketCountWithCdnaM0) {
@@ -824,8 +897,7 @@ TEST_F(AmdgpuFeedbackTest, IncrementsDroppedPacketCountWithCdnaM0) {
       atomic_ops[0], channel_values.address,
       LOOM_AMDGPU_FEEDBACK_CHANNEL_DROPPED_PACKET_COUNT_OFFSET);
   ASSERT_EQ(loom_low_op_operands(atomic_ops[0]).count, 4u);
-  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 2u);
-  ExpectAttrI64(loom_low_op_attrs(atomic_ops[0]), IREE_SV("sc1"), 1);
+  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 0u);
 }
 
 TEST_F(AmdgpuFeedbackTest, IncrementsDroppedPacketCountWithGfx12SystemScope) {
@@ -1054,7 +1126,7 @@ TEST_F(AmdgpuFeedbackTest, CompareExchangesReservationHeadWithRdnaOrdering) {
   ExpectGlobalAtomicCompareExchangeU64(
       atomic_ops[0], channel_values.address,
       LOOM_AMDGPU_FEEDBACK_CHANNEL_RESERVATION_HEAD_OFFSET, old_head);
-  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 1u);
+  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 0u);
 
   std::vector<loom_op_t*> waitcnt_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT);
@@ -1090,9 +1162,7 @@ TEST_F(AmdgpuFeedbackTest, CompareExchangesReservationHeadWithCdnaOrdering) {
       atomic_ops[0], channel_values.address,
       LOOM_AMDGPU_FEEDBACK_CHANNEL_RESERVATION_HEAD_OFFSET, old_head);
   ASSERT_EQ(loom_low_op_operands(atomic_ops[0]).count, 4u);
-  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 3u);
-  ExpectAttrI64(loom_low_op_attrs(atomic_ops[0]), IREE_SV("sc0"), 1);
-  ExpectAttrI64(loom_low_op_attrs(atomic_ops[0]), IREE_SV("sc1"), 1);
+  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 0u);
 
   std::vector<loom_op_t*> writeback_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBL2);

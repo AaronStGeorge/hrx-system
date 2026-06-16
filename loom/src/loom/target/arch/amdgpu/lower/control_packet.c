@@ -25,45 +25,6 @@ static iree_status_t loom_amdgpu_control_packet_build_u32_attr(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_control_packet_descriptor_operand_type(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor, uint16_t descriptor_operand_index,
-    loom_type_t* out_type) {
-  *out_type = loom_type_none();
-  if (descriptor_operand_index >= descriptor->operand_count) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU control-packet descriptor operand index is out of range");
-  }
-  const uint32_t operand_index =
-      (uint32_t)descriptor->operand_start + descriptor_operand_index;
-  if (operand_index >= descriptor_set->operand_count) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU control-packet descriptor operand row is out of range");
-  }
-  const loom_low_operand_t* operand = &descriptor_set->operands[operand_index];
-  for (uint16_t i = 0; i < operand->reg_class_alt_count; ++i) {
-    const uint32_t alt_index = operand->reg_class_alt_start + i;
-    if (alt_index >= descriptor_set->reg_class_alt_count) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "AMDGPU control-packet descriptor operand register-class "
-          "alternative is out of range");
-    }
-    const loom_low_reg_class_alt_t* alt =
-        &descriptor_set->reg_class_alts[alt_index];
-    if (iree_any_bit_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE)) {
-      continue;
-    }
-    return loom_low_build_register_type(descriptor_set, alt->reg_class_id,
-                                        operand->unit_count, out_type);
-  }
-  return iree_make_status(
-      IREE_STATUS_FAILED_PRECONDITION,
-      "AMDGPU control-packet descriptor operand has no register alternative");
-}
-
 static iree_status_t loom_amdgpu_control_packet_build_const_u32(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t value,
@@ -100,9 +61,8 @@ static iree_status_t loom_amdgpu_control_packet_build_m0_const_u32(
   (void)opcode_id;
 
   loom_type_t m0_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_control_packet_descriptor_operand_type(
-      descriptor_set, consumer_descriptor, consumer_descriptor->result_count,
-      &m0_type));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_descriptor_implicit_resource_type(
+      descriptor_set, consumer_descriptor, &m0_type));
   return loom_amdgpu_control_packet_build_const_u32(
       builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM,
       value, m0_type, location, out_value);

@@ -53,6 +53,14 @@ iree_status_t loom_amdgpu_system_memory_build_u32_attr(
 iree_status_t loom_amdgpu_system_memory_build_offset_attr(
     loom_builder_t* builder, uint32_t byte_offset, loom_named_attr_t* out_attr);
 
+// Materializes |base_address| plus |byte_offset| as an SGPRx2 address.
+//
+// Returns |base_address| unchanged when |byte_offset| is zero.
+iree_status_t loom_amdgpu_system_memory_build_saddr_byte_offset(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t base_address, uint32_t byte_offset,
+    loom_location_id_t location, loom_value_id_t* out_address);
+
 // Appends attrs for a system-scope load cursor read.
 iree_status_t loom_amdgpu_system_memory_append_load_attrs(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
@@ -80,6 +88,12 @@ iree_status_t loom_amdgpu_system_memory_append_return_atomic_attrs(
 // Emits explicit target-low packets that release prior global writes before a
 // following system-scope publication operation.
 iree_status_t loom_amdgpu_system_memory_build_release_ordering(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_location_id_t location);
+
+// Emits explicit target-low packets that wait for prior vector-memory loads to
+// complete without performing an acquire cache operation.
+iree_status_t loom_amdgpu_system_memory_build_load_wait(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_location_id_t location);
 

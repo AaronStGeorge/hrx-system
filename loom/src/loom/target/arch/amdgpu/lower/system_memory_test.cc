@@ -290,6 +290,69 @@ class AmdgpuSystemMemoryTest : public ::testing::Test {
                                 LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM);
   }
 
+  void ExpectLowConstU32(loom_value_id_t value,
+                         loom_amdgpu_descriptor_ref_t descriptor_ref,
+                         uint32_t expected_value) const {
+    const loom_value_t* ir_value = loom_module_value(module_, value);
+    ASSERT_FALSE(loom_value_is_block_arg(ir_value));
+    const loom_op_t* op = loom_value_def_op(ir_value);
+    ASSERT_NE(op, nullptr);
+    ExpectLowConstDescriptorRef(op, descriptor_ref);
+    loom_named_attr_slice_t attrs = loom_low_const_attrs(op);
+    ASSERT_EQ(attrs.count, 1u);
+    EXPECT_EQ(ToString(String(attrs.entries[0].name_id)), "imm32");
+    EXPECT_EQ(loom_attr_as_i64(attrs.entries[0].value), expected_value);
+  }
+
+  void ExpectSgprByteOffsetPart(loom_value_id_t actual_part,
+                                loom_value_id_t expected_base,
+                                int64_t expected_base_slice_offset,
+                                loom_amdgpu_descriptor_ref_t descriptor_ref,
+                                uint32_t expected_addend) const {
+    const loom_op_t* add_op = DefiningOp(actual_part);
+    ASSERT_NE(add_op, nullptr);
+    ExpectLowOpDescriptorRef(add_op, descriptor_ref);
+    loom_value_slice_t add_operands = loom_low_op_operands(add_op);
+    ASSERT_EQ(add_operands.count, 2u);
+    ASSERT_EQ(loom_low_op_results(add_op).count, 1u);
+    EXPECT_EQ(loom_value_slice_get(loom_low_op_results(add_op), 0),
+              actual_part);
+
+    const loom_op_t* slice_op = DefiningOp(add_operands.values[0]);
+    ASSERT_NE(slice_op, nullptr);
+    ASSERT_TRUE(loom_low_slice_isa(slice_op));
+    EXPECT_EQ(loom_low_slice_source(slice_op), expected_base);
+    EXPECT_EQ(loom_low_slice_offset(slice_op), expected_base_slice_offset);
+
+    ExpectLowConstU32(add_operands.values[1],
+                      LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, expected_addend);
+    ExpectRegisterType(actual_part, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
+  }
+
+  void ExpectSgprByteOffsetAddress(loom_value_id_t actual_address,
+                                   loom_value_id_t expected_base,
+                                   uint32_t expected_byte_offset) const {
+    ExpectRegisterType(actual_address, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+    if (expected_byte_offset == 0) {
+      EXPECT_EQ(actual_address, expected_base);
+      return;
+    }
+
+    const loom_op_t* concat_op = DefiningOp(actual_address);
+    ASSERT_NE(concat_op, nullptr);
+    ASSERT_TRUE(loom_low_concat_isa(concat_op));
+    loom_value_slice_t address_parts = loom_low_concat_sources(concat_op);
+    ASSERT_EQ(address_parts.count, 2u);
+    ExpectSgprByteOffsetPart(address_parts.values[0], expected_base,
+                             /*expected_base_slice_offset=*/0,
+                             LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
+                             expected_byte_offset);
+    ExpectSgprByteOffsetPart(address_parts.values[1], expected_base,
+                             /*expected_base_slice_offset=*/1,
+                             LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32,
+                             /*expected_addend=*/0);
+  }
+
   void ExpectGlobalLoadSaddr(const loom_op_t* op,
                              loom_amdgpu_descriptor_ref_t descriptor_ref,
                              loom_value_id_t expected_base,
@@ -375,6 +438,30 @@ TEST_F(AmdgpuSystemMemoryTest, AppendsReturnAtomicAttrsByArchitecture) {
   ExpectAppendedAttrs(IREE_SV("amdgpu.rdna4.core"),
                       SystemMemoryAttrKind::kReturnAtomic,
                       {{IREE_SV("scope"), kSystemCacheScope}});
+}
+
+TEST_F(AmdgpuSystemMemoryTest, BuildsSaddrByteOffsetZeroAsBase) {
+  const loom_value_id_t base_address = BuildBaseAddress();
+  const size_t op_count_before = Ops().size();
+  loom_value_id_t offset_address = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_system_memory_build_saddr_byte_offset(
+      &builder_, descriptor_set_, base_address, /*byte_offset=*/0,
+      LOOM_LOCATION_UNKNOWN, &offset_address));
+
+  ExpectSgprByteOffsetAddress(offset_address, base_address,
+                              /*expected_byte_offset=*/0);
+  EXPECT_EQ(Ops().size(), op_count_before);
+}
+
+TEST_F(AmdgpuSystemMemoryTest, BuildsSaddrByteOffsetWithScalarAdd) {
+  const loom_value_id_t base_address = BuildBaseAddress();
+  loom_value_id_t offset_address = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_system_memory_build_saddr_byte_offset(
+      &builder_, descriptor_set_, base_address, /*byte_offset=*/24,
+      LOOM_LOCATION_UNKNOWN, &offset_address));
+
+  ExpectSgprByteOffsetAddress(offset_address, base_address,
+                              /*expected_byte_offset=*/24);
 }
 
 TEST_F(AmdgpuSystemMemoryTest, BuildsUniformB32LoadFromSaddr) {

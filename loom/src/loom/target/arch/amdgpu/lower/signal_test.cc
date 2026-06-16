@@ -231,6 +231,55 @@ class AmdgpuSignalTest : public ::testing::Test {
     return loom_value_def_op(ir_value);
   }
 
+  void ExpectSgprByteOffsetPart(loom_value_id_t actual_part,
+                                loom_value_id_t expected_base,
+                                int64_t expected_base_slice_offset,
+                                loom_amdgpu_descriptor_ref_t descriptor_ref,
+                                uint32_t expected_addend) const {
+    const loom_op_t* add_op = DefiningOp(actual_part);
+    ASSERT_NE(add_op, nullptr);
+    ExpectLowOpDescriptorRef(add_op, descriptor_ref);
+    loom_value_slice_t add_operands = loom_low_op_operands(add_op);
+    ASSERT_EQ(add_operands.count, 2u);
+    ASSERT_EQ(loom_low_op_results(add_op).count, 1u);
+    EXPECT_EQ(loom_value_slice_get(loom_low_op_results(add_op), 0),
+              actual_part);
+
+    const loom_op_t* slice_op = DefiningOp(add_operands.values[0]);
+    ASSERT_NE(slice_op, nullptr);
+    ASSERT_TRUE(loom_low_slice_isa(slice_op));
+    EXPECT_EQ(loom_low_slice_source(slice_op), expected_base);
+    EXPECT_EQ(loom_low_slice_offset(slice_op), expected_base_slice_offset);
+
+    ExpectLowConstU32(add_operands.values[1],
+                      LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, expected_addend);
+    ExpectRegisterType(actual_part, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
+  }
+
+  void ExpectSgprByteOffsetAddress(loom_value_id_t actual_address,
+                                   loom_value_id_t expected_base,
+                                   uint32_t expected_byte_offset) const {
+    ExpectRegisterType(actual_address, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+    if (expected_byte_offset == 0) {
+      EXPECT_EQ(actual_address, expected_base);
+      return;
+    }
+
+    const loom_op_t* concat_op = DefiningOp(actual_address);
+    ASSERT_NE(concat_op, nullptr);
+    ASSERT_TRUE(loom_low_concat_isa(concat_op));
+    loom_value_slice_t address_parts = loom_low_concat_sources(concat_op);
+    ASSERT_EQ(address_parts.count, 2u);
+    ExpectSgprByteOffsetPart(address_parts.values[0], expected_base,
+                             /*expected_base_slice_offset=*/0,
+                             LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
+                             expected_byte_offset);
+    ExpectSgprByteOffsetPart(address_parts.values[1], expected_base,
+                             /*expected_base_slice_offset=*/1,
+                             LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32,
+                             /*expected_addend=*/0);
+  }
+
   const loom_op_t* FindGlobalLoadSaddr(
       loom_amdgpu_descriptor_ref_t descriptor_ref,
       loom_value_id_t expected_base, uint32_t expected_byte_offset) const {
@@ -338,13 +387,12 @@ class AmdgpuSignalTest : public ::testing::Test {
                   LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR));
     ExpectRegisterType(operands.values[0], LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
     ExpectRegisterType(operands.values[1], LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2);
-    EXPECT_EQ(operands.values[2], expected_signal_address);
+    ExpectSgprByteOffsetAddress(operands.values[2], expected_signal_address,
+                                LOOM_AMDGPU_SIGNAL_VALUE_OFFSET);
     if (operands.count == 4) {
       ExpectM0ConstOperand(operands.values[3]);
     }
     ASSERT_EQ(loom_low_op_results(op).count, 0u);
-    ExpectAttrI64(loom_low_op_attrs(op), IREE_SV("offset"),
-                  LOOM_AMDGPU_SIGNAL_VALUE_OFFSET);
   }
 
   loom_value_id_t BuildSignalAddress() {
@@ -407,7 +455,7 @@ TEST_F(AmdgpuSignalTest, AddsOneWithRdnaReleaseOrdering) {
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
   ASSERT_EQ(atomic_ops.size(), 1u);
   ExpectSignalAddAtomic(atomic_ops[0], signal_address);
-  EXPECT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 1u);
+  EXPECT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 0u);
 }
 
 TEST_F(AmdgpuSignalTest, AddsOneWithCdnaM0AndWriteback) {
@@ -428,8 +476,7 @@ TEST_F(AmdgpuSignalTest, AddsOneWithCdnaM0AndWriteback) {
   ASSERT_EQ(atomic_ops.size(), 1u);
   ExpectSignalAddAtomic(atomic_ops[0], signal_address);
   EXPECT_EQ(loom_low_op_operands(atomic_ops[0]).count, 4u);
-  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 2u);
-  ExpectAttrI64(loom_low_op_attrs(atomic_ops[0]), IREE_SV("sc1"), 1);
+  EXPECT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 0u);
 }
 
 TEST_F(AmdgpuSignalTest, AddsOneWithGfx12SystemScope) {

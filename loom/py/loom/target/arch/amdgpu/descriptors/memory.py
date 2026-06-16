@@ -2856,6 +2856,7 @@ def _flat_load_overlay(
         if offset_signed
         else _offset_immediate(offset_bit_width)
     )
+    asm_operands = ("addr", "m0") if implicit_m0 else ("addr",)
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
         instruction_name=instruction_name,
@@ -2876,7 +2877,7 @@ def _flat_load_overlay(
         asm_forms=_asm(
             mnemonic=mnemonic,
             results=("dst",),
-            operands=("addr",),
+            operands=asm_operands,
             immediates=_memory_asm_immediate_names(cache_fields),
             named_immediates=True,
         ),

@@ -128,29 +128,6 @@ static iree_status_t loom_amdgpu_signal_asm_form(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_signal_asm_operand_type(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor, uint16_t asm_operand_index,
-    loom_type_t* out_type) {
-  *out_type = loom_type_none();
-  const loom_low_asm_form_t* asm_form = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_signal_asm_form(descriptor_set, descriptor, &asm_form));
-  if (asm_operand_index >= asm_form->operand_index_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU signal asm operand index is out of range");
-  }
-  const uint32_t operand_index =
-      (uint32_t)asm_form->operand_index_start + asm_operand_index;
-  if (operand_index >= descriptor_set->asm_operand_index_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU signal asm operand row is out of range");
-  }
-  return loom_amdgpu_signal_descriptor_operand_type(
-      descriptor_set, descriptor,
-      descriptor_set->asm_operand_indices[operand_index], out_type);
-}
-
 static iree_status_t loom_amdgpu_signal_descriptor_result_type(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, uint16_t result_index,
@@ -211,14 +188,12 @@ static iree_status_t loom_amdgpu_signal_build_vgpr_u32_const(
 
 static iree_status_t loom_amdgpu_signal_build_m0_const_u32(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* consumer_descriptor,
-    uint16_t consumer_asm_operand_index, uint32_t value,
+    const loom_low_descriptor_t* consumer_descriptor, uint32_t value,
     loom_location_id_t location, loom_value_id_t* out_value) {
   *out_value = LOOM_VALUE_ID_INVALID;
   loom_type_t m0_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_signal_asm_operand_type(
-      descriptor_set, consumer_descriptor, consumer_asm_operand_index,
-      &m0_type));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_descriptor_implicit_resource_type(
+      descriptor_set, consumer_descriptor, &m0_type));
   return loom_amdgpu_signal_build_const_u32(
       builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM,
       value, m0_type, location, out_value);
@@ -358,8 +333,7 @@ static iree_status_t loom_amdgpu_signal_append_optional_m0_operand(
   }
   loom_value_id_t m0_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_m0_const_u32(
-      builder, descriptor_set, descriptor, (uint16_t)*inout_operand_count, 0,
-      location, &m0_value));
+      builder, descriptor_set, descriptor, 0, location, &m0_value));
   operands[*inout_operand_count] = m0_value;
   *inout_operand_count += 1;
   return iree_ok_status();
@@ -389,6 +363,9 @@ static iree_status_t loom_amdgpu_signal_build_global_store_b64(
       loom_amdgpu_signal_build_offset_attr(builder, 0, &attrs[attr_count++]));
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_append_release_store_attrs(
       builder, descriptor_set, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
+  loom_amdgpu_filter_descriptor_optional_attrs(builder, descriptor_set,
+                                               descriptor, /*required_count=*/1,
+                                               attrs, &attr_count);
 
   loom_value_id_t operands[4] = {zero_vaddr, value, saddr,
                                  LOOM_VALUE_ID_INVALID};
@@ -409,10 +386,6 @@ static iree_status_t loom_amdgpu_signal_build_atomic_attrs(
     loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
     iree_host_size_t* out_attr_count) {
   *out_attr_count = 0;
-  loom_named_attr_t offset_attr = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_offset_attr(
-      builder, LOOM_AMDGPU_SIGNAL_VALUE_OFFSET, &offset_attr));
-  attrs[(*out_attr_count)++] = offset_attr;
   return loom_amdgpu_system_memory_append_no_return_atomic_attrs(
       builder, descriptor_set, attrs, attr_capacity, out_attr_count);
 }
@@ -490,11 +463,19 @@ iree_status_t loom_amdgpu_build_signal_add_one_release(
       builder, descriptor_set,
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR, &descriptor,
       &opcode_id));
+  loom_value_id_t value_address = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_saddr_byte_offset(
+      builder, descriptor_set, signal_address, LOOM_AMDGPU_SIGNAL_VALUE_OFFSET,
+      location, &value_address));
+
   loom_named_attr_t attrs[2] = {0};
   iree_host_size_t attr_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_atomic_attrs(
       builder, descriptor_set, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
-  loom_value_id_t operands[4] = {zero_vaddr, one64, signal_address,
+  loom_amdgpu_filter_descriptor_optional_attrs(builder, descriptor_set,
+                                               descriptor, /*required_count=*/0,
+                                               attrs, &attr_count);
+  loom_value_id_t operands[4] = {zero_vaddr, one64, value_address,
                                  LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 3;
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_append_optional_m0_operand(

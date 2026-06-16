@@ -68,8 +68,8 @@ from loom.target.arch.amdgpu.descriptors import (
     _gfx940_core_overlays,
     _gfx950_core_overlays,
     _gfx1250_core_overlays,
-    _record_amdgpu_atomic_candidate,
     _predefined,
+    _record_amdgpu_atomic_candidate,
     _validate_address_immediate_units,
     _with_execution_mask_state_read,
     _with_gfx125x_vgpr_msb_address_state,
@@ -931,7 +931,8 @@ def test_flat_u8_load_descriptor_covers_execution_families() -> None:
         asm_form = descriptor.asm_forms[0]
         assert asm_form.mnemonic == mnemonic
         assert asm_form.results == ("dst",)
-        assert asm_form.operands == ("addr",)
+        expected_asm_operands = ("addr", "m0") if uses_m0 else ("addr",)
+        assert asm_form.operands == expected_asm_operands
         assert (
             tuple(immediate.field_name for immediate in asm_form.immediates)
             == expected_asm_immediates
