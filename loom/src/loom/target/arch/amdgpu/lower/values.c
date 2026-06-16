@@ -47,6 +47,13 @@ typedef struct loom_amdgpu_constant_plan_t {
   bool i1_value;
 } loom_amdgpu_constant_plan_t;
 
+typedef uint32_t loom_amdgpu_vector_iota_plan_flags_t;
+
+enum {
+  LOOM_AMDGPU_VECTOR_IOTA_PLAN_BASE_EXACT = 1u << 0,
+  LOOM_AMDGPU_VECTOR_IOTA_PLAN_STEP_EXACT = 1u << 1,
+};
+
 typedef struct loom_amdgpu_vector_iota_plan_t {
   // Descriptor row selected for each lane constant packet.
   loom_low_lower_resolved_descriptor_t descriptor;
@@ -58,13 +65,34 @@ typedef struct loom_amdgpu_vector_iota_plan_t {
   loom_value_id_t step;
   // Result vector receiving the generated i32 lane constants.
   loom_value_id_t result;
+  // Exact base value when BASE_EXACT is set.
+  int32_t exact_base;
+  // Exact step value when STEP_EXACT is set.
+  int32_t exact_step;
+  // Static operand facts selected by the planner.
+  loom_amdgpu_vector_iota_plan_flags_t flags;
   // Static number of generated lanes.
   uint32_t lane_count;
   // Precomputed lane bit patterns emitted as VGPR constants.
   uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-  // True when one or more iota operands must be materialized dynamically.
-  bool is_dynamic;
 } loom_amdgpu_vector_iota_plan_t;
+
+static bool loom_amdgpu_vector_iota_plan_has_exact_base(
+    const loom_amdgpu_vector_iota_plan_t* plan) {
+  return iree_any_bit_set(plan->flags, LOOM_AMDGPU_VECTOR_IOTA_PLAN_BASE_EXACT);
+}
+
+static bool loom_amdgpu_vector_iota_plan_has_exact_step(
+    const loom_amdgpu_vector_iota_plan_t* plan) {
+  return iree_any_bit_set(plan->flags, LOOM_AMDGPU_VECTOR_IOTA_PLAN_STEP_EXACT);
+}
+
+static bool loom_amdgpu_vector_iota_plan_is_dynamic(
+    const loom_amdgpu_vector_iota_plan_t* plan) {
+  return !iree_all_bits_set(plan->flags,
+                            LOOM_AMDGPU_VECTOR_IOTA_PLAN_BASE_EXACT |
+                                LOOM_AMDGPU_VECTOR_IOTA_PLAN_STEP_EXACT);
+}
 
 typedef enum loom_amdgpu_vector_from_elements_materialization_kind_e {
   LOOM_AMDGPU_VECTOR_FROM_ELEMENTS_MATERIALIZATION_OPERANDS = 0,
@@ -1387,6 +1415,14 @@ static iree_status_t loom_amdgpu_select_vector_iota_plan(
   out_plan->step = step_id;
   out_plan->result = result;
   out_plan->lane_count = element_count;
+  if (has_static_base) {
+    out_plan->flags |= LOOM_AMDGPU_VECTOR_IOTA_PLAN_BASE_EXACT;
+    out_plan->exact_base = (int32_t)base;
+  }
+  if (has_static_step) {
+    out_plan->flags |= LOOM_AMDGPU_VECTOR_IOTA_PLAN_STEP_EXACT;
+    out_plan->exact_step = (int32_t)step;
+  }
 
   iree_string_view_t constraint_key = iree_string_view_empty();
   if (!loom_amdgpu_vector_iota_source_supported(
@@ -1397,7 +1433,6 @@ static iree_status_t loom_amdgpu_select_vector_iota_plan(
   }
 
   if (!has_static_base || !has_static_step) {
-    out_plan->is_dynamic = true;
     *out_selected = true;
     return iree_ok_status();
   }
@@ -3185,7 +3220,7 @@ static iree_status_t loom_amdgpu_lower_constant_plan(
 static iree_status_t loom_amdgpu_lower_vector_iota(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_iota_plan_t* plan) {
-  if (!plan->is_dynamic) {
+  if (!loom_amdgpu_vector_iota_plan_is_dynamic(plan)) {
     return loom_amdgpu_bind_register_u32_lane_constants(
         context, source_op, plan->result, &plan->descriptor,
         plan->imm32_attr_name_id, plan->lane_bit_patterns, plan->lane_count);
@@ -3194,12 +3229,17 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
   loom_value_id_t low_base = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
-      context, source_op, plan->base, &low_base));
+  if (loom_amdgpu_vector_iota_plan_has_exact_base(plan)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
+        (uint32_t)plan->exact_base, lane_type, &low_base));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
+        context, source_op, plan->base, &low_base));
+  }
 
-  int64_t exact_step = 0;
-  const bool has_exact_step =
-      loom_amdgpu_value_as_i32_constant(context, plan->step, &exact_step);
+  const bool has_exact_step = loom_amdgpu_vector_iota_plan_has_exact_step(plan);
+  const int32_t exact_step = plan->exact_step;
   loom_value_id_t low_step = LOOM_VALUE_ID_INVALID;
   if (!has_exact_step) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
@@ -4047,12 +4087,23 @@ void loom_amdgpu_mark_value_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t plan) {
   switch (plan.id) {
-    case LOOM_OP_VECTOR_IOTA:
+    case LOOM_OP_VECTOR_IOTA: {
       if (plan.target_data == NULL) {
         return;
       }
-      loom_low_lower_require_source_operands_storage(context, source_op);
+      const loom_amdgpu_vector_iota_plan_t* iota_plan =
+          (const loom_amdgpu_vector_iota_plan_t*)plan.target_data;
+      if (!loom_amdgpu_vector_iota_plan_is_dynamic(iota_plan)) {
+        return;
+      }
+      if (!loom_amdgpu_vector_iota_plan_has_exact_base(iota_plan)) {
+        loom_low_lower_require_source_value_storage(context, iota_plan->base);
+      }
+      if (!loom_amdgpu_vector_iota_plan_has_exact_step(iota_plan)) {
+        loom_low_lower_require_source_value_storage(context, iota_plan->step);
+      }
       return;
+    }
     case LOOM_OP_VECTOR_FROM_ELEMENTS:
     case LOOM_OP_VECTOR_SPLAT: {
       if (plan.target_data == NULL) {
