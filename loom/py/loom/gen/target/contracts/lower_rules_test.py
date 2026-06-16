@@ -38,6 +38,7 @@ from loom.target.contracts import (
     LowerSourceMemory,
     LowerTypePattern,
     LowerValueRef,
+    RecipeRule,
     Scalar,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
@@ -395,6 +396,41 @@ def test_generate_lower_rule_set_emits_storage_element_format_guard() -> None:
     guard_text = generated.source[guard_start:guard_end]
     assert ".value_ref_index = 0," in guard_text
     assert ".u64 = LOOM_VALUE_FACT_NUMERIC_FORMAT_U8," in guard_text
+
+
+def test_generate_lower_rule_set_emits_packed_integer_storage_guard() -> None:
+    table = ContractFragment(
+        name="test.low.packed_integer_storage",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitunpacku,
+                guards=(
+                    Guard.value_packed_integer_lanes_from_payload(
+                        "source",
+                        "result",
+                        "width",
+                        storage_unit_bit_count=32,
+                        maximum_storage_unit_count=16,
+                        maximum_lane_count=32,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    generated = generate_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    guard_start = generated.source.index("LOOM_LOW_LOWER_GUARD_VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD")
+    guard_end = generated.source.index("},", guard_start)
+    guard_text = generated.source[guard_start:guard_end]
+    assert ".value_ref_index = 0," in guard_text
+    assert ".other_value_ref_index = 1," in guard_text
+    assert ".attr_index = 0," in guard_text
+    assert ".u64 = UINT64_C(16)," in guard_text
+    assert ".minimum_i64 = 32," in guard_text
+    assert ".maximum_i64 = 32," in guard_text
 
 
 def test_generate_lower_rule_set_emits_source_instance_flags_projection() -> None:

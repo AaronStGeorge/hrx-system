@@ -889,6 +889,54 @@ def test_compile_lower_rule_set_compiles_storage_element_format_guard() -> None:
     assert compiled.guards[0].u64_c_expression == "LOOM_VALUE_FACT_NUMERIC_FORMAT_U8"
 
 
+def test_compile_lower_rule_set_compiles_packed_integer_storage_guards() -> None:
+    table = ContractFragment(
+        name="test.packed-integer-storage",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitpack,
+                guards=(
+                    Guard.value_packed_integer_payload_from_lanes(
+                        "source",
+                        "result",
+                        "width",
+                        storage_unit_bit_count=32,
+                        storage_payload_multiple=32,
+                    ),
+                ),
+            ),
+            RecipeRule(
+                source_op=vector.vector_bitunpacku,
+                guards=(
+                    Guard.value_packed_integer_lanes_from_payload(
+                        "source",
+                        "result",
+                        "width",
+                        storage_unit_bit_count=32,
+                        maximum_storage_unit_count=16,
+                        maximum_lane_count=32,
+                    ),
+                ),
+            ),
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert compiled.guards[0].kind == GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES
+    assert compiled.guards[0].attr_index == 0
+    assert compiled.guards[0].u64 == 32
+    assert compiled.guards[0].minimum_i64 == 32
+    assert compiled.rules[1].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert compiled.guards[1].kind == GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD
+    assert compiled.guards[1].attr_index == 0
+    assert compiled.guards[1].u64 == 16
+    assert compiled.guards[1].minimum_i64 == 32
+    assert compiled.guards[1].maximum_i64 == 32
+
+
 def test_compile_lower_rule_set_compiles_value_range_relation_guard() -> None:
     table = ContractFragment(
         name="test.value-range-relation",

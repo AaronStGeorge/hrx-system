@@ -67,6 +67,8 @@ class GuardKind(Enum):
     VALUE_I64_RANGE_GE = "value_i64_range_ge"
     VALUE_F64_EQUALS = "value_f64_equals"
     VALUE_STORAGE_ELEMENT_FORMAT = "value_storage_element_format"
+    VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES = "value_packed_integer_payload_from_lanes"
+    VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD = "value_packed_integer_lanes_from_payload"
     VALUE_NO_USES = "value_no_uses"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
 
@@ -483,6 +485,50 @@ class Guard:
         )
 
     @classmethod
+    def value_packed_integer_payload_from_lanes(
+        cls,
+        lane_field: str,
+        storage_field: str,
+        width_attr: str,
+        *,
+        storage_unit_bit_count: int,
+        storage_payload_multiple: int,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+            field=lane_field,
+            other_field=storage_field,
+            attr_field=width_attr,
+            count=storage_payload_multiple,
+            minimum=storage_unit_bit_count,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def value_packed_integer_lanes_from_payload(
+        cls,
+        storage_field: str,
+        lane_field: str,
+        width_attr: str,
+        *,
+        storage_unit_bit_count: int,
+        maximum_storage_unit_count: int,
+        maximum_lane_count: int,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+            field=storage_field,
+            other_field=lane_field,
+            attr_field=width_attr,
+            count=maximum_storage_unit_count,
+            minimum=storage_unit_bit_count,
+            maximum=maximum_lane_count,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def value_no_uses(
         cls,
         field: str,
@@ -529,6 +575,7 @@ class Guard:
         if (
             self.minimum is not None
             and self.maximum is not None
+            and self.kind not in (GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,)
             and self.minimum > self.maximum
         ):
             raise ValueError(f"{self.kind.value} range minimum exceeds maximum")
@@ -623,6 +670,8 @@ class Guard:
             GuardKind.VALUE_I64_RANGE_GE,
             GuardKind.VALUE_F64_EQUALS,
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+            GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+            GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
         ):
             _validate_value_fact_guard(self, source_op, subject)
             return
@@ -721,6 +770,44 @@ def _validate_value_fact_guard(
         raise ValueError(f"{source_op.name}: {subject} needs minimum/maximum")
     if guard.kind == GuardKind.VALUE_F64_EQUALS and guard.f64_value is None:
         raise ValueError(f"{source_op.name}: {subject} needs an f64 value")
+    if guard.kind in (
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+    ):
+        if guard.other_field is None:
+            raise ValueError(f"{source_op.name}: {subject} needs another value")
+        _require_value(source_op, guard.other_field, subject)
+        if guard.attr_field is None:
+            raise ValueError(f"{source_op.name}: {subject} needs an attr field")
+        attr = _require_attr(source_op, guard.attr_field, subject)
+        if attr.attr_type != ATTR_TYPE_I64:
+            raise ValueError(
+                f"{source_op.name}: {subject} attr field "
+                f"'{guard.attr_field}' must be an i64 attr"
+            )
+        _require_positive_u32(
+            guard.minimum,
+            source_op,
+            subject,
+            "storage unit bit count",
+        )
+        _require_positive_u32(
+            guard.count,
+            source_op,
+            subject,
+            (
+                "storage payload multiple"
+                if guard.kind == GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES
+                else "maximum storage unit count"
+            ),
+        )
+        if guard.kind == GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD:
+            _require_positive_u32(
+                guard.maximum,
+                source_op,
+                subject,
+                "maximum lane count",
+            )
 
 
 def _validate_i64_array_guard(

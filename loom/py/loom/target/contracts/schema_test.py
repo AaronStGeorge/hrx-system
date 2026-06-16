@@ -341,6 +341,31 @@ def test_descriptor_rule_validates_f64_equals_guard() -> None:
     assert case.guards[0].f64_value == 1.0
 
 
+def test_recipe_rule_validates_packed_integer_storage_guard() -> None:
+    table = ContractFragment(
+        name="test-low.packed-integer-storage",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitpack,
+                guards=[
+                    Guard.value_packed_integer_payload_from_lanes(
+                        "source",
+                        "result",
+                        "width",
+                        storage_unit_bit_count=32,
+                        storage_payload_multiple=32,
+                    ),
+                ],
+            )
+        ],
+    )
+
+    case = table.cases[0]
+    assert isinstance(case, RecipeRule)
+    assert case.guards[0].attr_field == "width"
+
+
 def test_descriptor_rule_rejects_unknown_instance_flag() -> None:
     with pytest.raises(
         ValueError,

@@ -500,10 +500,16 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE = 24,
   // Source value type storage schema element format must match u64.
   LOOM_LOW_LOWER_GUARD_VALUE_STORAGE_ELEMENT_FORMAT = 25,
+  // Packed integer storage payload bits must equal source lane count times a
+  // source i64 width attribute.
+  LOOM_LOW_LOWER_GUARD_VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES = 26,
+  // Packed integer storage payload bits divided by a source i64 width
+  // attribute must equal the result lane count.
+  LOOM_LOW_LOWER_GUARD_VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD = 27,
   // Source value must have no ordinary operand uses. Type uses are ignored.
-  LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 26,
+  LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 28,
   // Source value ref must map to a low register with exactly |u64| units.
-  LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 27,
+  LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 29,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -523,16 +529,18 @@ typedef struct loom_low_lower_guard_t {
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
   // Required enum value, divisor adjustment, expected count, element index,
-  // bit-count limit, register unit count, exact f64 bit pattern, flag mask, or
-  // storage element format.
+  // bit-count limit, register unit count, exact f64 bit pattern, flag mask,
+  // storage element format, storage unit cap, or storage payload multiple.
   uint64_t u64;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;
   // Rule-set-local descriptor ref used by DESCRIPTOR_AVAILABLE guards.
   loom_low_lower_descriptor_ref_t descriptor_ref;
-  // Inclusive lower i64 bound for range guards.
+  // Inclusive lower i64 bound for range guards or storage unit bit count for
+  // packed integer storage guards.
   int64_t minimum_i64;
-  // Inclusive upper i64 bound for range guards.
+  // Inclusive upper i64 bound for range guards or maximum lane count for
+  // packed integer storage guards.
   int64_t maximum_i64;
 } loom_low_lower_guard_t;
 

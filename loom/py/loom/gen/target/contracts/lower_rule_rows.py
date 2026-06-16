@@ -55,6 +55,8 @@ _GUARD_VALUE_REF_KINDS = frozenset(
         GuardKind.VALUE_I64_RANGE_GE,
         GuardKind.VALUE_F64_EQUALS,
         GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
         GuardKind.VALUE_NO_USES,
     )
 )
@@ -64,6 +66,8 @@ _GUARD_OTHER_VALUE_REF_KINDS = frozenset(
         GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
         GuardKind.VALUE_I64_RANGE_LE,
         GuardKind.VALUE_I64_RANGE_GE,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
     )
 )
 
@@ -324,6 +328,8 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.I64_ARRAY_COUNT,
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
     ):
         _append_field(fields, "attr_index", row.attr_index, always=True)
 
@@ -350,6 +356,8 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
         GuardKind.VALUE_F64_EQUALS,
         GuardKind.INSTANCE_FLAGS_HAS_ALL,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
     ):
         _append_field(fields, "u64", lower_rule_spelling.u64_c_literal(row.u64), always=True)
     if row.kind == GuardKind.VALUE_STORAGE_ELEMENT_FORMAT:
@@ -370,8 +378,17 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
         GuardKind.VALUE_I64_RANGE,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
     ):
         _append_field(fields, "minimum_i64", row.minimum_i64, always=True)
+    if row.kind in (
+        GuardKind.I64_RANGE,
+        GuardKind.I64_ARRAY_ELEMENT_RANGE,
+        GuardKind.I64_ARRAY_ELEMENTS_RANGE,
+        GuardKind.VALUE_I64_RANGE,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+    ):
         _append_field(fields, "maximum_i64", row.maximum_i64, always=True)
     return fields
 

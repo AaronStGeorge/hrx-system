@@ -732,6 +732,8 @@ class _LowerRuleSetCompiler:
             GuardKind.VALUE_I64_RANGE_GE,
             GuardKind.VALUE_F64_EQUALS,
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+            GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+            GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
         ):
             self._append_value_fact_guard(source_op, guard)
             return
@@ -1080,6 +1082,58 @@ class _LowerRuleSetCompiler:
                         ),
                     ),
                     u64_c_expression=guard.numeric_format_c_expression,
+                )
+            )
+            return
+        if guard.kind in (
+            GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+            GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+        ):
+            if guard.other_field is None or guard.attr_field is None:
+                raise ValueError(
+                    f"{source_op.name}: {guard.kind.value} guard needs "
+                    "two values and one attr field"
+                )
+            if guard.minimum is None or guard.minimum <= 0:
+                raise ValueError(
+                    f"{source_op.name}: {guard.kind.value} guard needs "
+                    "a positive storage unit bit count"
+                )
+            if guard.count is None or guard.count <= 0:
+                raise ValueError(
+                    f"{source_op.name}: {guard.kind.value} guard needs "
+                    "a positive storage payload value"
+                )
+            if guard.kind == GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD and (
+                guard.maximum is None or guard.maximum <= 0
+            ):
+                raise ValueError(
+                    f"{source_op.name}: {guard.kind.value} guard needs "
+                    "a positive maximum lane count"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    other_value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.other_field),
+                    ),
+                    attr_index=_source_attr_index(source_op, guard.attr_field),
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _named_constraint_diagnostic(
+                                "value",
+                                guard.field,
+                                guard.kind.value,
+                            ),
+                        ),
+                    ),
+                    u64=guard.count,
+                    minimum_i64=guard.minimum,
+                    maximum_i64=guard.maximum or 0,
                 )
             )
             return

@@ -31,6 +31,7 @@ from loom.target.contracts import (
     EmitDescriptorOp,
     Guard,
     GuardDiagnostic,
+    RecipeRule,
     Scalar,
     TypePattern,
     ValueAliasRule,
@@ -315,6 +316,21 @@ _BITFIELD_WIDTH_DIAGNOSTIC = GuardDiagnostic(
     subject_name="i32",
     constraint_key="amdgpu.bitfield.width_i32",
 )
+_PACKED_INTEGER_WIDTH_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="field-width",
+    subject_name="i32",
+    constraint_key="amdgpu.packed_integer.width_i32",
+)
+_PACKED_INTEGER_PAYLOAD_FROM_LANES_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="packed-integer-storage",
+    subject_name="vector.bitpack",
+    constraint_key="amdgpu.packed_integer.payload_from_lanes",
+)
+_PACKED_INTEGER_LANES_FROM_PAYLOAD_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="packed-integer-storage",
+    subject_name="vector.bitunpack",
+    constraint_key="amdgpu.packed_integer.lanes_from_payload",
+)
 
 
 def _descriptor(key: str) -> Descriptor:
@@ -550,6 +566,84 @@ def _bitfield_attr_guards(
             width_min,
             width_max,
             diagnostic=_BITFIELD_WIDTH_DIAGNOSTIC,
+        ),
+    )
+
+
+def _packed_integer_width_guard(maximum_width: int) -> Guard:
+    return Guard.i64_range(
+        "width",
+        1,
+        maximum_width,
+        diagnostic=_PACKED_INTEGER_WIDTH_DIAGNOSTIC,
+    )
+
+
+def _vector_bitpack_recipe_rule() -> RecipeRule:
+    return RecipeRule(
+        source_op=vector.vector_bitpack,
+        guards=(
+            _value_type("source", _VEC_I32),
+            _value_type("result", _VEC_I8_PACKED),
+            _packed_integer_width_guard(8),
+            Guard.value_packed_integer_payload_from_lanes(
+                "source",
+                "result",
+                "width",
+                storage_unit_bit_count=32,
+                storage_payload_multiple=32,
+                diagnostic=_PACKED_INTEGER_PAYLOAD_FROM_LANES_DIAGNOSTIC,
+            ),
+        ),
+    )
+
+
+def _vector_bitunpack_recipe_rule(
+    source_op: Op,
+    result_type: TypePattern,
+    *,
+    maximum_width: int,
+) -> RecipeRule:
+    return RecipeRule(
+        source_op=source_op,
+        guards=(
+            _value_type("result", result_type),
+            _packed_integer_width_guard(maximum_width),
+            Guard.value_packed_integer_lanes_from_payload(
+                "source",
+                "result",
+                "width",
+                storage_unit_bit_count=32,
+                maximum_storage_unit_count=16,
+                maximum_lane_count=32,
+                diagnostic=_PACKED_INTEGER_LANES_FROM_PAYLOAD_DIAGNOSTIC,
+            ),
+        ),
+    )
+
+
+def _vector_packed_integer_recipe_rules() -> tuple[RecipeRule, ...]:
+    return (
+        _vector_bitpack_recipe_rule(),
+        _vector_bitunpack_recipe_rule(
+            vector.vector_bitunpacku,
+            _VEC_I32,
+            maximum_width=32,
+        ),
+        _vector_bitunpack_recipe_rule(
+            vector.vector_bitunpacku,
+            _VEC_I8_PACKED,
+            maximum_width=8,
+        ),
+        _vector_bitunpack_recipe_rule(
+            vector.vector_bitunpacks,
+            _VEC_I32,
+            maximum_width=32,
+        ),
+        _vector_bitunpack_recipe_rule(
+            vector.vector_bitunpacks,
+            _VEC_I8_PACKED,
+            maximum_width=8,
         ),
     )
 
@@ -2421,6 +2515,7 @@ def _rules() -> tuple[ContractCase, ...]:
             )
         )
     rules.extend(_vector_bitfield_rules())
+    rules.extend(_vector_packed_integer_recipe_rules())
     for source_op, descriptor_key in (
         (scalar_arithmetic.scalar_addf, "amdgpu.v_add_f32.lit"),
         (scalar_arithmetic.scalar_mulf, "amdgpu.v_mul_f32.lit"),
