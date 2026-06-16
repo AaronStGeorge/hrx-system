@@ -561,13 +561,14 @@ static iree_hal_allocator_t* iree_hal_vulkan_logical_device_allocator(
   return device->device_allocator;
 }
 
-static void iree_hal_vulkan_replace_device_allocator(
+static iree_status_t iree_hal_vulkan_replace_device_allocator(
     iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
   iree_hal_vulkan_logical_device_t* device =
       iree_hal_vulkan_logical_device_cast(base_device);
   iree_hal_allocator_retain(new_allocator);
   iree_hal_allocator_release(device->device_allocator);
   device->device_allocator = new_allocator;
+  return iree_ok_status();
 }
 
 static void iree_hal_vulkan_replace_channel_provider(

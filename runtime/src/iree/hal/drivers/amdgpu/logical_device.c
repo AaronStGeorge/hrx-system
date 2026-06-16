@@ -1786,13 +1786,14 @@ static iree_hal_allocator_t* iree_hal_amdgpu_logical_device_allocator(
   return logical_device->device_allocator;
 }
 
-static void iree_hal_amdgpu_replace_device_allocator(
+static iree_status_t iree_hal_amdgpu_replace_device_allocator(
     iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
   iree_hal_allocator_retain(new_allocator);
   iree_hal_allocator_release(logical_device->device_allocator);
   logical_device->device_allocator = new_allocator;
+  return iree_ok_status();
 }
 
 static void iree_hal_amdgpu_replace_channel_provider(

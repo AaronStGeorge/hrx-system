@@ -645,27 +645,26 @@ static iree_hal_allocator_t* iree_hal_replay_device_allocator(
   return device->allocator;
 }
 
-static void iree_hal_replay_replace_device_allocator(
+static iree_status_t iree_hal_replay_replace_device_allocator(
     iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
   iree_hal_replay_device_t* device = iree_hal_replay_device_cast(base_device);
-  if (!new_allocator) {
-    iree_hal_device_replace_allocator(device->base_device, new_allocator);
-    iree_hal_allocator_release(device->allocator);
-    device->allocator = NULL;
-    return;
-  }
   iree_hal_allocator_t* new_replay_allocator = NULL;
   iree_status_t status = iree_hal_replay_recorder_wrap_allocator(
       device->recorder, device->device_id, base_device, new_allocator,
       device->host_allocator, &new_replay_allocator);
   if (!iree_status_is_ok(status)) {
     iree_hal_replay_recorder_fail(device->recorder, iree_status_code(status));
-    iree_status_ignore(status);
-    return;
+    return status;
   }
-  iree_hal_device_replace_allocator(device->base_device, new_allocator);
-  iree_hal_allocator_release(device->allocator);
-  device->allocator = new_replay_allocator;
+  status =
+      iree_hal_device_replace_allocator(device->base_device, new_allocator);
+  if (iree_status_is_ok(status)) {
+    iree_hal_allocator_release(device->allocator);
+    device->allocator = new_replay_allocator;
+  } else {
+    iree_hal_allocator_release(new_replay_allocator);
+  }
+  return status;
 }
 
 static void iree_hal_replay_replace_channel_provider(

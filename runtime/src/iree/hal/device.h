@@ -451,14 +451,23 @@ iree_hal_device_host_allocator(iree_hal_device_t* device);
 IREE_API_EXPORT iree_hal_allocator_t* iree_hal_device_allocator(
     iree_hal_device_t* device);
 
-// Replaces the default device memory allocator.
+// Replaces the default device memory allocator with a compatible wrapper.
+//
 // The |new_allocator| will be retained for the lifetime of the device or until
-// the allocator is replaced again. The common usage pattern is to shim the
-// default allocator with a wrapper:
+// the allocator is replaced again. The common usage pattern is to wrap the
+// default allocator without changing the device memory, virtual-memory,
+// external-handle, or topology source facts captured in the immutable spec:
 //   // Retain the existing allocator in the new wrapper.
 //   wrap_allocator(iree_hal_device_allocator(device), &new_allocator);
 //   // Update the device to use the wrapper for allocations.
-//   iree_hal_device_replace_allocator(device, new_allocator);
+//   IREE_RETURN_IF_ERROR(
+//       iree_hal_device_replace_allocator(device, new_allocator));
+//
+// Replacements must preserve the allocation capabilities described by
+// iree_hal_device_spec(). They may add instrumentation, caching, recording, or
+// debugging behavior, but must not make the cached device spec inaccurate. A
+// caller that needs different memory-system facts must create a new device.
+// Returns an error if the wrapper cannot be installed.
 //
 // WARNING: this is not thread-safe and must only be performed when the device
 // is idle and all buffers that may have been allocated from the existing
@@ -472,7 +481,7 @@ IREE_API_EXPORT iree_hal_allocator_t* iree_hal_device_allocator(
 // approach would be to replace the singular allocator with queue-specific pools
 // and make the user register those pools explicitly with the implementation
 // they desire.
-IREE_API_EXPORT void iree_hal_device_replace_allocator(
+IREE_API_EXPORT iree_status_t iree_hal_device_replace_allocator(
     iree_hal_device_t* device, iree_hal_allocator_t* new_allocator);
 
 // Replaces the current collective channel provider.
@@ -974,7 +983,7 @@ typedef struct iree_hal_device_vtable_t {
   iree_allocator_t(IREE_API_PTR* host_allocator)(iree_hal_device_t* device);
   iree_hal_allocator_t*(IREE_API_PTR* device_allocator)(
       iree_hal_device_t* device);
-  void(IREE_API_PTR* replace_device_allocator)(
+  iree_status_t(IREE_API_PTR* replace_device_allocator)(
       iree_hal_device_t* device, iree_hal_allocator_t* new_allocator);
   void(IREE_API_PTR* replace_channel_provider)(
       iree_hal_device_t* device, iree_hal_channel_provider_t* new_provider);

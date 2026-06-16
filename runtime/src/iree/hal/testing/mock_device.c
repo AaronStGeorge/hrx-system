@@ -502,8 +502,10 @@ static iree_hal_allocator_t* iree_hal_mock_device_allocator(
   return NULL;
 }
 
-static void iree_hal_mock_device_replace_device_allocator(
-    iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {}
+static iree_status_t iree_hal_mock_device_replace_device_allocator(
+    iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
+  return iree_ok_status();
+}
 
 static void iree_hal_mock_device_replace_channel_provider(
     iree_hal_device_t* base_device, iree_hal_channel_provider_t* new_provider) {
