@@ -470,6 +470,26 @@ instructions, and one barrier. AMDGPU object disassembly should show a
 `global_load_b128`, `ds_store_b128`, `s_barrier`, `ds_load_b128`, and
 `global_store_b128`.
 
+## Shared Memory Bank Feedback
+
+Tags: `__shared__`, `LDS`, `bank conflict`, `padding`, `swizzle`,
+`compile-report`, `source_low_memory`, `rocprof`, `Nsight`.
+
+HIP shared-memory ports often arrive with layout decisions encoded as padding,
+swizzling, reinterpret-cast vector widths, or inline LDS instruction choices.
+In Loom those choices should become source layout and indexing contracts first;
+the AMDGPU compile report then explains the selected LDS packet and visible
+bank pattern.
+
+The canonical workflow and classification table live in the authoring guide's
+[AMDGPU shared-memory feedback](/loom/src/loom/test/corpus/authoring/README.md#amdgpu-shared-memory-feedback)
+section. Use it after translating HIP `__shared__` storage into `buffer.alloca`
+with `memory_space = workgroup`, after preserving intentional vector widths
+with `vector.load`/`vector.store`, and before spending time in runtime
+profilers. `rocprof` and Nsight still decide final performance; the compile
+report answers whether the source layout and selected packet are structurally
+reasonable before object-level profiling enters the loop.
+
 ## Packed Signedness
 
 Tags: `q8`, `q4`, `packed-byte`, `packed-nibble`, `uint8_t`, `int8_t`,
@@ -731,7 +751,8 @@ Use `buffer.alloca` with `memory_space = workgroup`, form typed views with
 `buffer.view`, and put a `kernel.barrier<workgroup>` between producer and
 consumer phases when different work items communicate through the tile. The
 compile report should record local memory bytes and local memory operations;
-target listings should show LDS instructions on AMDGPU.
+`source_low_memory` detail rows should explain selected LDS packet bank
+behavior; target listings should show LDS instructions on AMDGPU.
 
 Tags: `fma`, `contract`, `fast-math`, `v_fma`, `v_dot`, `dot4`.
 

@@ -31,7 +31,7 @@ belong to `iree-benchmark-loom` flags or embedding APIs.
 | Logical indexing | The examples use index/view math for logical rows, blocks, lanes, byte positions, and dense tensor coordinates. |
 | Dynamic case parameters | `mlp_down_projection_residual_bf16.loom` names `rows` on a `check.param.choice` and threads it through shapes, launch geometry, and the kernel ABI. |
 | Benchmark slices | `mlp_down_projection_residual_bf16.loom` has an anonymous full sweep plus named decode/full rows with assignment dictionaries. |
-| HIP C++ porting motifs | `hip/README.md` maps HIP/CUDA kernel habits to Loom source spellings, proof commands, diagnostics, and report queries. |
+| HIP C++ porting motifs | `hip/README.md` maps HIP/CUDA kernel habits to Loom source spellings, proof commands, diagnostics, and authoring-level report workflows. |
 | Packed field contracts | `hip/packed_field_contracts.loom` shows q2/q3/q4/q5/q6-style fields as explicit storage/decode/repack contracts instead of fake scalar element types. |
 | HIP shared memory tile | `hip/shared_memory_tile.loom` stages a 64-lane i32 tile through workgroup memory, synchronizes, and reads a reversed lane so correctness depends on LDS traffic. |
 | HIP shared memory transpose | `hip/shared_memory_transpose.loom` stages an 8x8 i32 tile through two workgroup allocations, synchronizes twice, and validates x/y cross-axis LDS traffic. |
@@ -234,6 +234,70 @@ above intentionally uses one hot-reuse input ring and tiny iteration counts for
 smoke coverage; serious timing should use larger batches, warmups, a stable
 minimum duration, and enough input-ring bytes to avoid measuring only cache-hot
 data reuse.
+
+## AMDGPU Shared-Memory Feedback
+
+The AMDGPU compile report can explain selected workgroup-memory packets and the
+static LDS bank pattern visible from the source facts. This is structural
+compiler feedback, not a runtime performance verdict: final tuning still needs
+measurements and profiler counters when occupancy, cache behavior, scheduling,
+or data-dependent control flow dominates. The useful shift is that a source
+author can see the selected packet, stride facts, and bank-conflict
+classification while the source layout is still in view.
+
+Compile with detailed reports when investigating shared-memory layout,
+padding, swizzling, vectorization, or imported kernel staging choices:
+
+```bash
+loom-compile loom/src/loom/test/corpus/authoring/hip/shared_memory_vector_tile.loom \
+  --backend=amdgpu-hal \
+  --target=gfx1100 \
+  --output=/tmp/shared-memory-vector-tile.vmfb \
+  --compile-report=json-details \
+  --compile-report-output=/tmp/shared-memory-vector-tile.compile-report.json
+```
+
+The `source_low.memory_rows` array records one selected memory-packet row per
+reported source memory operation:
+
+```bash
+jq '.source_low.memory_rows[]?
+  | {function, source_op, operation, packet, vector_lanes,
+     dynamic_stride_bytes, vector_lane_stride_bytes,
+     bank_stride_words, bank_conflict_degree, bank_conflict_kind}' \
+  /tmp/shared-memory-vector-tile.compile-report.json
+```
+
+The text form carries the same fields as `source_low_memory[...]` rows when a
+greppable report is more convenient:
+
+```bash
+loom-compile loom/src/loom/test/corpus/authoring/hip/shared_memory_vector_tile.loom \
+  --backend=amdgpu-hal \
+  --target=gfx1100 \
+  --output=/tmp/shared-memory-vector-tile.vmfb \
+  --compile-report=text-details \
+  --compile-report-output=/tmp/shared-memory-vector-tile.compile-report.txt
+
+rg 'source_low_memory|bank_conflict|ds_' \
+  /tmp/shared-memory-vector-tile.compile-report.txt
+```
+
+The classification key is a compact summary of the facts Loom could prove for
+the selected AMDGPU LDS packet:
+
+| Classification | Meaning |
+| --- | --- |
+| `bank-conflict-free` | Static facts prove conflict degree one for the selected target bank geometry. |
+| `padded-bank-conflict-free` | The access is conflict-free and the stride exposes visible padding beyond the packet footprint. |
+| `bank-conflict-risk` | Static facts imply a conflict degree greater than one; padding, swizzling, or a different staging shape deserves investigation. |
+| `bank-pattern-unknown` | Loom selected a workgroup-memory packet but the current facts do not prove one lane-to-bank pattern. |
+
+The report should be read before object-level profiling when the question is
+whether the source layout and selected packet shape make sense. Runtime tools
+such as `rocprof` and Nsight still decide whether the complete kernel is fast,
+but they should not be the first place a source author learns that a static LDS
+access pattern is structurally suspicious.
 
 ## Memset i8
 
