@@ -623,10 +623,6 @@ class _LowerRuleSetCompiler:
             self._append_low_value_guard(source_op, guard)
             return
 
-        if guard.kind in (GuardKind.BITPACK_STORAGE, GuardKind.BITUNPACK_STORAGE):
-            self._append_bitstream_storage_guard(source_op, guard)
-            return
-
         if guard.kind == GuardKind.OPERAND_SEGMENT_COUNT:
             if guard.count is None:
                 raise ValueError(
@@ -896,51 +892,6 @@ class _LowerRuleSetCompiler:
                         ),
                     ),
                 ),
-            )
-        )
-
-    def _append_bitstream_storage_guard(self, source_op: Op, guard: Guard) -> None:
-        if guard.other_field is None or guard.attr_field is None:
-            raise ValueError(
-                f"{source_op.name}: {guard.kind.value} guard needs source, "
-                "result, and attr fields"
-            )
-        if guard.count is None or guard.minimum is None:
-            raise ValueError(
-                f"{source_op.name}: {guard.kind.value} guard needs "
-                "storage policy parameters"
-            )
-        if guard.kind == GuardKind.BITUNPACK_STORAGE and guard.maximum is None:
-            raise ValueError(
-                f"{source_op.name}: {guard.kind.value} guard needs a "
-                "maximum result lane count"
-            )
-        self._guards.append(
-            LowerGuard(
-                kind=guard.kind,
-                value_ref_index=self._append_value_ref(
-                    source_op,
-                    _value_ref_for_source_field(source_op, guard.field),
-                ),
-                other_value_ref_index=self._append_value_ref(
-                    source_op,
-                    _value_ref_for_source_field(source_op, guard.other_field),
-                ),
-                attr_index=_source_attr_index(source_op, guard.attr_field),
-                diagnostic_index=self._append_diagnostic_ref(
-                    source_op,
-                    _guard_diagnostic(
-                        guard,
-                        _named_constraint_diagnostic(
-                            "value",
-                            guard.field,
-                            guard.kind.value,
-                        ),
-                    ),
-                ),
-                u64=guard.count,
-                minimum_i64=guard.minimum,
-                maximum_i64=guard.maximum or 0,
             )
         )
 

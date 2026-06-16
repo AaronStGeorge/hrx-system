@@ -31,7 +31,6 @@ from loom.target.contracts import (
     EmitDescriptorOp,
     Guard,
     GuardDiagnostic,
-    RecipeRule,
     Scalar,
     TypePattern,
     ValueAliasRule,
@@ -316,26 +315,6 @@ _BITFIELD_WIDTH_DIAGNOSTIC = GuardDiagnostic(
     subject_name="i32",
     constraint_key="amdgpu.bitfield.width_i32",
 )
-_BITSTREAM_WIDTH_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="bitstream-width",
-    subject_name="i32",
-    constraint_key="amdgpu.bitstream.width_i32",
-)
-_BITSTREAM_BITPACK_STORAGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="bitstream-storage",
-    subject_name="vector.bitpack",
-    constraint_key="amdgpu.bitstream.bitpack_i32_to_i8",
-)
-_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="bitstream-storage",
-    subject_name="vector.bitunpack",
-    constraint_key="amdgpu.bitstream.bitunpack_i32_lanes",
-)
-_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="bitstream-storage",
-    subject_name="vector.bitunpack",
-    constraint_key="amdgpu.bitstream.bitunpack_i8_lanes",
-)
 
 
 def _descriptor(key: str) -> Descriptor:
@@ -571,89 +550,6 @@ def _bitfield_attr_guards(
             width_min,
             width_max,
             diagnostic=_BITFIELD_WIDTH_DIAGNOSTIC,
-        ),
-    )
-
-
-def _bitstream_width_guard(maximum: int) -> Guard:
-    return Guard.i64_range(
-        "width",
-        1,
-        maximum,
-        diagnostic=_BITSTREAM_WIDTH_DIAGNOSTIC,
-    )
-
-
-def _vector_bitpack_recipe_rule() -> RecipeRule:
-    return RecipeRule(
-        source_op=vector.vector_bitpack,
-        guards=(
-            _value_type("source", _VEC_I32),
-            _value_type("result", _VEC_I8_PACKED),
-            _bitstream_width_guard(8),
-            Guard.bitpack_storage(
-                "source",
-                "result",
-                "width",
-                register_bit_width=32,
-                result_payload_multiple=32,
-                diagnostic=_BITSTREAM_BITPACK_STORAGE_DIAGNOSTIC,
-            ),
-        ),
-    )
-
-
-def _vector_bitunpack_recipe_rule(
-    source_op: Op,
-    result_type: TypePattern,
-    *,
-    maximum_width: int,
-    diagnostic: GuardDiagnostic,
-) -> RecipeRule:
-    return RecipeRule(
-        source_op=source_op,
-        guards=(
-            _value_type("result", result_type),
-            _bitstream_width_guard(maximum_width),
-            Guard.bitunpack_storage(
-                "source",
-                "result",
-                "width",
-                register_bit_width=32,
-                maximum_source_registers=16,
-                maximum_result_lanes=32,
-                diagnostic=diagnostic,
-            ),
-        ),
-    )
-
-
-def _vector_bitstream_recipe_rules() -> tuple[RecipeRule, ...]:
-    return (
-        _vector_bitpack_recipe_rule(),
-        _vector_bitunpack_recipe_rule(
-            vector.vector_bitunpacku,
-            _VEC_I32,
-            maximum_width=32,
-            diagnostic=_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC,
-        ),
-        _vector_bitunpack_recipe_rule(
-            vector.vector_bitunpacku,
-            _VEC_I8_PACKED,
-            maximum_width=8,
-            diagnostic=_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC,
-        ),
-        _vector_bitunpack_recipe_rule(
-            vector.vector_bitunpacks,
-            _VEC_I32,
-            maximum_width=32,
-            diagnostic=_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC,
-        ),
-        _vector_bitunpack_recipe_rule(
-            vector.vector_bitunpacks,
-            _VEC_I8_PACKED,
-            maximum_width=8,
-            diagnostic=_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC,
         ),
     )
 
@@ -2525,7 +2421,6 @@ def _rules() -> tuple[ContractCase, ...]:
             )
         )
     rules.extend(_vector_bitfield_rules())
-    rules.extend(_vector_bitstream_recipe_rules())
     for source_op, descriptor_key in (
         (scalar_arithmetic.scalar_addf, "amdgpu.v_add_f32.lit"),
         (scalar_arithmetic.scalar_mulf, "amdgpu.v_mul_f32.lit"),

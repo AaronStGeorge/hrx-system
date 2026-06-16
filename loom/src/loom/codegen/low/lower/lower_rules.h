@@ -504,11 +504,6 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 26,
   // Source value ref must map to a low register with exactly |u64| units.
   LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 27,
-  // Bitpack source/result storage must match the width attr and target policy.
-  LOOM_LOW_LOWER_GUARD_BITPACK_STORAGE = 28,
-  // Bitunpack source/result storage must match the width attr and target
-  // policy.
-  LOOM_LOW_LOWER_GUARD_BITUNPACK_STORAGE = 29,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -527,19 +522,17 @@ typedef struct loom_low_lower_guard_t {
   uint16_t diagnostic_index;
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
-  // Required enum value, divisor, count, element index, bit-count payload,
-  // register unit count, exact f64 bit pattern, result payload multiple, or
-  // maximum source register count.
+  // Required enum value, divisor adjustment, expected count, element index,
+  // bit-count limit, register unit count, exact f64 bit pattern, flag mask, or
+  // storage element format.
   uint64_t u64;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;
   // Rule-set-local descriptor ref used by DESCRIPTOR_AVAILABLE guards.
   loom_low_lower_descriptor_ref_t descriptor_ref;
-  // Inclusive lower i64 bound for range guards or register bit width for
-  // bitstream storage guards.
+  // Inclusive lower i64 bound for range guards.
   int64_t minimum_i64;
-  // Inclusive upper i64 bound for range guards or maximum result lanes for
-  // bitunpack storage guards.
+  // Inclusive upper i64 bound for range guards.
   int64_t maximum_i64;
 } loom_low_lower_guard_t;
 

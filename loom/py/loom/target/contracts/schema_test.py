@@ -91,68 +91,17 @@ def test_recipe_rule_validates_guards() -> None:
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
             RecipeRule(
-                source_op=vector.vector_bitpack,
+                source_op=vector.vector_addi,
                 guards=(
-                    Guard.value_type("source", Vector("i32", lanes=4)),
-                    Guard.value_type("result", Vector("i8", lanes=4)),
-                    Guard.i64_range("width", 8, 8),
+                    Guard.value_type("lhs", Vector("i32", lanes=4)),
+                    Guard.value_type("rhs", Vector("i32", lanes=4)),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
                 ),
             )
         ],
     )
 
-    assert table.cases[0].source_op == vector.vector_bitpack
-
-
-def test_recipe_rule_validates_bitstream_storage_guard() -> None:
-    table = ContractFragment(
-        name="test.recipe.bitstream",
-        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
-        cases=[
-            RecipeRule(
-                source_op=vector.vector_bitunpacku,
-                guards=(
-                    Guard.bitunpack_storage(
-                        "source",
-                        "result",
-                        "width",
-                        register_bit_width=32,
-                        maximum_source_registers=16,
-                        maximum_result_lanes=32,
-                    ),
-                ),
-            )
-        ],
-    )
-
-    assert table.cases[0].source_op == vector.vector_bitunpacku
-
-
-def test_recipe_rule_rejects_oversized_bitstream_storage_policy() -> None:
-    with pytest.raises(
-        ValueError,
-        match=r"vector.bitunpacku: guard bitunpack_storage maximum result "
-        r"lane count must fit in u32",
-    ):
-        ContractFragment(
-            name="test.recipe.bitstream",
-            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
-            cases=[
-                RecipeRule(
-                    source_op=vector.vector_bitunpacku,
-                    guards=(
-                        Guard.bitunpack_storage(
-                            "source",
-                            "result",
-                            "width",
-                            register_bit_width=32,
-                            maximum_source_registers=16,
-                            maximum_result_lanes=0x100000000,
-                        ),
-                    ),
-                )
-            ],
-        )
+    assert table.cases[0].source_op == vector.vector_addi
 
 
 def test_elide_rule_rejects_operands() -> None:

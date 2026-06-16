@@ -69,8 +69,6 @@ class GuardKind(Enum):
     VALUE_STORAGE_ELEMENT_FORMAT = "value_storage_element_format"
     VALUE_NO_USES = "value_no_uses"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
-    BITPACK_STORAGE = "bitpack_storage"
-    BITUNPACK_STORAGE = "bitunpack_storage"
 
 
 _LOW_VALUE_GUARD_KINDS = (
@@ -513,50 +511,6 @@ class Guard:
             diagnostic=diagnostic,
         )
 
-    @classmethod
-    def bitpack_storage(
-        cls,
-        source_field: str,
-        result_field: str,
-        width_attr: str,
-        *,
-        register_bit_width: int,
-        result_payload_multiple: int,
-        diagnostic: GuardDiagnostic | None = None,
-    ) -> Self:
-        return cls(
-            kind=GuardKind.BITPACK_STORAGE,
-            field=source_field,
-            other_field=result_field,
-            attr_field=width_attr,
-            minimum=register_bit_width,
-            count=result_payload_multiple,
-            diagnostic=diagnostic,
-        )
-
-    @classmethod
-    def bitunpack_storage(
-        cls,
-        source_field: str,
-        result_field: str,
-        width_attr: str,
-        *,
-        register_bit_width: int,
-        maximum_source_registers: int,
-        maximum_result_lanes: int,
-        diagnostic: GuardDiagnostic | None = None,
-    ) -> Self:
-        return cls(
-            kind=GuardKind.BITUNPACK_STORAGE,
-            field=source_field,
-            other_field=result_field,
-            attr_field=width_attr,
-            count=maximum_source_registers,
-            minimum=register_bit_width,
-            maximum=maximum_result_lanes,
-            diagnostic=diagnostic,
-        )
-
     def __post_init__(self) -> None:
         if not self.field:
             raise ValueError(f"{self.kind.value} guard requires a field")
@@ -696,9 +650,6 @@ class Guard:
                     f"has no enum case '{self.enum_keyword}'"
                 )
             return
-        if self.kind in (GuardKind.BITPACK_STORAGE, GuardKind.BITUNPACK_STORAGE):
-            _validate_bitstream_storage_guard(self, source_op, subject)
-            return
         _validate_i64_array_guard(self, source_op, subject)
 
 
@@ -723,53 +674,6 @@ def _validate_low_value_guard(
     if guard.other_field is None:
         raise ValueError(f"{source_op.name}: {subject} needs another value")
     _require_value(source_op, guard.other_field, subject)
-
-
-def _validate_bitstream_storage_guard(
-    guard: Guard,
-    source_op: Op,
-    subject: str,
-) -> None:
-    _require_value(source_op, guard.field, subject)
-    if guard.other_field is None:
-        raise ValueError(f"{source_op.name}: {subject} needs another value field")
-    _require_value(source_op, guard.other_field, subject)
-    if guard.attr_field is None:
-        raise ValueError(f"{source_op.name}: {subject} needs an attr field")
-    attr = _require_attr(source_op, guard.attr_field, subject)
-    if attr.attr_type != ATTR_TYPE_I64:
-        raise ValueError(
-            f"{source_op.name}: {subject} attr field "
-            f"'{guard.attr_field}' must be an i64 attr"
-        )
-
-    _require_positive_u32(
-        guard.minimum,
-        source_op,
-        subject,
-        "register bit width",
-    )
-    if guard.kind == GuardKind.BITPACK_STORAGE:
-        _require_positive_u32(
-            guard.count,
-            source_op,
-            subject,
-            "result payload multiple",
-        )
-        return
-
-    _require_positive_u32(
-        guard.count,
-        source_op,
-        subject,
-        "maximum source register count",
-    )
-    _require_positive_u32(
-        guard.maximum,
-        source_op,
-        subject,
-        "maximum result lane count",
-    )
 
 
 def _require_positive_u32(
