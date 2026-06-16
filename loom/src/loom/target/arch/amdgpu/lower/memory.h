@@ -321,6 +321,11 @@ iree_status_t loom_amdgpu_lower_view_prefetch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_prefetch_plan_t* plan);
 
+// Marks the physical source values needed by a selected AMDGPU prefetch plan.
+void loom_amdgpu_mark_prefetch_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_prefetch_plan_t* plan);
+
 // Records optional prefetch diagnostics for source view.prefetch hints.
 iree_status_t loom_amdgpu_record_view_prefetch_diagnostic(
     loom_target_low_legality_context_t* context, const loom_op_t* source_op,
