@@ -21,6 +21,52 @@ using ::iree::testing::status::StatusIs;
 using ::testing::Eq;
 using ::testing::Ne;
 
+static iree_hal_device_spec_t* CreateTestDeviceSpec(
+    const char* driver_id, uint32_t logical_ordinal, uint32_t physical_ordinal,
+    uint32_t numa_node, uint64_t physical_device_affinity) {
+  iree_hal_physical_device_spec_t physical_device = {
+      /*.identity=*/
+      {
+          /*.display_name=*/iree_make_cstring_view("test physical device"),
+          /*.backend_path=*/iree_make_cstring_view("test://physical"),
+          /*.vendor_id=*/0,
+          /*.device_id=*/0,
+          /*.revision_id=*/0,
+          /*.uuid=*/{{0}},
+          /*.pci=*/{0, 0, 0, 0},
+          /*.numa=*/{numa_node},
+          /*.flags=*/IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE,
+      },
+      /*.physical_ordinal=*/physical_ordinal,
+      /*.partition_ordinal=*/0,
+      /*.partition_count=*/1,
+      /*.physical_device_affinity=*/physical_device_affinity,
+  };
+  iree_hal_device_identity_spec_t identity = {
+      /*.logical_device_id=*/iree_make_cstring_view(driver_id),
+      /*.display_name=*/iree_make_cstring_view("test logical device"),
+      /*.driver_id=*/iree_make_cstring_view(driver_id),
+      /*.driver_version=*/iree_make_cstring_view("test"),
+      /*.backend_id=*/iree_make_cstring_view("test"),
+      /*.device_path=*/iree_make_cstring_view("test://logical"),
+      /*.vendor_name=*/iree_make_cstring_view("test"),
+      /*.vendor_id=*/0,
+      /*.device_id=*/0,
+      /*.revision_id=*/0,
+      /*.logical_ordinal=*/logical_ordinal,
+      /*.physical_device_count=*/1,
+      /*.physical_devices=*/&physical_device,
+      /*.flags=*/IREE_HAL_DEVICE_IDENTITY_FLAG_NONE,
+  };
+  iree_hal_device_spec_params_t params = {
+      /*.identity=*/&identity,
+  };
+  iree_hal_device_spec_t* device_spec = NULL;
+  IREE_CHECK_OK(iree_hal_device_spec_create(&params, iree_allocator_system(),
+                                            &device_spec));
+  return device_spec;
+}
+
 //===----------------------------------------------------------------------===//
 // Builder initialization tests
 //===----------------------------------------------------------------------===//
@@ -73,7 +119,7 @@ TEST(TopologyBuilder, SetEdges) {
 
   // Set cross-device edges with custom scheduling and interop settings.
   iree_hal_topology_edge_t cross_edge =
-      iree_hal_topology_edge_make_cross_driver();
+      iree_hal_topology_edge_make_host_staged();
   cross_edge.lo = iree_hal_topology_edge_set_wait_mode(
       cross_edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
   cross_edge.lo = iree_hal_topology_edge_set_signal_mode(
@@ -120,7 +166,7 @@ TEST(TopologyBuilder, LogicalDeviceNodes) {
   iree_hal_topology_builder_initialize(&builder, 2);
 
   iree_hal_topology_edge_t cross_edge =
-      iree_hal_topology_edge_make_cross_driver();
+      iree_hal_topology_edge_make_host_staged();
   IREE_ASSERT_OK(
       iree_hal_topology_builder_set_edge(&builder, 0, 1, cross_edge));
   IREE_ASSERT_OK(
@@ -150,13 +196,80 @@ TEST(TopologyBuilder, LogicalDeviceNodes) {
   iree_hal_topology_destroy(topology, iree_allocator_system());
 }
 
+// Tests that spec-aware finalize exposes physical placement nodes and links.
+TEST(TopologyBuilder, DeviceSpecNodesAndLinks) {
+  iree_hal_device_spec_t* spec_a =
+      CreateTestDeviceSpec("mock", 7, 11, 2, 1ull << 0);
+  iree_hal_device_spec_t* spec_b =
+      CreateTestDeviceSpec("mock", 8, 12, 3, 1ull << 1);
+  const iree_hal_device_spec_t* specs[2] = {spec_a, spec_b};
+
+  iree_hal_topology_builder_t builder;
+  iree_hal_topology_builder_initialize(&builder, 2);
+
+  iree_hal_topology_edge_t edge = iree_hal_topology_edge_make_host_staged();
+  IREE_ASSERT_OK(iree_hal_topology_builder_set_edge(&builder, 0, 1, edge));
+  IREE_ASSERT_OK(iree_hal_topology_builder_set_edge(&builder, 1, 0, edge));
+
+  iree_hal_topology_t* topology = NULL;
+  IREE_ASSERT_OK(iree_hal_topology_builder_finalize_with_device_specs(
+      &builder, specs, iree_allocator_system(), &topology));
+
+  EXPECT_EQ(iree_hal_topology_device_numa_node(topology, 0), 2u);
+  EXPECT_EQ(iree_hal_topology_device_numa_node(topology, 1), 3u);
+  ASSERT_EQ(iree_hal_topology_node_count(topology), 6u);
+  ASSERT_EQ(iree_hal_topology_link_count(topology), 4u);
+
+  const iree_hal_topology_node_t* numa0 =
+      iree_hal_topology_node_at(topology, 0);
+  ASSERT_NE(numa0, nullptr);
+  EXPECT_EQ(numa0->kind, IREE_HAL_TOPOLOGY_NODE_KIND_HOST_NUMA);
+  EXPECT_EQ(numa0->local_ordinal, 2u);
+  EXPECT_EQ(numa0->device_ordinal, IREE_HAL_TOPOLOGY_DEVICE_ORDINAL_INVALID);
+
+  const iree_hal_topology_node_t* logical0 =
+      iree_hal_topology_node_at(topology, 2);
+  ASSERT_NE(logical0, nullptr);
+  EXPECT_EQ(logical0->kind, IREE_HAL_TOPOLOGY_NODE_KIND_LOGICAL_DEVICE);
+  EXPECT_EQ(logical0->device_ordinal, 0u);
+  EXPECT_EQ(logical0->local_ordinal, 7u);
+
+  const iree_hal_topology_node_t* physical0 =
+      iree_hal_topology_node_at(topology, 4);
+  ASSERT_NE(physical0, nullptr);
+  EXPECT_EQ(physical0->kind, IREE_HAL_TOPOLOGY_NODE_KIND_PHYSICAL_DEVICE);
+  EXPECT_EQ(physical0->parent_ordinal, logical0->ordinal);
+  EXPECT_EQ(physical0->device_ordinal, 0u);
+  EXPECT_EQ(physical0->local_ordinal, 11u);
+  EXPECT_EQ(physical0->physical_device_affinity, 1ull << 0);
+
+  const iree_hal_topology_link_t* contains =
+      iree_hal_topology_link_at(topology, 0);
+  ASSERT_NE(contains, nullptr);
+  EXPECT_EQ(contains->source_node_ordinal, logical0->ordinal);
+  EXPECT_EQ(contains->target_node_ordinal, physical0->ordinal);
+  EXPECT_EQ(contains->kind, IREE_HAL_TOPOLOGY_LINK_KIND_CONTAINS);
+
+  const iree_hal_topology_link_t* numa_link =
+      iree_hal_topology_link_at(topology, 1);
+  ASSERT_NE(numa_link, nullptr);
+  EXPECT_EQ(numa_link->source_node_ordinal, numa0->ordinal);
+  EXPECT_EQ(numa_link->target_node_ordinal, physical0->ordinal);
+  EXPECT_EQ(numa_link->kind, IREE_HAL_TOPOLOGY_LINK_KIND_INTERCONNECT);
+  EXPECT_TRUE(numa_link->flags & IREE_HAL_TOPOLOGY_LINK_FLAG_BIDIRECTIONAL);
+
+  iree_hal_topology_destroy(topology, iree_allocator_system());
+  iree_hal_device_spec_release(spec_b);
+  iree_hal_device_spec_release(spec_a);
+}
+
 // Tests that both words of an edge are preserved through set_edge and finalize.
 TEST(TopologyBuilder, FullEdgePreservation) {
   iree_hal_topology_builder_t builder;
   iree_hal_topology_builder_initialize(&builder, 2);
 
   // Build a fully-populated cross-device edge.
-  iree_hal_topology_edge_t edge = iree_hal_topology_edge_make_cross_driver();
+  iree_hal_topology_edge_t edge = iree_hal_topology_edge_make_host_staged();
   edge.lo = iree_hal_topology_edge_set_wait_mode(
       edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
   edge.lo = iree_hal_topology_edge_set_signal_mode(
@@ -243,11 +356,11 @@ TEST(TopologyBuilder, ValidationFailsAsymmetricLinks) {
   iree_hal_topology_builder_initialize(&builder, 2);
 
   // Set asymmetric cross-device edges (different link classes).
-  iree_hal_topology_edge_t edge1 = iree_hal_topology_edge_make_cross_driver();
+  iree_hal_topology_edge_t edge1 = iree_hal_topology_edge_make_host_staged();
   edge1.lo = iree_hal_topology_edge_set_link_class(
       edge1.lo, IREE_HAL_TOPOLOGY_LINK_CLASS_NVLINK_IF);
 
-  iree_hal_topology_edge_t edge2 = iree_hal_topology_edge_make_cross_driver();
+  iree_hal_topology_edge_t edge2 = iree_hal_topology_edge_make_host_staged();
   edge2.lo = iree_hal_topology_edge_set_link_class(
       edge2.lo, IREE_HAL_TOPOLOGY_LINK_CLASS_PCIE_SAME_ROOT);
 
@@ -297,7 +410,7 @@ TEST(TopologyBuilder, NumaNodes) {
     for (uint32_t j = 0; j < 4; ++j) {
       if (i != j) {
         iree_hal_topology_edge_t cross =
-            iree_hal_topology_edge_make_cross_driver();
+            iree_hal_topology_edge_make_host_staged();
         // Same NUMA node = lower cost (costs are 4-bit, max 15).
         uint8_t cost =
             (builder.device_numa_nodes[i] == builder.device_numa_nodes[j]) ? 5
@@ -341,7 +454,7 @@ TEST(TopologyBuilder, QueryEdges) {
     for (uint32_t j = 0; j < 3; ++j) {
       if (i != j) {
         iree_hal_topology_edge_t edge =
-            iree_hal_topology_edge_make_cross_driver();
+            iree_hal_topology_edge_make_host_staged();
         // Give each edge a unique copy cost for identification.
         edge.lo =
             iree_hal_topology_edge_set_copy_cost(edge.lo, (uint8_t)(i * 3 + j));

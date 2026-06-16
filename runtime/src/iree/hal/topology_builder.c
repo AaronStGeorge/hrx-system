@@ -11,7 +11,6 @@
 #include <string.h>
 
 #include "iree/base/internal/atomics.h"
-#include "iree/hal/device.h"
 #include "iree/hal/utils/platform_topology.h"
 
 //===----------------------------------------------------------------------===//
@@ -156,6 +155,216 @@ IREE_API_EXPORT void iree_hal_topology_destroy(
 }
 
 //===----------------------------------------------------------------------===//
+// Device spec projection helpers
+//===----------------------------------------------------------------------===//
+
+static bool iree_hal_physical_device_spec_try_get_numa_node(
+    const iree_hal_physical_device_spec_t* physical_device,
+    uint8_t* out_numa_node) {
+  IREE_ASSERT_ARGUMENT(physical_device);
+  IREE_ASSERT_ARGUMENT(out_numa_node);
+  if (!iree_all_bits_set(physical_device->identity.flags,
+                         IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE)) {
+    return false;
+  }
+  if (physical_device->identity.numa.node_id > UINT8_MAX) return false;
+  *out_numa_node = (uint8_t)physical_device->identity.numa.node_id;
+  return true;
+}
+
+static bool iree_hal_topology_device_spec_try_get_representative_numa_node(
+    const iree_hal_device_spec_t* device_spec,
+    uint8_t* out_representative_numa_node) {
+  IREE_ASSERT_ARGUMENT(device_spec);
+  IREE_ASSERT_ARGUMENT(out_representative_numa_node);
+  const iree_hal_device_identity_spec_t* identity =
+      iree_hal_device_spec_identity(device_spec);
+  if (!identity->physical_device_count) return false;
+
+  uint8_t representative_numa_node = 0;
+  if (!iree_hal_physical_device_spec_try_get_numa_node(
+          &identity->physical_devices[0], &representative_numa_node)) {
+    return false;
+  }
+  for (iree_host_size_t i = 1; i < identity->physical_device_count; ++i) {
+    uint8_t numa_node = 0;
+    if (!iree_hal_physical_device_spec_try_get_numa_node(
+            &identity->physical_devices[i], &numa_node) ||
+        numa_node != representative_numa_node) {
+      return false;
+    }
+  }
+  *out_representative_numa_node = representative_numa_node;
+  return true;
+}
+
+IREE_API_EXPORT uint8_t iree_hal_topology_device_spec_representative_numa_node(
+    const iree_hal_device_spec_t* device_spec) {
+  uint8_t representative_numa_node = 0;
+  if (!iree_hal_topology_device_spec_try_get_representative_numa_node(
+          device_spec, &representative_numa_node)) {
+    return 0;
+  }
+  return representative_numa_node;
+}
+
+static bool iree_hal_uuid_equal(iree_hal_uuid_t lhs, iree_hal_uuid_t rhs) {
+  return memcmp(lhs.bytes, rhs.bytes, sizeof(lhs.bytes)) == 0;
+}
+
+static bool iree_hal_physical_device_spec_has_uuid(
+    const iree_hal_physical_device_spec_t* physical_device) {
+  return iree_all_bits_set(physical_device->identity.flags,
+                           IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_UUID);
+}
+
+static bool iree_hal_topology_physical_device_sets_match_by_uuid(
+    const iree_hal_device_identity_spec_t* source_identity,
+    const iree_hal_device_identity_spec_t* destination_identity) {
+  if (source_identity->physical_device_count == 0 ||
+      source_identity->physical_device_count !=
+          destination_identity->physical_device_count) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < source_identity->physical_device_count;
+       ++i) {
+    const iree_hal_physical_device_spec_t* source_physical =
+        &source_identity->physical_devices[i];
+    if (!iree_hal_physical_device_spec_has_uuid(source_physical)) {
+      return false;
+    }
+    bool found_match = false;
+    for (iree_host_size_t j = 0;
+         j < destination_identity->physical_device_count && !found_match; ++j) {
+      const iree_hal_physical_device_spec_t* destination_physical =
+          &destination_identity->physical_devices[j];
+      found_match =
+          iree_hal_physical_device_spec_has_uuid(destination_physical) &&
+          iree_hal_uuid_equal(source_physical->identity.uuid,
+                              destination_physical->identity.uuid);
+    }
+    if (!found_match) return false;
+  }
+  return true;
+}
+
+static iree_hal_topology_handle_type_t
+iree_hal_topology_device_spec_external_buffer_handle_types(
+    const iree_hal_device_spec_t* device_spec,
+    iree_hal_external_handle_direction_flags_t direction_flags) {
+  const iree_hal_device_memory_spec_t* memory =
+      iree_hal_device_spec_memory(device_spec);
+  uint32_t handle_types = IREE_HAL_TOPOLOGY_HANDLE_TYPE_NONE;
+  for (iree_host_size_t i = 0; i < memory->external_buffer_handle_count; ++i) {
+    const iree_hal_external_buffer_handle_spec_t* handle =
+        &memory->external_buffer_handles[i];
+    if (iree_all_bits_set(handle->direction_flags, direction_flags)) {
+      handle_types |= handle->handle_type_mask;
+    }
+  }
+  return (iree_hal_topology_handle_type_t)handle_types;
+}
+
+static uint8_t iree_hal_topology_numa_distance_between_device_specs(
+    const iree_hal_device_spec_t* source_spec,
+    const iree_hal_device_spec_t* destination_spec) {
+  uint8_t source_numa_node = 0;
+  uint8_t destination_numa_node = 0;
+  if (!iree_hal_topology_device_spec_try_get_representative_numa_node(
+          source_spec, &source_numa_node) ||
+      !iree_hal_topology_device_spec_try_get_representative_numa_node(
+          destination_spec, &destination_numa_node)) {
+    return 0;
+  }
+  if (source_numa_node == destination_numa_node) return 0;
+
+  uint8_t slit_distance = 0;
+  if (iree_hal_platform_try_query_numa_distance(
+          source_numa_node, destination_numa_node, &slit_distance)) {
+    uint32_t scaled_distance =
+        slit_distance > 10 ? (slit_distance - 10) / 2 : 0;
+    return (uint8_t)iree_min(scaled_distance, 15u);
+  }
+  return 3;
+}
+
+IREE_API_EXPORT iree_hal_topology_edge_t
+iree_hal_topology_edge_from_device_specs(
+    const iree_hal_device_spec_t* source_spec,
+    const iree_hal_device_spec_t* destination_spec) {
+  IREE_ASSERT_ARGUMENT(source_spec);
+  IREE_ASSERT_ARGUMENT(destination_spec);
+
+  const iree_hal_device_identity_spec_t* source_identity =
+      iree_hal_device_spec_identity(source_spec);
+  const iree_hal_device_identity_spec_t* destination_identity =
+      iree_hal_device_spec_identity(destination_spec);
+  const bool same_physical_device_set =
+      iree_hal_topology_physical_device_sets_match_by_uuid(
+          source_identity, destination_identity);
+
+  iree_hal_topology_handle_type_t source_buffer_export_types =
+      iree_hal_topology_device_spec_external_buffer_handle_types(
+          source_spec, IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT);
+  iree_hal_topology_handle_type_t destination_buffer_import_types =
+      iree_hal_topology_device_spec_external_buffer_handle_types(
+          destination_spec, IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT);
+  iree_hal_topology_handle_type_t buffer_import_types =
+      source_buffer_export_types & destination_buffer_import_types;
+  iree_hal_topology_handle_type_t buffer_export_types = buffer_import_types;
+  const bool has_buffer_import =
+      buffer_import_types != IREE_HAL_TOPOLOGY_HANDLE_TYPE_NONE;
+
+  iree_hal_topology_edge_t edge = iree_hal_topology_edge_make_host_staged();
+  edge.hi = iree_hal_topology_edge_set_buffer_import_types(edge.hi,
+                                                           buffer_import_types);
+  edge.hi = iree_hal_topology_edge_set_buffer_export_types(edge.hi,
+                                                           buffer_export_types);
+
+  iree_hal_topology_capability_t capabilities =
+      IREE_HAL_TOPOLOGY_CAPABILITY_NONE;
+  if (has_buffer_import) {
+    edge.lo = iree_hal_topology_edge_set_buffer_read_mode_noncoherent(
+        edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+    edge.lo = iree_hal_topology_edge_set_buffer_write_mode_noncoherent(
+        edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+    edge.lo = iree_hal_topology_edge_set_buffer_read_mode_coherent(
+        edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+    edge.lo = iree_hal_topology_edge_set_buffer_write_mode_coherent(
+        edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+  }
+
+  iree_hal_topology_link_class_t link_class =
+      IREE_HAL_TOPOLOGY_LINK_CLASS_HOST_STAGED;
+  if (same_physical_device_set) {
+    link_class = IREE_HAL_TOPOLOGY_LINK_CLASS_SAME_DIE;
+  } else if (has_buffer_import) {
+    link_class = IREE_HAL_TOPOLOGY_LINK_CLASS_OTHER;
+  }
+  edge.lo = iree_hal_topology_edge_set_link_class(edge.lo, link_class);
+
+  uint8_t wait_cost = 10;
+  uint8_t signal_cost = 10;
+  edge.lo = iree_hal_topology_edge_set_wait_cost(edge.lo, wait_cost);
+  edge.lo = iree_hal_topology_edge_set_signal_cost(edge.lo, signal_cost);
+
+  uint8_t copy_cost = 13;
+  uint8_t latency_class = 11;
+  if (has_buffer_import) {
+    copy_cost = same_physical_device_set ? 3 : 6;
+    latency_class = same_physical_device_set ? 3 : 7;
+  }
+  edge.lo = iree_hal_topology_edge_set_copy_cost(edge.lo, copy_cost);
+  edge.lo = iree_hal_topology_edge_set_latency_class(edge.lo, latency_class);
+  edge.lo = iree_hal_topology_edge_set_numa_distance(
+      edge.lo, iree_hal_topology_numa_distance_between_device_specs(
+                   source_spec, destination_spec));
+  edge.lo = iree_hal_topology_edge_set_capability_flags(edge.lo, capabilities);
+
+  return edge;
+}
+
+//===----------------------------------------------------------------------===//
 // iree_hal_topology_builder_t
 //===----------------------------------------------------------------------===//
 
@@ -274,6 +483,193 @@ static iree_status_t iree_hal_topology_builder_validate(
   return iree_ok_status();
 }
 
+static bool iree_hal_topology_builder_find_numa_node_id(
+    const uint32_t* numa_node_ids, iree_host_size_t numa_node_count,
+    uint32_t node_id, iree_host_size_t* out_index) {
+  for (iree_host_size_t i = 0; i < numa_node_count; ++i) {
+    if (numa_node_ids[i] == node_id) {
+      *out_index = i;
+      return true;
+    }
+  }
+  *out_index = IREE_HOST_SIZE_MAX;
+  return false;
+}
+
+static void iree_hal_topology_builder_append_numa_node_id(
+    uint32_t node_id, uint32_t* numa_node_ids,
+    iree_host_size_t* inout_numa_node_count) {
+  iree_host_size_t existing_index = 0;
+  if (iree_hal_topology_builder_find_numa_node_id(
+          numa_node_ids, *inout_numa_node_count, node_id, &existing_index)) {
+    return;
+  }
+  numa_node_ids[(*inout_numa_node_count)++] = node_id;
+}
+
+static iree_host_size_t iree_hal_topology_builder_count_physical_devices(
+    uint32_t device_count, const iree_hal_device_spec_t* const* device_specs) {
+  iree_host_size_t physical_device_count = 0;
+  for (uint32_t i = 0; i < device_count; ++i) {
+    physical_device_count +=
+        iree_hal_device_spec_identity(device_specs[i])->physical_device_count;
+  }
+  return physical_device_count;
+}
+
+static iree_status_t iree_hal_topology_builder_create_spec_nodes_and_links(
+    uint32_t device_count, const iree_hal_device_spec_t* const* device_specs,
+    iree_allocator_t host_allocator, iree_host_size_t* out_node_count,
+    iree_hal_topology_node_t** out_nodes, iree_host_size_t* out_link_count,
+    iree_hal_topology_link_t** out_links) {
+  *out_node_count = 0;
+  *out_nodes = NULL;
+  *out_link_count = 0;
+  *out_links = NULL;
+
+  const iree_host_size_t physical_device_count =
+      iree_hal_topology_builder_count_physical_devices(device_count,
+                                                       device_specs);
+  uint32_t* numa_node_ids = NULL;
+  iree_status_t status = iree_ok_status();
+  if (physical_device_count != 0) {
+    status = iree_allocator_malloc_array(host_allocator, physical_device_count,
+                                         sizeof(*numa_node_ids),
+                                         (void**)&numa_node_ids);
+  }
+
+  iree_host_size_t numa_node_count = 0;
+  iree_host_size_t physical_numa_link_count = 0;
+  for (uint32_t i = 0; i < device_count && iree_status_is_ok(status); ++i) {
+    const iree_hal_device_identity_spec_t* identity =
+        iree_hal_device_spec_identity(device_specs[i]);
+    for (iree_host_size_t j = 0; j < identity->physical_device_count; ++j) {
+      const iree_hal_physical_device_spec_t* physical_device =
+          &identity->physical_devices[j];
+      uint8_t compact_numa_node = 0;
+      if (!iree_hal_physical_device_spec_try_get_numa_node(
+              physical_device, &compact_numa_node)) {
+        continue;
+      }
+      iree_hal_topology_builder_append_numa_node_id(
+          physical_device->identity.numa.node_id, numa_node_ids,
+          &numa_node_count);
+      ++physical_numa_link_count;
+    }
+  }
+
+  iree_hal_topology_node_t* nodes = NULL;
+  iree_hal_topology_link_t* links = NULL;
+  const iree_host_size_t node_count =
+      numa_node_count + device_count + physical_device_count;
+  const iree_host_size_t link_count =
+      physical_device_count + physical_numa_link_count;
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(host_allocator, node_count,
+                                         sizeof(*nodes), (void**)&nodes);
+  }
+  if (iree_status_is_ok(status) && link_count != 0) {
+    status = iree_allocator_malloc_array(host_allocator, link_count,
+                                         sizeof(*links), (void**)&links);
+  }
+
+  if (iree_status_is_ok(status)) {
+    memset(nodes, 0, node_count * sizeof(*nodes));
+    if (links) memset(links, 0, link_count * sizeof(*links));
+
+    iree_host_size_t node_index = 0;
+    for (iree_host_size_t i = 0; i < numa_node_count; ++i) {
+      nodes[node_index] = (iree_hal_topology_node_t){
+          .ordinal = (uint32_t)node_index,
+          .parent_ordinal = IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID,
+          .device_ordinal = IREE_HAL_TOPOLOGY_DEVICE_ORDINAL_INVALID,
+          .kind = IREE_HAL_TOPOLOGY_NODE_KIND_HOST_NUMA,
+          .local_ordinal = numa_node_ids[i],
+          .physical_device_affinity = 0,
+      };
+      ++node_index;
+    }
+
+    const iree_host_size_t logical_device_node_base = node_index;
+    for (uint32_t i = 0; i < device_count; ++i) {
+      const iree_hal_device_identity_spec_t* identity =
+          iree_hal_device_spec_identity(device_specs[i]);
+      nodes[node_index] = (iree_hal_topology_node_t){
+          .ordinal = (uint32_t)node_index,
+          .parent_ordinal = IREE_HAL_TOPOLOGY_NODE_ORDINAL_INVALID,
+          .device_ordinal = i,
+          .kind = IREE_HAL_TOPOLOGY_NODE_KIND_LOGICAL_DEVICE,
+          .local_ordinal = identity->logical_ordinal,
+          .physical_device_affinity = 0,
+      };
+      ++node_index;
+    }
+
+    iree_host_size_t link_index = 0;
+    for (uint32_t i = 0; i < device_count; ++i) {
+      const iree_hal_device_identity_spec_t* identity =
+          iree_hal_device_spec_identity(device_specs[i]);
+      const uint32_t logical_node_ordinal =
+          (uint32_t)(logical_device_node_base + i);
+      for (iree_host_size_t j = 0; j < identity->physical_device_count; ++j) {
+        const iree_hal_physical_device_spec_t* physical_device =
+            &identity->physical_devices[j];
+        const uint32_t physical_node_ordinal = (uint32_t)node_index;
+        nodes[node_index] = (iree_hal_topology_node_t){
+            .ordinal = physical_node_ordinal,
+            .parent_ordinal = logical_node_ordinal,
+            .device_ordinal = i,
+            .kind = IREE_HAL_TOPOLOGY_NODE_KIND_PHYSICAL_DEVICE,
+            .local_ordinal = physical_device->physical_ordinal,
+            .physical_device_affinity =
+                physical_device->physical_device_affinity,
+        };
+        ++node_index;
+
+        links[link_index++] = (iree_hal_topology_link_t){
+            .source_node_ordinal = logical_node_ordinal,
+            .target_node_ordinal = physical_node_ordinal,
+            .kind = IREE_HAL_TOPOLOGY_LINK_KIND_CONTAINS,
+            .flags = IREE_HAL_TOPOLOGY_LINK_FLAG_NONE,
+            .distance = 0,
+            .bandwidth_bytes_per_second = 0,
+            .latency_nanoseconds = 0,
+        };
+
+        uint8_t compact_numa_node = 0;
+        if (iree_hal_physical_device_spec_try_get_numa_node(
+                physical_device, &compact_numa_node)) {
+          iree_host_size_t numa_node_index = 0;
+          bool found_numa_node = iree_hal_topology_builder_find_numa_node_id(
+              numa_node_ids, numa_node_count,
+              physical_device->identity.numa.node_id, &numa_node_index);
+          IREE_ASSERT_TRUE(found_numa_node);
+          links[link_index++] = (iree_hal_topology_link_t){
+              .source_node_ordinal = (uint32_t)numa_node_index,
+              .target_node_ordinal = physical_node_ordinal,
+              .kind = IREE_HAL_TOPOLOGY_LINK_KIND_INTERCONNECT,
+              .flags = IREE_HAL_TOPOLOGY_LINK_FLAG_BIDIRECTIONAL,
+              .distance = 0,
+              .bandwidth_bytes_per_second = 0,
+              .latency_nanoseconds = 0,
+          };
+        }
+      }
+    }
+
+    *out_node_count = node_count;
+    *out_nodes = nodes;
+    *out_link_count = link_count;
+    *out_links = links;
+  } else {
+    iree_allocator_free(host_allocator, links);
+    iree_allocator_free(host_allocator, nodes);
+  }
+
+  iree_allocator_free(host_allocator, numa_node_ids);
+  return status;
+}
+
 iree_status_t iree_hal_topology_builder_finalize(
     iree_hal_topology_builder_t* builder, iree_allocator_t host_allocator,
     iree_hal_topology_t** out_topology) {
@@ -302,6 +698,58 @@ iree_status_t iree_hal_topology_builder_finalize(
       builder->device_count, device_nodes, /*link_count=*/0, /*links=*/NULL,
       host_allocator, out_topology);
 
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
+IREE_API_EXPORT iree_status_t
+iree_hal_topology_builder_finalize_with_device_specs(
+    iree_hal_topology_builder_t* builder,
+    const iree_hal_device_spec_t* const* device_specs,
+    iree_allocator_t host_allocator, iree_hal_topology_t** out_topology) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  IREE_ASSERT_ARGUMENT(builder);
+  IREE_ASSERT_ARGUMENT(device_specs);
+  IREE_ASSERT_ARGUMENT(out_topology);
+  *out_topology = NULL;
+
+  iree_status_t status = iree_hal_topology_builder_validate(builder);
+  for (uint32_t i = 0; i < builder->device_count && iree_status_is_ok(status);
+       ++i) {
+    if (IREE_UNLIKELY(!device_specs[i])) {
+      status = iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "topology device spec %u is NULL; every HAL device must provide "
+          "cached immutable specs",
+          i);
+    }
+  }
+  for (uint32_t i = 0; i < builder->device_count && iree_status_is_ok(status);
+       ++i) {
+    status = iree_hal_topology_builder_set_numa_node(
+        builder, i,
+        iree_hal_topology_device_spec_representative_numa_node(
+            device_specs[i]));
+  }
+
+  iree_host_size_t node_count = 0;
+  iree_hal_topology_node_t* nodes = NULL;
+  iree_host_size_t link_count = 0;
+  iree_hal_topology_link_t* links = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_topology_builder_create_spec_nodes_and_links(
+        builder->device_count, device_specs, host_allocator, &node_count,
+        &nodes, &link_count, &links);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_topology_create_with_storage(
+        builder->device_count, builder->device_numa_nodes,
+        builder->device_edges, node_count, nodes, link_count, links,
+        host_allocator, out_topology);
+  }
+
+  iree_allocator_free(host_allocator, links);
+  iree_allocator_free(host_allocator, nodes);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }
@@ -367,15 +815,15 @@ iree_hal_topology_edge_t iree_hal_topology_edge_make_self(void) {
   return edge;
 }
 
-iree_hal_topology_edge_t iree_hal_topology_edge_make_cross_driver(void) {
+iree_hal_topology_edge_t iree_hal_topology_edge_make_host_staged(void) {
   iree_hal_topology_edge_scheduling_word_t lo = 0;
   iree_hal_topology_edge_interop_word_t hi = 0;
 
-  // Default cross-driver settings require import/export.
+  // Host-staged settings require explicit host mediation.
   lo = iree_hal_topology_edge_set_wait_mode(
-      lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+      lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
   lo = iree_hal_topology_edge_set_signal_mode(
-      lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+      lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
   lo = iree_hal_topology_edge_set_buffer_read_mode_noncoherent(
       lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
   lo = iree_hal_topology_edge_set_buffer_write_mode_noncoherent(
@@ -385,298 +833,42 @@ iree_hal_topology_edge_t iree_hal_topology_edge_make_cross_driver(void) {
   lo = iree_hal_topology_edge_set_buffer_write_mode_coherent(
       lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
 
-  // Assume PCIe link by default.
+  // No direct physical link is proven.
   lo = iree_hal_topology_edge_set_link_class(
-      lo, IREE_HAL_TOPOLOGY_LINK_CLASS_PCIE_SAME_ROOT);
+      lo, IREE_HAL_TOPOLOGY_LINK_CLASS_HOST_STAGED);
 
-  // No special capabilities for cross-driver.
   lo = iree_hal_topology_edge_set_capability_flags(
       lo, IREE_HAL_TOPOLOGY_CAPABILITY_NONE);
 
-  // Moderate costs for cross-driver operations.
-  lo = iree_hal_topology_edge_set_wait_cost(lo, 5);
-  lo = iree_hal_topology_edge_set_signal_cost(lo, 5);
-  lo = iree_hal_topology_edge_set_copy_cost(lo, 10);
-  lo = iree_hal_topology_edge_set_latency_class(lo, 8);  // PCIe range (<10us).
-  lo = iree_hal_topology_edge_set_numa_distance(lo, 2);
-
-  // NOTE: we could add default OPAQUE_FD/etc per platform here but only if we
-  // know for certain every HAL supports it. We don't currently mandate a common
-  // required primitive so we avoid setting it at all.
+  lo = iree_hal_topology_edge_set_wait_cost(lo, 10);
+  lo = iree_hal_topology_edge_set_signal_cost(lo, 10);
+  lo = iree_hal_topology_edge_set_copy_cost(lo, 13);
+  lo = iree_hal_topology_edge_set_latency_class(lo, 11);
+  lo = iree_hal_topology_edge_set_numa_distance(lo, 0);
 
   iree_hal_topology_edge_t edge = {lo, hi};
   return edge;
 }
 
-IREE_API_EXPORT iree_hal_topology_edge_t
-iree_hal_topology_edge_from_capabilities(
-    const iree_hal_device_capabilities_t* src_caps,
-    const iree_hal_device_capabilities_t* dst_caps,
-    iree_string_view_t src_driver_name, iree_string_view_t dst_driver_name) {
-  iree_hal_topology_edge_scheduling_word_t lo = 0;
-  iree_hal_topology_edge_interop_word_t hi = 0;
+void iree_hal_topology_edge_refine_same_runtime_domain(
+    iree_hal_topology_edge_t* edge) {
+  IREE_ASSERT_ARGUMENT(edge);
 
-  // Same driver detection (enables NATIVE mode).
-  bool same_driver = iree_string_view_equal(src_driver_name, dst_driver_name);
+  edge->lo = iree_hal_topology_edge_set_wait_mode(
+      edge->lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE);
+  edge->lo = iree_hal_topology_edge_set_signal_mode(
+      edge->lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE);
+  edge->lo = iree_hal_topology_edge_set_wait_cost(edge->lo, 0);
+  edge->lo = iree_hal_topology_edge_set_signal_cost(edge->lo, 1);
+  iree_hal_topology_capability_t capabilities =
+      iree_hal_topology_edge_capability_flags(edge->lo);
+  capabilities |= IREE_HAL_TOPOLOGY_CAPABILITY_SAME_RUNTIME_DOMAIN |
+                  IREE_HAL_TOPOLOGY_CAPABILITY_TIMELINE_SEMAPHORE;
+  edge->lo =
+      iree_hal_topology_edge_set_capability_flags(edge->lo, capabilities);
 
-  // Same-driver aliasing detection: two iree_hal_device_t instances wrapping
-  // the same underlying driver object. They share all resources and should
-  // behave as self-edges (zero-cost NATIVE everything).
-  if (same_driver && src_caps->driver_device_handle != 0 &&
-      src_caps->driver_device_handle == dst_caps->driver_device_handle) {
-    return iree_hal_topology_edge_make_self();
-  }
-
-  // Physical device UUID matching (cross-driver same-GPU detection).
-  bool same_physical_device = false;
-  if (src_caps->has_physical_device_uuid &&
-      dst_caps->has_physical_device_uuid) {
-    same_physical_device = (memcmp(src_caps->physical_device_uuid,
-                                   dst_caps->physical_device_uuid, 16) == 0);
-    if (same_physical_device) {
-      // Same physical GPU! Upgrade link class even if different drivers.
-      lo = iree_hal_topology_edge_set_link_class(
-          lo, IREE_HAL_TOPOLOGY_LINK_CLASS_SAME_DIE);
-    }
-  }
-
-  // External handle type intersections.
-  // For a directed edge src→dst:
-  //   import_types = what dst can import from src (src exports ∩ dst imports)
-  //   export_types = what src can export to dst (dst exports ∩ src imports)
-  uint32_t semaphore_import_types =
-      src_caps->semaphore_export_types & dst_caps->semaphore_import_types;
-  uint32_t semaphore_export_types =
-      dst_caps->semaphore_export_types & src_caps->semaphore_import_types;
-  uint32_t buffer_import_types =
-      src_caps->buffer_export_types & dst_caps->buffer_import_types;
-  uint32_t buffer_export_types =
-      dst_caps->buffer_export_types & src_caps->buffer_import_types;
-
-  hi = iree_hal_topology_edge_set_semaphore_import_types(
-      hi, semaphore_import_types);
-  hi = iree_hal_topology_edge_set_semaphore_export_types(
-      hi, semaphore_export_types);
-  hi = iree_hal_topology_edge_set_buffer_import_types(hi, buffer_import_types);
-  hi = iree_hal_topology_edge_set_buffer_export_types(hi, buffer_export_types);
-
-  // Derive interop modes from handle types and flags.
-  iree_hal_topology_interop_mode_t wait_mode, signal_mode;
-  if (same_driver &&
-      (semaphore_import_types & IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE)) {
-    wait_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE;
-  } else if (semaphore_import_types != 0) {
-    wait_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT;
-  } else {
-    wait_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY;
-  }
-
-  if (same_driver &&
-      (semaphore_export_types & IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE)) {
-    signal_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE;
-  } else if (semaphore_export_types != 0) {
-    signal_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT;
-  } else {
-    signal_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY;
-  }
-
-  lo = iree_hal_topology_edge_set_wait_mode(lo, wait_mode);
-  lo = iree_hal_topology_edge_set_signal_mode(lo, signal_mode);
-
-  // Buffer modes (non-coherent and coherent).
-  //
-  // Each device pair has two sets of buffer modes reflecting the two memory
-  // types available in heterogeneous systems:
-  //
-  //   Non-coherent: device-local memory optimized for compute bandwidth.
-  //     Requires explicit DMA or host staging for cross-device access.
-  //     Determined by PEER_ADDRESSABLE (large BAR mapping) and P2P_COPY.
-  //
-  //   Coherent: memory with hardware-maintained coherency (fine-grained, SVM).
-  //     UNIFIED_MEMORY means device-visible coherent memory is accessible by
-  //     default. SHARED_VIRTUAL_ADDRESS only says matching virtual addresses
-  //     can be made meaningful; it may still require per-range access grants.
-  //
-  // NATIVE: load/store addressable — scheduler references the buffer directly.
-  // IMPORT: buffer handle import — one-time setup, then directly usable.
-  // COPY: transfer command required (P2P DMA or host-staged; see copy_cost).
-  //
-  // These are base defaults. refine_topology_edge queries actual per-pool
-  // access modes from the driver and may upgrade or downgrade either set.
-  bool peer_addressable =
-      (src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_PEER_ADDRESSABLE) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_PEER_ADDRESSABLE);
-  bool p2p_copy = (src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_P2P_COPY) &&
-                  (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_P2P_COPY);
-  bool unified_memory =
-      (src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_UNIFIED_MEMORY) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_UNIFIED_MEMORY);
-  bool shared_virtual_address =
-      (src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_SHARED_VIRTUAL_ADDRESS) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_SHARED_VIRTUAL_ADDRESS);
-
-  // Non-coherent buffer modes (device-local, coarse-grained).
-  iree_hal_topology_interop_mode_t nc_buffer_read_mode, nc_buffer_write_mode;
-  if (peer_addressable && same_driver) {
-    nc_buffer_read_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE;
-    nc_buffer_write_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE;
-  } else if (buffer_import_types != 0) {
-    nc_buffer_read_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT;
-    nc_buffer_write_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT;
-  } else {
-    nc_buffer_read_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY;
-    nc_buffer_write_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY;
-  }
-
-  lo = iree_hal_topology_edge_set_buffer_read_mode_noncoherent(
-      lo, nc_buffer_read_mode);
-  lo = iree_hal_topology_edge_set_buffer_write_mode_noncoherent(
-      lo, nc_buffer_write_mode);
-
-  // Coherent buffer modes (host-coherent, fine-grained, SVM).
-  // Coherent memory is often more accessible than non-coherent because SVM
-  // provides direct addressing without explicit grants. Unlike non-coherent
-  // mode, UNIFIED_MEMORY alone is sufficient for NATIVE — SVM guarantees
-  // pointer equivalence across drivers (e.g., CPU local-task + GPU amdgpu).
-  iree_hal_topology_interop_mode_t c_buffer_read_mode, c_buffer_write_mode;
-  if (unified_memory || (peer_addressable && same_driver)) {
-    c_buffer_read_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE;
-    c_buffer_write_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE;
-  } else if (buffer_import_types != 0) {
-    c_buffer_read_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT;
-    c_buffer_write_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT;
-  } else {
-    c_buffer_read_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY;
-    c_buffer_write_mode = IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY;
-  }
-
-  lo = iree_hal_topology_edge_set_buffer_read_mode_coherent(lo,
-                                                            c_buffer_read_mode);
-  lo = iree_hal_topology_edge_set_buffer_write_mode_coherent(
-      lo, c_buffer_write_mode);
-
-  // Capability flags (bitwise AND of device flags).
-  iree_hal_topology_capability_t caps = 0;
-
-  if (same_driver) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_SAME_RUNTIME_DOMAIN;
-  }
-
-  if ((src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_UNIFIED_MEMORY) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_UNIFIED_MEMORY)) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_UNIFIED_MEMORY;
-  }
-
-  if (shared_virtual_address) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_SHARED_VIRTUAL_ADDRESS;
-  }
-
-  if ((src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_PEER_COHERENT) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_PEER_COHERENT) &&
-      same_driver) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_PEER_COHERENT;
-  }
-
-  if ((src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_HOST_COHERENT) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_HOST_COHERENT)) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_HOST_COHERENT;
-  }
-
-  if ((src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_P2P_COPY) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_P2P_COPY)) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_P2P_COPY;
-  }
-
-  if ((src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_CONCURRENT_SAFE) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_CONCURRENT_SAFE)) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_CONCURRENT_SAFE;
-  }
-
-  if ((src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_DEVICE) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_DEVICE)) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_ATOMIC_DEVICE;
-  }
-
-  if ((src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_SYSTEM) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_SYSTEM)) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_ATOMIC_SYSTEM;
-  }
-
-  if ((src_caps->flags & IREE_HAL_DEVICE_CAPABILITY_TIMELINE_SEMAPHORES) &&
-      (dst_caps->flags & IREE_HAL_DEVICE_CAPABILITY_TIMELINE_SEMAPHORES)) {
-    caps |= IREE_HAL_TOPOLOGY_CAPABILITY_TIMELINE_SEMAPHORE;
-  }
-
-  lo = iree_hal_topology_edge_set_capability_flags(lo, caps);
-
-  // NUMA distance (queried from ACPI SLIT table via platform APIs).
-  if (src_caps->numa_node != dst_caps->numa_node) {
-    uint8_t slit_distance = 0;
-    uint32_t scaled_distance;
-    if (iree_hal_platform_try_query_numa_distance(
-            src_caps->numa_node, dst_caps->numa_node, &slit_distance)) {
-      // Normalize SLIT distance (10=same, 20=1hop, 30=2hop, ...) to 0-15 scale.
-      // Subtract the "same node" base of 10, divide by 2 to compress range.
-      scaled_distance = slit_distance > 10 ? (slit_distance - 10) / 2 : 0;
-    } else {
-      // Platform doesn't support SLIT queries; use a conservative default
-      // for cross-node distance. This will be refined by driver-specific logic
-      // via refine_topology_edge.
-      scaled_distance = 3;
-    }
-    scaled_distance = scaled_distance > 15 ? 15 : scaled_distance;
-    lo = iree_hal_topology_edge_set_numa_distance(lo, scaled_distance);
-  }
-
-  // Default link class (refinement can upgrade).
-  iree_hal_topology_link_class_t link_class =
-      IREE_HAL_TOPOLOGY_LINK_CLASS_SAME_DIE;
-  if (same_physical_device) {
-    link_class = IREE_HAL_TOPOLOGY_LINK_CLASS_SAME_DIE;
-  } else if (same_driver) {
-    link_class = IREE_HAL_TOPOLOGY_LINK_CLASS_PCIE_SAME_ROOT;
-  } else {
-    link_class = IREE_HAL_TOPOLOGY_LINK_CLASS_HOST_STAGED;
-  }
-  lo = iree_hal_topology_edge_set_link_class(lo, link_class);
-
-  // Default costs (refinement can adjust).
-  // Derive from interop modes and link class for accurate scheduling hints.
-  uint32_t wait_cost = (wait_mode == IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE) ? 0
-                       : (wait_mode == IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT)
-                           ? 3
-                           : 10;
-  uint32_t signal_cost =
-      (signal_mode == IREE_HAL_TOPOLOGY_INTEROP_MODE_NATIVE)   ? 1
-      : (signal_mode == IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT) ? 3
-                                                               : 10;
-
-  // Copy cost based on link class and P2P capability:
-  // SAME_DIE: 0-3 (very low, >500GB/s direct access)
-  // P2P DMA: 5-7 (direct device-to-device DMA, no host bounce)
-  // PCIE_SAME_ROOT: 8-11 (moderate, ~30GB/s PCIe, may need host staging)
-  // HOST_STAGED: 12-14 (high, <10GB/s with host bounce)
-  uint32_t copy_cost = 0;
-  uint32_t latency_class = 0;
-  if (same_physical_device) {
-    copy_cost = 0;      // Zero-copy same device.
-    latency_class = 0;  // <10ns same device.
-  } else if (p2p_copy && same_driver) {
-    copy_cost = 5;      // P2P DMA (~100GB/s NVLink, ~30GB/s PCIe P2P).
-    latency_class = 5;  // ~1us P2P DMA round-trip.
-  } else if (same_driver) {
-    copy_cost = 9;      // PCIe without P2P (~30GB/s with driver staging).
-    latency_class = 8;  // <10us driver-managed transfer.
-  } else {
-    copy_cost = 13;      // Host staging (<10GB/s).
-    latency_class = 11;  // 10-100us host bounce.
-  }
-
-  lo = iree_hal_topology_edge_set_wait_cost(lo, wait_cost);
-  lo = iree_hal_topology_edge_set_signal_cost(lo, signal_cost);
-  lo = iree_hal_topology_edge_set_copy_cost(lo, copy_cost);
-  lo = iree_hal_topology_edge_set_latency_class(lo, latency_class);
-
-  iree_hal_topology_edge_t edge = {lo, hi};
-  return edge;
+  edge->hi = iree_hal_topology_edge_set_semaphore_import_types(
+      edge->hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
+  edge->hi = iree_hal_topology_edge_set_semaphore_export_types(
+      edge->hi, IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE);
 }

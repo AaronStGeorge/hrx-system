@@ -356,8 +356,11 @@ enum iree_hal_device_capability_bits_e {
   // Reserved for future use (bits 12-63).
 };
 
-// Device capabilities for topology edge construction.
-// Contains ALL information needed for cross-driver edge computation.
+// Legacy scalar device capability snapshot.
+//
+// New topology construction uses cached immutable device specs plus
+// driver-local refinement. This scalar snapshot remains for drivers and tests
+// that have not yet been migrated to the richer spec surface.
 typedef struct iree_hal_device_capabilities_t {
   // Capability flags bitfield.
   iree_hal_device_capability_bits_t flags;
@@ -382,10 +385,8 @@ typedef struct iree_hal_device_capabilities_t {
 
   // Opaque driver-specific handle for same-driver aliasing detection.
   // 0 means "not set." When two same-driver devices report the same non-zero
-  // handle, they are wrapping the same underlying driver object.
-  // from_capabilities uses this to detect aliased devices and return a
-  // self-edge (zero-cost NATIVE). Also available to refine_topology_edge
-  // for driver-specific refinement.
+  // handle, they are wrapping the same underlying driver object. Also
+  // available to refine_topology_edge for driver-specific refinement.
   uintptr_t driver_device_handle;
 
   // Device group index (for same-driver multi-device groups).
@@ -579,10 +580,10 @@ IREE_API_EXPORT void iree_hal_device_replace_channel_provider(
 IREE_API_EXPORT
 iree_status_t iree_hal_device_trim(iree_hal_device_t* device);
 
-// Queries device capabilities for topology construction.
-// Returns all information needed for cross-driver edge building.
-// If the device doesn't support topology queries, returns OK with zeroed
-// struct.
+// Queries legacy scalar device capabilities.
+//
+// Immutable device specs are the source facts for topology construction; this
+// scalar surface remains for code that has not yet moved to specs.
 IREE_API_EXPORT iree_status_t iree_hal_device_query_capabilities(
     iree_hal_device_t* device,
     iree_hal_device_capabilities_t* out_capabilities);
@@ -637,9 +638,11 @@ IREE_API_EXPORT const iree_hal_device_topology_info_t*
 iree_hal_device_topology_info(iree_hal_device_t* device);
 
 // Refines a topology edge from |src_device| to |dst_device|.
-// This is called ONLY for same-driver device pairs during topology
-// construction. If the device doesn't support refinement, returns OK without
-// modification.
+//
+// Device specs provide the serializable source facts for topology projection.
+// This hook is called only for same-runtime-domain pairs where a driver may
+// prove additional process-local facts from live backend handles. If the device
+// has no such facts, it returns OK without modification.
 IREE_API_EXPORT iree_status_t iree_hal_device_refine_topology_edge(
     iree_hal_device_t* src_device, iree_hal_device_t* dst_device,
     iree_hal_topology_edge_t* edge);

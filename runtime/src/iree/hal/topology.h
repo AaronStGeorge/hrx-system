@@ -18,7 +18,6 @@ extern "C" {
 
 // Forward declarations.
 typedef struct iree_hal_device_t iree_hal_device_t;
-typedef struct iree_hal_device_capabilities_t iree_hal_device_capabilities_t;
 
 //===----------------------------------------------------------------------===//
 // Constants
@@ -227,7 +226,7 @@ typedef uint8_t iree_hal_topology_link_class_t;
 enum iree_hal_topology_handle_type_bits_t {
   // No external handle support.
   IREE_HAL_TOPOLOGY_HANDLE_TYPE_NONE = 0,
-  // Native handle for same-driver devices.
+  // Native handle for devices in the same runtime domain.
   IREE_HAL_TOPOLOGY_HANDLE_TYPE_NATIVE = 1u << 0,
   // POSIX file descriptor (Linux/Android).
   IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD = 1u << 1,
@@ -316,6 +315,12 @@ typedef struct iree_hal_topology_node_t {
   uint32_t device_ordinal;
   // Kind of topology object represented by this node.
   iree_hal_topology_node_kind_t kind;
+  // Kind-specific local ordinal such as an OS NUMA node id, physical device
+  // ordinal, memory domain index, or queue family index.
+  uint32_t local_ordinal;
+  // Physical device affinity represented by this node, or 0 when not tied to
+  // a specific physical-device subset.
+  uint64_t physical_device_affinity;
 } iree_hal_topology_node_t;
 
 // Kinds of links in a normalized HAL topology graph.
@@ -873,27 +878,6 @@ iree_hal_topology_edge_buffer_export_types(
 //   noncoherent COPY + P2P_COPY      -> pipeline with DMA
 //   otherwise                        -> replicate-and-compute
 // This decision happens once at plan construction time — no buffers exist yet.
-
-//===----------------------------------------------------------------------===//
-// iree_hal_topology_edge_t edge construction
-//===----------------------------------------------------------------------===//
-
-// Computes a base edge from device capabilities and driver names by:
-//  - Detecting same driver (enables NATIVE mode)
-//  - Matching physical device UUIDs (cross-driver same-GPU detection)
-//  - Intersecting external handle types (semaphore/buffer import/export)
-//  - Deriving interop modes from handle type intersections
-//  - Computing buffer modes based on P2P capability flags
-//  - Propagating capability flags (bitwise AND of device flags)
-//  - Calculating NUMA distance
-//  - Assigning default link class and costs
-// Returns base edge that can be refined by driver-specific logic via
-// iree_hal_device_refine_topology_edge().
-IREE_API_EXPORT iree_hal_topology_edge_t
-iree_hal_topology_edge_from_capabilities(
-    const iree_hal_device_capabilities_t* src_caps,
-    const iree_hal_device_capabilities_t* dst_caps,
-    iree_string_view_t src_driver_name, iree_string_view_t dst_driver_name);
 
 //===----------------------------------------------------------------------===//
 // iree_hal_topology_t formatting

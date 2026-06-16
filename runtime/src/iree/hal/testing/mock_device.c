@@ -407,9 +407,15 @@ iree_status_t iree_hal_mock_device_create(
       options->identifier, &device->identifier,
       (char*)device + total_size - options->identifier.size);
 
-  iree_status_t status = iree_hal_device_spec_create_minimal(
-      device->identifier, device->identifier, IREE_SV("mock"), IREE_SV("mock"),
-      host_allocator, &device->device_spec);
+  iree_status_t status = iree_ok_status();
+  if (options->device_spec) {
+    device->device_spec = options->device_spec;
+    iree_hal_device_spec_retain(device->device_spec);
+  } else {
+    status = iree_hal_device_spec_create_minimal(
+        device->identifier, device->identifier, IREE_SV("mock"),
+        IREE_SV("mock"), host_allocator, &device->device_spec);
+  }
   if (!iree_status_is_ok(status)) {
     iree_hal_device_release((iree_hal_device_t*)device);
     return status;
@@ -479,7 +485,7 @@ iree_hal_mock_device_topology_info(iree_hal_device_t* base_device) {
 static iree_status_t iree_hal_mock_device_refine_topology_edge(
     iree_hal_device_t* src_device, iree_hal_device_t* dst_device,
     iree_hal_topology_edge_t* edge) {
-  // No refinement — the base edge from capabilities is used as-is.
+  // No refinement; tests observe the common spec-derived projection as-is.
   return iree_ok_status();
 }
 

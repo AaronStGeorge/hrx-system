@@ -2175,6 +2175,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_refine_topology_edge(
   }
 
   iree_hal_amdgpu_topology_edge_aggregate_t aggregate;
+  iree_hal_topology_edge_refine_same_runtime_domain(edge);
   iree_hal_amdgpu_topology_edge_aggregate_initialize(*edge, &aggregate);
 
   // A composite logical device has one generic HAL topology node but several
