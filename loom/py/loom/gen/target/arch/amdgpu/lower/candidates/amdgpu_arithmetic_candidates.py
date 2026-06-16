@@ -44,6 +44,21 @@ class _FmaMixDescriptorCube:
     include_all_f32: bool
 
 
+@dataclass(frozen=True, slots=True)
+class _PackedTernaryDescriptorCandidate:
+    descriptor_key: str
+    source_permutation: tuple[int, int, int] = (0, 1, 2)
+    flags: tuple[str, ...] = ()
+    packet_unit_count: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class _PackedTernaryDescriptorCandidateArray:
+    array_name: str
+    count_name: str
+    candidates: tuple[_PackedTernaryDescriptorCandidate, ...]
+
+
 _SOURCE_KINDS = (
     _FmaMixSourceKind(
         keyword="f32",
@@ -60,6 +75,11 @@ _SOURCE_KINDS = (
 )
 
 _F32_SOURCE = ("f32", "f32", "f32")
+_PACKED_TERNARY_KNOWN_FLAGS = frozenset(
+    {
+        "LOOM_AMDGPU_PACKED_TERNARY_FLAG_TIED_ACCUMULATOR",
+    }
+)
 
 _FMA_MIX_DESCRIPTOR_CUBES = (
     _FmaMixDescriptorCube(
@@ -91,6 +111,57 @@ _FMA_MIX_DESCRIPTOR_CUBES = (
         array_name="kLoomAmdgpuMadMixhiF16DescriptorRefs",
         descriptor_key_prefix="amdgpu.v_mad_mixhi_f16",
         include_all_f32=True,
+    ),
+)
+
+_PACKED_TERNARY_DESCRIPTOR_CANDIDATE_ARRAYS = (
+    _PackedTernaryDescriptorCandidateArray(
+        array_name="kLoomAmdgpuPackedFmafF16DescriptorCandidates",
+        count_name="kLoomAmdgpuPackedFmafF16DescriptorCandidateCount",
+        candidates=(
+            _PackedTernaryDescriptorCandidate(
+                descriptor_key="amdgpu.v_pk_fmac_f16",
+                source_permutation=(2, 0, 1),
+                flags=("LOOM_AMDGPU_PACKED_TERNARY_FLAG_TIED_ACCUMULATOR",),
+            ),
+            _PackedTernaryDescriptorCandidate(
+                descriptor_key="amdgpu.v_pk_fma_f16",
+            ),
+        ),
+    ),
+    _PackedTernaryDescriptorCandidateArray(
+        array_name="kLoomAmdgpuPackedFmafF32DescriptorCandidates",
+        count_name="kLoomAmdgpuPackedFmafF32DescriptorCandidateCount",
+        candidates=(
+            _PackedTernaryDescriptorCandidate(
+                descriptor_key="amdgpu.v_pk_fma_f32",
+                packet_unit_count=2,
+            ),
+        ),
+    ),
+    _PackedTernaryDescriptorCandidateArray(
+        array_name="kLoomAmdgpuPackedFmaiSignedPreferenceDescriptorCandidates",
+        count_name="kLoomAmdgpuPackedFmaiSignedPreferenceDescriptorCandidateCount",
+        candidates=(
+            _PackedTernaryDescriptorCandidate(
+                descriptor_key="amdgpu.v_pk_mad_i16",
+            ),
+            _PackedTernaryDescriptorCandidate(
+                descriptor_key="amdgpu.v_pk_mad_u16",
+            ),
+        ),
+    ),
+    _PackedTernaryDescriptorCandidateArray(
+        array_name="kLoomAmdgpuPackedFmaiUnsignedPreferenceDescriptorCandidates",
+        count_name="kLoomAmdgpuPackedFmaiUnsignedPreferenceDescriptorCandidateCount",
+        candidates=(
+            _PackedTernaryDescriptorCandidate(
+                descriptor_key="amdgpu.v_pk_mad_u16",
+            ),
+            _PackedTernaryDescriptorCandidate(
+                descriptor_key="amdgpu.v_pk_mad_i16",
+            ),
+        ),
     ),
 )
 
@@ -164,6 +235,53 @@ def _emit_fma_mix_src2_literal_table(
     yield "};"
 
 
+def _validate_packed_ternary_candidate(
+    array: _PackedTernaryDescriptorCandidateArray,
+    candidate: _PackedTernaryDescriptorCandidate,
+    descriptor_ref_key_set: set[str],
+) -> None:
+    owner = f"AMDGPU packed ternary descriptor candidate {array.array_name}"
+    required_descriptor_ref_constant_name(owner, candidate.descriptor_key, descriptor_ref_key_set)
+    if sorted(candidate.source_permutation) != [0, 1, 2]:
+        raise ValueError(f"{owner} {candidate.descriptor_key} has invalid source permutation {candidate.source_permutation}")
+    unknown_flags = sorted(set(candidate.flags) - _PACKED_TERNARY_KNOWN_FLAGS)
+    if unknown_flags:
+        raise ValueError(f"{owner} {candidate.descriptor_key} has unknown flags {', '.join(unknown_flags)}")
+    if candidate.packet_unit_count not in (1, 2):
+        raise ValueError(f"{owner} {candidate.descriptor_key} has packet_unit_count {candidate.packet_unit_count}")
+
+
+def _packed_ternary_flags_expr(candidate: _PackedTernaryDescriptorCandidate) -> str:
+    if not candidate.flags:
+        return "0"
+    return " | ".join(candidate.flags)
+
+
+def _emit_packed_ternary_candidate_array(
+    array: _PackedTernaryDescriptorCandidateArray,
+    descriptor_ref_key_set: set[str],
+) -> Iterable[str]:
+    if not array.candidates:
+        raise ValueError(f"AMDGPU packed ternary descriptor array {array.array_name} is empty")
+    yield "const loom_amdgpu_packed_ternary_descriptor_candidate_t"
+    yield f"    {array.array_name}[] = {{"
+    for candidate in array.candidates:
+        _validate_packed_ternary_candidate(array, candidate, descriptor_ref_key_set)
+        descriptor_ref = required_descriptor_ref_constant_name(
+            f"AMDGPU packed ternary descriptor candidate {array.array_name}",
+            candidate.descriptor_key,
+            descriptor_ref_key_set,
+        )
+        yield "        {"
+        yield f"            .descriptor_ref = {descriptor_ref},"
+        yield f"            .source_permutation = {{{', '.join(str(source) for source in candidate.source_permutation)}}},"
+        yield f"            .flags = {_packed_ternary_flags_expr(candidate)},"
+        yield f"            .packet_unit_count = {candidate.packet_unit_count},"
+        yield "        },"
+    yield "};"
+    yield f"const uint32_t {array.count_name} = {len(array.candidates)}u;"
+
+
 def _emit_source(*, public_header: str) -> str:
     descriptor_ref_key_set = set(amdgpu_descriptor_ref_keys())
     data_lines: list[str] = []
@@ -174,6 +292,10 @@ def _emit_source(*, public_header: str) -> str:
         if expected_rows != (27 if cube.include_all_f32 else 26):
             raise ValueError(f"AMDGPU FMA-mix cube {cube.array_name} generated {expected_rows} source rows")
     data_lines.extend(_emit_fma_mix_src2_literal_table(descriptor_ref_key_set))
+    data_lines.append("")
+    for array in _PACKED_TERNARY_DESCRIPTOR_CANDIDATE_ARRAYS:
+        data_lines.extend(_emit_packed_ternary_candidate_array(array, descriptor_ref_key_set))
+        data_lines.append("")
 
     lines = [
         "// Copyright 2026 The IREE Authors",

@@ -38,8 +38,14 @@ def test_arithmetic_generator_emits_fma_mix_data_source_only() -> None:
     assert "kLoomAmdgpuFmaMixF32DescriptorRefs" in source
     assert "kLoomAmdgpuFmaMixF32Src2LiteralDescriptorRefs" in source
     assert "kLoomAmdgpuMadMixhiF16DescriptorRefs" in source
+    assert "kLoomAmdgpuPackedFmafF16DescriptorCandidates" in source
+    assert "kLoomAmdgpuPackedFmaiUnsignedPreferenceDescriptorCandidates" in source
     assert "LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_MIX_F32_F32_F16LO_F16HI" in source
     assert "LOOM_AMDGPU_DESCRIPTOR_REF_V_MAD_MIXHI_F16_F32_F32_F32" in source
+    assert "LOOM_AMDGPU_DESCRIPTOR_REF_V_PK_FMAC_F16" in source
+    assert "LOOM_AMDGPU_DESCRIPTOR_REF_V_PK_MAD_U16" in source
+    assert ".source_permutation = {2, 0, 1}" in source
+    assert ".flags = LOOM_AMDGPU_PACKED_TERNARY_FLAG_TIED_ACCUMULATOR" in source
     assert "LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_MIX_F32_F32_F32_F32" not in source
 
 
@@ -50,6 +56,25 @@ def test_arithmetic_generator_covers_fma_mix_descriptor_lattice() -> None:
     assert len(amdgpu_arithmetic_candidates._fma_mix_source_combinations(include_all_f32=False)) == 26
     assert amdgpu_arithmetic_candidates._fma_mix_src2_literal_descriptor_key("f16lo", "f32") == "amdgpu.v_fma_mix_f32.f16lo_f32_f32.src2_lit"
     assert amdgpu_arithmetic_candidates._fma_mix_src2_literal_descriptor_key("f32", "f32") is None
+
+
+def test_arithmetic_generator_covers_packed_ternary_descriptor_candidates() -> None:
+    arrays = amdgpu_arithmetic_candidates._PACKED_TERNARY_DESCRIPTOR_CANDIDATE_ARRAYS
+
+    assert [len(array.candidates) for array in arrays] == [2, 1, 2, 2]
+    assert arrays[0].candidates[0].descriptor_key == "amdgpu.v_pk_fmac_f16"
+    assert arrays[0].candidates[0].source_permutation == (2, 0, 1)
+    assert arrays[0].candidates[0].flags == ("LOOM_AMDGPU_PACKED_TERNARY_FLAG_TIED_ACCUMULATOR",)
+    assert arrays[1].candidates[0].descriptor_key == "amdgpu.v_pk_fma_f32"
+    assert arrays[1].candidates[0].packet_unit_count == 2
+    assert [candidate.descriptor_key for candidate in arrays[2].candidates] == [
+        "amdgpu.v_pk_mad_i16",
+        "amdgpu.v_pk_mad_u16",
+    ]
+    assert [candidate.descriptor_key for candidate in arrays[3].candidates] == [
+        "amdgpu.v_pk_mad_u16",
+        "amdgpu.v_pk_mad_i16",
+    ]
 
 
 def test_arithmetic_generator_rejects_missing_fma_mix_descriptor_ref() -> None:
@@ -64,6 +89,24 @@ def test_arithmetic_generator_rejects_missing_fma_mix_descriptor_ref() -> None:
                 r"kLoomAmdgpuFmaMixF32DescriptorRefs f32 f32 f16lo "
                 r"requires missing descriptor refs: "
                 r"amdgpu\.v_fma_mix_f32\.f32_f32_f16lo"
+            ),
+        ):
+            amdgpu_arithmetic_candidates._emit_source(public_header=_ARITHMETIC_HEADER)
+    finally:
+        amdgpu_arithmetic_candidates.amdgpu_descriptor_ref_keys = original_descriptor_ref_keys
+
+
+def test_arithmetic_generator_rejects_missing_packed_ternary_descriptor_ref() -> None:
+    descriptor_ref_keys = tuple(key for key in amdgpu_arithmetic_candidates.amdgpu_descriptor_ref_keys() if key != "amdgpu.v_pk_fmac_f16")
+    original_descriptor_ref_keys = amdgpu_arithmetic_candidates.amdgpu_descriptor_ref_keys
+    try:
+        amdgpu_arithmetic_candidates.amdgpu_descriptor_ref_keys = lambda: descriptor_ref_keys
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"AMDGPU packed ternary descriptor candidate "
+                r"kLoomAmdgpuPackedFmafF16DescriptorCandidates "
+                r"requires missing descriptor refs: amdgpu\.v_pk_fmac_f16"
             ),
         ):
             amdgpu_arithmetic_candidates._emit_source(public_header=_ARITHMETIC_HEADER)

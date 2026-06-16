@@ -115,6 +115,8 @@ typedef struct loom_amdgpu_packed_ternary_plan_t {
   loom_value_id_t result;
   // Descriptor row selected for each packed ternary packet.
   loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // Flags describing selected descriptor packet semantics.
+  loom_amdgpu_packed_ternary_flags_t flags;
   // Number of 32-bit register units in each source and result vector.
   uint32_t register_count;
   // Number of 32-bit register units consumed and produced by each packet.

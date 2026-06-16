@@ -9,6 +9,8 @@
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_KINDS_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_KINDS_H_
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -83,6 +85,13 @@ enum {
   LOOM_AMDGPU_MULF_MIX_SOURCE_COUNT = 2,
   // Number of source operands in packed ternary packet order.
   LOOM_AMDGPU_PACKED_TERNARY_SOURCE_COUNT = 3,
+};
+
+typedef uint32_t loom_amdgpu_packed_ternary_flags_t;
+
+enum {
+  // The descriptor ties its result to the first source operand.
+  LOOM_AMDGPU_PACKED_TERNARY_FLAG_TIED_ACCUMULATOR = 1u << 0,
 };
 
 #ifdef __cplusplus
