@@ -479,7 +479,7 @@ static iree_status_t loom_low_select_operand_form_emit_decision(
     const loom_low_descriptor_t* source_descriptor,
     const loom_low_descriptor_t* replacement_descriptor,
     const loom_low_operand_form_t* form, iree_string_view_t decision,
-    iree_string_view_t reason, int64_t immediate_value,
+    iree_string_view_t reason_key, int64_t immediate_value,
     const loom_low_select_operand_form_destructive_info_t* destructive_info) {
   if (!state->emit_operand_form_diagnostics) {
     return iree_ok_status();
@@ -524,7 +524,7 @@ static iree_status_t loom_low_select_operand_form_emit_decision(
       loom_param_string(
           loom_low_descriptor_key(descriptor_set, replacement_descriptor)),
       loom_param_string(decision),
-      loom_param_string(reason),
+      loom_param_string(reason_key),
       loom_low_select_operand_form_operand_param(source_operand_name,
                                                  source_packet_operand_index),
       loom_param_string(loom_low_descriptor_immediate_name(
@@ -886,10 +886,10 @@ static iree_status_t loom_low_select_operand_form_resolve_immediate_value(
     const loom_low_descriptor_t* replacement_descriptor,
     const loom_low_operand_form_t* form, int64_t matched_value,
     loom_named_attr_slice_t source_attrs, int64_t* out_immediate_value,
-    bool* out_can_rewrite, iree_string_view_t* out_reject_reason) {
+    bool* out_can_rewrite, iree_string_view_t* out_reject_reason_key) {
   *out_immediate_value = 0;
   *out_can_rewrite = true;
-  *out_reject_reason = IREE_SV("selected");
+  *out_reject_reason_key = IREE_SV("selected");
 
   int64_t replacement_value = 0;
   switch (form->immediate_action) {
@@ -907,13 +907,13 @@ static iree_status_t loom_low_select_operand_form_resolve_immediate_value(
           &source_value));
       if (!has_source_value) {
         *out_can_rewrite = false;
-        *out_reject_reason = IREE_SV("missing_source_immediate");
+        *out_reject_reason_key = IREE_SV("missing_source_immediate");
         return iree_ok_status();
       }
       if (!loom_checked_add_i64(source_value, matched_value,
                                 &replacement_value)) {
         *out_can_rewrite = false;
-        *out_reject_reason = IREE_SV("immediate_overflow");
+        *out_reject_reason_key = IREE_SV("immediate_overflow");
         return iree_ok_status();
       }
       break;
@@ -933,7 +933,7 @@ static iree_status_t loom_low_select_operand_form_resolve_immediate_value(
   if (!loom_low_immediate_accepts_i64(descriptor_set, immediate,
                                       replacement_value)) {
     *out_can_rewrite = false;
-    *out_reject_reason = IREE_SV("immediate_out_of_range");
+    *out_reject_reason_key = IREE_SV("immediate_out_of_range");
     return iree_ok_status();
   }
   return iree_ok_status();
@@ -1007,18 +1007,18 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
 
   int64_t immediate_value = 0;
   bool can_rewrite = false;
-  iree_string_view_t reject_reason = IREE_SV("selected");
+  iree_string_view_t reject_reason_key = IREE_SV("selected");
   IREE_RETURN_IF_ERROR(loom_low_select_operand_form_resolve_immediate_value(
       state->module, descriptor_set, source_descriptor, replacement_descriptor,
       form, matched_value, loom_low_op_attrs(op), &immediate_value,
-      &can_rewrite, &reject_reason));
+      &can_rewrite, &reject_reason_key));
   if (!can_rewrite) {
     loom_low_select_operand_form_destructive_info_t no_destructive_info;
     loom_low_select_operand_form_reset_destructive_info(&no_destructive_info);
     ++state->statistics->forms_rejected;
     IREE_RETURN_IF_ERROR(loom_low_select_operand_form_emit_decision(
         state, op, source_descriptor, replacement_descriptor, form,
-        IREE_SV("rejected"), reject_reason, immediate_value,
+        IREE_SV("rejected"), reject_reason_key, immediate_value,
         &no_destructive_info));
     return iree_ok_status();
   }
