@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:python.bzl", "iree_py_library")
+load("//build_tools/bazel:python.bzl", "iree_py_library", "iree_py_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -18,6 +18,7 @@ iree_py_library(
         "arithmetic.py",
         "async.py",
         "buffer.py",
+        "callback_ownership.py",
         "compare.py",
         "config.py",
         "dot.py",
@@ -37,7 +38,23 @@ iree_py_library(
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
         "//loom/py/loom/dialect/view",
+        "//loom/py/loom/target:contract_fragments",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/contracts",
+    ],
+)
+
+iree_py_test(
+    name = "contracts_test",
+    srcs = [
+        "callback_ownership_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = [
+        "loom.target.arch.amdgpu.contracts.callback_ownership_test",
+    ],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":contracts",
     ],
 )
