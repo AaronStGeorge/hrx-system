@@ -27,14 +27,23 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
+    GuardKind,
+    LowerAttrCopy,
+    LowerAttrCopyKind,
+    LowerEmit,
+    LowerEmitKind,
+    LowerGuard,
     LowerRule,
+    LowerRuleSpan,
     LowerSourceMemory,
     LowerTypePattern,
+    LowerValueRef,
     Scalar,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
     SourceMemoryOperation,
     SourceOpProject,
+    SourceValueKind,
     ValueProject,
     ValueRef,
     Vector,
@@ -60,20 +69,26 @@ def _expect_value_error(callable_obj: Callable[[], object], message: str) -> Non
 def _compiled_lower_rule_set(
     *,
     rules: tuple[LowerRule, ...] = (),
+    spans: tuple[LowerRuleSpan, ...] = (),
     type_patterns: tuple[LowerTypePattern, ...] = (),
+    value_refs: tuple[LowerValueRef, ...] = (),
+    source_memories: tuple[LowerSourceMemory, ...] = (),
+    guards: tuple[LowerGuard, ...] = (),
+    attr_copies: tuple[LowerAttrCopy, ...] = (),
+    emits: tuple[LowerEmit, ...] = (),
 ) -> CompiledLowerRuleSet:
     return CompiledLowerRuleSet(
         name="test.low.generated_c_shape",
         authored_case_indices=(),
         rules=rules,
-        spans=(),
+        spans=spans,
         type_patterns=type_patterns,
-        value_refs=(),
-        source_memories=(),
-        guards=(),
-        attr_copies=(),
+        value_refs=value_refs,
+        source_memories=source_memories,
+        guards=guards,
+        attr_copies=attr_copies,
         tied_results=(),
-        emits=(),
+        emits=emits,
         diagnostics=(),
     )
 
@@ -143,6 +158,162 @@ def test_validate_c_table_shape_rejects_oversized_type_payload() -> None:
     _expect_value_error(
         lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
         "lower-rule set 'test.low.generated_c_shape' type-pattern 0 static lanes exceeds int64_t",
+    )
+
+
+def test_validate_c_table_shape_rejects_rule_guard_range_oob() -> None:
+    table = _compiled_lower_rule_set(
+        rules=(
+            LowerRule(
+                source_op=scalar_arithmetic.scalar_addi,
+                temporary_count=0,
+                guard_start=1,
+                guard_count=1,
+                emit_start=0,
+                emit_count=0,
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' rule 0 guard range exceeds guard table",
+    )
+
+
+def test_validate_c_table_shape_rejects_emit_operand_range_oob() -> None:
+    table = _compiled_lower_rule_set(
+        emits=(
+            LowerEmit(
+                kind=LowerEmitKind.DESCRIPTOR_OP,
+                descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                operand_ref_start=1,
+                operand_ref_count=1,
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' emit 0 operand-ref range exceeds value-ref table",
+    )
+
+
+def test_validate_c_table_shape_rejects_emit_source_memory_ordinal_oob() -> None:
+    table = _compiled_lower_rule_set(
+        emits=(
+            LowerEmit(
+                kind=LowerEmitKind.DESCRIPTOR_OP,
+                descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                source_memory_ordinal=1,
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' emit 0 source-memory ordinal references missing source-memory row",
+    )
+
+
+def test_validate_c_table_shape_rejects_span_rule_range_mismatch() -> None:
+    table = _compiled_lower_rule_set(
+        rules=(
+            LowerRule(
+                source_op=scalar_arithmetic.scalar_addi,
+                temporary_count=0,
+                guard_start=0,
+                guard_count=0,
+                emit_start=0,
+                emit_count=0,
+            ),
+        ),
+        spans=(
+            LowerRuleSpan(
+                source_op=scalar_arithmetic.scalar_mulf,
+                rule_start=0,
+                rule_count=1,
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "span 0 rule range contains rule 0 for source op 'scalar.addi', expected 'scalar.mulf'",
+    )
+
+
+def test_validate_c_table_shape_rejects_guard_type_pattern_index_oob() -> None:
+    table = _compiled_lower_rule_set(
+        value_refs=(LowerValueRef(kind=SourceValueKind.OPERAND, index=0),),
+        guards=(LowerGuard(kind=GuardKind.VALUE_TYPE),),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' guard 0 type-pattern index references missing type-pattern row",
+    )
+
+
+def test_validate_c_table_shape_rejects_guard_value_ref_index_oob() -> None:
+    table = _compiled_lower_rule_set(
+        guards=(LowerGuard(kind=GuardKind.VALUE_NO_USES),),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' guard 0 value-ref index references missing value-ref row",
+    )
+
+
+def test_validate_c_table_shape_rejects_guard_other_value_ref_index_oob() -> None:
+    table = _compiled_lower_rule_set(
+        value_refs=(LowerValueRef(kind=SourceValueKind.OPERAND, index=0),),
+        guards=(
+            LowerGuard(
+                kind=GuardKind.VALUE_I64_RANGE_LE,
+                value_ref_index=0,
+                other_value_ref_index=1,
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' guard 0 other value-ref index references missing value-ref row",
+    )
+
+
+def test_validate_c_table_shape_rejects_attr_copy_value_ref_index_oob() -> None:
+    table = _compiled_lower_rule_set(
+        attr_copies=(
+            LowerAttrCopy(
+                kind=LowerAttrCopyKind.VALUE_EXACT_I64,
+                target_name="i32_value",
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' attr-copy 0 value-ref index references missing value-ref row",
+    )
+
+
+def test_validate_c_table_shape_rejects_value_ref_materializer_index_oob() -> None:
+    table = _compiled_lower_rule_set(
+        value_refs=(
+            LowerValueRef(
+                kind=SourceValueKind.OPERAND,
+                index=0,
+                materializer_index=1,
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' value-ref 0 materializer index references missing materializer row",
     )
 
 

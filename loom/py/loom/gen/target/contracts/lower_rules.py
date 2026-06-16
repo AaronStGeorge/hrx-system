@@ -17,13 +17,22 @@ from loom.gen.support.c import c_identifier as _c_identifier
 from loom.gen.support.generated_file import line_comment_header
 from loom.gen.target.contracts import lower_rule_rows, lower_rule_spelling
 from loom.target.contracts import (
+    LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
+    LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN,
+    LOWER_SOURCE_MEMORY_NONE,
     CompiledLowerRuleSet,
     ContractFragment,
+    GuardKind,
+    LowerAttrCopyKind,
     LowerDiagnosticParam,
+    LowerEmitKind,
     TypePattern,
     compile_lower_rule_set,
 )
-from loom.target.contracts.diagnostics import MAX_TARGET_DIAGNOSTIC_PARAMS
+from loom.target.contracts.diagnostics import (
+    MAX_TARGET_DIAGNOSTIC_PARAMS,
+    DiagnosticParamKind,
+)
 
 _I64_MIN = -(2**63)
 _I64_MAX = 2**63 - 1
@@ -31,6 +40,53 @@ _U8_MAX = 0xFF
 _U16_MAX = 0xFFFF
 _U32_MAX = 0xFFFF_FFFF
 _U64_MAX = 0xFFFF_FFFF_FFFF_FFFF
+
+_VALUE_REF_GUARD_KINDS = frozenset(
+    (
+        GuardKind.VALUE_TYPE,
+        GuardKind.VALUE_MATERIALIZABLE,
+        GuardKind.LOW_VALUE_REGISTER_CLASS,
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
+        GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+        GuardKind.VALUE_SIGNED_BIT_COUNT,
+        GuardKind.VALUE_UNSIGNED_BIT_COUNT,
+        GuardKind.VALUE_EXACT_I64,
+        GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
+        GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
+        GuardKind.VALUE_EXACT_F64,
+        GuardKind.VALUE_I64_RANGE,
+        GuardKind.VALUE_I64_RANGE_LE,
+        GuardKind.VALUE_I64_RANGE_GE,
+        GuardKind.VALUE_F64_EQUALS,
+        GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+        GuardKind.VALUE_NO_USES,
+    )
+)
+
+_OTHER_VALUE_REF_GUARD_KINDS = frozenset(
+    (
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+        GuardKind.VALUE_I64_RANGE_LE,
+        GuardKind.VALUE_I64_RANGE_GE,
+    )
+)
+
+_VALUE_REF_ATTR_COPY_KINDS = frozenset(
+    (
+        LowerAttrCopyKind.VALUE_EXACT_I64,
+        LowerAttrCopyKind.VALUE_EXACT_I64_NEGATE,
+        LowerAttrCopyKind.VALUE_EXACT_I64_LOG2,
+        LowerAttrCopyKind.VALUE_EXACT_I64_MINUS_ONE,
+        LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_MULTIPLIER,
+        LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_SHIFT,
+        LowerAttrCopyKind.VALUE_I32_AS_U32_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_F16_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_BF16_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_F32_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_F64_BITS,
+    )
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,6 +414,13 @@ def _validate_c_table_shape(
         for param_index, param in enumerate(row.params):
             param_subject = f"{diagnostic_subject} param {param_index}"
             _require_u16(param.value_ref_index, f"{param_subject} value-ref index")
+            if param.kind == DiagnosticParamKind.VALUE_TYPE:
+                _require_table_index(
+                    param.value_ref_index,
+                    len(table.value_refs),
+                    f"{param_subject} value-ref index",
+                    "value-ref",
+                )
             _require_i64(param.i64_value, f"{param_subject} i64 value")
             _require_u32(param.u32_value, f"{param_subject} u32 value")
             _require_u64(param.u64_value, f"{param_subject} u64 value")
@@ -374,6 +437,13 @@ def _validate_c_table_shape(
         row_subject = f"{subject} value-ref {index}"
         _require_u16(row.index, f"{row_subject} index")
         _require_u16(row.materializer_index, f"{row_subject} materializer index")
+        if row.materializer_index:
+            _require_one_based_table_index(
+                row.materializer_index,
+                len(source_contract.materializers),
+                f"{row_subject} materializer index",
+                "materializer",
+            )
 
     for index, row in enumerate(table.source_memories):
         row_subject = f"{subject} source-memory {index}"
@@ -421,11 +491,23 @@ def _validate_c_table_shape(
             row.dynamic_offset_diagnostic_index,
             f"{row_subject} dynamic-offset diagnostic index",
         )
+        _require_optional_table_index(
+            row.dynamic_offset_diagnostic_index,
+            len(table.diagnostics),
+            f"{row_subject} dynamic-offset diagnostic index",
+            "diagnostic",
+        )
         _require_u32(
             constraint.cache_policy_build_flags,
             f"{row_subject} cache policy build flags",
         )
         _require_u16(row.diagnostic_index, f"{row_subject} diagnostic index")
+        _require_optional_table_index(
+            row.diagnostic_index,
+            len(table.diagnostics),
+            f"{row_subject} diagnostic index",
+            "diagnostic",
+        )
 
     for index, row in enumerate(table.guards):
         row_subject = f"{subject} guard {index}"
@@ -434,9 +516,36 @@ def _validate_c_table_shape(
             row.other_value_ref_index,
             f"{row_subject} other value-ref index",
         )
+        if row.kind in _VALUE_REF_GUARD_KINDS:
+            _require_table_index(
+                row.value_ref_index,
+                len(table.value_refs),
+                f"{row_subject} value-ref index",
+                "value-ref",
+            )
+        if row.kind in _OTHER_VALUE_REF_GUARD_KINDS:
+            _require_table_index(
+                row.other_value_ref_index,
+                len(table.value_refs),
+                f"{row_subject} other value-ref index",
+                "value-ref",
+            )
         _require_u16(row.attr_index, f"{row_subject} attr index")
         _require_u16(row.type_pattern_index, f"{row_subject} type-pattern index")
+        if row.kind == GuardKind.VALUE_TYPE:
+            _require_table_index(
+                row.type_pattern_index,
+                len(table.type_patterns),
+                f"{row_subject} type-pattern index",
+                "type-pattern",
+            )
         _require_u16(row.diagnostic_index, f"{row_subject} diagnostic index")
+        _require_optional_table_index(
+            row.diagnostic_index,
+            len(table.diagnostics),
+            f"{row_subject} diagnostic index",
+            "diagnostic",
+        )
         _require_u64(row.u64, f"{row_subject} u64 payload")
         _require_u16(row.register_class_id, f"{row_subject} register class id")
         _require_i64(row.minimum_i64, f"{row_subject} minimum i64")
@@ -463,6 +572,13 @@ def _validate_c_table_shape(
         )
         _require_u8(row.target_bit_offset, f"{row_subject} target bit offset")
         _require_u16(row.value_ref_index, f"{row_subject} value-ref index")
+        if row.kind in _VALUE_REF_ATTR_COPY_KINDS:
+            _require_table_index(
+                row.value_ref_index,
+                len(table.value_refs),
+                f"{row_subject} value-ref index",
+                "value-ref",
+            )
         _require_u8(row.dynamic_term_index, f"{row_subject} dynamic term index")
         _require_i64(row.literal_i64, f"{row_subject} literal i64")
 
@@ -476,46 +592,143 @@ def _validate_c_table_shape(
         _require_u16(row.flags, f"{row_subject} flags")
         _require_u16(row.operand_ref_start, f"{row_subject} operand-ref start")
         _require_u16(row.operand_ref_count, f"{row_subject} operand-ref count")
+        _require_table_range(
+            row.operand_ref_start,
+            row.operand_ref_count,
+            len(table.value_refs),
+            f"{row_subject} operand-ref range",
+            "value-ref",
+        )
         _require_u16(row.copy_operand_mask, f"{row_subject} copy operand mask")
+        if row.operand_ref_count < 16:
+            allowed_operand_mask = (1 << row.operand_ref_count) - 1
+            if row.copy_operand_mask & ~allowed_operand_mask:
+                raise ValueError(f"{row_subject} copy operand mask references an operand outside operand-ref range: {row.copy_operand_mask}")
         _require_u16(
             row.accumulator_operand_index,
             f"{row_subject} accumulator operand index",
         )
+        if row.kind == LowerEmitKind.DESCRIPTOR_OP_ACCUMULATE_LANES and row.accumulator_operand_index >= row.operand_ref_count:
+            raise ValueError(f"{row_subject} accumulator operand index is outside operand-ref range: {row.accumulator_operand_index}")
         _require_u16(row.result_ref_start, f"{row_subject} result-ref start")
         _require_u16(
             row.result_type_pattern_start,
             f"{row_subject} result type-pattern start",
         )
         _require_u16(row.result_ref_count, f"{row_subject} result-ref count")
+        if row.flags & LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN:
+            _require_table_range(
+                row.result_type_pattern_start,
+                row.result_ref_count,
+                len(table.type_patterns),
+                f"{row_subject} result type-pattern range",
+                "type-pattern",
+            )
+        else:
+            _require_table_range(
+                row.result_ref_start,
+                row.result_ref_count,
+                len(table.value_refs),
+                f"{row_subject} result-ref range",
+                "value-ref",
+            )
         _require_u16(
             row.result_bind_ref_start,
             f"{row_subject} result bind-ref start",
         )
+        if row.flags & LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS:
+            _require_table_range(
+                row.result_bind_ref_start,
+                row.result_ref_count,
+                len(table.value_refs),
+                f"{row_subject} result bind-ref range",
+                "value-ref",
+            )
         _require_u16(row.attr_copy_start, f"{row_subject} attr-copy start")
         _require_u16(row.attr_copy_count, f"{row_subject} attr-copy count")
+        _require_table_range(
+            row.attr_copy_start,
+            row.attr_copy_count,
+            len(table.attr_copies),
+            f"{row_subject} attr-copy range",
+            "attr-copy",
+        )
         _require_u16(row.tied_result_start, f"{row_subject} tied-result start")
         _require_u16(row.tied_result_count, f"{row_subject} tied-result count")
+        _require_table_range(
+            row.tied_result_start,
+            row.tied_result_count,
+            len(table.tied_results),
+            f"{row_subject} tied-result range",
+            "tied-result",
+        )
         _require_u16(
             row.source_memory_ordinal,
             f"{row_subject} source-memory ordinal",
         )
+        if row.source_memory_ordinal != LOWER_SOURCE_MEMORY_NONE:
+            _require_one_based_table_index(
+                row.source_memory_ordinal,
+                len(table.source_memories),
+                f"{row_subject} source-memory ordinal",
+                "source-memory",
+            )
 
     for index, row in enumerate(table.rules):
         row_subject = f"{subject} rule {index}"
         _require_u16(row.temporary_count, f"{row_subject} temporary count")
         _require_u16(row.guard_start, f"{row_subject} guard start")
         _require_u16(row.guard_count, f"{row_subject} guard count")
+        _require_table_range(
+            row.guard_start,
+            row.guard_count,
+            len(table.guards),
+            f"{row_subject} guard range",
+            "guard",
+        )
         _require_u16(row.emit_start, f"{row_subject} emit start")
         _require_u16(row.emit_count, f"{row_subject} emit count")
+        _require_table_range(
+            row.emit_start,
+            row.emit_count,
+            len(table.emits),
+            f"{row_subject} emit range",
+            "emit",
+        )
         _require_u16(row.alias_ref_start, f"{row_subject} alias-ref start")
         _require_u16(row.alias_ref_count, f"{row_subject} alias-ref count")
+        _require_table_range(
+            row.alias_ref_start,
+            row.alias_ref_count * 2,
+            len(table.value_refs),
+            f"{row_subject} alias-ref range",
+            "value-ref",
+        )
         _require_u16(row.elide_ref_start, f"{row_subject} elide-ref start")
         _require_u16(row.elide_ref_count, f"{row_subject} elide-ref count")
+        _require_table_range(
+            row.elide_ref_start,
+            row.elide_ref_count,
+            len(table.value_refs),
+            f"{row_subject} elide-ref range",
+            "value-ref",
+        )
 
     for index, row in enumerate(table.spans):
         row_subject = f"{subject} span {index}"
         _require_u16(row.rule_start, f"{row_subject} rule start")
         _require_u16(row.rule_count, f"{row_subject} rule count")
+        _require_table_range(
+            row.rule_start,
+            row.rule_count,
+            len(table.rules),
+            f"{row_subject} rule range",
+            "rule",
+        )
+        for rule_index in range(row.rule_start, row.rule_start + row.rule_count):
+            rule = table.rules[rule_index]
+            if rule.source_op is not row.source_op:
+                raise ValueError(f"{row_subject} rule range contains rule {rule_index} for source op '{rule.source_op.name}', expected '{row.source_op.name}'")
 
 
 def _validate_type_pattern_c_shape(subject: str, type_pattern: TypePattern) -> None:
@@ -566,6 +779,52 @@ def _require_u64(value: int, subject: str) -> None:
 def _require_i64(value: int, subject: str) -> None:
     if not _I64_MIN <= value <= _I64_MAX:
         raise ValueError(f"{subject} exceeds int64_t: {value}")
+
+
+def _require_table_index(
+    index: int,
+    row_count: int,
+    subject: str,
+    table_name: str,
+) -> None:
+    if 0 <= index < row_count:
+        return
+    raise ValueError(f"{subject} references missing {table_name} row: index={index} rows={row_count}")
+
+
+def _require_one_based_table_index(
+    ordinal: int,
+    row_count: int,
+    subject: str,
+    table_name: str,
+) -> None:
+    if 1 <= ordinal <= row_count:
+        return
+    raise ValueError(f"{subject} references missing {table_name} row: ordinal={ordinal} rows={row_count}")
+
+
+def _require_optional_table_index(
+    index: int,
+    row_count: int,
+    subject: str,
+    table_name: str,
+) -> None:
+    if index == 0xFFFF:
+        return
+    _require_table_index(index, row_count, subject, table_name)
+
+
+def _require_table_range(
+    start: int,
+    count: int,
+    row_count: int,
+    subject: str,
+    table_name: str,
+) -> None:
+    if start < 0 or count < 0:
+        raise ValueError(f"{subject} has negative {table_name} range: start={start} count={count}")
+    if start > row_count or start + count > row_count:
+        raise ValueError(f"{subject} exceeds {table_name} table: start={start} count={count} rows={row_count}")
 
 
 def _op_header_includes(table: CompiledLowerRuleSet) -> tuple[str, ...]:
