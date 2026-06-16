@@ -883,6 +883,43 @@ ERR_AMDGPU_039 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_040: AMDGPU bitstream lowering recipe rejected source shape.
+ERR_AMDGPU_040 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=40,
+    severity=Severity.ERROR,
+    summary="AMDGPU bitstream lowering recipe rejected source shape.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': "
+        "bitstream recipe '{recipe_key}' cannot satisfy constraint "
+        "'{constraint_key}' for width {width}, source type {source_type}, "
+        "result type {result_type}, source lanes {source_lane_count}, result "
+        "lanes {result_lane_count}, source payload bits "
+        "{source_payload_bit_count}, result payload bits "
+        "{result_payload_bit_count}, source registers {source_register_count}, "
+        "and result registers {result_register_count}"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("recipe_key", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("width", ParamKind.I64),
+        ErrorParam("source_type", ParamKind.TYPE),
+        ErrorParam("result_type", ParamKind.TYPE),
+        ErrorParam("source_lane_count", ParamKind.U32),
+        ErrorParam("result_lane_count", ParamKind.U32),
+        ErrorParam("source_payload_bit_count", ParamKind.U32),
+        ErrorParam("result_payload_bit_count", ParamKind.U32),
+        ErrorParam("source_register_count", ParamKind.U32),
+        ErrorParam("result_register_count", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Use a supported AMDGPU bitstream packing shape or decompose the "
+        "operation before AMDGPU source-to-low lowering"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -922,4 +959,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_037,
     ERR_AMDGPU_038,
     ERR_AMDGPU_039,
+    ERR_AMDGPU_040,
 )
