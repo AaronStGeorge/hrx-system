@@ -287,16 +287,16 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
 } loom_amdgpu_table_lookup_plan_t;
 
 typedef struct loom_amdgpu_vector_compare_plan_t {
+  // Left-hand payload vector value.
+  loom_value_id_t lhs;
+  // Right-hand payload vector value.
+  loom_value_id_t rhs;
   // Descriptor row selected for the compare predicate.
   loom_low_lower_resolved_descriptor_t descriptor;
   // Optional descriptor row selected when the left-hand lane is inline.
   loom_low_lower_resolved_descriptor_t src0_inline_descriptor;
   // Optional descriptor row selected when the right-hand lane is inline.
   loom_low_lower_resolved_descriptor_t src1_inline_descriptor;
-  // Left-hand payload vector value.
-  loom_value_id_t lhs;
-  // Right-hand payload vector value.
-  loom_value_id_t rhs;
   // Result mask vector value.
   loom_value_id_t result;
   // Static number of payload and mask lanes compared.
@@ -354,6 +354,12 @@ typedef enum loom_amdgpu_select_payload_kind_e {
 } loom_amdgpu_select_payload_kind_t;
 
 typedef struct loom_amdgpu_vector_select_plan_t {
+  // Source condition selecting true lanes.
+  loom_value_id_t condition;
+  // Source vector used when the corresponding condition lane is true.
+  loom_value_id_t true_value;
+  // Source vector used when the corresponding condition lane is false.
+  loom_value_id_t false_value;
   // Selected representation of the true/false/result payload.
   loom_amdgpu_select_payload_kind_t payload_kind;
   // Selected representation of the scalar or vector condition.
@@ -370,12 +376,6 @@ typedef struct loom_amdgpu_vector_select_plan_t {
   loom_low_lower_resolved_descriptor_t mask_or_descriptor;
   // Descriptor row selected to XOR i1 mask payloads.
   loom_low_lower_resolved_descriptor_t mask_xor_descriptor;
-  // Source condition selecting true lanes.
-  loom_value_id_t condition;
-  // Source vector used when the corresponding condition lane is true.
-  loom_value_id_t true_value;
-  // Source vector used when the corresponding condition lane is false.
-  loom_value_id_t false_value;
   // Result vector value.
   loom_value_id_t result;
   // Static number of selected 32-bit register units.
@@ -393,6 +393,12 @@ typedef enum loom_amdgpu_clampf_mode_e {
 } loom_amdgpu_clampf_mode_t;
 
 typedef struct loom_amdgpu_clampf_plan_t {
+  // Source payload being clamped.
+  loom_value_id_t value;
+  // Source lower bound.
+  loom_value_id_t lower;
+  // Source upper bound.
+  loom_value_id_t upper;
   // Selected clamp semantics with native AMDGPU packet support.
   loom_amdgpu_clampf_mode_t mode;
   // Descriptor row selected for the ordered lower-bound comparison.
@@ -409,12 +415,6 @@ typedef struct loom_amdgpu_clampf_plan_t {
   loom_low_lower_resolved_descriptor_t upper_bound_register_descriptor;
   // Optional descriptor row selected for literal upper-bound minnum.
   loom_low_lower_resolved_descriptor_t upper_bound_literal_descriptor;
-  // Source payload being clamped.
-  loom_value_id_t value;
-  // Source lower bound.
-  loom_value_id_t lower;
-  // Source upper bound.
-  loom_value_id_t upper;
   // Result value.
   loom_value_id_t result;
   // Static number of f32 lanes lowered.
