@@ -1625,7 +1625,7 @@ iree_status_t loom_amdgpu_low_legality_verify_scalar_cmpi_i64(
   return loom_amdgpu_low_legality_reject(context, op, constraint_key);
 }
 
-static iree_status_t loom_amdgpu_select_vector_extract_contract(
+static iree_status_t loom_amdgpu_select_arithmetic_contract(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     bool* out_selected) {
   *out_selected = false;
@@ -1757,8 +1757,8 @@ static iree_status_t loom_amdgpu_select_vector_extract_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_vector_extract_plan_t* out_plan, bool* out_selected) {
   *out_plan = (loom_amdgpu_vector_extract_plan_t){0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_select_vector_extract_contract(
-      context, source_op, out_selected));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_select_arithmetic_contract(context, source_op, out_selected));
   if (*out_selected) {
     loom_amdgpu_vector_extract_plan_from_accepted_op(
         loom_low_lower_context_module(context), source_op, out_plan);
@@ -2185,11 +2185,10 @@ static bool loom_amdgpu_type_is_bf16_packed_vector(
   return true;
 }
 
-static bool loom_amdgpu_select_vector_bf16_conversion_plan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
+static void loom_amdgpu_vector_bf16_conversion_plan_from_accepted_op(
+    const loom_module_t* module, const loom_op_t* source_op,
     loom_amdgpu_vector_bf16_conversion_plan_t* out_plan) {
   *out_plan = (loom_amdgpu_vector_bf16_conversion_plan_t){0};
-  const loom_module_t* module = loom_low_lower_context_module(context);
 
   loom_value_id_t source = LOOM_VALUE_ID_INVALID;
   loom_value_id_t result = LOOM_VALUE_ID_INVALID;
@@ -2207,7 +2206,8 @@ static bool loom_amdgpu_select_vector_bf16_conversion_plan(
       kind = LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_FPTRUNC;
       break;
     default:
-      return false;
+      IREE_ASSERT_UNREACHABLE("accepted AMDGPU BF16 conversion has wrong op");
+      IREE_BUILTIN_UNREACHABLE();
   }
 
   const loom_type_t source_type = loom_module_value_type(module, source);
@@ -2217,23 +2217,22 @@ static bool loom_amdgpu_select_vector_bf16_conversion_plan(
   uint32_t result_lane_count = 0;
   uint32_t result_register_count = 0;
   if (kind == LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_EXTF) {
-    if (!loom_amdgpu_type_is_bf16_packed_vector(source_type, &source_lane_count,
-                                                &source_register_count)) {
-      return false;
-    }
+    const bool source_matches = loom_amdgpu_type_is_bf16_packed_vector(
+        source_type, &source_lane_count, &source_register_count);
+    IREE_ASSERT(source_matches);
     result_lane_count = loom_amdgpu_vector_f32_register_count(result_type);
     result_register_count = result_lane_count;
   } else {
     source_lane_count = loom_amdgpu_vector_f32_register_count(source_type);
     source_register_count = source_lane_count;
-    if (!loom_amdgpu_type_is_bf16_packed_vector(result_type, &result_lane_count,
-                                                &result_register_count)) {
-      return false;
-    }
+    const bool result_matches = loom_amdgpu_type_is_bf16_packed_vector(
+        result_type, &result_lane_count, &result_register_count);
+    IREE_ASSERT(result_matches);
   }
-  if (source_lane_count == 0 || source_lane_count != result_lane_count) {
-    return false;
-  }
+  IREE_ASSERT_NE(source_lane_count, 0u);
+  IREE_ASSERT_EQ(source_lane_count, result_lane_count);
+  IREE_ASSERT_NE(source_register_count, 0u);
+  IREE_ASSERT_NE(result_register_count, 0u);
 
   *out_plan = (loom_amdgpu_vector_bf16_conversion_plan_t){
       .kind = kind,
@@ -2243,7 +2242,19 @@ static bool loom_amdgpu_select_vector_bf16_conversion_plan(
       .source_register_count = source_register_count,
       .result_register_count = result_register_count,
   };
-  return true;
+}
+
+static iree_status_t loom_amdgpu_select_vector_bf16_conversion_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_bf16_conversion_plan_t* out_plan, bool* out_selected) {
+  *out_plan = (loom_amdgpu_vector_bf16_conversion_plan_t){0};
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_select_arithmetic_contract(context, source_op, out_selected));
+  if (*out_selected) {
+    loom_amdgpu_vector_bf16_conversion_plan_from_accepted_op(
+        loom_low_lower_context_module(context), source_op, out_plan);
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_emit_index_cast_range_diagnostic(
@@ -3056,13 +3067,18 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
     }
     case LOOM_OP_VECTOR_EXTF:
     case LOOM_OP_VECTOR_FPTRUNC: {
+      loom_amdgpu_vector_bf16_conversion_plan_t local_plan = {0};
+      bool selected = false;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_select_vector_bf16_conversion_plan(
+          context, source_op, &local_plan, &selected));
+      if (!selected) {
+        return iree_ok_status();
+      }
       loom_amdgpu_vector_bf16_conversion_plan_t* plan_data = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
           context, sizeof(*plan_data), (void**)&plan_data));
-      if (loom_amdgpu_select_vector_bf16_conversion_plan(context, source_op,
-                                                         plan_data)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-      }
+      *plan_data = local_plan;
+      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
       return iree_ok_status();
     }
     default:

@@ -158,3 +158,24 @@ def test_vector_extract_rules_publish_contract_only_shape_rows() -> None:
             )
         )
         assert GuardKind.VECTOR_EXTRACT_SHAPE in guard_kinds
+
+
+def test_vector_bf16_conversion_rules_publish_contract_only_shape_rows() -> None:
+    compiled = _compiled_arithmetic_rules()
+
+    for source_op in (vector.vector_extf, vector.vector_fptrunc):
+        rules = _rules_for_source_op(compiled, source_op)
+        contract_rules = tuple(
+            rule for rule in rules if rule.flags & LOWER_RULE_FLAG_CONTRACT_ONLY
+        )
+
+        assert len(contract_rules) == 1
+        assert contract_rules[0].emit_count == 0
+        guard_kinds = tuple(
+            compiled.guards[guard_index].kind
+            for guard_index in range(
+                contract_rules[0].guard_start,
+                contract_rules[0].guard_start + contract_rules[0].guard_count,
+            )
+        )
+        assert GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ in guard_kinds
