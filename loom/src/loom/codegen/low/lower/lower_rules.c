@@ -2046,6 +2046,17 @@ iree_status_t loom_low_lower_rule_set_select(
       &match_context, rule_set, source_op, out_selection);
 }
 
+iree_status_t loom_low_lower_rule_set_select_contract(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection) {
+  loom_low_lower_rule_match_context_t match_context =
+      loom_low_lower_rule_match_context_from_lowering(context);
+  match_context.flags |= LOOM_LOW_LOWER_RULE_MATCH_FLAG_CONTRACT_ONLY;
+  return loom_low_lower_rule_set_select_with_match_context(
+      &match_context, rule_set, source_op, out_selection);
+}
+
 iree_status_t loom_low_lower_rule_set_select_rule_range(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,

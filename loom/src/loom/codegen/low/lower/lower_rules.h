@@ -779,6 +779,15 @@ iree_status_t loom_low_lower_rule_set_select(
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     loom_low_lower_rule_selection_t* out_selection);
 
+// Selects the exact target contract rule for |source_op| using the mutable
+// lowering context. Unlike loom_low_lower_rule_set_select this includes
+// contract-only rows and is intended for target recipe selectors that consume
+// generated contracts but still need target-owned emit code.
+iree_status_t loom_low_lower_rule_set_select_contract(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection);
+
 // Selects a lowering rule from a caller-selected rule range using the mutable
 // lowering context. Contract-table source lowering uses this after direct
 // op-kind lookup has selected the candidate row.

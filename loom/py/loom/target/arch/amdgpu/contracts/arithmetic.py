@@ -668,7 +668,6 @@ def _vector_bitunpack_recipe_rule(
     return RecipeRule(
         source_op=source_op,
         guards=(
-            _value_type("result", result_type),
             _packed_integer_width_guard(maximum_width),
             Guard.value_packed_integer_lanes_from_payload(
                 "source",
@@ -679,6 +678,7 @@ def _vector_bitunpack_recipe_rule(
                 maximum_lane_count=32,
                 diagnostic=_PACKED_INTEGER_LANES_FROM_PAYLOAD_DIAGNOSTIC,
             ),
+            _value_type("result", result_type),
         ),
     )
 

@@ -11,7 +11,6 @@
 
 #include "loom/codegen/low/lower/lower.h"
 #include "loom/target/arch/amdgpu/lower/plan.h"
-#include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,13 +36,6 @@ iree_status_t loom_amdgpu_select_vector_bitunpack_plan(
 iree_status_t loom_amdgpu_lower_vector_bitunpack(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_bitunpack_plan_t* plan);
-
-// Verifies source vector bitstream op legality for AMDGPU target-low
-// selection.
-iree_status_t loom_amdgpu_low_legality_verify_vector_bitstream(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled);
 
 #ifdef __cplusplus
 }  // extern "C"
