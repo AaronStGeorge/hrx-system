@@ -35,6 +35,21 @@ typedef enum loom_amdgpu_bitstream_rejection_e {
   LOOM_AMDGPU_BITSTREAM_REJECTION_PAYLOAD_DIVISIBILITY = 9,
 } loom_amdgpu_bitstream_rejection_t;
 
+typedef struct loom_amdgpu_bitstream_storage_shape_t {
+  // Source IR value type being matched.
+  loom_type_t type;
+  // Static i32 lane count accepted by the scalarized 32-bit vector path.
+  uint32_t i32_lane_count;
+  // Static i8 lane count accepted by the packed byte vector path.
+  uint32_t i8_lane_count;
+  // Payload bits occupied by packed integer storage.
+  uint32_t payload_bit_count;
+  // Number of 32-bit registers occupied by packed integer storage.
+  uint32_t register_count;
+  // True when |payload_bit_count| and |register_count| are valid.
+  bool has_packed_integer_storage;
+} loom_amdgpu_bitstream_storage_shape_t;
+
 typedef struct loom_amdgpu_bitstream_diagnostic_t {
   // Stable lowering recipe family selected from the source op kind.
   loom_amdgpu_bitstream_recipe_kind_t recipe_kind;
@@ -59,6 +74,18 @@ typedef struct loom_amdgpu_bitstream_diagnostic_t {
   // Number of 32-bit result registers represented by the storage shape.
   uint32_t result_register_count;
 } loom_amdgpu_bitstream_diagnostic_t;
+
+static loom_amdgpu_bitstream_storage_shape_t
+loom_amdgpu_bitstream_storage_shape_from_type(loom_type_t type) {
+  loom_amdgpu_bitstream_storage_shape_t shape = {
+      .type = type,
+      .i32_lane_count = loom_amdgpu_vector_i32_lane_count(type),
+      .i8_lane_count = loom_amdgpu_vector_i8_lane_count(type),
+  };
+  shape.has_packed_integer_storage = loom_amdgpu_type_packed_integer_storage(
+      type, &shape.payload_bit_count, &shape.register_count);
+  return shape;
+}
 
 static void loom_amdgpu_bitstream_diagnostic_initialize(
     loom_amdgpu_bitstream_diagnostic_t* out_diagnostic,
@@ -95,47 +122,47 @@ static bool loom_amdgpu_bitpack_plan_from_op(
       out_diagnostic, LOOM_AMDGPU_BITSTREAM_RECIPE_PACK_I8_FROM_I32, width);
   const loom_value_id_t source = loom_vector_bitpack_source(source_op);
   const loom_value_id_t result = loom_vector_bitpack_result(source_op);
-  const loom_type_t source_type = loom_module_value_type(module, source);
-  const loom_type_t result_type = loom_module_value_type(module, result);
-  const uint32_t source_lane_count =
-      loom_amdgpu_vector_i32_lane_count(source_type);
-  const uint32_t result_lane_count =
-      loom_amdgpu_vector_i8_lane_count(result_type);
+  const loom_amdgpu_bitstream_storage_shape_t source_shape =
+      loom_amdgpu_bitstream_storage_shape_from_type(
+          loom_module_value_type(module, source));
+  const loom_amdgpu_bitstream_storage_shape_t result_shape =
+      loom_amdgpu_bitstream_storage_shape_from_type(
+          loom_module_value_type(module, result));
   if (out_diagnostic != NULL) {
-    out_diagnostic->source_type = source_type;
-    out_diagnostic->result_type = result_type;
-    out_diagnostic->source_lane_count = source_lane_count;
-    out_diagnostic->result_lane_count = result_lane_count;
-    out_diagnostic->source_payload_bit_count = source_lane_count * 32u;
-    out_diagnostic->source_register_count = source_lane_count;
-    (void)loom_amdgpu_type_packed_integer_storage(
-        result_type, &out_diagnostic->result_payload_bit_count,
-        &out_diagnostic->result_register_count);
+    out_diagnostic->source_type = source_shape.type;
+    out_diagnostic->result_type = result_shape.type;
+    out_diagnostic->source_lane_count = source_shape.i32_lane_count;
+    out_diagnostic->result_lane_count = result_shape.i8_lane_count;
+    out_diagnostic->source_payload_bit_count =
+        source_shape.i32_lane_count * 32u;
+    out_diagnostic->source_register_count = source_shape.i32_lane_count;
+    out_diagnostic->result_payload_bit_count = result_shape.payload_bit_count;
+    out_diagnostic->result_register_count = result_shape.register_count;
   }
   if (width != 8) {
     return loom_amdgpu_bitstream_reject(out_diagnostic,
                                         LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH);
   }
-  if (source_lane_count == 0) {
+  if (source_shape.i32_lane_count == 0) {
     return loom_amdgpu_bitstream_reject(
         out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_SOURCE_TYPE);
   }
-  if (result_lane_count == 0) {
+  if (result_shape.i8_lane_count == 0) {
     return loom_amdgpu_bitstream_reject(
         out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_RESULT_TYPE);
   }
-  if (result_lane_count != source_lane_count) {
+  if (result_shape.i8_lane_count != source_shape.i32_lane_count) {
     return loom_amdgpu_bitstream_reject(
         out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_LANE_COUNT);
   }
-  if ((result_lane_count % 4) != 0) {
+  if ((result_shape.i8_lane_count % 4) != 0) {
     return loom_amdgpu_bitstream_reject(
         out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_LANE_GROUP);
   }
 
   out_plan->source = source;
   out_plan->result = result;
-  out_plan->result_register_count = result_lane_count / 4u;
+  out_plan->result_register_count = result_shape.i8_lane_count / 4u;
   return true;
 }
 
@@ -166,28 +193,26 @@ static bool loom_amdgpu_bitunpack_plan_from_op(
     IREE_BUILTIN_UNREACHABLE();
   }
 
-  const loom_type_t source_type =
-      loom_module_value_type(module, out_plan->source);
-  const loom_type_t result_type =
-      loom_module_value_type(module, out_plan->result);
+  const loom_amdgpu_bitstream_storage_shape_t source_shape =
+      loom_amdgpu_bitstream_storage_shape_from_type(
+          loom_module_value_type(module, out_plan->source));
+  const loom_amdgpu_bitstream_storage_shape_t result_shape =
+      loom_amdgpu_bitstream_storage_shape_from_type(
+          loom_module_value_type(module, out_plan->result));
   if (out_diagnostic != NULL) {
-    out_diagnostic->source_type = source_type;
-    out_diagnostic->result_type = result_type;
-    (void)loom_amdgpu_type_packed_integer_storage(
-        source_type, &out_diagnostic->source_payload_bit_count,
-        &out_diagnostic->source_register_count);
-    const uint32_t i32_lane_count =
-        loom_amdgpu_vector_i32_lane_count(result_type);
-    if (i32_lane_count != 0) {
-      out_diagnostic->result_lane_count = i32_lane_count;
-      out_diagnostic->result_payload_bit_count = i32_lane_count * 32u;
-      out_diagnostic->result_register_count = i32_lane_count;
+    out_diagnostic->source_type = source_shape.type;
+    out_diagnostic->result_type = result_shape.type;
+    out_diagnostic->source_payload_bit_count = source_shape.payload_bit_count;
+    out_diagnostic->source_register_count = source_shape.register_count;
+    if (result_shape.i32_lane_count != 0) {
+      out_diagnostic->result_lane_count = result_shape.i32_lane_count;
+      out_diagnostic->result_payload_bit_count =
+          result_shape.i32_lane_count * 32u;
+      out_diagnostic->result_register_count = result_shape.i32_lane_count;
     } else {
-      out_diagnostic->result_lane_count =
-          loom_amdgpu_vector_i8_lane_count(result_type);
-      (void)loom_amdgpu_type_packed_integer_storage(
-          result_type, &out_diagnostic->result_payload_bit_count,
-          &out_diagnostic->result_register_count);
+      out_diagnostic->result_lane_count = result_shape.i8_lane_count;
+      out_diagnostic->result_payload_bit_count = result_shape.payload_bit_count;
+      out_diagnostic->result_register_count = result_shape.register_count;
     }
   }
   if (width < 1 || width > 32) {
@@ -199,27 +224,24 @@ static bool loom_amdgpu_bitunpack_plan_from_op(
         out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH_DWORD_DIVISOR);
   }
 
-  uint32_t source_payload_bit_count = 0;
-  uint32_t source_register_count = 0;
-  if (!loom_amdgpu_type_packed_integer_storage(
-          source_type, &source_payload_bit_count, &source_register_count)) {
+  if (!source_shape.has_packed_integer_storage) {
     if (out_diagnostic != NULL) {
-      out_diagnostic->source_type = source_type;
+      out_diagnostic->source_type = source_shape.type;
     }
     return loom_amdgpu_bitstream_reject(
         out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_SOURCE_STORAGE);
   }
   if (out_diagnostic != NULL) {
-    out_diagnostic->source_type = source_type;
-    out_diagnostic->source_payload_bit_count = source_payload_bit_count;
-    out_diagnostic->source_register_count = source_register_count;
+    out_diagnostic->source_type = source_shape.type;
+    out_diagnostic->source_payload_bit_count = source_shape.payload_bit_count;
+    out_diagnostic->source_register_count = source_shape.register_count;
   }
-  if ((source_payload_bit_count % (uint32_t)width) != 0) {
+  if ((source_shape.payload_bit_count % (uint32_t)width) != 0) {
     return loom_amdgpu_bitstream_reject(
         out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_PAYLOAD_DIVISIBILITY);
   }
 
-  const uint32_t lane_count = source_payload_bit_count / (uint32_t)width;
+  const uint32_t lane_count = source_shape.payload_bit_count / (uint32_t)width;
   if (out_diagnostic != NULL) {
     out_diagnostic->source_lane_count = lane_count;
   }
@@ -228,38 +250,30 @@ static bool loom_amdgpu_bitunpack_plan_from_op(
         out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_LANE_COUNT);
   }
 
-  const uint32_t i32_lane_count =
-      loom_amdgpu_vector_i32_lane_count(result_type);
   if (out_diagnostic != NULL) {
-    out_diagnostic->result_type = result_type;
-    out_diagnostic->result_lane_count = i32_lane_count;
-    out_diagnostic->result_payload_bit_count = i32_lane_count * 32u;
-    out_diagnostic->result_register_count = i32_lane_count;
+    out_diagnostic->result_type = result_shape.type;
+    out_diagnostic->result_lane_count = result_shape.i32_lane_count;
+    out_diagnostic->result_payload_bit_count =
+        result_shape.i32_lane_count * 32u;
+    out_diagnostic->result_register_count = result_shape.i32_lane_count;
   }
-  if (i32_lane_count == lane_count) {
+  if (result_shape.i32_lane_count == lane_count) {
     out_plan->result_kind = LOOM_AMDGPU_BITUNPACK_RESULT_KIND_I32_LANES;
     out_plan->result_register_count = lane_count;
   } else {
-    uint32_t result_payload_bit_count = 0;
-    uint32_t result_register_count = 0;
-    const uint32_t i8_lane_count =
-        loom_amdgpu_vector_i8_lane_count(result_type);
-    const bool result_has_packed_storage =
-        loom_amdgpu_type_packed_integer_storage(
-            result_type, &result_payload_bit_count, &result_register_count);
     if (out_diagnostic != NULL) {
-      out_diagnostic->result_lane_count = i8_lane_count;
-      out_diagnostic->result_payload_bit_count = result_payload_bit_count;
-      out_diagnostic->result_register_count = result_register_count;
+      out_diagnostic->result_lane_count = result_shape.i8_lane_count;
+      out_diagnostic->result_payload_bit_count = result_shape.payload_bit_count;
+      out_diagnostic->result_register_count = result_shape.register_count;
     }
-    if (width > 8 || i8_lane_count != lane_count ||
-        !result_has_packed_storage ||
-        result_payload_bit_count != lane_count * 8u) {
+    if (width > 8 || result_shape.i8_lane_count != lane_count ||
+        !result_shape.has_packed_integer_storage ||
+        result_shape.payload_bit_count != lane_count * 8u) {
       return loom_amdgpu_bitstream_reject(
           out_diagnostic, LOOM_AMDGPU_BITSTREAM_REJECTION_RESULT_TYPE);
     }
     out_plan->result_kind = LOOM_AMDGPU_BITUNPACK_RESULT_KIND_PACKED_I8;
-    out_plan->result_register_count = result_register_count;
+    out_plan->result_register_count = result_shape.register_count;
   }
   if (out_plan->result_kind == LOOM_AMDGPU_BITUNPACK_RESULT_KIND_NONE) {
     return loom_amdgpu_bitstream_reject(
@@ -267,7 +281,7 @@ static bool loom_amdgpu_bitunpack_plan_from_op(
   }
 
   out_plan->width = (uint32_t)width;
-  out_plan->source_register_count = source_register_count;
+  out_plan->source_register_count = source_shape.register_count;
   out_plan->lane_count = lane_count;
   return true;
 }
