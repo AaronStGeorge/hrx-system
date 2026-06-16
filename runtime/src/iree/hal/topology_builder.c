@@ -265,6 +265,29 @@ iree_hal_topology_device_spec_external_buffer_handle_types(
   return (iree_hal_topology_handle_type_t)handle_types;
 }
 
+static iree_hal_external_timepoint_type_mask_t
+iree_hal_topology_device_spec_external_timepoint_types(
+    const iree_hal_device_spec_t* device_spec,
+    iree_hal_external_handle_direction_flags_t direction_flags,
+    iree_hal_semaphore_compatibility_t compatibility) {
+  const iree_hal_device_queue_spec_t* queues =
+      iree_hal_device_spec_queues(device_spec);
+  iree_hal_external_timepoint_type_mask_t timepoint_types =
+      IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE;
+  for (iree_host_size_t i = 0; i < queues->external_timepoint_handle_count;
+       ++i) {
+    const iree_hal_external_timepoint_handle_spec_t* handle =
+        &queues->external_timepoint_handles[i];
+    if (!iree_all_bits_set(handle->direction_flags, direction_flags) ||
+        !iree_all_bits_set(handle->compatibility, compatibility)) {
+      continue;
+    }
+    timepoint_types |=
+        iree_hal_external_timepoint_type_mask_from_type(handle->handle_type);
+  }
+  return timepoint_types;
+}
+
 static uint8_t iree_hal_topology_numa_distance_between_device_specs(
     const iree_hal_device_spec_t* source_spec,
     const iree_hal_device_spec_t* destination_spec) {
@@ -315,7 +338,27 @@ iree_hal_topology_edge_from_device_specs(
   const bool has_buffer_import =
       buffer_import_types != IREE_HAL_TOPOLOGY_HANDLE_TYPE_NONE;
 
+  const iree_hal_external_timepoint_type_mask_t source_timepoint_export_types =
+      iree_hal_topology_device_spec_external_timepoint_types(
+          source_spec, IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT,
+          IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT);
+  const iree_hal_external_timepoint_type_mask_t
+      destination_timepoint_import_types =
+          iree_hal_topology_device_spec_external_timepoint_types(
+              destination_spec, IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT,
+              IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT);
+  iree_hal_external_timepoint_type_mask_t semaphore_import_timepoint_types =
+      source_timepoint_export_types & destination_timepoint_import_types;
+  iree_hal_external_timepoint_type_mask_t semaphore_export_timepoint_types =
+      semaphore_import_timepoint_types;
+  const bool has_semaphore_import = semaphore_import_timepoint_types !=
+                                    IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE;
+
   iree_hal_topology_edge_t edge = iree_hal_topology_edge_make_host_staged();
+  edge.hi = iree_hal_topology_edge_set_semaphore_import_timepoint_types(
+      edge.hi, semaphore_import_timepoint_types);
+  edge.hi = iree_hal_topology_edge_set_semaphore_export_timepoint_types(
+      edge.hi, semaphore_export_timepoint_types);
   edge.hi = iree_hal_topology_edge_set_buffer_import_types(edge.hi,
                                                            buffer_import_types);
   edge.hi = iree_hal_topology_edge_set_buffer_export_types(edge.hi,
@@ -323,6 +366,13 @@ iree_hal_topology_edge_from_device_specs(
 
   iree_hal_topology_capability_t capabilities =
       IREE_HAL_TOPOLOGY_CAPABILITY_NONE;
+  if (has_semaphore_import) {
+    edge.lo = iree_hal_topology_edge_set_wait_mode(
+        edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+    edge.lo = iree_hal_topology_edge_set_signal_mode(
+        edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+    capabilities |= IREE_HAL_TOPOLOGY_CAPABILITY_TIMELINE_SEMAPHORE;
+  }
   if (has_buffer_import) {
     edge.lo = iree_hal_topology_edge_set_buffer_read_mode_noncoherent(
         edge.lo, IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
@@ -343,8 +393,12 @@ iree_hal_topology_edge_from_device_specs(
   }
   edge.lo = iree_hal_topology_edge_set_link_class(edge.lo, link_class);
 
-  uint8_t wait_cost = 10;
-  uint8_t signal_cost = 10;
+  uint8_t wait_cost = has_semaphore_import ? 6 : 10;
+  uint8_t signal_cost = has_semaphore_import ? 6 : 10;
+  if (has_semaphore_import && same_physical_device_set) {
+    wait_cost = 3;
+    signal_cost = 3;
+  }
   edge.lo = iree_hal_topology_edge_set_wait_cost(edge.lo, wait_cost);
   edge.lo = iree_hal_topology_edge_set_signal_cost(edge.lo, signal_cost);
 

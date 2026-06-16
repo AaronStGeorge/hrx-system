@@ -546,11 +546,11 @@ static inline iree_hal_topology_interop_mode_t iree_hal_topology_edge_wait_mode(
 }
 
 // Returns the signal interop mode from a scheduling word.
-// This describes how the destination device can signal a semaphore that will
-// be consumed by the source device. Asymmetric from wait mode as signal and
-// wait may have different hardware capabilities:
+// This describes how a semaphore signaled by the source device can be observed
+// by the destination device. Asymmetric from wait mode as signal and wait may
+// have different hardware capabilities:
 // - NATIVE: Direct hardware signal (same driver/device)
-// - IMPORT: Export handle, signal through imported semaphore (cross-driver)
+// - IMPORT: Export/import timepoint handle, observe signal natively
 // - COPY: Must stage signal through host updates (incompatible HW)
 // - NONE: Cannot signal (isolated devices)
 //

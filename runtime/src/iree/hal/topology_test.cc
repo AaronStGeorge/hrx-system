@@ -35,6 +35,7 @@ enum TestDeviceSpecFlagBits {
   TEST_DEVICE_SPEC_FLAG_NUMA_NODE = 1u << 0,
   TEST_DEVICE_SPEC_FLAG_UUID = 1u << 1,
   TEST_DEVICE_SPEC_FLAG_EXTERNAL_BUFFER_HANDLES = 1u << 2,
+  TEST_DEVICE_SPEC_FLAG_EXTERNAL_TIMEPOINT_HANDLES = 1u << 3,
 };
 
 static iree_hal_uuid_t MakeTestUuid(uint8_t value) {
@@ -111,9 +112,28 @@ static iree_hal_device_spec_t* CreateTestDeviceSpec(
       /*.external_buffer_handles=*/external_buffer_handles,
       /*.flags=*/IREE_HAL_DEVICE_MEMORY_SPEC_FLAG_NONE,
   };
+  iree_hal_external_timepoint_handle_spec_t external_timepoint_handles[1] = {
+      {
+          /*.handle_type=*/IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT,
+          /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT |
+              IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT,
+          /*.compatibility=*/IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT,
+          /*.flags=*/IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_NONE,
+      },
+  };
+  iree_hal_device_queue_spec_t queues = {
+      /*.family_count=*/0,
+      /*.families=*/NULL,
+      /*.external_timepoint_handle_count=*/
+      (flags & TEST_DEVICE_SPEC_FLAG_EXTERNAL_TIMEPOINT_HANDLES) ? 1u : 0u,
+      /*.external_timepoint_handles=*/external_timepoint_handles,
+      /*.flags=*/IREE_HAL_DEVICE_QUEUE_SPEC_FLAG_NONE,
+  };
   iree_hal_device_spec_params_t params = {
       /*.identity=*/&identity,
       /*.memory=*/&memory,
+      /*.virtual_memory=*/NULL,
+      /*.queues=*/&queues,
   };
   iree_hal_device_spec_t* device_spec = NULL;
   IREE_CHECK_OK(iree_hal_device_spec_create(&params, iree_allocator_system(),
@@ -430,6 +450,55 @@ TEST(TopologyEdge, ExternalBufferHandlesUseImportModes) {
             IREE_HAL_TOPOLOGY_LINK_CLASS_OTHER);
   EXPECT_FALSE(iree_hal_topology_edge_capability_flags(edge.lo) &
                IREE_HAL_TOPOLOGY_CAPABILITY_P2P_COPY);
+
+  iree_hal_device_spec_release(spec_b);
+  iree_hal_device_spec_release(spec_a);
+}
+
+TEST(TopologyEdge, ExternalTimepointsUseImportModes) {
+  TestDeviceSpecFlags flags = TEST_DEVICE_SPEC_FLAG_EXTERNAL_TIMEPOINT_HANDLES;
+  iree_hal_device_spec_t* spec_a = CreateTestDeviceSpec(
+      "producer", "producer", 0, flags, 0, MakeTestUuid(0));
+  iree_hal_device_spec_t* spec_b = CreateTestDeviceSpec(
+      "consumer", "consumer", 1, flags, 0, MakeTestUuid(0));
+
+  iree_hal_topology_edge_t edge =
+      iree_hal_topology_edge_from_device_specs(spec_a, spec_b);
+  EXPECT_EQ(iree_hal_topology_edge_wait_mode(edge.lo),
+            IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+  EXPECT_EQ(iree_hal_topology_edge_signal_mode(edge.lo),
+            IREE_HAL_TOPOLOGY_INTEROP_MODE_IMPORT);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT);
+  EXPECT_TRUE(iree_hal_topology_edge_capability_flags(edge.lo) &
+              IREE_HAL_TOPOLOGY_CAPABILITY_TIMELINE_SEMAPHORE);
+  EXPECT_LT(iree_hal_topology_edge_wait_cost(edge.lo), 10);
+
+  iree_hal_device_spec_release(spec_b);
+  iree_hal_device_spec_release(spec_a);
+}
+
+TEST(TopologyEdge, ExternalTimepointExportWithoutImportStaysHostStaged) {
+  iree_hal_device_spec_t* spec_a = CreateTestDeviceSpec(
+      "hip", "hsa", 0, TEST_DEVICE_SPEC_FLAG_EXTERNAL_TIMEPOINT_HANDLES, 0,
+      MakeTestUuid(0));
+  iree_hal_device_spec_t* spec_b = CreateTestDeviceSpec(
+      "vulkan", "vulkan", 1, TEST_DEVICE_SPEC_FLAG_NONE, 0, MakeTestUuid(0));
+
+  iree_hal_topology_edge_t edge =
+      iree_hal_topology_edge_from_device_specs(spec_a, spec_b);
+  EXPECT_EQ(iree_hal_topology_edge_wait_mode(edge.lo),
+            IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
+  EXPECT_EQ(iree_hal_topology_edge_signal_mode(edge.lo),
+            IREE_HAL_TOPOLOGY_INTEROP_MODE_COPY);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_import_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
+  EXPECT_EQ(iree_hal_topology_edge_semaphore_export_timepoint_types(edge.hi),
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE);
+  EXPECT_FALSE(iree_hal_topology_edge_capability_flags(edge.lo) &
+               IREE_HAL_TOPOLOGY_CAPABILITY_TIMELINE_SEMAPHORE);
 
   iree_hal_device_spec_release(spec_b);
   iree_hal_device_spec_release(spec_a);
