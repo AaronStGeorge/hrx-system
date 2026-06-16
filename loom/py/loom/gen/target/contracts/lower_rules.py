@@ -20,9 +20,17 @@ from loom.target.contracts import (
     CompiledLowerRuleSet,
     ContractFragment,
     LowerDiagnosticParam,
+    TypePattern,
     compile_lower_rule_set,
 )
 from loom.target.contracts.diagnostics import MAX_TARGET_DIAGNOSTIC_PARAMS
+
+_I64_MIN = -(2**63)
+_I64_MAX = 2**63 - 1
+_U8_MAX = 0xFF
+_U16_MAX = 0xFFFF
+_U32_MAX = 0xFFFF_FFFF
+_U64_MAX = 0xFFFF_FFFF_FFFF_FFFF
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +188,7 @@ def _generate_source(
     )
 
     descriptor_ref_keys = lower_rule_rows.descriptor_ref_keys(table, source_contract)
+    _validate_c_table_shape(table, source_contract, descriptor_ref_keys)
     descriptor_refs = {key: index for index, key in enumerate(descriptor_ref_keys)}
     descriptor_refs_name = f"k{c_table_prefix}DescriptorRefs"
     lines.extend(
@@ -308,6 +317,255 @@ def _generate_source(
     )
     lines.extend(["};", ""])
     return "\n".join(lines)
+
+
+def _validate_c_table_shape(
+    table: CompiledLowerRuleSet,
+    source_contract: ContractFragment,
+    descriptor_ref_keys: tuple[str, ...],
+) -> None:
+    """Validates that compiled rows fit the compact C table ABI."""
+
+    subject = f"lower-rule set '{table.name}'"
+    _require_u16(len(table.spans), f"{subject} span count")
+    _require_u16(len(table.rules), f"{subject} rule count")
+    _require_u16(len(table.type_patterns), f"{subject} type-pattern count")
+    _require_u16(len(table.value_refs), f"{subject} value-ref count")
+    _require_u16(
+        len(source_contract.materializers),
+        f"{subject} materializer count",
+    )
+    _require_u16(len(table.source_memories), f"{subject} source-memory count")
+    _require_u16(len(descriptor_ref_keys), f"{subject} descriptor-ref count")
+    _require_u16(len(table.guards), f"{subject} guard count")
+    _require_u16(len(table.attr_copies), f"{subject} attr-copy count")
+    _require_u16(len(table.tied_results), f"{subject} tied-result count")
+    _require_u16(len(table.emits), f"{subject} emit count")
+    _require_u16(len(table.diagnostics), f"{subject} diagnostic count")
+
+    diagnostic_param_count = 0
+    for index, row in enumerate(table.diagnostics):
+        diagnostic_subject = f"{subject} diagnostic {index}"
+        _require_u16(
+            diagnostic_param_count,
+            f"{diagnostic_subject} param start",
+        )
+        param_count = len(row.params)
+        _require_target_diagnostic_param_count(
+            param_count,
+            f"{diagnostic_subject} param count",
+        )
+        for param_index, param in enumerate(row.params):
+            param_subject = f"{diagnostic_subject} param {param_index}"
+            _require_u16(param.value_ref_index, f"{param_subject} value-ref index")
+            _require_i64(param.i64_value, f"{param_subject} i64 value")
+            _require_u32(param.u32_value, f"{param_subject} u32 value")
+            _require_u64(param.u64_value, f"{param_subject} u64 value")
+        diagnostic_param_count += param_count
+    _require_u16(diagnostic_param_count, f"{subject} diagnostic-param count")
+
+    for index, row in enumerate(table.type_patterns):
+        _validate_type_pattern_c_shape(
+            f"{subject} type-pattern {index}",
+            row.type_pattern,
+        )
+
+    for index, row in enumerate(table.value_refs):
+        row_subject = f"{subject} value-ref {index}"
+        _require_u16(row.index, f"{row_subject} index")
+        _require_u16(row.materializer_index, f"{row_subject} materializer index")
+
+    for index, row in enumerate(table.source_memories):
+        row_subject = f"{subject} source-memory {index}"
+        constraint = row.constraint
+        _require_u32(
+            constraint.element_byte_count,
+            f"{row_subject} element byte count",
+        )
+        _require_u32(
+            constraint.vector_lane_count,
+            f"{row_subject} vector lane count",
+        )
+        _require_i64(
+            constraint.vector_lane_byte_stride,
+            f"{row_subject} vector lane byte stride",
+        )
+        _require_i64(
+            constraint.static_byte_offset_minimum,
+            f"{row_subject} static byte offset minimum",
+        )
+        _require_i64(
+            constraint.static_byte_offset_maximum,
+            f"{row_subject} static byte offset maximum",
+        )
+        _require_u32(
+            constraint.minimum_alignment,
+            f"{row_subject} minimum alignment",
+        )
+        dynamic_term_count = constraint.dynamic_term_count
+        if dynamic_term_count is not None:
+            _require_u8_not_reserved_any(
+                dynamic_term_count,
+                f"{row_subject} dynamic term count",
+            )
+        if constraint.dynamic_byte_stride is not None:
+            _require_i64(
+                constraint.dynamic_byte_stride,
+                f"{row_subject} dynamic byte stride",
+            )
+        _require_u8(
+            constraint.dynamic_offset_unsigned_bit_count,
+            f"{row_subject} dynamic offset unsigned bit count",
+        )
+        _require_u16(
+            row.dynamic_offset_diagnostic_index,
+            f"{row_subject} dynamic-offset diagnostic index",
+        )
+        _require_u32(
+            constraint.cache_policy_build_flags,
+            f"{row_subject} cache policy build flags",
+        )
+        _require_u16(row.diagnostic_index, f"{row_subject} diagnostic index")
+
+    for index, row in enumerate(table.guards):
+        row_subject = f"{subject} guard {index}"
+        _require_u16(row.value_ref_index, f"{row_subject} value-ref index")
+        _require_u16(
+            row.other_value_ref_index,
+            f"{row_subject} other value-ref index",
+        )
+        _require_u16(row.attr_index, f"{row_subject} attr index")
+        _require_u16(row.type_pattern_index, f"{row_subject} type-pattern index")
+        _require_u16(row.diagnostic_index, f"{row_subject} diagnostic index")
+        _require_u64(row.u64, f"{row_subject} u64 payload")
+        _require_u16(row.register_class_id, f"{row_subject} register class id")
+        _require_i64(row.minimum_i64, f"{row_subject} minimum i64")
+        _require_i64(row.maximum_i64, f"{row_subject} maximum i64")
+
+    for index, row in enumerate(table.attr_copies):
+        row_subject = f"{subject} attr-copy {index}"
+        _require_u16(row.source_attr_index, f"{row_subject} source attr index")
+        _require_u16(
+            row.other_source_attr_index,
+            f"{row_subject} other source attr index",
+        )
+        _require_u16(
+            row.source_element_index,
+            f"{row_subject} source element index",
+        )
+        _require_u16(
+            row.source_element_count,
+            f"{row_subject} source element count",
+        )
+        _require_u8(
+            row.source_element_bit_width,
+            f"{row_subject} source element bit width",
+        )
+        _require_u8(row.target_bit_offset, f"{row_subject} target bit offset")
+        _require_u16(row.value_ref_index, f"{row_subject} value-ref index")
+        _require_u8(row.dynamic_term_index, f"{row_subject} dynamic term index")
+        _require_i64(row.literal_i64, f"{row_subject} literal i64")
+
+    for index, row in enumerate(table.tied_results):
+        row_subject = f"{subject} tied-result {index}"
+        _require_u16(row.result_index, f"{row_subject} result index")
+        _require_u16(row.operand_index, f"{row_subject} operand index")
+
+    for index, row in enumerate(table.emits):
+        row_subject = f"{subject} emit {index}"
+        _require_u16(row.flags, f"{row_subject} flags")
+        _require_u16(row.operand_ref_start, f"{row_subject} operand-ref start")
+        _require_u16(row.operand_ref_count, f"{row_subject} operand-ref count")
+        _require_u16(row.copy_operand_mask, f"{row_subject} copy operand mask")
+        _require_u16(
+            row.accumulator_operand_index,
+            f"{row_subject} accumulator operand index",
+        )
+        _require_u16(row.result_ref_start, f"{row_subject} result-ref start")
+        _require_u16(
+            row.result_type_pattern_start,
+            f"{row_subject} result type-pattern start",
+        )
+        _require_u16(row.result_ref_count, f"{row_subject} result-ref count")
+        _require_u16(
+            row.result_bind_ref_start,
+            f"{row_subject} result bind-ref start",
+        )
+        _require_u16(row.attr_copy_start, f"{row_subject} attr-copy start")
+        _require_u16(row.attr_copy_count, f"{row_subject} attr-copy count")
+        _require_u16(row.tied_result_start, f"{row_subject} tied-result start")
+        _require_u16(row.tied_result_count, f"{row_subject} tied-result count")
+        _require_u16(
+            row.source_memory_ordinal,
+            f"{row_subject} source-memory ordinal",
+        )
+
+    for index, row in enumerate(table.rules):
+        row_subject = f"{subject} rule {index}"
+        _require_u16(row.temporary_count, f"{row_subject} temporary count")
+        _require_u16(row.guard_start, f"{row_subject} guard start")
+        _require_u16(row.guard_count, f"{row_subject} guard count")
+        _require_u16(row.emit_start, f"{row_subject} emit start")
+        _require_u16(row.emit_count, f"{row_subject} emit count")
+        _require_u16(row.alias_ref_start, f"{row_subject} alias-ref start")
+        _require_u16(row.alias_ref_count, f"{row_subject} alias-ref count")
+        _require_u16(row.elide_ref_start, f"{row_subject} elide-ref start")
+        _require_u16(row.elide_ref_count, f"{row_subject} elide-ref count")
+
+    for index, row in enumerate(table.spans):
+        row_subject = f"{subject} span {index}"
+        _require_u16(row.rule_start, f"{row_subject} rule start")
+        _require_u16(row.rule_count, f"{row_subject} rule count")
+
+
+def _validate_type_pattern_c_shape(subject: str, type_pattern: TypePattern) -> None:
+    if type_pattern.kind != "vector":
+        return
+    _require_u8(len(type_pattern.dims), f"{subject} rank")
+    for index, dim in enumerate(type_pattern.dims):
+        _require_i64(dim, f"{subject} static dim {index}")
+    if type_pattern.lanes is not None:
+        _require_i64(type_pattern.lanes, f"{subject} static lanes")
+    if isinstance(type_pattern.minimum_lanes, int):
+        _require_i64(type_pattern.minimum_lanes, f"{subject} minimum lanes")
+    if isinstance(type_pattern.maximum_lanes, int):
+        _require_i64(type_pattern.maximum_lanes, f"{subject} maximum lanes")
+
+
+def _require_u8(value: int, subject: str) -> None:
+    if not 0 <= value <= _U8_MAX:
+        raise ValueError(f"{subject} exceeds uint8_t: {value}")
+
+
+def _require_u8_not_reserved_any(value: int, subject: str) -> None:
+    if not 0 <= value < _U8_MAX:
+        raise ValueError(f"{subject} exceeds uint8_t reserved-any range: {value}")
+
+
+def _require_target_diagnostic_param_count(value: int, subject: str) -> None:
+    if value > MAX_TARGET_DIAGNOSTIC_PARAMS:
+        raise ValueError(f"{subject} exceeds target diagnostic param capacity: {value}")
+    _require_u8(value, subject)
+
+
+def _require_u16(value: int, subject: str) -> None:
+    if not 0 <= value <= _U16_MAX:
+        raise ValueError(f"{subject} exceeds uint16_t: {value}")
+
+
+def _require_u32(value: int, subject: str) -> None:
+    if not 0 <= value <= _U32_MAX:
+        raise ValueError(f"{subject} exceeds uint32_t: {value}")
+
+
+def _require_u64(value: int, subject: str) -> None:
+    if not 0 <= value <= _U64_MAX:
+        raise ValueError(f"{subject} exceeds uint64_t: {value}")
+
+
+def _require_i64(value: int, subject: str) -> None:
+    if not _I64_MIN <= value <= _I64_MAX:
+        raise ValueError(f"{subject} exceeds int64_t: {value}")
 
 
 def _op_header_includes(table: CompiledLowerRuleSet) -> tuple[str, ...]:

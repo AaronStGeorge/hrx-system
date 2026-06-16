@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 
 from loom.dialect.scalar import ALL_SCALAR_OPS
@@ -13,8 +14,12 @@ from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.gen.target.contracts.lower_rule_rows import source_memory_row
-from loom.gen.target.contracts.lower_rules import generate_lower_rule_set
+from loom.gen.target.contracts.lower_rules import (
+    _validate_c_table_shape,
+    generate_lower_rule_set,
+)
 from loom.target.contracts import (
+    CompiledLowerRuleSet,
     ContractFragment,
     DescriptorAccumulatorSeed,
     DescriptorAccumulatorTree,
@@ -22,7 +27,9 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
+    LowerRule,
     LowerSourceMemory,
+    LowerTypePattern,
     Scalar,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
@@ -38,6 +45,44 @@ from loom.target.test.descriptors import (
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
 )
+
+
+def _expect_value_error(callable_obj: Callable[[], object], message: str) -> None:
+    error: ValueError | None = None
+    try:
+        callable_obj()
+    except ValueError as exc:
+        error = exc
+    assert error is not None
+    assert message in str(error)
+
+
+def _compiled_lower_rule_set(
+    *,
+    rules: tuple[LowerRule, ...] = (),
+    type_patterns: tuple[LowerTypePattern, ...] = (),
+) -> CompiledLowerRuleSet:
+    return CompiledLowerRuleSet(
+        name="test.low.generated_c_shape",
+        authored_case_indices=(),
+        rules=rules,
+        spans=(),
+        type_patterns=type_patterns,
+        value_refs=(),
+        source_memories=(),
+        guards=(),
+        attr_copies=(),
+        tied_results=(),
+        emits=(),
+        diagnostics=(),
+    )
+
+
+def _c_shape_contract() -> ContractFragment:
+    return ContractFragment(
+        name="test.low.generated_c_shape",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+    )
 
 
 def _add_f32_flags_descriptor_set():
@@ -56,6 +101,48 @@ def _add_f32_flags_descriptor_set():
     return descriptor, replace(
         TEST_LOW_CORE_DESCRIPTOR_SET,
         descriptors=(*TEST_LOW_CORE_DESCRIPTOR_SET.descriptors, descriptor),
+    )
+
+
+def test_validate_c_table_shape_rejects_oversized_table_count() -> None:
+    table = _compiled_lower_rule_set(
+        type_patterns=(LowerTypePattern(Scalar("i32")),) * 0x10000,
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' type-pattern count exceeds uint16_t",
+    )
+
+
+def test_validate_c_table_shape_rejects_oversized_rule_field() -> None:
+    table = _compiled_lower_rule_set(
+        rules=(
+            LowerRule(
+                source_op=scalar_arithmetic.scalar_addi,
+                temporary_count=0x10000,
+                guard_start=0,
+                guard_count=0,
+                emit_start=0,
+                emit_count=0,
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' rule 0 temporary count exceeds uint16_t",
+    )
+
+
+def test_validate_c_table_shape_rejects_oversized_type_payload() -> None:
+    table = _compiled_lower_rule_set(
+        type_patterns=(LowerTypePattern(Vector("i32", lanes=2**63)),),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' type-pattern 0 static lanes exceeds int64_t",
     )
 
 
