@@ -47,7 +47,7 @@ class _RowMacroSignature:
     argument_count: int
     storage_policy_argument: int | None = None
     preselect_policy_argument: int | None = None
-    report_policy_argument: int | None = None
+    report_key_argument: int | None = None
 
 
 _ROW_RE = re.compile(
@@ -71,8 +71,8 @@ _ROW_MACRO_SIGNATURES = {
     "RECIPE_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5
     ),
-    "RECIPE_DATA_STORAGE_REPORT_ROW": _RowMacroSignature(
-        argument_count=7, storage_policy_argument=5, report_policy_argument=6
+    "RECIPE_DATA_STORAGE_REPORT_KEY_ROW": _RowMacroSignature(
+        argument_count=7, storage_policy_argument=5, report_key_argument=6
     ),
     "GENERATED_PRESELECT_DIRECT_POLICY_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=4, preselect_policy_argument=5
@@ -107,23 +107,29 @@ _PRESELECT_POLICY_NAMES = frozenset(
     }
 )
 
-_REPORT_POLICY_NAMES = frozenset(
+_REPORT_KEY_NAMES = frozenset(
     {
-        "LOOM_AMDGPU_REPORT_TABLE_LOOKUP_STRATEGY",
-        "LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION",
+        "LOOM_AMDGPU_REPORT_KEY_TABLE_LOOKUP_STRATEGY",
+        "LOOM_AMDGPU_REPORT_KEY_WORKGROUP_REDUCE_PUBLICATION",
     }
 )
 
-_POLICY_NAMES_BY_KIND = {
+_ROW_TAG_NAMES_BY_KIND = {
     "storage": _STORAGE_POLICY_NAMES,
     "preselect": _PRESELECT_POLICY_NAMES,
-    "report": _REPORT_POLICY_NAMES,
+    "report_key": _REPORT_KEY_NAMES,
 }
 
-_POLICY_PREFIXES = (
+_ROW_TAG_DESCRIPTIONS = {
+    "storage": "storage policy",
+    "preselect": "preselect policy",
+    "report_key": "report key",
+}
+
+_ROW_TAG_PREFIXES = (
     "LOOM_AMDGPU_STORAGE_",
     "LOOM_AMDGPU_PRESELECT_",
-    "LOOM_AMDGPU_REPORT_",
+    "LOOM_AMDGPU_REPORT_KEY_",
 )
 
 
@@ -168,10 +174,10 @@ def parse_callback_dispatch_rows(source: str) -> tuple[CallbackDispatchRow, ...]
     return tuple(rows)
 
 
-def callback_dispatch_policy_names_by_kind() -> dict[str, frozenset[str]]:
-    """Returns explicit policy tokens accepted by callback dispatch rows."""
+def callback_dispatch_row_tag_names_by_kind() -> dict[str, frozenset[str]]:
+    """Returns explicit row-tag tokens accepted by callback dispatch rows."""
 
-    return dict(_POLICY_NAMES_BY_KIND)
+    return dict(_ROW_TAG_NAMES_BY_KIND)
 
 
 def callback_dispatch_row_macro_names() -> frozenset[str]:
@@ -254,31 +260,31 @@ def _validate_callback_dispatch_row_shape(row: CallbackDispatchRow) -> None:
             f"op-kind argument {row.arguments[0]}"
         )
 
-    expected_policy_arguments: dict[int, str] = {}
+    expected_row_tag_arguments: dict[int, str] = {}
     if signature.storage_policy_argument is not None:
-        expected_policy_arguments[signature.storage_policy_argument] = "storage"
+        expected_row_tag_arguments[signature.storage_policy_argument] = "storage"
     if signature.preselect_policy_argument is not None:
-        expected_policy_arguments[signature.preselect_policy_argument] = "preselect"
-    if signature.report_policy_argument is not None:
-        expected_policy_arguments[signature.report_policy_argument] = "report"
+        expected_row_tag_arguments[signature.preselect_policy_argument] = "preselect"
+    if signature.report_key_argument is not None:
+        expected_row_tag_arguments[signature.report_key_argument] = "report_key"
 
-    for argument_index, policy_kind in expected_policy_arguments.items():
+    for argument_index, row_tag_kind in expected_row_tag_arguments.items():
         argument = row.arguments[argument_index]
-        if argument not in _POLICY_NAMES_BY_KIND[policy_kind]:
+        if argument not in _ROW_TAG_NAMES_BY_KIND[row_tag_kind]:
             raise ValueError(
                 f"AMDGPU callback row {row.op_kind} via {row.macro_name} "
-                f"expects a {policy_kind} policy at argument {argument_index + 1}, "
-                f"got {argument}"
+                f"expects a {_ROW_TAG_DESCRIPTIONS[row_tag_kind]} at argument "
+                f"{argument_index + 1}, got {argument}"
             )
 
     for argument_index, argument in enumerate(row.arguments):
-        if not argument.startswith(_POLICY_PREFIXES):
+        if not argument.startswith(_ROW_TAG_PREFIXES):
             continue
-        if argument_index in expected_policy_arguments:
+        if argument_index in expected_row_tag_arguments:
             continue
         raise ValueError(
-            f"AMDGPU callback row {row.op_kind} via {row.macro_name} has policy "
-            f"token {argument} in non-policy argument {argument_index + 1}"
+            f"AMDGPU callback row {row.op_kind} via {row.macro_name} has row tag "
+            f"token {argument} in non-tag argument {argument_index + 1}"
         )
 
 
