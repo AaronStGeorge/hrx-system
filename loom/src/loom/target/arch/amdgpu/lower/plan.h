@@ -60,12 +60,12 @@ typedef enum loom_amdgpu_vector_bf16_conversion_kind_e {
 } loom_amdgpu_vector_bf16_conversion_kind_t;
 
 typedef struct loom_amdgpu_vector_bf16_conversion_plan_t {
-  // Conversion operation selected for the source/result type pair.
-  loom_amdgpu_vector_bf16_conversion_kind_t kind;
   // Source vector value being converted.
   loom_value_id_t source;
   // Result vector value receiving the converted lane payload.
   loom_value_id_t result;
+  // Conversion operation selected for the source/result type pair.
+  loom_amdgpu_vector_bf16_conversion_kind_t kind;
   // Static vector lane count.
   uint32_t lane_count;
   // Number of 32-bit source registers occupied by the source vector.
@@ -129,14 +129,14 @@ typedef enum loom_amdgpu_scalar_i64_alu_kind_e {
 } loom_amdgpu_scalar_i64_alu_kind_t;
 
 typedef struct loom_amdgpu_scalar_i64_alu_plan_t {
-  // Lowering strategy selected for the scalar i64 ALU op.
-  loom_amdgpu_scalar_i64_alu_kind_t kind;
   // Left-hand 64-bit source value.
   loom_value_id_t lhs;
   // Right-hand 64-bit source value.
   loom_value_id_t rhs;
   // Source result value receiving the emitted low result.
   loom_value_id_t result;
+  // Lowering strategy selected for the scalar i64 ALU op.
+  loom_amdgpu_scalar_i64_alu_kind_t kind;
 } loom_amdgpu_scalar_i64_alu_plan_t;
 
 typedef enum loom_amdgpu_scalar_conversion_kind_e {
@@ -153,12 +153,12 @@ typedef enum loom_amdgpu_scalar_conversion_kind_e {
 } loom_amdgpu_scalar_conversion_kind_t;
 
 typedef struct loom_amdgpu_scalar_conversion_plan_t {
-  // Lowering strategy selected for the source/result type pair.
-  loom_amdgpu_scalar_conversion_kind_t kind;
   // Source value being converted.
   loom_value_id_t source;
   // Result value receiving the converted payload.
   loom_value_id_t result;
+  // Lowering strategy selected for the source/result type pair.
+  loom_amdgpu_scalar_conversion_kind_t kind;
   // Static source integer payload bit count, or zero for non-integer sources.
   uint32_t source_bit_count;
   // Static result integer payload bit count, or zero for non-integer results.

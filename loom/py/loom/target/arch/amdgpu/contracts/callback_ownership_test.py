@@ -381,19 +381,19 @@ def test_validate_callback_dispatch_rows_accepts_bounded_recipe() -> None:
     )
 
 
-def test_validate_callback_dispatch_rows_accepts_value_data_policy() -> None:
+def test_validate_callback_dispatch_rows_accepts_value_data_source_policy() -> None:
     rows = (
         CallbackDispatchRow(
             op_kind="LOOM_OP_SCALAR_TRUNCI",
             role=CallbackDispatchRole.VALUE,
-            macro_name="VALUE_DATA_POLICY_ROW",
+            macro_name="VALUE_DATA_SOURCE_POLICY_ROW",
             arguments=(
                 "LOOM_OP_SCALAR_TRUNCI",
                 "loom_amdgpu_scalar_conversion_plan_t",
                 "select",
                 "emit",
                 "verify",
-                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "1",
                 "LOOM_AMDGPU_PRESELECT_PLAN_ID",
             ),
         ),

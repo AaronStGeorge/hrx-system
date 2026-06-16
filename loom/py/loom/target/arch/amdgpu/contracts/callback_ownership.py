@@ -66,8 +66,11 @@ _ROW_MACRO_SIGNATURES = {
     "VALUE_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5
     ),
-    "VALUE_DATA_POLICY_ROW": _RowMacroSignature(
-        argument_count=7, storage_policy_argument=5, preselect_policy_argument=6
+    "VALUE_DATA_SOURCE_ROW": _RowMacroSignature(
+        argument_count=6, source_count_argument=5
+    ),
+    "VALUE_DATA_SOURCE_POLICY_ROW": _RowMacroSignature(
+        argument_count=7, source_count_argument=5, preselect_policy_argument=6
     ),
     "MEMORY_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5

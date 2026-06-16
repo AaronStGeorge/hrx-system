@@ -812,7 +812,9 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_sanitizer_assert_access_dispatch,
 #define LOOM_AMDGPU_VALUE_DIRECT_POLICY_ROW \
   LOOM_AMDGPU_INTERNAL_DIRECT_POLICY_ROW
 #define LOOM_AMDGPU_VALUE_DATA_STORAGE_ROW LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
-#define LOOM_AMDGPU_VALUE_DATA_POLICY_ROW LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW
+#define LOOM_AMDGPU_VALUE_DATA_SOURCE_ROW LOOM_AMDGPU_INTERNAL_DATA_SOURCE_ROW
+#define LOOM_AMDGPU_VALUE_DATA_SOURCE_POLICY_ROW \
+  LOOM_AMDGPU_INTERNAL_DATA_SOURCE_POLICY_ROW
 
 #define LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
@@ -884,7 +886,8 @@ static const loom_amdgpu_lower_dispatch_table_t
 #undef LOOM_AMDGPU_RECIPE_DATA_ROW
 #undef LOOM_AMDGPU_RECIPE_DIRECT_STORAGE_ROW
 #undef LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW
-#undef LOOM_AMDGPU_VALUE_DATA_POLICY_ROW
+#undef LOOM_AMDGPU_VALUE_DATA_SOURCE_POLICY_ROW
+#undef LOOM_AMDGPU_VALUE_DATA_SOURCE_ROW
 #undef LOOM_AMDGPU_VALUE_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_VALUE_DIRECT_POLICY_ROW
 #undef LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW
@@ -982,6 +985,18 @@ static_assert(offsetof(loom_amdgpu_mulf_mix_plan_t, sources) == 0,
       offsetof(plan_type, field) == sizeof(loom_value_id_t) * (index),   \
       #plan_type "." #field " must match dispatch row storage policy")
 
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_offset_add_plan_t, lhs, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_offset_add_plan_t, rhs, 1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_i64_compare_plan_t, lhs, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_i64_compare_plan_t, rhs, 1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_scalar_i64_alu_plan_t, lhs,
+                                        0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_scalar_i64_alu_plan_t, rhs,
+                                        1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_scalar_conversion_plan_t,
+                                        source, 0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(
+    loom_amdgpu_vector_bf16_conversion_plan_t, source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_bitpack_plan_t, source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_bitunpack_plan_t, source,
                                         0);
