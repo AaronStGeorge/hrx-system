@@ -331,6 +331,7 @@ loom_cc_test(
   SRCS
     "arithmetic_lower_rules_test.cc"
   DEPS
+    ::arithmetic
     ::arithmetic_lower_rules
     iree::base
     iree::base::internal::arena
@@ -342,6 +343,7 @@ loom_cc_test(
     loom::ops::func
     loom::ops::vector
     loom::target::arch::amdgpu::lower::materializers
+    loom::target::contract
     loom::testing::module_ptr
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

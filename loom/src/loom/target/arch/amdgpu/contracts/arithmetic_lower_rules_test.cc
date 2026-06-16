@@ -14,13 +14,16 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/lower/contract_query.h"
 #include "loom/codegen/low/lower/lower_rules.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/arch/amdgpu/contracts/arithmetic.h"
 #include "loom/target/arch/amdgpu/lower/materializers.h"
+#include "loom/target/contract.h"
 #include "loom/testing/module_ptr.h"
 
 extern "C" bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
@@ -349,6 +352,98 @@ class AmdgpuArithmeticLowerRulesTest : public ::testing::Test {
     EXPECT_EQ(selection.rule, nullptr);
   }
 
+  void ExpectQueriedDescriptorKey(
+      iree_string_view_t source, loom_op_kind_t op_kind,
+      std::vector<iree_string_view_t> hidden_descriptor_keys,
+      iree_string_view_t expected_descriptor_key) {
+    ModulePtr module = Parse(source);
+    loom_op_t* function_op = FindFirstOp(module->body, LOOM_OP_FUNC_DEF);
+    ASSERT_NE(function_op, nullptr);
+    loom_func_like_t function = loom_func_like_cast(module.get(), function_op);
+    ASSERT_TRUE(loom_func_like_isa(function));
+    loom_op_t* op = FindFirstOp(module->body, op_kind);
+    ASSERT_NE(op, nullptr);
+
+    iree_arena_block_pool_t block_pool;
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool);
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool, &arena);
+
+    const loom_target_contract_binding_t bindings[] = {
+        {
+            /*.fragment=*/&loom_amdgpu_arithmetic_contract_fragment,
+            /*.rule_set_index=*/0,
+        },
+    };
+    loom_target_contract_index_t index = {};
+    IREE_ASSERT_OK(loom_target_contract_index_compose(
+        bindings, IREE_ARRAYSIZE(bindings), &index, &arena));
+
+    const loom_low_lower_rule_set_t* rule_sets[] = {
+        &loom_amdgpu_arithmetic_lower_rule_set,
+    };
+    DescriptorResolverState resolver_state = {
+        /*.hidden_keys=*/std::move(hidden_descriptor_keys),
+    };
+    const loom_low_lower_contract_query_options_t options = {
+        /*.contract_index=*/&index,
+        /*.rule_sets=*/
+        {
+            /*.count=*/IREE_ARRAYSIZE(rule_sets),
+            /*.values=*/rule_sets,
+        },
+        /*.map_value=*/{},
+        /*.can_materialize=*/{},
+        /*.descriptor_ref=*/
+        {
+            /*.fn=*/ResolveDescriptorRef,
+            /*.user_data=*/&resolver_state,
+        },
+    };
+    const loom_target_contract_query_environment_t environment = {
+        /*.module=*/module.get(),
+        /*.function=*/function,
+        /*.bundle=*/&kTargetBundle,
+        /*.target_data=*/nullptr,
+        /*.target_ref=*/{},
+        /*.descriptor_set=*/nullptr,
+        /*.fact_table=*/nullptr,
+        /*.view_regions=*/nullptr,
+        /*.arena=*/&arena,
+    };
+
+    loom_target_contract_query_result_t result =
+        loom_target_contract_query_result_empty();
+    IREE_ASSERT_OK(loom_low_lower_query_target_contract(&environment, &options,
+                                                        op, &result));
+
+    EXPECT_EQ(result.outcome, LOOM_TARGET_CONTRACT_QUERY_LEGAL);
+    EXPECT_EQ(result.binding_index, 0);
+    EXPECT_EQ(result.rule_set_index, 0);
+    ASSERT_LT(result.rule_index,
+              loom_amdgpu_arithmetic_lower_rule_set.rule_count);
+    const loom_low_lower_rule_t* rule =
+        &loom_amdgpu_arithmetic_lower_rule_set.rules[result.rule_index];
+    EXPECT_EQ(result.matched_guard_count, rule->guard_count);
+    const loom_low_lower_descriptor_ref_t descriptor_ref =
+        loom_low_lower_rule_first_descriptor_ref(
+            &loom_amdgpu_arithmetic_lower_rule_set, rule);
+    ASSERT_NE(descriptor_ref, LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE);
+    ASSERT_LT(descriptor_ref,
+              loom_amdgpu_arithmetic_lower_rule_set.descriptor_ref_count);
+    const iree_string_view_t actual_descriptor_key =
+        loom_amdgpu_arithmetic_lower_rule_set.descriptor_refs[descriptor_ref]
+            .key;
+    EXPECT_TRUE(
+        iree_string_view_equal(actual_descriptor_key, expected_descriptor_key))
+        << "expected " << ToString(expected_descriptor_key) << ", got "
+        << ToString(actual_descriptor_key);
+
+    iree_arena_deinitialize(&arena);
+    iree_arena_block_pool_deinitialize(&block_pool);
+  }
+
   loom_context_t context_;
   iree_arena_block_pool_t block_pool_;
 };
@@ -379,6 +474,18 @@ func.def @extractu(%source: vector<1xi32>) -> (vector<1xi32>) {
           IREE_SV("amdgpu.v_lshrrev_b32.src0_inline"),
           IREE_SV("amdgpu.v_and_b32.src0_inline"),
       });
+}
+
+TEST_F(AmdgpuArithmeticLowerRulesTest, QueriesUnsignedBitfieldExtractFallback) {
+  ExpectQueriedDescriptorKey(IREE_SV(R"(
+func.def @extractu(%source: vector<1xi32>) -> (vector<1xi32>) {
+  %bits = vector.bitfield.extractu %source {offset = 4, width = 4} : vector<1xi32> -> vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+)"),
+                             LOOM_OP_VECTOR_BITFIELD_EXTRACTU,
+                             {IREE_SV("amdgpu.v_bfe_u32.offset_width_inline")},
+                             IREE_SV("amdgpu.v_lshrrev_b32.src0_inline"));
 }
 
 TEST_F(AmdgpuArithmeticLowerRulesTest,
@@ -422,6 +529,18 @@ func.def @extracts(%source: vector<1xi32>) -> (vector<1xi32>) {
           IREE_SV("amdgpu.v_lshlrev_b32.src0_inline"),
           IREE_SV("amdgpu.v_ashrrev_i32.src0_inline"),
       });
+}
+
+TEST_F(AmdgpuArithmeticLowerRulesTest, QueriesSignedBitfieldExtractFallback) {
+  ExpectQueriedDescriptorKey(IREE_SV(R"(
+func.def @extracts(%source: vector<1xi32>) -> (vector<1xi32>) {
+  %bits = vector.bitfield.extracts %source {offset = 4, width = 4} : vector<1xi32> -> vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+)"),
+                             LOOM_OP_VECTOR_BITFIELD_EXTRACTS,
+                             {IREE_SV("amdgpu.v_bfe_i32.offset_width_inline")},
+                             IREE_SV("amdgpu.v_lshlrev_b32.src0_inline"));
 }
 
 TEST_F(AmdgpuArithmeticLowerRulesTest,
@@ -468,6 +587,18 @@ func.def @insert(%field: vector<1xi32>, %base: vector<1xi32>) -> (vector<1xi32>)
                                    IREE_SV("amdgpu.v_and_b32.lit"),
                                    IREE_SV("amdgpu.v_or_b32"),
                                });
+}
+
+TEST_F(AmdgpuArithmeticLowerRulesTest, QueriesBitfieldInsertFallback) {
+  ExpectQueriedDescriptorKey(IREE_SV(R"(
+func.def @insert(%field: vector<1xi32>, %base: vector<1xi32>) -> (vector<1xi32>) {
+  %bits = vector.bitfield.insert %field into %base {offset = 8, width = 4} : vector<1xi32>, vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+)"),
+                             LOOM_OP_VECTOR_BITFIELD_INSERT,
+                             {IREE_SV("amdgpu.v_bfi_b32.src0_lit")},
+                             IREE_SV("amdgpu.v_and_b32.src0_inline"));
 }
 
 TEST_F(AmdgpuArithmeticLowerRulesTest,
