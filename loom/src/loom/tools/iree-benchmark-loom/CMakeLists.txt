@@ -77,7 +77,6 @@ loom_cc_library(
     iree::tooling::device_util
     iree::tooling::profile::counter
     iree::tooling::profile::summary
-    iree::vm
     loom::error::diagnostic
     loom::error::json_sink
     loom::error::renderer

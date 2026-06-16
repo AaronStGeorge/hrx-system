@@ -185,7 +185,6 @@ loom_cc_library(
         "//runtime/src/iree/tooling:device_util",
         "//runtime/src/iree/tooling/profile:counter",
         "//runtime/src/iree/tooling/profile:summary",
-        "//runtime/src/iree/vm",
     ],
 )
 
