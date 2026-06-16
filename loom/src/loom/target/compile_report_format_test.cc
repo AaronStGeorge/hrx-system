@@ -57,7 +57,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           /*.rule_set_index=*/0,
           /*.rule_index=*/1,
           /*.plan_id=*/UINT64_MAX,
-          /*.plan_detail=*/IREE_SVL(""),
+          /*.plan_key=*/IREE_SVL(""),
           /*.descriptor_id=*/7,
           /*.emitted_low_op_count=*/1,
       },
@@ -336,7 +336,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("\"rule_set_index\":0,"
                                           "\"rule_index\":1,\"plan_id\":null,"
-                                          "\"plan_detail\":null,"
+                                          "\"plan_key\":null,"
                                           "\"descriptor_id\":7"),
                                   0),
             IREE_STRING_VIEW_NPOS);

@@ -930,7 +930,7 @@ static void loom_amdgpu_mark_plan_storage_demands(
   }
 }
 
-static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_detail(
+static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_key(
     const loom_amdgpu_workgroup_reduce_plan_t* plan) {
   switch (plan->publication_kind) {
     case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LDS:
@@ -948,7 +948,7 @@ static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_detail(
   }
 }
 
-static iree_string_view_t loom_amdgpu_describe_plan(
+static iree_string_view_t loom_amdgpu_plan_key(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_low_lower_plan_t plan) {
   (void)user_data;
@@ -961,7 +961,7 @@ static iree_string_view_t loom_amdgpu_describe_plan(
       if (plan.target_data == NULL) {
         return iree_string_view_empty();
       }
-      return loom_amdgpu_workgroup_reduce_plan_detail(
+      return loom_amdgpu_workgroup_reduce_plan_key(
           (const loom_amdgpu_workgroup_reduce_plan_t*)plan.target_data);
     default:
       return iree_string_view_empty();
@@ -1069,7 +1069,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},
     .mark_plan_storage_demands = {.fn = loom_amdgpu_mark_plan_storage_demands,
                                   .user_data = NULL},
-    .describe_plan = {.fn = loom_amdgpu_describe_plan, .user_data = NULL},
+    .plan_key = {.fn = loom_amdgpu_plan_key, .user_data = NULL},
     .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
 };
 
