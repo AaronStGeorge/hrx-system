@@ -7,6 +7,7 @@
 #include "loom/target/arch/amdgpu/lower/values.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #include "loom/ir/context.h"
 #include "loom/ops/index/ops.h"
@@ -2879,6 +2880,18 @@ static bool loom_amdgpu_select_scalar_conversion_plan(
       loom_low_lower_context_descriptor_set(context), source_op, out_plan);
 }
 
+static iree_status_t loom_amdgpu_bind_selected_value_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const void* local_plan, iree_host_size_t local_plan_size,
+    loom_low_lower_plan_t* out_plan) {
+  void* plan_data = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_allocate_plan_data(context, local_plan_size, &plan_data));
+  memcpy(plan_data, local_plan, local_plan_size);
+  *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_low_legality_verify_scalar_conversion(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
@@ -2902,17 +2915,13 @@ iree_status_t loom_amdgpu_low_legality_verify_scalar_conversion(
 static iree_status_t loom_amdgpu_select_scalar_conversion_lower_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
-  loom_amdgpu_scalar_conversion_plan_t local_plan;
+  loom_amdgpu_scalar_conversion_plan_t local_plan = {0};
   if (!loom_amdgpu_select_scalar_conversion_plan(context, source_op,
                                                  &local_plan)) {
     return iree_ok_status();
   }
-  loom_amdgpu_scalar_conversion_plan_t* plan_data = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-      context, sizeof(*plan_data), (void**)&plan_data));
-  *plan_data = local_plan;
-  *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-  return iree_ok_status();
+  return loom_amdgpu_bind_selected_value_plan(context, source_op, &local_plan,
+                                              sizeof(local_plan), out_plan);
 }
 
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
@@ -2923,75 +2932,67 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
     case LOOM_OP_INDEX_CONSTANT:
     case LOOM_OP_SCALAR_CONSTANT:
     case LOOM_OP_VECTOR_CONSTANT: {
-      loom_amdgpu_constant_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
+      loom_amdgpu_constant_plan_t local_plan = {0};
       bool selected = false;
       if (source_op->kind == LOOM_OP_INDEX_CONSTANT) {
         IREE_RETURN_IF_ERROR(loom_amdgpu_select_index_constant_plan(
-            context, source_op, plan_data, &selected));
+            context, source_op, &local_plan, &selected));
       } else if (source_op->kind == LOOM_OP_SCALAR_CONSTANT) {
         IREE_RETURN_IF_ERROR(loom_amdgpu_select_scalar_constant_plan(
-            context, source_op, plan_data, &selected));
+            context, source_op, &local_plan, &selected));
       } else {
         IREE_RETURN_IF_ERROR(loom_amdgpu_select_vector_constant_plan(
-            context, source_op, plan_data, &selected));
+            context, source_op, &local_plan, &selected));
       }
-      if (selected) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+      if (!selected) {
+        return iree_ok_status();
       }
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     case LOOM_OP_INDEX_CAST: {
-      loom_amdgpu_index_cast_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
+      loom_amdgpu_index_cast_plan_t local_plan = {0};
       bool selected = false;
       IREE_RETURN_IF_ERROR(loom_amdgpu_select_index_cast_plan(
-          context, source_op, plan_data, &selected));
-      if (selected) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+          context, source_op, &local_plan, &selected));
+      if (!selected) {
+        return iree_ok_status();
       }
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     case LOOM_OP_INDEX_ADD: {
-      loom_amdgpu_offset_add_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
+      loom_amdgpu_offset_add_plan_t local_plan = {0};
       bool selected = false;
       IREE_RETURN_IF_ERROR(loom_amdgpu_select_offset_add_plan(
-          context, source_op, plan_data, &selected));
-      if (selected) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+          context, source_op, &local_plan, &selected));
+      if (!selected) {
+        return iree_ok_status();
       }
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     case LOOM_OP_INDEX_CMP: {
-      loom_amdgpu_i64_compare_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
+      loom_amdgpu_i64_compare_plan_t local_plan = {0};
       bool selected = false;
       IREE_RETURN_IF_ERROR(loom_amdgpu_select_index_cmp_i64_plan(
-          context, source_op, plan_data, &selected));
-      if (selected) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+          context, source_op, &local_plan, &selected));
+      if (!selected) {
+        return iree_ok_status();
       }
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     case LOOM_OP_SCALAR_CMPI: {
-      loom_amdgpu_i64_compare_plan_t local_plan;
+      loom_amdgpu_i64_compare_plan_t local_plan = {0};
       bool selected = false;
       IREE_RETURN_IF_ERROR(loom_amdgpu_select_scalar_cmpi_i64_plan(
           context, source_op, &local_plan, &selected));
       if (!selected) {
         return iree_ok_status();
       }
-      loom_amdgpu_i64_compare_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
-      *plan_data = local_plan;
-      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     case LOOM_OP_SCALAR_EXTUI:
     case LOOM_OP_SCALAR_EXTSI:
@@ -3006,64 +3007,60 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
               context, source_op, out_plan)) {
         return iree_ok_status();
       }
-      loom_amdgpu_vector_iota_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
+      loom_amdgpu_vector_iota_plan_t local_plan = {0};
       bool selected = false;
       IREE_RETURN_IF_ERROR(loom_amdgpu_select_vector_iota_plan(
-          context, source_op, plan_data, &selected));
-      if (selected) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+          context, source_op, &local_plan, &selected));
+      if (!selected) {
+        return iree_ok_status();
       }
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     case LOOM_OP_VECTOR_EXTRACT: {
-      loom_amdgpu_vector_extract_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
+      loom_amdgpu_vector_extract_plan_t local_plan = {0};
       bool selected = false;
       IREE_RETURN_IF_ERROR(loom_amdgpu_select_vector_extract_plan(
-          context, source_op, plan_data, &selected));
-      if (selected) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+          context, source_op, &local_plan, &selected));
+      if (!selected) {
+        return iree_ok_status();
       }
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     case LOOM_OP_VECTOR_FROM_ELEMENTS: {
       if (loom_amdgpu_select_fact_only_vector_atomic_offset_plan(
               context, source_op, out_plan)) {
         return iree_ok_status();
       }
-      loom_amdgpu_vector_from_elements_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
+      loom_amdgpu_vector_from_elements_plan_t local_plan = {0};
       if (loom_amdgpu_select_vector_from_elements_plan(context, source_op,
-                                                       plan_data)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+                                                       &local_plan)) {
+        return loom_amdgpu_bind_selected_value_plan(
+            context, source_op, &local_plan, sizeof(local_plan), out_plan);
       }
       return iree_ok_status();
     }
     case LOOM_OP_VECTOR_SPLAT: {
-      loom_amdgpu_vector_from_elements_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
-      if (loom_amdgpu_select_vector_splat_plan(context, source_op, plan_data)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+      loom_amdgpu_vector_from_elements_plan_t local_plan = {0};
+      if (loom_amdgpu_select_vector_splat_plan(context, source_op,
+                                               &local_plan)) {
+        return loom_amdgpu_bind_selected_value_plan(
+            context, source_op, &local_plan, sizeof(local_plan), out_plan);
       }
       return iree_ok_status();
     }
     case LOOM_OP_VECTOR_INSERT: {
-      loom_amdgpu_vector_insert_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
+      loom_amdgpu_vector_insert_plan_t local_plan = {0};
       bool selected = false;
       IREE_RETURN_IF_ERROR(loom_amdgpu_select_vector_insert_plan(
           context, source_op, LOOM_AMDGPU_VECTOR_INSERT_SELECT_FLAG_NONE,
-          plan_data, &selected));
-      if (selected) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+          &local_plan, &selected));
+      if (!selected) {
+        return iree_ok_status();
       }
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     case LOOM_OP_VECTOR_EXTF:
     case LOOM_OP_VECTOR_FPTRUNC: {
@@ -3074,12 +3071,8 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
       if (!selected) {
         return iree_ok_status();
       }
-      loom_amdgpu_vector_bf16_conversion_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan_data), (void**)&plan_data));
-      *plan_data = local_plan;
-      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-      return iree_ok_status();
+      return loom_amdgpu_bind_selected_value_plan(
+          context, source_op, &local_plan, sizeof(local_plan), out_plan);
     }
     default:
       return iree_ok_status();
@@ -3096,26 +3089,22 @@ iree_status_t loom_amdgpu_preselect_value_plan(
   }
 
   if (loom_scalar_cmpi_isa(source_op)) {
-    loom_amdgpu_i64_compare_plan_t local_plan;
+    loom_amdgpu_i64_compare_plan_t local_plan = {0};
     bool selected = false;
     IREE_RETURN_IF_ERROR(loom_amdgpu_select_scalar_cmpi_i64_plan(
         context, source_op, &local_plan, &selected));
     if (!selected) {
       return iree_ok_status();
     }
-    loom_amdgpu_i64_compare_plan_t* plan_data = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-        context, sizeof(*plan_data), (void**)&plan_data));
-    *plan_data = local_plan;
-    *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-    return iree_ok_status();
+    return loom_amdgpu_bind_selected_value_plan(context, source_op, &local_plan,
+                                                sizeof(local_plan), out_plan);
   }
 
   if (!loom_vector_insert_isa(source_op)) {
     return iree_ok_status();
   }
 
-  loom_amdgpu_vector_insert_plan_t local_plan;
+  loom_amdgpu_vector_insert_plan_t local_plan = {0};
   bool selected = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_select_vector_insert_plan(
       context, source_op,
@@ -3127,12 +3116,8 @@ iree_status_t loom_amdgpu_preselect_value_plan(
     return iree_ok_status();
   }
 
-  loom_amdgpu_vector_insert_plan_t* plan_data = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-      context, sizeof(*plan_data), (void**)&plan_data));
-  *plan_data = local_plan;
-  *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-  return iree_ok_status();
+  return loom_amdgpu_bind_selected_value_plan(context, source_op, &local_plan,
+                                              sizeof(local_plan), out_plan);
 }
 
 static iree_status_t loom_amdgpu_bind_register_u32_lane_constants(
