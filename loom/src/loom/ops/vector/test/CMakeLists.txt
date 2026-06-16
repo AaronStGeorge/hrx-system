@@ -9,125 +9,21 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "block_quant_canonicalize"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/block_quant_canonicalize.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "block_quant_samples"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/block_quant_samples.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "bytecode"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/bytecode.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "canonicalize"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/canonicalize.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "facts"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/facts.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "roundtrip"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "vector_to_scalar"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "vector_to_scalar_atomics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar_atomics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "vector_to_scalar_cleanup"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar_cleanup.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "vector_to_scalar_memory"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar_memory.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "verify"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "block_quant_canonicalize.loom-test"
+    "block_quant_samples.loom-test"
+    "bytecode.loom-test"
+    "canonicalize.loom-test"
+    "facts.loom-test"
+    "roundtrip.loom-test"
+    "vector_to_scalar.loom-test"
+    "vector_to_scalar_atomics.loom-test"
+    "vector_to_scalar_cleanup.loom-test"
+    "vector_to_scalar_memory.loom-test"
+    "verify.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

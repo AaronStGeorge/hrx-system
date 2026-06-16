@@ -9,81 +9,17 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "canonicalize"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/canonicalize.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "facts"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/facts.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "roundtrip"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "structured_control"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/structured_control.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "structured_control_bytecode"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/structured_control_bytecode.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "target_verify"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/target_verify.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "verify"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "canonicalize.loom-test"
+    "facts.loom-test"
+    "roundtrip.loom-test"
+    "structured_control.loom-test"
+    "structured_control_bytecode.loom-test"
+    "target_verify.loom-test"
+    "verify.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -56,15 +56,11 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "test_assembly"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    loom_check_file_test
+  SRCS
+    "test/assembly.loom-test"
 )
 endif()
 

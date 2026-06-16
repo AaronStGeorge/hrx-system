@@ -9,26 +9,12 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "licm"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/licm.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "loop_fusion"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/loop_fusion.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "licm.loom-test"
+    "loop_fusion.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -28,6 +28,7 @@ set(IREE_COMPILER_TABLEGEN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}")
 set(IREE_IMPLICIT_DEFS_CC_DEPS loom_defs)
 
 include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_cc.cmake")
+include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_check.cmake")
 include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_low_descriptor.cmake")
 include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_generated.cmake")
 """,

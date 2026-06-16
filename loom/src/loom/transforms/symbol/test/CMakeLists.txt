@@ -9,48 +9,14 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "inline_callables"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/inline_callables.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "refine_boundaries"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/refine_boundaries.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "symbol_dce"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/symbol_dce.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "template_selection"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/template_selection.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "inline_callables.loom-test"
+    "refine_boundaries.loom-test"
+    "symbol_dce.loom-test"
+    "template_selection.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

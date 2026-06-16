@@ -198,54 +198,14 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "test_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/diagnostics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_emit"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_target_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/target_low.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_toolchain"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/toolchain.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    file_test
+  SRCS
+    "test/diagnostics.loom-test"
+    "test/emit.loom-test"
+    "test/target_low.loom-test"
+    "test/toolchain.loom-test"
 )
 endif()
 

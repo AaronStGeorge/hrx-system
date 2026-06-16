@@ -9,48 +9,14 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "kernel_async_legality"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernel_async_legality.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "kernel_resources"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernel_resources.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "promote_private_fragments"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/promote_private_fragments.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "promote_private_fragments_footprint"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/promote_private_fragments_footprint.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "kernel_async_legality.loom-test"
+    "kernel_resources.loom-test"
+    "promote_private_fragments.loom-test"
+    "promote_private_fragments_footprint.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

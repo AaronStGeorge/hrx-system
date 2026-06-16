@@ -889,51 +889,64 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         self,
         name,
         srcs,
+        size="small",
         data=None,
         env=None,
         tags=None,
         runner="//loom/src/loom/tools/loom-check:loom-check",
         test_name_prefix_to_strip="",
+        resource_group=None,
+        timeout=None,
         target_compatible_with=None,
         **kwargs,
     ):
+        del size
         if self._should_skip_target(tags=tags, **kwargs):
             return
         target_compatible_with = self._apply_loom_target_compatible_with(
             target_compatible_with
         )
-        test_binary_block = self._convert_single_target_block("SRC", runner)
+        for src in srcs:
+            self._loom_check_test_base_name(src)
+        name_block = self._convert_string_arg_block("NAME", name, quote=False)
+        srcs_block = self._convert_string_list_block(
+            "SRCS", [self._normalize_label(src) for src in srcs], sort=False
+        )
+        default_runner = "//loom/src/loom/tools/loom-check:loom-check"
+        runner_block = (
+            ""
+            if runner == default_runner
+            else self._convert_single_target_block("RUNNER", runner)
+        )
         data_block = self._convert_string_list_block(
             "DATA", self._convert_loom_check_data(data)
         )
         env_block = self._convert_string_list_block(
             "ENV", self._convert_native_test_env(env), sort=False
         )
-        combined_tags = (tags or []) + ["loom-check"]
-        labels_block = self._convert_string_list_block("LABELS", combined_tags)
-        for src in srcs:
-            test_name_src = self._loom_check_test_base_name(src)
-            if test_name_prefix_to_strip and test_name_src.startswith(
-                test_name_prefix_to_strip
-            ):
-                test_name_src = test_name_src[len(test_name_prefix_to_strip) :]
-            test_name = test_name_src.replace("/", "_")
-            name_block = self._convert_string_arg_block("NAME", test_name)
-            args_block = self._convert_string_list_block(
-                "ARGS", [f"${{CMAKE_CURRENT_SOURCE_DIR}}/{src}"]
-            )
-            self._emit_platform_guard_begin(target_compatible_with)
-            self._converter.body += (
-                f"iree_native_test(\n"
-                f"{name_block}"
-                f"{args_block}"
-                f"{test_binary_block}"
-                f"{data_block}"
-                f"{env_block}"
-                f"{labels_block}"
-                f")\n\n"
-            )
-            self._emit_platform_guard_end(target_compatible_with)
+        labels_block = self._convert_string_list_block("LABELS", tags)
+        test_name_prefix_to_strip_block = self._convert_string_arg_block(
+            "TEST_NAME_PREFIX_TO_STRIP", test_name_prefix_to_strip or None
+        )
+        resource_group_block = self._convert_string_arg_block(
+            "RESOURCE_GROUP", resource_group, quote=False
+        )
+        timeout_block = self._convert_timeout_arg_block("TIMEOUT", timeout)
+        self._emit_platform_guard_begin(target_compatible_with)
+        self._converter.body += (
+            f"loom_check_test_suite(\n"
+            f"{name_block}"
+            f"{srcs_block}"
+            f"{runner_block}"
+            f"{data_block}"
+            f"{env_block}"
+            f"{labels_block}"
+            f"{test_name_prefix_to_strip_block}"
+            f"{resource_group_block}"
+            f"{timeout_block}"
+            f")\n\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
 
 
 def convert_unmatched_target(converter, target):

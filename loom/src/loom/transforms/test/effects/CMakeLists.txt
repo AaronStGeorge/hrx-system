@@ -9,48 +9,14 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "canonicalize"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/canonicalize.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "cse"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/cse.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "dce"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/dce.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "verify"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "canonicalize.loom-test"
+    "cse.loom-test"
+    "dce.loom-test"
+    "verify.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

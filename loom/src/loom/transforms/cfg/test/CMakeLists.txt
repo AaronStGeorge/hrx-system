@@ -9,59 +9,15 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "branch_fusion"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/branch_fusion.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "branch_sink"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/branch_sink.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "cfg_compatibility"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/cfg_compatibility.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "cfg_simplify"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/cfg_simplify.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "cfg_simplify_scf_pipeline"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/cfg_simplify_scf_pipeline.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "branch_fusion.loom-test"
+    "branch_sink.loom-test"
+    "cfg_compatibility.loom-test"
+    "cfg_simplify.loom-test"
+    "cfg_simplify_scf_pipeline.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

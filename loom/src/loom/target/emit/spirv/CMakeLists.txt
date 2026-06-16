@@ -277,66 +277,19 @@ loom_cc_test(
 endif()
 
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "barrier"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/barrier.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
+    loom_check_file_test
+  SRCS
+    "test/barrier.loom-test"
+    "test/emit.loom-test"
+    "test/source_structured_control.loom-test"
+    "test/workgroup_storage.loom-test"
   ENV
     "LOOM_SPIRV_DIS=$<TARGET_FILE:iree::third_party::spirv_dis>"
     "LOOM_SPIRV_VAL=$<TARGET_FILE:iree::third_party::spirv_val>"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
-iree_native_test(
-  NAME
-    "emit"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  ENV
-    "LOOM_SPIRV_DIS=$<TARGET_FILE:iree::third_party::spirv_dis>"
-    "LOOM_SPIRV_VAL=$<TARGET_FILE:iree::third_party::spirv_val>"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
-iree_native_test(
-  NAME
-    "source_structured_control"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_structured_control.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  ENV
-    "LOOM_SPIRV_DIS=$<TARGET_FILE:iree::third_party::spirv_dis>"
-    "LOOM_SPIRV_VAL=$<TARGET_FILE:iree::third_party::spirv_val>"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
-iree_native_test(
-  NAME
-    "workgroup_storage"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/workgroup_storage.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  ENV
-    "LOOM_SPIRV_DIS=$<TARGET_FILE:iree::third_party::spirv_dis>"
-    "LOOM_SPIRV_VAL=$<TARGET_FILE:iree::third_party::spirv_val>"
-  LABELS
-    "loom-check"
+  TEST_NAME_PREFIX_TO_STRIP
+    "test/"
 )
 endif()
 

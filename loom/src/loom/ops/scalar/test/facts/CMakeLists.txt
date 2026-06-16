@@ -9,48 +9,14 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "arithmeticf"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/arithmeticf.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "arithmetici"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "bitwisei"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "conversioni"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/conversioni.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    facts
+  SRCS
+    "arithmeticf.loom-test"
+    "arithmetici.loom-test"
+    "bitwisei.loom-test"
+    "conversioni.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

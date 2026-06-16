@@ -9,70 +9,16 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "facts"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/facts.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "hints_canonicalize"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hints_canonicalize.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "hints_dce"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hints_dce.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "hints_strip"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hints_strip.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "roundtrip"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "verify"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "facts.loom-test"
+    "hints_canonicalize.loom-test"
+    "hints_dce.loom-test"
+    "hints_strip.loom-test"
+    "roundtrip.loom-test"
+    "verify.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

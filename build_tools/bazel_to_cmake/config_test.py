@@ -137,6 +137,54 @@ class ConfigTest(unittest.TestCase):
             [],
         )
 
+    def test_loom_check_test_suite_preserves_suite_rule(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        loom = bazel_to_cmake_config.include_project(
+            str(repo_root / ".bazel_to_cmake.cfg.py"),
+            "loom/.bazel_to_cmake.cfg.py",
+        )
+        repo_cfg = SimpleNamespace(PROJECTS=[loom], REPO_MAP={"@iree": ""})
+
+        cmake = bazel_to_cmake_converter.convert_build_file(
+            """
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+
+loom_check_test_suite(
+    name = "loom_check_file_test",
+    srcs = [
+        "test/source_low/b.loom-test",
+        "test/source_low/a.loom-test",
+    ],
+    data = [
+        "//loom/src/loom/test/corpus/source_low:vector_dot.loom-test",
+    ],
+    tags = ["gpu"],
+    test_name_prefix_to_strip = "test/source_low/",
+)
+""",
+            repo_cfg,
+            str(repo_root / "loom/src/loom/target/arch/amdgpu"),
+            repo_root=str(repo_root),
+        )
+
+        self.assertIn("if(LOOM_TARGET_ARCH_AMDGPU)", cmake)
+        self.assertIn("loom_check_test_suite(", cmake)
+        self.assertNotIn("iree_native_test(", cmake)
+        self.assertIn('    "test/source_low/b.loom-test"', cmake)
+        self.assertIn('    "test/source_low/a.loom-test"', cmake)
+        self.assertLess(
+            cmake.index('    "test/source_low/b.loom-test"'),
+            cmake.index('    "test/source_low/a.loom-test"'),
+        )
+        self.assertIn(
+            '"${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/'
+            'vector_dot.loom-test"',
+            cmake,
+        )
+        self.assertIn('    "gpu"', cmake)
+        self.assertIn('    "test/source_low/"', cmake)
+        self.assertNotIn('    "loom-check"', cmake)
+
     def test_rejects_compiler_monorepo_external_targets(self):
         converter = bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""})
 

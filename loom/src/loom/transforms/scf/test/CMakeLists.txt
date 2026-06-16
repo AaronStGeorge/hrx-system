@@ -9,37 +9,13 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "scf_index"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/scf_index.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "scf_to_cfg"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/scf_to_cfg.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "scf_unroll"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/scf_unroll.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "scf_index.loom-test"
+    "scf_to_cfg.loom-test"
+    "scf_unroll.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -9,37 +9,13 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "allocation"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/allocation.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "hazard_plan"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hazard_plan.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "packet"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/packet.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "allocation.loom-test"
+    "hazard_plan.loom-test"
+    "packet.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

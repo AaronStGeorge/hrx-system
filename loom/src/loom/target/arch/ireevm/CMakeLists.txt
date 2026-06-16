@@ -80,93 +80,19 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_IREE_VM)
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "test_import_decl"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/import_decl.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-iree_native_test(
-  NAME
-    "test_import_decl_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/import_decl_diagnostics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-iree_native_test(
-  NAME
-    "test_ref_lifetime"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/ref_lifetime.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-iree_native_test(
-  NAME
-    "allocation"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/allocation.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-iree_native_test(
-  NAME
-    "pass_source_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/pass_source_low.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-iree_native_test(
-  NAME
-    "source_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-iree_native_test(
-  NAME
-    "source_low_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    loom_check_file_test
+  SRCS
+    "test/import_decl.loom-test"
+    "test/import_decl_diagnostics.loom-test"
+    "test/ref_lifetime.loom-test"
+    "test/source_low/allocation.loom-test"
+    "test/source_low/pass_source_low.loom-test"
+    "test/source_low/source_low.loom-test"
+    "test/source_low/source_low_diagnostics.loom-test"
+  TEST_NAME_PREFIX_TO_STRIP
+    "test/source_low/"
 )
 endif()
 
