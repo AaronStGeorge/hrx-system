@@ -6,7 +6,6 @@
 
 #include "iree/hal/local/device_spec_builder.h"
 
-#include "iree/hal/local/loaders/static_library_loader.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -14,12 +13,88 @@
 namespace iree::hal {
 namespace {
 
+typedef struct test_executable_loader_t {
+  iree_hal_executable_loader_t base;
+} test_executable_loader_t;
+
+static void test_executable_loader_destroy(
+    iree_hal_executable_loader_t* base_executable_loader) {}
+
+static iree_status_t test_executable_loader_infer_format(
+    iree_hal_executable_loader_t* base_executable_loader,
+    iree_hal_executable_caching_mode_t caching_mode,
+    iree_const_byte_span_t executable_data,
+    iree_host_size_t executable_format_capacity, char* executable_format,
+    iree_host_size_t* out_inferred_size) {
+  return iree_make_status(IREE_STATUS_CANCELLED);
+}
+
+static bool test_executable_loader_query_support(
+    iree_hal_executable_loader_t* base_executable_loader,
+    iree_hal_executable_caching_mode_t caching_mode,
+    iree_string_view_t executable_format) {
+  return iree_string_view_equal(executable_format, IREE_SV("test-loader"));
+}
+
+static void test_executable_loader_query_spec(
+    iree_hal_executable_loader_t* base_executable_loader,
+    iree_hal_device_executable_spec_t* out_executable_spec) {
+  static const iree_hal_executable_format_spec_t executable_formats[] = {
+      {
+          /*.format=*/IREE_SVL("test-loader"),
+          /*.caching_modes=*/IREE_HAL_EXECUTABLE_CACHING_MODE_NONE,
+          /*.flags=*/IREE_HAL_EXECUTABLE_FORMAT_SPEC_FLAG_NONE,
+      },
+  };
+  static const iree_hal_executable_target_t executable_targets[] = {
+      {
+          /*.family=*/IREE_SVL("test-family"),
+          /*.architecture=*/IREE_SVL("test-architecture"),
+          /*.processor=*/IREE_SVL("test-processor"),
+          /*.features=*/{},
+          /*.artifact_format=*/IREE_SVL("test-loader"),
+          /*.runtime_abi=*/IREE_SVL("test-abi"),
+          /*.loader_namespace=*/IREE_SVL("test-namespace"),
+          /*.loader_target=*/IREE_SVL("test-load-key"),
+          /*.metadata_schema=*/IREE_SVL("test.metadata"),
+          /*.kind=*/IREE_HAL_EXECUTABLE_TARGET_KIND_EXACT,
+          /*.priority=*/7,
+          /*.physical_device_affinity=*/1ull,
+          /*.flags=*/IREE_HAL_EXECUTABLE_TARGET_FLAG_NONE,
+      },
+  };
+  *out_executable_spec = {
+      /*.format_count=*/IREE_ARRAYSIZE(executable_formats),
+      /*.formats=*/executable_formats,
+      /*.target_count=*/IREE_ARRAYSIZE(executable_targets),
+      /*.targets=*/executable_targets,
+      /*.flags=*/IREE_HAL_DEVICE_EXECUTABLE_SPEC_FLAG_NONE,
+  };
+}
+
+static iree_status_t test_executable_loader_try_load(
+    iree_hal_executable_loader_t* base_executable_loader,
+    const iree_hal_executable_params_t* executable_params,
+    iree_host_size_t worker_capacity, iree_hal_executable_t** out_executable) {
+  *out_executable = NULL;
+  return iree_make_status(IREE_STATUS_CANCELLED);
+}
+
+static const iree_hal_executable_loader_vtable_t test_executable_loader_vtable =
+    {
+        /*.destroy=*/test_executable_loader_destroy,
+        /*.infer_format=*/test_executable_loader_infer_format,
+        /*.query_support=*/test_executable_loader_query_support,
+        /*.query_spec=*/test_executable_loader_query_spec,
+        /*.try_load=*/test_executable_loader_try_load,
+};
+
 TEST(LocalDeviceSpecBuilderTest, CapturesCommonLocalFacts) {
-  iree_hal_executable_loader_t* loader = NULL;
-  IREE_ASSERT_OK(iree_hal_static_library_loader_create(
-      /*library_count=*/0, /*library_query_fns=*/NULL,
-      iree_hal_executable_import_provider_null(), iree_allocator_system(),
-      &loader));
+  test_executable_loader_t loader;
+  iree_hal_executable_loader_initialize(
+      &test_executable_loader_vtable,
+      iree_hal_executable_import_provider_null(), &loader.base);
+  iree_hal_executable_loader_t* loader_ptr = &loader.base;
 
   iree_hal_local_device_spec_params_t params = {
       /*.logical_device_id=*/IREE_SV("local0"),
@@ -29,7 +104,7 @@ TEST(LocalDeviceSpecBuilderTest, CapturesCommonLocalFacts) {
       /*.queue_count=*/2,
       /*.default_queue_worker_count=*/8,
       /*.loader_count=*/1,
-      /*.loaders=*/&loader,
+      /*.loaders=*/&loader_ptr,
   };
   iree_hal_device_spec_t* spec = NULL;
   IREE_ASSERT_OK(iree_hal_local_device_spec_create(
@@ -73,10 +148,27 @@ TEST(LocalDeviceSpecBuilderTest, CapturesCommonLocalFacts) {
   ASSERT_NE(executables, nullptr);
   ASSERT_EQ(executables->format_count, 1);
   EXPECT_TRUE(iree_string_view_equal(executables->formats[0].format,
-                                     IREE_SV("static")));
+                                     IREE_SV("test-loader")));
+  iree_hal_executable_target_selection_t target_selection = {
+      /*.policy=*/IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_EXACT_DEVICE,
+      /*.family=*/IREE_SV("test-family"),
+      /*.architecture=*/iree_string_view_empty(),
+      /*.processor=*/iree_string_view_empty(),
+      /*.features=*/iree_string_view_empty(),
+      /*.artifact_format=*/IREE_SV("test-loader"),
+      /*.runtime_abi=*/IREE_SV("test-abi"),
+      /*.loader_namespace=*/iree_string_view_empty(),
+      /*.loader_target=*/iree_string_view_empty(),
+      /*.metadata_schema=*/IREE_SV("test.metadata"),
+  };
+  const iree_hal_executable_target_t* selected_target = NULL;
+  EXPECT_EQ(IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_SELECTED,
+            iree_hal_device_spec_select_executable_target(
+                spec, &target_selection, &selected_target));
+  ASSERT_NE(selected_target, nullptr);
 
   iree_hal_device_spec_release(spec);
-  iree_hal_executable_loader_release(loader);
+  iree_hal_executable_loader_release(&loader.base);
 }
 
 }  // namespace

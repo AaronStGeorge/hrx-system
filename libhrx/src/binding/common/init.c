@@ -98,7 +98,7 @@ static iree_status_t iree_hal_streaming_query_device_info(
     memcpy(device->gcn_arch_name, "gfx942", 7);
   }
 
-  // Query total memory from the HAL device observation API.
+  // Query total memory from the immutable HAL device spec.
   uint64_t total_memory = 0;
   iree_status_t status = HRX_CALL(hrx_device_get_property(
       device->hrx_device, HRX_DEVICE_PROPERTY_TOTAL_MEMORY, &total_memory,
@@ -122,6 +122,8 @@ static iree_status_t iree_hal_streaming_query_device_info(
       dispatch ? &dispatch->subgroup : NULL;
   const iree_hal_device_execution_spec_t* execution =
       dispatch ? &dispatch->execution : NULL;
+  const bool is_gfx1100 = strncmp(device->gcn_arch_name, "gfx1100", 7) == 0;
+  const bool is_gfx942 = strncmp(device->gcn_arch_name, "gfx942", 6) == 0;
 
   // Query cooperative launch support.
   // TODO: Query from actual device properties.
@@ -139,8 +141,8 @@ static iree_status_t iree_hal_streaming_query_device_info(
   }
 
   device->warp_size = iree_hal_streaming_u32_or_default(
-      subgroup ? subgroup->default_size : 0, 1);
-  if (strncmp(device->gcn_arch_name, "gfx1100", 7) == 0) {
+      subgroup ? subgroup->default_size : 0, 64);
+  if (is_gfx1100) {
     // HIP reports wave32 as the warp size for RDNA3 devices. IREE/HSA may
     // expose the hardware wavefront width instead, which in turn prevents the
     // CU-to-WGP compatibility adjustment below.
@@ -148,7 +150,7 @@ static iree_status_t iree_hal_streaming_query_device_info(
   }
 
   uint32_t multiprocessor_count = iree_hal_streaming_u32_or_default(
-      execution ? execution->unit_count : 0, 1);
+      execution ? execution->unit_count : 0, 80);
   // IREE/HSA reports raw compute units, while HIP reports RDNA devices in
   // WGP-like units. Keep this HIP-compatible because rocBLAS/hipBLASLt query
   // the physical multiprocessor count when selecting GEMM solutions.
@@ -159,29 +161,30 @@ static iree_status_t iree_hal_streaming_query_device_info(
   device->multiprocessor_count = multiprocessor_count;
 
   device->max_threads_per_multiprocessor = iree_hal_streaming_u32_or_default(
-      execution ? execution->maximum_resident_invocation_count : 0, 1);
+      execution ? execution->maximum_resident_invocation_count : 0, 2048);
   device->max_blocks_per_multiprocessor = iree_hal_streaming_u32_or_default(
-      execution ? execution->maximum_resident_workgroup_count : 0, 1);
+      execution ? execution->maximum_resident_workgroup_count : 0,
+      is_gfx942 ? 2 : 32);
   uint64_t maximum_register_count =
       execution ? execution->maximum_register_count : 0;
   if (maximum_register_count == 0 && execution) {
     maximum_register_count = execution->maximum_workgroup_register_count;
   }
   device->max_registers_per_multiprocessor =
-      iree_hal_streaming_u32_or_default(maximum_register_count, 1);
+      iree_hal_streaming_u32_or_default(maximum_register_count, 65536);
   uint64_t maximum_local_memory_size =
       execution ? execution->maximum_local_memory_size : 0;
   if (maximum_local_memory_size == 0 && execution) {
     maximum_local_memory_size = execution->maximum_workgroup_local_memory_size;
   }
   device->max_shared_memory_per_multiprocessor =
-      iree_hal_streaming_u32_or_default(maximum_local_memory_size, 1);
+      iree_hal_streaming_u32_or_default(maximum_local_memory_size,
+                                        is_gfx942 ? 19922944u : 49152u);
   device->max_registers_per_block = iree_hal_streaming_u32_or_default(
-      execution ? execution->maximum_workgroup_register_count : 0,
-      device->max_registers_per_multiprocessor);
+      execution ? execution->maximum_workgroup_register_count : 0, 65536);
   device->max_shared_memory_per_block = iree_hal_streaming_u32_or_default(
       execution ? execution->maximum_workgroup_local_memory_size : 0,
-      device->max_shared_memory_per_multiprocessor);
+      (is_gfx942 || is_gfx1100) ? 65536u : 49152u);
 
   return iree_ok_status();
 }

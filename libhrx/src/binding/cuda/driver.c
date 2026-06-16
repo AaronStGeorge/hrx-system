@@ -723,15 +723,10 @@ CUDAAPI CUresult cuDeviceGetAttribute(int* pi, CUdevice_attribute attrib,
       *pi = device->compute_capability_minor;
       break;
     case CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN:
-      // Return the maximum shared memory per block when opted in.
-      // For now, return the same as MAX_SHARED_MEMORY_PER_BLOCK.
-      // This would typically be higher on devices that support > 48KB.
-      *pi = 49152;  // 48KB default, actual value would be device-specific.
+      *pi = device->max_shared_memory_per_block;
       break;
     case CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR:
-      // Total shared memory per SM/multiprocessor.
-      // Common values: 64KB, 96KB, 128KB depending on architecture.
-      *pi = 65536;  // 64KB default.
+      *pi = device->max_shared_memory_per_multiprocessor;
       break;
     case CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED:
       // GPU Direct RDMA with CUDA VMM support.

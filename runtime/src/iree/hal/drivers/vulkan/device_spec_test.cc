@@ -185,6 +185,23 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
   ASSERT_EQ(executables->format_count, 1);
   EXPECT_TRUE(iree_string_view_equal(executables->formats[0].format,
                                      IREE_SV("vulkan-spirv-bda")));
+  iree_hal_executable_target_selection_t target_selection = {
+      /*.policy=*/IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_EXACT_DEVICE,
+      /*.family=*/IREE_SV("spirv"),
+      /*.architecture=*/IREE_SV("vulkan"),
+      /*.processor=*/iree_string_view_empty(),
+      /*.features=*/IREE_SV("bda"),
+      /*.artifact_format=*/IREE_SV("vulkan-spirv-bda"),
+      /*.runtime_abi=*/IREE_SV("iree-hal"),
+      /*.loader_namespace=*/IREE_SV("vulkan"),
+      /*.loader_target=*/iree_string_view_empty(),
+      /*.metadata_schema=*/IREE_SV("iree.hal.vulkan.spirv.bda"),
+  };
+  const iree_hal_executable_target_t* selected_target = NULL;
+  EXPECT_EQ(IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_SELECTED,
+            iree_hal_device_spec_select_executable_target(
+                device_spec, &target_selection, &selected_target));
+  ASSERT_NE(selected_target, nullptr);
 
   const iree_hal_device_spec_facet_t* facet =
       iree_hal_vulkan_device_spec_find_facet(device_spec);

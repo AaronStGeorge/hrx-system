@@ -504,9 +504,26 @@ static iree_status_t iree_hal_vulkan_device_spec_populate_executables(
       .caching_modes = IREE_HAL_EXECUTABLE_CACHING_MODE_NONE,
       .flags = IREE_HAL_EXECUTABLE_FORMAT_SPEC_FLAG_NONE,
   };
+  iree_hal_executable_target_t executable_target = {
+      .family = IREE_SV("spirv"),
+      .architecture = IREE_SV("vulkan"),
+      .processor = IREE_SV("vulkan1.3"),
+      .features = IREE_SV("bda"),
+      .artifact_format = IREE_SV("vulkan-spirv-bda"),
+      .runtime_abi = IREE_SV("iree-hal"),
+      .loader_namespace = IREE_SV("vulkan"),
+      .loader_target = IREE_SV("vulkan-spirv-bda"),
+      .metadata_schema = IREE_SV("iree.hal.vulkan.spirv.bda"),
+      .kind = IREE_HAL_EXECUTABLE_TARGET_KIND_EXACT,
+      .priority = 100,
+      .physical_device_affinity = 1ull,
+      .flags = IREE_HAL_EXECUTABLE_TARGET_FLAG_NONE,
+  };
   iree_hal_device_executable_spec_t executables = {
       .format_count = 1,
       .formats = &executable_format,
+      .target_count = 1,
+      .targets = &executable_target,
       .flags = IREE_HAL_DEVICE_EXECUTABLE_SPEC_FLAG_NONE,
   };
   return iree_hal_device_spec_builder_set_executables(builder, &executables);

@@ -906,8 +906,8 @@ HIPAPI hipError_t hipGetDeviceProperties(hipDeviceProp_t* prop, int device) {
   const bool is_gfx1100 = strncmp(prop->gcnArchName, "gfx1100", 7) == 0;
   const bool is_gfx942 = strncmp(prop->gcnArchName, "gfx942", 6) == 0;
   prop->totalGlobalMem = (size_t)total_memory;
-  prop->sharedMemPerBlock = 65536;  // 64KB default
-  prop->regsPerBlock = is_gfx1100 ? 196608 : 65536;
+  prop->sharedMemPerBlock = device_obj->max_shared_memory_per_block;
+  prop->regsPerBlock = device_obj->max_registers_per_block;
   prop->warpSize = device_obj->warp_size;
   prop->memPitch = 0;
   prop->maxThreadsPerBlock = device_obj->max_threads_per_block;
@@ -985,12 +985,14 @@ HIPAPI hipError_t hipGetDeviceProperties(hipDeviceProp_t* prop, int device) {
   prop->l2CacheSize = is_gfx942 ? 4194304 : (is_gfx1100 ? 6291456 : 0);
   prop->persistingL2CacheMaxSize =
       is_gfx942 ? 4194304 : (is_gfx1100 ? 6291456 : 0);
-  prop->maxThreadsPerMultiProcessor = 2048;  // Default
+  prop->maxThreadsPerMultiProcessor =
+      device_obj->max_threads_per_multiprocessor;
   prop->streamPrioritiesSupported = 0;
   prop->globalL1CacheSupported = 1;
   prop->localL1CacheSupported = 1;
-  prop->sharedMemPerMultiprocessor = is_gfx942 ? 19922944 : 65536;
-  prop->regsPerMultiprocessor = 65536;
+  prop->sharedMemPerMultiprocessor =
+      device_obj->max_shared_memory_per_multiprocessor;
+  prop->regsPerMultiprocessor = device_obj->max_registers_per_multiprocessor;
   prop->managedMemory = 0;
   prop->isMultiGpuBoard = 0;
   prop->multiGpuBoardGroupID = 0;
@@ -1001,16 +1003,16 @@ HIPAPI hipError_t hipGetDeviceProperties(hipDeviceProp_t* prop, int device) {
   prop->canUseHostPointerForRegisteredMem = 0;
   prop->cooperativeLaunch = 0;
   prop->cooperativeMultiDeviceLaunch = 0;
-  prop->sharedMemPerBlockOptin = (is_gfx942 || is_gfx1100) ? 65536 : 0;
+  prop->sharedMemPerBlockOptin = device_obj->max_shared_memory_per_block;
   prop->pageableMemoryAccessUsesHostPageTables = 0;
   prop->directManagedMemAccessFromHost = 0;
-  prop->maxBlocksPerMultiProcessor = is_gfx942 ? 2 : (is_gfx1100 ? 64 : 32);
+  prop->maxBlocksPerMultiProcessor = device_obj->max_blocks_per_multiprocessor;
   prop->accessPolicyMaxWindowSize = 0;
   prop->reservedSharedMemPerBlock = 0;
   prop->hostNativeAtomicSupported = is_gfx1100 ? 1 : 0;
   prop->memoryPoolsSupported = is_gfx1100 ? 1 : 0;
   prop->maxSharedMemoryPerMultiProcessor =
-      is_gfx942 ? 19922944 : (is_gfx1100 ? 65536 : 0);
+      device_obj->max_shared_memory_per_multiprocessor;
   prop->clockInstructionRate = is_gfx1100 ? 1000000 : 0;
   prop->isLargeBar = is_gfx1100 ? 1 : 0;
   if (is_gfx1100) {
@@ -1135,10 +1137,10 @@ HIPAPI hipError_t hipDeviceGetAttribute(int* value, hipDeviceAttribute_t attr,
       *value = device_obj->compute_capability_minor;
       break;
     case hipDeviceAttributeMaxSharedMemoryPerBlock:
-      *value = 65536;  // 64KB default
+      *value = device_obj->max_shared_memory_per_block;
       break;
     case hipDeviceAttributeMaxRegistersPerBlock:
-      *value = 65536;
+      *value = device_obj->max_registers_per_block;
       break;
     case hipDeviceAttributeClockRate:
       *value = is_gfx942 ? 2100000 : (is_gfx1100 ? 1760000 : 1000000);  // kHz
@@ -1153,24 +1155,16 @@ HIPAPI hipError_t hipDeviceGetAttribute(int* value, hipDeviceAttribute_t attr,
       *value = is_gfx942 ? 4194304 : (is_gfx1100 ? 6291456 : 0);
       break;
     case hipDeviceAttributeMaxThreadsPerMultiProcessor:
-      *value = 2048;  // Default
+      *value = device_obj->max_threads_per_multiprocessor;
       break;
     case hipDeviceAttributeSharedMemPerBlockOptin:
-      // Maximum shared memory per block when opted in (> 48KB).
-      // This is equivalent to
-      // CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN.
-      *value = (is_gfx942 || is_gfx1100) ? 65536 : 49152;
+      *value = device_obj->max_shared_memory_per_block;
       break;
     case hipDeviceAttributeMaxSharedMemoryPerMultiprocessor:
-      // Total shared memory per multiprocessor.
-      // This is equivalent to
-      // CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR.
-      *value = is_gfx942 ? 19922944 : 65536;
+      *value = device_obj->max_shared_memory_per_multiprocessor;
       break;
     case hipDeviceAttributeSharedMemPerMultiprocessor:
-      // Shared memory available per multiprocessor.
-      // Similar to above, different naming in HIP.
-      *value = is_gfx942 ? 19922944 : 65536;
+      *value = device_obj->max_shared_memory_per_multiprocessor;
       break;
     case hipDeviceAttributeTotalGlobalMem:
       *value = device_obj->total_memory > 2147483647ull
@@ -2995,12 +2989,12 @@ HIPAPI hipError_t hipMemGetInfo(size_t* free, size_t* total) {
     HIP_RETURN_ERROR(init_result);
   }
 
-  size_t free_memory = 0;
-  size_t total_memory = 0;
+  iree_device_size_t free_memory = 0;
+  iree_device_size_t total_memory = 0;
   HIP_RETURN_STATUS_AND_END_ZONE_IF_ERROR(
       z0,
-      HRX_CALL(hrx_device_memory_info(iree_hip_hrx_device_from_context(context),
-                                      &free_memory, &total_memory)),
+      iree_hal_streaming_device_memory_info(context->device_ordinal,
+                                            &free_memory, &total_memory),
       hipErrorInvalidDevice);
 
   if (free) *free = (size_t)free_memory;

@@ -704,6 +704,8 @@ typedef struct iree_hal_executable_target_selection_t {
   iree_string_view_t loader_namespace;
   // Optional canonical loader target filter.
   iree_string_view_t loader_target;
+  // Optional metadata schema filter.
+  iree_string_view_t metadata_schema;
   // Optional physical-device affinity filter.
   uint64_t physical_device_affinity;
 } iree_hal_executable_target_selection_t;

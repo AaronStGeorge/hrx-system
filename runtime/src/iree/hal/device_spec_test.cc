@@ -184,6 +184,8 @@ static iree_hal_device_spec_params_t MakeTestSpecParams(
   out_executable_targets[2] = out_executable_targets[1];
   out_executable_targets[2].loader_target =
       iree_make_cstring_view("amdgpu-gfx11-generic-alt");
+  out_executable_targets[2].metadata_schema =
+      iree_make_cstring_view("alt-msgpack");
   *out_executables = {
       /*.format_count=*/1,
       /*.formats=*/out_executable_formats,
@@ -272,6 +274,27 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
             iree_hal_device_spec_select_executable_target(
                 spec, &generic_selection, &selected_target));
   EXPECT_EQ(selected_target, nullptr);
+
+  selected_target = NULL;
+  iree_hal_executable_target_selection_t metadata_selection = {
+      /*.policy=*/
+      IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_COMPATIBLE_GENERIC,
+      /*.family=*/iree_make_cstring_view("amdgpu"),
+      /*.architecture=*/iree_string_view_empty(),
+      /*.processor=*/iree_string_view_empty(),
+      /*.features=*/iree_string_view_empty(),
+      /*.artifact_format=*/iree_string_view_empty(),
+      /*.runtime_abi=*/iree_string_view_empty(),
+      /*.loader_namespace=*/iree_string_view_empty(),
+      /*.loader_target=*/iree_string_view_empty(),
+      /*.metadata_schema=*/iree_make_cstring_view("alt-msgpack"),
+  };
+  EXPECT_EQ(IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_SELECTED,
+            iree_hal_device_spec_select_executable_target(
+                spec, &metadata_selection, &selected_target));
+  ASSERT_NE(selected_target, nullptr);
+  ExpectStringViewEq(selected_target->loader_target,
+                     "amdgpu-gfx11-generic-alt");
 
   iree_byte_span_t serialized_bytes = iree_byte_span_empty();
   IREE_ASSERT_OK(iree_hal_device_spec_serialize(spec, iree_allocator_system(),

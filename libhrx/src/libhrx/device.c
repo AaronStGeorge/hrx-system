@@ -8,6 +8,25 @@
 
 #include "hrx_internal.h"
 
+static hrx_status_t hrx_device_total_memory_from_spec(
+    hrx_device_t device, iree_device_size_t* out_total) {
+  iree_hal_device_observation_t observation;
+  iree_hal_device_observation_initialize(
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY, &observation);
+  iree_status_t status =
+      iree_hal_device_observation_populate_memory_total_from_spec(
+          iree_hal_device_spec(device->hal_device), &observation);
+  if (!iree_status_is_ok(status)) return hrx_status_from_iree(status);
+  if (!iree_all_bits_set(observation.memory.flags,
+                         IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_TOTAL_BYTES)) {
+    return hrx_make_status(
+        HRX_STATUS_UNAVAILABLE,
+        "HAL device spec did not provide a known total memory capacity");
+  }
+  *out_total = observation.memory.total_bytes;
+  return hrx_ok_status();
+}
+
 static hrx_status_t hrx_device_sample_memory(
     hrx_device_t device, iree_device_size_t* out_total,
     iree_device_size_t* out_available) {
@@ -73,7 +92,7 @@ hrx_status_t hrx_device_get_property(hrx_device_t device,
       }
       iree_device_size_t total_bytes = 0;
       hrx_status_t status =
-          hrx_device_sample_memory(device, &total_bytes, NULL);
+          hrx_device_total_memory_from_spec(device, &total_bytes);
       if (!hrx_status_is_ok(status)) return status;
       *(uint64_t*)value = (uint64_t)total_bytes;
       return status;

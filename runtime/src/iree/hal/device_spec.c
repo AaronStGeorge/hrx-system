@@ -2102,6 +2102,10 @@ static bool iree_hal_device_spec_target_matches_selection(
                                                      target->loader_target)) {
     return false;
   }
+  if (!iree_hal_device_spec_selection_string_matches(selection->metadata_schema,
+                                                     target->metadata_schema)) {
+    return false;
+  }
   if (selection->physical_device_affinity && target->physical_device_affinity &&
       (selection->physical_device_affinity &
        target->physical_device_affinity) == 0) {
