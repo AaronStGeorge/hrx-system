@@ -933,6 +933,17 @@ typedef struct loom_amdgpu_fragment_origin_plan_t {
   int64_t static_index;
 } loom_amdgpu_fragment_origin_plan_t;
 
+typedef struct loom_amdgpu_fragment_memory_packet_plan_t {
+  // First fragment payload register consumed or produced by this packet.
+  uint16_t register_index;
+  // Number of fragment payload registers covered by this packet.
+  uint16_t result_register_count;
+  // Number of 32-bit memory packet registers moved by the descriptor.
+  uint16_t packet_register_count;
+  // Descriptor row selected for this packet.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
+} loom_amdgpu_fragment_memory_packet_plan_t;
+
 typedef struct loom_amdgpu_fragment_memory_plan_t {
   // Direction of the fragment memory movement.
   loom_amdgpu_memory_operation_kind_t operation_kind;
@@ -967,6 +978,11 @@ typedef struct loom_amdgpu_fragment_memory_plan_t {
   uint16_t elements_per_register;
   // Byte count of one logical fragment element.
   uint16_t element_byte_count;
+  // Direct memory packets emitted in increasing fragment-register order.
+  loom_amdgpu_fragment_memory_packet_plan_t
+      packets[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
+  // Number of populated packet plans.
+  uint16_t packet_count;
   // True when a f32 result fragment is stored into 16-bit memory.
   bool narrowed_result_store;
   // Optional f32 fragment source to round directly for narrowed stores.
