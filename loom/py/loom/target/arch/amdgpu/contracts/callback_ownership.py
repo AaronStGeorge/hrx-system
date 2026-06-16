@@ -60,13 +60,9 @@ _ROW_MACRO_SIGNATURES = {
     "VALUE_DIRECT_STORAGE_ROW": _RowMacroSignature(
         argument_count=5, storage_policy_argument=4
     ),
-    "VALUE_DIRECT_PRESELECT_ROW": _RowMacroSignature(
-        argument_count=5, preselect_policy_argument=4
-    ),
     "VALUE_DIRECT_POLICY_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=4, preselect_policy_argument=5
     ),
-    "MEMORY_DATA_ROW": _RowMacroSignature(argument_count=5),
     "MEMORY_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5
     ),
@@ -75,17 +71,11 @@ _ROW_MACRO_SIGNATURES = {
     "RECIPE_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5
     ),
-    "RECIPE_DATA_REPORT_ROW": _RowMacroSignature(
-        argument_count=6, report_policy_argument=5
-    ),
     "RECIPE_DATA_STORAGE_REPORT_ROW": _RowMacroSignature(
         argument_count=7, storage_policy_argument=5, report_policy_argument=6
     ),
-    "GENERATED_PRESELECT_DIRECT_ROW": _RowMacroSignature(
-        argument_count=5, preselect_policy_argument=4
-    ),
-    "GENERATED_PRESELECT_DATA_PRESELECT_ROW": _RowMacroSignature(
-        argument_count=6, preselect_policy_argument=5
+    "GENERATED_PRESELECT_DIRECT_POLICY_ROW": _RowMacroSignature(
+        argument_count=6, storage_policy_argument=4, preselect_policy_argument=5
     ),
     "GENERATED_PRESELECT_DATA_POLICY_ROW": _RowMacroSignature(
         argument_count=7, storage_policy_argument=5, preselect_policy_argument=6
@@ -179,6 +169,12 @@ def callback_dispatch_policy_names_by_kind() -> dict[str, frozenset[str]]:
     """Returns explicit policy tokens accepted by callback dispatch rows."""
 
     return dict(_POLICY_NAMES_BY_KIND)
+
+
+def callback_dispatch_row_macro_names() -> frozenset[str]:
+    """Returns public callback dispatch row macros accepted by the validator."""
+
+    return frozenset(_ROW_MACRO_SIGNATURES)
 
 
 def validate_callback_dispatch_rows(

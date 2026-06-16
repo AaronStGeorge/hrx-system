@@ -45,6 +45,14 @@ loom_cc_library(
     ],
 )
 
+exports_files(
+    [
+        "registry.c",
+        "registry_tables.inl",
+    ],
+    visibility = ["//loom/py/loom/target/arch/amdgpu/contracts:__pkg__"],
+)
+
 loom_cc_library(
     name = "lower",
     srcs = [

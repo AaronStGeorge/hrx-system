@@ -18,6 +18,7 @@ from loom.target.arch.amdgpu.contracts.callback_ownership import (
     CallbackDispatchRow,
     amdgpu_generated_lower_rule_op_kinds,
     callback_dispatch_policy_names_by_kind,
+    callback_dispatch_row_macro_names,
     parse_callback_dispatch_rows,
     validate_callback_dispatch_rows,
 )
@@ -34,6 +35,7 @@ _POLICY_ENUM_RE = re.compile(
 _POLICY_NAME_RE = re.compile(
     r"\b(LOOM_AMDGPU_(?:STORAGE|PRESELECT|REPORT)_[A-Z0-9_]+)\b"
 )
+_PUBLIC_ROW_MACRO_RE = re.compile(r"#define LOOM_AMDGPU_([A-Z0-9_]+ROW)\b")
 _POLICY_SENTINELS_BY_KIND = {
     "storage": frozenset(
         {"LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS", "LOOM_AMDGPU_STORAGE_MAX"}
@@ -149,13 +151,14 @@ def test_validate_callback_dispatch_rows_rejects_wrong_report_policy_namespace()
         CallbackDispatchRow(
             op_kind="LOOM_OP_KERNEL_WORKGROUP_REDUCE",
             role=CallbackDispatchRole.RECIPE,
-            macro_name="RECIPE_DATA_REPORT_ROW",
+            macro_name="RECIPE_DATA_STORAGE_REPORT_ROW",
             arguments=(
                 "LOOM_OP_KERNEL_WORKGROUP_REDUCE",
                 "loom_amdgpu_workgroup_reduce_plan_t",
                 "select",
                 "emit",
                 "verify",
+                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1",
                 "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2",
             ),
         ),
@@ -170,13 +173,14 @@ def test_validate_callback_dispatch_rows_accepts_report_policy() -> None:
         CallbackDispatchRow(
             op_kind="LOOM_OP_KERNEL_WORKGROUP_REDUCE",
             role=CallbackDispatchRole.RECIPE,
-            macro_name="RECIPE_DATA_REPORT_ROW",
+            macro_name="RECIPE_DATA_STORAGE_REPORT_ROW",
             arguments=(
                 "LOOM_OP_KERNEL_WORKGROUP_REDUCE",
                 "loom_amdgpu_workgroup_reduce_plan_t",
                 "select",
                 "emit",
                 "verify",
+                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1",
                 "LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION",
             ),
         ),
@@ -189,6 +193,14 @@ def test_callback_policy_names_match_registry_enums() -> None:
     registry_source = _read_repo_file(_REGISTRY_SOURCE_PATH)
 
     assert callback_dispatch_policy_names_by_kind() == _parse_registry_policy_enums(
+        registry_source
+    )
+
+
+def test_callback_row_macro_schemas_match_registry_macros() -> None:
+    registry_source = _read_repo_file(_REGISTRY_SOURCE_PATH)
+
+    assert callback_dispatch_row_macro_names() == _parse_public_row_macros(
         registry_source
     )
 
@@ -256,6 +268,29 @@ def test_validate_callback_dispatch_rows_accepts_generated_preselect() -> None:
     validate_callback_dispatch_rows(
         rows,
         generated_lower_rule_op_kinds={"LOOM_OP_VECTOR_FMAF"},
+    )
+
+
+def test_validate_callback_dispatch_rows_accepts_generated_direct_preselect() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_INDEX_ADD",
+            role=CallbackDispatchRole.GENERATED_PRESELECT,
+            macro_name="GENERATED_PRESELECT_DIRECT_POLICY_ROW",
+            arguments=(
+                "LOOM_OP_INDEX_ADD",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "LOOM_AMDGPU_PRESELECT_PLAN_ID",
+            ),
+        ),
+    )
+
+    validate_callback_dispatch_rows(
+        rows,
+        generated_lower_rule_op_kinds={"LOOM_OP_INDEX_ADD"},
     )
 
 
@@ -338,3 +373,14 @@ def _parse_registry_policy_enums(source: str) -> dict[str, frozenset[str]]:
         policy_names_by_kind[kind] = policy_names - _POLICY_SENTINELS_BY_KIND[kind]
     assert policy_names_by_kind.keys() == _POLICY_SENTINELS_BY_KIND.keys()
     return policy_names_by_kind
+
+
+def _parse_public_row_macros(source: str) -> frozenset[str]:
+    dispatch_macro_region = source.split(
+        '#include "loom/target/arch/amdgpu/lower/registry_tables.inl"', maxsplit=1
+    )[0]
+    return frozenset(
+        macro_name
+        for macro_name in _PUBLIC_ROW_MACRO_RE.findall(dispatch_macro_region)
+        if not macro_name.startswith("INTERNAL_")
+    )

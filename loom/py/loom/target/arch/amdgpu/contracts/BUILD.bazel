@@ -53,6 +53,10 @@ iree_py_test(
     args = [
         "loom.target.arch.amdgpu.contracts.callback_ownership_test",
     ],
+    data = [
+        "//loom/src/loom/target/arch/amdgpu/lower:registry.c",
+        "//loom/src/loom/target/arch/amdgpu/lower:registry_tables.inl",
+    ],
     main = "pytest_style_runner.py",
     deps = [
         ":contracts",
