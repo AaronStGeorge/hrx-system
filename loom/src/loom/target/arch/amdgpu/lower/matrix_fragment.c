@@ -31,6 +31,7 @@ enum {
   LOOM_AMDGPU_FRAGMENT_VIEW_RANK = 2,
   LOOM_AMDGPU_FRAGMENT_LANE_MODULUS = 16,
   LOOM_AMDGPU_FRAGMENT_REGISTER_BYTE_COUNT = 4,
+  LOOM_AMDGPU_FRAGMENT_MEMORY_MAX_PACKET_REGISTERS = 4,
 };
 
 static const uint16_t kLoomAmdgpuFragmentMemoryPacketCandidates[] = {4, 3, 2,
@@ -38,6 +39,76 @@ static const uint16_t kLoomAmdgpuFragmentMemoryPacketCandidates[] = {4, 3, 2,
 
 static const uint16_t kLoomAmdgpuFragmentMemoryNarrowedStoreCandidates[] = {
     8, 6, 4, 2, 1};
+
+typedef enum loom_amdgpu_fragment_memory_domain_e {
+  LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_GLOBAL = 0,
+  LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_WORKGROUP = 1,
+  LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_COUNT_,
+} loom_amdgpu_fragment_memory_domain_t;
+
+typedef struct loom_amdgpu_fragment_memory_descriptor_table_t {
+  // Descriptor refs for normal 32-bit-register packet payloads, indexed by
+  // operation kind and packet register count.
+  loom_amdgpu_descriptor_ref_t
+      packet_refs[LOOM_AMDGPU_MEMORY_OPERATION_COUNT_]
+                 [LOOM_AMDGPU_FRAGMENT_MEMORY_MAX_PACKET_REGISTERS + 1u];
+  // Descriptor ref for a scalar 16-bit store packet.
+  loom_amdgpu_descriptor_ref_t store_b16_ref;
+} loom_amdgpu_fragment_memory_descriptor_table_t;
+
+static_assert(LOOM_AMDGPU_MEMORY_OPERATION_COUNT_ == 2,
+              "AMDGPU fragment memory descriptor tables cover load/store");
+
+static const loom_amdgpu_fragment_memory_descriptor_table_t
+    kFragmentMemoryDescriptorTables[LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_COUNT_] = {
+        [LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_GLOBAL] =
+            {
+                .packet_refs =
+                    {
+                        [LOOM_AMDGPU_MEMORY_OPERATION_LOAD] =
+                            {
+                                LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32_SADDR,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B128_SADDR,
+                            },
+                        [LOOM_AMDGPU_MEMORY_OPERATION_STORE] =
+                            {
+                                LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B128_SADDR,
+                            },
+                    },
+                .store_b16_ref =
+                    LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B16_SADDR,
+            },
+        [LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_WORKGROUP] =
+            {
+                .packet_refs =
+                    {
+                        [LOOM_AMDGPU_MEMORY_OPERATION_LOAD] =
+                            {
+                                LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B32,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B64,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B96,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B128,
+                            },
+                        [LOOM_AMDGPU_MEMORY_OPERATION_STORE] =
+                            {
+                                LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B64,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B96,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B128,
+                            },
+                    },
+                .store_b16_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B16,
+            },
+};
 
 typedef struct loom_amdgpu_fragment_memory_environment_t {
   // Source module being checked or lowered.
@@ -543,84 +614,18 @@ static bool loom_amdgpu_fragment_memory_view_base_value(
   return false;
 }
 
-static bool loom_amdgpu_fragment_memory_descriptor_ref(
-    loom_amdgpu_memory_operation_kind_t operation_kind,
-    loom_value_fact_memory_space_t memory_space, uint16_t packet_register_count,
-    loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
-  *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+static bool loom_amdgpu_fragment_memory_domain_from_space(
+    loom_value_fact_memory_space_t memory_space,
+    loom_amdgpu_fragment_memory_domain_t* out_domain) {
   switch (memory_space) {
     case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
     case LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT:
     case LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR:
-      if (operation_kind == LOOM_AMDGPU_MEMORY_OPERATION_LOAD) {
-        switch (packet_register_count) {
-          case 1:
-            *out_descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32_SADDR;
-            return true;
-          case 2:
-            *out_descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR;
-            return true;
-          case 4:
-            *out_descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B128_SADDR;
-            return true;
-          default:
-            return false;
-        }
-      }
-      switch (packet_register_count) {
-        case 1:
-          *out_descriptor_ref =
-              LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR;
-          return true;
-        case 2:
-          *out_descriptor_ref =
-              LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR;
-          return true;
-        case 4:
-          *out_descriptor_ref =
-              LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B128_SADDR;
-          return true;
-        default:
-          return false;
-      }
+      *out_domain = LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_GLOBAL;
+      return true;
     case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
-      if (operation_kind == LOOM_AMDGPU_MEMORY_OPERATION_LOAD) {
-        switch (packet_register_count) {
-          case 1:
-            *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B32;
-            return true;
-          case 2:
-            *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B64;
-            return true;
-          case 3:
-            *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B96;
-            return true;
-          case 4:
-            *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B128;
-            return true;
-          default:
-            return false;
-        }
-      }
-      switch (packet_register_count) {
-        case 1:
-          *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32;
-          return true;
-        case 2:
-          *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B64;
-          return true;
-        case 3:
-          *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B96;
-          return true;
-        case 4:
-          *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B128;
-          return true;
-        default:
-          return false;
-      }
+      *out_domain = LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_WORKGROUP;
+      return true;
     case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
     case LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE:
     case LOOM_VALUE_FACT_MEMORY_SPACE_HOST:
@@ -630,26 +635,47 @@ static bool loom_amdgpu_fragment_memory_descriptor_ref(
   }
 }
 
+static bool loom_amdgpu_fragment_memory_descriptor_ref(
+    loom_amdgpu_memory_operation_kind_t operation_kind,
+    loom_value_fact_memory_space_t memory_space, uint16_t packet_register_count,
+    loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
+  *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  if (operation_kind >= LOOM_AMDGPU_MEMORY_OPERATION_COUNT_ ||
+      packet_register_count >
+          LOOM_AMDGPU_FRAGMENT_MEMORY_MAX_PACKET_REGISTERS) {
+    return false;
+  }
+  loom_amdgpu_fragment_memory_domain_t domain =
+      LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_COUNT_;
+  if (!loom_amdgpu_fragment_memory_domain_from_space(memory_space, &domain)) {
+    return false;
+  }
+  const loom_amdgpu_descriptor_ref_t descriptor_ref =
+      kFragmentMemoryDescriptorTables[domain]
+          .packet_refs[operation_kind][packet_register_count];
+  if (descriptor_ref == LOOM_AMDGPU_DESCRIPTOR_REF_NONE) {
+    return false;
+  }
+  *out_descriptor_ref = descriptor_ref;
+  return true;
+}
+
 static bool loom_amdgpu_fragment_memory_16bit_store_descriptor_ref(
     loom_value_fact_memory_space_t memory_space,
     loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
   *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
-  switch (memory_space) {
-    case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR:
-      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B16_SADDR;
-      return true;
-    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
-      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B16;
-      return true;
-    case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_HOST:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
-    default:
-      return false;
+  loom_amdgpu_fragment_memory_domain_t domain =
+      LOOM_AMDGPU_FRAGMENT_MEMORY_DOMAIN_COUNT_;
+  if (!loom_amdgpu_fragment_memory_domain_from_space(memory_space, &domain)) {
+    return false;
   }
+  const loom_amdgpu_descriptor_ref_t descriptor_ref =
+      kFragmentMemoryDescriptorTables[domain].store_b16_ref;
+  if (descriptor_ref == LOOM_AMDGPU_DESCRIPTOR_REF_NONE) {
+    return false;
+  }
+  *out_descriptor_ref = descriptor_ref;
+  return true;
 }
 
 static bool loom_amdgpu_fragment_memory_narrowed_store_descriptor_ref(
