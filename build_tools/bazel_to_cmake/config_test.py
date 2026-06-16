@@ -185,6 +185,43 @@ loom_check_test_suite(
         self.assertIn('    "test/source_low/"', cmake)
         self.assertNotIn('    "loom-check"', cmake)
 
+    def test_loom_check_test_suite_preserves_glob_srcs(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        loom = bazel_to_cmake_config.include_project(
+            str(repo_root / ".bazel_to_cmake.cfg.py"),
+            "loom/.bazel_to_cmake.cfg.py",
+        )
+        repo_cfg = SimpleNamespace(PROJECTS=[loom], REPO_MAP={"@iree": ""})
+
+        cmake = bazel_to_cmake_converter.convert_build_file(
+            """
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+
+loom_check_test_suite(
+    name = "loom_check_file_test",
+    srcs = glob(["test/source_low/*.loom-test"]),
+    test_name_prefix_to_strip = "test/source_low/",
+)
+""",
+            repo_cfg,
+            str(repo_root / "loom/src/loom/target/arch/amdgpu"),
+            repo_root=str(repo_root),
+        )
+
+        self.assertIn(
+            "file(GLOB _GLOB_TEST_SOURCE_LOW_X_LOOM_TEST LIST_DIRECTORIES false",
+            cmake,
+        )
+        self.assertIn(
+            "RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS "
+            "test/source_low/*.loom-test)",
+            cmake,
+        )
+        self.assertIn("loom_check_test_suite(", cmake)
+        self.assertIn('    "${_GLOB_TEST_SOURCE_LOW_X_LOOM_TEST}"', cmake)
+        self.assertNotIn('"test/source_low/a.loom-test"', cmake)
+        self.assertNotIn("iree_native_test(", cmake)
+
     def test_rejects_compiler_monorepo_external_targets(self):
         converter = bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""})
 

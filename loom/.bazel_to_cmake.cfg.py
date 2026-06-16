@@ -798,6 +798,8 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         self._emit_platform_guard_end(target_compatible_with)
 
     def _loom_check_test_base_name(self, src):
+        if src.startswith("${_GLOB_") and src.endswith("}"):
+            return src
         extension = ".loom-test"
         if not src.endswith(extension):
             raise ValueError(

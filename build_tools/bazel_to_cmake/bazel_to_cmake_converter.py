@@ -1452,8 +1452,10 @@ class BuildFileFunctions(object):
                 # emulate them or silently give different behavior, just error out.
                 # See https://bazel.build/reference/be/functions.html#glob
                 raise NotImplementedError("Recursive globs not supported")
-            # Bazel `*.mlir` glob -> CMake Variable `_GLOB_X_MLIR`
-            var = "_GLOB_" + pattern.replace("*", "X").replace(".", "_").upper()
+            # Bazel `*.mlir` glob -> CMake variable `_GLOB_X_MLIR`.
+            var = (
+                "_GLOB_" + self._cmake_variable_name(pattern.replace("*", "X")).upper()
+            )
             glob_vars.append(var)
             self._converter.body += (
                 f"file(GLOB {var} LIST_DIRECTORIES false"
