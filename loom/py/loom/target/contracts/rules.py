@@ -251,9 +251,5 @@ class DescriptorMatrixRule:
 
 
 type ContractCase = (
-    DescriptorRule
-    | ValueAliasRule
-    | ValueElideRule
-    | RecipeRule
-    | DescriptorMatrixRule
+    DescriptorRule | ValueAliasRule | ValueElideRule | RecipeRule | DescriptorMatrixRule
 )
