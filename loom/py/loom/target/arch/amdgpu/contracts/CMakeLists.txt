@@ -47,6 +47,7 @@ iree_py_test(
   SRCS
     "../../../../tools/pytest_style_runner.py"
   ARGS
+    "loom.target.arch.amdgpu.contracts.arithmetic_test"
     "loom.target.arch.amdgpu.contracts.callback_ownership_test"
   DEPS
     loom::py::loom::target::arch::amdgpu::contracts::contracts
