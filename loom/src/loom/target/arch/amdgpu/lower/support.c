@@ -25,6 +25,7 @@
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/materializers.h"
+#include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/util/fact_table.h"
@@ -402,6 +403,19 @@ iree_status_t loom_amdgpu_low_legality_verify_descriptor_requirements(
     IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirement(
         context, op, requirements[i].descriptor_ref,
         requirements[i].constraint_key));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t constraint_key, uint32_t* out_wavefront_size) {
+  *out_wavefront_size = 0;
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_target_wavefront_size(bundle, out_wavefront_size));
+  if (!loom_amdgpu_wavefront_size_is_valid(*out_wavefront_size)) {
+    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
   }
   return iree_ok_status();
 }

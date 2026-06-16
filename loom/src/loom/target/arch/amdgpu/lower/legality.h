@@ -53,6 +53,12 @@ iree_status_t loom_amdgpu_low_legality_verify_descriptor_requirements(
     const loom_amdgpu_low_legality_descriptor_requirement_t* requirements,
     iree_host_size_t requirement_count);
 
+// Verifies that the active target bundle has a supported subgroup wavefront
+// size and returns it.
+iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t constraint_key, uint32_t* out_wavefront_size);
+
 // Returns true when the target bundle belongs to an AMDGPU contract set.
 bool loom_amdgpu_low_legality_bundle_is_amdgpu(
     const loom_target_bundle_t* bundle);

@@ -1186,20 +1186,8 @@ static void loom_amdgpu_mark_plan_storage_demands(
 
 static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_key(
     const loom_amdgpu_workgroup_reduce_plan_t* plan) {
-  switch (plan->publication_kind) {
-    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LDS:
-      return IREE_SV("amdgpu.workgroup_reduce.publication.lds");
-    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP:
-      return IREE_SV("amdgpu.workgroup_reduce.publication.redundant_subgroup");
-    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LEADER_WORKITEM:
-      return IREE_SV("amdgpu.workgroup_reduce.publication.leader_workitem");
-    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP_LEADER_LANE:
-      return IREE_SV(
-          "amdgpu.workgroup_reduce.publication."
-          "redundant_subgroup_leader_lane");
-    default:
-      return iree_string_view_empty();
-  }
+  return loom_amdgpu_workgroup_reduce_publication_report_key(
+      plan->publication_kind);
 }
 
 static iree_string_view_t loom_amdgpu_table_lookup_plan_key(

@@ -641,6 +641,19 @@ typedef enum loom_amdgpu_workgroup_reduce_publication_kind_e {
   LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP_LEADER_LANE = 3,
 } loom_amdgpu_workgroup_reduce_publication_kind_t;
 
+typedef struct loom_amdgpu_workgroup_collective_cross_wave_descriptors_t {
+  // Descriptor row selected for LDS reads between waves.
+  loom_low_lower_resolved_descriptor_t lds_read_descriptor;
+  // Descriptor row selected for LDS writes between waves.
+  loom_low_lower_resolved_descriptor_t lds_write_descriptor;
+  // Descriptor row selected to synchronize LDS publication.
+  loom_low_lower_resolved_descriptor_t barrier_descriptor;
+  // Descriptor row selected to restrict publication to producer lanes.
+  loom_low_lower_resolved_descriptor_t saveexec_descriptor;
+  // Descriptor row selected to restore EXEC after lane-restricted regions.
+  loom_low_lower_resolved_descriptor_t restore_exec_descriptor;
+} loom_amdgpu_workgroup_collective_cross_wave_descriptors_t;
+
 typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   // Source value reduced across workgroup lanes.
   loom_value_id_t value;
@@ -656,16 +669,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t lane_ge_descriptor;
   // Descriptor row selected to replace inactive source lanes with identity.
   loom_low_lower_resolved_descriptor_t select_descriptor;
-  // Descriptor row selected for compiler-owned LDS reloads.
-  loom_low_lower_resolved_descriptor_t lds_read_descriptor;
-  // Descriptor row selected for compiler-owned LDS spills.
-  loom_low_lower_resolved_descriptor_t lds_write_descriptor;
-  // Descriptor row selected for the LDS synchronization barrier.
-  loom_low_lower_resolved_descriptor_t barrier_descriptor;
-  // Descriptor row selected to restrict EXEC to the producer wave.
-  loom_low_lower_resolved_descriptor_t saveexec_descriptor;
-  // Descriptor row selected to restore EXEC after producer-wave publication.
-  loom_low_lower_resolved_descriptor_t restore_exec_descriptor;
+  // Descriptor bundle used for cross-wave LDS publication.
+  loom_amdgpu_workgroup_collective_cross_wave_descriptors_t cross_wave;
   // Result value receiving the reduced payload.
   loom_value_id_t result;
   // Source/result payload shape selected during planning.
@@ -728,16 +733,8 @@ typedef struct loom_amdgpu_workgroup_scan_plan_t {
   loom_low_lower_resolved_descriptor_t lane_lt_descriptor;
   // Descriptor row selected for tail-wave predicates.
   loom_low_lower_resolved_descriptor_t lane_ge_descriptor;
-  // Descriptor row selected for LDS reads between waves.
-  loom_low_lower_resolved_descriptor_t lds_read_descriptor;
-  // Descriptor row selected for LDS writes between waves.
-  loom_low_lower_resolved_descriptor_t lds_write_descriptor;
-  // Descriptor row selected to synchronize LDS publication.
-  loom_low_lower_resolved_descriptor_t barrier_descriptor;
-  // Descriptor row selected to restrict publication to producer lanes.
-  loom_low_lower_resolved_descriptor_t saveexec_descriptor;
-  // Descriptor row selected to restore EXEC after lane-restricted regions.
-  loom_low_lower_resolved_descriptor_t restore_exec_descriptor;
+  // Descriptor bundle used for cross-wave LDS publication.
+  loom_amdgpu_workgroup_collective_cross_wave_descriptors_t cross_wave;
   // Result value receiving the scanned payload.
   loom_value_id_t result;
   // Source/result payload shape selected during planning.

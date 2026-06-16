@@ -33,6 +33,11 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_reduce(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
+// Returns the compile-report key for a selected workgroup reduce publication
+// strategy.
+iree_string_view_t loom_amdgpu_workgroup_reduce_publication_report_key(
+    loom_amdgpu_workgroup_reduce_publication_kind_t publication_kind);
+
 // Selects native AMDGPU cross-lane and LDS packets for a source workgroup scan.
 iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
