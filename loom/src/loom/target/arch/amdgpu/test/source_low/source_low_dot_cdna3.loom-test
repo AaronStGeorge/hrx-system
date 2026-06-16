@@ -92,17 +92,17 @@ low.func.def target(@target) abi(hal_kernel) @bf16_score_gather_dot2(%query: reg
   %33 = concat(%31, %32) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
   %34 = s_mov_b32_m0_imm 0
   %35 = global_load_d16_b16_saddr %26, %33, %34
-  %45 = concat(%31, %32) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %47 = global_load_d16_b16_saddr %26, %45, %34 {offset = 14}
-  %48 = v_bfe_u32_offset_0_width_16_low16 %35
-  %49 = v_lshlrev_b32_src0_16_low16 %47
-  %key_pair = v_or_b32 %48, %49
-  %51 = v_lshlrev_b32_lit %query, 16
-  %52 = v_lshlrev_b32_lit %key_pair, 16
-  %53 = v_and_b32_lit %query, 4294901760
-  %54 = v_and_b32_lit %key_pair, 4294901760
-  %55 = v_fma_f32 %51, %52, %acc
-  %score = v_fma_f32 %53, %54, %55
+  %43 = concat(%31, %32) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %45 = global_load_d16_b16_saddr %26, %43, %34 {offset = 14}
+  %46 = v_bfe_u32_offset_0_width_16_low16 %35
+  %47 = v_lshlrev_b32_src0_16_low16 %45
+  %key_pair = v_or_b32 %46, %47
+  %49 = v_lshlrev_b32_lit %query, 16
+  %50 = v_lshlrev_b32_lit %key_pair, 16
+  %51 = v_and_b32_lit %query, 4294901760
+  %52 = v_and_b32_lit %key_pair, 4294901760
+  %53 = v_fma_f32 %49, %50, %acc
+  %score = v_fma_f32 %51, %52, %53
   return %score
 }
 

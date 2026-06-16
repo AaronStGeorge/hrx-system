@@ -274,6 +274,53 @@ static bool loom_amdgpu_memory_dynamic_term_select_preferred_kind(
   return false;
 }
 
+void loom_amdgpu_mark_source_memory_plan_storage_demands(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_access_plan_t* source) {
+  loom_low_lower_require_source_value_storage(context, source->view_value_id);
+  for (uint8_t i = 0; i < source->dynamic_term_count; ++i) {
+    const loom_low_source_memory_dynamic_term_t* term =
+        &source->dynamic_terms[i];
+    loom_low_lower_require_source_value_storage(context, term->index);
+    for (uint8_t j = 0; j < term->stride_value_count; ++j) {
+      loom_low_lower_require_source_value_storage(context,
+                                                  term->stride_values[j]);
+    }
+  }
+}
+
+static loom_value_id_t loom_amdgpu_memory_access_payload_value(
+    const loom_op_t* source_op) {
+  switch (source_op->kind) {
+    case LOOM_OP_VIEW_LOAD:
+    case LOOM_OP_VECTOR_LOAD:
+      return LOOM_VALUE_ID_INVALID;
+    case LOOM_OP_VIEW_STORE:
+      return loom_view_store_value(source_op);
+    case LOOM_OP_VECTOR_STORE:
+      return loom_vector_store_value(source_op);
+    default:
+      IREE_ASSERT(false);
+      return LOOM_VALUE_ID_INVALID;
+  }
+}
+
+void loom_amdgpu_mark_memory_access_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_plan_t* plan) {
+  IREE_ASSERT_GT(plan->packet_count, 0u);
+  // Split packets only change static offsets and register slices; dynamic
+  // address storage is shared by every packet in the selected access plan.
+  loom_amdgpu_mark_source_memory_plan_storage_demands(
+      context, &plan->packets[0].access.source);
+
+  const loom_value_id_t value =
+      loom_amdgpu_memory_access_payload_value(source_op);
+  if (value != LOOM_VALUE_ID_INVALID) {
+    loom_low_lower_require_source_value_storage(context, value);
+  }
+}
+
 static bool loom_amdgpu_memory_dynamic_term_select_source_kind(
     const loom_amdgpu_memory_access_t* access,
     const loom_low_source_memory_dynamic_term_t* term,

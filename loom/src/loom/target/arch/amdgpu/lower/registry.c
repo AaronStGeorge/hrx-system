@@ -88,8 +88,10 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2 = 3,
   // Target plan data starts with a 3-value source array.
   LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3 = 4,
+  // Memory access plans own their source operand demand policy.
+  LOOM_AMDGPU_STORAGE_MEMORY_PLAN = 5,
   // Atomic plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_ATOMIC = 5,
+  LOOM_AMDGPU_STORAGE_ATOMIC = 6,
   // Maximum storage-policy value accepted by dispatch row policy bits.
   LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_ATOMIC,
 };
@@ -1010,6 +1012,11 @@ static void loom_amdgpu_mark_plan_storage_demands(
       loom_amdgpu_mark_atomic_plan_storage_demands(
           context, source_op,
           (const loom_amdgpu_atomic_plan_t*)plan.target_data);
+      return;
+    case LOOM_AMDGPU_STORAGE_MEMORY_PLAN:
+      loom_amdgpu_mark_memory_access_plan_storage_demands(
+          context, source_op,
+          (const loom_amdgpu_memory_access_plan_t*)plan.target_data);
       return;
     case LOOM_AMDGPU_STORAGE_VALUE_PLAN:
       loom_amdgpu_mark_value_plan_storage_demands(context, source_op, plan);

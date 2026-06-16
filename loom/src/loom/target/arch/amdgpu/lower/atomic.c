@@ -1675,17 +1675,6 @@ static void loom_amdgpu_require_atomic_payload_storage(
 void loom_amdgpu_mark_atomic_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_atomic_plan_t* plan) {
-  loom_low_lower_require_source_value_storage(context,
-                                              plan->source.view_value_id);
+  loom_amdgpu_mark_source_memory_plan_storage_demands(context, &plan->source);
   loom_amdgpu_require_atomic_payload_storage(context, source_op);
-
-  for (uint8_t i = 0; i < plan->source.dynamic_term_count; ++i) {
-    const loom_low_source_memory_dynamic_term_t* term =
-        &plan->source.dynamic_terms[i];
-    loom_low_lower_require_source_value_storage(context, term->index);
-    for (uint8_t j = 0; j < term->stride_value_count; ++j) {
-      loom_low_lower_require_source_value_storage(context,
-                                                  term->stride_values[j]);
-    }
-  }
 }
