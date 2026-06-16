@@ -101,6 +101,11 @@ class PhysicalDeviceSnapshotBuilder {
         IREE_HAL_VULKAN_DEVICE_EXTENSION_KHR_SHADER_BFLOAT16;
   }
 
+  void EnableMemoryBudgetExtension() {
+    snapshot_.available_extensions |=
+        IREE_HAL_VULKAN_DEVICE_EXTENSION_EXT_MEMORY_BUDGET;
+  }
+
   void EnableShaderBfloat16Features() {
     EnableShaderBfloat16Extension();
     snapshot_.shader_bfloat16_features.sType =
@@ -376,6 +381,25 @@ TEST(DevicePlanTest, OwnedCreateEnablesCooperativeMatrixWhenAvailable) {
             copied_plan.enabled_features12.pNext);
   EXPECT_EQ(&copied_plan.enabled_cooperative_matrix_features,
             copied_plan.enabled_features13.pNext);
+}
+
+TEST(DevicePlanTest, OwnedCreateEnablesMemoryBudgetWhenAvailable) {
+  PhysicalDeviceSnapshotBuilder builder;
+  builder.AddQueueFamily(VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT, 1);
+  builder.EnableMemoryBudgetExtension();
+
+  iree_hal_vulkan_device_options_t options = DefaultDeviceOptions();
+
+  iree_hal_vulkan_device_plan_t plan;
+  IREE_ASSERT_OK(iree_hal_vulkan_device_plan_initialize_for_create(
+      builder.snapshot(), &options, IREE_HAL_VULKAN_REQUEST_FLAG_NONE,
+      IREE_HAL_VULKAN_FEATURE_NONE, &plan));
+
+  EXPECT_TRUE(
+      iree_all_bits_set(plan.enabled_extensions,
+                        IREE_HAL_VULKAN_DEVICE_EXTENSION_EXT_MEMORY_BUDGET));
+  EXPECT_TRUE(PlanContainsExtension(
+      plan, IREE_HAL_VULKAN_EXT_MEMORY_BUDGET_EXTENSION_NAME));
 }
 
 TEST(DevicePlanTest, OwnedCreateEnablesShaderBfloat16WhenAvailable) {

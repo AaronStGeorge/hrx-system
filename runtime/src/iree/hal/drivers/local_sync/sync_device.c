@@ -15,9 +15,9 @@
 #include "iree/async/notification.h"
 #include "iree/async/util/proactor_pool.h"
 #include "iree/base/internal/arena.h"
-#include "iree/base/internal/cpu.h"
 #include "iree/hal/drivers/local_sync/sync_event.h"
 #include "iree/hal/drivers/local_sync/sync_semaphore.h"
+#include "iree/hal/local/device_spec_builder.h"
 #include "iree/hal/local/executable_environment.h"
 #include "iree/hal/local/inline_command_buffer.h"
 #include "iree/hal/local/inline_dispatch.h"
@@ -68,6 +68,9 @@ typedef struct iree_hal_sync_device_t {
 
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   iree_hal_device_topology_info_t topology_info;
 
@@ -205,6 +208,20 @@ iree_status_t iree_hal_sync_device_create(
                     iree_memory_order_relaxed);
   iree_status_t status =
       iree_async_proactor_pool_get(device->proactor_pool, 0, &device->proactor);
+  if (iree_status_is_ok(status)) {
+    iree_hal_local_device_spec_params_t spec_params = {
+        .logical_device_id = identifier,
+        .display_name = identifier,
+        .driver_id = IREE_SV("local-sync"),
+        .backend_id = IREE_SV("local"),
+        .queue_count = 1,
+        .default_queue_worker_count = 1,
+        .loader_count = loader_count,
+        .loaders = loaders,
+    };
+    status = iree_hal_local_device_spec_create(&spec_params, host_allocator,
+                                               &device->device_spec);
+  }
 
   if (iree_status_is_ok(status)) {
     status = iree_hal_sync_device_create_default_pool(
@@ -264,6 +281,7 @@ static void iree_hal_sync_device_destroy(iree_hal_device_t* base_device) {
   iree_hal_sync_device_clear_topology_info(device);
   iree_hal_allocator_release(device->device_allocator);
   iree_hal_channel_provider_release(device->channel_provider);
+  iree_hal_device_spec_release(device->device_spec);
   iree_async_proactor_pool_release(device->proactor_pool);
 
   iree_arena_block_pool_deinitialize(&device->large_block_pool);
@@ -291,12 +309,13 @@ static iree_hal_allocator_t* iree_hal_sync_device_allocator(
   return device->device_allocator;
 }
 
-static void iree_hal_sync_replace_device_allocator(
+static iree_status_t iree_hal_sync_replace_device_allocator(
     iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
   iree_hal_sync_device_t* device = iree_hal_sync_device_cast(base_device);
   iree_hal_allocator_retain(new_allocator);
   iree_hal_allocator_release(device->device_allocator);
   device->device_allocator = new_allocator;
+  return iree_ok_status();
 }
 
 static void iree_hal_sync_replace_channel_provider(
@@ -313,51 +332,23 @@ static iree_status_t iree_hal_sync_device_trim(iree_hal_device_t* base_device) {
   return iree_hal_allocator_trim(device->device_allocator);
 }
 
-static iree_status_t iree_hal_sync_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
+static const iree_hal_device_spec_t* iree_hal_sync_device_spec(
+    iree_hal_device_t* base_device) {
   iree_hal_sync_device_t* device = iree_hal_sync_device_cast(base_device);
-  *out_value = 0;
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.executable.format"))) {
-    *out_value =
-        iree_hal_query_any_executable_loader_support(
-            device->loader_count, device->loaders, /*caching_mode=*/0, key)
-            ? 1
-            : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = 1;
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("hal.dispatch"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = 1;
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("hal.cpu"))) {
-    return iree_cpu_lookup_data_by_key(key, out_value);
-  }
-
-  return iree_make_status(
-      IREE_STATUS_NOT_FOUND,
-      "unknown device configuration key value '%.*s :: %.*s'",
-      (int)category.size, category.data, (int)key.size, key.data);
+  return device->device_spec;
 }
 
-static iree_status_t iree_hal_sync_device_query_capabilities(
+static iree_status_t iree_hal_sync_device_sample_observation(
     iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  memset(out_capabilities, 0, sizeof(*out_capabilities));
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation) {
+  iree_hal_sync_device_t* device = iree_hal_sync_device_cast(base_device);
+  if (iree_any_bit_set(requested_flags,
+                       IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY)) {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_device_observation_populate_memory_total_from_spec(
+            device->device_spec, out_observation));
+  }
   return iree_ok_status();
 }
 
@@ -1733,8 +1724,8 @@ static const iree_hal_device_vtable_t iree_hal_sync_device_vtable = {
     .replace_device_allocator = iree_hal_sync_replace_device_allocator,
     .replace_channel_provider = iree_hal_sync_replace_channel_provider,
     .trim = iree_hal_sync_device_trim,
-    .query_i64 = iree_hal_sync_device_query_i64,
-    .query_capabilities = iree_hal_sync_device_query_capabilities,
+    .device_spec = iree_hal_sync_device_spec,
+    .sample_observation = iree_hal_sync_device_sample_observation,
     .topology_info = iree_hal_sync_device_topology_info,
     .refine_topology_edge = iree_hal_sync_device_refine_topology_edge,
     .assign_topology_info = iree_hal_sync_device_assign_topology_info,

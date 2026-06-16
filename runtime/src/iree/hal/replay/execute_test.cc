@@ -1358,11 +1358,11 @@ TEST(ReplayExecuteTest, SkipsFailedOperationRecords) {
 
   iree_hal_device_t* wrapped_device =
       iree_hal_device_group_device_at(wrapped_group, 0);
-  int64_t value = 0;
+  iree_hal_device_external_capture_options_t capture_options = {};
+  capture_options.provider = IREE_SV("replay-test");
   IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_NOT_FOUND,
-      iree_hal_device_query_i64(wrapped_device, IREE_SV("hal.replay.missing"),
-                                IREE_SV("probe"), &value));
+      IREE_STATUS_UNIMPLEMENTED,
+      iree_hal_device_external_capture_begin(wrapped_device, &capture_options));
 
   IREE_ASSERT_OK(iree_hal_replay_recorder_close(recorder));
   iree_hal_device_group_release(wrapped_group);

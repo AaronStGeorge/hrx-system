@@ -6171,131 +6171,55 @@ iree_status_t iree_hal_vulkan_queue_prepare_profile_timestamp_queries(
   return iree_ok_status();
 }
 
-static int64_t iree_hal_vulkan_queue_i64_saturate_u64(uint64_t value) {
-  return value > (uint64_t)INT64_MAX ? INT64_MAX : (int64_t)value;
-}
-
-bool iree_hal_vulkan_queue_query_i64(iree_hal_vulkan_queue_t* queue,
-                                     iree_string_view_t category,
-                                     iree_string_view_t key,
-                                     int64_t* out_value) {
+void iree_hal_vulkan_queue_sample_bda_publication_cache_stats(
+    iree_hal_vulkan_queue_t* queue,
+    iree_hal_vulkan_bda_publication_cache_stats_t* out_stats) {
   IREE_ASSERT_ARGUMENT(queue);
-  IREE_ASSERT_ARGUMENT(out_value);
-  *out_value = 0;
-
-  if (iree_string_view_equal(category,
-                             IREE_SV("vulkan.queue.bda_publication_cache"))) {
-    iree_slim_mutex_lock(&queue->submission_mutex);
-    if (iree_string_view_equal(key, IREE_SV("block_count"))) {
-      *out_value = (int64_t)queue->bda_publication_cache.block_count;
-    } else {
-      iree_slim_mutex_unlock(&queue->submission_mutex);
-      return false;
-    }
-    iree_slim_mutex_unlock(&queue->submission_mutex);
-    return true;
-  }
-
-  if (iree_string_view_equal(category,
-                             IREE_SV("vulkan.queue.timestamp_query_cache"))) {
-    iree_slim_mutex_lock(&queue->submission_mutex);
-    if (iree_string_view_equal(key, IREE_SV("block_count"))) {
-      *out_value = (int64_t)queue->timestamp_query_cache.block_count;
-    } else if (iree_string_view_equal(key, IREE_SV("query_capacity"))) {
-      uint64_t query_capacity = 0;
-      for (iree_hal_vulkan_queue_timestamp_query_block_t* block =
-               queue->timestamp_query_cache.head;
-           block; block = block->next) {
-        query_capacity += block->capacity;
-      }
-      *out_value = iree_hal_vulkan_queue_i64_saturate_u64(query_capacity);
-    } else if (iree_string_view_equal(key, IREE_SV("allocated_count"))) {
-      uint64_t allocated_count = 0;
-      for (iree_hal_vulkan_queue_timestamp_query_block_t* block =
-               queue->timestamp_query_cache.head;
-           block; block = block->next) {
-        allocated_count += block->allocated_count;
-      }
-      *out_value = iree_hal_vulkan_queue_i64_saturate_u64(allocated_count);
-    } else if (iree_string_view_equal(key, IREE_SV("active_lease_count"))) {
-      uint64_t active_lease_count = 0;
-      for (iree_hal_vulkan_queue_timestamp_query_block_t* block =
-               queue->timestamp_query_cache.head;
-           block; block = block->next) {
-        active_lease_count += block->active_lease_count;
-      }
-      *out_value = iree_hal_vulkan_queue_i64_saturate_u64(active_lease_count);
-    } else {
-      iree_slim_mutex_unlock(&queue->submission_mutex);
-      return false;
-    }
-    iree_slim_mutex_unlock(&queue->submission_mutex);
-    return true;
-  }
-
-  if (!iree_string_view_equal(category,
-                              IREE_SV("vulkan.queue.native_replay_cache"))) {
-    return false;
-  }
+  IREE_ASSERT_ARGUMENT(out_stats);
+  memset(out_stats, 0, sizeof(*out_stats));
 
   iree_slim_mutex_lock(&queue->submission_mutex);
-  if (iree_string_view_equal(key, IREE_SV("instance_count"))) {
-    *out_value = (int64_t)queue->native_replay_cache.instance_count;
-  } else if (iree_string_view_equal(key, IREE_SV("max_instance_count"))) {
-    *out_value = (int64_t)queue->native_replay_cache.max_instance_count;
-  } else if (iree_string_view_equal(key, IREE_SV("retained_instance_count"))) {
-    *out_value = (int64_t)queue->native_replay_cache.retained_instance_count;
-  } else if (iree_string_view_equal(key, IREE_SV("publication_bytes"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.publication_bytes);
-  } else if (iree_string_view_equal(key, IREE_SV("max_publication_bytes"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.max_publication_bytes);
-  } else if (iree_string_view_equal(key, IREE_SV("peak_instance_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.peak_instance_count);
-  } else if (iree_string_view_equal(key, IREE_SV("peak_publication_bytes"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.peak_publication_bytes);
-  } else if (iree_string_view_equal(key, IREE_SV("hit_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.hit_count);
-  } else if (iree_string_view_equal(key, IREE_SV("miss_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.miss_count);
-  } else if (iree_string_view_equal(key, IREE_SV("create_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.create_count);
-  } else if (iree_string_view_equal(key, IREE_SV("fork_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.fork_count);
-  } else if (iree_string_view_equal(key, IREE_SV("publication_skip_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.publication_skip_count);
-  } else if (iree_string_view_equal(key, IREE_SV("publication_update_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.publication_update_count);
-  } else if (iree_string_view_equal(key, IREE_SV("descriptor_bypass_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.descriptor_bypass_count);
-  } else if (iree_string_view_equal(key, IREE_SV("profile_bypass_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.profile_bypass_count);
-  } else if (iree_string_view_equal(key, IREE_SV("one_shot_bypass_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.one_shot_bypass_count);
-  } else if (iree_string_view_equal(key, IREE_SV("capacity_bypass_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.capacity_bypass_count);
-  } else if (iree_string_view_equal(key, IREE_SV("trim_count"))) {
-    *out_value = iree_hal_vulkan_queue_i64_saturate_u64(
-        queue->native_replay_cache.trim_count);
-  } else {
-    iree_slim_mutex_unlock(&queue->submission_mutex);
-    return false;
-  }
+  out_stats->block_count = queue->bda_publication_cache.block_count;
   iree_slim_mutex_unlock(&queue->submission_mutex);
-  return true;
+}
+
+void iree_hal_vulkan_queue_sample_native_replay_cache_stats(
+    iree_hal_vulkan_queue_t* queue,
+    iree_hal_vulkan_native_replay_cache_stats_t* out_stats) {
+  IREE_ASSERT_ARGUMENT(queue);
+  IREE_ASSERT_ARGUMENT(out_stats);
+  memset(out_stats, 0, sizeof(*out_stats));
+
+  iree_slim_mutex_lock(&queue->submission_mutex);
+  out_stats->instance_count = queue->native_replay_cache.instance_count;
+  out_stats->max_instance_count = queue->native_replay_cache.max_instance_count;
+  out_stats->retained_instance_count =
+      queue->native_replay_cache.retained_instance_count;
+  out_stats->publication_bytes = queue->native_replay_cache.publication_bytes;
+  out_stats->max_publication_bytes =
+      queue->native_replay_cache.max_publication_bytes;
+  out_stats->peak_instance_count =
+      queue->native_replay_cache.peak_instance_count;
+  out_stats->peak_publication_bytes =
+      queue->native_replay_cache.peak_publication_bytes;
+  out_stats->hit_count = queue->native_replay_cache.hit_count;
+  out_stats->miss_count = queue->native_replay_cache.miss_count;
+  out_stats->create_count = queue->native_replay_cache.create_count;
+  out_stats->fork_count = queue->native_replay_cache.fork_count;
+  out_stats->publication_skip_count =
+      queue->native_replay_cache.publication_skip_count;
+  out_stats->publication_update_count =
+      queue->native_replay_cache.publication_update_count;
+  out_stats->descriptor_bypass_count =
+      queue->native_replay_cache.descriptor_bypass_count;
+  out_stats->profile_bypass_count =
+      queue->native_replay_cache.profile_bypass_count;
+  out_stats->one_shot_bypass_count =
+      queue->native_replay_cache.one_shot_bypass_count;
+  out_stats->capacity_bypass_count =
+      queue->native_replay_cache.capacity_bypass_count;
+  out_stats->trim_count = queue->native_replay_cache.trim_count;
+  iree_slim_mutex_unlock(&queue->submission_mutex);
 }
 
 iree_status_t iree_hal_vulkan_queue_assign_frontier(

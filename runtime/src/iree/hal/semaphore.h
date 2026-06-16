@@ -256,6 +256,36 @@ typedef enum iree_hal_external_timepoint_type_e {
   IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT,
 } iree_hal_external_timepoint_type_t;
 
+// A bitmask of iree_hal_external_timepoint_type_t values.
+typedef uint32_t iree_hal_external_timepoint_type_mask_t;
+typedef enum iree_hal_external_timepoint_type_mask_bits_e {
+  // No external timepoint types are supported.
+  IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE = 0u,
+  // Bit for IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_ASYNC_PRIMITIVE.
+  IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_ASYNC_PRIMITIVE =
+      1u << IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_ASYNC_PRIMITIVE,
+  // Bit for IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_CUDA_EVENT.
+  IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_CUDA_EVENT =
+      1u << IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_CUDA_EVENT,
+  // Bit for IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT.
+  IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_HIP_EVENT =
+      1u << IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT,
+} iree_hal_external_timepoint_type_mask_bits_t;
+
+// Returns the mask bit for |type| or NONE for an invalid/sentinel type.
+static inline iree_hal_external_timepoint_type_mask_t
+iree_hal_external_timepoint_type_mask_from_type(
+    iree_hal_external_timepoint_type_t type) {
+  if (type == IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_NONE) {
+    return IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE;
+  }
+  const uint32_t ordinal = (uint32_t)type;
+  if (ordinal >= 8u * sizeof(iree_hal_external_timepoint_type_mask_t)) {
+    return IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_MASK_NONE;
+  }
+  return (iree_hal_external_timepoint_type_mask_t)(1u << ordinal);
+}
+
 // Flags for controlling iree_hal_external_timepoint_t implementation
 // details.
 enum iree_hal_external_timepoint_flag_bits_t {

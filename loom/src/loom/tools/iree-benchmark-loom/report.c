@@ -15,6 +15,7 @@
 #include "iree/tooling/device_util.h"
 #include "loom/tooling/execution/benchmark.h"
 #include "loom/tooling/io/file.h"
+#include "loom/tools/iree-benchmark-loom/device_spec_report.h"
 #include "loom/tools/iree-benchmark-loom/diagnostics.h"
 #include "loom/tools/iree-benchmark-loom/module_query.h"
 #include "loom/tools/iree-benchmark-loom/options.h"
@@ -64,40 +65,6 @@ iree_status_t iree_benchmark_loom_write_status_object_json(
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
       stream, iree_make_string_view(message, required_length)));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
-  return iree_ok_status();
-}
-
-static iree_status_t iree_benchmark_loom_write_optional_i64_query_json(
-    iree_hal_device_t* device, iree_string_view_t category,
-    iree_string_view_t key, const char* field_name,
-    loom_output_stream_t* stream) {
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(stream, field_name));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":"));
-  int64_t value = 0;
-  iree_status_t status =
-      iree_hal_device_query_i64(device, category, key, &value);
-  if (iree_status_is_ok(status)) {
-    return loom_output_stream_write_format(stream, "%" PRIi64, value);
-  }
-  iree_status_t write_status =
-      iree_benchmark_loom_write_status_object_json(status, stream);
-  iree_status_free(status);
-  return write_status;
-}
-
-static iree_status_t iree_benchmark_loom_write_hex_bytes_json(
-    const uint8_t* bytes, iree_host_size_t byte_count,
-    loom_output_stream_t* stream) {
-  static const char kHexDigits[] = "0123456789abcdef";
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\""));
-  for (iree_host_size_t i = 0; i < byte_count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_char(stream, kHexDigits[bytes[i] >> 4]));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_char(stream, kHexDigits[bytes[i] & 0x0F]));
-  }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\""));
   return iree_ok_status();
 }
 
@@ -419,46 +386,9 @@ iree_status_t iree_benchmark_loom_write_hal_context_identity_fields_json(
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         stream, iree_hal_device_id(context->execution.runtime.device)));
     IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"queries\":{"));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, "\"attempted\":true"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_optional_i64_query_json(
-        context->execution.runtime.device, IREE_SV("hal.device"),
-        IREE_SV("concurrency"), "hal_device_concurrency", stream));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_optional_i64_query_json(
-        context->execution.runtime.device, IREE_SV("hal.dispatch"),
-        IREE_SV("concurrency"), "hal_dispatch_concurrency", stream));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
-
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"capabilities\":"));
-    iree_hal_device_capabilities_t capabilities = {0};
-    iree_status_t capabilities_status = iree_hal_device_query_capabilities(
-        context->execution.runtime.device, &capabilities);
-    if (iree_status_is_ok(capabilities_status)) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-          stream,
-          "{\"flags\":%" PRIu64 ",\"numa_node\":%" PRIu8
-          ",\"has_physical_device_uuid\":%s,\"device_group_index\":%" PRIu32
-          ",\"has_device_group\":%s",
-          capabilities.flags, capabilities.numa_node,
-          capabilities.has_physical_device_uuid ? "true" : "false",
-          capabilities.device_group_index,
-          capabilities.has_device_group ? "true" : "false"));
-      if (capabilities.has_physical_device_uuid) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-            stream, ",\"physical_device_uuid\":"));
-        IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_hex_bytes_json(
-            capabilities.physical_device_uuid,
-            IREE_ARRAYSIZE(capabilities.physical_device_uuid), stream));
-      }
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
-    } else {
-      iree_status_t write_status = iree_benchmark_loom_write_status_object_json(
-          capabilities_status, stream);
-      iree_status_free(capabilities_status);
-      IREE_RETURN_IF_ERROR(write_status);
-    }
+        loom_output_stream_write_cstring(stream, ",\"device_spec\":"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_device_spec_json(
+        iree_hal_device_spec(context->execution.runtime.device), stream));
   } else {
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(stream, ",\"status\":\"planned\""));

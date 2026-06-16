@@ -89,10 +89,6 @@ typedef struct loom_spirv_vulkan_hal_profile_facts_t {
   loom_target_workgroup_size_t max_compute_workgroup_size;
   // Maximum dispatch workgroup count per dimension.
   loom_target_workgroup_count_limit_t max_compute_workgroup_count;
-  // Number of active VK_KHR_cooperative_matrix property rows.
-  uint32_t cooperative_matrix_property_count;
-  // Bitmask of shader stages supported by VK_KHR_cooperative_matrix.
-  uint32_t cooperative_matrix_supported_stages;
 } loom_spirv_vulkan_hal_profile_facts_t;
 
 typedef struct loom_spirv_vulkan_hal_target_profile_storage_t {

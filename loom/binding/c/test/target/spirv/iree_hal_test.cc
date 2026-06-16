@@ -11,6 +11,8 @@
 #include <string>
 
 #include "iree/hal/api.h"
+#include "iree/hal/drivers/vulkan/device_spec.h"
+#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/testing/gtest.h"
 #include "loomc/diagnostic.h"
 #include "loomc/result.h"
@@ -29,30 +31,18 @@ using TargetEnvironmentPtr =
     HandlePtr<loomc_target_environment_t, loomc_target_environment_release>;
 using TargetProfilePtr =
     HandlePtr<loomc_target_profile_t, loomc_target_profile_release>;
+using DeviceSpecPtr =
+    HandlePtr<iree_hal_device_spec_t, iree_hal_device_spec_release>;
 
 constexpr uint32_t kVulkanApiVersion13 =
     (1u << 22) | (3u << 12) | static_cast<uint32_t>(0);
-
-typedef struct FakeQueryRow {
-  // HAL query category.
-  iree_string_view_t category;
-
-  // HAL query key within category.
-  iree_string_view_t key;
-
-  // Scalar query value returned to the caller.
-  int64_t value;
-} FakeQueryRow;
 
 typedef struct FakeHalDevice {
   // HAL resource header used by device vtable dispatch.
   iree_hal_resource_t resource;
 
-  // Query rows exposed by this fake device.
-  const FakeQueryRow* rows;
-
-  // Number of entries in rows.
-  iree_host_size_t row_count;
+  // Immutable device facts borrowed from the test.
+  const iree_hal_device_spec_t* device_spec;
 } FakeHalDevice;
 
 typedef struct FakeExecutableCache {
@@ -67,19 +57,10 @@ std::string ToString(loomc_string_view_t value) {
   return value.data ? std::string(value.data, value.size) : std::string();
 }
 
-static iree_status_t FakeHalDeviceQueryI64(iree_hal_device_t* base_device,
-                                           iree_string_view_t category,
-                                           iree_string_view_t key,
-                                           int64_t* out_value) {
+static const iree_hal_device_spec_t* FakeHalDeviceSpec(
+    iree_hal_device_t* base_device) {
   FakeHalDevice* device = reinterpret_cast<FakeHalDevice*>(base_device);
-  for (iree_host_size_t i = 0; i < device->row_count; ++i) {
-    if (iree_string_view_equal(category, device->rows[i].category) &&
-        iree_string_view_equal(key, device->rows[i].key)) {
-      *out_value = device->rows[i].value;
-      return iree_ok_status();
-    }
-  }
-  return iree_make_status(IREE_STATUS_NOT_FOUND);
+  return device->device_spec;
 }
 
 static bool FakeExecutableCacheCanPrepareFormat(
@@ -93,16 +74,14 @@ static bool FakeExecutableCacheCanPrepareFormat(
          iree_string_view_equal(executable_format, IREE_SV("vulkan-spirv-bda"));
 }
 
-static const iree_hal_device_vtable_t kFakeHalDeviceVtable = {
-    /*.destroy=*/nullptr,
-    /*.id=*/nullptr,
-    /*.host_allocator=*/nullptr,
-    /*.device_allocator=*/nullptr,
-    /*.replace_device_allocator=*/nullptr,
-    /*.replace_channel_provider=*/nullptr,
-    /*.trim=*/nullptr,
-    /*.query_i64=*/FakeHalDeviceQueryI64,
-};
+static iree_hal_device_vtable_t MakeFakeHalDeviceVtable() {
+  iree_hal_device_vtable_t vtable = {};
+  vtable.device_spec = FakeHalDeviceSpec;
+  return vtable;
+}
+
+static const iree_hal_device_vtable_t kFakeHalDeviceVtable =
+    MakeFakeHalDeviceVtable();
 
 static const iree_hal_executable_cache_vtable_t kFakeExecutableCacheVtable = {
     /*.destroy=*/nullptr,
@@ -110,12 +89,10 @@ static const iree_hal_executable_cache_vtable_t kFakeExecutableCacheVtable = {
     /*.can_prepare_format=*/FakeExecutableCacheCanPrepareFormat,
 };
 
-FakeHalDevice MakeFakeDevice(const FakeQueryRow* rows,
-                             iree_host_size_t row_count) {
+FakeHalDevice MakeFakeDevice(const iree_hal_device_spec_t* device_spec) {
   FakeHalDevice device = {
       /*.resource=*/{},
-      /*.rows=*/rows,
-      /*.row_count=*/row_count,
+      /*.device_spec=*/device_spec,
   };
   iree_hal_resource_initialize(&kFakeHalDeviceVtable, &device.resource);
   return device;
@@ -129,6 +106,81 @@ FakeExecutableCache MakeFakeExecutableCache(bool raw_bda_supported) {
   iree_hal_resource_initialize(&kFakeExecutableCacheVtable,
                                &executable_cache.resource);
   return executable_cache;
+}
+
+iree_hal_vulkan_features_t RequiredVulkanFeatures() {
+  return IREE_HAL_VULKAN_FEATURE_ENABLE_BUFFER_DEVICE_ADDRESSES |
+         IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_INT64;
+}
+
+iree_status_t CreateVulkanDeviceSpec(
+    iree_hal_vulkan_features_t enabled_features, bool include_dispatch,
+    DeviceSpecPtr* out_device_spec) {
+  out_device_spec->reset();
+  iree_hal_vulkan_device_spec_t vulkan_spec = {
+      /*.api_version=*/kVulkanApiVersion13,
+      /*.driver_version=*/1,
+      /*.physical_device_type=*/2,
+      /*.enabled_features=*/enabled_features,
+      /*.flags=*/IREE_HAL_VULKAN_DEVICE_SPEC_FLAG_NONE,
+  };
+  uint8_t vulkan_payload_storage[8 + sizeof(iree_hal_vulkan_device_spec_t)];
+  IREE_RETURN_IF_ERROR(iree_hal_vulkan_device_spec_encode(
+      &vulkan_spec, iree_make_byte_span(vulkan_payload_storage,
+                                        sizeof(vulkan_payload_storage))));
+  iree_hal_device_spec_facet_t vulkan_facet = {
+      /*.schema_id=*/
+      iree_make_cstring_view(IREE_HAL_VULKAN_DEVICE_SPEC_SCHEMA_ID),
+      /*.schema_version=*/IREE_HAL_VULKAN_DEVICE_SPEC_SCHEMA_VERSION,
+      /*.payload=*/
+      iree_make_const_byte_span(vulkan_payload_storage,
+                                sizeof(vulkan_payload_storage)),
+  };
+
+  iree_hal_device_spec_builder_t builder;
+  iree_hal_device_spec_builder_initialize(iree_allocator_system(), &builder);
+  iree_status_t status = iree_ok_status();
+  if (include_dispatch) {
+    iree_hal_device_dispatch_spec_t dispatch = {
+        /*.launch=*/
+        {
+            /*.maximum_workgroup_invocations=*/256,
+            /*.maximum_workgroup_size=*/{256, 128, 64},
+            /*.maximum_workgroup_count=*/{65535, 65535, 65535},
+        },
+        /*.subgroup=*/
+        {
+            /*.default_size=*/32,
+            /*.minimum_size=*/32,
+            /*.maximum_size=*/32,
+            /*.supported_size_mask=*/1ull << 32,
+        },
+        /*.execution=*/
+        {
+            /*.unit_count=*/1,
+            /*.group_count=*/1,
+        },
+        /*.addressing=*/
+        {
+            /*.pointer_size_bits=*/64,
+            /*.address_space_bits=*/64,
+        },
+        /*.flags=*/IREE_HAL_DEVICE_DISPATCH_SPEC_FLAG_NONE,
+    };
+    status = iree_hal_device_spec_builder_set_dispatch(&builder, &dispatch);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_spec_builder_add_facet(&builder, &vulkan_facet);
+  }
+  iree_hal_device_spec_t* device_spec = nullptr;
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_spec_builder_finalize(&builder, &device_spec);
+  }
+  iree_hal_device_spec_builder_deinitialize(&builder);
+  if (iree_status_is_ok(status)) {
+    out_device_spec->reset(device_spec);
+  }
+  return status;
 }
 
 TargetEnvironmentPtr CreateSpirvTargetEnvironment() {
@@ -184,28 +236,12 @@ TargetProfilePtr CreateProfileFromHal(
 }
 
 TEST(LoomcSpirvIreeHalTargetTest, CreatesProfileFromHalFacts) {
-  const FakeQueryRow rows[] = {
-      {IREE_SVL("vulkan.device"), IREE_SVL("api_version"), kVulkanApiVersion13},
-      {IREE_SVL("vulkan.device"), IREE_SVL("subgroup_size"), 32},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_invocations"),
-       256},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_size_x"),
-       256},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_size_y"),
-       128},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_size_z"), 64},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_count_x"),
-       65535},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_count_y"),
-       65535},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_count_z"),
-       65535},
-      {IREE_SVL("vulkan.feature"), IREE_SVL("buffer_device_address"), 1},
-      {IREE_SVL("vulkan.feature"), IREE_SVL("shader_int64"), 1},
-      {IREE_SVL("vulkan.feature"), IREE_SVL("shader_float16"), 1},
-      {IREE_SVL("vulkan.feature"), IREE_SVL("storage_buffer_8bit_access"), 1},
-  };
-  FakeHalDevice device = MakeFakeDevice(rows, IREE_ARRAYSIZE(rows));
+  DeviceSpecPtr device_spec;
+  IREE_ASSERT_OK(CreateVulkanDeviceSpec(
+      RequiredVulkanFeatures() | IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_FLOAT16 |
+          IREE_HAL_VULKAN_FEATURE_ENABLE_STORAGE_BUFFER_8BIT_ACCESS,
+      /*include_dispatch=*/true, &device_spec));
+  FakeHalDevice device = MakeFakeDevice(device_spec.get());
   FakeExecutableCache executable_cache = MakeFakeExecutableCache(true);
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   loomc_result_t* result = nullptr;
@@ -231,10 +267,7 @@ TEST(LoomcSpirvIreeHalTargetTest, CreatesProfileFromHalFacts) {
 }
 
 TEST(LoomcSpirvIreeHalTargetTest, MissingExecutableFormatFailsResult) {
-  const FakeQueryRow rows[] = {
-      {IREE_SVL("vulkan.device"), IREE_SVL("api_version"), kVulkanApiVersion13},
-  };
-  FakeHalDevice device = MakeFakeDevice(rows, IREE_ARRAYSIZE(rows));
+  FakeHalDevice device = MakeFakeDevice(nullptr);
   FakeExecutableCache executable_cache = MakeFakeExecutableCache(false);
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   loomc_result_t* result = nullptr;
@@ -247,12 +280,11 @@ TEST(LoomcSpirvIreeHalTargetTest, MissingExecutableFormatFailsResult) {
 }
 
 TEST(LoomcSpirvIreeHalTargetTest, MissingRequiredHalFactFailsResult) {
-  const FakeQueryRow rows[] = {
-      {IREE_SVL("vulkan.device"), IREE_SVL("api_version"), kVulkanApiVersion13},
-      {IREE_SVL("vulkan.feature"), IREE_SVL("buffer_device_address"), 1},
-      {IREE_SVL("vulkan.feature"), IREE_SVL("shader_int64"), 1},
-  };
-  FakeHalDevice device = MakeFakeDevice(rows, IREE_ARRAYSIZE(rows));
+  DeviceSpecPtr device_spec;
+  IREE_ASSERT_OK(CreateVulkanDeviceSpec(RequiredVulkanFeatures(),
+                                        /*include_dispatch=*/false,
+                                        &device_spec));
+  FakeHalDevice device = MakeFakeDevice(device_spec.get());
   FakeExecutableCache executable_cache = MakeFakeExecutableCache(true);
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   loomc_result_t* result = nullptr;
@@ -265,26 +297,11 @@ TEST(LoomcSpirvIreeHalTargetTest, MissingRequiredHalFactFailsResult) {
 }
 
 TEST(LoomcSpirvIreeHalTargetTest, ProviderRoutesThroughGenericHalRouter) {
-  const FakeQueryRow rows[] = {
-      {IREE_SVL("vulkan.device"), IREE_SVL("api_version"), kVulkanApiVersion13},
-      {IREE_SVL("vulkan.device"), IREE_SVL("subgroup_size"), 32},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_invocations"),
-       256},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_size_x"),
-       256},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_size_y"),
-       128},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_size_z"), 64},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_count_x"),
-       65535},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_count_y"),
-       65535},
-      {IREE_SVL("vulkan.device"), IREE_SVL("max_compute_workgroup_count_z"),
-       65535},
-      {IREE_SVL("vulkan.feature"), IREE_SVL("buffer_device_address"), 1},
-      {IREE_SVL("vulkan.feature"), IREE_SVL("shader_int64"), 1},
-  };
-  FakeHalDevice device = MakeFakeDevice(rows, IREE_ARRAYSIZE(rows));
+  DeviceSpecPtr device_spec;
+  IREE_ASSERT_OK(CreateVulkanDeviceSpec(RequiredVulkanFeatures(),
+                                        /*include_dispatch=*/true,
+                                        &device_spec));
+  FakeHalDevice device = MakeFakeDevice(device_spec.get());
   FakeExecutableCache executable_cache = MakeFakeExecutableCache(true);
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   iree_hal_device_t* hal_device = reinterpret_cast<iree_hal_device_t*>(&device);
@@ -316,7 +333,7 @@ TEST(LoomcSpirvIreeHalTargetTest, ProviderRoutesThroughGenericHalRouter) {
 }
 
 TEST(LoomcSpirvIreeHalTargetTest, ProviderMissLetsRouterReportUnsupported) {
-  FakeHalDevice device = MakeFakeDevice(nullptr, 0);
+  FakeHalDevice device = MakeFakeDevice(nullptr);
   FakeExecutableCache executable_cache = MakeFakeExecutableCache(true);
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   iree_hal_device_t* hal_device = reinterpret_cast<iree_hal_device_t*>(&device);

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
 loom_cc_library(
   NAME
     iree_hal
@@ -19,6 +19,7 @@ loom_cc_library(
     "iree_hal.c"
   DEPS
     iree::hal
+    iree::hal::drivers::vulkan::device_spec
     loom::binding::c::loomc
     loom::binding::c::target::iree_hal
     loom::binding::c::target::spirv

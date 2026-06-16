@@ -47,6 +47,7 @@ loom_cc_library(
   DEPS
     ::vulkan_profile
     iree::base
+    iree::hal::drivers::vulkan::device_spec
     loom::tooling::execution::hal::testbench_actual
     loom::tooling::testbench::requirements
   PUBLIC
@@ -66,6 +67,7 @@ loom_cc_library(
     iree::hal
     iree::hal::drivers::vulkan
     iree::hal::drivers::vulkan::api
+    iree::hal::drivers::vulkan::device_spec
     loom::target::arch::spirv::cooperative_properties
     loom::target::arch::spirv::features
     loom::target::arch::spirv::profile
@@ -88,7 +90,9 @@ loom_cc_test(
     iree::base::internal::arena
     iree::hal
     iree::hal::drivers::vulkan
+    iree::hal::drivers::vulkan::device_spec
     iree::hal::drivers::vulkan::headers
+    iree::hal::utils::device_spec_builder
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::text_asm
@@ -118,6 +122,8 @@ loom_cc_test(
     iree::base
     iree::hal
     iree::hal::drivers::vulkan::api
+    iree::hal::drivers::vulkan::device_spec
+    iree::hal::utils::device_spec_builder
     iree::testing::gtest
     iree::testing::gtest_main
     loom::target::arch::spirv::cooperative_properties

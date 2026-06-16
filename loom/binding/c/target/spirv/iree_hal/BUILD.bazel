@@ -17,8 +17,7 @@ package(
 )
 
 _SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:spirv",
-    "//loom/config/emit:spirv",
+    "//loom/config/target:spirv_vulkan_artifacts",
 ])
 
 loom_cc_library(
@@ -32,6 +31,7 @@ loom_cc_library(
         "//loom/binding/c/target/iree_hal",
         "//loom/binding/c/target/spirv",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/vulkan:device_spec",
     ],
     alwayslink = True,
 )

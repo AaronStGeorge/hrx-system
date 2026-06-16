@@ -11,11 +11,13 @@
 #include <stdint.h>
 
 #include "iree/base/api.h"
+#include "iree/base/time.h"
 #include "iree/hal/allocator.h"
 #include "iree/hal/buffer.h"
 #include "iree/hal/channel.h"
 #include "iree/hal/channel_provider.h"
 #include "iree/hal/command_buffer.h"
+#include "iree/hal/device_spec.h"
 #include "iree/hal/event.h"
 #include "iree/hal/executable_cache.h"
 #include "iree/hal/fence.h"
@@ -305,92 +307,6 @@ enum iree_hal_execute_flag_bits_t {
   IREE_HAL_EXECUTE_FLAG_BORROW_BINDING_TABLE_LIFETIME = 1ull << 0,
 };
 
-// Device capability flags bitfield.
-// These flags describe boolean device features used for topology construction.
-typedef uint64_t iree_hal_device_capability_bits_t;
-enum iree_hal_device_capability_bits_e {
-  IREE_HAL_DEVICE_CAPABILITY_NONE = 0,
-
-  // Native timeline semaphore support (not binary emulation).
-  IREE_HAL_DEVICE_CAPABILITY_TIMELINE_SEMAPHORES = 1ull << 0,
-
-  // Device memory is transparently accessible through one address space without
-  // driver-specific per-range access programming.
-  IREE_HAL_DEVICE_CAPABILITY_UNIFIED_MEMORY = 1ull << 1,
-  // Host accesses to device-visible memory are coherent without explicit
-  // application-managed cache maintenance.
-  IREE_HAL_DEVICE_CAPABILITY_HOST_COHERENT = 1ull << 2,
-  // Same-driver peer memory accesses are coherent without explicit
-  // application-managed cache maintenance.
-  IREE_HAL_DEVICE_CAPABILITY_PEER_COHERENT = 1ull << 3,
-
-  // Transfer capabilities.
-  // P2P DMA engine can copy directly between this device and peers.
-  // Does NOT imply load/store addressability — see PEER_ADDRESSABLE.
-  IREE_HAL_DEVICE_CAPABILITY_P2P_COPY = 1ull << 4,
-  IREE_HAL_DEVICE_CAPABILITY_HOST_ZERO_COPY_OK = 1ull << 5,
-  // Peer memory is load/store addressable (mapped BARs, unified memory, etc.).
-  // When set with P2P_COPY, buffers on this device can be directly accessed
-  // by peer devices without issuing a transfer command (NATIVE mode).
-  // When P2P_COPY is set without this flag, only the DMA engine can access
-  // peer memory — shader/host load/store will fault.
-  // Example: NVLink with large BAR → PEER_ADDRESSABLE + P2P_COPY.
-  // Example: PCIe P2P without BAR mapping → P2P_COPY only.
-  IREE_HAL_DEVICE_CAPABILITY_PEER_ADDRESSABLE = 1ull << 10,
-  // Shared virtual addressing is available across devices. This means a
-  // driver can make matching virtual addresses meaningful, but it does not
-  // imply those addresses are accessible by default; some runtimes require
-  // per-allocation or per-range access programming before device use.
-  IREE_HAL_DEVICE_CAPABILITY_SHARED_VIRTUAL_ADDRESS = 1ull << 11,
-
-  // Concurrency and atomics.
-  IREE_HAL_DEVICE_CAPABILITY_CONCURRENT_SAFE = 1ull << 6,
-  IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_DEVICE = 1ull << 7,
-  IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_SYSTEM = 1ull << 8,
-
-  // Isolation (MIG, SR-IOV, etc.).
-  IREE_HAL_DEVICE_CAPABILITY_ISOLATED = 1ull << 9,
-
-  // Reserved for future use (bits 12-63).
-};
-
-// Device capabilities for topology edge construction.
-// Contains ALL information needed for cross-driver edge computation.
-typedef struct iree_hal_device_capabilities_t {
-  // Capability flags bitfield.
-  iree_hal_device_capability_bits_t flags;
-
-  // External handle types this device supports.
-  iree_hal_topology_handle_type_t semaphore_export_types;
-  iree_hal_topology_handle_type_t semaphore_import_types;
-  iree_hal_topology_handle_type_t buffer_export_types;
-  iree_hal_topology_handle_type_t buffer_import_types;
-
-  // NUMA affinity (for CPU topology integration).
-  uint8_t numa_node;
-  uint8_t reserved[3];  // Padding to 4 bytes.
-
-  // Physical device identification (for detecting same physical GPU).
-  // Vulkan: VkPhysicalDeviceIDProperties.deviceUUID
-  // CUDA: cuDeviceGetUuid()
-  // AMDGPU: HSA_AMD_AGENT_INFO_DRIVER_UID
-  // D3D12: DXGI adapter LUID (expanded to 16 bytes)
-  uint8_t physical_device_uuid[16];
-  bool has_physical_device_uuid;
-
-  // Opaque driver-specific handle for same-driver aliasing detection.
-  // 0 means "not set." When two same-driver devices report the same non-zero
-  // handle, they are wrapping the same underlying driver object.
-  // from_capabilities uses this to detect aliased devices and return a
-  // self-edge (zero-cost NATIVE). Also available to refine_topology_edge
-  // for driver-specific refinement.
-  uintptr_t driver_device_handle;
-
-  // Device group index (for same-driver multi-device groups).
-  uint32_t device_group_index;
-  bool has_device_group;
-} iree_hal_device_capabilities_t;
-
 // Device's cached view of topology for fast compatibility checks.
 //
 // The bitmaps provide O(1) "can I interact with device X?" answers for the
@@ -448,6 +364,66 @@ static inline iree_hal_topology_edge_t iree_hal_device_topology_query_edge(
       src_info->topology, src_info->topology_index, dst_info->topology_index);
 }
 
+// Top-level device observation groups requested by callers and populated by
+// devices during a point-in-time sample.
+typedef uint64_t iree_hal_device_observation_flags_t;
+typedef enum iree_hal_device_observation_flag_bits_e {
+  // No observation groups are requested or populated.
+  IREE_HAL_DEVICE_OBSERVATION_FLAG_NONE = 0ull,
+  // Device memory availability and total allocation budget fields are requested
+  // or populated.
+  IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY = 1ull << 0,
+  // All currently defined observation groups.
+  IREE_HAL_DEVICE_OBSERVATION_FLAG_ALL =
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY,
+} iree_hal_device_observation_flag_bits_t;
+
+// Memory fields populated in an observation sample.
+typedef uint64_t iree_hal_device_memory_observation_flags_t;
+typedef enum iree_hal_device_memory_observation_flag_bits_e {
+  // No memory observation fields are populated.
+  IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_NONE = 0ull,
+  // The total_bytes field is populated.
+  IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_TOTAL_BYTES = 1ull << 0,
+  // The available_bytes field is populated.
+  IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_AVAILABLE_BYTES = 1ull << 1,
+  // All currently defined memory observation fields.
+  IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_ALL =
+      IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_TOTAL_BYTES |
+      IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_AVAILABLE_BYTES,
+} iree_hal_device_memory_observation_flag_bits_t;
+
+// Sampled device memory state.
+typedef struct iree_hal_device_memory_observation_t {
+  // Memory fields populated by the device.
+  iree_hal_device_memory_observation_flags_t flags;
+  // Total memory bytes represented by this sample.
+  //
+  // The value is source-defined: it may be immutable physical capacity when
+  // sourced from device specs or a live allocation budget when sourced from a
+  // backend budget query. Callers that need immutable hardware capacity should
+  // use iree_hal_device_spec_t instead.
+  iree_device_size_t total_bytes;
+  // Memory bytes available for new allocations at sample time.
+  iree_device_size_t available_bytes;
+} iree_hal_device_memory_observation_t;
+
+// Point-in-time device state observation.
+//
+// Observations contain sampled device state that may change over the lifetime
+// of a device. Immutable hardware and driver-interface facts belong in
+// iree_hal_device_spec_t instead.
+typedef struct iree_hal_device_observation_t {
+  // Top-level observation groups requested by the caller.
+  iree_hal_device_observation_flags_t requested_flags;
+  // Top-level observation groups populated by the device.
+  iree_hal_device_observation_flags_t provided_flags;
+  // Monotonic host timestamp captured when sampling began.
+  iree_time_t sample_time_ns;
+  // Sampled memory state.
+  iree_hal_device_memory_observation_t memory;
+} iree_hal_device_observation_t;
+
 //===----------------------------------------------------------------------===//
 // iree_hal_device_t
 //===----------------------------------------------------------------------===//
@@ -475,14 +451,23 @@ iree_hal_device_host_allocator(iree_hal_device_t* device);
 IREE_API_EXPORT iree_hal_allocator_t* iree_hal_device_allocator(
     iree_hal_device_t* device);
 
-// Replaces the default device memory allocator.
+// Replaces the default device memory allocator with a compatible wrapper.
+//
 // The |new_allocator| will be retained for the lifetime of the device or until
-// the allocator is replaced again. The common usage pattern is to shim the
-// default allocator with a wrapper:
+// the allocator is replaced again. The common usage pattern is to wrap the
+// default allocator without changing the device memory, virtual-memory,
+// external-handle, or topology source facts captured in the immutable spec:
 //   // Retain the existing allocator in the new wrapper.
 //   wrap_allocator(iree_hal_device_allocator(device), &new_allocator);
 //   // Update the device to use the wrapper for allocations.
-//   iree_hal_device_replace_allocator(device, new_allocator);
+//   IREE_RETURN_IF_ERROR(
+//       iree_hal_device_replace_allocator(device, new_allocator));
+//
+// Replacements must preserve the allocation capabilities described by
+// iree_hal_device_spec(). They may add instrumentation, caching, recording, or
+// debugging behavior, but must not make the cached device spec inaccurate. A
+// caller that needs different memory-system facts must create a new device.
+// Returns an error if the wrapper cannot be installed.
 //
 // WARNING: this is not thread-safe and must only be performed when the device
 // is idle and all buffers that may have been allocated from the existing
@@ -496,7 +481,7 @@ IREE_API_EXPORT iree_hal_allocator_t* iree_hal_device_allocator(
 // approach would be to replace the singular allocator with queue-specific pools
 // and make the user register those pools explicitly with the implementation
 // they desire.
-IREE_API_EXPORT void iree_hal_device_replace_allocator(
+IREE_API_EXPORT iree_status_t iree_hal_device_replace_allocator(
     iree_hal_device_t* device, iree_hal_allocator_t* new_allocator);
 
 // Replaces the current collective channel provider.
@@ -517,36 +502,48 @@ IREE_API_EXPORT void iree_hal_device_replace_channel_provider(
 IREE_API_EXPORT
 iree_status_t iree_hal_device_trim(iree_hal_device_t* device);
 
-// Queries a configuration value as an int64_t.
-// The |category| and |key| will be provided to the device driver to interpret
-// in a device-specific way and if recognized the value will be converted to an
-// int64_t and returned in |out_value|. Fails if the value represented by the
-// key is not convertible.
+// Returns immutable facts for |device|.
 //
-// This is roughly equivalent to the `sysconf` linux syscall
-// (https://man7.org/linux/man-pages/man3/sysconf.3.html) in that the exact
-// set of categories and keys available and their interpretation is
-// target-dependent.
-//
-// Well-known queries (category :: key):
-//   hal.device.id :: some-pattern-*
-//   hal.device.feature :: some-pattern-*
-//   hal.device.architecture :: some-pattern-*
-//   hal.executable.format :: some-pattern-*
-//
-// Returned values must remain the same for the lifetime of the device as
-// callers may cache them to avoid redundant calls.
-IREE_API_EXPORT iree_status_t iree_hal_device_query_i64(
-    iree_hal_device_t* device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value);
+// The returned pointer is owned by |device| and remains valid until |device| is
+// destroyed. Callers that need to keep the spec beyond the device lifetime must
+// retain it.
+IREE_API_EXPORT const iree_hal_device_spec_t* iree_hal_device_spec(
+    iree_hal_device_t* device);
 
-// Queries device capabilities for topology construction.
-// Returns all information needed for cross-driver edge building.
-// If the device doesn't support topology queries, returns OK with zeroed
-// struct.
-IREE_API_EXPORT iree_status_t iree_hal_device_query_capabilities(
+// Initializes |out_observation| for a device state sample.
+IREE_API_EXPORT void iree_hal_device_observation_initialize(
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation);
+
+// Marks |total_bytes| as populated in |out_observation|.
+IREE_API_EXPORT void iree_hal_device_observation_set_memory_total(
+    iree_device_size_t total_bytes,
+    iree_hal_device_observation_t* out_observation);
+
+// Marks |available_bytes| as populated in |out_observation|.
+IREE_API_EXPORT void iree_hal_device_observation_set_memory_available(
+    iree_device_size_t available_bytes,
+    iree_hal_device_observation_t* out_observation);
+
+// Populates memory total capacity from known heap capacities in |device_spec|.
+//
+// Heap capacities marked unknown are skipped. If no known heap capacities are
+// present then |out_observation| is left unchanged.
+IREE_API_EXPORT iree_status_t
+iree_hal_device_observation_populate_memory_total_from_spec(
+    const iree_hal_device_spec_t* device_spec,
+    iree_hal_device_observation_t* out_observation);
+
+// Samples dynamic state from |device| into |out_observation|.
+//
+// The returned observation is a point-in-time snapshot: devices populate only
+// requested groups and fields they can sample without inventing fallback
+// values. Missing groups and fields are reported by leaving the corresponding
+// provided/field flags unset.
+IREE_API_EXPORT iree_status_t iree_hal_device_sample_observation(
     iree_hal_device_t* device,
-    iree_hal_device_capabilities_t* out_capabilities);
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation);
 
 // Returns a pointer to device's topology info populated during device creation.
 // Returns NULL if device is not part of a topology.
@@ -555,9 +552,11 @@ IREE_API_EXPORT const iree_hal_device_topology_info_t*
 iree_hal_device_topology_info(iree_hal_device_t* device);
 
 // Refines a topology edge from |src_device| to |dst_device|.
-// This is called ONLY for same-driver device pairs during topology
-// construction. If the device doesn't support refinement, returns OK without
-// modification.
+//
+// Device specs provide the serializable source facts for topology projection.
+// This hook is called only for same-runtime-domain pairs where a driver may
+// prove additional process-local facts from live backend handles. If the device
+// has no such facts, it returns OK without modification.
 IREE_API_EXPORT iree_status_t iree_hal_device_refine_topology_edge(
     iree_hal_device_t* src_device, iree_hal_device_t* dst_device,
     iree_hal_topology_edge_t* edge);
@@ -984,21 +983,20 @@ typedef struct iree_hal_device_vtable_t {
   iree_allocator_t(IREE_API_PTR* host_allocator)(iree_hal_device_t* device);
   iree_hal_allocator_t*(IREE_API_PTR* device_allocator)(
       iree_hal_device_t* device);
-  void(IREE_API_PTR* replace_device_allocator)(
+  iree_status_t(IREE_API_PTR* replace_device_allocator)(
       iree_hal_device_t* device, iree_hal_allocator_t* new_allocator);
   void(IREE_API_PTR* replace_channel_provider)(
       iree_hal_device_t* device, iree_hal_channel_provider_t* new_provider);
 
   iree_status_t(IREE_API_PTR* trim)(iree_hal_device_t* device);
 
-  iree_status_t(IREE_API_PTR* query_i64)(iree_hal_device_t* device,
-                                         iree_string_view_t category,
-                                         iree_string_view_t key,
-                                         int64_t* out_value);
+  const iree_hal_device_spec_t*(IREE_API_PTR* device_spec)(
+      iree_hal_device_t* device);
 
-  iree_status_t(IREE_API_PTR* query_capabilities)(
+  iree_status_t(IREE_API_PTR* sample_observation)(
       iree_hal_device_t* device,
-      iree_hal_device_capabilities_t* out_capabilities);
+      iree_hal_device_observation_flags_t requested_flags,
+      iree_hal_device_observation_t* out_observation);
 
   const iree_hal_device_topology_info_t*(IREE_API_PTR* topology_info)(
       iree_hal_device_t* device);

@@ -20,8 +20,6 @@ iree_status_t iree_benchmark_loom_evaluate_case_requirements(
       requirement_providers[IREE_BENCHMARK_LOOM_MAX_REQUIREMENT_PROVIDERS] = {
           0};
   iree_host_size_t requirement_provider_count = 0;
-  loom_run_hal_testbench_requirement_provider_initialize(
-      hal_context, &requirement_providers[requirement_provider_count++]);
   if (configuration->populate_requirement_providers.fn != NULL) {
     IREE_RETURN_IF_ERROR(configuration->populate_requirement_providers.fn(
         configuration->populate_requirement_providers.user_data, hal_context,

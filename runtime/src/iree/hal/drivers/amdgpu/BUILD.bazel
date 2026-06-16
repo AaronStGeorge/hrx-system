@@ -22,6 +22,18 @@ iree_amdgpu_target_selectors_flag(
 )
 
 iree_runtime_cc_library(
+    name = "device_spec_builder",
+    srcs = ["device_spec_builder.c"],
+    hdrs = ["device_spec_builder.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:target_id",
+        "//runtime/src/iree/hal/utils:device_spec_builder",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "queue_affinity",
     srcs = ["queue_affinity.c"],
     hdrs = ["queue_affinity.h"],
@@ -208,6 +220,7 @@ iree_runtime_cc_library(
     deps = [
         ":access_policy",
         ":buffer",
+        ":device_spec_builder",
         ":executable_metadata",
         ":executable_metadata_hsaco",
         ":kernarg_layout",
@@ -336,6 +349,19 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_test(
+    name = "device_spec_test",
+    srcs = ["device_spec_test.cc"],
+    deps = [
+        ":device_spec_builder",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/utils:device_spec_builder",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "access_policy_test",
     srcs = ["access_policy_test.cc"],
     deps = [
@@ -368,6 +394,7 @@ iree_runtime_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:info",
         "//runtime/src/iree/hal/drivers/amdgpu/util:topology",
         "//runtime/src/iree/hal/drivers/amdgpu/util:vmem",
         "//runtime/src/iree/testing:gtest",

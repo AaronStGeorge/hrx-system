@@ -6,6 +6,7 @@
 
 #include "iree/hal/drivers/hip/hip_device.h"
 
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -17,6 +18,7 @@
 #include "iree/base/internal/math.h"
 #include "iree/base/tracing.h"
 #include "iree/hal/drivers/hip/cleanup_thread.h"
+#include "iree/hal/drivers/hip/device_spec_builder.h"
 #include "iree/hal/drivers/hip/dispatch_thread.h"
 #include "iree/hal/drivers/hip/dynamic_symbols.h"
 #include "iree/hal/drivers/hip/event_pool.h"
@@ -42,6 +44,7 @@
 #define IREE_HAL_DEVICE_TRANSFER_DEFAULT_BUFFER_SIZE (128 * 1024 * 1024)
 #define IREE_HAL_DEVICE_MAX_TRANSFER_DEFAULT_CHUNK_SIZE (64 * 1024 * 1024)
 #define IREE_HAL_DEVICE_INVALID_EXTERNAL_STREAM (0xFFFFFFFFFFFFFFFFul)
+#define IREE_HAL_HIP_DEVICE_UUID_PATH_LENGTH (4 + 36 + 1)
 
 //===----------------------------------------------------------------------===//
 // iree_hal_hip_device_t
@@ -103,6 +106,9 @@ typedef struct iree_hal_hip_device_t {
 
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   iree_hal_device_topology_info_t topology_info;
 
@@ -277,9 +283,10 @@ static iree_status_t iree_hal_hip_device_check_params(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "arena block size too small (< 4096 bytes)");
   }
-  if (params->queue_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "at least one queue is required");
+  if (params->queue_count != 1) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HIP currently exposes exactly one queue per physical device");
   }
   if (params->external_stream != IREE_HAL_DEVICE_INVALID_EXTERNAL_STREAM) {
     if (device_count != 1) {
@@ -296,6 +303,195 @@ static iree_hal_hip_device_topology_t iree_hal_hip_device_make_topology(
   iree_hal_hip_device_topology_t topology = {.count = device->device_count,
                                              .devices = device->devices};
   return topology;
+}
+
+static uint32_t iree_hal_hip_u32_from_nonnegative_int(int value) {
+  return value > 0 ? (uint32_t)value : 0;
+}
+
+static uint64_t iree_hal_hip_hz_from_khz_int(int value) {
+  return value > 0 ? (uint64_t)value * 1000ull : 0;
+}
+
+static void iree_hal_hip_copy_fixed_cstring(const char* source,
+                                            iree_host_size_t target_capacity,
+                                            char* target) {
+  iree_host_size_t source_length = 0;
+  while (source_length < target_capacity - 1 && source[source_length]) {
+    ++source_length;
+  }
+  memcpy(target, source, source_length);
+  target[source_length] = 0;
+}
+
+static iree_hal_hip_device_facts_t iree_hal_hip_device_spec_from_properties(
+    const hipDeviceProp_tR0000* properties) {
+  iree_hal_hip_device_facts_t spec = {
+      .architecture = {0},
+      .launch =
+          {
+              .maximum_workgroup_invocations =
+                  iree_hal_hip_u32_from_nonnegative_int(
+                      properties->maxThreadsPerBlock),
+              .maximum_workgroup_size =
+                  {
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxThreadsDim[0]),
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxThreadsDim[1]),
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxThreadsDim[2]),
+                  },
+              .maximum_workgroup_count =
+                  {
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxGridSize[0]),
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxGridSize[1]),
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxGridSize[2]),
+                  },
+              .maximum_invocations_per_execution_unit =
+                  iree_hal_hip_u32_from_nonnegative_int(
+                      properties->maxThreadsPerMultiProcessor),
+              .maximum_workgroup_register_count =
+                  iree_hal_hip_u32_from_nonnegative_int(
+                      properties->regsPerBlock),
+              .maximum_local_memory_size =
+                  properties->maxSharedMemoryPerMultiProcessor,
+              .maximum_workgroup_local_memory_size =
+                  properties->sharedMemPerBlock,
+          },
+      .clocks =
+          {
+              .clock_instruction_frequency_hz = iree_hal_hip_hz_from_khz_int(
+                  properties->clockInstructionRate),
+          },
+      .execution_unit_count = iree_hal_hip_u32_from_nonnegative_int(
+          properties->multiProcessorCount),
+      .subgroup_size =
+          iree_hal_hip_u32_from_nonnegative_int(properties->warpSize),
+  };
+  iree_hal_hip_copy_fixed_cstring(properties->gcnArchName,
+                                  sizeof(spec.architecture.gcn_arch_name),
+                                  spec.architecture.gcn_arch_name);
+  return spec;
+}
+
+static void iree_hal_hip_device_format_uuid_path(const hipUUID* uuid,
+                                                 char* storage) {
+  iree_snprintf(storage, IREE_HAL_HIP_DEVICE_UUID_PATH_LENGTH,
+                "GPU-"
+                "%02x%02x%02x%02x-"
+                "%02x%02x-"
+                "%02x%02x-"
+                "%02x%02x-"
+                "%02x%02x%02x%02x%02x%02x",
+                (uint8_t)uuid->bytes[0], (uint8_t)uuid->bytes[1],
+                (uint8_t)uuid->bytes[2], (uint8_t)uuid->bytes[3],
+                (uint8_t)uuid->bytes[4], (uint8_t)uuid->bytes[5],
+                (uint8_t)uuid->bytes[6], (uint8_t)uuid->bytes[7],
+                (uint8_t)uuid->bytes[8], (uint8_t)uuid->bytes[9],
+                (uint8_t)uuid->bytes[10], (uint8_t)uuid->bytes[11],
+                (uint8_t)uuid->bytes[12], (uint8_t)uuid->bytes[13],
+                (uint8_t)uuid->bytes[14], (uint8_t)uuid->bytes[15]);
+}
+
+static iree_status_t iree_hal_hip_device_query_spec_physical_device(
+    iree_hal_hip_device_t* device, iree_host_size_t device_ordinal,
+    hipDeviceProp_tR0000* properties, char* backend_path_storage,
+    iree_hal_hip_device_spec_physical_device_params_t* out_physical_device) {
+  memset(properties, 0, sizeof(*properties));
+  IREE_HIP_RETURN_IF_ERROR(
+      device->hip_symbols,
+      hipGetDeviceProperties(properties,
+                             device->devices[device_ordinal].hip_device),
+      "hipGetDeviceProperties");
+
+  hipUUID uuid = {0};
+  IREE_HIP_RETURN_IF_ERROR(
+      device->hip_symbols,
+      hipDeviceGetUuid(&uuid, device->devices[device_ordinal].hip_device),
+      "hipDeviceGetUuid");
+  iree_hal_hip_device_format_uuid_path(&uuid, backend_path_storage);
+
+  iree_hal_uuid_t device_uuid = {{0}};
+  memcpy(device_uuid.bytes, uuid.bytes, sizeof(device_uuid.bytes));
+  *out_physical_device = (iree_hal_hip_device_spec_physical_device_params_t){
+      .display_name = iree_make_cstring_view(properties->name),
+      .backend_path = iree_make_cstring_view(backend_path_storage),
+      .uuid = device_uuid,
+      .pci =
+          {
+              .domain = iree_hal_hip_u32_from_nonnegative_int(
+                  properties->pciDomainID),
+              .bus =
+                  iree_hal_hip_u32_from_nonnegative_int(properties->pciBusID),
+              .device = iree_hal_hip_u32_from_nonnegative_int(
+                  properties->pciDeviceID),
+              .function = 0,
+          },
+      .physical_ordinal = (uint32_t)device->devices[device_ordinal].hip_device,
+      .facts = iree_hal_hip_device_spec_from_properties(properties),
+      .flags = IREE_HAL_HIP_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_UUID |
+               IREE_HAL_HIP_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_PCI_ADDRESS,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t iree_hal_hip_device_create_device_spec(
+    iree_hal_hip_device_t* device, iree_allocator_t host_allocator) {
+  if (!device->hip_symbols->hipGetDeviceProperties) {
+    return iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "HIP runtime does not export hipGetDeviceProperties");
+  }
+
+  iree_hal_hip_device_spec_physical_device_params_t* physical_devices = NULL;
+  iree_status_t status = iree_allocator_malloc_array(
+      host_allocator, device->device_count, sizeof(*physical_devices),
+      (void**)&physical_devices);
+
+  hipDeviceProp_tR0000* properties = NULL;
+  if (iree_status_is_ok(status)) {
+    status =
+        iree_allocator_malloc_array(host_allocator, device->device_count,
+                                    sizeof(*properties), (void**)&properties);
+  }
+
+  char* backend_paths = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc(
+        host_allocator,
+        device->device_count * IREE_HAL_HIP_DEVICE_UUID_PATH_LENGTH,
+        (void**)&backend_paths);
+  }
+
+  for (iree_host_size_t i = 0;
+       i < device->device_count && iree_status_is_ok(status); ++i) {
+    status = iree_hal_hip_device_query_spec_physical_device(
+        device, i, &properties[i],
+        backend_paths + i * IREE_HAL_HIP_DEVICE_UUID_PATH_LENGTH,
+        &physical_devices[i]);
+  }
+
+  if (iree_status_is_ok(status)) {
+    iree_hal_hip_device_spec_params_t spec_params = {
+        .logical_device_id = device->identifier,
+        .display_name = device->identifier,
+        .queue_count = device->params.queue_count,
+        .physical_device_count = device->device_count,
+        .physical_devices = physical_devices,
+        .device_allocator = device->device_allocator,
+    };
+    status = iree_hal_hip_device_spec_create(&spec_params, host_allocator,
+                                             &device->device_spec);
+  }
+
+  iree_allocator_free(host_allocator, backend_paths);
+  iree_allocator_free(host_allocator, properties);
+  iree_allocator_free(host_allocator, physical_devices);
+  return status;
 }
 
 static iree_status_t iree_hal_hip_device_initialize_internal(
@@ -337,7 +533,7 @@ static iree_status_t iree_hal_hip_device_initialize_internal(
   device->nccl_symbols = nccl_symbols;
   iree_status_t status = iree_ok_status();
   // Enable tracing for each of the streams - no-op if disabled.
-  if (device->params.stream_tracing) {
+  if (iree_status_is_ok(status) && device->params.stream_tracing) {
     for (iree_host_size_t i = 0; i < device->device_count; ++i) {
       iree_hal_hip_tracing_device_interface_t* tracing_device_interface = NULL;
       status = iree_allocator_malloc(host_allocator,
@@ -402,6 +598,10 @@ static iree_status_t iree_hal_hip_device_initialize_internal(
       (iree_hal_device_t*)device, symbols,
       iree_hal_hip_device_make_topology(device), device->supports_memory_pools,
       host_allocator, &device->device_allocator);
+
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_hip_device_create_device_spec(device, host_allocator);
+  }
 
   if (iree_status_is_ok(status)) {
     status = iree_hal_hip_cleanup_thread_allocate(symbols, host_allocator,
@@ -653,6 +853,7 @@ static void iree_hal_hip_device_destroy(iree_hal_device_t* base_device) {
 
   // Buffers may have been retaining collective resources.
   iree_hal_channel_provider_release(device->channel_provider);
+  iree_hal_device_spec_release(device->device_spec);
 
   for (iree_host_size_t i = 0; i < device->device_count; ++i) {
     iree_hal_hip_memory_pools_deinitialize(&device->devices[i].memory_pools);
@@ -709,12 +910,13 @@ static iree_hal_allocator_t* iree_hal_hip_device_allocator(
   return device->device_allocator;
 }
 
-static void iree_hal_hip_replace_device_allocator(
+static iree_status_t iree_hal_hip_replace_device_allocator(
     iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
   iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
   iree_hal_allocator_retain(new_allocator);
   iree_hal_allocator_release(device->device_allocator);
   device->device_allocator = new_allocator;
+  return iree_ok_status();
 }
 
 static void iree_hal_hip_replace_channel_provider(
@@ -738,58 +940,97 @@ static iree_status_t iree_hal_hip_device_trim(iree_hal_device_t* base_device) {
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_hip_device_query_attribute(
-    iree_hal_hip_device_t* device, hipDeviceAttribute_t attribute,
-    int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
-
-  *out_value = 0;
-  int value = 0;
-  IREE_HIP_RETURN_IF_ERROR(
-      device->hip_symbols,
-      hipDeviceGetAttribute(&value, attribute, device->devices[0].hip_device),
-      "hipDeviceGetAttribute");
-  *out_value = value;
-  return iree_ok_status();
+static const iree_hal_device_spec_t* iree_hal_hip_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
+  return device->device_spec;
 }
 
-static iree_status_t iree_hal_hip_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
-  iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
-  *out_value = 0;
+static iree_status_t iree_hal_hip_device_sample_memory_observation(
+    iree_hal_hip_device_t* device,
+    iree_hal_device_observation_t* out_observation) {
+  IREE_RETURN_IF_ERROR(
+      iree_hal_device_observation_populate_memory_total_from_spec(
+          device->device_spec, out_observation));
 
-  if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
-    return iree_ok_status();
-  }
+  iree_device_size_t aggregate_available_bytes = 0;
+  iree_device_size_t aggregate_total_bytes = 0;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < device->device_count && iree_status_is_ok(status); ++i) {
+    bool context_pushed = false;
+    status = IREE_HIP_CALL_TO_STATUS(
+        device->hip_symbols, hipCtxPushCurrent(device->devices[i].hip_context));
+    if (iree_status_is_ok(status)) {
+      context_pushed = true;
+    }
 
-  if (iree_string_view_equal(category, IREE_SV("hal.executable.format"))) {
-    *out_value = (iree_string_view_equal(key, IREE_SV("rocm-hsaco-fb")) ||
-                  iree_string_view_equal(key, IREE_SV("rocm-spirv-fb")))
-                     ? 1
-                     : 0;
-    return iree_ok_status();
-  }
+    size_t available_bytes = 0;
+    size_t total_bytes = 0;
+    if (iree_status_is_ok(status)) {
+      status = IREE_HIP_CALL_TO_STATUS(
+          device->hip_symbols, hipMemGetInfo(&available_bytes, &total_bytes));
+    }
 
-  if (iree_string_view_equal(category, IREE_SV("hal.device"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = device->device_count;
-      return iree_ok_status();
+    if (iree_status_is_ok(status) && total_bytes > IREE_DEVICE_SIZE_MAX) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HIP device memory total byte count %" PRIu64
+          " exceeds the representable iree_device_size_t range",
+          (uint64_t)total_bytes);
+    }
+    if (iree_status_is_ok(status) && available_bytes > IREE_DEVICE_SIZE_MAX) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HIP device memory available byte count %" PRIu64
+          " exceeds the representable iree_device_size_t range",
+          (uint64_t)available_bytes);
+    }
+    if (iree_status_is_ok(status) &&
+        !iree_device_size_checked_add(aggregate_total_bytes,
+                                      (iree_device_size_t)total_bytes,
+                                      &aggregate_total_bytes)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "aggregate HIP device memory total byte count exceeds the "
+          "representable iree_device_size_t range");
+    }
+    if (iree_status_is_ok(status) &&
+        !iree_device_size_checked_add(aggregate_available_bytes,
+                                      (iree_device_size_t)available_bytes,
+                                      &aggregate_available_bytes)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "aggregate HIP device memory available byte count exceeds the "
+          "representable iree_device_size_t range");
+    }
+
+    if (context_pushed) {
+      status = iree_status_join(
+          status,
+          IREE_HIP_CALL_TO_STATUS(device->hip_symbols, hipCtxPopCurrent(NULL)));
     }
   }
 
-  return iree_make_status(
-      IREE_STATUS_NOT_FOUND,
-      "unknown device configuration key value '%.*s :: %.*s'",
-      (int)category.size, category.data, (int)key.size, key.data);
+  if (iree_status_is_ok(status) && device->device_count > 0) {
+    iree_hal_device_observation_set_memory_total(aggregate_total_bytes,
+                                                 out_observation);
+    iree_hal_device_observation_set_memory_available(aggregate_available_bytes,
+                                                     out_observation);
+  }
+  return status;
 }
 
-static iree_status_t iree_hal_hip_device_query_capabilities(
+static iree_status_t iree_hal_hip_device_sample_observation(
     iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  memset(out_capabilities, 0, sizeof(*out_capabilities));
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation) {
+  iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
+  if (iree_any_bit_set(requested_flags,
+                       IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY)) {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_hip_device_sample_memory_observation(device, out_observation));
+  }
   return iree_ok_status();
 }
 
@@ -2843,8 +3084,8 @@ static const iree_hal_device_vtable_t iree_hal_hip_device_vtable = {
     .replace_device_allocator = iree_hal_hip_replace_device_allocator,
     .replace_channel_provider = iree_hal_hip_replace_channel_provider,
     .trim = iree_hal_hip_device_trim,
-    .query_i64 = iree_hal_hip_device_query_i64,
-    .query_capabilities = iree_hal_hip_device_query_capabilities,
+    .device_spec = iree_hal_hip_device_spec,
+    .sample_observation = iree_hal_hip_device_sample_observation,
     .topology_info = iree_hal_hip_device_topology_info,
     .refine_topology_edge = iree_hal_hip_device_refine_topology_edge,
     .assign_topology_info = iree_hal_hip_device_assign_topology_info,

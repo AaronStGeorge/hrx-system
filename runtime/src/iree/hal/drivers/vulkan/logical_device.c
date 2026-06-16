@@ -25,6 +25,7 @@
 #include "iree/hal/drivers/vulkan/debug_utils.h"
 #include "iree/hal/drivers/vulkan/device_options.h"
 #include "iree/hal/drivers/vulkan/device_plan.h"
+#include "iree/hal/drivers/vulkan/device_spec_builder.h"
 #include "iree/hal/drivers/vulkan/executable.h"
 #include "iree/hal/drivers/vulkan/executable_cache.h"
 #include "iree/hal/drivers/vulkan/physical_device.h"
@@ -162,6 +163,9 @@ struct iree_hal_vulkan_logical_device_t {
 
   // Logical allocator.
   iree_hal_allocator_t* device_allocator;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   // Active profiling session state.
   struct {
@@ -525,6 +529,7 @@ static void iree_hal_vulkan_logical_device_destroy(
     iree_hal_vulkan_instance_deinitialize(&device->instance);
   }
   iree_hal_vulkan_libvulkan_deinitialize(&device->libvulkan);
+  iree_hal_device_spec_release(device->device_spec);
   iree_arena_block_pool_deinitialize(&device->command_buffer_block_pool);
   iree_slim_mutex_deinitialize(&device->profile.clock_alignment.mutex);
   iree_slim_mutex_deinitialize(&device->queues.handle_mutexes.sparse_binding);
@@ -556,13 +561,14 @@ static iree_hal_allocator_t* iree_hal_vulkan_logical_device_allocator(
   return device->device_allocator;
 }
 
-static void iree_hal_vulkan_replace_device_allocator(
+static iree_status_t iree_hal_vulkan_replace_device_allocator(
     iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
   iree_hal_vulkan_logical_device_t* device =
       iree_hal_vulkan_logical_device_cast(base_device);
   iree_hal_allocator_retain(new_allocator);
   iree_hal_allocator_release(device->device_allocator);
   device->device_allocator = new_allocator;
+  return iree_ok_status();
 }
 
 static void iree_hal_vulkan_replace_channel_provider(
@@ -585,223 +591,91 @@ static iree_status_t iree_hal_vulkan_logical_device_trim(
   return iree_hal_allocator_trim(device->device_allocator);
 }
 
-static bool iree_hal_vulkan_logical_device_query_queue_i64(
-    iree_hal_vulkan_logical_device_t* device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
-  int64_t total_value = 0;
-  bool has_value = false;
-  for (iree_host_size_t i = 0; i < device->queues.lane_count; ++i) {
-    int64_t queue_value = 0;
-    if (iree_hal_vulkan_queue_query_i64(&device->queues.lanes[i], category, key,
-                                        &queue_value)) {
-      has_value = true;
-      if (queue_value > INT64_MAX - total_value) {
-        total_value = INT64_MAX;
-      } else {
-        total_value += queue_value;
-      }
-    }
-  }
-  *out_value = total_value;
-  return has_value;
+static uint64_t iree_hal_vulkan_stats_saturating_add(uint64_t lhs,
+                                                     uint64_t rhs) {
+  return rhs > UINT64_MAX - lhs ? UINT64_MAX : lhs + rhs;
 }
 
-static int64_t iree_hal_vulkan_feature_query_value(
-    iree_hal_vulkan_features_t enabled_features,
-    iree_hal_vulkan_features_t feature_bit) {
-  return iree_all_bits_set(enabled_features, feature_bit) ? 1 : 0;
+static void iree_hal_vulkan_bda_publication_cache_stats_accumulate(
+    const iree_hal_vulkan_bda_publication_cache_stats_t* source,
+    iree_hal_vulkan_bda_publication_cache_stats_t* target) {
+  target->block_count = iree_hal_vulkan_stats_saturating_add(
+      target->block_count, source->block_count);
 }
 
-static iree_status_t iree_hal_vulkan_logical_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
+static void iree_hal_vulkan_native_replay_cache_stats_accumulate(
+    const iree_hal_vulkan_native_replay_cache_stats_t* source,
+    iree_hal_vulkan_native_replay_cache_stats_t* target) {
+  target->instance_count = iree_hal_vulkan_stats_saturating_add(
+      target->instance_count, source->instance_count);
+  target->max_instance_count = iree_hal_vulkan_stats_saturating_add(
+      target->max_instance_count, source->max_instance_count);
+  target->retained_instance_count = iree_hal_vulkan_stats_saturating_add(
+      target->retained_instance_count, source->retained_instance_count);
+  target->publication_bytes = iree_hal_vulkan_stats_saturating_add(
+      target->publication_bytes, source->publication_bytes);
+  target->max_publication_bytes = iree_hal_vulkan_stats_saturating_add(
+      target->max_publication_bytes, source->max_publication_bytes);
+  target->peak_instance_count = iree_hal_vulkan_stats_saturating_add(
+      target->peak_instance_count, source->peak_instance_count);
+  target->peak_publication_bytes = iree_hal_vulkan_stats_saturating_add(
+      target->peak_publication_bytes, source->peak_publication_bytes);
+  target->hit_count = iree_hal_vulkan_stats_saturating_add(target->hit_count,
+                                                           source->hit_count);
+  target->miss_count = iree_hal_vulkan_stats_saturating_add(target->miss_count,
+                                                            source->miss_count);
+  target->create_count = iree_hal_vulkan_stats_saturating_add(
+      target->create_count, source->create_count);
+  target->fork_count = iree_hal_vulkan_stats_saturating_add(target->fork_count,
+                                                            source->fork_count);
+  target->publication_skip_count = iree_hal_vulkan_stats_saturating_add(
+      target->publication_skip_count, source->publication_skip_count);
+  target->publication_update_count = iree_hal_vulkan_stats_saturating_add(
+      target->publication_update_count, source->publication_update_count);
+  target->descriptor_bypass_count = iree_hal_vulkan_stats_saturating_add(
+      target->descriptor_bypass_count, source->descriptor_bypass_count);
+  target->profile_bypass_count = iree_hal_vulkan_stats_saturating_add(
+      target->profile_bypass_count, source->profile_bypass_count);
+  target->one_shot_bypass_count = iree_hal_vulkan_stats_saturating_add(
+      target->one_shot_bypass_count, source->one_shot_bypass_count);
+  target->capacity_bypass_count = iree_hal_vulkan_stats_saturating_add(
+      target->capacity_bypass_count, source->capacity_bypass_count);
+  target->trim_count = iree_hal_vulkan_stats_saturating_add(target->trim_count,
+                                                            source->trim_count);
+}
+
+void iree_hal_vulkan_logical_device_sample_bda_publication_cache_stats(
+    iree_hal_device_t* base_device,
+    iree_hal_vulkan_bda_publication_cache_stats_t* out_stats) {
+  IREE_ASSERT_ARGUMENT(base_device);
+  IREE_ASSERT_ARGUMENT(out_stats);
   iree_hal_vulkan_logical_device_t* device =
       iree_hal_vulkan_logical_device_cast(base_device);
-  *out_value = 0;
+  memset(out_stats, 0, sizeof(*out_stats));
+  for (iree_host_size_t i = 0; i < device->queues.lane_count; ++i) {
+    iree_hal_vulkan_bda_publication_cache_stats_t lane_stats;
+    iree_hal_vulkan_queue_sample_bda_publication_cache_stats(
+        &device->queues.lanes[i], &lane_stats);
+    iree_hal_vulkan_bda_publication_cache_stats_accumulate(&lane_stats,
+                                                           out_stats);
+  }
+}
 
-  if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
-    return iree_ok_status();
+void iree_hal_vulkan_logical_device_sample_native_replay_cache_stats(
+    iree_hal_device_t* base_device,
+    iree_hal_vulkan_native_replay_cache_stats_t* out_stats) {
+  IREE_ASSERT_ARGUMENT(base_device);
+  IREE_ASSERT_ARGUMENT(out_stats);
+  iree_hal_vulkan_logical_device_t* device =
+      iree_hal_vulkan_logical_device_cast(base_device);
+  memset(out_stats, 0, sizeof(*out_stats));
+  for (iree_host_size_t i = 0; i < device->queues.lane_count; ++i) {
+    iree_hal_vulkan_native_replay_cache_stats_t lane_stats;
+    iree_hal_vulkan_queue_sample_native_replay_cache_stats(
+        &device->queues.lanes[i], &lane_stats);
+    iree_hal_vulkan_native_replay_cache_stats_accumulate(&lane_stats,
+                                                         out_stats);
   }
-  if (iree_string_view_equal(category, IREE_SV("hal.executable.format"))) {
-    *out_value = iree_hal_vulkan_executable_format_supported(
-                     device->enabled_features, key)
-                     ? 1
-                     : 0;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(category, IREE_SV("hal.device"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = (int64_t)device->queues.count;
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("hal.dispatch"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = 1;
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("vulkan.device"))) {
-    if (iree_string_view_equal(key, IREE_SV("api_version"))) {
-      *out_value = device->physical_device.properties2.properties.apiVersion;
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("subgroup_size"))) {
-      *out_value = device->physical_device.subgroup_properties.subgroupSize;
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("max_compute_workgroup_invocations"))) {
-      *out_value = device->physical_device.properties2.properties.limits
-                       .maxComputeWorkGroupInvocations;
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("max_compute_workgroup_size_x"))) {
-      *out_value = device->physical_device.properties2.properties.limits
-                       .maxComputeWorkGroupSize[0];
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("max_compute_workgroup_size_y"))) {
-      *out_value = device->physical_device.properties2.properties.limits
-                       .maxComputeWorkGroupSize[1];
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("max_compute_workgroup_size_z"))) {
-      *out_value = device->physical_device.properties2.properties.limits
-                       .maxComputeWorkGroupSize[2];
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("max_compute_workgroup_count_x"))) {
-      *out_value = device->physical_device.properties2.properties.limits
-                       .maxComputeWorkGroupCount[0];
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("max_compute_workgroup_count_y"))) {
-      *out_value = device->physical_device.properties2.properties.limits
-                       .maxComputeWorkGroupCount[1];
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("max_compute_workgroup_count_z"))) {
-      *out_value = device->physical_device.properties2.properties.limits
-                       .maxComputeWorkGroupCount[2];
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("vulkan.feature"))) {
-    if (iree_string_view_equal(key, IREE_SV("buffer_device_address")) ||
-        iree_string_view_equal(key, IREE_SV("physical_storage_buffer64"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_BUFFER_DEVICE_ADDRESSES);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("subgroup_size_control"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SUBGROUP_SIZE_CONTROL);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("cooperative_matrix_khr"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_COOPERATIVE_MATRIX);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key,
-                                      IREE_SV("storage_buffer_8bit_access"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_STORAGE_BUFFER_8BIT_ACCESS);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key,
-                                      IREE_SV("storage_buffer_16bit_access"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_STORAGE_BUFFER_16BIT_ACCESS);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("shader_float16"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_FLOAT16);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("shader_float64"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_FLOAT64);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("shader_bfloat16_type"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_BFLOAT16_TYPE);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key,
-                                      IREE_SV("shader_bfloat16_dot_product"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_BFLOAT16_DOT_PRODUCT);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("shader_bfloat16_cooperative_matrix"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_BFLOAT16_COOPERATIVE_MATRIX);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("shader_int8"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features, IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_INT8);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("shader_int16"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_INT16);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("shader_int64"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_INT64);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key,
-                                      IREE_SV("shader_integer_dot_product"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_SHADER_INTEGER_DOT_PRODUCT);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("vulkan_memory_model"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_VULKAN_MEMORY_MODEL);
-      return iree_ok_status();
-    } else if (iree_string_view_equal(
-                   key, IREE_SV("vulkan_memory_model_device_scope"))) {
-      *out_value = iree_hal_vulkan_feature_query_value(
-          device->enabled_features,
-          IREE_HAL_VULKAN_FEATURE_ENABLE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE);
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category,
-                                    IREE_SV("vulkan.cooperative_matrix"))) {
-    const bool has_cooperative_matrix =
-        iree_all_bits_set(device->enabled_features,
-                          IREE_HAL_VULKAN_FEATURE_ENABLE_COOPERATIVE_MATRIX);
-    if (iree_string_view_equal(key, IREE_SV("supported"))) {
-      *out_value = has_cooperative_matrix ? 1 : 0;
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("property_count"))) {
-      *out_value =
-          has_cooperative_matrix
-              ? device->physical_device.cooperative_matrix_property_count
-              : 0;
-      return iree_ok_status();
-    } else if (iree_string_view_equal(key, IREE_SV("supported_stages"))) {
-      *out_value = has_cooperative_matrix
-                       ? device->physical_device.cooperative_matrix_properties
-                             .cooperativeMatrixSupportedStages
-                       : 0;
-      return iree_ok_status();
-    }
-  } else if (iree_hal_vulkan_logical_device_query_queue_i64(device, category,
-                                                            key, out_value)) {
-    return iree_ok_status();
-  }
-
-  return iree_make_status(
-      IREE_STATUS_NOT_FOUND,
-      "unknown device configuration key value '%.*s :: %.*s'",
-      (int)category.size, category.data, (int)key.size, key.data);
 }
 
 IREE_API_EXPORT iree_status_t
@@ -869,28 +743,104 @@ iree_hal_vulkan_device_query_cooperative_matrix_properties(
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_vulkan_logical_device_query_capabilities(
-    iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
+static const iree_hal_device_spec_t* iree_hal_vulkan_logical_device_spec(
+    iree_hal_device_t* base_device) {
   iree_hal_vulkan_logical_device_t* device =
       iree_hal_vulkan_logical_device_cast(base_device);
-  memset(out_capabilities, 0, sizeof(*out_capabilities));
+  return device->device_spec;
+}
 
-  memcpy(out_capabilities->physical_device_uuid,
-         device->physical_device.id_properties.deviceUUID,
-         sizeof(out_capabilities->physical_device_uuid));
-  out_capabilities->has_physical_device_uuid = true;
-  out_capabilities->driver_device_handle =
-      (uintptr_t)device->physical_device.handle;
-  out_capabilities->flags |= IREE_HAL_DEVICE_CAPABILITY_TIMELINE_SEMAPHORES |
-                             IREE_HAL_DEVICE_CAPABILITY_ATOMIC_SCOPE_DEVICE;
-  if (iree_all_bits_set(
-          device->enabled_extensions,
-          IREE_HAL_VULKAN_DEVICE_EXTENSION_KHR_EXTERNAL_MEMORY_FD)) {
-    out_capabilities->buffer_export_types |=
-        IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD;
-    out_capabilities->buffer_import_types |=
-        IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD;
+static iree_status_t iree_hal_vulkan_logical_device_sample_memory_observation(
+    iree_hal_vulkan_logical_device_t* device,
+    iree_hal_device_observation_t* out_observation) {
+  IREE_RETURN_IF_ERROR(
+      iree_hal_device_observation_populate_memory_total_from_spec(
+          device->device_spec, out_observation));
+  if (!iree_all_bits_set(device->enabled_extensions,
+                         IREE_HAL_VULKAN_DEVICE_EXTENSION_EXT_MEMORY_BUDGET)) {
+    return iree_ok_status();
+  }
+
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT memory_budget = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT,
+  };
+  VkPhysicalDeviceMemoryProperties2 memory_properties = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+      .pNext = &memory_budget,
+  };
+  IREE_LEAK_CHECK_DISABLE_PUSH();
+  iree_vkGetPhysicalDeviceMemoryProperties2(
+      IREE_VULKAN_INSTANCE(&device->instance.syms),
+      device->physical_device.handle, &memory_properties);
+  IREE_LEAK_CHECK_DISABLE_POP();
+
+  iree_device_size_t aggregate_budget_bytes = 0;
+  iree_device_size_t aggregate_available_bytes = 0;
+  iree_status_t status = iree_ok_status();
+  const uint32_t heap_count =
+      memory_properties.memoryProperties.memoryHeapCount;
+  for (uint32_t i = 0; i < heap_count && iree_status_is_ok(status); ++i) {
+    const VkDeviceSize heap_budget_bytes = memory_budget.heapBudget[i];
+    const VkDeviceSize heap_usage_bytes = memory_budget.heapUsage[i];
+    if (heap_budget_bytes > (VkDeviceSize)IREE_DEVICE_SIZE_MAX) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "Vulkan heap memory budget exceeds the representable "
+          "iree_device_size_t range");
+    }
+
+    const VkDeviceSize heap_available_bytes =
+        heap_budget_bytes > heap_usage_bytes
+            ? heap_budget_bytes - heap_usage_bytes
+            : 0;
+    if (iree_status_is_ok(status) &&
+        heap_available_bytes > (VkDeviceSize)IREE_DEVICE_SIZE_MAX) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "Vulkan heap memory availability exceeds the representable "
+          "iree_device_size_t range");
+    }
+
+    if (iree_status_is_ok(status) &&
+        !iree_device_size_checked_add(aggregate_budget_bytes,
+                                      (iree_device_size_t)heap_budget_bytes,
+                                      &aggregate_budget_bytes)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "aggregate Vulkan memory budget exceeds the representable "
+          "iree_device_size_t range");
+    }
+    if (iree_status_is_ok(status) &&
+        !iree_device_size_checked_add(aggregate_available_bytes,
+                                      (iree_device_size_t)heap_available_bytes,
+                                      &aggregate_available_bytes)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "aggregate Vulkan memory availability exceeds the representable "
+          "iree_device_size_t range");
+    }
+  }
+
+  if (iree_status_is_ok(status) && heap_count > 0) {
+    iree_hal_device_observation_set_memory_total(aggregate_budget_bytes,
+                                                 out_observation);
+    iree_hal_device_observation_set_memory_available(aggregate_available_bytes,
+                                                     out_observation);
+  }
+  return status;
+}
+
+static iree_status_t iree_hal_vulkan_logical_device_sample_observation(
+    iree_hal_device_t* base_device,
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation) {
+  iree_hal_vulkan_logical_device_t* device =
+      iree_hal_vulkan_logical_device_cast(base_device);
+  if (iree_any_bit_set(requested_flags,
+                       IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY)) {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_vulkan_logical_device_sample_memory_observation(
+            device, out_observation));
   }
   return iree_ok_status();
 }
@@ -1705,6 +1655,7 @@ static iree_status_t iree_hal_vulkan_logical_device_create(
         &device->profile.clock_alignment);
     *out_device = device;
   } else {
+    iree_hal_device_spec_release(device->device_spec);
     iree_arena_block_pool_deinitialize(&device->command_buffer_block_pool);
     iree_allocator_free(host_allocator, device);
   }
@@ -1732,6 +1683,24 @@ static iree_status_t iree_hal_vulkan_logical_device_initialize_allocator(
       device->enabled_extensions, device->queues.affinity_mask,
       device->queues.sparse_binding_lane, device->proactor,
       device->host_allocator, &device->device_allocator);
+}
+
+static iree_status_t iree_hal_vulkan_logical_device_initialize_device_spec(
+    iree_hal_vulkan_logical_device_t* device,
+    const iree_hal_vulkan_device_plan_t* device_plan) {
+  IREE_ASSERT_ARGUMENT(device);
+  IREE_ASSERT_ARGUMENT(device_plan);
+  IREE_ASSERT_ARGUMENT(device->device_allocator);
+
+  iree_hal_vulkan_device_spec_params_t spec_params = {
+      .logical_device_id = device->identifier,
+      .display_name = device->identifier,
+      .physical_device = &device->physical_device,
+      .device_plan = device_plan,
+      .device_allocator = device->device_allocator,
+  };
+  return iree_hal_vulkan_device_spec_create(
+      &spec_params, device->host_allocator, &device->device_spec);
 }
 
 static void iree_hal_vulkan_logical_device_resolve_queue_assignment(
@@ -2000,6 +1969,10 @@ static iree_status_t iree_hal_vulkan_logical_device_initialize_from_plan(
   if (iree_status_is_ok(status)) {
     status = iree_hal_vulkan_logical_device_initialize_queue_staging(device);
   }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_vulkan_logical_device_initialize_device_spec(device,
+                                                                   device_plan);
+  }
   return status;
 }
 
@@ -2233,8 +2206,8 @@ static const iree_hal_device_vtable_t iree_hal_vulkan_logical_device_vtable = {
     .replace_device_allocator = iree_hal_vulkan_replace_device_allocator,
     .replace_channel_provider = iree_hal_vulkan_replace_channel_provider,
     .trim = iree_hal_vulkan_logical_device_trim,
-    .query_i64 = iree_hal_vulkan_logical_device_query_i64,
-    .query_capabilities = iree_hal_vulkan_logical_device_query_capabilities,
+    .device_spec = iree_hal_vulkan_logical_device_spec,
+    .sample_observation = iree_hal_vulkan_logical_device_sample_observation,
     .topology_info = iree_hal_vulkan_logical_device_topology_info,
     .refine_topology_edge = iree_hal_vulkan_logical_device_refine_topology_edge,
     .assign_topology_info = iree_hal_vulkan_logical_device_assign_topology_info,

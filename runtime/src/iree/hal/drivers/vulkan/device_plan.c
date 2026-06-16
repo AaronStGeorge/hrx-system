@@ -268,6 +268,10 @@ static iree_status_t iree_hal_vulkan_device_plan_select_extensions(
           VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME, plan));
   IREE_RETURN_IF_ERROR(
       iree_hal_vulkan_device_plan_enable_extension_if_available(
+          snapshot, IREE_HAL_VULKAN_DEVICE_EXTENSION_EXT_MEMORY_BUDGET,
+          IREE_HAL_VULKAN_EXT_MEMORY_BUDGET_EXTENSION_NAME, plan));
+  IREE_RETURN_IF_ERROR(
+      iree_hal_vulkan_device_plan_enable_extension_if_available(
           snapshot, IREE_HAL_VULKAN_DEVICE_EXTENSION_KHR_PUSH_DESCRIPTOR,
           VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, plan));
   IREE_RETURN_IF_ERROR(

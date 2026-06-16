@@ -126,6 +126,11 @@ iree_hal_vulkan_available_device_extensions_from_list(
         IREE_HAL_VULKAN_DEVICE_EXTENSION_EXT_CALIBRATED_TIMESTAMPS;
   }
   if (iree_hal_vulkan_extension_list_contains(
+          extension_count, extensions,
+          IREE_HAL_VULKAN_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
+    available_extensions |= IREE_HAL_VULKAN_DEVICE_EXTENSION_EXT_MEMORY_BUDGET;
+  }
+  if (iree_hal_vulkan_extension_list_contains(
           extension_count, extensions, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)) {
     available_extensions |=
         IREE_HAL_VULKAN_DEVICE_EXTENSION_KHR_PUSH_DESCRIPTOR;

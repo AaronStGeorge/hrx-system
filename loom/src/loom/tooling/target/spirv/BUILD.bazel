@@ -54,6 +54,7 @@ loom_cc_library(
         "//loom/src/loom/tooling/execution/hal:testbench_actual",
         "//loom/src/loom/tooling/testbench:requirements",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/vulkan:device_spec",
     ],
 )
 
@@ -72,6 +73,7 @@ loom_cc_library(
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/vulkan",
         "//runtime/src/iree/hal/drivers/vulkan:api",
+        "//runtime/src/iree/hal/drivers/vulkan:device_spec",
     ],
 )
 
@@ -96,7 +98,9 @@ loom_cc_test(
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/vulkan",
+        "//runtime/src/iree/hal/drivers/vulkan:device_spec",
         "//runtime/src/iree/hal/drivers/vulkan:headers",
+        "//runtime/src/iree/hal/utils:device_spec_builder",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -115,6 +119,8 @@ loom_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/vulkan:api",
+        "//runtime/src/iree/hal/drivers/vulkan:device_spec",
+        "//runtime/src/iree/hal/utils:device_spec_builder",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

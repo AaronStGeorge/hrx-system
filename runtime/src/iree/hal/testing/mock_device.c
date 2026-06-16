@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include "iree/hal/utils/device_spec_builder.h"
+
 //===----------------------------------------------------------------------===//
 // Mock executable support
 //===----------------------------------------------------------------------===//
@@ -351,14 +353,14 @@ typedef struct iree_hal_mock_device_t {
   // Identifier string (backed by trailing storage).
   iree_string_view_t identifier;
 
-  // Capabilities returned by query_capabilities.
-  iree_hal_device_capabilities_t capabilities;
-
   // Status returned by assign_topology_info.
   iree_status_code_t assign_topology_info_status_code;
 
   // True when create_executable_cache returns mock executable caches.
   bool executable_cache_enabled;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   // Topology information assigned during group creation.
   iree_hal_device_topology_info_t topology_info;
@@ -392,7 +394,6 @@ iree_status_t iree_hal_mock_device_create(
   memset(device, 0, sizeof(*device));
   iree_hal_resource_initialize(&iree_hal_mock_device_vtable, &device->resource);
   device->host_allocator = host_allocator;
-  device->capabilities = options->capabilities;
   device->assign_topology_info_status_code =
       options->assign_topology_info_status_code;
   device->executable_cache_enabled = options->executable_cache_enabled;
@@ -401,6 +402,20 @@ iree_status_t iree_hal_mock_device_create(
   iree_string_view_append_to_buffer(
       options->identifier, &device->identifier,
       (char*)device + total_size - options->identifier.size);
+
+  iree_status_t status = iree_ok_status();
+  if (options->device_spec) {
+    device->device_spec = options->device_spec;
+    iree_hal_device_spec_retain(device->device_spec);
+  } else {
+    status = iree_hal_device_spec_create_minimal(
+        device->identifier, device->identifier, IREE_SV("mock"),
+        IREE_SV("mock"), host_allocator, &device->device_spec);
+  }
+  if (!iree_status_is_ok(status)) {
+    iree_hal_device_release((iree_hal_device_t*)device);
+    return status;
+  }
 
   *out_device = (iree_hal_device_t*)device;
   return iree_ok_status();
@@ -413,6 +428,7 @@ iree_status_t iree_hal_mock_device_create(
 static void iree_hal_mock_device_destroy(iree_hal_device_t* base_device) {
   iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
   iree_allocator_t host_allocator = device->host_allocator;
+  iree_hal_device_spec_release(device->device_spec);
   iree_allocator_free(host_allocator, device);
 }
 
@@ -428,11 +444,23 @@ static iree_allocator_t iree_hal_mock_device_host_allocator(
   return device->host_allocator;
 }
 
-static iree_status_t iree_hal_mock_device_query_capabilities(
-    iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
+static const iree_hal_device_spec_t* iree_hal_mock_device_spec(
+    iree_hal_device_t* base_device) {
   iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
-  *out_capabilities = device->capabilities;
+  return device->device_spec;
+}
+
+static iree_status_t iree_hal_mock_device_sample_observation(
+    iree_hal_device_t* base_device,
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation) {
+  iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
+  if (iree_any_bit_set(requested_flags,
+                       IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY)) {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_device_observation_populate_memory_total_from_spec(
+            device->device_spec, out_observation));
+  }
   return iree_ok_status();
 }
 
@@ -445,7 +473,7 @@ iree_hal_mock_device_topology_info(iree_hal_device_t* base_device) {
 static iree_status_t iree_hal_mock_device_refine_topology_edge(
     iree_hal_device_t* src_device, iree_hal_device_t* dst_device,
     iree_hal_topology_edge_t* edge) {
-  // No refinement — the base edge from capabilities is used as-is.
+  // No refinement; tests observe the common spec-derived projection as-is.
   return iree_ok_status();
 }
 
@@ -474,20 +502,16 @@ static iree_hal_allocator_t* iree_hal_mock_device_allocator(
   return NULL;
 }
 
-static void iree_hal_mock_device_replace_device_allocator(
-    iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {}
+static iree_status_t iree_hal_mock_device_replace_device_allocator(
+    iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
+  return iree_ok_status();
+}
 
 static void iree_hal_mock_device_replace_channel_provider(
     iree_hal_device_t* base_device, iree_hal_channel_provider_t* new_provider) {
 }
 
 static iree_status_t iree_hal_mock_device_trim(iree_hal_device_t* base_device) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED);
-}
-
-static iree_status_t iree_hal_mock_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED);
 }
 
@@ -694,8 +718,8 @@ static const iree_hal_device_vtable_t iree_hal_mock_device_vtable = {
     .replace_device_allocator = iree_hal_mock_device_replace_device_allocator,
     .replace_channel_provider = iree_hal_mock_device_replace_channel_provider,
     .trim = iree_hal_mock_device_trim,
-    .query_i64 = iree_hal_mock_device_query_i64,
-    .query_capabilities = iree_hal_mock_device_query_capabilities,
+    .device_spec = iree_hal_mock_device_spec,
+    .sample_observation = iree_hal_mock_device_sample_observation,
     .topology_info = iree_hal_mock_device_topology_info,
     .refine_topology_edge = iree_hal_mock_device_refine_topology_edge,
     .assign_topology_info = iree_hal_mock_device_assign_topology_info,

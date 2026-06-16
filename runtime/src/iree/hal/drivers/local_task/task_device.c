@@ -15,12 +15,12 @@
 #include "iree/async/notification.h"
 #include "iree/async/util/proactor_pool.h"
 #include "iree/base/internal/arena.h"
-#include "iree/base/internal/cpu.h"
 #include "iree/base/internal/math.h"
 #include "iree/hal/drivers/local_task/block_command_buffer.h"
 #include "iree/hal/drivers/local_task/task_event.h"
 #include "iree/hal/drivers/local_task/task_queue.h"
 #include "iree/hal/drivers/local_task/task_semaphore.h"
+#include "iree/hal/local/device_spec_builder.h"
 #include "iree/hal/local/executable_environment.h"
 #include "iree/hal/local/local_executable_cache.h"
 #include "iree/hal/local/profile.h"
@@ -76,6 +76,9 @@ typedef struct iree_hal_task_device_t {
 
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   // Active HAL-native profiling recorder, or NULL when profiling is disabled.
   iree_hal_local_profile_recorder_t* profile_recorder;
@@ -327,6 +330,21 @@ iree_status_t iree_hal_task_device_create(
       iree_task_executor_node_id(queue_executors[0]);
   iree_status_t status = iree_async_proactor_pool_get_for_node(
       device->proactor_pool, default_node_id, &device->proactor);
+  if (iree_status_is_ok(status)) {
+    iree_hal_local_device_spec_params_t spec_params = {
+        .logical_device_id = identifier,
+        .display_name = identifier,
+        .driver_id = IREE_SV("local-task"),
+        .backend_id = IREE_SV("local"),
+        .queue_count = queue_count,
+        .default_queue_worker_count =
+            iree_task_executor_worker_count(queue_executors[0]),
+        .loader_count = loader_count,
+        .loaders = loaders,
+    };
+    status = iree_hal_local_device_spec_create(&spec_params, host_allocator,
+                                               &device->device_spec);
+  }
 
   if (iree_status_is_ok(status)) {
     status = iree_hal_task_device_create_default_pools(
@@ -417,6 +435,7 @@ static void iree_hal_task_device_destroy(iree_hal_device_t* base_device) {
   iree_async_notification_release(device->default_pool_notification);
   iree_hal_allocator_release(device->device_allocator);
   iree_hal_channel_provider_release(device->channel_provider);
+  iree_hal_device_spec_release(device->device_spec);
   iree_async_proactor_pool_release(device->proactor_pool);
 
   iree_arena_block_pool_deinitialize(&device->large_block_pool);
@@ -445,12 +464,13 @@ static iree_hal_allocator_t* iree_hal_task_device_allocator(
   return device->device_allocator;
 }
 
-static void iree_hal_task_replace_device_allocator(
+static iree_status_t iree_hal_task_replace_device_allocator(
     iree_hal_device_t* base_device, iree_hal_allocator_t* new_allocator) {
   iree_hal_task_device_t* device = iree_hal_task_device_cast(base_device);
   iree_hal_allocator_retain(new_allocator);
   iree_hal_allocator_release(device->device_allocator);
   device->device_allocator = new_allocator;
+  return iree_ok_status();
 }
 
 static void iree_hal_task_replace_channel_provider(
@@ -479,54 +499,23 @@ static iree_status_t iree_hal_task_device_trim(iree_hal_device_t* base_device) {
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_task_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
+static const iree_hal_device_spec_t* iree_hal_task_device_spec(
+    iree_hal_device_t* base_device) {
   iree_hal_task_device_t* device = iree_hal_task_device_cast(base_device);
-  *out_value = 0;
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.executable.format"))) {
-    *out_value =
-        iree_hal_query_any_executable_loader_support(
-            device->loader_count, device->loaders, /*caching_mode=*/0, key)
-            ? 1
-            : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = (int64_t)device->queue_count;
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("hal.dispatch"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      // NOTE: we always return the queue 0 worker count. This will be incorrect
-      // if there are multiple queues with differing queue counts but that's ok.
-      *out_value =
-          (int64_t)iree_task_executor_worker_count(device->queues[0].executor);
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("hal.cpu"))) {
-    return iree_cpu_lookup_data_by_key(key, out_value);
-  }
-
-  return iree_make_status(
-      IREE_STATUS_NOT_FOUND,
-      "unknown device configuration key value '%.*s :: %.*s'",
-      (int)category.size, category.data, (int)key.size, key.data);
+  return device->device_spec;
 }
 
-static iree_status_t iree_hal_task_device_query_capabilities(
+static iree_status_t iree_hal_task_device_sample_observation(
     iree_hal_device_t* base_device,
-    iree_hal_device_capabilities_t* out_capabilities) {
-  memset(out_capabilities, 0, sizeof(*out_capabilities));
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation) {
+  iree_hal_task_device_t* device = iree_hal_task_device_cast(base_device);
+  if (iree_any_bit_set(requested_flags,
+                       IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY)) {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_device_observation_populate_memory_total_from_spec(
+            device->device_spec, out_observation));
+  }
   return iree_ok_status();
 }
 
@@ -1202,8 +1191,8 @@ static const iree_hal_device_vtable_t iree_hal_task_device_vtable = {
     .replace_device_allocator = iree_hal_task_replace_device_allocator,
     .replace_channel_provider = iree_hal_task_replace_channel_provider,
     .trim = iree_hal_task_device_trim,
-    .query_i64 = iree_hal_task_device_query_i64,
-    .query_capabilities = iree_hal_task_device_query_capabilities,
+    .device_spec = iree_hal_task_device_spec,
+    .sample_observation = iree_hal_task_device_sample_observation,
     .topology_info = iree_hal_task_device_topology_info,
     .refine_topology_edge = iree_hal_task_device_refine_topology_edge,
     .assign_topology_info = iree_hal_task_device_assign_topology_info,

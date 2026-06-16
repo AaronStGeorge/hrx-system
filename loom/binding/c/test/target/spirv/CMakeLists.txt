@@ -71,7 +71,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_test
@@ -79,6 +79,8 @@ loom_cc_test(
     "iree_hal_test.cc"
   DEPS
     iree::hal
+    iree::hal::drivers::vulkan::device_spec
+    iree::hal::utils::device_spec_builder
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc

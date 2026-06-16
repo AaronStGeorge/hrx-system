@@ -31,6 +31,12 @@ typedef struct iree_hal_streaming_fat_binary_elf_t {
   iree_string_view_t triple;
 } iree_hal_streaming_fat_binary_elf_t;
 
+// Ranked fat-binary target candidate.
+typedef struct iree_hal_streaming_fat_binary_target_t {
+  // Target string to match against bundle entries.
+  iree_string_view_t value;
+} iree_hal_streaming_fat_binary_target_t;
+
 // Owns the ELFs produced by a single fat-binary unpack.
 // Must be reset with iree_hal_streaming_fat_binary_extract_reset when the
 // contained ELF spans are no longer in use. ELF spans may alias either the
@@ -55,22 +61,24 @@ typedef struct iree_hal_streaming_fat_binary_extract_t {
 bool iree_hal_streaming_fat_binary_is_supported(iree_const_byte_span_t data);
 
 // Unwraps a fat-binary / offload-bundle / CCOB / raw ELF blob and returns
-// every contained ELF whose bundle triple matches |target_arch| (a base
-// gfx name, e.g. "gfx1100"). For a raw-ELF input the ELF itself is
-// returned as a single match with an empty triple.
+// every contained ELF whose bundle triple matches the best-ranked target
+// candidate. For a raw-ELF input the ELF itself is returned as a single match
+// with an empty triple.
 //
-// |target_arch| is matched against the bundle-entry triple's trailing gfx
-// component (after the final "--" or final "-" separator), with feature
-// specifiers such as ":sramecc+" or ":xnack-" stripped from both sides
-// before comparison. Pass the device's cached `gcn_arch_name` (e.g.
-// "gfx942:sramecc+:xnack-"), which is normalized here.
+// |targets| must be ordered from most-specific to least-specific. Each target
+// value is matched against the bundle-entry triple's trailing gfx component
+// (after the final "--" or final "-" separator, or the entire string for bare
+// gfx targets), with feature specifiers such as ":sramecc+" or ":xnack-"
+// stripped from both sides before comparison. If the bundle contains matches
+// for several candidates, only matches for the earliest candidate are returned.
 //
 // On error |out_extract| is left empty (safe to reset).
 // On success the caller owns |out_extract| and must call
 // iree_hal_streaming_fat_binary_extract_reset once the ELF spans are no
 // longer referenced.
-iree_status_t iree_hal_streaming_fat_binary_extract_for_target(
-    iree_const_byte_span_t data, iree_string_view_t target_arch,
+iree_status_t iree_hal_streaming_fat_binary_extract_for_targets(
+    iree_const_byte_span_t data, iree_host_size_t target_count,
+    const iree_hal_streaming_fat_binary_target_t* targets,
     iree_allocator_t host_allocator,
     iree_hal_streaming_fat_binary_extract_t* out_extract);
 

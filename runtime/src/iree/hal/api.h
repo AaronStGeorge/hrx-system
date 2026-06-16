@@ -19,6 +19,7 @@
 #include "iree/hal/command_buffer.h"    // IWYU pragma: export
 #include "iree/hal/device.h"            // IWYU pragma: export
 #include "iree/hal/device_group.h"      // IWYU pragma: export
+#include "iree/hal/device_spec.h"       // IWYU pragma: export
 #include "iree/hal/driver.h"            // IWYU pragma: export
 #include "iree/hal/driver_registry.h"   // IWYU pragma: export
 #include "iree/hal/event.h"             // IWYU pragma: export
@@ -37,6 +38,5 @@
 #include "iree/hal/semaphore.h"         // IWYU pragma: export
 #include "iree/hal/string_util.h"       // IWYU pragma: export
 #include "iree/hal/topology.h"          // IWYU pragma: export
-#include "iree/hal/topology_builder.h"  // IWYU pragma: export
 
 #endif  // IREE_HAL_API_H_

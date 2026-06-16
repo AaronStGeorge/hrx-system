@@ -27,6 +27,8 @@ typedef struct iree_hal_device_t iree_hal_device_t;
 
 // Defines how the executable cache performs preparation.
 enum iree_hal_executable_caching_mode_bits_t {
+  // No optional executable caching modes are enabled.
+  IREE_HAL_EXECUTABLE_CACHING_MODE_NONE = 0u,
   // Allows the cache to reference the provided executable_data after it has
   // prepared the executable. Callers must ensure the data remains valid for the
   // lifetime of the cache. If memory mapping constant executable data from
