@@ -424,6 +424,21 @@ func.def @extracts(%source: vector<1xi32>) -> (vector<1xi32>) {
       });
 }
 
+TEST_F(AmdgpuArithmeticLowerRulesTest,
+       RejectsSignedBitfieldExtractWhenFallbackDescriptorsMissing) {
+  ExpectNoSelection(IREE_SV(R"(
+func.def @extracts(%source: vector<1xi32>) -> (vector<1xi32>) {
+  %bits = vector.bitfield.extracts %source {offset = 4, width = 4} : vector<1xi32> -> vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+)"),
+                    LOOM_OP_VECTOR_BITFIELD_EXTRACTS,
+                    {
+                        IREE_SV("amdgpu.v_bfe_i32.offset_width_inline"),
+                        IREE_SV("amdgpu.v_ashrrev_i32.src0_inline"),
+                    });
+}
+
 TEST_F(AmdgpuArithmeticLowerRulesTest, SelectsNativeBitfieldInsert) {
   ExpectSelectedDescriptorKeys(IREE_SV(R"(
 func.def @insert(%field: vector<1xi32>, %base: vector<1xi32>) -> (vector<1xi32>) {
