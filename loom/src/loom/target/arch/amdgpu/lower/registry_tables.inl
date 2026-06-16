@@ -348,11 +348,12 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_vector_bitcast_dispatch,
                 loom_amdgpu_low_legality_verify_vector_structural, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CONCAT)] =
-            LOOM_AMDGPU_RECIPE_DATA_ROW(
-                LOOM_OP_VECTOR_CONCAT, loom_amdgpu_vector_concat_plan_t,
+            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+                LOOM_OP_VECTOR_CONCAT, loom_amdgpu_vector_register_map_plan_t,
                 loom_amdgpu_select_vector_concat_dispatch,
-                loom_amdgpu_emit_vector_concat_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural),
+                loom_amdgpu_emit_vector_register_map_dispatch,
+                loom_amdgpu_low_legality_verify_vector_structural,
+                LOOM_AMDGPU_STORAGE_VECTOR_REGISTER_MAP_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_DEINTERLEAVE)] =
             LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_DEINTERLEAVE,
@@ -361,23 +362,29 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_vector_deinterleave_dispatch,
                 loom_amdgpu_low_legality_verify_vector_structural, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_INTERLEAVE)] =
-            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
-                LOOM_OP_VECTOR_INTERLEAVE, loom_amdgpu_vector_interleave_plan_t,
+            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+                LOOM_OP_VECTOR_INTERLEAVE,
+                loom_amdgpu_vector_register_map_plan_t,
                 loom_amdgpu_select_vector_interleave_dispatch,
-                loom_amdgpu_emit_vector_interleave_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural, 2),
+                loom_amdgpu_emit_vector_register_map_dispatch,
+                loom_amdgpu_low_legality_verify_vector_structural,
+                LOOM_AMDGPU_STORAGE_VECTOR_REGISTER_MAP_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SHUFFLE)] =
-            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
-                LOOM_OP_VECTOR_SHUFFLE, loom_amdgpu_vector_permutation_plan_t,
+            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+                LOOM_OP_VECTOR_SHUFFLE,
+                loom_amdgpu_vector_register_map_plan_t,
                 loom_amdgpu_select_vector_shuffle_dispatch,
-                loom_amdgpu_emit_vector_permutation_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural, 1),
+                loom_amdgpu_emit_vector_register_map_dispatch,
+                loom_amdgpu_low_legality_verify_vector_structural,
+                LOOM_AMDGPU_STORAGE_VECTOR_REGISTER_MAP_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_TRANSPOSE)] =
-            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
-                LOOM_OP_VECTOR_TRANSPOSE, loom_amdgpu_vector_permutation_plan_t,
+            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
+                LOOM_OP_VECTOR_TRANSPOSE,
+                loom_amdgpu_vector_register_map_plan_t,
                 loom_amdgpu_select_vector_transpose_dispatch,
-                loom_amdgpu_emit_vector_permutation_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural, 1),
+                loom_amdgpu_emit_vector_register_map_dispatch,
+                loom_amdgpu_low_legality_verify_vector_structural,
+                LOOM_AMDGPU_STORAGE_VECTOR_REGISTER_MAP_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SLICE)] =
             LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_VECTOR_SLICE, loom_amdgpu_vector_slice_plan_t,

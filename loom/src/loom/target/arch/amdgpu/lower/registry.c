@@ -86,22 +86,24 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS = 0,
   // Structural value lowering owns its source operand demand policy.
   LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN = 1,
+  // Vector register-map plans own their mapped source-value demand policy.
+  LOOM_AMDGPU_STORAGE_VECTOR_REGISTER_MAP_PLAN = 2,
   // Target plan data starts with row-declared source values.
-  LOOM_AMDGPU_STORAGE_PLAN_LEADING_SOURCES = 2,
+  LOOM_AMDGPU_STORAGE_PLAN_LEADING_SOURCES = 3,
   // Memory access plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_MEMORY_PLAN = 3,
+  LOOM_AMDGPU_STORAGE_MEMORY_PLAN = 4,
   // Atomic plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_ATOMIC = 4,
+  LOOM_AMDGPU_STORAGE_ATOMIC = 5,
   // Prefetch plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_PREFETCH = 5,
+  LOOM_AMDGPU_STORAGE_PREFETCH = 6,
   // Fragment memory plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY = 6,
+  LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY = 7,
   // Subgroup broadcast plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_SUBGROUP_BROADCAST = 7,
+  LOOM_AMDGPU_STORAGE_SUBGROUP_BROADCAST = 8,
   // Selected plans require no source operand storage.
-  LOOM_AMDGPU_STORAGE_NONE = 8,
+  LOOM_AMDGPU_STORAGE_NONE = 9,
   // Async gather plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_ASYNC_GATHER = 9,
+  LOOM_AMDGPU_STORAGE_ASYNC_GATHER = 10,
   // Maximum storage-policy value accepted by dispatch row policy bits.
   LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_ASYNC_GATHER,
 };
@@ -611,12 +613,12 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bitcast_dispatch,
                              loom_amdgpu_lower_vector_bitcast)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_concat_dispatch,
-                               loom_amdgpu_vector_concat_plan_t,
+                               loom_amdgpu_vector_register_map_plan_t,
                                loom_amdgpu_select_vector_concat_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_concat_dispatch,
-                             loom_amdgpu_vector_concat_plan_t,
-                             loom_amdgpu_lower_vector_concat)
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_register_map_dispatch,
+                             loom_amdgpu_vector_register_map_plan_t,
+                             loom_amdgpu_lower_vector_register_map)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_deinterleave_dispatch,
                                loom_amdgpu_vector_deinterleave_plan_t,
@@ -627,24 +629,16 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_deinterleave_dispatch,
                              loom_amdgpu_lower_vector_deinterleave)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_interleave_dispatch,
-                               loom_amdgpu_vector_interleave_plan_t,
+                               loom_amdgpu_vector_register_map_plan_t,
                                loom_amdgpu_select_vector_interleave_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_interleave_dispatch,
-                             loom_amdgpu_vector_interleave_plan_t,
-                             loom_amdgpu_lower_vector_interleave)
-
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_shuffle_dispatch,
-                               loom_amdgpu_vector_permutation_plan_t,
+                               loom_amdgpu_vector_register_map_plan_t,
                                loom_amdgpu_select_vector_shuffle_plan)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_transpose_dispatch,
-                               loom_amdgpu_vector_permutation_plan_t,
+                               loom_amdgpu_vector_register_map_plan_t,
                                loom_amdgpu_select_vector_transpose_plan)
-
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_permutation_dispatch,
-                             loom_amdgpu_vector_permutation_plan_t,
-                             loom_amdgpu_lower_vector_permutation)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_slice_dispatch,
                                loom_amdgpu_vector_slice_plan_t,
@@ -1026,12 +1020,6 @@ LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_bitcast_plan_t,
                                         source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_deinterleave_plan_t,
                                         source, 0);
-LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_interleave_plan_t,
-                                        even, 0);
-LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_interleave_plan_t,
-                                        odd, 1);
-LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_permutation_plan_t,
-                                        source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_table_lookup_plan_t, table,
                                         0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_table_lookup_plan_t,
@@ -1065,6 +1053,15 @@ static void loom_amdgpu_mark_plan_sources_storage(
   const loom_value_id_t* sources = (const loom_value_id_t*)plan_data;
   for (uint8_t i = 0; i < source_count; ++i) {
     loom_low_lower_require_source_value_storage(context, sources[i]);
+  }
+}
+
+static void loom_amdgpu_mark_vector_register_map_plan_storage_demands(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_vector_register_map_plan_t* plan) {
+  IREE_ASSERT_LE(plan->source_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
+  for (uint32_t i = 0; i < plan->source_count; ++i) {
+    loom_low_lower_require_source_value_storage(context, plan->sources[i]);
   }
 }
 
@@ -1139,6 +1136,11 @@ static void loom_amdgpu_mark_plan_storage_demands(
       loom_amdgpu_mark_plan_sources_storage(
           context, plan.target_data,
           loom_amdgpu_dispatch_row_leading_source_count(row));
+      return;
+    case LOOM_AMDGPU_STORAGE_VECTOR_REGISTER_MAP_PLAN:
+      loom_amdgpu_mark_vector_register_map_plan_storage_demands(
+          context,
+          (const loom_amdgpu_vector_register_map_plan_t*)plan.target_data);
       return;
     case LOOM_AMDGPU_STORAGE_ATOMIC:
       loom_amdgpu_mark_atomic_plan_storage_demands(
