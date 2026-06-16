@@ -34,7 +34,12 @@ from build_tools.devtools.source_lock import (
 
 def _run(description: str, cmd: list[str], **kwargs: object) -> bool:
     """Run a command, print status, return True on success."""
-    result = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+    except FileNotFoundError:
+        print(f"  FAIL  {description}")
+        print(f"        executable not found: {cmd[0]}")
+        return False
     if result.returncode == 0:
         print(f"  PASS  {description}")
         if result.stdout.strip():
