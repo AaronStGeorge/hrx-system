@@ -17,6 +17,8 @@ from loom.target.arch.amdgpu.target_info import (
     AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH,
     AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
+    AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
+    AMDGPU_WAVEFRONT_SIZE_FLAG_32,
     AmdgpuDescriptorSetInfo,
     AmdgpuDescriptorSetVectorMemoryInfo,
     AmdgpuKernelDescriptorVgprGranules,
@@ -92,6 +94,24 @@ def test_memory_cache_policy_rejects_incomplete_temporal_th_table() -> None:
 
     with _raises_value_error("temporal TH table must cover every cache temporal"):
         amdgpu_target_info._ordered_memory_cache_policy_temporal_th(rows=rows)
+
+
+def test_target_info_flag_expressions_validate_known_bits() -> None:
+    assert amdgpu_target_info._descriptor_set_info_flags_expr(AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING) == "LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING"
+    assert amdgpu_target_info._wavefront_size_flags_expr(AMDGPU_WAVEFRONT_SIZE_FLAG_32) == "LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32"
+    assert amdgpu_target_info._kernel_descriptor_abi_flags_expr(AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID) == "LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID"
+    assert amdgpu_target_info._processor_scheduling_bits_expr(AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU) == "LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU"
+
+
+def test_target_info_flag_expressions_reject_unknown_bits() -> None:
+    with _raises_value_error("unknown AMDGPU descriptor-set info flags"):
+        amdgpu_target_info._descriptor_set_info_flags_expr(1 << 63)
+    with _raises_value_error("unknown AMDGPU wavefront-size flags"):
+        amdgpu_target_info._wavefront_size_flags_expr(1 << 31)
+    with _raises_value_error("unknown AMDGPU kernel descriptor ABI flags"):
+        amdgpu_target_info._kernel_descriptor_abi_flags_expr(1 << 63)
+    with _raises_value_error("unknown AMDGPU processor scheduling flags"):
+        amdgpu_target_info._processor_scheduling_bits_expr(1 << 31)
 
 
 def test_profileless_kernel_descriptor_accepts_packed_workitem_id_fact() -> None:
