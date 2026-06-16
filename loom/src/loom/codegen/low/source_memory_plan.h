@@ -149,6 +149,9 @@ typedef struct loom_low_source_memory_access_plan_t {
   int64_t static_byte_offset;
   // Static byte offset contributed by the source view base.
   int64_t static_view_base_byte_offset;
+  // Source SSA value that materializes the dynamic view-base byte offset, or
+  // invalid when the view base is fully static.
+  loom_value_id_t dynamic_view_base_value_id;
   // Minimum provable byte alignment of the final accessed address.
   uint32_t minimum_alignment;
   // Dynamic address terms. The first |dynamic_view_base_term_count| entries

@@ -1225,6 +1225,7 @@ static bool loom_low_source_memory_access_add_dynamic_view_base_byte_offset(
     return false;
   }
   plan->static_view_base_byte_offset = static_view_base_byte_offset;
+  plan->dynamic_view_base_value_id = byte_offset;
   plan->dynamic_view_base_term_count = 1;
   return true;
 }
@@ -1453,6 +1454,7 @@ static bool loom_low_source_memory_access_plan_from_components(
       .root_value_id = LOOM_VALUE_ID_INVALID,
       .root_minimum_alignment = 1,
       .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
+      .dynamic_view_base_value_id = LOOM_VALUE_ID_INVALID,
       .minimum_alignment = 1,
       .cache_policy = cache_policy,
   };
