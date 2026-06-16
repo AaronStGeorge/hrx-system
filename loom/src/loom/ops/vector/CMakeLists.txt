@@ -20,6 +20,7 @@ loom_generated_cc_library(
     "facts.c"
     "fragment.c"
     "memory.c"
+    "storage.c"
     "type_transfer.c"
     "verify.c"
   GENERATED_SRC_FLAGS
@@ -61,6 +62,7 @@ loom_generated_cc_library(
     "fragment.h"
     "memory.h"
     "ops.h"
+    "storage.h"
     "tables.h"
   ARGS
     "--dialect=vector"
@@ -124,6 +126,17 @@ loom_cc_test(
     loom::ir
     loom::ops::encoding
     loom::ops::op_defs
+)
+
+loom_cc_test(
+  NAME
+    storage_test
+  SRCS
+    "storage_test.cc"
+  DEPS
+    ::vector
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

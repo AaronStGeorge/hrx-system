@@ -10,6 +10,7 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/vector/storage.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
@@ -79,11 +80,19 @@ static loom_amdgpu_bitstream_storage_shape_t
 loom_amdgpu_bitstream_storage_shape_from_type(loom_type_t type) {
   loom_amdgpu_bitstream_storage_shape_t shape = {
       .type = type,
-      .i32_lane_count = loom_amdgpu_vector_i32_lane_count(type),
-      .i8_lane_count = loom_amdgpu_vector_i8_lane_count(type),
+      .i32_lane_count = loom_vector_static_rank1_lane_count(
+          type, LOOM_SCALAR_TYPE_I32, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES),
+      .i8_lane_count = loom_vector_static_rank1_lane_count(
+          type, LOOM_SCALAR_TYPE_I8, LOOM_AMDGPU_MAX_PACKED_I8_LANES),
   };
-  shape.has_packed_integer_storage = loom_amdgpu_type_packed_integer_storage(
-      type, &shape.payload_bit_count, &shape.register_count);
+  loom_vector_packed_integer_storage_shape_t storage_shape;
+  shape.has_packed_integer_storage = loom_vector_packed_integer_storage_shape(
+      type, /*storage_unit_bit_count=*/32,
+      LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS, &storage_shape);
+  if (shape.has_packed_integer_storage) {
+    shape.payload_bit_count = storage_shape.payload_bit_count;
+    shape.register_count = storage_shape.storage_unit_count;
+  }
   return shape;
 }
 
