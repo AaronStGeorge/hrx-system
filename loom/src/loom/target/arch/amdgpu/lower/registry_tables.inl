@@ -524,12 +524,13 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_low_legality_verify_kernel_subgroup_ballot,
                 LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK)] =
-            LOOM_AMDGPU_RECIPE_DATA_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK,
                 loom_amdgpu_subgroup_active_mask_plan_t,
                 loom_amdgpu_select_kernel_subgroup_active_mask_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_active_mask_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask),
+                loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask,
+                LOOM_AMDGPU_STORAGE_NONE),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY)] =
             LOOM_AMDGPU_LEGALITY_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY,
