@@ -324,4 +324,28 @@ loom_cc_library(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    arithmetic_lower_rules_test
+  SRCS
+    "arithmetic_lower_rules_test.cc"
+  DEPS
+    ::arithmetic_lower_rules
+    iree::base
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::lower
+    loom::format::text::parser
+    loom::ir
+    loom::ops::func
+    loom::ops::vector
+    loom::target::arch::amdgpu::lower::materializers
+    loom::testing::module_ptr
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
