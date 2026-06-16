@@ -27,7 +27,9 @@ loom_amdgpu_runtime_requirements_from_target_pipeline_options(
   }
 
   loom_amdgpu_runtime_requirements_t requirements =
-      LOOM_AMDGPU_RUNTIME_REQUIREMENT_FEEDBACK;
+      options->sanitizer.reporting_mode == LOOM_SANITIZER_REPORTING_MODE_TRAP
+          ? LOOM_AMDGPU_RUNTIME_REQUIREMENT_NONE
+          : LOOM_AMDGPU_RUNTIME_REQUIREMENT_FEEDBACK;
   if (iree_any_bit_set(options->sanitizer.checks,
                        LOOM_SANITIZER_CHECK_ACCESS)) {
     requirements |= LOOM_AMDGPU_RUNTIME_REQUIREMENT_ASAN_SHADOW;

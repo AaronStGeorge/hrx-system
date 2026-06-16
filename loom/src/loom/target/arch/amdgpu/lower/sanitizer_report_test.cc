@@ -893,6 +893,79 @@ TEST_F(AmdgpuSanitizerReportTest, NarrowsExecForMaskedColdSiteBlock) {
                 LOOM_AMDGPU_SANITIZER_TRAP_ID);
 }
 
+TEST_F(AmdgpuSanitizerReportTest, TrapsDirectlyForMaskedColdSiteBlock) {
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  loom_amdgpu_feedback_packet_address_t packet_address = {};
+  IREE_ASSERT_OK(
+      BuildFeedbackValues(&config_values, &channel_values, &packet_address));
+  const loom_value_id_t failure_mask = channel_values.ring_capacity;
+
+  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
+      &builder_, descriptor_set_, failure_mask, LOOM_LOCATION_UNKNOWN,
+      &branch));
+  loom_op_t* continuation_return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/nullptr,
+                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
+                                       &continuation_return_op));
+
+  VerifyModuleOk();
+  VerifyLowModuleOk();
+
+  ASSERT_NE(branch.failure_block, nullptr);
+  ASSERT_NE(branch.continuation_block, nullptr);
+  loom_region_t* body = body_block_->parent_region;
+  ASSERT_EQ(loom_region_block(body, 1), branch.continuation_block);
+  ASSERT_EQ(loom_region_block(body, 2), branch.failure_block);
+
+  std::vector<loom_op_t*> hot_mask_compares = OpsForDescriptorRefInBlock(
+      body_block_, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_U64);
+  ASSERT_EQ(hot_mask_compares.size(), 1u);
+
+  const loom_op_t* hot_terminator = loom_block_const_last_op(body_block_);
+  ASSERT_TRUE(loom_low_cond_br_isa(hot_terminator));
+  EXPECT_EQ(loom_low_cond_br_condition(hot_terminator),
+            loom_low_op_results(hot_mask_compares[0]).values[0]);
+  EXPECT_EQ(loom_low_cond_br_true_dest(hot_terminator), branch.failure_block);
+  EXPECT_EQ(loom_low_cond_br_false_dest(hot_terminator),
+            branch.continuation_block);
+
+  std::vector<loom_op_t*> saveexec_ops = OpsForDescriptorRefInBlock(
+      branch.failure_block, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64);
+  ASSERT_EQ(saveexec_ops.size(), 1u);
+  ASSERT_EQ(loom_low_op_operands(saveexec_ops[0]).count, 1u);
+  EXPECT_EQ(loom_low_op_operands(saveexec_ops[0]).values[0], failure_mask);
+  ASSERT_EQ(loom_low_op_results(saveexec_ops[0]).count, 2u);
+  const loom_value_id_t saved_exec =
+      loom_low_op_results(saveexec_ops[0]).values[0];
+
+  std::vector<loom_op_t*> failure_trap_ops = OpsForDescriptorRefInBlock(
+      branch.failure_block, LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP);
+  ASSERT_EQ(failure_trap_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(failure_trap_ops[0]), IREE_SV("trapid"),
+                LOOM_AMDGPU_SANITIZER_TRAP_ID);
+  std::vector<loom_op_t*> restore_exec_ops = OpsForDescriptorRefInBlock(
+      branch.failure_block, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC);
+  ASSERT_EQ(restore_exec_ops.size(), 1u);
+  ASSERT_EQ(loom_low_op_operands(restore_exec_ops[0]).count, 1u);
+  EXPECT_EQ(loom_low_op_operands(restore_exec_ops[0]).values[0], saved_exec);
+
+  const loom_op_t* failure_terminator =
+      loom_block_const_last_op(branch.failure_block);
+  ASSERT_TRUE(loom_low_br_isa(failure_terminator));
+  EXPECT_EQ(loom_low_br_dest(failure_terminator), branch.continuation_block);
+  EXPECT_EQ(loom_low_br_args(failure_terminator).count, 0u);
+
+  EXPECT_TRUE(
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR)
+          .empty());
+  EXPECT_TRUE(
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR)
+          .empty());
+  EXPECT_EQ(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP).size(), 1u);
+}
+
 TEST_F(AmdgpuSanitizerReportTest, RejectsInvalidReportMetadata) {
   loom_amdgpu_feedback_config_values_t config_values = {};
   loom_amdgpu_feedback_channel_header_values_t channel_values = {};

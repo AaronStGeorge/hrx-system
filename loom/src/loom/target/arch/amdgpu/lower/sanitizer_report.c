@@ -427,7 +427,11 @@ static iree_status_t loom_amdgpu_sanitizer_build_sgpr64_nonzero_scc(
 
 static iree_status_t loom_amdgpu_sanitizer_build_exec_narrow(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t lane_mask, loom_location_id_t location) {
+    loom_value_id_t lane_mask, loom_location_id_t location,
+    loom_value_id_t* out_saved_exec) {
+  if (out_saved_exec != NULL) {
+    *out_saved_exec = LOOM_VALUE_ID_INVALID;
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_register_class(
       builder, descriptor_set, lane_mask, 2, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
       IREE_SV("lane_mask")));
@@ -439,10 +443,27 @@ static iree_status_t loom_amdgpu_sanitizer_build_exec_narrow(
       descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SCC, 1, &scc_type));
   const loom_type_t result_types[] = {sgpr_x2_type, scc_type};
   loom_op_t* saveexec_op = NULL;
-  return loom_amdgpu_sanitizer_build_descriptor_op(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_descriptor_op(
       builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64,
       &lane_mask, /*operand_count=*/1, result_types,
-      IREE_ARRAYSIZE(result_types), location, &saveexec_op);
+      IREE_ARRAYSIZE(result_types), location, &saveexec_op));
+  if (out_saved_exec != NULL) {
+    *out_saved_exec = loom_value_slice_get(loom_low_op_results(saveexec_op), 0);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_build_exec_restore(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t saved_exec, loom_location_id_t location) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_register_class(
+      builder, descriptor_set, saved_exec, 2, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+      IREE_SV("saved_exec")));
+  loom_op_t* restore_op = NULL;
+  return loom_amdgpu_sanitizer_build_descriptor_op(
+      builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC,
+      &saved_exec, /*operand_count=*/1, /*result_types=*/NULL,
+      /*result_count=*/0, location, &restore_op);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_define_register_block_arg(
@@ -663,9 +684,45 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
 
   loom_builder_set_block(builder, branch.failure_block);
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_exec_narrow(
-      builder, descriptor_set, failure_mask, location));
+      builder, descriptor_set, failure_mask, location,
+      /*out_saved_exec=*/NULL));
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_trap_branch(
       builder, descriptor_set, island, source, report, location));
+
+  loom_builder_set_block(builder, branch.continuation_block);
+  *out_branch = branch;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t failure_mask, loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch) {
+  IREE_ASSERT_ARGUMENT(out_branch);
+  *out_branch = (loom_amdgpu_sanitizer_access_report_failure_branch_t){0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_register_class(
+      builder, descriptor_set, failure_mask, 2, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+      IREE_SV("failure_mask")));
+  loom_value_id_t failure_scc = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_sgpr64_nonzero_scc(
+      builder, descriptor_set, failure_mask, location, &failure_scc));
+
+  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_split_current_block_on_failure_scc(
+      builder, failure_scc, location, &branch));
+
+  loom_builder_set_block(builder, branch.failure_block);
+  loom_value_id_t saved_exec = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_exec_narrow(
+      builder, descriptor_set, failure_mask, location, &saved_exec));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_control_packet_trap(
+      builder, descriptor_set, LOOM_AMDGPU_SANITIZER_TRAP_ID, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_exec_restore(
+      builder, descriptor_set, saved_exec, location));
+  loom_op_t* branch_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_br_build(builder, branch.continuation_block,
+                                         /*args=*/NULL, /*args_count=*/0,
+                                         location, &branch_op));
 
   loom_builder_set_block(builder, branch.continuation_block);
   *out_branch = branch;

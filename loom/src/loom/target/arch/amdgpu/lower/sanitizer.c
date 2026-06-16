@@ -59,10 +59,13 @@ typedef struct loom_amdgpu_sanitizer_lower_state_t {
   loom_amdgpu_sanitizer_site_map_row_t* site_map_rows;
   // Number of entries in site_map_rows.
   iree_host_size_t site_map_row_count;
-  // True once the runtime config symbols have been looked up or created.
-  bool has_config_symbols;
+  // True once the runtime feedback config symbol has been looked up or created.
+  bool has_feedback_config_symbol;
   // Module-local feedback channel configuration symbol.
   loom_symbol_ref_t feedback_config_symbol;
+  // True once the runtime ASAN shadow config symbol has been looked up or
+  // created.
+  bool has_asan_config_symbol;
   // Module-local ASAN shadow configuration symbol.
   loom_symbol_ref_t asan_config_symbol;
   // True once read access failures have a shared cold report/trap island.
@@ -148,19 +151,37 @@ static iree_status_t loom_amdgpu_sanitizer_module_state_from_module_state(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_sanitizer_ensure_config_symbols(
+static iree_status_t loom_amdgpu_sanitizer_ensure_feedback_config_symbol(
     loom_low_lower_context_t* context,
     loom_amdgpu_sanitizer_lower_state_t* state) {
-  if (!state->has_config_symbols) {
+  if (!state->has_feedback_config_symbol) {
     loom_module_t* module = loom_low_lower_context_module(context);
     IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_or_create_symbol(
         module, IREE_SV("iree_feedback_config"),
         &state->feedback_config_symbol));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_or_create_symbol(
-        module, IREE_SV("iree_asan_config"), &state->asan_config_symbol));
-    state->has_config_symbols = true;
+    state->has_feedback_config_symbol = true;
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_ensure_asan_config_symbol(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_sanitizer_lower_state_t* state) {
+  if (!state->has_asan_config_symbol) {
+    loom_module_t* module = loom_low_lower_context_module(context);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_or_create_symbol(
+        module, IREE_SV("iree_asan_config"), &state->asan_config_symbol));
+    state->has_asan_config_symbol = true;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_ensure_config_symbols(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_sanitizer_lower_state_t* state) {
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_ensure_feedback_config_symbol(context, state));
+  return loom_amdgpu_sanitizer_ensure_asan_config_symbol(context, state);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_ensure_site_collection(
@@ -454,8 +475,11 @@ iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
   }
   out_plan->report_access_kind = report_kind;
   out_plan->access_size = (uint32_t)access_size;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_site_id_for_op(
-      context, source_op, &out_plan->site_id));
+  if (loom_low_lower_context_sanitizer_reporting_mode(context) ==
+      LOOM_SANITIZER_REPORTING_MODE_DEFAULT) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_site_id_for_op(
+        context, source_op, &out_plan->site_id));
+  }
   *out_selected = true;
   return iree_ok_status();
 }
@@ -555,8 +579,23 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
 
   loom_amdgpu_sanitizer_lower_state_t* state = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_lower_state(context, &state));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_sanitizer_ensure_config_symbols(context, state));
+  const loom_sanitizer_reporting_mode_t reporting_mode =
+      loom_low_lower_context_sanitizer_reporting_mode(context);
+  switch (reporting_mode) {
+    case LOOM_SANITIZER_REPORTING_MODE_DEFAULT: {
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_sanitizer_ensure_config_symbols(context, state));
+      break;
+    }
+    case LOOM_SANITIZER_REPORTING_MODE_TRAP: {
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_sanitizer_ensure_asan_config_symbol(context, state));
+      break;
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported AMDGPU sanitizer reporting mode");
+  }
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
@@ -564,6 +603,13 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_check(
       builder, descriptor_set, state->asan_config_symbol, fault_address,
       plan->access_size, wavefront_size, source_op->location, &check));
+
+  if (reporting_mode == LOOM_SANITIZER_REPORTING_MODE_TRAP) {
+    loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
+    return loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
+        builder, descriptor_set, check.failure_mask, source_op->location,
+        &branch);
+  }
 
   loom_amdgpu_sanitizer_report_source_t source = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(
