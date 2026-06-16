@@ -48,6 +48,7 @@ from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_ENCODING_FORMAT_VOP2,
     AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL,
     AMDGPU_MEMORY_DESCRIPTOR_CATEGORY,
+    AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU,
     AMDGPU_VECTOR_DESCRIPTOR_CATEGORY,
     AmdgpuAtomicDescriptorCandidate,
     AmdgpuAtomicKind,
@@ -345,8 +346,9 @@ def test_s_delay_alu_descriptor_uses_native_packed_immediate() -> None:
     assert delay.unsigned_max == 0x07FF
     assert descriptor.asm_forms[0].native_assembly_values == (
         NativeAsmValue(
-            NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+            NativeAsmValueKind.IMMEDIATE_TARGET_FORMAT,
             field_name="delay",
+            target_format_id=AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU,
         ),
     )
 

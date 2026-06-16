@@ -129,6 +129,7 @@ class CompiledNativeAsmValue:
     kind: NativeAsmValueKind
     index: int
     bit_width: int
+    target_format_id: int
     literal_label: str | None
     literal: str | None
 

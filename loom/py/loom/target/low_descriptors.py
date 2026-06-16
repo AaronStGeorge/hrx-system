@@ -234,9 +234,7 @@ class NativeAsmValueKind(CEnum):
     OPERAND = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND"
     IMMEDIATE_I64 = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64"
     IMMEDIATE_UNSIGNED_HEX = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX"
-    AMDGPU_DELAY_ALU_IMMEDIATE = (
-        "LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE"
-    )
+    IMMEDIATE_TARGET_FORMAT = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_TARGET_FORMAT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,6 +335,7 @@ class NativeAsmValue:
     field_name: str | None = None
     literal: str | None = None
     bit_width: int = 0
+    target_format_id: int = 0
 
 
 @dataclass(frozen=True, slots=True)

@@ -116,6 +116,8 @@ from loom.target.low_descriptors import (
     StorageLeaseReleaseScope,
 )
 
+AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU = 1
+
 _REG_SGPR = "amdgpu.sgpr"
 _REG_VGPR = "amdgpu.vgpr"
 _REG_AGPR = "amdgpu.agpr"
@@ -825,8 +827,9 @@ def _native_unsigned_hex_immediate(field_name: str, bit_width: int) -> NativeAsm
 
 def _native_amdgpu_delay_alu_immediate(field_name: str) -> NativeAsmValue:
     return NativeAsmValue(
-        NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+        NativeAsmValueKind.IMMEDIATE_TARGET_FORMAT,
         field_name=field_name,
+        target_format_id=AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU,
     )
 
 
@@ -2463,6 +2466,7 @@ __all__ = (
     "AMDGPU_MATRIX_DESCRIPTOR_CATEGORY",
     "AMDGPU_MEMORY_DESCRIPTOR_CATEGORY",
     "AMDGPU_MISC_DESCRIPTOR_CATEGORY",
+    "AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU",
     "AMDGPU_SCALAR_DESCRIPTOR_CATEGORY",
     "AMDGPU_VECTOR_DESCRIPTOR_CATEGORY",
     "AmdgpuAtomicDescriptorCandidate",

@@ -425,7 +425,7 @@ static bool loom_low_native_asm_value_kind_is_valid(
     case LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND:
     case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64:
     case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX:
-    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE:
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_TARGET_FORMAT:
       return true;
     default:
       return false;
@@ -452,12 +452,13 @@ static iree_status_t loom_low_verify_native_asm_values(
           descriptor_set, value->literal_string_offset,
           "native_asm_value.literal", &literal));
       (void)literal;
-      if (value->index != 0 || value->bit_width != 0) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "low asm form for descriptor %" PRIu32
-            " literal native value must not set index or bit width",
-            descriptor_index);
+      if (value->index != 0 || value->bit_width != 0 ||
+          value->target_format_id != 0) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm form for descriptor %" PRIu32
+                                " literal native value must "
+                                "not set index, bit width, or target format",
+                                descriptor_index);
       }
       continue;
     }
@@ -493,6 +494,12 @@ static iree_status_t loom_low_verify_native_asm_values(
                                   " native result must not set bit width",
                                   descriptor_index);
         }
+        if (value->target_format_id != 0) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm form for descriptor %" PRIu32
+                                  " native result must not set target format",
+                                  descriptor_index);
+        }
         break;
       }
       case LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND: {
@@ -519,6 +526,12 @@ static iree_status_t loom_low_verify_native_asm_values(
                                   " native operand must not set bit width",
                                   descriptor_index);
         }
+        if (value->target_format_id != 0) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm form for descriptor %" PRIu32
+                                  " native operand must not set target format",
+                                  descriptor_index);
+        }
         break;
       }
       case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64:
@@ -537,6 +550,13 @@ static iree_status_t loom_low_verify_native_asm_values(
               " native i64 immediate must not set bit width",
               descriptor_index);
         }
+        if (value->target_format_id != 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low asm form for descriptor %" PRIu32
+              " native i64 immediate must not set target format",
+              descriptor_index);
+        }
         break;
       case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX:
         if (value->index >= descriptor->immediate_count) {
@@ -553,8 +573,15 @@ static iree_status_t loom_low_verify_native_asm_values(
                                   " native unsigned-hex bit width is invalid",
                                   descriptor_index);
         }
+        if (value->target_format_id != 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low asm form for descriptor %" PRIu32
+              " native unsigned-hex immediate must not set target format",
+              descriptor_index);
+        }
         break;
-      case LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE:
+      case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_TARGET_FORMAT:
         if (value->index >= descriptor->immediate_count) {
           return iree_make_status(
               IREE_STATUS_OUT_OF_RANGE,
@@ -567,7 +594,14 @@ static iree_status_t loom_low_verify_native_asm_values(
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
               "low asm form for descriptor %" PRIu32
-              " native AMDGPU delay-ALU immediate must not set bit width",
+              " native target-format immediate must not set bit width",
+              descriptor_index);
+        }
+        if (value->target_format_id == 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low asm form for descriptor %" PRIu32
+              " native target-format immediate must set target format",
               descriptor_index);
         }
         break;

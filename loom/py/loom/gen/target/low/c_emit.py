@@ -325,6 +325,7 @@ def _native_asm_value_row_lines(
             f".kind = {value.kind.c_name},",
             f".index = {value.index},",
             f".bit_width = {value.bit_width},",
+            f".target_format_id = {value.target_format_id},",
             f".literal_string_offset = {c_spelling.optional_string_expr(pool, value.literal_label)},",
         ]
         for value in values
