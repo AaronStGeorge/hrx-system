@@ -235,6 +235,8 @@ typedef struct loom_amdgpu_vector_extract_plan_t {
   uint32_t element_register_count;
   // Number of payload bits occupied by each logical source lane.
   uint32_t lane_bit_count;
+  // True when packed integer extraction must produce scalar sign-extension.
+  bool sign_extend_packed_lane;
   // True when extraction uses |dynamic_index| instead of |lane_offset|.
   bool is_dynamic;
 } loom_amdgpu_vector_extract_plan_t;

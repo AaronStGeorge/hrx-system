@@ -318,6 +318,7 @@ loom_check_test_suite(
         "test/source_low/source_low_bitfield.loom-test",
         "test/source_low/source_low_bitpack.loom-test",
         "test/source_low/source_low_bitpack_diagnostics.loom-test",
+        "test/source_low/source_low_bitstream_reference_pipeline.loom-test",
         "test/source_low/source_low_bitstream_report.loom-test",
         "test/source_low/source_low_bitunpack.loom-test",
         "test/source_low/source_low_bitunpack_diagnostics.loom-test",

@@ -155,6 +155,90 @@ low.func.def target(@target) abi(hal_kernel) @i16x4_from_elements_dynamic(%a: re
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @i8x1_extract_static(%bytes: vector<1xi8>) -> (i8) {
+  %lane = vector.extract %bytes[0] : vector<1xi8> -> i8
+  func.return %lane : i8
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i8x1_extract_static(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = v_bfe_i32_offset_width_inline %bytes {offset = 0, width = 8}
+  return %lane
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i8x4_extract_static(%bytes: vector<4xi8>) -> (i8) {
+  %lane = vector.extract %bytes[2] : vector<4xi8> -> i8
+  func.return %lane : i8
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i8x4_extract_static(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = v_bfe_i32_offset_width_inline %bytes {offset = 16, width = 8}
+  return %lane
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i8x4_extract_dynamic(%bytes: vector<4xi8>, %lane_index: index) -> (i8) {
+  %lane = vector.extract %bytes[%lane_index] : vector<4xi8> -> i8
+  func.return %lane : i8
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i8x4_extract_dynamic(%bytes: reg<amdgpu.vgpr>, %lane_index: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %7 = v_bfe_i32_offset_width_inline %bytes {offset = 0, width = 8}
+  %8 = v_mov_b32_copy %lane_index
+  %9 = v_mov_b32 1
+  %10 = v_cmp_eq_i32 %8, %9
+  %11 = v_bfe_i32_offset_width_inline %bytes {offset = 8, width = 8}
+  %12 = v_cndmask_b32 %7, %11, %10
+  %13 = v_mov_b32 2
+  %14 = v_cmp_eq_i32 %8, %13
+  %15 = v_bfe_i32_offset_width_inline %bytes {offset = 16, width = 8}
+  %16 = v_cndmask_b32 %12, %15, %14
+  %17 = v_mov_b32 3
+  %18 = v_cmp_eq_i32 %8, %17
+  %19 = v_bfe_i32_offset_width_inline %bytes {offset = 24, width = 8}
+  %lane = v_cndmask_b32 %16, %19, %18
+  return %lane
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i16x1_extract_static(%word: vector<1xi16>) -> (i16) {
+  %lane = vector.extract %word[0] : vector<1xi16> -> i16
+  func.return %lane : i16
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i16x1_extract_static(%word: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = v_bfe_i32_offset_width_inline %word {offset = 0, width = 16}
+  return %lane
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i16x4_extract_static(%words: vector<4xi16>) -> (i16) {
+  %lane = vector.extract %words[3] : vector<4xi16> -> i16
+  func.return %lane : i16
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i16x4_extract_static(%words: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %5 = slice %words[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %lane = v_bfe_i32_offset_width_inline %5 {offset = 16, width = 16}
+  return %lane
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @i8x4_splat_exact() -> (vector<4xi8>) {
   %scalar = scalar.constant -1 : i8
   %value = vector.splat %scalar : vector<4xi8>
