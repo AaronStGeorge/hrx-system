@@ -4,31 +4,19 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <cstdio>
-#include <cstdlib>
 #include <memory>
 #include <string>
-#include <utility>
-
-#include "loom/target/tool/llvm.h"
-
-#if defined(IREE_PLATFORM_WINDOWS)
-#if !defined(WIN32_LEAN_AND_MEAN)
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
 
 #include "iree/io/file_contents.h"
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/testing/temp_file.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/test_modules.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
+#include "loom/target/tool/llvm.h"
 #include "loom/util/stream.h"
 
 namespace loom {
@@ -56,53 +44,6 @@ bool IsToolUnavailable(iree_status_code_t status_code) {
          status_code == IREE_STATUS_UNAVAILABLE ||
          status_code == IREE_STATUS_UNIMPLEMENTED;
 }
-
-const char* TempDirectory() {
-  const char* temp_directory = getenv("TEST_TMPDIR");
-  if (temp_directory != NULL && temp_directory[0] != '\0') {
-    return temp_directory;
-  }
-  temp_directory = getenv("TMPDIR");
-  if (temp_directory != NULL && temp_directory[0] != '\0') {
-    return temp_directory;
-  }
-#if defined(IREE_PLATFORM_WINDOWS)
-  temp_directory = getenv("TEMP");
-  if (temp_directory != NULL && temp_directory[0] != '\0') {
-    return temp_directory;
-  }
-  return "C:/Temp";
-#else
-  return "/tmp";
-#endif
-}
-
-uint32_t ProcessId() {
-#if defined(IREE_PLATFORM_WINDOWS)
-  return (uint32_t)GetCurrentProcessId();
-#else
-  return (uint32_t)getpid();
-#endif
-}
-
-std::string TempPath(const char* suffix) {
-  static uint32_t counter = 0;
-  return std::string(TempDirectory()) + "/loom_llvm_tool_test_" +
-         std::to_string(ProcessId()) + "_" + std::to_string(counter++) + suffix;
-}
-
-class TempFile {
- public:
-  explicit TempFile(std::string path) : path_(std::move(path)) {}
-  TempFile(const TempFile&) = delete;
-  TempFile& operator=(const TempFile&) = delete;
-  ~TempFile() { std::remove(path_.c_str()); }
-
-  const std::string& path() const { return path_; }
-
- private:
-  std::string path_;
-};
 
 StreamPtr CreateStream() {
   iree_io_stream_t* stream = NULL;
@@ -198,8 +139,8 @@ TEST(LlvmIrToolTest, QueriesVersion) {
 TEST(LlvmIrToolTest, AssemblesTextAndVerifiesBitcode) {
   std::string text;
   IREE_ASSERT_OK(BuildTextFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &text));
-  TempFile input_file(TempPath(".ll"));
-  TempFile bitcode_file(TempPath(".bc"));
+  iree::testing::TempFilePath input_file("loom_llvm_tool_test", ".ll");
+  iree::testing::TempFilePath bitcode_file("loom_llvm_tool_test", ".bc");
   IREE_ASSERT_OK(WriteTempFile(input_file.path(), text));
 
   loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
@@ -225,7 +166,7 @@ TEST(LlvmIrToolTest, DisassemblesBitcode) {
   std::string bitcode;
   IREE_ASSERT_OK(
       BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
-  TempFile bitcode_file(TempPath(".bc"));
+  iree::testing::TempFilePath bitcode_file("loom_llvm_tool_test", ".bc");
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
   loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
@@ -270,7 +211,7 @@ TEST(LlvmIrToolTest, DisassemblesBitcodeBytes) {
 TEST(LlvmIrToolTest, DisassemblesAndVerifiesCastsBitcode) {
   std::string bitcode;
   IREE_ASSERT_OK(BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_CASTS, &bitcode));
-  TempFile bitcode_file(TempPath(".bc"));
+  iree::testing::TempFilePath bitcode_file("loom_llvm_tool_test", ".bc");
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
   loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
@@ -303,8 +244,8 @@ TEST(LlvmIrToolTest, CompilesX86Object) {
   std::string bitcode;
   IREE_ASSERT_OK(
       BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
-  TempFile bitcode_file(TempPath(".bc"));
-  TempFile object_file(TempPath(".o"));
+  iree::testing::TempFilePath bitcode_file("loom_llvm_tool_test", ".bc");
+  iree::testing::TempFilePath object_file("loom_llvm_tool_test", ".o");
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
   loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
@@ -347,8 +288,8 @@ TEST(LlvmIrToolTest, CompilesX86Assembly) {
   std::string bitcode;
   IREE_ASSERT_OK(
       BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
-  TempFile bitcode_file(TempPath(".bc"));
-  TempFile assembly_file(TempPath(".s"));
+  iree::testing::TempFilePath bitcode_file("loom_llvm_tool_test", ".bc");
+  iree::testing::TempFilePath assembly_file("loom_llvm_tool_test", ".s");
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
   loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
@@ -411,8 +352,8 @@ TEST(LlvmIrToolTest, CompilesAmdgpuObjectWhenTargetIsRegistered) {
   std::string bitcode;
   IREE_ASSERT_OK(
       BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS, &bitcode));
-  TempFile bitcode_file(TempPath(".bc"));
-  TempFile object_file(TempPath(".o"));
+  iree::testing::TempFilePath bitcode_file("loom_llvm_tool_test", ".bc");
+  iree::testing::TempFilePath object_file("loom_llvm_tool_test", ".o");
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
   iree_string_view_t extra_arguments[] = {
