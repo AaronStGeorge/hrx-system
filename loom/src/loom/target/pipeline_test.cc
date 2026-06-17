@@ -32,6 +32,10 @@ typedef struct PipelineRunCounts {
   int sanitizer_insert_assertions = 0;
   // Checks option on the source assertion-insertion pass.
   iree_string_view_t sanitizer_insert_checks = iree_string_view_empty();
+  // Number of source race-observation pass runs.
+  int sanitizer_insert_race_observations = 0;
+  // Checks option on the source race-observation pass.
+  iree_string_view_t sanitizer_insert_race_checks = iree_string_view_empty();
   // Number of target-low assertion-materialization pass runs.
   int sanitizer_materialize_assertions = 0;
   // Number of other sanitizer pass runs.
@@ -81,6 +85,11 @@ iree_status_t CountSanitizerRun(void* user_data, loom_op_t* op,
                                     IREE_SV("sanitizer-insert-assertions"))) {
     ++counts->sanitizer_insert_assertions;
     counts->sanitizer_insert_checks = FindStringOption(
+        count_context->module, loom_pass_run_options(op), IREE_SV("checks"));
+  } else if (iree_string_view_equal(
+                 key, IREE_SV("sanitizer-insert-race-observations"))) {
+    ++counts->sanitizer_insert_race_observations;
+    counts->sanitizer_insert_race_checks = FindStringOption(
         count_context->module, loom_pass_run_options(op), IREE_SV("checks"));
   } else if (iree_string_view_equal(
                  key, IREE_SV("sanitizer-materialize-assertions"))) {
@@ -161,6 +170,7 @@ TEST_F(TargetPipelineTest, ZeroChecksBuildsNoSanitizerPassSlots) {
   EXPECT_TRUE(
       iree_string_view_is_empty(counts.source_to_low_sanitizer_reporting));
   EXPECT_EQ(counts.sanitizer_insert_assertions, 0);
+  EXPECT_EQ(counts.sanitizer_insert_race_observations, 0);
   EXPECT_EQ(counts.sanitizer_materialize_assertions, 0);
   EXPECT_EQ(counts.other_sanitizer_runs, 0);
 }
@@ -189,6 +199,7 @@ TEST_F(TargetPipelineTest, TrapReportingBuildsSourceToLowOption) {
   EXPECT_TRUE(iree_string_view_equal(counts.source_to_low_sanitizer_reporting,
                                      IREE_SV("trap")));
   EXPECT_EQ(counts.sanitizer_insert_assertions, 0);
+  EXPECT_EQ(counts.sanitizer_insert_race_observations, 0);
   EXPECT_EQ(counts.sanitizer_materialize_assertions, 0);
   EXPECT_EQ(counts.other_sanitizer_runs, 0);
 }
@@ -218,6 +229,34 @@ TEST_F(TargetPipelineTest, EnabledChecksBuildSanitizerPassSlots) {
   EXPECT_EQ(counts.sanitizer_insert_assertions, 1);
   EXPECT_TRUE(iree_string_view_equal(counts.sanitizer_insert_checks,
                                      IREE_SV("access|value|operation")));
+  EXPECT_EQ(counts.sanitizer_insert_race_observations, 0);
+  EXPECT_EQ(counts.sanitizer_materialize_assertions, 1);
+  EXPECT_EQ(counts.other_sanitizer_runs, 0);
+}
+
+TEST_F(TargetPipelineTest, RaceChecksBuildRaceObservationPassSlot) {
+  ModulePtr module = AllocateModule(IREE_SV("pipeline"));
+  const loom_target_pipeline_options_t options = {
+      /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
+      /*.control_flow_lowering=*/{},
+      /*.sanitizer=*/
+      {
+          /*.checks=*/LOOM_SANITIZER_CHECK_RACE,
+      },
+  };
+
+  loom_op_t* pipeline_op = nullptr;
+  IREE_ASSERT_OK(loom_target_pipeline_build_to_prepared_low(
+      module.get(), IREE_SV("compile"), &options, &environment_,
+      loom_pass_environment_empty(), &pipeline_op));
+
+  const PipelineRunCounts counts = CountPipelineRuns(module.get(), pipeline_op);
+  EXPECT_EQ(counts.source_to_low, 1);
+  EXPECT_EQ(counts.sanitizer_insert_assertions, 0);
+  EXPECT_EQ(counts.sanitizer_insert_race_observations, 1);
+  EXPECT_TRUE(iree_string_view_equal(counts.sanitizer_insert_race_checks,
+                                     IREE_SV("race")));
   EXPECT_EQ(counts.sanitizer_materialize_assertions, 1);
   EXPECT_EQ(counts.other_sanitizer_runs, 0);
 }

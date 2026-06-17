@@ -42,6 +42,7 @@ loom_cc_library(
   DEPS
     ::options
     ::options_cli
+    ::site_location
     ::site_payload
     iree::base
     loom::ir
@@ -54,6 +55,46 @@ loom_cc_library(
     loom::pass::types
     loom::pass::value_facts
     loom::rewrite::rewriter
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    race_insertion
+  HDRS
+    "race_insertion.h"
+  SRCS
+    "race_insertion.c"
+  DEPS
+    ::options
+    ::options_cli
+    ::site_location
+    ::site_payload
+    iree::base
+    loom::ir
+    loom::ops::kernel
+    loom::ops::sanitizer
+    loom::ops::view
+    loom::pass::pipeline
+    loom::pass::registry
+    loom::pass::types
+    loom::pass::value_facts
+    loom::rewrite::rewriter
+    loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    site_location
+  HDRS
+    "site_location.h"
+  SRCS
+    "site_location.c"
+  DEPS
+    ::site_payload
+    iree::base
+    loom::ir
   PUBLIC
 )
 

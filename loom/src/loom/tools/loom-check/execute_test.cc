@@ -1239,6 +1239,10 @@ TEST_F(ExecuteTest, EmitSourceLowParsesSanitizerOptions) {
       ActualOutputString(result).find(
           "sanitizer-insert-assertions(checks = \"value|operation|race\")"),
       std::string::npos);
+  EXPECT_NE(ActualOutputString(result).find(
+                "sanitizer-insert-race-observations(checks = "
+                "\"value|operation|race\")"),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 
   ExpectFirstFailsWithDetail(

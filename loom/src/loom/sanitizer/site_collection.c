@@ -48,7 +48,7 @@ static bool loom_sanitizer_site_op_isa(const loom_op_t* op) {
          loom_sanitizer_assert_value_isa(op) ||
          loom_sanitizer_assert_op_isa(op) ||
          loom_sanitizer_assert_layout_isa(op) ||
-         loom_sanitizer_race_access_isa(op);
+         loom_sanitizer_race_access_isa(op) || loom_sanitizer_race_sync_isa(op);
 }
 
 static iree_status_t loom_sanitizer_site_location_validate_child(

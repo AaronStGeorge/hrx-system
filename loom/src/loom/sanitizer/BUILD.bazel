@@ -37,6 +37,7 @@ loom_cc_library(
     deps = [
         ":options",
         ":options_cli",
+        ":site_location",
         ":site_payload",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/index",
@@ -48,6 +49,40 @@ loom_cc_library(
         "//loom/src/loom/pass:types",
         "//loom/src/loom/pass:value_facts",
         "//loom/src/loom/rewrite:rewriter",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "race_insertion",
+    srcs = ["race_insertion.c"],
+    hdrs = ["race_insertion.h"],
+    deps = [
+        ":options",
+        ":options_cli",
+        ":site_location",
+        ":site_payload",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/sanitizer",
+        "//loom/src/loom/ops/view",
+        "//loom/src/loom/pass:pipeline",
+        "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "site_location",
+    srcs = ["site_location.c"],
+    hdrs = ["site_location.h"],
+    deps = [
+        ":site_payload",
+        "//loom/src/loom/ir",
         "//runtime/src/iree/base",
     ],
 )

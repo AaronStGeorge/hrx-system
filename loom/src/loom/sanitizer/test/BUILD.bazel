@@ -16,5 +16,6 @@ loom_check_test_suite(
     name = "test",
     srcs = [
         "insert_assertions.loom-test",
+        "insert_race_observations.loom-test",
     ],
 )
