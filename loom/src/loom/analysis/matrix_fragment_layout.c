@@ -170,6 +170,20 @@ bool loom_matrix_fragment_coordinate_from_role_layout(
       out_coordinate->column = lane % tile_shape.result_column_count;
       return true;
     }
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD: {
+      if (element_index != 0) {
+        return false;
+      }
+      const uint32_t row = (uint32_t)(lane / tile_shape.result_column_count) *
+                               role_layout->register_count +
+                           register_index;
+      if (row >= tile_shape.result_row_count) {
+        return false;
+      }
+      out_coordinate->row = (uint16_t)row;
+      out_coordinate->column = lane % tile_shape.result_column_count;
+      return true;
+    }
     case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
     default:
       return false;

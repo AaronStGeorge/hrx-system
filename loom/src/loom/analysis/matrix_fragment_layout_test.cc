@@ -111,6 +111,21 @@ loom_matrix_fragment_layout_t CdnaLayout() {
   };
 }
 
+loom_matrix_fragment_layout_t LaneGroupLowSubwordLayout() {
+  loom_matrix_fragment_layout_t layout = CdnaLayout();
+  layout.kind = 3;
+  layout.name = IREE_SV("test.lane_group.low_subword");
+  layout.accumulator = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD, 4, 2,
+      kRowColumn);
+  layout.result = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD, 4, 2,
+      kRowColumn);
+  return layout;
+}
+
 void ExpectCoordinate(const loom_matrix_fragment_layout_t* layout,
                       loom_contract_operand_role_t role, uint16_t lane,
                       uint16_t register_index, uint16_t element_index,
@@ -273,6 +288,26 @@ TEST(MatrixFragmentLayoutTest, MapsLaneGroupRegisterRowColumnCoordinates) {
                    kRowColumn, 4, 0, 0);
   ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3, 0,
                    kRowColumn, 15, 15, 0);
+}
+
+TEST(MatrixFragmentLayoutTest, MapsLaneGroupLowSubwordCoordinates) {
+  loom_matrix_fragment_layout_t layout = LaneGroupLowSubwordLayout();
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0, 0, 0,
+                   kRowColumn, 0, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 15, 3, 0,
+                   kRowColumn, 3, 15, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 16, 0, 0,
+                   kRowColumn, 4, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3, 0,
+                   kRowColumn, 15, 15, 0);
+
+  loom_matrix_fragment_coordinate_t coordinate = {};
+  EXPECT_FALSE(loom_matrix_fragment_coordinate(
+      &layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3, 1, &coordinate));
+  ExpectPhysicalElementCount(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                             RowColumn(15, 15), 1);
+  ExpectPhysicalElement(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                        RowColumn(15, 15), 0, 63, 3, 0);
 }
 
 TEST(MatrixFragmentLayoutTest, RejectsOutOfRangeElements) {

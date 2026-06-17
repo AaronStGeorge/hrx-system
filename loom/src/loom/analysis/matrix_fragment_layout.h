@@ -53,6 +53,9 @@ typedef enum loom_matrix_fragment_map_kind_e {
   // Row is register-interleaved by the lane group; column is lane mod N; only
   // the low packed subword element carries a logical coordinate.
   LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD = 7,
+  // Row is register-local within a lane group; column is lane mod N; only the
+  // low packed subword element carries a logical coordinate.
+  LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD = 8,
 } loom_matrix_fragment_map_kind_t;
 
 typedef struct loom_matrix_fragment_tile_shape_t {

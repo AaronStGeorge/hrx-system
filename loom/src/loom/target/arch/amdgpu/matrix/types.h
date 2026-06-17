@@ -187,6 +187,14 @@ typedef enum loom_amdgpu_matrix_fragment_layout_kind_e {
   LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F16_16X16X16_F16 = 6,
   // RDNA3 WMMAR3 16x16x16 bf16 input, bf16 accumulator/result layout.
   LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_BF16_16X16X16_BF16 = 7,
+  // RDNA3 WMMAR3 wave64 16x16x16 f16 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16_W64 = 8,
+  // RDNA3 WMMAR3 wave64 16x16x16 bf16 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_BF16_W64 = 9,
+  // RDNA3 WMMAR3 wave64 16x16x16 f16 input, f16 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F16_16X16X16_F16_W64 = 10,
+  // RDNA3 WMMAR3 wave64 16x16x16 bf16 input, bf16 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_BF16_16X16X16_BF16_W64 = 11,
 } loom_amdgpu_matrix_fragment_layout_kind_t;
 
 typedef enum loom_amdgpu_matrix_fragment_map_kind_e {
@@ -215,6 +223,10 @@ typedef enum loom_amdgpu_matrix_fragment_map_kind_e {
   // the low packed subword element carries a logical coordinate.
   LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD =
       LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD,
+  // Row is register-local within a lane group; column is lane mod N; only the
+  // low packed subword element carries a logical coordinate.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD =
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD,
 } loom_amdgpu_matrix_fragment_map_kind_t;
 
 typedef enum loom_amdgpu_matrix_contract_flag_bits_e {

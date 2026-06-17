@@ -284,9 +284,16 @@ static bool loom_amdgpu_fragment_memory_can_narrow_result_store(
 
 static bool loom_amdgpu_fragment_memory_role_uses_low_subword(
     const loom_amdgpu_matrix_fragment_role_layout_t* role_layout) {
-  return role_layout != NULL &&
-         role_layout->map_kind ==
-             LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD;
+  if (role_layout == NULL) {
+    return false;
+  }
+  switch (role_layout->map_kind) {
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD:
+      return true;
+    default:
+      return false;
+  }
 }
 
 static bool loom_amdgpu_fragment_memory_payload_matches_role_storage(
@@ -607,6 +614,7 @@ static bool loom_amdgpu_fragment_memory_fill_view_strides(
         packed_axis = 0;
         break;
       case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD:
+      case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD:
         return true;
       default:
         return loom_amdgpu_fragment_memory_reject(
@@ -1217,6 +1225,7 @@ static bool loom_amdgpu_fragment_memory_register_terms(
                                 plan->axis_byte_strides[0];
       return true;
     case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN:
+    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD:
       *out_lane_mod_stride = plan->axis_byte_strides[1];
       if (!loom_amdgpu_fragment_memory_scale_stride_u32(
               plan->register_count, plan->axis_byte_strides[0],
