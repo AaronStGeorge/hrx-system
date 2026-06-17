@@ -22,10 +22,32 @@ COMMIT_MSG_SPEC.loader.exec_module(commit_msg)
 
 
 class CommitMessageTest(unittest.TestCase):
-    def diagnostic_texts(self, message: str) -> list[str]:
+    def diagnostic_texts(
+        self,
+        message: str,
+        *,
+        changed_paths: list[str] | None = None,
+    ) -> list[str]:
         return [
             diagnostic.text
-            for diagnostic in commit_msg.validate_commit_message_text(message)
+            for diagnostic in commit_msg.validate_commit_message_text(
+                message,
+                changed_paths=changed_paths or [],
+            )
+        ]
+
+    def diagnostic_messages(
+        self,
+        message: str,
+        *,
+        changed_paths: list[str] | None = None,
+    ) -> list[str]:
+        return [
+            diagnostic.message
+            for diagnostic in commit_msg.validate_commit_message_text(
+                message,
+                changed_paths=changed_paths or [],
+            )
         ]
 
     def test_allows_normal_paragraphs_and_loom_tools(self):
@@ -50,7 +72,7 @@ class CommitMessageTest(unittest.TestCase):
 
     def test_rejects_literal_carriage_return_escape(self):
         self.assertEqual(
-            self.diagnostic_texts("Subject\n\nBody with \\r escape.\n"),
+            self.diagnostic_texts("[Infra] Subject\n\nBody with \\r escape.\n"),
             [r"\r"],
         )
 
@@ -78,7 +100,7 @@ class CommitMessageTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             message_path = Path(temporary_directory) / "COMMIT_EDITMSG"
             message_path.write_text(
-                "Subject\n\nReferences loom-20r1y.\n",
+                "[Infra] Subject\n\nReferences loom-20r1y.\n",
                 encoding="utf-8",
             )
 
@@ -86,6 +108,69 @@ class CommitMessageTest(unittest.TestCase):
 
         self.assertEqual(
             [diagnostic.text for diagnostic in diagnostics], ["loom-20r1y"]
+        )
+
+    def test_rejects_missing_subject_tag_with_path_suggestions(self):
+        diagnostics = commit_msg.validate_commit_message_text(
+            "Update race lowering\n\nBody.\n",
+            changed_paths=[
+                "loom/src/loom/target/arch/amdgpu/lower/sanitizer.c",
+                "runtime/src/iree/hal/drivers/amdgpu/device.c",
+            ],
+        )
+
+        self.assertEqual(
+            [diagnostic.message for diagnostic in diagnostics],
+            ["subject line must start with a bracketed subsystem tag"],
+        )
+        self.assertIn("[Loom/AMDGPU]", diagnostics[0].hint)
+        self.assertIn("[HAL/AMDGPU]", diagnostics[0].hint)
+
+    def test_rejects_missing_subject_description(self):
+        self.assertEqual(
+            self.diagnostic_messages("[Infra]\n\nBody.\n"),
+            ["subject line must include a description after the tag"],
+        )
+
+    def test_rejects_long_subject(self):
+        subject = "[Infra] " + "x" * 80
+        self.assertEqual(
+            self.diagnostic_messages(subject + "\n\nBody.\n"),
+            ["subject line is 88 characters; keep it at or below 72"],
+        )
+
+    def test_rejects_long_body_lines_outside_code_blocks(self):
+        long_line = "This body line is intentionally too long for commit prose " + (
+            "because it should be wrapped."
+        )
+        self.assertEqual(
+            self.diagnostic_messages(f"[Infra] Subject\n\n{long_line}\n"),
+            [
+                f"line is {len(long_line)} characters; keep commit message "
+                "body lines at or below 72"
+            ],
+        )
+
+    def test_allows_long_lines_inside_code_blocks(self):
+        long_line = "x" * 120
+        self.assertEqual(
+            self.diagnostic_messages(
+                f"[Infra] Subject\n\n```text\n{long_line}\n```\nWrapped prose.\n"
+            ),
+            [],
+        )
+
+    def test_ranks_tag_suggestions_from_paths(self):
+        self.assertEqual(
+            commit_msg.tag_suggestions_for_paths(
+                [
+                    "loom/src/loom/target/arch/amdgpu/lower/sanitizer.c",
+                    "loom/py/loom/dialect/sanitizer/defs.py",
+                    "libhrx/src/libhrx/runtime.c",
+                    "build_tools/lefthook/commit_msg.py",
+                ]
+            )[:4],
+            ["[Loom]", "[Loom/AMDGPU]", "[HRX]", "[Infra]"],
         )
 
 

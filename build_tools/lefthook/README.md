@@ -38,11 +38,21 @@ python dev.py cmake fix
 commit-scope, staged, and explicit-path test-bearing runs. `presubmit` is
 non-mutating and runs the full-tree CI-shaped profile.
 
-The `commit-msg` hook validates the final Git commit message text. It rejects
-literal `\n`/`\r` escape sequences that should have been real paragraph breaks
-and bead-shaped issue identifiers such as `loom-20r1y`, `loom-qof73.1`, or
-`bd-123`. Legitimate tool names such as `loom-check`, `loom-compile`, and
-`loom-opt` are not issue identifiers and are accepted.
+The `commit-msg` hook validates the final Git commit message text. The subject
+line must start with a bracketed subsystem tag such as `[Loom]`, `[HRX]`,
+`[HAL]`, `[Runtime]`, `[Infra]`, or `[CI]`, followed by the short description.
+Slash-qualified tags such as `[HAL/AMDGPU]`, `[Loom/WASM]`, or `[Runtime/VM]`
+are accepted when the narrower ownership surface is useful.
+
+Subjects and prose body lines must stay at or below 72 characters. Long lines
+inside fenced code blocks are accepted so literal examples can remain faithful.
+When a tag is missing, the hook ranks suggested tags from the staged paths and
+prints the paths used for the suggestion so the next edit is obvious.
+
+The hook also rejects literal `\n`/`\r` escape sequences that should have been
+real paragraph breaks and bead-shaped issue identifiers such as `loom-20r1y`,
+`loom-qof73.1`, or `bd-123`. Legitimate tool names such as `loom-check`,
+`loom-compile`, and `loom-opt` are not issue identifiers and are accepted.
 
 Normal presubmit output is terse: major phases, named checks, pass/fail status,
 and failure details. Large captured failures print the beginning and end with an
