@@ -29,6 +29,8 @@ typedef struct iree_hal_amdgpu_executable_cache_t {
   iree_hal_amdgpu_feedback_state_t* feedback_state;
   // Borrowed logical-device ASAN state used to publish executable globals.
   iree_hal_amdgpu_asan_state_t* asan_state;
+  // Borrowed logical-device TSAN state used to publish executable globals.
+  iree_hal_amdgpu_tsan_state_t* tsan_state;
   // Borrowed logical-device profiling metadata registry.
   iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata;
 } iree_hal_amdgpu_executable_cache_t;
@@ -47,6 +49,7 @@ iree_status_t iree_hal_amdgpu_executable_cache_create(
     const iree_hal_amdgpu_topology_t* topology,
     iree_hal_amdgpu_feedback_state_t* feedback_state,
     iree_hal_amdgpu_asan_state_t* asan_state,
+    iree_hal_amdgpu_tsan_state_t* tsan_state,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_string_view_t identifier, iree_allocator_t host_allocator,
     iree_hal_executable_cache_t** out_executable_cache) {
@@ -75,6 +78,7 @@ iree_status_t iree_hal_amdgpu_executable_cache_create(
   executable_cache->topology = topology;
   executable_cache->feedback_state = feedback_state;
   executable_cache->asan_state = asan_state;
+  executable_cache->tsan_state = tsan_state;
   executable_cache->profile_metadata = profile_metadata;
 
   *out_executable_cache = (iree_hal_executable_cache_t*)executable_cache;
@@ -142,8 +146,8 @@ static iree_status_t iree_hal_amdgpu_executable_cache_prepare_executable(
       executable_cache->device, executable_cache->libhsa,
       executable_cache->topology, executable_params, executable_id,
       executable_cache->feedback_state, executable_cache->asan_state,
-      executable_cache->profile_metadata, executable_cache->host_allocator,
-      out_executable);
+      executable_cache->tsan_state, executable_cache->profile_metadata,
+      executable_cache->host_allocator, out_executable);
 }
 
 static const iree_hal_executable_cache_vtable_t

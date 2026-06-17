@@ -77,6 +77,9 @@ typedef struct iree_hal_amdgpu_feedback_state_t {
   // Policy applied after a valid ASAN report is emitted.
   iree_hal_amdgpu_asan_report_policy_t asan_report_policy;
 
+  // Policy applied after a valid TSAN report is emitted.
+  iree_hal_amdgpu_tsan_report_policy_t tsan_report_policy;
+
   // Number of entries in |device_states|.
   iree_host_size_t device_state_count;
 
@@ -93,7 +96,7 @@ typedef struct iree_hal_amdgpu_feedback_state_t {
 // Initializes |out_state| from logical-device options.
 //
 // When feedback is disabled this leaves |out_state| zeroed and returns OK.
-// ASAN currently enables feedback because ASAN report packets need a serviced
+// Sanitizers currently enable feedback because report packets need a serviced
 // device-to-host transport; other feedback clients can enable the same state
 // once they have packet schemas and handlers.
 iree_status_t iree_hal_amdgpu_feedback_state_initialize(

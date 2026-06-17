@@ -227,6 +227,8 @@ iree_runtime_cc_library(
         "system.h",
         "transient_buffer.c",
         "transient_buffer.h",
+        "tsan_state.c",
+        "tsan_state.h",
         "virtual_queue.h",
     ],
     hdrs = [
@@ -338,6 +340,7 @@ iree_runtime_cc_library(
         "slab_provider.h",
         "system.h",
         "transient_buffer.h",
+        "tsan_state.h",
         "virtual_queue.h",
     ],
     deps = [

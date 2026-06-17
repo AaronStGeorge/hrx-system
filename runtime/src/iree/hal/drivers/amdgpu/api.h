@@ -91,6 +91,18 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
 #define IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE \
   ((iree_device_size_t)256 * 1024 * 1024)
 
+// Device-visible TSAN shadow entry size in bytes.
+#define IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE 8u
+
+// Default log2 local-memory bytes represented by one TSAN shadow entry.
+#define IREE_HAL_AMDGPU_TSAN_DEFAULT_MEMORY_GRANULE_SHIFT 2u
+
+// Default local-memory byte capacity represented for each workgroup.
+#define IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_LOCAL_MEMORY_SIZE (64u * 1024u)
+
+// Default number of workgroup ordinals represented by one dispatch shadow.
+#define IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_CAPACITY 256u
+
 // Selects how AMDGPU ASAN reports affect the owning logical device.
 typedef enum iree_hal_amdgpu_asan_report_policy_e {
   // Emit ASAN reports through the device event sink and keep the logical device
@@ -100,6 +112,16 @@ typedef enum iree_hal_amdgpu_asan_report_policy_e {
   // device so queue users observe the violation as device loss.
   IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE = 1,
 } iree_hal_amdgpu_asan_report_policy_t;
+
+// Selects how AMDGPU TSAN reports affect the owning logical device.
+typedef enum iree_hal_amdgpu_tsan_report_policy_e {
+  // Emit TSAN reports through the device event sink and keep the logical device
+  // usable for subsequent work.
+  IREE_HAL_AMDGPU_TSAN_REPORT_POLICY_REPORT_ONLY = 0,
+  // Emit TSAN reports through the device event sink and then fail the logical
+  // device so queue users observe the violation as device loss.
+  IREE_HAL_AMDGPU_TSAN_REPORT_POLICY_FAIL_DEVICE = 1,
+} iree_hal_amdgpu_tsan_report_policy_t;
 
 // Selects how ASAN shadow virtual address space is mapped.
 typedef enum iree_hal_amdgpu_asan_shadow_mode_e {
@@ -240,6 +262,24 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
     // Freed allocation mapping budget in bytes kept resident and poisoned.
     iree_device_size_t quarantine_size;
   } asan;
+
+  // Optional TSAN device-side race checking support.
+  struct {
+    // True to reserve TSAN shadow state for the logical device.
+    uint64_t enabled : 1;
+
+    // Policy applied after a valid TSAN report is emitted.
+    iree_hal_amdgpu_tsan_report_policy_t report_policy;
+
+    // Log2 local-memory bytes represented by one shadow entry.
+    uint32_t memory_granule_shift;
+
+    // Local-memory byte capacity represented for each workgroup.
+    uint32_t workgroup_local_memory_size;
+
+    // Maximum workgroup ordinals represented by one dispatch shadow.
+    uint32_t workgroup_capacity;
+  } tsan;
 
   // Preallocates a reasonable number of resources in pools to reduce initial
   // execution latency.

@@ -12,8 +12,22 @@
 
 #include "iree/hal/drivers/amdgpu/abi/common.h"
 
+// Name of the executable global containing |iree_hal_amdgpu_tsan_config_t|.
+#define IREE_HAL_AMDGPU_TSAN_CONFIG_GLOBAL_NAME "iree_tsan_config"
+
+// ABI version for |iree_hal_amdgpu_tsan_config_t|.
+#define IREE_HAL_AMDGPU_TSAN_CONFIG_ABI_VERSION_0 0u
+
 // ABI version for |iree_hal_amdgpu_tsan_report_t|.
 #define IREE_HAL_AMDGPU_TSAN_REPORT_ABI_VERSION_0 0u
+
+// Bitfield specifying properties of the TSAN configuration.
+typedef uint32_t iree_hal_amdgpu_tsan_config_flags_t;
+enum iree_hal_amdgpu_tsan_config_flag_bits_t {
+  IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_NONE = 0u,
+  // TSAN race checking is enabled for the owning logical device.
+  IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_ENABLED = 1u << 0,
+};
 
 // TSAN check kind that triggered a report.
 typedef uint32_t iree_hal_amdgpu_tsan_check_kind_t;
@@ -62,6 +76,47 @@ enum iree_hal_amdgpu_tsan_report_flag_bits_t {
   // Prior access was an atomic memory operation.
   IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_PRIOR_ATOMIC = 1u << 1,
 };
+
+// Runtime-published TSAN configuration read by instrumented device code.
+//
+// The first implementation uses one shadow slot per physical device. The ABI is
+// intentionally shaped so a queue-sharded executable can later publish
+// queue-specific AQL ring coordinates without changing the device-side field
+// contract: a dispatch pointer maps to a dispatch slot when |queue_aql_base| is
+// non-zero, otherwise slot zero is used.
+typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
+  // Size of this record in bytes for forward-compatible parsing.
+  uint32_t record_length;
+  // ABI version of this record layout.
+  uint32_t abi_version;
+  // Flags describing enabled TSAN runtime facilities.
+  iree_hal_amdgpu_tsan_config_flags_t flags;
+  // Log2 application memory bytes represented by one shadow entry.
+  uint32_t memory_granule_shift;
+  // Device-visible base of the queue or device shadow allocation.
+  uint64_t shadow_base;
+  // Total bytes in the shadow allocation.
+  uint64_t shadow_size;
+  // Bytes reserved for one dispatch slot.
+  uint64_t dispatch_shadow_stride;
+  // Bytes reserved for one workgroup inside a dispatch slot.
+  uint64_t workgroup_shadow_stride;
+  // Maximum workgroup ordinals represented by one dispatch slot.
+  uint32_t workgroup_capacity;
+  // Bytes in each shadow entry.
+  uint32_t shadow_entry_size;
+  // Device-visible base of the owning queue AQL ring, or 0 for slot zero.
+  uint64_t queue_aql_base;
+  // Power-of-two AQL packet slot mask used with |queue_aql_base|.
+  uint64_t queue_aql_slot_mask;
+  // Reserved for future TSAN runtime state. Must be zero.
+  uint64_t reserved[3];
+} iree_hal_amdgpu_tsan_config_t;
+IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_config_t) == 96,
+                          "TSAN config size is part of the device ABI");
+IREE_AMDGPU_STATIC_ASSERT(
+    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_config_t, shadow_base) == 16,
+    "TSAN config shadow fields must follow the fixed header");
 
 // TSAN diagnostic payload carried by feedback packets of kind TSAN.
 //

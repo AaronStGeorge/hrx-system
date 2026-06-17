@@ -116,6 +116,33 @@ iree_runtime_cc_test(
 )
 
 iree_runtime_cc_library(
+    name = "tsan_executable_test",
+    testonly = True,
+    srcs = ["tsan_executable_test.cc"],
+    deps = [
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/hal/drivers/amdgpu:headers",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+    ],
+    alwayslink = True,
+)
+
+iree_runtime_cc_test(
+    name = "tsan_executable_tests",
+    srcs = ["//runtime/src/iree/hal/cts/util:test_main.cc"],
+    args = ["--amdgpu_tsan=true"],
+    deps = [
+        ":backends",
+        ":testdata_amdgpu",
+        ":tsan_executable_test",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/hal/cts/util:registry",
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/testing:gtest",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "manual_asan_executable_test",
     testonly = True,
     srcs = ["manual_asan_executable_test.cc"],
