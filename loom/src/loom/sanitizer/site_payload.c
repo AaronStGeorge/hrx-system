@@ -8,19 +8,21 @@
 
 #include <string.h>
 
-iree_string_view_t loom_sanitizer_assertion_kind_name(
-    loom_sanitizer_assertion_kind_t assertion_kind) {
-  switch (assertion_kind) {
-    case LOOM_SANITIZER_ASSERTION_KIND_UNKNOWN:
+iree_string_view_t loom_sanitizer_site_kind_name(
+    loom_sanitizer_site_kind_t site_kind) {
+  switch (site_kind) {
+    case LOOM_SANITIZER_SITE_KIND_UNKNOWN:
       return IREE_SV("unknown");
-    case LOOM_SANITIZER_ASSERTION_KIND_ACCESS:
+    case LOOM_SANITIZER_SITE_KIND_ACCESS:
       return IREE_SV("access");
-    case LOOM_SANITIZER_ASSERTION_KIND_VALUE:
+    case LOOM_SANITIZER_SITE_KIND_VALUE:
       return IREE_SV("value");
-    case LOOM_SANITIZER_ASSERTION_KIND_OPERATION:
+    case LOOM_SANITIZER_SITE_KIND_OPERATION:
       return IREE_SV("operation");
-    case LOOM_SANITIZER_ASSERTION_KIND_LAYOUT:
+    case LOOM_SANITIZER_SITE_KIND_LAYOUT:
       return IREE_SV("layout");
+    case LOOM_SANITIZER_SITE_KIND_RACE:
+      return IREE_SV("race");
     default:
       return iree_string_view_empty();
   }
@@ -59,6 +61,8 @@ iree_string_view_t loom_sanitizer_check_kind_name(
       return IREE_SV("value_relation");
     case LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS:
       return IREE_SV("value_constraints");
+    case LOOM_SANITIZER_CHECK_KIND_DATA_RACE:
+      return IREE_SV("data_race");
     default:
       return iree_string_view_empty();
   }
@@ -166,7 +170,7 @@ iree_status_t loom_sanitizer_site_payload_encode(
   }
 
   storage.data[0] = LOOM_SANITIZER_SITE_PAYLOAD_CURRENT_VERSION;
-  storage.data[1] = payload->assertion_kind;
+  storage.data[1] = payload->site_kind;
   storage.data[2] = payload->check_kind;
   storage.data[3] = payload->provenance_kind;
   storage.data[4] = payload->lane_policy;
@@ -207,7 +211,7 @@ iree_status_t loom_sanitizer_site_payload_decode(
                             version);
   }
 
-  out_payload->assertion_kind = data.data[1];
+  out_payload->site_kind = data.data[1];
   out_payload->check_kind = data.data[2];
   out_payload->provenance_kind = data.data[3];
   out_payload->lane_policy = data.data[4];

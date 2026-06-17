@@ -8,7 +8,7 @@
 //
 // Site tables are compact read-only blobs emitted with executable artifacts.
 // Runtime reports carry dense site IDs; host diagnostics use this table to map
-// those IDs back to assertion kind, source span, and optional sanitizer payload
+// those IDs back to site kind, source span, and optional sanitizer payload
 // metadata. The table is useful but not required for execution: stripped builds
 // may report unknown source metadata while preserving distinct site IDs.
 

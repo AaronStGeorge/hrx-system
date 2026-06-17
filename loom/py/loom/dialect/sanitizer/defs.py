@@ -9,6 +9,7 @@
 from loom.assembly import (
     ARROW,
     COLON,
+    AttrDict,
     IndexList,
     PredicateList,
     Ref,
@@ -18,10 +19,14 @@ from loom.assembly import (
     TypeOf,
     TypesOf,
 )
+from loom.dialect.atomic import AtomicOrdering, AtomicScope
+from loom.dialect.memory import MemorySpace
 from loom.dsl import (
     ANY,
+    ATTR_TYPE_BOOL,
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64_ARRAY,
+    CONVERGENT,
     FACT_IDENTITY,
     INDEX,
     REFINABLE_RESULT_TYPE_REFS,
@@ -42,10 +47,13 @@ from loom.dsl import (
 __all__ = [
     "ALL_SANITIZER_OPS",
     "SanitizerAccessKind",
+    "SanitizerRaceAccessKind",
     "sanitizer_assert_access",
     "sanitizer_assert_layout",
     "sanitizer_assert_op",
     "sanitizer_assert_value",
+    "sanitizer_race_access",
+    "sanitizer_race_sync",
     "sanitizer_ops",
 ]
 
@@ -73,6 +81,21 @@ SanitizerAccessKind = EnumDef(
         ),
     ],
     doc="Logical memory access kind covered by a sanitizer access assertion.",
+)
+
+
+SanitizerRaceAccessKind = EnumDef(
+    "SanitizerRaceAccessKind",
+    [
+        EnumCase("read", 0, doc="Race observation covers a logical read access."),
+        EnumCase("write", 1, doc="Race observation covers a logical write access."),
+        EnumCase(
+            "read_write",
+            2,
+            doc="Race observation covers a logical read-modify-write access.",
+        ),
+    ],
+    doc="Logical memory access kind covered by a sanitizer race observation.",
 )
 
 
@@ -266,9 +289,128 @@ sanitizer_assert_layout = Op(
 )
 
 
+# ============================================================================
+# sanitizer.race.access
+# ============================================================================
+
+sanitizer_race_access = Op(
+    "sanitizer.race.access",
+    group=sanitizer_ops,
+    doc=(
+        "Observe a logical indexed view access for race detection. Unlike "
+        "sanitizer.assert.access, this op does not assert that the access is "
+        "individually valid and does not refine the continuing path. It records "
+        "a memory event that target materialization can compare against prior "
+        "unordered events in the selected race detector."
+    ),
+    operands=[
+        Operand("view", VIEW, doc="Typed view being accessed."),
+        Operand(
+            "indices",
+            INDEX,
+            variadic=True,
+            doc="Dynamic logical element indices.",
+        ),
+    ],
+    attrs=[
+        AttrDef(
+            "kind",
+            ATTR_TYPE_ENUM,
+            enum_def=SanitizerRaceAccessKind,
+            doc="Logical access kind being observed.",
+        ),
+        AttrDef(
+            "atomic",
+            ATTR_TYPE_BOOL,
+            default=False,
+            elide_default=True,
+            doc="Whether the observed access is an atomic memory operation.",
+        ),
+        AttrDef(
+            "ordering",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicOrdering,
+            optional=True,
+            doc="Atomic memory ordering when atomic is true.",
+        ),
+        AttrDef(
+            "scope",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicScope,
+            optional=True,
+            doc="Atomic synchronization scope when atomic is true.",
+        ),
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical element indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    traits=[UNKNOWN_EFFECTS],
+    verify="loom_sanitizer_race_access_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        AttrDict(),
+        COLON,
+        TypeOf("view"),
+    ],
+    examples=[
+        "sanitizer.race.access<read> %view[%lane] : view<64xi32, #dense>",
+        "sanitizer.race.access<read_write> %view[%lane] {atomic = true, ordering = acq_rel, scope = workgroup} : view<64xi32, #dense>",
+    ],
+)
+
+
+# ============================================================================
+# sanitizer.race.sync
+# ============================================================================
+
+sanitizer_race_sync = Op(
+    "sanitizer.race.sync",
+    group=sanitizer_ops,
+    doc=(
+        "Observe a synchronization boundary for race detection. The original "
+        "synchronization operation remains the semantic barrier or fence; this "
+        "op records the boundary needed by race-detector materialization."
+    ),
+    attrs=[
+        AttrDef(
+            "memory_space",
+            ATTR_TYPE_ENUM,
+            enum_def=MemorySpace,
+            doc="Memory space whose accesses are ordered by this boundary.",
+        ),
+        AttrDef(
+            "ordering",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicOrdering,
+            doc="Memory ordering applied to the synchronized accesses.",
+        ),
+        AttrDef(
+            "scope",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicScope,
+            doc="Synchronization scope.",
+        ),
+    ],
+    traits=[UNKNOWN_EFFECTS, CONVERGENT],
+    format=[
+        TemplateParam("memory_space"),
+        AttrDict(),
+    ],
+    examples=[
+        "sanitizer.race.sync<workgroup> {ordering = acq_rel, scope = workgroup}",
+    ],
+)
+
+
 ALL_SANITIZER_OPS: tuple[Op, ...] = (
     sanitizer_assert_access,
     sanitizer_assert_value,
     sanitizer_assert_op,
     sanitizer_assert_layout,
+    sanitizer_race_access,
+    sanitizer_race_sync,
 )

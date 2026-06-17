@@ -204,7 +204,7 @@ static loom_sanitizer_check_kind_t loom_sanitizer_check_kind_for_predicates(
 
 static iree_status_t loom_sanitizer_make_site_location(
     loom_module_t* module, loom_location_id_t source_location,
-    loom_sanitizer_assertion_kind_t assertion_kind,
+    loom_sanitizer_site_kind_t site_kind,
     loom_sanitizer_check_kind_t check_kind,
     loom_sanitizer_provenance_kind_t provenance_kind,
     loom_sanitizer_lane_policy_t lane_policy,
@@ -212,7 +212,7 @@ static iree_status_t loom_sanitizer_make_site_location(
     loom_location_id_t* out_location) {
   uint8_t payload_storage[LOOM_SANITIZER_SITE_PAYLOAD_HEADER_LENGTH] = {0};
   const loom_sanitizer_site_payload_t payload = {
-      .assertion_kind = assertion_kind,
+      .site_kind = site_kind,
       .check_kind = check_kind,
       .provenance_kind = provenance_kind,
       .lane_policy = lane_policy,
@@ -511,7 +511,7 @@ static iree_status_t loom_sanitizer_build_value_assertion(
       module, rewriter, values, &result_types));
   loom_location_id_t site_location = LOOM_LOCATION_UNKNOWN;
   IREE_RETURN_IF_ERROR(loom_sanitizer_make_site_location(
-      module, source_location, LOOM_SANITIZER_ASSERTION_KIND_VALUE,
+      module, source_location, LOOM_SANITIZER_SITE_KIND_VALUE,
       loom_sanitizer_check_kind_for_predicates(predicates, predicate_count),
       provenance_kind, LOOM_SANITIZER_LANE_POLICY_SCALAR,
       LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL, &site_location));
@@ -571,7 +571,7 @@ static iree_status_t loom_sanitizer_build_access_assertion(
     loom_location_id_t source_location, loom_op_t** out_op) {
   loom_location_id_t site_location = LOOM_LOCATION_UNKNOWN;
   IREE_RETURN_IF_ERROR(loom_sanitizer_make_site_location(
-      module, source_location, LOOM_SANITIZER_ASSERTION_KIND_ACCESS,
+      module, source_location, LOOM_SANITIZER_SITE_KIND_ACCESS,
       LOOM_SANITIZER_CHECK_KIND_ACCESS_RANGE,
       LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT,
       LOOM_SANITIZER_LANE_POLICY_SCALAR, LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL,
