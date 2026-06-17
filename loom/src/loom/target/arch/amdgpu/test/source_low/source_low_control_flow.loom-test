@@ -1545,43 +1545,24 @@ func.def target(@target) @divergent_if_i1_computed_feeds_vgpr_select(%values: ve
 // ----
 low.func.def target(@target) abi(hal_kernel) @divergent_if_i1_computed_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %upper: reg<amdgpu.sgpr>, %fallback: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %27 = v_mov_b32_copy %limit
-  %lane_condition = v_cmp_lt_i32 %lane, %27
-  %29, %30 = s_and_saveexec_b64 %lane_condition
-  low.cond_br %30, ^_bb1, ^_bb5 : reg<amdgpu.scc>
-^_bb1:
-  %40 = v_mov_b32_copy %upper
-  %inside_upper = v_cmp_lt_i32 %lane, %40
-  low.br ^_bb4(%inside_upper: reg<amdgpu.sgpr x2>)
-^_bb2:
-  %42 = v_mov_b32_copy %fallback
-  %43 = v_mov_b32_copy %limit
-  %has_fallback = v_cmp_ne_i32 %42, %43
-  low.br ^_bb7
-^_bb3(%selected_condition$23: reg<amdgpu.sgpr x2>):
-  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition$23
+  %24 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %24
+  %26 = v_mov_b32_copy %upper
+  %inside_upper = v_cmp_lt_i32 %lane, %26
+  %has_fallback = s_cmp_lg_i32 %fallback, %limit
+  %29 = s_and_b64 %lane_condition, %inside_upper
+  %30 = s_mov_b64_exec_read
+  %31 = slice %30[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %32 = slice %30[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %33 = s_mov_b32 0
+  %34 = s_cselect_b32 %31, %33, %has_fallback
+  %35 = s_cselect_b32 %32, %33, %has_fallback
+  %36 = concat(%34, %35) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %38 = s_xor_b64 %lane_condition, %30
+  %39 = s_and_b64 %38, %36
+  %selected_condition = s_or_b64 %29, %39
+  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition
   return %result
-^_bb4(%selected_condition$24: reg<amdgpu.sgpr x2>):
-  s_mov_b64_exec %29
-  %38 = s_and_b64 %29, %lane_condition
-  %39 = s_xor_b64_exec %38
-  low.cond_br %39, ^_bb2, ^_bb6 : reg<amdgpu.scc>
-^_bb5:
-  s_mov_b64_exec %29
-  %31 = s_mov_b32 0
-  %32 = concat(%31, %31) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  low.br ^_bb4(%32: reg<amdgpu.sgpr x2>)
-^_bb6:
-  s_mov_b64_exec %29
-  low.br ^_bb3(%selected_condition$24: reg<amdgpu.sgpr x2>)
-^_bb7:
-  s_mov_b64_exec %29
-  %33 = s_and_b64 %29, %lane_condition
-  %34 = s_and_b64 %33, %selected_condition$24
-  %35 = s_xor_b64 %33, %29
-  %36 = s_and_b64 %35, %has_fallback
-  %37 = s_or_b64 %34, %36
-  low.br ^_bb3(%37: reg<amdgpu.sgpr x2>)
 }
 
 // ====

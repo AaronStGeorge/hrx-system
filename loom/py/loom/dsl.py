@@ -4196,7 +4196,7 @@ def comparison_op(
         results=[Result("result", I1)],
         attrs=op_attrs,
         constraints=[SameType("lhs", "rhs")],
-        traits=[PURE],
+        traits=[PURE, SAFE_TO_SPECULATE],
         format=fmt,
         **kwargs,
     )

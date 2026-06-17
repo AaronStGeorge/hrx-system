@@ -911,6 +911,11 @@ iree_status_t loom_scf_switch_canonicalize(loom_op_t* op,
 // scf.if
 //===----------------------------------------------------------------------===//
 
+enum {
+  // Maximum non-fact work per arm that if-conversion may execute eagerly.
+  LOOM_SCF_IF_SELECTIFY_MAX_SPECULATED_OPS = 4,
+};
+
 static bool loom_scf_if_regions_are_discardable(const loom_module_t* module,
                                                 loom_op_t* op) {
   // Read-only branch work with no yielded observer is dead. Writes,
@@ -1148,6 +1153,77 @@ static iree_status_t loom_scf_if_build_select(loom_op_t* op, loom_type_t type,
   return iree_ok_status();
 }
 
+static bool loom_scf_if_op_is_strippable_fact_identity(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_trait_flags_t traits) {
+  if (loom_traits_are_fact_identity(traits) &&
+      iree_any_bit_set(traits, LOOM_TRAIT_PURE) &&
+      !iree_any_bit_set(traits, LOOM_TRAIT_HINT | LOOM_TRAIT_CONVERGENT) &&
+      !loom_traits_may_read(traits) && !loom_traits_may_write(traits) &&
+      op->operand_count == 1 && op->result_count == 1) {
+    return loom_type_equal(
+        loom_module_value_type(module, loom_op_operands(op)[0]),
+        loom_module_value_type(module, loom_op_const_results(op)[0]));
+  }
+  return false;
+}
+
+static bool loom_scf_if_op_can_selectify_speculate(const loom_module_t* module,
+                                                   const loom_op_t* op) {
+  if (!op || iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) return false;
+  if (op->region_count != 0 || op->tied_result_count != 0) return false;
+  loom_trait_flags_t traits = loom_op_effective_traits(module, op);
+  if (loom_scf_if_op_is_strippable_fact_identity(module, op, traits)) {
+    return true;
+  }
+  if (!iree_any_bit_set(traits, LOOM_TRAIT_PURE)) return false;
+  if (iree_any_bit_set(traits, LOOM_TRAIT_HINT | LOOM_TRAIT_CONVERGENT)) {
+    return false;
+  }
+  if (loom_traits_may_read(traits) || loom_traits_may_write(traits)) {
+    return false;
+  }
+  return loom_traits_are_safe_to_speculate(traits) ||
+         iree_any_bit_set(traits, LOOM_TRAIT_CONSTANT_LIKE);
+}
+
+static bool loom_scf_if_block_can_selectify_speculate(
+    const loom_module_t* module, const loom_block_t* block,
+    const loom_op_t* yield) {
+  if (!block || block->arg_count != 0 || !yield) return false;
+  uint16_t speculative_op_count = 0;
+  for (const loom_op_t* child_op = block->first_op; child_op != yield;
+       child_op = child_op->next_op) {
+    if (!loom_scf_if_op_can_selectify_speculate(module, child_op)) {
+      return false;
+    }
+    loom_trait_flags_t traits = loom_op_effective_traits(module, child_op);
+    if (!loom_scf_if_op_is_strippable_fact_identity(module, child_op, traits) &&
+        ++speculative_op_count > LOOM_SCF_IF_SELECTIFY_MAX_SPECULATED_OPS) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_scf_if_strip_branch_fact_identities(
+    loom_rewriter_t* rewriter, loom_block_t* block, const loom_op_t* yield) {
+  loom_op_t* child_op = block->first_op;
+  while (child_op && child_op != yield) {
+    loom_op_t* next_child_op = child_op->next_op;
+    loom_trait_flags_t traits =
+        loom_op_effective_traits(rewriter->module, child_op);
+    if (loom_scf_if_op_is_strippable_fact_identity(rewriter->module, child_op,
+                                                   traits)) {
+      loom_value_id_t replacement = loom_op_operands(child_op)[0];
+      IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+          rewriter, child_op, &replacement, 1));
+    }
+    child_op = next_child_op;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_scf_if_selectify_yield_only(
     loom_op_t* op, loom_rewriter_t* rewriter) {
   if (op->result_count == 0 || op->tied_result_count != 0) {
@@ -1209,6 +1285,80 @@ static iree_status_t loom_scf_if_selectify_yield_only(
                                                   op->result_count);
 }
 
+static iree_status_t loom_scf_if_selectify_speculatable_values(
+    loom_op_t* op, loom_rewriter_t* rewriter) {
+  if (op->result_count == 0 || op->tied_result_count != 0) {
+    return iree_ok_status();
+  }
+
+  loom_region_t* then_region = loom_scf_if_then_region(op);
+  loom_region_t* else_region = loom_scf_if_else_region(op);
+  if (!else_region) return iree_ok_status();
+  loom_op_t* then_yield = loom_scf_region_terminator(then_region);
+  loom_op_t* else_yield = loom_scf_region_terminator(else_region);
+  if (!then_yield || !else_yield) return iree_ok_status();
+
+  loom_block_t* then_block = loom_region_entry_block(then_region);
+  loom_block_t* else_block = loom_region_entry_block(else_region);
+  if (!loom_scf_if_block_can_selectify_speculate(rewriter->module, then_block,
+                                                 then_yield) ||
+      !loom_scf_if_block_can_selectify_speculate(rewriter->module, else_block,
+                                                 else_yield)) {
+    return iree_ok_status();
+  }
+
+  loom_value_slice_t then_values = loom_scf_yield_values(then_yield);
+  loom_value_slice_t else_values = loom_scf_yield_values(else_yield);
+  if (then_values.count != op->result_count ||
+      else_values.count != op->result_count) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t* old_results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    loom_type_t result_type =
+        loom_module_value_type(rewriter->module, old_results[i]);
+    if (loom_scf_type_is_storage_root_or_projection(result_type) ||
+        !loom_type_equal(
+            result_type,
+            loom_module_value_type(rewriter->module, then_values.values[i])) ||
+        !loom_type_equal(
+            result_type,
+            loom_module_value_type(rewriter->module, else_values.values[i]))) {
+      return iree_ok_status();
+    }
+  }
+
+  IREE_RETURN_IF_ERROR(loom_scf_if_strip_branch_fact_identities(
+      rewriter, then_block, then_yield));
+  IREE_RETURN_IF_ERROR(loom_scf_if_strip_branch_fact_identities(
+      rewriter, else_block, else_yield));
+
+  IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
+      rewriter, then_region, then_yield, op));
+  IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
+      rewriter, else_region, else_yield, op));
+
+  loom_value_id_t* replacements = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(rewriter->arena, op->result_count,
+                                sizeof(*replacements), (void**)&replacements));
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    loom_type_t result_type =
+        loom_module_value_type(rewriter->module, old_results[i]);
+    IREE_RETURN_IF_ERROR(loom_scf_if_build_select(
+        op, result_type, then_values.values[i], else_values.values[i], rewriter,
+        &replacements[i]));
+  }
+
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, replacements, op->result_count, value_checkpoint));
+  return loom_rewriter_replace_all_uses_and_erase(rewriter, op, replacements,
+                                                  op->result_count);
+}
+
 iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
                                        loom_rewriter_t* rewriter) {
   bool condition = false;
@@ -1234,7 +1384,11 @@ iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
     IREE_RETURN_IF_ERROR(loom_scf_if_fold_exact_boolean_yields(
         op, rewriter, &exact_boolean_folded));
     if (exact_boolean_folded) return iree_ok_status();
-    return loom_scf_if_selectify_yield_only(op, rewriter);
+    IREE_RETURN_IF_ERROR(loom_scf_if_selectify_yield_only(op, rewriter));
+    if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
+      return iree_ok_status();
+    }
+    return loom_scf_if_selectify_speculatable_values(op, rewriter);
   }
 
   loom_region_t* selected_region =
