@@ -47,7 +47,7 @@ loom_amdgpu_memory_access_alloca_root_rejection_bit(
   }
 }
 
-static bool loom_amdgpu_memory_access_include_alloca_root_byte_offset(
+bool loom_amdgpu_memory_access_include_alloca_root_byte_offset(
     const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
