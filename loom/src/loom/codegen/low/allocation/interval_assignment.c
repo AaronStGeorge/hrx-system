@@ -209,7 +209,7 @@ static iree_status_t loom_low_allocation_interval_assignment_record_failure(
       const loom_low_allocation_assignment_t* assignment =
           &state->result.assignments[assignment_index];
       if (!loom_low_allocation_active_assignment_conflicts(
-              state->context->target->descriptor_set, state->context->liveness,
+              state->context->target->descriptor_set,
               state->context->unit_liveness->end_points,
               state->context->unit_liveness->end_point_count, assignment,
               &candidate, /*ignored_value_ids=*/NULL,

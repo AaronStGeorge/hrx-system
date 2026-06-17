@@ -38,14 +38,6 @@ loom_low_descriptor_set_t DescriptorSet(const loom_low_reg_class_t* reg_classes,
   return descriptor_set;
 }
 
-loom_liveness_analysis_t Liveness(const loom_liveness_block_info_t* blocks,
-                                  iree_host_size_t block_count) {
-  loom_liveness_analysis_t liveness = {};
-  liveness.blocks = blocks;
-  liveness.block_count = block_count;
-  return liveness;
-}
-
 TEST(LowAllocationActiveUnitTest, FindsAndRemovesIndexedConflicts) {
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
@@ -56,20 +48,6 @@ TEST(LowAllocationActiveUnitTest, FindsAndRemovesIndexedConflicts) {
   const loom_low_reg_class_t reg_classes[1] = {};
   const loom_low_descriptor_set_t descriptor_set =
       DescriptorSet(reg_classes, IREE_ARRAYSIZE(reg_classes));
-  const loom_value_id_t live_in_values[] = {1, 2};
-  const loom_liveness_block_info_t blocks[] = {
-      {
-          /*.block=*/nullptr,
-          /*.start_point=*/0,
-          /*.end_point=*/20,
-          /*.live_in_values=*/live_in_values,
-          /*.live_in_count=*/IREE_ARRAYSIZE(live_in_values),
-          /*.live_out_values=*/nullptr,
-          /*.live_out_count=*/0,
-      },
-  };
-  const loom_liveness_analysis_t liveness =
-      Liveness(blocks, IREE_ARRAYSIZE(blocks));
   const uint32_t unit_end_points[] = {10, 10, 10, 10};
   const loom_low_allocation_assignment_t assignments[] = {
       Assignment(/*value_id=*/1, /*descriptor_reg_class_id=*/0,
@@ -91,25 +69,25 @@ TEST(LowAllocationActiveUnitTest, FindsAndRemovesIndexedConflicts) {
   EXPECT_TRUE(loom_low_allocation_active_unit_index_contains_assignment(
       &index, /*assignment_index=*/0));
   EXPECT_TRUE(loom_low_allocation_active_unit_index_conflicts(
-      &index, &descriptor_set, &liveness, unit_end_points,
-      IREE_ARRAYSIZE(unit_end_points), assignments, IREE_ARRAYSIZE(assignments),
-      &assignments[1], /*ignored_value_ids=*/nullptr,
+      &index, &descriptor_set, unit_end_points, IREE_ARRAYSIZE(unit_end_points),
+      assignments, IREE_ARRAYSIZE(assignments), &assignments[1],
+      /*ignored_value_ids=*/nullptr,
       /*ignored_value_count=*/0));
 
   const loom_value_id_t ignored_value_ids[] = {1};
   EXPECT_FALSE(loom_low_allocation_active_unit_index_conflicts(
-      &index, &descriptor_set, &liveness, unit_end_points,
-      IREE_ARRAYSIZE(unit_end_points), assignments, IREE_ARRAYSIZE(assignments),
-      &assignments[1], ignored_value_ids, IREE_ARRAYSIZE(ignored_value_ids)));
+      &index, &descriptor_set, unit_end_points, IREE_ARRAYSIZE(unit_end_points),
+      assignments, IREE_ARRAYSIZE(assignments), &assignments[1],
+      ignored_value_ids, IREE_ARRAYSIZE(ignored_value_ids)));
 
   loom_low_allocation_active_unit_index_remove_assignment(
       &index, assignments, IREE_ARRAYSIZE(assignments), /*assignment_index=*/0);
   EXPECT_FALSE(loom_low_allocation_active_unit_index_contains_assignment(
       &index, /*assignment_index=*/0));
   EXPECT_FALSE(loom_low_allocation_active_unit_index_conflicts(
-      &index, &descriptor_set, &liveness, unit_end_points,
-      IREE_ARRAYSIZE(unit_end_points), assignments, IREE_ARRAYSIZE(assignments),
-      &assignments[1], /*ignored_value_ids=*/nullptr,
+      &index, &descriptor_set, unit_end_points, IREE_ARRAYSIZE(unit_end_points),
+      assignments, IREE_ARRAYSIZE(assignments), &assignments[1],
+      /*ignored_value_ids=*/nullptr,
       /*ignored_value_count=*/0));
 
   iree_arena_deinitialize(&arena);

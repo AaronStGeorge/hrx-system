@@ -1046,7 +1046,7 @@ bool loom_low_allocation_target_constraints_fixed_value_conflicts(
                 unit_liveness, liveness, fixed_value->value_ordinal),
     };
     if (loom_low_allocation_live_range_assignments_conflict(
-            descriptor_set, liveness, unit_liveness->end_points,
+            descriptor_set, unit_liveness->end_points,
             unit_liveness->end_point_count, &fixed_assignment, candidate)) {
       return true;
     }

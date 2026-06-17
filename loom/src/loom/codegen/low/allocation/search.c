@@ -68,7 +68,7 @@ bool loom_low_allocation_search_location_conflicts(
               context, interval->value_id),
   };
   if (loom_low_allocation_active_set_conflicts(
-          context->active_set, context->descriptor_set, context->liveness,
+          context->active_set, context->descriptor_set,
           context->unit_liveness->end_points,
           context->unit_liveness->end_point_count,
           context->assignment_map->assignments,
@@ -246,8 +246,7 @@ static iree_status_t loom_low_allocation_search_collect_active_spill_victim_set(
     const loom_low_allocation_assignment_t* assignment =
         &context->assignment_map->assignments[assignment_index];
     if (!loom_low_allocation_active_assignment_conflicts(
-            context->descriptor_set, context->liveness,
-            context->unit_liveness->end_points,
+            context->descriptor_set, context->unit_liveness->end_points,
             context->unit_liveness->end_point_count, assignment, &candidate,
             /*ignored_value_ids=*/NULL,
             /*ignored_value_count=*/0)) {
