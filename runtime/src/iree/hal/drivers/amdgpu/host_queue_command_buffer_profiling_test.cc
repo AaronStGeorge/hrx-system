@@ -120,10 +120,8 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   CommandBufferProfileSink sink = {};
   CommandBufferProfileSinkInitialize(&sink);
   DeviceProfilingScope profiling(test_device.base_device());
-  iree_status_t status =
-      BeginUnsupportedHardwareCounterProfiling(&profiling, &sink);
-  EXPECT_FALSE(iree_status_is_ok(status));
-  iree_status_free(status);
+  IREE_EXPECT_NOT_OK(
+      BeginUnsupportedHardwareCounterProfiling(&profiling, &sink));
 }
 
 TEST_F(HostQueueCommandBufferProfilingTest,
