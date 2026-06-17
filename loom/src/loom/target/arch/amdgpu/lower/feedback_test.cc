@@ -1036,7 +1036,7 @@ TEST_F(AmdgpuFeedbackTest, LoadsReadTailWithRdnaAcquireOrdering) {
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT);
   ASSERT_EQ(waitcnt_ops.size(), 1u);
   ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("vmcnt"), 0);
-  ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("lgkmcnt"), 15);
+  ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("lgkmcnt"), 63);
   ASSERT_EQ(
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL1_INV).size(),
       1u);
@@ -1578,7 +1578,7 @@ TEST_F(AmdgpuFeedbackTest, PublishesPacketStateWithRdnaReleaseOrdering) {
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT);
   ASSERT_EQ(waitcnt_ops.size(), 1u);
   ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("vmcnt"), 0);
-  ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("lgkmcnt"), 15);
+  ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("lgkmcnt"), 63);
 
   std::vector<loom_op_t*> vscnt_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT_VSCNT);

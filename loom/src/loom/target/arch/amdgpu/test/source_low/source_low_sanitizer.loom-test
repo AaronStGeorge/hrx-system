@@ -36,7 +36,7 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_explicit_rdna3_access_re
   %35, %36 = v_add_co_ci_u32 %20, %27, %34
   %37 = concat(%33, %35) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %38 = flat_load_u8 %37 {glc = 1, dlc = 1}
-  s_waitcnt {vmcnt = 0, lgkmcnt = 15}
+  s_waitcnt {vmcnt = 0}
   %40 = v_and_b32_lit %7, 7
   %41 = v_add_u32_lit %40, 3
   %42 = v_mov_b32 0
@@ -57,7 +57,7 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_explicit_rdna3_access_re
   %79, %80 = v_add_co_ci_u32 %20, %71, %78
   %81 = concat(%77, %79) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %82 = flat_load_u8 %81 {glc = 1, dlc = 1}
-  s_waitcnt {vmcnt = 0, lgkmcnt = 15}
+  s_waitcnt {vmcnt = 0}
   %84 = v_and_b32_lit %56, 7
   %87 = v_cmp_ne_i32 %82, %42
   %88 = v_cmp_ge_u32 %82, %43
@@ -120,7 +120,7 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_trap_rejoins_returning_f
   %39, %40 = v_add_co_ci_u32 %24, %31, %38
   %41 = concat(%37, %39) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %42 = flat_load_u8 %41 {glc = 1, dlc = 1}
-  s_waitcnt {vmcnt = 0, lgkmcnt = 15}
+  s_waitcnt {vmcnt = 0}
   %44 = v_and_b32_lit %11, 7
   %45 = v_add_u32_lit %44, 3
   %46 = v_mov_b32 0
@@ -141,7 +141,7 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_trap_rejoins_returning_f
   %83, %84 = v_add_co_ci_u32 %24, %75, %82
   %85 = concat(%81, %83) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %86 = flat_load_u8 %85 {glc = 1, dlc = 1}
-  s_waitcnt {vmcnt = 0, lgkmcnt = 15}
+  s_waitcnt {vmcnt = 0}
   %88 = v_and_b32_lit %60, 7
   %91 = v_cmp_ne_i32 %86, %46
   %92 = v_cmp_ge_u32 %86, %47

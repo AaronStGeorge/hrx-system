@@ -308,6 +308,7 @@ TEST_F(SourceMemoryPlanTest, StaticDenseLoadIncludesViewBase) {
   EXPECT_EQ(plan.vector_offset_kind, LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_NONE);
   EXPECT_EQ(plan.static_byte_offset, 28);
   EXPECT_EQ(plan.static_view_base_byte_offset, 16);
+  EXPECT_EQ(plan.dynamic_view_base_value_id, LOOM_VALUE_ID_INVALID);
   EXPECT_EQ(plan.root_minimum_alignment, 1u);
   EXPECT_EQ(plan.minimum_alignment, 1u);
   EXPECT_EQ(plan.dynamic_term_count, 0u);
@@ -464,6 +465,7 @@ TEST_F(SourceMemoryPlanTest, DynamicDenseLoadTracksViewBaseBoundary) {
   ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
   EXPECT_EQ(plan.static_byte_offset, 28);
   EXPECT_EQ(plan.static_view_base_byte_offset, 16);
+  EXPECT_EQ(plan.dynamic_view_base_value_id, loom_index_add_result(base_op));
   ASSERT_EQ(plan.dynamic_term_count, 1u);
   EXPECT_EQ(plan.dynamic_view_base_term_count, 1u);
   EXPECT_EQ(plan.dynamic_terms[0].index, base);
@@ -501,6 +503,7 @@ TEST_F(SourceMemoryPlanTest, StaticOffsetCombinesWithRootAlignment) {
   EXPECT_EQ(plan.root_minimum_alignment, 16u);
   EXPECT_EQ(plan.static_byte_offset, 12);
   EXPECT_EQ(plan.static_view_base_byte_offset, 8);
+  EXPECT_EQ(plan.dynamic_view_base_value_id, LOOM_VALUE_ID_INVALID);
   EXPECT_EQ(plan.minimum_alignment, 4u);
 }
 

@@ -449,6 +449,7 @@ iree_status_t loom_amdgpu_wait_packet_try_select_counter_mask(
 
   *out_selection = (loom_amdgpu_wait_packet_selection_t){
       .descriptor = descriptor,
+      .descriptor_ref = packet_descriptor->descriptor_ref,
       .counter_mask = covered_counter_mask,
       .immediate_count = packet_descriptor->immediate_count,
   };

@@ -30,12 +30,12 @@ iree_status_t loom_amdgpu_lower_vector_bitcast(
 // Selects an AMDGPU vector.concat register concatenation plan.
 iree_status_t loom_amdgpu_select_vector_concat_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_concat_plan_t* out_plan, bool* out_selected);
+    loom_amdgpu_vector_register_map_plan_t* out_plan, bool* out_selected);
 
-// Lowers a source vector.concat op as AMDGPU register concatenation.
-iree_status_t loom_amdgpu_lower_vector_concat(
+// Lowers a source vector structural op with a static 32-bit register map.
+iree_status_t loom_amdgpu_lower_vector_register_map(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_vector_concat_plan_t* plan);
+    const loom_amdgpu_vector_register_map_plan_t* plan);
 
 // Selects an AMDGPU vector.deinterleave register split plan.
 iree_status_t loom_amdgpu_select_vector_deinterleave_plan(
@@ -50,27 +50,17 @@ iree_status_t loom_amdgpu_lower_vector_deinterleave(
 // Selects an AMDGPU vector.interleave register merge plan.
 iree_status_t loom_amdgpu_select_vector_interleave_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_interleave_plan_t* out_plan, bool* out_selected);
-
-// Lowers a source vector.interleave op as AMDGPU register interleaving.
-iree_status_t loom_amdgpu_lower_vector_interleave(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_vector_interleave_plan_t* plan);
+    loom_amdgpu_vector_register_map_plan_t* out_plan, bool* out_selected);
 
 // Selects an AMDGPU vector.shuffle register permutation plan.
 iree_status_t loom_amdgpu_select_vector_shuffle_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_permutation_plan_t* out_plan, bool* out_selected);
-
-// Lowers a source vector permutation op using the selected register map.
-iree_status_t loom_amdgpu_lower_vector_permutation(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_vector_permutation_plan_t* plan);
+    loom_amdgpu_vector_register_map_plan_t* out_plan, bool* out_selected);
 
 // Selects an AMDGPU vector.transpose flattened register permutation plan.
 iree_status_t loom_amdgpu_select_vector_transpose_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_permutation_plan_t* out_plan, bool* out_selected);
+    loom_amdgpu_vector_register_map_plan_t* out_plan, bool* out_selected);
 
 // Selects an AMDGPU vector.slice register slicing plan.
 iree_status_t loom_amdgpu_select_vector_slice_plan(

@@ -14,6 +14,7 @@
 
 #include "loom/codegen/low/lower/lower.h"
 #include "loom/target/arch/amdgpu/lower/plan.h"
+#include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +52,18 @@ iree_status_t loom_amdgpu_collective_bind_payload_result(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_result, uint32_t register_count,
     const loom_value_id_t* result_registers);
+
+// Resolves descriptors required for cross-wave LDS exchange in workgroup
+// collective lowering.
+iree_status_t loom_amdgpu_collective_resolve_cross_wave_descriptors(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_workgroup_collective_cross_wave_descriptors_t* out_descriptors,
+    bool* out_present);
+
+// Verifies descriptors required for cross-wave LDS exchange in workgroup
+// collective lowering.
+iree_status_t loom_amdgpu_collective_verify_cross_wave_descriptor_requirements(
+    loom_target_low_legality_context_t* context, const loom_op_t* op);
 
 #ifdef __cplusplus
 }  // extern "C"

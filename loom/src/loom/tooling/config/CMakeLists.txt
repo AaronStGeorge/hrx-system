@@ -43,6 +43,7 @@ loom_cc_test(
     iree::io::file_handle
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::testing::temp_file
     loom::format::text::parser
     loom::format::text::printer
     loom::ir

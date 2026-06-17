@@ -33,9 +33,9 @@ loom_generated_textual_header(
   GENERATOR
     loom::py::loom::gen::target::arch::amdgpu::config_tables
   OUTPUT
-    "encoding_field_ids.h"
+    "encoding_field_ids.inl"
   OUTPUT_FLAG
-    "--encoding-field-ids-header"
+    "--encoding-field-ids"
 )
 endif()
 
@@ -45,7 +45,8 @@ loom_cc_library(
     encoding_defs
   HDRS
     "encoding.h"
-    "encoding_field_ids.h"
+  TEXTUAL_HDRS
+    "encoding_field_ids.inl"
   DEPS
     iree::base
   PUBLIC

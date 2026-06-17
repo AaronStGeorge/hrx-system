@@ -7,6 +7,7 @@
 #include "loom/target/arch/amdgpu/lower/collective_payload.h"
 
 #include "loom/target/arch/amdgpu/lower/emit.h"
+#include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 
 static loom_amdgpu_subgroup_payload_kind_t loom_amdgpu_collective_payload_kind(
@@ -93,4 +94,63 @@ iree_status_t loom_amdgpu_collective_bind_payload_result(
     const loom_value_id_t* result_registers) {
   return loom_amdgpu_bind_low_register_range(context, source_op, source_result,
                                              result_registers, register_count);
+}
+
+iree_status_t loom_amdgpu_collective_resolve_cross_wave_descriptors(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_workgroup_collective_cross_wave_descriptors_t* out_descriptors,
+    bool* out_present) {
+  const loom_amdgpu_descriptor_resolution_t resolutions[] = {
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B32,
+          .out_descriptor = &out_descriptors->lds_read_descriptor,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32,
+          .out_descriptor = &out_descriptors->lds_write_descriptor,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER,
+          .out_descriptor = &out_descriptors->barrier_descriptor,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64,
+          .out_descriptor = &out_descriptors->saveexec_descriptor,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC,
+          .out_descriptor = &out_descriptors->restore_exec_descriptor,
+      },
+  };
+  return loom_amdgpu_resolve_descriptor_refs_if_present(
+      context, resolutions, IREE_ARRAYSIZE(resolutions), out_present);
+}
+
+iree_status_t loom_amdgpu_collective_verify_cross_wave_descriptor_requirements(
+    loom_target_low_legality_context_t* context, const loom_op_t* op) {
+  static const loom_amdgpu_low_legality_descriptor_requirement_t
+      requirements[] = {
+          {
+              .constraint_key = IREE_SVL("descriptor.ds_read_b32"),
+              .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B32,
+          },
+          {
+              .constraint_key = IREE_SVL("descriptor.ds_write_b32"),
+              .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32,
+          },
+          {
+              .constraint_key = IREE_SVL("descriptor.s_barrier"),
+              .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER,
+          },
+          {
+              .constraint_key = IREE_SVL("descriptor.s_and_saveexec_b64"),
+              .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64,
+          },
+          {
+              .constraint_key = IREE_SVL("descriptor.s_mov_b64_exec"),
+              .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC,
+          },
+      };
+  return loom_amdgpu_low_legality_verify_descriptor_requirements(
+      context, op, requirements, IREE_ARRAYSIZE(requirements));
 }

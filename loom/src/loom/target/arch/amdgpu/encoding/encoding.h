@@ -107,7 +107,13 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY_LITERAL = 68,
 } loom_amdgpu_encoding_format_t;
 
-#include "loom/target/arch/amdgpu/encoding/encoding_field_ids.h"
+// Stable target-owned encoding field identifiers used in
+// loom_amdgpu_encoding_field_value_t arrays.
+enum {
+#define LOOM_AMDGPU_ENCODING_FIELD(symbol, value) symbol = value,
+#include "loom/target/arch/amdgpu/encoding/encoding_field_ids.inl"
+#undef LOOM_AMDGPU_ENCODING_FIELD
+};
 
 typedef struct loom_amdgpu_encoding_bit_range_t {
   // Target bit offset populated by this range.

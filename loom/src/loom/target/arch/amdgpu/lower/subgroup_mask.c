@@ -391,19 +391,6 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_all(
       &low_result));
   return loom_low_lower_bind_value(context, plan->result, low_result);
 }
-static iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    iree_string_view_t constraint_key, uint32_t* out_wavefront_size) {
-  *out_wavefront_size = 0;
-  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_target_wavefront_size(bundle, out_wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(*out_wavefront_size)) {
-    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_low_legality_verify_subgroup_native_predicate(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_value_id_t predicate, iree_string_view_t constraint_key) {

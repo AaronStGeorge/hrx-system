@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""AMDGPU callback-registry ownership checks."""
+"""AMDGPU lower-dispatch ownership checks."""
 
 from __future__ import annotations
 
@@ -22,9 +22,10 @@ from loom.target.contracts import LOWER_RULE_FLAG_CONTRACT_ONLY, compile_lower_r
 
 
 @unique
-class CallbackDispatchRole(Enum):
-    """Ownership class declared by an AMDGPU callback dispatch row macro."""
+class DispatchRowRole(Enum):
+    """Ownership class declared by an AMDGPU dispatch row macro."""
 
+    STRUCTURAL = "structural"
     VALUE = "value"
     MEMORY = "memory"
     RECIPE = "recipe"
@@ -33,11 +34,11 @@ class CallbackDispatchRole(Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class CallbackDispatchRow:
-    """Parsed callback dispatch row from the AMDGPU registry table."""
+class DispatchRow:
+    """Parsed dispatch row from the AMDGPU registry table."""
 
     op_kind: str
-    role: CallbackDispatchRole
+    role: DispatchRowRole
     macro_name: str
     arguments: tuple[str, ...]
 
@@ -57,11 +58,26 @@ _ROW_RE = re.compile(
 )
 
 _ROW_MACRO_SIGNATURES = {
-    "VALUE_DIRECT_STORAGE_ROW": _RowMacroSignature(
+    "STRUCTURAL_DIRECT_STORAGE_ROW": _RowMacroSignature(
         argument_count=5, storage_policy_argument=4
     ),
-    "VALUE_DIRECT_POLICY_ROW": _RowMacroSignature(
+    "VALUE_STRUCTURAL_DIRECT_STORAGE_ROW": _RowMacroSignature(
+        argument_count=5, storage_policy_argument=4
+    ),
+    "VALUE_STRUCTURAL_DIRECT_POLICY_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=4, preselect_policy_argument=5
+    ),
+    "VALUE_STRUCTURAL_DATA_STORAGE_ROW": _RowMacroSignature(
+        argument_count=6, storage_policy_argument=5
+    ),
+    "VALUE_DATA_STORAGE_ROW": _RowMacroSignature(
+        argument_count=6, storage_policy_argument=5
+    ),
+    "VALUE_DATA_SOURCE_ROW": _RowMacroSignature(
+        argument_count=6, source_count_argument=5
+    ),
+    "VALUE_DATA_SOURCE_POLICY_ROW": _RowMacroSignature(
+        argument_count=7, source_count_argument=5, preselect_policy_argument=6
     ),
     "MEMORY_DATA_STORAGE_ROW": _RowMacroSignature(
         argument_count=6, storage_policy_argument=5
@@ -96,7 +112,8 @@ _ROW_MACRO_SIGNATURES = {
 
 _STORAGE_POLICY_NAMES = frozenset(
     {
-        "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+        "LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN",
+        "LOOM_AMDGPU_STORAGE_VECTOR_REGISTER_MAP_PLAN",
         "LOOM_AMDGPU_STORAGE_MEMORY_PLAN",
         "LOOM_AMDGPU_STORAGE_ATOMIC",
         "LOOM_AMDGPU_STORAGE_PREFETCH",
@@ -109,9 +126,9 @@ _STORAGE_POLICY_NAMES = frozenset(
 
 _PRESELECT_POLICY_NAMES = frozenset(
     {
-        "LOOM_AMDGPU_PRESELECT_VALUE_PLAN",
-        "LOOM_AMDGPU_PRESELECT_PLAN_ID",
-        "LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC",
+        "LOOM_AMDGPU_PRESELECT_STRUCTURAL_VALUE_PLAN",
+        "LOOM_AMDGPU_PRESELECT_TARGET_PLAN",
+        "LOOM_AMDGPU_PRESELECT_TARGET_PLAN_FMA_DIAGNOSTIC",
     }
 )
 
@@ -165,17 +182,17 @@ def amdgpu_generated_lower_rule_op_kinds(
     return frozenset(op_kinds)
 
 
-def parse_callback_dispatch_rows(source: str) -> tuple[CallbackDispatchRow, ...]:
-    """Parses classified AMDGPU callback dispatch rows from registry source."""
+def parse_dispatch_rows(source: str) -> tuple[DispatchRow, ...]:
+    """Parses classified AMDGPU dispatch rows from registry source."""
 
-    rows: list[CallbackDispatchRow] = []
+    rows: list[DispatchRow] = []
     for match in _ROW_RE.finditer(source):
         macro_name = match.group(2)
-        arguments = _parse_callback_dispatch_arguments(source, match.end())
+        arguments = _parse_dispatch_row_arguments(source, match.end())
         rows.append(
-            CallbackDispatchRow(
+            DispatchRow(
                 op_kind=match.group(1),
-                role=_callback_dispatch_role(macro_name),
+                role=_dispatch_row_role(macro_name),
                 macro_name=macro_name,
                 arguments=arguments,
             )
@@ -183,89 +200,91 @@ def parse_callback_dispatch_rows(source: str) -> tuple[CallbackDispatchRow, ...]
     return tuple(rows)
 
 
-def callback_dispatch_row_tag_names_by_kind() -> dict[str, frozenset[str]]:
-    """Returns explicit row-tag tokens accepted by callback dispatch rows."""
+def dispatch_row_tag_names_by_kind() -> dict[str, frozenset[str]]:
+    """Returns explicit row-tag tokens accepted by dispatch rows."""
 
     return dict(_ROW_TAG_NAMES_BY_KIND)
 
 
-def callback_dispatch_row_macro_names() -> frozenset[str]:
-    """Returns public callback dispatch row macros accepted by the validator."""
+def dispatch_row_macro_names() -> frozenset[str]:
+    """Returns public dispatch row macros accepted by the validator."""
 
     return frozenset(_ROW_MACRO_SIGNATURES)
 
 
-def validate_callback_dispatch_rows(
-    rows: Iterable[CallbackDispatchRow],
+def validate_dispatch_rows(
+    rows: Iterable[DispatchRow],
     *,
     generated_lower_rule_op_kinds: Iterable[str],
 ) -> None:
-    """Validates callback rows against Python-authored generated ownership."""
+    """Validates dispatch rows against Python-authored generated ownership."""
 
     rows = tuple(rows)
     for row in rows:
-        _validate_callback_dispatch_row_shape(row)
+        _validate_dispatch_row_shape(row)
 
     generated_op_kinds = frozenset(generated_lower_rule_op_kinds)
-    bad_generated_callbacks = tuple(
+    bad_generated_rows = tuple(
         row
         for row in rows
         if row.op_kind in generated_op_kinds
         and row.role
         not in (
-            CallbackDispatchRole.GENERATED_PRESELECT,
-            CallbackDispatchRole.LEGALITY,
+            DispatchRowRole.GENERATED_PRESELECT,
+            DispatchRowRole.LEGALITY,
         )
     )
-    if bad_generated_callbacks:
+    if bad_generated_rows:
         raise ValueError(
-            "AMDGPU callback rows for generated lower-rule ops must be "
+            "AMDGPU dispatch rows for generated lower-rule ops must be "
             "generated-preselect or legality-only rows: "
-            + _format_rows(bad_generated_callbacks)
+            + _format_rows(bad_generated_rows)
         )
 
-    bad_preselect_callbacks = tuple(
+    bad_preselect_rows = tuple(
         row
         for row in rows
-        if row.role == CallbackDispatchRole.GENERATED_PRESELECT
+        if row.role == DispatchRowRole.GENERATED_PRESELECT
         and row.op_kind not in generated_op_kinds
     )
-    if bad_preselect_callbacks:
+    if bad_preselect_rows:
         raise ValueError(
-            "AMDGPU generated-preselect callback rows need a generated lower-rule "
-            "fallback owner: " + _format_rows(bad_preselect_callbacks)
+            "AMDGPU generated-preselect dispatch rows need a generated lower-rule "
+            "fallback owner: " + _format_rows(bad_preselect_rows)
         )
 
 
-def _callback_dispatch_role(macro_name: str) -> CallbackDispatchRole:
+def _dispatch_row_role(macro_name: str) -> DispatchRowRole:
     if macro_name == "LEGALITY_ROW":
-        return CallbackDispatchRole.LEGALITY
+        return DispatchRowRole.LEGALITY
+    if macro_name.startswith("STRUCTURAL_"):
+        return DispatchRowRole.STRUCTURAL
     if macro_name.startswith("GENERATED_PRESELECT_"):
-        return CallbackDispatchRole.GENERATED_PRESELECT
+        return DispatchRowRole.GENERATED_PRESELECT
     if macro_name.startswith("VALUE_"):
-        return CallbackDispatchRole.VALUE
+        return DispatchRowRole.VALUE
     if macro_name.startswith("MEMORY_"):
-        return CallbackDispatchRole.MEMORY
+        return DispatchRowRole.MEMORY
     if macro_name.startswith("RECIPE_"):
-        return CallbackDispatchRole.RECIPE
-    raise ValueError(f"AMDGPU callback row macro '{macro_name}' has no role prefix")
+        return DispatchRowRole.RECIPE
+    raise ValueError(f"AMDGPU dispatch row macro '{macro_name}' has no role prefix")
 
 
-def _validate_callback_dispatch_row_shape(row: CallbackDispatchRow) -> None:
+def _validate_dispatch_row_shape(row: DispatchRow) -> None:
     signature = _ROW_MACRO_SIGNATURES.get(row.macro_name)
     if signature is None:
         raise ValueError(
-            f"AMDGPU callback row macro '{row.macro_name}' has no registered "
+            f"AMDGPU dispatch row macro '{row.macro_name}' has no registered "
             "dispatch-row schema"
         )
     if len(row.arguments) != signature.argument_count:
         raise ValueError(
-            f"AMDGPU callback row {row.op_kind} via {row.macro_name} has "
+            f"AMDGPU dispatch row {row.op_kind} via {row.macro_name} has "
             f"{len(row.arguments)} arguments, expected {signature.argument_count}"
         )
     if row.arguments[0] != row.op_kind:
         raise ValueError(
-            f"AMDGPU callback row index {row.op_kind} does not match macro "
+            f"AMDGPU dispatch row index {row.op_kind} does not match macro "
             f"op-kind argument {row.arguments[0]}"
         )
 
@@ -281,7 +300,7 @@ def _validate_callback_dispatch_row_shape(row: CallbackDispatchRow) -> None:
         and row.arguments[signature.source_count_argument] not in _SOURCE_COUNT_NAMES
     ):
         raise ValueError(
-            f"AMDGPU callback row {row.op_kind} via {row.macro_name} expects "
+            f"AMDGPU dispatch row {row.op_kind} via {row.macro_name} expects "
             f"a leading source count at argument "
             f"{signature.source_count_argument + 1}, got "
             f"{row.arguments[signature.source_count_argument]}"
@@ -291,7 +310,7 @@ def _validate_callback_dispatch_row_shape(row: CallbackDispatchRow) -> None:
         argument = row.arguments[argument_index]
         if argument not in _ROW_TAG_NAMES_BY_KIND[row_tag_kind]:
             raise ValueError(
-                f"AMDGPU callback row {row.op_kind} via {row.macro_name} "
+                f"AMDGPU dispatch row {row.op_kind} via {row.macro_name} "
                 f"expects a {_ROW_TAG_DESCRIPTIONS[row_tag_kind]} at argument "
                 f"{argument_index + 1}, got {argument}"
             )
@@ -302,14 +321,12 @@ def _validate_callback_dispatch_row_shape(row: CallbackDispatchRow) -> None:
         if argument_index in expected_row_tag_arguments:
             continue
         raise ValueError(
-            f"AMDGPU callback row {row.op_kind} via {row.macro_name} has row tag "
+            f"AMDGPU dispatch row {row.op_kind} via {row.macro_name} has row tag "
             f"token {argument} in non-tag argument {argument_index + 1}"
         )
 
 
-def _parse_callback_dispatch_arguments(
-    source: str, argument_start: int
-) -> tuple[str, ...]:
+def _parse_dispatch_row_arguments(source: str, argument_start: int) -> tuple[str, ...]:
     arguments: list[str] = []
     depth = 0
     current_start = argument_start
@@ -328,7 +345,7 @@ def _parse_callback_dispatch_arguments(
             if next_char == "*":
                 comment_end = source.find("*/", index + 2)
                 if comment_end == -1:
-                    raise ValueError("unterminated C block comment in callback row")
+                    raise ValueError("unterminated C block comment in dispatch row")
                 index = comment_end + 2
                 continue
         if char in "([{":
@@ -337,7 +354,7 @@ def _parse_callback_dispatch_arguments(
             if depth == 0:
                 if char != ")":
                     raise ValueError(
-                        f"unexpected '{char}' while parsing callback row arguments"
+                        f"unexpected '{char}' while parsing dispatch row arguments"
                     )
                 arguments.append(source[current_start:index].strip())
                 return tuple(arguments)
@@ -346,7 +363,7 @@ def _parse_callback_dispatch_arguments(
             arguments.append(source[current_start:index].strip())
             current_start = index + 1
         index += 1
-    raise ValueError("unterminated AMDGPU callback row macro invocation")
+    raise ValueError("unterminated AMDGPU dispatch row macro invocation")
 
 
 def _skip_c_quoted_literal(source: str, quote_index: int) -> int:
@@ -359,10 +376,10 @@ def _skip_c_quoted_literal(source: str, quote_index: int) -> int:
         if source[index] == quote:
             return index + 1
         index += 1
-    raise ValueError("unterminated C quoted literal in callback row")
+    raise ValueError("unterminated C quoted literal in dispatch row")
 
 
-def _format_rows(rows: Iterable[CallbackDispatchRow]) -> str:
+def _format_rows(rows: Iterable[DispatchRow]) -> str:
     return ", ".join(f"{row.op_kind} via {row.macro_name}" for row in rows)
 
 

@@ -44,6 +44,11 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
     AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS,
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
+    AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET,
+    AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH,
+    AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE,
+    AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING,
+    AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID,
     AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAGS_PROFILELESS,
     AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
@@ -59,13 +64,20 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+    AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
     AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS,
+    AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES,
+    AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
+    AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES,
+    AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
+    AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTRS,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_INFOS,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_TEMPORAL_TH,
     AMDGPU_WAVEFRONT_SIZE_FLAG_32,
     AMDGPU_WAVEFRONT_SIZE_FLAG_64,
+    AMDGPU_WAVEFRONT_SIZE_KNOWN_FLAGS,
     AmdgpuDescriptorSetInfo,
     AmdgpuProcessorInfo,
     AmdgpuVectorMemoryCachePolicyEncodingInfo,
@@ -154,6 +166,56 @@ _WAVEFRONT_SIZE_FLAG_EXPRS = (
     (
         AMDGPU_WAVEFRONT_SIZE_FLAG_64,
         "LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64",
+    ),
+)
+
+_KERNEL_DESCRIPTOR_ABI_FLAG_EXPRS = (
+    (
+        AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH,
+        "LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH",
+    ),
+    (
+        AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING,
+        "LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING",
+    ),
+    (
+        AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET,
+        "LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET",
+    ),
+    (
+        AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE,
+        "LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE",
+    ),
+    (
+        AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID,
+        "LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID",
+    ),
+)
+
+_PROCESSOR_SCHEDULING_BIT_EXPRS = (
+    (
+        AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
+        "LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR",
+    ),
+    (
+        AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES,
+        "LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES",
+    ),
+    (
+        AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES,
+        "LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES",
+    ),
+    (
+        AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES,
+        "LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES",
+    ),
+    (
+        AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
+        "LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR",
+    ),
+    (
+        AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
+        "LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU",
     ),
 )
 
@@ -344,32 +406,68 @@ def _emit_memory_cache_policy_temporal_th() -> str:
     )
 
 
-def _descriptor_set_info_flags_expr(flags: int) -> str:
+def _flag_bits_expr(
+    flags: int,
+    *,
+    known_bits: int,
+    rows: Sequence[tuple[int, str]],
+    zero_expr: str,
+    description: str,
+) -> str:
     if flags == 0:
-        return "UINT64_C(0)"
+        return zero_expr
     remaining_flags = flags
     exprs: list[str] = []
-    for flag, expr in _DESCRIPTOR_SET_INFO_FLAG_EXPRS:
+    for flag, expr in rows:
         if flags & flag:
             exprs.append(expr)
             remaining_flags &= ~flag
+    unknown_flags = flags & ~known_bits
+    if unknown_flags != 0:
+        raise ValueError(f"unknown AMDGPU {description} flags 0x{unknown_flags:x}")
     if remaining_flags != 0:
-        raise ValueError(f"unknown AMDGPU descriptor-set info flags 0x{remaining_flags:x}")
+        raise ValueError(f"AMDGPU {description} flags 0x{remaining_flags:x} have no C expression")
     return " | ".join(exprs)
+
+
+def _descriptor_set_info_flags_expr(flags: int) -> str:
+    return _flag_bits_expr(
+        flags,
+        known_bits=AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS,
+        rows=_DESCRIPTOR_SET_INFO_FLAG_EXPRS,
+        zero_expr="UINT64_C(0)",
+        description="descriptor-set info",
+    )
 
 
 def _wavefront_size_flags_expr(flags: int) -> str:
-    if flags == 0:
-        return "UINT32_C(0)"
-    remaining_flags = flags
-    exprs: list[str] = []
-    for flag, expr in _WAVEFRONT_SIZE_FLAG_EXPRS:
-        if flags & flag:
-            exprs.append(expr)
-            remaining_flags &= ~flag
-    if remaining_flags != 0:
-        raise ValueError(f"unknown AMDGPU wavefront-size flags 0x{remaining_flags:x}")
-    return " | ".join(exprs)
+    return _flag_bits_expr(
+        flags,
+        known_bits=AMDGPU_WAVEFRONT_SIZE_KNOWN_FLAGS,
+        rows=_WAVEFRONT_SIZE_FLAG_EXPRS,
+        zero_expr="UINT32_C(0)",
+        description="wavefront-size",
+    )
+
+
+def _kernel_descriptor_abi_flags_expr(flags: int) -> str:
+    return _flag_bits_expr(
+        flags,
+        known_bits=AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS,
+        rows=_KERNEL_DESCRIPTOR_ABI_FLAG_EXPRS,
+        zero_expr="UINT64_C(0)",
+        description="kernel descriptor ABI",
+    )
+
+
+def _processor_scheduling_bits_expr(flags: int) -> str:
+    return _flag_bits_expr(
+        flags,
+        known_bits=AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS,
+        rows=_PROCESSOR_SCHEDULING_BIT_EXPRS,
+        zero_expr="UINT32_C(0)",
+        description="processor scheduling",
+    )
 
 
 def _supported_wavefront_sizes(info: AmdgpuProcessorInfo) -> int:
@@ -478,9 +576,6 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             raise ValueError(f"AMDGPU ISA XML architecture id is required for {info.key}")
         if info.flags < 0 or info.flags > 0xFFFFFFFFFFFFFFFF:
             raise ValueError(f"AMDGPU descriptor-set info flags for {info.key} must fit u64")
-        unknown_descriptor_set_flags = info.flags & ~AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS
-        if unknown_descriptor_set_flags != 0:
-            raise ValueError(f"AMDGPU descriptor set {info.key} has unknown info flags 0x{unknown_descriptor_set_flags:x}")
         _descriptor_set_info_flags_expr(info.flags)
         if info.storage_generator_target is not None:
             if not info.storage_generator_target:
@@ -542,9 +637,7 @@ def _validate_processors(
         _matrix_feature_profile_expr(info.features.matrix)
         if kernel_descriptor.flags < 0 or kernel_descriptor.flags > 0xFFFFFFFFFFFFFFFF:
             raise ValueError(f"AMDGPU kernel descriptor ABI flags for {info.processor} must fit u64")
-        unknown_descriptor_flags = kernel_descriptor.flags & ~AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS
-        if unknown_descriptor_flags != 0:
-            raise ValueError(f"AMDGPU processor {info.processor} has unknown kernel descriptor ABI flags 0x{unknown_descriptor_flags:x}")
+        _kernel_descriptor_abi_flags_expr(kernel_descriptor.flags)
         if profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE:
             if vgpr_granules.wave32 != 0 or vgpr_granules.wave64 != 0:
                 raise ValueError(f"AMDGPU processor {info.processor} has no kernel descriptor profile but has VGPR encoding granules")
@@ -561,9 +654,7 @@ def _validate_processors(
                 raise ValueError(f"AMDGPU processor {info.processor} has a kernel descriptor profile but no ELF machine flags")
         if info.features.scheduling < 0 or info.features.scheduling > 0xFFFFFFFF:
             raise ValueError(f"AMDGPU scheduling bits for {info.processor} must fit u32")
-        unknown_scheduling_bits = info.features.scheduling & ~AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS
-        if unknown_scheduling_bits != 0:
-            raise ValueError(f"AMDGPU processor {info.processor} has unknown scheduling bits 0x{unknown_scheduling_bits:x}")
+        _processor_scheduling_bits_expr(info.features.scheduling)
 
 
 def _emit_header(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> str:
@@ -696,9 +787,9 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     wavefront_width = 2
     wavefront_flags_width = max(len(_wavefront_size_flags_expr(_supported_wavefront_sizes(info))) for info in processors)
     kernel_profile_width = max(len(_kernel_descriptor_profile_expr(info.kernel_descriptor.profile)) for info in processors)
-    kernel_flags_width = max(len(f"0x{info.kernel_descriptor.flags:x}") for info in processors)
+    kernel_flags_width = max(len(_kernel_descriptor_abi_flags_expr(info.kernel_descriptor.flags)) for info in processors)
     matrix_profile_width = max(len(_matrix_feature_profile_expr(info.features.matrix)) for info in processors)
-    scheduling_width = max(len(f"0x{info.features.scheduling:03x}") for info in processors)
+    scheduling_width = max(len(_processor_scheduling_bits_expr(info.features.scheduling)) for info in processors)
     register_granule_width = 1
     lines = [
         "#define LOOM_AMDGPU_PROCESSOR_INFO(processor_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, supported_wavefront_sizes_, kd_profile_, kd_flags_, matrix_profile_, scheduling_bits_, vgpr_granule_wave32_, vgpr_granule_wave64_) \\",
@@ -718,7 +809,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "    }, \\",
         "    .kernel_descriptor = { \\",
         "      .profile = kd_profile_, \\",
-        "      .flags = UINT64_C(kd_flags_), \\",
+        "      .flags = kd_flags_, \\",
         "      .vgpr_granules = { \\",
         "        .wave32 = vgpr_granule_wave32_, \\",
         "        .wave64 = vgpr_granule_wave64_, \\",
@@ -726,7 +817,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "    }, \\",
         "    .features = { \\",
         "      .matrix = matrix_profile_, \\",
-        "      .scheduling = UINT32_C(scheduling_bits_), \\",
+        "      .scheduling = scheduling_bits_, \\",
         "    }, \\",
         "  }",
         "",
@@ -744,9 +835,9 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
             f"{_padded_arg(str(info.wavefront.default_size), wavefront_width)}"
             f"{_padded_arg(_wavefront_size_flags_expr(_supported_wavefront_sizes(info)), wavefront_flags_width)}"
             f"{_padded_arg(_kernel_descriptor_profile_expr(info.kernel_descriptor.profile), kernel_profile_width)}"
-            f"{_padded_arg(f'0x{info.kernel_descriptor.flags:x}', kernel_flags_width)}"
+            f"{_padded_arg(_kernel_descriptor_abi_flags_expr(info.kernel_descriptor.flags), kernel_flags_width)}"
             f"{_padded_arg(_matrix_feature_profile_expr(info.features.matrix), matrix_profile_width)}"
-            f"{_padded_arg(f'0x{info.features.scheduling:03x}', scheduling_width)}"
+            f"{_padded_arg(_processor_scheduling_bits_expr(info.features.scheduling), scheduling_width)}"
             f"{_padded_arg(str(info.kernel_descriptor.vgpr_granules.wave32), register_granule_width)}"
             f"{info.kernel_descriptor.vgpr_granules.wave64!s}),"
         )

@@ -227,6 +227,19 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "wait_packets_test",
+    srcs = ["wait_packets_test.cc"],
+    deps = [
+        ":wait_packets",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "vopd_plan",
     srcs = ["vopd_plan.c"],

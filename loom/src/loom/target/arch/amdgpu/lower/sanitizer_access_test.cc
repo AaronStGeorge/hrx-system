@@ -309,7 +309,7 @@ TEST_F(AmdgpuSanitizerAccessTest, EmitsSingleShadowByteAccessCheck) {
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT);
   ASSERT_EQ(waitcnt_ops.size(), 1u);
   ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("vmcnt"), 0);
-  ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("lgkmcnt"), 15);
+  ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("lgkmcnt"), 63);
   EXPECT_EQ(
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT).size(),
       2u);
@@ -355,7 +355,7 @@ TEST_F(AmdgpuSanitizerAccessTest, EmitsFirstAndLastShadowByteAccessCheck) {
   ASSERT_EQ(waitcnt_ops.size(), 2u);
   for (loom_op_t* waitcnt_op : waitcnt_ops) {
     ExpectAttrI64(loom_low_op_attrs(waitcnt_op), IREE_SV("vmcnt"), 0);
-    ExpectAttrI64(loom_low_op_attrs(waitcnt_op), IREE_SV("lgkmcnt"), 15);
+    ExpectAttrI64(loom_low_op_attrs(waitcnt_op), IREE_SV("lgkmcnt"), 63);
   }
   EXPECT_EQ(
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT).size(),
@@ -476,7 +476,7 @@ TEST_F(AmdgpuSanitizerAccessTest, FeedsMaskedFailuresToSharedReportIsland) {
   ASSERT_EQ(hot_waitcnt_ops.size(), 2u);
   for (loom_op_t* waitcnt_op : hot_waitcnt_ops) {
     ExpectAttrI64(loom_low_op_attrs(waitcnt_op), IREE_SV("vmcnt"), 0);
-    ExpectAttrI64(loom_low_op_attrs(waitcnt_op), IREE_SV("lgkmcnt"), 15);
+    ExpectAttrI64(loom_low_op_attrs(waitcnt_op), IREE_SV("lgkmcnt"), 63);
   }
   EXPECT_EQ(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP).size(), 1u);
 }

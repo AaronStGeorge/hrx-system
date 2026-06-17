@@ -339,6 +339,7 @@ loom_cc_test(
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/lower",
         "//loom/src/loom/target/arch/amdgpu/ops",
+        "//loom/src/loom/target/arch/amdgpu/planning:wait_packets",
         "//loom/src/loom/target/arch/amdgpu/records:target_records",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/testing:diagnostic_matchers",

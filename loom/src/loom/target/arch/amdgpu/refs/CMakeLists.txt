@@ -61,10 +61,12 @@ loom_generated_cc_library(
     "target_refs_data.c"
   SRCS
     "target_refs.c"
+  HDRS
+    "target_refs.h"
   GENERATED_HDR_FLAGS
     "--header"
   GENERATED_HDRS
-    "target_refs.h"
+    "target_refs_tables.h"
   ARGS
     "--public-header=loom/target/arch/amdgpu/refs/target_refs.h"
     ${_target_refs_platform_args}

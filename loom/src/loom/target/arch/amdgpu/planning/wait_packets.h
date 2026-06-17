@@ -20,6 +20,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/base/string_builder.h"
 #include "loom/target/arch/amdgpu/planning/wait_plan.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,6 +41,8 @@ typedef struct loom_amdgpu_wait_packet_immediate_t {
 typedef struct loom_amdgpu_wait_packet_selection_t {
   // Borrowed descriptor row selected from the descriptor set.
   const loom_low_descriptor_t* descriptor;
+  // Stable descriptor ref selected from the descriptor set.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
   // Logical counter mask concretely drained by this packet.
   uint32_t counter_mask;
   // Immediate rows to materialize on the selected descriptor.
