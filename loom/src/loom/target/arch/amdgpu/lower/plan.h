@@ -729,6 +729,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   uint32_t register_count;
   // Exact subgroup width selected by the active target bundle.
   uint32_t wavefront_size;
+  // Execution wavefront width used to partition cross-wave workgroup staging.
+  uint32_t partition_wavefront_size;
   // Exact flattened workgroup size selected by launch configuration.
   uint32_t flat_workgroup_size;
   // 32-bit identity element bit pattern used for inactive source lanes.

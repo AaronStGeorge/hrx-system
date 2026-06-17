@@ -26,6 +26,7 @@ exports_files([
     "shared_memory_vector_tile.loom",
     "shared_memory_wave_tile.loom",
     "target_provider_selection.loom",
+    "wave64_reductions.loom",
 ])
 
 _AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
@@ -50,6 +51,7 @@ iree_execution_test_suite(
         "shared_memory_vector_tile.loom",
         "shared_memory_wave_tile.loom",
         "target_provider_selection.loom",
+        "wave64_reductions.loom",
     ],
     manifests = ["hip_authoring.test.json"],
     tags = ["hostonly"],
@@ -59,6 +61,33 @@ iree_execution_test_suite(
         "loom-compile": "//loom/src/loom/tools/loom-compile",
         "loom-opt": "//loom/src/loom/tools/loom-opt",
     },
+)
+
+iree_executable_test(
+    name = "wave64_reductions_amdgpu_test",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
+    args = [
+        "$(location wave64_reductions.loom)",
+        "--device=amdgpu",
+        "--measure=dispatch_complete",
+        "--sample-compilation=per_sample",
+        "--iterations=1",
+        "--warmup-iterations=0",
+        "--batch-size=1",
+        "--min-time-ms=0",
+        "--max-batches=1",
+        "--input-ring-count=1",
+    ],
+    data = [
+        "wave64_reductions.loom",
+    ],
+    tags = [
+        "iree-run-requirement=runtime.resource.amd_gpu",
+        "manual",
+        "requires-gpu-amd",
+        "runtime-resource=amd-gpu",
+    ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
 )
 
 iree_executable_test(

@@ -332,6 +332,96 @@
       ]
     },
     {
+      "name": "plans wave64 reductions recipe",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/wave64_reductions.loom",
+          "--dry-run"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "bench_wave64_workgroup_reduce_sub_wave",
+          "case_wave64_workgroup_reduce_sub_wave",
+          "bench_wave64_workgroup_reduce_full_wave",
+          "case_wave64_workgroup_reduce_full_wave",
+          "bench_wave64_workgroup_reduce_cross_wave",
+          "case_wave64_workgroup_reduce_cross_wave"
+        ]
+      }
+    },
+    {
+      "name": "preserves wave64 reductions source shape",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "{srcdir}/wave64_reductions.loom",
+          "--pass=canonicalize",
+          "--output={tmp}/wave64_reductions.loom"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/wave64_reductions.loom",
+          "contains": [
+            "amdgpu.target<gfx1100> @gfx1100_wave64 {subgroup_size = 64}",
+            "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_sub_wave",
+            "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_full_wave",
+            "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_cross_wave",
+            "kernel.def target(@gfx1100_wave64) @wave64_subgroup_reduce_full_wave",
+            "kernel.workgroup.reduce<addf>",
+            "kernel.subgroup.reduce<addf>"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "compiles wave64 reductions to AMDGPU HAL artifact",
+      "run": {
+        "tool": "loom-compile",
+        "args": [
+          "{srcdir}/wave64_reductions.loom",
+          "--backend=amdgpu-hal",
+          "--target=gfx1100",
+          "--output={tmp}/wave64_reductions.vmfb",
+          "--emit-target-artifact={tmp}/wave64_reductions.hsaco",
+          "--artifact-manifest=summary",
+          "--compile-report=summary"
+        ]
+      },
+      "stderr": {
+        "contains": {
+          "unordered": [
+            "\"target_key\":\"gfx1100\"",
+            "\"executable_format\":\"amdgcn-amd-amdhsa--gfx1100\"",
+            "\"status\":\"OK\"",
+            "\"function\":\"wave64_workgroup_reduce_sub_wave\"",
+            "\"function\":\"wave64_workgroup_reduce_full_wave\"",
+            "\"function\":\"wave64_workgroup_reduce_cross_wave\"",
+            "\"function\":\"wave64_subgroup_reduce_full_wave\"",
+            "\"local_memory_bytes\":8",
+            "\"local_memory_bytes\":16",
+            "\"barrier_count\":1"
+          ]
+        }
+      },
+      "files": [
+        {
+          "path": "{tmp}/wave64_reductions.vmfb",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/wave64_reductions.hsaco",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/wave64_reductions.hsaco.manifest.json",
+          "non_empty": true
+        }
+      ]
+    },
+    {
       "name": "plans shared memory transpose recipe",
       "run": {
         "tool": "iree-benchmark-loom",
