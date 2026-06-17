@@ -4,14 +4,16 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Consumes local scf.for unroll intent.
+// This pass consumes local scf.for unroll intent. Bare `unroll` requires a
+// compile-time full trip count and clones the body inline. `unroll(%factor)`
+// requires a compile-time factor and positive static step, then stripmines the
+// loop so code growth is bounded by the requested factor even when bounds are
+// dynamic or specialization-time facts are available.
 //
-// This pass consumes scf.for unroll / unroll(%factor) policies with
-// compile-time constant loop domains and clones their bodies inline. It is
-// intentionally separate from scf-to-cfg so structured loop intent can survive
-// until passes such as private-fragment promotion have used it, and then be
-// removed before target lowering would otherwise materialize dynamic loop
-// control.
+// The pass is intentionally separate from scf-to-cfg so structured loop intent
+// can survive until passes such as private-fragment promotion have used it, and
+// then be removed before target lowering would otherwise materialize dynamic
+// loop control.
 
 #ifndef LOOM_TRANSFORMS_SCF_UNROLL_H_
 #define LOOM_TRANSFORMS_SCF_UNROLL_H_

@@ -291,7 +291,7 @@ scf_for = Op(
             "unroll_factor",
             INDEX,
             optional=True,
-            doc="Optional SSA unroll factor policy consumed by unroll transforms.",
+            doc="Optional SSA unroll factor policy consumed by unroll transforms. The factor bounds body cloning and does not require the loop trip count to be static.",
         ),
     ],
     attrs=[
