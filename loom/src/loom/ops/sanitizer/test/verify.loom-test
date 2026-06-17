@@ -48,6 +48,14 @@ func.def @race_access_nonatomic_rejects_ordering(%layout: encoding<layout>, %vie
 
 // ====
 
+func.def @race_sync_rejects_relaxed_ordering() {
+  // ERROR@+1: STRUCTURE/014 "ordering" "0" "acquire, release, acq_rel, or seq_cst ordering"
+  sanitizer.race.sync<workgroup> {ordering = relaxed, scope = workgroup}
+  func.return
+}
+
+// ====
+
 func.def @count_mismatch(%x: index) -> (index, index) {
   // ERROR@+1: STRUCTURE/013 "values" "1" "results" "2"
   %a, %b = sanitizer.assert.value %x [ge(%x, 0)] : index, index

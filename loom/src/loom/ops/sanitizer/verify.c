@@ -284,6 +284,20 @@ iree_status_t loom_sanitizer_race_access_verify(
   return iree_ok_status();
 }
 
+iree_status_t loom_sanitizer_race_sync_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  (void)module;
+
+  loom_atomic_ordering_t ordering = loom_sanitizer_race_sync_ordering(op);
+  if (ordering == LOOM_ATOMIC_ORDERING_RELAXED) {
+    return loom_sanitizer_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("ordering"), ordering,
+        IREE_SV("acquire, release, acq_rel, or seq_cst ordering"));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_sanitizer_assert_value_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {

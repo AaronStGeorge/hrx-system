@@ -396,6 +396,7 @@ sanitizer_race_sync = Op(
         ),
     ],
     traits=[UNKNOWN_EFFECTS, CONVERGENT],
+    verify="loom_sanitizer_race_sync_verify",
     format=[
         TemplateParam("memory_space"),
         AttrDict(),
