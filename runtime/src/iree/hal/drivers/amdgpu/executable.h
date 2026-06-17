@@ -13,6 +13,7 @@
 #include "iree/hal/drivers/amdgpu/device/dispatch.h"
 #include "iree/hal/drivers/amdgpu/kernarg_layout.h"
 #include "iree/hal/drivers/amdgpu/profile_metadata.h"
+#include "iree/hal/drivers/amdgpu/queue_scope.h"
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
 #include "iree/hal/drivers/amdgpu/util/pm4_dispatch.h"
 
@@ -128,6 +129,11 @@ iree_status_t iree_hal_amdgpu_executable_infer_format(
 // |tsan_state| is captured by-reference for this load and used to publish TSAN
 // config globals when enabled. It may be NULL when TSAN is unavailable.
 //
+// |queue_scopes| captures immutable queue identities for the owning logical
+// device. Executables with queue-scoped globals may load one HSA executable
+// variant per physical queue ordinal and publish per-queue config without
+// mutating state on each dispatch.
+//
 // Exact code-object image bytes and loader load ranges are retained in profile
 // metadata for offline trace/disassembly workflows. Executable trace profiling
 // may begin after executable preparation, so this cold-path metadata is always
@@ -139,6 +145,8 @@ iree_status_t iree_hal_amdgpu_executable_create(
     uint64_t executable_id, iree_hal_amdgpu_feedback_state_t* feedback_state,
     iree_hal_amdgpu_asan_state_t* asan_state,
     iree_hal_amdgpu_tsan_state_t* tsan_state,
+    iree_host_size_t queue_scope_count,
+    const iree_hal_amdgpu_queue_scope_t* queue_scopes,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_allocator_t host_allocator, iree_hal_executable_t** out_executable);
 
@@ -179,6 +187,22 @@ iree_status_t iree_hal_amdgpu_executable_lookup_dispatch_descriptor_for_device(
     iree_hal_executable_function_t export_ordinal,
     iree_host_size_t device_ordinal,
     const iree_hal_amdgpu_executable_dispatch_descriptor_t** out_descriptor);
+
+// Returns host-resident dispatch metadata for an exported kernel function on a
+// queue.
+//
+// Queue-scoped executable variants require this lookup so the selected kernel
+// object and executable globals match the queue that will receive the dispatch.
+// Non-queue-scoped executables collapse this to the existing per-device lookup.
+iree_status_t iree_hal_amdgpu_executable_lookup_dispatch_descriptor_for_queue(
+    iree_hal_executable_t* executable,
+    iree_hal_executable_function_t export_ordinal,
+    iree_hal_queue_affinity_t queue_affinity,
+    const iree_hal_amdgpu_executable_dispatch_descriptor_t** out_descriptor);
+
+// Returns true when dispatches must select executable metadata by queue.
+bool iree_hal_amdgpu_executable_requires_queue_scope(
+    iree_hal_executable_t* executable);
 
 // Returns PM4 compute launch state for an exported kernel function on a
 // physical device.

@@ -145,9 +145,11 @@ iree_cc_library(
   SRCS
     "tsan_executable_test.cc"
   DEPS
+    iree::hal::cts::sanitizer::asan_test_util
     iree::hal::cts::util::test_base
     iree::hal::drivers::amdgpu::abi
     iree::hal::drivers::amdgpu::headers
+    iree::hal::drivers::amdgpu::registration
   TESTONLY
   ALWAYSLINK
   PUBLIC

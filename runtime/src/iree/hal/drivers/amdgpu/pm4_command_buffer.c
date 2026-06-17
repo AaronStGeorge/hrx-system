@@ -3206,6 +3206,13 @@ static iree_status_t iree_hal_amdgpu_pm4_command_buffer_record_dispatch(
     iree_hal_buffer_ref_list_t bindings, iree_hal_dispatch_flags_t flags) {
   IREE_RETURN_IF_ERROR(
       iree_hal_amdgpu_pm4_command_buffer_check_dispatch_flags(flags));
+  if (IREE_UNLIKELY(
+          iree_hal_amdgpu_executable_requires_queue_scope(executable))) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU queue-scoped executable dispatch from PM4 command buffers is "
+        "not implemented");
+  }
 
   const iree_hal_amdgpu_executable_dispatch_descriptor_t* descriptor = NULL;
   IREE_RETURN_IF_ERROR(

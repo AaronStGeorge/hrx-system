@@ -201,3 +201,14 @@ iree_status_t iree_hal_amdgpu_tsan_state_populate_config(
   *out_config = state->device_states[physical_device_ordinal].config;
   return iree_ok_status();
 }
+
+iree_status_t iree_hal_amdgpu_tsan_state_populate_queue_config(
+    const iree_hal_amdgpu_tsan_state_t* state,
+    iree_host_size_t physical_device_ordinal, uint64_t queue_aql_base,
+    uint64_t queue_aql_slot_mask, iree_hal_amdgpu_tsan_config_t* out_config) {
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_tsan_state_populate_config(
+      state, physical_device_ordinal, out_config));
+  out_config->queue_aql_base = queue_aql_base;
+  out_config->queue_aql_slot_mask = queue_aql_slot_mask;
+  return iree_ok_status();
+}

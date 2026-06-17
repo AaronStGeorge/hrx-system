@@ -84,6 +84,16 @@ iree_status_t iree_hal_amdgpu_tsan_state_populate_config(
     iree_host_size_t physical_device_ordinal,
     iree_hal_amdgpu_tsan_config_t* out_config);
 
+// Populates |out_config| with queue-specific TSAN configuration.
+//
+// |queue_aql_base| and |queue_aql_slot_mask| describe the owning queue's AQL
+// ring so device code can derive a queue-local dispatch slot from its implicit
+// dispatch packet pointer without host per-dispatch publication.
+iree_status_t iree_hal_amdgpu_tsan_state_populate_queue_config(
+    const iree_hal_amdgpu_tsan_state_t* state,
+    iree_host_size_t physical_device_ordinal, uint64_t queue_aql_base,
+    uint64_t queue_aql_slot_mask, iree_hal_amdgpu_tsan_config_t* out_config);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

@@ -120,9 +120,11 @@ iree_runtime_cc_library(
     testonly = True,
     srcs = ["tsan_executable_test.cc"],
     deps = [
+        "//runtime/src/iree/hal/cts/sanitizer:asan_test_util",
         "//runtime/src/iree/hal/cts/util:test_base",
         "//runtime/src/iree/hal/drivers/amdgpu:headers",
         "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/hal/drivers/amdgpu/registration",
     ],
     alwayslink = True,
 )

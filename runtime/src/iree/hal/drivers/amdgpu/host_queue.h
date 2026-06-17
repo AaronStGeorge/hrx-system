@@ -17,6 +17,7 @@
 #include "iree/hal/drivers/amdgpu/abi/profile.h"
 #include "iree/hal/drivers/amdgpu/abi/signal.h"
 #include "iree/hal/drivers/amdgpu/device/blit.h"
+#include "iree/hal/drivers/amdgpu/queue_scope.h"
 #include "iree/hal/drivers/amdgpu/util/aql_ring.h"
 #include "iree/hal/drivers/amdgpu/util/block_pool.h"
 #include "iree/hal/drivers/amdgpu/util/epoch_signal_table.h"
@@ -488,9 +489,8 @@ typedef struct iree_hal_amdgpu_host_queue_t {
   // lifetime of the queue.
   iree_arena_block_pool_t* block_pool;
 
-  // Ordinal of this queue's physical device within the topology. Used to look
-  // up device-specific kernel_args from executables via
-  // iree_hal_amdgpu_executable_lookup_kernel_args_for_device.
+  // Ordinal of this queue's physical device within the topology. Used by
+  // device-specific executable metadata paths and queue-local helpers.
   iree_host_size_t device_ordinal;
 
   // Builtin blit kernel table for this queue's physical device. Borrowed from
@@ -664,6 +664,15 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
 // The caller must ensure no concurrent access to the queue during deinit.
 void iree_hal_amdgpu_host_queue_deinitialize(
     iree_hal_amdgpu_host_queue_t* queue);
+
+// Populates |out_scope| with immutable queue identity and AQL ring facts.
+//
+// |queue_ordinal| is the flattened logical queue ordinal in the owning HAL
+// device. |physical_queue_ordinal| is relative to |queue->device_ordinal|.
+void iree_hal_amdgpu_host_queue_query_scope(
+    const iree_hal_amdgpu_host_queue_t* queue, iree_host_size_t queue_ordinal,
+    iree_host_size_t physical_queue_ordinal,
+    iree_hal_amdgpu_queue_scope_t* out_scope);
 
 // Drains completed notification entries, retires queue-owned resources, runs
 // post-drain continuations, and advances the queue frontier tracker.

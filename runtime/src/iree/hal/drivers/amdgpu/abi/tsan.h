@@ -79,11 +79,11 @@ enum iree_hal_amdgpu_tsan_report_flag_bits_t {
 
 // Runtime-published TSAN configuration read by instrumented device code.
 //
-// The first implementation uses one shadow slot per physical device. The ABI is
-// intentionally shaped so a queue-sharded executable can later publish
-// queue-specific AQL ring coordinates without changing the device-side field
-// contract: a dispatch pointer maps to a dispatch slot when |queue_aql_base| is
-// non-zero, otherwise slot zero is used.
+// Queue-scoped executable variants publish queue-specific AQL ring coordinates
+// so device code can derive a queue-local dispatch slot from its implicit
+// dispatch packet pointer without host per-dispatch mutation. When
+// |queue_aql_base| is zero, instrumentation must conservatively use dispatch
+// slot zero.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   // Size of this record in bytes for forward-compatible parsing.
   uint32_t record_length;

@@ -2655,11 +2655,35 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_executable_cache(
     iree_hal_executable_cache_t** out_executable_cache) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+
+  iree_host_size_t queue_scope_count = 0;
+  for (iree_host_size_t i = 0; i < logical_device->physical_device_count; ++i) {
+    queue_scope_count += logical_device->physical_devices[i]->host_queue_count;
+  }
+  iree_hal_amdgpu_queue_scope_t* queue_scopes = NULL;
+  if (queue_scope_count != 0) {
+    queue_scopes = (iree_hal_amdgpu_queue_scope_t*)iree_alloca(
+        queue_scope_count * sizeof(queue_scopes[0]));
+    iree_host_size_t queue_scope_ordinal = 0;
+    for (iree_host_size_t i = 0; i < logical_device->physical_device_count;
+         ++i) {
+      iree_hal_amdgpu_physical_device_t* physical_device =
+          logical_device->physical_devices[i];
+      for (iree_host_size_t j = 0; j < physical_device->host_queue_count; ++j) {
+        const iree_host_size_t queue_ordinal =
+            i * logical_device->system->topology.gpu_agent_queue_count + j;
+        iree_hal_amdgpu_host_queue_query_scope(
+            &physical_device->host_queues[j], queue_ordinal, j,
+            &queue_scopes[queue_scope_ordinal++]);
+      }
+    }
+  }
+
   return iree_hal_amdgpu_executable_cache_create(
       base_device, &logical_device->system->libhsa,
       &logical_device->system->topology, &logical_device->feedback,
-      &logical_device->asan, &logical_device->tsan,
-      &logical_device->profile_metadata, identifier,
+      &logical_device->asan, &logical_device->tsan, queue_scope_count,
+      queue_scopes, &logical_device->profile_metadata, identifier,
       iree_hal_device_host_allocator(base_device), out_executable_cache);
 }
 

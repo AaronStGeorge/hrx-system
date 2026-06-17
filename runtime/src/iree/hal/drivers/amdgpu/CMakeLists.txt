@@ -256,6 +256,7 @@ iree_cc_library(
     "profile_metadata.h"
     "profile_traces.c"
     "profile_traces.h"
+    "queue_scope.h"
     "semaphore.c"
     "semaphore.h"
     "slab_provider.c"

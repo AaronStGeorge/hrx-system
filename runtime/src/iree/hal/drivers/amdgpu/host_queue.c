@@ -175,6 +175,23 @@ static void iree_hal_amdgpu_host_queue_run_post_drain_actions(
   }
 }
 
+void iree_hal_amdgpu_host_queue_query_scope(
+    const iree_hal_amdgpu_host_queue_t* queue, iree_host_size_t queue_ordinal,
+    iree_host_size_t physical_queue_ordinal,
+    iree_hal_amdgpu_queue_scope_t* out_scope) {
+  IREE_ASSERT_ARGUMENT(queue);
+  IREE_ASSERT_ARGUMENT(out_scope);
+
+  *out_scope = (iree_hal_amdgpu_queue_scope_t){
+      .queue_affinity = queue->queue_affinity,
+      .queue_ordinal = queue_ordinal,
+      .physical_device_ordinal = queue->device_ordinal,
+      .physical_queue_ordinal = physical_queue_ordinal,
+      .aql_ring_base = (uint64_t)(uintptr_t)queue->aql_ring.base,
+      .aql_ring_mask = queue->aql_ring.mask,
+  };
+}
+
 // Drains completed notification entries and reclaims kernarg space. If the GPU
 // queue has faulted (error_status is set), fails all pending entries instead of
 // draining normally. Caller must hold completion_drain_mutex.

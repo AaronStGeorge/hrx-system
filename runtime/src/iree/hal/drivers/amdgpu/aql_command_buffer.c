@@ -1952,6 +1952,13 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
   *out_plan = (iree_hal_amdgpu_aql_dispatch_plan_t){0};
   IREE_RETURN_IF_ERROR(
       iree_hal_amdgpu_aql_command_buffer_check_dispatch_flags(inputs->flags));
+  if (IREE_UNLIKELY(iree_hal_amdgpu_executable_requires_queue_scope(
+          inputs->executable))) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU queue-scoped executable dispatch from command buffers is not "
+        "implemented");
+  }
   IREE_RETURN_IF_ERROR(
       iree_hal_amdgpu_executable_lookup_dispatch_descriptor_for_device(
           inputs->executable, inputs->export_ordinal,
