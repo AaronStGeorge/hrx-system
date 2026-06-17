@@ -64,6 +64,21 @@ loom_matrix_fragment_layout_t RdnaLayout() {
   };
 }
 
+loom_matrix_fragment_layout_t RdnaLowSubwordLayout() {
+  loom_matrix_fragment_layout_t layout = RdnaLayout();
+  layout.kind = 2;
+  layout.name = IREE_SV("test.rdna.low_subword");
+  layout.accumulator = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+      LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD, 8,
+      2, kRowColumn);
+  layout.result = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+      LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD, 8,
+      2, kRowColumn);
+  return layout;
+}
+
 loom_matrix_fragment_layout_t CdnaLayout() {
   return (loom_matrix_fragment_layout_t){
       /*.kind=*/2,
@@ -205,6 +220,26 @@ TEST(MatrixFragmentLayoutTest, MapsRegisterInterleavedRowColumnCoordinates) {
                    kRowColumn, 1, 0, 0);
   ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 31, 7, 0,
                    kRowColumn, 15, 15, 0);
+}
+
+TEST(MatrixFragmentLayoutTest, MapsRegisterInterleavedLowSubwordCoordinates) {
+  loom_matrix_fragment_layout_t layout = RdnaLowSubwordLayout();
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0, 0, 0,
+                   kRowColumn, 0, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 15, 0, 0,
+                   kRowColumn, 0, 15, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 16, 0, 0,
+                   kRowColumn, 1, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 31, 7, 0,
+                   kRowColumn, 15, 15, 0);
+
+  loom_matrix_fragment_coordinate_t coordinate = {};
+  EXPECT_FALSE(loom_matrix_fragment_coordinate(
+      &layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 31, 7, 1, &coordinate));
+  ExpectPhysicalElementCount(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                             RowColumn(15, 15), 1);
+  ExpectPhysicalElement(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                        RowColumn(15, 15), 0, 31, 7, 0);
 }
 
 TEST(MatrixFragmentLayoutTest, MapsLaneGroupPackedReductionCoordinates) {

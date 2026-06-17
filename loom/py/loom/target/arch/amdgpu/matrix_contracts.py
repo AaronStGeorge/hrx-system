@@ -1665,6 +1665,8 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("f16", 8, 16),
         result=payload("f16", 8, 16),
         scale_kind="none",
+        wave_size="32",
+        fragment_layout="rdna3_wmmar3_f16_16x16x16_f16",
     ),
     AmdgpuMatrixContract(
         name="wmma.bf16.16x16x16.bf16",
@@ -1677,6 +1679,8 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("bf16", 8, 16),
         result=payload("bf16", 8, 16),
         scale_kind="none",
+        wave_size="32",
+        fragment_layout="rdna3_wmmar3_bf16_16x16x16_bf16",
     ),
     AmdgpuMatrixContract(
         name="wmma.f32.16x16x16.fp8.fp8",
