@@ -257,7 +257,7 @@ TEST_F(TargetPipelineTest, RaceChecksBuildRaceObservationPassSlot) {
   EXPECT_EQ(counts.sanitizer_insert_race_observations, 1);
   EXPECT_TRUE(iree_string_view_equal(counts.sanitizer_insert_race_checks,
                                      IREE_SV("race")));
-  EXPECT_EQ(counts.sanitizer_materialize_assertions, 1);
+  EXPECT_EQ(counts.sanitizer_materialize_assertions, 0);
   EXPECT_EQ(counts.other_sanitizer_runs, 0);
 }
 

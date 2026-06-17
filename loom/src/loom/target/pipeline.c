@@ -311,7 +311,9 @@ static iree_status_t loom_target_pipeline_build_low_preparation(
       (const loom_target_pipeline_build_context_t*)user_data;
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION));
-  if (loom_target_pipeline_sanitizer_enabled(context)) {
+  if (loom_target_pipeline_sanitizer_has_checks(
+          context, LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
+                       LOOM_SANITIZER_CHECK_OPERATION)) {
     IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
         builder, IREE_SV("sanitizer-materialize-assertions")));
   }
