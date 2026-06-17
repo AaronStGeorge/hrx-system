@@ -31,6 +31,7 @@ BEAD_ID_PATTERN = re.compile(
 SUBJECT_TAG_PATTERN = re.compile(
     r"^\[(?P<tag>[A-Za-z][A-Za-z0-9]*(?:/[A-Za-z][A-Za-z0-9]*)?)\](?:\s+|$)"
 )
+AUTOSQUASH_SUBJECT_PREFIX_PATTERN = re.compile(r"^(?P<prefix>fixup|squash|amend)!\s+")
 CODE_FENCE_PATTERN = re.compile(r"^\s*(```|~~~)")
 TAG_EXAMPLES = ("[Loom]", "[HRX]", "[HAL]", "[Runtime]", "[Infra]", "[CI]")
 
@@ -186,6 +187,19 @@ def tag_hint(paths: Sequence[str]) -> str:
     return hint
 
 
+def unwrap_autosquash_subject(subject: str) -> tuple[str, bool]:
+    """Returns the subject after removing Git autosquash prefixes."""
+
+    unwrapped_subject = subject
+    is_autosquash_subject = False
+    while True:
+        prefix_match = AUTOSQUASH_SUBJECT_PREFIX_PATTERN.match(unwrapped_subject)
+        if prefix_match is None:
+            return unwrapped_subject, is_autosquash_subject
+        is_autosquash_subject = True
+        unwrapped_subject = unwrapped_subject[prefix_match.end() :]
+
+
 def validate_subject_line(
     line_number: int,
     subject: str,
@@ -206,30 +220,37 @@ def validate_subject_line(
         )
         return diagnostics
 
-    if len(subject) > LINE_LENGTH_LIMIT:
+    policy_subject, is_autosquash_subject = unwrap_autosquash_subject(subject)
+
+    if len(policy_subject) > LINE_LENGTH_LIMIT:
         diagnostics.append(
             CommitMessageDiagnostic(
                 line_number=line_number,
                 message=(
-                    f"subject line is {len(subject)} characters; keep it at or "
+                    f"subject line is {len(policy_subject)} characters; keep it at or "
                     f"below {LINE_LENGTH_LIMIT}"
                 ),
-                text=subject,
+                text=policy_subject,
                 hint="Move detail into the body and keep the subject crisp.",
             )
         )
 
-    tag_match = SUBJECT_TAG_PATTERN.match(subject)
+    tag_match = SUBJECT_TAG_PATTERN.match(policy_subject)
     if tag_match is None:
         diagnostics.append(
             CommitMessageDiagnostic(
                 line_number=line_number,
-                message="subject line must start with a bracketed subsystem tag",
-                text=subject,
+                message=(
+                    "autosquash target subject must start with a bracketed "
+                    "subsystem tag"
+                    if is_autosquash_subject
+                    else "subject line must start with a bracketed subsystem tag"
+                ),
+                text=policy_subject,
                 hint=tag_hint(changed_paths),
             )
         )
-    elif subject[tag_match.end() :].strip() == "":
+    elif policy_subject[tag_match.end() :].strip() == "":
         diagnostics.append(
             CommitMessageDiagnostic(
                 line_number=line_number,

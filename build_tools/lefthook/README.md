@@ -44,6 +44,10 @@ line must start with a bracketed subsystem tag such as `[Loom]`, `[HRX]`,
 Slash-qualified tags such as `[HAL/AMDGPU]`, `[Loom/WASM]`, or `[Runtime/VM]`
 are accepted when the narrower ownership surface is useful.
 
+Git autosquash subjects such as `fixup! [Loom] ...`, `squash! [Loom] ...`,
+and `amend! [Loom] ...` are accepted. The hook strips the autosquash wrapper
+and validates the target subject with the same tag and subject-length policy.
+
 Subjects and prose body lines must stay at or below 72 characters. Long lines
 inside fenced code blocks are accepted so literal examples can remain faithful.
 When a tag is missing, the hook ranks suggested tags from the staged paths and

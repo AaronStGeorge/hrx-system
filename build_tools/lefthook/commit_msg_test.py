@@ -60,6 +60,35 @@ class CommitMessageTest(unittest.TestCase):
             [],
         )
 
+    def test_allows_git_autosquash_subjects(self):
+        valid_subject = "[Loom] Update sanitizer race lowering"
+        for prefix in ("fixup!", "squash!", "amend!", "fixup! squash!"):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(
+                    self.diagnostic_texts(f"{prefix} {valid_subject}\n"),
+                    [],
+                )
+
+    def test_allows_autosquash_prefix_to_exceed_subject_length(self):
+        valid_subject = "[Infra] " + "x" * (commit_msg.LINE_LENGTH_LIMIT - 8)
+        self.assertEqual(
+            self.diagnostic_messages(f"fixup! {valid_subject}\n"),
+            [],
+        )
+
+    def test_rejects_autosquash_target_without_subject_tag(self):
+        self.assertEqual(
+            self.diagnostic_messages("fixup! Update race lowering\n"),
+            ["autosquash target subject must start with a bracketed subsystem tag"],
+        )
+
+    def test_rejects_long_autosquash_target_subject(self):
+        subject = "[Infra] " + "x" * 80
+        self.assertEqual(
+            self.diagnostic_messages(f"fixup! {subject}\n"),
+            ["subject line is 88 characters; keep it at or below 72"],
+        )
+
     def test_rejects_literal_newline_escape(self):
         self.assertEqual(
             self.diagnostic_texts(
