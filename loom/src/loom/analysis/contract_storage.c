@@ -293,6 +293,8 @@ bool loom_contract_view_payload_from_type(
   }
   out_payload->kind = LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT;
   out_payload->operand.numeric_type = numeric_type;
+  out_payload->operand.encoded.available_capability_flags =
+      loom_contract_plain_fragment_available_capability_flags(role);
   return true;
 }
 
@@ -324,11 +326,27 @@ bool loom_contract_request_from_matrix_payloads(
   out_request->k_group_size = options->k_group_size;
   out_request->lhs = options->lhs.operand;
   out_request->lhs.role = LOOM_CONTRACT_OPERAND_ROLE_LHS;
+  if (options->lhs.kind == LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT) {
+    out_request->lhs.encoded.available_capability_flags =
+        loom_contract_plain_fragment_available_capability_flags(
+            LOOM_CONTRACT_OPERAND_ROLE_LHS);
+  }
   out_request->rhs = options->rhs.operand;
   out_request->rhs.role = LOOM_CONTRACT_OPERAND_ROLE_RHS;
+  if (options->rhs.kind == LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT) {
+    out_request->rhs.encoded.available_capability_flags =
+        loom_contract_plain_fragment_available_capability_flags(
+            LOOM_CONTRACT_OPERAND_ROLE_RHS);
+  }
   out_request->accumulator = (loom_contract_operand_t){
       .role = LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
       .numeric_type = options->accumulator_numeric_type,
+      .encoded =
+          {
+              .available_capability_flags =
+                  loom_contract_plain_fragment_available_capability_flags(
+                      LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR),
+          },
   };
   out_request->result = (loom_contract_operand_t){
       .role = LOOM_CONTRACT_OPERAND_ROLE_RESULT,

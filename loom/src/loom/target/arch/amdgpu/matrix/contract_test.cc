@@ -642,6 +642,34 @@ TEST(MatrixContractTest, SparseFp8CrossProductDescriptors) {
             LOOM_AMDGPU_MATRIX_NUMERIC_F16);
 }
 
+TEST(MatrixContractTest, NativeHalfSwmmacDescriptorsRequireFragmentLayout) {
+  const char* const native_half_names[] = {
+      "swmmac.f16.16x16x128.fp8.fp8", "swmmac.f16.16x16x128.fp8.bf8",
+      "swmmac.f16.16x16x128.bf8.fp8", "swmmac.f16.16x16x128.bf8.bf8",
+      "swmmac.f16.16x16x64.f16",      "swmmac.bf16.16x16x64.bf16",
+      "swmmac.f16.16x16x32.f16",      "swmmac.bf16.16x16x32.bf16",
+  };
+  for (const char* name : native_half_names) {
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+        FindDescriptor(name);
+    ASSERT_NE(descriptor, nullptr) << name;
+    EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_SWMMAC) << name;
+    EXPECT_EQ(descriptor->fragment_layout_kind,
+              LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_UNKNOWN)
+        << name;
+    EXPECT_EQ(
+        descriptor->source_requirement_flags &
+            LOOM_AMDGPU_MATRIX_CONTRACT_SOURCE_REQUIREMENT_FRAGMENT_LAYOUT,
+        LOOM_AMDGPU_MATRIX_CONTRACT_SOURCE_REQUIREMENT_FRAGMENT_LAYOUT)
+        << name;
+  }
+
+  const loom_amdgpu_matrix_contract_descriptor_t* f32_descriptor =
+      FindDescriptor("swmmac.f32.16x16x32.f16");
+  ASSERT_NE(f32_descriptor, nullptr);
+  EXPECT_EQ(f32_descriptor->source_requirement_flags, 0u);
+}
+
 TEST(MatrixContractTest, WmmaFp8CrossProductDescriptors) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       FindDescriptor("wmma.f32.16x16x16.bf8.fp8");
@@ -903,6 +931,62 @@ TEST(MatrixContractTest, DenseFragmentDescriptorsCarryLayouts) {
           8,
           LOOM_AMDGPU_MATRIX_WAVE_SIZE_64,
           64,
+      },
+      {
+          "wmma.f16.16x16x16.f16.gfx12",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F16_16X16X16_F16,
+          LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X16_F16,
+          "rdna4.wmma.f16.16x16x16.f16",
+          LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+          4,
+          8,
+          4,
+          8,
+          LOOM_AMDGPU_MATRIX_WAVE_SIZE_32,
+          32,
+      },
+      {
+          "wmma.bf16.16x16x16.bf16.gfx12",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_BF16_16X16X16_BF16,
+          LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X16_BF16,
+          "rdna4.wmma.bf16.16x16x16.bf16",
+          LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+          4,
+          8,
+          4,
+          8,
+          LOOM_AMDGPU_MATRIX_WAVE_SIZE_32,
+          32,
+      },
+      {
+          "wmma.f16.16x16x32.f16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F16_16X16X32_F16,
+          LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X32_F16,
+          "rdna4.wmma.f16.16x16x32.f16",
+          LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+          8,
+          16,
+          4,
+          8,
+          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY,
+          32,
+      },
+      {
+          "wmma.bf16.16x16x32.bf16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_BF16_16X16X32_BF16,
+          LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X32_BF16,
+          "rdna4.wmma.bf16.16x16x32.bf16",
+          LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+          8,
+          16,
+          4,
+          8,
+          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY,
+          32,
       },
       {
           "mfma.f32.16x16x16.f16",
@@ -1188,6 +1272,148 @@ TEST(MatrixContractTest, Rdna3Wmmar3Wave64LayoutsMapFragments) {
   loom_amdgpu_matrix_fragment_coordinate_t coordinate = {};
   EXPECT_FALSE(loom_amdgpu_matrix_fragment_coordinate(
       f16_layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3, 1, &coordinate));
+}
+
+TEST(MatrixContractTest, Rdna4WmmaHalfLayoutsMapPackedFragments) {
+  constexpr loom_amdgpu_matrix_fragment_coordinate_flags_t kLhsCoordinates =
+      LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |
+      LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION;
+  constexpr loom_amdgpu_matrix_fragment_coordinate_flags_t kRhsCoordinates =
+      LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN |
+      LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION;
+  constexpr loom_amdgpu_matrix_fragment_coordinate_flags_t
+      kAccumulatorCoordinates = LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |
+                                LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN;
+
+  struct Case {
+    const char* descriptor_name;
+    loom_amdgpu_descriptor_ref_t low_descriptor_ref;
+    loom_amdgpu_matrix_fragment_layout_kind_t layout_kind;
+    const char* layout_name;
+    loom_amdgpu_matrix_numeric_type_t numeric_type;
+    uint16_t reduction_count;
+    uint16_t source_register_count;
+    uint16_t source_element_count;
+  };
+  const Case cases[] = {
+      {
+          "wmma.f16.16x16x16.f16.gfx12",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F16_16X16X16_F16,
+          LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X16_F16,
+          "rdna4.wmma.f16.16x16x16.f16",
+          LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+          16,
+          4,
+          8,
+      },
+      {
+          "wmma.bf16.16x16x16.bf16.gfx12",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_BF16_16X16X16_BF16,
+          LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X16_BF16,
+          "rdna4.wmma.bf16.16x16x16.bf16",
+          LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+          16,
+          4,
+          8,
+      },
+      {
+          "wmma.f16.16x16x32.f16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F16_16X16X32_F16,
+          LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X32_F16,
+          "rdna4.wmma.f16.16x16x32.f16",
+          LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+          32,
+          8,
+          16,
+      },
+      {
+          "wmma.bf16.16x16x32.bf16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_BF16_16X16X32_BF16,
+          LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X32_BF16,
+          "rdna4.wmma.bf16.16x16x32.bf16",
+          LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+          32,
+          8,
+          16,
+      },
+  };
+  for (const Case& test_case : cases) {
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+        FindDescriptor(test_case.descriptor_name);
+    ASSERT_NE(descriptor, nullptr) << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->low_descriptor_ref, test_case.low_descriptor_ref)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->tile_shape.reduction_count, test_case.reduction_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->lhs_payload.numeric_type, test_case.numeric_type)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->lhs_payload.register_count,
+              test_case.source_register_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->lhs_payload.element_count,
+              test_case.source_element_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->accumulator_payload.numeric_type,
+              test_case.numeric_type)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->accumulator_payload.register_count, 4)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->accumulator_payload.element_count, 8)
+        << test_case.descriptor_name;
+
+    const loom_amdgpu_matrix_fragment_layout_t* layout =
+        loom_amdgpu_matrix_contract_descriptor_fragment_layout(descriptor);
+    ASSERT_NE(layout, nullptr) << test_case.descriptor_name;
+    EXPECT_EQ(layout->kind, test_case.layout_kind) << test_case.descriptor_name;
+    EXPECT_EQ(ToString(layout->name), test_case.layout_name)
+        << test_case.descriptor_name;
+    EXPECT_EQ(layout->wave_size, 32) << test_case.descriptor_name;
+    EXPECT_EQ(layout->tile_shape.result_row_count, 16)
+        << test_case.descriptor_name;
+    EXPECT_EQ(layout->tile_shape.result_column_count, 16)
+        << test_case.descriptor_name;
+    EXPECT_EQ(layout->tile_shape.reduction_count, test_case.reduction_count)
+        << test_case.descriptor_name;
+
+    ExpectFragmentRoleLayout(
+        layout, LOOM_CONTRACT_OPERAND_ROLE_LHS,
+        LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION,
+        test_case.source_register_count, 2, 16, kLhsCoordinates);
+    ExpectFragmentRoleLayout(
+        layout, LOOM_CONTRACT_OPERAND_ROLE_RHS,
+        LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION,
+        test_case.source_register_count, 2, 16, kRhsCoordinates);
+    ExpectFragmentRoleLayout(
+        layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+        LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_PACKED_ROW_COLUMN, 4, 2, 16,
+        kAccumulatorCoordinates);
+    ExpectFragmentRoleLayout(
+        layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+        LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_PACKED_ROW_COLUMN, 4, 2, 16,
+        kAccumulatorCoordinates);
+
+    ExpectFragmentCoordinate(layout, LOOM_CONTRACT_OPERAND_ROLE_LHS, 0, 0, 0,
+                             kLhsCoordinates, 0, 0, 0);
+    ExpectFragmentCoordinate(layout, LOOM_CONTRACT_OPERAND_ROLE_LHS, 16,
+                             test_case.source_register_count - 1, 1,
+                             kLhsCoordinates, 0, 0,
+                             test_case.reduction_count - 1);
+    ExpectFragmentCoordinate(layout, LOOM_CONTRACT_OPERAND_ROLE_RHS, 31,
+                             test_case.source_register_count - 1, 1,
+                             kRhsCoordinates, 0, 15,
+                             test_case.reduction_count - 1);
+
+    ExpectFragmentCoordinate(layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0,
+                             0, 0, kAccumulatorCoordinates, 0, 0, 0);
+    ExpectFragmentCoordinate(layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0,
+                             0, 1, kAccumulatorCoordinates, 1, 0, 0);
+    ExpectFragmentCoordinate(layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 15,
+                             3, 1, kAccumulatorCoordinates, 7, 15, 0);
+    ExpectFragmentCoordinate(layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 16, 0,
+                             0, kAccumulatorCoordinates, 8, 0, 0);
+    ExpectFragmentCoordinate(layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 31, 3,
+                             1, kAccumulatorCoordinates, 15, 15, 0);
+  }
 }
 
 TEST(MatrixContractTest, MatcherSelectedWmmar3DescriptorCarriesLayoutFacts) {

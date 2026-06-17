@@ -38,6 +38,7 @@ class AmdgpuMatrixContract:
     intrinsic_name: str | None = None
     semantic_tag: str | None = None
     fragment_layout: str | None = None
+    source_requirements: tuple[str, ...] = ()
 
 
 def payload(
@@ -1009,6 +1010,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("f16", 4, 8),
         result=payload("f16", 4, 8),
         scale_kind="none",
+        source_requirements=("fragment_layout",),
     ),
     AmdgpuMatrixContract(
         name="swmmac.f16.16x16x128.fp8.bf8",
@@ -1021,6 +1023,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("f16", 4, 8),
         result=payload("f16", 4, 8),
         scale_kind="none",
+        source_requirements=("fragment_layout",),
     ),
     AmdgpuMatrixContract(
         name="swmmac.f16.16x16x128.bf8.fp8",
@@ -1033,6 +1036,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("f16", 4, 8),
         result=payload("f16", 4, 8),
         scale_kind="none",
+        source_requirements=("fragment_layout",),
     ),
     AmdgpuMatrixContract(
         name="swmmac.f16.16x16x128.bf8.bf8",
@@ -1045,6 +1049,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("f16", 4, 8),
         result=payload("f16", 4, 8),
         scale_kind="none",
+        source_requirements=("fragment_layout",),
     ),
     AmdgpuMatrixContract(
         name="swmmac.f32.16x16x64.f16",
@@ -1081,6 +1086,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("f16", 4, 8),
         result=payload("f16", 4, 8),
         scale_kind="none",
+        source_requirements=("fragment_layout",),
     ),
     AmdgpuMatrixContract(
         name="swmmac.bf16.16x16x64.bf16",
@@ -1093,6 +1099,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("bf16", 4, 8),
         result=payload("bf16", 4, 8),
         scale_kind="none",
+        source_requirements=("fragment_layout",),
     ),
     AmdgpuMatrixContract(
         name="swmmac.bf16f32.16x16x64.bf16",
@@ -1153,6 +1160,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("f16", 4, 8),
         result=payload("f16", 4, 8),
         scale_kind="none",
+        source_requirements=("fragment_layout",),
     ),
     AmdgpuMatrixContract(
         name="swmmac.bf16.16x16x32.bf16",
@@ -1165,6 +1173,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("bf16", 4, 8),
         result=payload("bf16", 4, 8),
         scale_kind="none",
+        source_requirements=("fragment_layout",),
     ),
     AmdgpuMatrixContract(
         name="swmmac.i32.16x16x32.iu8",
@@ -1297,6 +1306,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("f16", 4, 8),
         result=payload("f16", 4, 8),
         scale_kind="none",
+        fragment_layout="rdna4_wmma_f16_16x16x32_f16",
     ),
     AmdgpuMatrixContract(
         name="wmma.bf16.16x16x32.bf16",
@@ -1309,6 +1319,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         accumulator=payload("bf16", 4, 8),
         result=payload("bf16", 4, 8),
         scale_kind="none",
+        fragment_layout="rdna4_wmma_bf16_16x16x32_bf16",
     ),
     AmdgpuMatrixContract(
         name="wmma.bf16f32.16x16x32.bf16",
@@ -1579,6 +1590,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         wave_size="32",
         semantic_tag="matrix.wmma.f16.16x16x16.f16",
         intrinsic_name="llvm.amdgcn.wmma.f16.16x16x16.f16",
+        fragment_layout="rdna4_wmma_f16_16x16x16_f16",
     ),
     AmdgpuMatrixContract(
         name="wmma.bf16.16x16x16.bf16.gfx12",
@@ -1594,6 +1606,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
         wave_size="32",
         semantic_tag="matrix.wmma.bf16.16x16x16.bf16",
         intrinsic_name="llvm.amdgcn.wmma.bf16.16x16x16.bf16",
+        fragment_layout="rdna4_wmma_bf16_16x16x16_bf16",
     ),
     AmdgpuMatrixContract(
         name="wmma.f32.16x16x16.f16.gfx12",

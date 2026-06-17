@@ -184,6 +184,19 @@ bool loom_matrix_fragment_coordinate_from_role_layout(
       out_coordinate->column = lane % tile_shape.result_column_count;
       return true;
     }
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_PACKED_ROW_COLUMN: {
+      const uint32_t row =
+          (uint32_t)(lane / tile_shape.result_column_count) *
+              role_layout->register_count * role_layout->elements_per_register +
+          (uint32_t)register_index * role_layout->elements_per_register +
+          element_index;
+      if (row >= tile_shape.result_row_count) {
+        return false;
+      }
+      out_coordinate->row = (uint16_t)row;
+      out_coordinate->column = lane % tile_shape.result_column_count;
+      return true;
+    }
     case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
     default:
       return false;

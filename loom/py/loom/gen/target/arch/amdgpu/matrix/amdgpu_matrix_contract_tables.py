@@ -115,6 +115,10 @@ _FLAG_C_NAMES = {
     "scale_formats": "LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS",
 }
 
+_SOURCE_REQUIREMENT_C_NAMES = {
+    "fragment_layout": ("LOOM_AMDGPU_MATRIX_CONTRACT_SOURCE_REQUIREMENT_FRAGMENT_LAYOUT"),
+}
+
 _FRAGMENT_LAYOUT_C_NAMES = {
     None: "LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_UNKNOWN",
     "rdna3_wmmar3_f32_16x16x16_f16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16"),
@@ -125,6 +129,10 @@ _FRAGMENT_LAYOUT_C_NAMES = {
     "rdna3_wmmar3_bf16_16x16x16_bf16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_BF16_16X16X16_BF16"),
     "rdna3_wmmar3_f16_16x16x16_f16_w64": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F16_16X16X16_F16_W64"),
     "rdna3_wmmar3_bf16_16x16x16_bf16_w64": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_BF16_16X16X16_BF16_W64"),
+    "rdna4_wmma_f16_16x16x16_f16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X16_F16"),
+    "rdna4_wmma_bf16_16x16x16_bf16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X16_BF16"),
+    "rdna4_wmma_f16_16x16x32_f16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X32_F16"),
+    "rdna4_wmma_bf16_16x16x32_bf16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X32_BF16"),
     "cdna_mfma_f32_16x16x16_f16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16_F16"),
     "cdna_mfma_f32_16x16x16_bf16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16_BF16"),
     "cdna_mfma_f32_16x16x4_f32": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X4_F32"),
@@ -377,6 +385,12 @@ def _contract_initializer(
         contract=contract,
     )
     _validate_known_values(contract.flags, _FLAG_C_NAMES, field_name="flag", contract=contract)
+    _validate_known_values(
+        contract.source_requirements,
+        _SOURCE_REQUIREMENT_C_NAMES,
+        field_name="source requirement",
+        contract=contract,
+    )
     descriptor_key = _resolve_contract_descriptor_key(
         contract,
         keys_by_semantic_tag=keys_by_semantic_tag,
@@ -412,6 +426,7 @@ def _contract_initializer(
             f"    .required_feature_bits = {_c_bitset(contract.features, _FEATURE_C_NAMES, field_name='feature', contract=contract)},",
             f"    .wave_size_bits = {wave_size},",
             f"    .flags = {_c_bitset(contract.flags, _FLAG_C_NAMES, field_name='flag', contract=contract)},",
+            f"    .source_requirement_flags = {_c_bitset(contract.source_requirements, _SOURCE_REQUIREMENT_C_NAMES, field_name='source requirement', contract=contract)},",
             "    .tile_shape = (loom_amdgpu_matrix_tile_shape_t){",
             f"        .result_row_count = {result_row_count},",
             f"        .result_column_count = {result_column_count},",

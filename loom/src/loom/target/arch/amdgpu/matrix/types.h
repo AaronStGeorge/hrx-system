@@ -195,6 +195,14 @@ typedef enum loom_amdgpu_matrix_fragment_layout_kind_e {
   LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F16_16X16X16_F16_W64 = 10,
   // RDNA3 WMMAR3 wave64 16x16x16 bf16 input, bf16 accumulator/result layout.
   LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_BF16_16X16X16_BF16_W64 = 11,
+  // RDNA4 WMMA 16x16x16 f16 input, f16 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X16_F16 = 12,
+  // RDNA4 WMMA 16x16x16 bf16 input, bf16 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X16_BF16 = 13,
+  // RDNA4 gfx1250 WMMA 16x16x32 f16 input, f16 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X32_F16 = 14,
+  // RDNA4 gfx1250 WMMA 16x16x32 bf16 input, bf16 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X32_BF16 = 15,
 } loom_amdgpu_matrix_fragment_layout_kind_t;
 
 typedef enum loom_amdgpu_matrix_fragment_map_kind_e {
@@ -227,6 +235,9 @@ typedef enum loom_amdgpu_matrix_fragment_map_kind_e {
   // low packed subword element carries a logical coordinate.
   LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD =
       LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD,
+  // Row is packed by lane group, register, and element; column is lane mod N.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_PACKED_ROW_COLUMN =
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_PACKED_ROW_COLUMN,
 } loom_amdgpu_matrix_fragment_map_kind_t;
 
 typedef enum loom_amdgpu_matrix_contract_flag_bits_e {
@@ -256,6 +267,14 @@ typedef enum loom_amdgpu_matrix_contract_flag_bits_e {
 
 // Bitset of loom_amdgpu_matrix_contract_flag_bits_t values.
 typedef uint32_t loom_amdgpu_matrix_contract_flags_t;
+
+typedef enum loom_amdgpu_matrix_contract_source_requirement_flag_bits_e {
+  // Source-level lowering requires a target-owned fragment layout.
+  LOOM_AMDGPU_MATRIX_CONTRACT_SOURCE_REQUIREMENT_FRAGMENT_LAYOUT = 1u << 0,
+} loom_amdgpu_matrix_contract_source_requirement_flag_bits_t;
+
+// Bitset of loom_amdgpu_matrix_contract_source_requirement_flag_bits_t values.
+typedef uint32_t loom_amdgpu_matrix_contract_source_requirement_flags_t;
 
 // Matrix contract does not have a target-low descriptor mapping yet.
 #define LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE \
@@ -302,6 +321,9 @@ typedef struct loom_amdgpu_matrix_contract_descriptor_t {
   loom_amdgpu_matrix_wave_size_bits_t wave_size_bits;
   // Optional immediate operands or semantic decorations required by the call.
   loom_amdgpu_matrix_contract_flags_t flags;
+  // Source-level support requirements that must be met before selection.
+  loom_amdgpu_matrix_contract_source_requirement_flags_t
+      source_requirement_flags;
   // Logical tile shape consumed and produced by one instruction.
   loom_amdgpu_matrix_tile_shape_t tile_shape;
   // Matrix A payload shape.

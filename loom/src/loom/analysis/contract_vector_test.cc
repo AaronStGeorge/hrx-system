@@ -309,6 +309,12 @@ func.def @dense_mma(%lhs_data: vector<8xf16>, %rhs_data: vector<8xf16>, %init_da
   EXPECT_EQ(request.result.numeric_type, LOOM_CONTRACT_NUMERIC_F32);
   EXPECT_EQ(request.result.payload_register_count, 8);
   EXPECT_EQ(request.result.payload_element_count, 8);
+  EXPECT_TRUE(iree_all_bits_set(
+      loom_contract_request_available_capability_flags(&request),
+      LOOM_CONTRACT_CAPABILITY_REUSE |
+          LOOM_CONTRACT_CAPABILITY_OPERAND_MODIFIERS |
+          LOOM_CONTRACT_CAPABILITY_ACCUMULATOR_MODIFIER));
+  EXPECT_EQ(loom_contract_request_required_capability_flags(&request), 0u);
   EXPECT_EQ(request.arithmetic, LOOM_CONTRACT_ARITHMETIC_MIXED_DOT);
   EXPECT_EQ(request.capability_class,
             LOOM_CONTRACT_CAPABILITY_CLASS_GPU_MATRIX);

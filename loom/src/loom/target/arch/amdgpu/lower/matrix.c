@@ -444,11 +444,20 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
         environment, source_op, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
         contract_diagnostic, match_diagnostic, out_result);
   }
+  const loom_amdgpu_matrix_fragment_layout_t* fragment_layout =
+      loom_amdgpu_matrix_contract_descriptor_fragment_layout(
+          contract_descriptor);
+  if (iree_any_bit_set(
+          contract_descriptor->source_requirement_flags,
+          LOOM_AMDGPU_MATRIX_CONTRACT_SOURCE_REQUIREMENT_FRAGMENT_LAYOUT) &&
+      fragment_layout == NULL) {
+    return loom_amdgpu_matrix_contract_query_reject_descriptor(
+        environment, source_op, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
+        fragment_layout, contract_descriptor->name,
+        IREE_SV("target_matrix_fragment_layout"), out_result);
+  }
   if (contract_descriptor->low_descriptor_ref ==
       LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE) {
-    const loom_amdgpu_matrix_fragment_layout_t* fragment_layout =
-        loom_amdgpu_matrix_contract_descriptor_fragment_layout(
-            contract_descriptor);
     return loom_amdgpu_matrix_contract_query_reject_descriptor(
         environment, source_op, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
         fragment_layout, contract_descriptor->name,
@@ -457,9 +466,6 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
   const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
       environment->descriptor_set, contract_descriptor->low_descriptor_ref);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    const loom_amdgpu_matrix_fragment_layout_t* fragment_layout =
-        loom_amdgpu_matrix_contract_descriptor_fragment_layout(
-            contract_descriptor);
     return loom_amdgpu_matrix_contract_query_reject_descriptor(
         environment, source_op, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
         fragment_layout, contract_descriptor->name,
@@ -473,9 +479,7 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
   *out_result = loom_target_contract_query_result_empty();
   out_result->outcome = LOOM_TARGET_CONTRACT_QUERY_LEGAL;
   out_result->selected_descriptor = descriptor;
-  out_result->selected_matrix_fragment_layout =
-      loom_amdgpu_matrix_contract_descriptor_fragment_layout(
-          contract_descriptor);
+  out_result->selected_matrix_fragment_layout = fragment_layout;
   out_result->source_rejection_bits = contract_diagnostic.rejection_bits;
   out_result->target_rejection_bits = match_diagnostic.rejection_bits;
   return iree_ok_status();
