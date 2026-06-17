@@ -293,8 +293,12 @@ static void iree_hal_amdgpu_feedback_state_publish_tsan_event(
   tsan_event.memory_address = report->memory_address;
   tsan_event.shadow_address = report->shadow_address;
   tsan_event.shadow_value = report->shadow_value;
-  tsan_event.current_workgroup_id[0] = packet->source_workgroup_id_x;
-  tsan_event.current_workitem_id[0] = packet->source_workitem_id_x;
+  tsan_event.current_workgroup_id[0] = report->current_workgroup_id[0];
+  tsan_event.current_workgroup_id[1] = report->current_workgroup_id[1];
+  tsan_event.current_workgroup_id[2] = report->current_workgroup_id[2];
+  tsan_event.current_workitem_id[0] = report->current_workitem_id[0];
+  tsan_event.current_workitem_id[1] = report->current_workitem_id[1];
+  tsan_event.current_workitem_id[2] = report->current_workitem_id[2];
   tsan_event.prior_workgroup_id[0] = report->prior_workgroup_id[0];
   tsan_event.prior_workgroup_id[1] = report->prior_workgroup_id[1];
   tsan_event.prior_workgroup_id[2] = report->prior_workgroup_id[2];

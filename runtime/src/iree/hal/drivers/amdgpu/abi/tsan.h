@@ -120,9 +120,9 @@ IREE_AMDGPU_STATIC_ASSERT(
 
 // TSAN diagnostic payload carried by feedback packets of kind TSAN.
 //
-// The generic feedback packet header carries the current dispatch pointer,
-// workgroup id, and workitem id. This payload carries TSAN-specific state and
-// the prior access attribution needed to explain the conflict.
+// The generic feedback packet header carries common source attribution used by
+// all feedback packet kinds. This payload carries the TSAN-specific current and
+// prior access attribution needed to explain the conflict.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_report_t {
   // Size of this record in bytes for forward-compatible parsing.
   uint32_t record_length;
@@ -150,12 +150,16 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_report_t {
   uint64_t shadow_address;
   // Shadow value observed by the check, or 0 when unavailable.
   uint64_t shadow_value;
+  // Workgroup id that produced the current access report.
+  uint32_t current_workgroup_id[3];
+  // Workitem id that produced the current access report.
+  uint32_t current_workitem_id[3];
   // Workgroup id that produced the prior access.
   uint32_t prior_workgroup_id[3];
   // Workitem id that produced the prior access.
   uint32_t prior_workitem_id[3];
 } iree_hal_amdgpu_tsan_report_t;
-IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_report_t) == 96,
+IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_report_t) == 120,
                           "TSAN report payload size is part of the ABI");
 
 #endif  // IREE_HAL_DRIVERS_AMDGPU_ABI_TSAN_H_

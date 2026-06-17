@@ -27,6 +27,9 @@ iree_hal_amdgpu_tsan_report_data_race(
     iree_hal_amdgpu_tsan_access_kind_t prior_access_kind, uint32_t access_size,
     uint64_t current_site_id, uint64_t prior_site_id, uint64_t memory_address,
     uint64_t shadow_address, uint64_t shadow_value,
+    uint32_t current_workgroup_id_x, uint32_t current_workgroup_id_y,
+    uint32_t current_workgroup_id_z, uint32_t current_workitem_id_x,
+    uint32_t current_workitem_id_y, uint32_t current_workitem_id_z,
     uint32_t prior_workgroup_id_x, uint32_t prior_workgroup_id_y,
     uint32_t prior_workgroup_id_z, uint32_t prior_workitem_id_x,
     uint32_t prior_workitem_id_y, uint32_t prior_workitem_id_z) {
@@ -69,6 +72,12 @@ iree_hal_amdgpu_tsan_report_data_race(
   report->memory_address = memory_address;
   report->shadow_address = shadow_address;
   report->shadow_value = shadow_value;
+  report->current_workgroup_id[0] = current_workgroup_id_x;
+  report->current_workgroup_id[1] = current_workgroup_id_y;
+  report->current_workgroup_id[2] = current_workgroup_id_z;
+  report->current_workitem_id[0] = current_workitem_id_x;
+  report->current_workitem_id[1] = current_workitem_id_y;
+  report->current_workitem_id[2] = current_workitem_id_z;
   report->prior_workgroup_id[0] = prior_workgroup_id_x;
   report->prior_workgroup_id[1] = prior_workgroup_id_y;
   report->prior_workgroup_id[2] = prior_workgroup_id_z;
