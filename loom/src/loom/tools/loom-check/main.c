@@ -201,7 +201,7 @@ int loom_check_main(int argc, char** argv,
       "              artifacts or pipeline text and accepts\n"
       "              output=module|low|pipeline|prepared-pipeline,\n"
       "              control-flow=cfg|structured-low,\n"
-      "              sanitizer=none|access|value|operation|all,\n"
+      "              sanitizer=none|access|value|operation|race|all,\n"
       "              sanitizer-reporting=default|trap, and\n"
       "              diagnostics=none|memory|all.\n"
       "              low-allocation, low-allocation-json, and low-packet-json\n"

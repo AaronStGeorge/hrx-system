@@ -1,0 +1,20 @@
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @race_access_requires_provider(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space<global> %input : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<1xi32, #dense>
+  // ERROR@+1: TARGET/032 {op_name="sanitizer.race.access", op_constraint="target_contract.sanitizer_race.provider_required"}
+  sanitizer.race.access<read> %view[0] : view<1xi32, #dense>
+  func.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @race_sync_requires_provider() {
+  // ERROR@+1: TARGET/032 {op_name="sanitizer.race.sync", op_constraint="target_contract.sanitizer_race.provider_required"}
+  sanitizer.race.sync<workgroup> {ordering = acq_rel, scope = workgroup}
+  func.return
+}

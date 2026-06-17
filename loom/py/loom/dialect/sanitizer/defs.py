@@ -33,6 +33,7 @@ from loom.dsl import (
     UNKNOWN_EFFECTS,
     VIEW,
     AttrDef,
+    ContractFamily,
     Dialect,
     EnumCase,
     EnumDef,
@@ -347,6 +348,7 @@ sanitizer_race_access = Op(
         ),
     ],
     traits=[UNKNOWN_EFFECTS],
+    contracts=[ContractFamily.SANITIZER_RACE],
     verify="loom_sanitizer_race_access_verify",
     format=[
         TemplateParam("kind"),
@@ -396,6 +398,7 @@ sanitizer_race_sync = Op(
         ),
     ],
     traits=[UNKNOWN_EFFECTS, CONVERGENT],
+    contracts=[ContractFamily.SANITIZER_RACE],
     verify="loom_sanitizer_race_sync_verify",
     format=[
         TemplateParam("memory_space"),

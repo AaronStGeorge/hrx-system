@@ -1226,7 +1226,7 @@ TEST_F(ExecuteTest, EmitSourceLowParsesSanitizerOptions) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit source-low output=pipeline "
-                   "sanitizer=operation|value\n"
+                   "sanitizer=operation|value|race\n"
                    "test.target<low_core> @test_target\n"
                    "\n"
                    "func.def target(@test_target) @f() {\n"
@@ -1235,9 +1235,10 @@ TEST_F(ExecuteTest, EmitSourceLowParsesSanitizerOptions) {
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(ActualOutputString(result).find(
-                "sanitizer-insert-assertions(checks = \"value|operation\")"),
-            std::string::npos);
+  EXPECT_NE(
+      ActualOutputString(result).find(
+          "sanitizer-insert-assertions(checks = \"value|operation|race\")"),
+      std::string::npos);
   loom_check_result_deinitialize(&result);
 
   ExpectFirstFailsWithDetail(
