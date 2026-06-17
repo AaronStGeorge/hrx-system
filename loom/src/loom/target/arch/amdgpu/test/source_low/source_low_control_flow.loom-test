@@ -1920,3 +1920,81 @@ low.func.def target(@target) abi(hal_kernel) @divergent_loop_if_result_then_stor
   s_mov_b64_exec %64
   return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @loop_index_madd_guarded_copy(%n: i32) {
+  %n_idx = index.cast %n : i32 to index
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%n_idx, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%input_handle: buffer, %output_handle: buffer, %n: i32) {
+  %base = index.constant 0 : offset
+  %n_idx = index.cast %n : i32 to index
+  %input_global = buffer.assume.memory_space<global> %input_handle : buffer
+  %output_global = buffer.assume.memory_space<global> %output_handle : buffer
+  %input = buffer.view %input_global[%base] : buffer -> view<[%n_idx]x2xf32, #dense>
+  %output = buffer.view %output_global[%base] : buffer -> view<[%n_idx]x2xf32, #dense>
+  %workgroup = kernel.workgroup.id<x> : index
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %limit = index.constant 2 : index
+  scf.for %i = [%start to %limit step %step] {
+    %row = index.madd %workgroup, %limit, %i : index
+    %in_bounds = index.cmp slt, %row, %n_idx : index
+    scf.if %in_bounds {
+      %loaded = view.load %input[%row, %start] : view<[%n_idx]x2xf32, #dense> -> f32
+      view.store %loaded, %output[%row, %start] : f32, view<[%n_idx]x2xf32, #dense>
+    }
+  }
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loop_index_madd_guarded_copy(%n_idx: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %workgroup = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %start = s_mov_b32 0
+  %step = s_mov_b32 1
+  %limit = s_mov_b32 2
+  low.br ^_bb1(%start: reg<amdgpu.sgpr>)
+^_bb1(%i: reg<amdgpu.sgpr>):
+  %33 = s_cmp_lt_i32 %i, %limit
+  low.cond_br %33, ^_bb2, ^_bb5 : reg<amdgpu.scc>
+^_bb2:
+  %34 = s_mul_i32 %workgroup, %limit
+  %row = s_add_u32 %34, %i
+  %in_bounds = s_cmp_lt_i32 %row, %n_idx
+  low.cond_br %in_bounds, ^_bb3, ^_bb4 : reg<amdgpu.scc>
+^_bb3:
+  %37 = v_mov_b32 0
+  %39 = concat(%row, %start) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %40 = s_mov_b32 3
+  %41 = s_lshl_b64 %39, %40
+  %42 = slice %input[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %43 = slice %input[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %44 = slice %41[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %45 = slice %41[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %46 = s_add_u32 %42, %44
+  %47 = s_addc_u32 %43, %45
+  %48 = concat(%46, %47) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32_saddr %37, %48
+  %52 = concat(%row, %start) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %54 = s_lshl_b64 %52, %40
+  %55 = slice %output[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %56 = slice %output[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %57 = slice %54[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %58 = slice %54[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %59 = s_add_u32 %55, %57
+  %60 = s_addc_u32 %56, %58
+  %61 = concat(%59, %60) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  global_store_b32_saddr %37, %loaded, %61
+  low.br ^_bb4
+^_bb4:
+  %62 = s_add_u32 %i, %step
+  low.br ^_bb1(%62: reg<amdgpu.sgpr>)
+^_bb5:
+  return
+}

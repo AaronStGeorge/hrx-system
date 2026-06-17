@@ -416,6 +416,26 @@ def test_validate_dispatch_rows_accepts_bounded_recipe() -> None:
     )
 
 
+def test_validate_dispatch_rows_accepts_recipe_data_storage_policy() -> None:
+    rows = (
+        DispatchRow(
+            op_kind="LOOM_OP_SANITIZER_ASSERT_ACCESS",
+            role=DispatchRowRole.RECIPE,
+            macro_name="RECIPE_DATA_STORAGE_ROW",
+            arguments=(
+                "LOOM_OP_SANITIZER_ASSERT_ACCESS",
+                "loom_amdgpu_sanitizer_access_plan_t",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_SANITIZER_ACCESS",
+            ),
+        ),
+    )
+
+    validate_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
 def test_validate_dispatch_rows_accepts_value_data_source_policy() -> None:
     rows = (
         DispatchRow(

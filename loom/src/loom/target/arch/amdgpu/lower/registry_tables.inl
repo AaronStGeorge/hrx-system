@@ -170,11 +170,12 @@ static const loom_amdgpu_lower_dispatch_row_t
 static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuSanitizerDispatchRows[LOOM_OP_SANITIZER_COUNT_] = {
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SANITIZER_ASSERT_ACCESS)] =
-            LOOM_AMDGPU_RECIPE_DATA_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
                 LOOM_OP_SANITIZER_ASSERT_ACCESS,
                 loom_amdgpu_sanitizer_access_plan_t,
                 loom_amdgpu_select_sanitizer_assert_access_dispatch,
-                loom_amdgpu_emit_sanitizer_assert_access_dispatch, NULL),
+                loom_amdgpu_emit_sanitizer_assert_access_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_SANITIZER_ACCESS),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SANITIZER_RACE_ACCESS)] =
             LOOM_AMDGPU_RECIPE_DATA_ROW(
                 LOOM_OP_SANITIZER_RACE_ACCESS,

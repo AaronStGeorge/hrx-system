@@ -142,6 +142,7 @@ def _s_add_u32_rhs_symbol_rel32_lo_overlay() -> AmdgpuDescriptorOverlay:
             _symbol_rel32_immediate(),
             _SYMBOL_BYTE_OFFSET_IMMEDIATE,
         ),
+        effects=(_PC_RELATIVE_EFFECT,),
         fixed_encoding_fields=(("SSRC1", _predefined("SRC_LITERAL", "OPR_SSRC")),),
         asm_forms=_asm(
             mnemonic="s_add_u32_rhs_symbol_rel32_lo",
@@ -197,6 +198,7 @@ def _s_addc_u32_rhs_symbol_rel32_hi_overlay() -> AmdgpuDescriptorOverlay:
             _symbol_rel32_immediate(),
             _SYMBOL_BYTE_OFFSET_IMMEDIATE,
         ),
+        effects=(_PC_RELATIVE_EFFECT,),
         fixed_encoding_fields=(("SSRC1", _predefined("SRC_LITERAL", "OPR_SSRC")),),
         asm_forms=_asm(
             mnemonic="s_addc_u32_rhs_symbol_rel32_hi",

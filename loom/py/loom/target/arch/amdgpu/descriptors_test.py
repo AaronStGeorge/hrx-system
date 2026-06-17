@@ -860,6 +860,8 @@ def test_feedback_control_descriptors_cover_execution_families() -> None:
 
 
 def test_symbol_relative_salu_descriptors_have_lossless_low_asm_forms() -> None:
+    pc_relative_effect = (Effect(EffectKind.CONVERGENT, flags=(EffectFlag.ORDERED,)),)
+
     for overlays in (
         _gfx940_core_overlays(),
         _gfx950_core_overlays(),
@@ -870,6 +872,7 @@ def test_symbol_relative_salu_descriptors_have_lossless_low_asm_forms() -> None:
         descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
 
         add_lo = descriptors["amdgpu.s_add_u32.rhs_symbol_rel32_lo"]
+        assert add_lo.effects == pc_relative_effect
         assert add_lo.asm_forms is not None
         assert add_lo.asm_forms[0].mnemonic == "s_add_u32_rhs_symbol_rel32_lo"
         assert add_lo.asm_forms[0].results == ("dst",)
@@ -879,6 +882,7 @@ def test_symbol_relative_salu_descriptors_have_lossless_low_asm_forms() -> None:
         ) == ("symbol", "byte_offset")
 
         addc_hi = descriptors["amdgpu.s_addc_u32.rhs_symbol_rel32_hi"]
+        assert addc_hi.effects == pc_relative_effect
         assert addc_hi.asm_forms is not None
         assert addc_hi.asm_forms[0].mnemonic == "s_addc_u32_rhs_symbol_rel32_hi"
         assert addc_hi.asm_forms[0].results == ("sum",)
