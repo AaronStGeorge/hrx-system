@@ -34,6 +34,7 @@ add_custom_command(OUTPUT bitcode_hdrs.stamp
     "support/kernel.h"
     "support/queue.h"
     "support/signal.h"
+    "support/tsan.h"
     "timestamp.h"
 )
 
@@ -72,6 +73,7 @@ iree_cc_library(
     "support/kernel.h"
     "support/queue.h"
     "support/signal.h"
+    "support/tsan.h"
     "timestamp.h"
   DEPS
     iree::base

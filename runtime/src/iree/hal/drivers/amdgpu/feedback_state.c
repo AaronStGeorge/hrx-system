@@ -11,6 +11,7 @@
 #include "iree/base/threading/affinity.h"
 #include "iree/base/threading/thread.h"
 #include "iree/hal/drivers/amdgpu/abi/asan.h"
+#include "iree/hal/drivers/amdgpu/abi/tsan.h"
 #include "iree/hal/drivers/amdgpu/api.h"
 #include "iree/hal/drivers/amdgpu/physical_device.h"
 #include "iree/hal/drivers/amdgpu/source_context.h"
@@ -44,6 +45,52 @@ iree_hal_amdgpu_feedback_state_map_asan_access_kind(
     case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_UNKNOWN:
     default:
       return IREE_HAL_DEVICE_ASAN_ACCESS_KIND_UNKNOWN;
+  }
+}
+
+static iree_hal_device_tsan_check_kind_t
+iree_hal_amdgpu_feedback_state_map_tsan_check_kind(
+    iree_hal_amdgpu_tsan_check_kind_t check_kind) {
+  switch (check_kind) {
+    case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_DATA_RACE:
+      return IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE;
+    case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_UNKNOWN:
+    default:
+      return IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN;
+  }
+}
+
+static iree_hal_device_tsan_memory_space_t
+iree_hal_amdgpu_feedback_state_map_tsan_memory_space(
+    iree_hal_amdgpu_tsan_memory_space_t memory_space) {
+  switch (memory_space) {
+    case IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_GLOBAL:
+      return IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_GLOBAL;
+    case IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_WORKGROUP:
+      return IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP;
+    case IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_PRIVATE:
+      return IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_PRIVATE;
+    case IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_UNKNOWN:
+    default:
+      return IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_UNKNOWN;
+  }
+}
+
+static iree_hal_device_tsan_access_kind_t
+iree_hal_amdgpu_feedback_state_map_tsan_access_kind(
+    iree_hal_amdgpu_tsan_access_kind_t access_kind) {
+  switch (access_kind) {
+    case IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_READ:
+      return IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ;
+    case IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_WRITE:
+      return IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE;
+    case IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_READ_WRITE:
+      return IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ_WRITE;
+    case IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_ATOMIC:
+      return IREE_HAL_DEVICE_TSAN_ACCESS_KIND_ATOMIC;
+    case IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_UNKNOWN:
+    default:
+      return IREE_HAL_DEVICE_TSAN_ACCESS_KIND_UNKNOWN;
   }
 }
 
@@ -173,6 +220,114 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_asan_packet(
       executable_id, packet->source_dispatch_ptr);
 }
 
+static void iree_hal_amdgpu_feedback_state_publish_tsan_event(
+    iree_hal_amdgpu_feedback_state_t* state,
+    iree_host_size_t physical_device_ordinal,
+    const iree_hal_amdgpu_feedback_packet_t* packet,
+    const iree_hal_amdgpu_tsan_report_t* report) {
+  const iree_hal_amdgpu_source_context_t* source_context =
+      iree_hal_amdgpu_feedback_state_source_context(packet);
+
+  iree_hal_device_tsan_report_t tsan_event;
+  memset(&tsan_event, 0, sizeof(tsan_event));
+  tsan_event.record_length = sizeof(tsan_event);
+  tsan_event.abi_version = IREE_HAL_DEVICE_TSAN_REPORT_ABI_VERSION_0;
+  tsan_event.check_kind =
+      iree_hal_amdgpu_feedback_state_map_tsan_check_kind(report->check_kind);
+  tsan_event.flags = report->flags;
+  tsan_event.memory_space =
+      iree_hal_amdgpu_feedback_state_map_tsan_memory_space(
+          report->memory_space);
+  tsan_event.current_access_kind =
+      iree_hal_amdgpu_feedback_state_map_tsan_access_kind(
+          report->current_access_kind);
+  tsan_event.prior_access_kind =
+      iree_hal_amdgpu_feedback_state_map_tsan_access_kind(
+          report->prior_access_kind);
+  tsan_event.access_length = report->access_size;
+  tsan_event.current_site_id = report->current_site_id;
+  tsan_event.prior_site_id = report->prior_site_id;
+  tsan_event.memory_address = report->memory_address;
+  tsan_event.shadow_address = report->shadow_address;
+  tsan_event.shadow_value = report->shadow_value;
+  tsan_event.current_workgroup_id[0] = packet->source_workgroup_id_x;
+  tsan_event.current_workitem_id[0] = packet->source_workitem_id_x;
+  tsan_event.prior_workgroup_id[0] = report->prior_workgroup_id[0];
+  tsan_event.prior_workgroup_id[1] = report->prior_workgroup_id[1];
+  tsan_event.prior_workgroup_id[2] = report->prior_workgroup_id[2];
+  tsan_event.prior_workitem_id[0] = report->prior_workitem_id[0];
+  tsan_event.prior_workitem_id[1] = report->prior_workitem_id[1];
+  tsan_event.prior_workitem_id[2] = report->prior_workitem_id[2];
+  tsan_event.source_dispatch_ptr = packet->source_dispatch_ptr;
+
+  iree_hal_device_event_t event = iree_hal_device_event_default();
+  event.type = IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT;
+  event.severity = IREE_HAL_DEVICE_EVENT_SEVERITY_ERROR;
+  event.sequence = packet->sequence;
+  event.source.device = state->device;
+  event.source.device_id = state->device_id;
+  event.source.driver_id = IREE_SV("amdgpu");
+  event.source.executable_id =
+      iree_hal_amdgpu_source_context_executable_id(source_context);
+  event.source.physical_device_ordinal =
+      iree_hal_amdgpu_feedback_state_physical_device_ordinal(
+          physical_device_ordinal);
+  iree_hal_device_event_site_t site;
+  if (iree_hal_amdgpu_source_context_try_resolve_sanitizer_site(
+          source_context, report->current_site_id, &site)) {
+    event.site = &site;
+  }
+  event.payload = iree_make_const_byte_span(&tsan_event, sizeof(tsan_event));
+  event.implementation_payload =
+      iree_make_const_byte_span(packet, packet->record_length);
+  iree_hal_device_event_sink_publish(state->event_sink, &event);
+}
+
+static iree_status_t iree_hal_amdgpu_feedback_state_handle_tsan_packet(
+    iree_hal_amdgpu_feedback_state_t* state,
+    iree_host_size_t physical_device_ordinal,
+    const iree_hal_amdgpu_feedback_packet_t* packet) {
+  if (IREE_UNLIKELY(packet->record_length < packet->header_length)) {
+    return iree_make_status(
+        IREE_STATUS_DATA_LOSS,
+        "AMDGPU TSAN feedback packet on physical device %" PRIhsz
+        " has invalid lengths: packet_record_length=%u, "
+        "packet_header_length=%u",
+        physical_device_ordinal, packet->record_length, packet->header_length);
+  }
+  const iree_host_size_t payload_length =
+      packet->record_length - packet->header_length;
+  if (IREE_UNLIKELY(payload_length < sizeof(iree_hal_amdgpu_tsan_report_t))) {
+    return iree_make_status(
+        IREE_STATUS_DATA_LOSS,
+        "AMDGPU TSAN feedback packet on physical device %" PRIhsz
+        " is too small: packet_payload_length=%" PRIhsz
+        ", tsan_report_length=%" PRIhsz,
+        physical_device_ordinal, payload_length,
+        sizeof(iree_hal_amdgpu_tsan_report_t));
+  }
+
+  const iree_hal_amdgpu_tsan_report_t* report =
+      (const iree_hal_amdgpu_tsan_report_t*)((const uint8_t*)packet +
+                                             packet->header_length);
+  if (IREE_UNLIKELY(
+          report->record_length < sizeof(iree_hal_amdgpu_tsan_report_t) ||
+          report->record_length > payload_length ||
+          report->abi_version != IREE_HAL_AMDGPU_TSAN_REPORT_ABI_VERSION_0)) {
+    return iree_make_status(
+        IREE_STATUS_DATA_LOSS,
+        "AMDGPU TSAN report on physical device %" PRIhsz
+        " has unsupported ABI: record_length=%u, payload_length=%" PRIhsz
+        ", abi_version=%u",
+        physical_device_ordinal, report->record_length, payload_length,
+        report->abi_version);
+  }
+
+  iree_hal_amdgpu_feedback_state_publish_tsan_event(
+      state, physical_device_ordinal, packet, report);
+  return iree_ok_status();
+}
+
 static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
     iree_hal_amdgpu_feedback_state_t* state,
     iree_host_size_t physical_device_ordinal,
@@ -180,6 +335,9 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
   switch (packet->kind) {
     case IREE_HAL_AMDGPU_FEEDBACK_PACKET_KIND_ASAN:
       return iree_hal_amdgpu_feedback_state_handle_asan_packet(
+          state, physical_device_ordinal, packet);
+    case IREE_HAL_AMDGPU_FEEDBACK_PACKET_KIND_TSAN:
+      return iree_hal_amdgpu_feedback_state_handle_tsan_packet(
           state, physical_device_ordinal, packet);
     default: {
       const uint64_t executable_id =

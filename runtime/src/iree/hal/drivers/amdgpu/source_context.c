@@ -55,6 +55,8 @@ enum iree_hal_amdgpu_loom_op_kind_e {
   IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_VALUE = (0x1Du << 8) | 1u,
   IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_OP = (0x1Du << 8) | 2u,
   IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_LAYOUT = (0x1Du << 8) | 3u,
+  IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_RACE_ACCESS = (0x1Du << 8) | 4u,
+  IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_RACE_SYNC = (0x1Du << 8) | 5u,
 };
 
 static iree_string_view_t iree_hal_amdgpu_source_context_loom_op_kind_name(
@@ -68,6 +70,10 @@ static iree_string_view_t iree_hal_amdgpu_source_context_loom_op_kind_name(
       return IREE_SV("sanitizer.assert.op");
     case IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_LAYOUT:
       return IREE_SV("sanitizer.assert.layout");
+    case IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_RACE_ACCESS:
+      return IREE_SV("sanitizer.race.access");
+    case IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_RACE_SYNC:
+      return IREE_SV("sanitizer.race.sync");
     default:
       return iree_string_view_empty();
   }

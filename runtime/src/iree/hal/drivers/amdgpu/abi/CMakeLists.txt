@@ -22,6 +22,7 @@ add_custom_command(OUTPUT amdgpu_abi_bitcode_hdrs.stamp
     "queue.h"
     "signal.h"
     "timestamp.h"
+    "tsan.h"
 )
 
 add_custom_target(amdgpu_abi_bitcode_hdrs
@@ -43,6 +44,7 @@ iree_cc_library(
     "queue.h"
     "signal.h"
     "timestamp.h"
+    "tsan.h"
   DEPS
     iree::third_party::hsa_runtime_headers
   PUBLIC
