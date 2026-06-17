@@ -387,6 +387,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::codegen::low::builder
     loom::codegen::low::verify
     loom::error::renderer
     loom::ir

@@ -54,6 +54,18 @@ typedef struct loom_amdgpu_sanitizer_race_report_t {
   loom_value_id_t shadow_address;
   // Shadow value observed by the check, or zero when unavailable.
   loom_value_id_t shadow_value;
+  // X dimension workgroup id that produced the current access report.
+  loom_value_id_t current_workgroup_id_x;
+  // Y dimension workgroup id that produced the current access report.
+  loom_value_id_t current_workgroup_id_y;
+  // Z dimension workgroup id that produced the current access report.
+  loom_value_id_t current_workgroup_id_z;
+  // X dimension workitem id that produced the current access report.
+  loom_value_id_t current_workitem_id_x;
+  // Y dimension workitem id that produced the current access report.
+  loom_value_id_t current_workitem_id_y;
+  // Z dimension workitem id that produced the current access report.
+  loom_value_id_t current_workitem_id_z;
   // X dimension workgroup id that produced the prior access.
   loom_value_id_t prior_workgroup_id_x;
   // Y dimension workgroup id that produced the prior access.

@@ -77,7 +77,7 @@ enum loom_amdgpu_tsan_report_flag_bits_e {
 
 enum loom_amdgpu_tsan_report_layout_e {
   // Total byte length of the TSAN report payload.
-  LOOM_AMDGPU_TSAN_REPORT_BYTE_LENGTH = 96u,
+  LOOM_AMDGPU_TSAN_REPORT_BYTE_LENGTH = 120u,
   // Offset of the payload record length.
   LOOM_AMDGPU_TSAN_REPORT_RECORD_LENGTH_OFFSET = 0u,
   // Offset of the payload ABI version.
@@ -104,18 +104,30 @@ enum loom_amdgpu_tsan_report_layout_e {
   LOOM_AMDGPU_TSAN_REPORT_SHADOW_ADDRESS_OFFSET = 56u,
   // Offset of the shadow value observed by the check.
   LOOM_AMDGPU_TSAN_REPORT_SHADOW_VALUE_OFFSET = 64u,
+  // Offset of the current workgroup X coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKGROUP_ID_X_OFFSET = 72u,
+  // Offset of the current workgroup Y coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKGROUP_ID_Y_OFFSET = 76u,
+  // Offset of the current workgroup Z coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKGROUP_ID_Z_OFFSET = 80u,
+  // Offset of the current workitem X coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKITEM_ID_X_OFFSET = 84u,
+  // Offset of the current workitem Y coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKITEM_ID_Y_OFFSET = 88u,
+  // Offset of the current workitem Z coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKITEM_ID_Z_OFFSET = 92u,
   // Offset of the prior workgroup X coordinate.
-  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_X_OFFSET = 72u,
+  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_X_OFFSET = 96u,
   // Offset of the prior workgroup Y coordinate.
-  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_Y_OFFSET = 76u,
+  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_Y_OFFSET = 100u,
   // Offset of the prior workgroup Z coordinate.
-  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_Z_OFFSET = 80u,
+  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_Z_OFFSET = 104u,
   // Offset of the prior workitem X coordinate.
-  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_X_OFFSET = 84u,
+  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_X_OFFSET = 108u,
   // Offset of the prior workitem Y coordinate.
-  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_Y_OFFSET = 88u,
+  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_Y_OFFSET = 112u,
   // Offset of the prior workitem Z coordinate.
-  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_Z_OFFSET = 92u,
+  LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_Z_OFFSET = 116u,
 };
 
 #ifdef __cplusplus

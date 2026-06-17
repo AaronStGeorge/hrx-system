@@ -358,6 +358,7 @@ loom_cc_test(
     srcs = ["sanitizer_race_report_test.cc"],
     deps = [
         ":lower",
+        "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/error:renderer",
         "//loom/src/loom/ir",
