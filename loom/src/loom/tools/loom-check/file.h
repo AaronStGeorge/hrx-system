@@ -12,6 +12,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/ir/context.h"
+#include "loom/tooling/io/source_path.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/json_output.h"
 
@@ -28,6 +29,8 @@ typedef struct loom_check_process_options_t {
   bool json_enabled;
   // JSON result detail selected when |json_enabled| is true.
   loom_check_json_output_mode_t json_output_mode;
+  // Logical source path normalization used for diagnostics and loc() output.
+  loom_tooling_source_path_options_t source_path_options;
 } loom_check_process_options_t;
 
 // Reads a source from stdin or a file path, then processes it.

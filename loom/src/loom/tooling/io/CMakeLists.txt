@@ -24,4 +24,16 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    source_path
+  HDRS
+    "source_path.h"
+  SRCS
+    "source_path.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

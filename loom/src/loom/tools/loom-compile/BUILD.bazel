@@ -114,6 +114,7 @@ loom_cc_binary(
         "//loom/src/loom/tooling/execution/hal:artifact",
         "//loom/src/loom/tooling/execution/hal:candidate",
         "//loom/src/loom/tooling/io:file",
+        "//loom/src/loom/tooling/io:source_path",
         "//loom/src/loom/tooling/pass:trace_cli",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",

@@ -95,6 +95,7 @@ function(loom_check_test_suite)
       NAME
         "${_TEST_NAME}"
       ARGS
+        "--source-prefix-map=${IREE_ROOT_DIR}/="
         "${CMAKE_CURRENT_SOURCE_DIR}/${_SRC}"
       SRC
         ${_RULE_RUNNER}

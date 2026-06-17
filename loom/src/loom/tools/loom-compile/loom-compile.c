@@ -31,6 +31,7 @@
 #include "loom/tooling/execution/hal/candidate.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
+#include "loom/tooling/io/source_path.h"
 #include "loom/tooling/pass/trace_cli.h"
 
 #ifndef LOOM_COMPILE_HAVE_AMDGPU
@@ -162,6 +163,11 @@ IREE_FLAG_NAMED(string, compile_report_output, "compile-report-output",
                 "stderr",
                 "Output path for --compile-report. Use 'stderr', '-', or a "
                 "file path.");
+IREE_FLAG_LIST_NAMED(
+    string, source_prefix_map, "source-prefix-map",
+    "Remap source paths in diagnostics and serialized locations. Repeat as\n"
+    "--source-prefix-map=old=new; entries are applied in reverse order so the\n"
+    "last matching map wins. Use old= to strip a prefix.");
 
 #if LOOM_COMPILE_HAVE_AMDGPU
 static const loom_run_execution_provider_t kLoomCompileAmdgpuProvider = {
@@ -289,8 +295,10 @@ static iree_string_view_t loom_compile_input_filename(
 
 static iree_status_t loom_compile_parse_input_module(
     int argc, char** argv, loom_run_session_t* session,
+    const loom_tooling_source_path_options_t* source_path_options,
     iree_allocator_t allocator, iree_io_file_contents_t** out_contents,
-    loom_run_module_t* out_run_module) {
+    char** out_filename_storage, loom_run_module_t* out_run_module) {
+  *out_filename_storage = NULL;
   if (argc > 2) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -300,9 +308,14 @@ static iree_status_t loom_compile_parse_input_module(
   }
 
   const iree_string_view_t input_path = loom_compile_input_path(argc, argv);
-  const iree_string_view_t filename = loom_compile_input_filename(input_path);
+  iree_string_view_t filename = loom_compile_input_filename(input_path);
   IREE_RETURN_IF_ERROR(
       loom_tooling_read_input_file(input_path, allocator, out_contents));
+  if (!loom_tooling_file_path_is_stdio(input_path)) {
+    IREE_RETURN_IF_ERROR(
+        loom_tooling_source_path_remap(filename, source_path_options, allocator,
+                                       &filename, out_filename_storage));
+  }
 
   loom_run_module_parse_options_t parse_options = {0};
   loom_run_module_parse_options_initialize(&parse_options);
@@ -1110,8 +1123,9 @@ int main(int argc, char** argv) {
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
-  const iree_string_view_t input_filename =
-      loom_compile_input_filename(loom_compile_input_path(argc, argv));
+  const loom_tooling_source_path_options_t source_path_options = {
+      .prefix_maps = FLAG_source_prefix_map_list(),
+  };
   loom_run_execution_environment_t environment = {0};
   iree_status_t status = loom_run_execution_environment_initialize(
       &kLoomCompileProviderSet, &environment);
@@ -1119,6 +1133,7 @@ int main(int argc, char** argv) {
   loom_tooling_config_set_initialize(allocator, &config_set);
 
   iree_io_file_contents_t* contents = NULL;
+  char* input_filename_storage = NULL;
   loom_run_session_t session = {0};
   loom_run_module_t run_module = {0};
   loom_run_compile_report_capture_t compile_report_capture = {0};
@@ -1146,8 +1161,9 @@ int main(int argc, char** argv) {
     status = loom_compile_append_config_flags(&config_set);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_compile_parse_input_module(argc, argv, &session, allocator,
-                                             &contents, &run_module);
+    status = loom_compile_parse_input_module(
+        argc, argv, &session, &source_path_options, allocator, &contents,
+        &input_filename_storage, &run_module);
   }
   if (iree_status_is_ok(status)) {
     status =
@@ -1237,7 +1253,7 @@ int main(int argc, char** argv) {
     status = loom_tooling_pass_trace_open_from_flags(
         &(loom_tooling_pass_trace_open_options_t){
             .tool_name = IREE_SV("loom-compile"),
-            .input_path = input_filename,
+            .input_path = run_module.filename,
             .stdout_conflicts = stdout_conflicts,
             .stdout_conflict_count = IREE_ARRAYSIZE(stdout_conflicts),
         },
@@ -1315,6 +1331,7 @@ int main(int argc, char** argv) {
   }
   loom_run_compile_report_capture_deinitialize(&compile_report_capture);
   loom_run_module_deinitialize(&run_module);
+  iree_allocator_free(allocator, input_filename_storage);
   iree_io_file_contents_free(contents);
   loom_tooling_config_set_deinitialize(&config_set);
   loom_run_session_deinitialize(&session);

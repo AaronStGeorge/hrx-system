@@ -88,6 +88,11 @@ IREE_FLAG_CALLBACK(loom_check_parse_json_flag, loom_check_print_json_flag,
                    &FLAG_json, json,
                    "Structured JSON output to stdout. Bare --json is the same\n"
                    "as --json=failures. Modes: failures, summary, all.");
+IREE_FLAG_LIST_NAMED(
+    string, source_prefix_map, "source-prefix-map",
+    "Remap source paths in diagnostics and loc() output. Repeat as\n"
+    "--source-prefix-map=old=new; entries are applied in reverse order so the\n"
+    "last matching map wins. Use old= to strip a prefix.");
 
 static void loom_check_print_agents_markdown(FILE* stream) {
   fprintf(
@@ -306,6 +311,10 @@ int loom_check_main(int argc, char** argv,
       .verbose = FLAG_verbose,
       .json_enabled = FLAG_json.enabled,
       .json_output_mode = FLAG_json.output_mode,
+      .source_path_options =
+          {
+              .prefix_maps = FLAG_source_prefix_map_list(),
+          },
   };
 
   if (iree_status_is_ok(status)) {

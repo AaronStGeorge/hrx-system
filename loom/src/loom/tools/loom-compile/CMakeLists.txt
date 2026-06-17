@@ -73,6 +73,7 @@ loom_cc_binary(
     loom::tooling::execution::hal::candidate
     loom::tooling::execution::session
     loom::tooling::io::file
+    loom::tooling::io::source_path
     loom::tooling::pass::trace_cli
     ${_loom_compile_platform_deps}
 )
