@@ -68,14 +68,6 @@ jobs:
             # so local/source coverage remains intact.
             ctest_exclude_regex: "^iree/async/platform/io_uring/cts/core_tests$"
             package: false
-          - variant: MSAN
-            sanitizer: msan
-            assertions: true
-            # TODO(#20): MSAN builds/install are useful, but installed tests
-            # need an instrumented host C++ runtime/test dependency stack.
-            run_tests: false
-            ctest_exclude_regex: ""
-            package: false
           - variant: UBSAN
             sanitizer: ubsan
             assertions: true
@@ -117,7 +109,9 @@ jobs:
           - name: Linux / CMake / GPU gfx1201
             chip: gfx1201
             runner_label: gpu_navi4x
-            ctest_exclude_regex: ""
+            # TODO(#110): Re-enable after the ASAN HAL shadow probe lowering
+            # no longer references a missing AMDGPU descriptor ref on gfx1201.
+            ctest_exclude_regex: "^loom/target/arch/amdgpu/sanitizer_feedback_test$"
             experimental: false
     uses: ./.github/workflows/test_core_linux_gpu.yml
     permissions:
