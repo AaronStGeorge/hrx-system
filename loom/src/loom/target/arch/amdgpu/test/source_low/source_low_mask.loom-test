@@ -45,6 +45,56 @@ low.func.def target(@target) abi(hal_kernel) @f32_cmpf_select(%lhs: reg<amdgpu.v
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_cmpf_rhs_zero_inline(%value: f32) -> (i1) {
+  %zero = scalar.constant 0.0 : f32
+  %mask = scalar.cmpf one, %value, %zero : f32
+  func.return %mask : i1
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_cmpf_rhs_zero_inline(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  %mask = v_cmp_lg_f32_src1_inline %value {rhs = 0}
+  return %mask
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_cmpf_lhs_one_inline(%value: f32) -> (i1) {
+  %one = scalar.constant 1.0 : f32
+  %mask = scalar.cmpf olt, %one, %value : f32
+  func.return %mask : i1
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_cmpf_lhs_one_inline(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  %mask = v_cmp_lt_f32_src0_inline %value {lhs = 1065353216}
+  return %mask
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_cmpf_rhs_zero_inline(%value: vector<2xf32>) -> (vector<2xi1>) {
+  %zero = scalar.constant 0.0 : f32
+  %zeros = vector.splat %zero : vector<2xf32>
+  %mask = vector.cmpf one, %value, %zeros : vector<2xf32> -> vector<2xi1>
+  func.return %mask : vector<2xi1>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @vector_cmpf_rhs_zero_inline(%value: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.sgpr x4>) asm<amdgpu.rdna3.core> {
+  %11 = slice %value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %12 = v_cmp_lg_f32_src1_inline %11 {rhs = 0}
+  %13 = slice %value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = v_cmp_lg_f32_src1_inline %13 {rhs = 0}
+  %mask = concat(%12, %14) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  return %mask
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @i32_cmpi_select_zero_inline(%lhs: vector<2xi32>, %rhs: vector<2xi32>, %false_value: vector<2xi32>) -> (vector<2xi32>) {
   %mask = vector.cmpi slt, %lhs, %rhs : vector<2xi32> -> vector<2xi1>
   %zero = scalar.constant 0 : i32

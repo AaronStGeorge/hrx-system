@@ -663,6 +663,11 @@ TEST(AmdgpuEncodingTest, RejectsOutOfRangeVopdxyOp) {
 TEST(AmdgpuEncodingTest, InlineF32SourceMapsBitPatternToSourceSelector) {
   LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
       table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
+  uint16_t zero_source = 0;
+  EXPECT_TRUE(loom_amdgpu_encoding_inline_f32_source(
+      table, UINT32_C(0x00000000), &zero_source));
+  EXPECT_EQ(zero_source, 128u);
+
   uint16_t source = 0;
   EXPECT_TRUE(loom_amdgpu_encoding_inline_f32_source(
       table, UINT32_C(0x3f800000), &source));

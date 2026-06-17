@@ -181,6 +181,16 @@ func.def @f32_uniform_scalar_binary(%lhs_buffer: buffer, %rhs_buffer: buffer) ->
 
 // ====
 
+func.def @f32_inline_zero_arithmetic(%scalar: f32, %vector: vector<2xf32>) -> (f32, vector<2xf32>) {
+  %zero = scalar.constant 0.0 : f32
+  %scalar_result = scalar.mulf %scalar, %zero : f32
+  %zero_vector = vector.splat %zero : vector<2xf32>
+  %vector_result = vector.mulf %vector, %zero_vector : vector<2xf32>
+  func.return %scalar_result, %vector_result : f32, vector<2xf32>
+}
+
+// ====
+
 func.def @f32_uniform_scalar_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer: buffer) -> (f32) {
   %base = index.constant 0 : offset
   %a_global = buffer.assume.memory_space<global> %a_buffer : buffer

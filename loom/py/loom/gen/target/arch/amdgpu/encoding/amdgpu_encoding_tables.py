@@ -485,7 +485,7 @@ def _derive_predefined_f32_sources(
     sources: list[_InlineF32Source] = []
     seen_bit_patterns: set[int] = set()
     for predefined_value in operand_type.predefined_values:
-        if "." not in predefined_value.name:
+        if "." not in predefined_value.name and predefined_value.name != "0":
             continue
         try:
             bit_pattern = _f32_bit_pattern(float(predefined_value.name))

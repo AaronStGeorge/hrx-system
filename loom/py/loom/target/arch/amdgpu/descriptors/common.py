@@ -301,6 +301,7 @@ def _f32_bits(value: float) -> int:
 _AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN = EnumDomain(
     _AMDGPU_INLINE_F32_ENUM_DOMAIN_NAME,
     values=(
+        EnumValue("f32_0_0", _f32_bits(0.0)),
         EnumValue("f32_0_5", _f32_bits(0.5)),
         EnumValue("f32_n0_5", _f32_bits(-0.5)),
         EnumValue("f32_1_0", _f32_bits(1.0)),

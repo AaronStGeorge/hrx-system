@@ -427,6 +427,28 @@ low.func.def target(@target) abi(hal_kernel) @f32_uniform_scalar_binary() -> (re
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @f32_inline_zero_arithmetic(%scalar: f32, %vector: vector<2xf32>) -> (f32, vector<2xf32>) {
+  %zero = scalar.constant 0.0 : f32
+  %scalar_result = scalar.mulf %scalar, %zero : f32
+  %zero_vector = vector.splat %zero : vector<2xf32>
+  %vector_result = vector.mulf %vector, %zero_vector : vector<2xf32>
+  func.return %scalar_result, %vector_result : f32, vector<2xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32_inline_zero_arithmetic(%scalar: reg<amdgpu.vgpr>, %vector: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %scalar_result = v_mul_f32_src0_inline %scalar, 0
+  %14 = slice %vector[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %15 = v_mul_f32_src0_inline %14, 0
+  %16 = slice %vector[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %17 = v_mul_f32_src0_inline %16, 0
+  %vector_result = concat(%15, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %scalar_result, %vector_result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @f32_uniform_scalar_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer: buffer) -> (f32) {
   %base = index.constant 0 : offset
   %a_global = buffer.assume.memory_space<global> %a_buffer : buffer

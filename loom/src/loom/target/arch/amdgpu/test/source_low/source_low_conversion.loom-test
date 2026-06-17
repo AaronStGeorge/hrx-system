@@ -372,7 +372,6 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_round_f32_to_i8x4(
   %30 = v_mul_f32 %28, %inverse_scale
   %31 = slice %values[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %33 = v_mul_f32 %31, %inverse_scale
-  %40 = v_mov_b32 1056964608
   %51 = v_trunc_f32 %24
   %53 = v_trunc_f32 %27
   %55 = v_trunc_f32 %30
@@ -385,29 +384,29 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_round_f32_to_i8x4(
   %75 = v_and_b32_lit %64, 2147483647
   %77 = v_and_b32_lit %67, 2147483647
   %79 = v_and_b32_lit %70, 2147483647
-  %83 = v_cmp_ge_f32 %73, %40
-  %86 = v_cmp_ge_f32 %75, %40
-  %89 = v_cmp_ge_f32 %77, %40
-  %92 = v_cmp_ge_f32 %79, %40
-  %95 = v_cndmask_b32_src1_lit_src0_inline %83 {imm32 = 1065353216, false_value = 0}
-  %97 = v_cndmask_b32_src1_lit_src0_inline %86 {imm32 = 1065353216, false_value = 0}
-  %99 = v_cndmask_b32_src1_lit_src0_inline %89 {imm32 = 1065353216, false_value = 0}
-  %101 = v_cndmask_b32_src1_lit_src0_inline %92 {imm32 = 1065353216, false_value = 0}
-  %105 = v_bfi_b32_src0_lit %95, %24, 2147483647
-  %108 = v_bfi_b32_src0_lit %97, %27, 2147483647
-  %111 = v_bfi_b32_src0_lit %99, %30, 2147483647
-  %114 = v_bfi_b32_src0_lit %101, %33, 2147483647
-  %118 = v_add_f32 %51, %105
-  %121 = v_add_f32 %53, %108
-  %124 = v_add_f32 %55, %111
-  %127 = v_add_f32 %57, %114
-  %130 = v_cvt_i32_f32 %118
-  %132 = v_cvt_i32_f32 %121
-  %134 = v_cvt_i32_f32 %124
-  %136 = v_cvt_i32_f32 %127
-  %142 = v_perm_b32_src2_lit %130, %132, 1024
-  %143 = v_perm_b32_src2_lit %134, %136, 1024
-  %packed = v_perm_b32_src2_lit %142, %143, 84148480
+  %82 = v_cmp_ge_f32_src1_inline %73 {rhs = 1056964608}
+  %84 = v_cmp_ge_f32_src1_inline %75 {rhs = 1056964608}
+  %86 = v_cmp_ge_f32_src1_inline %77 {rhs = 1056964608}
+  %88 = v_cmp_ge_f32_src1_inline %79 {rhs = 1056964608}
+  %91 = v_cndmask_b32_src1_lit_src0_inline %82 {imm32 = 1065353216, false_value = 0}
+  %93 = v_cndmask_b32_src1_lit_src0_inline %84 {imm32 = 1065353216, false_value = 0}
+  %95 = v_cndmask_b32_src1_lit_src0_inline %86 {imm32 = 1065353216, false_value = 0}
+  %97 = v_cndmask_b32_src1_lit_src0_inline %88 {imm32 = 1065353216, false_value = 0}
+  %101 = v_bfi_b32_src0_lit %91, %24, 2147483647
+  %104 = v_bfi_b32_src0_lit %93, %27, 2147483647
+  %107 = v_bfi_b32_src0_lit %95, %30, 2147483647
+  %110 = v_bfi_b32_src0_lit %97, %33, 2147483647
+  %114 = v_add_f32 %51, %101
+  %117 = v_add_f32 %53, %104
+  %120 = v_add_f32 %55, %107
+  %123 = v_add_f32 %57, %110
+  %126 = v_cvt_i32_f32 %114
+  %128 = v_cvt_i32_f32 %117
+  %130 = v_cvt_i32_f32 %120
+  %132 = v_cvt_i32_f32 %123
+  %138 = v_perm_b32_src2_lit %126, %128, 1024
+  %139 = v_perm_b32_src2_lit %130, %132, 1024
+  %packed = v_perm_b32_src2_lit %138, %139, 84148480
   return %packed
 }
 
