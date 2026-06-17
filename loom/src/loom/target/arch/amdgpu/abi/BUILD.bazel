@@ -63,6 +63,16 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "tsan",
+    hdrs = ["tsan.h"],
+    visibility = (
+        _AMDGPU_LOWER_VISIBILITY +
+        _AMDGPU_NATIVE_VISIBILITY +
+        _AMDGPU_TOOLING_VISIBILITY
+    ),
+)
+
+loom_cc_library(
     name = "signal",
     hdrs = ["signal.h"],
     visibility = (
