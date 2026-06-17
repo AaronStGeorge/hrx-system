@@ -825,6 +825,10 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
                                                  &low_state);
       if (!iree_status_is_ok(status)) break;
       const uint64_t state_write_bits = low_state.writes;
+      if (state_write_bits != 0) {
+        loom_cse_scope_invalidate_state_dependencies(frame->scope,
+                                                     state_write_bits);
+      }
 
       // Execution-state barrier: convergent operations can change which
       // dynamic participants define later values. A pure materialization before
@@ -843,8 +847,6 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
 
       // Push child frames for nested regions.
       if (op->region_count > 0) {
-        loom_cse_scope_invalidate_state_dependencies(frame->scope,
-                                                     state_write_bits);
         loom_cse_scope_t* parent_scope =
             loom_traits_is_isolated(traits) ? NULL : frame->scope;
 
@@ -857,23 +859,22 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
       // CSE candidate check: must have results, no regions (handled
       // above), no writes, no unknown effects, and be deterministic.
       if (op->result_count == 0) {
-        loom_cse_scope_invalidate_state_dependencies(frame->scope,
-                                                     state_write_bits);
         continue;
       }
       if (op->tied_result_count != 0) {
-        loom_cse_scope_invalidate_state_dependencies(frame->scope,
-                                                     state_write_bits);
         continue;
       }
       if (loom_cse_result_is_consumed(module, op)) {
-        loom_cse_scope_invalidate_state_dependencies(frame->scope,
-                                                     state_write_bits);
         continue;
       }
       if (loom_cse_prevents_cse(traits)) {
-        loom_cse_scope_invalidate_state_dependencies(frame->scope,
-                                                     state_write_bits);
+        continue;
+      }
+      if (state_write_bits != 0) {
+        // Target-state writes produce dynamic architectural state, not ordinary
+        // immutable SSA values. Reusing an earlier state writer would erase the
+        // current write and extend the earlier materialization across packets
+        // that may also write the same state.
         continue;
       }
 
@@ -899,8 +900,6 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
         loom_pass_mark_changed(pass);
         ++statistics->expressions_eliminated;
       } else {
-        loom_cse_scope_invalidate_state_dependencies(frame->scope,
-                                                     state_write_bits);
         loom_cse_table_insert(&frame->scope->table, op, hash, traits,
                               low_state.dependencies);
       }

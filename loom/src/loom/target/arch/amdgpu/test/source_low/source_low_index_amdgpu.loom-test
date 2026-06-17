@@ -136,7 +136,8 @@ low.func.def target(@target) abi(hal_kernel) @index_uniform_div_rem_magic_mul(%b
   %13 = s_mul_hi_u32 %bounded_value, %12
   %14 = s_mov_b32 2
   %quotient = s_lshr_b32 %13, %14
-  %20 = s_mul_i32 %quotient, %divisor
+  %19 = s_lshr_b32 %13, %14
+  %20 = s_mul_i32 %19, %divisor
   %remainder = s_sub_u32 %bounded_value, %20
   return %quotient, %remainder
 }

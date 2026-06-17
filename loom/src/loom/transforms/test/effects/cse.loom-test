@@ -192,6 +192,30 @@ low.func.def target(@test_target) @descriptor_low_convergent_ops_do_not_cse(%val
 
 // ====
 
+// Descriptor-backed packets that write target state are not value-CSE
+// candidates. The second packet may have identical operands, but erasing it
+// would erase its architectural state update.
+// RUN: pass cse
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @descriptor_low_state_writes_do_not_cse(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm<test.low.core> {
+  %a = test.state.add.i32 %lhs, %rhs
+  %b = test.state.add.i32 %lhs, %rhs
+  return %a, %b
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @descriptor_low_state_writes_do_not_cse(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  %a = low.op<test.state.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  %b = low.op<test.state.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %a, %b : reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
 // Descriptor-backed packets with hidden target-state reads must not CSE across
 // an intervening write to the same state register class.
 // RUN: pass cse

@@ -26,6 +26,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @cache_device_non_tempor
   %12 = v_lshlrev_b32_src0_inline %lane, 4
   %13 = s_mov_b32_m0_imm 0
   %loaded = global_load_dwordx4_saddr %12, %input_view, %13 {nt = 1}
-  global_store_dwordx4_saddr %12, %loaded, %output_view, %13 {nt = 1}
+  %16 = s_mov_b32_m0_imm 0
+  global_store_dwordx4_saddr %12, %loaded, %output_view, %16 {nt = 1}
   return
 }
