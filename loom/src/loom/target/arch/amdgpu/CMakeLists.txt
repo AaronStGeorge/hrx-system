@@ -342,6 +342,7 @@ loom_cc_test(
     loom::sanitizer::options
     loom::sanitizer::site_table
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::lower
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::planning::wait_packets

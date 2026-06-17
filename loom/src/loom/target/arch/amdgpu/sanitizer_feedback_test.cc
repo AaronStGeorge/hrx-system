@@ -36,9 +36,11 @@
 #include "loom/sanitizer/options.h"
 #include "loom/sanitizer/site_table.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
+#include "loom/target/arch/amdgpu/hal/kernel_abi.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/lower/feedback.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_access.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_race_report.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_report.h"
 #include "loom/target/arch/amdgpu/lower/system_memory.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
@@ -65,6 +67,13 @@ constexpr uint64_t kReportAccessLength = 16;
 constexpr loom_sanitizer_site_id_t kReportSiteId = 0;
 constexpr uint64_t kReportShadowAddress = UINT64_C(0x0000056789ABCDEF);
 constexpr uint64_t kReportShadowValue = UINT64_C(0xF0);
+
+constexpr loom_sanitizer_site_id_t kTsanCurrentSiteId = 0;
+constexpr loom_sanitizer_site_id_t kTsanPriorSiteId = 1;
+constexpr uint64_t kTsanMemoryAddress = 0;
+constexpr uint64_t kTsanShadowAddress = 0;
+constexpr uint64_t kTsanShadowValue = 0;
+constexpr uint32_t kTsanAccessLength = sizeof(uint32_t);
 
 uint32_t LoadLeU32(const uint8_t* data, iree_host_size_t offset) {
   return ((uint32_t)data[offset]) | ((uint32_t)data[offset + 1] << 8) |
@@ -311,17 +320,18 @@ uint64_t AmdgpuAsanShadowAddress(const iree_hal_amdgpu_asan_config_t& config,
          (application_address >> config.shadow_scale_shift);
 }
 
-class AmdgpuAsanDeviceEventRecorder {
+class AmdgpuSanitizerDeviceEventRecorder {
  public:
-  AmdgpuAsanDeviceEventRecorder() = default;
+  AmdgpuSanitizerDeviceEventRecorder() = default;
 
-  AmdgpuAsanDeviceEventRecorder(const AmdgpuAsanDeviceEventRecorder&) = delete;
-  AmdgpuAsanDeviceEventRecorder& operator=(
-      const AmdgpuAsanDeviceEventRecorder&) = delete;
+  AmdgpuSanitizerDeviceEventRecorder(
+      const AmdgpuSanitizerDeviceEventRecorder&) = delete;
+  AmdgpuSanitizerDeviceEventRecorder& operator=(
+      const AmdgpuSanitizerDeviceEventRecorder&) = delete;
 
   iree_hal_device_event_sink_t sink() {
     iree_hal_device_event_sink_t sink;
-    sink.fn = AmdgpuAsanDeviceEventRecorder::Capture;
+    sink.fn = AmdgpuSanitizerDeviceEventRecorder::Capture;
     sink.user_data = this;
     return sink;
   }
@@ -329,6 +339,7 @@ class AmdgpuAsanDeviceEventRecorder {
   void Reset() {
     std::lock_guard<std::mutex> lock(mutex_);
     asan_report_count_ = 0;
+    tsan_report_count_ = 0;
     last_source_ = iree_hal_device_event_source_default();
     last_site_available_ = false;
     last_site_ = iree_hal_device_event_site_default();
@@ -336,7 +347,8 @@ class AmdgpuAsanDeviceEventRecorder {
     last_site_function_name_.clear();
     last_site_operation_name_.clear();
     last_site_producer_payload_.clear();
-    last_report_ = {};
+    last_asan_report_ = {};
+    last_tsan_report_ = {};
   }
 
   void WaitForAsanReportCount(iree_host_size_t expected_count) {
@@ -344,9 +356,19 @@ class AmdgpuAsanDeviceEventRecorder {
     condition_.wait(lock, [&] { return asan_report_count_ >= expected_count; });
   }
 
+  void WaitForTsanReportCount(iree_host_size_t expected_count) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [&] { return tsan_report_count_ >= expected_count; });
+  }
+
   iree_host_size_t asan_report_count() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return asan_report_count_;
+  }
+
+  iree_host_size_t tsan_report_count() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return tsan_report_count_;
   }
 
   iree_hal_device_event_source_t last_source() const {
@@ -356,7 +378,12 @@ class AmdgpuAsanDeviceEventRecorder {
 
   iree_hal_device_asan_report_t last_report() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return last_report_;
+    return last_asan_report_;
+  }
+
+  iree_hal_device_tsan_report_t last_tsan_report() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_tsan_report_;
   }
 
   bool last_site_available() const {
@@ -399,7 +426,7 @@ class AmdgpuAsanDeviceEventRecorder {
     }
   }
 
-  static void CaptureSite(AmdgpuAsanDeviceEventRecorder* recorder,
+  static void CaptureSite(AmdgpuSanitizerDeviceEventRecorder* recorder,
                           const iree_hal_device_event_site_t* site) {
     recorder->last_site_available_ = site != nullptr;
     recorder->last_site_ = iree_hal_device_event_site_default();
@@ -418,18 +445,30 @@ class AmdgpuAsanDeviceEventRecorder {
   }
 
   static void Capture(void* user_data, const iree_hal_device_event_t* event) {
-    auto* recorder = static_cast<AmdgpuAsanDeviceEventRecorder*>(user_data);
-    if (event->type != IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT ||
-        !event->payload.data ||
-        event->payload.data_length < sizeof(iree_hal_device_asan_report_t)) {
+    auto* recorder =
+        static_cast<AmdgpuSanitizerDeviceEventRecorder*>(user_data);
+    if (!event->payload.data) {
       return;
     }
     std::lock_guard<std::mutex> lock(recorder->mutex_);
-    recorder->last_source_ = event->source;
-    CaptureSite(recorder, event->site);
-    std::memcpy(&recorder->last_report_, event->payload.data,
-                sizeof(recorder->last_report_));
-    ++recorder->asan_report_count_;
+    if (event->type == IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT &&
+        event->payload.data_length >= sizeof(iree_hal_device_asan_report_t)) {
+      recorder->last_source_ = event->source;
+      CaptureSite(recorder, event->site);
+      std::memcpy(&recorder->last_asan_report_, event->payload.data,
+                  sizeof(recorder->last_asan_report_));
+      ++recorder->asan_report_count_;
+    } else if (event->type == IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT &&
+               event->payload.data_length >=
+                   sizeof(iree_hal_device_tsan_report_t)) {
+      recorder->last_source_ = event->source;
+      CaptureSite(recorder, event->site);
+      std::memcpy(&recorder->last_tsan_report_, event->payload.data,
+                  sizeof(recorder->last_tsan_report_));
+      ++recorder->tsan_report_count_;
+    } else {
+      return;
+    }
     recorder->condition_.notify_all();
   }
 
@@ -439,12 +478,15 @@ class AmdgpuAsanDeviceEventRecorder {
   std::condition_variable condition_;
   // Count of ASAN reports captured since the last reset.
   iree_host_size_t asan_report_count_ = 0;
-  // Source attribution from the last captured ASAN report.
+  // Count of TSAN reports captured since the last reset.
+  iree_host_size_t tsan_report_count_ = 0;
+  // Source attribution from the last captured sanitizer report.
   iree_hal_device_event_source_t last_source_ =
       iree_hal_device_event_source_default();
-  // True when the last captured ASAN report carried resolved site metadata.
+  // True when the last captured sanitizer report carried resolved site
+  // metadata.
   bool last_site_available_ = false;
-  // Resolved site metadata from the last captured ASAN report.
+  // Resolved site metadata from the last captured sanitizer report.
   iree_hal_device_event_site_t last_site_ =
       iree_hal_device_event_site_default();
   // Owned source file storage referenced by |last_site_|.
@@ -456,7 +498,9 @@ class AmdgpuAsanDeviceEventRecorder {
   // Owned producer payload storage referenced by |last_site_|.
   std::vector<uint8_t> last_site_producer_payload_;
   // Payload from the last captured ASAN report.
-  iree_hal_device_asan_report_t last_report_ = {};
+  iree_hal_device_asan_report_t last_asan_report_ = {};
+  // Payload from the last captured TSAN report.
+  iree_hal_device_tsan_report_t last_tsan_report_ = {};
 };
 
 iree_status_t AllocateAsanDeviceBuffer(iree_hal_allocator_t* allocator,
@@ -536,10 +580,15 @@ class AmdgpuAsanHalRuntime {
   AmdgpuAsanHalRuntime& operator=(const AmdgpuAsanHalRuntime&) = delete;
 
   iree_status_t Initialize() {
-    return Initialize(iree_hal_device_event_sink_discard());
+    return Initialize(IREE_SV("asan"), iree_hal_device_event_sink_discard());
   }
 
   iree_status_t Initialize(iree_hal_device_event_sink_t event_sink) {
+    return Initialize(IREE_SV("asan"), event_sink);
+  }
+
+  iree_status_t Initialize(iree_string_view_t sanitizer,
+                           iree_hal_device_event_sink_t event_sink) {
     iree_async_proactor_pool_t* proactor_pool = nullptr;
     iree_async_frontier_tracker_t* frontier_tracker = nullptr;
 
@@ -573,7 +622,7 @@ class AmdgpuAsanHalRuntime {
     create_params.event_sink = event_sink;
     create_params.proactor_pool = proactor_pool;
     iree_string_pair_t device_parameters[1] = {
-        iree_make_cstring_pair("hal.sanitizer", "asan"),
+        iree_make_string_pair(IREE_SV("hal.sanitizer"), sanitizer),
     };
     if (iree_status_is_ok(status)) {
       status = iree_hal_driver_create_device_by_ordinal(
@@ -644,7 +693,9 @@ iree_status_t BuildU32Attr(loom_builder_t* builder, iree_string_view_t name,
   return iree_ok_status();
 }
 
-iree_status_t AppendSingleSanitizerSiteTable(loom_module_t* module) {
+iree_status_t AppendSingleSanitizerSiteTable(loom_module_t* module,
+                                             loom_sanitizer_site_id_t site_id,
+                                             uint32_t op_kind) {
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_module_register_source(
       module, IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom"), &source_id));
@@ -657,8 +708,8 @@ iree_status_t AppendSingleSanitizerSiteTable(loom_module_t* module) {
       loom_module_add_location(module, source_entry, &source_location));
 
   loom_sanitizer_site_row_t row = {};
-  row.site_id = kReportSiteId;
-  row.op_kind = LOOM_OP_SANITIZER_ASSERT_ACCESS;
+  row.site_id = site_id;
+  row.op_kind = op_kind;
   row.location = source_location;
   row.payload_location = LOOM_LOCATION_UNKNOWN;
   row.source_location = source_location;
@@ -690,7 +741,9 @@ iree_status_t AppendSingleSanitizerSiteTable(loom_module_t* module) {
       site_table, 8, LOOM_LOCATION_UNKNOWN, &rodata_op);
 }
 
-void ExpectSingleSanitizerSiteTable(loom_module_t* module) {
+void ExpectSingleSanitizerSiteTable(loom_module_t* module,
+                                    loom_sanitizer_site_id_t site_id,
+                                    uint32_t op_kind) {
   loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
   IREE_ASSERT_OK(loom_module_intern_string(
       module, IREE_SV(LOOM_SANITIZER_SITE_TABLE_SYMBOL_NAME), &name_id));
@@ -716,9 +769,9 @@ void ExpectSingleSanitizerSiteTable(loom_module_t* module) {
   const uint8_t* record =
       contents.data + LOOM_SANITIZER_SITE_TABLE_HEADER_LENGTH;
   EXPECT_EQ(LoadLeU32(record, LOOM_SANITIZER_SITE_TABLE_RECORD_SITE_ID_OFFSET),
-            kReportSiteId);
+            site_id);
   EXPECT_EQ(LoadLeU32(record, LOOM_SANITIZER_SITE_TABLE_RECORD_OP_KIND_OFFSET),
-            LOOM_OP_SANITIZER_ASSERT_ACCESS);
+            op_kind);
   EXPECT_EQ(LoadLeU32(record, LOOM_SANITIZER_SITE_TABLE_RECORD_FLAGS_OFFSET),
             LOOM_SANITIZER_SITE_TABLE_RECORD_HAS_SOURCE_LOCATION);
   EXPECT_NE(
@@ -850,6 +903,21 @@ iree_status_t BuildWaitCounterMask(
       loom_make_named_attr_slice(attrs, selection.immediate_count),
       /*result_types=*/nullptr, /*result_count=*/0, /*tied_results=*/nullptr,
       /*tied_result_count=*/0, location, &wait_op);
+}
+
+iree_status_t BuildLiveIn(loom_builder_t* builder, iree_string_view_t source,
+                          loom_type_t result_type, loom_location_id_t location,
+                          loom_value_id_t* out_value) {
+  *out_value = LOOM_VALUE_ID_INVALID;
+  loom_string_id_t source_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(builder->module, source, &source_id));
+  loom_op_t* live_in_op = nullptr;
+  IREE_RETURN_IF_ERROR(loom_low_live_in_build(
+      builder, source_id, loom_make_named_attr_slice(nullptr, 0), result_type,
+      location, &live_in_op));
+  *out_value = loom_low_live_in_result(live_in_op);
+  return iree_ok_status();
 }
 
 iree_status_t FindKernelOpByName(loom_module_t* module, iree_string_view_t name,
@@ -986,6 +1054,87 @@ iree_status_t BuildAsanReportPublishAndReturn(
                                location, &return_op);
 }
 
+iree_status_t BuildTsanReportPublishAndReturn(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_symbol_ref_t feedback_config_symbol,
+    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_sanitizer_race_report_t* report,
+    loom_location_id_t location) {
+  loom_block_t* entry_block = builder->ip.block;
+  loom_block_t* feedback_block = nullptr;
+  IREE_RETURN_IF_ERROR(
+      InsertBlockAfter(builder->module, entry_block, &feedback_block));
+  loom_block_t* return_block = nullptr;
+  IREE_RETURN_IF_ERROR(
+      InsertBlockAfter(builder->module, feedback_block, &return_block));
+
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_config_values(
+      builder, descriptor_set, feedback_config_symbol, location,
+      &config_values));
+  loom_value_id_t feedback_enabled_scc = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_config_enabled_scc(
+      builder, descriptor_set, config_values.flags, location,
+      &feedback_enabled_scc));
+  loom_op_t* enabled_branch = nullptr;
+  IREE_RETURN_IF_ERROR(loom_low_cond_br_build(builder, feedback_enabled_scc,
+                                              feedback_block, return_block,
+                                              location, &enabled_branch));
+
+  loom_builder_set_block(builder, feedback_block);
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_channel_header_values(
+      builder, descriptor_set, config_values.channel_base, location,
+      &channel_values));
+  const uint32_t packet_length = (uint32_t)loom_amdgpu_feedback_packet_length(
+      LOOM_AMDGPU_TSAN_REPORT_BYTE_LENGTH);
+  loom_amdgpu_feedback_reservation_t reservation = {};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_reservation(
+      builder, descriptor_set, channel_values.address, channel_values.ring_base,
+      channel_values.ring_capacity, packet_length, location, &reservation));
+
+  loom_block_t* reservation_block = builder->ip.block;
+  loom_block_t* report_block = nullptr;
+  IREE_RETURN_IF_ERROR(
+      InsertBlockAfter(builder->module, reservation_block, &report_block));
+  loom_value_id_t reservation_succeeded_scc = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_reservation_succeeded_scc(
+      builder, descriptor_set, reservation.reserved_mask, location,
+      &reservation_succeeded_scc));
+  loom_op_t* reserved_branch = nullptr;
+  IREE_RETURN_IF_ERROR(
+      loom_low_cond_br_build(builder, reservation_succeeded_scc, report_block,
+                             return_block, location, &reserved_branch));
+
+  loom_builder_set_block(builder, report_block);
+  const loom_amdgpu_feedback_packet_header_t header = {
+      /*.record_length=*/packet_length,
+      /*.kind=*/LOOM_AMDGPU_FEEDBACK_PACKET_KIND_TSAN,
+      /*.flags=*/LOOM_AMDGPU_FEEDBACK_PACKET_FLAG_ASYNC,
+      /*.sequence=*/reservation.sequence,
+      /*.source_dispatch_ptr=*/source->dispatch_ptr,
+      /*.source_workgroup_id_x=*/source->workgroup_id_x,
+      /*.source_workitem_id_x=*/source->workitem_id_x,
+      /*.source_context=*/config_values.source_context,
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_packet_header(
+      builder, descriptor_set, &reservation.packet_address, &header, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_race_report_payload(
+      builder, descriptor_set, &reservation.packet_address, report, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_publish_packet(
+      builder, descriptor_set, &reservation.packet_address,
+      config_values.notify_signal, location));
+  loom_op_t* publish_branch = nullptr;
+  IREE_RETURN_IF_ERROR(loom_low_br_build(builder, return_block,
+                                         /*args=*/nullptr, /*args_count=*/0,
+                                         location, &publish_branch));
+
+  loom_builder_set_block(builder, return_block);
+  loom_op_t* return_op = nullptr;
+  return loom_low_return_build(builder, /*values=*/nullptr, /*values_count=*/0,
+                               location, &return_op);
+}
+
 iree_status_t AppendAsanReportProducer(
     loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
     iree_string_view_t kernel_name) {
@@ -1043,6 +1192,117 @@ iree_status_t AppendAsanReportProducer(
       kReportShadowValue, location, &report.shadow_value));
 
   return BuildAsanReportPublishAndReturn(&builder, descriptor_set,
+                                         feedback_config_symbol, &source,
+                                         &report, location);
+}
+
+iree_status_t AppendTsanReportProducer(
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_view_t kernel_name) {
+  loom_op_t* kernel_op = nullptr;
+  IREE_RETURN_IF_ERROR(FindKernelOpByName(module, kernel_name, &kernel_op));
+  loom_region_t* body = loom_low_kernel_def_body(kernel_op);
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  if (entry_block->op_count != 1 ||
+      !loom_low_return_isa(entry_block->last_op)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "expected report kernel skeleton to contain only "
+                            "one low.return terminator");
+  }
+  IREE_RETURN_IF_ERROR(loom_op_erase(module, entry_block->last_op));
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, entry_block, &builder);
+  builder.ip.parent_op = kernel_op;
+  constexpr loom_location_id_t location = LOOM_LOCATION_UNKNOWN;
+
+  loom_symbol_ref_t feedback_config_symbol = loom_symbol_ref_null();
+  IREE_RETURN_IF_ERROR(GetOrCreateModuleSymbol(
+      module, IREE_SV(IREE_HAL_AMDGPU_FEEDBACK_CONFIG_GLOBAL_NAME),
+      &feedback_config_symbol));
+
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+      /*unit_count=*/1, &sgpr_type));
+  loom_type_t sgpr_x2_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+      /*unit_count=*/2, &sgpr_x2_type));
+  loom_type_t vgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      /*unit_count=*/1, &vgpr_type));
+
+  loom_amdgpu_sanitizer_report_source_t source = {};
+  IREE_RETURN_IF_ERROR(BuildLiveIn(
+      &builder, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE),
+      sgpr_x2_type, location, &source.dispatch_ptr));
+  IREE_RETURN_IF_ERROR(BuildLiveIn(
+      &builder, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE),
+      sgpr_type, location, &source.workgroup_id_x));
+  IREE_RETURN_IF_ERROR(BuildLiveIn(
+      &builder, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE),
+      vgpr_type, location, &source.workitem_id_x));
+
+  loom_value_id_t vgpr_zero = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(BuildRegisterU32Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      /*value=*/0, location, &vgpr_zero));
+  loom_value_id_t vgpr_one = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(BuildRegisterU32Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      /*value=*/1, location, &vgpr_one));
+
+  loom_amdgpu_sanitizer_race_report_t report = {};
+  IREE_RETURN_IF_ERROR(BuildRegisterU32Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      LOOM_AMDGPU_TSAN_CHECK_KIND_DATA_RACE, location, &report.check_kind));
+  IREE_RETURN_IF_ERROR(BuildRegisterU32Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      /*value=*/0, location, &report.flags));
+  IREE_RETURN_IF_ERROR(BuildRegisterU32Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      LOOM_AMDGPU_TSAN_MEMORY_SPACE_WORKGROUP, location, &report.memory_space));
+  IREE_RETURN_IF_ERROR(BuildRegisterU32Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      LOOM_AMDGPU_TSAN_ACCESS_KIND_WRITE, location,
+      &report.current_access_kind));
+  IREE_RETURN_IF_ERROR(BuildRegisterU32Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      LOOM_AMDGPU_TSAN_ACCESS_KIND_READ, location, &report.prior_access_kind));
+  IREE_RETURN_IF_ERROR(BuildRegisterU32Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      kTsanAccessLength, location, &report.access_size));
+  IREE_RETURN_IF_ERROR(BuildRegisterU64Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      (uint64_t)kTsanCurrentSiteId, location, &report.current_site_id));
+  IREE_RETURN_IF_ERROR(BuildRegisterU64Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      (uint64_t)kTsanPriorSiteId, location, &report.prior_site_id));
+  IREE_RETURN_IF_ERROR(BuildRegisterU64Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      kTsanMemoryAddress, location, &report.memory_address));
+  IREE_RETURN_IF_ERROR(BuildRegisterU64Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      kTsanShadowAddress, location, &report.shadow_address));
+  IREE_RETURN_IF_ERROR(BuildRegisterU64Constant(
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR, kTsanShadowValue,
+      location, &report.shadow_value));
+  report.current_workgroup_id_x = source.workgroup_id_x;
+  report.current_workgroup_id_y = vgpr_zero;
+  report.current_workgroup_id_z = vgpr_zero;
+  report.current_workitem_id_x = source.workitem_id_x;
+  report.current_workitem_id_y = vgpr_zero;
+  report.current_workitem_id_z = vgpr_zero;
+  report.prior_workgroup_id_x = source.workgroup_id_x;
+  report.prior_workgroup_id_y = vgpr_zero;
+  report.prior_workgroup_id_z = vgpr_zero;
+  report.prior_workitem_id_x = vgpr_one;
+  report.prior_workitem_id_y = vgpr_zero;
+  report.prior_workitem_id_z = vgpr_zero;
+
+  return BuildTsanReportPublishAndReturn(&builder, descriptor_set,
                                          feedback_config_symbol, &source,
                                          &report, location);
 }
@@ -1131,7 +1391,7 @@ iree_status_t AppendAsanShadowProbeProducer(
 class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
  protected:
   static void SetUpTestSuite() {
-    recorder_ = new AmdgpuAsanDeviceEventRecorder();
+    recorder_ = new AmdgpuSanitizerDeviceEventRecorder();
     runtime_ = new AmdgpuAsanHalRuntime();
     iree_status_t status = runtime_->Initialize(recorder_->sink());
     runtime_status_code_ = iree_status_code(status);
@@ -1253,9 +1513,50 @@ class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
     IREE_RETURN_IF_ERROR(ParseModuleSource(
         iree_make_string_view(source.data(), source.size()),
         IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom"), &module));
-    IREE_RETURN_IF_ERROR(AppendSingleSanitizerSiteTable(module.get()));
+    IREE_RETURN_IF_ERROR(AppendSingleSanitizerSiteTable(
+        module.get(), kReportSiteId, LOOM_OP_SANITIZER_ASSERT_ACCESS));
     IREE_RETURN_IF_ERROR(AppendAsanReportProducer(
         module.get(), descriptor_set, IREE_SV("loom_report_kernel")));
+    *out_module = std::move(module);
+    return iree_ok_status();
+  }
+
+  iree_status_t ParseTsanReportModule(
+      const loom_run_hal_device_target_t* target, ModulePtr* out_module) {
+    if (target->target_bundle == nullptr ||
+        target->target_bundle->config == nullptr) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "selected AMDGPU target has no bundle config");
+    }
+    const loom_low_descriptor_set_t* descriptor_set =
+        loom_low_descriptor_registry_lookup(
+            &low_registry_.registry,
+            target->target_bundle->config->contract_set_key);
+    if (descriptor_set == nullptr) {
+      return iree_make_status(
+          IREE_STATUS_UNAVAILABLE, "AMDGPU descriptor set is not linked: %.*s",
+          (int)target->target_bundle->config->contract_set_key.size,
+          target->target_bundle->config->contract_set_key.data);
+    }
+
+    std::string source;
+    source += "amdgpu.target<";
+    source.append(target->target_key.data, target->target_key.size);
+    source += "> @gfx_target\n";
+    source +=
+        "low.kernel.def target(@gfx_target) workgroup_size(1, 1, 1) "
+        "@loom_tsan_report_kernel() {\n"
+        "  low.return\n"
+        "}\n";
+
+    ModulePtr module;
+    IREE_RETURN_IF_ERROR(ParseModuleSource(
+        iree_make_string_view(source.data(), source.size()),
+        IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom"), &module));
+    IREE_RETURN_IF_ERROR(AppendSingleSanitizerSiteTable(
+        module.get(), kTsanCurrentSiteId, LOOM_OP_SANITIZER_RACE_ACCESS));
+    IREE_RETURN_IF_ERROR(AppendTsanReportProducer(
+        module.get(), descriptor_set, IREE_SV("loom_tsan_report_kernel")));
     *out_module = std::move(module);
     return iree_ok_status();
   }
@@ -1316,9 +1617,9 @@ class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
 
   iree_hal_allocator_t* allocator() const { return runtime_->allocator(); }
 
-  AmdgpuAsanDeviceEventRecorder* recorder() const { return recorder_; }
+  AmdgpuSanitizerDeviceEventRecorder* recorder() const { return recorder_; }
 
-  static AmdgpuAsanDeviceEventRecorder* recorder_;
+  static AmdgpuSanitizerDeviceEventRecorder* recorder_;
   static AmdgpuAsanHalRuntime* runtime_;
   static iree_status_code_t runtime_status_code_;
   static std::string runtime_status_message_;
@@ -1329,7 +1630,7 @@ class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
   loom_target_low_descriptor_registry_t low_registry_ = {};
 };
 
-AmdgpuAsanDeviceEventRecorder* AmdgpuHalSanitizerFeedbackTest::recorder_ =
+AmdgpuSanitizerDeviceEventRecorder* AmdgpuHalSanitizerFeedbackTest::recorder_ =
     nullptr;
 AmdgpuAsanHalRuntime* AmdgpuHalSanitizerFeedbackTest::runtime_ = nullptr;
 iree_status_code_t AmdgpuHalSanitizerFeedbackTest::runtime_status_code_ =
@@ -1623,7 +1924,8 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
     GTEST_SKIP() << StatusToStringAndFree(status);
   }
   IREE_ASSERT_OK(status);
-  ASSERT_NO_FATAL_FAILURE(ExpectSingleSanitizerSiteTable(module.get()));
+  ASSERT_NO_FATAL_FAILURE(ExpectSingleSanitizerSiteTable(
+      module.get(), kReportSiteId, LOOM_OP_SANITIZER_ASSERT_ACCESS));
 
   const loom_target_pipeline_options_t target_pipeline_options = {
       /*.source_to_low_max_errors=*/{},
@@ -1703,6 +2005,140 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   EXPECT_EQ(site.end_column, 11u);
   IREE_EXPECT_OK(iree_hal_device_queue_flush(runtime()->device,
                                              IREE_HAL_QUEUE_AFFINITY_ANY));
+}
+
+TEST_F(AmdgpuHalSanitizerFeedbackTest,
+       PublishesTsanFeedbackPacketFromLoomNativeHsaco) {
+  AmdgpuSanitizerDeviceEventRecorder tsan_recorder;
+  AmdgpuAsanHalRuntime tsan_runtime;
+  iree_status_t status =
+      tsan_runtime.Initialize(IREE_SV("tsan"), tsan_recorder.sink());
+  const iree_status_code_t tsan_runtime_code = iree_status_code(status);
+  if (tsan_runtime_code == IREE_STATUS_UNAVAILABLE ||
+      tsan_runtime_code == IREE_STATUS_NOT_FOUND ||
+      tsan_runtime_code == IREE_STATUS_UNIMPLEMENTED) {
+    GTEST_SKIP() << StatusToStringAndFree(status);
+  }
+  IREE_ASSERT_OK(status);
+
+  loom_run_hal_device_target_t target = {};
+  status = loom_amdgpu_hal_artifact_provider.select_device_target(
+      &loom_amdgpu_hal_artifact_provider, tsan_runtime.runtime(),
+      iree_allocator_system(), &target);
+  if (iree_status_is_unavailable(status) ||
+      iree_status_is_unimplemented(status)) {
+    GTEST_SKIP() << StatusToStringAndFree(status);
+  }
+  IREE_ASSERT_OK(status);
+
+  ModulePtr module;
+  status = ParseTsanReportModule(&target, &module);
+  if (iree_status_is_unavailable(status)) {
+    GTEST_SKIP() << StatusToStringAndFree(status);
+  }
+  IREE_ASSERT_OK(status);
+  ASSERT_NO_FATAL_FAILURE(ExpectSingleSanitizerSiteTable(
+      module.get(), kTsanCurrentSiteId, LOOM_OP_SANITIZER_RACE_ACCESS));
+
+  const loom_target_pipeline_options_t target_pipeline_options = {
+      /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
+      /*.control_flow_lowering=*/{},
+      /*.sanitizer=*/
+      {
+          /*.checks=*/LOOM_SANITIZER_CHECK_RACE,
+      },
+  };
+  AmdgpuHalArtifact artifact;
+  bool emitted = false;
+  DiagnosticCapture capture;
+  IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.emit_artifact(
+      &loom_amdgpu_hal_artifact_provider, module.get(), &target,
+      /*diagnostic_sink=*/capture.sink(),
+      /*source_resolver=*/(loom_source_resolver_t){}, /*max_errors=*/20,
+      &target_pipeline_options,
+      /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
+      /*artifact_manifest=*/nullptr, /*report=*/nullptr,
+      iree_allocator_system(), &emitted, artifact.value()));
+  ASSERT_TRUE(emitted) << DiagnosticSummary(capture);
+  EXPECT_TRUE(capture.diagnostics.empty()) << DiagnosticSummary(capture);
+
+  AmdgpuHalPreparedCandidate candidate;
+  IREE_ASSERT_OK(loom_run_hal_prepared_candidate_prepare(
+      tsan_runtime.runtime(), artifact.value(), candidate.value()));
+  ASSERT_EQ(iree_hal_executable_function_count(candidate.value()->executable),
+            1u);
+
+  loom_run_hal_binding_list_t bindings = {};
+  loom_run_hal_binding_list_initialize(&bindings);
+  loom_run_hal_invocation_options_t options;
+  loom_run_hal_invocation_options_initialize(&options);
+  options.function_name = IREE_SV("loom_tsan_report_kernel");
+  status =
+      loom_run_hal_dispatch(tsan_runtime.runtime()->device,
+                            candidate.value()->executable, &bindings, &options);
+  loom_run_hal_binding_list_deinitialize(&bindings);
+
+  const iree_status_code_t dispatch_code = iree_status_code(status);
+  if (dispatch_code == IREE_STATUS_ABORTED) {
+    iree_status_free(status);
+  } else {
+    IREE_ASSERT_OK(status);
+  }
+
+  status = iree_hal_device_queue_flush(tsan_runtime.runtime()->device,
+                                       IREE_HAL_QUEUE_AFFINITY_ANY);
+  const iree_status_code_t flush_code = iree_status_code(status);
+  if (flush_code == IREE_STATUS_ABORTED) {
+    iree_status_free(status);
+  } else {
+    IREE_ASSERT_OK(status);
+  }
+  tsan_recorder.WaitForTsanReportCount(1);
+  EXPECT_EQ(tsan_recorder.tsan_report_count(), 1u);
+  iree_hal_device_tsan_report_t report = tsan_recorder.last_tsan_report();
+  EXPECT_EQ(report.record_length, sizeof(report));
+  EXPECT_EQ(report.abi_version, IREE_HAL_DEVICE_TSAN_REPORT_ABI_VERSION_0);
+  EXPECT_EQ(report.check_kind, IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE);
+  EXPECT_EQ(report.memory_space, IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP);
+  EXPECT_EQ(report.current_access_kind, IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE);
+  EXPECT_EQ(report.prior_access_kind, IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ);
+  EXPECT_EQ(report.access_length, kTsanAccessLength);
+  EXPECT_EQ(report.current_site_id, (uint64_t)kTsanCurrentSiteId);
+  EXPECT_EQ(report.prior_site_id, (uint64_t)kTsanPriorSiteId);
+  EXPECT_EQ(report.memory_address, kTsanMemoryAddress);
+  EXPECT_EQ(report.shadow_address, kTsanShadowAddress);
+  EXPECT_EQ(report.shadow_value, kTsanShadowValue);
+  EXPECT_EQ(report.current_workgroup_id[0], 0u);
+  EXPECT_EQ(report.current_workgroup_id[1], 0u);
+  EXPECT_EQ(report.current_workgroup_id[2], 0u);
+  EXPECT_EQ(report.current_workitem_id[0], 0u);
+  EXPECT_EQ(report.current_workitem_id[1], 0u);
+  EXPECT_EQ(report.current_workitem_id[2], 0u);
+  EXPECT_EQ(report.prior_workgroup_id[0], 0u);
+  EXPECT_EQ(report.prior_workgroup_id[1], 0u);
+  EXPECT_EQ(report.prior_workgroup_id[2], 0u);
+  EXPECT_EQ(report.prior_workitem_id[0], 1u);
+  EXPECT_EQ(report.prior_workitem_id[1], 0u);
+  EXPECT_EQ(report.prior_workitem_id[2], 0u);
+  EXPECT_NE(report.source_dispatch_ptr, 0u);
+
+  iree_hal_device_event_source_t source = tsan_recorder.last_source();
+  EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));
+  EXPECT_NE(source.executable_id, 0u);
+  EXPECT_NE(source.physical_device_ordinal, UINT32_MAX);
+
+  ASSERT_TRUE(tsan_recorder.last_site_available());
+  iree_hal_device_event_site_t site = tsan_recorder.last_site();
+  EXPECT_EQ(site.site_id, (uint64_t)kTsanCurrentSiteId);
+  EXPECT_TRUE(iree_string_view_equal(
+      site.source_file, IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom")));
+  EXPECT_EQ(site.start_line, 13u);
+  EXPECT_EQ(site.start_column, 3u);
+  EXPECT_EQ(site.end_line, 13u);
+  EXPECT_EQ(site.end_column, 11u);
+  EXPECT_TRUE(iree_string_view_equal(site.operation_name,
+                                     IREE_SV("sanitizer.race.access")));
 }
 
 }  // namespace

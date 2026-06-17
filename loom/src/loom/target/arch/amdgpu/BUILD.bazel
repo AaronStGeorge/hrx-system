@@ -337,6 +337,7 @@ loom_cc_test(
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/arch/amdgpu:provider",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
         "//loom/src/loom/target/arch/amdgpu/lower",
         "//loom/src/loom/target/arch/amdgpu/ops",
         "//loom/src/loom/target/arch/amdgpu/planning:wait_packets",
