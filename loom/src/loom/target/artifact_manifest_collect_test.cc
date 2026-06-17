@@ -77,8 +77,10 @@ class ArtifactManifestCollectTest : public ::testing::Test {
 
   iree_status_t SelectEntriesAndBuildDependencies(
       const loom_module_t* module, loom_target_entry_list_t* out_entries,
-      loom_symbol_dependency_table_t* out_dependencies) {
+      loom_symbol_dependency_table_t* out_dependencies,
+      const loom_target_bundle_t* effective_target_bundle = nullptr) {
     loom_target_entry_options_t options = {};
+    options.effective_target_bundle = effective_target_bundle;
     loom_target_entry_diagnostic_emitter_t diagnostic_emitter = {};
     loom_target_entry_diagnostic_emitter_initialize(
         module, &options, LOOM_EMITTER_VERIFIER, &diagnostic_emitter);
@@ -101,11 +103,12 @@ class ArtifactManifestCollectTest : public ::testing::Test {
       const loom_module_t* module,
       const loom_target_artifact_manifest_collect_options_t* collect_options,
       loom_target_artifact_manifest_mode_t format_mode,
-      iree_string_builder_t* builder) {
+      iree_string_builder_t* builder,
+      const loom_target_bundle_t* effective_target_bundle = nullptr) {
     loom_target_entry_list_t entries;
     loom_symbol_dependency_table_t dependencies;
-    IREE_CHECK_OK(
-        SelectEntriesAndBuildDependencies(module, &entries, &dependencies));
+    IREE_CHECK_OK(SelectEntriesAndBuildDependencies(
+        module, &entries, &dependencies, effective_target_bundle));
     loom_target_artifact_manifest_t manifest;
     IREE_CHECK_OK(loom_target_artifact_manifest_collect_from_entries(
         module, entries, &dependencies, collect_options, &analysis_arena_,
@@ -200,6 +203,64 @@ func.def target(@test_target) abi(object_function) export("forward") @forward() 
                       "\"targets\":[\"test_target\"]},"
                       "{\"name\":\"scratch\","
                       "\"targets\":[\"test_target\"]}]}")));
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST_F(ArtifactManifestCollectTest,
+       CollectsEffectiveSelectionWithAuthoredSubgroupSize) {
+  loom_target_snapshot_t selected_snapshot = {};
+  selected_snapshot.name = IREE_SV("runtime-wave32");
+  selected_snapshot.codegen_format = LOOM_TARGET_CODEGEN_FORMAT_VM;
+  selected_snapshot.artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF;
+  selected_snapshot.default_pointer_bitwidth = 64;
+  selected_snapshot.index_bitwidth = 64;
+  selected_snapshot.offset_bitwidth = 64;
+  selected_snapshot.subgroup_size = 32;
+  const loom_target_export_plan_t selected_export_plan = {
+      /*.name=*/IREE_SVL("runtime-wave32-object"),
+      /*.export_symbol=*/{},
+      /*.abi_kind=*/LOOM_TARGET_ABI_OBJECT_FUNCTION,
+  };
+  const loom_target_config_t selected_config = {
+      /*.name=*/IREE_SVL("target.generic.reference.runtime"),
+  };
+  const loom_target_bundle_t selected_bundle = {
+      /*.name=*/IREE_SVL("runtime_wave32"),
+      /*.snapshot=*/&selected_snapshot,
+      /*.export_plan=*/&selected_export_plan,
+      /*.config=*/&selected_config,
+  };
+  ModulePtr module = ParseModule(R"(
+target.generic<reference> @authored_wave64 {
+  artifact_format = elf,
+  subgroup_size = 64
+}
+
+func.def target(@authored_wave64) abi(object_function) export("run") @entry() {
+  func.return
+}
+)");
+
+  loom_target_artifact_manifest_collect_options_t options;
+  loom_target_artifact_manifest_collect_options_initialize(&options);
+  options.mode = LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY;
+
+  iree_string_builder_t builder;
+  iree_string_view_t output = CollectAndFormat(
+      module.get(), &options, LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY,
+      &builder, &selected_bundle);
+  EXPECT_TRUE(iree_string_view_equal(
+      output, IREE_SV("{\"kind\":\"loom.artifact_manifest\","
+                      "\"schema_version\":1,"
+                      "\"mode\":\"summary\","
+                      "\"artifact\":{\"format\":\"elf\"},"
+                      "\"targets\":[{\"name\":\"runtime_wave32\"}],"
+                      "\"functions\":[{\"name\":\"run\","
+                      "\"source\":\"entry\","
+                      "\"targets\":[\"runtime_wave32\"],"
+                      "\"interface\":{\"parameter_count\":0},"
+                      "\"execution\":{\"subgroup_size\":64}}]}")))
+      << std::string(output.data, output.size);
   iree_string_builder_deinitialize(&builder);
 }
 

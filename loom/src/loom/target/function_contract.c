@@ -31,7 +31,12 @@ void loom_target_function_contract_apply_compatible_selection(
     loom_target_bundle_storage_t* bundle_storage) {
   IREE_ASSERT_ARGUMENT(selected_bundle);
   IREE_ASSERT_ARGUMENT(bundle_storage);
+  const uint32_t authored_subgroup_size =
+      bundle_storage->snapshot.subgroup_size;
   bundle_storage->snapshot = *selected_bundle->snapshot;
+  if (authored_subgroup_size != 0) {
+    bundle_storage->snapshot.subgroup_size = authored_subgroup_size;
+  }
   bundle_storage->config = *selected_bundle->config;
   bundle_storage->bundle = *selected_bundle;
   bundle_storage->bundle.snapshot = &bundle_storage->snapshot;

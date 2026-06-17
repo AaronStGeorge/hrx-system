@@ -170,6 +170,8 @@ TEST_F(TargetFunctionContractTest,
       /*.offset_bitwidth=*/64,
       /*.max_workgroup_size=*/{},
       /*.max_flat_workgroup_size=*/64,
+      /*.max_workgroup_storage_bytes=*/0,
+      /*.subgroup_size=*/64,
   };
   const loom_target_export_plan_t module_export = {
       /*.name=*/IREE_SVL("spirv-shader-entry-point"),
@@ -191,6 +193,7 @@ TEST_F(TargetFunctionContractTest,
   loom_target_snapshot_t selected_snapshot = module_snapshot;
   selected_snapshot.name = IREE_SV("spirv-vulkan1.3-bda");
   selected_snapshot.max_flat_workgroup_size = 1024;
+  selected_snapshot.subgroup_size = 32;
   loom_target_export_plan_t selected_export = module_export;
   selected_export.name = IREE_SV("spirv-hal-kernel");
   loom_target_config_t selected_config = module_config;
@@ -223,6 +226,7 @@ TEST_F(TargetFunctionContractTest,
       iree_string_view_equal(storage.snapshot.name, selected_snapshot.name));
   EXPECT_EQ(storage.snapshot.max_flat_workgroup_size,
             selected_snapshot.max_flat_workgroup_size);
+  EXPECT_EQ(storage.snapshot.subgroup_size, module_snapshot.subgroup_size);
   EXPECT_TRUE(
       iree_string_view_equal(storage.config.name, selected_config.name));
   EXPECT_EQ(storage.config.contract_feature_bits,
