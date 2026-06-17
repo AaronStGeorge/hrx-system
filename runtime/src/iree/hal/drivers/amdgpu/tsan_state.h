@@ -70,6 +70,14 @@ iree_status_t iree_hal_amdgpu_tsan_state_initialize(
 void iree_hal_amdgpu_tsan_state_deinitialize(
     iree_hal_amdgpu_tsan_state_t* state);
 
+// Initializes queue-owned TSAN state after host queues have been assigned.
+//
+// When TSAN is disabled this returns OK without modifying queues. On failure,
+// queue TSAN state initialized by the call is released before returning.
+iree_status_t iree_hal_amdgpu_tsan_state_assign_queues(
+    iree_hal_amdgpu_tsan_state_t* state, iree_host_size_t physical_device_count,
+    iree_hal_amdgpu_physical_device_t* const* physical_devices);
+
 // Returns true when |state| owns enabled TSAN resources.
 bool iree_hal_amdgpu_tsan_state_is_enabled(
     const iree_hal_amdgpu_tsan_state_t* state);
@@ -89,10 +97,12 @@ iree_status_t iree_hal_amdgpu_tsan_state_populate_config(
 // |queue_aql_base| and |queue_aql_slot_mask| describe the owning queue's AQL
 // ring so device code can derive a queue-local dispatch slot from its implicit
 // dispatch packet pointer without host per-dispatch publication.
+// |queue_state_base| is zero when queue-owned TSAN state was not allocated.
 iree_status_t iree_hal_amdgpu_tsan_state_populate_queue_config(
     const iree_hal_amdgpu_tsan_state_t* state,
     iree_host_size_t physical_device_ordinal, uint64_t queue_aql_base,
-    uint64_t queue_aql_slot_mask, iree_hal_amdgpu_tsan_config_t* out_config);
+    uint64_t queue_aql_slot_mask, uint64_t queue_state_base,
+    iree_hal_amdgpu_tsan_config_t* out_config);
 
 #ifdef __cplusplus
 }  // extern "C"

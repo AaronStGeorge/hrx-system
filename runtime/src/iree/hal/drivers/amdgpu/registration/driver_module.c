@@ -114,7 +114,7 @@ IREE_FLAG(
     int32_t, amdgpu_tsan_workgroup_local_memory_size,
     IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_LOCAL_MEMORY_SIZE,
     "Local-memory byte capacity represented by each AMDGPU TSAN workgroup "
-    "shadow.");
+    "shadow. Zero uses the backend-selected group segment limit.");
 IREE_FLAG(int32_t, amdgpu_tsan_workgroup_capacity,
           IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_CAPACITY,
           "Maximum workgroup ordinals represented by one AMDGPU TSAN dispatch "
@@ -306,7 +306,8 @@ static iree_status_t iree_hal_amdgpu_driver_factory_try_create(
   device_options->enable_experimental_pm4_command_buffers =
       FLAG_amdgpu_experimental_pm4_command_buffers;
 
-  device_options->asan.enabled = FLAG_amdgpu_asan;
+  device_options->asan.enabled =
+      device_options->asan.enabled || FLAG_amdgpu_asan;
   if (strcmp(FLAG_amdgpu_asan_report_policy, "report-only") == 0) {
     device_options->asan.report_policy =
         IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY;
@@ -342,7 +343,8 @@ static iree_status_t iree_hal_amdgpu_driver_factory_try_create(
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_flag_int64_to_device_size(
       "amdgpu_asan_quarantine_size", FLAG_amdgpu_asan_quarantine_size,
       &device_options->asan.quarantine_size));
-  device_options->tsan.enabled = FLAG_amdgpu_tsan;
+  device_options->tsan.enabled =
+      device_options->tsan.enabled || FLAG_amdgpu_tsan;
   if (strcmp(FLAG_amdgpu_tsan_report_policy, "report-only") == 0) {
     device_options->tsan.report_policy =
         IREE_HAL_AMDGPU_TSAN_REPORT_POLICY_REPORT_ONLY;

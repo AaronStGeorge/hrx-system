@@ -419,6 +419,7 @@ static iree_hal_amdgpu_aql_block_processor_t MakeProcessor(
   processor.packets.count = packet_count;
   processor.packets.headers = packet_headers;
   processor.packets.setups = packet_setups;
+  processor.queue.physical_queue_count = 1;
   processor.kernargs.blocks = kernarg_blocks;
   processor.kernargs.count = kernarg_block_count;
   processor.submission.inline_acquire_scope = inline_acquire_scope;
@@ -526,6 +527,8 @@ class AqlBlockProcessorRecordedTest : public ::testing::Test {
         device_allocator_, IREE_HAL_COMMAND_BUFFER_MODE_ONE_SHOT,
         IREE_HAL_COMMAND_CATEGORY_ANY, IREE_HAL_QUEUE_AFFINITY_ANY,
         binding_capacity, /*device_ordinal=*/0,
+        /*queue_count_per_physical_device=*/1,
+        /*tsan_shadow_slot_count=*/16,
         iree_hal_amdgpu_aql_prepublished_kernarg_storage_disabled(),
         &profile_metadata_, &block_pool_, &block_pool_, iree_allocator_system(),
         &command_buffer));
@@ -658,6 +661,93 @@ TEST(AqlBlockProcessorTest, DirectDispatchPopulatesPacketAndKernarg) {
                                         /*is_barrier=*/true,
                                         IREE_HSA_FENCE_SCOPE_SYSTEM,
                                         IREE_HSA_FENCE_SCOPE_SYSTEM));
+}
+
+TEST(AqlBlockProcessorTest, DirectDispatchSelectsQueueScopedKernelObject) {
+  DirectDispatchBlock block = MakeDirectDispatchBlock();
+  const uint64_t queue_kernel_objects[] = {
+      0x1111000000000000ull,
+      0x2222000000000000ull,
+      0x3333000000000000ull,
+  };
+  block.dispatch_command.kernel_object =
+      (uint64_t)(uintptr_t)queue_kernel_objects;
+  block.dispatch_command.dispatch_flags =
+      IREE_HAL_AMDGPU_COMMAND_BUFFER_DISPATCH_FLAG_QUEUE_SCOPED_KERNEL_OBJECT;
+
+  alignas(64) iree_hal_amdgpu_aql_packet_t packets[8] = {};
+  iree_hal_amdgpu_aql_ring_t ring = {};
+  ring.base = packets;
+  ring.mask = 7;
+  uint16_t packet_headers[1] = {};
+  uint16_t packet_setups[1] = {};
+  iree_hal_amdgpu_kernarg_block_t kernarg_blocks[1] = {};
+  iree_hal_amdgpu_aql_block_processor_t processor = MakeProcessor(
+      &ring, /*packet_count=*/1, packet_headers, packet_setups, kernarg_blocks,
+      /*kernarg_block_count=*/1,
+      IREE_HAL_AMDGPU_AQL_BLOCK_PROCESSOR_FLAG_FINAL_PAYLOAD_PACKET);
+  processor.queue.physical_queue_ordinal = 2;
+  processor.queue.physical_queue_count = 3;
+
+  iree_hal_amdgpu_aql_block_processor_result_t result;
+  IREE_ASSERT_OK(iree_hal_amdgpu_aql_block_processor_invoke(
+      &processor, &block.header, &result));
+
+  EXPECT_EQ(result.packets.emitted, 1u);
+  EXPECT_EQ(packets[4].dispatch.kernel_object, queue_kernel_objects[2]);
+}
+
+TEST(AqlBlockProcessorTest, DirectDispatchRejectsMissingQueueScopedTable) {
+  DirectDispatchBlock block = MakeDirectDispatchBlock();
+  block.dispatch_command.kernel_object = 0;
+  block.dispatch_command.dispatch_flags =
+      IREE_HAL_AMDGPU_COMMAND_BUFFER_DISPATCH_FLAG_QUEUE_SCOPED_KERNEL_OBJECT;
+
+  alignas(64) iree_hal_amdgpu_aql_packet_t packets[8] = {};
+  iree_hal_amdgpu_aql_ring_t ring = {};
+  ring.base = packets;
+  ring.mask = 7;
+  uint16_t packet_headers[1] = {};
+  uint16_t packet_setups[1] = {};
+  iree_hal_amdgpu_kernarg_block_t kernarg_blocks[1] = {};
+  iree_hal_amdgpu_aql_block_processor_t processor = MakeProcessor(
+      &ring, /*packet_count=*/1, packet_headers, packet_setups, kernarg_blocks,
+      /*kernarg_block_count=*/1,
+      IREE_HAL_AMDGPU_AQL_BLOCK_PROCESSOR_FLAG_FINAL_PAYLOAD_PACKET);
+
+  iree_hal_amdgpu_aql_block_processor_result_t result;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        iree_hal_amdgpu_aql_block_processor_invoke(
+                            &processor, &block.header, &result));
+}
+
+TEST(AqlBlockProcessorTest, DirectDispatchRejectsQueueScopedTableOverrun) {
+  DirectDispatchBlock block = MakeDirectDispatchBlock();
+  const uint64_t queue_kernel_objects[] = {
+      0x1111000000000000ull,
+  };
+  block.dispatch_command.kernel_object =
+      (uint64_t)(uintptr_t)queue_kernel_objects;
+  block.dispatch_command.dispatch_flags =
+      IREE_HAL_AMDGPU_COMMAND_BUFFER_DISPATCH_FLAG_QUEUE_SCOPED_KERNEL_OBJECT;
+
+  alignas(64) iree_hal_amdgpu_aql_packet_t packets[8] = {};
+  iree_hal_amdgpu_aql_ring_t ring = {};
+  ring.base = packets;
+  ring.mask = 7;
+  uint16_t packet_headers[1] = {};
+  uint16_t packet_setups[1] = {};
+  iree_hal_amdgpu_kernarg_block_t kernarg_blocks[1] = {};
+  iree_hal_amdgpu_aql_block_processor_t processor = MakeProcessor(
+      &ring, /*packet_count=*/1, packet_headers, packet_setups, kernarg_blocks,
+      /*kernarg_block_count=*/1,
+      IREE_HAL_AMDGPU_AQL_BLOCK_PROCESSOR_FLAG_FINAL_PAYLOAD_PACKET);
+  processor.queue.physical_queue_ordinal = 1;
+
+  iree_hal_amdgpu_aql_block_processor_result_t result;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        iree_hal_amdgpu_aql_block_processor_invoke(
+                            &processor, &block.header, &result));
 }
 
 TEST(AqlBlockProcessorTest,

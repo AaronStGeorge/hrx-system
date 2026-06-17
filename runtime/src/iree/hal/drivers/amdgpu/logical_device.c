@@ -196,6 +196,8 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
       IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_LOCAL_MEMORY_SIZE;
   out_options->tsan.workgroup_capacity =
       IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_CAPACITY;
+  out_options->tsan.shadow_slot_count =
+      IREE_HAL_AMDGPU_TSAN_DEFAULT_SHADOW_SLOT_COUNT;
 
   out_options->preallocate_pools = 1;
 }
@@ -410,13 +412,13 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
           "AMDGPU TSAN memory granule shift %u exceeds max shift 16",
           options->tsan.memory_granule_shift);
     }
-    if (options->tsan.workgroup_local_memory_size == 0 ||
+    if (options->tsan.workgroup_local_memory_size != 0 &&
         !iree_device_size_is_power_of_two(
             options->tsan.workgroup_local_memory_size)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU TSAN workgroup local-memory size %u must be a non-zero "
-          "power of two",
+          "AMDGPU TSAN workgroup local-memory size %u must be zero for "
+          "auto-detect or a power of two",
           options->tsan.workgroup_local_memory_size);
     }
     if (options->tsan.workgroup_capacity == 0) {
@@ -424,28 +426,43 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
           IREE_STATUS_INVALID_ARGUMENT,
           "AMDGPU TSAN workgroup capacity must be non-zero");
     }
-    const uint64_t granule_size = 1ull << options->tsan.memory_granule_shift;
-    const uint64_t workgroup_entry_count =
-        (options->tsan.workgroup_local_memory_size + granule_size - 1) >>
-        options->tsan.memory_granule_shift;
-    if (workgroup_entry_count >
-        UINT64_MAX / IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "AMDGPU TSAN workgroup shadow size overflows: local_memory_size=%u, "
-          "granule_shift=%u",
-          options->tsan.workgroup_local_memory_size,
-          options->tsan.memory_granule_shift);
+    if (options->tsan.shadow_slot_count == 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU TSAN shadow slot count must be non-zero");
     }
-    const uint64_t workgroup_shadow_stride =
-        workgroup_entry_count * IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE;
-    if (workgroup_shadow_stride >
-        UINT64_MAX / options->tsan.workgroup_capacity) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "AMDGPU TSAN dispatch shadow size overflows: "
-          "workgroup_shadow_stride=%" PRIu64 ", workgroup_capacity=%u",
-          workgroup_shadow_stride, options->tsan.workgroup_capacity);
+    if (options->tsan.workgroup_local_memory_size != 0) {
+      const uint64_t granule_size = 1ull << options->tsan.memory_granule_shift;
+      const uint64_t workgroup_entry_count =
+          (options->tsan.workgroup_local_memory_size + granule_size - 1) >>
+          options->tsan.memory_granule_shift;
+      if (workgroup_entry_count >
+          UINT64_MAX / IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "AMDGPU TSAN workgroup shadow size overflows: "
+                                "local_memory_size=%u, granule_shift=%u",
+                                options->tsan.workgroup_local_memory_size,
+                                options->tsan.memory_granule_shift);
+      }
+      const uint64_t workgroup_shadow_stride =
+          workgroup_entry_count * IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE;
+      if (workgroup_shadow_stride >
+          UINT64_MAX / options->tsan.workgroup_capacity) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU TSAN dispatch shadow size overflows: "
+            "workgroup_shadow_stride=%" PRIu64 ", workgroup_capacity=%u",
+            workgroup_shadow_stride, options->tsan.workgroup_capacity);
+      }
+      const uint64_t dispatch_shadow_stride =
+          workgroup_shadow_stride * options->tsan.workgroup_capacity;
+      if (dispatch_shadow_stride >
+          UINT64_MAX / options->tsan.shadow_slot_count) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU TSAN queue shadow size overflows: "
+            "dispatch_shadow_stride=%" PRIu64 ", shadow_slot_count=%u",
+            dispatch_shadow_stride, options->tsan.shadow_slot_count);
+      }
     }
   }
   return iree_ok_status();
@@ -1821,6 +1838,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
     physical_params->queue_count = (uint32_t)physical_device->host_queue_count;
     physical_params->compute_unit_count = physical_device->compute_unit_count;
     physical_params->wavefront_size = physical_device->wavefront_size;
+    physical_params->maximum_workgroup_local_memory_size =
+        physical_device->group_segment_max_size;
   }
 
   uint64_t device_memory_capacity_bytes = 0;
@@ -2449,6 +2468,11 @@ static iree_status_t iree_hal_amdgpu_logical_device_assign_topology_info(
         logical_device->host_allocator,
         logical_device->physical_devices[device_ordinal]);
   }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_tsan_state_assign_queues(
+        &logical_device->tsan, logical_device->physical_device_count,
+        logical_device->physical_devices);
+  }
 
   if (iree_status_is_ok(status)) {
     logical_device->topology_info = *topology_info;
@@ -2481,6 +2505,11 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_aql_command_buffer(
   return iree_hal_amdgpu_aql_command_buffer_create(
       logical_device->device_allocator, mode, command_categories,
       effective_queue_affinity, binding_capacity, device_ordinal,
+      physical_device->host_queue_count,
+      iree_hal_amdgpu_tsan_state_is_enabled(&logical_device->tsan)
+          ? logical_device->tsan.device_states[device_ordinal]
+                .config.shadow_slot_count
+          : 0,
       physical_device->prepublished_kernarg_storage,
       &logical_device->profile_metadata,
       &logical_device->host_block_pools.command_buffer,
@@ -2670,10 +2699,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_executable_cache(
       iree_hal_amdgpu_physical_device_t* physical_device =
           logical_device->physical_devices[i];
       for (iree_host_size_t j = 0; j < physical_device->host_queue_count; ++j) {
-        const iree_host_size_t queue_ordinal =
-            i * logical_device->system->topology.gpu_agent_queue_count + j;
         iree_hal_amdgpu_host_queue_query_scope(
-            &physical_device->host_queues[j], queue_ordinal, j,
+            &physical_device->host_queues[j],
             &queue_scopes[queue_scope_ordinal++]);
       }
     }

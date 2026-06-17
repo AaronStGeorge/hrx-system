@@ -71,6 +71,145 @@ static iree_status_t iree_hal_amdgpu_host_queue_allocate_pm4_ib_slots(
   return status;
 }
 
+iree_status_t iree_hal_amdgpu_host_queue_initialize_tsan_state(
+    iree_hal_amdgpu_host_queue_t* queue, hsa_agent_t gpu_agent,
+    hsa_amd_memory_pool_t memory_pool, iree_host_size_t queue_ordinal,
+    iree_host_size_t physical_queue_ordinal,
+    iree_device_size_t workgroup_shadow_stride,
+    iree_device_size_t dispatch_shadow_stride, uint32_t workgroup_capacity,
+    uint32_t shadow_entry_size, uint32_t memory_granule_shift,
+    uint32_t shadow_slot_count) {
+  IREE_ASSERT_ARGUMENT(queue);
+  IREE_TRACE_ZONE_BEGIN(z0);
+  IREE_TRACE_ZONE_APPEND_VALUE_I64(z0, shadow_slot_count);
+
+  if (IREE_UNLIKELY(queue->tsan.allocation_base)) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                             "AMDGPU host queue TSAN state is already "
+                             "initialized"));
+  }
+  if (IREE_UNLIKELY(!memory_pool.handle)) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                             "AMDGPU TSAN requires a host fine-grained memory "
+                             "pool for queue state"));
+  }
+  if (IREE_UNLIKELY(queue_ordinal > UINT32_MAX ||
+                    queue->device_ordinal > UINT32_MAX ||
+                    physical_queue_ordinal > UINT32_MAX)) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                             "AMDGPU TSAN queue ordinals exceed device ABI "
+                             "limits"));
+  }
+  if (IREE_UNLIKELY(queue->aql_ring.mask >= UINT32_MAX)) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                             "AMDGPU TSAN AQL ring mask %u"
+                             " exceeds dispatch-state ABI limits",
+                             queue->aql_ring.mask));
+  }
+
+  const uint32_t dispatch_state_count = (uint32_t)(queue->aql_ring.mask + 1u);
+  iree_device_size_t shadow_size = 0;
+  if (IREE_UNLIKELY(!iree_device_size_checked_mul(
+          dispatch_shadow_stride, shadow_slot_count, &shadow_size))) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_make_status(
+                IREE_STATUS_OUT_OF_RANGE,
+                "AMDGPU TSAN queue shadow size overflow: "
+                "dispatch_shadow_stride=%" PRIu64 ", shadow_slot_count=%u",
+                (uint64_t)dispatch_shadow_stride, shadow_slot_count));
+  }
+  if (IREE_UNLIKELY(shadow_size == 0 ||
+                    (iree_device_size_t)(iree_host_size_t)shadow_size !=
+                        shadow_size)) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                             "AMDGPU TSAN queue shadow allocation size is "
+                             "invalid: %" PRIu64,
+                             (uint64_t)shadow_size));
+  }
+
+  iree_host_size_t queue_state_offset = 0;
+  iree_host_size_t dispatch_states_offset = 0;
+  iree_host_size_t shadow_offset = 0;
+  iree_host_size_t allocation_size = 0;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, IREE_STRUCT_LAYOUT(
+              0, &allocation_size,
+              IREE_STRUCT_FIELD(1, iree_hal_amdgpu_tsan_queue_state_t,
+                                &queue_state_offset),
+              IREE_STRUCT_FIELD(dispatch_state_count,
+                                iree_hal_amdgpu_tsan_dispatch_state_t,
+                                &dispatch_states_offset),
+              IREE_STRUCT_FIELD_ALIGNED((iree_host_size_t)shadow_size, uint8_t,
+                                        64, &shadow_offset)));
+
+  void* allocation_base = NULL;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hsa_amd_memory_pool_allocate(
+              IREE_LIBHSA(queue->libhsa), memory_pool, allocation_size,
+              HSA_AMD_MEMORY_POOL_STANDARD_FLAG, &allocation_base));
+  iree_status_t status = iree_hsa_amd_agents_allow_access(
+      IREE_LIBHSA(queue->libhsa), /*num_agents=*/1, &gpu_agent, /*flags=*/NULL,
+      allocation_base);
+  if (iree_status_is_ok(status)) {
+    memset(allocation_base, 0, allocation_size);
+    uint8_t* storage = (uint8_t*)allocation_base;
+    iree_hal_amdgpu_tsan_queue_state_t* queue_state =
+        (iree_hal_amdgpu_tsan_queue_state_t*)(storage + queue_state_offset);
+    iree_hal_amdgpu_tsan_dispatch_state_t* dispatch_states =
+        (iree_hal_amdgpu_tsan_dispatch_state_t*)(storage +
+                                                 dispatch_states_offset);
+    void* shadow_base = storage + shadow_offset;
+    *queue_state = (iree_hal_amdgpu_tsan_queue_state_t){
+        .record_length = sizeof(*queue_state),
+        .abi_version = IREE_HAL_AMDGPU_TSAN_QUEUE_STATE_ABI_VERSION_0,
+        .flags = IREE_HAL_AMDGPU_TSAN_QUEUE_STATE_FLAG_NONE,
+        .queue_ordinal = (uint32_t)queue_ordinal,
+        .physical_device_ordinal = (uint32_t)queue->device_ordinal,
+        .physical_queue_ordinal = (uint32_t)physical_queue_ordinal,
+        .dispatch_state_count = dispatch_state_count,
+        .shadow_slot_count = shadow_slot_count,
+        .aql_ring_base = (uint64_t)(uintptr_t)queue->aql_ring.base,
+        .aql_ring_mask = queue->aql_ring.mask,
+        .dispatch_state_base = (uint64_t)(uintptr_t)dispatch_states,
+        .shadow_base = (uint64_t)(uintptr_t)shadow_base,
+        .shadow_size = shadow_size,
+        .dispatch_shadow_stride = dispatch_shadow_stride,
+        .workgroup_shadow_stride = workgroup_shadow_stride,
+        .workgroup_capacity = workgroup_capacity,
+        .shadow_entry_size = shadow_entry_size,
+        .memory_granule_shift = memory_granule_shift,
+        .reserved0 = 0,
+        .reserved1 = 0,
+    };
+    queue->tsan.allocation_base = allocation_base;
+    queue->tsan.allocation_size = allocation_size;
+    queue->tsan.queue_state = queue_state;
+    queue->tsan.dispatch_states = dispatch_states;
+    queue->tsan.shadow_base = shadow_base;
+    queue->tsan.shadow_size = shadow_size;
+  } else {
+    status = iree_status_join(
+        status, iree_hsa_amd_memory_pool_free(IREE_LIBHSA(queue->libhsa),
+                                              allocation_base));
+  }
+
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
+void iree_hal_amdgpu_host_queue_deinitialize_tsan_state(
+    iree_hal_amdgpu_host_queue_t* queue) {
+  if (!queue->tsan.allocation_base) return;
+  iree_hal_amdgpu_hsa_cleanup_assert_success(iree_hsa_amd_memory_pool_free_raw(
+      queue->libhsa, queue->tsan.allocation_base));
+  memset(&queue->tsan, 0, sizeof(queue->tsan));
+}
+
 static void iree_hal_amdgpu_host_queue_retire_reclaim_entry(
     iree_hal_amdgpu_reclaim_entry_t* entry,
     iree_hal_amdgpu_reclaim_retire_flags_t flags, void* user_data) {
@@ -176,19 +315,19 @@ static void iree_hal_amdgpu_host_queue_run_post_drain_actions(
 }
 
 void iree_hal_amdgpu_host_queue_query_scope(
-    const iree_hal_amdgpu_host_queue_t* queue, iree_host_size_t queue_ordinal,
-    iree_host_size_t physical_queue_ordinal,
+    const iree_hal_amdgpu_host_queue_t* queue,
     iree_hal_amdgpu_queue_scope_t* out_scope) {
   IREE_ASSERT_ARGUMENT(queue);
   IREE_ASSERT_ARGUMENT(out_scope);
 
   *out_scope = (iree_hal_amdgpu_queue_scope_t){
       .queue_affinity = queue->queue_affinity,
-      .queue_ordinal = queue_ordinal,
+      .queue_ordinal = queue->queue_ordinal,
       .physical_device_ordinal = queue->device_ordinal,
-      .physical_queue_ordinal = physical_queue_ordinal,
+      .physical_queue_ordinal = queue->physical_queue_ordinal,
       .aql_ring_base = (uint64_t)(uintptr_t)queue->aql_ring.base,
       .aql_ring_mask = queue->aql_ring.mask,
+      .tsan_queue_state_base = (uint64_t)(uintptr_t)queue->tsan.queue_state,
   };
 }
 
@@ -548,7 +687,8 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
     const iree_hal_amdgpu_kernarg_ring_memory_t* kernarg_memory,
     hsa_amd_memory_pool_t pm4_ib_pool,
     iree_async_frontier_tracker_t* frontier_tracker, iree_async_axis_t axis,
-    iree_hal_queue_affinity_t queue_affinity,
+    iree_hal_queue_affinity_t queue_affinity, iree_host_size_t queue_ordinal,
+    iree_host_size_t physical_queue_ordinal,
     iree_thread_affinity_t completion_thread_affinity,
     iree_hal_amdgpu_wait_barrier_strategy_t wait_barrier_strategy,
     iree_hal_amdgpu_vendor_packet_capability_flags_t vendor_packet_capabilities,
@@ -616,6 +756,8 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
   out_queue->vendor_packet_capabilities = vendor_packet_capabilities;
   out_queue->pm4_timestamp_strategy = pm4_timestamp_strategy;
   out_queue->queue_affinity = queue_affinity;
+  out_queue->queue_ordinal = queue_ordinal;
+  out_queue->physical_queue_ordinal = physical_queue_ordinal;
   out_queue->last_signal.semaphore = NULL;
   out_queue->last_signal.epoch = 0;
   out_queue->feedback_state =
@@ -835,6 +977,8 @@ void iree_hal_amdgpu_host_queue_deinitialize(
     iree_hal_amdgpu_queue_upload_ring_deinitialize(queue->libhsa,
                                                    &queue->queue_upload_ring);
   }
+
+  iree_hal_amdgpu_host_queue_deinitialize_tsan_state(queue);
 
   iree_hal_amdgpu_kernarg_ring_deinitialize(queue->libhsa,
                                             &queue->kernarg_ring);

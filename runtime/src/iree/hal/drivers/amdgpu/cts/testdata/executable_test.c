@@ -49,6 +49,8 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void export0(uint64_t* lhs, uint64_t* rhs,
     lhs[7] = iree_tsan_config.memory_granule_shift;
     lhs[8] = iree_tsan_config.queue_aql_base;
     lhs[9] = iree_tsan_config.queue_aql_slot_mask;
+    lhs[10] = iree_tsan_config.queue_state_base;
+    lhs[11] = iree_tsan_config.shadow_slot_count;
   } else if (c0 == 0x4153414Eu && c1 == 0x52505421u) {
     lhs[0] = iree_hal_amdgpu_asan_report_access(
                  &iree_feedback_config, IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_WRITE,

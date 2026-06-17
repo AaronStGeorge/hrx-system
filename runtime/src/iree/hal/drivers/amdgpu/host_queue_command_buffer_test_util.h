@@ -172,6 +172,7 @@ static iree_status_t LoadCtsExecutable(
     if (iree_status_is_ok(status)) {
       *out_executable_cache = executable_cache;
       *out_executable = executable;
+      iree_status_free(candidate_status);
       return iree_ok_status();
     }
     iree_hal_executable_release(executable);

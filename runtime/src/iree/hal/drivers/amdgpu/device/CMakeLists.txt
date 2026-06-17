@@ -15,6 +15,7 @@ add_custom_command(OUTPUT bitcode_srcs.stamp
     "blit.c"
     "dispatch.c"
     "timestamp.c"
+    "tsan.c"
 )
 
 add_custom_target(bitcode_srcs
@@ -36,6 +37,7 @@ add_custom_command(OUTPUT bitcode_hdrs.stamp
     "support/signal.h"
     "support/tsan.h"
     "timestamp.h"
+    "tsan.h"
 )
 
 add_custom_target(bitcode_hdrs
@@ -75,6 +77,7 @@ iree_cc_library(
     "support/signal.h"
     "support/tsan.h"
     "timestamp.h"
+    "tsan.h"
   DEPS
     iree::base
     iree::base::internal
@@ -114,6 +117,19 @@ iree_cc_library(
     timestamp
   SRCS
     "timestamp.c"
+  DEPS
+    ::dispatch
+    ::headers
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    tsan
+  SRCS
+    "tsan.c"
   DEPS
     ::dispatch
     ::headers

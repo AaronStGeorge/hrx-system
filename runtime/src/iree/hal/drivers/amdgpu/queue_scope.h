@@ -19,7 +19,7 @@ extern "C" {
 // Executable-load paths use this cold-path metadata to publish queue-specific
 // globals without adding per-dispatch host bookkeeping. Device code can derive
 // a queue-local packet slot from its implicit dispatch pointer using
-// |aql_ring_base| and |aql_ring_mask|.
+// |aql_ring_base|, |aql_ring_mask|, and optional queue-owned TSAN state.
 typedef struct iree_hal_amdgpu_queue_scope_t {
   // One-bit HAL queue affinity selecting this queue.
   iree_hal_queue_affinity_t queue_affinity;
@@ -38,6 +38,9 @@ typedef struct iree_hal_amdgpu_queue_scope_t {
 
   // Power-of-two packet-ring slot mask.
   uint64_t aql_ring_mask;
+
+  // Device-visible iree_hal_amdgpu_tsan_queue_state_t pointer, or zero.
+  uint64_t tsan_queue_state_base;
 } iree_hal_amdgpu_queue_scope_t;
 
 #ifdef __cplusplus

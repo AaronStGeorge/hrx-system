@@ -10,6 +10,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/hal/api.h"
+#include "iree/hal/drivers/amdgpu/abi/tsan.h"
 #include "iree/hal/drivers/amdgpu/aql_prepublished_kernarg_storage.h"
 #include "iree/hal/drivers/amdgpu/aql_program_builder.h"
 #include "iree/hal/drivers/amdgpu/profile_metadata.h"
@@ -29,6 +30,8 @@ iree_status_t iree_hal_amdgpu_aql_command_buffer_create(
     iree_hal_command_category_t command_categories,
     iree_hal_queue_affinity_t queue_affinity, iree_host_size_t binding_capacity,
     iree_host_size_t device_ordinal,
+    iree_host_size_t queue_count_per_physical_device,
+    uint32_t tsan_shadow_slot_count,
     iree_hal_amdgpu_aql_prepublished_kernarg_storage_t
         prepublished_kernarg_storage,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
@@ -84,6 +87,11 @@ const iree_hal_amdgpu_aql_program_t* iree_hal_amdgpu_aql_command_buffer_program(
 iree_host_size_t iree_hal_amdgpu_aql_command_buffer_device_ordinal(
     iree_hal_command_buffer_t* command_buffer);
 
+// Returns the number of physical queues covered by recorded queue-scoped
+// executable tables.
+uint32_t iree_hal_amdgpu_aql_command_buffer_queue_count_per_physical_device(
+    iree_hal_command_buffer_t* command_buffer);
+
 // Returns the producer-local profile command-buffer id, or 0 when recording
 // did not retain command-buffer profile metadata.
 uint64_t iree_hal_amdgpu_aql_command_buffer_profile_id(
@@ -96,6 +104,20 @@ iree_hal_amdgpu_aql_command_buffer_dispatch_summaries(
     iree_hal_command_buffer_t* command_buffer,
     const iree_hal_amdgpu_command_buffer_block_header_t* block,
     uint32_t* out_count);
+
+// Returns the device-visible TSAN assignment plan for |block|, or NULL when
+// the block has no TSAN assignment prefix.
+const iree_hal_amdgpu_tsan_assignment_plan_t*
+iree_hal_amdgpu_aql_command_buffer_tsan_assignment_plan(
+    iree_hal_command_buffer_t* command_buffer,
+    const iree_hal_amdgpu_command_buffer_block_header_t* block);
+
+// Returns the host-readable TSAN assignment plan for |block|, or NULL when the
+// block has no TSAN assignment prefix.
+const iree_hal_amdgpu_tsan_assignment_plan_t*
+iree_hal_amdgpu_aql_command_buffer_tsan_assignment_host_plan(
+    iree_hal_command_buffer_t* command_buffer,
+    const iree_hal_amdgpu_command_buffer_block_header_t* block);
 
 // Returns a direct buffer recorded in the command-buffer static binding table.
 iree_hal_buffer_t* iree_hal_amdgpu_aql_command_buffer_static_buffer(

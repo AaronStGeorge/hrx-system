@@ -1364,7 +1364,8 @@ static iree_status_t iree_hal_amdgpu_executable_publish_tsan_config(
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_tsan_state_populate_queue_config(
             tsan_state, device_ordinal, queue_scope->aql_ring_base,
-            queue_scope->aql_ring_mask, &config),
+            queue_scope->aql_ring_mask, queue_scope->tsan_queue_state_base,
+            &config),
         "populating TSAN config for physical device %" PRIhsz
         " queue ordinal %" PRIhsz,
         device_ordinal, load_variant->physical_queue_ordinal);

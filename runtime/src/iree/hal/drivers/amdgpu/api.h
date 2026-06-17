@@ -98,10 +98,14 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
 #define IREE_HAL_AMDGPU_TSAN_DEFAULT_MEMORY_GRANULE_SHIFT 2u
 
 // Default local-memory byte capacity represented for each workgroup.
-#define IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_LOCAL_MEMORY_SIZE (64u * 1024u)
+// Zero selects the backend default group segment limit.
+#define IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_LOCAL_MEMORY_SIZE 0u
 
 // Default number of workgroup ordinals represented by one dispatch shadow.
 #define IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_CAPACITY 256u
+
+// Default number of queue-local dispatch shadow slots.
+#define IREE_HAL_AMDGPU_TSAN_DEFAULT_SHADOW_SLOT_COUNT 16u
 
 // Selects how AMDGPU ASAN reports affect the owning logical device.
 typedef enum iree_hal_amdgpu_asan_report_policy_e {
@@ -274,11 +278,15 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
     // Log2 local-memory bytes represented by one shadow entry.
     uint32_t memory_granule_shift;
 
-    // Local-memory byte capacity represented for each workgroup.
+    // Local-memory byte capacity represented for each workgroup. Zero selects
+    // the backend default group segment limit.
     uint32_t workgroup_local_memory_size;
 
     // Maximum workgroup ordinals represented by one dispatch shadow.
     uint32_t workgroup_capacity;
+
+    // Number of queue-local dispatch shadow slots available.
+    uint32_t shadow_slot_count;
   } tsan;
 
   // Preallocates a reasonable number of resources in pools to reduce initial
