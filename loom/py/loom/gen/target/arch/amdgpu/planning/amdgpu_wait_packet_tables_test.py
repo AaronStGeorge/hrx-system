@@ -17,8 +17,12 @@ from loom.target.arch.amdgpu.descriptors import (
     _COUNTER_LDS,
     _COUNTER_SMEM,
     _COUNTER_VMEM_LOAD,
+    _COUNTER_VMEM_STORE,
     _WAIT_COUNTER_LGKM_ENCODING_ID,
+    _WAIT_COUNTER_SMEM_ENCODING_ID,
     _WAIT_COUNTER_VMEM_ENCODING_ID,
+    _WAIT_COUNTER_VMEM_LOAD_ENCODING_ID,
+    _WAIT_COUNTER_VMEM_STORE_ENCODING_ID,
 )
 from loom.target.low_descriptors import (
     Descriptor,
@@ -131,6 +135,67 @@ def test_classifies_wait_packet_descriptor_rows() -> None:
     assert range_row.first_descriptor == 7
     assert range_row.descriptor_count == 1
     assert range_row.max_descriptor_immediate_count == 2
+
+
+def test_classifies_split_wait_packet_descriptor_rows() -> None:
+    load_descriptor = _descriptor(
+        "amdgpu.s_wait_loadcnt",
+        effects=(_wait_effect(_COUNTER_VMEM_LOAD),),
+        immediates=(_wait_immediate("loadcnt", _WAIT_COUNTER_VMEM_LOAD_ENCODING_ID),),
+    )
+    store_descriptor = _descriptor(
+        "amdgpu.s_wait_storecnt",
+        effects=(_wait_effect(_COUNTER_VMEM_STORE),),
+        immediates=(_wait_immediate("storecnt", _WAIT_COUNTER_VMEM_STORE_ENCODING_ID),),
+    )
+    scalar_descriptor = _descriptor(
+        "amdgpu.s_wait_kmcnt",
+        effects=(_wait_effect(_COUNTER_SMEM),),
+        immediates=(
+            _wait_immediate(
+                "kmcnt",
+                _WAIT_COUNTER_SMEM_ENCODING_ID,
+                unsigned_max=31,
+            ),
+        ),
+    )
+
+    descriptor_rows, immediate_rows, range_row = amdgpu_wait_packet_tables._descriptor_set_wait_packet_rows(
+        _descriptor_set(load_descriptor, store_descriptor, scalar_descriptor),
+        descriptor_set_ordinal=4,
+        descriptor_ref_key_set={
+            "amdgpu.s_wait_loadcnt",
+            "amdgpu.s_wait_storecnt",
+            "amdgpu.s_wait_kmcnt",
+        },
+        first_descriptor=8,
+        first_immediate=12,
+    )
+
+    assert [row.descriptor_ref for row in descriptor_rows] == [
+        "LOOM_AMDGPU_DESCRIPTOR_REF_S_WAIT_LOADCNT",
+        "LOOM_AMDGPU_DESCRIPTOR_REF_S_WAIT_STORECNT",
+        "LOOM_AMDGPU_DESCRIPTOR_REF_S_WAIT_KMCNT",
+    ]
+    assert [row.counter_mask for row in descriptor_rows] == [
+        amdgpu_wait_packet_tables._counter_mask(_COUNTER_VMEM_LOAD),
+        amdgpu_wait_packet_tables._counter_mask(_COUNTER_VMEM_STORE),
+        amdgpu_wait_packet_tables._counter_mask(_COUNTER_SMEM),
+    ]
+    assert [row.immediate_start for row in descriptor_rows] == [12, 13, 14]
+    assert [immediate.field_name for immediate in immediate_rows] == [
+        "loadcnt",
+        "storecnt",
+        "kmcnt",
+    ]
+    assert [immediate.counter_mask for immediate in immediate_rows] == [
+        amdgpu_wait_packet_tables._counter_mask(_COUNTER_VMEM_LOAD),
+        amdgpu_wait_packet_tables._counter_mask(_COUNTER_VMEM_STORE),
+        amdgpu_wait_packet_tables._counter_mask(_COUNTER_SMEM),
+    ]
+    assert range_row.first_descriptor == 8
+    assert range_row.descriptor_count == 3
+    assert range_row.max_descriptor_immediate_count == 1
 
 
 def test_skips_non_counter_descriptors() -> None:
@@ -295,7 +360,7 @@ def test_combined_immediate_maps_multiple_counter_effects() -> None:
         effects=(_wait_effect(_COUNTER_LDS), _wait_effect(_COUNTER_SMEM)),
         immediates=(_wait_immediate("lgkmcnt", _WAIT_COUNTER_LGKM_ENCODING_ID),),
     )
-    descriptor_rows, _, _ = amdgpu_wait_packet_tables._descriptor_set_wait_packet_rows(
+    descriptor_rows, immediate_rows, _ = amdgpu_wait_packet_tables._descriptor_set_wait_packet_rows(
         _descriptor_set(descriptor),
         descriptor_set_ordinal=0,
         descriptor_ref_key_set={"amdgpu.s_waitcnt"},
@@ -304,6 +369,7 @@ def test_combined_immediate_maps_multiple_counter_effects() -> None:
     )
 
     assert descriptor_rows[0].counter_count == 2
+    assert immediate_rows[0].counter_mask == (amdgpu_wait_packet_tables._counter_mask(_COUNTER_LDS) | amdgpu_wait_packet_tables._counter_mask(_COUNTER_SMEM))
 
 
 def test_generated_fragments_are_data_only() -> None:

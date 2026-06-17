@@ -266,6 +266,24 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    wait_packets_test
+  SRCS
+    "wait_packets_test.cc"
+  DEPS
+    ::wait_packets
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::descriptors
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     vopd_plan

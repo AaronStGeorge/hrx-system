@@ -43,6 +43,7 @@
 #include "loom/target/arch/amdgpu/lower/system_memory.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
 #include "loom/target/arch/amdgpu/ops/registry.h"
+#include "loom/target/arch/amdgpu/planning/wait_packets.h"
 #include "loom/target/arch/amdgpu/provider.h"
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
@@ -825,22 +826,28 @@ iree_status_t BuildSgprLoadDwordX2(
   return iree_ok_status();
 }
 
-iree_status_t BuildSWaitcntLgkm0(
+iree_status_t BuildWaitCounterMask(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_location_id_t location) {
-  loom_named_attr_t wait_attr = {};
-  IREE_RETURN_IF_ERROR(
-      BuildU32Attr(builder, IREE_SV("lgkmcnt"), 0, &wait_attr));
-  const loom_low_descriptor_t* descriptor = nullptr;
+    uint32_t counter_mask, uint16_t target_count, loom_location_id_t location) {
+  loom_amdgpu_wait_packet_selection_t selection = {};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_select_counter_mask(
+      descriptor_set, counter_mask, target_count, &selection));
+  loom_named_attr_t
+      attrs[LOOM_AMDGPU_WAIT_PACKET_SELECTION_IMMEDIATE_CAPACITY] = {};
+  for (iree_host_size_t i = 0; i < selection.immediate_count; ++i) {
+    IREE_RETURN_IF_ERROR(BuildU32Attr(builder, selection.immediates[i].name,
+                                      selection.immediates[i].value,
+                                      &attrs[i]));
+  }
+  iree_string_view_t key = loom_low_descriptor_set_string(
+      descriptor_set, selection.descriptor->key_string_offset);
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
-      builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT,
-      &descriptor, &opcode_id));
+  IREE_RETURN_IF_ERROR(loom_builder_intern_string(builder, key, &opcode_id));
   loom_op_t* wait_op = nullptr;
   return loom_low_build_resolved_descriptor_op(
-      builder, descriptor_set, descriptor, opcode_id,
+      builder, descriptor_set, selection.descriptor, opcode_id,
       /*operands=*/nullptr, /*operand_count=*/0,
-      loom_make_named_attr_slice(&wait_attr, 1),
+      loom_make_named_attr_slice(attrs, selection.immediate_count),
       /*result_types=*/nullptr, /*result_count=*/0, /*tied_results=*/nullptr,
       /*tied_result_count=*/0, location, &wait_op);
 }
@@ -1082,7 +1089,9 @@ iree_status_t AppendAsanShadowProbeProducer(
   IREE_RETURN_IF_ERROR(
       BuildSgprLoadDwordX2(&builder, descriptor_set, kernarg_segment_ptr,
                            /*byte_offset=*/8, location, &output_resource));
-  IREE_RETURN_IF_ERROR(BuildSWaitcntLgkm0(&builder, descriptor_set, location));
+  IREE_RETURN_IF_ERROR(BuildWaitCounterMask(&builder, descriptor_set,
+                                            LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM,
+                                            /*target_count=*/0, location));
 
   loom_amdgpu_feedback_packet_address_t output_address = {};
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_uniform_packet_address(
