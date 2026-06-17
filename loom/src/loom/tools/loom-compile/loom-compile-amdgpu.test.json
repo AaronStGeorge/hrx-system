@@ -102,6 +102,54 @@
       ]
     },
     {
+      "name": "compiles selected AMDGPU root before target selection",
+      "steps": [
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{srcdir}/selected_root_amdgpu.loom",
+              "--backend=amdgpu-hal",
+              "--root=@selected_store_i32",
+              "--output={tmp}/selected_root_amdgpu.vmfb",
+              "--emit-target-artifact={tmp}/selected_root_amdgpu.hsaco",
+              "--artifact-manifest=summary",
+              "--compile-report=details"
+            ]
+          },
+          "stderr": {
+            "contains": {
+              "unordered": [
+                "\"target_bundle\":\"gfx1100_target\"",
+                "\"executable_format\":\"amdgcn-amd-amdhsa--gfx1100\"",
+                "\"function\":\"selected_store_i32\"",
+                "\"status\":\"OK\""
+              ]
+            },
+            "not_contains": [
+              "unselected_targetless_store_i32",
+              "requires --target="
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/selected_root_amdgpu.vmfb",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/selected_root_amdgpu.hsaco",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/selected_root_amdgpu.hsaco.manifest.json",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "requires invocation target for AMDGPU HAL root without target attr",
       "steps": [
         {

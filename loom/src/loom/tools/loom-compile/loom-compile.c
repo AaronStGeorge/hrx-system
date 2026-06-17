@@ -16,6 +16,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
+#include "loom/link/linker.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/sanitizer/options_cli.h"
@@ -121,6 +122,10 @@ IREE_FLAG(string, target, "",
           "target(...) attrs, provider/template selection, lowering, and "
           "emission. Compatible authored targets are refined with the same "
           "backend-owned target facts.");
+IREE_FLAG_LIST(string, root,
+               "Root symbol to materialize before compilation. Repeat for "
+               "multiple roots. When omitted, the full input module is "
+               "compiled.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before artifact emission. Use 'default' or "
           "empty for the shared prepared-low compile pipeline, 'none' to "
@@ -352,6 +357,34 @@ static iree_status_t loom_compile_materialize_config_set(
   options.config_set = config_set;
   return loom_tooling_config_materialize_module(
       run_module->module, &options, loom_run_session_block_pool(session), NULL);
+}
+
+static iree_status_t loom_compile_select_roots(loom_run_session_t* session,
+                                               loom_run_module_t* run_module,
+                                               iree_allocator_t allocator) {
+  const iree_flag_string_list_t roots = FLAG_root_list();
+  if (roots.count == 0) {
+    return iree_ok_status();
+  }
+
+  const loom_module_t* const source_modules[] = {run_module->module};
+  iree_string_view_t module_name = iree_string_view_empty();
+  if (run_module->module->name_id < run_module->module->strings.count) {
+    module_name =
+        run_module->module->strings.entries[run_module->module->name_id];
+  }
+  loom_module_t* linked_module = NULL;
+  IREE_RETURN_IF_ERROR(loom_link_materialized_modules(
+      source_modules, IREE_ARRAYSIZE(source_modules),
+      &(loom_link_options_t){
+          .module_name = module_name,
+          .root_symbols = roots,
+      },
+      loom_run_session_block_pool(session), allocator, &linked_module));
+
+  loom_module_free(run_module->module);
+  run_module->module = linked_module;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_compile_report_options_initialize(
@@ -1044,6 +1077,9 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "loom-compile kernel.loom --backend=vm --output=kernel.vmfb\n"
       "loom-compile kernel.loom --backend=amdgpu-hal --target=gfx1100 \\\n"
       "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
+      "loom-compile catalog.loom --root=@entry --backend=amdgpu-hal \\\n"
+      "  --target=gfx1100 --emit-target-artifact=entry.hsaco \\\n"
+      "  --output=entry.vmfb\n"
       "loom-compile kernel.loom --backend=llvmir-text --output=kernel.ll\n"
       "loom-compile kernel.loom --backend=llvmir-bitcode --output=kernel.bc\n"
       "loom-compile kernel.loombc --backend=amdgpu-hal --target=gfx1100 \\\n"
@@ -1064,6 +1100,9 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "attrs. Target-owned emitters such as `--backend=llvmir-text` and\n"
       "`--backend=llvmir-bitcode` write the selected artifact directly to\n"
       "`--output`. A single invocation compiles one target configuration.\n"
+      "Use repeated `--root=@symbol` values to compile selected entries from "
+      "a\n"
+      "catalog-like module without first producing a linked bytecode file.\n"
       "\n"
       "### Config specialization\n"
       "\n"
@@ -1168,6 +1207,9 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status)) {
     status =
         loom_compile_materialize_config_set(&session, &run_module, &config_set);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_select_roots(&session, &run_module, allocator);
   }
 
   loom_run_compile_report_capture_options_t compile_report_options = {0};
