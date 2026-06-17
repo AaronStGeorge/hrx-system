@@ -52,6 +52,7 @@ static iree_status_t iree_benchmark_loom_initialize_sequence_compile_context(
         .filename = options->filename,
         .source = options->source,
         .pipeline = options->benchmark_options->pipeline,
+        .sanitizer = options->benchmark_options->sanitizer,
         .test_module = options->module_plan->module,
         .case_plan = case_plan,
         .sample_constant_case_plan = case_plan,
@@ -124,8 +125,8 @@ static iree_status_t iree_benchmark_loom_initialize_single_compile_context(
     status = iree_benchmark_loom_hal_actual_provider_initialize(
         options->hal_context, options->session, options->filename,
         options->source, options->benchmark_options->pipeline,
-        options->module_plan->module, actual_invocation,
-        compile_item->sample_compilation, case_plan,
+        options->benchmark_options->sanitizer, options->module_plan->module,
+        actual_invocation, compile_item->sample_compilation, case_plan,
         compile_item->case_sample_ordinal,
         compile_item->has_case_sample_ordinal, options->compile_report_options,
         options->artifact_manifest_options, &context->hal_provider);

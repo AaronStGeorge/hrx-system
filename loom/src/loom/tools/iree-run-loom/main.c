@@ -16,6 +16,7 @@
 #include "iree/tooling/value_io.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
+#include "loom/sanitizer/options_cli.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/context/context.h"
@@ -35,6 +36,9 @@ IREE_FLAG(string, pipeline, "default",
           "the comprehensive prepared-low pipeline, 'none' to disable pass "
           "execution, '@symbol' to run a module-local pass.pipeline, or a "
           "comma-separated pass list such as 'canonicalize,cse'.");
+IREE_FLAG(string, sanitizer, "none",
+          "Sanitizer checks to insert in the default target pipeline: none, "
+          "all, or a '|'-separated set of access, value, operation, and race.");
 IREE_FLAG(string, function, "",
           "Function/export name to invoke. Empty selects the single VM export "
           "or HAL executable function.");
@@ -338,6 +342,13 @@ static iree_status_t iree_run_loom_compile_report_options_initialize(
   return iree_ok_status();
 }
 
+static iree_status_t iree_run_loom_sanitizer_options_initialize(
+    loom_sanitizer_options_t* out_options) {
+  return loom_sanitizer_options_parse_checks(
+      iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
+      out_options);
+}
+
 static iree_status_t iree_run_loom_run_pass_pipeline(
     const iree_run_loom_configuration_t* configuration,
     loom_run_session_t* session, loom_run_module_t* run_module,
@@ -346,6 +357,8 @@ static iree_status_t iree_run_loom_run_pass_pipeline(
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
+  pipeline_options.target_pipeline_options =
+      compile_options->target_pipeline_options;
   pipeline_options.target_environment = configuration->target_environment;
   pipeline_options.low_descriptor_registry =
       loom_run_session_low_descriptor_registry(session);
@@ -563,6 +576,10 @@ int iree_run_loom_main(int argc, char** argv,
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = iree_make_cstring_view(FLAG_module_name);
+  if (iree_status_is_ok(status)) {
+    status = iree_run_loom_sanitizer_options_initialize(
+        &compile_options.target_pipeline_options.sanitizer);
+  }
   loom_run_compile_report_capture_options_t compile_report_options = {0};
   if (iree_status_is_ok(status)) {
     status = iree_run_loom_compile_report_options_initialize(

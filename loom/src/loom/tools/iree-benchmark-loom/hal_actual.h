@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/ir/module.h"
+#include "loom/sanitizer/options.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/execution/session.h"
@@ -25,7 +26,8 @@ extern "C" {
 iree_status_t iree_benchmark_loom_hal_actual_provider_initialize(
     iree_benchmark_loom_hal_context_t* context, loom_run_session_t* session,
     iree_string_view_t filename, iree_string_view_t source,
-    iree_string_view_t pipeline, const loom_module_t* test_module,
+    iree_string_view_t pipeline, loom_sanitizer_options_t sanitizer,
+    const loom_module_t* test_module,
     const loom_testbench_invocation_plan_t* actual_invocation,
     iree_string_view_t sample_compilation,
     const loom_testbench_case_plan_t* sample_constant_case_plan,

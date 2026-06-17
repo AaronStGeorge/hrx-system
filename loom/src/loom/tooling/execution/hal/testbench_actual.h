@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 #include "loom/pass/types.h"
+#include "loom/sanitizer/options.h"
 #include "loom/target/provider.h"
 #include "loom/tooling/execution/compile_options.h"
 #include "loom/tooling/execution/hal/artifact.h"
@@ -92,6 +93,8 @@ typedef struct loom_run_hal_testbench_actual_provider_options_t {
   iree_string_view_t source;
   // User-selected pass pipeline.
   iree_string_view_t pipeline;
+  // Sanitizer checks inserted by the target pipeline.
+  loom_sanitizer_options_t sanitizer;
   // Module that owns |actual_invocation|.
   const loom_module_t* test_module;
   // Actual invocation selected from the owning check.case.
@@ -127,6 +130,8 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   iree_string_view_t source;
   // User-selected pass pipeline.
   iree_string_view_t pipeline;
+  // Sanitizer checks inserted by the target pipeline.
+  loom_sanitizer_options_t sanitizer;
   // Module that owns |actual_invocation|.
   const loom_module_t* test_module;
   // Actual invocation selected from the owning check.case.
@@ -200,6 +205,8 @@ typedef struct loom_run_hal_testbench_actual_sequence_options_t {
   iree_string_view_t source;
   // User-selected pass pipeline.
   iree_string_view_t pipeline;
+  // Sanitizer checks inserted by the target pipeline.
+  loom_sanitizer_options_t sanitizer;
   // Module that owns |case_plan|.
   const loom_module_t* test_module;
   // Case plan whose actual invocations are executed by the sequence.

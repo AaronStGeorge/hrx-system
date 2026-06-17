@@ -199,6 +199,7 @@ void loom_run_hal_testbench_actual_provider_initialize(
       .filename = options->filename,
       .source = options->source,
       .pipeline = options->pipeline,
+      .sanitizer = options->sanitizer,
       .test_module = options->test_module,
       .actual_invocation = options->actual_invocation,
       .sample_constant_case_plan = options->sample_constant_case_plan,
@@ -647,6 +648,7 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   pipeline_options.pipeline = provider->pipeline;
   pipeline_options.target_pipeline_options =
       provider->context->artifact_provider->default_pipeline_options;
+  pipeline_options.target_pipeline_options.sanitizer = provider->sanitizer;
   pipeline_options.target_environment = provider->target_environment;
   pipeline_options.target_selection = (loom_target_selection_t){
       .bundle = provider->compile_device_target.target_bundle,
@@ -973,6 +975,7 @@ iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
         .filename = options->filename,
         .source = options->source,
         .pipeline = options->pipeline,
+        .sanitizer = options->sanitizer,
         .test_module = options->test_module,
         .actual_invocation = invocation,
         .sample_constant_case_plan = options->sample_constant_case_plan,

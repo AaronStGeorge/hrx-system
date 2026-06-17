@@ -13,6 +13,7 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
+#include "loom/sanitizer/options.h"
 #include "loom/util/stream.h"
 
 #ifdef __cplusplus
@@ -85,6 +86,8 @@ typedef struct iree_benchmark_loom_options_t {
   iree_host_size_t max_samples_per_case;
   // Pass pipeline used before target artifact emission.
   iree_string_view_t pipeline;
+  // Sanitizer checks inserted by the target pipeline.
+  loom_sanitizer_options_t sanitizer;
   // Explicit result output path, or empty to use stdout or bundle defaults.
   iree_string_view_t output;
   // Selected result output format.

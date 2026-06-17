@@ -31,6 +31,7 @@ iree_status_t loom_run_hal_runtime_initialize(
     iree_hal_device_create_params_t create_params =
         iree_hal_device_create_params_default();
     create_params.proactor_pool = proactor_pool;
+    create_params.event_sink = iree_hal_device_event_sink_stderr();
     status = iree_hal_create_device_from_flags(
         iree_hal_available_driver_registry(), hal_driver_name, &create_params,
         allocator, &out_runtime->device);

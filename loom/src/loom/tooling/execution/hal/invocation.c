@@ -503,6 +503,9 @@ iree_status_t loom_run_hal_dispatch(
                                      iree_infinite_timeout(),
                                      IREE_ASYNC_WAIT_FLAG_NONE);
   }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_queue_flush(device, IREE_HAL_QUEUE_AFFINITY_ANY);
+  }
 
   iree_hal_semaphore_release(semaphore);
   iree_hal_command_buffer_release(command_buffer);
@@ -1075,6 +1078,10 @@ iree_status_t loom_run_hal_dispatch_batch_execute(
     status = iree_hal_semaphore_wait(batch->semaphore, signal_value,
                                      iree_infinite_timeout(),
                                      IREE_ASYNC_WAIT_FLAG_NONE);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_queue_flush(runtime->device,
+                                         IREE_HAL_QUEUE_AFFINITY_ANY);
   }
   if (iree_status_is_ok(status)) {
     ++batch->next_signal_value;

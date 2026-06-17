@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "iree/base/tooling/flags.h"
+#include "loom/sanitizer/options_cli.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/testbench/testbench.h"
 #include "loom/tools/iree-benchmark-loom/module_query.h"
@@ -36,6 +37,10 @@ IREE_FLAG_NAMED(int32_t, max_samples_per_case, "max-samples-per-case",
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used before HAL candidate emission. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
+IREE_FLAG(string, sanitizer, "none",
+          "Sanitizer checks inserted by the target pipeline. Use 'none', "
+          "'access', 'value', 'operation', 'race', 'asan', 'ubsan', 'tsan', "
+          "'all', or a '|' separated list.");
 IREE_FLAG(string, output, "",
           "Output path for benchmark results. Empty or '-' writes to stdout.");
 IREE_FLAG_NAMED(
@@ -229,6 +234,9 @@ iree_status_t iree_benchmark_loom_options_from_flags(
           iree_make_cstring_view(FLAG_benchmark));
   out_options->sample_ordinal = FLAG_sample;
   out_options->pipeline = iree_make_cstring_view(FLAG_pipeline);
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_parse_checks(
+      iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
+      &out_options->sanitizer));
   out_options->output = iree_make_cstring_view(FLAG_output);
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_parse_output_format(
       iree_make_cstring_view(FLAG_output_format), &out_options->output_format));

@@ -83,6 +83,7 @@ loom_cc_library(
     deps = [
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
+        "//loom/src/loom/sanitizer:options_cli",
         "//loom/src/loom/tooling/cli:help",
         "//loom/src/loom/tooling/compile:pipeline",
         "//loom/src/loom/tooling/context",
