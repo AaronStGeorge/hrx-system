@@ -21,6 +21,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_feedback.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,9 +37,6 @@ typedef struct loom_amdgpu_feedback_packet_address_t
 
 // Byte length of the AMDGPU sanitizer access report payload.
 #define LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_BYTE_LENGTH 64u
-
-// Trap ID used after emitting a sanitizer report.
-#define LOOM_AMDGPU_SANITIZER_TRAP_ID 0x100u
 
 // Access kind values carried by AMDGPU sanitizer access reports.
 typedef uint32_t loom_amdgpu_sanitizer_access_kind_t;
@@ -91,15 +89,6 @@ typedef struct loom_amdgpu_sanitizer_access_report_t {
   // Shadow value observed by the check, or zero when unavailable.
   loom_value_id_t shadow_value;
 } loom_amdgpu_sanitizer_access_report_t;
-
-typedef struct loom_amdgpu_sanitizer_report_source_t {
-  // Device-visible dispatch packet pointer captured for host diagnostics.
-  loom_value_id_t dispatch_ptr;
-  // X dimension workgroup id captured for host diagnostics.
-  loom_value_id_t workgroup_id_x;
-  // X dimension workitem id captured for host diagnostics.
-  loom_value_id_t workitem_id_x;
-} loom_amdgpu_sanitizer_report_source_t;
 
 typedef struct loom_amdgpu_sanitizer_access_report_trap_island_t {
   // Entry block accepting the source/report tuple for one failed access site.

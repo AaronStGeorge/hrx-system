@@ -162,6 +162,7 @@ loom_cc_library(
         "preamble.h",
         "sanitizer.h",
         "sanitizer_access.h",
+        "sanitizer_feedback.h",
         "sanitizer_race_report.h",
         "sanitizer_report.h",
         "signal.h",

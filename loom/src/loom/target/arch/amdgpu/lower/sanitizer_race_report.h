@@ -16,15 +16,18 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/ir/attribute.h"
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
 #include "loom/target/arch/amdgpu/abi/tsan.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_feedback.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct loom_builder_t loom_builder_t;
+typedef struct loom_block_t loom_block_t;
 typedef struct loom_amdgpu_feedback_packet_address_t
     loom_amdgpu_feedback_packet_address_t;
 
@@ -65,6 +68,18 @@ typedef struct loom_amdgpu_sanitizer_race_report_t {
   loom_value_id_t prior_workitem_id_z;
 } loom_amdgpu_sanitizer_race_report_t;
 
+typedef struct loom_amdgpu_sanitizer_race_report_trap_island_t {
+  // Entry block accepting the source/report tuple for one failed race site.
+  loom_block_t* entry_block;
+  // Final trap block reached after optional reporting or when reporting is not
+  // available.
+  loom_block_t* trap_block;
+  // Block arguments carrying current source coordinates in |entry_block|.
+  loom_amdgpu_sanitizer_report_source_t source_args;
+  // Block arguments carrying race report values in |entry_block|.
+  loom_amdgpu_sanitizer_race_report_t report_args;
+} loom_amdgpu_sanitizer_race_report_trap_island_t;
+
 // Emits the AMDGPU sanitizer race report payload into a reserved feedback
 // packet.
 //
@@ -75,6 +90,48 @@ typedef struct loom_amdgpu_sanitizer_race_report_t {
 iree_status_t loom_amdgpu_build_sanitizer_race_report_payload(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_feedback_packet_address_t* packet_address,
+    const loom_amdgpu_sanitizer_race_report_t* report,
+    loom_location_id_t location);
+
+// Emits a fatal AMDGPU sanitizer race report producer.
+//
+// The builder must be positioned at the end of a target-low block. This helper
+// emits a cold CFG that loads the runtime feedback config, branches around
+// feedback channel dereferences when feedback is disabled, reserves packet
+// storage when possible, writes and publishes one TSAN-kind feedback packet on
+// successful reservation, and emits S_TRAP on all paths. The builder is left in
+// the trap block after the S_TRAP packet; callers remain responsible for adding
+// the target-low terminator required by the surrounding function.
+iree_status_t loom_amdgpu_build_sanitizer_race_report_trap(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_symbol_ref_t feedback_config_symbol,
+    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_sanitizer_race_report_t* report,
+    loom_location_id_t location);
+
+// Builds a shared cold report/trap island for failed race observations.
+//
+// The island accepts one failed race site's report tuple as block arguments,
+// attempts to enqueue a feedback packet, and traps whether reporting succeeds,
+// is disabled, or cannot reserve packet storage. Call
+// loom_amdgpu_build_sanitizer_race_report_trap_branch from each per-site cold
+// block to enter the island. Leaves the builder positioned at the island's trap
+// block after the trap packet has been emitted.
+iree_status_t loom_amdgpu_build_sanitizer_race_report_trap_island(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_block_t* after_block, loom_symbol_ref_t feedback_config_symbol,
+    loom_location_id_t location,
+    loom_amdgpu_sanitizer_race_report_trap_island_t* out_island);
+
+// Terminates the current cold block with a branch into |island|.
+//
+// Values are converted to the island's canonical block-argument register
+// classes in the current block, so this should only be used on the
+// already-failing path.
+iree_status_t loom_amdgpu_build_sanitizer_race_report_trap_branch(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_race_report_trap_island_t* island,
+    const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_race_report_t* report,
     loom_location_id_t location);
 

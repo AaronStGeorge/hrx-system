@@ -156,6 +156,13 @@ class AmdgpuSanitizerRaceReportTest : public ::testing::Test {
     return ops;
   }
 
+  std::vector<loom_op_t*> OpsInBlock(loom_block_t* block) const {
+    std::vector<loom_op_t*> ops;
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) { ops.push_back(op); }
+    return ops;
+  }
+
   iree_string_view_t String(loom_string_id_t string_id) const {
     return module_->strings.entries[string_id];
   }
@@ -210,6 +217,17 @@ class AmdgpuSanitizerRaceReportTest : public ::testing::Test {
     return filtered_ops;
   }
 
+  std::vector<loom_op_t*> OpsForDescriptorRefInBlock(
+      loom_block_t* block, loom_amdgpu_descriptor_ref_t descriptor_ref) const {
+    std::vector<loom_op_t*> filtered_ops;
+    for (loom_op_t* op : OpsInBlock(block)) {
+      if (LowOpHasDescriptorRef(op, descriptor_ref)) {
+        filtered_ops.push_back(op);
+      }
+    }
+    return filtered_ops;
+  }
+
   void ExpectAttrI64(loom_named_attr_slice_t attrs, iree_string_view_t name,
                      int64_t expected_value) const {
     for (iree_host_size_t i = 0; i < attrs.count; ++i) {
@@ -251,6 +269,14 @@ class AmdgpuSanitizerRaceReportTest : public ::testing::Test {
     ASSERT_EQ(attrs.count, 1u);
     EXPECT_EQ(ToString(String(attrs.entries[0].name_id)), "imm32");
     EXPECT_EQ(loom_attr_as_i64(attrs.entries[0].value), expected_value);
+  }
+
+  void ExpectRegisterType(loom_value_id_t value, uint16_t register_class,
+                          uint32_t unit_count) const {
+    const loom_type_t expected_type = loom_low_register_type(
+        descriptor_set_->stable_id, register_class, unit_count);
+    EXPECT_TRUE(
+        loom_type_equal(expected_type, loom_module_value_type(module_, value)));
   }
 
   void ExpectStoreOp(const loom_op_t* op,
@@ -464,6 +490,186 @@ TEST_F(AmdgpuSanitizerRaceReportTest, EmitsRaceReportPayloadStores) {
                 LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
                 packet_address,
                 payload_base + LOOM_AMDGPU_TSAN_REPORT_SHADOW_VALUE_OFFSET, 2);
+}
+
+TEST_F(AmdgpuSanitizerRaceReportTest, EmitsFatalRaceReportProducerCfg) {
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+
+  const loom_amdgpu_sanitizer_report_source_t source = {
+      /*.dispatch_ptr=*/config_values.notify_signal,
+      /*.workgroup_id_x=*/config_values.flags,
+      /*.workitem_id_x=*/channel_values.flags,
+  };
+  const loom_amdgpu_sanitizer_race_report_t report =
+      MakeReport(config_values, channel_values);
+  IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_race_report_trap(
+      &builder_, descriptor_set_, config_symbol, &source, &report,
+      LOOM_LOCATION_UNKNOWN));
+
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/NULL,
+                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
+                                       &return_op));
+  VerifyModuleOk();
+  VerifyLowModuleOk();
+
+  loom_region_t* body = body_block_->parent_region;
+  ASSERT_EQ(body->block_count, 8u);
+  loom_block_t* config_block = body_block_;
+  loom_block_t* feedback_block = loom_region_block(body, 1);
+  loom_block_t* attempt_block = loom_region_block(body, 2);
+  loom_block_t* reserved_block = loom_region_block(body, 3);
+  loom_block_t* continuation_block = loom_region_block(body, 4);
+  loom_block_t* report_block = loom_region_block(body, 5);
+  loom_block_t* dropped_block = loom_region_block(body, 6);
+  loom_block_t* trap_block = loom_region_block(body, 7);
+
+  const loom_op_t* config_terminator = loom_block_const_last_op(config_block);
+  ASSERT_TRUE(loom_low_cond_br_isa(config_terminator));
+  EXPECT_EQ(loom_low_cond_br_true_dest(config_terminator), feedback_block);
+  EXPECT_EQ(loom_low_cond_br_false_dest(config_terminator), trap_block);
+  ExpectRegisterType(loom_low_cond_br_condition(config_terminator),
+                     LOOM_AMDGPU_REG_CLASS_ID_SCC, 1);
+
+  const loom_op_t* continuation_terminator =
+      loom_block_const_last_op(continuation_block);
+  ASSERT_TRUE(loom_low_cond_br_isa(continuation_terminator));
+  EXPECT_EQ(loom_low_cond_br_true_dest(continuation_terminator), report_block);
+  EXPECT_EQ(loom_low_cond_br_false_dest(continuation_terminator), trap_block);
+  ExpectRegisterType(loom_low_cond_br_condition(continuation_terminator),
+                     LOOM_AMDGPU_REG_CLASS_ID_SCC, 1);
+
+  const loom_op_t* report_terminator = loom_block_const_last_op(report_block);
+  ASSERT_TRUE(loom_low_br_isa(report_terminator));
+  EXPECT_EQ(loom_low_br_dest(report_terminator), trap_block);
+
+  const loom_op_t* trap_terminator = loom_block_const_last_op(trap_block);
+  ASSERT_TRUE(loom_low_return_isa(trap_terminator));
+  std::vector<loom_op_t*> trap_ops =
+      OpsForDescriptorRefInBlock(trap_block, LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP);
+  ASSERT_EQ(trap_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(trap_ops[0]), IREE_SV("trapid"),
+                LOOM_AMDGPU_SANITIZER_TRAP_ID);
+
+  ASSERT_TRUE(loom_low_cond_br_isa(loom_block_const_last_op(feedback_block)));
+  ASSERT_TRUE(loom_low_cond_br_isa(loom_block_const_last_op(attempt_block)));
+  ASSERT_TRUE(loom_low_br_isa(loom_block_const_last_op(reserved_block)));
+  ASSERT_TRUE(loom_low_br_isa(loom_block_const_last_op(dropped_block)));
+
+  std::vector<loom_op_t*> report_b32_stores = OpsForDescriptorRefInBlock(
+      report_block, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
+  ASSERT_EQ(report_b32_stores.size(), 21u);
+  std::vector<loom_op_t*> report_b64_stores = OpsForDescriptorRefInBlock(
+      report_block, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
+  ASSERT_EQ(report_b64_stores.size(), 11u);
+}
+
+TEST_F(AmdgpuSanitizerRaceReportTest, BranchesColdSitesToSharedReportIsland) {
+  loom_region_t* body = body_block_->parent_region;
+  loom_block_t* first_site_block = nullptr;
+  IREE_ASSERT_OK(loom_region_insert_block(
+      module_, body, (uint16_t)(body_block_->region_index + 1),
+      &first_site_block));
+  loom_block_t* second_site_block = nullptr;
+  IREE_ASSERT_OK(loom_region_insert_block(
+      module_, body, (uint16_t)(first_site_block->region_index + 1),
+      &second_site_block));
+
+  loom_builder_set_block(&builder_, body_block_);
+  loom_op_t* entry_branch_op = nullptr;
+  IREE_ASSERT_OK(loom_low_br_build(&builder_, first_site_block,
+                                   /*args=*/nullptr, /*args_count=*/0,
+                                   LOOM_LOCATION_UNKNOWN, &entry_branch_op));
+
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_sanitizer_race_report_trap_island_t island = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_race_report_trap_island(
+      &builder_, descriptor_set_, second_site_block, config_symbol,
+      LOOM_LOCATION_UNKNOWN, &island));
+  loom_op_t* return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/nullptr,
+                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
+                                       &return_op));
+
+  auto build_site_branch = [&](loom_block_t* site_block) {
+    loom_builder_set_block(&builder_, site_block);
+    loom_amdgpu_feedback_config_values_t config_values = {};
+    IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+        &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+        &config_values));
+    loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+    IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+        &builder_, descriptor_set_, config_values.channel_base,
+        LOOM_LOCATION_UNKNOWN, &channel_values));
+    const loom_amdgpu_sanitizer_report_source_t source = {
+        /*.dispatch_ptr=*/config_values.notify_signal,
+        /*.workgroup_id_x=*/config_values.flags,
+        /*.workitem_id_x=*/channel_values.flags,
+    };
+    const loom_amdgpu_sanitizer_race_report_t report =
+        MakeReport(config_values, channel_values);
+    IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_race_report_trap_branch(
+        &builder_, descriptor_set_, &island, &source, &report,
+        LOOM_LOCATION_UNKNOWN));
+  };
+  build_site_branch(first_site_block);
+  build_site_branch(second_site_block);
+
+  VerifyModuleOk();
+  VerifyLowModuleOk();
+
+  ASSERT_NE(island.entry_block, nullptr);
+  ASSERT_NE(island.trap_block, nullptr);
+  EXPECT_EQ(island.entry_block->arg_count, 20u);
+  EXPECT_EQ(island.source_args.dispatch_ptr,
+            loom_block_arg_id(island.entry_block, 0));
+  EXPECT_EQ(island.source_args.workgroup_id_x,
+            loom_block_arg_id(island.entry_block, 1));
+  EXPECT_EQ(island.source_args.workitem_id_x,
+            loom_block_arg_id(island.entry_block, 2));
+  EXPECT_EQ(island.report_args.check_kind,
+            loom_block_arg_id(island.entry_block, 3));
+  EXPECT_EQ(island.report_args.prior_workitem_id_z,
+            loom_block_arg_id(island.entry_block, 19));
+  ExpectRegisterType(island.source_args.dispatch_ptr,
+                     LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+  ExpectRegisterType(island.source_args.workgroup_id_x,
+                     LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
+  ExpectRegisterType(island.source_args.workitem_id_x,
+                     LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
+  ExpectRegisterType(island.report_args.current_site_id,
+                     LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2);
+  ExpectRegisterType(island.report_args.prior_workitem_id_z,
+                     LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
+
+  const loom_op_t* first_branch = loom_block_const_last_op(first_site_block);
+  const loom_op_t* second_branch = loom_block_const_last_op(second_site_block);
+  ASSERT_TRUE(loom_low_br_isa(first_branch));
+  ASSERT_TRUE(loom_low_br_isa(second_branch));
+  EXPECT_EQ(loom_low_br_dest(first_branch), island.entry_block);
+  EXPECT_EQ(loom_low_br_dest(second_branch), island.entry_block);
+  ASSERT_EQ(loom_low_br_args(first_branch).count, 20u);
+  ASSERT_EQ(loom_low_br_args(second_branch).count, 20u);
+
+  std::vector<loom_op_t*> report_b32_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
+  std::vector<loom_op_t*> report_b64_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
+  EXPECT_EQ(report_b32_stores.size(), 21u);
+  EXPECT_EQ(report_b64_stores.size(), 11u);
+  std::vector<loom_op_t*> trap_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP);
+  ASSERT_EQ(trap_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(trap_ops[0]), IREE_SV("trapid"),
+                LOOM_AMDGPU_SANITIZER_TRAP_ID);
 }
 
 TEST_F(AmdgpuSanitizerRaceReportTest, RejectsUnsupportedValueShapes) {
