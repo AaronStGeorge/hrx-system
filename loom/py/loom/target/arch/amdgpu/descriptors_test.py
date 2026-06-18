@@ -2573,6 +2573,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         buffer_store_key,
         buffer_mnemonic,
         global_mnemonic,
+        scratch_store_b16_mnemonic,
         offset_field_name,
     ) in (
         (
@@ -2584,6 +2585,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_dwordx3",
             "buffer_load_dwordx3",
             "global_load_dwordx3_saddr",
+            "scratch_store_short",
             "OFFSET",
         ),
         (
@@ -2595,6 +2597,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_dwordx3",
             "buffer_load_dwordx3",
             "global_load_dwordx3_saddr",
+            "scratch_store_short",
             "OFFSET",
         ),
         (
@@ -2606,6 +2609,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_b96",
             "buffer_load_b96",
             "global_load_b96_saddr",
+            "scratch_store_b16",
             "OFFSET",
         ),
         (
@@ -2617,6 +2621,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_b96",
             "buffer_load_b96",
             "global_load_b96_saddr",
+            "scratch_store_b16",
             "IOFFSET",
         ),
         (
@@ -2628,6 +2633,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_b96",
             "buffer_load_b96",
             "global_load_b96_saddr",
+            "scratch_store_b16",
             "IOFFSET",
         ),
     ):
@@ -2777,6 +2783,23 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         )
         assert scratch_store.asm_forms is not None
         assert scratch_store.asm_forms[0].mnemonic == "scratch_store_b96_vaddr"
+
+        scratch_store_b16 = descriptors["amdgpu.scratch_store_b16_vaddr"]
+        _assert_memory_width_overlay(
+            scratch_store_b16,
+            width_bits=16,
+            semantic_tag="memory.stack.store.u16",
+            mnemonic=scratch_store_b16_mnemonic,
+            operand_units=1,
+            payload_field_name="value",
+            effect_kind=EffectKind.WRITE,
+            memory_space=MemorySpace.STACK,
+        )
+        assert scratch_store_b16.asm_forms is not None
+        assert (
+            scratch_store_b16.asm_forms[0].mnemonic
+            == f"{scratch_store_b16_mnemonic}_vaddr"
+        )
 
 
 def test_cdna_global_load_lds_descriptors_cover_extension_rows() -> None:

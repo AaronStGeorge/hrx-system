@@ -676,6 +676,7 @@ def _cdna_core_overlays(
             descriptor_key_suffix="_vaddr",
             narrow_byte_load_mnemonic_suffixes=("ubyte", "sbyte"),
             narrow_b16_load_mnemonic_suffixes=("ushort", "sshort"),
+            narrow_store_mnemonic_suffixes=("byte", "short"),
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_scratch_memory_overlays(
@@ -695,6 +696,7 @@ def _cdna_core_overlays(
             descriptor_key_suffix="_offset_only",
             narrow_byte_load_mnemonic_suffixes=("ubyte", "sbyte"),
             narrow_b16_load_mnemonic_suffixes=("ushort", "sshort"),
+            narrow_store_mnemonic_suffixes=("byte", "short"),
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_global_load_lds_overlays(
