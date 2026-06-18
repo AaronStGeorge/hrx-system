@@ -40,6 +40,7 @@ loom_cc_library(
   SRCS
     "pipeline_passes.c"
   DEPS
+    ::memory
     ::options
     ::options_cli
     ::site_location
@@ -69,6 +70,7 @@ loom_cc_library(
   SRCS
     "race_insertion.c"
   DEPS
+    ::memory
     ::options
     ::options_cli
     ::site_location
@@ -86,6 +88,21 @@ loom_cc_library(
     loom::pass::registry
     loom::pass::types
     loom::pass::value_facts
+    loom::rewrite::rewriter
+    loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    memory
+  HDRS
+    "memory.h"
+  SRCS
+    "memory.c"
+  DEPS
+    loom::ir
+    loom::ir::facts
     loom::rewrite::rewriter
     loom::util::fact_table
   PUBLIC

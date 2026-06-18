@@ -23,6 +23,7 @@
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/sanitizer/memory.h"
 #include "loom/sanitizer/options.h"
 #include "loom/sanitizer/options_cli.h"
 #include "loom/sanitizer/site_location.h"
@@ -943,6 +944,9 @@ static iree_status_t loom_sanitizer_try_instrument_access_op(
                                                &footprint)) {
       return iree_ok_status();
     }
+    if (!loom_sanitizer_access_view_is_observable(rewriter, footprint.view)) {
+      return iree_ok_status();
+    }
     if (!loom_sanitizer_access_kind_from_vector_footprint(&footprint, &kind)) {
       return loom_sanitizer_emit_vector_access_unsupported(pass, module, op);
     }
@@ -970,6 +974,9 @@ static iree_status_t loom_sanitizer_try_instrument_access_op(
     static_indices = footprint.static_indices;
     IREE_RETURN_IF_ERROR(loom_sanitizer_vector_static_extents(
         pass, module, &footprint, &static_extents));
+  }
+  if (!loom_sanitizer_access_view_is_observable(rewriter, view)) {
+    return iree_ok_status();
   }
   if (loom_sanitizer_preceded_by_matching_access_assertion(
           op, kind, view, indices, static_indices, static_extents)) {
