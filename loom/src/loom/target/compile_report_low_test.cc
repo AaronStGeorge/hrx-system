@@ -156,6 +156,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   report.requested_detail_flags =
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS;
 
@@ -323,7 +324,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       /*.block=*/{},
       /*.block_index=*/{},
       /*.source_ordinal=*/{},
-      /*.scheduled_ordinal=*/{},
+      /*.scheduled_ordinal=*/1,
       /*.kind=*/LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
       /*.traits=*/{},
       /*.descriptor=*/&descriptors[1],
@@ -336,7 +337,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       /*.block=*/{},
       /*.block_index=*/{},
       /*.source_ordinal=*/{},
-      /*.scheduled_ordinal=*/{},
+      /*.scheduled_ordinal=*/2,
       /*.kind=*/LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
       /*.traits=*/{},
       /*.descriptor=*/&descriptors[2],
@@ -344,6 +345,16 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       /*.schedule_class_id=*/{},
       /*.schedule_class_name=*/IREE_SVL("amdgpu.wmma"),
   };
+  const loom_low_schedule_block_t schedule_blocks[] = {
+      {
+          /*.block=*/{},
+          /*.node_start=*/0,
+          /*.node_count=*/3,
+          /*.scheduled_node_start=*/0,
+          /*.scheduled_node_count=*/3,
+      },
+  };
+  const uint32_t scheduled_node_indices[] = {0, 1, 2};
   const loom_low_emission_frame_t frame = {
       /*.module=*/{},
       /*.function_op=*/{}, /*.target=*/
@@ -371,14 +382,14 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           },
           /*.memory_access_table=*/{},
           /*.liveness=*/{},
-          /*.blocks=*/{},
-          /*.block_count=*/{},
+          /*.blocks=*/schedule_blocks,
+          /*.block_count=*/IREE_ARRAYSIZE(schedule_blocks),
           /*.nodes=*/schedule_nodes,
           /*.node_count=*/13,
           /*.dependencies=*/{},
           /*.dependency_count=*/6,
-          /*.scheduled_node_indices=*/{},
-          /*.scheduled_node_count=*/12,
+          /*.scheduled_node_indices=*/scheduled_node_indices,
+          /*.scheduled_node_count=*/IREE_ARRAYSIZE(scheduled_node_indices),
           /*.pressure_steps=*/{},
           /*.pressure_step_count=*/{},
           /*.candidate_decisions=*/{},
@@ -502,6 +513,9 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_TRUE(iree_all_bits_set(
       report.detail_flags,
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS));
+  EXPECT_TRUE(
+      iree_all_bits_set(report.detail_flags,
+                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS));
   EXPECT_TRUE(iree_all_bits_set(
@@ -574,6 +588,36 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                                      IREE_SV("register.copy.b32")));
   EXPECT_EQ(pressure_origin_rows[1].live_units, 2u);
   EXPECT_EQ(pressure_origin_rows[1].live_values, 1u);
+  EXPECT_EQ(report.schedule_band_rows.count, 3u);
+  ASSERT_NE(report.schedule_band_rows.head, nullptr);
+  const auto* schedule_band_rows =
+      static_cast<const loom_target_compile_report_schedule_band_row_t*>(
+          loom_target_compile_report_vec_const_rows(
+              report.schedule_band_rows.head));
+  EXPECT_EQ(schedule_band_rows[0].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE);
+  EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[0].semantic_tag,
+                                     IREE_SV("register.copy.b32")));
+  EXPECT_EQ(schedule_band_rows[0].node_count, 1u);
+  EXPECT_EQ(schedule_band_rows[0].first_scheduled_ordinal, 0u);
+  EXPECT_EQ(schedule_band_rows[0].static_instruction_mix.descriptor_count, 1u);
+  EXPECT_EQ(schedule_band_rows[0].static_instruction_mix.vector_alu_count, 1u);
+  EXPECT_EQ(schedule_band_rows[0].static_instruction_mix.register_move_count,
+            1u);
+  EXPECT_EQ(schedule_band_rows[0].result_value_count, 1u);
+  EXPECT_EQ(schedule_band_rows[0].result_unit_count, 2u);
+  EXPECT_EQ(schedule_band_rows[1].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY);
+  EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[1].semantic_tag,
+                                     IREE_SV("memory.global.load.u32")));
+  EXPECT_EQ(schedule_band_rows[1].static_instruction_mix.global_memory_count,
+            1u);
+  EXPECT_EQ(schedule_band_rows[2].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_MATRIX);
+  EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[2].semantic_tag,
+                                     IREE_SV("matrix.wmma.f32")));
+  EXPECT_EQ(schedule_band_rows[2].static_instruction_mix.matrix_count, 1u);
+  EXPECT_EQ(schedule_band_rows[2].static_instruction_mix.wmma_count, 1u);
   EXPECT_EQ(report.spill_rows.count, 2u);
   ASSERT_NE(report.spill_rows.head, nullptr);
   const auto* spill_rows =

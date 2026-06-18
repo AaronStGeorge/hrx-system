@@ -65,6 +65,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS = 1u << 14,
   // Per-pressure-peak origin contribution rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS = 1u << 15,
+  // Consecutive low-schedule band rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS = 1u << 16,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -416,6 +418,8 @@ typedef struct loom_target_compile_report_entry_t {
   iree_host_size_t pressure_row_count;
   // Number of detailed pressure-origin rows copied for this entry.
   iree_host_size_t pressure_origin_row_count;
+  // Number of detailed low-schedule band rows copied for this entry.
+  iree_host_size_t schedule_band_row_count;
   // Number of detailed spill rows copied for this entry.
   iree_host_size_t spill_row_count;
 } loom_target_compile_report_entry_t;
@@ -471,6 +475,34 @@ typedef struct loom_target_compile_report_pressure_origin_row_t {
   // Number of live values contributed by this origin group at the peak.
   uint64_t live_values;
 } loom_target_compile_report_pressure_origin_row_t;
+
+// One consecutive low-schedule band in a compile report.
+typedef struct loom_target_compile_report_schedule_band_row_t {
+  // Target artifact function symbol containing this schedule band.
+  iree_string_view_t function_name;
+  // Region block label containing this schedule band.
+  iree_string_view_t block_name;
+  // First global scheduled packet index in this band.
+  uint64_t first_packet_index;
+  // First scheduled ordinal within |block_name| in this band.
+  uint32_t first_scheduled_ordinal;
+  // Number of consecutive scheduled nodes in this band.
+  uint32_t node_count;
+  // Structured origin family shared by this band.
+  loom_target_compile_report_pressure_origin_kind_t origin_kind;
+  // Representative operation mnemonic for this band.
+  iree_string_view_t origin_operation_name;
+  // Shared descriptor semantic tag for descriptor-backed bands, if any.
+  iree_string_view_t semantic_tag;
+  // Representative SSA result value produced in this band, if any.
+  iree_string_view_t sample_value_name;
+  // Static descriptor-backed instruction-mix feature counters for this band.
+  loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
+  // Number of result values produced by nodes in this band.
+  uint64_t result_value_count;
+  // Number of allocation units produced by result values in this band.
+  uint64_t result_unit_count;
+} loom_target_compile_report_schedule_band_row_t;
 
 // One predicted spill row in a compile report.
 typedef struct loom_target_compile_report_spill_row_t {
@@ -863,6 +895,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t pressure_rows;
   // Owned register-pressure origin contribution rows.
   loom_target_compile_report_row_list_t pressure_origin_rows;
+  // Owned consecutive low-schedule band rows.
+  loom_target_compile_report_row_list_t schedule_band_rows;
   // Owned predicted spill rows.
   loom_target_compile_report_row_list_t spill_rows;
   // Owned hard allocation-failure rows.
@@ -979,6 +1013,11 @@ iree_status_t loom_target_compile_report_record_pressure_row(
 iree_status_t loom_target_compile_report_record_pressure_origin_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_pressure_origin_row_t* row);
+
+// Records one low-schedule band row.
+iree_status_t loom_target_compile_report_record_schedule_band_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_schedule_band_row_t* row);
 
 // Records one spill row.
 iree_status_t loom_target_compile_report_record_spill_row(

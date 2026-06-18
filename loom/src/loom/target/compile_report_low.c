@@ -291,6 +291,48 @@ static bool loom_target_compile_report_low_node_features_are_known(
          features->register_move;
 }
 
+static void loom_target_compile_report_accumulate_low_node_static_mix(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_node_t* node,
+    loom_target_compile_report_static_instruction_mix_t* mix) {
+  if (node->kind == LOOM_LOW_SCHEDULE_NODE_TERMINATOR) {
+    const uint64_t control_transfer_count =
+        loom_target_compile_report_low_structural_control_transfer_count(
+            schedule, node);
+    mix->branch_count += control_transfer_count;
+    mix->control_count += control_transfer_count;
+    return;
+  }
+  if (node->kind != LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR ||
+      node->descriptor == NULL) {
+    return;
+  }
+  ++mix->descriptor_count;
+  const loom_target_compile_report_low_node_features_t features =
+      loom_target_compile_report_classify_low_node_features(descriptor_set,
+                                                            node);
+  mix->scalar_alu_count += features.scalar_alu ? 1 : 0;
+  mix->vector_alu_count += features.vector_alu ? 1 : 0;
+  mix->matrix_count += features.matrix ? 1 : 0;
+  mix->mfma_count += features.mfma ? 1 : 0;
+  mix->wmma_count += features.wmma ? 1 : 0;
+  mix->dot_count += features.dot ? 1 : 0;
+  mix->global_memory_count += features.global_memory ? 1 : 0;
+  mix->local_memory_count += features.local_memory ? 1 : 0;
+  mix->scalar_memory_count += features.scalar_memory ? 1 : 0;
+  mix->generic_memory_count += features.generic_memory ? 1 : 0;
+  mix->atomic_count += features.atomic ? 1 : 0;
+  mix->branch_count += features.branch ? 1 : 0;
+  mix->barrier_count += features.barrier ? 1 : 0;
+  mix->control_count += features.control ? 1 : 0;
+  mix->conversion_count += features.conversion ? 1 : 0;
+  mix->cache_count += features.cache ? 1 : 0;
+  mix->register_move_count += features.register_move ? 1 : 0;
+  mix->unknown_count +=
+      loom_target_compile_report_low_node_features_are_known(&features) ? 0 : 1;
+}
+
 static void loom_target_compile_report_record_low_static_instruction_mix(
     loom_target_compile_report_t* report,
     const loom_low_emission_frame_t* frame) {
@@ -299,42 +341,8 @@ static void loom_target_compile_report_record_low_static_instruction_mix(
   loom_target_compile_report_static_instruction_mix_t mix = {0};
   for (iree_host_size_t i = 0; i < frame->schedule.node_count; ++i) {
     const loom_low_schedule_node_t* node = &frame->schedule.nodes[i];
-    if (node->kind == LOOM_LOW_SCHEDULE_NODE_TERMINATOR) {
-      const uint64_t control_transfer_count =
-          loom_target_compile_report_low_structural_control_transfer_count(
-              &frame->schedule, node);
-      mix.branch_count += control_transfer_count;
-      mix.control_count += control_transfer_count;
-      continue;
-    }
-    if (node->kind != LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR ||
-        node->descriptor == NULL) {
-      continue;
-    }
-    ++mix.descriptor_count;
-    const loom_target_compile_report_low_node_features_t features =
-        loom_target_compile_report_classify_low_node_features(descriptor_set,
-                                                              node);
-    mix.scalar_alu_count += features.scalar_alu ? 1 : 0;
-    mix.vector_alu_count += features.vector_alu ? 1 : 0;
-    mix.matrix_count += features.matrix ? 1 : 0;
-    mix.mfma_count += features.mfma ? 1 : 0;
-    mix.wmma_count += features.wmma ? 1 : 0;
-    mix.dot_count += features.dot ? 1 : 0;
-    mix.global_memory_count += features.global_memory ? 1 : 0;
-    mix.local_memory_count += features.local_memory ? 1 : 0;
-    mix.scalar_memory_count += features.scalar_memory ? 1 : 0;
-    mix.generic_memory_count += features.generic_memory ? 1 : 0;
-    mix.atomic_count += features.atomic ? 1 : 0;
-    mix.branch_count += features.branch ? 1 : 0;
-    mix.barrier_count += features.barrier ? 1 : 0;
-    mix.control_count += features.control ? 1 : 0;
-    mix.conversion_count += features.conversion ? 1 : 0;
-    mix.cache_count += features.cache ? 1 : 0;
-    mix.register_move_count += features.register_move ? 1 : 0;
-    mix.unknown_count +=
-        loom_target_compile_report_low_node_features_are_known(&features) ? 0
-                                                                          : 1;
+    loom_target_compile_report_accumulate_low_node_static_mix(
+        &frame->schedule, descriptor_set, node, &mix);
   }
   loom_target_compile_report_record_static_instruction_mix(report, &mix);
 }
@@ -571,6 +579,134 @@ static iree_status_t loom_target_compile_report_build_pressure_origin_infos(
             "low schedule result ordinal exceeds liveness value domain");
       }
       origin_infos[result_ordinal] = info;
+    }
+  }
+  return iree_ok_status();
+}
+
+static bool loom_target_compile_report_schedule_band_matches(
+    const loom_target_compile_report_schedule_band_row_t* row,
+    const loom_target_compile_report_pressure_origin_info_t* info) {
+  if (row->origin_kind != info->kind) {
+    return false;
+  }
+  if (!iree_string_view_is_empty(row->semantic_tag) ||
+      !iree_string_view_is_empty(info->semantic_tag)) {
+    return iree_string_view_equal(row->semantic_tag, info->semantic_tag);
+  }
+  return iree_string_view_equal(row->origin_operation_name,
+                                info->operation_name);
+}
+
+static void loom_target_compile_report_add_schedule_band_node_results(
+    const loom_module_t* module, const loom_liveness_analysis_t* liveness,
+    const loom_low_schedule_node_t* node,
+    loom_target_compile_report_schedule_band_row_t* row) {
+  if (liveness == NULL || liveness->value_ids == NULL) {
+    return;
+  }
+  const loom_value_ordinal_t* result_ordinals =
+      loom_low_schedule_node_const_result_ordinals(node);
+  for (uint16_t i = 0; i < node->result_count; ++i) {
+    const loom_value_ordinal_t result_ordinal = result_ordinals[i];
+    if (result_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
+        result_ordinal >= liveness->value_count) {
+      continue;
+    }
+    const loom_value_id_t value_id = liveness->value_ids[result_ordinal];
+    if (iree_string_view_is_empty(row->sample_value_name)) {
+      row->sample_value_name =
+          loom_target_compile_report_value_name(module, value_id);
+    }
+    const loom_liveness_interval_t* interval =
+        loom_liveness_interval_for_value_ordinal(liveness, result_ordinal);
+    if (interval != NULL) {
+      row->result_unit_count += interval->unit_count;
+    }
+    ++row->result_value_count;
+  }
+}
+
+static void loom_target_compile_report_accumulate_schedule_band_node(
+    const loom_low_schedule_table_t* schedule,
+    const loom_liveness_analysis_t* liveness,
+    const loom_low_schedule_node_t* node,
+    loom_target_compile_report_schedule_band_row_t* row) {
+  ++row->node_count;
+  loom_target_compile_report_accumulate_low_node_static_mix(
+      schedule, schedule->target.descriptor_set, node,
+      &row->static_instruction_mix);
+  loom_target_compile_report_add_schedule_band_node_results(
+      schedule->module, liveness, node, row);
+}
+
+static iree_status_t loom_target_compile_report_record_schedule_band_rows(
+    loom_target_compile_report_t* report,
+    const loom_liveness_analysis_t* liveness,
+    const loom_low_schedule_table_t* schedule) {
+  if (!loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS)) {
+    return iree_ok_status();
+  }
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS;
+  if (schedule == NULL || schedule->scheduled_node_count == 0 ||
+      schedule->block_count == 0 || iree_allocator_is_null(report->allocator)) {
+    return iree_ok_status();
+  }
+  if (schedule->scheduled_node_indices == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low schedule band rows require scheduled nodes");
+  }
+  const loom_module_t* module = schedule->module;
+  const loom_low_descriptor_set_t* descriptor_set =
+      schedule->target.descriptor_set;
+  for (iree_host_size_t block_index = 0; block_index < schedule->block_count;
+       ++block_index) {
+    const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
+    bool has_band = false;
+    loom_target_compile_report_schedule_band_row_t band = {0};
+    for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
+      const iree_host_size_t packet_index =
+          (iree_host_size_t)block->scheduled_node_start + (iree_host_size_t)i;
+      if (packet_index >= schedule->scheduled_node_count) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "low schedule band packet index is invalid");
+      }
+      const uint32_t node_index =
+          schedule->scheduled_node_indices[packet_index];
+      if (node_index >= schedule->node_count) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "low schedule band node index is invalid");
+      }
+      const loom_low_schedule_node_t* node = &schedule->nodes[node_index];
+      const loom_target_compile_report_pressure_origin_info_t info =
+          loom_target_compile_report_pressure_origin_from_node(
+              module, descriptor_set, node);
+      if (!has_band ||
+          !loom_target_compile_report_schedule_band_matches(&band, &info)) {
+        if (has_band) {
+          IREE_RETURN_IF_ERROR(
+              loom_target_compile_report_record_schedule_band_row(report,
+                                                                  &band));
+        }
+        band = (loom_target_compile_report_schedule_band_row_t){
+            .function_name = report->function_name,
+            .block_name =
+                loom_target_compile_report_block_name(module, node->block),
+            .first_packet_index = (uint64_t)packet_index,
+            .first_scheduled_ordinal = node->scheduled_ordinal,
+            .origin_kind = info.kind,
+            .origin_operation_name = info.operation_name,
+            .semantic_tag = info.semantic_tag,
+        };
+        has_band = true;
+      }
+      loom_target_compile_report_accumulate_schedule_band_node(
+          schedule, liveness, node, &band);
+    }
+    if (has_band) {
+      IREE_RETURN_IF_ERROR(
+          loom_target_compile_report_record_schedule_band_row(report, &band));
     }
   }
   return iree_ok_status();
@@ -1267,6 +1403,10 @@ static iree_status_t loom_target_compile_report_record_low_allocation_contents(
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_record_pressure_origin_rows(
         report, liveness, schedule, allocation->target.descriptor_set);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_record_schedule_band_rows(
+        report, liveness, schedule);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_record_spill_rows(report, allocation);
