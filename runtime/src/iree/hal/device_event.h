@@ -327,6 +327,11 @@ enum iree_hal_device_tsan_report_flag_bits_t {
   IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_ATOMIC = 1u << 0,
   // Prior access was an atomic memory operation.
   IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_ATOMIC = 1u << 1,
+  // Prior workitem id is stored as a linear local id in prior_workitem_id[0].
+  IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR = 1u << 2,
+  // Current workitem id is stored as a linear local id in
+  // current_workitem_id[0].
+  IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR = 1u << 3,
 };
 
 // HAL-level TSAN report payload.
@@ -359,11 +364,15 @@ typedef struct iree_hal_device_tsan_report_t {
   uint64_t shadow_value;
   // Workgroup id that produced the current access report.
   uint32_t current_workgroup_id[3];
-  // Workitem id that produced the current access report.
+  // Workitem id that produced the current access report. When
+  // IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR is set, element 0
+  // is the linear local id and elements 1/2 are zero.
   uint32_t current_workitem_id[3];
   // Workgroup id that produced the prior access.
   uint32_t prior_workgroup_id[3];
-  // Workitem id that produced the prior access.
+  // Workitem id that produced the prior access. When
+  // IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR is set, element 0 is
+  // the linear local id and elements 1/2 are zero.
   uint32_t prior_workitem_id[3];
   // Device-visible dispatch packet pointer, or 0 when unavailable.
   uint64_t source_dispatch_ptr;

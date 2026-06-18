@@ -438,13 +438,25 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
       if (workgroup_entry_count >
           UINT64_MAX / IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE) {
         return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "AMDGPU TSAN workgroup shadow size overflows: "
+                                "AMDGPU TSAN workgroup shadow data overflows: "
                                 "local_memory_size=%u, granule_shift=%u",
                                 options->tsan.workgroup_local_memory_size,
                                 options->tsan.memory_granule_shift);
       }
-      const uint64_t workgroup_shadow_stride =
+      const uint64_t workgroup_shadow_data_size =
           workgroup_entry_count * IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE;
+      if (workgroup_shadow_data_size >
+          UINT64_MAX - IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU TSAN workgroup shadow size overflows: "
+            "header_size=%u, data_size=%" PRIu64,
+            IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE,
+            workgroup_shadow_data_size);
+      }
+      const uint64_t workgroup_shadow_stride =
+          IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE +
+          workgroup_shadow_data_size;
       if (workgroup_shadow_stride >
           UINT64_MAX / options->tsan.workgroup_capacity) {
         return iree_make_status(

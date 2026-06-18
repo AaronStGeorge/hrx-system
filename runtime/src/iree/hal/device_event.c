@@ -240,29 +240,48 @@ static void iree_hal_device_event_sink_stderr_print_tsan(
     fprintf(stderr, "  site: id=0x%016" PRIx64 " unresolved\n",
             report->current_site_id);
   }
+  const bool prior_workitem_linear = iree_all_bits_set(
+      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR);
+  const bool current_workitem_linear = iree_all_bits_set(
+      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR);
   fprintf(stderr,
           "  tsan: check=%s memory=%s address=0x%016" PRIx64
           " access_length=%u\n"
           "  access: current=%s prior=%s prior_site=0x%016" PRIx64
           "\n"
-          "  shadow: address=0x%016" PRIx64 " value=0x%016" PRIx64
-          "\n"
-          "  current: workgroup=(%u,%u,%u) workitem=(%u,%u,%u)\n"
-          "  prior: workgroup=(%u,%u,%u) workitem=(%u,%u,%u) "
-          "dispatch=0x%016" PRIx64 "\n",
+          "  shadow: address=0x%016" PRIx64 " value=0x%016" PRIx64 "\n",
           iree_hal_device_tsan_check_kind_string(report->check_kind),
           iree_hal_device_tsan_memory_space_string(report->memory_space),
           report->memory_address, report->access_length,
           iree_hal_device_tsan_access_kind_string(report->current_access_kind),
           iree_hal_device_tsan_access_kind_string(report->prior_access_kind),
-          report->prior_site_id, report->shadow_address, report->shadow_value,
-          report->current_workgroup_id[0], report->current_workgroup_id[1],
-          report->current_workgroup_id[2], report->current_workitem_id[0],
-          report->current_workitem_id[1], report->current_workitem_id[2],
-          report->prior_workgroup_id[0], report->prior_workgroup_id[1],
-          report->prior_workgroup_id[2], report->prior_workitem_id[0],
-          report->prior_workitem_id[1], report->prior_workitem_id[2],
-          report->source_dispatch_ptr);
+          report->prior_site_id, report->shadow_address, report->shadow_value);
+  if (current_workitem_linear) {
+    fprintf(stderr, "  current: workgroup=(%u,%u,%u) workitem_linear=%u\n",
+            report->current_workgroup_id[0], report->current_workgroup_id[1],
+            report->current_workgroup_id[2], report->current_workitem_id[0]);
+  } else {
+    fprintf(stderr, "  current: workgroup=(%u,%u,%u) workitem=(%u,%u,%u)\n",
+            report->current_workgroup_id[0], report->current_workgroup_id[1],
+            report->current_workgroup_id[2], report->current_workitem_id[0],
+            report->current_workitem_id[1], report->current_workitem_id[2]);
+  }
+  if (prior_workitem_linear) {
+    fprintf(stderr,
+            "  prior: workgroup=(%u,%u,%u) workitem_linear=%u "
+            "dispatch=0x%016" PRIx64 "\n",
+            report->prior_workgroup_id[0], report->prior_workgroup_id[1],
+            report->prior_workgroup_id[2], report->prior_workitem_id[0],
+            report->source_dispatch_ptr);
+  } else {
+    fprintf(stderr,
+            "  prior: workgroup=(%u,%u,%u) workitem=(%u,%u,%u) "
+            "dispatch=0x%016" PRIx64 "\n",
+            report->prior_workgroup_id[0], report->prior_workgroup_id[1],
+            report->prior_workgroup_id[2], report->prior_workitem_id[0],
+            report->prior_workitem_id[1], report->prior_workitem_id[2],
+            report->source_dispatch_ptr);
+  }
 }
 
 static void iree_hal_device_event_sink_stderr_print_printf(

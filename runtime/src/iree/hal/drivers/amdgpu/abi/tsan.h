@@ -86,6 +86,11 @@ enum iree_hal_amdgpu_tsan_report_flag_bits_t {
   IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_CURRENT_ATOMIC = 1u << 0,
   // Prior access was an atomic memory operation.
   IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_PRIOR_ATOMIC = 1u << 1,
+  // Prior workitem id is stored as a linear local id in prior_workitem_id_x.
+  IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR = 1u << 2,
+  // Current workitem id is stored as a linear local id in
+  // current_workitem_id_x.
+  IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR = 1u << 3,
 };
 
 // Bitfield specifying properties of a TSAN assignment plan.
@@ -239,6 +244,51 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_dispatch_state_t {
 } iree_hal_amdgpu_tsan_dispatch_state_t;
 IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_dispatch_state_t) == 16,
                           "TSAN dispatch state size is part of the device ABI");
+
+// TSAN shadow entry bit layout used for workgroup-local memory race detection.
+enum iree_hal_amdgpu_tsan_shadow_entry_layout_t {
+  // Byte length of each TSAN local-memory shadow entry.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_BYTE_LENGTH = 8u,
+  // Per-workgroup shadow header byte length.
+  IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_BYTE_LENGTH = 8u,
+  // Offset of the per-workgroup barrier epoch inside the shadow header.
+  IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_EPOCH_OFFSET = 0u,
+  // Bit offset of the encoded prior access kind in a shadow entry.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_ACCESS_KIND_SHIFT = 0u,
+  // Bit count of the encoded prior access kind in a shadow entry.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_ACCESS_KIND_BIT_COUNT = 3u,
+  // Bit offset of the encoded prior linear local workitem id.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_SHIFT = 3u,
+  // Bit count of the encoded prior linear local workitem id.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_BIT_COUNT = 10u,
+  // Bit offset of the encoded workgroup barrier epoch.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_EPOCH_SHIFT = 13u,
+  // Bit count of the encoded workgroup barrier epoch.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_EPOCH_BIT_COUNT = 10u,
+  // Bit offset of the encoded dispatch generation low bits.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT = 23u,
+  // Bit count of the encoded dispatch generation low bits.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT = 20u,
+  // Bit offset of the encoded instrumentation site low bits.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SITE_SHIFT = 43u,
+  // Bit count of the encoded instrumentation site low bits.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SITE_BIT_COUNT = 21u,
+};
+
+// Encoded access kind stored in each TSAN shadow entry.
+typedef uint32_t iree_hal_amdgpu_tsan_shadow_access_kind_t;
+enum iree_hal_amdgpu_tsan_shadow_access_kind_bits_t {
+  // No prior access has been recorded for the shadow entry.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ACCESS_KIND_EMPTY = 0u,
+  // Prior access was a non-atomic read.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ACCESS_KIND_READ = 1u,
+  // Prior access was a non-atomic write.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ACCESS_KIND_WRITE = 2u,
+  // Prior access was a non-atomic read-modify-write observation.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ACCESS_KIND_READ_WRITE = 3u,
+  // Prior access was an atomic memory operation.
+  IREE_HAL_AMDGPU_TSAN_SHADOW_ACCESS_KIND_ATOMIC = 4u,
+};
 
 // Device-readable assignment plan for one TSAN-instrumented command-buffer
 // block.

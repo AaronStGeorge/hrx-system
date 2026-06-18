@@ -25,14 +25,24 @@ static iree_status_t iree_hal_amdgpu_tsan_state_calculate_layout(
                                           << options->tsan.memory_granule_shift;
   const iree_device_size_t workgroup_entry_count =
       iree_device_size_ceil_div(workgroup_local_memory_size, granule_size);
-  iree_device_size_t workgroup_shadow_stride = 0;
+  iree_device_size_t workgroup_shadow_data_size = 0;
   if (!iree_device_size_checked_mul(workgroup_entry_count,
                                     IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE,
-                                    &workgroup_shadow_stride)) {
+                                    &workgroup_shadow_data_size)) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU TSAN workgroup shadow size overflow: entry_count=%" PRIu64,
+        "AMDGPU TSAN workgroup shadow data size overflow: entry_count=%" PRIu64,
         (uint64_t)workgroup_entry_count);
+  }
+  iree_device_size_t workgroup_shadow_stride = 0;
+  if (!iree_device_size_checked_add(
+          IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE,
+          workgroup_shadow_data_size, &workgroup_shadow_stride)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU TSAN workgroup shadow size overflow: "
+                            "header_size=%u, data_size=%" PRIu64,
+                            IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE,
+                            (uint64_t)workgroup_shadow_data_size);
   }
   iree_device_size_t dispatch_shadow_stride = 0;
   if (!iree_device_size_checked_mul(workgroup_shadow_stride,

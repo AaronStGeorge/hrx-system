@@ -94,6 +94,9 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
 // Device-visible TSAN shadow entry size in bytes.
 #define IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE 8u
 
+// Per-workgroup TSAN shadow header size in bytes.
+#define IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE 8u
+
 // Default log2 local-memory bytes represented by one TSAN shadow entry.
 #define IREE_HAL_AMDGPU_TSAN_DEFAULT_MEMORY_GRANULE_SHIFT 2u
 
