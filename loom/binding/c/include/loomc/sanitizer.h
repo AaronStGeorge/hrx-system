@@ -12,9 +12,9 @@
 /// @file
 /// Sanitizer compile options.
 ///
-/// Loom sanitizer options select semantic assertion classes. ASAN-like and
-/// UBSAN-like are public preset names over one shared bitset; compiler and
-/// target internals traffic in the concrete assertion classes.
+/// Loom sanitizer options select semantic assertion classes. ASAN-like,
+/// UBSAN-like, and TSAN-like are public preset names over one shared bitset;
+/// compiler and target internals traffic in the concrete assertion classes.
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +29,9 @@ enum loomc_sanitizer_check_bit_e {
 
   /// Enables operation-level assertions.
   LOOMC_SANITIZER_CHECK_OPERATION = 1u << 2,
+
+  /// Enables data-race observations.
+  LOOMC_SANITIZER_CHECK_RACE = 1u << 3,
 };
 /// Bitset of `loomc_sanitizer_check_bit_e` values selecting assertion classes.
 typedef uint64_t loomc_sanitizer_checks_t;
@@ -41,6 +44,10 @@ typedef uint64_t loomc_sanitizer_checks_t;
 #define LOOMC_SANITIZER_CHECKS_UBSAN_LIKE                   \
   ((loomc_sanitizer_checks_t)(LOOMC_SANITIZER_CHECK_VALUE | \
                               LOOMC_SANITIZER_CHECK_OPERATION))
+
+/// TSAN-like preset over Loom's unified sanitizer check bitset.
+#define LOOMC_SANITIZER_CHECKS_TSAN_LIKE \
+  ((loomc_sanitizer_checks_t)LOOMC_SANITIZER_CHECK_RACE)
 
 enum loomc_sanitizer_flag_bit_e {
   /// No sanitizer flags are currently defined.
