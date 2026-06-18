@@ -141,7 +141,9 @@ typedef struct loom_low_emission_frame_spill_free_options_t {
 } loom_low_emission_frame_spill_free_options_t;
 
 // Schedules, allocates, and validates one target-low function for target
-// emitters. |arena| must outlive |out_frame|.
+// emitters. |arena| must outlive |out_frame|. Schedule or allocation
+// diagnostics may return a partial frame with the corresponding table
+// |error_count| set; later emission stages have not consumed that frame.
 iree_status_t loom_low_emission_frame_build(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_emission_frame_options_t* options,

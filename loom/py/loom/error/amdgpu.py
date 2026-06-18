@@ -383,12 +383,12 @@ ERR_AMDGPU_021 = ErrorDef(
     ),
 )
 
-# ERR_AMDGPU_022: AMDGPU matrix descriptor has no target-low packet mapping.
+# ERR_AMDGPU_022: AMDGPU matrix descriptor lacks required target support.
 ERR_AMDGPU_022 = ErrorDef(
     domain=ErrorDomain.AMDGPU,
     code=22,
     severity=Severity.ERROR,
-    summary="AMDGPU matrix descriptor has no target-low packet mapping.",
+    summary="AMDGPU matrix descriptor lacks required target support.",
     message=(
         "AMDGPU target '{target_key}' export '{export_name}' config "
         "'{config_key}' rejected '{op_name}' descriptor '{descriptor_name}' "
@@ -401,8 +401,8 @@ ERR_AMDGPU_022 = ErrorDef(
         ErrorParam("descriptor_constraint", ParamKind.STRING),
     ),
     fix_hint=(
-        "Use an AMDGPU matrix descriptor that has a selected target-low packet "
-        "mapping in the active descriptor set"
+        "Use an AMDGPU matrix descriptor whose selected target support is "
+        "complete in the active descriptor set"
     ),
 )
 

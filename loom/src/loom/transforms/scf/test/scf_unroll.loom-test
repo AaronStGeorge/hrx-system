@@ -201,16 +201,142 @@ func.def @dynamic_one_factor_clears_policy(%input: i32) -> (i32) {
 
 // ====
 
-func.def @dynamic_partial_factor_rejected() {
+func.def @dynamic_partial_factor_stripmines_with_tail_guard() {
   %start = index.constant 0 : index
   %end = index.constant 3 : index
   %step = index.constant 1 : index
   %factor = index.constant 2 : index
-  // ERROR@+1: STRUCTURE/014 {attr_name="unroll_factor", actual_value="2", expected_constraint="0, 1, or the exact full trip count"}
   scf.for %i = [%start to %end step %step] unroll(%factor) {
     test.use %i : index
   }
   func.return
+}
+
+// ----
+func.def @dynamic_partial_factor_stripmines_with_tail_guard() {
+  %start = index.constant 0 : index
+  %end = index.constant 3 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 2 : index
+  %5 = index.constant 2 : index
+  scf.for %i = [%start to %end step %5] {
+    test.use %i : index
+    %7 = index.constant 1 : index
+    %i_1 = index.add %i, %7 : index
+    %9 = index.cmp slt, %i_1, %end : index
+    scf.if %9 {
+      test.use %i_1 : index
+    }
+  }
+  func.return
+}
+
+// ====
+
+func.def @partial_factor_divisible_trip_count_omits_tail_guard() {
+  %start = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 2 : index
+  scf.for %i = [%start to %end step %step] unroll(%factor) {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+func.def @partial_factor_divisible_trip_count_omits_tail_guard() {
+  %start = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 2 : index
+  %5 = index.constant 2 : index
+  scf.for %i = [%start to %end step %5] {
+    test.use %i : index
+    %7 = index.constant 1 : index
+    %i_1 = index.add %i, %7 : index
+    test.use %i_1 : index
+  }
+  func.return
+}
+
+// ====
+
+func.def @dynamic_bound_factor_stripmines(%end: index) {
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 4 : index
+  scf.for %i = [%start to %end step %step] unroll(%factor) {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+func.def @dynamic_bound_factor_stripmines(%end: index) {
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 4 : index
+  %5 = index.constant 4 : index
+  scf.for %i = [%start to %end step %5] {
+    test.use %i : index
+    %7 = index.constant 1 : index
+    %i_1 = index.add %i, %7 : index
+    %9 = index.cmp slt, %i_1, %end : index
+    scf.if %9 {
+      test.use %i_1 : index
+    }
+    %10 = index.constant 2 : index
+    %i_2 = index.add %i, %10 : index
+    %12 = index.cmp slt, %i_2, %end : index
+    scf.if %12 {
+      test.use %i_2 : index
+    }
+    %13 = index.constant 3 : index
+    %i_3 = index.add %i, %13 : index
+    %15 = index.cmp slt, %i_3, %end : index
+    scf.if %15 {
+      test.use %i_3 : index
+    }
+  }
+  func.return
+}
+
+// ====
+
+func.def @partial_factor_loop_carried_tail(%input: i32) -> (i32) {
+  %start = index.constant 0 : index
+  %end = index.constant 3 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 2 : index
+  %result = scf.for %i = [%start to %end step %step](%acc = %input : i32) -> (i32) unroll(%factor) {
+    %next = test.addi %acc, %acc : i32
+    scf.yield %next : i32
+  }
+  func.return %result : i32
+}
+
+// ----
+func.def @partial_factor_loop_carried_tail(%input: i32) -> (i32) {
+  %start = index.constant 0 : index
+  %end = index.constant 3 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 2 : index
+  %10 = index.constant 2 : index
+  %result = scf.for %i = [%start to %end step %10](%acc = %input : i32) -> (i32) {
+    %next = test.addi %acc, %acc : i32
+    %15 = index.constant 1 : index
+    %i_1 = index.add %i, %15 : index
+    %17 = index.cmp slt, %i_1, %end : index
+    %18 = scf.if %17 -> (i32) {
+      %next_1 = test.addi %next, %next : i32
+      scf.yield %next_1 : i32
+    } else {
+      scf.yield %next : i32
+    }
+    scf.yield %18 : i32
+  }
+  func.return %result : i32
 }
 
 // ====

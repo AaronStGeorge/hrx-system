@@ -1756,6 +1756,36 @@ static bool loom_amdgpu_memory_access_dynamic_terms_can_flat_address(
   return true;
 }
 
+static bool loom_amdgpu_memory_dynamic_term_can_emit_flat_address(
+    const loom_module_t* module,
+    const loom_low_source_memory_dynamic_term_t* term) {
+  if (!loom_amdgpu_memory_dynamic_term_can_materialize_vaddr(module, term)) {
+    return false;
+  }
+  if (term->byte_stride <= 0 || term->byte_stride > UINT32_MAX) {
+    return false;
+  }
+  if (term->stride_value_count != 0) {
+    return false;
+  }
+  return term->byte_shift == LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE ||
+         term->byte_shift < 32;
+}
+
+static bool loom_amdgpu_memory_access_dynamic_terms_can_emit_flat_address(
+    const loom_module_t* module, const loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  for (uint8_t i = 0; i < access->source.dynamic_term_count; ++i) {
+    if (!loom_amdgpu_memory_dynamic_term_can_emit_flat_address(
+            module, &access->source.dynamic_terms[i])) {
+      loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
+          module, &access->source, diagnostic);
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool loom_amdgpu_memory_access_dynamic_terms_can_vaddr(
     const loom_module_t* module, const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
@@ -1822,17 +1852,11 @@ bool loom_amdgpu_memory_access_select_u32_vaddr_byte_offset(
   return true;
 }
 
-static bool loom_amdgpu_memory_access_try_select_global_flat(
-    const loom_module_t* module,
+static bool loom_amdgpu_memory_access_select_global_flat_descriptor(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
-  if (!loom_amdgpu_memory_access_dynamic_terms_can_flat_address(module, access,
-                                                                diagnostic)) {
-    return false;
-  }
-
   const loom_low_descriptor_t* descriptor = NULL;
   uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   if (!loom_amdgpu_select_global_flat_memory_descriptor(
@@ -1852,9 +1876,27 @@ static bool loom_amdgpu_memory_access_try_select_global_flat(
           access, &offset_info, diagnostic)) {
     return false;
   }
+  access->descriptor = descriptor;
+  return true;
+}
+
+static bool loom_amdgpu_memory_access_try_select_global_flat(
+    const loom_module_t* module,
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_memory_operation_kind_t kind,
+    loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  if (!loom_amdgpu_memory_access_dynamic_terms_can_flat_address(module, access,
+                                                                diagnostic)) {
+    return false;
+  }
+
+  if (!loom_amdgpu_memory_access_select_global_flat_descriptor(
+          descriptor_set, kind, access, diagnostic)) {
+    return false;
+  }
   loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(access);
   access->address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT;
-  access->descriptor = descriptor;
   return true;
 }
 
@@ -2290,8 +2332,17 @@ bool loom_amdgpu_memory_access_select_flat_global_address(
           out_access->source.static_byte_offset, out_diagnostic)) {
     return false;
   }
-  return loom_amdgpu_memory_access_try_select_global_flat(
-      module, descriptor_set, kind, out_access, out_diagnostic);
+  if (!loom_amdgpu_memory_access_dynamic_terms_can_emit_flat_address(
+          module, out_access, out_diagnostic)) {
+    return false;
+  }
+  if (!loom_amdgpu_memory_access_select_global_flat_descriptor(
+          descriptor_set, kind, out_access, out_diagnostic)) {
+    return false;
+  }
+  loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(out_access);
+  out_access->address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT;
+  return true;
 }
 
 static bool loom_amdgpu_memory_access_make_32bit_chunk_source(

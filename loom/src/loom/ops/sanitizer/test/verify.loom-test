@@ -16,6 +16,30 @@ func.def @access_static_index_out_of_bounds(%layout: encoding<layout>, %view: vi
 
 // ====
 
+func.def @access_static_extent_count_mismatch(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: SUBRANGE/003 "static_extents" "1" "2"
+  sanitizer.assert.access<read> %view[%row, 0] {static_extents = [4]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @access_static_extent_must_be_positive(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: STRUCTURE/014 "static_extents" "0" "positive extent"
+  sanitizer.assert.access<read> %view[%row, 0] {static_extents = [1, 0]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @access_static_extent_out_of_bounds(%layout: encoding<layout>, %view: view<4x4xf32, %layout>) {
+  // ERROR@+1: SUBRANGE/004
+  sanitizer.assert.access<read> %view[3, 1] {static_extents = [1, 4]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
 func.def @race_access_index_count_mismatch(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
   // ERROR@+1: SUBRANGE/001 "view" "1" "2"
   sanitizer.race.access<read> %view[%row] : view<4x4xf32, %layout>

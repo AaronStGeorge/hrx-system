@@ -744,7 +744,7 @@ iree_status_t loom_vector_fragment_load_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_FRAGMENT_STORE: Store a target-shaped matrix fragment payload into a typed view at a full-rank logical origin. The value is interpreted as the physical payload for the given fragment role and logical matrix shape; the store is therefore a matrix-fragment movement boundary, not an ordinary vector.store footprint.
+// LOOM_OP_VECTOR_FRAGMENT_STORE: Store a target-shaped matrix fragment payload into a typed view at a full-rank logical origin. The value is interpreted as the physical payload for the given fragment role and logical matrix shape; the store is therefore a matrix-fragment movement boundary, not an ordinary vector.store footprint. When the payload and view element types differ, the operation represents a fragment-shaped numeric conversion at the store boundary and target lowering must either select that conversion explicitly or reject it with target diagnostics.
 // vector.fragment.store<result> %acc, %c[%row, %col] shape [%m, %n] : vector<8xf32>, view<[%M]x[%N]xf32, %layout>
 LOOM_DEFINE_ISA(loom_vector_fragment_store_isa, LOOM_OP_VECTOR_FRAGMENT_STORE)
 LOOM_DEFINE_OPERAND(loom_vector_fragment_store_value, 0)

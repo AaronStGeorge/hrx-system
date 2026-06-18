@@ -1067,6 +1067,50 @@ ERR_BACKEND_043 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_044: Low schedule dependency cycle was detected.
+ERR_BACKEND_044 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=44,
+    severity=Severity.ERROR,
+    summary="Low schedule dependency cycle detected.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' scheduler stopped in block '{block_name}' "
+        "index {block_index} after scheduling {scheduled_node_count}/"
+        "{block_node_count} node(s) with {unscheduled_node_count} "
+        "unscheduled node(s); unresolved {dependency_kind} dependency from "
+        "node {producer_node} '{producer_packet}' to node {consumer_node} "
+        "'{consumer_packet}' operand '{operand_index}'; cycle path "
+        "{cycle_path_packets}; path truncated {cycle_path_truncated}; "
+        "witness edge only {witness_edge_only}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("block_name", ParamKind.STRING),
+        ErrorParam("block_index", ParamKind.U32),
+        ErrorParam("scheduled_node_count", ParamKind.U32),
+        ErrorParam("block_node_count", ParamKind.U32),
+        ErrorParam("unscheduled_node_count", ParamKind.U32),
+        ErrorParam("producer_node", ParamKind.U32),
+        ErrorParam("producer_packet", ParamKind.STRING),
+        ErrorParam("consumer_node", ParamKind.U32),
+        ErrorParam("consumer_packet", ParamKind.STRING),
+        ErrorParam("dependency_kind", ParamKind.STRING),
+        ErrorParam("operand_index", ParamKind.STRING),
+        ErrorParam("cycle_path_packets", ParamKind.STRING_LIST),
+        ErrorParam("cycle_path_truncated", ParamKind.BOOL),
+        ErrorParam("witness_edge_only", ParamKind.BOOL),
+    ),
+    fix_hint=(
+        "Inspect the cycle path and dependency kind; the scheduler dependency "
+        "model or the low lowering that produced this graph must break the "
+        "cycle before final scheduling"
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_003,
     ERR_BACKEND_005,
@@ -1105,4 +1149,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_041,
     ERR_BACKEND_042,
     ERR_BACKEND_043,
+    ERR_BACKEND_044,
 )

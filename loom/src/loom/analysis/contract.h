@@ -162,6 +162,13 @@ typedef enum loom_contract_capability_flag_bits_e {
 // Bitset of loom_contract_capability_flag_bits_t values.
 typedef uint32_t loom_contract_capability_flags_t;
 
+// Returns target-independent capabilities implied by a plain dense matrix
+// fragment role. These are canonical no-op facts: unmodified LHS/RHS operands,
+// no source reuse hints, and an unmodified accumulator.
+loom_contract_capability_flags_t
+loom_contract_plain_fragment_available_capability_flags(
+    loom_contract_operand_role_t role);
+
 // Dense auxiliary operand key slots. Keep this enum in the same order as the
 // bit enum below so key -> bit conversion is a shift, not a lookup.
 typedef enum loom_contract_auxiliary_operand_key_e {

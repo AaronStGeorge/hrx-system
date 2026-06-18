@@ -48,6 +48,9 @@ loom_cc_library(
   DEPS
     ::compile_options
     iree::base
+    loom::error::diagnostic
+    loom::error::json_sink
+    loom::error::renderer
     loom::target::compile_report
     loom::target::compile_report_format
   PUBLIC
@@ -153,6 +156,8 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::error::error_defs
+    loom::error::json_sink
 )
 
 loom_cc_test(

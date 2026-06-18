@@ -31,8 +31,34 @@ iree_execution_test_suite(
     "shared_memory_vector_tile.loom"
     "shared_memory_wave_tile.loom"
     "target_provider_selection.loom"
+    "wave64_reductions.loom"
   LABELS
     "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "wave64_reductions_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/hip/wave64_reductions.loom}}"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--sample-compilation=per_sample"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 endif()
 

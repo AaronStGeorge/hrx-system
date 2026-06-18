@@ -234,12 +234,10 @@ iree_status_t loom_low_allocation_live_range_ordered_op_program_point(
 
 bool loom_low_allocation_live_range_assignments_conflict(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_liveness_analysis_t* liveness, const uint32_t* unit_end_points,
-    iree_host_size_t unit_end_point_count,
+    const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
   IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(liveness);
   IREE_ASSERT_ARGUMENT(lhs);
   IREE_ASSERT_ARGUMENT(rhs);
   if (!loom_low_allocation_assignment_is_register_like(lhs) ||
@@ -272,11 +270,7 @@ bool loom_low_allocation_live_range_assignments_conflict(
         rhs->start_point >= lhs_unit_end_point) {
       continue;
     }
-    if (loom_low_allocation_live_range_values_overlap(
-            liveness, lhs->value_id, lhs->start_point, lhs_unit_end_point,
-            rhs->value_id, rhs->start_point, rhs_unit_end_point)) {
-      return true;
-    }
+    return true;
   }
   return false;
 }

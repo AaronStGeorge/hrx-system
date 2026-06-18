@@ -1098,6 +1098,7 @@ static bool loom_vector_to_scalar_mma_result_layout_is_supported(
   }
   switch (result->map_kind) {
     case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN:
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD:
     case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN:
       return true;
     case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
@@ -1151,6 +1152,7 @@ static bool loom_vector_to_scalar_mma_reduction_role_layout_is_supported(
                  layout->wave_size;
     case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
     case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN:
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD:
     case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN:
     default:
       return false;
@@ -1237,6 +1239,13 @@ static iree_status_t loom_vector_to_scalar_mma_build_result_coordinate_terms(
           state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, register_base,
           lane_group, out_row);
     }
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD: {
+      const loom_vector_to_scalar_index_term_t register_base =
+          loom_vector_to_scalar_static_term((int64_t)register_index * 2);
+      return loom_vector_to_scalar_build_term_binary(
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, register_base,
+          lane_group, out_row);
+    }
     case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN: {
       const loom_vector_to_scalar_index_term_t register_count =
           loom_vector_to_scalar_static_term(result_layout->register_count);
@@ -1313,6 +1322,7 @@ static iree_status_t loom_vector_to_scalar_mma_build_reduction_source_lane(
     }
     case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
     case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN:
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD:
     case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN:
     default:
       return iree_make_status(IREE_STATUS_INTERNAL,

@@ -446,7 +446,7 @@ static bool loom_amdgpu_sanitizer_assert_access_kinds(
 
 static bool loom_amdgpu_sanitizer_access_payload_type(
     const loom_module_t* module, loom_value_id_t view_value_id,
-    loom_type_t* out_vector_type) {
+    loom_attribute_t static_extents, loom_type_t* out_vector_type) {
   *out_vector_type = loom_type_none();
   if (view_value_id >= module->values.count) {
     return false;
@@ -455,9 +455,27 @@ static bool loom_amdgpu_sanitizer_access_payload_type(
   if (!loom_type_is_view(view_type)) {
     return false;
   }
+  int64_t lane_count = 1;
+  if (!loom_attr_is_absent(static_extents)) {
+    const uint8_t view_rank = loom_type_rank(view_type);
+    if (static_extents.kind != LOOM_ATTR_I64_ARRAY ||
+        static_extents.count != view_rank || view_rank == 0) {
+      return false;
+    }
+    for (uint8_t axis = 0; axis + 1 < view_rank; ++axis) {
+      if (static_extents.i64_array[axis] != 1) {
+        return false;
+      }
+    }
+    lane_count = static_extents.i64_array[view_rank - 1];
+    if (lane_count <= 0) {
+      return false;
+    }
+  }
   *out_vector_type =
       loom_type_shaped_1d(LOOM_TYPE_VECTOR, loom_type_element_type(view_type),
-                          loom_dim_pack_static(1), /*encoding_id=*/0);
+                          loom_dim_pack_static(lane_count),
+                          /*encoding_id=*/0);
   return true;
 }
 
@@ -487,8 +505,10 @@ iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
   const loom_value_id_t view_value_id =
       loom_sanitizer_assert_access_view(source_op);
   const loom_module_t* module = loom_low_lower_context_module(context);
-  if (!loom_amdgpu_sanitizer_access_payload_type(module, view_value_id,
-                                                 &vector_type)) {
+  if (!loom_amdgpu_sanitizer_access_payload_type(
+          module, view_value_id,
+          loom_sanitizer_assert_access_static_extents(source_op),
+          &vector_type)) {
     return iree_ok_status();
   }
 
@@ -504,7 +524,7 @@ iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
   }
   const uint64_t access_size =
       (uint64_t)source.element_byte_count * source.vector_lane_count;
-  if (access_size == 0 || access_size > 8) {
+  if (access_size == 0 || access_size > UINT32_MAX) {
     return iree_ok_status();
   }
 
@@ -516,8 +536,10 @@ iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
   }
   out_plan->report_access_kind = report_kind;
   out_plan->access_size = (uint32_t)access_size;
-  if (loom_low_lower_context_sanitizer_reporting_mode(context) ==
-      LOOM_SANITIZER_REPORTING_MODE_DEFAULT) {
+  const loom_sanitizer_reporting_mode_t reporting_mode =
+      loom_low_lower_context_sanitizer_reporting_mode(context);
+  if (reporting_mode == LOOM_SANITIZER_REPORTING_MODE_DEFAULT ||
+      reporting_mode == LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_site_id_for_op(
         context, source_op, &out_plan->site_id));
   }
@@ -628,6 +650,11 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
           loom_amdgpu_sanitizer_ensure_config_symbols(context, state));
       break;
     }
+    case LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY: {
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_sanitizer_ensure_config_symbols(context, state));
+      break;
+    }
     case LOOM_SANITIZER_REPORTING_MODE_TRAP: {
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_sanitizer_ensure_asan_config_symbol(context, state));
@@ -652,12 +679,6 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
         &branch);
   }
 
-  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
-          builder, descriptor_set, check.failure_mask, source_op->location,
-          &branch));
-
   loom_amdgpu_sanitizer_report_source_t source = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(
       context, source_op, 0, &source.dispatch_ptr));
@@ -678,12 +699,18 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_emit_vgpr_u64_constant(
       context, source_op, plan->site_id, &report.site_id));
 
+  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
+  if (reporting_mode == LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY) {
+    return loom_amdgpu_build_sanitizer_access_report_only_failure_mask_branch(
+        builder, descriptor_set, state->feedback_config_symbol,
+        check.failure_mask, &source, &report, source_op->location, &branch);
+  }
+
   const loom_amdgpu_sanitizer_access_report_island_t* island = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_access_island(
       builder, descriptor_set, state, plan->report_access_kind,
       source_op->location, &island));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_branch(
-      builder, descriptor_set, island, &source, &report, source_op->location));
-  loom_builder_set_block(builder, branch.continuation_block);
-  return iree_ok_status();
+  return loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
+      builder, descriptor_set, island, check.failure_mask, &source, &report,
+      source_op->location, &branch);
 }

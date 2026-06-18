@@ -64,6 +64,21 @@ loom_matrix_fragment_layout_t RdnaLayout() {
   };
 }
 
+loom_matrix_fragment_layout_t RdnaLowSubwordLayout() {
+  loom_matrix_fragment_layout_t layout = RdnaLayout();
+  layout.kind = 2;
+  layout.name = IREE_SV("test.rdna.low_subword");
+  layout.accumulator = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+      LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD, 8,
+      2, kRowColumn);
+  layout.result = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+      LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD, 8,
+      2, kRowColumn);
+  return layout;
+}
+
 loom_matrix_fragment_layout_t CdnaLayout() {
   return (loom_matrix_fragment_layout_t){
       /*.kind=*/2,
@@ -94,6 +109,43 @@ loom_matrix_fragment_layout_t CdnaLayout() {
                  LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1,
                  kRowColumn),
   };
+}
+
+loom_matrix_fragment_layout_t LaneGroupLowSubwordLayout() {
+  loom_matrix_fragment_layout_t layout = CdnaLayout();
+  layout.kind = 3;
+  layout.name = IREE_SV("test.lane_group.low_subword");
+  layout.accumulator = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD, 4, 2,
+      kRowColumn);
+  layout.result = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD, 4, 2,
+      kRowColumn);
+  return layout;
+}
+
+loom_matrix_fragment_layout_t LaneGroupPackedRowLayout() {
+  loom_matrix_fragment_layout_t layout = CdnaLayout();
+  layout.kind = 4;
+  layout.name = IREE_SV("test.lane_group.packed_row");
+  layout.wave_size = 32;
+  layout.lhs = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_LHS,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION, 4, 2,
+      kRowReduction);
+  layout.rhs = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_RHS,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION, 4,
+      2, kColumnReduction);
+  layout.accumulator = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_PACKED_ROW_COLUMN, 4, 2, kRowColumn);
+  layout.result = RoleLayout(
+      LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_PACKED_ROW_COLUMN, 4, 2, kRowColumn);
+  return layout;
 }
 
 void ExpectCoordinate(const loom_matrix_fragment_layout_t* layout,
@@ -207,6 +259,26 @@ TEST(MatrixFragmentLayoutTest, MapsRegisterInterleavedRowColumnCoordinates) {
                    kRowColumn, 15, 15, 0);
 }
 
+TEST(MatrixFragmentLayoutTest, MapsRegisterInterleavedLowSubwordCoordinates) {
+  loom_matrix_fragment_layout_t layout = RdnaLowSubwordLayout();
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0, 0, 0,
+                   kRowColumn, 0, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 15, 0, 0,
+                   kRowColumn, 0, 15, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 16, 0, 0,
+                   kRowColumn, 1, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 31, 7, 0,
+                   kRowColumn, 15, 15, 0);
+
+  loom_matrix_fragment_coordinate_t coordinate = {};
+  EXPECT_FALSE(loom_matrix_fragment_coordinate(
+      &layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 31, 7, 1, &coordinate));
+  ExpectPhysicalElementCount(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                             RowColumn(15, 15), 1);
+  ExpectPhysicalElement(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                        RowColumn(15, 15), 0, 31, 7, 0);
+}
+
 TEST(MatrixFragmentLayoutTest, MapsLaneGroupPackedReductionCoordinates) {
   loom_matrix_fragment_layout_t layout = CdnaLayout();
   ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_LHS, 0, 0, 0,
@@ -238,6 +310,45 @@ TEST(MatrixFragmentLayoutTest, MapsLaneGroupRegisterRowColumnCoordinates) {
                    kRowColumn, 4, 0, 0);
   ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3, 0,
                    kRowColumn, 15, 15, 0);
+}
+
+TEST(MatrixFragmentLayoutTest, MapsLaneGroupLowSubwordCoordinates) {
+  loom_matrix_fragment_layout_t layout = LaneGroupLowSubwordLayout();
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0, 0, 0,
+                   kRowColumn, 0, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 15, 3, 0,
+                   kRowColumn, 3, 15, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 16, 0, 0,
+                   kRowColumn, 4, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3, 0,
+                   kRowColumn, 15, 15, 0);
+
+  loom_matrix_fragment_coordinate_t coordinate = {};
+  EXPECT_FALSE(loom_matrix_fragment_coordinate(
+      &layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3, 1, &coordinate));
+  ExpectPhysicalElementCount(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                             RowColumn(15, 15), 1);
+  ExpectPhysicalElement(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                        RowColumn(15, 15), 0, 63, 3, 0);
+}
+
+TEST(MatrixFragmentLayoutTest, MapsLaneGroupPackedRowCoordinates) {
+  loom_matrix_fragment_layout_t layout = LaneGroupPackedRowLayout();
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0, 0, 0,
+                   kRowColumn, 0, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0, 0, 1,
+                   kRowColumn, 1, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 15, 3, 1,
+                   kRowColumn, 7, 15, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 16, 0, 0,
+                   kRowColumn, 8, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 31, 3, 1,
+                   kRowColumn, 15, 15, 0);
+
+  ExpectPhysicalElementCount(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                             RowColumn(15, 15), 1);
+  ExpectPhysicalElement(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                        RowColumn(15, 15), 0, 31, 3, 1);
 }
 
 TEST(MatrixFragmentLayoutTest, RejectsOutOfRangeElements) {

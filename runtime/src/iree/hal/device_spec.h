@@ -496,7 +496,10 @@ typedef struct iree_hal_device_subgroup_spec_t {
   uint32_t minimum_size;
   // Maximum supported subgroup size.
   uint32_t maximum_size;
-  // Bitmask of supported subgroup sizes.
+  // Bitmask of supported subgroup sizes less than 64.
+  //
+  // Subgroup size 64 is represented by |minimum_size|/|maximum_size| because a
+  // uint64_t mask cannot encode bit 64.
   uint64_t supported_size_mask;
 } iree_hal_device_subgroup_spec_t;
 

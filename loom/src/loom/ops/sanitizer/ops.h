@@ -53,6 +53,7 @@ LOOM_DEFINE_OPERAND(loom_sanitizer_assert_access_view, 0)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_sanitizer_assert_access_indices, 1)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_assert_access_kind, 0, loom_sanitizer_assert_access_kind_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_sanitizer_assert_access_static_indices, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_sanitizer_assert_access_static_extents, 2)
 iree_status_t loom_sanitizer_assert_access_build(
     loom_builder_t* builder,
     loom_sanitizer_assert_access_kind_t kind,
@@ -61,6 +62,8 @@ iree_status_t loom_sanitizer_assert_access_build(
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
+    loom_optional const int64_t* static_extents,
+    iree_host_size_t static_extents_count,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_sanitizer_assert_access_verify(

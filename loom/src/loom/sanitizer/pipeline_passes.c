@@ -8,10 +8,16 @@
 
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/sanitizer/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
+#include "loom/ops/vector/memory.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
@@ -509,6 +515,9 @@ static bool loom_sanitizer_value_slices_equal(loom_value_slice_t lhs,
 
 static bool loom_sanitizer_i64_arrays_equal(loom_attribute_t lhs,
                                             loom_attribute_t rhs) {
+  if (loom_attr_is_absent(lhs) && loom_attr_is_absent(rhs)) {
+    return true;
+  }
   if (lhs.kind != LOOM_ATTR_I64_ARRAY || rhs.kind != LOOM_ATTR_I64_ARRAY ||
       lhs.count != rhs.count) {
     return false;
@@ -524,7 +533,7 @@ static bool loom_sanitizer_i64_arrays_equal(loom_attribute_t lhs,
 static bool loom_sanitizer_preceded_by_matching_access_assertion(
     loom_op_t* op, loom_sanitizer_assert_access_kind_t kind,
     loom_value_id_t view, loom_value_slice_t indices,
-    loom_attribute_t static_indices) {
+    loom_attribute_t static_indices, loom_attribute_t static_extents) {
   loom_op_t* previous_op = op->prev_op;
   if (!previous_op || !loom_sanitizer_assert_access_isa(previous_op) ||
       loom_sanitizer_assert_access_kind(previous_op) != kind ||
@@ -535,20 +544,137 @@ static bool loom_sanitizer_preceded_by_matching_access_assertion(
              loom_sanitizer_assert_access_indices(previous_op), indices) &&
          loom_sanitizer_i64_arrays_equal(
              loom_sanitizer_assert_access_static_indices(previous_op),
-             static_indices);
+             static_indices) &&
+         loom_sanitizer_i64_arrays_equal(
+             loom_sanitizer_assert_access_static_extents(previous_op),
+             static_extents);
+}
+
+static iree_status_t loom_sanitizer_emit_pass_diagnostic(
+    loom_pass_t* pass, const loom_op_t* op, const loom_error_def_t* error,
+    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = error,
+      .params = params,
+      .param_count = param_count,
+  };
+  return iree_diagnostic_emit(pass->diagnostic_emitter, &emission);
+}
+
+static iree_status_t loom_sanitizer_emit_vector_access_unsupported(
+    loom_pass_t* pass, loom_module_t* module, const loom_op_t* op) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
+  };
+  return loom_sanitizer_emit_pass_diagnostic(pass, op, LOOM_ERR_SUBRANGE_021,
+                                             params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_emit_vector_access_dynamic(
+    loom_pass_t* pass, loom_module_t* module, const loom_op_t* op) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
+  };
+  return loom_sanitizer_emit_pass_diagnostic(pass, op, LOOM_ERR_SUBRANGE_019,
+                                             params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_emit_vector_access_rank(
+    loom_pass_t* pass, loom_module_t* module, const loom_op_t* op,
+    uint8_t vector_rank) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_i64(vector_rank),
+  };
+  return loom_sanitizer_emit_pass_diagnostic(pass, op, LOOM_ERR_SUBRANGE_020,
+                                             params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_vector_static_extents(
+    loom_pass_t* pass, loom_module_t* module,
+    const loom_vector_memory_footprint_t* footprint,
+    loom_attribute_t* out_static_extents) {
+  *out_static_extents = loom_attr_absent();
+  const uint8_t view_rank = footprint->vector_access.view_rank;
+  int64_t* static_extents = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(pass->arena, view_rank,
+                                                 sizeof(*static_extents),
+                                                 (void**)&static_extents));
+  if (!loom_vector_memory_footprint_static_extents(footprint, static_extents,
+                                                   view_rank)) {
+    return loom_sanitizer_emit_vector_access_dynamic(pass, module,
+                                                     footprint->access.op);
+  }
+  *out_static_extents = loom_attr_i64_array(static_extents, view_rank);
+  return iree_ok_status();
+}
+
+static bool loom_sanitizer_access_kind_from_vector_footprint(
+    const loom_vector_memory_footprint_t* footprint,
+    loom_sanitizer_assert_access_kind_t* out_kind) {
+  const bool reads =
+      iree_any_bit_set(footprint->flags, LOOM_VECTOR_MEMORY_FOOTPRINT_READS);
+  const bool writes =
+      iree_any_bit_set(footprint->flags, LOOM_VECTOR_MEMORY_FOOTPRINT_WRITES);
+  if (reads && writes) {
+    *out_kind = LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ_WRITE;
+    return true;
+  } else if (writes) {
+    *out_kind = LOOM_SANITIZER_ASSERT_ACCESS_KIND_WRITE;
+    return true;
+  } else if (reads) {
+    *out_kind = LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ;
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_sanitizer_emit_vector_access_element_count(
+    loom_pass_t* pass, loom_module_t* module, const loom_op_t* op,
+    loom_type_t vector_type) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_string(pass->info->name),
+      loom_param_type(vector_type),
+  };
+  return loom_sanitizer_emit_pass_diagnostic(pass, op, LOOM_ERR_SHAPE_007,
+                                             params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_vector_static_lane_count(
+    loom_pass_t* pass, loom_module_t* module,
+    const loom_vector_memory_footprint_t* footprint, uint16_t* out_lane_count) {
+  *out_lane_count = 0;
+  uint64_t element_count = 0;
+  if (!loom_type_static_element_count(footprint->vector_type, &element_count)) {
+    return loom_sanitizer_emit_vector_access_dynamic(pass, module,
+                                                     footprint->access.op);
+  }
+  if (element_count > UINT16_MAX) {
+    return loom_sanitizer_emit_vector_access_element_count(
+        pass, module, footprint->access.op, footprint->vector_type);
+  }
+  *out_lane_count = (uint16_t)element_count;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_sanitizer_build_access_assertion(
     loom_module_t* module, loom_rewriter_t* rewriter,
     loom_sanitizer_assert_access_kind_t kind, loom_value_id_t view,
     loom_value_slice_t indices, loom_attribute_t static_indices,
-    loom_location_id_t source_location, loom_op_t** out_op) {
+    loom_attribute_t static_extents, loom_location_id_t source_location,
+    loom_op_t** out_op) {
   loom_location_id_t site_location = LOOM_LOCATION_UNKNOWN;
+  const loom_sanitizer_lane_policy_t lane_policy =
+      loom_attr_is_absent(static_extents)
+          ? LOOM_SANITIZER_LANE_POLICY_SCALAR
+          : LOOM_SANITIZER_LANE_POLICY_ALL_LANES;
   const loom_sanitizer_site_payload_t payload = {
       .site_kind = LOOM_SANITIZER_SITE_KIND_ACCESS,
       .check_kind = LOOM_SANITIZER_CHECK_KIND_ACCESS_RANGE,
       .provenance_kind = LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT,
-      .lane_policy = LOOM_SANITIZER_LANE_POLICY_SCALAR,
+      .lane_policy = lane_policy,
       .lineage_role = LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL,
       .flags = 0,
       .extension_data = iree_const_byte_span_empty(),
@@ -557,7 +683,238 @@ static iree_status_t loom_sanitizer_build_access_assertion(
       module, source_location, &payload, &site_location));
   return loom_sanitizer_assert_access_build(
       &rewriter->builder, kind, view, indices.values, indices.count,
-      static_indices.i64_array, static_indices.count, site_location, out_op);
+      static_indices.i64_array, static_indices.count, static_extents.i64_array,
+      static_extents.count, site_location, out_op);
+}
+
+static iree_status_t loom_sanitizer_extract_vector_static_lane(
+    loom_rewriter_t* rewriter, loom_value_id_t vector, loom_type_t vector_type,
+    uint16_t lane_ordinal, loom_location_id_t location,
+    loom_value_id_t* out_lane) {
+  int64_t static_index = lane_ordinal;
+  loom_type_t result_type =
+      loom_type_scalar(loom_type_element_type(vector_type));
+  loom_op_t* extract_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_extract_build(
+      &rewriter->builder, vector, NULL, 0, &static_index, 1, result_type,
+      location, &extract_op));
+  *out_lane = loom_vector_extract_result(extract_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_cast_to_index(loom_module_t* module,
+                                                  loom_rewriter_t* rewriter,
+                                                  loom_value_id_t value,
+                                                  loom_location_id_t location,
+                                                  loom_value_id_t* out_index) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t value_type = loom_module_value_type(module, value);
+  if (loom_type_equal(value_type, index_type)) {
+    *out_index = value;
+    return iree_ok_status();
+  }
+  loom_op_t* cast_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_cast_build(
+      &rewriter->builder, value, value_type, index_type, location, &cast_op));
+  *out_index = loom_index_cast_result(cast_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_build_index_constant(
+    loom_rewriter_t* rewriter, int64_t value, loom_location_id_t location,
+    loom_value_id_t* out_index) {
+  loom_op_t* constant_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_constant_build(
+      &rewriter->builder, loom_attr_i64(value),
+      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), location, &constant_op));
+  *out_index = loom_index_constant_result(constant_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_build_index_add(
+    loom_rewriter_t* rewriter, loom_value_id_t lhs, loom_value_id_t rhs,
+    loom_location_id_t location, loom_value_id_t* out_index) {
+  loom_op_t* add_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_add_build(
+      &rewriter->builder, lhs, rhs, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      location, &add_op));
+  *out_index = loom_index_add_result(add_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_build_vector_atomic_lane_index(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    const loom_vector_memory_footprint_t* footprint, uint16_t lane_ordinal,
+    loom_value_slice_t* out_indices, loom_attribute_t* out_static_indices) {
+  *out_indices = (loom_value_slice_t){0};
+  *out_static_indices = loom_attr_absent();
+  const uint8_t view_rank = footprint->vector_access.view_rank;
+  if (footprint->static_indices.kind != LOOM_ATTR_I64_ARRAY ||
+      footprint->static_indices.count != view_rank ||
+      footprint->offsets == LOOM_VALUE_ID_INVALID) {
+    return loom_sanitizer_emit_vector_access_unsupported(pass, module,
+                                                         footprint->access.op);
+  }
+  uint16_t expected_dynamic_count = 0;
+  for (uint8_t axis = 0; axis < view_rank; ++axis) {
+    if (footprint->static_indices.i64_array[axis] == INT64_MIN) {
+      ++expected_dynamic_count;
+    }
+  }
+  if (expected_dynamic_count != footprint->dynamic_indices.count) {
+    return loom_sanitizer_emit_vector_access_unsupported(pass, module,
+                                                         footprint->access.op);
+  }
+
+  loom_type_t offset_type = loom_module_value_type(module, footprint->offsets);
+  loom_value_id_t offset_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_extract_vector_static_lane(
+      rewriter, footprint->offsets, offset_type, lane_ordinal,
+      footprint->access.op->location, &offset_lane));
+  loom_value_id_t offset_index = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_cast_to_index(
+      module, rewriter, offset_lane, footprint->access.op->location,
+      &offset_index));
+
+  int64_t* static_indices = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, view_rank,
+                                                 sizeof(*static_indices),
+                                                 (void**)&static_indices));
+  loom_value_id_t* dynamic_indices = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, view_rank,
+                                                 sizeof(*dynamic_indices),
+                                                 (void**)&dynamic_indices));
+
+  uint16_t source_dynamic_ordinal = 0;
+  uint16_t dynamic_count = 0;
+  for (uint8_t axis = 0; axis < view_rank; ++axis) {
+    const int64_t origin = footprint->static_indices.i64_array[axis];
+    if (axis + 1 < view_rank) {
+      static_indices[axis] = origin;
+      if (origin == INT64_MIN) {
+        dynamic_indices[dynamic_count++] =
+            footprint->dynamic_indices.values[source_dynamic_ordinal++];
+      }
+      continue;
+    }
+
+    static_indices[axis] = INT64_MIN;
+    loom_value_id_t base_index = LOOM_VALUE_ID_INVALID;
+    if (origin == INT64_MIN) {
+      base_index = footprint->dynamic_indices.values[source_dynamic_ordinal++];
+    } else if (origin != 0) {
+      IREE_RETURN_IF_ERROR(loom_sanitizer_build_index_constant(
+          rewriter, origin, footprint->access.op->location, &base_index));
+    }
+
+    loom_value_id_t lane_index = offset_index;
+    if (base_index != LOOM_VALUE_ID_INVALID) {
+      IREE_RETURN_IF_ERROR(loom_sanitizer_build_index_add(
+          rewriter, base_index, offset_index, footprint->access.op->location,
+          &lane_index));
+    }
+    dynamic_indices[dynamic_count++] = lane_index;
+  }
+
+  *out_indices = (loom_value_slice_t){
+      .values = dynamic_indices,
+      .count = dynamic_count,
+  };
+  *out_static_indices = loom_attr_i64_array(static_indices, view_rank);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_insert_access_assertion(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    loom_sanitizer_assert_access_kind_t kind, loom_value_id_t view,
+    loom_value_slice_t indices, loom_attribute_t static_indices,
+    loom_attribute_t static_extents, loom_location_id_t source_location) {
+  loom_op_t* assert_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_build_access_assertion(
+      module, rewriter, kind, view, indices, static_indices, static_extents,
+      source_location, &assert_op));
+  (void)assert_op;
+  loom_sanitizer_insert_assertions_statistics_t* statistics =
+      loom_sanitizer_insert_assertions_statistics(pass);
+  ++statistics->access_assertions_inserted;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_insert_vector_atomic_lane_assertion(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    const loom_vector_memory_footprint_t* footprint,
+    loom_sanitizer_assert_access_kind_t kind, uint16_t lane_ordinal) {
+  loom_value_slice_t indices = {0};
+  loom_attribute_t static_indices = loom_attr_absent();
+  IREE_RETURN_IF_ERROR(loom_sanitizer_build_vector_atomic_lane_index(
+      pass, module, rewriter, footprint, lane_ordinal, &indices,
+      &static_indices));
+  return loom_sanitizer_insert_access_assertion(
+      pass, module, rewriter, kind, footprint->view, indices, static_indices,
+      loom_attr_absent(), footprint->access.op->location);
+}
+
+static iree_status_t loom_sanitizer_insert_masked_vector_atomic_lane_assertion(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    const loom_vector_memory_footprint_t* footprint,
+    loom_sanitizer_assert_access_kind_t kind, uint16_t lane_ordinal) {
+  loom_type_t mask_type = loom_module_value_type(module, footprint->mask);
+  loom_value_id_t condition = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_extract_vector_static_lane(
+      rewriter, footprint->mask, mask_type, lane_ordinal,
+      footprint->access.op->location, &condition));
+
+  loom_op_t* if_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(
+      &rewriter->builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION, condition,
+      NULL, 0, NULL, 0, footprint->access.op->location, &if_op));
+
+  loom_builder_ip_t saved = loom_builder_enter_region(
+      &rewriter->builder, if_op, loom_scf_if_then_region(if_op));
+  IREE_RETURN_IF_ERROR(loom_sanitizer_insert_vector_atomic_lane_assertion(
+      pass, module, rewriter, footprint, kind, lane_ordinal));
+  loom_op_t* then_yield = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&rewriter->builder, NULL, 0,
+                                            footprint->access.op->location,
+                                            &then_yield));
+  loom_builder_restore(&rewriter->builder, saved);
+
+  saved = loom_builder_enter_region(&rewriter->builder, if_op,
+                                    loom_scf_if_else_region(if_op));
+  loom_op_t* else_yield = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&rewriter->builder, NULL, 0,
+                                            footprint->access.op->location,
+                                            &else_yield));
+  loom_builder_restore(&rewriter->builder, saved);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_try_instrument_vector_atomic_access_op(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    const loom_vector_memory_footprint_t* footprint,
+    loom_sanitizer_assert_access_kind_t kind) {
+  if (footprint->vector_access.vector_rank != 1) {
+    return loom_sanitizer_emit_vector_access_rank(
+        pass, module, footprint->access.op,
+        footprint->vector_access.vector_rank);
+  }
+  uint16_t lane_count = 0;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_vector_static_lane_count(
+      pass, module, footprint, &lane_count));
+  loom_builder_set_before(&rewriter->builder, footprint->access.op);
+  const bool has_mask =
+      footprint->kind == LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_ATOMIC_PER_LANE;
+  for (uint16_t lane_ordinal = 0; lane_ordinal < lane_count; ++lane_ordinal) {
+    if (has_mask) {
+      IREE_RETURN_IF_ERROR(
+          loom_sanitizer_insert_masked_vector_atomic_lane_assertion(
+              pass, module, rewriter, footprint, kind, lane_ordinal));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_sanitizer_insert_vector_atomic_lane_assertion(
+          pass, module, rewriter, footprint, kind, lane_ordinal));
+    }
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_sanitizer_try_instrument_access_op(
@@ -567,6 +924,7 @@ static iree_status_t loom_sanitizer_try_instrument_access_op(
   loom_value_id_t view = LOOM_VALUE_ID_INVALID;
   loom_value_slice_t indices = {0};
   loom_attribute_t static_indices = loom_attr_absent();
+  loom_attribute_t static_extents = loom_attr_absent();
   if (loom_view_load_isa(op)) {
     kind = LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ;
     view = loom_view_load_view(op);
@@ -578,22 +936,49 @@ static iree_status_t loom_sanitizer_try_instrument_access_op(
     indices = loom_view_store_indices(op);
     static_indices = loom_view_store_static_indices(op);
   } else {
-    return iree_ok_status();
+    loom_vector_memory_footprint_t footprint = {0};
+    const loom_fact_context_t* fact_context =
+        rewriter->fact_table ? &rewriter->fact_table->context : NULL;
+    if (!loom_vector_memory_footprint_describe(fact_context, module, op,
+                                               &footprint)) {
+      return iree_ok_status();
+    }
+    if (!loom_sanitizer_access_kind_from_vector_footprint(&footprint, &kind)) {
+      return loom_sanitizer_emit_vector_access_unsupported(pass, module, op);
+    }
+    switch (footprint.kind) {
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_DENSE:
+        break;
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_ATOMIC_PER_LANE:
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_ATOMIC_PER_LANE:
+        return loom_sanitizer_try_instrument_vector_atomic_access_op(
+            pass, module, rewriter, &footprint, kind);
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_NONE:
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_DENSE:
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_COMPRESS_EXPAND:
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_PER_LANE_OFFSET:
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_PER_LANE_OFFSET:
+      case LOOM_VECTOR_MEMORY_FOOTPRINT_FRAGMENT:
+        return loom_sanitizer_emit_vector_access_unsupported(pass, module, op);
+    }
+    if (footprint.vector_access.vector_rank != 1) {
+      return loom_sanitizer_emit_vector_access_rank(
+          pass, module, op, footprint.vector_access.vector_rank);
+    }
+    view = footprint.view;
+    indices = footprint.dynamic_indices;
+    static_indices = footprint.static_indices;
+    IREE_RETURN_IF_ERROR(loom_sanitizer_vector_static_extents(
+        pass, module, &footprint, &static_extents));
   }
   if (loom_sanitizer_preceded_by_matching_access_assertion(
-          op, kind, view, indices, static_indices)) {
+          op, kind, view, indices, static_indices, static_extents)) {
     return iree_ok_status();
   }
   loom_builder_set_before(&rewriter->builder, op);
-  loom_op_t* assert_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_sanitizer_build_access_assertion(
-      module, rewriter, kind, view, indices, static_indices, op->location,
-      &assert_op));
-  (void)assert_op;
-  loom_sanitizer_insert_assertions_statistics_t* statistics =
-      loom_sanitizer_insert_assertions_statistics(pass);
-  ++statistics->access_assertions_inserted;
-  return iree_ok_status();
+  return loom_sanitizer_insert_access_assertion(pass, module, rewriter, kind,
+                                                view, indices, static_indices,
+                                                static_extents, op->location);
 }
 
 static iree_status_t loom_sanitizer_filter_predicates(
@@ -1034,6 +1419,7 @@ iree_status_t loom_sanitizer_insert_assertions_run(loom_pass_t* pass,
       status =
           loom_sanitizer_try_instrument_access_op(pass, module, &rewriter, op);
       if (!iree_status_is_ok(status)) continue;
+      if (loom_pass_has_error_diagnostics(pass)) break;
     }
     if (!value_checks_enabled) continue;
     if (loom_scalar_assume_isa(op)) {

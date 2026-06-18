@@ -56,6 +56,13 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_shuffle_plan(
       !loom_amdgpu_subgroup_shuffle_width_is_supported(width, wavefront_size)) {
     return iree_ok_status();
   }
+  bool direct_width_supported = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
+      module, loom_low_lower_context_target_ref(context), wavefront_size,
+      (uint32_t)width, &direct_width_supported));
+  if (!direct_width_supported) {
+    return iree_ok_status();
+  }
 
   int64_t offset = 0;
   if (!loom_amdgpu_value_as_exact_i32(
@@ -358,6 +365,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(
     return loom_amdgpu_low_legality_reject(
         context, op, IREE_SV("subgroup_shuffle.power_of_two_width"));
   }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_direct_subgroup_width(
+      context, op, wavefront_size, (uint32_t)width,
+      IREE_SV("subgroup_shuffle.native_width")));
 
   int64_t offset = 0;
   if (!loom_amdgpu_value_as_exact_i32(

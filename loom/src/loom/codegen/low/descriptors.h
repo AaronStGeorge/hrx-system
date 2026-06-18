@@ -1057,6 +1057,25 @@ iree_string_view_t loom_low_operand_role_name(loom_low_operand_role_t role);
 // descriptor. Result and implicit rows are not packet operands.
 bool loom_low_operand_role_is_packet_operand(loom_low_operand_role_t role);
 
+// Returns true if |descriptor_operand_index| names an explicit low packet
+// operand. The descriptor must be a verified row from |descriptor_set|.
+bool loom_low_descriptor_operand_maps_to_packet_operand(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t descriptor_operand_index);
+
+// Returns the low packet operand index for |descriptor_operand_index|. The
+// descriptor operand must map to an explicit low packet operand.
+uint16_t loom_low_descriptor_operand_packet_index(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t descriptor_operand_index);
+
+// Returns the descriptor operand index for |packet_operand_index|, or
+// LOOM_LOW_ID_NONE when no explicit descriptor operand maps to that packet
+// operand.
+uint16_t loom_low_descriptor_packet_operand_descriptor_index(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t packet_operand_index);
+
 // Returns the stable diagnostic spelling for an operand address map.
 iree_string_view_t loom_low_operand_address_map_kind_name(
     loom_low_operand_address_map_kind_t kind);

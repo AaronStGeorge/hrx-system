@@ -222,7 +222,15 @@ static iree_status_t loom_target_artifact_manifest_collect_low_layout(
   IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_try_u32_attr(
       module, abi_layout, IREE_SV("direct_arg_count"),
       &direct_arg_count_present, &direct_arg_count));
-  if (resource_count_present || direct_arg_count_present) {
+  bool parameter_count_present = false;
+  uint32_t parameter_count = 0;
+  IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_try_u32_attr(
+      module, abi_layout, IREE_SV("parameter_count"), &parameter_count_present,
+      &parameter_count));
+  if (parameter_count_present) {
+    loom_target_artifact_manifest_set_parameter_count(out_interface,
+                                                      parameter_count);
+  } else if (resource_count_present || direct_arg_count_present) {
     if (direct_arg_count > UINT32_MAX - resource_count) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "HAL parameter count overflows uint32_t");

@@ -254,7 +254,7 @@ loom_target_pipeline_build_source_safe_normalization_after_legalize(
     loom_builder_t* builder, void* user_data) {
   (void)user_data;
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
-      builder, IREE_SV("vector-gather-to-scalar")));
+      builder, IREE_SV("vector-memory-to-scalar")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("linearize-view-accesses")));
   return loom_target_pipeline_build_cleanup(builder);

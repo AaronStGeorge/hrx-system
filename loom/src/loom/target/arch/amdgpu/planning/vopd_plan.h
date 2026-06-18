@@ -358,11 +358,11 @@ iree_status_t loom_amdgpu_vopd_plan_build(
     iree_arena_allocator_t* arena, loom_amdgpu_vopd_plan_t* out_plan);
 
 // Builds AMDGPU scheduling affinities for descriptors that can later form VOPD
-// pairs. These are scheduling hints only; loom_amdgpu_vopd_plan_build remains
-// the final post-allocation legality check.
+// pairs on |target|. These are scheduling hints only;
+// loom_amdgpu_vopd_plan_build remains the final post-allocation legality
+// check.
 iree_status_t loom_amdgpu_vopd_build_schedule_pair_affinities(
-    const loom_low_descriptor_set_t* descriptor_set,
-    iree_arena_allocator_t* arena,
+    const loom_low_resolved_target_t* target, iree_arena_allocator_t* arena,
     loom_low_schedule_pair_affinity_list_t* out_affinities);
 
 // Verifies that |plan| describes |schedule| and |allocation|.

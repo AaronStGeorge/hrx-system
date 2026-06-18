@@ -1201,15 +1201,69 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot8_i32_iu4_overlay(lhs_signed=False, rhs_signed=True),
         _v_dot8_u32_u4_overlay(),
         *_with_zero_accumulator_form(_v_wmma_f32_16x16x16_f16_overlay(input_units=8)),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_f16_overlay(
+                descriptor_key_suffix=".w64",
+                low_mnemonic_suffix="_w64",
+                input_units=8,
+                accumulator_units=4,
+                accumulator_size_exception_reason=_WMMA_GFX11_WAVE64_ACCUMULATOR_SIZE_REASON,
+            )
+        ),
         *_with_zero_accumulator_form(_v_wmma_f32_16x16x16_bf16_overlay(input_units=8)),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_bf16_overlay(
+                descriptor_key_suffix=".w64",
+                low_mnemonic_suffix="_w64",
+                input_units=8,
+                accumulator_units=4,
+                accumulator_size_exception_reason=_WMMA_GFX11_WAVE64_ACCUMULATOR_SIZE_REASON,
+            )
+        ),
         *_with_zero_accumulator_form(
             _v_wmma_f16_16x16x16_f16_overlay(input_units=8, accumulator_units=8)
         ),
         *_with_zero_accumulator_form(
+            _v_wmma_f16_16x16x16_f16_overlay(
+                descriptor_key_suffix=".w64",
+                low_mnemonic_suffix="_w64",
+                input_units=8,
+                accumulator_units=4,
+                accumulator_size_exception_reason=_WMMA_GFX11_WAVE64_ACCUMULATOR_SIZE_REASON,
+            )
+        ),
+        *_with_zero_accumulator_form(
             _v_wmma_bf16_16x16x16_bf16_overlay(input_units=8, accumulator_units=8)
         ),
+        *_with_zero_accumulator_form(
+            _v_wmma_bf16_16x16x16_bf16_overlay(
+                descriptor_key_suffix=".w64",
+                low_mnemonic_suffix="_w64",
+                input_units=8,
+                accumulator_units=4,
+                accumulator_size_exception_reason=_WMMA_GFX11_WAVE64_ACCUMULATOR_SIZE_REASON,
+            )
+        ),
         *_with_zero_accumulator_form(_v_wmma_i32_16x16x16_iu8_overlay(operand_units=4)),
+        *_with_zero_accumulator_form(
+            _v_wmma_i32_16x16x16_iu8_overlay(
+                descriptor_key_suffix=".w64",
+                low_mnemonic_suffix="_w64",
+                operand_units=4,
+                accumulator_units=4,
+                accumulator_size_exception_reason=_WMMA_GFX11_WAVE64_ACCUMULATOR_SIZE_REASON,
+            )
+        ),
         *_with_zero_accumulator_form(_v_wmma_i32_16x16x16_iu4_overlay(operand_units=2)),
+        *_with_zero_accumulator_form(
+            _v_wmma_i32_16x16x16_iu4_overlay(
+                descriptor_key_suffix=".w64",
+                low_mnemonic_suffix="_w64",
+                operand_units=2,
+                accumulator_units=4,
+                accumulator_size_exception_reason=_WMMA_GFX11_WAVE64_ACCUMULATOR_SIZE_REASON,
+            )
+        ),
         _s_barrier_overlay(),
         _s_sendmsg_overlay(),
         _s_sendmsg_rtn_b32_overlay(),

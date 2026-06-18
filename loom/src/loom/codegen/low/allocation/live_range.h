@@ -87,8 +87,7 @@ iree_status_t loom_low_allocation_live_range_ordered_op_program_point(
 // read.
 bool loom_low_allocation_live_range_assignments_conflict(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_liveness_analysis_t* liveness, const uint32_t* unit_end_points,
-    iree_host_size_t unit_end_point_count,
+    const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs);
 

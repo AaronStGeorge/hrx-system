@@ -50,7 +50,14 @@ def test_generation_resolves_gfx1250_supplemental_matrix_descriptors() -> None:
 
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X128_FP8_BF8" in wmma
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_SWMMAC_F16_16X16X128_BF8_FP8" in swmmac
+    assert ".source_requirement_flags = LOOM_AMDGPU_MATRIX_CONTRACT_SOURCE_REQUIREMENT_FRAGMENT_LAYOUT" in swmmac
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_SCALE16_F32_32X16X128_F4" in scaled_f4
+
+
+def test_generation_emits_empty_source_requirement_flags() -> None:
+    initializer = _contract_initializer(_contract("swmmac.f32.16x16x32.f16"))
+
+    assert ".source_requirement_flags = 0" in initializer
 
 
 def test_generation_resolves_gfx12_wmma_abi_shape_variants() -> None:
@@ -61,6 +68,16 @@ def test_generation_resolves_gfx12_wmma_abi_shape_variants() -> None:
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X16_F16" in f16
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_BF16_16X16X16_BF16" in bf16
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_I32_16X16X16_IU4" in iu4
+
+
+def test_generation_resolves_gfx11_wmma_wave64_abi_shape_variants() -> None:
+    f32_f16 = _contract_initializer(_contract("wmma.f32.16x16x16.f16.w64"))
+    f16 = _contract_initializer(_contract("wmma.f16.16x16x16.f16.w64"))
+    iu8 = _contract_initializer(_contract("wmma.i32.16x16x16.iu8.w64"))
+
+    assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X16_F16_W64" in f32_f16
+    assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F16_16X16X16_F16_W64" in f16
+    assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_I32_16X16X16_IU8_W64" in iu8
 
 
 def test_generation_rejects_low_descriptor_payload_shape_drift() -> None:

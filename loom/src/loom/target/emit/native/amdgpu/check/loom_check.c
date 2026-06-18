@@ -324,7 +324,7 @@ static iree_status_t loom_amdgpu_loom_check_build_schedule_pair_affinities(
     return iree_ok_status();
   }
   return loom_amdgpu_vopd_build_schedule_pair_affinities(
-      target.descriptor_set, request->case_arena, out_affinities);
+      &target, request->case_arena, out_affinities);
 }
 
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
@@ -369,6 +369,9 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
       selected_storage_lease_provider, &spill_free_options, &frame));
   if (request->diagnostic_collector != NULL &&
       request->diagnostic_collector->count != 0) {
+    return iree_ok_status();
+  }
+  if (frame.schedule.error_count != 0 || frame.allocation.error_count != 0) {
     return iree_ok_status();
   }
   if (iree_string_view_equal(request->target_name, IREE_SV("amdgpu-native"))) {

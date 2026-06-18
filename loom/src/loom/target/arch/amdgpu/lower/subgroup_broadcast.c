@@ -58,6 +58,13 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
   if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
     return iree_ok_status();
   }
+  bool direct_width_supported = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
+      module, loom_low_lower_context_target_ref(context), wavefront_size,
+      wavefront_size, &direct_width_supported));
+  if (!direct_width_supported) {
+    return iree_ok_status();
+  }
 
   const loom_value_id_t source_lane =
       loom_kernel_subgroup_broadcast_lane(source_op);
@@ -115,6 +122,13 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_first_plan(
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
   if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
+    return iree_ok_status();
+  }
+  bool direct_width_supported = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
+      module, loom_low_lower_context_target_ref(context), wavefront_size,
+      wavefront_size, &direct_width_supported));
+  if (!direct_width_supported) {
     return iree_ok_status();
   }
 
@@ -291,6 +305,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast(
     return loom_amdgpu_low_legality_reject(
         context, op, IREE_SV("subgroup_broadcast.wavefront_size"));
   }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_direct_subgroup_width(
+      context, op, wavefront_size, wavefront_size,
+      IREE_SV("subgroup_broadcast.native_width")));
 
   const loom_value_id_t source_lane = loom_kernel_subgroup_broadcast_lane(op);
   if (!loom_amdgpu_subgroup_i32_lane_is_in_range(
@@ -330,6 +347,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast_first(
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
       context, op, IREE_SV("subgroup_broadcast_first.wavefront_size"),
       &unused_wavefront_size));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_direct_subgroup_width(
+      context, op, unused_wavefront_size, unused_wavefront_size,
+      IREE_SV("subgroup_broadcast_first.native_width")));
   return loom_amdgpu_low_legality_verify_descriptor_requirement(
       context, op, LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32,
       IREE_SV("descriptor.v_readfirstlane_b32"));

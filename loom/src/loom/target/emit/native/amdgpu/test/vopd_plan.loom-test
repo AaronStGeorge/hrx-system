@@ -202,6 +202,21 @@ low.func.def target(@gfx11_target) @gfx11_vopd_plan_mov_pair(%resource: reg<amdg
 
 // ====
 
+// RUN: emit amdgpu-vopd-plan-json @gfx11_wave64_vopd_plan_mov_pair fixed=%zero:physical_register:0:1 fixed=%answer:physical_register:1:1
+amdgpu.target<gfx1100> @gfx11_wave64_target {subgroup_size = 64}
+low.func.def target(@gfx11_wave64_target) @gfx11_wave64_vopd_plan_mov_pair(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %zero = v_mov_b32 0
+  %answer = v_mov_b32 42
+  buffer_store_dword %zero, %resource, %vaddr, %soffset
+  buffer_store_dword %answer, %resource, %vaddr, %soffset {offset = 4}
+  return
+}
+
+// ----
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_wave64_vopd_plan_mov_pair","target":"gfx11_wave64_target","descriptor_set":"amdgpu.rdna3.core","pair_count":0,"rejection_count":0,"packet_count":0,"pairs":[],"rejections":[],"packets":[]}
+
+// ====
+
 // RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_fmamk_pair
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_vopd_plan_fmamk_pair(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs0: reg<amdgpu.vgpr>, %addend0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %addend1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

@@ -19,6 +19,9 @@
 extern "C" {
 #endif
 
+typedef struct loom_run_compile_report_capture_t
+    loom_run_compile_report_capture_t;
+
 typedef enum loom_run_candidate_artifact_flag_bits_e {
   LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE = 0u,
   // Requests target-owned textual executable listings when the selected backend
@@ -59,6 +62,9 @@ typedef struct loom_run_candidate_compile_options_t {
   uint32_t max_errors;
   // Optional caller-owned structured compile report to populate.
   loom_target_compile_report_t* report;
+  // Optional one-shot report capture receiving emitted diagnostics for report
+  // output adapters.
+  loom_run_compile_report_capture_t* report_capture;
   // Optional debug artifacts requested from the selected backend.
   loom_run_candidate_artifact_flags_t artifact_flags;
   // Optional artifact manifest requested from the selected backend.

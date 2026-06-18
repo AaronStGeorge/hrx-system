@@ -11,15 +11,12 @@
 namespace iree::hal::amdgpu {
 namespace {
 
-TEST(DeviceSpecTest, CreatesSpecFromParams) {
-  iree_hal_allocator_t* allocator = NULL;
-  IREE_ASSERT_OK(
-      iree_hal_allocator_create_heap(IREE_SV("test"), iree_allocator_system(),
-                                     iree_allocator_system(), &allocator));
-
+static void CreateDeviceSpecForProcessor(
+    iree_string_view_t processor, uint32_t wavefront_size,
+    iree_hal_allocator_t* allocator, iree_hal_device_spec_t** out_device_spec) {
   iree_hal_amdgpu_target_id_t target_id = {};
   IREE_ASSERT_OK(iree_hal_amdgpu_target_id_parse(
-      IREE_SV("gfx1100"), IREE_HAL_AMDGPU_TARGET_ID_PARSE_FLAG_ALLOW_ARCH_ONLY,
+      processor, IREE_HAL_AMDGPU_TARGET_ID_PARSE_FLAG_ALLOW_ARCH_ONLY,
       &target_id));
 
   iree_hal_amdgpu_device_spec_physical_device_params_t physical_device = {
@@ -30,7 +27,7 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
       /*.physical_ordinal=*/7,
       /*.queue_count=*/2,
       /*.compute_unit_count=*/40,
-      /*.wavefront_size=*/32,
+      /*.wavefront_size=*/wavefront_size,
       /*.maximum_workgroup_local_memory_size=*/64 * 1024,
       /*.flags=*/IREE_HAL_AMDGPU_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_UUID |
           IREE_HAL_AMDGPU_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_PCI_ADDRESS,
@@ -46,10 +43,18 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
       /*.sanitizer=*/{},
       /*.flags=*/IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_DMABUF,
   };
+  IREE_ASSERT_OK(iree_hal_amdgpu_device_spec_create(
+      &params, iree_allocator_system(), out_device_spec));
+}
+
+TEST(DeviceSpecTest, CreatesSpecFromParams) {
+  iree_hal_allocator_t* allocator = NULL;
+  IREE_ASSERT_OK(
+      iree_hal_allocator_create_heap(IREE_SV("test"), iree_allocator_system(),
+                                     iree_allocator_system(), &allocator));
 
   iree_hal_device_spec_t* device_spec = NULL;
-  IREE_ASSERT_OK(iree_hal_amdgpu_device_spec_create(
-      &params, iree_allocator_system(), &device_spec));
+  CreateDeviceSpecForProcessor(IREE_SV("gfx1100"), 32, allocator, &device_spec);
 
   const iree_hal_device_identity_spec_t* identity =
       iree_hal_device_spec_identity(device_spec);
@@ -75,6 +80,8 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
       iree_hal_device_spec_dispatch(device_spec);
   ASSERT_NE(dispatch, nullptr);
   EXPECT_EQ(dispatch->subgroup.default_size, 32);
+  EXPECT_EQ(dispatch->subgroup.minimum_size, 32);
+  EXPECT_EQ(dispatch->subgroup.maximum_size, 64);
   EXPECT_EQ(dispatch->subgroup.supported_size_mask, 1ull << 32);
   EXPECT_EQ(dispatch->execution.unit_count, 40);
   EXPECT_EQ(dispatch->execution.maximum_workgroup_local_memory_size, 64 * 1024);
@@ -105,6 +112,47 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
                                      IREE_SV("gfx1100")));
 
   iree_hal_device_spec_release(device_spec);
+  iree_hal_allocator_release(allocator);
+}
+
+TEST(DeviceSpecTest, ReportsProcessorWavefrontSupport) {
+  struct Case {
+    iree_string_view_t processor;
+    uint32_t hsa_wavefront_size;
+    uint32_t expected_default_size;
+    uint32_t expected_minimum_size;
+    uint32_t expected_maximum_size;
+    uint64_t expected_supported_size_mask;
+  };
+  static const Case cases[] = {
+      {IREE_SV("gfx1100"), 32, 32, 32, 64, 1ull << 32},
+      {IREE_SV("gfx942"), 64, 64, 64, 64, 0},
+      {IREE_SV("gfx1250"), 32, 32, 32, 32, 1ull << 32},
+  };
+
+  iree_hal_allocator_t* allocator = NULL;
+  IREE_ASSERT_OK(
+      iree_hal_allocator_create_heap(IREE_SV("test"), iree_allocator_system(),
+                                     iree_allocator_system(), &allocator));
+
+  for (const Case& test_case : cases) {
+    iree_hal_device_spec_t* device_spec = NULL;
+    CreateDeviceSpecForProcessor(test_case.processor,
+                                 test_case.hsa_wavefront_size, allocator,
+                                 &device_spec);
+
+    const iree_hal_device_dispatch_spec_t* dispatch =
+        iree_hal_device_spec_dispatch(device_spec);
+    ASSERT_NE(dispatch, nullptr);
+    EXPECT_EQ(dispatch->subgroup.default_size, test_case.expected_default_size);
+    EXPECT_EQ(dispatch->subgroup.minimum_size, test_case.expected_minimum_size);
+    EXPECT_EQ(dispatch->subgroup.maximum_size, test_case.expected_maximum_size);
+    EXPECT_EQ(dispatch->subgroup.supported_size_mask,
+              test_case.expected_supported_size_mask);
+
+    iree_hal_device_spec_release(device_spec);
+  }
+
   iree_hal_allocator_release(allocator);
 }
 

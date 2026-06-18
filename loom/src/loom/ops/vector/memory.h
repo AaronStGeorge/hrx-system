@@ -19,6 +19,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
 #include "loom/ops/encoding/storage.h"
+#include "loom/ops/op_defs.h"
 #include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
@@ -69,6 +70,83 @@ typedef struct loom_vector_memory_access_t {
   loom_value_facts_t layout_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK];
 } loom_vector_memory_access_t;
 
+// Semantic memory-footprint family for vector MemoryAccess ops.
+typedef enum loom_vector_memory_footprint_kind_e {
+  // Not a vector memory footprint.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_NONE = 0,
+  // Ordinary vector.load/store footprint over trailing view axes.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_DENSE = 1,
+  // Masked vector.load.mask/store.mask footprint over trailing view axes.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_DENSE = 2,
+  // Expand/compress footprint whose memory element count depends on mask
+  // population.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_COMPRESS_EXPAND = 3,
+  // Gather/scatter footprint selected by per-lane element offsets.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PER_LANE_OFFSET = 4,
+  // Masked gather/scatter footprint selected by active per-lane offsets.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_PER_LANE_OFFSET = 5,
+  // Atomic gather/scatter footprint selected by per-lane offsets.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_ATOMIC_PER_LANE = 6,
+  // Masked atomic gather/scatter footprint selected by active per-lane offsets.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_ATOMIC_PER_LANE = 7,
+  // Target-shaped fragment movement; the payload vector is not the logical
+  // memory footprint.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_FRAGMENT = 8,
+} loom_vector_memory_footprint_kind_t;
+
+enum loom_vector_memory_footprint_flag_bits_e {
+  // The footprint reads memory.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_READS = 1u << 0,
+  // The footprint writes memory.
+  LOOM_VECTOR_MEMORY_FOOTPRINT_WRITES = 1u << 1,
+};
+// Bitfield of loom_vector_memory_footprint_flag_bits_e values.
+typedef uint32_t loom_vector_memory_footprint_flags_t;
+
+// Classified vector memory footprint. This is a semantic description of legal
+// vector memory IR, not a second verifier for malformed operations.
+typedef struct loom_vector_memory_footprint_t {
+  // Footprint family.
+  loom_vector_memory_footprint_kind_t kind;
+
+  // Read/write effects for the footprint.
+  loom_vector_memory_footprint_flags_t flags;
+
+  // Borrowed MemoryAccess interface reference.
+  loom_memory_access_t access;
+
+  // View being accessed.
+  loom_value_id_t view;
+
+  // Written/update value when the op shape has one.
+  loom_value_id_t value;
+
+  // Lane/activity mask when the op shape has one.
+  loom_value_id_t mask;
+
+  // Passthrough value when the op shape has one.
+  loom_value_id_t passthrough;
+
+  // Per-lane offset vector when the op shape has one.
+  loom_value_id_t offsets;
+
+  // Dynamic logical origin indices.
+  loom_value_slice_t dynamic_indices;
+
+  // Static logical origin indices.
+  loom_attribute_t static_indices;
+
+  // Typed view operand.
+  loom_type_t view_type;
+
+  // Vector payload type that describes the logical footprint for non-fragment
+  // families.
+  loom_type_t vector_type;
+
+  // Decomposed view/vector relationship for non-fragment families.
+  loom_vector_memory_access_t vector_access;
+} loom_vector_memory_footprint_t;
+
 // Generated-builder flags shared by vector and view memory ops.
 typedef enum loom_vector_memory_cache_policy_build_flag_e {
   // cache_scope is present in the optional attribute dictionary.
@@ -98,6 +176,20 @@ bool loom_vector_memory_access_describe(
     const loom_fact_context_t* context, const loom_module_t* module,
     loom_type_t view_type, loom_type_t vector_type,
     loom_vector_memory_access_t* out_access);
+
+// Describes a vector memory operation footprint using the MemoryAccess
+// interface and vector memory shape contracts. Returns false for non-vector
+// memory ops or malformed vector memory IR.
+bool loom_vector_memory_footprint_describe(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, loom_vector_memory_footprint_t* out_footprint);
+
+// Copies full-rank static logical extents for the footprint into |out_extents|.
+// Returns false when any footprint axis is dynamic or when |capacity| is
+// smaller than the view rank.
+bool loom_vector_memory_footprint_static_extents(
+    const loom_vector_memory_footprint_t* footprint, int64_t* out_extents,
+    iree_host_size_t capacity);
 
 // Extracts the optional cache policy from a vector memory op. Returns false
 // for non-memory ops or malformed cache attrs so callers do not rewrite away

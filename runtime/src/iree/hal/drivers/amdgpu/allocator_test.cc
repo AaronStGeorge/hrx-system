@@ -777,8 +777,8 @@ TEST_F(AllocatorTest, AmdgpuDeviceSpecExposesRepresentativePhysicalFacts) {
   EXPECT_EQ(dispatch->execution.group_count, topology_.gpu_agent_count);
   EXPECT_TRUE(dispatch->subgroup.default_size == 32 ||
               dispatch->subgroup.default_size == 64);
-  EXPECT_EQ(dispatch->subgroup.default_size, dispatch->subgroup.minimum_size);
-  EXPECT_EQ(dispatch->subgroup.default_size, dispatch->subgroup.maximum_size);
+  EXPECT_LE(dispatch->subgroup.minimum_size, dispatch->subgroup.default_size);
+  EXPECT_GE(dispatch->subgroup.maximum_size, dispatch->subgroup.default_size);
 
   const iree_hal_device_executable_spec_t* executables =
       iree_hal_device_spec_executables(device_spec);

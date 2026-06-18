@@ -10,6 +10,8 @@
 #define LOOM_TOOLING_EXECUTION_COMPILE_REPORT_CAPTURE_H_
 
 #include "iree/base/api.h"
+#include "loom/error/diagnostic.h"
+#include "loom/error/renderer.h"
 #include "loom/target/compile_report_format.h"
 #include "loom/tooling/execution/compile_options.h"
 
@@ -40,6 +42,10 @@ typedef struct loom_run_compile_report_capture_t {
   iree_allocator_t host_allocator;
   // Compile report populated by candidate compilation.
   loom_target_compile_report_t report;
+  // Canonical diagnostic JSON objects for structured JSON detail reports.
+  iree_string_builder_t diagnostic_json_objects;
+  // Number of compiler diagnostics captured for report output.
+  iree_host_size_t diagnostic_count;
 } loom_run_compile_report_capture_t;
 
 // Initializes capture options with report output disabled.
@@ -74,6 +80,12 @@ iree_status_t loom_run_compile_report_capture_initialize(
 void loom_run_compile_report_capture_configure_compile_options(
     loom_run_compile_report_capture_t* capture,
     loom_run_candidate_compile_options_t* compile_options);
+
+// Records one compiler diagnostic for report output using the canonical
+// loom_diagnostic_json_write_object() shape.
+iree_status_t loom_run_compile_report_capture_record_diagnostic(
+    loom_run_compile_report_capture_t* capture,
+    const loom_diagnostic_t* diagnostic, loom_type_formatter_t type_formatter);
 
 // Appends the captured report to |builder| when capture is enabled.
 iree_status_t loom_run_compile_report_capture_append_text(

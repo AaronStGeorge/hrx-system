@@ -3941,47 +3941,6 @@ static iree_status_t loom_amdgpu_extract_vector_register_unit(
       unit_type, out_register_unit);
 }
 
-static bool loom_amdgpu_low_value_defines_vgpr_low16(
-    loom_low_lower_context_t* context, loom_value_id_t low_value_id) {
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_value_t* low_value = loom_module_value(module, low_value_id);
-  if (low_value == NULL || loom_value_is_block_arg(low_value)) {
-    return false;
-  }
-  const loom_op_t* low_op = loom_value_def_op(low_value);
-  if (low_op == NULL || !loom_low_op_isa(low_op)) {
-    return false;
-  }
-  const int64_t descriptor_ordinal = loom_low_op_descriptor_ordinal(low_op);
-  if (descriptor_ordinal < 0 || (uint64_t)descriptor_ordinal > UINT32_MAX) {
-    return false;
-  }
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_low_lower_context_descriptor_set(context);
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set,
-                                            (uint32_t)descriptor_ordinal);
-  const uint16_t result_index = loom_value_def_index(low_value);
-  if (descriptor == NULL || result_index >= descriptor->result_count) {
-    return false;
-  }
-  const uint32_t operand_index = descriptor->operand_start + result_index;
-  if (operand_index >= descriptor_set->operand_count) {
-    return false;
-  }
-  const loom_low_operand_t* result_operand =
-      &descriptor_set->operands[operand_index];
-  if (result_operand->register_part_id >= descriptor_set->register_part_count) {
-    return false;
-  }
-  const loom_low_register_part_t* register_part =
-      &descriptor_set->register_parts[result_operand->register_part_id];
-  const iree_string_view_t register_part_name = loom_low_descriptor_set_string(
-      descriptor_set, register_part->name_string_offset);
-  return iree_string_view_equal(register_part_name,
-                                IREE_SV("amdgpu.vgpr.low16"));
-}
-
 static iree_status_t loom_amdgpu_lower_static_vector_extract(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_extract_plan_t* plan) {

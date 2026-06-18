@@ -16,6 +16,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
+#include "loom/link/linker.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/sanitizer/options_cli.h"
@@ -52,6 +53,8 @@ typedef struct loom_compile_diagnostic_sink_t {
   const loom_run_module_t* run_module;
   // Printer context used to render target-owned register and storage types.
   loom_low_descriptor_text_print_context_t type_print_context;
+  // Optional compile report capture receiving canonical diagnostic JSON.
+  loom_run_compile_report_capture_t* compile_report_capture;
 } loom_compile_diagnostic_sink_t;
 
 static iree_status_t loom_compile_format_diagnostic_type(
@@ -72,6 +75,8 @@ static iree_status_t loom_compile_format_diagnostic_type(
 
 static iree_status_t loom_compile_diagnostic_sink(
     void* user_data, const loom_diagnostic_t* diagnostic) {
+  loom_compile_diagnostic_sink_t* sink =
+      (loom_compile_diagnostic_sink_t*)user_data;
   loom_output_stream_t stream;
   loom_output_stream_for_file(stderr, &stream);
   const loom_diagnostic_format_options_t format_options = {
@@ -81,8 +86,15 @@ static iree_status_t loom_compile_diagnostic_sink(
               .user_data = user_data,
           },
   };
-  return loom_diagnostic_format_with_options(diagnostic, &format_options,
-                                             &stream);
+  iree_status_t status =
+      loom_diagnostic_format_with_options(diagnostic, &format_options, &stream);
+  if (iree_status_is_ok(status)) {
+    loom_run_compile_report_capture_t* compile_report_capture =
+        sink ? sink->compile_report_capture : NULL;
+    status = loom_run_compile_report_capture_record_diagnostic(
+        compile_report_capture, diagnostic, format_options.type_formatter);
+  }
+  return status;
 }
 
 #define LOOM_COMPILE_HAVE_ANY_PROVIDER                      \
@@ -121,6 +133,10 @@ IREE_FLAG(string, target, "",
           "target(...) attrs, provider/template selection, lowering, and "
           "emission. Compatible authored targets are refined with the same "
           "backend-owned target facts.");
+IREE_FLAG_LIST(string, root,
+               "Root symbol to materialize before compilation. Repeat for "
+               "multiple roots. When omitted, the full input module is "
+               "compiled.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before artifact emission. Use 'default' or "
           "empty for the shared prepared-low compile pipeline, 'none' to "
@@ -130,6 +146,9 @@ IREE_FLAG(string, pipeline, "default",
 IREE_FLAG(string, sanitizer, "none",
           "Sanitizer checks to insert in the default target pipeline: none, "
           "all, or a '|'-separated set of access, value, and operation.");
+IREE_FLAG_NAMED(string, sanitizer_reporting, "sanitizer-reporting", "default",
+                "Sanitizer assertion failure reporting mode in the default "
+                "target pipeline: default, trap, or report-only.");
 IREE_FLAG_LIST(
     string, config,
     "Compile-time config binding. Repeat as --config=key=value. Bindings not "
@@ -354,6 +373,34 @@ static iree_status_t loom_compile_materialize_config_set(
       run_module->module, &options, loom_run_session_block_pool(session), NULL);
 }
 
+static iree_status_t loom_compile_select_roots(loom_run_session_t* session,
+                                               loom_run_module_t* run_module,
+                                               iree_allocator_t allocator) {
+  const iree_flag_string_list_t roots = FLAG_root_list();
+  if (roots.count == 0) {
+    return iree_ok_status();
+  }
+
+  const loom_module_t* const source_modules[] = {run_module->module};
+  iree_string_view_t module_name = iree_string_view_empty();
+  if (run_module->module->name_id < run_module->module->strings.count) {
+    module_name =
+        run_module->module->strings.entries[run_module->module->name_id];
+  }
+  loom_module_t* linked_module = NULL;
+  IREE_RETURN_IF_ERROR(loom_link_materialized_modules(
+      source_modules, IREE_ARRAYSIZE(source_modules),
+      &(loom_link_options_t){
+          .module_name = module_name,
+          .root_symbols = roots,
+      },
+      loom_run_session_block_pool(session), allocator, &linked_module));
+
+  loom_module_free(run_module->module);
+  run_module->module = linked_module;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_compile_report_options_initialize(
     loom_run_compile_report_capture_options_t* out_options) {
   loom_run_compile_report_capture_options_initialize(out_options);
@@ -364,9 +411,12 @@ static iree_status_t loom_compile_report_options_initialize(
 
 static iree_status_t loom_compile_sanitizer_options_initialize(
     loom_sanitizer_options_t* out_options) {
-  return loom_sanitizer_options_parse_checks(
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_parse_checks(
       iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
-      out_options);
+      out_options));
+  return loom_sanitizer_reporting_mode_parse(
+      iree_make_cstring_view(FLAG_sanitizer_reporting),
+      IREE_SV("--sanitizer-reporting"), &out_options->reporting_mode);
 }
 
 static iree_status_t loom_compile_make_artifact_manifest_path(
@@ -466,6 +516,7 @@ static iree_status_t loom_compile_run_pass_pipeline(
       loom_run_session_low_descriptor_registry(session);
   loom_compile_diagnostic_sink_t diagnostic_sink = {
       .run_module = run_module,
+      .compile_report_capture = compile_options->report_capture,
   };
   loom_low_descriptor_text_print_context_initialize(
       &pipeline_options.low_descriptor_registry->registry,
@@ -1044,6 +1095,9 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "loom-compile kernel.loom --backend=vm --output=kernel.vmfb\n"
       "loom-compile kernel.loom --backend=amdgpu-hal --target=gfx1100 \\\n"
       "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
+      "loom-compile catalog.loom --root=@entry --backend=amdgpu-hal \\\n"
+      "  --target=gfx1100 --emit-target-artifact=entry.hsaco \\\n"
+      "  --output=entry.vmfb\n"
       "loom-compile kernel.loom --backend=llvmir-text --output=kernel.ll\n"
       "loom-compile kernel.loom --backend=llvmir-bitcode --output=kernel.bc\n"
       "loom-compile kernel.loombc --backend=amdgpu-hal --target=gfx1100 \\\n"
@@ -1064,6 +1118,9 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "attrs. Target-owned emitters such as `--backend=llvmir-text` and\n"
       "`--backend=llvmir-bitcode` write the selected artifact directly to\n"
       "`--output`. A single invocation compiles one target configuration.\n"
+      "Use repeated `--root=@symbol` values to compile selected entries from "
+      "a\n"
+      "catalog-like module without first producing a linked bytecode file.\n"
       "\n"
       "### Config specialization\n"
       "\n"
@@ -1168,6 +1225,9 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status)) {
     status =
         loom_compile_materialize_config_set(&session, &run_module, &config_set);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_select_roots(&session, &run_module, allocator);
   }
 
   loom_run_compile_report_capture_options_t compile_report_options = {0};

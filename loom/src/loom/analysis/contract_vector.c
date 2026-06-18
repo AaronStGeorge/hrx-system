@@ -388,6 +388,8 @@ static bool loom_contract_vector_operand_from_fragment(
     return false;
   }
   out_operand->role = role;
+  out_operand->encoded.available_capability_flags =
+      loom_contract_plain_fragment_available_capability_flags(role);
   return true;
 }
 

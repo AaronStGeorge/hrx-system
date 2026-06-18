@@ -210,6 +210,11 @@ iree_string_view_t loom_target_low_legality_function_name(
 const loom_target_bundle_t* loom_target_low_legality_bundle(
     const loom_target_low_legality_context_t* context);
 
+// Returns the module-local target record symbol selected for this legality
+// check.
+loom_symbol_ref_t loom_target_low_legality_target_ref(
+    const loom_target_low_legality_context_t* context);
+
 // Returns the selected low descriptor set.
 const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
     const loom_target_low_legality_context_t* context);

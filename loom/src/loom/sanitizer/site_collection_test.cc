@@ -138,7 +138,8 @@ class SiteCollectionTest : public ::testing::Test {
     loom_op_t* op = NULL;
     IREE_CHECK_OK(loom_sanitizer_assert_access_build(
         &builder_, LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ, view_id, NULL, 0,
-        static_indices, IREE_ARRAYSIZE(static_indices), location, &op));
+        static_indices, IREE_ARRAYSIZE(static_indices), NULL, 0, location,
+        &op));
     return op;
   }
 

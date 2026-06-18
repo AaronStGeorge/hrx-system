@@ -48,6 +48,84 @@ static iree_status_t loom_sanitizer_emit_attribute_value_constraint(
                              IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_sanitizer_emit_static_access_out_of_bounds(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint16_t axis,
+    int64_t offset, int64_t size, int64_t bound) {
+  int64_t total = INT64_MAX;
+  if (offset <= INT64_MAX - size) {
+    total = offset + size;
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_i64(axis),  loom_param_i64(offset), loom_param_i64(size),
+      loom_param_i64(total), loom_param_i64(bound),
+  };
+  return loom_sanitizer_emit(emitter, op, LOOM_ERR_SUBRANGE_004, params,
+                             IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_emit_static_extent_count_mismatch(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t field_name, uint64_t actual_count,
+    uint64_t expected_count) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(field_name),
+      loom_param_u32((uint32_t)iree_min(actual_count, UINT32_MAX)),
+      loom_param_i64((int64_t)iree_min(expected_count, (uint64_t)INT64_MAX)),
+  };
+  return loom_sanitizer_emit(emitter, op, LOOM_ERR_SUBRANGE_003, params,
+                             IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_emit_static_extent_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, int64_t extent) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("static_extents")),
+      loom_param_i64(extent),
+      loom_param_string(IREE_SV("positive extent")),
+  };
+  return loom_sanitizer_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                             IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_assert_access_verify_static_extents(
+    const loom_op_t* op, iree_diagnostic_emitter_t emitter,
+    loom_type_t view_type, loom_attribute_t static_indices,
+    loom_attribute_t static_extents) {
+  if (loom_attr_is_absent(static_extents) ||
+      static_extents.kind != LOOM_ATTR_I64_ARRAY ||
+      !loom_type_is_view(view_type)) {
+    return iree_ok_status();
+  }
+
+  const uint8_t view_rank = loom_type_rank(view_type);
+  if (static_extents.count != view_rank) {
+    return loom_sanitizer_emit_static_extent_count_mismatch(
+        emitter, op, IREE_SV("static_extents"), static_extents.count,
+        view_rank);
+  }
+
+  for (uint16_t axis = 0; axis < static_extents.count; ++axis) {
+    const int64_t extent = static_extents.i64_array[axis];
+    if (extent <= 0) {
+      return loom_sanitizer_emit_static_extent_constraint(emitter, op, extent);
+    }
+    if (static_indices.kind != LOOM_ATTR_I64_ARRAY ||
+        axis >= static_indices.count) {
+      continue;
+    }
+    const int64_t origin = static_indices.i64_array[axis];
+    if (origin == INT64_MIN || loom_type_dim_is_dynamic_at(view_type, axis)) {
+      continue;
+    }
+    const int64_t bound = loom_type_dim_static_size_at(view_type, axis);
+    if (origin < 0 || origin > bound || extent > bound - origin) {
+      return loom_sanitizer_emit_static_access_out_of_bounds(
+          emitter, op, axis, origin, extent, bound);
+    }
+  }
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Predicate assertions
 //===----------------------------------------------------------------------===//
@@ -236,10 +314,13 @@ iree_status_t loom_sanitizer_assert_access_verify(
     iree_diagnostic_emitter_t emitter) {
   loom_type_t view_type =
       loom_module_value_type(module, loom_sanitizer_assert_access_view(op));
-  return loom_view_verify_element_access(
+  IREE_RETURN_IF_ERROR(loom_view_verify_element_access(
       module, op, emitter, IREE_SV("view"), view_type,
       loom_sanitizer_assert_access_static_indices(op),
-      loom_sanitizer_assert_access_indices(op).count);
+      loom_sanitizer_assert_access_indices(op).count));
+  return loom_sanitizer_assert_access_verify_static_extents(
+      op, emitter, view_type, loom_sanitizer_assert_access_static_indices(op),
+      loom_sanitizer_assert_access_static_extents(op));
 }
 
 iree_status_t loom_sanitizer_race_access_verify(

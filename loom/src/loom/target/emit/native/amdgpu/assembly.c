@@ -376,6 +376,63 @@ static iree_status_t loom_amdgpu_read_packet_immediate_i64(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_append_packet_symbol_attr(
+    const loom_native_assembly_packet_context_t* context,
+    iree_string_view_t field_name, const loom_named_attr_t* attr) {
+  if (attr == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU assembly requires attribute '%.*s'",
+                            (int)field_name.size, field_name.data);
+  }
+  if (attr->value.kind != LOOM_ATTR_SYMBOL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU assembly attribute '%.*s' must be a "
+                            "symbol reference",
+                            (int)field_name.size, field_name.data);
+  }
+  const loom_symbol_ref_t symbol_ref = attr->value.symbol;
+  const loom_module_t* module = context->schedule->module;
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU assembly attribute '%.*s' references an invalid symbol",
+        (int)field_name.size, field_name.data);
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id >= module->strings.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU assembly attribute '%.*s' references an unnamed symbol",
+        (int)field_name.size, field_name.data);
+  }
+  const iree_string_view_t name = module->strings.entries[symbol->name_id];
+  return iree_string_builder_append_format(context->builder, "@%.*s",
+                                           (int)name.size, name.data);
+}
+
+static iree_status_t loom_amdgpu_append_packet_immediate(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_immediate_t* immediate) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  iree_string_view_t name = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+      descriptor_set, immediate->field_name_string_offset, &name));
+  if (immediate->kind == LOOM_LOW_IMMEDIATE_KIND_ORDINAL &&
+      iree_all_bits_set(immediate->flags, LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC)) {
+    const loom_named_attr_t* attr = loom_native_assembly_find_attr(
+        context->schedule->module, loom_amdgpu_packet_attrs(context), name);
+    if (attr != NULL && attr->value.kind == LOOM_ATTR_SYMBOL) {
+      return loom_amdgpu_append_packet_symbol_attr(context, name, attr);
+    }
+  }
+  int64_t value = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_read_packet_immediate_i64(context, immediate, &value));
+  return iree_string_builder_append_format(context->builder, "%" PRId64, value);
+}
+
 static iree_status_t loom_amdgpu_read_packet_immediate_by_index_i64(
     const loom_native_assembly_packet_context_t* context,
     uint16_t descriptor_immediate_index, int64_t* out_value) {
@@ -1037,9 +1094,6 @@ static iree_status_t loom_amdgpu_append_asm_form_immediates(
     const loom_low_immediate_t* immediate =
         &descriptor_set->immediates[descriptor->immediate_start +
                                     asm_immediate->immediate_index];
-    int64_t value = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_read_packet_immediate_i64(context, immediate, &value));
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_append_asm_form_separator(context, in_list));
     if (asm_immediate->name_string_offset != LOOM_LOW_STRING_OFFSET_NONE) {
@@ -1047,11 +1101,14 @@ static iree_status_t loom_amdgpu_append_asm_form_immediates(
       IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
           descriptor_set, asm_immediate->name_string_offset, &spelling));
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-          context->builder, "%.*s(%" PRId64 ")", (int)spelling.size,
-          spelling.data, value));
+          context->builder, "%.*s(", (int)spelling.size, spelling.data));
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_append_packet_immediate(context, immediate));
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(context->builder, ")"));
     } else {
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-          context->builder, "%" PRId64, value));
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_append_packet_immediate(context, immediate));
     }
   }
   return iree_ok_status();

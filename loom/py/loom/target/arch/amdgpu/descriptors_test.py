@@ -378,6 +378,83 @@ def test_v_mov_b32_literal_results_are_rematerializable() -> None:
         )
 
 
+def test_gfx11_wmma_wave64_asm_forms_keep_native_mnemonics_unsuffixed() -> None:
+    descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
+    }
+    cases = (
+        (
+            "amdgpu.v_wmma_f32_16x16x16_f16.w64",
+            "v_wmma_f32_16x16x16_f16_w64",
+            "v_wmma_f32_16x16x16_f16",
+        ),
+        (
+            "amdgpu.v_wmma_f32_16x16x16_bf16.w64",
+            "v_wmma_f32_16x16x16_bf16_w64",
+            "v_wmma_f32_16x16x16_bf16",
+        ),
+        (
+            "amdgpu.v_wmma_f16_16x16x16_f16.w64",
+            "v_wmma_f16_16x16x16_f16_w64",
+            "v_wmma_f16_16x16x16_f16",
+        ),
+        (
+            "amdgpu.v_wmma_bf16_16x16x16_bf16.w64",
+            "v_wmma_bf16_16x16x16_bf16_w64",
+            "v_wmma_bf16_16x16x16_bf16",
+        ),
+        (
+            "amdgpu.v_wmma_i32_16x16x16_iu8.w64",
+            "v_wmma_i32_16x16x16_iu8_w64",
+            "v_wmma_i32_16x16x16_iu8",
+        ),
+        (
+            "amdgpu.v_wmma_i32_16x16x16_iu4.w64",
+            "v_wmma_i32_16x16x16_iu4_w64",
+            "v_wmma_i32_16x16x16_iu4",
+        ),
+    )
+
+    for descriptor_key, low_mnemonic, native_mnemonic in cases:
+        descriptor = descriptors[descriptor_key]
+        assert descriptor.mnemonic == low_mnemonic
+        assert descriptor.asm_forms is not None
+        assert len(descriptor.asm_forms) == 1
+        form = descriptor.asm_forms[0]
+        assert form.mnemonic is None
+        assert form.native_assembly_mnemonic == native_mnemonic
+        assert form.results == ("dst",)
+        assert form.operands == ("a", "b", "acc")
+
+        zero_descriptor = descriptors[f"{descriptor_key}.acc_zero"]
+        zero_form = zero_descriptor.asm_forms[0]
+        assert zero_form.mnemonic == f"{low_mnemonic}_acc_zero"
+        assert zero_form.native_assembly_mnemonic == native_mnemonic
+        assert zero_form.native_assembly_values == (
+            NativeAsmValue(NativeAsmValueKind.RESULT, field_name="dst"),
+            NativeAsmValue(NativeAsmValueKind.OPERAND, field_name="a"),
+            NativeAsmValue(NativeAsmValueKind.OPERAND, field_name="b"),
+            NativeAsmValue(NativeAsmValueKind.LITERAL, literal="0"),
+        )
+
+
+def test_wmma_zero_accumulator_asm_forms_print_native_base_mnemonic() -> None:
+    descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
+    }
+    zero_descriptor = descriptors["amdgpu.v_wmma_f32_16x16x16_f16.acc_zero"]
+    zero_form = zero_descriptor.asm_forms[0]
+
+    assert zero_form.mnemonic == "v_wmma_f32_16x16x16_f16_acc_zero"
+    assert zero_form.native_assembly_mnemonic == "v_wmma_f32_16x16x16_f16"
+    assert zero_form.native_assembly_values == (
+        NativeAsmValue(NativeAsmValueKind.RESULT, field_name="dst"),
+        NativeAsmValue(NativeAsmValueKind.OPERAND, field_name="a"),
+        NativeAsmValue(NativeAsmValueKind.OPERAND, field_name="b"),
+        NativeAsmValue(NativeAsmValueKind.LITERAL, literal="0"),
+    )
+
+
 def test_scalar_descriptors_do_not_get_execution_mask_state_read() -> None:
     descriptor = Descriptor(
         key="amdgpu.s_add_u32",
@@ -783,6 +860,8 @@ def test_feedback_control_descriptors_cover_execution_families() -> None:
 
 
 def test_symbol_relative_salu_descriptors_have_lossless_low_asm_forms() -> None:
+    pc_relative_effect = (Effect(EffectKind.CONVERGENT, flags=(EffectFlag.ORDERED,)),)
+
     for overlays in (
         _gfx940_core_overlays(),
         _gfx950_core_overlays(),
@@ -793,6 +872,7 @@ def test_symbol_relative_salu_descriptors_have_lossless_low_asm_forms() -> None:
         descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
 
         add_lo = descriptors["amdgpu.s_add_u32.rhs_symbol_rel32_lo"]
+        assert add_lo.effects == pc_relative_effect
         assert add_lo.asm_forms is not None
         assert add_lo.asm_forms[0].mnemonic == "s_add_u32_rhs_symbol_rel32_lo"
         assert add_lo.asm_forms[0].results == ("dst",)
@@ -802,6 +882,7 @@ def test_symbol_relative_salu_descriptors_have_lossless_low_asm_forms() -> None:
         ) == ("symbol", "byte_offset")
 
         addc_hi = descriptors["amdgpu.s_addc_u32.rhs_symbol_rel32_hi"]
+        assert addc_hi.effects == pc_relative_effect
         assert addc_hi.asm_forms is not None
         assert addc_hi.asm_forms[0].mnemonic == "s_addc_u32_rhs_symbol_rel32_hi"
         assert addc_hi.asm_forms[0].results == ("sum",)

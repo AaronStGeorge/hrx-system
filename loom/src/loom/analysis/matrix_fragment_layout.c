@@ -118,6 +118,19 @@ bool loom_matrix_fragment_coordinate_from_role_layout(
       out_coordinate->column = lane % tile_shape.result_column_count;
       return true;
     }
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD: {
+      if (element_index != 0) {
+        return false;
+      }
+      const uint32_t row =
+          (uint32_t)register_index * 2u + lane / tile_shape.result_column_count;
+      if (row >= tile_shape.result_row_count) {
+        return false;
+      }
+      out_coordinate->row = (uint16_t)row;
+      out_coordinate->column = lane % tile_shape.result_column_count;
+      return true;
+    }
     case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION: {
       const uint32_t lane_group = lane / tile_shape.result_row_count;
       const uint32_t reduction =
@@ -150,6 +163,33 @@ bool loom_matrix_fragment_coordinate_from_role_layout(
       const uint32_t row = (uint32_t)(lane / tile_shape.result_column_count) *
                                role_layout->register_count +
                            register_index;
+      if (row >= tile_shape.result_row_count) {
+        return false;
+      }
+      out_coordinate->row = (uint16_t)row;
+      out_coordinate->column = lane % tile_shape.result_column_count;
+      return true;
+    }
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD: {
+      if (element_index != 0) {
+        return false;
+      }
+      const uint32_t row = (uint32_t)(lane / tile_shape.result_column_count) *
+                               role_layout->register_count +
+                           register_index;
+      if (row >= tile_shape.result_row_count) {
+        return false;
+      }
+      out_coordinate->row = (uint16_t)row;
+      out_coordinate->column = lane % tile_shape.result_column_count;
+      return true;
+    }
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_PACKED_ROW_COLUMN: {
+      const uint32_t row =
+          (uint32_t)(lane / tile_shape.result_column_count) *
+              role_layout->register_count * role_layout->elements_per_register +
+          (uint32_t)register_index * role_layout->elements_per_register +
+          element_index;
       if (row >= tile_shape.result_row_count) {
         return false;
       }

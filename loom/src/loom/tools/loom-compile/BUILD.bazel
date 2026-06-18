@@ -97,6 +97,7 @@ loom_cc_binary(
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
+        "//loom/src/loom/link:linker",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/kernel",
         "//loom/src/loom/sanitizer:options_cli",
@@ -134,6 +135,9 @@ iree_execution_test_suite(
 
 iree_execution_test_suite(
     name = "amdgpu_execution_test",
+    data = [
+        "selected_root_amdgpu.loom",
+    ],
     manifests = ["loom-compile-amdgpu.test.json"],
     tags = ["hostonly"],
     target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,

@@ -62,15 +62,13 @@ loom_contract_auxiliary_operand_all_flags(void) {
   return UINT32_MAX >> (32 - LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_);
 }
 
-static bool loom_contract_encoded_operand_has_facts(
+static bool loom_contract_encoded_operand_has_storage_or_auxiliary_facts(
     const loom_contract_encoded_operand_t* encoded) {
   return loom_contract_storage_schema_is_known(encoded->source_schema) ||
          loom_contract_storage_schema_is_known(encoded->target_schema) ||
          encoded->available_auxiliary_operands != 0 ||
          loom_contract_encoded_operand_has_auxiliary_value_refs(encoded) ||
-         encoded->required_auxiliary_operands != 0 ||
-         encoded->available_capability_flags != 0 ||
-         encoded->required_capability_flags != 0;
+         encoded->required_auxiliary_operands != 0;
 }
 
 static bool loom_contract_encoded_operand_auxiliary_values_are_consistent(
@@ -93,28 +91,27 @@ static bool loom_contract_encoded_operand_auxiliary_values_are_consistent(
 static loom_contract_rejection_bits_t
 loom_contract_encoded_operand_rejection_bits(
     const loom_contract_encoded_operand_t* encoded) {
-  if (!loom_contract_encoded_operand_has_facts(encoded)) {
-    return LOOM_CONTRACT_REJECTION_NONE;
-  }
-
   loom_contract_rejection_bits_t rejection_bits = LOOM_CONTRACT_REJECTION_NONE;
-  if (loom_value_fact_encoded_operand_schema_is_unknown(
-          encoded->target_schema.encoded_operand) ||
-      !loom_value_fact_encoded_operand_schema_scale_is_complete(
-          encoded->target_schema.encoded_operand)) {
-    rejection_bits |= LOOM_CONTRACT_REJECTION_SCHEMA;
-  }
-  if (!iree_all_bits_set(encoded->available_auxiliary_operands,
-                         encoded->required_auxiliary_operands)) {
-    rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
-  }
-  if (iree_any_bit_set(encoded->available_auxiliary_operands |
-                           encoded->required_auxiliary_operands,
-                       ~loom_contract_auxiliary_operand_all_flags())) {
-    rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
-  }
-  if (!loom_contract_encoded_operand_auxiliary_values_are_consistent(encoded)) {
-    rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+  if (loom_contract_encoded_operand_has_storage_or_auxiliary_facts(encoded)) {
+    if (loom_value_fact_encoded_operand_schema_is_unknown(
+            encoded->target_schema.encoded_operand) ||
+        !loom_value_fact_encoded_operand_schema_scale_is_complete(
+            encoded->target_schema.encoded_operand)) {
+      rejection_bits |= LOOM_CONTRACT_REJECTION_SCHEMA;
+    }
+    if (!iree_all_bits_set(encoded->available_auxiliary_operands,
+                           encoded->required_auxiliary_operands)) {
+      rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+    }
+    if (iree_any_bit_set(encoded->available_auxiliary_operands |
+                             encoded->required_auxiliary_operands,
+                         ~loom_contract_auxiliary_operand_all_flags())) {
+      rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+    }
+    if (!loom_contract_encoded_operand_auxiliary_values_are_consistent(
+            encoded)) {
+      rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+    }
   }
   if (!iree_all_bits_set(encoded->available_capability_flags,
                          encoded->required_capability_flags)) {
@@ -138,6 +135,24 @@ loom_contract_operand_required_capability_flags(
 //===----------------------------------------------------------------------===//
 // Public API
 //===----------------------------------------------------------------------===//
+
+loom_contract_capability_flags_t
+loom_contract_plain_fragment_available_capability_flags(
+    loom_contract_operand_role_t role) {
+  switch (role) {
+    case LOOM_CONTRACT_OPERAND_ROLE_LHS:
+    case LOOM_CONTRACT_OPERAND_ROLE_RHS:
+      return LOOM_CONTRACT_CAPABILITY_REUSE |
+             LOOM_CONTRACT_CAPABILITY_OPERAND_MODIFIERS;
+    case LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR:
+      return LOOM_CONTRACT_CAPABILITY_REUSE |
+             LOOM_CONTRACT_CAPABILITY_ACCUMULATOR_MODIFIER;
+    case LOOM_CONTRACT_OPERAND_ROLE_RESULT:
+    case LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN:
+    default:
+      return 0;
+  }
+}
 
 void loom_contract_request_initialize(loom_contract_request_t* out_request) {
   *out_request = (loom_contract_request_t){

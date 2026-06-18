@@ -552,20 +552,42 @@ const loom_amdgpu_vopd_packet_t* loom_amdgpu_vopd_plan_packet_at(
   return packet->role == LOOM_AMDGPU_VOPD_PACKET_ROLE_NONE ? NULL : packet;
 }
 
-static bool loom_amdgpu_vopd_target_supports_base_vopd(
+static bool loom_amdgpu_vopd_component_rule_applies_to_descriptor_set(
+    const loom_amdgpu_vopd_component_rule_t* rule,
     const loom_low_descriptor_set_t* descriptor_set) {
+  if (rule == NULL || descriptor_set == NULL ||
+      descriptor_set->descriptor_set_ordinal >=
+          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT) {
+    return false;
+  }
+  return iree_any_bit_set(rule->descriptor_set_mask,
+                          LOOM_AMDGPU_VOPD_DESCRIPTOR_SET_BIT(
+                              descriptor_set->descriptor_set_ordinal));
+}
+
+static bool loom_amdgpu_vopd_descriptor_set_has_component_rule(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kVopdComponentRules); ++i) {
+    if (loom_amdgpu_vopd_component_rule_applies_to_descriptor_set(
+            &kVopdComponentRules[i], descriptor_set)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_amdgpu_vopd_target_supports_base_vopd(
+    const loom_low_resolved_target_t* target) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      target != NULL ? target->descriptor_set : NULL;
   if (descriptor_set == NULL ||
       descriptor_set->target_stable_id != LOOM_AMDGPU_TARGET_STABLE_ID) {
     return false;
   }
-  switch (descriptor_set->descriptor_set_ordinal) {
-    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3:
-    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4:
-    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X:
-      return true;
-    default:
-      return false;
+  if (target->bundle_storage.snapshot.subgroup_size != 32) {
+    return false;
   }
+  return loom_amdgpu_vopd_descriptor_set_has_component_rule(descriptor_set);
 }
 
 static void loom_amdgpu_vopd_append_schedule_pair_affinity(
@@ -631,28 +653,15 @@ static bool loom_amdgpu_vopd_component_infos_pair_reason(
   return true;
 }
 
-static bool loom_amdgpu_vopd_component_rule_applies_to_descriptor_set(
-    const loom_amdgpu_vopd_component_rule_t* rule,
-    const loom_low_descriptor_set_t* descriptor_set) {
-  if (rule == NULL || descriptor_set == NULL ||
-      descriptor_set->descriptor_set_ordinal >=
-          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT) {
-    return false;
-  }
-  return iree_any_bit_set(rule->descriptor_set_mask,
-                          LOOM_AMDGPU_VOPD_DESCRIPTOR_SET_BIT(
-                              descriptor_set->descriptor_set_ordinal));
-}
-
 iree_status_t loom_amdgpu_vopd_build_schedule_pair_affinities(
-    const loom_low_descriptor_set_t* descriptor_set,
-    iree_arena_allocator_t* arena,
+    const loom_low_resolved_target_t* target, iree_arena_allocator_t* arena,
     loom_low_schedule_pair_affinity_list_t* out_affinities) {
   *out_affinities = loom_low_schedule_pair_affinity_list_empty();
-  if (descriptor_set == NULL || arena == NULL ||
-      !loom_amdgpu_vopd_target_supports_base_vopd(descriptor_set)) {
+  if (target == NULL || target->descriptor_set == NULL || arena == NULL ||
+      !loom_amdgpu_vopd_target_supports_base_vopd(target)) {
     return iree_ok_status();
   }
+  const loom_low_descriptor_set_t* descriptor_set = target->descriptor_set;
 
   const loom_amdgpu_vopd_component_rule_t*
       component_rules[IREE_ARRAYSIZE(kVopdComponentRules)] = {0};
@@ -1988,8 +1997,7 @@ iree_status_t loom_amdgpu_vopd_plan_build(
       loom_amdgpu_vopd_verify_wait_packet_plan(schedule, wait_packets));
   IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_verify_wait_state_plan(
       schedule, allocation, wait_states));
-  if (!loom_amdgpu_vopd_target_supports_base_vopd(
-          schedule->target.descriptor_set)) {
+  if (!loom_amdgpu_vopd_target_supports_base_vopd(&schedule->target)) {
     *out_plan = (loom_amdgpu_vopd_plan_t){
         .schedule = schedule,
         .allocation = allocation,

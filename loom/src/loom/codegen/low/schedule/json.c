@@ -73,6 +73,18 @@ static const char* loom_low_schedule_json_dependency_kind(
   }
 }
 
+static const char* loom_low_schedule_json_failure_kind(
+    loom_low_schedule_failure_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_SCHEDULE_FAILURE_NONE:
+      return "none";
+    case LOOM_LOW_SCHEDULE_FAILURE_DEPENDENCY_CYCLE:
+      return "dependency_cycle";
+    default:
+      return "unknown";
+  }
+}
+
 static iree_status_t loom_low_schedule_json_write_nullable_string(
     loom_output_stream_t* stream, iree_string_view_t value) {
   if (iree_string_view_is_empty(value)) {
@@ -149,6 +161,58 @@ iree_status_t loom_low_schedule_format_json(
       table->candidate_decision_count, table->resource_use_count,
       table->effect_use_count, table->hazard_use_count, table->hazard_gap_count,
       table->model_summary_count, table->resource_summary_count));
+  if (table->error_count != 0) {
+    const loom_low_schedule_failure_t* failure = &table->failure;
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        &stream, ",\"error_count\":%" PRIu32 ",\"failure\":{\"kind\":",
+        table->error_count));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+        &stream, loom_low_schedule_json_failure_kind(failure->kind)));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        &stream,
+        ",\"flags\":%" PRIu16
+        ",\"cycle_path_truncated\":%s"
+        ",\"witness_edge_only\":%s"
+        ",\"block\":%" PRIu32 ",\"block_node_count\":%" PRIu32
+        ",\"scheduled_node_count\":%" PRIu32
+        ",\"unscheduled_node_count\":%" PRIu32 ",\"producer_node\":",
+        failure->flags,
+        iree_all_bits_set(failure->flags,
+                          LOOM_LOW_SCHEDULE_FAILURE_FLAG_CYCLE_PATH_TRUNCATED)
+            ? "true"
+            : "false",
+        iree_all_bits_set(failure->flags,
+                          LOOM_LOW_SCHEDULE_FAILURE_FLAG_WITNESS_EDGE_ONLY)
+            ? "true"
+            : "false",
+        failure->block_index, failure->block_node_count,
+        failure->scheduled_node_count, failure->unscheduled_node_count));
+    IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_u32_or_null(
+        &stream, failure->producer_node, LOOM_LOW_SCHEDULE_NODE_NONE));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"consumer_node\":"));
+    IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_u32_or_null(
+        &stream, failure->consumer_node, LOOM_LOW_SCHEDULE_NODE_NONE));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"dependency_kind\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+        &stream,
+        loom_low_schedule_json_dependency_kind(failure->dependency_kind)));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"operand\":"));
+    IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_u32_or_null(
+        &stream, failure->operand_index, UINT32_MAX));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"cycle_nodes\":["));
+    for (uint32_t i = 0; i < failure->cycle_node_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream, "%" PRIu32, failure->cycle_nodes[i]));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]}"));
+  }
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"blocks\":["));

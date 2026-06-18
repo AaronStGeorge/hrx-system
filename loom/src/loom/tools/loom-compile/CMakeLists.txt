@@ -56,6 +56,7 @@ loom_cc_binary(
     loom::error::diagnostic
     loom::format::text::printer
     loom::ir
+    loom::link::linker
     loom::ops::kernel
     loom::ops::op_defs
     loom::sanitizer::options_cli
@@ -98,6 +99,8 @@ iree_execution_test_suite(
     "loom-compile-amdgpu.test.json"
   TOOLS
     "loom-compile=::loom-compile"
+  DATA
+    "selected_root_amdgpu.loom"
   LABELS
     "hostonly"
 )

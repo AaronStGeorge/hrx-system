@@ -1434,7 +1434,11 @@ vector_fragment_store = Op(
         "full-rank logical origin. The value is interpreted as the physical "
         "payload for the given fragment role and logical matrix shape; the "
         "store is therefore a matrix-fragment movement boundary, not an "
-        "ordinary vector.store footprint."
+        "ordinary vector.store footprint. When the payload and view element "
+        "types differ, the operation represents a fragment-shaped numeric "
+        "conversion at the store boundary and target lowering must either "
+        "select that conversion explicitly or reject it with target "
+        "diagnostics."
     ),
     operands=[
         Operand("value", VECTOR, doc="Physical matrix fragment payload to store."),
@@ -1447,7 +1451,6 @@ vector_fragment_store = Op(
         AttrDef("role", ATTR_TYPE_ENUM, enum_def=VectorFragmentRole),
         *_indexed_memory_attrs(),
     ],
-    constraints=[SameElementType("value", "view")],
     effects=[Writes("view")],
     interfaces=[_memory_access_interface(value="value")],
     verify="loom_vector_fragment_store_verify",

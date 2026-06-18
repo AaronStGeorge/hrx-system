@@ -221,6 +221,25 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
     loom_value_id_t failure_mask, loom_location_id_t location,
     loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
 
+// Splits the current hot block on an EXEC-width failure mask and reports
+// failed lanes without trapping.
+//
+// |failure_mask| must be an SGPRx2 native lane mask where set bits identify
+// lanes that failed the assertion. The hot block only compares the mask
+// against zero and conditionally branches. The per-site cold block narrows EXEC
+// to the failed lanes, emits one structured ASAN feedback report when feedback
+// is enabled and reservation succeeds, restores EXEC, and rejoins the
+// continuation block whether reporting was emitted or dropped. Leaves the
+// builder positioned at the continuation block.
+iree_status_t
+loom_amdgpu_build_sanitizer_access_report_only_failure_mask_branch(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_symbol_ref_t feedback_config_symbol, loom_value_id_t failure_mask,
+    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_sanitizer_access_report_t* report,
+    loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
+
 // Splits the current hot block on an EXEC-width failure mask and traps failed
 // lanes directly.
 //

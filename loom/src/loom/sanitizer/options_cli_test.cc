@@ -80,6 +80,10 @@ TEST(SanitizerOptionsCliTest, ParsesReportingModes) {
       IREE_SV("default"), IREE_SV("--sanitizer-reporting"), &mode));
   EXPECT_EQ(mode, LOOM_SANITIZER_REPORTING_MODE_DEFAULT);
 
+  IREE_ASSERT_OK(loom_sanitizer_reporting_mode_parse(
+      IREE_SV("report-only"), IREE_SV("--sanitizer-reporting"), &mode));
+  EXPECT_EQ(mode, LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY);
+
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_sanitizer_reporting_mode_parse(
@@ -95,6 +99,10 @@ TEST(SanitizerOptionsCliTest, FormatsReportingModes) {
   IREE_ASSERT_OK(loom_sanitizer_reporting_mode_format(
       LOOM_SANITIZER_REPORTING_MODE_DEFAULT, &formatted));
   EXPECT_TRUE(iree_string_view_equal(formatted, IREE_SV("default")));
+
+  IREE_ASSERT_OK(loom_sanitizer_reporting_mode_format(
+      LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY, &formatted));
+  EXPECT_TRUE(iree_string_view_equal(formatted, IREE_SV("report-only")));
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_sanitizer_reporting_mode_format(

@@ -105,8 +105,10 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_NONE = 9,
   // Async gather plans own their source operand demand policy.
   LOOM_AMDGPU_STORAGE_ASYNC_GATHER = 10,
+  // Sanitizer access plans own their source operand demand policy.
+  LOOM_AMDGPU_STORAGE_SANITIZER_ACCESS = 11,
   // Maximum storage-policy value accepted by dispatch row policy bits.
-  LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_ASYNC_GATHER,
+  LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_SANITIZER_ACCESS,
 };
 
 enum loom_amdgpu_preselect_policy_e {
@@ -1093,6 +1095,13 @@ static void loom_amdgpu_mark_vector_register_map_plan_storage_demands(
   }
 }
 
+static void loom_amdgpu_mark_sanitizer_access_plan_storage_demands(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_sanitizer_access_plan_t* plan) {
+  loom_amdgpu_mark_source_memory_plan_storage_demands(context,
+                                                      &plan->address.source);
+}
+
 static iree_status_t loom_amdgpu_select_dispatch_row(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_lower_dispatch_row_t* row,
@@ -1202,6 +1211,11 @@ static void loom_amdgpu_mark_plan_storage_demands(
       loom_amdgpu_mark_memory_access_plan_storage_demands(
           context, source_op,
           (const loom_amdgpu_memory_access_plan_t*)plan.target_data);
+      return;
+    case LOOM_AMDGPU_STORAGE_SANITIZER_ACCESS:
+      loom_amdgpu_mark_sanitizer_access_plan_storage_demands(
+          context,
+          (const loom_amdgpu_sanitizer_access_plan_t*)plan.target_data);
       return;
     case LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN:
       loom_amdgpu_mark_structural_value_plan_storage_demands(context, source_op,
@@ -1353,6 +1367,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .map_contract_value = {.fn = loom_amdgpu_map_contract_value,
                            .user_data = NULL},
     .map_argument = {.fn = loom_amdgpu_map_argument, .user_data = NULL},
+    .map_abi_layout = {.fn = loom_amdgpu_map_abi_layout, .user_data = NULL},
     .emit_preamble = {.fn = loom_amdgpu_emit_preamble, .user_data = NULL},
     .emit_entry_setup = {.fn = loom_amdgpu_emit_entry_setup, .user_data = NULL},
     .prepare_branch = {.fn = loom_amdgpu_prepare_branch, .user_data = NULL},

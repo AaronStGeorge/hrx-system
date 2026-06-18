@@ -183,6 +183,40 @@ TEST(TargetIdTest, LooksUpCodeObjectTarget) {
                                      IREE_SV("gfx1300")));
 }
 
+TEST(TargetIdTest, LooksUpWavefrontSizeSupport) {
+  struct Case {
+    const char* processor;
+    uint32_t expected_default_size;
+    iree_hal_amdgpu_wavefront_size_flags_t expected_explicit_supported_sizes;
+  };
+  static const Case cases[] = {
+      {"gfx90a", 64, IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_NONE},
+      {"gfx942", 64, IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_64},
+      {"gfx1100", 32,
+       IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_32 |
+           IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_64},
+      {"gfx1250", 32, IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_32},
+  };
+  for (const Case& test_case : cases) {
+    auto target_id = ParseTargetId(test_case.processor);
+    iree_hal_amdgpu_wavefront_size_support_t support;
+    EXPECT_TRUE(iree_hal_amdgpu_target_id_lookup_wavefront_size_support(
+        &target_id, &support));
+    EXPECT_EQ(support.default_size, test_case.expected_default_size);
+    EXPECT_EQ(support.explicit_supported_sizes,
+              test_case.expected_explicit_supported_sizes);
+  }
+
+  auto generic_target_id = ParseTargetId("gfx11-generic");
+  iree_hal_amdgpu_wavefront_size_support_t support;
+  EXPECT_FALSE(iree_hal_amdgpu_target_id_lookup_wavefront_size_support(
+      &generic_target_id, &support));
+
+  auto unknown_target_id = ParseTargetId("gfx1300");
+  EXPECT_FALSE(iree_hal_amdgpu_target_id_lookup_wavefront_size_support(
+      &unknown_target_id, &support));
+}
+
 TEST(TargetIdTest, ChecksExactCompatibility) {
   auto code_object_target_id = ParseTargetId("gfx1100");
   auto agent_target_id = ParseTargetId("gfx1100");

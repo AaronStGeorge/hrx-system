@@ -114,6 +114,17 @@ func.def @if_preserves_inconclusive_unsigned_cmp(%x: index, %y: index) -> (index
   func.return %result : index
 }
 
+// ----
+func.def @if_preserves_inconclusive_unsigned_cmp(%x: index, %y: index) -> (index) {
+  %maybe_negative = index.assume %x [range(%x, -4, 4)] : index
+  %positive = index.assume %y [range(%y, 8, 16)] : index
+  %cond = index.cmp ult, %maybe_negative, %positive : index
+  %one = index.constant 1 : index
+  %two = index.constant 2 : index
+  %result = scf.select %cond, %one, %two : index
+  func.return %result : index
+}
+
 // ====
 
 // Branch-edge facts materialize as region-local assumes, allowing both sides of
@@ -134,6 +145,31 @@ func.def @if_condition_relation_folds_inside_regions(%i: index, %n: index) -> (i
 func.def @if_condition_relation_folds_inside_regions(%i: index, %n: index) -> (i1) {
   %result = scalar.constant true : i1
   func.return %result : i1
+}
+
+// ====
+
+func.def @if_selectifies_region_assumes_before_speculating(%x: i32, %limit: i32, %upper: i32, %fallback: i32) -> (i1) {
+  %cond = scalar.cmpi slt, %x, %limit : i32
+  %selected = scf.if %cond -> (i1) {
+    %then_x = scalar.assume %x [lt(%x, %limit)] : i32
+    %inside_upper = scalar.cmpi slt, %then_x, %upper : i32
+    scf.yield %inside_upper : i1
+  } else {
+    %else_limit = scalar.assume %limit [le(%limit, %x)] : i32
+    %has_fallback = scalar.cmpi ne, %fallback, %else_limit : i32
+    scf.yield %has_fallback : i1
+  }
+  func.return %selected : i1
+}
+
+// ----
+func.def @if_selectifies_region_assumes_before_speculating(%x: i32, %limit: i32, %upper: i32, %fallback: i32) -> (i1) {
+  %cond = scalar.cmpi slt, %x, %limit : i32
+  %inside_upper = scalar.cmpi slt, %x, %upper : i32
+  %has_fallback = scalar.cmpi ne, %fallback, %limit : i32
+  %selected = scf.select %cond, %inside_upper, %has_fallback : i1
+  func.return %selected : i1
 }
 
 // ====
@@ -414,19 +450,18 @@ func.def @if_index_cmp_refines_address_ranges(%time: index) -> (i64, i64, i64, i
   %bounded = index.assume %time [range(%time, 0, 63)] : index
   %split = index.constant 2 : index
   %cond = index.cmp slt, %bounded, %split : index
-  %time_lo, %time_hi, %chunk_lo, %chunk_hi = scf.if %cond -> (i64, i64, i64, i64) {
-    %then_time_lo = scalar.constant 0 : i64
-    %then_time_hi = scalar.constant 1 : i64
-    %unused_chunk_lo = scalar.constant -1 : i64
-    %unused_chunk_hi = scalar.constant -1 : i64
-    scf.yield %then_time_lo, %then_time_hi, %unused_chunk_lo, %unused_chunk_hi : i64, i64, i64, i64
-  } else {
-    %unused_time_lo = scalar.constant -1 : i64
-    %unused_time_hi = scalar.constant -1 : i64
-    %else_chunk_lo = scalar.constant 0 : i64
-    %else_chunk_hi = scalar.constant 61 : i64
-    scf.yield %unused_time_lo, %unused_time_hi, %else_chunk_lo, %else_chunk_hi : i64, i64, i64, i64
-  }
+  %then_time_lo = scalar.constant 0 : i64
+  %then_time_hi = scalar.constant 1 : i64
+  %unused_chunk_lo = scalar.constant -1 : i64
+  %unused_chunk_hi = scalar.constant -1 : i64
+  %unused_time_lo = scalar.constant -1 : i64
+  %unused_time_hi = scalar.constant -1 : i64
+  %else_chunk_lo = scalar.constant 0 : i64
+  %else_chunk_hi = scalar.constant 61 : i64
+  %time_lo = scf.select %cond, %then_time_lo, %unused_time_lo : i64
+  %time_hi = scf.select %cond, %then_time_hi, %unused_time_hi : i64
+  %chunk_lo = scf.select %cond, %unused_chunk_lo, %else_chunk_lo : i64
+  %chunk_hi = scf.select %cond, %unused_chunk_hi, %else_chunk_hi : i64
   func.return %time_lo, %time_hi, %chunk_lo, %chunk_hi : i64, i64, i64, i64
 }
 

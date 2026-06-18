@@ -148,7 +148,13 @@ TEST(ContractStorageTest, QueriesPlainViewPayloadFromElementType) {
   EXPECT_EQ(payload.kind, LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT);
   EXPECT_EQ(payload.operand.role, LOOM_CONTRACT_OPERAND_ROLE_LHS);
   EXPECT_EQ(payload.operand.numeric_type, LOOM_CONTRACT_NUMERIC_U8);
-  EXPECT_EQ(payload.operand.encoded.available_capability_flags, 0u);
+  EXPECT_TRUE(
+      iree_all_bits_set(payload.operand.encoded.available_capability_flags,
+                        LOOM_CONTRACT_CAPABILITY_REUSE |
+                            LOOM_CONTRACT_CAPABILITY_OPERAND_MODIFIERS));
+  EXPECT_FALSE(
+      iree_any_bit_set(payload.operand.encoded.available_capability_flags,
+                       LOOM_CONTRACT_CAPABILITY_ACCUMULATOR_MODIFIER));
 }
 
 TEST(ContractStorageTest, BuildsMatrixRequestFromPayloadFacts) {
@@ -197,6 +203,10 @@ TEST(ContractStorageTest, BuildsMatrixRequestFromPayloadFacts) {
       loom_contract_request_available_capability_flags(&request),
       LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS |
           LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS));
+  EXPECT_TRUE(iree_all_bits_set(
+      loom_contract_request_available_capability_flags(&request),
+      LOOM_CONTRACT_CAPABILITY_REUSE |
+          LOOM_CONTRACT_CAPABILITY_ACCUMULATOR_MODIFIER));
   EXPECT_TRUE(iree_all_bits_set(
       loom_contract_request_required_capability_flags(&request),
       LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS));

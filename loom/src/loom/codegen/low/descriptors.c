@@ -61,6 +61,57 @@ bool loom_low_descriptor_operands_are_tied(
   return false;
 }
 
+bool loom_low_descriptor_operand_maps_to_packet_operand(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t descriptor_operand_index) {
+  IREE_ASSERT_LT(descriptor_operand_index, descriptor->operand_count);
+  if (descriptor_operand_index < descriptor->result_count) {
+    return false;
+  }
+  const loom_low_operand_t* operand =
+      &descriptor_set
+           ->operands[descriptor->operand_start + descriptor_operand_index];
+  return loom_low_operand_role_is_packet_operand(operand->role);
+}
+
+uint16_t loom_low_descriptor_operand_packet_index(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t descriptor_operand_index) {
+  IREE_ASSERT_TRUE(loom_low_descriptor_operand_maps_to_packet_operand(
+      descriptor_set, descriptor, descriptor_operand_index));
+  uint16_t packet_operand_index = 0;
+  for (uint16_t i = descriptor->result_count; i < descriptor_operand_index;
+       ++i) {
+    if (loom_low_descriptor_operand_maps_to_packet_operand(descriptor_set,
+                                                           descriptor, i)) {
+      ++packet_operand_index;
+    }
+  }
+  return packet_operand_index;
+}
+
+uint16_t loom_low_descriptor_packet_operand_descriptor_index(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t packet_operand_index) {
+  uint16_t current_packet_operand_index = 0;
+  for (uint16_t descriptor_operand_index = descriptor->result_count;
+       descriptor_operand_index < descriptor->operand_count;
+       ++descriptor_operand_index) {
+    if (!loom_low_descriptor_operand_maps_to_packet_operand(
+            descriptor_set, descriptor, descriptor_operand_index)) {
+      continue;
+    }
+    if (current_packet_operand_index == packet_operand_index) {
+      return descriptor_operand_index;
+    }
+    ++current_packet_operand_index;
+  }
+  IREE_ASSERT_UNREACHABLE("descriptor packet operand index is out of range");
+  return LOOM_LOW_ID_NONE;
+}
+
 static iree_string_view_t loom_low_descriptor_set_key(
     const loom_low_descriptor_set_t* descriptor_set) {
   return loom_low_descriptor_set_string_view(descriptor_set,

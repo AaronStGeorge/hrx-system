@@ -41,6 +41,8 @@ typedef enum loom_sanitizer_reporting_mode_e {
   LOOM_SANITIZER_REPORTING_MODE_DEFAULT = 0,
   // Trap directly on sanitizer failures without emitting structured reports.
   LOOM_SANITIZER_REPORTING_MODE_TRAP = 1,
+  // Emit structured sanitizer reports and continue execution.
+  LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY = 2,
 } loom_sanitizer_reporting_mode_t;
 
 // Check bits understood by this compiler.
@@ -85,6 +87,7 @@ static inline iree_status_t loom_sanitizer_options_validate(
   switch (options->reporting_mode) {
     case LOOM_SANITIZER_REPORTING_MODE_DEFAULT:
     case LOOM_SANITIZER_REPORTING_MODE_TRAP:
+    case LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY:
       break;
     default:
       return iree_make_status(

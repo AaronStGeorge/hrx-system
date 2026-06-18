@@ -415,17 +415,8 @@ static iree_status_t loom_target_entry_try_entry(
           diagnostic_emitter, &entry, pipeline_name));
       return iree_ok_status();
     }
-    const iree_string_view_t effective_target_name =
-        !iree_string_view_is_empty(effective_target_bundle->name)
-            ? effective_target_bundle->name
-            : entry.bundle_storage.bundle.name;
-    IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve_from_bundle(
-        module, func_facts, effective_target_name, effective_target_bundle,
-        loom_target_entry_emitter(diagnostic_emitter), &contract_valid,
-        &entry.bundle_storage));
-    if (!contract_valid) {
-      return iree_ok_status();
-    }
+    loom_target_function_contract_apply_compatible_selection(
+        effective_target_bundle, &entry.bundle_storage);
     if (!predicate.fn(predicate.user_data, &entry)) {
       if (!require_compatible) {
         return iree_ok_status();

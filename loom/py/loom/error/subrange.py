@@ -130,13 +130,20 @@ ERR_SUBRANGE_010 = ErrorDef(
     message=(
         "{op_name} full-vector footprint upper bound is not proven on view axis "
         "{view_axis} (vector axis {vector_axis}); origin {origin} must satisfy "
-        "origin + vector_extent <= view_bound"
+        "origin + vector_extent <= view_bound for view {view}; vector_extent "
+        "is {vector_extent}, view_bound is {view_bound}, and the maximum "
+        "legal origin is {required_origin_upper_bound}"
     ),
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("view_axis", ParamKind.I64),
         ErrorParam("vector_axis", ParamKind.I64),
+        ErrorParam("view", ParamKind.STRING),
         ErrorParam("origin", ParamKind.STRING),
+        ErrorParam("vector_extent", ParamKind.STRING),
+        ErrorParam("view_bound", ParamKind.STRING),
+        ErrorParam("required_origin_upper_bound", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use a full-tile guard, vector.mask.range tail mask, padded view "
@@ -153,13 +160,20 @@ ERR_SUBRANGE_011 = ErrorDef(
     message=(
         "{op_name} scalar-axis footprint upper bound is not proven on view axis "
         "{view_axis} (vector axis {vector_axis}); origin {origin} must satisfy "
-        "origin + 1 <= view_bound"
+        "origin + 1 <= view_bound for view {view}; vector_extent is "
+        "{vector_extent}, view_bound is {view_bound}, and the maximum legal "
+        "origin is {required_origin_upper_bound}"
     ),
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("view_axis", ParamKind.I64),
         ErrorParam("vector_axis", ParamKind.I64),
+        ErrorParam("view", ParamKind.STRING),
         ErrorParam("origin", ParamKind.STRING),
+        ErrorParam("vector_extent", ParamKind.STRING),
+        ErrorParam("view_bound", ParamKind.STRING),
+        ErrorParam("required_origin_upper_bound", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use a guard, assume, launch/view relation, or padded view extent "
@@ -265,6 +279,60 @@ ERR_SUBRANGE_018 = ErrorDef(
     ),
 )
 
+# ERR_SUBRANGE_019: Sanitizer vector access footprint shape is dynamic.
+ERR_SUBRANGE_019 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=19,
+    severity=Severity.ERROR,
+    summary="Sanitizer vector access footprint shape is dynamic.",
+    message=(
+        "{op_name} access sanitizer insertion requires an all-static vector "
+        "shape so the runtime access footprint can be represented compactly"
+    ),
+    params=(ErrorParam("op_name", ParamKind.STRING),),
+    fix_hint=(
+        "Use a static vector shape before access sanitizer insertion or lower "
+        "dynamic vector memory before enabling access checks"
+    ),
+)
+
+# ERR_SUBRANGE_020: Sanitizer vector access footprint rank is unsupported.
+ERR_SUBRANGE_020 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Sanitizer vector access footprint rank is unsupported.",
+    message=(
+        "{op_name} access sanitizer insertion currently requires a rank-1 "
+        "vector footprint; observed vector rank {vector_rank}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("vector_rank", ParamKind.I64),
+    ),
+    fix_hint=(
+        "Use rank-1 vector memory for access sanitizer insertion or lower "
+        "higher-rank vector memory before enabling access checks"
+    ),
+)
+
+# ERR_SUBRANGE_021: Sanitizer vector access pattern is unsupported.
+ERR_SUBRANGE_021 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Sanitizer vector access pattern is unsupported.",
+    message=(
+        "{op_name} access sanitizer insertion does not yet support this "
+        "vector memory pattern"
+    ),
+    params=(ErrorParam("op_name", ParamKind.STRING),),
+    fix_hint=(
+        "Use vector.load/vector.store with a static rank-1 footprint or lower "
+        "this vector memory operation before enabling access checks"
+    ),
+)
+
 ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SUBRANGE_001,
     ERR_SUBRANGE_002,
@@ -282,4 +350,7 @@ ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SUBRANGE_016,
     ERR_SUBRANGE_017,
     ERR_SUBRANGE_018,
+    ERR_SUBRANGE_019,
+    ERR_SUBRANGE_020,
+    ERR_SUBRANGE_021,
 )

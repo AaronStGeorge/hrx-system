@@ -1,5 +1,6 @@
 func.def @assert_access_roundtrip(%layout: encoding<layout>, %view: view<16x32xf32, %layout>, %row: index) {
   sanitizer.assert.access<read> %view[%row, 0] : view<16x32xf32, %layout>
+  sanitizer.assert.access<read> %view[%row, 0] {static_extents = [1, 4]} : view<16x32xf32, %layout>
   func.return
 }
 
