@@ -469,7 +469,7 @@ TEST_F(AmdgpuSanitizerReportTest, EmitsFatalAccessReportProducerCfg) {
       &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
       &config_values));
 
-  const loom_amdgpu_sanitizer_report_source_t source = {
+  const loom_amdgpu_feedback_packet_source_t source = {
       /*.dispatch_ptr=*/config_values.notify_signal,
       /*.workgroup_id_x=*/config_values.flags,
       /*.workitem_id_x=*/config_values.flags,
@@ -602,7 +602,7 @@ TEST_F(AmdgpuSanitizerReportTest, BranchesColdSitesToSharedReportIsland) {
     IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
         &builder_, descriptor_set_, config_values.channel_base,
         LOOM_LOCATION_UNKNOWN, &channel_values));
-    const loom_amdgpu_sanitizer_report_source_t source = {
+    const loom_amdgpu_feedback_packet_source_t source = {
         /*.dispatch_ptr=*/config_values.notify_signal,
         /*.workgroup_id_x=*/config_values.flags,
         /*.workitem_id_x=*/channel_values.flags,
@@ -689,7 +689,7 @@ TEST_F(AmdgpuSanitizerReportTest, SplitsHotFailurePredicateToColdSiteBlock) {
       &builder_, descriptor_set_, config_values.flags, LOOM_LOCATION_UNKNOWN,
       &failure_scc));
 
-  const loom_amdgpu_sanitizer_report_source_t source = {
+  const loom_amdgpu_feedback_packet_source_t source = {
       /*.dispatch_ptr=*/config_values.notify_signal,
       /*.workgroup_id_x=*/config_values.flags,
       /*.workitem_id_x=*/channel_values.flags,
@@ -789,7 +789,7 @@ TEST_F(AmdgpuSanitizerReportTest, NarrowsExecForMaskedColdSiteBlock) {
       LOOM_LOCATION_UNKNOWN, &channel_values));
   const loom_value_id_t failure_mask = channel_values.ring_capacity;
 
-  const loom_amdgpu_sanitizer_report_source_t source = {
+  const loom_amdgpu_feedback_packet_source_t source = {
       /*.dispatch_ptr=*/config_values.notify_signal,
       /*.workgroup_id_x=*/config_values.flags,
       /*.workitem_id_x=*/channel_values.flags,

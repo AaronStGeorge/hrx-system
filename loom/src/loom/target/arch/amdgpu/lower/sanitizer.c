@@ -767,7 +767,7 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
         &branch);
   }
 
-  loom_amdgpu_sanitizer_report_source_t source = {0};
+  loom_amdgpu_feedback_packet_source_t source = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(
       context, source_op, 0, &source.dispatch_ptr));
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_emit_sgpr_u32_constant(

@@ -28,6 +28,7 @@ extern "C" {
 #endif
 
 typedef struct loom_builder_t loom_builder_t;
+typedef struct loom_block_t loom_block_t;
 
 typedef struct loom_amdgpu_feedback_config_values_t {
   // Address of the runtime-published feedback config global.
@@ -83,6 +84,42 @@ typedef struct loom_amdgpu_feedback_packet_header_t {
   // Runtime-published opaque host source context copied from the config.
   loom_value_id_t source_context;
 } loom_amdgpu_feedback_packet_header_t;
+
+typedef struct loom_amdgpu_feedback_packet_source_t {
+  // Device-visible dispatch packet pointer captured for host diagnostics.
+  loom_value_id_t dispatch_ptr;
+  // X dimension workgroup id captured for host diagnostics.
+  loom_value_id_t workgroup_id_x;
+  // X dimension workitem id captured for host diagnostics.
+  loom_value_id_t workitem_id_x;
+} loom_amdgpu_feedback_packet_source_t;
+
+typedef iree_status_t (*loom_amdgpu_feedback_payload_builder_t)(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
+    const void* payload_context, loom_location_id_t location);
+
+typedef struct loom_amdgpu_feedback_packet_producer_t {
+  // Payload byte length before feedback packet alignment is applied.
+  uint32_t payload_byte_length;
+  // Feedback packet schema kind owned by the producer facility.
+  loom_amdgpu_feedback_packet_kind_t packet_kind;
+  // Packet-level behavior flags.
+  loom_amdgpu_feedback_packet_flags_t packet_flags;
+  // Source coordinates copied into the common feedback packet header.
+  const loom_amdgpu_feedback_packet_source_t* source;
+  // Callback that writes producer-specific payload bytes into reserved storage.
+  loom_amdgpu_feedback_payload_builder_t build_payload;
+  // Producer-specific payload data passed to |build_payload|.
+  const void* payload_context;
+} loom_amdgpu_feedback_packet_producer_t;
+
+typedef struct loom_amdgpu_feedback_failure_branch_t {
+  // Per-site cold block reached when the observed predicate fails.
+  loom_block_t* failure_block;
+  // Hot continuation block reached when the observed predicate does not fail.
+  loom_block_t* continuation_block;
+} loom_amdgpu_feedback_failure_branch_t;
 
 typedef struct loom_amdgpu_feedback_reservation_attempt_t {
   // Monotonic reservation head value this attempt tried to claim.
@@ -247,6 +284,31 @@ iree_status_t loom_amdgpu_build_feedback_reservation_succeeded_scc(
     loom_value_id_t reservation_mask, loom_location_id_t location,
     loom_value_id_t* out_scc);
 
+// Splits the current hot block on |failure_scc|.
+//
+// |failure_scc| must be an SCC register value where nonzero means the observed
+// predicate failed. The current block receives only the conditional branch
+// terminator. The true edge enters a newly created failure block, while the
+// false edge falls through to a newly created continuation block. Leaves the
+// builder positioned in the original block.
+iree_status_t loom_amdgpu_build_feedback_failure_scc_split(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t failure_scc, loom_location_id_t location,
+    loom_amdgpu_feedback_failure_branch_t* out_branch);
+
+// Splits the current hot block on an EXEC-width failure mask.
+//
+// |failure_mask| must be an SGPRx2 native lane mask where set bits identify
+// lanes that failed. The hot block only compares the mask against zero and
+// conditionally branches. The builder is left positioned in the per-site cold
+// failure block after EXEC has been narrowed to the failed lanes. The caller
+// must terminate that block and then move the builder to
+// |out_branch->continuation_block|.
+iree_status_t loom_amdgpu_build_feedback_failure_mask_split(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t failure_mask, loom_location_id_t location,
+    loom_amdgpu_feedback_failure_branch_t* out_branch);
+
 // Materializes |source| as a VGPR register range for packet stores or cold
 // feedback block arguments.
 //
@@ -333,6 +395,20 @@ iree_status_t loom_amdgpu_build_feedback_publish_packet(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_feedback_packet_address_t* packet_address,
     loom_value_id_t notify_signal, loom_location_id_t location);
+
+// Emits a terminal feedback packet producer.
+//
+// The builder must be positioned at the end of a target-low block. This helper
+// emits a cold CFG that loads the runtime feedback config, branches around
+// channel dereferences when feedback is disabled, reserves packet storage when
+// possible, writes and publishes one feedback packet on successful reservation,
+// and terminates the current wave on all paths. The builder is left in the
+// terminal block after the return terminator has been emitted.
+iree_status_t loom_amdgpu_build_feedback_packet_producer_terminate(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_symbol_ref_t feedback_config_symbol,
+    const loom_amdgpu_feedback_packet_producer_t* producer,
+    loom_location_id_t location, loom_block_t** out_terminal_block);
 
 #ifdef __cplusplus
 }  // extern "C"

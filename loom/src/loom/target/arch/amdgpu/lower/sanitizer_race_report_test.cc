@@ -580,7 +580,7 @@ TEST_F(AmdgpuSanitizerRaceReportTest, EmitsFatalRaceReportProducerCfg) {
       &builder_, descriptor_set_, config_values.channel_base,
       LOOM_LOCATION_UNKNOWN, &channel_values));
 
-  const loom_amdgpu_sanitizer_report_source_t source = {
+  const loom_amdgpu_feedback_packet_source_t source = {
       /*.dispatch_ptr=*/config_values.notify_signal,
       /*.workgroup_id_x=*/config_values.flags,
       /*.workitem_id_x=*/BuildVgprU32(9),
@@ -678,7 +678,7 @@ TEST_F(AmdgpuSanitizerRaceReportTest, BranchesColdSitesToSharedReportIsland) {
     IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
         &builder_, descriptor_set_, config_values.channel_base,
         LOOM_LOCATION_UNKNOWN, &channel_values));
-    const loom_amdgpu_sanitizer_report_source_t source = {
+    const loom_amdgpu_feedback_packet_source_t source = {
         /*.dispatch_ptr=*/config_values.notify_signal,
         /*.workgroup_id_x=*/config_values.flags,
         /*.workitem_id_x=*/BuildVgprU32(9),
