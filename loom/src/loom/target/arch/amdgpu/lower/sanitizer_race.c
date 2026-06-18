@@ -50,6 +50,13 @@ typedef struct loom_amdgpu_sanitizer_race_config_values_t {
   loom_value_id_t dispatch_state_base;
 } loom_amdgpu_sanitizer_race_config_values_t;
 
+typedef struct loom_amdgpu_sanitizer_race_shadow_entry_base_t {
+  // Low entry bits common to every access by this workitem in this dispatch.
+  loom_value_id_t low;
+  // High entry generation bits common to every access in this dispatch.
+  loom_value_id_t high;
+} loom_amdgpu_sanitizer_race_shadow_entry_base_t;
+
 typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
   // True once entry-block TSAN config values have been materialized.
   bool has_config_values;
@@ -73,12 +80,14 @@ typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
   loom_value_id_t dispatch_ptr;
   // Entry-dominating byte offset of the dispatch-state slot.
   loom_value_id_t queue_slot_offset;
-  // True once entry-join dispatch-state values have been materialized.
-  bool has_dispatch_state_values;
-  // Entry-join low 32 bits of the replay generation.
-  loom_value_id_t dispatch_generation_low;
+  // True once the entry-join dispatch shadow slot has been materialized.
+  bool has_dispatch_shadow_slot;
   // Entry-join queue-local shadow slot assigned to the dispatch.
   loom_value_id_t shadow_slot;
+  // True once entry-body shadow entry base bits have been materialized.
+  bool has_shadow_entry_base;
+  // Entry-body shadow entry bits shared by all access observations.
+  loom_amdgpu_sanitizer_race_shadow_entry_base_t shadow_entry_base;
   // True once TSAN data-race failures have a shared cold report island.
   bool has_report_island;
   // Shared cold island for TSAN data-race reports.
@@ -90,8 +99,6 @@ typedef struct loom_amdgpu_sanitizer_race_dispatch_values_t {
   loom_value_id_t dispatch_ptr;
   // Byte offset of this dispatch's queue-local dispatch-state slot.
   loom_value_id_t queue_slot_offset;
-  // Low 32 bits of the replay generation loaded from the dispatch state slot.
-  loom_value_id_t generation_low;
   // Queue-local shadow slot loaded from the dispatch state slot.
   loom_value_id_t shadow_slot;
 } loom_amdgpu_sanitizer_race_dispatch_values_t;
@@ -131,14 +138,21 @@ static uint32_t loom_amdgpu_sanitizer_race_shadow_low_epoch_generation_mask(
       LOOM_AMDGPU_TSAN_SHADOW_ENTRY_EPOCH_SHIFT, bit_count);
 }
 
+static uint32_t loom_amdgpu_sanitizer_race_shadow_low_generation_bit_count(
+    void) {
+  return 32u - LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT;
+}
+
+static uint32_t loom_amdgpu_sanitizer_race_shadow_high_generation_bit_count(
+    void) {
+  return LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT -
+         loom_amdgpu_sanitizer_race_shadow_low_generation_bit_count();
+}
+
 static uint32_t loom_amdgpu_sanitizer_race_shadow_high_generation_mask(void) {
-  const uint32_t generation_low_bit_count =
-      32u - LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT;
-  const uint32_t generation_high_bit_count =
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT -
-      generation_low_bit_count;
   return loom_amdgpu_sanitizer_race_shadow_bit_mask(
-      /*bit_shift=*/0, generation_high_bit_count);
+      /*bit_shift=*/0,
+      loom_amdgpu_sanitizer_race_shadow_high_generation_bit_count());
 }
 
 static uint32_t loom_amdgpu_sanitizer_race_shadow_workitem_mask(void) {
@@ -621,30 +635,106 @@ static iree_status_t loom_amdgpu_sanitizer_race_get_dispatch_slot_values(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_sanitizer_race_get_dispatch_state_values(
-    loom_low_lower_context_t* context, loom_value_id_t* out_generation_low,
-    loom_value_id_t* out_shadow_slot) {
-  *out_generation_low = LOOM_VALUE_ID_INVALID;
+static iree_status_t loom_amdgpu_sanitizer_race_get_dispatch_shadow_slot(
+    loom_low_lower_context_t* context, loom_value_id_t* out_shadow_slot) {
   *out_shadow_slot = LOOM_VALUE_ID_INVALID;
   loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
-  if (!state->has_dispatch_state_values) {
+  if (!state->has_dispatch_shadow_slot) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU TSAN dispatch state values were not materialized in entry "
-        "setup");
+        "AMDGPU TSAN dispatch shadow slot was not materialized in entry setup");
   }
-  *out_generation_low = state->dispatch_generation_low;
   *out_shadow_slot = state->shadow_slot;
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_sanitizer_race_build_dispatch_state_loads(
+static iree_status_t loom_amdgpu_sanitizer_race_get_shadow_entry_base(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_sanitizer_race_shadow_entry_base_t** out_base) {
+  *out_base = NULL;
+  loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
+  if (!state->has_shadow_entry_base) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU TSAN shadow entry base was not materialized in entry setup");
+  }
+  *out_base = &state->shadow_entry_base;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_race_build_shadow_entry_base(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t workitem_linear_id, loom_value_id_t generation_low,
+    loom_amdgpu_sanitizer_race_shadow_entry_base_t* out_base) {
+  *out_base = (loom_amdgpu_sanitizer_race_shadow_entry_base_t){0};
+  loom_type_t vgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
+
+  loom_value_id_t workitem_bits = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_SHIFT, workitem_linear_id,
+      vgpr_type, &workitem_bits));
+
+  loom_value_id_t generation_low_part = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+      generation_low,
+      (1u << loom_amdgpu_sanitizer_race_shadow_low_generation_bit_count()) - 1u,
+      vgpr_type, &generation_low_part));
+  loom_value_id_t generation_low_bits = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT, generation_low_part,
+      vgpr_type, &generation_low_bits));
+
+  loom_value_id_t low = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, workitem_bits,
+      generation_low_bits, vgpr_type, &low));
+
+  loom_value_id_t generation_high_bits = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT,
+      loom_amdgpu_sanitizer_race_shadow_low_generation_bit_count(),
+      generation_low, vgpr_type, &generation_high_bits));
+  loom_value_id_t high = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+      generation_high_bits,
+      (1u << loom_amdgpu_sanitizer_race_shadow_high_generation_bit_count()) -
+          1u,
+      vgpr_type, &high));
+
+  *out_base = (loom_amdgpu_sanitizer_race_shadow_entry_base_t){
+      .low = low,
+      .high = high,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_amdgpu_sanitizer_race_build_dispatch_generation_low_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_race_config_values_t* config,
-    loom_value_id_t queue_slot_offset, loom_value_id_t* out_generation_low,
-    loom_value_id_t* out_shadow_slot) {
+    loom_value_id_t queue_slot_offset, loom_value_id_t* out_generation_low) {
   *out_generation_low = LOOM_VALUE_ID_INVALID;
+  loom_builder_t* builder = loom_low_lower_context_builder(context);
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  const loom_location_id_t location = source_op->location;
+
+  return loom_amdgpu_sanitizer_race_build_global_load_b32(
+      builder, descriptor_set, config->dispatch_state_base, queue_slot_offset,
+      LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE, location, out_generation_low);
+}
+
+static iree_status_t loom_amdgpu_sanitizer_race_build_dispatch_shadow_slot_load(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_sanitizer_race_config_values_t* config,
+    loom_value_id_t queue_slot_offset, loom_value_id_t* out_shadow_slot) {
   *out_shadow_slot = LOOM_VALUE_ID_INVALID;
   loom_builder_t* builder = loom_low_lower_context_builder(context);
   const loom_low_descriptor_set_t* descriptor_set =
@@ -653,9 +743,6 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_dispatch_state_loads(
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
 
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_load_b32(
-      builder, descriptor_set, config->dispatch_state_base, queue_slot_offset,
-      LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE, location, out_generation_low));
   loom_value_id_t shadow_slot_offset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT,
@@ -1004,6 +1091,7 @@ loom_amdgpu_sanitizer_race_build_dispatch_state_assigned_scc(
 iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
     loom_low_lower_context_t* context) {
   const loom_op_t* first_race_op = NULL;
+  const loom_op_t* first_race_access_op = NULL;
   const iree_host_size_t plan_count =
       loom_low_lower_context_selected_plan_count(context);
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
@@ -1012,10 +1100,16 @@ iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
     if (selected_plan.elided) {
       continue;
     }
-    if (selected_plan.plan.id == LOOM_OP_SANITIZER_RACE_ACCESS ||
-        selected_plan.plan.id == LOOM_OP_SANITIZER_RACE_SYNC) {
+    if (selected_plan.plan.id == LOOM_OP_SANITIZER_RACE_ACCESS) {
+      if (first_race_access_op == NULL) {
+        first_race_access_op = selected_plan.source_op;
+      }
+      if (first_race_op == NULL) {
+        first_race_op = selected_plan.source_op;
+      }
+    } else if (selected_plan.plan.id == LOOM_OP_SANITIZER_RACE_SYNC &&
+               first_race_op == NULL) {
       first_race_op = selected_plan.source_op;
-      break;
     }
   }
   if (first_race_op == NULL) {
@@ -1058,14 +1152,25 @@ iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
   state->has_topology_values = true;
   state->has_dispatch_slot_values = true;
 
-  const loom_type_t dispatch_state_arg_types[] = {vgpr_type, vgpr_type};
+  const bool has_race_access = first_race_access_op != NULL;
+  loom_type_t dispatch_state_arg_types[3] = {vgpr_type};
+  uint16_t dispatch_state_arg_count = 1;
+  if (has_race_access) {
+    dispatch_state_arg_types[dispatch_state_arg_count++] = vgpr_type;
+    dispatch_state_arg_types[dispatch_state_arg_count++] = vgpr_type;
+  }
   loom_low_lower_entry_interposition_t entry = {0};
   IREE_RETURN_IF_ERROR(loom_low_lower_interpose_entry_block(
-      context, dispatch_state_arg_types,
-      IREE_ARRAYSIZE(dispatch_state_arg_types), &entry));
-  IREE_ASSERT_EQ(entry.target_arg_count, 2);
-  state->dispatch_generation_low = entry.target_args[0];
-  state->shadow_slot = entry.target_args[1];
+      context, dispatch_state_arg_types, dispatch_state_arg_count, &entry));
+  IREE_ASSERT_EQ(entry.target_arg_count, dispatch_state_arg_count);
+  state->shadow_slot = entry.target_args[0];
+  if (has_race_access) {
+    state->shadow_entry_base = (loom_amdgpu_sanitizer_race_shadow_entry_base_t){
+        .low = entry.target_args[1],
+        .high = entry.target_args[2],
+    };
+    state->has_shadow_entry_base = true;
+  }
 
   loom_value_id_t enabled_scc = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_required_config_scc(
@@ -1089,13 +1194,30 @@ iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
           first_race_op->location, /*out_enabled_block=*/NULL,
           &dispatch_unassigned_block));
 
-  loom_value_id_t enabled_args[2] = {
+  loom_value_id_t enabled_args[3] = {
+      LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
   };
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_dispatch_state_loads(
-      context, first_race_op, &state->config_values, state->queue_slot_offset,
-      &enabled_args[0], &enabled_args[1]));
+  loom_value_id_t generation_low = LOOM_VALUE_ID_INVALID;
+  if (has_race_access) {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_sanitizer_race_build_dispatch_generation_low_load(
+            context, first_race_access_op, &state->config_values,
+            state->queue_slot_offset, &generation_low));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_race_build_dispatch_shadow_slot_load(
+          context, first_race_op, &state->config_values,
+          state->queue_slot_offset, &enabled_args[0]));
+  if (has_race_access) {
+    loom_amdgpu_sanitizer_race_shadow_entry_base_t enabled_base = {0};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_shadow_entry_base(
+        context, first_race_access_op, state->workitem_linear_id,
+        generation_low, &enabled_base));
+    enabled_args[1] = enabled_base.low;
+    enabled_args[2] = enabled_base.high;
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_branch_to_entry_body(
       context, &entry, enabled_args, first_race_op->location));
 
@@ -1104,7 +1226,11 @@ iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
   loom_value_id_t unassigned_zero = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_zero_vgpr_u32(
       context, first_race_op, &unassigned_zero));
-  const loom_value_id_t unassigned_args[2] = {unassigned_zero, unassigned_zero};
+  const loom_value_id_t unassigned_args[3] = {
+      unassigned_zero,
+      unassigned_zero,
+      unassigned_zero,
+  };
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_branch_to_entry_body(
       context, &entry, unassigned_args, first_race_op->location));
 
@@ -1113,13 +1239,17 @@ iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
   loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_sanitizer_race_zero_vgpr_u32(context, first_race_op, &zero));
-  const loom_value_id_t disabled_args[2] = {zero, zero};
+  const loom_value_id_t disabled_args[3] = {
+      zero,
+      zero,
+      zero,
+  };
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_branch_to_entry_body(
       context, &entry, disabled_args, first_race_op->location));
   loom_builder_set_block(loom_low_lower_context_builder(context),
                          entry.body_block);
 
-  state->has_dispatch_state_values = true;
+  state->has_dispatch_shadow_slot = true;
   return iree_ok_status();
 }
 
@@ -1222,8 +1352,8 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_dispatch_values(
   loom_amdgpu_sanitizer_race_dispatch_values_t values = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_dispatch_slot_values(
       context, &values.dispatch_ptr, &values.queue_slot_offset));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_dispatch_state_values(
-      context, &values.generation_low, &values.shadow_slot));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_dispatch_shadow_slot(
+      context, &values.shadow_slot));
   *out_values = values;
   return iree_ok_status();
 }
@@ -1310,18 +1440,12 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_shadow_report_address(
 static iree_status_t loom_amdgpu_sanitizer_race_build_shadow_entry(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_tsan_shadow_access_kind_t access_kind,
-    loom_value_id_t workitem_linear_id, loom_value_id_t epoch,
-    loom_value_id_t generation_low, loom_sanitizer_site_id_t site_id,
+    const loom_amdgpu_sanitizer_race_shadow_entry_base_t* base,
+    loom_value_id_t epoch, loom_sanitizer_site_id_t site_id,
     loom_amdgpu_sanitizer_race_shadow_entry_t* out_entry) {
   *out_entry = (loom_amdgpu_sanitizer_race_shadow_entry_t){0};
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
-
-  loom_value_id_t workitem_bits = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_SHIFT, workitem_linear_id,
-      vgpr_type, &workitem_bits));
 
   loom_value_id_t epoch_low = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
@@ -1334,38 +1458,17 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_shadow_entry(
       LOOM_AMDGPU_TSAN_SHADOW_ENTRY_EPOCH_SHIFT, epoch_low, vgpr_type,
       &epoch_bits));
 
-  loom_value_id_t generation_low_part = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-      generation_low, (1u << 9) - 1u, vgpr_type, &generation_low_part));
-  loom_value_id_t generation_low_bits = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT, generation_low_part,
-      vgpr_type, &generation_low_bits));
-
   loom_value_id_t low = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_vgpr_u32_constant(
       context, source_op, access_kind, &low));
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, low,
-      workitem_bits, vgpr_type, &low));
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, low, base->low,
+      vgpr_type, &low));
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, low, epoch_bits,
       vgpr_type, &low));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, low,
-      generation_low_bits, vgpr_type, &low));
 
-  loom_value_id_t generation_high_bits = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 9,
-      generation_low, vgpr_type, &generation_high_bits));
-  loom_value_id_t generation_high_part = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-      generation_high_bits, (1u << 11) - 1u, vgpr_type, &generation_high_part));
-  loom_value_id_t high = generation_high_part;
+  loom_value_id_t high = base->high;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_vgpr_u32_or_immediate(
       context, source_op, high,
       (site_id & ((1u << LOOM_AMDGPU_TSAN_SHADOW_ENTRY_SITE_BIT_COUNT) - 1u))
@@ -1985,10 +2088,14 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_access(
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_workitem_linear_id(
       context, &workitem_linear_id));
 
+  const loom_amdgpu_sanitizer_race_shadow_entry_base_t* shadow_entry_base =
+      NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_shadow_entry_base(
+      context, &shadow_entry_base));
   loom_amdgpu_sanitizer_race_shadow_entry_t current_entry = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_shadow_entry(
-      context, source_op, plan->shadow_access_kind, workitem_linear_id, epoch,
-      dispatch.generation_low, plan->site_id, &current_entry));
+      context, source_op, plan->shadow_access_kind, shadow_entry_base, epoch,
+      plan->site_id, &current_entry));
 
   loom_value_id_t shadow_entry_offset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_shadow_entry_offset(
