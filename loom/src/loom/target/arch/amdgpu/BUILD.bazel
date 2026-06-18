@@ -223,6 +223,7 @@ loom_cc_library(
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/target:legalization",
         "//loom/src/loom/target/arch/amdgpu:target_info_defs",
+        "//loom/src/loom/target/arch/amdgpu/lower:kinds",
         "//runtime/src/iree/base",
     ],
 )

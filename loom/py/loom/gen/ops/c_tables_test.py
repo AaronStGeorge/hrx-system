@@ -35,6 +35,8 @@ from loom.dsl import (
     ATTR_TYPE_I64_ARRAY,
     ATTR_TYPE_PREDICATE_LIST,
     ATTR_TYPE_SYMBOL,
+    DECOMPOSABLE,
+    ELEMENTWISE,
     INTEGER,
     POOL,
     SYMBOL_DEFINE,
@@ -270,6 +272,65 @@ def test_generate_tables_omits_type_propagation_flag_for_scalar_only_constraints
 
     assert "LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE" not in tables_c
     assert ".vtable_flags =" not in tables_c
+
+
+def test_generate_tables_derives_decomposable_for_same_type_elementwise_vector_ops() -> None:
+    op = Op(
+        "test.add",
+        group=Dialect("test"),
+        operands=[Operand("lhs", VECTOR), Operand("rhs", VECTOR)],
+        results=[Result("result", VECTOR)],
+        constraints=[SameType("lhs", "rhs", "result")],
+        traits=[ELEMENTWISE],
+    )
+
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert "LOOM_TRAIT_DECOMPOSABLE" in tables_c
+
+
+def test_generate_tables_accepts_explicit_decomposable_for_same_type_elementwise_vector_ops() -> None:
+    op = Op(
+        "test.add",
+        group=Dialect("test"),
+        operands=[Operand("lhs", VECTOR), Operand("rhs", VECTOR)],
+        results=[Result("result", VECTOR)],
+        constraints=[SameType("lhs", "rhs", "result")],
+        traits=[ELEMENTWISE, DECOMPOSABLE],
+    )
+
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert "LOOM_TRAIT_DECOMPOSABLE" in tables_c
+
+
+def test_generate_tables_does_not_derive_decomposable_for_mixed_result_elementwise_ops() -> None:
+    op = Op(
+        "test.cmp",
+        group=Dialect("test"),
+        operands=[Operand("lhs", VECTOR), Operand("rhs", VECTOR)],
+        results=[Result("result", VECTOR)],
+        constraints=[SameType("lhs", "rhs")],
+        traits=[ELEMENTWISE],
+    )
+
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert "LOOM_TRAIT_DECOMPOSABLE" not in tables_c
+
+
+def test_generate_tables_rejects_explicit_decomposable_for_mixed_result_elementwise_ops() -> None:
+    op = Op(
+        "test.cmp",
+        group=Dialect("test"),
+        operands=[Operand("lhs", VECTOR), Operand("rhs", VECTOR)],
+        results=[Result("result", VECTOR)],
+        constraints=[SameType("lhs", "rhs")],
+        traits=[ELEMENTWISE, DECOMPOSABLE],
+    )
+
+    with _raises_value_error("Decomposable requires"):
+        generate_tables_c("test", 0x01, [op])
 
 
 def test_generate_tables_marks_type_propagation_candidate_for_refinable_types() -> None:
