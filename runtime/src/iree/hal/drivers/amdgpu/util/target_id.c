@@ -21,6 +21,8 @@ typedef struct iree_hal_amdgpu_target_id_mapping_t {
   // Feature support flags from
   // iree_hal_amdgpu_target_feature_support_bits_t.
   iree_hal_amdgpu_target_feature_support_flags_t feature_support;
+  // Wavefront-size support derived from the processor table.
+  iree_hal_amdgpu_wavefront_size_support_t wavefront;
 } iree_hal_amdgpu_target_id_mapping_t;
 
 static const iree_hal_amdgpu_target_id_mapping_t
@@ -425,6 +427,35 @@ iree_hal_amdgpu_target_id_lookup_code_object_target(
   out_code_object_target_id->sramecc = exact_target_id->sramecc;
   out_code_object_target_id->xnack = exact_target_id->xnack;
   return iree_ok_status();
+}
+
+IREE_API_EXPORT iree_hal_amdgpu_wavefront_size_flags_t
+iree_hal_amdgpu_wavefront_size_flag(uint32_t wavefront_size) {
+  switch (wavefront_size) {
+    case 32:
+      return IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_32;
+    case 64:
+      return IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_64;
+    default:
+      return IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_NONE;
+  }
+}
+
+IREE_API_EXPORT bool iree_hal_amdgpu_target_id_lookup_wavefront_size_support(
+    const iree_hal_amdgpu_target_id_t* exact_target_id,
+    iree_hal_amdgpu_wavefront_size_support_t* out_support) {
+  IREE_ASSERT_ARGUMENT(exact_target_id);
+  IREE_ASSERT_ARGUMENT(out_support);
+  memset(out_support, 0, sizeof(*out_support));
+
+  if (exact_target_id->kind != IREE_HAL_AMDGPU_TARGET_KIND_EXACT) {
+    return false;
+  }
+  const iree_hal_amdgpu_target_id_mapping_t* mapping =
+      iree_hal_amdgpu_target_id_lookup_mapping(exact_target_id->processor);
+  if (mapping == NULL) return false;
+  *out_support = mapping->wavefront;
+  return true;
 }
 
 static bool iree_hal_amdgpu_generic_version_compatible(

@@ -93,6 +93,25 @@ typedef enum iree_hal_amdgpu_target_compatibility_bits_e {
 } iree_hal_amdgpu_target_compatibility_bits_t;
 typedef uint32_t iree_hal_amdgpu_target_compatibility_t;
 
+// Wavefront-size support flags for AMDGPU processors.
+typedef uint32_t iree_hal_amdgpu_wavefront_size_flags_t;
+typedef enum iree_hal_amdgpu_wavefront_size_flag_bits_e {
+  // No wavefront-size flag bits are present.
+  IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_NONE = 0u,
+  // Wavefront-size-32 mode.
+  IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_32 = 1u << 0,
+  // Wavefront-size-64 mode.
+  IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_64 = 1u << 1,
+} iree_hal_amdgpu_wavefront_size_flag_bits_t;
+
+// Wavefront-size facts derived from the AMDGPU processor table.
+typedef struct iree_hal_amdgpu_wavefront_size_support_t {
+  // Default wavefront size in lanes.
+  uint32_t default_size;
+  // Explicitly selectable wavefront-size modes from the kernel descriptor ABI.
+  iree_hal_amdgpu_wavefront_size_flags_t explicit_supported_sizes;
+} iree_hal_amdgpu_wavefront_size_support_t;
+
 // Parses an AMDGPU target ID into |out_target_id|.
 //
 // String views in |out_target_id| borrow from |value| and are only valid while
@@ -120,6 +139,19 @@ iree_status_t iree_hal_amdgpu_target_id_format(
 iree_status_t iree_hal_amdgpu_target_id_lookup_code_object_target(
     const iree_hal_amdgpu_target_id_t* exact_target_id,
     iree_hal_amdgpu_target_id_t* out_code_object_target_id);
+
+// Returns the wavefront-size flag for |wavefront_size|, or zero if unsupported.
+iree_hal_amdgpu_wavefront_size_flags_t iree_hal_amdgpu_wavefront_size_flag(
+    uint32_t wavefront_size);
+
+// Looks up wavefront-size facts for an exact processor target ID.
+//
+// The returned support preserves the processor table's explicit mode support.
+// The implicit default mode is executable even when it is not explicitly
+// selectable by the kernel descriptor ABI.
+bool iree_hal_amdgpu_target_id_lookup_wavefront_size_support(
+    const iree_hal_amdgpu_target_id_t* exact_target_id,
+    iree_hal_amdgpu_wavefront_size_support_t* out_support);
 
 // Checks whether |code_object_target_id| can execute on |agent_target_id|.
 iree_hal_amdgpu_target_compatibility_t

@@ -273,17 +273,79 @@ static iree_status_t iree_hal_amdgpu_device_spec_populate_queues(
   return status;
 }
 
+static void iree_hal_amdgpu_device_spec_query_wavefront_support(
+    const iree_hal_amdgpu_device_spec_physical_device_params_t* physical_device,
+    iree_hal_amdgpu_wavefront_size_support_t* out_support) {
+  if (iree_hal_amdgpu_target_id_lookup_wavefront_size_support(
+          &physical_device->target_id, out_support)) {
+    return;
+  }
+
+  out_support->default_size = physical_device->wavefront_size;
+  out_support->explicit_supported_sizes =
+      IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_NONE;
+}
+
+static uint32_t iree_hal_amdgpu_device_spec_minimum_subgroup_size(
+    iree_hal_amdgpu_wavefront_size_flags_t supported_sizes) {
+  if (iree_any_bit_set(supported_sizes,
+                       IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_32)) {
+    return 32;
+  }
+  if (iree_any_bit_set(supported_sizes,
+                       IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_64)) {
+    return 64;
+  }
+  return 0;
+}
+
+static uint32_t iree_hal_amdgpu_device_spec_maximum_subgroup_size(
+    iree_hal_amdgpu_wavefront_size_flags_t supported_sizes) {
+  if (iree_any_bit_set(supported_sizes,
+                       IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_64)) {
+    return 64;
+  }
+  if (iree_any_bit_set(supported_sizes,
+                       IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_32)) {
+    return 32;
+  }
+  return 0;
+}
+
+static uint64_t iree_hal_amdgpu_device_spec_subgroup_size_mask(
+    iree_hal_amdgpu_wavefront_size_flags_t supported_sizes) {
+  uint64_t mask = 0;
+  if (iree_any_bit_set(supported_sizes,
+                       IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_32)) {
+    mask |= 1ull << 32;
+  }
+  return mask;
+}
+
 static iree_status_t iree_hal_amdgpu_device_spec_populate_dispatch(
     const iree_hal_amdgpu_device_spec_params_t* params,
     iree_hal_device_spec_builder_t* builder) {
-  uint32_t wavefront_size = params->physical_devices[0].wavefront_size;
+  uint32_t default_wavefront_size = params->physical_devices[0].wavefront_size;
+  iree_hal_amdgpu_wavefront_size_flags_t supported_wavefront_sizes =
+      IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_NONE;
   uint32_t maximum_workgroup_local_memory_size =
       params->physical_devices[0].maximum_workgroup_local_memory_size;
   uint32_t compute_unit_count = 0;
   for (iree_host_size_t i = 0; i < params->physical_device_count; ++i) {
     const iree_hal_amdgpu_device_spec_physical_device_params_t*
         physical_device = &params->physical_devices[i];
-    wavefront_size = iree_min(wavefront_size, physical_device->wavefront_size);
+    iree_hal_amdgpu_wavefront_size_support_t physical_wavefront_support;
+    iree_hal_amdgpu_device_spec_query_wavefront_support(
+        physical_device, &physical_wavefront_support);
+    const iree_hal_amdgpu_wavefront_size_flags_t physical_supported_sizes =
+        physical_wavefront_support.explicit_supported_sizes |
+        iree_hal_amdgpu_wavefront_size_flag(
+            physical_wavefront_support.default_size);
+    default_wavefront_size = iree_min(default_wavefront_size,
+                                      physical_wavefront_support.default_size);
+    supported_wavefront_sizes =
+        i == 0 ? physical_supported_sizes
+               : supported_wavefront_sizes & physical_supported_sizes;
     maximum_workgroup_local_memory_size =
         iree_min(maximum_workgroup_local_memory_size,
                  physical_device->maximum_workgroup_local_memory_size);
@@ -295,13 +357,29 @@ static iree_status_t iree_hal_amdgpu_device_spec_populate_dispatch(
     compute_unit_count += physical_device->compute_unit_count;
   }
 
-  const uint64_t subgroup_size_supported_mask =
-      wavefront_size < 64 ? (1ull << wavefront_size) : 0;
+  if (IREE_UNLIKELY(supported_wavefront_sizes ==
+                    IREE_HAL_AMDGPU_WAVEFRONT_SIZE_FLAG_NONE)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU physical devices have no common wavefront size");
+  }
+  if (!iree_any_bit_set(
+          supported_wavefront_sizes,
+          iree_hal_amdgpu_wavefront_size_flag(default_wavefront_size))) {
+    default_wavefront_size = iree_hal_amdgpu_device_spec_minimum_subgroup_size(
+        supported_wavefront_sizes);
+  }
   iree_hal_device_dispatch_spec_t dispatch = {
-      .subgroup.default_size = wavefront_size,
-      .subgroup.minimum_size = wavefront_size,
-      .subgroup.maximum_size = wavefront_size,
-      .subgroup.supported_size_mask = subgroup_size_supported_mask,
+      .subgroup.default_size = default_wavefront_size,
+      .subgroup.minimum_size =
+          iree_hal_amdgpu_device_spec_minimum_subgroup_size(
+              supported_wavefront_sizes),
+      .subgroup.maximum_size =
+          iree_hal_amdgpu_device_spec_maximum_subgroup_size(
+              supported_wavefront_sizes),
+      .subgroup.supported_size_mask =
+          iree_hal_amdgpu_device_spec_subgroup_size_mask(
+              supported_wavefront_sizes),
       .execution.unit_count = compute_unit_count,
       .execution.group_count = (uint32_t)params->physical_device_count,
       .execution.maximum_workgroup_local_memory_size =
