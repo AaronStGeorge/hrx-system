@@ -214,3 +214,210 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @wave_sized_workgroup_me
   ds_write_b32 %20, %loaded
   return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @wave_sized_workgroup_memory_roundtrip_lane_cast_b32() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %lane_i32 = index.cast %lane : index to i32
+  %lane_index = index.cast %lane_i32 : i32 to index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 128 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<32xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %scratch_view[%lane_index] : vector<1xi32>, view<32xi32, #dense>
+  %loaded = vector.load %scratch_view[%lane_index] : view<32xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %scratch_view[%lane_index] : vector<1xi32>, view<32xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @wave_sized_workgroup_memory_roundtrip_lane_cast_b32() asm<amdgpu.rdna3.core> {
+  %lane_index = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %12 = storage {byte_alignment = 16, byte_length = 128} : low.storage<workgroup>
+  %one = v_mov_b32 1
+  %15 = v_lshlrev_b32_src0_inline %lane_index, 2
+  ds_write_b32 %15, %one
+  %loaded = ds_read_b32 %15
+  ds_write_b32 %15, %loaded
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @wave_sized_workgroup_memory_select_same_lane_b32() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %limit = index.constant 32 : index
+  %inside = index.cmp ult, %lane, %limit : index
+  %selected_lane = scf.select %inside, %lane, %lane : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 128 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<32xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %scratch_view[%selected_lane] : vector<1xi32>, view<32xi32, #dense>
+  %loaded = vector.load %scratch_view[%selected_lane] : view<32xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %scratch_view[%selected_lane] : vector<1xi32>, view<32xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @wave_sized_workgroup_memory_select_same_lane_b32() asm<amdgpu.rdna3.core> {
+  %13 = storage {byte_alignment = 16, byte_length = 128} : low.storage<workgroup>
+  %one = v_mov_b32 1
+  %16 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %one, %16
+  %17 = s_mov_b32_m0_imm 0
+  %loaded = ds_read_addtid_b32 %17
+  %19 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %loaded, %19
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @wave_sized_workgroup_memory_select_scaled_lane_b32() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %two = index.constant 2 : index
+  %scaled_lane = index.mul %lane, %two : index
+  %limit = index.constant 16 : index
+  %inside = index.cmp ult, %lane, %limit : index
+  %element_index = scf.select %inside, %lane, %scaled_lane : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %scratch_view[%element_index] : vector<1xi32>, view<64xi32, #dense>
+  %loaded = vector.load %scratch_view[%element_index] : view<64xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %scratch_view[%element_index] : vector<1xi32>, view<64xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @wave_sized_workgroup_memory_select_scaled_lane_b32() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %scaled_lane = v_lshlrev_b32_lit %lane, 1
+  %inside = v_cmp_lt_u32_src1_inline %lane {rhs = 16}
+  %element_index = v_cndmask_b32 %scaled_lane, %lane, %inside
+  %20 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %one = v_mov_b32 1
+  %23 = v_lshlrev_b32_src0_inline %element_index, 2
+  ds_write_b32 %23, %one
+  %loaded = ds_read_b32 %23
+  ds_write_b32 %23, %loaded
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @wave_sized_workgroup_memory_guarded_lane_store_b32() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %limit = index.constant 16 : index
+  %inside = index.cmp ult, %lane, %limit : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 128 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<32xi32, #dense>
+  %initial = vector.constant 0 : vector<1xi32>
+  %replacement = vector.constant 1 : vector<1xi32>
+  vector.store %initial, %scratch_view[%lane] : vector<1xi32>, view<32xi32, #dense>
+  scf.if %inside {
+    vector.store %replacement, %scratch_view[%lane] : vector<1xi32>, view<32xi32, #dense>
+  }
+  %loaded = vector.load %scratch_view[%lane] : view<32xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %scratch_view[%lane] : vector<1xi32>, view<32xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @wave_sized_workgroup_memory_guarded_lane_store_b32() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %14 = storage {byte_alignment = 16, byte_length = 128} : low.storage<workgroup>
+  %initial = v_mov_b32 0
+  %replacement = v_mov_b32 1
+  %18 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %initial, %18
+  %inside = v_cmp_lt_u32_src1_inline %lane {rhs = 16}
+  %20, %21 = s_and_saveexec_b64 %inside
+  low.cond_br %21, ^_bb1, ^_bb3 : reg<amdgpu.scc>
+^_bb1:
+  %22 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %replacement, %22
+  low.br ^_bb3
+^_bb2:
+  %23 = s_mov_b32_m0_imm 0
+  %loaded = ds_read_addtid_b32 %23
+  %25 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %loaded, %25
+  return
+^_bb3:
+  s_mov_b64_exec %20
+  low.br ^_bb2
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @wave_sized_workgroup_memory_guarded_lane_load_b32() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %limit = index.constant 16 : index
+  %inside = index.cmp ult, %lane, %limit : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 128 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<32xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %scratch_view[%lane] : vector<1xi32>, view<32xi32, #dense>
+  scf.if %inside {
+    %loaded = vector.load %scratch_view[%lane] : view<32xi32, #dense> -> vector<1xi32>
+    vector.store %loaded, %scratch_view[%lane] : vector<1xi32>, view<32xi32, #dense>
+  }
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @wave_sized_workgroup_memory_guarded_lane_load_b32() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %13 = storage {byte_alignment = 16, byte_length = 128} : low.storage<workgroup>
+  %one = v_mov_b32 1
+  %16 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %one, %16
+  %inside = v_cmp_lt_u32_src1_inline %lane {rhs = 16}
+  %18, %19 = s_and_saveexec_b64 %inside
+  low.cond_br %19, ^_bb1, ^_bb2 : reg<amdgpu.scc>
+^_bb1:
+  %20 = s_mov_b32_m0_imm 0
+  %loaded = ds_read_addtid_b32 %20
+  %22 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %loaded, %22
+  low.br ^_bb2
+^_bb2:
+  s_mov_b64_exec %18
+  return
+}
