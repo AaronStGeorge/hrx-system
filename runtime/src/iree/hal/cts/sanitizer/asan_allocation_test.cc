@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-#include "iree/hal/cts/sanitizer/asan_test_util.h"
+#include "iree/hal/cts/sanitizer/sanitizer_test_util.h"
 #include "iree/hal/cts/util/registry.h"
 
 namespace iree::hal::cts {
@@ -122,7 +122,7 @@ static iree_status_t ExportDeviceAddress(iree_hal_allocator_t* allocator,
 class AsanAllocationTest : public ::testing::TestWithParam<BackendInfo> {
  protected:
   void SetUp() override {
-    iree_status_t status = asan_device_.Initialize(GetParam());
+    iree_status_t status = asan_device_.Initialize(GetParam(), "asan");
     if (iree_status_is_unavailable(status)) {
       iree_status_free(status);
       GTEST_SKIP() << "Backend '" << GetParam().name
@@ -184,7 +184,9 @@ class AsanAllocationTest : public ::testing::TestWithParam<BackendInfo> {
 
   iree_hal_allocator_t* allocator() const { return asan_device_.allocator(); }
 
-  AsanDeviceEventRecorder* recorder() const { return asan_device_.recorder(); }
+  SanitizerDeviceEventRecorder* recorder() const {
+    return asan_device_.recorder();
+  }
 
   iree_hal_executable_t* executable() const { return executable_; }
 
@@ -194,7 +196,7 @@ class AsanAllocationTest : public ::testing::TestWithParam<BackendInfo> {
                         AsanReportExpectationFlags expectation_flags) {
     recorder()->WaitForAsanReportCount(expected_count);
     EXPECT_EQ(recorder()->asan_report_count(), expected_count);
-    iree_hal_device_asan_report_t report = recorder()->last_report();
+    iree_hal_device_asan_report_t report = recorder()->last_asan_report();
     EXPECT_EQ(report.record_length, sizeof(report));
     EXPECT_EQ(report.abi_version, IREE_HAL_DEVICE_ASAN_REPORT_ABI_VERSION_0);
     EXPECT_EQ(report.access_kind, expected_kind);
@@ -208,7 +210,7 @@ class AsanAllocationTest : public ::testing::TestWithParam<BackendInfo> {
     }
   }
 
-  AsanCachedBackendDevice asan_device_;
+  SanitizerCachedBackendDevice asan_device_;
   Ref<iree_hal_executable_cache_t> executable_cache_;
   Ref<iree_hal_executable_t> executable_;
 };

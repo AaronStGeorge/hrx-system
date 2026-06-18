@@ -7,165 +7,67 @@
 // AMDGPU TSAN executable CTS coverage.
 
 #include <cstdint>
-#include <map>
 #include <string_view>
 #include <vector>
 
-#include "iree/hal/cts/sanitizer/asan_test_util.h"
+#include "iree/hal/cts/sanitizer/sanitizer_test_util.h"
 #include "iree/hal/drivers/amdgpu/abi/feedback.h"
 #include "iree/hal/drivers/amdgpu/abi/tsan.h"
 #include "iree/hal/drivers/amdgpu/api.h"
-#include "iree/hal/drivers/amdgpu/registration/driver_module.h"
 
 namespace iree::hal::cts {
 
-namespace {
-
-static iree_status_t CreateAmdgpuTsanDevice(
-    const iree_hal_device_create_params_t* create_params,
-    iree_hal_driver_t** out_driver, iree_hal_device_t** out_device) {
-  *out_driver = nullptr;
-  *out_device = nullptr;
-
-  iree_status_t status = iree_hal_amdgpu_driver_module_register(
-      iree_hal_driver_registry_default());
-  if (iree_status_is_already_exists(status)) {
-    iree_status_free(status);
-    status = iree_ok_status();
-  }
-
-  iree_hal_driver_t* driver = nullptr;
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_driver_registry_try_create(
-        iree_hal_driver_registry_default(), IREE_SV("amdgpu"),
-        iree_allocator_system(), &driver);
-  }
-
-  iree_hal_device_t* device = nullptr;
-  if (iree_status_is_ok(status)) {
-    iree_string_pair_t params[1] = {};
-    params[0].key = IREE_SV("hal.sanitizer");
-    params[0].value = IREE_SV("tsan");
-    status = iree_hal_driver_create_device_by_id(
-        driver, IREE_HAL_DEVICE_ID_DEFAULT, IREE_ARRAYSIZE(params), params,
-        create_params, iree_allocator_system(), &device);
-  }
-
-  if (iree_status_is_ok(status)) {
-    *out_driver = driver;
-    *out_device = device;
-  } else {
-    iree_hal_device_release(device);
-    iree_hal_driver_release(driver);
-  }
-  return status;
-}
-
-struct TsanCachedBackendResources {
-  ~TsanCachedBackendResources() { Reset(); }
-
-  void Reset() {
-    iree_hal_allocator_release(allocator);
-    allocator = nullptr;
-    iree_hal_device_release(device);
-    device = nullptr;
-    iree_hal_device_group_release(device_group);
-    device_group = nullptr;
-    iree_hal_driver_release(driver);
-    driver = nullptr;
-    create_context.Deinitialize();
-    unavailable = false;
-  }
-
-  DeviceCreateContext create_context;
-  iree_hal_driver_t* driver = nullptr;
-  iree_hal_device_group_t* device_group = nullptr;
-  iree_hal_device_t* device = nullptr;
-  iree_hal_allocator_t* allocator = nullptr;
-  bool unavailable = false;
-};
-
-static std::map<std::string, TsanCachedBackendResources>&
-GetTsanBackendCache() {
-  static std::map<std::string, TsanCachedBackendResources> cache;
-  return cache;
-}
-
-}  // namespace
-
-class TsanExecutableTest : public CtsTestBase<> {
+class TsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
  protected:
   void SetUp() override {
-    const BackendInfo& backend = GetParam();
-    auto [cached_it, inserted] =
-        GetTsanBackendCache().try_emplace(GetBackendDeviceCacheKey(backend));
-    (void)inserted;
-    TsanCachedBackendResources& cached = cached_it->second;
-    if (!cached.device && !cached.unavailable) {
-      iree_hal_driver_t* driver = nullptr;
-      iree_hal_device_t* device = nullptr;
-      iree_status_t status =
-          cached.create_context.Initialize(iree_allocator_system());
-      if (iree_status_is_ok(status)) {
-        status = CreateAmdgpuTsanDevice(cached.create_context.params(), &driver,
-                                        &device);
-      }
-      if (AsanStatusCodeIsBackendUnavailable(iree_status_code(status))) {
-        iree_status_free(status);
-        cached.unavailable = true;
-        cached.create_context.Deinitialize();
-      } else if (!iree_status_is_ok(status)) {
-        cached.create_context.Deinitialize();
-        IREE_ASSERT_OK(status);
-      } else {
-        cached.driver = driver;
-        cached.device = device;
-        IREE_ASSERT_OK(iree_hal_device_group_create_from_device(
-            device, cached.create_context.frontier_tracker(),
-            iree_allocator_system(), &cached.device_group));
-        cached.allocator = iree_hal_device_allocator(device);
-        iree_hal_allocator_retain(cached.allocator);
-      }
-    }
-    if (cached.unavailable) {
-      GTEST_SKIP() << "Backend '" << backend.name
+    iree_status_t status = tsan_device_.Initialize(GetParam(), "tsan");
+    if (iree_status_is_unavailable(status)) {
+      iree_status_free(status);
+      GTEST_SKIP() << "Backend '" << GetParam().name
                    << "' unavailable on this system";
-      return;
     }
-
-    driver_ = cached.driver;
-    iree_hal_driver_retain(driver_);
-    device_group_ = cached.device_group;
-    iree_hal_device_group_retain(device_group_);
-    device_ = cached.device;
-    iree_hal_device_retain(device_);
-    device_allocator_ = cached.allocator;
-    iree_hal_allocator_retain(device_allocator_);
+    IREE_ASSERT_OK(status);
 
     IREE_ASSERT_OK(iree_hal_executable_cache_create(
-        device_, iree_make_cstring_view("default"), &executable_cache_));
+        device(), iree_make_cstring_view("default"), executable_cache_.out()));
 
-    PrepareExecutableOrSkipUnsupported(executable_cache_, "executable_test.bin",
-                                       &executable_);
+    iree_hal_executable_params_t executable_params;
+    iree_hal_executable_params_initialize(&executable_params);
+    executable_params.caching_mode =
+        IREE_HAL_EXECUTABLE_CACHING_MODE_ALIAS_PROVIDED_DATA;
+    executable_params.executable_format =
+        iree_make_cstring_view(GetParam().executable_format);
+    executable_params.executable_data = GetParam().executable_data(
+        iree_make_cstring_view("executable_test.bin"));
+    status = iree_hal_executable_cache_prepare_executable(
+        executable_cache_, &executable_params, executable_.out());
+    if (iree_status_is_incompatible(status)) {
+      iree_status_free(status);
+      GTEST_SKIP() << "Executable format '" << GetParam().executable_format
+                   << "' is incompatible with CTS backend/device '"
+                   << GetParam().name << "'";
+    }
+    IREE_ASSERT_OK(status);
   }
 
   void TearDown() override {
-    iree_hal_executable_release(executable_);
-    executable_ = nullptr;
-    iree_hal_executable_cache_release(executable_cache_);
-    executable_cache_ = nullptr;
-    iree_hal_allocator_release(device_allocator_);
-    device_allocator_ = nullptr;
-    iree_hal_device_release(device_);
-    device_ = nullptr;
-    iree_hal_device_group_release(device_group_);
-    device_group_ = nullptr;
-    iree_hal_driver_release(driver_);
-    driver_ = nullptr;
+    if (device()) {
+      IREE_EXPECT_OK(
+          iree_hal_device_queue_flush(device(), IREE_HAL_QUEUE_AFFINITY_ANY));
+    }
   }
 
-  iree_hal_executable_cache_t* executable_cache_ = nullptr;
-  iree_hal_executable_t* executable_ = nullptr;
+  iree_hal_device_t* device() const { return tsan_device_.device(); }
+
+  iree_hal_allocator_t* allocator() const { return tsan_device_.allocator(); }
+
+  SanitizerDeviceEventRecorder* recorder() const {
+    return tsan_device_.recorder();
+  }
+
+  SanitizerCachedBackendDevice tsan_device_;
+  Ref<iree_hal_executable_cache_t> executable_cache_;
+  Ref<iree_hal_executable_t> executable_;
 };
 
 TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
@@ -187,8 +89,9 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
       executable_, global, IREE_HAL_QUEUE_AFFINITY_ANY, &global_buffer));
   ASSERT_NE(global_buffer, nullptr);
 
-  std::vector<iree_hal_amdgpu_tsan_config_t> configs =
-      ReadBufferData<iree_hal_amdgpu_tsan_config_t>(global_buffer);
+  std::vector<iree_hal_amdgpu_tsan_config_t> configs;
+  IREE_ASSERT_OK(
+      SanitizerReadBufferData(device(), allocator(), global_buffer, &configs));
   ASSERT_EQ(configs.size(), 1u);
   const iree_hal_amdgpu_tsan_config_t& config = configs[0];
   EXPECT_EQ(config.record_length, sizeof(config));
@@ -211,12 +114,11 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
   EXPECT_NE(config.dispatch_state_base, 0u);
 
   Ref<iree_hal_buffer_t> output_buffer;
-  IREE_ASSERT_OK(
-      CreateZeroedDeviceBuffer(13 * sizeof(uint64_t), output_buffer.out()));
+  IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(allocator(), 13 * sizeof(uint64_t),
+                                             output_buffer.out()));
   Ref<iree_hal_buffer_t> fallback_buffer;
-  const uint64_t fallback_value = 0xAAAAAAAA55555555ull;
-  IREE_ASSERT_OK(CreateDeviceBufferWithData(
-      &fallback_value, sizeof(fallback_value), fallback_buffer.out()));
+  IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(allocator(), sizeof(uint64_t),
+                                             fallback_buffer.out()));
 
   iree_hal_buffer_ref_t binding_refs[2];
   binding_refs[0] = iree_hal_make_buffer_ref(
@@ -234,16 +136,18 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
       iree_make_const_byte_span(constant_data, sizeof(constant_data));
 
   SemaphoreList empty_wait;
-  SemaphoreList dispatch_signal(device_, {0}, {1});
+  SemaphoreList dispatch_signal(device(), {0}, {1});
   IREE_ASSERT_OK(iree_hal_device_queue_dispatch(
-      device_, IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait, dispatch_signal,
+      device(), IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait, dispatch_signal,
       executable_, iree_hal_executable_function_from_index(0),
       iree_hal_make_static_dispatch_config(1, 1, 1), constants, bindings,
       IREE_HAL_DISPATCH_FLAG_NONE));
   IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
       dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
 
-  std::vector<uint64_t> output_data = ReadBufferData<uint64_t>(output_buffer);
+  std::vector<uint64_t> output_data;
+  IREE_ASSERT_OK(SanitizerReadBufferData(device(), allocator(), output_buffer,
+                                         &output_data));
   ASSERT_EQ(output_data.size(), 13u);
   EXPECT_EQ(output_data[0], config.record_length);
   EXPECT_EQ(output_data[1], config.flags);
@@ -279,8 +183,9 @@ TEST_P(TsanExecutableTest, EnablesFeedbackConfigGlobal) {
       executable_, global, IREE_HAL_QUEUE_AFFINITY_ANY, &global_buffer));
   ASSERT_NE(global_buffer, nullptr);
 
-  std::vector<iree_hal_amdgpu_feedback_config_t> configs =
-      ReadBufferData<iree_hal_amdgpu_feedback_config_t>(global_buffer);
+  std::vector<iree_hal_amdgpu_feedback_config_t> configs;
+  IREE_ASSERT_OK(
+      SanitizerReadBufferData(device(), allocator(), global_buffer, &configs));
   ASSERT_EQ(configs.size(), 1u);
   const iree_hal_amdgpu_feedback_config_t& config = configs[0];
   EXPECT_EQ(config.record_length, sizeof(config));
@@ -289,6 +194,85 @@ TEST_P(TsanExecutableTest, EnablesFeedbackConfigGlobal) {
   EXPECT_NE(config.channel_base, 0u);
   EXPECT_NE(config.notify_signal.handle, 0u);
   EXPECT_NE(config.source_context, 0u);
+}
+
+TEST_P(TsanExecutableTest, ReportsTsanPacketThroughFeedback) {
+  Ref<iree_hal_buffer_t> output_buffer;
+  IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(allocator(), sizeof(uint64_t),
+                                             output_buffer.out()));
+  Ref<iree_hal_buffer_t> fallback_buffer;
+  IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(allocator(), sizeof(uint64_t),
+                                             fallback_buffer.out()));
+
+  iree_hal_buffer_ref_t binding_refs[2];
+  binding_refs[0] = iree_hal_make_buffer_ref(
+      output_buffer, /*offset=*/0, iree_hal_buffer_byte_length(output_buffer));
+  binding_refs[1] =
+      iree_hal_make_buffer_ref(fallback_buffer, /*offset=*/0,
+                               iree_hal_buffer_byte_length(fallback_buffer));
+  iree_hal_buffer_ref_list_t bindings = {
+      /*.count=*/IREE_ARRAYSIZE(binding_refs),
+      /*.values=*/binding_refs,
+  };
+
+  recorder()->Reset();
+  const uint32_t constant_data[] = {0x5453414Eu, 0x52505421u};
+  iree_const_byte_span_t constants =
+      iree_make_const_byte_span(constant_data, sizeof(constant_data));
+
+  SemaphoreList empty_wait;
+  SemaphoreList dispatch_signal(device(), {0}, {1});
+  IREE_ASSERT_OK(iree_hal_device_queue_dispatch(
+      device(), IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait, dispatch_signal,
+      executable_, iree_hal_executable_function_from_index(0),
+      iree_hal_make_static_dispatch_config(1, 1, 1), constants, bindings,
+      IREE_HAL_DISPATCH_FLAG_NONE));
+  IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
+      dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+
+  recorder()->WaitForTsanReportCount(1);
+  EXPECT_EQ(recorder()->asan_report_count(), 0u);
+  EXPECT_EQ(recorder()->tsan_report_count(), 1u);
+
+  std::vector<uint64_t> output_data;
+  IREE_ASSERT_OK(SanitizerReadBufferData(device(), allocator(), output_buffer,
+                                         &output_data));
+  ASSERT_EQ(output_data.size(), 1u);
+  EXPECT_EQ(output_data[0], 1u);
+
+  iree_hal_device_tsan_report_t report = recorder()->last_tsan_report();
+  EXPECT_EQ(report.record_length, sizeof(report));
+  EXPECT_EQ(report.abi_version, IREE_HAL_DEVICE_TSAN_REPORT_ABI_VERSION_0);
+  EXPECT_EQ(report.check_kind, IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE);
+  EXPECT_EQ(report.flags,
+            IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR |
+                IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR);
+  EXPECT_EQ(report.memory_space, IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP);
+  EXPECT_EQ(report.current_access_kind, IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE);
+  EXPECT_EQ(report.prior_access_kind, IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ);
+  EXPECT_EQ(report.access_length, 4u);
+  EXPECT_EQ(report.current_site_id, 0x5453414E00000002ull);
+  EXPECT_EQ(report.prior_site_id, 0x5453414E00000001ull);
+  EXPECT_EQ(report.memory_address, 0x20u);
+  EXPECT_EQ(report.shadow_address, 0xABC0u);
+  EXPECT_EQ(report.shadow_value, 0x12345678u);
+  EXPECT_EQ(report.current_workgroup_id[0], 0u);
+  EXPECT_EQ(report.current_workgroup_id[1], 0u);
+  EXPECT_EQ(report.current_workgroup_id[2], 0u);
+  EXPECT_EQ(report.current_workitem_id[0], 5u);
+  EXPECT_EQ(report.current_workitem_id[1], 0u);
+  EXPECT_EQ(report.current_workitem_id[2], 0u);
+  EXPECT_EQ(report.prior_workgroup_id[0], 0u);
+  EXPECT_EQ(report.prior_workgroup_id[1], 0u);
+  EXPECT_EQ(report.prior_workgroup_id[2], 0u);
+  EXPECT_EQ(report.prior_workitem_id[0], 3u);
+  EXPECT_EQ(report.prior_workitem_id[1], 0u);
+  EXPECT_EQ(report.prior_workitem_id[2], 0u);
+
+  iree_hal_device_event_source_t source = recorder()->last_source();
+  EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));
+  EXPECT_NE(source.executable_id, 0u);
+  EXPECT_NE(source.physical_device_ordinal, UINT32_MAX);
 }
 
 CTS_REGISTER_EXECUTABLE_TEST_SUITE(TsanExecutableTest);

@@ -9,6 +9,7 @@
 #include "iree/hal/drivers/amdgpu/abi/tsan.h"
 #include "iree/hal/drivers/amdgpu/device/support/asan.h"
 #include "iree/hal/drivers/amdgpu/device/support/kernel.h"
+#include "iree/hal/drivers/amdgpu/device/support/tsan.h"
 
 [[gnu::visibility("protected"), gnu::used]]
 volatile uint64_t executable_test_global = 0x0123456789ABCDEFull;
@@ -56,6 +57,18 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void export0(uint64_t* lhs, uint64_t* rhs,
     lhs[0] = iree_hal_amdgpu_asan_report_access(
                  &iree_feedback_config, IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_WRITE,
                  0x123456789ABCDEFull, 16, 0xC0DEFACEu, 0x56789ABCDEFull, 0xF0u)
+                 ? 1
+                 : 0;
+  } else if (c0 == 0x5453414Eu && c1 == 0x52505421u) {
+    lhs[0] = iree_hal_amdgpu_tsan_report_data_race(
+                 &iree_feedback_config,
+                 IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR |
+                     IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR,
+                 IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_WORKGROUP,
+                 IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_WRITE,
+                 IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_READ, 4,
+                 0x5453414E00000002ull, 0x5453414E00000001ull, 0x20, 0xABC0,
+                 0x12345678, 0, 0, 0, 5, 0, 0, 0, 0, 0, 3, 0, 0)
                  ? 1
                  : 0;
   } else {

@@ -11,9 +11,9 @@ iree_add_all_subdirs()
 
 iree_cc_library(
   NAME
-    asan_test_util
+    sanitizer_test_util
   HDRS
-    "asan_test_util.h"
+    "sanitizer_test_util.h"
   DEPS
     iree::hal
     iree::hal::cts::util::test_base
@@ -27,7 +27,7 @@ iree_cc_library(
   SRCS
     "asan_allocation_test.cc"
   DEPS
-    ::asan_test_util
+    ::sanitizer_test_util
     iree::hal
     iree::hal::cts::util::registry
     iree::hal::cts::util::test_base

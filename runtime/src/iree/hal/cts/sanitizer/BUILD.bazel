@@ -15,9 +15,9 @@ package(
 )
 
 iree_runtime_cc_library(
-    name = "asan_test_util",
+    name = "sanitizer_test_util",
     testonly = True,
-    hdrs = ["asan_test_util.h"],
+    hdrs = ["sanitizer_test_util.h"],
     deps = [
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/cts/util:test_base",
@@ -29,7 +29,7 @@ iree_runtime_cc_library(
     testonly = True,
     srcs = ["asan_allocation_test.cc"],
     deps = [
-        ":asan_test_util",
+        ":sanitizer_test_util",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/cts/util:registry",
         "//runtime/src/iree/hal/cts/util:test_base",

@@ -93,7 +93,7 @@ iree_runtime_cc_library(
     testonly = True,
     srcs = ["asan_executable_test.cc"],
     deps = [
-        "//runtime/src/iree/hal/cts/sanitizer:asan_test_util",
+        "//runtime/src/iree/hal/cts/sanitizer:sanitizer_test_util",
         "//runtime/src/iree/hal/drivers/amdgpu:headers",
         "//runtime/src/iree/hal/drivers/amdgpu/abi",
     ],
@@ -120,11 +120,10 @@ iree_runtime_cc_library(
     testonly = True,
     srcs = ["tsan_executable_test.cc"],
     deps = [
-        "//runtime/src/iree/hal/cts/sanitizer:asan_test_util",
+        "//runtime/src/iree/hal/cts/sanitizer:sanitizer_test_util",
         "//runtime/src/iree/hal/cts/util:test_base",
         "//runtime/src/iree/hal/drivers/amdgpu:headers",
         "//runtime/src/iree/hal/drivers/amdgpu/abi",
-        "//runtime/src/iree/hal/drivers/amdgpu/registration",
     ],
     alwayslink = True,
 )
@@ -132,7 +131,10 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "tsan_executable_tests",
     srcs = ["//runtime/src/iree/hal/cts/util:test_main.cc"],
-    args = ["--amdgpu_tsan=true"],
+    args = [
+        "--amdgpu_tsan=true",
+        "--amdgpu_tsan_report_policy=report-only",
+    ],
     deps = [
         ":backends",
         ":testdata_amdgpu",
@@ -150,7 +152,7 @@ iree_runtime_cc_library(
     srcs = ["manual_asan_executable_test.cc"],
     deps = [
         "//runtime/src/iree/hal",
-        "//runtime/src/iree/hal/cts/sanitizer:asan_test_util",
+        "//runtime/src/iree/hal/cts/sanitizer:sanitizer_test_util",
         "//runtime/src/iree/hal/cts/util:registry",
         "//runtime/src/iree/hal/cts/util:test_base",
         "//runtime/src/iree/hal/drivers/amdgpu:buffer",
