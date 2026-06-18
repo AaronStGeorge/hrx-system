@@ -138,9 +138,9 @@ iree_execution_test_suite(
 iree_execution_test_suite(
     name = "amdgpu_execution_test",
     data = [
-        "testdata/amdgpu_asan_actual.loom",
         "testdata/amdgpu_hal_actual.loom",
-        "testdata/amdgpu_sanitizer_actual.loom",
+        "//loom/src/loom/test/corpus/sanitizer:amdgpu_asan_actual.loom",
+        "//loom/src/loom/test/corpus/sanitizer:amdgpu_tsan_actual.loom",
     ],
     manifests = ["iree-test-loom_amdgpu.test.json"],
     tags = [

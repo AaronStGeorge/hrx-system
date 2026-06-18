@@ -98,9 +98,9 @@ iree_execution_test_suite(
   TOOLS
     "iree-test-loom=::iree-test-loom"
   DATA
-    "testdata/amdgpu_asan_actual.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_asan_actual.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_tsan_actual.loom"
     "testdata/amdgpu_hal_actual.loom"
-    "testdata/amdgpu_sanitizer_actual.loom"
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
     "requires-gpu-amd"

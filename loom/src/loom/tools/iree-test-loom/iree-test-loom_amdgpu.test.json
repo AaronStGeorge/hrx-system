@@ -28,7 +28,7 @@
       "run": {
         "tool": "iree-test-loom",
         "args": [
-          "{srcdir}/testdata/amdgpu_asan_actual.loom",
+          "{srcdir}/../../test/corpus/sanitizer/amdgpu_asan_actual.loom",
           "--case=@asan_global_store_valid_case",
           "--device=amdgpu",
           "--sanitizer=asan",
@@ -54,7 +54,7 @@
       "run": {
         "tool": "iree-test-loom",
         "args": [
-          "{srcdir}/testdata/amdgpu_asan_actual.loom",
+          "{srcdir}/../../test/corpus/sanitizer/amdgpu_asan_actual.loom",
           "--case=@asan_global_store_redzone_case",
           "--device=amdgpu",
           "--sanitizer=asan",
@@ -80,7 +80,7 @@
       "run": {
         "tool": "iree-test-loom",
         "args": [
-          "{srcdir}/testdata/amdgpu_sanitizer_actual.loom",
+          "{srcdir}/../../test/corpus/sanitizer/amdgpu_tsan_actual.loom",
           "--case=@tsan_workgroup_write_race_case",
           "--device=amdgpu",
           "--sanitizer=tsan",
@@ -95,6 +95,32 @@
             "\"format\":\"loom.test.v0\"",
             {
               "regex": "\"case\":\"tsan_workgroup_write_race_case\"[^}]*\"passed\":true"
+            },
+            "\"failed_sample_count\":0"
+          ]
+        }
+      }
+    },
+    {
+      "name": "keeps barrier-safe loom-authored amdgpu tsan access silent",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/../../test/corpus/sanitizer/amdgpu_tsan_actual.loom",
+          "--case=@tsan_workgroup_barrier_safe_write_case",
+          "--device=amdgpu",
+          "--sanitizer=tsan",
+          "--sanitizer-reporting=report-only",
+          "--amdgpu_tsan=true",
+          "--amdgpu_tsan_report_policy=report-only"
+        ]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "\"format\":\"loom.test.v0\"",
+            {
+              "regex": "\"case\":\"tsan_workgroup_barrier_safe_write_case\"[^}]*\"passed\":true"
             },
             "\"failed_sample_count\":0"
           ]
