@@ -59,6 +59,14 @@ iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     iree_string_view_t constraint_key, uint32_t* out_wavefront_size);
 
+// Verifies that a direct subgroup operation with |required_width| semantic
+// lanes can be represented by native subgroup communication for the active
+// target.
+iree_status_t loom_amdgpu_low_legality_verify_direct_subgroup_width(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    uint32_t source_wavefront_size, uint32_t required_width,
+    iree_string_view_t constraint_key);
+
 // Returns true when the target bundle belongs to an AMDGPU contract set.
 bool loom_amdgpu_low_legality_bundle_is_amdgpu(
     const loom_target_bundle_t* bundle);

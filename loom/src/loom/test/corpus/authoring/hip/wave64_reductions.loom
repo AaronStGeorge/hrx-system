@@ -2,10 +2,11 @@
 //
 // Position: these cases exercise the authoring spellings that decode and
 // matvec kernels naturally reach for when a wave64 target is selected. The
-// first three use workgroup reductions across sub-wave, full-wave, and
-// cross-wave workgroup sizes. The last kernel keeps the direct subgroup
-// spelling covered at compile time because authors may use it while tuning a
-// single-wave kernel.
+// workgroup reductions cover sub-wave, full-wave, and cross-wave workgroup
+// sizes. Direct full-width subgroup reductions on this target are intentionally
+// rejected by AMDGPU source-to-low diagnostics because native subgroup
+// communication is only proven for the processor's narrower execution
+// partition.
 amdgpu.target<gfx1100> @gfx1100_wave64 {subgroup_size = 64}
 
 kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_sub_wave() {
@@ -58,25 +59,6 @@ kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_cross_wave() {
   %output_view = buffer.view %output[%base] : buffer -> view<1xf32, #dense>
   %value = view.load %input_view[%lane] : view<128xf32, #dense> -> f32
   %sum = kernel.workgroup.reduce<addf> %value : f32
-  %is_leader = index.cmp eq, %lane, %zero : index
-  scf.if %is_leader {
-    view.store %sum, %output_view[%zero] : f32, view<1xf32, #dense>
-  }
-  kernel.return
-}
-
-kernel.def target(@gfx1100_wave64) @wave64_subgroup_reduce_full_wave() {
-  %unit = index.constant 1 : index
-  %workgroup_size = index.constant 64 : index
-  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch(%input: buffer, %output: buffer) {
-  %base = index.constant 0 : offset
-  %zero = index.constant 0 : index
-  %lane = kernel.workitem.id<x> : index
-  %input_view = buffer.view %input[%base] : buffer -> view<64xf32, #dense>
-  %output_view = buffer.view %output[%base] : buffer -> view<1xf32, #dense>
-  %value = view.load %input_view[%lane] : view<64xf32, #dense> -> f32
-  %sum = kernel.subgroup.reduce<addf> %value : f32
   %is_leader = index.cmp eq, %lane, %zero : index
   scf.if %is_leader {
     view.store %sum, %output_view[%zero] : f32, view<1xf32, #dense>

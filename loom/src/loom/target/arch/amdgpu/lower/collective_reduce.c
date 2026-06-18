@@ -22,7 +22,6 @@
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/lower/workgroup.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
-#include "loom/target/arch/amdgpu/target_id/target_id.h"
 
 #define LOOM_AMDGPU_MAX_SUBGROUP_TREE_STEPS 6u
 #define LOOM_AMDGPU_DPP_ROW_LANE_COUNT 16u
@@ -38,31 +37,6 @@ static uint32_t loom_amdgpu_subgroup_u32_log2(uint32_t value) {
     ++log2;
   }
   return log2;
-}
-
-static iree_status_t loom_amdgpu_workgroup_reduce_partition_wavefront_size(
-    const loom_module_t* module, loom_symbol_ref_t target_ref,
-    uint32_t source_wavefront_size, uint32_t* out_partition_wavefront_size) {
-  *out_partition_wavefront_size = 0;
-  const loom_amdgpu_processor_info_t* processor =
-      loom_amdgpu_target_processor_from_ref(module, target_ref);
-  if (processor == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AMDGPU workgroup reduction requires an AMDGPU processor target "
-        "record");
-  }
-  const uint32_t default_wavefront_size = processor->wavefront.default_size;
-  if (!loom_amdgpu_wavefront_size_is_valid(default_wavefront_size)) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AMDGPU workgroup reduction selected a processor with an invalid "
-        "default wavefront size");
-  }
-  *out_partition_wavefront_size = source_wavefront_size < default_wavefront_size
-                                      ? source_wavefront_size
-                                      : default_wavefront_size;
-  return iree_ok_status();
 }
 
 static bool loom_amdgpu_subgroup_optional_attr_is_present(const loom_op_t* op,
@@ -667,6 +641,13 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
       return iree_ok_status();
     }
   }
+  bool direct_width_supported = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
+      module, loom_low_lower_context_target_ref(context), wavefront_size,
+      active_lane_count, &direct_width_supported));
+  if (!direct_width_supported) {
+    return iree_ok_status();
+  }
 
   const loom_amdgpu_descriptor_resolution_t resolutions[] = {
       {
@@ -759,7 +740,7 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_reduce_plan(
     return iree_ok_status();
   }
   uint32_t partition_wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_workgroup_reduce_partition_wavefront_size(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_native_subgroup_width(
       module, loom_low_lower_context_target_ref(context), wavefront_size,
       &partition_wavefront_size));
   uint32_t flat_workgroup_size = 0;
@@ -1888,6 +1869,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
           IREE_SV("subgroup_reduce.fixed_workgroup_wave_multiple"));
     }
   }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_direct_subgroup_width(
+      context, op, wavefront_size, active_lane_count,
+      IREE_SV("subgroup_reduce.native_width")));
   if (!loom_amdgpu_u32_is_power_of_two(active_lane_count)) {
     uint32_t unused_identity_bits = 0;
     if (!loom_amdgpu_collective_combine_identity_bits(kind,
@@ -1968,7 +1952,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_reduce(
         context, op, IREE_SV("workgroup_reduce.wavefront_size"));
   }
   uint32_t partition_wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_workgroup_reduce_partition_wavefront_size(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_native_subgroup_width(
       module, loom_target_low_legality_target_ref(context), wavefront_size,
       &partition_wavefront_size));
   uint32_t flat_workgroup_size = 0;

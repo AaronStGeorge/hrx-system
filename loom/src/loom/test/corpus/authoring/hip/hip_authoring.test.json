@@ -369,9 +369,7 @@
             "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_sub_wave",
             "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_full_wave",
             "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_cross_wave",
-            "kernel.def target(@gfx1100_wave64) @wave64_subgroup_reduce_full_wave",
-            "kernel.workgroup.reduce<addf>",
-            "kernel.subgroup.reduce<addf>"
+            "kernel.workgroup.reduce<addf>"
           ]
         }
       ]
@@ -399,7 +397,6 @@
             "\"function\":\"wave64_workgroup_reduce_sub_wave\"",
             "\"function\":\"wave64_workgroup_reduce_full_wave\"",
             "\"function\":\"wave64_workgroup_reduce_cross_wave\"",
-            "\"function\":\"wave64_subgroup_reduce_full_wave\"",
             "\"local_memory_bytes\":8",
             "\"local_memory_bytes\":16",
             "\"barrier_count\":1"

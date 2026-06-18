@@ -39,6 +39,24 @@ bool loom_amdgpu_source_lds_layout_lookup_root(
 iree_status_t loom_amdgpu_target_wavefront_size(
     const loom_target_bundle_t* bundle, uint32_t* out_wavefront_size);
 
+// Returns the native execution partition width available to subgroup
+// communication for |source_wavefront_size| on |target_ref|.
+//
+// Source target records may request a kernel wavefront size that is wider than
+// the processor's default/native execution partition. Workgroup collectives can
+// stitch native partitions together through LDS, but direct subgroup operations
+// must not claim semantic communication wider than this value.
+iree_status_t loom_amdgpu_target_native_subgroup_width(
+    const loom_module_t* module, loom_symbol_ref_t target_ref,
+    uint32_t source_wavefront_size, uint32_t* out_native_subgroup_width);
+
+// Returns whether a direct subgroup operation with |required_width| lanes can
+// be represented by native subgroup communication for the selected target.
+iree_status_t loom_amdgpu_target_supports_direct_subgroup_width(
+    const loom_module_t* module, loom_symbol_ref_t target_ref,
+    uint32_t source_wavefront_size, uint32_t required_width,
+    bool* out_supported);
+
 // Returns the fixed per-dimension workgroup size required by the source
 // function or target ABI.
 bool loom_amdgpu_required_workgroup_size(
