@@ -278,6 +278,15 @@ typedef struct loom_amdgpu_dotf_plan_t {
   loom_amdgpu_descriptor_ref_t tied_accumulate_descriptor_ref;
 } loom_amdgpu_dotf_plan_t;
 
+typedef uint32_t loom_amdgpu_fma_mix_plan_flags_t;
+
+enum {
+  // Source 2 is encoded as a literal positive zero immediate.
+  LOOM_AMDGPU_FMA_MIX_PLAN_SRC2_LITERAL_ZERO = 1u << 0,
+  // Source 2 is supplied by a materialized VGPR positive zero.
+  LOOM_AMDGPU_FMA_MIX_PLAN_SRC2_MATERIALIZED_ZERO = 1u << 1,
+};
+
 typedef struct loom_amdgpu_fma_mix_plan_t {
   // Source values consumed by the selected descriptor in a, b, c order.
   loom_value_id_t sources[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT];
@@ -290,6 +299,8 @@ typedef struct loom_amdgpu_fma_mix_plan_t {
   // Descriptor source interpretation for each source value.
   loom_amdgpu_fma_mix_source_kind_t
       source_kinds[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT];
+  // Flags describing implicit literal or materialized operands.
+  loom_amdgpu_fma_mix_plan_flags_t flags;
 } loom_amdgpu_fma_mix_plan_t;
 
 typedef struct loom_amdgpu_packed_ternary_plan_t {

@@ -61,6 +61,8 @@ low.func.def target(@gfx11_target) @vop3p_fma_mix_half_result_lanes(%acc: reg<am
   %low_result = v_fma_mixlo_f16_f32_f32_f32 %acc, %a, %b, %c
   %high_result = v_fma_mixhi_f16_f16lo_f32_f32 %low_result, %a, %b, %c
   %mixed_result = v_fma_mixlo_f16_f16lo_f32_f16hi %high_result, %a, %b, %a
+  %low_literal = v_fma_mixlo_f16_f32_f32_f32_src2_lit %mixed_result, %a, %b, 0
+  %high_literal = v_fma_mixhi_f16_f16lo_f32_f32_src2_lit %low_literal, %a, %b, 0
   return
 }
 

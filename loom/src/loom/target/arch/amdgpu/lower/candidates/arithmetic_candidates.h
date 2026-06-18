@@ -49,6 +49,14 @@ extern const loom_amdgpu_fma_mix_descriptor_ref_cube_t
 extern const loom_amdgpu_fma_mix_src2_literal_descriptor_ref_table_t
     kLoomAmdgpuFmaMixF32Src2LiteralDescriptorRefs;
 
+// Descriptor refs for V_FMA_MIXLO_F16 source-2 literal-zero packets.
+extern const loom_amdgpu_fma_mix_src2_literal_descriptor_ref_table_t
+    kLoomAmdgpuFmaMixloF16Src2LiteralDescriptorRefs;
+
+// Descriptor refs for V_FMA_MIXHI_F16 source-2 literal-zero packets.
+extern const loom_amdgpu_fma_mix_src2_literal_descriptor_ref_table_t
+    kLoomAmdgpuFmaMixhiF16Src2LiteralDescriptorRefs;
+
 // Descriptor refs for f32-result mixed-source V_MAD_MIX_F32 packets.
 extern const loom_amdgpu_fma_mix_descriptor_ref_cube_t
     kLoomAmdgpuMadMixF32DescriptorRefs;

@@ -1898,23 +1898,47 @@ static iree_status_t loom_amdgpu_select_vector_insert_fma_mix_half_result(
     return iree_ok_status();
   }
 
-  const loom_op_t* fmaf_op = loom_amdgpu_value_defining_op(module, fmaf_result);
-  if (fmaf_op == NULL || !loom_scalar_fmaf_isa(fmaf_op) ||
-      loom_scalar_fmaf_result(fmaf_op) != fmaf_result) {
+  const loom_op_t* rounding_source_op =
+      loom_amdgpu_value_defining_op(module, fmaf_result);
+  loom_value_id_t operands[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT] = {
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+  };
+  uint32_t operand_count = LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT;
+  bool has_implicit_zero_addend = false;
+  if (rounding_source_op != NULL && loom_scalar_fmaf_isa(rounding_source_op) &&
+      loom_scalar_fmaf_result(rounding_source_op) == fmaf_result) {
+    operands[0] = loom_scalar_fmaf_a(rounding_source_op);
+    operands[1] = loom_scalar_fmaf_b(rounding_source_op);
+    operands[2] = loom_scalar_fmaf_c(rounding_source_op);
+  } else if (rounding_source_op != NULL &&
+             loom_scalar_mulf_isa(rounding_source_op) &&
+             loom_scalar_mulf_result(rounding_source_op) == fmaf_result) {
+    if (!loom_amdgpu_scalar_mulf_fastmath_allows_zero_add(rounding_source_op)) {
+      if (emit_diagnostics) {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fma_mix_half_result_diagnostic(
+            context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
+            destination_lane_index, result_half, source_kind_names,
+            IREE_SV("rejected"),
+            IREE_SV("rounding_source_mulf_requires_nnan_nsz_contract")));
+      }
+      return iree_ok_status();
+    }
+    operands[0] = loom_scalar_mulf_lhs(rounding_source_op);
+    operands[1] = loom_scalar_mulf_rhs(rounding_source_op);
+    operand_count = LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT - 1;
+    has_implicit_zero_addend = true;
+  } else {
     if (emit_diagnostics) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fma_mix_half_result_diagnostic(
           context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
           destination_lane_index, result_half, source_kind_names,
-          IREE_SV("rejected"), IREE_SV("rounding_source_not_fmaf")));
+          IREE_SV("rejected"), IREE_SV("rounding_source_not_fmaf_or_mulf")));
     }
     return iree_ok_status();
   }
 
-  const loom_value_id_t operands[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT] = {
-      loom_scalar_fmaf_a(fmaf_op),
-      loom_scalar_fmaf_b(fmaf_op),
-      loom_scalar_fmaf_c(fmaf_op),
-  };
   loom_value_id_t sources[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT] = {
       LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
@@ -1928,7 +1952,7 @@ static iree_status_t loom_amdgpu_select_vector_insert_fma_mix_half_result(
           LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
           LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
       };
-  for (uint32_t i = 0; i < IREE_ARRAYSIZE(operands); ++i) {
+  for (uint32_t i = 0; i < operand_count; ++i) {
     if (!loom_amdgpu_select_fma_mix_source(module, operands[i], &sources[i],
                                            &source_kinds[i],
                                            &source_register_offsets[i])) {
@@ -1942,7 +1966,16 @@ static iree_status_t loom_amdgpu_select_vector_insert_fma_mix_half_result(
       }
       return iree_ok_status();
     }
+  }
+  if (has_implicit_zero_addend) {
+    loom_amdgpu_canonicalize_mulf_mix_sources(sources, source_register_offsets,
+                                              source_kinds);
+  }
+  for (uint32_t i = 0; i < operand_count; ++i) {
     source_kind_names[i] = loom_amdgpu_fma_mix_source_kind_key(source_kinds[i]);
+  }
+  if (has_implicit_zero_addend) {
+    source_kind_names[2] = IREE_SV("f32_zero");
   }
 
   if (inout_plan->is_dynamic) {
@@ -1956,9 +1989,16 @@ static iree_status_t loom_amdgpu_select_vector_insert_fma_mix_half_result(
   }
 
   loom_amdgpu_descriptor_ref_t descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  loom_amdgpu_fma_mix_plan_flags_t plan_flags = 0;
   const bool high_result = (inout_plan->lane_offset & 1u) != 0;
-  if (!loom_amdgpu_select_fma_mix_half_result_descriptor(
-          context, source_kinds, high_result, &descriptor_ref)) {
+  const bool selected =
+      has_implicit_zero_addend
+          ? loom_amdgpu_select_fma_mix_half_result_zero_addend_descriptor(
+                context, source_kinds, high_result, &descriptor_ref,
+                &plan_flags)
+          : loom_amdgpu_select_fma_mix_half_result_descriptor(
+                context, source_kinds, high_result, &descriptor_ref);
+  if (!selected) {
     if (emit_diagnostics) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fma_mix_half_result_diagnostic(
           context, source_op, descriptor_ref, destination_lane_index,
@@ -1966,6 +2006,12 @@ static iree_status_t loom_amdgpu_select_vector_insert_fma_mix_half_result(
           IREE_SV("descriptor_unavailable")));
     }
     return iree_ok_status();
+  }
+  if (has_implicit_zero_addend) {
+    source_kind_names[2] =
+        iree_any_bit_set(plan_flags, LOOM_AMDGPU_FMA_MIX_PLAN_SRC2_LITERAL_ZERO)
+            ? IREE_SV("f32_zero_literal")
+            : IREE_SV("f32_zero_vgpr");
   }
 
   if (emit_diagnostics) {
@@ -1985,6 +2031,7 @@ static iree_status_t loom_amdgpu_select_vector_insert_fma_mix_half_result(
       .result = inout_plan->value,
       .descriptor_ref = descriptor_ref,
       .source_kinds = {source_kinds[0], source_kinds[1], source_kinds[2]},
+      .flags = plan_flags,
   };
   return iree_ok_status();
 }
@@ -4795,6 +4842,9 @@ iree_status_t loom_amdgpu_emit_f32_pair_to_packed_bf16(
 static void loom_amdgpu_require_fma_mix_plan_sources_storage(
     loom_low_lower_context_t* context, const loom_amdgpu_fma_mix_plan_t* plan) {
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(plan->sources); ++i) {
+    if (plan->sources[i] == LOOM_VALUE_ID_INVALID) {
+      continue;
+    }
     loom_low_lower_require_source_value_storage(context, plan->sources[i]);
   }
 }
