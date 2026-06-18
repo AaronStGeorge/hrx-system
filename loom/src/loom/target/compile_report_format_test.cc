@@ -11,6 +11,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/types.h"
+#include "loom/target/math_policy.h"
 
 namespace loom {
 namespace {
@@ -121,6 +122,26 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.bank_conflict_kind=*/IREE_SVL("bank-conflict-risk"),
           },
       };
+  loom_target_compile_report_math_row_t math_legalization_rows[] = {
+      {
+          /*.function_name=*/IREE_SVL("branchy"),
+          /*.source_op_name=*/IREE_SVL("scalar.roundf"),
+          /*.source_op_kind=*/44,
+          /*.target_bundle_name=*/IREE_SVL("vm_target"),
+          /*.target_config_name=*/IREE_SVL("vm_o0"),
+          /*.policy_name=*/IREE_SVL("amdgpu-math"),
+          /*.constraint_key=*/IREE_SVL("math.recipe.round_away_f32"),
+          /*.math_op=*/LOOM_TARGET_MATH_OP_ROUNDF,
+          /*.lane_domain=*/LOOM_TARGET_MATH_LANE_DOMAIN_SCALAR,
+          /*.element_type=*/LOOM_SCALAR_TYPE_F32,
+          /*.action=*/LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REWRITTEN,
+          /*.recipe=*/LOOM_TARGET_MATH_RECIPE_ROUND_AWAY_F32,
+          /*.source_fastmath_flags=*/LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
+          /*.recipe_fastmath_flags=*/LOOM_TARGET_MATH_FASTMATH_FLAG_NONE,
+          /*.created_op_count=*/10,
+          /*.erased_op_count=*/1,
+      },
+  };
   loom_target_compile_report_legalization_row_t target_legalization_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
@@ -161,6 +182,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
   report.function_name = IREE_SVL("branchy");
@@ -259,6 +281,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       &report, &source_low_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_source_low_memory_row(
       &report, &source_low_memory_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_math_row(
+      &report, &math_legalization_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_legalization_row(
       &report, &target_legalization_rows[0]));
 
@@ -380,6 +404,21 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("source_low selected_ops=4"), 0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("math_legalization rewritten=1 "
+                                          "rejected=0 missing_policy=0 "
+                                          "missing_recipe=0 rows=1"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("math_legalization[0] function=branchy "
+                        "source_op=scalar.roundf action=rewritten "
+                        "policy=amdgpu-math math_op=roundf domain=scalar "
+                        "element=f32 recipe=round-away-f32 "
+                        "constraint=math.recipe.round_away_f32"),
+                0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("source_low_memory rows=1"), 0),
       IREE_STRING_VIEW_NPOS);
@@ -522,6 +561,28 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "\"conflict_start_point\":0,"
                                           "\"conflict_end_point\":5"),
                                   0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"math_legalization\":{\"rewritten_op_count\":1,"
+                        "\"rejected_op_count\":0,"
+                        "\"missing_policy_op_count\":0,"
+                        "\"missing_recipe_op_count\":0,\"count\":1,"
+                        "\"rows\":[{\"index\":0,\"function\":\"branchy\","
+                        "\"source_op\":\"scalar.roundf\""),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"policy\":\"amdgpu-math\","
+                        "\"constraint_key\":\"math.recipe.round_away_f32\","
+                        "\"math_op\":\"roundf\",\"lane_domain\":\"scalar\","
+                        "\"element_type\":\"f32\",\"action\":\"rewritten\","
+                        "\"recipe\":\"round-away-f32\","
+                        "\"source_fastmath_flags\":0,"
+                        "\"recipe_fastmath_flags\":0,"
+                        "\"created_op_count\":10,\"erased_op_count\":1"),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"source_low\":{\"selected_op_count\":4"), 0),

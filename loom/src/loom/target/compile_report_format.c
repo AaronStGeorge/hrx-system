@@ -11,6 +11,7 @@
 
 #include "loom/ir/scalar_type.h"
 #include "loom/ir/types.h"
+#include "loom/target/math_policy.h"
 #include "loom/util/json.h"
 
 void loom_target_compile_report_format_options_initialize(
@@ -188,6 +189,23 @@ static iree_string_view_t loom_target_compile_report_legalizer_strategy_name(
     case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE:
       return IREE_SV("reference");
     case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_NONE:
+    default:
+      return IREE_SV("none");
+  }
+}
+
+static iree_string_view_t loom_target_compile_report_math_action_name(
+    loom_target_compile_report_math_action_t action) {
+  switch (action) {
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REWRITTEN:
+      return IREE_SV("rewritten");
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REJECTED:
+      return IREE_SV("rejected");
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_POLICY:
+      return IREE_SV("missing-policy");
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_RECIPE:
+      return IREE_SV("missing-recipe");
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_NONE:
     default:
       return IREE_SV("none");
   }
@@ -464,6 +482,21 @@ static iree_status_t loom_target_compile_report_format_summary(
         report->emitted_code_storage_byte_count));
   }
 
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        "COMPILE-REPORT: math_legalization rewritten=%" PRIu64
+        " rejected=%" PRIu64 " missing_policy=%" PRIu64
+        " missing_recipe=%" PRIu64 " rows=%" PRIhsz "\n",
+        report->math_legalization_rewritten_op_count,
+        report->math_legalization_rejected_op_count,
+        report->math_legalization_missing_policy_op_count,
+        report->math_legalization_missing_recipe_op_count,
+        report->math_legalization_rows.count));
+  }
+
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -699,7 +732,8 @@ static iree_status_t loom_target_compile_report_format_pressure_rows(
       const iree_string_view_t type_kind_name =
           loom_target_compile_report_type_kind_name(row->type_kind);
       const iree_string_view_t element_type_name =
-          loom_target_compile_report_scalar_type_name(row->element_type);
+          loom_target_compile_report_scalar_type_name(
+              (loom_scalar_type_t)row->element_type);
       const iree_string_view_t peak_block_name =
           loom_target_compile_report_non_empty(row->peak_block_name);
       const iree_string_view_t peak_operation_name =
@@ -985,6 +1019,66 @@ static iree_status_t loom_target_compile_report_format_source_low_memory_rows(
           row->dynamic_stride_bytes, row->vector_lane_stride_bytes,
           row->bank_stride_words, row->bank_conflict_degree,
           (int)bank_conflict_kind.size, bank_conflict_kind.data));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_compile_report_format_math_rows(
+    const loom_target_compile_report_t* report,
+    iree_string_builder_t* builder) {
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec =
+           report->math_legalization_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_math_row_t* rows =
+        (const loom_target_compile_report_math_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_math_row_t* row = &rows[i];
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
+      const iree_string_view_t source_op_name =
+          loom_target_compile_report_non_empty(row->source_op_name);
+      const iree_string_view_t target_bundle_name =
+          loom_target_compile_report_non_empty(row->target_bundle_name);
+      const iree_string_view_t target_config_name =
+          loom_target_compile_report_non_empty(row->target_config_name);
+      const iree_string_view_t policy_name =
+          loom_target_compile_report_non_empty(row->policy_name);
+      const iree_string_view_t constraint_key =
+          loom_target_compile_report_non_empty(row->constraint_key);
+      const iree_string_view_t action_name =
+          loom_target_compile_report_math_action_name(row->action);
+      const iree_string_view_t math_op_name =
+          loom_target_math_op_name((loom_target_math_op_t)row->math_op);
+      const iree_string_view_t lane_domain_name =
+          loom_target_math_lane_domain_name(
+              (loom_target_math_lane_domain_t)row->lane_domain);
+      const iree_string_view_t element_type_name =
+          loom_target_compile_report_scalar_type_name(row->element_type);
+      const iree_string_view_t recipe_name =
+          loom_target_math_recipe_name((loom_target_math_recipe_t)row->recipe);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: math_legalization[%" PRIhsz
+          "] function=%.*s source_op=%.*s action=%.*s policy=%.*s "
+          "math_op=%.*s domain=%.*s element=%.*s recipe=%.*s "
+          "constraint=%.*s bundle=%.*s config=%.*s source_fastmath=0x%02x "
+          "recipe_fastmath=0x%02x created_ops=%" PRIu64 " erased_ops=%" PRIu64
+          "\n",
+          row_index, (int)function_name.size, function_name.data,
+          (int)source_op_name.size, source_op_name.data, (int)action_name.size,
+          action_name.data, (int)policy_name.size, policy_name.data,
+          (int)math_op_name.size, math_op_name.data, (int)lane_domain_name.size,
+          lane_domain_name.data, (int)element_type_name.size,
+          element_type_name.data, (int)recipe_name.size, recipe_name.data,
+          (int)constraint_key.size, constraint_key.data,
+          (int)target_bundle_name.size, target_bundle_name.data,
+          (int)target_config_name.size, target_config_name.data,
+          (uint32_t)row->source_fastmath_flags,
+          (uint32_t)row->recipe_fastmath_flags, row->created_op_count,
+          row->erased_op_count));
     }
   }
   return iree_ok_status();
@@ -1987,6 +2081,107 @@ static iree_status_t loom_target_compile_report_format_source_low_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
+static iree_status_t loom_target_compile_report_format_math_row_json(
+    const loom_target_compile_report_math_row_t* row,
+    iree_host_size_t row_index, loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "index", row_index));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", row->function_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "source_op", row->source_op_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "source_op_kind", row->source_op_kind));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_bundle", row->target_bundle_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_config", row->target_config_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "policy", row->policy_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "constraint_key", row->constraint_key));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "math_op",
+      loom_target_math_op_name((loom_target_math_op_t)row->math_op)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "lane_domain",
+      loom_target_math_lane_domain_name(
+          (loom_target_math_lane_domain_t)row->lane_domain)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "element_type",
+      loom_target_compile_report_scalar_type_name(
+          (loom_scalar_type_t)row->element_type)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "action",
+      loom_target_compile_report_math_action_name(row->action)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "recipe",
+      loom_target_math_recipe_name((loom_target_math_recipe_t)row->recipe)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "source_fastmath_flags",
+      row->source_fastmath_flags));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "recipe_fastmath_flags",
+      row->recipe_fastmath_flags));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "created_op_count", row->created_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "erased_op_count", row->erased_op_count));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_target_compile_report_format_math_json(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_format_mode_t mode,
+    loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "rewritten_op_count",
+      report->math_legalization_rewritten_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "rejected_op_count",
+      report->math_legalization_rejected_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "missing_policy_op_count",
+      report->math_legalization_missing_policy_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "missing_recipe_op_count",
+      report->math_legalization_missing_recipe_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "count", report->math_legalization_rows.count));
+  if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "rows"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+    iree_host_size_t row_index = 0;
+    for (const loom_target_compile_report_vec_t* vec =
+             report->math_legalization_rows.head;
+         vec != NULL; vec = vec->next) {
+      const loom_target_compile_report_math_row_t* rows =
+          (const loom_target_compile_report_math_row_t*)
+              loom_target_compile_report_vec_const_rows(vec);
+      for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+        if (row_index != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(loom_target_compile_report_format_math_row_json(
+            &rows[i], row_index, stream));
+      }
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 static iree_status_t loom_target_compile_report_format_legalization_row_json(
     const loom_target_compile_report_legalization_row_t* row,
     iree_host_size_t row_index, loom_output_stream_t* stream) {
@@ -2144,6 +2339,8 @@ iree_status_t loom_target_compile_report_format_text(
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_allocation_failure_rows(report,
                                                                   builder));
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_math_rows(report, builder));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_source_low_rows(report, builder));
     IREE_RETURN_IF_ERROR(
@@ -2310,6 +2507,14 @@ iree_status_t loom_target_compile_report_format_json(
       IREE_RETURN_IF_ERROR(
           loom_target_compile_report_format_diagnostics_json(options, stream));
     }
+  }
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "math_legalization"));
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_math_json(
+        report, options->mode, stream));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {

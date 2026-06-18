@@ -167,13 +167,15 @@ iree_string_view_t loom_target_math_recipe_name(
 }
 
 loom_target_math_pass_capability_t loom_target_math_pass_capability_make(
-    const loom_target_math_policy_registry_t* policy_registry) {
+    const loom_target_math_policy_registry_t* policy_registry,
+    loom_target_compile_report_t* compile_report) {
   return (loom_target_math_pass_capability_t){
       .base =
           {
               .type = &loom_target_math_pass_capability_type,
           },
       .policy_registry = policy_registry,
+      .compile_report = compile_report,
   };
 }
 
@@ -197,4 +199,9 @@ const loom_target_math_policy_registry_t*
 loom_target_math_pass_capability_policy_registry(
     const loom_target_math_pass_capability_t* capability) {
   return capability ? capability->policy_registry : NULL;
+}
+
+loom_target_compile_report_t* loom_target_math_pass_capability_compile_report(
+    const loom_target_math_pass_capability_t* capability) {
+  return capability ? capability->compile_report : NULL;
 }

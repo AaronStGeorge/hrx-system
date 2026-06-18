@@ -36,6 +36,7 @@ loom_cc_library(
     loom::pass::types
     loom::rewrite::greedy
     loom::rewrite::rewriter
+    loom::target::compile_report
     loom::target::math_policy
     loom::target::selection
   PUBLIC

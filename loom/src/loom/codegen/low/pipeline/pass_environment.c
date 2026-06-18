@@ -65,8 +65,8 @@ loom_pass_environment_t loom_low_pass_environment_storage_initialize(
   out_storage->low_capability = loom_low_pass_capability_make(
       descriptor_registry, lower_policy_registry, legality_provider_list,
       legalizer_provider_list, compile_report);
-  out_storage->math_capability =
-      loom_target_math_pass_capability_make(math_policy_registry);
+  out_storage->math_capability = loom_target_math_pass_capability_make(
+      math_policy_registry, compile_report);
   out_storage->capabilities[0] = &out_storage->target_capability.base;
   out_storage->capabilities[1] = &out_storage->low_capability.base;
   out_storage->capabilities[2] = &out_storage->math_capability.base;

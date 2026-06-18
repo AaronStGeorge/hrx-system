@@ -194,6 +194,7 @@ loom_cc_library(
     "compile_report_format.c"
   DEPS
     ::compile_report
+    ::math_policy
     iree::base
     loom::ir
     loom::util::json
@@ -587,6 +588,7 @@ loom_cc_test(
     "compile_report_format_test.cc"
   DEPS
     ::compile_report_format
+    ::math_policy
     iree::testing::gtest
     iree::testing::gtest_main
     loom::ir

@@ -61,6 +61,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS = 1u << 12,
   // Final target resource and occupancy summaries were recorded.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES = 1u << 13,
+  // Target math-legalization recipe rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS = 1u << 14,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -196,6 +198,19 @@ typedef enum loom_target_compile_report_legalizer_strategy_e {
   // Target-independent reference rewrite used as a portable fallback.
   LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE = 2,
 } loom_target_compile_report_legalizer_strategy_t;
+
+typedef enum loom_target_compile_report_math_action_e {
+  // No target math-legalization action was recorded.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_NONE = 0,
+  // A target math policy rewrote the source op through a recipe.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REWRITTEN = 1,
+  // A target math policy rejected the source op.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REJECTED = 2,
+  // No target math policy was available for the source op.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_POLICY = 3,
+  // The selected target math recipe was not implemented by the compiler.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_RECIPE = 4,
+} loom_target_compile_report_math_action_t;
 
 // Residual move-cause counters for one category.
 typedef struct loom_target_compile_report_move_cause_counts_t {
@@ -513,6 +528,42 @@ typedef struct loom_target_compile_report_source_low_memory_row_t {
   iree_string_view_t bank_conflict_kind;
 } loom_target_compile_report_source_low_memory_row_t;
 
+// One target math-legalization decision row copied into a compile report.
+typedef struct loom_target_compile_report_math_row_t {
+  // Source function symbol containing the legalized math operation.
+  iree_string_view_t function_name;
+  // Source operation mnemonic considered by math legalization.
+  iree_string_view_t source_op_name;
+  // Numeric source operation kind considered by math legalization.
+  uint32_t source_op_kind;
+  // Target bundle selected for the containing function.
+  iree_string_view_t target_bundle_name;
+  // Target config selected for the containing function, if any.
+  iree_string_view_t target_config_name;
+  // Stable target math policy name that decided this row, if any.
+  iree_string_view_t policy_name;
+  // Stable structured constraint or recipe key selected by the policy.
+  iree_string_view_t constraint_key;
+  // Semantic math operation requested by the source op.
+  uint32_t math_op;
+  // Whether the source op computes one scalar lane or a vector of lanes.
+  uint32_t lane_domain;
+  // Scalar element type rewritten or rejected by math legalization.
+  uint32_t element_type;
+  // Target math-legalization decision recorded for this source operation.
+  loom_target_compile_report_math_action_t action;
+  // Recipe selected when |action| is REWRITTEN or MISSING_RECIPE.
+  uint32_t recipe;
+  // Source fast-math flags observed on the original operation.
+  uint8_t source_fastmath_flags;
+  // Extra fast-math flags applied by the selected recipe.
+  uint8_t recipe_fastmath_flags;
+  // Operations created by the math legalization recipe.
+  uint64_t created_op_count;
+  // Operations erased by the math legalization recipe.
+  uint64_t erased_op_count;
+} loom_target_compile_report_math_row_t;
+
 // One target-legalization decision row copied into a compile report.
 typedef struct loom_target_compile_report_legalization_row_t {
   // Source function symbol containing the legalized source operation.
@@ -701,6 +752,14 @@ typedef struct loom_target_compile_report_t {
   uint64_t target_legalization_unsupported_op_count;
   // Number of unsupported source ops with no legalizer opinion.
   uint64_t target_legalization_unhandled_op_count;
+  // Number of source math ops rewritten by target math legalization.
+  uint64_t math_legalization_rewritten_op_count;
+  // Number of source math ops rejected by target math legalization.
+  uint64_t math_legalization_rejected_op_count;
+  // Number of source math ops without a target math policy.
+  uint64_t math_legalization_missing_policy_op_count;
+  // Number of source math ops selecting an unimplemented recipe.
+  uint64_t math_legalization_missing_recipe_op_count;
   // Residual target move counts indexed by
   // loom_target_compile_report_move_cause_t.
   loom_target_compile_report_move_cause_counts_t
@@ -721,6 +780,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t source_low_rows;
   // Owned emitted source-memory packet rows.
   loom_target_compile_report_row_list_t source_low_memory_rows;
+  // Owned target math-legalization decision rows.
+  loom_target_compile_report_row_list_t math_legalization_rows;
   // Owned target-legalization decision rows.
   loom_target_compile_report_row_list_t target_legalization_rows;
   // Estimated target private memory bytes.
@@ -842,6 +903,11 @@ iree_status_t loom_target_compile_report_record_source_low_row(
 iree_status_t loom_target_compile_report_record_source_low_memory_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_memory_row_t* row);
+
+// Records one target math-legalization row.
+iree_status_t loom_target_compile_report_record_math_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_math_row_t* row);
 
 // Records one target-legalization decision for summary counters without
 // materializing a detailed row.

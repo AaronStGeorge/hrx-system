@@ -51,6 +51,8 @@ void loom_target_compile_report_deinitialize(
   loom_target_compile_report_row_list_deinitialize(
       allocator, &report->source_low_memory_rows);
   loom_target_compile_report_row_list_deinitialize(
+      allocator, &report->math_legalization_rows);
+  loom_target_compile_report_row_list_deinitialize(
       allocator, &report->target_legalization_rows);
   *report = (loom_target_compile_report_t){0};
 }
@@ -61,6 +63,7 @@ static bool loom_target_compile_report_has_rows(
          report->allocation_failure_rows.count != 0 ||
          report->entry_rows.count != 0 || report->source_low_rows.count != 0 ||
          report->source_low_memory_rows.count != 0 ||
+         report->math_legalization_rows.count != 0 ||
          report->target_legalization_rows.count != 0;
 }
 
@@ -153,12 +156,14 @@ iree_status_t loom_target_compile_report_clone(
   target.allocation_failure_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_memory_rows = (loom_target_compile_report_row_list_t){0};
+  target.math_legalization_rows = (loom_target_compile_report_row_list_t){0};
   target.target_legalization_rows = (loom_target_compile_report_row_list_t){0};
   if (source->entry_rows.count == 0 && source->pressure_rows.count == 0 &&
       source->spill_rows.count == 0 &&
       source->allocation_failure_rows.count == 0 &&
       source->source_low_rows.count == 0 &&
       source->source_low_memory_rows.count == 0 &&
+      source->math_legalization_rows.count == 0 &&
       source->target_legalization_rows.count == 0) {
     *out_target = target;
     return iree_ok_status();
@@ -198,6 +203,12 @@ iree_status_t loom_target_compile_report_clone(
         &source->source_low_memory_rows,
         sizeof(loom_target_compile_report_source_low_memory_row_t), allocator,
         &target.source_low_memory_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->math_legalization_rows,
+        sizeof(loom_target_compile_report_math_row_t), allocator,
+        &target.math_legalization_rows);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_row_list_clone(
@@ -528,6 +539,14 @@ static void loom_target_compile_report_merge_entry_summary(
     report->local_memory_bytes = entry_report->local_memory_bytes;
     report->static_instruction_mix = entry_report->static_instruction_mix;
     report->target_resources = entry_report->target_resources;
+    report->math_legalization_rewritten_op_count =
+        entry_report->math_legalization_rewritten_op_count;
+    report->math_legalization_rejected_op_count =
+        entry_report->math_legalization_rejected_op_count;
+    report->math_legalization_missing_policy_op_count =
+        entry_report->math_legalization_missing_policy_op_count;
+    report->math_legalization_missing_recipe_op_count =
+        entry_report->math_legalization_missing_recipe_op_count;
     memcpy(report->move_causes, entry_report->move_causes,
            sizeof(report->move_causes));
     return;
@@ -575,6 +594,14 @@ static void loom_target_compile_report_merge_entry_summary(
       iree_max(report->local_memory_bytes, entry_report->local_memory_bytes);
   loom_target_compile_report_accumulate_instruction_mix(
       &report->static_instruction_mix, &entry_report->static_instruction_mix);
+  report->math_legalization_rewritten_op_count +=
+      entry_report->math_legalization_rewritten_op_count;
+  report->math_legalization_rejected_op_count +=
+      entry_report->math_legalization_rejected_op_count;
+  report->math_legalization_missing_policy_op_count +=
+      entry_report->math_legalization_missing_policy_op_count;
+  report->math_legalization_missing_recipe_op_count +=
+      entry_report->math_legalization_missing_recipe_op_count;
   if (iree_any_bit_set(entry_report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES)) {
     if (report_had_target_resources) {
@@ -678,6 +705,13 @@ iree_status_t loom_target_compile_report_record_entry_report(
         sizeof(loom_target_compile_report_allocation_failure_row_t),
         report->allocator));
   }
+  if (iree_any_bit_set(
+          entry_report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_append_rows(
+        &report->math_legalization_rows, &entry_report->math_legalization_rows,
+        sizeof(loom_target_compile_report_math_row_t), report->allocator));
+  }
   return iree_ok_status();
 }
 
@@ -727,6 +761,42 @@ iree_status_t loom_target_compile_report_record_source_low_memory_row(
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
   return loom_target_compile_report_row_list_append(
       &report->source_low_memory_rows, sizeof(*row), report->allocator, row);
+}
+
+static void loom_target_compile_report_count_math_action(
+    loom_target_compile_report_t* report,
+    loom_target_compile_report_math_action_t action) {
+  switch (action) {
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REWRITTEN:
+      ++report->math_legalization_rewritten_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REJECTED:
+      ++report->math_legalization_rejected_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_POLICY:
+      ++report->math_legalization_missing_policy_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_RECIPE:
+      ++report->math_legalization_missing_recipe_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_NONE:
+    default:
+      break;
+  }
+}
+
+iree_status_t loom_target_compile_report_record_math_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_math_row_t* row) {
+  report->detail_flags |=
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS;
+  loom_target_compile_report_count_math_action(report, row->action);
+  if (!loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS)) {
+    return iree_ok_status();
+  }
+  return loom_target_compile_report_row_list_append(
+      &report->math_legalization_rows, sizeof(*row), report->allocator, row);
 }
 
 static void loom_target_compile_report_count_legalization_action(

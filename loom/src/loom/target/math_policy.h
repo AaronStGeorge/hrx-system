@@ -30,6 +30,7 @@ extern "C" {
 typedef struct loom_target_math_policy_t loom_target_math_policy_t;
 typedef struct loom_target_math_policy_registry_t
     loom_target_math_policy_registry_t;
+typedef struct loom_target_compile_report_t loom_target_compile_report_t;
 
 typedef enum loom_target_math_op_e {
   LOOM_TARGET_MATH_OP_UNKNOWN = 0,
@@ -168,6 +169,8 @@ typedef struct loom_target_math_pass_capability_t {
   loom_pass_environment_capability_t base;
   // Linked target math policy registry.
   const loom_target_math_policy_registry_t* policy_registry;
+  // Optional caller-owned compile report receiving math legalization rows.
+  loom_target_compile_report_t* compile_report;
 } loom_target_math_pass_capability_t;
 
 // Initializes |out_registry| from a target-owned entry table. The table is
@@ -209,7 +212,8 @@ iree_string_view_t loom_target_math_recipe_name(
 
 // Creates a borrowed target-math pass capability.
 loom_target_math_pass_capability_t loom_target_math_pass_capability_make(
-    const loom_target_math_policy_registry_t* policy_registry);
+    const loom_target_math_policy_registry_t* policy_registry,
+    loom_target_compile_report_t* compile_report);
 
 // Looks up the target math capability from |environment|. Returns NULL when
 // absent.
@@ -225,6 +229,10 @@ loom_target_math_pass_capability_from_pass(const loom_pass_t* pass);
 // Returns the policy registry selected by |capability|, or NULL.
 const loom_target_math_policy_registry_t*
 loom_target_math_pass_capability_policy_registry(
+    const loom_target_math_pass_capability_t* capability);
+
+// Returns the optional compile report selected by |capability|, or NULL.
+loom_target_compile_report_t* loom_target_math_pass_capability_compile_report(
     const loom_target_math_pass_capability_t* capability);
 
 #ifdef __cplusplus
