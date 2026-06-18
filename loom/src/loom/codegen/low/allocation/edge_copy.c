@@ -441,8 +441,11 @@ static iree_status_t loom_low_allocation_edge_copy_unit_starts_cycle(
     }
     next_destination = next_source;
   }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "low allocation edge-copy cycle is malformed");
+  // The path reached a different cycle in the same destination-to-source graph.
+  // This unit is not itself the cycle head, but the storage class still needs a
+  // scratch location before the real move sequencer can safely emit the group.
+  *out_has_cycle = true;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_edge_copy_class_seen_before(
