@@ -38,8 +38,9 @@ enum {
   LOOM_OP_CHECK_EXPECT_CLOSE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 16),
   LOOM_OP_CHECK_EXPECT_SHAPE = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 17),
   LOOM_OP_CHECK_EXPECT = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 18),
-  LOOM_OP_CHECK_BENCHMARK = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 19),
-  LOOM_OP_CHECK_COUNT_ = 20,
+  LOOM_OP_CHECK_EXPECT_EVENT = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 19),
+  LOOM_OP_CHECK_BENCHMARK = LOOM_OP_KIND(LOOM_DIALECT_CHECK, 20),
+  LOOM_OP_CHECK_COUNT_ = 21,
 };
 
 // Check symbol visibility. Absent (0) means private.
@@ -371,6 +372,18 @@ iree_status_t loom_check_expect_build(
     loom_string_id_t provider,
     loom_value_id_t actual,
     loom_value_id_t expected,
+    loom_optional loom_named_attr_slice_t attrs,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_CHECK_EXPECT_EVENT: Requires a structured runtime event matching a provider-specific subset pattern.
+// check.expect.event<device> {type = "asan_report", count = 1}
+LOOM_DEFINE_ISA(loom_check_expect_event_isa, LOOM_OP_CHECK_EXPECT_EVENT)
+LOOM_DEFINE_ATTR_STRING(loom_check_expect_event_provider, 0)
+LOOM_DEFINE_ATTR_DICT(loom_check_expect_event_attrs, 1)
+iree_status_t loom_check_expect_event_build(
+    loom_builder_t* builder,
+    loom_string_id_t provider,
     loom_optional loom_named_attr_slice_t attrs,
     loom_location_id_t location,
     loom_op_t** out_op);

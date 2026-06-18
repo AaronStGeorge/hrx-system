@@ -28,6 +28,8 @@ const char* loom_testbench_expectation_kind_name(
       return "shape";
     case LOOM_TESTBENCH_EXPECTATION_CUSTOM:
       return "custom";
+    case LOOM_TESTBENCH_EXPECTATION_EVENT:
+      return "event";
   }
   return "unknown";
 }
@@ -748,11 +750,795 @@ static iree_status_t loom_testbench_lookup_expectation_values(
       table, expectation->expected_value_id, out_expected);
 }
 
+static iree_string_view_t loom_testbench_module_string(
+    const loom_module_t* module, loom_string_id_t string_id) {
+  if (module == NULL || string_id >= module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return module->strings.entries[string_id];
+}
+
+static const loom_named_attr_t* loom_testbench_find_named_attr(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    const loom_named_attr_t* attr = &attrs.entries[i];
+    if (iree_string_view_equal(
+            loom_testbench_module_string(module, attr->name_id), name)) {
+      return attr;
+    }
+  }
+  return NULL;
+}
+
+static bool loom_testbench_attr_name_is_in_set(const loom_module_t* module,
+                                               const loom_named_attr_t* attr,
+                                               const iree_string_view_t* names,
+                                               iree_host_size_t name_count) {
+  const iree_string_view_t attr_name =
+      loom_testbench_module_string(module, attr->name_id);
+  for (iree_host_size_t i = 0; i < name_count; ++i) {
+    if (iree_string_view_equal(attr_name, names[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_testbench_validate_event_attrs(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    const iree_string_view_t* names, iree_host_size_t name_count,
+    iree_string_view_t context) {
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    if (!loom_testbench_attr_name_is_in_set(module, &attrs.entries[i], names,
+                                            name_count)) {
+      const iree_string_view_t attr_name =
+          loom_testbench_module_string(module, attrs.entries[i].name_id);
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "%.*s event expectation has unsupported "
+                              "attribute `%.*s`",
+                              (int)context.size, context.data,
+                              (int)attr_name.size, attr_name.data);
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_event_optional_i64(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name, bool* out_present, int64_t* out_value) {
+  *out_present = false;
+  *out_value = 0;
+  const loom_named_attr_t* attr =
+      loom_testbench_find_named_attr(module, attrs, name);
+  if (attr == NULL) {
+    return iree_ok_status();
+  }
+  if (attr->value.kind != LOOM_ATTR_I64) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "event expectation attribute `%.*s` must be i64",
+                            (int)name.size, name.data);
+  }
+  *out_present = true;
+  *out_value = loom_attr_as_i64(attr->value);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_event_optional_bool(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name, bool* out_present, bool* out_value) {
+  *out_present = false;
+  *out_value = false;
+  const loom_named_attr_t* attr =
+      loom_testbench_find_named_attr(module, attrs, name);
+  if (attr == NULL) {
+    return iree_ok_status();
+  }
+  if (attr->value.kind != LOOM_ATTR_BOOL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "event expectation attribute `%.*s` must be bool",
+                            (int)name.size, name.data);
+  }
+  *out_present = true;
+  *out_value = loom_attr_as_bool(attr->value);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_event_optional_string(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name, bool* out_present, iree_string_view_t* out_value) {
+  *out_present = false;
+  *out_value = iree_string_view_empty();
+  const loom_named_attr_t* attr =
+      loom_testbench_find_named_attr(module, attrs, name);
+  if (attr == NULL) {
+    return iree_ok_status();
+  }
+  if (attr->value.kind != LOOM_ATTR_STRING) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "event expectation attribute `%.*s` must be string",
+                            (int)name.size, name.data);
+  }
+  *out_present = true;
+  *out_value =
+      loom_testbench_module_string(module, loom_attr_as_string_id(attr->value));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_event_optional_dict(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name, bool* out_present,
+    loom_named_attr_slice_t* out_value) {
+  *out_present = false;
+  *out_value = loom_named_attr_slice_empty();
+  const loom_named_attr_t* attr =
+      loom_testbench_find_named_attr(module, attrs, name);
+  if (attr == NULL) {
+    return iree_ok_status();
+  }
+  if (attr->value.kind != LOOM_ATTR_DICT) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "event expectation attribute `%.*s` must be dict",
+                            (int)name.size, name.data);
+  }
+  *out_present = true;
+  *out_value = loom_attr_as_dict(attr->value);
+  return iree_ok_status();
+}
+
+static bool loom_testbench_event_type_parse(iree_string_view_t value,
+                                            uint32_t* out_type) {
+  if (iree_string_view_equal(value, IREE_SV("driver_failure"))) {
+    *out_type = IREE_HAL_DEVICE_EVENT_TYPE_DRIVER_FAILURE;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("asan_report"))) {
+    *out_type = IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("ubsan_report"))) {
+    *out_type = IREE_HAL_DEVICE_EVENT_TYPE_UBSAN_REPORT;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("tsan_report"))) {
+    *out_type = IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("printf"))) {
+    *out_type = IREE_HAL_DEVICE_EVENT_TYPE_PRINTF;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("host_call"))) {
+    *out_type = IREE_HAL_DEVICE_EVENT_TYPE_HOST_CALL;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("none"))) {
+    *out_type = IREE_HAL_DEVICE_EVENT_TYPE_NONE;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_testbench_event_severity_parse(iree_string_view_t value,
+                                                uint32_t* out_severity) {
+  if (iree_string_view_equal(value, IREE_SV("trace"))) {
+    *out_severity = IREE_HAL_DEVICE_EVENT_SEVERITY_TRACE;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("info"))) {
+    *out_severity = IREE_HAL_DEVICE_EVENT_SEVERITY_INFO;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("warning"))) {
+    *out_severity = IREE_HAL_DEVICE_EVENT_SEVERITY_WARNING;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("error"))) {
+    *out_severity = IREE_HAL_DEVICE_EVENT_SEVERITY_ERROR;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("fatal"))) {
+    *out_severity = IREE_HAL_DEVICE_EVENT_SEVERITY_FATAL;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_testbench_asan_access_parse(iree_string_view_t value,
+                                             uint32_t* out_kind) {
+  if (iree_string_view_equal(value, IREE_SV("read"))) {
+    *out_kind = IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("write"))) {
+    *out_kind = IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("atomic"))) {
+    *out_kind = IREE_HAL_DEVICE_ASAN_ACCESS_KIND_ATOMIC;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("unknown"))) {
+    *out_kind = IREE_HAL_DEVICE_ASAN_ACCESS_KIND_UNKNOWN;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_testbench_ubsan_check_parse(iree_string_view_t value,
+                                             uint32_t* out_kind) {
+  if (iree_string_view_equal(value, IREE_SV("integer_overflow"))) {
+    *out_kind = IREE_HAL_DEVICE_UBSAN_CHECK_KIND_INTEGER_OVERFLOW;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("divide_by_zero"))) {
+    *out_kind = IREE_HAL_DEVICE_UBSAN_CHECK_KIND_DIVIDE_BY_ZERO;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("alignment"))) {
+    *out_kind = IREE_HAL_DEVICE_UBSAN_CHECK_KIND_ALIGNMENT;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("float_nan_contract"))) {
+    *out_kind = IREE_HAL_DEVICE_UBSAN_CHECK_KIND_FLOAT_NAN_CONTRACT;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("unreachable"))) {
+    *out_kind = IREE_HAL_DEVICE_UBSAN_CHECK_KIND_UNREACHABLE;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("unknown"))) {
+    *out_kind = IREE_HAL_DEVICE_UBSAN_CHECK_KIND_UNKNOWN;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_testbench_tsan_check_parse(iree_string_view_t value,
+                                            uint32_t* out_kind) {
+  if (iree_string_view_equal(value, IREE_SV("data_race"))) {
+    *out_kind = IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("unknown"))) {
+    *out_kind = IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_testbench_tsan_memory_parse(iree_string_view_t value,
+                                             uint32_t* out_space) {
+  if (iree_string_view_equal(value, IREE_SV("global"))) {
+    *out_space = IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_GLOBAL;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("workgroup"))) {
+    *out_space = IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("private"))) {
+    *out_space = IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_PRIVATE;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("unknown"))) {
+    *out_space = IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_UNKNOWN;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_testbench_tsan_access_parse(iree_string_view_t value,
+                                             uint32_t* out_kind) {
+  if (iree_string_view_equal(value, IREE_SV("read"))) {
+    *out_kind = IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("write"))) {
+    *out_kind = IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("read_write"))) {
+    *out_kind = IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ_WRITE;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("atomic"))) {
+    *out_kind = IREE_HAL_DEVICE_TSAN_ACCESS_KIND_ATOMIC;
+    return true;
+  }
+  if (iree_string_view_equal(value, IREE_SV("unknown"))) {
+    *out_kind = IREE_HAL_DEVICE_TSAN_ACCESS_KIND_UNKNOWN;
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_testbench_event_optional_enum_string(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name,
+    bool (*parse_fn)(iree_string_view_t value, uint32_t* out_value),
+    bool* out_present, uint32_t* out_value) {
+  iree_string_view_t string_value = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_string(
+      module, attrs, name, out_present, &string_value));
+  if (!*out_present) {
+    return iree_ok_status();
+  }
+  if (!parse_fn(string_value, out_value)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "event expectation attribute `%.*s` has unknown "
+                            "value `%.*s`",
+                            (int)name.size, name.data, (int)string_value.size,
+                            string_value.data);
+  }
+  return iree_ok_status();
+}
+
+static bool loom_testbench_event_match_optional_u32(uint32_t actual,
+                                                    bool expected_present,
+                                                    int64_t expected) {
+  return !expected_present ||
+         (expected >= 0 && (uint64_t)expected == (uint64_t)actual);
+}
+
+static bool loom_testbench_event_match_optional_u64(uint64_t actual,
+                                                    bool expected_present,
+                                                    int64_t expected) {
+  return !expected_present || (expected >= 0 && (uint64_t)expected == actual);
+}
+
+static bool loom_testbench_event_match_optional_string(
+    iree_string_view_t actual, bool expected_present,
+    iree_string_view_t expected) {
+  return !expected_present || iree_string_view_equal(actual, expected);
+}
+
+static bool loom_testbench_event_payload_has_prefix(
+    const iree_hal_device_event_t* event, iree_host_size_t prefix_length) {
+  return event->payload.data != NULL &&
+         event->payload.data_length >= prefix_length;
+}
+
+static iree_status_t loom_testbench_event_match_asan(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    const iree_hal_device_event_t* event, bool* out_matches) {
+  *out_matches = false;
+  const iree_string_view_t keys[] = {
+      IREE_SV("access"),
+      IREE_SV("access_length"),
+      IREE_SV("shadow_value"),
+      IREE_SV("site_id"),
+  };
+  IREE_RETURN_IF_ERROR(loom_testbench_validate_event_attrs(
+      module, attrs, keys, IREE_ARRAYSIZE(keys), IREE_SV("asan")));
+  if (event->type != IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT ||
+      !loom_testbench_event_payload_has_prefix(
+          event, sizeof(iree_hal_device_asan_report_t))) {
+    return iree_ok_status();
+  }
+  const iree_hal_device_asan_report_t* report =
+      (const iree_hal_device_asan_report_t*)event->payload.data;
+
+  bool access_present = false;
+  uint32_t access = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_enum_string(
+      module, attrs, IREE_SV("access"), loom_testbench_asan_access_parse,
+      &access_present, &access));
+  bool access_length_present = false;
+  int64_t access_length = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("access_length"), &access_length_present,
+      &access_length));
+  bool shadow_value_present = false;
+  int64_t shadow_value = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_testbench_event_optional_i64(module, attrs, IREE_SV("shadow_value"),
+                                        &shadow_value_present, &shadow_value));
+  bool site_id_present = false;
+  int64_t site_id = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("site_id"), &site_id_present, &site_id));
+
+  *out_matches =
+      (!access_present || report->access_kind == access) &&
+      loom_testbench_event_match_optional_u64(
+          report->access_length, access_length_present, access_length) &&
+      loom_testbench_event_match_optional_u64(
+          report->shadow_value, shadow_value_present, shadow_value) &&
+      loom_testbench_event_match_optional_u64(report->site_id, site_id_present,
+                                              site_id);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_event_match_ubsan(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    const iree_hal_device_event_t* event, bool* out_matches) {
+  *out_matches = false;
+  const iree_string_view_t keys[] = {
+      IREE_SV("check"),
+      IREE_SV("operand0"),
+      IREE_SV("operand1"),
+      IREE_SV("site_id"),
+  };
+  IREE_RETURN_IF_ERROR(loom_testbench_validate_event_attrs(
+      module, attrs, keys, IREE_ARRAYSIZE(keys), IREE_SV("ubsan")));
+  if (event->type != IREE_HAL_DEVICE_EVENT_TYPE_UBSAN_REPORT ||
+      !loom_testbench_event_payload_has_prefix(
+          event, sizeof(iree_hal_device_ubsan_report_t))) {
+    return iree_ok_status();
+  }
+  const iree_hal_device_ubsan_report_t* report =
+      (const iree_hal_device_ubsan_report_t*)event->payload.data;
+
+  bool check_present = false;
+  uint32_t check = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_enum_string(
+      module, attrs, IREE_SV("check"), loom_testbench_ubsan_check_parse,
+      &check_present, &check));
+  bool operand0_present = false;
+  int64_t operand0 = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("operand0"), &operand0_present, &operand0));
+  bool operand1_present = false;
+  int64_t operand1 = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("operand1"), &operand1_present, &operand1));
+  bool site_id_present = false;
+  int64_t site_id = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("site_id"), &site_id_present, &site_id));
+
+  *out_matches = (!check_present || report->check_kind == check) &&
+                 loom_testbench_event_match_optional_u64(
+                     report->operand0, operand0_present, operand0) &&
+                 loom_testbench_event_match_optional_u64(
+                     report->operand1, operand1_present, operand1) &&
+                 loom_testbench_event_match_optional_u64(
+                     report->site_id, site_id_present, site_id);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_event_match_tsan(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    const iree_hal_device_event_t* event, bool* out_matches) {
+  *out_matches = false;
+  const iree_string_view_t keys[] = {
+      IREE_SV("check"),
+      IREE_SV("memory"),
+      IREE_SV("current_access"),
+      IREE_SV("prior_access"),
+      IREE_SV("access_length"),
+      IREE_SV("current_site_id"),
+      IREE_SV("prior_site_id"),
+      IREE_SV("current_atomic"),
+      IREE_SV("prior_atomic"),
+      IREE_SV("current_workitem_linear"),
+      IREE_SV("prior_workitem_linear"),
+  };
+  IREE_RETURN_IF_ERROR(loom_testbench_validate_event_attrs(
+      module, attrs, keys, IREE_ARRAYSIZE(keys), IREE_SV("tsan")));
+  if (event->type != IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT ||
+      !loom_testbench_event_payload_has_prefix(
+          event, sizeof(iree_hal_device_tsan_report_t))) {
+    return iree_ok_status();
+  }
+  const iree_hal_device_tsan_report_t* report =
+      (const iree_hal_device_tsan_report_t*)event->payload.data;
+
+  bool check_present = false;
+  uint32_t check = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_enum_string(
+      module, attrs, IREE_SV("check"), loom_testbench_tsan_check_parse,
+      &check_present, &check));
+  bool memory_present = false;
+  uint32_t memory = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_enum_string(
+      module, attrs, IREE_SV("memory"), loom_testbench_tsan_memory_parse,
+      &memory_present, &memory));
+  bool current_access_present = false;
+  uint32_t current_access = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_enum_string(
+      module, attrs, IREE_SV("current_access"),
+      loom_testbench_tsan_access_parse, &current_access_present,
+      &current_access));
+  bool prior_access_present = false;
+  uint32_t prior_access = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_enum_string(
+      module, attrs, IREE_SV("prior_access"), loom_testbench_tsan_access_parse,
+      &prior_access_present, &prior_access));
+  bool access_length_present = false;
+  int64_t access_length = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("access_length"), &access_length_present,
+      &access_length));
+  bool current_site_id_present = false;
+  int64_t current_site_id = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("current_site_id"), &current_site_id_present,
+      &current_site_id));
+  bool prior_site_id_present = false;
+  int64_t prior_site_id = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("prior_site_id"), &prior_site_id_present,
+      &prior_site_id));
+  bool current_atomic_present = false;
+  bool current_atomic = false;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_bool(
+      module, attrs, IREE_SV("current_atomic"), &current_atomic_present,
+      &current_atomic));
+  bool prior_atomic_present = false;
+  bool prior_atomic = false;
+  IREE_RETURN_IF_ERROR(
+      loom_testbench_event_optional_bool(module, attrs, IREE_SV("prior_atomic"),
+                                         &prior_atomic_present, &prior_atomic));
+  bool current_linear_present = false;
+  bool current_linear = false;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_bool(
+      module, attrs, IREE_SV("current_workitem_linear"),
+      &current_linear_present, &current_linear));
+  bool prior_linear_present = false;
+  bool prior_linear = false;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_bool(
+      module, attrs, IREE_SV("prior_workitem_linear"), &prior_linear_present,
+      &prior_linear));
+
+  const bool report_current_atomic = iree_all_bits_set(
+      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_ATOMIC);
+  const bool report_prior_atomic = iree_all_bits_set(
+      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_ATOMIC);
+  const bool report_current_linear = iree_all_bits_set(
+      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR);
+  const bool report_prior_linear = iree_all_bits_set(
+      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR);
+
+  *out_matches =
+      (!check_present || report->check_kind == check) &&
+      (!memory_present || report->memory_space == memory) &&
+      (!current_access_present ||
+       report->current_access_kind == current_access) &&
+      (!prior_access_present || report->prior_access_kind == prior_access) &&
+      loom_testbench_event_match_optional_u32(
+          report->access_length, access_length_present, access_length) &&
+      loom_testbench_event_match_optional_u64(
+          report->current_site_id, current_site_id_present, current_site_id) &&
+      loom_testbench_event_match_optional_u64(
+          report->prior_site_id, prior_site_id_present, prior_site_id) &&
+      (!current_atomic_present || report_current_atomic == current_atomic) &&
+      (!prior_atomic_present || report_prior_atomic == prior_atomic) &&
+      (!current_linear_present || report_current_linear == current_linear) &&
+      (!prior_linear_present || report_prior_linear == prior_linear);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_event_record_matches(
+    const loom_module_t* module,
+    const loom_testbench_expectation_plan_t* expectation,
+    const loom_testbench_device_event_record_t* record, bool* out_matches) {
+  *out_matches = false;
+  const loom_named_attr_slice_t attrs = expectation->event.attrs;
+  const iree_hal_device_event_t* event = &record->event;
+
+  bool type_present = false;
+  uint32_t type = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_enum_string(
+      module, attrs, IREE_SV("type"), loom_testbench_event_type_parse,
+      &type_present, &type));
+  bool severity_present = false;
+  uint32_t severity = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_enum_string(
+      module, attrs, IREE_SV("severity"), loom_testbench_event_severity_parse,
+      &severity_present, &severity));
+  bool driver_present = false;
+  iree_string_view_t driver = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_string(
+      module, attrs, IREE_SV("driver"), &driver_present, &driver));
+  bool device_present = false;
+  iree_string_view_t device = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_string(
+      module, attrs, IREE_SV("device"), &device_present, &device));
+  bool physical_device_present = false;
+  int64_t physical_device = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("physical_device"), &physical_device_present,
+      &physical_device));
+  bool queue_present = false;
+  int64_t queue = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("queue"), &queue_present, &queue));
+  bool export_present = false;
+  int64_t export_ordinal = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("export"), &export_present, &export_ordinal));
+  bool site_id_present = false;
+  int64_t site_id = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, attrs, IREE_SV("site_id"), &site_id_present, &site_id));
+  bool source_file_present = false;
+  iree_string_view_t source_file = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_string(
+      module, attrs, IREE_SV("source_file"), &source_file_present,
+      &source_file));
+  bool function_present = false;
+  iree_string_view_t function = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_string(
+      module, attrs, IREE_SV("function"), &function_present, &function));
+  bool operation_present = false;
+  iree_string_view_t operation = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_string(
+      module, attrs, IREE_SV("operation"), &operation_present, &operation));
+
+  if (type_present && event->type != type) return iree_ok_status();
+  if (severity_present && event->severity != severity) return iree_ok_status();
+  if (!loom_testbench_event_match_optional_string(event->source.driver_id,
+                                                  driver_present, driver)) {
+    return iree_ok_status();
+  }
+  if (!loom_testbench_event_match_optional_string(event->source.device_id,
+                                                  device_present, device)) {
+    return iree_ok_status();
+  }
+  if (!loom_testbench_event_match_optional_u32(
+          event->source.physical_device_ordinal, physical_device_present,
+          physical_device)) {
+    return iree_ok_status();
+  }
+  if (!loom_testbench_event_match_optional_u32(event->source.queue_ordinal,
+                                               queue_present, queue)) {
+    return iree_ok_status();
+  }
+  if (!loom_testbench_event_match_optional_u32(
+          event->source.export_ordinal, export_present, export_ordinal)) {
+    return iree_ok_status();
+  }
+  if (site_id_present && event->site == NULL) return iree_ok_status();
+  if (event->site != NULL) {
+    if (!loom_testbench_event_match_optional_u64(event->site->site_id,
+                                                 site_id_present, site_id)) {
+      return iree_ok_status();
+    }
+    if (!loom_testbench_event_match_optional_string(
+            event->site->source_file, source_file_present, source_file)) {
+      return iree_ok_status();
+    }
+    if (!loom_testbench_event_match_optional_string(
+            event->site->function_name, function_present, function)) {
+      return iree_ok_status();
+    }
+    if (!loom_testbench_event_match_optional_string(
+            event->site->operation_name, operation_present, operation)) {
+      return iree_ok_status();
+    }
+  } else if (source_file_present || function_present || operation_present) {
+    return iree_ok_status();
+  }
+
+  bool asan_present = false;
+  loom_named_attr_slice_t asan_attrs = loom_named_attr_slice_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_dict(
+      module, attrs, IREE_SV("asan"), &asan_present, &asan_attrs));
+  if (asan_present) {
+    bool asan_matches = false;
+    IREE_RETURN_IF_ERROR(loom_testbench_event_match_asan(module, asan_attrs,
+                                                         event, &asan_matches));
+    if (!asan_matches) return iree_ok_status();
+  }
+
+  bool ubsan_present = false;
+  loom_named_attr_slice_t ubsan_attrs = loom_named_attr_slice_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_dict(
+      module, attrs, IREE_SV("ubsan"), &ubsan_present, &ubsan_attrs));
+  if (ubsan_present) {
+    bool ubsan_matches = false;
+    IREE_RETURN_IF_ERROR(loom_testbench_event_match_ubsan(
+        module, ubsan_attrs, event, &ubsan_matches));
+    if (!ubsan_matches) return iree_ok_status();
+  }
+
+  bool tsan_present = false;
+  loom_named_attr_slice_t tsan_attrs = loom_named_attr_slice_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_dict(
+      module, attrs, IREE_SV("tsan"), &tsan_present, &tsan_attrs));
+  if (tsan_present) {
+    bool tsan_matches = false;
+    IREE_RETURN_IF_ERROR(loom_testbench_event_match_tsan(module, tsan_attrs,
+                                                         event, &tsan_matches));
+    if (!tsan_matches) return iree_ok_status();
+  }
+
+  *out_matches = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_evaluate_event_expectation(
+    const loom_testbench_expectation_plan_t* expectation,
+    const loom_module_t* module,
+    const loom_testbench_case_sample_observations_t* observations,
+    iree_string_builder_t* detail_builder, bool* out_matched) {
+  *out_matched = false;
+  if (!iree_string_view_equal(expectation->event.provider, IREE_SV("device"))) {
+    return iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "event expectation provider `%.*s` is not configured",
+        (int)expectation->event.provider.size,
+        expectation->event.provider.data);
+  }
+
+  const iree_string_view_t keys[] = {
+      IREE_SV("count"),       IREE_SV("type"),     IREE_SV("severity"),
+      IREE_SV("driver"),      IREE_SV("device"),   IREE_SV("physical_device"),
+      IREE_SV("queue"),       IREE_SV("export"),   IREE_SV("site_id"),
+      IREE_SV("source_file"), IREE_SV("function"), IREE_SV("operation"),
+      IREE_SV("asan"),        IREE_SV("ubsan"),    IREE_SV("tsan"),
+  };
+  IREE_RETURN_IF_ERROR(loom_testbench_validate_event_attrs(
+      module, expectation->event.attrs, keys, IREE_ARRAYSIZE(keys),
+      IREE_SV("device")));
+
+  if (observations == NULL || observations->device_events == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "device event expectations require captured device events");
+  }
+  const loom_testbench_device_event_list_t* events =
+      observations->device_events;
+  if (events->dropped_count != 0) {
+    return iree_string_builder_append_format(
+        detail_builder,
+        "device event capture dropped %" PRIhsz
+        " event(s), so the expectation cannot be evaluated reliably",
+        events->dropped_count);
+  }
+
+  bool count_present = false;
+  int64_t expected_count = 1;
+  IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
+      module, expectation->event.attrs, IREE_SV("count"), &count_present,
+      &expected_count));
+  if (!count_present) {
+    expected_count = 1;
+  }
+  if (expected_count < 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "event expectation count must be non-negative");
+  }
+
+  iree_host_size_t matched_count = 0;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; iree_status_is_ok(status) && i < events->count;
+       ++i) {
+    bool event_matches = false;
+    status = loom_testbench_event_record_matches(
+        module, expectation, &events->records[i], &event_matches);
+    if (iree_status_is_ok(status) && event_matches) {
+      ++matched_count;
+    }
+  }
+  if (!iree_status_is_ok(status)) {
+    return status;
+  }
+  if (matched_count == (iree_host_size_t)expected_count) {
+    *out_matched = true;
+    return iree_ok_status();
+  }
+
+  return iree_string_builder_append_format(
+      detail_builder,
+      "expected %" PRIi64 " matching device event(s), observed %" PRIhsz
+      " among %" PRIhsz " captured event(s)",
+      expected_count, matched_count, events->count);
+}
+
 static iree_status_t loom_testbench_evaluate_single_expectation(
     const loom_testbench_prepared_expectation_t* prepared,
     const loom_testbench_value_table_t* table,
+    const loom_testbench_case_sample_observations_t* observations,
     iree_string_builder_t* detail_builder, bool* out_matched) {
   const loom_testbench_expectation_plan_t* expectation = prepared->plan;
+  if (expectation->kind == LOOM_TESTBENCH_EXPECTATION_EVENT) {
+    return loom_testbench_evaluate_event_expectation(
+        expectation, table->module, observations, detail_builder, out_matched);
+  }
+
   const loom_testbench_value_t* actual = NULL;
   const loom_testbench_value_t* expected = NULL;
   IREE_RETURN_IF_ERROR(loom_testbench_lookup_expectation_values(
@@ -775,6 +1561,10 @@ static iree_status_t loom_testbench_evaluate_single_expectation(
       return prepared->custom_evaluate.fn(prepared->custom_evaluate.user_data,
                                           expectation, actual, expected,
                                           detail_builder, out_matched);
+    case LOOM_TESTBENCH_EXPECTATION_EVENT:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "event expectation should not reach value "
+                              "comparison path");
     default:
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                               "invalid expectation plan kind %u",
@@ -809,6 +1599,7 @@ static iree_status_t loom_testbench_append_expectation_failure(
 iree_status_t loom_testbench_evaluate_case_expectations(
     const loom_testbench_expectation_schedule_t* schedule,
     const loom_testbench_value_table_t* table,
+    const loom_testbench_case_sample_observations_t* observations,
     loom_testbench_expectation_report_t* report) {
   if (report->failure_capacity < schedule->expectation_count) {
     return iree_make_status(
@@ -833,7 +1624,7 @@ iree_status_t loom_testbench_evaluate_case_expectations(
     bool matched = false;
     iree_string_builder_reset(&detail_builder);
     status = loom_testbench_evaluate_single_expectation(
-        prepared, table, &detail_builder, &matched);
+        prepared, table, observations, &detail_builder, &matched);
     if (iree_status_is_ok(status) && matched) {
       ++report->passed_count;
     } else if (iree_status_is_ok(status)) {
@@ -865,8 +1656,10 @@ static iree_status_t loom_testbench_write_expectation_failure_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"kind\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
       stream, loom_testbench_expectation_kind_name(failure->kind)));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"actual_value_id\":%u", (unsigned)failure->actual_value_id));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"actual_value_id\":"));
+  IREE_RETURN_IF_ERROR(loom_testbench_write_expectation_value_id_json(
+      failure->actual_value_id, stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"expected_value_id\":"));
   IREE_RETURN_IF_ERROR(loom_testbench_write_expectation_value_id_json(

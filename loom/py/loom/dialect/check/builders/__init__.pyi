@@ -191,6 +191,13 @@ class CheckBuilder(DialectBuilder):
         attrs: Mapping[str, Any] | None = ...,
         location_id: int | None = ...,
     ) -> None: ...
+    def event(
+        self,
+        *,
+        provider: str,
+        attrs: Mapping[str, Any] | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...
     def benchmark(
         self,
         *,

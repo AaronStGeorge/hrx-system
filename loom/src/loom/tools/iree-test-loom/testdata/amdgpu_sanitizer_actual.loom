@@ -23,5 +23,6 @@ check.case @tsan_workgroup_write_race_case {
   func.call @tsan_workgroup_write_race(%output) : (tensor<1xi32>)
   %expected = check.generate.fill value(1) : tensor<1xi32>
   check.expect.equal actual(%output) expected(%expected) : tensor<1xi32>
+  check.expect.event<device> {type = "tsan_report", severity = "error", count = 1, tsan = {check = "data_race", memory = "workgroup", current_access = "write", prior_access = "write", access_length = 4}}
   check.return
 }

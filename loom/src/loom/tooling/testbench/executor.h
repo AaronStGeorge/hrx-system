@@ -33,6 +33,8 @@ typedef struct loom_testbench_case_execution_options_t {
   loom_testbench_invocation_options_t invocation;
   // Custom expectation providers visible while preparing the case.
   loom_testbench_expectation_options_t expectation;
+  // Optional device-event capture shared with event expectations.
+  loom_testbench_device_event_capture_t* device_event_capture;
 } loom_testbench_case_execution_options_t;
 
 // Initializes case execution options with no providers and the system host
@@ -81,6 +83,8 @@ typedef struct loom_testbench_case_executor_t {
   loom_testbench_value_table_t value_table;
   // Reusable invocation scratch storage.
   loom_testbench_invocation_executor_t invocation_executor;
+  // Optional device-event capture reset and observed for each sample.
+  loom_testbench_device_event_capture_t* device_event_capture;
   // Reusable expectation result report.
   loom_testbench_expectation_report_t expectation_report;
 } loom_testbench_case_executor_t;

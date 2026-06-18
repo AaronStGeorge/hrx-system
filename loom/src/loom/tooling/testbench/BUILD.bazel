@@ -48,6 +48,17 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "device_event",
+    srcs = ["device_event.c"],
+    hdrs = ["device_event.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+loom_cc_library(
     name = "invocation",
     srcs = ["invocation.c"],
     hdrs = ["invocation.h"],
@@ -65,6 +76,7 @@ loom_cc_library(
     srcs = ["expectation.c"],
     hdrs = ["expectation.h"],
     deps = [
+        ":device_event",
         ":testbench",
         ":value_materializer",
         "//loom/src/loom/ir",
@@ -83,6 +95,7 @@ loom_cc_library(
     srcs = ["executor.c"],
     hdrs = ["executor.h"],
     deps = [
+        ":device_event",
         ":expectation",
         ":invocation",
         ":testbench",
@@ -157,6 +170,7 @@ loom_cc_test(
     name = "expectation_test",
     srcs = ["expectation_test.cc"],
     deps = [
+        ":device_event",
         ":expectation",
         ":testbench",
         ":value_materializer",

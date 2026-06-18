@@ -50,5 +50,6 @@ check.case @provider_case {
   %actual = check.literal value(1) : i32
   %expected = check.literal value(1) : i32
   check.expect<topk.equal> actual(%actual) expected(%expected) {k = 1} : i32
+  check.expect.event<device> {count = 1, severity = "error", tsan = {access_length = 4, check = "data_race", current_access = "write", memory = "workgroup", prior_access = "write"}, type = "tsan_report"}
   check.return
 }

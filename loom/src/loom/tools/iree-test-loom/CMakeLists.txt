@@ -28,6 +28,7 @@ loom_cc_library(
     loom::tooling::execution::hal::testbench_actual
     loom::tooling::execution::session
     loom::tooling::io::file
+    loom::tooling::testbench::device_event
     loom::tooling::testbench::executor
     loom::tooling::testbench::reference
     loom::tooling::testbench::requirements

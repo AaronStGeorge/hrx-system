@@ -47,11 +47,6 @@
             "\"failed_sample_count\":0"
           ]
         }
-      },
-      "stderr": {
-        "not_contains": [
-          "IREE HAL device event: type=asan_report"
-        ]
       }
     },
     {
@@ -78,13 +73,6 @@
             "\"failed_sample_count\":0"
           ]
         }
-      },
-      "stderr": {
-        "contains": [
-          "IREE HAL device event: type=asan_report severity=error",
-          "asan: write access of 4 bytes",
-          "device: driver=amdgpu"
-        ]
       }
     },
     {
@@ -111,16 +99,6 @@
             "\"failed_sample_count\":0"
           ]
         }
-      },
-      "stderr": {
-        "contains": [
-          "IREE HAL device event: type=tsan_report severity=error",
-          "tsan: check=data_race memory=workgroup",
-          "access: current=write prior=write",
-          "current: workgroup=(0,0,0)",
-          "prior: workgroup=(0,0,0)",
-          "device: driver=amdgpu"
-        ]
       }
     }
   ]

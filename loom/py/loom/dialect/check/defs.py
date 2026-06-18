@@ -553,6 +553,25 @@ check_expect = Op(
     ],
 )
 
+check_expect_event = Op(
+    "check.expect.event",
+    group=check_ops,
+    doc=("Requires a structured runtime event matching a provider-specific subset pattern."),
+    attrs=[
+        AttrDef("provider", "string"),
+        AttrDef("attrs", "dict", optional=True),
+    ],
+    traits=_CASE_BODY_TRAITS,
+    format=[
+        OpRef("provider"),
+        AttrDict("attrs"),
+    ],
+    examples=[
+        'check.expect.event<device> {type = "asan_report", count = 1}',
+        'check.expect.event<device> {type = "tsan_report", tsan = {memory = "workgroup", current_access = "write", prior_access = "write"}}',
+    ],
+)
+
 
 # ============================================================================
 # Benchmark records
@@ -609,5 +628,6 @@ ALL_CHECK_OPS = (
     check_expect_close,
     check_expect_shape,
     check_expect,
+    check_expect_event,
     check_benchmark,
 )
