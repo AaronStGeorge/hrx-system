@@ -160,3 +160,73 @@ COMPILE-REPORT: source_low[15] function=report_workgroup_reduce_vector_publicati
 COMPILE-REPORT: source_low[16] function=report_workgroup_reduce_vector_publication source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[17] function=report_workgroup_reduce_vector_publication source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
 COMPILE-REPORT: target_legalization[0] function=report_workgroup_reduce_vector_publication source_op=vector.store mode=final policy=prefer-native action=rewritten outcome=reference-fallback contract=unhandled legalizer=vector strategy=reference bundle=target config=target binding=65535 case=65535 rule_set=65535 rule=65535 diagnostic=65535 descriptor=18446744073709551615 source_rejections=0x00000000 source_rejection_detail=0 target_rejections=0x00000000 missing_features=0x00000000 missing_facts=0x00000000 created_ops=12 erased_ops=1
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @report_subgroup_reduce_addf_f32_wave32_all_lanes() {
+  %one = index.constant 1 : index
+  %workgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%workgroup_size, %one, %one) : index
+} launch(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %start = index.constant 0 : offset
+  %input_view = buffer.view %input[%start] : buffer -> view<32xf32, #dense>
+  %output_view = buffer.view %output[%start] : buffer -> view<32xf32, #dense>
+  %value = view.load %input_view[%tid] : view<32xf32, #dense> -> f32
+  %sum = kernel.subgroup.reduce<addf> %value : f32
+  view.store %sum, %output_view[%tid] : f32, view<32xf32, #dense>
+  kernel.return
+}
+
+// ----
+COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
+COMPILE-REPORT: source_low selected_ops=7 emitted_ops=10 rows=7
+COMPILE-REPORT: source_low[0] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[1] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[2] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[3] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[4] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low[5] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=kernel.subgroup.reduce selection=plan plan=4124 plan_key=amdgpu.subgroup_reduce.strategy.dpp_row_permlanex16.all_lanes.row_pair descriptor=0 emitted_ops=6
+COMPILE-REPORT: source_low[6] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+
+// ====
+
+amdgpu.target<gfx1100> @target {subgroup_size = 64}
+
+kernel.def target(@target) @report_subgroup_reduce_addf_f32_wave64_leader_lane() {
+  %one = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%workgroup_size, %one, %one) : index
+} launch(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %lane = kernel.subgroup.lane.id : index
+  %zero = index.constant 0 : index
+  %start = index.constant 0 : offset
+  %input_view = buffer.view %input[%start] : buffer -> view<64xf32, #dense>
+  %output_view = buffer.view %output[%start] : buffer -> view<1xf32, #dense>
+  %value = view.load %input_view[%tid] : view<64xf32, #dense> -> f32
+  %sum = kernel.subgroup.reduce<addf> %value : f32
+  %is_leader_lane = index.cmp eq, %lane, %zero : index
+  cfg.cond_br %is_leader_lane, ^then, ^done
+^then:
+  view.store %sum, %output_view[%zero] : f32, view<1xf32, #dense>
+  cfg.br ^done
+^done:
+  kernel.return
+}
+
+// ----
+COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
+COMPILE-REPORT: source_low selected_ops=10 emitted_ops=15 rows=10
+COMPILE-REPORT: source_low[0] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[1] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=kernel.subgroup.lane.id selection=plan plan=4120 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[2] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[3] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[4] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[5] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[6] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low[7] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=kernel.subgroup.reduce selection=plan plan=4124 plan_key=amdgpu.subgroup_reduce.strategy.dpp_row_permlanex16.leader_lane.row_pair descriptor=0 emitted_ops=10
+COMPILE-REPORT: source_low[8] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=index.cmp selection=rule rule_set=4 rule=75 descriptor=4582905300084092641 emitted_ops=1
+COMPILE-REPORT: source_low[9] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2

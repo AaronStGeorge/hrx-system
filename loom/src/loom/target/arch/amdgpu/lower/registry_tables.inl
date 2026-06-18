@@ -587,12 +587,13 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast_first,
                 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_REDUCE)] =
-            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_REPORT_KEY_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_REDUCE,
                 loom_amdgpu_subgroup_reduce_plan_t,
                 loom_amdgpu_select_kernel_subgroup_reduce_dispatch,
                 loom_amdgpu_emit_kernel_subgroup_reduce_dispatch,
-                loom_amdgpu_low_legality_verify_kernel_subgroup_reduce, 1),
+                loom_amdgpu_low_legality_verify_kernel_subgroup_reduce, 1,
+                LOOM_AMDGPU_REPORT_KEY_SUBGROUP_REDUCE_STRATEGY),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_SCAN)] =
             LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_SCAN, loom_amdgpu_subgroup_scan_plan_t,
