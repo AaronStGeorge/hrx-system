@@ -308,6 +308,27 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    allocation_rematerialization
+  HDRS
+    "allocation_rematerialization.h"
+  SRCS
+    "allocation_rematerialization.c"
+  DEPS
+    ::allocation
+    ::descriptor_traits
+    ::target_binding
+    iree::base
+    iree::base::internal::arena
+    loom::ir
+    loom::ops::op_defs
+    loom::rewrite::materialize
+    loom::rewrite::remap
+    loom::rewrite::rewriter
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     allocation_json
   HDRS
     "allocation_json.h"
@@ -472,6 +493,7 @@ loom_cc_library(
     ::addressability
     ::allocation
     ::allocation_materialization
+    ::allocation_rematerialization
     ::diagnostics
     ::function
     ::memory_access
