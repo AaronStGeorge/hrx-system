@@ -279,6 +279,60 @@ ERR_SUBRANGE_018 = ErrorDef(
     ),
 )
 
+# ERR_SUBRANGE_019: Sanitizer vector access footprint shape is dynamic.
+ERR_SUBRANGE_019 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=19,
+    severity=Severity.ERROR,
+    summary="Sanitizer vector access footprint shape is dynamic.",
+    message=(
+        "{op_name} access sanitizer insertion requires an all-static vector "
+        "shape so the runtime access footprint can be represented compactly"
+    ),
+    params=(ErrorParam("op_name", ParamKind.STRING),),
+    fix_hint=(
+        "Use a static vector shape before access sanitizer insertion or lower "
+        "dynamic vector memory before enabling access checks"
+    ),
+)
+
+# ERR_SUBRANGE_020: Sanitizer vector access footprint rank is unsupported.
+ERR_SUBRANGE_020 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Sanitizer vector access footprint rank is unsupported.",
+    message=(
+        "{op_name} access sanitizer insertion currently requires a rank-1 "
+        "vector footprint; observed vector rank {vector_rank}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("vector_rank", ParamKind.I64),
+    ),
+    fix_hint=(
+        "Use rank-1 vector memory for access sanitizer insertion or lower "
+        "higher-rank vector memory before enabling access checks"
+    ),
+)
+
+# ERR_SUBRANGE_021: Sanitizer vector access pattern is unsupported.
+ERR_SUBRANGE_021 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Sanitizer vector access pattern is unsupported.",
+    message=(
+        "{op_name} access sanitizer insertion does not yet support this "
+        "vector memory pattern"
+    ),
+    params=(ErrorParam("op_name", ParamKind.STRING),),
+    fix_hint=(
+        "Use vector.load/vector.store with a static rank-1 footprint or lower "
+        "this vector memory operation before enabling access checks"
+    ),
+)
+
 ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SUBRANGE_001,
     ERR_SUBRANGE_002,
@@ -296,4 +350,7 @@ ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SUBRANGE_016,
     ERR_SUBRANGE_017,
     ERR_SUBRANGE_018,
+    ERR_SUBRANGE_019,
+    ERR_SUBRANGE_020,
+    ERR_SUBRANGE_021,
 )

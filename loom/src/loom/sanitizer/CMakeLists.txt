@@ -45,10 +45,12 @@ loom_cc_library(
     ::site_location
     ::site_payload
     iree::base
+    loom::error::error_defs
     loom::ir
     loom::ops::index
     loom::ops::sanitizer
     loom::ops::scalar
+    loom::ops::vector
     loom::ops::view
     loom::pass::pipeline
     loom::pass::registry

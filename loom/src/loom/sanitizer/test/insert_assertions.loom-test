@@ -146,6 +146,67 @@ func.def @access_only_instruments_scalar_view_memory(%layout: encoding<layout>, 
 
 // ====
 
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_rank1_vector_memory(%layout: encoding<layout>, %input: view<64x4xi32, %layout>, %output: view<64x4xi32, %layout>, %row: index) {
+  %value = vector.load %input[%row, 0] : view<64x4xi32, %layout> -> vector<4xi32>
+  vector.store %value, %output[%row, 0] : vector<4xi32>, view<64x4xi32, %layout>
+  func.return
+}
+
+// ----
+func.def @access_only_instruments_rank1_vector_memory(%layout: encoding<layout>, %input: view<64x4xi32, %layout>, %output: view<64x4xi32, %layout>, %row: index) {
+  sanitizer.assert.access<read> %input[%row, 0] {static_extents = [1, 4]} : view<64x4xi32, %layout>
+  %value = vector.load %input[%row, 0] : view<64x4xi32, %layout> -> vector<4xi32>
+  sanitizer.assert.access<write> %output[%row, 0] {static_extents = [1, 4]} : view<64x4xi32, %layout>
+  vector.store %value, %output[%row, 0] : vector<4xi32>, view<64x4xi32, %layout>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_keeps_existing_vector_assertions(%layout: encoding<layout>, %input: view<16xi32, %layout>, %i: index) -> (vector<2xi32>) {
+  sanitizer.assert.access<read> %input[%i] {static_extents = [2]} : view<16xi32, %layout>
+  %value = vector.load %input[%i] : view<16xi32, %layout> -> vector<2xi32>
+  func.return %value : vector<2xi32>
+}
+
+// ----
+func.def @access_only_keeps_existing_vector_assertions(%layout: encoding<layout>, %input: view<16xi32, %layout>, %i: index) -> (vector<2xi32>) {
+  sanitizer.assert.access<read> %input[%i] {static_extents = [2]} : view<16xi32, %layout>
+  %value = vector.load %input[%i] : view<16xi32, %layout> -> vector<2xi32>
+  func.return %value : vector<2xi32>
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_rejects_dynamic_vector_memory(%layout: encoding<layout>, %n: index, %input: view<[%n]xf32, %layout>, %i: index) -> (vector<[%n]xf32>) {
+  // ERROR@+1: SUBRANGE/019 {op_name="vector.load"}
+  %value = vector.load %input[%i] : view<[%n]xf32, %layout> -> vector<[%n]xf32>
+  func.return %value : vector<[%n]xf32>
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_rejects_rank2_vector_memory(%layout: encoding<layout>, %input: view<4x4xf32, %layout>) -> (vector<2x2xf32>) {
+  // ERROR@+1: SUBRANGE/020 {op_name="vector.load", vector_rank="2"}
+  %value = vector.load %input[0, 0] : view<4x4xf32, %layout> -> vector<2x2xf32>
+  func.return %value : vector<2x2xf32>
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_rejects_masked_vector_memory(%layout: encoding<layout>, %input: view<16xf32, %layout>, %i: index, %mask: vector<4xi1>, %old: vector<4xf32>) -> (vector<4xf32>) {
+  // ERROR@+1: SUBRANGE/021 {op_name="vector.load.mask"}
+  %value = vector.load.mask %input[%i], %mask, %old : view<16xf32, %layout>, vector<4xi1>, vector<4xf32>
+  func.return %value : vector<4xf32>
+}
+
+// ====
+
 // RUN: with-locations pass sanitizer-insert-assertions{checks=value}
 
 // Inserted assertions carry compact sanitizer site payloads while keeping the

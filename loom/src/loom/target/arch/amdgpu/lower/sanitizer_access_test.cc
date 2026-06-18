@@ -477,7 +477,50 @@ TEST_F(AmdgpuSanitizerAccessTest, FeedsMaskedFailuresToSharedReportIsland) {
   EXPECT_TRUE(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP).empty());
 }
 
-TEST_F(AmdgpuSanitizerAccessTest, RejectsUnsupportedStaticAccessSize) {
+TEST_F(AmdgpuSanitizerAccessTest, EmitsPacketizedStaticAccessCheck) {
+  loom_symbol_ref_t asan_config_symbol = AddSymbol(IREE_SV("iree_asan_config"));
+  loom_value_id_t fault_address = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(BuildFaultAddress(asan_config_symbol, &fault_address));
+
+  loom_amdgpu_sanitizer_access_check_t check = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_access_check(
+      &builder_, descriptor_set_, asan_config_symbol, fault_address,
+      /*access_size=*/16, /*wavefront_size=*/32, LOOM_LOCATION_UNKNOWN,
+      &check));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/NULL,
+                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
+                                       &return_op));
+
+  VerifyModuleOk();
+  VerifyLowModuleOk();
+
+  ExpectRegisterType(check.failure_mask, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+  ExpectRegisterType(check.shadow_address, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2);
+  ExpectRegisterType(check.shadow_value, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2);
+  EXPECT_EQ(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_FLAT_LOAD_U8).size(),
+            4u);
+  EXPECT_EQ(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT).size(),
+            4u);
+  EXPECT_EQ(
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT).size(),
+      8u);
+  EXPECT_EQ(
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT).size(),
+      4u);
+  EXPECT_EQ(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_NE_I32).size(),
+            4u);
+  EXPECT_EQ(
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32).size(), 8u);
+  EXPECT_EQ(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B64).size(),
+            4u);
+  EXPECT_EQ(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B64).size(),
+            7u);
+  EXPECT_EQ(
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32).size(), 9u);
+}
+
+TEST_F(AmdgpuSanitizerAccessTest, RejectsZeroStaticAccessSize) {
   loom_symbol_ref_t asan_config_symbol = AddSymbol(IREE_SV("iree_asan_config"));
   loom_value_id_t fault_address = LOOM_VALUE_ID_INVALID;
   IREE_ASSERT_OK(BuildFaultAddress(asan_config_symbol, &fault_address));
@@ -487,7 +530,7 @@ TEST_F(AmdgpuSanitizerAccessTest, RejectsUnsupportedStaticAccessSize) {
       StatusCode::kInvalidArgument,
       loom_amdgpu_build_sanitizer_access_check(
           &builder_, descriptor_set_, asan_config_symbol, fault_address,
-          /*access_size=*/16, /*wavefront_size=*/32, LOOM_LOCATION_UNKNOWN,
+          /*access_size=*/0, /*wavefront_size=*/32, LOOM_LOCATION_UNKNOWN,
           &check));
 }
 

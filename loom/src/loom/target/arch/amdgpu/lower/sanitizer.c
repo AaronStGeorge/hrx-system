@@ -446,7 +446,7 @@ static bool loom_amdgpu_sanitizer_assert_access_kinds(
 
 static bool loom_amdgpu_sanitizer_access_payload_type(
     const loom_module_t* module, loom_value_id_t view_value_id,
-    loom_type_t* out_vector_type) {
+    loom_attribute_t static_extents, loom_type_t* out_vector_type) {
   *out_vector_type = loom_type_none();
   if (view_value_id >= module->values.count) {
     return false;
@@ -455,9 +455,27 @@ static bool loom_amdgpu_sanitizer_access_payload_type(
   if (!loom_type_is_view(view_type)) {
     return false;
   }
+  int64_t lane_count = 1;
+  if (!loom_attr_is_absent(static_extents)) {
+    const uint8_t view_rank = loom_type_rank(view_type);
+    if (static_extents.kind != LOOM_ATTR_I64_ARRAY ||
+        static_extents.count != view_rank || view_rank == 0) {
+      return false;
+    }
+    for (uint8_t axis = 0; axis + 1 < view_rank; ++axis) {
+      if (static_extents.i64_array[axis] != 1) {
+        return false;
+      }
+    }
+    lane_count = static_extents.i64_array[view_rank - 1];
+    if (lane_count <= 0) {
+      return false;
+    }
+  }
   *out_vector_type =
       loom_type_shaped_1d(LOOM_TYPE_VECTOR, loom_type_element_type(view_type),
-                          loom_dim_pack_static(1), /*encoding_id=*/0);
+                          loom_dim_pack_static(lane_count),
+                          /*encoding_id=*/0);
   return true;
 }
 
@@ -487,8 +505,10 @@ iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
   const loom_value_id_t view_value_id =
       loom_sanitizer_assert_access_view(source_op);
   const loom_module_t* module = loom_low_lower_context_module(context);
-  if (!loom_amdgpu_sanitizer_access_payload_type(module, view_value_id,
-                                                 &vector_type)) {
+  if (!loom_amdgpu_sanitizer_access_payload_type(
+          module, view_value_id,
+          loom_sanitizer_assert_access_static_extents(source_op),
+          &vector_type)) {
     return iree_ok_status();
   }
 
@@ -504,7 +524,7 @@ iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
   }
   const uint64_t access_size =
       (uint64_t)source.element_byte_count * source.vector_lane_count;
-  if (access_size == 0 || access_size > 8) {
+  if (access_size == 0 || access_size > UINT32_MAX) {
     return iree_ok_status();
   }
 
