@@ -230,7 +230,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_access_report_defa
   %298 = s_add_u32_rhs_symbol_rel32_lo %296 {symbol = @iree_feedback_config}
   %299 = s_addc_u32_rhs_symbol_rel32_hi %297 {symbol = @iree_feedback_config}
   %300 = concat(%298, %299) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %302 = global_load_b32_saddr %233, %300 {offset = 8, glc = 1, dlc = 1}
+  %301 = v_mov_b32 0
+  %302 = global_load_b32_saddr %301, %300 {offset = 8, glc = 1, dlc = 1}
   %303 = v_readfirstlane_b32 %302
   %304 = v_mov_b32 0
   %305 = global_load_b64_saddr %304, %300 {offset = 16, glc = 1, dlc = 1}

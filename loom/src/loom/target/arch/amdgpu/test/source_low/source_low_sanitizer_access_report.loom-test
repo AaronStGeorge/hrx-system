@@ -98,7 +98,8 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_access_report_default() 
   %146 = s_add_u32_rhs_symbol_rel32_lo %144 {symbol = @iree_feedback_config}
   %147 = s_addc_u32_rhs_symbol_rel32_hi %145 {symbol = @iree_feedback_config}
   %148 = concat(%146, %147) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %150 = global_load_b32_saddr %118, %148 {offset = 8, glc = 1, dlc = 1}
+  %149 = v_mov_b32 0
+  %150 = global_load_b32_saddr %149, %148 {offset = 8, glc = 1, dlc = 1}
   %151 = v_readfirstlane_b32 %150
   %152 = v_mov_b32 0
   %153 = global_load_b64_saddr %152, %148 {offset = 16, glc = 1, dlc = 1}
