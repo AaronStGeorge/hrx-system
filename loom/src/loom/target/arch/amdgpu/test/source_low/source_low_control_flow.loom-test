@@ -1075,6 +1075,143 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @workgroup_loop_bound_f32
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @uniform_q4_scale_min_loop_decode(%input: buffer) -> (f32) {
+  %zero_offset = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  %two = index.constant 2 : index
+  %three = index.constant 3 : index
+  %four = index.constant 4 : index
+  %four_i32 = scalar.constant 4 : i32
+  %two_i32 = scalar.constant 2 : i32
+  %mask_0f = scalar.constant 15 : i32
+  %mask_3f = scalar.constant 63 : i32
+  %mask_c0 = scalar.constant 192 : i32
+  %zero_f32 = scalar.constant 0.0 : f32
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %input_noalias = buffer.assume.noalias %input_global : buffer
+  %input_view = buffer.view %input_noalias[%zero_offset] : buffer -> view<16xi8, #dense>
+  %sum = scf.for %position = [%zero to %two step %one](%acc = %zero_f32 : f32) -> (f32) {
+    %group0 = index.add %position, %three : index
+    %group = index.assume %group0 [range(%group0, 3, 4)] : index
+    %group_lt4 = index.cmp slt, %group, %four : index
+    %scale_i32, %min_i32 = scf.if %group_lt4 -> (i32, i32) {
+      %scale_index = index.add %group, %position : index
+      %min_slot = index.add %group, %four : index
+      %min_index = index.add %min_slot, %position : index
+      %scale_i8 = view.load %input_view[%scale_index] : view<16xi8, #dense> -> i8
+      %min_i8 = view.load %input_view[%min_index] : view<16xi8, #dense> -> i8
+      %scale_u = scalar.extui %scale_i8 : i8 to i32
+      %min_u = scalar.extui %min_i8 : i8 to i32
+      %scale = scalar.andi %scale_u, %mask_3f : i32
+      %min = scalar.andi %min_u, %mask_3f : i32
+      scf.yield %scale, %min : i32, i32
+    } else {
+      %group_minus4 = index.sub %group, %four : index
+      %group_plus4 = index.add %group, %four : index
+      %low_index = index.add %group_minus4, %position : index
+      %mid_index = index.add %group, %position : index
+      %high_index = index.add %group_plus4, %position : index
+      %low_i8 = view.load %input_view[%low_index] : view<16xi8, #dense> -> i8
+      %mid_i8 = view.load %input_view[%mid_index] : view<16xi8, #dense> -> i8
+      %high_i8 = view.load %input_view[%high_index] : view<16xi8, #dense> -> i8
+      %low = scalar.extui %low_i8 : i8 to i32
+      %mid = scalar.extui %mid_i8 : i8 to i32
+      %high = scalar.extui %high_i8 : i8 to i32
+      %scale_low = scalar.andi %high, %mask_0f : i32
+      %scale_hi0 = scalar.andi %low, %mask_c0 : i32
+      %scale_hi = scalar.shrui %scale_hi0, %two_i32 : i32
+      %scale = scalar.ori %scale_low, %scale_hi : i32
+      %min_low = scalar.shrui %high, %four_i32 : i32
+      %min_hi0 = scalar.andi %mid, %mask_c0 : i32
+      %min_hi = scalar.shrui %min_hi0, %two_i32 : i32
+      %min = scalar.ori %min_low, %min_hi : i32
+      scf.yield %scale, %min : i32, i32
+    }
+    %scale_f32 = scalar.uitofp %scale_i32 : i32 to f32
+    %min_f32 = scalar.uitofp %min_i32 : i32 to f32
+    %term = scalar.addf<reassoc|nnan|ninf|nsz> %scale_f32, %min_f32 : f32
+    %next = scalar.addf<reassoc|nnan|ninf|nsz> %acc, %term : f32
+    scf.yield %next : f32
+  }
+  func.return %sum : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @uniform_q4_scale_min_loop_decode() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %zero = s_mov_b32 0
+  %one = s_mov_b32 1
+  %two = s_mov_b32 2
+  %three = s_mov_b32 3
+  %four = s_mov_b32 4
+  %zero_f32 = v_mov_b32 0
+  low.br ^_bb1(%zero: reg<amdgpu.sgpr>, %zero_f32: reg<amdgpu.vgpr>)
+^_bb1(%position: reg<amdgpu.sgpr>, %acc: reg<amdgpu.vgpr>):
+  %83 = s_cmp_lt_i32 %position, %two
+  low.cond_br %83, ^_bb2, ^_bb6 : reg<amdgpu.scc>
+^_bb2:
+  %group = s_add_u32 %position, %three
+  %group_lt4 = s_cmp_lt_i32 %group, %four
+  low.cond_br %group_lt4, ^_bb3, ^_bb4 : reg<amdgpu.scc>
+^_bb3:
+  %87 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %88 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %90 = s_add_u32 %87, %position
+  %91 = s_addc_u32 %88, %zero
+  %92 = concat(%90, %91) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %scale_i8 = global_load_i8_saddr %zero_f32, %92 {offset = 3}
+  %98 = s_add_u32 %87, %position
+  %99 = s_addc_u32 %88, %zero
+  %100 = concat(%98, %99) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %min_i8 = global_load_i8_saddr %zero_f32, %100 {offset = 7}
+  %scale_u = v_and_b32_lit %scale_i8, 255
+  %min_u = v_and_b32_lit %min_i8, 255
+  %scale$104 = v_and_b32_lit %scale_u, 63
+  %min$105 = v_and_b32_lit %min_u, 63
+  low.br ^_bb5(%scale$104: reg<amdgpu.vgpr>, %min$105: reg<amdgpu.vgpr>)
+^_bb4:
+  %107 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %108 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %110 = s_add_u32 %107, %position
+  %111 = s_addc_u32 %108, %zero
+  %112 = concat(%110, %111) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %low_i8 = global_load_i8_saddr %zero_f32, %112
+  %118 = s_add_u32 %107, %position
+  %119 = s_addc_u32 %108, %zero
+  %120 = concat(%118, %119) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %mid_i8 = global_load_i8_saddr %zero_f32, %120 {offset = 4}
+  %126 = s_add_u32 %107, %position
+  %127 = s_addc_u32 %108, %zero
+  %128 = concat(%126, %127) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %high_i8 = global_load_i8_saddr %zero_f32, %128 {offset = 8}
+  %low = v_and_b32_lit %low_i8, 255
+  %mid = v_and_b32_lit %mid_i8, 255
+  %high = v_and_b32_lit %high_i8, 255
+  %scale_low = v_and_b32_lit %high, 15
+  %scale_hi0 = v_and_b32_lit %low, 192
+  %scale_hi = v_lshrrev_b32_lit %scale_hi0, 2
+  %scale$136 = v_or_b32 %scale_low, %scale_hi
+  %min_low = v_lshrrev_b32_lit %high, 4
+  %min_hi0 = v_and_b32_lit %mid, 192
+  %min_hi = v_lshrrev_b32_lit %min_hi0, 2
+  %min$140 = v_or_b32 %min_low, %min_hi
+  low.br ^_bb5(%scale$136: reg<amdgpu.vgpr>, %min$140: reg<amdgpu.vgpr>)
+^_bb5(%scale_i32: reg<amdgpu.vgpr>, %min_i32: reg<amdgpu.vgpr>):
+  %scale_f32 = v_cvt_f32_u32 %scale_i32
+  %min_f32 = v_cvt_f32_u32 %min_i32
+  %term = v_add_f32 %scale_f32, %min_f32
+  %next = v_add_f32 %acc, %term
+  %145 = s_add_u32 %position, %one
+  low.br ^_bb1(%145: reg<amdgpu.sgpr>, %next: reg<amdgpu.vgpr>)
+^_bb6:
+  return %acc
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @divergent_if_q6_nibble_i8_result(%values: vector<2xi32>, %limit: i32) -> (i8) {
   %code = vector.extract %values[0] : vector<2xi32> -> i32
   %selector = vector.extract %values[1] : vector<2xi32> -> i32
