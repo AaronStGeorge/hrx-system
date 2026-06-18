@@ -143,15 +143,27 @@ def test_bitfield_insert_rules_try_native_bfi_before_mask_merge_fallback() -> No
 def test_packed_i16_arithmetic_rules_try_native_pk_ops_before_word_ops() -> None:
     compiled = _compiled_arithmetic_rules()
 
-    add_positions = _descriptor_sequence_positions(compiled, vector.vector_addi)
-    assert (
-        add_positions[("amdgpu.v_pk_add_u16",)] < add_positions[("amdgpu.v_add_u32",)]
+    arithmetic_cases = (
+        (vector.vector_addi, "amdgpu.v_pk_add_u16", "amdgpu.v_add_u32"),
+        (vector.vector_subi, "amdgpu.v_pk_sub_i16", "amdgpu.v_sub_u32"),
+        (vector.vector_muli, "amdgpu.v_pk_mul_lo_u16", "amdgpu.v_mul_lo_u32"),
+        (vector.vector_minsi, "amdgpu.v_pk_min_i16", "amdgpu.v_min_i32"),
+        (vector.vector_maxsi, "amdgpu.v_pk_max_i16", "amdgpu.v_max_i32"),
+        (vector.vector_minui, "amdgpu.v_pk_min_u16", "amdgpu.v_min_u32"),
+        (vector.vector_maxui, "amdgpu.v_pk_max_u16", "amdgpu.v_max_u32"),
     )
+    for source_op, packed_descriptor, word_descriptor in arithmetic_cases:
+        positions = _descriptor_sequence_positions(compiled, source_op)
+        assert positions[(packed_descriptor,)] < positions[(word_descriptor,)]
 
-    sub_positions = _descriptor_sequence_positions(compiled, vector.vector_subi)
-    assert (
-        sub_positions[("amdgpu.v_pk_sub_i16",)] < sub_positions[("amdgpu.v_sub_u32",)]
+    shift_cases = (
+        (vector.vector_shli, "amdgpu.v_pk_lshlrev_b16"),
+        (vector.vector_shrsi, "amdgpu.v_pk_ashrrev_i16"),
+        (vector.vector_shrui, "amdgpu.v_pk_lshrrev_b16"),
     )
+    for source_op, packed_descriptor in shift_cases:
+        positions = _descriptor_sequence_positions(compiled, source_op)
+        assert positions[(packed_descriptor,)] == 0
 
 
 def test_vector_extract_rules_publish_contract_only_shape_rows() -> None:

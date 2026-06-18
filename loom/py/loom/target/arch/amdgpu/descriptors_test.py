@@ -1615,6 +1615,14 @@ def test_packed_i16_binary_descriptors_pin_lane_container_widths() -> None:
     packed_keys = (
         "amdgpu.v_pk_add_u16",
         "amdgpu.v_pk_sub_i16",
+        "amdgpu.v_pk_mul_lo_u16",
+        "amdgpu.v_pk_min_i16",
+        "amdgpu.v_pk_max_i16",
+        "amdgpu.v_pk_min_u16",
+        "amdgpu.v_pk_max_u16",
+        "amdgpu.v_pk_lshlrev_b16",
+        "amdgpu.v_pk_lshrrev_b16",
+        "amdgpu.v_pk_ashrrev_i16",
     )
     for descriptor_set in (
         _gfx940_core_overlays(),

@@ -3382,6 +3382,8 @@ def _v_pk_binary_overlay(
     instruction_name: str,
     mnemonic: str,
     semantic_tag: str,
+    lhs_name: str = "lhs",
+    rhs_name: str = "rhs",
     units: int = 1,
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
@@ -3393,8 +3395,8 @@ def _v_pk_binary_overlay(
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result(units=units)),
-            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs", units=units)),
-            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("rhs", units=units)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand(lhs_name, units=units)),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand(rhs_name, units=units)),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
@@ -3514,6 +3516,99 @@ def _v_pk_sub_i16_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="V_PK_SUB_I16",
         mnemonic="v_pk_sub_i16",
         semantic_tag="integer.sub.pk2.i16",
+    )
+
+
+def _v_pk_mul_lo_u16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_mul_lo_u16",
+        instruction_name="V_PK_MUL_LO_U16",
+        mnemonic="v_pk_mul_lo_u16",
+        semantic_tag="integer.mul.lo.pk2.u16",
+    )
+
+
+def _v_pk_min_i16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_min_i16",
+        instruction_name="V_PK_MIN_I16",
+        mnemonic="v_pk_min_i16",
+        semantic_tag="integer.min.pk2.i16",
+    )
+
+
+def _v_pk_max_i16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_max_i16",
+        instruction_name="V_PK_MAX_I16",
+        mnemonic="v_pk_max_i16",
+        semantic_tag="integer.max.pk2.i16",
+    )
+
+
+def _v_pk_min_u16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_min_u16",
+        instruction_name="V_PK_MIN_U16",
+        mnemonic="v_pk_min_u16",
+        semantic_tag="integer.min.pk2.u16",
+    )
+
+
+def _v_pk_max_u16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_max_u16",
+        instruction_name="V_PK_MAX_U16",
+        mnemonic="v_pk_max_u16",
+        semantic_tag="integer.max.pk2.u16",
+    )
+
+
+def _v_pk_lshlrev_b16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_lshlrev_b16",
+        instruction_name="V_PK_LSHLREV_B16",
+        mnemonic="v_pk_lshlrev_b16",
+        semantic_tag="integer.shl.pk2.u16",
+        lhs_name="shift",
+        rhs_name="value",
+    )
+
+
+def _v_pk_lshrrev_b16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_lshrrev_b16",
+        instruction_name="V_PK_LSHRREV_B16",
+        mnemonic="v_pk_lshrrev_b16",
+        semantic_tag="integer.shr.pk2.u16",
+        lhs_name="shift",
+        rhs_name="value",
+    )
+
+
+def _v_pk_ashrrev_i16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_ashrrev_i16",
+        instruction_name="V_PK_ASHRREV_I16",
+        mnemonic="v_pk_ashrrev_i16",
+        semantic_tag="integer.shr.pk2.i16",
+        lhs_name="shift",
+        rhs_name="value",
+    )
+
+
+def _v_pk_i16_binary_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_pk_add_u16_overlay(),
+        _v_pk_sub_i16_overlay(),
+        _v_pk_mul_lo_u16_overlay(),
+        _v_pk_min_i16_overlay(),
+        _v_pk_max_i16_overlay(),
+        _v_pk_min_u16_overlay(),
+        _v_pk_max_u16_overlay(),
+        _v_pk_lshlrev_b16_overlay(),
+        _v_pk_lshrrev_b16_overlay(),
+        _v_pk_ashrrev_i16_overlay(),
     )
 
 
@@ -4730,9 +4825,18 @@ __all__ = (
     "_v_fmac_f64_overlay",
     "_v_fmamk_f16_overlay",
     "_v_fmamk_f32_overlay",
+    "_v_pk_ashrrev_i16_overlay",
     "_v_pk_fma_f16_overlay",
     "_v_pk_fma_f16_literal_overlays",
     "_v_pk_add_u16_overlay",
+    "_v_pk_lshlrev_b16_overlay",
+    "_v_pk_lshrrev_b16_overlay",
+    "_v_pk_max_i16_overlay",
+    "_v_pk_max_u16_overlay",
+    "_v_pk_min_i16_overlay",
+    "_v_pk_min_u16_overlay",
+    "_v_pk_mul_lo_u16_overlay",
+    "_v_pk_i16_binary_overlays",
     "_v_pk_fma_f32_overlay",
     "_v_pk_fmac_f16_overlay",
     "_v_pk_mad_i16_overlay",

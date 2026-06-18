@@ -83,6 +83,14 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_pk_fma_f16",
     "amdgpu.v_pk_add_u16",
     "amdgpu.v_pk_sub_i16",
+    "amdgpu.v_pk_mul_lo_u16",
+    "amdgpu.v_pk_min_i16",
+    "amdgpu.v_pk_max_i16",
+    "amdgpu.v_pk_min_u16",
+    "amdgpu.v_pk_max_u16",
+    "amdgpu.v_pk_lshlrev_b16",
+    "amdgpu.v_pk_lshrrev_b16",
+    "amdgpu.v_pk_ashrrev_i16",
     "amdgpu.v_pk_mad_i16",
     "amdgpu.v_pk_mad_u16",
     "amdgpu.v_cvt_f32_i32",
@@ -3020,10 +3028,35 @@ def _rules() -> tuple[ContractCase, ...]:
                 "amdgpu.v_pk_sub_i16",
             ),
             _binary_rule(vector.vector_subi, _VEC_I32, "amdgpu.v_sub_u32"),
+            _binary_rule(
+                vector.vector_muli,
+                _VEC_I16_PACKED_STORAGE,
+                "amdgpu.v_pk_mul_lo_u16",
+            ),
             _binary_rule(vector.vector_muli, _VEC_I32, "amdgpu.v_mul_lo_u32"),
+            _binary_rule(
+                vector.vector_minsi,
+                _VEC_I16_PACKED_STORAGE,
+                "amdgpu.v_pk_min_i16",
+            ),
             _binary_rule(vector.vector_minsi, _VEC_I32, "amdgpu.v_min_i32"),
+            _binary_rule(
+                vector.vector_maxsi,
+                _VEC_I16_PACKED_STORAGE,
+                "amdgpu.v_pk_max_i16",
+            ),
             _binary_rule(vector.vector_maxsi, _VEC_I32, "amdgpu.v_max_i32"),
+            _binary_rule(
+                vector.vector_minui,
+                _VEC_I16_PACKED_STORAGE,
+                "amdgpu.v_pk_min_u16",
+            ),
             _binary_rule(vector.vector_minui, _VEC_I32, "amdgpu.v_min_u32"),
+            _binary_rule(
+                vector.vector_maxui,
+                _VEC_I16_PACKED_STORAGE,
+                "amdgpu.v_pk_max_u16",
+            ),
             _binary_rule(vector.vector_maxui, _VEC_I32, "amdgpu.v_max_u32"),
         )
     )
@@ -3061,6 +3094,22 @@ def _rules() -> tuple[ContractCase, ...]:
                     nonliteral_source="lhs",
                 ),
                 _binary_rule(source_op, _VEC_I32, descriptor_key),
+            )
+        )
+    for source_op, descriptor_key in (
+        (vector.vector_shli, "amdgpu.v_pk_lshlrev_b16"),
+        (vector.vector_shrsi, "amdgpu.v_pk_ashrrev_i16"),
+        (vector.vector_shrui, "amdgpu.v_pk_lshrrev_b16"),
+    ):
+        rules.append(
+            _binary_rule(
+                source_op,
+                _VEC_I16_PACKED_STORAGE,
+                descriptor_key,
+                descriptor_lhs="shift",
+                descriptor_rhs="value",
+                source_lhs="rhs",
+                source_rhs="lhs",
             )
         )
     for source_op, descriptor_key in (

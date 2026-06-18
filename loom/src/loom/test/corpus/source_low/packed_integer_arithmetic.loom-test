@@ -26,6 +26,35 @@ func.def @i16x4_add_sub_storage_tuple(%lhs: vector<4xi16>, %rhs: vector<4xi16>) 
 
 // ====
 
+func.def @i16x4_mul_minmax_storage_tuple(%lhs: vector<4xi16>, %rhs: vector<4xi16>) -> (vector<4xi16>, vector<4xi16>, vector<4xi16>, vector<4xi16>, vector<4xi16>) {
+  %product = vector.muli %lhs, %rhs : vector<4xi16>
+  %smin = vector.minsi %lhs, %rhs : vector<4xi16>
+  %smax = vector.maxsi %lhs, %rhs : vector<4xi16>
+  %umin = vector.minui %lhs, %rhs : vector<4xi16>
+  %umax = vector.maxui %lhs, %rhs : vector<4xi16>
+  func.return %product, %smin, %smax, %umin, %umax : vector<4xi16>, vector<4xi16>, vector<4xi16>, vector<4xi16>, vector<4xi16>
+}
+
+// ====
+
+func.def @i16x4_shift_storage_tuple(%value: vector<4xi16>, %shift: vector<4xi16>) -> (vector<4xi16>, vector<4xi16>, vector<4xi16>) {
+  %left = vector.shli %value, %shift : vector<4xi16>
+  %signed_right = vector.shrsi %value, %shift : vector<4xi16>
+  %unsigned_right = vector.shrui %value, %shift : vector<4xi16>
+  func.return %left, %signed_right, %unsigned_right : vector<4xi16>, vector<4xi16>, vector<4xi16>
+}
+
+// ====
+
+func.def @i16x4_bitcast_mul_maxui_chain(%packed: vector<2xi32>, %scale: vector<4xi16>, %limit: vector<4xi16>) -> (vector<4xi16>) {
+  %lanes = vector.bitcast %packed : vector<2xi32> to vector<4xi16>
+  %product = vector.muli %lanes, %scale : vector<4xi16>
+  %result = vector.maxui %product, %limit : vector<4xi16>
+  func.return %result : vector<4xi16>
+}
+
+// ====
+
 func.def @i16x4_select_xori(%lhs: i32, %rhs: i32, %true_value: vector<4xi16>, %false_value: vector<4xi16>, %mask: vector<4xi16>) -> (vector<4xi16>) {
   %condition = scalar.cmpi slt, %lhs, %rhs : i32
   %predicate = vector.splat %condition : vector<4xi1>
