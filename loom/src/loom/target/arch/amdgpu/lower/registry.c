@@ -303,13 +303,14 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_extract_dispatch,
                              loom_amdgpu_lower_vector_extract)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(
-    loom_amdgpu_select_vector_bf16_conversion_dispatch,
-    loom_amdgpu_vector_bf16_conversion_plan_t,
-    loom_amdgpu_select_vector_bf16_conversion_plan)
+    loom_amdgpu_select_vector_16bit_float_conversion_dispatch,
+    loom_amdgpu_vector_16bit_float_conversion_plan_t,
+    loom_amdgpu_select_vector_16bit_float_conversion_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bf16_conversion_dispatch,
-                             loom_amdgpu_vector_bf16_conversion_plan_t,
-                             loom_amdgpu_lower_vector_bf16_conversion)
+LOOM_AMDGPU_DEFINE_DATA_EMIT(
+    loom_amdgpu_emit_vector_16bit_float_conversion_dispatch,
+    loom_amdgpu_vector_16bit_float_conversion_plan_t,
+    loom_amdgpu_lower_vector_16bit_float_conversion)
 
 static iree_status_t loom_amdgpu_select_buffer_dispatch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -1032,7 +1033,7 @@ LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_scalar_conversion_plan_t,
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_conversion_plan_t,
                                         source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(
-    loom_amdgpu_vector_bf16_conversion_plan_t, source, 0);
+    loom_amdgpu_vector_16bit_float_conversion_plan_t, source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_bitpack_plan_t, source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_bitunpack_plan_t, source,
                                         0);

@@ -396,10 +396,10 @@ _VECTOR_EXTRACT_SHAPE_DIAGNOSTIC = GuardDiagnostic(
     subject_name="vector.extract",
     constraint_key="amdgpu.arithmetic.vector_extract_shape",
 )
-_VECTOR_BF16_CONVERSION_SHAPE_DIAGNOSTIC = GuardDiagnostic(
+_VECTOR_16BIT_FLOAT_CONVERSION_SHAPE_DIAGNOSTIC = GuardDiagnostic(
     subject_role="shape",
-    subject_name="vector.bf16_conversion",
-    constraint_key="amdgpu.arithmetic.vector_bf16_conversion_shape",
+    subject_name="vector.16bit_float_conversion",
+    constraint_key="amdgpu.arithmetic.vector_16bit_float_conversion_shape",
 )
 
 
@@ -799,7 +799,7 @@ def _vector_extract_recipe_rules() -> tuple[RecipeRule, ...]:
     )
 
 
-def _vector_bf16_conversion_recipe_rule(
+def _vector_16bit_float_conversion_recipe_rule(
     source_op: Op,
     input_type: TypePattern,
     result_type: TypePattern,
@@ -812,20 +812,30 @@ def _vector_bf16_conversion_recipe_rule(
             Guard.value_static_element_count_eq(
                 "input",
                 "result",
-                diagnostic=_VECTOR_BF16_CONVERSION_SHAPE_DIAGNOSTIC,
+                diagnostic=_VECTOR_16BIT_FLOAT_CONVERSION_SHAPE_DIAGNOSTIC,
             ),
         ),
     )
 
 
-def _vector_bf16_conversion_recipe_rules() -> tuple[RecipeRule, ...]:
+def _vector_16bit_float_conversion_recipe_rules() -> tuple[RecipeRule, ...]:
     return (
-        _vector_bf16_conversion_recipe_rule(
+        _vector_16bit_float_conversion_recipe_rule(
+            vector.vector_extf,
+            _VEC_F16_PACKED_STORAGE,
+            _VEC_F32_STATIC,
+        ),
+        _vector_16bit_float_conversion_recipe_rule(
             vector.vector_extf,
             _VEC_BF16_PACKED_STORAGE,
             _VEC_F32_STATIC,
         ),
-        _vector_bf16_conversion_recipe_rule(
+        _vector_16bit_float_conversion_recipe_rule(
+            vector.vector_fptrunc,
+            _VEC_F32_STATIC,
+            _VEC_F16_PACKED_STORAGE,
+        ),
+        _vector_16bit_float_conversion_recipe_rule(
             vector.vector_fptrunc,
             _VEC_F32_STATIC,
             _VEC_BF16_PACKED_STORAGE,
@@ -2799,7 +2809,7 @@ def _rules() -> tuple[ContractCase, ...]:
             *_packed_f16_vector_fma_rules(),
             *_packed_i16_vector_fmai_rules(),
             *_vector_extract_recipe_rules(),
-            *_vector_bf16_conversion_recipe_rules(),
+            *_vector_16bit_float_conversion_recipe_rules(),
             *_f32_fma_rules(vector.vector_fmaf, _VEC_F32),
             _unary_rule(vector.vector_exp2f, _VEC_F32, "amdgpu.v_exp_f32"),
             _unary_rule(vector.vector_log2f, _VEC_F32, "amdgpu.v_log_f32"),

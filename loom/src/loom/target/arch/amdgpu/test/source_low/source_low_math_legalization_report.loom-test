@@ -15,13 +15,13 @@ COMPILE-REPORT: math_legalization[0] function=report_scalar_round_away_recipe so
 COMPILE-REPORT: source_low[0] function=report_scalar_round_away_recipe source_op=scalar.constant selection=plan plan=597 descriptor=0 emitted_ops=1
 COMPILE-REPORT: source_low[1] function=report_scalar_round_away_recipe source_op=scalar.constant selection=plan plan=597 descriptor=0 emitted_ops=1
 COMPILE-REPORT: source_low[2] function=report_scalar_round_away_recipe source_op=scalar.constant selection=plan plan=597 descriptor=0 emitted_ops=1
-COMPILE-REPORT: source_low[3] function=report_scalar_round_away_recipe source_op=scalar.truncf selection=rule rule_set=0 rule=396 descriptor=3641742240926975688 emitted_ops=1
-COMPILE-REPORT: source_low[4] function=report_scalar_round_away_recipe source_op=scalar.subf selection=rule rule_set=0 rule=358 descriptor=6038374860459134232 emitted_ops=1
-COMPILE-REPORT: source_low[5] function=report_scalar_round_away_recipe source_op=scalar.absf selection=rule rule_set=0 rule=362 descriptor=1747636869416133384 emitted_ops=1
+COMPILE-REPORT: source_low[3] function=report_scalar_round_away_recipe source_op=scalar.truncf selection=rule rule_set=0 rule=398 descriptor=3641742240926975688 emitted_ops=1
+COMPILE-REPORT: source_low[4] function=report_scalar_round_away_recipe source_op=scalar.subf selection=rule rule_set=0 rule=360 descriptor=6038374860459134232 emitted_ops=1
+COMPILE-REPORT: source_low[5] function=report_scalar_round_away_recipe source_op=scalar.absf selection=rule rule_set=0 rule=364 descriptor=1747636869416133384 emitted_ops=1
 COMPILE-REPORT: source_low[6] function=report_scalar_round_away_recipe source_op=scalar.cmpf selection=plan plan=581 descriptor=0 emitted_ops=1
 COMPILE-REPORT: source_low[7] function=report_scalar_round_away_recipe source_op=scf.select selection=plan plan=1284 descriptor=0 emitted_ops=1
-COMPILE-REPORT: source_low[8] function=report_scalar_round_away_recipe source_op=scalar.copysignf selection=rule rule_set=0 rule=363 descriptor=4489095985271686921 emitted_ops=1
-COMPILE-REPORT: source_low[9] function=report_scalar_round_away_recipe source_op=scalar.addf selection=rule rule_set=0 rule=357 descriptor=5183489740832503697 emitted_ops=1
+COMPILE-REPORT: source_low[8] function=report_scalar_round_away_recipe source_op=scalar.copysignf selection=rule rule_set=0 rule=365 descriptor=4489095985271686921 emitted_ops=1
+COMPILE-REPORT: source_low[9] function=report_scalar_round_away_recipe source_op=scalar.addf selection=rule rule_set=0 rule=359 descriptor=5183489740832503697 emitted_ops=1
 
 // ====
 
@@ -40,7 +40,7 @@ COMPILE-REPORT: math_legalization[0] function=report_vector_round_away_recipe so
 COMPILE-REPORT: source_low[0] function=report_vector_round_away_recipe source_op=vector.constant selection=plan plan=3584 descriptor=0 emitted_ops=3
 COMPILE-REPORT: source_low[1] function=report_vector_round_away_recipe source_op=vector.constant selection=plan plan=3584 descriptor=0 emitted_ops=3
 COMPILE-REPORT: source_low[2] function=report_vector_round_away_recipe source_op=vector.constant selection=plan plan=3584 descriptor=0 emitted_ops=3
-COMPILE-REPORT: source_low[3] function=report_vector_round_away_recipe source_op=vector.truncf selection=rule rule_set=0 rule=154 descriptor=3641742240926975688 emitted_ops=5
+COMPILE-REPORT: source_low[3] function=report_vector_round_away_recipe source_op=vector.truncf selection=rule rule_set=0 rule=156 descriptor=3641742240926975688 emitted_ops=5
 COMPILE-REPORT: source_low[4] function=report_vector_round_away_recipe source_op=vector.subf selection=rule rule_set=0 rule=101 descriptor=6038374860459134232 emitted_ops=7
 COMPILE-REPORT: source_low[5] function=report_vector_round_away_recipe source_op=vector.absf selection=rule rule_set=0 rule=105 descriptor=1747636869416133384 emitted_ops=5
 COMPILE-REPORT: source_low[6] function=report_vector_round_away_recipe source_op=vector.cmpf selection=plan plan=3622 descriptor=0 emitted_ops=5
@@ -60,4 +60,4 @@ func.def target(@target) @report_vector_roundeven_native(%input: vector<2xf32>) 
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=1 emitted_ops=5 rows=1
-COMPILE-REPORT: source_low[0] function=report_vector_roundeven_native source_op=vector.roundevenf selection=rule rule_set=0 rule=153 plan_key=amdgpu.vector_roundevenf.strategy.rndne descriptor=5149499237128073059 emitted_ops=5
+COMPILE-REPORT: source_low[0] function=report_vector_roundeven_native source_op=vector.roundevenf selection=rule rule_set=0 rule=155 plan_key=amdgpu.vector_roundevenf.strategy.rndne descriptor=5149499237128073059 emitted_ops=5

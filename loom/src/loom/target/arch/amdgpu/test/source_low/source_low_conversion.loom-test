@@ -868,6 +868,72 @@ low.func.def target(@target) abi(hal_kernel) @scalar_fptrunc_f32_store(%input: r
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_extf_f16x2(%input: vector<2xf16>) -> (vector<2xf32>) {
+  %converted = vector.extf %input : vector<2xf16> to vector<2xf32>
+  func.return %converted : vector<2xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @vector_extf_f16x2(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %5 = v_and_b32_lit %input, 65535
+  %6 = v_cvt_f32_f16 %5
+  %7 = v_lshrrev_b32_src0_inline %input, 16
+  %8 = v_and_b32_lit %7, 65535
+  %9 = v_cvt_f32_f16 %8
+  %converted = concat(%6, %9) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %converted
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_extf_f16x3(%input: vector<3xf16>) -> (vector<3xf32>) {
+  %converted = vector.extf %input : vector<3xf16> to vector<3xf32>
+  func.return %converted : vector<3xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @vector_extf_f16x3(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x3>) asm<amdgpu.rdna3.core> {
+  %5 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %6 = v_and_b32_lit %5, 65535
+  %7 = v_cvt_f32_f16 %6
+  %9 = v_lshrrev_b32_src0_inline %5, 16
+  %10 = v_and_b32_lit %9, 65535
+  %11 = v_cvt_f32_f16 %10
+  %12 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %13 = v_and_b32_lit %12, 65535
+  %14 = v_cvt_f32_f16 %13
+  %converted = concat(%7, %11, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
+  return %converted
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_fptrunc_f16x3(%input: vector<3xf32>) -> (vector<3xf16>) {
+  %converted = vector.fptrunc %input : vector<3xf32> to vector<3xf16>
+  func.return %converted : vector<3xf16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @vector_fptrunc_f16x3(%input: reg<amdgpu.vgpr x3>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %5 = slice %input[0] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
+  %6 = v_cvt_f16_f32 %5
+  %7 = v_bfe_u32_offset_0_width_16_low16 %6
+  %8 = slice %input[1] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
+  %9 = v_cvt_f16_f32 %8
+  %10 = v_bfe_u32_offset_0_width_16_low16 %9
+  %11 = v_lshl_add_u32_shift_imm %10, %7, 16
+  %12 = slice %input[2] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
+  %13 = v_cvt_f16_f32 %12
+  %14 = v_bfe_u32_offset_0_width_16_low16 %13
+  %converted = concat(%11, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %converted
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @scalar_fptrunc_bf16_store(%output: buffer, %input: f32) {
   %base = index.constant 0 : offset
   %output_view = buffer.view %output[%base] : buffer -> view<1xbf16, #dense>

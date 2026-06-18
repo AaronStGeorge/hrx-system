@@ -54,26 +54,30 @@ typedef struct loom_amdgpu_constant_plan_t {
   bool i1_value;
 } loom_amdgpu_constant_plan_t;
 
-typedef enum loom_amdgpu_vector_bf16_conversion_kind_e {
-  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_NONE = 0,
-  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_EXTF = 1,
-  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_FPTRUNC = 2,
-} loom_amdgpu_vector_bf16_conversion_kind_t;
+typedef enum loom_amdgpu_vector_16bit_float_conversion_kind_e {
+  LOOM_AMDGPU_VECTOR_16BIT_FLOAT_CONVERSION_KIND_NONE = 0,
+  LOOM_AMDGPU_VECTOR_16BIT_FLOAT_CONVERSION_KIND_EXTF = 1,
+  LOOM_AMDGPU_VECTOR_16BIT_FLOAT_CONVERSION_KIND_FPTRUNC = 2,
+} loom_amdgpu_vector_16bit_float_conversion_kind_t;
 
-typedef struct loom_amdgpu_vector_bf16_conversion_plan_t {
+typedef struct loom_amdgpu_vector_16bit_float_conversion_plan_t {
   // Source vector value being converted.
   loom_value_id_t source;
   // Result vector value receiving the converted lane payload.
   loom_value_id_t result;
   // Conversion operation selected for the source/result type pair.
-  loom_amdgpu_vector_bf16_conversion_kind_t kind;
+  loom_amdgpu_vector_16bit_float_conversion_kind_t kind;
+  // Source scalar element type.
+  loom_scalar_type_t source_element_type;
+  // Result scalar element type.
+  loom_scalar_type_t result_element_type;
   // Static vector lane count.
   uint32_t lane_count;
   // Number of 32-bit source registers occupied by the source vector.
   uint32_t source_register_count;
   // Number of 32-bit result registers occupied by the result vector.
   uint32_t result_register_count;
-} loom_amdgpu_vector_bf16_conversion_plan_t;
+} loom_amdgpu_vector_16bit_float_conversion_plan_t;
 
 typedef enum loom_amdgpu_index_cast_kind_e {
   LOOM_AMDGPU_INDEX_CAST_KIND_NONE = 0,

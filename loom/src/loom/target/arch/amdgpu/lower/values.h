@@ -112,15 +112,16 @@ iree_status_t loom_amdgpu_lower_vector_extract(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_extract_plan_t* plan);
 
-// Selects an AMDGPU vector bf16 conversion plan.
-iree_status_t loom_amdgpu_select_vector_bf16_conversion_plan(
+// Selects an AMDGPU vector 16-bit-float conversion plan.
+iree_status_t loom_amdgpu_select_vector_16bit_float_conversion_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_bf16_conversion_plan_t* out_plan, bool* out_selected);
+    loom_amdgpu_vector_16bit_float_conversion_plan_t* out_plan,
+    bool* out_selected);
 
-// Lowers an AMDGPU vector bf16 conversion plan.
-iree_status_t loom_amdgpu_lower_vector_bf16_conversion(
+// Lowers an AMDGPU vector 16-bit-float conversion plan.
+iree_status_t loom_amdgpu_lower_vector_16bit_float_conversion(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_vector_bf16_conversion_plan_t* plan);
+    const loom_amdgpu_vector_16bit_float_conversion_plan_t* plan);
 
 // Selects a plan for structural value-construction source ops.
 iree_status_t loom_amdgpu_select_structural_value_plan(
