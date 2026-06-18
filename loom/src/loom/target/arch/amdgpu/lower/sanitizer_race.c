@@ -279,50 +279,24 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_global_load_b64(
       out_value);
 }
 
-static iree_status_t loom_amdgpu_sanitizer_race_build_cmpswap_pair(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t expected_value, loom_value_id_t desired_value,
-    loom_location_id_t location, loom_value_id_t* out_value) {
-  *out_value = LOOM_VALUE_ID_INVALID;
-  loom_type_t vgpr_x4_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
-      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 4, &vgpr_x4_type));
-  const loom_value_id_t parts[] = {desired_value, expected_value};
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_low_concat_build(builder, parts, IREE_ARRAYSIZE(parts), vgpr_x4_type,
-                            location, &concat_op));
-  *out_value = loom_low_concat_result(concat_op);
-  return iree_ok_status();
-}
-
-static iree_status_t
-loom_amdgpu_sanitizer_race_build_global_cmpswap_b64_acq_rel(
+static iree_status_t loom_amdgpu_sanitizer_race_build_global_swap_u64_acq_rel(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t base_address, loom_value_id_t byte_offset,
-    loom_value_id_t expected_value, loom_value_id_t desired_value,
-    loom_location_id_t location, loom_value_id_t* out_observed_value) {
+    loom_value_id_t desired_value, loom_location_id_t location,
+    loom_value_id_t* out_observed_value) {
   *out_observed_value = LOOM_VALUE_ID_INVALID;
 
   const loom_low_descriptor_t* descriptor = NULL;
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
       builder, descriptor_set,
-      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_CMPSWAP_B64_RTN_SADDR,
-      &descriptor, &opcode_id));
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_SWAP_U64_RTN_SADDR, &descriptor,
+      &opcode_id));
 
-  loom_value_id_t expected_vgpr = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
-      builder, descriptor_set, expected_value, /*expected_unit_count=*/2,
-      location, &expected_vgpr));
   loom_value_id_t desired_vgpr = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
       builder, descriptor_set, desired_value, /*expected_unit_count=*/2,
       location, &desired_vgpr));
-  loom_value_id_t compare_exchange_pair = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_cmpswap_pair(
-      builder, descriptor_set, expected_vgpr, desired_vgpr, location,
-      &compare_exchange_pair));
 
   loom_named_attr_t attrs[2] = {0};
   iree_host_size_t attr_count = 0;
@@ -335,8 +309,8 @@ loom_amdgpu_sanitizer_race_build_global_cmpswap_b64_acq_rel(
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_release_ordering(
       builder, descriptor_set, location));
 
-  loom_value_id_t operands[4] = {byte_offset, compare_exchange_pair,
-                                 base_address, LOOM_VALUE_ID_INVALID};
+  loom_value_id_t operands[4] = {byte_offset, desired_vgpr, base_address,
+                                 LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 3;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_append_optional_m0(
       builder, descriptor_set, descriptor, location, operands,
@@ -720,7 +694,7 @@ static bool loom_amdgpu_sanitizer_race_required_descriptors_present(
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32_SADDR,
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR,
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR,
-      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_CMPSWAP_B64_RTN_SADDR,
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_SWAP_U64_RTN_SADDR,
       LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
       LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32,
       LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B32,
@@ -1761,17 +1735,10 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_access(
   loom_value_id_t shadow_entry_offset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_shadow_entry_offset(
       context, source_op, &shadow_address, &shadow_entry_offset));
-  loom_value_id_t expected_entry_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_load_b64(
-      builder, descriptor_set, config.shadow_base, shadow_entry_offset,
-      LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_ACQUIRE, source_op->location,
-      &expected_entry_value));
   loom_value_id_t observed_entry_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_sanitizer_race_build_global_cmpswap_b64_acq_rel(
-          builder, descriptor_set, config.shadow_base, shadow_entry_offset,
-          expected_entry_value, current_entry.value, source_op->location,
-          &observed_entry_value));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_swap_u64_acq_rel(
+      builder, descriptor_set, config.shadow_base, shadow_entry_offset,
+      current_entry.value, source_op->location, &observed_entry_value));
 
   loom_amdgpu_sanitizer_race_shadow_entry_t observed_entry = {0};
   loom_value_id_t prior_access_kind = LOOM_VALUE_ID_INVALID;

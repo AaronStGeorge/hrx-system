@@ -59,6 +59,7 @@ class _AtomicRow:
     instruction_name: str
     semantic_suffix: str
     data_format_name: str
+    memory_data_format_name: str
     has_no_return_form: bool
     value_units: int
     width_bits: int
@@ -70,6 +71,7 @@ def _atomic_row(
     semantic_suffix: str,
     data_format_name: str,
     *,
+    memory_data_format_name: str | None = None,
     mnemonic_suffix: str | None = None,
     has_no_return_form: bool = True,
     value_units: int = 1,
@@ -81,6 +83,7 @@ def _atomic_row(
         instruction_name=instruction_name,
         semantic_suffix=semantic_suffix,
         data_format_name=data_format_name,
+        memory_data_format_name=memory_data_format_name or data_format_name,
         has_no_return_form=has_no_return_form,
         value_units=value_units,
         width_bits=width_bits,
@@ -344,6 +347,16 @@ _GLOBAL_ATOMIC_DEFAULT_ROWS = (
         value_units=2,
         width_bits=64,
     ),
+    _atomic_row(
+        "swap_u64",
+        "GLOBAL_ATOMIC_SWAP_X2",
+        "exchange.u64",
+        "FMT_NUM_U64",
+        memory_data_format_name="FMT_NUM_B64",
+        has_no_return_form=False,
+        value_units=2,
+        width_bits=64,
+    ),
     _atomic_row("min_f32", "GLOBAL_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32"),
     _atomic_row("max_f32", "GLOBAL_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32"),
 )
@@ -356,6 +369,17 @@ _GLOBAL_ATOMIC_GFX940_ROWS = (
         "add.u64",
         "FMT_NUM_U64",
         mnemonic_suffix="add_x2",
+        value_units=2,
+        width_bits=64,
+    ),
+    _atomic_row(
+        "swap_u64",
+        "GLOBAL_ATOMIC_SWAP_X2",
+        "exchange.u64",
+        "FMT_NUM_U64",
+        memory_data_format_name="FMT_NUM_B64",
+        mnemonic_suffix="swap_x2",
+        has_no_return_form=False,
         value_units=2,
         width_bits=64,
     ),
@@ -411,7 +435,7 @@ def _global_atomic_overlays(
                     instruction_name=row.instruction_name,
                     mnemonic=f"global_atomic_{row.mnemonic_suffix}",
                     semantic_tag=f"memory.global.atomic.{row.semantic_suffix}",
-                    data_format_name=row.data_format_name,
+                    data_format_name=row.memory_data_format_name,
                     returns_old_value=False,
                     encoding_name=encoding_name,
                     address_field_name=address_field_name,
@@ -438,7 +462,7 @@ def _global_atomic_overlays(
                 instruction_name=row.instruction_name,
                 mnemonic=f"global_atomic_{row.mnemonic_suffix}",
                 semantic_tag=f"memory.global.atomic.{row.semantic_suffix}.return",
-                data_format_name=row.data_format_name,
+                data_format_name=row.memory_data_format_name,
                 returns_old_value=True,
                 encoding_name=encoding_name,
                 address_field_name=address_field_name,
