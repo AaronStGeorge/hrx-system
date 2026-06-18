@@ -205,12 +205,13 @@ typedef struct loom_target_compile_report_move_cause_counts_t {
   uint64_t unit_count;
 } loom_target_compile_report_move_cause_counts_t;
 
-// Static feature counters for descriptor-backed low schedule nodes.
+// Static feature counters for low packets that survive target emission.
 //
 // These counters are compile-time proxies derived from descriptor semantic
-// tags, schedule classes, and schedule resources. They are intentionally
-// separate from measured HAL profiling counters and may overlap: for example an
-// AMDGPU global atomic packet is both global memory and atomic.
+// tags, schedule classes, schedule resources, and structural low terminators.
+// They are intentionally separate from measured HAL profiling counters and may
+// overlap: for example an AMDGPU global atomic packet is both global memory and
+// atomic.
 typedef struct loom_target_compile_report_static_instruction_mix_t {
   // Descriptor-backed schedule nodes inspected for feature classification.
   uint64_t descriptor_count;
@@ -238,11 +239,11 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   uint64_t generic_memory_count;
   // Descriptor-backed nodes identified as atomic memory operations.
   uint64_t atomic_count;
-  // Descriptor-backed nodes identified as branch, return, or call control flow.
+  // Low packets identified as branch, return, or call control flow.
   uint64_t branch_count;
   // Descriptor-backed nodes identified as barrier or synchronization packets.
   uint64_t barrier_count;
-  // Descriptor-backed nodes identified as other control packets.
+  // Low packets identified as control flow or other control packets.
   uint64_t control_count;
   // Descriptor-backed nodes identified as numeric conversion packets.
   uint64_t conversion_count;

@@ -107,6 +107,49 @@
       ]
     },
     {
+      "name": "reports structural AMDGPU branch packets in static mix",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/branch_mix_report_amdgpu.loom",
+            "text": "kernel.def export(\"compile_report_branch_mix\") @compile_report_branch_mix() {\n  %unit = index.constant 1 : index\n  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index\n} launch(%output: buffer, %flag: i32) {\n  %zero_offset = index.constant 0 : offset\n  %zero_index = index.constant 0 : index\n  %zero_i32 = scalar.constant 0 : i32\n  %one_i32 = scalar.constant 1 : i32\n  %two_i32 = scalar.constant 2 : i32\n  %global = buffer.assume.memory_space<global> %output : buffer\n  %view = buffer.view %global[%zero_offset] : buffer -> view<1xi32, #dense>\n  %nonzero = scalar.cmpi ne, %flag, %zero_i32 : i32\n  cfg.cond_br %nonzero, ^then, ^else\n^then:\n  view.store %one_i32, %view[%zero_index] : i32, view<1xi32, #dense>\n  cfg.br ^done\n^else:\n  view.store %two_i32, %view[%zero_index] : i32, view<1xi32, #dense>\n  cfg.br ^done\n^done:\n  kernel.return\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/branch_mix_report_amdgpu.loom",
+              "--backend=amdgpu-hal",
+              "--target=gfx11-generic",
+              "--output={tmp}/branch_mix_report_amdgpu.hsaco",
+              "--compile-report=details",
+              "--compile-report-output=-"
+            ]
+          },
+          "stdout": {
+            "contains": {
+              "unordered": [
+                "\"function\":\"compile_report_branch_mix\"",
+                "\"status\":\"OK\"",
+                "\"static_instruction_mix\":{\"descriptor_count\":",
+                "\"branch_count\":3",
+                "\"control_count\":3"
+              ]
+            }
+          },
+          "files": [
+            {
+              "path": "{tmp}/branch_mix_report_amdgpu.hsaco",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "compiles selected AMDGPU root before target selection",
       "steps": [
         {

@@ -7,6 +7,7 @@
 #include "loom/target/compile_report_low.h"
 
 #include "loom/codegen/low/diagnostics.h"
+#include "loom/codegen/low/packet.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
@@ -97,6 +98,48 @@ static bool loom_target_compile_report_schedule_class_uses_resource_kind(
   return false;
 }
 
+static bool loom_target_compile_report_low_branch_falls_through(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_schedule_node_t* node, const loom_block_t* dest) {
+  const uint32_t dest_block_index = loom_low_packet_block_index(schedule, dest);
+  return dest_block_index != LOOM_LOW_PACKET_INDEX_NONE &&
+         dest_block_index == node->block_index + 1;
+}
+
+static uint64_t
+loom_target_compile_report_low_structural_control_transfer_count(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_schedule_node_t* node) {
+  if (node->op == NULL) {
+    return 0;
+  }
+  if (loom_low_return_isa(node->op)) {
+    return 1;
+  }
+  if (loom_low_br_isa(node->op)) {
+    return loom_target_compile_report_low_branch_falls_through(
+               schedule, node, loom_low_br_dest(node->op))
+               ? 0
+               : 1;
+  }
+  if (!loom_low_cond_br_isa(node->op)) {
+    return 0;
+  }
+
+  const loom_block_t* true_dest = loom_low_cond_br_true_dest(node->op);
+  const loom_block_t* false_dest = loom_low_cond_br_false_dest(node->op);
+  const bool true_fallthrough =
+      loom_target_compile_report_low_branch_falls_through(schedule, node,
+                                                          true_dest);
+  if (true_dest == false_dest) {
+    return true_fallthrough ? 0 : 1;
+  }
+  const bool false_fallthrough =
+      loom_target_compile_report_low_branch_falls_through(schedule, node,
+                                                          false_dest);
+  return true_fallthrough || false_fallthrough ? 1 : 2;
+}
+
 static void loom_target_compile_report_record_low_static_instruction_mix(
     loom_target_compile_report_t* report,
     const loom_low_emission_frame_t* frame) {
@@ -105,6 +148,14 @@ static void loom_target_compile_report_record_low_static_instruction_mix(
   loom_target_compile_report_static_instruction_mix_t mix = {0};
   for (iree_host_size_t i = 0; i < frame->schedule.node_count; ++i) {
     const loom_low_schedule_node_t* node = &frame->schedule.nodes[i];
+    if (node->kind == LOOM_LOW_SCHEDULE_NODE_TERMINATOR) {
+      const uint64_t control_transfer_count =
+          loom_target_compile_report_low_structural_control_transfer_count(
+              &frame->schedule, node);
+      mix.branch_count += control_transfer_count;
+      mix.control_count += control_transfer_count;
+      continue;
+    }
     if (node->kind != LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR ||
         node->descriptor == NULL) {
       continue;

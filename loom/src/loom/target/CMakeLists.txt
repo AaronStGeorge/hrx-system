@@ -216,6 +216,7 @@ loom_cc_library(
     loom::codegen::low::diagnostics
     loom::codegen::low::frame
     loom::codegen::low::lower
+    loom::codegen::low::packet
     loom::ir
     loom::ops::low
   PUBLIC
