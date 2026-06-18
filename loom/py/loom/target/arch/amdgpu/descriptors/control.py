@@ -13,6 +13,13 @@ from __future__ import annotations
 
 from .common import *
 
+_SENDMSG_RTN_MESSAGE_IMMEDIATE = Immediate(
+    "message",
+    ImmediateKind.UNSIGNED,
+    bit_width=8,
+    unsigned_max=(2**8) - 1,
+)
+
 
 def _s_waitcnt_overlay(
     *,
@@ -220,7 +227,7 @@ def _s_sendmsg_rtn_b32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_MODE_CONTROL,
         operands=(AmdgpuOperandOverlay("SDST", _sgpr_result()),),
         immediate_fields=("SSRC0",),
-        immediates=(_source_inline_u32_immediate("message"),),
+        immediates=(_SENDMSG_RTN_MESSAGE_IMMEDIATE,),
         effects=(_CACHE_CONTROL_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )

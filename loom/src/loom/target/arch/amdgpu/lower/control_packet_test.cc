@@ -155,6 +155,23 @@ class AmdgpuControlPacketTest : public ::testing::Test {
     }
   }
 
+  void ExpectPacketOp(const loom_op_t* op,
+                      loom_amdgpu_descriptor_ref_t descriptor_ref,
+                      iree_host_size_t expected_operand_count,
+                      loom_value_id_t expected_result) const {
+    ExpectLowOpDescriptorRef(op, descriptor_ref);
+    EXPECT_EQ(loom_low_op_operands(op).count, expected_operand_count);
+    EXPECT_EQ(loom_low_op_attrs(op).count, 0u);
+
+    loom_value_slice_t results = loom_low_op_results(op);
+    if (expected_result == LOOM_VALUE_ID_INVALID) {
+      EXPECT_EQ(results.count, 0u);
+    } else {
+      ASSERT_EQ(results.count, 1u);
+      EXPECT_EQ(loom_value_slice_get(results, 0), expected_result);
+    }
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
@@ -218,6 +235,73 @@ TEST_F(AmdgpuControlPacketTest, PreservesExplicitM0Dependency) {
   ExpectControlOp(ops[2], LOOM_AMDGPU_DESCRIPTOR_REF_S_SENDMSG,
                   IREE_SV("message"), 2, 1, LOOM_VALUE_ID_INVALID);
   EXPECT_EQ(loom_low_op_operands(ops[2]).values[0], m0_payload);
+}
+
+TEST_F(AmdgpuControlPacketTest, EmitsAmdhsaDebugTrap) {
+  IREE_ASSERT_OK(loom_amdgpu_build_control_packet_debug_trap(
+      &builder_, descriptor_set_, LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> ops = Ops();
+  ASSERT_EQ(ops.size(), 1u);
+  ExpectControlOp(ops[0], LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP, IREE_SV("trapid"),
+                  3, 0, LOOM_VALUE_ID_INVALID);
+}
+
+TEST_F(AmdgpuControlPacketTest, EmitsAmdhsaFatalTrapForGfx11Plus) {
+  IREE_ASSERT_OK(loom_amdgpu_build_control_packet_fatal_trap(
+      &builder_, descriptor_set_, LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> ops = Ops();
+  ASSERT_EQ(ops.size(), 8u);
+  ExpectControlOp(ops[0], LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP, IREE_SV("trapid"),
+                  2, 0, LOOM_VALUE_ID_INVALID);
+  const loom_value_id_t doorbell = loom_low_op_results(ops[1]).values[0];
+  ExpectControlOp(ops[1], LOOM_AMDGPU_DESCRIPTOR_REF_S_SENDMSG_RTN_B32,
+                  IREE_SV("message"), 128, 0, doorbell);
+
+  ExpectLowConstDescriptorRef(ops[2], LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32);
+  EXPECT_EQ(loom_attr_as_i64(loom_low_const_attrs(ops[2]).entries[0].value),
+            0x3FF);
+  const loom_value_id_t doorbell_mask = loom_low_const_result(ops[2]);
+  const loom_value_id_t doorbell_id = loom_low_op_results(ops[3]).values[0];
+  ExpectPacketOp(ops[3], LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B32, 2, doorbell_id);
+  EXPECT_EQ(loom_low_op_operands(ops[3]).values[0], doorbell);
+  EXPECT_EQ(loom_low_op_operands(ops[3]).values[1], doorbell_mask);
+
+  ExpectLowConstDescriptorRef(ops[4], LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32);
+  EXPECT_EQ(loom_attr_as_i64(loom_low_const_attrs(ops[4]).entries[0].value),
+            0x400);
+  const loom_value_id_t wave_abort_bit = loom_low_const_result(ops[4]);
+  const loom_value_id_t interrupt_payload =
+      loom_low_op_results(ops[5]).values[0];
+  ExpectPacketOp(ops[5], LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B32, 2,
+                 interrupt_payload);
+  EXPECT_EQ(loom_low_op_operands(ops[5]).values[0], doorbell_id);
+  EXPECT_EQ(loom_low_op_operands(ops[5]).values[1], wave_abort_bit);
+
+  const loom_value_id_t m0_payload = loom_low_op_results(ops[6]).values[0];
+  ExpectPacketOp(ops[6], LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0, 1,
+                 m0_payload);
+  EXPECT_EQ(loom_low_op_operands(ops[6]).values[0], interrupt_payload);
+  ExpectControlOp(ops[7], LOOM_AMDGPU_DESCRIPTOR_REF_S_SENDMSG,
+                  IREE_SV("message"), 1, 1, LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(loom_low_op_operands(ops[7]).values[0], m0_payload);
+}
+
+TEST_F(AmdgpuControlPacketTest, EmitsAmdhsaFatalTrapDirectlyForGfx9) {
+  descriptor_set_ = loom_low_descriptor_registry_lookup(
+      &low_registry_.registry, IREE_SV("amdgpu.cdna3.core"));
+  if (descriptor_set_ == nullptr) {
+    GTEST_SKIP() << "CDNA3 descriptor set is not linked.";
+  }
+
+  IREE_ASSERT_OK(loom_amdgpu_build_control_packet_fatal_trap(
+      &builder_, descriptor_set_, LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> ops = Ops();
+  ASSERT_EQ(ops.size(), 1u);
+  ExpectControlOp(ops[0], LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP, IREE_SV("trapid"),
+                  2, 0, LOOM_VALUE_ID_INVALID);
 }
 
 }  // namespace

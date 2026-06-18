@@ -61,6 +61,26 @@ iree_status_t loom_amdgpu_build_control_packet_trap(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     uint32_t trap_id, loom_location_id_t location);
 
+// Emits an LLVM AMDHSA debugtrap packet.
+//
+// Debug traps are explicitly resumable by debuggers. Sanitizer assertion
+// failures should use loom_amdgpu_build_control_packet_fatal_trap instead.
+iree_status_t loom_amdgpu_build_control_packet_debug_trap(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_location_id_t location);
+
+// Emits an LLVM AMDHSA fatal trap notification packet sequence.
+//
+// This follows LLVM's trap ABI for AMDHSA kernels. Targets where S_TRAP 2 is
+// sufficient emit that packet directly. Targets where S_TRAP 2 can be a nop
+// under privileged execution emit LLVM's simulated trap sequence that requests
+// the doorbell id and sends MSG_INTERRUPT. This helper emits only the target
+// packets; callers own the no-return control-flow edge, usually a branch to an
+// S_SETHALT loop.
+iree_status_t loom_amdgpu_build_control_packet_fatal_trap(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_location_id_t location);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

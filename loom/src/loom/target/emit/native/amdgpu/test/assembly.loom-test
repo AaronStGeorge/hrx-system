@@ -17,6 +17,31 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_control_messages waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_control_messages() asm<amdgpu.rdna3.core> {
+  %doorbell = s_sendmsg_rtn_b32 {message = 128}
+  %mask = s_mov_b32 1023
+  %doorbell_id = s_and_b32 %doorbell, %mask
+  %wave_abort = s_mov_b32 1024
+  %interrupt_payload = s_or_b32 %doorbell_id, %wave_abort
+  %m0_payload = s_mov_b32_m0 %interrupt_payload
+  s_sendmsg %m0_payload {message = 1}
+  return
+}
+
+// ----
+  s_sendmsg_rtn_b32 s0, message(128)
+  s_mov_b32 s1, 1023
+  s_mov_b32 s2, 1024
+  s_and_b32 s0, s0, s1
+  s_or_b32 s0, s0, s2
+  s_mov_b32_m0 m0, s0
+  s_sendmsg message(1)
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_s_delay_alu waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_s_delay_alu() asm<amdgpu.rdna3.core> {

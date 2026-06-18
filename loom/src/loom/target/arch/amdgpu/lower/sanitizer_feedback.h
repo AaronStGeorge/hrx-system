@@ -15,9 +15,6 @@
 extern "C" {
 #endif
 
-// Trap ID used after emitting a sanitizer report.
-#define LOOM_AMDGPU_SANITIZER_TRAP_ID 0x100u
-
 typedef struct loom_amdgpu_sanitizer_report_source_t {
   // Device-visible dispatch packet pointer captured for host diagnostics.
   loom_value_id_t dispatch_ptr;

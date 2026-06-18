@@ -16,6 +16,8 @@
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/registers.h"
 
+#define LOOM_AMDGPU_SANITIZER_FATAL_HALT_REASON 5u
+
 static iree_status_t loom_amdgpu_sanitizer_insert_block_after(
     loom_builder_t* builder, loom_block_t* after_block,
     loom_block_t** out_block) {
@@ -733,19 +735,29 @@ iree_status_t loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
   loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_split_current_block_on_failure_scc(
       builder, failure_scc, location, &branch));
+  loom_block_t* halt_loop_block = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_insert_block_after(
+      builder, branch.failure_block, &halt_loop_block));
 
   loom_builder_set_block(builder, branch.failure_block);
-  loom_value_id_t saved_exec = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_exec_narrow(
-      builder, descriptor_set, failure_mask, location, &saved_exec));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_build_control_packet_trap(
-      builder, descriptor_set, LOOM_AMDGPU_SANITIZER_TRAP_ID, location));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_exec_restore(
-      builder, descriptor_set, saved_exec, location));
-  loom_op_t* branch_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_br_build(builder, branch.continuation_block,
+      builder, descriptor_set, failure_mask, location,
+      /*out_saved_exec=*/NULL));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_control_packet_fatal_trap(
+      builder, descriptor_set, location));
+  loom_op_t* halt_branch_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_br_build(builder, halt_loop_block,
                                          /*args=*/NULL, /*args_count=*/0,
-                                         location, &branch_op));
+                                         location, &halt_branch_op));
+
+  loom_builder_set_block(builder, halt_loop_block);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_control_packet_halt(
+      builder, descriptor_set, LOOM_AMDGPU_SANITIZER_FATAL_HALT_REASON,
+      location));
+  loom_op_t* halt_loop_branch_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_br_build(builder, halt_loop_block,
+                                         /*args=*/NULL, /*args_count=*/0,
+                                         location, &halt_loop_branch_op));
 
   loom_builder_set_block(builder, branch.continuation_block);
   *out_branch = branch;
