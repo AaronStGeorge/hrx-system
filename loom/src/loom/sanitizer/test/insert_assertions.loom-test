@@ -259,6 +259,86 @@ func.def @access_after_memory_scalarization_checks_per_lane_vector_memory(%input
 // ====
 
 // RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_vector_atomic_memory(%view: view<16xi32, #dense>, %origin: index, %offsets: vector<2xindex>, %value: vector<2xi32>, %expected: vector<2xi32>, %replacement: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
+  vector.atomic.reduce<addi> %value, %view[%origin][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<16xi32, #dense>, vector<2xindex>
+  %old = vector.atomic.rmw<addi> %value, %view[%origin][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<16xi32, #dense>, vector<2xindex>
+  %cmp = vector.atomic.cmpxchg %expected, %replacement, %view[%origin][%offsets] {success_ordering = acq_rel, failure_ordering = acquire, scope = workgroup} : vector<2xi32>, view<16xi32, #dense>, vector<2xindex> -> vector<2xi32>
+  func.return %old, %cmp : vector<2xi32>, vector<2xi32>
+}
+
+// ----
+func.def @access_only_instruments_vector_atomic_memory(%view: view<16xi32, #dense>, %origin: index, %offsets: vector<2xindex>, %value: vector<2xi32>, %expected: vector<2xi32>, %replacement: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
+  %18 = vector.extract %offsets[0] : vector<2xindex> -> index
+  %19 = index.add %origin, %18 : index
+  sanitizer.assert.access<read_write> %view[%19] : view<16xi32, #dense>
+  %20 = vector.extract %offsets[1] : vector<2xindex> -> index
+  %21 = index.add %origin, %20 : index
+  sanitizer.assert.access<read_write> %view[%21] : view<16xi32, #dense>
+  vector.atomic.reduce<addi> %value, %view[%origin][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<16xi32, #dense>, vector<2xindex>
+  %14 = vector.extract %offsets[0] : vector<2xindex> -> index
+  %15 = index.add %origin, %14 : index
+  sanitizer.assert.access<read_write> %view[%15] : view<16xi32, #dense>
+  %16 = vector.extract %offsets[1] : vector<2xindex> -> index
+  %17 = index.add %origin, %16 : index
+  sanitizer.assert.access<read_write> %view[%17] : view<16xi32, #dense>
+  %old = vector.atomic.rmw<addi> %value, %view[%origin][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<16xi32, #dense>, vector<2xindex>
+  %10 = vector.extract %offsets[0] : vector<2xindex> -> index
+  %11 = index.add %origin, %10 : index
+  sanitizer.assert.access<read_write> %view[%11] : view<16xi32, #dense>
+  %12 = vector.extract %offsets[1] : vector<2xindex> -> index
+  %13 = index.add %origin, %12 : index
+  sanitizer.assert.access<read_write> %view[%13] : view<16xi32, #dense>
+  %cmp = vector.atomic.cmpxchg %expected, %replacement, %view[%origin][%offsets] {failure_ordering = acquire, scope = workgroup, success_ordering = acq_rel} : vector<2xi32>, view<16xi32, #dense>, vector<2xindex> -> vector<2xi32>
+  func.return %old, %cmp : vector<2xi32>, vector<2xi32>
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_masked_vector_atomic_memory(%view: view<16xf32, #dense>, %origin: index, %offsets: vector<2xindex>, %mask: vector<2xi1>, %value: vector<2xf32>, %passthrough: vector<2xf32>) -> (vector<2xf32>) {
+  vector.atomic.reduce.mask<addf> %value, %view[%origin][%offsets], %mask {ordering = relaxed, scope = workgroup} : vector<2xf32>, view<16xf32, #dense>, vector<2xindex>, vector<2xi1>
+  %old = vector.atomic.rmw.mask<addf> %value, %view[%origin][%offsets], %mask, %passthrough {ordering = relaxed, scope = workgroup} : vector<2xf32>, view<16xf32, #dense>, vector<2xindex>, vector<2xi1>, vector<2xf32>
+  func.return %old : vector<2xf32>
+}
+
+// ----
+func.def @access_only_instruments_masked_vector_atomic_memory(%view: view<16xf32, #dense>, %origin: index, %offsets: vector<2xindex>, %mask: vector<2xi1>, %value: vector<2xf32>, %passthrough: vector<2xf32>) -> (vector<2xf32>) {
+  %14 = vector.extract %mask[0] : vector<2xi1> -> i1
+  scf.if %14 {
+    %15 = vector.extract %offsets[0] : vector<2xindex> -> index
+    %16 = index.add %origin, %15 : index
+    sanitizer.assert.access<read_write> %view[%16] : view<16xf32, #dense>
+  } else {
+  }
+  %17 = vector.extract %mask[1] : vector<2xi1> -> i1
+  scf.if %17 {
+    %18 = vector.extract %offsets[1] : vector<2xindex> -> index
+    %19 = index.add %origin, %18 : index
+    sanitizer.assert.access<read_write> %view[%19] : view<16xf32, #dense>
+  } else {
+  }
+  vector.atomic.reduce.mask<addf> %value, %view[%origin][%offsets], %mask {ordering = relaxed, scope = workgroup} : vector<2xf32>, view<16xf32, #dense>, vector<2xindex>, vector<2xi1>
+  %8 = vector.extract %mask[0] : vector<2xi1> -> i1
+  scf.if %8 {
+    %9 = vector.extract %offsets[0] : vector<2xindex> -> index
+    %10 = index.add %origin, %9 : index
+    sanitizer.assert.access<read_write> %view[%10] : view<16xf32, #dense>
+  } else {
+  }
+  %11 = vector.extract %mask[1] : vector<2xi1> -> i1
+  scf.if %11 {
+    %12 = vector.extract %offsets[1] : vector<2xindex> -> index
+    %13 = index.add %origin, %12 : index
+    sanitizer.assert.access<read_write> %view[%13] : view<16xf32, #dense>
+  } else {
+  }
+  %old = vector.atomic.rmw.mask<addf> %value, %view[%origin][%offsets], %mask, %passthrough {ordering = relaxed, scope = workgroup} : vector<2xf32>, view<16xf32, #dense>, vector<2xindex>, vector<2xi1>, vector<2xf32>
+  func.return %old : vector<2xf32>
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
 func.def @access_only_rejects_dynamic_vector_memory(%layout: encoding<layout>, %n: index, %input: view<[%n]xf32, %layout>, %i: index) -> (vector<[%n]xf32>) {
   // ERROR@+1: SUBRANGE/019 {op_name="vector.load"}
   %value = vector.load %input[%i] : view<[%n]xf32, %layout> -> vector<[%n]xf32>
@@ -272,6 +352,24 @@ func.def @access_only_rejects_rank2_vector_memory(%layout: encoding<layout>, %in
   // ERROR@+1: SUBRANGE/020 {op_name="vector.load", vector_rank="2"}
   %value = vector.load %input[0, 0] : view<4x4xf32, %layout> -> vector<2x2xf32>
   func.return %value : vector<2x2xf32>
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_rejects_dynamic_vector_atomic_memory(%n: index, %view: view<[%n]xi32, #dense>, %origin: index, %offsets: vector<[%n]xindex>, %value: vector<[%n]xi32>) {
+  // ERROR@+1: SUBRANGE/019 {op_name="vector.atomic.reduce"}
+  vector.atomic.reduce<addi> %value, %view[%origin][%offsets] {ordering = relaxed, scope = workgroup} : vector<[%n]xi32>, view<[%n]xi32, #dense>, vector<[%n]xindex>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_rejects_rank2_vector_atomic_memory(%view: view<4x4xi32, #dense>, %offsets: vector<2x2xindex>, %value: vector<2x2xi32>) {
+  // ERROR@+1: SUBRANGE/020 {op_name="vector.atomic.reduce", vector_rank="2"}
+  vector.atomic.reduce<addi> %value, %view[0, 0][%offsets] {ordering = relaxed, scope = workgroup} : vector<2x2xi32>, view<4x4xi32, #dense>, vector<2x2xindex>
+  func.return
 }
 
 // ====
