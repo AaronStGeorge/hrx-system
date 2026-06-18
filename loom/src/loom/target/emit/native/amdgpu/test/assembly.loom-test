@@ -1972,6 +1972,55 @@ low.func.def target(@gfx11_target) @gfx11_scc_selects_with_interleaved_producers
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_guarded_scalar_exec_mask waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_guarded_scalar_exec_mask(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %x: reg<amdgpu.sgpr>, %y: reg<amdgpu.sgpr>, %payload: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %zero = s_mov_b32 0
+  %one = s_mov_b32 1
+  %x_zero = s_cmp_eq_i32 %x, %zero
+  %y_zero = s_cmp_eq_i32 %y, %zero
+  %x_bit = s_cselect_b32 %one, %zero, %x_zero
+  %y_bit = s_cselect_b32 %one, %zero, %y_zero
+  %both_bits = s_and_b32 %x_bit, %y_bit
+  %both = s_cmp_lg_i32 %both_bits, %zero
+  %exec = s_mov_b64_exec_read
+  %exec_lo = slice %exec[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %exec_hi = slice %exec[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %mask_lo = s_cselect_b32 %exec_lo, %zero, %both
+  %mask_hi = s_cselect_b32 %exec_hi, %zero, %both
+  %mask = concat(%mask_lo, %mask_hi) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %saved_exec, %active = s_and_saveexec_b64 %mask
+  low.cond_br %active, ^then, ^join : reg<amdgpu.scc>
+^then:
+  buffer_store_dword %payload, %resource, %vaddr, %soffset
+  low.br ^join
+^join:
+  s_mov_b64_exec %saved_exec
+  return
+}
+
+// ----
+  s_mov_b32 s3, 0
+  s_mov_b32 s8, 1
+  s_mov_b64_exec_read s[10:11]
+  s_cmp_eq_i32 s0, s3
+  s_cselect_b32 s0, s8, s3
+  s_cmp_eq_i32 s1, s3
+  s_cselect_b32 s1, s8, s3
+  s_and_b32 s0, s0, s1
+  s_cmp_lg_i32 s0, s3
+  s_cselect_b32 s0, s10, s3
+  s_cselect_b32 s1, s11, s3
+  s_and_saveexec_b64 s[0:1], s[0:1]
+  s_cbranch_scc0 .Lbb2
+.Lbb1:
+  buffer_store_dword v1, v0, s[4:7], s2 offen offset:0
+.Lbb2:
+  s_mov_b64 exec, s[0:1]
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_sgpr_spill_reload waits=none strategy=source
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_sgpr_spill_reload(%value: reg<amdgpu.sgpr x2>) {
