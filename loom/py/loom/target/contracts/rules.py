@@ -29,6 +29,7 @@ class DescriptorRule:
     guards: tuple[Guard, ...] = ()
     emit: tuple[EmitDescriptorOp, ...] = ()
     priority: int = 0
+    report_key: str = ""
 
     def __init__(
         self,
@@ -38,14 +39,17 @@ class DescriptorRule:
         guards: Sequence[Guard] = (),
         emit: Sequence[EmitDescriptorOp] = (),
         priority: int = 0,
+        report_key: str = "",
     ) -> None:
         object.__setattr__(self, "source_op", source_op)
         object.__setattr__(self, "descriptor", descriptor)
         object.__setattr__(self, "guards", tuple(guards))
         object.__setattr__(self, "emit", tuple(emit))
         object.__setattr__(self, "priority", priority)
+        object.__setattr__(self, "report_key", report_key)
         if priority < 0:
             raise ValueError("descriptor rule priority must be non-negative")
+        _validate_report_key(source_op, report_key)
 
     @property
     def system(self) -> ContractSystem:
@@ -253,3 +257,14 @@ class DescriptorMatrixRule:
 type ContractCase = (
     DescriptorRule | ValueAliasRule | ValueElideRule | RecipeRule | DescriptorMatrixRule
 )
+
+
+def _validate_report_key(source_op: Op, report_key: str) -> None:
+    if not report_key:
+        return
+    if any(char.isspace() for char in report_key):
+        raise ValueError(f"{source_op.name}: report key must not contain whitespace")
+    if report_key != report_key.strip("."):
+        raise ValueError(f"{source_op.name}: report key must not have empty segments")
+    if ".." in report_key:
+        raise ValueError(f"{source_op.name}: report key must not have empty segments")

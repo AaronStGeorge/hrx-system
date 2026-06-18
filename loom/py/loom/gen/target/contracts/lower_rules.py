@@ -196,8 +196,10 @@ def _generate_source(
     )
 
     descriptor_ref_keys = lower_rule_rows.descriptor_ref_keys(table, source_contract)
+    report_keys = _collect_report_keys(table)
     _validate_c_table_shape(table, source_contract, descriptor_ref_keys)
     descriptor_refs = {key: index for index, key in enumerate(descriptor_ref_keys)}
+    report_key_ordinals = {key: index + 1 for index, key in enumerate(report_keys)}
     descriptor_refs_name = f"k{c_table_prefix}DescriptorRefs"
     lines.extend(
         lower_rule_rows.emit_optional_array(
@@ -283,12 +285,21 @@ def _generate_source(
         )
     )
 
+    report_keys_name = f"k{c_table_prefix}ReportKeys"
+    lines.extend(
+        lower_rule_rows.emit_optional_array(
+            report_keys_name,
+            "iree_string_view_t",
+            [lower_rule_rows.report_key_row(key) for key in report_keys],
+        )
+    )
+
     rules_name = f"k{c_table_prefix}Rules"
     lines.extend(
         lower_rule_rows.emit_optional_array(
             rules_name,
             "loom_low_lower_rule_t",
-            [lower_rule_rows.rule_row(row) for row in table.rules],
+            [lower_rule_rows.rule_row(row, report_key_ordinals) for row in table.rules],
         )
     )
 
@@ -309,6 +320,8 @@ def _generate_source(
             source_contract=source_contract,
             spans_name=spans_name,
             rules_name=rules_name,
+            report_keys=report_keys,
+            report_keys_name=report_keys_name,
             type_patterns_name=type_patterns_name,
             value_refs_name=value_refs_name,
             materializers_name=materializers_name,
@@ -337,6 +350,7 @@ def _validate_c_table_shape(
     subject = f"lower-rule set '{table.name}'"
     _require_u16(len(table.spans), f"{subject} span count")
     _require_u16(len(table.rules), f"{subject} rule count")
+    _require_u16(len(_collect_report_keys(table)), f"{subject} report-key count")
     _require_u16(len(table.type_patterns), f"{subject} type-pattern count")
     _require_u16(len(table.value_refs), f"{subject} value-ref count")
     _require_u16(
@@ -628,6 +642,8 @@ def _validate_c_table_shape(
 
     for index, row in enumerate(table.rules):
         row_subject = f"{subject} rule {index}"
+        if row.report_key:
+            _require_report_key(row.report_key, f"{row_subject} report key")
         _require_u16(row.temporary_count, f"{row_subject} temporary count")
         _require_u16(row.guard_start, f"{row_subject} guard start")
         _require_u16(row.guard_count, f"{row_subject} guard count")
@@ -733,6 +749,13 @@ def _require_i64(value: int, subject: str) -> None:
         raise ValueError(f"{subject} exceeds int64_t: {value}")
 
 
+def _require_report_key(value: str, subject: str) -> None:
+    if any(char.isspace() for char in value):
+        raise ValueError(f"{subject} must not contain whitespace: {value!r}")
+    if value != value.strip(".") or ".." in value:
+        raise ValueError(f"{subject} must not have empty segments: {value!r}")
+
+
 def _require_table_index(
     index: int,
     row_count: int,
@@ -786,3 +809,14 @@ def _op_header_includes(table: CompiledLowerRuleSet) -> tuple[str, ...]:
 
 def _materializer_includes(table: ContractFragment) -> tuple[str, ...]:
     return tuple(sorted({materializer.header for materializer in table.materializers}))
+
+
+def _collect_report_keys(table: CompiledLowerRuleSet) -> tuple[str, ...]:
+    report_keys: list[str] = []
+    seen: set[str] = set()
+    for rule in table.rules:
+        if not rule.report_key or rule.report_key in seen:
+            continue
+        report_keys.append(rule.report_key)
+        seen.add(rule.report_key)
+    return tuple(report_keys)

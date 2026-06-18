@@ -485,6 +485,10 @@ def _emit_form(type_pattern: TypePattern) -> DescriptorEmitForm:
     return DescriptorEmitForm.OP
 
 
+def _report_key(source_op: Op, strategy: str) -> str:
+    return f"amdgpu.{source_op.name.replace('.', '_')}.strategy.{strategy}"
+
+
 def _binary_rule(
     source_op: Op,
     type_pattern: TypePattern,
@@ -532,11 +536,13 @@ def _unary_rule(
     descriptor_key: str,
     *,
     f32_operand: bool = False,
+    report_key: str = "",
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
+        report_key=report_key,
         guards=(
             *_typed_guards(("input", "result"), type_pattern),
             Guard.descriptor_available(descriptor),
@@ -1371,6 +1377,7 @@ def _divf_arcp_one_rule(
     return DescriptorRule(
         source_op=source_op,
         descriptor=reciprocal,
+        report_key=_report_key(source_op, "arcp_one_rcp"),
         guards=(
             *_typed_guards(("lhs", "rhs", "result"), type_pattern),
             Guard.instance_flags_has_all("fastmath", "arcp"),
@@ -1403,6 +1410,7 @@ def _divf_arcp_rule(
     return DescriptorRule(
         source_op=source_op,
         descriptor=reciprocal,
+        report_key=_report_key(source_op, "arcp_rcp_mul"),
         guards=(
             *_typed_guards(("lhs", "rhs", "result"), type_pattern),
             Guard.instance_flags_has_all("fastmath", "arcp"),
@@ -1451,6 +1459,7 @@ def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule
     return DescriptorRule(
         source_op=source_op,
         descriptor=scale,
+        report_key=_report_key(source_op, "exact_fixup"),
         guards=(
             *_typed_guards(("lhs", "rhs", "result"), type_pattern),
             Guard.value_materializable(
@@ -2798,7 +2807,12 @@ def _rules() -> tuple[ContractCase, ...]:
             _unary_rule(vector.vector_costurnsf, _VEC_F32, "amdgpu.v_cos_f32"),
             _unary_rule(vector.vector_floorf, _VEC_F32, "amdgpu.v_floor_f32"),
             _unary_rule(vector.vector_ceilf, _VEC_F32, "amdgpu.v_ceil_f32"),
-            _unary_rule(vector.vector_roundevenf, _VEC_F32, "amdgpu.v_rndne_f32"),
+            _unary_rule(
+                vector.vector_roundevenf,
+                _VEC_F32,
+                "amdgpu.v_rndne_f32",
+                report_key=_report_key(vector.vector_roundevenf, "rndne"),
+            ),
             _unary_rule(vector.vector_truncf, _VEC_F32, "amdgpu.v_trunc_f32"),
             _unary_rule(vector.vector_sqrtf, _VEC_F32, "amdgpu.v_sqrt_f32"),
             _unary_rule(vector.vector_rsqrtf, _VEC_F32, "amdgpu.v_rsq_f32"),
@@ -3039,7 +3053,12 @@ def _rules() -> tuple[ContractCase, ...]:
             _unary_rule(scalar_math.scalar_costurnsf, _F32, "amdgpu.v_cos_f32"),
             _unary_rule(scalar_math.scalar_floorf, _F32, "amdgpu.v_floor_f32"),
             _unary_rule(scalar_math.scalar_ceilf, _F32, "amdgpu.v_ceil_f32"),
-            _unary_rule(scalar_math.scalar_roundevenf, _F32, "amdgpu.v_rndne_f32"),
+            _unary_rule(
+                scalar_math.scalar_roundevenf,
+                _F32,
+                "amdgpu.v_rndne_f32",
+                report_key=_report_key(scalar_math.scalar_roundevenf, "rndne"),
+            ),
             _unary_rule(scalar_math.scalar_truncf, _F32, "amdgpu.v_trunc_f32"),
             _unary_rule(scalar_math.scalar_sqrtf, _F32, "amdgpu.v_sqrt_f32"),
             _unary_rule(scalar_math.scalar_rsqrtf, _F32, "amdgpu.v_rsq_f32"),

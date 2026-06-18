@@ -97,7 +97,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           /*.rule_set_index=*/0,
           /*.rule_index=*/1,
           /*.plan_id=*/UINT64_MAX,
-          /*.plan_key=*/IREE_SVL(""),
+          /*.plan_key=*/IREE_SVL("test.scalar_addi.strategy.native"),
           /*.descriptor_id=*/7,
           /*.emitted_low_op_count=*/1,
       },
@@ -386,6 +386,13 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("source_low[0] function=branchy"), 0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("selection=rule rule_set=0 rule=1 "
+                                    "plan_key=test.scalar_addi.strategy.native "
+                                    "descriptor=7 emitted_ops=1"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
                 IREE_SV("source_low_memory[0] function=branchy "
@@ -521,13 +528,15 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("\"memory_count\":1"), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output,
-                                  IREE_SV("\"rule_set_index\":0,"
-                                          "\"rule_index\":1,\"plan_id\":null,"
-                                          "\"plan_key\":null,"
-                                          "\"descriptor_id\":7"),
-                                  0),
-            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"rule_set_index\":0,"
+                                    "\"rule_index\":1,\"plan_id\":null,"
+                                    "\"plan_key\":"
+                                    "\"test.scalar_addi.strategy.native\","
+                                    "\"descriptor_id\":7"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
                 IREE_SV("\"memory_rows\":[{\"index\":0,\"function\":"

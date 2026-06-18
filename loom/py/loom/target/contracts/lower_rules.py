@@ -259,6 +259,7 @@ class LowerRule:
     alias_ref_count: int = 0
     elide_ref_start: int = 0
     elide_ref_count: int = 0
+    report_key: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,6 +388,7 @@ class _LowerRuleSetCompiler:
                 guard_count=len(self._guards) - guard_start,
                 emit_start=emit_start,
                 emit_count=len(self._emits) - emit_start,
+                report_key=rule.report_key,
             )
         )
         self._authored_case_indices.append(authored_case_index)
