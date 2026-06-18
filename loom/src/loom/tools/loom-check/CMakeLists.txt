@@ -99,7 +99,6 @@ loom_cc_library(
     loom::pass::registry
     loom::pass::tooling
     loom::sanitizer::options
-    loom::sanitizer::options_cli
     loom::target::compile_report_format
     loom::target::entry_selection
     loom::target::legalization

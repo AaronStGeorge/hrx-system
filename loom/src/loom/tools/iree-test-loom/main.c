@@ -13,7 +13,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"

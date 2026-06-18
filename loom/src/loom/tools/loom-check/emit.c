@@ -32,7 +32,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/sanitizer/options.h"
-#include "loom/sanitizer/options_cli.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/tooling/compile/pipeline.h"

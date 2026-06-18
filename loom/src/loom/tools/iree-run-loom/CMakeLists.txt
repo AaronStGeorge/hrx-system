@@ -23,7 +23,7 @@ loom_cc_library(
     iree::tooling::value_io
     loom::error::diagnostic
     loom::ir
-    loom::sanitizer::options_cli
+    loom::sanitizer::options
     loom::tooling::cli::help
     loom::tooling::compile::pipeline
     loom::tooling::context

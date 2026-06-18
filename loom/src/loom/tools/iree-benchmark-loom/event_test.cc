@@ -17,6 +17,8 @@
 namespace loom {
 namespace {
 
+static const loom_sanitizer_options_t kNoSanitizer = {};
+
 typedef struct event_collector_t {
   iree_host_size_t event_count;
   iree_benchmark_loom_event_t events[10];
@@ -71,7 +73,7 @@ TEST(BenchmarkEventSinkTest, EmitsTypedLifecycleEvents) {
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &sink, &run, /*dry_run=*/true,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, &kNoSanitizer));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_work_plan(
       &sink, &run, &module, &work_plan));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
@@ -86,6 +88,7 @@ TEST(BenchmarkEventSinkTest, EmitsTypedLifecycleEvents) {
   EXPECT_EQ(collector.events[0].kind, IREE_BENCHMARK_LOOM_EVENT_RUN);
   EXPECT_EQ(collector.events[0].run.run, &run);
   EXPECT_TRUE(collector.events[0].run.dry_run);
+  EXPECT_EQ(collector.events[0].run.sanitizer.checks, 0u);
   EXPECT_EQ(collector.events[1].kind, IREE_BENCHMARK_LOOM_EVENT_WORK_PLAN);
   EXPECT_EQ(collector.events[1].work_plan.run, &run);
   EXPECT_EQ(collector.events[1].work_plan.module, &module);
@@ -190,10 +193,11 @@ TEST(BenchmarkEventSinkTest, PropagatesSinkStatus) {
   run.source = IREE_SV("input.loom");
   run.results_path = IREE_SV("-");
 
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
-                        iree_benchmark_loom_event_sink_emit_run(
-                            &sink, &run, /*dry_run=*/false,
-                            IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_PER_SAMPLE));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      iree_benchmark_loom_event_sink_emit_run(
+          &sink, &run, /*dry_run=*/false,
+          IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_PER_SAMPLE, &kNoSanitizer));
 }
 
 TEST(BenchmarkEventSinkTest, JsonlAdapterWritesLifecycleRows) {
@@ -213,7 +217,7 @@ TEST(BenchmarkEventSinkTest, JsonlAdapterWritesLifecycleRows) {
   iree_benchmark_loom_artifact_bundle_t artifact_bundle = {};
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &event_sink, &run, /*dry_run=*/false,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, &kNoSanitizer));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
       &event_sink, &run, &artifact_bundle, /*planned_case_count=*/1,
       /*planned_benchmark_count=*/2, /*selected_benchmark_count=*/2,

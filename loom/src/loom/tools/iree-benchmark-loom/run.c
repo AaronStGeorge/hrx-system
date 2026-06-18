@@ -194,7 +194,8 @@ iree_status_t iree_benchmark_loom_run_file(
     if (iree_status_is_ok(status)) {
       status = iree_benchmark_loom_event_sink_emit_run(
           event_sink, &run_identity, benchmark_options->dry_run,
-          benchmark_options->sample_compilation_mode);
+          benchmark_options->sample_compilation_mode,
+          &benchmark_options->sanitizer);
     }
   }
   iree_string_view_t source = iree_string_view_empty();

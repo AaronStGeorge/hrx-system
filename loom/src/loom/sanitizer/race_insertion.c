@@ -22,7 +22,6 @@
 #include "loom/rewrite/rewriter.h"
 #include "loom/sanitizer/memory.h"
 #include "loom/sanitizer/options.h"
-#include "loom/sanitizer/options_cli.h"
 #include "loom/sanitizer/site_location.h"
 #include "loom/sanitizer/site_payload.h"
 

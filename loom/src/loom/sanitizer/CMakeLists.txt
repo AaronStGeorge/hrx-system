@@ -14,20 +14,9 @@ loom_cc_library(
     options
   HDRS
     "options.h"
-  DEPS
-    iree::base
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    options_cli
-  HDRS
-    "options_cli.h"
   SRCS
-    "options_cli.c"
+    "options.c"
   DEPS
-    ::options
     iree::base
   PUBLIC
 )
@@ -42,7 +31,6 @@ loom_cc_library(
   DEPS
     ::memory
     ::options
-    ::options_cli
     ::site_location
     ::site_payload
     iree::base
@@ -72,7 +60,6 @@ loom_cc_library(
   DEPS
     ::memory
     ::options
-    ::options_cli
     ::site_location
     ::site_payload
     iree::base
@@ -204,11 +191,11 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    options_cli_test
+    options_test
   SRCS
-    "options_cli_test.cc"
+    "options_test.cc"
   DEPS
-    ::options_cli
+    ::options
     iree::testing::gtest
     iree::testing::gtest_main
 )

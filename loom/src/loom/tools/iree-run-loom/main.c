@@ -16,7 +16,7 @@
 #include "iree/tooling/value_io.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/context/context.h"

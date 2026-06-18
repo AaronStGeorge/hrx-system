@@ -14,18 +14,9 @@ package(
 
 loom_cc_library(
     name = "options",
+    srcs = ["options.c"],
     hdrs = ["options.h"],
     deps = [
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "options_cli",
-    srcs = ["options_cli.c"],
-    hdrs = ["options_cli.h"],
-    deps = [
-        ":options",
         "//runtime/src/iree/base",
     ],
 )
@@ -37,7 +28,6 @@ loom_cc_library(
     deps = [
         ":memory",
         ":options",
-        ":options_cli",
         ":site_location",
         ":site_payload",
         "//loom/src/loom/error:error_defs",
@@ -64,7 +54,6 @@ loom_cc_library(
     deps = [
         ":memory",
         ":options",
-        ":options_cli",
         ":site_location",
         ":site_payload",
         "//loom/src/loom/error:error_defs",
@@ -178,10 +167,10 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "options_cli_test",
-    srcs = ["options_cli_test.cc"],
+    name = "options_test",
+    srcs = ["options_test.cc"],
     deps = [
-        ":options_cli",
+        ":options",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

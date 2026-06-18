@@ -59,7 +59,7 @@ loom_cc_binary(
     loom::link::linker
     loom::ops::kernel
     loom::ops::op_defs
-    loom::sanitizer::options_cli
+    loom::sanitizer::options
     loom::target::artifact_manifest
     loom::target::entry_selection
     loom::target::low_descriptor_registry

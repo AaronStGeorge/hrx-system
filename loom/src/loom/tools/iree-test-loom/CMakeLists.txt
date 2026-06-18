@@ -20,7 +20,7 @@ loom_cc_library(
     iree::base
     iree::base::tooling::flags
     iree::io::file_handle
-    loom::sanitizer::options_cli
+    loom::sanitizer::options
     loom::target::provider
     loom::tooling::cli::help
     loom::tooling::context

@@ -19,7 +19,7 @@
 #include "loom/link/linker.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 #include "loom/target/artifact_manifest.h"
 #include "loom/target/entry_selection.h"
 #include "loom/tooling/cli/help.h"

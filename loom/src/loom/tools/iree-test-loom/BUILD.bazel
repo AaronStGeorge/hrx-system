@@ -91,7 +91,7 @@ loom_cc_library(
     srcs = ["main.c"],
     hdrs = ["main.h"],
     deps = [
-        "//loom/src/loom/sanitizer:options_cli",
+        "//loom/src/loom/sanitizer:options",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/tooling/cli:help",
         "//loom/src/loom/tooling/context",

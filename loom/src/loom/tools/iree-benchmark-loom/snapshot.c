@@ -27,6 +27,8 @@ typedef struct iree_benchmark_loom_snapshot_state_t {
   bool dry_run;
   // Requested sample-compilation mode for this run.
   iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode;
+  // Sanitizer checks and reporting mode used for compiler-backed work.
+  loom_sanitizer_options_t sanitizer;
   // Owned storage backing |run_id|.
   char* run_id_storage;
   // Copied run identifier.
@@ -471,6 +473,7 @@ static iree_status_t iree_benchmark_loom_snapshot_append_run(
   state->run_seen = true;
   state->dry_run = event->dry_run;
   state->sample_compilation_mode = event->sample_compilation_mode;
+  state->sanitizer = event->sanitizer;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_copy_string(
       state, event->run->run_id, &state->run_id_storage, &state->run_id));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_copy_string(
@@ -1083,6 +1086,10 @@ static iree_status_t iree_benchmark_loom_snapshot_append_run_json(
       stream, first_field, "sample_compilation",
       iree_benchmark_loom_sample_compilation_mode_name(
           state->sample_compilation_mode)));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "sanitizer"));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sanitizer_options_json(
+      &state->sanitizer, stream));
   return iree_ok_status();
 }
 

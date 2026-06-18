@@ -27,7 +27,7 @@ loom_cc_library(
     loom::pass::registry
     loom::pass::types
     loom::pass::value_facts
-    loom::sanitizer::options_cli
+    loom::sanitizer::options
     loom::target::compile_report_low
     loom::target::low_legality
   PUBLIC

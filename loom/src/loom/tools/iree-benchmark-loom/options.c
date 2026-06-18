@@ -13,7 +13,7 @@
 #include <string.h>
 
 #include "iree/base/tooling/flags.h"
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/testbench/testbench.h"
 #include "loom/tools/iree-benchmark-loom/module_query.h"
@@ -41,6 +41,9 @@ IREE_FLAG(string, sanitizer, "none",
           "Sanitizer checks inserted by the target pipeline. Use 'none', "
           "'access', 'value', 'operation', 'race', 'asan', 'ubsan', 'tsan', "
           "'all', or a '|' separated list.");
+IREE_FLAG_NAMED(string, sanitizer_reporting, "sanitizer-reporting", "default",
+                "Sanitizer reporting mode used by the target pipeline. Use "
+                "'default', 'trap', or 'report-only'.");
 IREE_FLAG(string, output, "",
           "Output path for benchmark results. Empty or '-' writes to stdout.");
 IREE_FLAG_NAMED(
@@ -237,6 +240,10 @@ iree_status_t iree_benchmark_loom_options_from_flags(
   IREE_RETURN_IF_ERROR(loom_sanitizer_options_parse_checks(
       iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
       &out_options->sanitizer));
+  IREE_RETURN_IF_ERROR(loom_sanitizer_reporting_mode_parse(
+      iree_make_cstring_view(FLAG_sanitizer_reporting),
+      IREE_SV("--sanitizer-reporting"),
+      &out_options->sanitizer.reporting_mode));
   out_options->output = iree_make_cstring_view(FLAG_output);
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_parse_output_format(
       iree_make_cstring_view(FLAG_output_format), &out_options->output_format));

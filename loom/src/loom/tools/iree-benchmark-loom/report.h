@@ -10,6 +10,7 @@
 #define LOOM_TOOLS_IREE_BENCHMARK_LOOM_REPORT_H_
 
 #include "iree/base/api.h"
+#include "loom/sanitizer/options.h"
 #include "loom/tooling/testbench/testbench.h"
 #include "loom/tools/iree-benchmark-loom/model.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
@@ -36,6 +37,10 @@ iree_status_t iree_benchmark_loom_write_candidate_identity_json(
 // Writes a sample-compilation field when |sample_compilation| is non-empty.
 iree_status_t iree_benchmark_loom_write_sample_compilation_field_json(
     iree_string_view_t sample_compilation, loom_output_stream_t* stream);
+
+// Writes sanitizer compiler/runtime policy as a compact JSON object.
+iree_status_t iree_benchmark_loom_write_sanitizer_options_json(
+    const loom_sanitizer_options_t* sanitizer, loom_output_stream_t* stream);
 
 // Writes fields for one concrete parameterized case sample.
 iree_status_t iree_benchmark_loom_write_sample_fields_json(
@@ -140,7 +145,7 @@ iree_status_t iree_benchmark_loom_append_sample_row(
 iree_status_t iree_benchmark_loom_append_run_row(
     const iree_benchmark_loom_run_identity_t* run, bool dry_run,
     iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode,
-    iree_string_builder_t* output);
+    const loom_sanitizer_options_t* sanitizer, iree_string_builder_t* output);
 
 // Appends the selected HAL device row once per run.
 iree_status_t iree_benchmark_loom_append_device_row(

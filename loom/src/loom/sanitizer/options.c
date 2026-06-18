@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 
 static iree_string_view_t loom_sanitizer_diagnostic_name(
     iree_string_view_t diagnostic_name) {
