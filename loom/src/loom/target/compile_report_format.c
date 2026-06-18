@@ -92,6 +92,57 @@ loom_target_compile_report_allocation_failure_blocking_kind_name(
   }
 }
 
+static iree_string_view_t loom_target_compile_report_pressure_origin_kind_name(
+    loom_target_compile_report_pressure_origin_kind_t kind) {
+  switch (kind) {
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_BLOCK_ARGUMENT:
+      return IREE_SV("block-argument");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONSTANT:
+      return IREE_SV("constant");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_COPY:
+      return IREE_SV("copy");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SLICE:
+      return IREE_SV("slice");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONCAT:
+      return IREE_SV("concat");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_STORAGE:
+      return IREE_SV("storage");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SPILL_RELOAD:
+      return IREE_SV("spill-reload");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SCALAR_ALU:
+      return IREE_SV("scalar-alu");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_VECTOR_ALU:
+      return IREE_SV("vector-alu");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_MATRIX:
+      return IREE_SV("matrix");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_DOT:
+      return IREE_SV("dot");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY:
+      return IREE_SV("global-memory");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_LOCAL_MEMORY:
+      return IREE_SV("local-memory");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SCALAR_MEMORY:
+      return IREE_SV("scalar-memory");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GENERIC_MEMORY:
+      return IREE_SV("generic-memory");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONTROL:
+      return IREE_SV("control");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_BARRIER:
+      return IREE_SV("barrier");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONVERSION:
+      return IREE_SV("conversion");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE:
+      return IREE_SV("register-move");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CACHE:
+      return IREE_SV("cache");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_OPERATION:
+      return IREE_SV("operation");
+    case LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 static iree_string_view_t loom_target_compile_report_legalization_mode_name(
     loom_target_compile_report_legalization_mode_t mode) {
   switch (mode) {
@@ -549,6 +600,14 @@ static iree_status_t loom_target_compile_report_format_summary(
         report->pressure_rows.count));
   }
 
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "COMPILE-REPORT: pressure_origin_rows count=%" PRIhsz "\n",
+        report->pressure_origin_rows.count));
+  }
+
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -678,8 +737,11 @@ static iree_status_t loom_target_compile_report_format_entry_rows(
             (int)limiting_resource.size, limiting_resource.data));
       }
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-          builder, " pressure_rows=%" PRIhsz " spill_rows=%" PRIhsz "\n",
-          row->pressure_row_count, row->spill_row_count));
+          builder,
+          " pressure_rows=%" PRIhsz " pressure_origin_rows=%" PRIhsz
+          " spill_rows=%" PRIhsz "\n",
+          row->pressure_row_count, row->pressure_origin_row_count,
+          row->spill_row_count));
     }
   }
   return iree_ok_status();
@@ -751,6 +813,62 @@ static iree_status_t loom_target_compile_report_format_pressure_rows(
           row->peak_live_units, row->peak_live_values, row->peak_point,
           (int)peak_block_name.size, peak_block_name.data,
           (int)peak_operation_name.size, peak_operation_name.data));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_compile_report_format_pressure_origin_rows(
+    const loom_target_compile_report_t* report,
+    iree_string_builder_t* builder) {
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec =
+           report->pressure_origin_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_pressure_origin_row_t* rows =
+        (const loom_target_compile_report_pressure_origin_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_pressure_origin_row_t* row = &rows[i];
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
+      const iree_string_view_t register_class =
+          loom_target_compile_report_non_empty(row->register_class);
+      const iree_string_view_t type_kind_name =
+          loom_target_compile_report_type_kind_name(row->type_kind);
+      const iree_string_view_t element_type_name =
+          loom_target_compile_report_scalar_type_name(row->element_type);
+      const iree_string_view_t peak_block_name =
+          loom_target_compile_report_non_empty(row->peak_block_name);
+      const iree_string_view_t peak_operation_name =
+          loom_target_compile_report_non_empty(row->peak_operation_name);
+      const iree_string_view_t origin_kind =
+          loom_target_compile_report_pressure_origin_kind_name(
+              row->origin_kind);
+      const iree_string_view_t origin_operation_name =
+          loom_target_compile_report_non_empty(row->origin_operation_name);
+      const iree_string_view_t semantic_tag =
+          loom_target_compile_report_non_empty(row->semantic_tag);
+      const iree_string_view_t sample_value_name =
+          loom_target_compile_report_non_empty(row->sample_value_name);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: pressure_origin[%" PRIhsz
+          "] function=%.*s class=%.*s type=%.*s element=%.*s "
+          "point=%u block=%.*s op=%.*s origin=%.*s origin_op=%.*s "
+          "semantic=%.*s sample=%.*s live_units=%" PRIu64
+          " live_values=%" PRIu64 "\n",
+          row_index, (int)function_name.size, function_name.data,
+          (int)register_class.size, register_class.data,
+          (int)type_kind_name.size, type_kind_name.data,
+          (int)element_type_name.size, element_type_name.data, row->peak_point,
+          (int)peak_block_name.size, peak_block_name.data,
+          (int)peak_operation_name.size, peak_operation_name.data,
+          (int)origin_kind.size, origin_kind.data,
+          (int)origin_operation_name.size, origin_operation_name.data,
+          (int)semantic_tag.size, semantic_tag.data,
+          (int)sample_value_name.size, sample_value_name.data, row->live_units,
+          row->live_values));
     }
   }
   return iree_ok_status();
@@ -1619,6 +1737,9 @@ static iree_status_t loom_target_compile_report_format_entry_json(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
       stream, &first_field, "pressure_row_count", row->pressure_row_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "pressure_origin_row_count",
+      row->pressure_origin_row_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
       stream, &first_field, "spill_row_count", row->spill_row_count));
   if (iree_any_bit_set(row->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES)) {
@@ -1731,6 +1852,93 @@ static iree_status_t loom_target_compile_report_format_pressure_rows_json(
         }
         IREE_RETURN_IF_ERROR(
             loom_target_compile_report_format_pressure_row_json(
+                &rows[i], row_index, stream));
+      }
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_target_compile_report_format_pressure_origin_row_json(
+    const loom_target_compile_report_pressure_origin_row_t* row,
+    iree_host_size_t row_index, loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "index", row_index));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", row->function_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "register_class", row->register_class));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "type_kind", row->type_kind));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "type",
+      loom_target_compile_report_type_kind_name(row->type_kind)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "element_type", row->element_type));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "element",
+      loom_target_compile_report_scalar_type_name(row->element_type)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "peak_point", row->peak_point));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "peak_block", row->peak_block_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "peak_operation", row->peak_operation_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "origin_kind", row->origin_kind));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "origin",
+      loom_target_compile_report_pressure_origin_kind_name(row->origin_kind)));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "origin_operation",
+          row->origin_operation_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "semantic_tag", row->semantic_tag));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "sample_value", row->sample_value_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "live_units", row->live_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "live_values", row->live_values));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t
+loom_target_compile_report_format_pressure_origin_rows_json(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_format_mode_t mode,
+    loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "count", report->pressure_origin_rows.count));
+  if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "rows"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+    iree_host_size_t row_index = 0;
+    for (const loom_target_compile_report_vec_t* vec =
+             report->pressure_origin_rows.head;
+         vec != NULL; vec = vec->next) {
+      const loom_target_compile_report_pressure_origin_row_t* rows =
+          (const loom_target_compile_report_pressure_origin_row_t*)
+              loom_target_compile_report_vec_const_rows(vec);
+      for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+        if (row_index != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_target_compile_report_format_pressure_origin_row_json(
                 &rows[i], row_index, stream));
       }
     }
@@ -2334,6 +2542,8 @@ iree_status_t loom_target_compile_report_format_text(
         loom_target_compile_report_format_move_causes(report, builder));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_pressure_rows(report, builder));
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_pressure_origin_rows(
+        report, builder));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_spill_rows(report, builder));
     IREE_RETURN_IF_ERROR(
@@ -2481,6 +2691,15 @@ iree_status_t loom_target_compile_report_format_json(
         stream, &first_field, "pressure_rows"));
     IREE_RETURN_IF_ERROR(loom_target_compile_report_format_pressure_rows_json(
         report, options->mode, stream));
+  }
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "pressure_origin_rows"));
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_pressure_origin_rows_json(
+            report, options->mode, stream));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {

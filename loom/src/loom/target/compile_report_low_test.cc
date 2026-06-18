@@ -155,6 +155,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   loom_target_compile_report_initialize(&report, iree_allocator_system());
   report.requested_detail_flags =
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS;
 
@@ -215,6 +216,26 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       4,
       5,
   };
+  const uint32_t liveness_value_interval_indices[] = {
+      0,
+      1,
+  };
+  const loom_liveness_interval_t liveness_intervals[] = {
+      {
+          /*.value_id=*/4,
+          /*.start_point=*/0,
+          /*.end_point=*/8,
+          /*.value_class=*/pressure_summaries[0].value_class,
+          /*.unit_count=*/1,
+      },
+      {
+          /*.value_id=*/5,
+          /*.start_point=*/1,
+          /*.end_point=*/12,
+          /*.value_class=*/pressure_summaries[1].value_class,
+          /*.unit_count=*/2,
+      },
+  };
   const uint32_t assignment_indices_by_value_ordinal[] = {
       0,
       1,
@@ -271,13 +292,8 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           /*.reload_count=*/4,
       },
   };
-  const loom_op_t copy_op = {
-      /*.kind=*/LOOM_OP_KIND_UNKNOWN,
-      /*.operand_count=*/1,
-      /*.result_count=*/1,
-  };
   schedule_nodes[0] = (loom_low_schedule_node_t){
-      /*.op=*/&copy_op,
+      /*.op=*/{},
       /*.block=*/{},
       /*.block_index=*/{},
       /*.source_ordinal=*/{},
@@ -399,11 +415,11 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
               /*.is_cfg=*/{},
               /*.blocks=*/{},
               /*.block_count=*/{},
-              /*.intervals=*/{},
-              /*.interval_count=*/{},
+              /*.intervals=*/liveness_intervals,
+              /*.interval_count=*/IREE_ARRAYSIZE(liveness_intervals),
               /*.value_ids=*/liveness_value_ids,
               /*.value_count=*/IREE_ARRAYSIZE(liveness_value_ids),
-              /*.value_interval_indices=*/{},
+              /*.value_interval_indices=*/liveness_value_interval_indices,
               /*.pressure_summaries=*/pressure_summaries,
               /*.pressure_summary_count=*/
               IREE_ARRAYSIZE(pressure_summaries),
@@ -483,6 +499,9 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES));
   EXPECT_TRUE(iree_all_bits_set(
       report.detail_flags, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS));
+  EXPECT_TRUE(iree_all_bits_set(
+      report.detail_flags,
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS));
   EXPECT_TRUE(iree_all_bits_set(
@@ -539,6 +558,22 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_TRUE(iree_string_view_equal(pressure_rows[0].peak_operation_name,
                                      IREE_SV("<block-boundary>")));
   EXPECT_EQ(pressure_rows[1].peak_live_units, 11u);
+  EXPECT_EQ(report.pressure_origin_rows.count, 2u);
+  ASSERT_NE(report.pressure_origin_rows.head, nullptr);
+  const auto* pressure_origin_rows =
+      static_cast<const loom_target_compile_report_pressure_origin_row_t*>(
+          loom_target_compile_report_vec_const_rows(
+              report.pressure_origin_rows.head));
+  EXPECT_EQ(pressure_origin_rows[0].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN);
+  EXPECT_EQ(pressure_origin_rows[0].live_units, 1u);
+  EXPECT_EQ(pressure_origin_rows[0].live_values, 1u);
+  EXPECT_EQ(pressure_origin_rows[1].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE);
+  EXPECT_TRUE(iree_string_view_equal(pressure_origin_rows[1].semantic_tag,
+                                     IREE_SV("register.copy.b32")));
+  EXPECT_EQ(pressure_origin_rows[1].live_units, 2u);
+  EXPECT_EQ(pressure_origin_rows[1].live_values, 1u);
   EXPECT_EQ(report.spill_rows.count, 2u);
   ASSERT_NE(report.spill_rows.head, nullptr);
   const auto* spill_rows =

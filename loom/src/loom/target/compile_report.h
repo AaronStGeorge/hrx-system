@@ -63,6 +63,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES = 1u << 13,
   // Target math-legalization recipe rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS = 1u << 14,
+  // Per-pressure-peak origin contribution rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS = 1u << 15,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -120,6 +122,53 @@ typedef enum loom_target_compile_report_allocation_failure_blocking_kind_e {
   LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_NO_ASSIGNABLE_LOCATION =
       4,
 } loom_target_compile_report_allocation_failure_blocking_kind_t;
+
+typedef enum loom_target_compile_report_pressure_origin_kind_e {
+  // No specific pressure origin was classified.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN = 0,
+  // Function, block, or region argument live across the peak.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_BLOCK_ARGUMENT = 1,
+  // Target-low constant materialization value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONSTANT = 2,
+  // Target-low copy value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_COPY = 3,
+  // Target-low slice value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SLICE = 4,
+  // Target-low concat value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONCAT = 5,
+  // Target-low storage address or storage view value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_STORAGE = 6,
+  // Target-low spill or reload value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SPILL_RELOAD = 7,
+  // Descriptor-backed scalar ALU value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SCALAR_ALU = 8,
+  // Descriptor-backed vector ALU value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_VECTOR_ALU = 9,
+  // Descriptor-backed matrix or tensor-core-like value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_MATRIX = 10,
+  // Descriptor-backed dot-product value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_DOT = 11,
+  // Descriptor-backed global or vector-memory value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY = 12,
+  // Descriptor-backed local, LDS, or workgroup-memory value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_LOCAL_MEMORY = 13,
+  // Descriptor-backed scalar-memory value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SCALAR_MEMORY = 14,
+  // Descriptor-backed generic memory value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GENERIC_MEMORY = 15,
+  // Descriptor-backed control-flow value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONTROL = 16,
+  // Descriptor-backed barrier or synchronization value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_BARRIER = 17,
+  // Descriptor-backed numeric conversion value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONVERSION = 18,
+  // Descriptor-backed register move or repair value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE = 19,
+  // Descriptor-backed cache or prefetch value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CACHE = 20,
+  // Operation-backed value not covered by a more specific origin.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_OPERATION = 21,
+} loom_target_compile_report_pressure_origin_kind_t;
 
 typedef enum loom_target_compile_report_legalization_mode_e {
   // No target-legalization mode was recorded.
@@ -365,6 +414,8 @@ typedef struct loom_target_compile_report_entry_t {
   loom_target_compile_report_target_resources_t target_resources;
   // Number of detailed register-pressure rows copied for this entry.
   iree_host_size_t pressure_row_count;
+  // Number of detailed pressure-origin rows copied for this entry.
+  iree_host_size_t pressure_origin_row_count;
   // Number of detailed spill rows copied for this entry.
   iree_host_size_t spill_row_count;
 } loom_target_compile_report_entry_t;
@@ -390,6 +441,36 @@ typedef struct loom_target_compile_report_pressure_row_t {
   // Operation name after which the peak was observed, or a boundary marker.
   iree_string_view_t peak_operation_name;
 } loom_target_compile_report_pressure_row_t;
+
+// One origin contribution to a register-pressure peak.
+typedef struct loom_target_compile_report_pressure_origin_row_t {
+  // Target artifact function symbol containing this pressure peak.
+  iree_string_view_t function_name;
+  // Register class name for register values, or an empty string otherwise.
+  iree_string_view_t register_class;
+  // Numeric Loom type kind for the pressure class.
+  uint32_t type_kind;
+  // Numeric Loom scalar element type for the pressure class.
+  uint32_t element_type;
+  // Program point associated with the pressure peak.
+  uint32_t peak_point;
+  // Block label containing the pressure peak.
+  iree_string_view_t peak_block_name;
+  // Operation name after which the peak was observed, or a boundary marker.
+  iree_string_view_t peak_operation_name;
+  // Structured family that produced this group of live values.
+  loom_target_compile_report_pressure_origin_kind_t origin_kind;
+  // Defining operation mnemonic for this group when available.
+  iree_string_view_t origin_operation_name;
+  // Descriptor semantic tag for descriptor-backed origins, if any.
+  iree_string_view_t semantic_tag;
+  // Representative SSA value from this contribution group.
+  iree_string_view_t sample_value_name;
+  // Number of live units contributed by this origin group at the peak.
+  uint64_t live_units;
+  // Number of live values contributed by this origin group at the peak.
+  uint64_t live_values;
+} loom_target_compile_report_pressure_origin_row_t;
 
 // One predicted spill row in a compile report.
 typedef struct loom_target_compile_report_spill_row_t {
@@ -772,6 +853,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t entry_rows;
   // Owned register-pressure peak rows.
   loom_target_compile_report_row_list_t pressure_rows;
+  // Owned register-pressure origin contribution rows.
+  loom_target_compile_report_row_list_t pressure_origin_rows;
   // Owned predicted spill rows.
   loom_target_compile_report_row_list_t spill_rows;
   // Owned hard allocation-failure rows.
@@ -883,6 +966,11 @@ iree_status_t loom_target_compile_report_record_entry_report(
 iree_status_t loom_target_compile_report_record_pressure_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_pressure_row_t* row);
+
+// Records one pressure-origin contribution row.
+iree_status_t loom_target_compile_report_record_pressure_origin_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_pressure_origin_row_t* row);
 
 // Records one spill row.
 iree_status_t loom_target_compile_report_record_spill_row(
