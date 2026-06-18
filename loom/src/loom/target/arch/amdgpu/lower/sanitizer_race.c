@@ -55,6 +55,10 @@ typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
   bool has_config_values;
   // Entry-dominating TSAN config values loaded from iree_tsan_config.
   loom_amdgpu_sanitizer_race_config_values_t config_values;
+  // Entry-dominating TSAN config flags required by observation guards.
+  loom_value_id_t required_config_flags;
+  // Entry-dominating config.flags value masked by required_config_flags.
+  loom_value_id_t active_config_flags;
   // True once entry-block launch topology values have been materialized.
   bool has_topology_values;
   // Entry-dominating flattened workgroup id for the active dispatch.
@@ -502,6 +506,25 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_scaled_shadow_offset(
                                         stride_vgpr, out_offset);
 }
 
+static iree_status_t loom_amdgpu_sanitizer_race_build_config_guard_values(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t config_flags, loom_value_id_t* out_required_flags,
+    loom_value_id_t* out_active_flags) {
+  *out_required_flags = LOOM_VALUE_ID_INVALID;
+  *out_active_flags = LOOM_VALUE_ID_INVALID;
+
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
+  const uint32_t required_flags = LOOM_AMDGPU_TSAN_CONFIG_FLAG_ENABLED |
+                                  LOOM_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_STATE;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, required_flags,
+      sgpr_type, out_required_flags));
+  return loom_amdgpu_emit_sgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B32, config_flags,
+      *out_required_flags, sgpr_type, out_active_flags);
+}
+
 iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
     loom_low_lower_context_t* context) {
   const loom_op_t* first_race_op = NULL;
@@ -534,6 +557,9 @@ iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
       loom_amdgpu_sanitizer_tsan_config_symbol(context, &config_symbol));
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_config_values(
       context, first_race_op, config_symbol, &state->config_values));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_config_guard_values(
+      context, first_race_op, state->config_values.flags,
+      &state->required_config_flags, &state->active_config_flags));
 
   loom_type_t sgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
@@ -621,25 +647,22 @@ static iree_status_t loom_amdgpu_sanitizer_race_get_dispatch_slot_values(
 
 static iree_status_t loom_amdgpu_sanitizer_race_build_required_config_scc(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t config_flags, loom_value_id_t* out_scc) {
+    loom_value_id_t* out_scc) {
   *out_scc = LOOM_VALUE_ID_INVALID;
 
-  loom_type_t sgpr_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
-  const uint32_t required_flags = LOOM_AMDGPU_TSAN_CONFIG_FLAG_ENABLED |
-                                  LOOM_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_STATE;
-  loom_value_id_t required = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, required_flags,
-      sgpr_type, &required));
-  loom_value_id_t masked = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B32, config_flags,
-      required, sgpr_type, &masked));
+  loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
+  if (!state->has_config_values) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU TSAN config guard values were not materialized in entry "
+        "setup");
+  }
 
   loom_type_t scc_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_scc_type(context, &scc_type));
-  const loom_value_id_t operands[] = {masked, required};
+  const loom_value_id_t operands[] = {state->active_config_flags,
+                                      state->required_config_flags};
   loom_op_t* compare_op = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_EQ_I32, operands,
@@ -1472,7 +1495,7 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_config_guard(
       loom_amdgpu_sanitizer_race_get_config_values(context, out_config));
   loom_value_id_t enabled_scc = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_required_config_scc(
-      context, source_op, out_config->flags, &enabled_scc));
+      context, source_op, &enabled_scc));
   loom_block_t* enabled_block = NULL;
   return loom_amdgpu_sanitizer_race_split_enabled_block(
       loom_low_lower_context_builder(context), enabled_scc, source_op->location,

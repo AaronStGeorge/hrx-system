@@ -67,43 +67,43 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_sync_workgroup_bar
   %58 = v_readfirstlane_b32 %56
   %59 = v_readfirstlane_b32 %57
   %60 = concat(%58, %59) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %61 = s_load_dword_offset_only %5 {offset = 12}
-  %62 = s_mov_b32 6
-  %63 = s_lshr_b32 %61, %62
-  %64 = s_load_dword_offset_only %5 {offset = 16}
-  %65 = s_mul_i32 %3, %63
-  %66 = s_add_u32 %2, %65
-  %67 = s_mul_i32 %63, %64
-  %68 = s_mul_i32 %4, %67
-  %69 = s_add_u32 %66, %68
-  %70 = v_mov_b32_copy %69
-  %74 = v_mov_b32_copy %37
-  %82 = v_mul_lo_u32 %70, %74
-  %89 = v_and_b32_lit %packed_tid, 1023
-  %90 = slice %5[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %91 = v_mov_b32_copy %90
-  %96 = v_mov_b32_copy %44
-  %104, %105 = v_sub_co_u32 %91, %96
-  %110 = v_lshrrev_b32_src0_inline %104, 6
-  %112 = v_mov_b32_copy %51
-  %113 = v_and_b32 %110, %112
-  %114 = v_lshlrev_b32_src0_inline %113, 4
+  %61 = s_mov_b32 3
+  %62 = s_and_b32 %15, %61
+  %63 = s_load_dword_offset_only %5 {offset = 12}
+  %64 = s_mov_b32 6
+  %65 = s_lshr_b32 %63, %64
+  %66 = s_load_dword_offset_only %5 {offset = 16}
+  %67 = s_mul_i32 %3, %65
+  %68 = s_add_u32 %2, %67
+  %69 = s_mul_i32 %65, %66
+  %70 = s_mul_i32 %4, %69
+  %71 = s_add_u32 %68, %70
+  %72 = v_mov_b32_copy %71
+  %76 = v_mov_b32_copy %37
+  %84 = v_mul_lo_u32 %72, %76
+  %91 = v_and_b32_lit %packed_tid, 1023
+  %92 = slice %5[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %93 = v_mov_b32_copy %92
+  %98 = v_mov_b32_copy %44
+  %106, %107 = v_sub_co_u32 %93, %98
+  %112 = v_lshrrev_b32_src0_inline %106, 6
+  %114 = v_mov_b32_copy %51
+  %115 = v_and_b32 %112, %114
+  %116 = v_lshlrev_b32_src0_inline %115, 4
   s_barrier
-  %115 = s_mov_b32 3
-  %116 = s_and_b32 %15, %115
-  %117 = s_cmp_eq_i32 %116, %115
+  %117 = s_cmp_eq_i32 %62, %61
   low.cond_br %117, ^_bb1, ^_bb2 : reg<amdgpu.scc>
 ^_bb1:
   s_waitcnt {vmcnt = 0}
   buffer_gl1_inv
   buffer_gl0_inv
-  %121 = v_add_u32_src0_inline %114, 8
+  %121 = v_add_u32_src0_inline %116, 8
   %122 = global_load_b32_saddr %121, %60 {glc = 1, dlc = 1}
   %126 = v_mov_b32_copy %30
   %134 = v_mul_lo_u32 %122, %126
-  %145, %146 = v_add_co_u32 %134, %82
+  %145, %146 = v_add_co_u32 %134, %84
   %151 = v_mov_b32 0
-  %152 = v_cmp_eq_i32 %89, %151
+  %152 = v_cmp_eq_i32 %91, %151
   %153, %154 = s_and_saveexec_b64 %152
   %155 = v_mov_b32 1
   %156 = v_mov_b32 0
@@ -188,43 +188,43 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_sync_two_workgroup
   %58 = v_readfirstlane_b32 %56
   %59 = v_readfirstlane_b32 %57
   %60 = concat(%58, %59) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %61 = s_load_dword_offset_only %5 {offset = 12}
-  %62 = s_mov_b32 6
-  %63 = s_lshr_b32 %61, %62
-  %64 = s_load_dword_offset_only %5 {offset = 16}
-  %65 = s_mul_i32 %3, %63
-  %66 = s_add_u32 %2, %65
-  %67 = s_mul_i32 %63, %64
-  %68 = s_mul_i32 %4, %67
-  %69 = s_add_u32 %66, %68
-  %70 = v_mov_b32_copy %69
-  %74 = v_mov_b32_copy %37
-  %82 = v_mul_lo_u32 %70, %74
-  %89 = v_and_b32_lit %packed_tid, 1023
-  %90 = slice %5[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %91 = v_mov_b32_copy %90
-  %96 = v_mov_b32_copy %44
-  %104, %105 = v_sub_co_u32 %91, %96
-  %110 = v_lshrrev_b32_src0_inline %104, 6
-  %112 = v_mov_b32_copy %51
-  %113 = v_and_b32 %110, %112
-  %114 = v_lshlrev_b32_src0_inline %113, 4
+  %61 = s_mov_b32 3
+  %62 = s_and_b32 %15, %61
+  %63 = s_load_dword_offset_only %5 {offset = 12}
+  %64 = s_mov_b32 6
+  %65 = s_lshr_b32 %63, %64
+  %66 = s_load_dword_offset_only %5 {offset = 16}
+  %67 = s_mul_i32 %3, %65
+  %68 = s_add_u32 %2, %67
+  %69 = s_mul_i32 %65, %66
+  %70 = s_mul_i32 %4, %69
+  %71 = s_add_u32 %68, %70
+  %72 = v_mov_b32_copy %71
+  %76 = v_mov_b32_copy %37
+  %84 = v_mul_lo_u32 %72, %76
+  %91 = v_and_b32_lit %packed_tid, 1023
+  %92 = slice %5[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %93 = v_mov_b32_copy %92
+  %98 = v_mov_b32_copy %44
+  %106, %107 = v_sub_co_u32 %93, %98
+  %112 = v_lshrrev_b32_src0_inline %106, 6
+  %114 = v_mov_b32_copy %51
+  %115 = v_and_b32 %112, %114
+  %116 = v_lshlrev_b32_src0_inline %115, 4
   s_barrier
-  %115 = s_mov_b32 3
-  %116 = s_and_b32 %15, %115
-  %117 = s_cmp_eq_i32 %116, %115
+  %117 = s_cmp_eq_i32 %62, %61
   low.cond_br %117, ^_bb1, ^_bb2 : reg<amdgpu.scc>
 ^_bb1:
   s_waitcnt {vmcnt = 0}
   buffer_gl1_inv
   buffer_gl0_inv
-  %121 = v_add_u32_src0_inline %114, 8
+  %121 = v_add_u32_src0_inline %116, 8
   %122 = global_load_b32_saddr %121, %60 {glc = 1, dlc = 1}
   %126 = v_mov_b32_copy %30
   %134 = v_mul_lo_u32 %122, %126
-  %145, %146 = v_add_co_u32 %134, %82
+  %145, %146 = v_add_co_u32 %134, %84
   %151 = v_mov_b32 0
-  %152 = v_cmp_eq_i32 %89, %151
+  %152 = v_cmp_eq_i32 %91, %151
   %153, %154 = s_and_saveexec_b64 %152
   %155 = v_mov_b32 1
   %156 = v_mov_b32 0
@@ -237,29 +237,27 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_sync_two_workgroup
   low.br ^_bb2
 ^_bb2:
   s_barrier
-  %158 = s_mov_b32 3
-  %159 = s_and_b32 %15, %158
-  %160 = s_cmp_eq_i32 %159, %158
-  low.cond_br %160, ^_bb3, ^_bb4 : reg<amdgpu.scc>
+  %158 = s_cmp_eq_i32 %62, %61
+  low.cond_br %158, ^_bb3, ^_bb4 : reg<amdgpu.scc>
 ^_bb3:
   s_waitcnt {vmcnt = 0}
   buffer_gl1_inv
   buffer_gl0_inv
-  %164 = v_add_u32_src0_inline %114, 8
-  %165 = global_load_b32_saddr %164, %60 {glc = 1, dlc = 1}
-  %169 = v_mov_b32_copy %30
-  %177 = v_mul_lo_u32 %165, %169
-  %188, %189 = v_add_co_u32 %177, %82
-  %194 = v_mov_b32 0
-  %195 = v_cmp_eq_i32 %89, %194
-  %196, %197 = s_and_saveexec_b64 %195
-  %198 = v_mov_b32 1
-  %199 = v_mov_b32 0
-  %200 = concat(%198, %199) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  global_atomic_add_u64_saddr %188, %200, %25
+  %162 = v_add_u32_src0_inline %116, 8
+  %163 = global_load_b32_saddr %162, %60 {glc = 1, dlc = 1}
+  %167 = v_mov_b32_copy %30
+  %175 = v_mul_lo_u32 %163, %167
+  %186, %187 = v_add_co_u32 %175, %84
+  %192 = v_mov_b32 0
+  %193 = v_cmp_eq_i32 %91, %192
+  %194, %195 = s_and_saveexec_b64 %193
+  %196 = v_mov_b32 1
+  %197 = v_mov_b32 0
+  %198 = concat(%196, %197) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  global_atomic_add_u64_saddr %186, %198, %25
   s_waitcnt {vmcnt = 0}
   s_waitcnt_vscnt {vscnt = 0}
-  s_mov_b64_exec %196
+  s_mov_b64_exec %194
   s_barrier
   low.br ^_bb4
 ^_bb4:
