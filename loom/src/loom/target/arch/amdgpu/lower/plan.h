@@ -93,16 +93,28 @@ typedef struct loom_amdgpu_index_cast_plan_t {
   uint32_t index_bitwidth;
 } loom_amdgpu_index_cast_plan_t;
 
-typedef struct loom_amdgpu_offset_add_plan_t {
-  // Left-hand offset value.
+typedef enum loom_amdgpu_address_i64_alu_kind_e {
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_NONE = 0,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_SGPR_ADD = 1,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_ADD = 2,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_SUB = 3,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_MUL_LO = 4,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_SHL = 5,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_MADD_LO = 6,
+} loom_amdgpu_address_i64_alu_kind_t;
+
+typedef struct loom_amdgpu_address_i64_alu_plan_t {
+  // Left-hand address-domain value.
   loom_value_id_t lhs;
-  // Right-hand offset value.
+  // Right-hand address-domain value.
   loom_value_id_t rhs;
-  // Result offset value receiving the full-width sum.
+  // Addend address-domain value for multiply-add operations.
+  loom_value_id_t addend;
+  // Result address-domain value receiving the full-width result.
   loom_value_id_t result;
-  // True when the result is a VGPR x2 value instead of an SGPR x2 value.
-  bool result_is_vgpr;
-} loom_amdgpu_offset_add_plan_t;
+  // Lowering strategy selected for the full-width address operation.
+  loom_amdgpu_address_i64_alu_kind_t kind;
+} loom_amdgpu_address_i64_alu_plan_t;
 
 typedef struct loom_amdgpu_i64_compare_plan_t {
   // Left-hand 64-bit source value.

@@ -1056,6 +1056,31 @@ kernel.def @loaded_i32_row_stride_f16_to_f32_load() {
 
 // ====
 
+kernel.def @wide_intermediate_narrowed_f16_index_madd_load() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %row_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %start = index.constant 0 : index
+  %row_stride = index.constant 65536 : index
+  %lane = kernel.workitem.id<x> : index
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 65536)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 1073741824)] : index
+  %raw_index = index.madd %row, %row_stride, %lane : index
+  %index = index.assume %raw_index [range(%raw_index, 0, 1073741823), lt(%raw_index, %element_count)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<[%element_count]xf16, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<1xf32, #dense>
+  %half = view.load %input_view[%index] : view<[%element_count]xf16, #dense> -> f16
+  %loaded = scalar.extf %half : f16 to f32
+  view.store %loaded, %output_view[%start] : f32, view<1xf32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @rank2_vector_tile_transpose() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 16 : index

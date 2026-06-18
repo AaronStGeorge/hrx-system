@@ -250,13 +250,13 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_index_cast_dispatch,
                              loom_amdgpu_index_cast_plan_t,
                              loom_amdgpu_lower_index_cast)
 
-LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_offset_add_dispatch,
-                               loom_amdgpu_offset_add_plan_t,
-                               loom_amdgpu_select_offset_add_plan)
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_address_i64_alu_dispatch,
+                               loom_amdgpu_address_i64_alu_plan_t,
+                               loom_amdgpu_select_address_i64_alu_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_offset_add_dispatch,
-                             loom_amdgpu_offset_add_plan_t,
-                             loom_amdgpu_lower_offset_add)
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_address_i64_alu_dispatch,
+                             loom_amdgpu_address_i64_alu_plan_t,
+                             loom_amdgpu_lower_address_i64_alu)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_index_cmp_i64_dispatch,
                                loom_amdgpu_i64_compare_plan_t,
@@ -1015,8 +1015,12 @@ static_assert(offsetof(loom_amdgpu_mulf_mix_plan_t, sources) == 0,
       offsetof(plan_type, field) == sizeof(loom_value_id_t) * (index),   \
       #plan_type "." #field " must match dispatch row storage policy")
 
-LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_offset_add_plan_t, lhs, 0);
-LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_offset_add_plan_t, rhs, 1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_address_i64_alu_plan_t, lhs,
+                                        0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_address_i64_alu_plan_t, rhs,
+                                        1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_address_i64_alu_plan_t,
+                                        addend, 2);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_i64_compare_plan_t, lhs, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_i64_compare_plan_t, rhs, 1);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_scalar_i64_alu_plan_t, lhs,

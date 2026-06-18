@@ -62,6 +62,29 @@ bool loom_amdgpu_type_is_address_scalar(loom_type_t type) {
           loom_type_element_type(type) == LOOM_SCALAR_TYPE_OFFSET);
 }
 
+bool loom_amdgpu_source_address_value_needs_64bit(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t source_value_id, loom_type_t source_type) {
+  if (!loom_amdgpu_type_is_address_scalar(source_type)) {
+    return false;
+  }
+  const loom_scalar_type_t element_type = loom_type_element_type(source_type);
+  if (fact_table == NULL || module == NULL ||
+      source_value_id >= module->values.count) {
+    return element_type == LOOM_SCALAR_TYPE_OFFSET;
+  }
+  const loom_value_facts_t facts =
+      loom_value_fact_table_lookup(fact_table, source_value_id);
+  if (loom_value_facts_fit_unsigned_bit_count(facts, 32)) {
+    return false;
+  }
+  if (element_type == LOOM_SCALAR_TYPE_OFFSET) {
+    return true;
+  }
+  return element_type == LOOM_SCALAR_TYPE_INDEX &&
+         loom_value_facts_fit_unsigned_bit_count(facts, 63);
+}
+
 bool loom_amdgpu_type_is_f32(loom_type_t type) {
   return loom_type_is_scalar(type) &&
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32;
@@ -1752,6 +1775,20 @@ bool loom_amdgpu_source_value_prefers_vgpr(
     return true;
   }
 
+  const loom_type_t source_type =
+      loom_module_value_type(module, source_value_id);
+  if (loom_amdgpu_source_address_value_needs_64bit(
+          module, fact_table, source_value_id, source_type)) {
+    switch (defining_op->kind) {
+      case LOOM_OP_INDEX_SUB:
+      case LOOM_OP_INDEX_MUL:
+      case LOOM_OP_INDEX_SHLI:
+        return true;
+      default:
+        break;
+    }
+  }
+
   if (loom_amdgpu_index_arithmetic_result_follows_operand_vgpr(
           module, fact_table, view_regions, source_value_id, defining_op)) {
     return true;
@@ -1764,7 +1801,6 @@ bool loom_amdgpu_source_value_prefers_vgpr(
                                                  view_regions, input_value_id);
   }
 
-  loom_type_t source_type = loom_module_value_type(module, source_value_id);
   if (loom_amdgpu_type_is_f64(source_type) ||
       loom_amdgpu_type_is_16bit_float(source_type)) {
     return true;
@@ -1878,20 +1914,6 @@ iree_status_t loom_amdgpu_context_value_is_native_i1_mask(
       loom_low_lower_context_fact_table(context), view_regions,
       source_value_id);
   return iree_ok_status();
-}
-
-static bool loom_amdgpu_offset_value_needs_64bit(
-    const loom_value_fact_table_t* fact_table, const loom_module_t* module,
-    loom_value_id_t source_value_id, loom_type_t source_type) {
-  if (!loom_amdgpu_type_is_offset(source_type)) {
-    return false;
-  }
-  if (fact_table == NULL || module == NULL ||
-      source_value_id >= module->values.count) {
-    return true;
-  }
-  return !loom_value_facts_fit_unsigned_bit_count(
-      loom_value_fact_table_lookup(fact_table, source_value_id), 32);
 }
 
 typedef struct loom_amdgpu_register_shape_t {
@@ -2025,8 +2047,8 @@ static bool loom_amdgpu_source_scalar_value_register_shape(
               module, fact_table, view_regions, source_value_id)) {
         out_shape->class_id = LOOM_AMDGPU_REG_CLASS_ID_VGPR;
       }
-      if (loom_amdgpu_offset_value_needs_64bit(fact_table, module,
-                                               source_value_id, source_type)) {
+      if (loom_amdgpu_source_address_value_needs_64bit(
+              module, fact_table, source_value_id, source_type)) {
         out_shape->unit_count = 2;
       }
       return true;
