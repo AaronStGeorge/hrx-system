@@ -460,8 +460,13 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
       descriptor_set, table_arena, &schedule_pressure_cliffs));
   loom_low_schedule_pair_affinity_list_t schedule_pair_affinities =
       loom_low_schedule_pair_affinity_list_empty();
+  loom_low_resolved_target_t resolved_target = {
+      .bundle_storage = plan->entry->bundle_storage,
+      .descriptor_set = descriptor_set,
+  };
+  loom_target_bundle_storage_rebind(&resolved_target.bundle_storage);
   IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_build_schedule_pair_affinities(
-      descriptor_set, table_arena, &schedule_pair_affinities));
+      &resolved_target, table_arena, &schedule_pair_affinities));
 
   loom_low_emission_frame_t frame = {0};
   loom_low_storage_lease_provider_t storage_lease_provider = {0};

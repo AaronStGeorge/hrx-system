@@ -324,7 +324,7 @@ static iree_status_t loom_amdgpu_loom_check_build_schedule_pair_affinities(
     return iree_ok_status();
   }
   return loom_amdgpu_vopd_build_schedule_pair_affinities(
-      target.descriptor_set, request->case_arena, out_affinities);
+      &target, request->case_arena, out_affinities);
 }
 
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
