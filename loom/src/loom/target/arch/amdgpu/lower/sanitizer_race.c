@@ -55,6 +55,10 @@ typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
   bool has_config_values;
   // Entry-dominating TSAN config values loaded from iree_tsan_config.
   loom_amdgpu_sanitizer_race_config_values_t config_values;
+  // True once entry-block launch topology values have been materialized.
+  bool has_topology_values;
+  // Entry-dominating flattened workgroup id for the active dispatch.
+  loom_value_id_t workgroup_linear_id;
   // True once TSAN data-race failures have a shared cold report island.
   bool has_report_island;
   // Shared cold island for TSAN data-race reports.
@@ -479,7 +483,13 @@ iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
       loom_amdgpu_sanitizer_tsan_config_symbol(context, &config_symbol));
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_config_values(
       context, first_race_op, config_symbol, &state->config_values));
+
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_workgroup_linear_id(
+      context, first_race_op, sgpr_type, &state->workgroup_linear_id));
   state->has_config_values = true;
+  state->has_topology_values = true;
   return iree_ok_status();
 }
 
@@ -495,6 +505,20 @@ static iree_status_t loom_amdgpu_sanitizer_race_get_config_values(
         "AMDGPU TSAN config values were not materialized in entry setup");
   }
   *out_config = state->config_values;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_race_get_workgroup_linear_id(
+    loom_low_lower_context_t* context, loom_value_id_t* out_linear_id) {
+  *out_linear_id = LOOM_VALUE_ID_INVALID;
+  loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
+  if (!state->has_topology_values) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU TSAN topology values were not materialized in entry setup");
+  }
+  *out_linear_id = state->workgroup_linear_id;
   return iree_ok_status();
 }
 
@@ -933,11 +957,9 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_workgroup_shadow_offset(
       context, source_op, dispatch->shadow_slot, config->dispatch_shadow_stride,
       &dispatch_offset));
 
-  loom_type_t sgpr_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
   loom_value_id_t workgroup_linear_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_workgroup_linear_id(
-      context, source_op, sgpr_type, &workgroup_linear_id));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_workgroup_linear_id(
+      context, &workgroup_linear_id));
   loom_value_id_t workgroup_offset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_scaled_shadow_offset(
       context, source_op, workgroup_linear_id, config->workgroup_shadow_stride,
