@@ -167,6 +167,10 @@ iree_status_t loom_low_emission_frame_build(
   IREE_RETURN_IF_ERROR(loom_low_allocate_function(
       module, low_func_op, &allocation_options, arena, &out_frame->allocation));
 
+  if (out_frame->allocation.error_count != 0) {
+    out_frame->target = out_frame->schedule.target;
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(&out_frame->schedule,
                                                        &out_frame->allocation));
   out_frame->target = out_frame->schedule.target;
@@ -382,6 +386,10 @@ iree_status_t loom_low_emission_frame_build_spill_free(
     loom_low_emission_frame_t frame = {0};
     IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
         module, low_func_op, frame_options, arena, &frame));
+    if (frame.allocation.error_count != 0) {
+      *out_frame = frame;
+      return iree_ok_status();
+    }
     if (iteration_limit == 0) {
       if (frame.allocation.liveness.value_count == IREE_HOST_SIZE_MAX) {
         return iree_make_status(

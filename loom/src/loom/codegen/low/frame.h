@@ -153,8 +153,10 @@ iree_status_t loom_low_emission_frame_build(
 // change liveness and invalidate later spill plans in the current frame.
 // Materialization, final addressability, and final-frame convergence
 // diagnostics follow the normal target-entry convention: if an error diagnostic
-// is emitted, the function returns OK with |out_frame| left empty and the
-// caller must check its diagnostic emitter before consuming the frame.
+// is emitted, the function returns OK and the caller must check its diagnostic
+// emitter before consuming the frame. Allocation diagnostics may return a
+// partial frame containing the schedule and allocation failure table for
+// reporting; later emission stages have not validated that frame.
 iree_status_t loom_low_emission_frame_build_spill_free(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_emission_frame_options_t* frame_options,

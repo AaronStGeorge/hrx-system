@@ -228,6 +228,7 @@ iree_status_t loom_low_allocate_function(
         .spill_plan_count = state.interval_assignment.spill_plan_count,
         .remarks = state.interval_assignment.remarks,
         .remark_count = state.interval_assignment.remark_count,
+        .failure = state.interval_assignment.failure,
         .copy_decisions = state.copy_decision_plan.decisions,
         .copy_decision_count = state.copy_decision_plan.decision_count,
         .edge_copies = state.edge_copy_plan.copies,

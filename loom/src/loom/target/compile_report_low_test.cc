@@ -13,7 +13,7 @@
 namespace loom {
 namespace {
 
-TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
+TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   constexpr uint32_t kSourceAssignmentIndex = 0;
   constexpr uint32_t kResultAssignmentIndex = 1;
   constexpr uint32_t kEdgeCopyCount = 1;
@@ -155,7 +155,8 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
   loom_target_compile_report_initialize(&report, iree_allocator_system());
   report.requested_detail_flags =
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
-      LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS;
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS;
 
   const loom_op_t peak_op = {};
   const loom_liveness_pressure_summary_t pressure_summaries[] = {
@@ -409,7 +410,7 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
           },
           /*.placement=*/{},
           /*.allocation_mode=*/{},
-          /*.error_count=*/{},
+          /*.error_count=*/1,
           /*.assignments=*/assignments,
           /*.assignment_count=*/IREE_ARRAYSIZE(assignments),
           /*.assignment_indices_by_value_ordinal=*/
@@ -420,6 +421,31 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
           /*.spill_plan_count=*/IREE_ARRAYSIZE(spill_plans),
           /*.remarks=*/{},
           /*.remark_count=*/{},
+          /*.failure=*/
+          {
+              /*.failure_code=*/IREE_SVL("unspillable-register-exhausted"),
+              /*.value_id=*/5,
+              /*.value_class=*/pressure_summaries[1].value_class,
+              /*.descriptor_reg_class_id=*/0,
+              /*.start_point=*/3,
+              /*.end_point=*/8,
+              /*.required_unit_count=*/2,
+              /*.budget_units=*/1,
+              /*.peak_live_units=*/11,
+              /*.location_kind=*/LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+              /*.location_base=*/0,
+              /*.location_count=*/2,
+              /*.blocking_kind=*/
+              LOOM_LOW_ALLOCATION_FAILURE_BLOCKING_ACTIVE_ASSIGNMENT,
+              /*.conflict_assignment_index=*/0,
+              /*.conflict_value_id=*/4,
+              /*.conflict_start_point=*/0,
+              /*.conflict_end_point=*/8,
+              /*.conflict_location_kind=*/
+              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+              /*.conflict_location_base=*/0,
+              /*.conflict_location_count=*/1,
+          },
           /*.copy_decisions=*/copy_decisions,
           /*.copy_decision_count=*/IREE_ARRAYSIZE(copy_decisions),
           /*.edge_copies=*/edge_copies,
@@ -459,6 +485,9 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
       report.detail_flags, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS));
+  EXPECT_TRUE(iree_all_bits_set(
+      report.detail_flags,
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS));
   EXPECT_TRUE(
       iree_string_view_equal(report.function_name, IREE_SV("<unnamed>")));
   EXPECT_EQ(report.schedule_node_count, 13u);
@@ -525,6 +554,29 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
   EXPECT_EQ(spill_rows[0].store_count, 1u);
   EXPECT_EQ(spill_rows[0].reload_count, 2u);
   EXPECT_EQ(spill_rows[1].slot_index, 1u);
+  EXPECT_EQ(report.allocation_failure_rows.count, 1u);
+  ASSERT_NE(report.allocation_failure_rows.head, nullptr);
+  const auto* allocation_failure_rows =
+      static_cast<const loom_target_compile_report_allocation_failure_row_t*>(
+          loom_target_compile_report_vec_const_rows(
+              report.allocation_failure_rows.head));
+  EXPECT_TRUE(
+      iree_string_view_equal(allocation_failure_rows[0].failure_code,
+                             IREE_SV("unspillable-register-exhausted")));
+  EXPECT_TRUE(iree_string_view_equal(allocation_failure_rows[0].register_class,
+                                     IREE_SV("test.gpr")));
+  EXPECT_EQ(
+      allocation_failure_rows[0].blocking_kind,
+      LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_ACTIVE_ASSIGNMENT);
+  EXPECT_TRUE(iree_string_view_equal(allocation_failure_rows[0].value_name,
+                                     IREE_SV("<unnamed>")));
+  EXPECT_EQ(allocation_failure_rows[0].required_unit_count, 2u);
+  EXPECT_EQ(allocation_failure_rows[0].budget_units, 1u);
+  EXPECT_EQ(allocation_failure_rows[0].peak_live_units, 11u);
+  EXPECT_EQ(allocation_failure_rows[0].conflict_assignment_index, 0u);
+  EXPECT_TRUE(iree_string_view_equal(
+      allocation_failure_rows[0].conflict_value_name, IREE_SV("<unnamed>")));
+  EXPECT_EQ(allocation_failure_rows[0].conflict_location_base, 0u);
   loom_target_compile_report_deinitialize(&report);
 }
 

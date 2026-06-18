@@ -57,6 +57,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS = 1u << 10,
   // Per-entry native artifact summaries were recorded.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES = 1u << 11,
+  // Per-allocation-failure rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS = 1u << 12,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -96,6 +98,24 @@ typedef enum loom_target_compile_report_source_low_selection_kind_e {
   // Selection came from a target-owned callback plan.
   LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_PLAN = 2,
 } loom_target_compile_report_source_low_selection_kind_t;
+
+typedef enum loom_target_compile_report_allocation_failure_blocking_kind_e {
+  // No specific blocking constraint was recorded.
+  LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_UNKNOWN = 0,
+  // The failing interval itself is wider than the register-class budget.
+  LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_INTERVAL_EXCEEDS_BUDGET =
+      1,
+  // A live assignment occupies a candidate location and cannot be evicted.
+  LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_ACTIVE_ASSIGNMENT = 2,
+  // A fixed value, reserved range, or storage lease blocks a candidate
+  // location.
+  LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_LOCATION_CONSTRAINT =
+      3,
+  // The allocator scanned candidate locations without finding a legal
+  // placement or a more specific blocking constraint.
+  LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_NO_ASSIGNABLE_LOCATION =
+      4,
+} loom_target_compile_report_allocation_failure_blocking_kind_t;
 
 typedef enum loom_target_compile_report_legalization_mode_e {
   // No target-legalization mode was recorded.
@@ -346,6 +366,59 @@ typedef struct loom_target_compile_report_spill_row_t {
   // Predicted operand-use reloads in the current synthetic spill plan.
   uint64_t reload_count;
 } loom_target_compile_report_spill_row_t;
+
+// One hard allocation-failure row in a compile report.
+typedef struct loom_target_compile_report_allocation_failure_row_t {
+  // Target artifact function symbol containing this allocation failure.
+  iree_string_view_t function_name;
+  // SSA value name whose interval could not be assigned.
+  iree_string_view_t value_name;
+  // Register class name for the failed value.
+  iree_string_view_t register_class;
+  // Numeric Loom type kind for the failed value class.
+  uint32_t type_kind;
+  // Numeric Loom scalar element type for the failed value class.
+  uint32_t element_type;
+  // Stable structured diagnostic failure code.
+  iree_string_view_t failure_code;
+  // Structured category describing the blocking constraint.
+  loom_target_compile_report_allocation_failure_blocking_kind_t blocking_kind;
+  // Operation mnemonic that produced the failed value, or a fallback context.
+  iree_string_view_t origin_operation_name;
+  // Block label containing |origin_operation_name|, or empty when unavailable.
+  iree_string_view_t origin_block_name;
+  // Program point where the failed interval starts.
+  uint32_t start_point;
+  // One-past-last storage program point required by the failed interval.
+  uint32_t end_point;
+  // Allocation units required by the failed interval.
+  uint32_t required_unit_count;
+  // Maximum allocation units available, or UINT32_MAX when unbounded.
+  uint32_t budget_units;
+  // Maximum boundary-live units observed for this pressure class.
+  uint32_t peak_live_units;
+  // Candidate location kind used while diagnosing the failure.
+  iree_string_view_t location_kind;
+  // Candidate base physical register or target ID, or UINT32_MAX.
+  uint32_t location_base;
+  // Candidate location width, or zero when unavailable.
+  uint32_t location_count;
+  // Assignment index for an active-assignment conflict, or UINT32_MAX.
+  uint32_t conflict_assignment_index;
+  // SSA value name occupying the conflicting assignment, or empty.
+  iree_string_view_t conflict_value_name;
+  // Program point where the conflicting assignment starts, or UINT32_MAX.
+  uint32_t conflict_start_point;
+  // One-past-last storage program point for the conflicting assignment, or
+  // UINT32_MAX.
+  uint32_t conflict_end_point;
+  // Conflicting assignment location kind, or empty.
+  iree_string_view_t conflict_location_kind;
+  // Conflicting assignment base physical register or target ID, or UINT32_MAX.
+  uint32_t conflict_location_base;
+  // Conflicting assignment location width, or zero when unavailable.
+  uint32_t conflict_location_count;
+} loom_target_compile_report_allocation_failure_row_t;
 
 // One source-to-target-low selection row copied into a compile report.
 typedef struct loom_target_compile_report_source_low_row_t {
@@ -603,6 +676,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t pressure_rows;
   // Owned predicted spill rows.
   loom_target_compile_report_row_list_t spill_rows;
+  // Owned hard allocation-failure rows.
+  loom_target_compile_report_row_list_t allocation_failure_rows;
   // Owned source-to-low selection rows.
   loom_target_compile_report_row_list_t source_low_rows;
   // Owned emitted source-memory packet rows.
@@ -708,6 +783,11 @@ iree_status_t loom_target_compile_report_record_pressure_row(
 iree_status_t loom_target_compile_report_record_spill_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_spill_row_t* row);
+
+// Records one hard allocation-failure row.
+iree_status_t loom_target_compile_report_record_allocation_failure_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_allocation_failure_row_t* row);
 
 // Records one source-low row.
 iree_status_t loom_target_compile_report_record_source_low_row(

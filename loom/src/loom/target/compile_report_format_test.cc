@@ -47,6 +47,35 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           /*.reload_count=*/2,
       },
   };
+  loom_target_compile_report_allocation_failure_row_t allocation_failure_rows[] = {
+      {
+          /*.function_name=*/IREE_SVL("branchy"),
+          /*.value_name=*/IREE_SVL("blocked"),
+          /*.register_class=*/IREE_SVL("test.scc"),
+          /*.type_kind=*/LOOM_TYPE_REGISTER,
+          /*.element_type=*/LOOM_SCALAR_TYPE_INDEX,
+          /*.failure_code=*/IREE_SVL("unspillable-register-exhausted"),
+          /*.blocking_kind=*/
+          LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_ACTIVE_ASSIGNMENT,
+          /*.origin_operation_name=*/IREE_SVL("low.return"),
+          /*.origin_block_name=*/IREE_SVL("entry"),
+          /*.start_point=*/2,
+          /*.end_point=*/5,
+          /*.required_unit_count=*/1,
+          /*.budget_units=*/1,
+          /*.peak_live_units=*/2,
+          /*.location_kind=*/IREE_SVL("physical_register"),
+          /*.location_base=*/0,
+          /*.location_count=*/1,
+          /*.conflict_assignment_index=*/0,
+          /*.conflict_value_name=*/IREE_SVL("leader"),
+          /*.conflict_start_point=*/0,
+          /*.conflict_end_point=*/5,
+          /*.conflict_location_kind=*/IREE_SVL("physical_register"),
+          /*.conflict_location_base=*/0,
+          /*.conflict_location_count=*/1,
+      },
+  };
   loom_target_compile_report_source_low_row_t source_low_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
@@ -119,6 +148,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   report.requested_detail_flags =
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
@@ -191,6 +221,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       &report, &pressure_rows[0]));
   IREE_ASSERT_OK(
       loom_target_compile_report_record_spill_row(&report, &spill_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_allocation_failure_row(
+      &report, &allocation_failure_rows[0]));
   report.source_low_selected_op_count = 4;
   report.source_low_emitted_op_count = 5;
   IREE_ASSERT_OK(loom_target_compile_report_record_source_low_row(
@@ -246,6 +278,19 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("spill[0] function=branchy "
                                           "value=rhs"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("allocation_failure[0] function=branchy "
+                                    "value=blocked class=test.scc "
+                                    "code=unspillable-register-exhausted "
+                                    "blocking=active-assignment"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("conflict_value=leader "
+                                          "conflict_start=0 conflict_end=5"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
@@ -364,6 +409,26 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("\"spill_rows\":{\"count\":1,"
                                           "\"rows\":["),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output,
+          IREE_SV("\"allocation_failure_rows\":{\"count\":1,"
+                  "\"rows\":[{\"index\":0,\"function\":\"branchy\","
+                  "\"value\":\"blocked\",\"register_class\":\"test.scc\""),
+          0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"failure_code\":\"unspillable-register-exhausted\","
+                        "\"blocking_kind\":\"active-assignment\""),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("\"conflict_value\":\"leader\","
+                                          "\"conflict_start_point\":0,"
+                                          "\"conflict_end_point\":5"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(

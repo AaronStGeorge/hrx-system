@@ -289,10 +289,9 @@ static iree_string_view_t loom_target_compile_report_block_name(
 }
 
 static iree_string_view_t loom_target_compile_report_value_class_name(
-    const loom_module_t* module, loom_liveness_value_class_t value_class) {
-  (void)module;
-  (void)value_class;
-  return iree_string_view_empty();
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_liveness_value_class_t value_class) {
+  return loom_low_diagnostic_value_class_name(descriptor_set, value_class);
 }
 
 static iree_string_view_t loom_target_compile_report_op_name(
@@ -650,7 +649,8 @@ iree_status_t loom_target_compile_report_record_low_lowering(
 
 static iree_status_t loom_target_compile_report_record_pressure_rows(
     loom_target_compile_report_t* report,
-    const loom_liveness_analysis_t* liveness) {
+    const loom_liveness_analysis_t* liveness,
+    const loom_low_descriptor_set_t* descriptor_set) {
   if (!loom_target_compile_report_wants_details(
           report, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS)) {
     return iree_ok_status();
@@ -661,7 +661,7 @@ static iree_status_t loom_target_compile_report_record_pressure_rows(
     const loom_target_compile_report_pressure_row_t row = {
         .function_name = report->function_name,
         .register_class = loom_target_compile_report_value_class_name(
-            liveness->module, summary->value_class),
+            descriptor_set, summary->value_class),
         .type_kind = summary->value_class.type_kind,
         .element_type = summary->value_class.element_type,
         .peak_live_units = summary->peak_live_units,
@@ -702,7 +702,7 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
         .value_name = loom_target_compile_report_value_name(
             allocation->module, spill_plan->value_id),
         .register_class = loom_target_compile_report_value_class_name(
-            allocation->module, value_class),
+            allocation->target.descriptor_set, value_class),
         .type_kind = value_class.type_kind,
         .element_type = value_class.element_type,
         .assignment_index = spill_plan->assignment_index,
@@ -717,6 +717,155 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
         loom_target_compile_report_record_spill_row(report, &row));
   }
   return iree_ok_status();
+}
+
+static loom_target_compile_report_allocation_failure_blocking_kind_t
+loom_target_compile_report_allocation_failure_blocking_kind(
+    loom_low_allocation_failure_blocking_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_ALLOCATION_FAILURE_BLOCKING_INTERVAL_EXCEEDS_BUDGET:
+      return LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_INTERVAL_EXCEEDS_BUDGET;
+    case LOOM_LOW_ALLOCATION_FAILURE_BLOCKING_ACTIVE_ASSIGNMENT:
+      return LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_ACTIVE_ASSIGNMENT;
+    case LOOM_LOW_ALLOCATION_FAILURE_BLOCKING_LOCATION_CONSTRAINT:
+      return LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_LOCATION_CONSTRAINT;
+    case LOOM_LOW_ALLOCATION_FAILURE_BLOCKING_NO_ASSIGNABLE_LOCATION:
+      return LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_NO_ASSIGNABLE_LOCATION;
+    case LOOM_LOW_ALLOCATION_FAILURE_BLOCKING_UNKNOWN:
+    default:
+      return LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_UNKNOWN;
+  }
+}
+
+static iree_string_view_t
+loom_target_compile_report_allocation_failure_conflict_value_name(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_failure_t* failure) {
+  return failure->conflict_value_id == LOOM_VALUE_ID_INVALID
+             ? iree_string_view_empty()
+             : loom_target_compile_report_value_name(
+                   allocation->module, failure->conflict_value_id);
+}
+
+static const loom_block_t*
+loom_target_compile_report_allocation_failure_origin_block(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_failure_t* failure, const loom_op_t* origin_op) {
+  if (allocation->module != NULL &&
+      failure->value_id < allocation->module->values.count) {
+    const loom_value_t* value =
+        loom_module_value(allocation->module, failure->value_id);
+    if (loom_value_is_block_arg(value)) {
+      return loom_value_def_block(value);
+    }
+  }
+  return origin_op != NULL ? origin_op->parent_block : NULL;
+}
+
+static iree_status_t loom_target_compile_report_record_allocation_failure_rows(
+    loom_target_compile_report_t* report,
+    const loom_low_allocation_table_t* allocation) {
+  if (!loom_low_allocation_failure_is_present(&allocation->failure) ||
+      !loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS)) {
+    return iree_ok_status();
+  }
+  const loom_low_allocation_failure_t* failure = &allocation->failure;
+  const loom_op_t* origin_op = loom_low_diagnostic_value_origin_op(
+      allocation->module, failure->value_id, allocation->function_op);
+  const loom_block_t* origin_block =
+      loom_target_compile_report_allocation_failure_origin_block(
+          allocation, failure, origin_op);
+  const loom_target_compile_report_allocation_failure_row_t row = {
+      .function_name = report->function_name,
+      .value_name = loom_target_compile_report_value_name(allocation->module,
+                                                          failure->value_id),
+      .register_class = loom_target_compile_report_value_class_name(
+          allocation->target.descriptor_set, failure->value_class),
+      .type_kind = failure->value_class.type_kind,
+      .element_type = failure->value_class.element_type,
+      .failure_code = failure->failure_code,
+      .blocking_kind =
+          loom_target_compile_report_allocation_failure_blocking_kind(
+              failure->blocking_kind),
+      .origin_operation_name =
+          loom_target_compile_report_op_name(allocation->module, origin_op),
+      .origin_block_name = loom_target_compile_report_block_name(
+          allocation->module, origin_block),
+      .start_point = failure->start_point,
+      .end_point = failure->end_point,
+      .required_unit_count = failure->required_unit_count,
+      .budget_units = failure->budget_units,
+      .peak_live_units = failure->peak_live_units,
+      .location_kind =
+          loom_low_allocation_location_kind_name(failure->location_kind),
+      .location_base = failure->location_base,
+      .location_count = failure->location_count,
+      .conflict_assignment_index = failure->conflict_assignment_index,
+      .conflict_value_name =
+          loom_target_compile_report_allocation_failure_conflict_value_name(
+              allocation, failure),
+      .conflict_start_point = failure->conflict_start_point,
+      .conflict_end_point = failure->conflict_end_point,
+      .conflict_location_kind =
+          failure->conflict_value_id == LOOM_VALUE_ID_INVALID
+              ? iree_string_view_empty()
+              : loom_low_allocation_location_kind_name(
+                    failure->conflict_location_kind),
+      .conflict_location_base = failure->conflict_location_base,
+      .conflict_location_count = failure->conflict_location_count,
+  };
+  return loom_target_compile_report_record_allocation_failure_row(report, &row);
+}
+
+static void loom_target_compile_report_record_low_allocation_identity(
+    loom_target_compile_report_t* report,
+    const loom_low_allocation_table_t* allocation) {
+  const iree_string_view_t export_symbol =
+      allocation->target.bundle_storage.export_plan.export_symbol;
+  report->function_name =
+      !iree_string_view_is_empty(export_symbol)
+          ? export_symbol
+          : loom_low_diagnostic_function_name(allocation->module,
+                                              allocation->function_op);
+  report->lowered_symbol = loom_low_diagnostic_function_name(
+      allocation->module, allocation->function_op);
+  report->target_bundle_name = allocation->target.bundle_storage.bundle.name;
+  report->target_snapshot_name =
+      allocation->target.bundle_storage.snapshot.name;
+  report->target_export_name =
+      allocation->target.bundle_storage.export_plan.name;
+  report->target_export_symbol =
+      allocation->target.bundle_storage.export_plan.export_symbol;
+  report->target_config_name = allocation->target.bundle_storage.config.name;
+}
+
+static iree_status_t loom_target_compile_report_record_low_allocation_contents(
+    loom_target_compile_report_t* report,
+    const loom_low_allocation_table_t* allocation) {
+  const loom_liveness_analysis_t* liveness = &allocation->liveness;
+  loom_target_compile_report_record_allocation(
+      report, allocation->assignment_count, allocation->spill_count,
+      allocation->spill_plan_count, allocation->coalesced_copy_count,
+      allocation->materialized_copy_count);
+  iree_status_t status = loom_target_compile_report_record_pressure_rows(
+      report, liveness, allocation->target.descriptor_set);
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_record_spill_rows(report, allocation);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_record_allocation_failure_rows(
+        report, allocation);
+  }
+  return status;
+}
+
+iree_status_t loom_target_compile_report_record_low_allocation(
+    loom_target_compile_report_t* report,
+    const loom_low_allocation_table_t* allocation) {
+  loom_target_compile_report_record_low_allocation_identity(report, allocation);
+  return loom_target_compile_report_record_low_allocation_contents(report,
+                                                                   allocation);
 }
 
 iree_status_t loom_target_compile_report_record_low_emission_frame(
@@ -737,19 +886,11 @@ iree_status_t loom_target_compile_report_record_low_emission_frame(
       frame->schedule.dependency_count, frame->schedule.resource_use_count,
       frame->schedule.hazard_gap_count, frame->schedule.model_summary_count,
       liveness->pressure_summary_count, peak_live_units);
-  loom_target_compile_report_record_allocation(
-      report, frame->allocation.assignment_count, frame->allocation.spill_count,
-      frame->allocation.spill_plan_count,
-      frame->allocation.coalesced_copy_count,
-      frame->allocation.materialized_copy_count);
   loom_target_compile_report_record_low_static_instruction_mix(report, frame);
   loom_target_compile_report_record_move_causes(report, frame);
   iree_status_t status =
-      loom_target_compile_report_record_pressure_rows(report, liveness);
-  if (iree_status_is_ok(status)) {
-    status = loom_target_compile_report_record_spill_rows(report,
-                                                          &frame->allocation);
-  }
+      loom_target_compile_report_record_low_allocation_contents(
+          report, &frame->allocation);
   loom_low_allocation_release_value_scratch(&value_scratch);
   return status;
 }

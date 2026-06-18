@@ -433,6 +433,10 @@ static iree_status_t loom_ireevm_archive_emit_function(
       state->module, function->op, &frame_options, &spill_free_options,
       &state->table_arena, &frame));
   if (state->diagnostic_emitter.error_count != 0) {
+    if (state->report != NULL && frame.allocation.function_op != NULL) {
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_record_low_allocation(
+          state->report, &frame.allocation));
+    }
     return iree_ok_status();
   }
   if (state->report != NULL) {

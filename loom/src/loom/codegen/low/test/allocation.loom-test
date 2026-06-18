@@ -141,6 +141,34 @@ low.func.def target(@test_target) @fixed_value_unit_count_mismatch(%value: reg<t
 
 // ====
 
+// RUN: emit low-allocation-json @unspillable_interval_exceeds_budget_reports_failure test.special=1
+
+test.target<low_core> @test_target
+
+// ERROR@+1: BACKEND/005 {function_name="unspillable_interval_exceeds_budget_reports_failure", value_class="test.special", budget="1", peak="2", failure_code="unspillable-register-exhausted"}
+low.func.def target(@test_target) @unspillable_interval_exceeds_budget_reports_failure(%wide: reg<test.special x2>) -> (reg<test.special x2>) asm<test.low.core> {
+  return %wide
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"unspillable_interval_exceeds_budget_reports_failure","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":0,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[],"spill_plans":[],"copy_decisions":[],"remarks":[],"failure":{"code":"unspillable-register-exhausted","blocking_kind":"interval-exceeds-budget","value":{"id":0,"name":"wide","type":"reg<test.special x2>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.special"},"start_point":0,"end_point":1,"required_units":2,"budget_units":1,"peak_live_units":2,"location":{"kind":"physical_register","base":null,"count":0},"conflict":null}}
+
+// ====
+
+// RUN: emit low-allocation-json @unspillable_active_conflict_reports_failure test.special=1
+
+test.target<low_core> @test_target
+
+// ERROR@+1: BACKEND/005 {function_name="unspillable_active_conflict_reports_failure", value_class="test.special", budget="1", peak="2", failure_code="unspillable-register-exhausted"}
+low.func.def target(@test_target) @unspillable_active_conflict_reports_failure(%leader: reg<test.special>, %blocked: reg<test.special>) -> (reg<test.special>, reg<test.special>) asm<test.low.core> {
+  return %leader, %blocked : reg<test.special>, reg<test.special>
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"unspillable_active_conflict_reports_failure","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":1,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"leader","type":"reg<test.special>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.special"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[],"failure":{"code":"unspillable-register-exhausted","blocking_kind":"active-assignment","value":{"id":1,"name":"blocked","type":"reg<test.special>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.special"},"start_point":0,"end_point":1,"required_units":1,"budget_units":1,"peak_live_units":2,"location":{"kind":"physical_register","base":0,"count":1},"conflict":{"assignment":0,"value":{"id":0,"name":"leader","type":"reg<test.special>"},"start_point":0,"end_point":1,"location":{"kind":"physical_register","base":0,"count":1}}}}
+
+// ====
+
 // RUN: emit low-allocation-json @dead_result_clobber_window
 
 test.target<low_core> @test_target
