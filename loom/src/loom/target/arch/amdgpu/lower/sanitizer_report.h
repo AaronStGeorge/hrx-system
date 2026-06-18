@@ -21,6 +21,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_feedback.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,9 +37,6 @@ typedef struct loom_amdgpu_feedback_packet_address_t
 
 // Byte length of the AMDGPU sanitizer access report payload.
 #define LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_BYTE_LENGTH 64u
-
-// Trap ID used after emitting a sanitizer report.
-#define LOOM_AMDGPU_SANITIZER_TRAP_ID 0x100u
 
 // Access kind values carried by AMDGPU sanitizer access reports.
 typedef uint32_t loom_amdgpu_sanitizer_access_kind_t;
@@ -92,21 +90,12 @@ typedef struct loom_amdgpu_sanitizer_access_report_t {
   loom_value_id_t shadow_value;
 } loom_amdgpu_sanitizer_access_report_t;
 
-typedef struct loom_amdgpu_sanitizer_report_source_t {
-  // Device-visible dispatch packet pointer captured for host diagnostics.
-  loom_value_id_t dispatch_ptr;
-  // X dimension workgroup id captured for host diagnostics.
-  loom_value_id_t workgroup_id_x;
-  // X dimension workitem id captured for host diagnostics.
-  loom_value_id_t workitem_id_x;
-} loom_amdgpu_sanitizer_report_source_t;
-
-typedef struct loom_amdgpu_sanitizer_access_report_trap_island_t {
+typedef struct loom_amdgpu_sanitizer_access_report_island_t {
   // Entry block accepting the source/report tuple for one failed access site.
   loom_block_t* entry_block;
-  // Final trap block reached after optional reporting or when reporting is not
+  // Terminal block reached after optional reporting or when reporting is not
   // available.
-  loom_block_t* trap_block;
+  loom_block_t* terminal_block;
   // Access kind handled by this island.
   loom_amdgpu_sanitizer_access_kind_t access_kind;
   // Report flags handled by this island.
@@ -115,7 +104,7 @@ typedef struct loom_amdgpu_sanitizer_access_report_trap_island_t {
   loom_amdgpu_sanitizer_report_source_t source_args;
   // Block arguments carrying access report values in |entry_block|.
   loom_amdgpu_sanitizer_access_report_t report_args;
-} loom_amdgpu_sanitizer_access_report_trap_island_t;
+} loom_amdgpu_sanitizer_access_report_island_t;
 
 typedef struct loom_amdgpu_sanitizer_access_report_failure_branch_t {
   // Per-site cold block that canonicalizes report values and enters the island.
@@ -137,45 +126,45 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_payload(
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location);
 
-// Emits a fatal AMDGPU sanitizer access report producer.
+// Emits a terminal AMDGPU sanitizer access report producer.
 //
 // The builder must be positioned at the end of a target-low block. This helper
 // emits a cold CFG that loads the runtime feedback config, branches around
 // feedback channel dereferences when feedback is disabled, reserves packet
 // storage when possible, writes and publishes one ASAN-kind feedback packet on
-// successful reservation, and emits S_TRAP on all paths. The builder is left in
-// the trap block after the S_TRAP packet; callers remain responsible for adding
-// the target-low terminator required by the surrounding function.
-iree_status_t loom_amdgpu_build_sanitizer_access_report_trap(
+// successful reservation, and terminates the current wave on all paths. The
+// builder is left in the terminal block after the return terminator has been
+// emitted.
+iree_status_t loom_amdgpu_build_sanitizer_access_report_terminate(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t feedback_config_symbol,
     const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location);
 
-// Builds a shared cold report/trap island for failed access assertions.
+// Builds a shared cold report island for failed access assertions.
 //
 // The island accepts one failed access site's report tuple as block arguments,
-// attempts to enqueue a feedback packet, and traps whether reporting succeeds,
-// is disabled, or cannot reserve packet storage. Call
-// loom_amdgpu_build_sanitizer_access_report_trap_branch from each per-site cold
-// block to enter the island. Leaves the builder positioned at the island's trap
-// block after the trap packet has been emitted.
-iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_island(
+// attempts to enqueue a feedback packet, and terminates the current wave
+// whether reporting succeeds, is disabled, or cannot reserve packet storage.
+// Call loom_amdgpu_build_sanitizer_access_report_branch from each per-site cold
+// block to enter the island. Leaves the builder positioned at the island's
+// terminal block after the return terminator has been emitted.
+iree_status_t loom_amdgpu_build_sanitizer_access_report_island(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_block_t* after_block, loom_symbol_ref_t feedback_config_symbol,
     loom_amdgpu_sanitizer_access_kind_t access_kind,
     loom_amdgpu_sanitizer_report_flags_t flags, loom_location_id_t location,
-    loom_amdgpu_sanitizer_access_report_trap_island_t* out_island);
+    loom_amdgpu_sanitizer_access_report_island_t* out_island);
 
 // Terminates the current cold block with a branch into |island|.
 //
 // Values are converted to the island's canonical block-argument register
 // classes in the current block, so this should only be used on the
 // already-failing path.
-iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_branch(
+iree_status_t loom_amdgpu_build_sanitizer_access_report_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_sanitizer_access_report_trap_island_t* island,
+    const loom_amdgpu_sanitizer_access_report_island_t* island,
     const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location);
@@ -187,11 +176,11 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_branch(
 // failed. The current block receives no report operations, only the conditional
 // branch terminator. The false edge falls through to a newly-created
 // continuation block, while the true edge enters a per-site cold block that
-// materializes report arguments and branches to |island|. Leaves the builder
-// positioned at the continuation block.
+// converts the already-built report tuple to |island| arguments. Leaves the
+// builder positioned at the continuation block.
 iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_sanitizer_access_report_trap_island_t* island,
+    const loom_amdgpu_sanitizer_access_report_island_t* island,
     loom_value_id_t failure_scc,
     const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
@@ -204,16 +193,32 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_branch(
 // |failure_mask| must be an SGPRx2 native lane mask where set bits identify
 // lanes that failed the assertion. The hot block only compares the mask against
 // zero and conditionally branches. The per-site cold block narrows EXEC to the
-// failed lanes before materializing report arguments and branching to |island|.
-// Since the island always traps, the saved EXEC value is intentionally not
-// restored. Leaves the builder positioned at the continuation block.
+// failed lanes before converting the already-built report tuple to |island|
+// arguments. Since the island terminates the failed wave, the saved EXEC value
+// is intentionally not restored. Leaves the builder positioned at the
+// continuation block.
 iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_sanitizer_access_report_trap_island_t* island,
+    const loom_amdgpu_sanitizer_access_report_island_t* island,
     loom_value_id_t failure_mask,
     const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
+
+// Splits the current hot block on an EXEC-width failure mask and enters the
+// cold per-site failure block.
+//
+// |failure_mask| must be an SGPRx2 native lane mask where set bits identify
+// lanes that failed the assertion. The hot block only compares the mask against
+// zero and conditionally branches. The builder is left positioned in the
+// per-site cold failure block after EXEC has been narrowed to the failed lanes.
+// The caller must terminate that block, usually with
+// loom_amdgpu_build_sanitizer_access_report_branch, and then move the builder
+// to |out_branch->continuation_block|.
+iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t failure_mask, loom_location_id_t location,
     loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
 
 // Splits the current hot block on an EXEC-width failure mask and traps failed

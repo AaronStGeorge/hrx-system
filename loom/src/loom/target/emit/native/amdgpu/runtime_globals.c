@@ -24,6 +24,9 @@ iree_host_size_t loom_amdgpu_runtime_global_count(
   if (iree_any_bit_set(flags, LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG)) {
     ++count;
   }
+  if (iree_any_bit_set(flags, LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG)) {
+    ++count;
+  }
   return count;
 }
 
@@ -36,6 +39,14 @@ void loom_amdgpu_runtime_global_symbols(
     out_symbols[count++] = (loom_amdgpu_hsaco_data_symbol_t){
         .name = LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_NAME,
         .byte_length = LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH,
+        .alignment = LOOM_AMDGPU_RUNTIME_GLOBAL_CONFIG_ALIGNMENT,
+        .flags = LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+    };
+  }
+  if (iree_any_bit_set(flags, LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG)) {
+    out_symbols[count++] = (loom_amdgpu_hsaco_data_symbol_t){
+        .name = LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_NAME,
+        .byte_length = LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_BYTE_LENGTH,
         .alignment = LOOM_AMDGPU_RUNTIME_GLOBAL_CONFIG_ALIGNMENT,
         .flags = LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
     };

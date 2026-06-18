@@ -31,6 +31,7 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
       /*.queue_count=*/2,
       /*.compute_unit_count=*/40,
       /*.wavefront_size=*/32,
+      /*.maximum_workgroup_local_memory_size=*/64 * 1024,
       /*.flags=*/IREE_HAL_AMDGPU_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_UUID |
           IREE_HAL_AMDGPU_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_PCI_ADDRESS,
   };
@@ -76,6 +77,9 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
   EXPECT_EQ(dispatch->subgroup.default_size, 32);
   EXPECT_EQ(dispatch->subgroup.supported_size_mask, 1ull << 32);
   EXPECT_EQ(dispatch->execution.unit_count, 40);
+  EXPECT_EQ(dispatch->execution.maximum_workgroup_local_memory_size, 64 * 1024);
+  EXPECT_EQ(dispatch->execution.maximum_workgroup_local_memory_size_optin,
+            64 * 1024);
 
   const iree_hal_device_memory_spec_t* memory =
       iree_hal_device_spec_memory(device_spec);

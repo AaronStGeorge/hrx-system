@@ -10,6 +10,7 @@
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_PREAMBLE_H_
 
 #include "loom/codegen/low/lower/lower.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
@@ -32,6 +33,36 @@ iree_status_t loom_amdgpu_emit_entry_setup(void* user_data,
 // Lowers a kernel preamble source op using its pre-bound live-in value.
 iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op);
+
+// Looks up the current dispatch packet pointer live-in.
+iree_status_t loom_amdgpu_lookup_current_dispatch_ptr(
+    loom_low_lower_context_t* context, loom_value_id_t* out_low_value_id);
+
+// Looks up the current workgroup id live-in for |dimension|.
+iree_status_t loom_amdgpu_lookup_current_workgroup_id(
+    loom_low_lower_context_t* context, loom_kernel_dimension_t dimension,
+    loom_value_id_t* out_low_value_id);
+
+// Looks up or extracts the current workitem id for |dimension|.
+iree_status_t loom_amdgpu_lookup_current_workitem_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_kernel_dimension_t dimension, loom_value_id_t* out_low_value_id);
+
+// Emits the dynamic workgroup count for |dimension| from the dispatch packet.
+iree_status_t loom_amdgpu_emit_current_workgroup_count(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_kernel_dimension_t dimension, loom_type_t result_type,
+    loom_value_id_t* out_low_value_id);
+
+// Emits the current workgroup id flattened with dynamic launch dimensions.
+iree_status_t loom_amdgpu_emit_current_workgroup_linear_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_type_t result_type, loom_value_id_t* out_linear_id);
+
+// Emits the current workitem id flattened within the static workgroup.
+iree_status_t loom_amdgpu_emit_current_workitem_linear_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_type_t result_type, loom_value_id_t* out_linear_id);
 
 // Verifies AMDGPU low legality for launch preamble query source ops.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(

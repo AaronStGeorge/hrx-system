@@ -380,6 +380,25 @@ ERR_LOWERING_045 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_046: Sanitizer observation cannot represent memory operation.
+ERR_LOWERING_046 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=46,
+    severity=Severity.ERROR,
+    summary="Sanitizer observation cannot represent memory operation.",
+    message=("{phase_name} cannot observe {op_name}: {reason}"),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Lower the memory operation to sanitizer-observable scalar accesses "
+        "before observation insertion or add a sanitizer observation form that "
+        "preserves the operation's lane activity"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_022,
     ERR_LOWERING_023,
@@ -399,4 +418,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_043,
     ERR_LOWERING_044,
     ERR_LOWERING_045,
+    ERR_LOWERING_046,
 )

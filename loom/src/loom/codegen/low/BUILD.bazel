@@ -302,6 +302,24 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "allocation_rematerialization",
+    srcs = ["allocation_rematerialization.c"],
+    hdrs = ["allocation_rematerialization.h"],
+    deps = [
+        ":allocation",
+        ":descriptor_traits",
+        ":target_binding",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/rewrite:materialize",
+        "//loom/src/loom/rewrite:remap",
+        "//loom/src/loom/rewrite:rewriter",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "allocation_json",
     srcs = ["allocation_json.c"],
     hdrs = ["allocation_json.h"],
@@ -439,6 +457,7 @@ loom_cc_library(
         ":addressability",
         ":allocation",
         ":allocation_materialization",
+        ":allocation_rematerialization",
         ":diagnostics",
         ":function",
         ":memory_access",

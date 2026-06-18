@@ -45,6 +45,8 @@ typedef struct iree_hal_amdgpu_device_spec_physical_device_params_t {
   uint32_t compute_unit_count;
   // Native wavefront size in lanes.
   uint32_t wavefront_size;
+  // Maximum workgroup local-memory byte length.
+  uint32_t maximum_workgroup_local_memory_size;
   // Optional physical-device parameter flags.
   iree_hal_amdgpu_device_spec_physical_device_flags_t flags;
 } iree_hal_amdgpu_device_spec_physical_device_params_t;

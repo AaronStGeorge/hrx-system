@@ -170,6 +170,11 @@ void iree_hal_amdgpu_aql_program_builder_set_pending_barrier_scopes(
     iree_hal_amdgpu_aql_program_builder_t* builder, uint8_t acquire_scope,
     uint8_t release_scope);
 
+// ORs |flags| into the current block header.
+void iree_hal_amdgpu_aql_program_builder_or_current_block_flags(
+    iree_hal_amdgpu_aql_program_builder_t* builder,
+    iree_hal_amdgpu_command_buffer_block_flags_t flags);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

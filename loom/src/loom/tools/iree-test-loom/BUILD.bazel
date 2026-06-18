@@ -91,6 +91,7 @@ loom_cc_library(
     srcs = ["main.c"],
     hdrs = ["main.h"],
     deps = [
+        "//loom/src/loom/sanitizer:options_cli",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/tooling/cli:help",
         "//loom/src/loom/tooling/context",
@@ -137,6 +138,7 @@ iree_execution_test_suite(
     name = "amdgpu_execution_test",
     data = [
         "testdata/amdgpu_hal_actual.loom",
+        "testdata/amdgpu_sanitizer_actual.loom",
     ],
     manifests = ["iree-test-loom_amdgpu.test.json"],
     tags = [

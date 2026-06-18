@@ -16,6 +16,7 @@
 #include "loom/codegen/low/transforms/pipeline/source_to_low.h"
 #include "loom/codegen/low/transforms/pipeline/target_legalize.h"
 #include "loom/sanitizer/pipeline_passes.h"
+#include "loom/sanitizer/race_insertion.h"
 #include "loom/transforms/cfg/branch_fusion.h"
 #include "loom/transforms/cfg/branch_sink.h"
 #include "loom/transforms/cfg/cfg_simplify.h"
@@ -265,6 +266,14 @@ static const loom_pass_option_schema_t
         },
 };
 
+static const loom_pass_option_schema_t
+    kSanitizerInsertRaceObservationsOptionSchema[] = {
+        {
+            .name = IREE_SVL("checks"),
+            .kind = LOOM_PASS_OPTION_SCHEMA_STRING,
+        },
+};
+
 static const loom_pass_option_enum_value_t kTemplateSelectionModeValues[] = {
     {.value = IREE_SVL("early")},
     {.value = IREE_SVL("final")},
@@ -407,6 +416,15 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .option_schema = kSanitizerInsertAssertionsOptionSchema,
         .option_schema_count =
             IREE_ARRAYSIZE(kSanitizerInsertAssertionsOptionSchema),
+    },
+    {
+        .key = IREE_SVL("sanitizer-insert-race-observations"),
+        .info = loom_sanitizer_insert_race_observations_pass_info,
+        .function_run = loom_sanitizer_insert_race_observations_run,
+        .create = loom_sanitizer_insert_race_observations_create,
+        .option_schema = kSanitizerInsertRaceObservationsOptionSchema,
+        .option_schema_count =
+            IREE_ARRAYSIZE(kSanitizerInsertRaceObservationsOptionSchema),
     },
     {
         .key = IREE_SVL("sanitizer-materialize-assertions"),

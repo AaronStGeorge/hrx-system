@@ -152,6 +152,30 @@ bool loom_amdgpu_memory_access_select_flat_global_address(
     loom_amdgpu_memory_access_t* out_access,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic);
 
+// Selects an explicit VGPR byte-offset expression for source access
+// instrumentation.
+//
+// The selected access has all static byte offset, including target-assigned
+// workgroup/private alloca layout, and all dynamic byte terms routed through
+// VADDR. It does not select a memory packet descriptor. Callers can pass the
+// result to loom_amdgpu_emit_memory_vaddr with no base value to materialize the
+// exact u32 memory-space-relative byte offset.
+bool loom_amdgpu_memory_access_select_u32_vaddr_byte_offset(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_func_like_t source_function,
+    const loom_low_source_memory_access_plan_t* source,
+    loom_amdgpu_memory_access_t* out_access,
+    loom_amdgpu_memory_access_diagnostic_t* out_diagnostic);
+
+// Folds target-assigned workgroup/private alloca layout into a source memory
+// access so later offset materialization uses the same address domain as real
+// AMDGPU memory packets.
+bool loom_amdgpu_memory_access_include_alloca_root_byte_offset(
+    const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
+    loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic);
+
 // Selects target operand paths for dynamic source memory address terms.
 bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,

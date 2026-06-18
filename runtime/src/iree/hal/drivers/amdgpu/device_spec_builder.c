@@ -277,11 +277,16 @@ static iree_status_t iree_hal_amdgpu_device_spec_populate_dispatch(
     const iree_hal_amdgpu_device_spec_params_t* params,
     iree_hal_device_spec_builder_t* builder) {
   uint32_t wavefront_size = params->physical_devices[0].wavefront_size;
+  uint32_t maximum_workgroup_local_memory_size =
+      params->physical_devices[0].maximum_workgroup_local_memory_size;
   uint32_t compute_unit_count = 0;
   for (iree_host_size_t i = 0; i < params->physical_device_count; ++i) {
     const iree_hal_amdgpu_device_spec_physical_device_params_t*
         physical_device = &params->physical_devices[i];
     wavefront_size = iree_min(wavefront_size, physical_device->wavefront_size);
+    maximum_workgroup_local_memory_size =
+        iree_min(maximum_workgroup_local_memory_size,
+                 physical_device->maximum_workgroup_local_memory_size);
     if (IREE_UNLIKELY(UINT32_MAX - compute_unit_count <
                       physical_device->compute_unit_count)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -299,6 +304,10 @@ static iree_status_t iree_hal_amdgpu_device_spec_populate_dispatch(
       .subgroup.supported_size_mask = subgroup_size_supported_mask,
       .execution.unit_count = compute_unit_count,
       .execution.group_count = (uint32_t)params->physical_device_count,
+      .execution.maximum_workgroup_local_memory_size =
+          maximum_workgroup_local_memory_size,
+      .execution.maximum_workgroup_local_memory_size_optin =
+          maximum_workgroup_local_memory_size,
       .addressing.pointer_size_bits = 64,
       .addressing.address_space_bits = 64,
       .flags = IREE_HAL_DEVICE_DISPATCH_SPEC_FLAG_NONE,

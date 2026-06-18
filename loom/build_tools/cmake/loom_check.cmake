@@ -86,6 +86,10 @@ function(loom_check_test_suite)
   endif()
 
   foreach(_SRC IN LISTS _RULE_SRCS)
+    set(_ABS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${_SRC}")
+    cmake_path(RELATIVE_PATH _ABS_SRC
+      BASE_DIRECTORY "${IREE_ROOT_DIR}"
+      OUTPUT_VARIABLE _LOGICAL_SRC)
     _loom_check_test_name(
       _TEST_NAME
       "${_SRC}"
@@ -95,7 +99,9 @@ function(loom_check_test_suite)
       NAME
         "${_TEST_NAME}"
       ARGS
-        "${CMAKE_CURRENT_SOURCE_DIR}/${_SRC}"
+        "--source-prefix-map=${IREE_ROOT_DIR}/="
+        "--source-prefix-map=${_ABS_SRC}=${_LOGICAL_SRC}"
+        "${_ABS_SRC}"
       SRC
         ${_RULE_RUNNER}
       ${_DATA_ARG}

@@ -40,6 +40,15 @@
 // Preferred priority for pooled allocations in the default pool set.
 #define IREE_HAL_AMDGPU_PHYSICAL_DEVICE_DEFAULT_POOL_PRIORITY_TLSF 10
 
+// Conservative maximum group-segment byte length supported by the AMDGPU
+// dispatch paths used here. HSA exposes executable group-segment requirements
+// but does not expose a portable per-agent LDS capacity property.
+#define IREE_HAL_AMDGPU_PHYSICAL_DEVICE_GROUP_SEGMENT_MAX_SIZE_DEFAULT \
+  (64 * 1024)
+static_assert(IREE_HAL_AMDGPU_PHYSICAL_DEVICE_GROUP_SEGMENT_MAX_SIZE_DEFAULT !=
+                  0,
+              "group segment max size default must be non-zero");
+
 typedef struct iree_hal_amdgpu_agent_first_isa_t {
   // Number of ISAs seen during iteration.
   uint32_t count;
@@ -867,6 +876,8 @@ iree_hal_amdgpu_physical_device_initialize_device_library_and_blit_context(
   IREE_RETURN_IF_ERROR(
       iree_hsa_agent_get_info(IREE_LIBHSA(libhsa), device_agent,
                               HSA_AGENT_INFO_WAVEFRONT_SIZE, &wavefront_size));
+  const uint32_t group_segment_max_size =
+      IREE_HAL_AMDGPU_PHYSICAL_DEVICE_GROUP_SEGMENT_MAX_SIZE_DEFAULT;
 
   // Validate launch metadata before passing it to the blit context. A broken
   // HSA bring-up that returns garbage here must fail loud with a clear message
@@ -886,6 +897,7 @@ iree_hal_amdgpu_physical_device_initialize_device_library_and_blit_context(
   }
   out_physical_device->compute_unit_count = compute_unit_count;
   out_physical_device->wavefront_size = wavefront_size;
+  out_physical_device->group_segment_max_size = group_segment_max_size;
   iree_hal_amdgpu_device_buffer_transfer_context_initialize(
       &out_physical_device->device_kernels, compute_unit_count, wavefront_size,
       &out_physical_device->buffer_transfer_context);
@@ -1214,7 +1226,8 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
         libhsa, logical_device, proactor, physical_device->device_agent,
         &kernarg_ring_memory.descriptor, host_memory_pools->fine_pool,
         frontier_tracker, queue_axis, resolved.queue_affinity,
-        completion_thread_affinity, physical_device->wait_barrier_strategy,
+        logical_queue_ordinal, queue_ordinal, completion_thread_affinity,
+        physical_device->wait_barrier_strategy,
         physical_device->vendor_packet_capabilities,
         physical_device->pm4_timestamp_strategy, epoch_signal_table,
         feedback_state, &physical_device->fine_host_block_pool,

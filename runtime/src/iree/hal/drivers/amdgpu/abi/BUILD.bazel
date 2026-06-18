@@ -23,6 +23,7 @@ ABI_HDRS = [
     "queue.h",
     "signal.h",
     "timestamp.h",
+    "tsan.h",
 ]
 
 filegroup(

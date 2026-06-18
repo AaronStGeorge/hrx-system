@@ -13,6 +13,8 @@
 #define LOOM_OPS_SANITIZER_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/ir/facts.h"
+#include "loom/ops/atomic.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +25,9 @@ enum {
   LOOM_OP_SANITIZER_ASSERT_VALUE = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 1),
   LOOM_OP_SANITIZER_ASSERT_OP = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 2),
   LOOM_OP_SANITIZER_ASSERT_LAYOUT = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 3),
-  LOOM_OP_SANITIZER_COUNT_ = 4,
+  LOOM_OP_SANITIZER_RACE_ACCESS = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 4),
+  LOOM_OP_SANITIZER_RACE_SYNC = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 5),
+  LOOM_OP_SANITIZER_COUNT_ = 6,
 };
 
 // Logical memory access kind covered by a sanitizer access assertion.
@@ -33,6 +37,14 @@ typedef enum loom_sanitizer_assert_access_kind_e {
   LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ_WRITE = 2,
   LOOM_SANITIZER_ASSERT_ACCESS_KIND_COUNT_ = 3,
 } loom_sanitizer_assert_access_kind_t;
+
+// Logical memory access kind covered by a sanitizer race observation.
+typedef enum loom_sanitizer_race_access_kind_e {
+  LOOM_SANITIZER_RACE_ACCESS_KIND_READ = 0,
+  LOOM_SANITIZER_RACE_ACCESS_KIND_WRITE = 1,
+  LOOM_SANITIZER_RACE_ACCESS_KIND_READ_WRITE = 2,
+  LOOM_SANITIZER_RACE_ACCESS_KIND_COUNT_ = 3,
+} loom_sanitizer_race_access_kind_t;
 
 // LOOM_OP_SANITIZER_ASSERT_ACCESS: Assert that a logical indexed view access is valid. The assertion has the same index-list shape as ordinary view memory operations so source-level memory contracts remain typed until target lowering materializes address checks.
 // sanitizer.assert.access<read> %view[%row, %col] : view<[%M]x[%N]xf32, %layout>
@@ -119,6 +131,56 @@ iree_status_t loom_sanitizer_assert_layout_type_transfer(
     loom_type_transfer_context_t* context,
     const loom_module_t* module, loom_op_t* op);
 iree_status_t loom_sanitizer_assert_layout_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_SANITIZER_RACE_ACCESS: Observe a logical indexed view access for race detection. Unlike sanitizer.assert.access, this op does not assert that the access is individually valid and does not refine the continuing path. It records a memory event that target materialization can compare against prior unordered events in the selected race detector.
+// sanitizer.race.access<read> %view[%lane] : view<64xi32, #dense>
+LOOM_DEFINE_ISA(loom_sanitizer_race_access_isa, LOOM_OP_SANITIZER_RACE_ACCESS)
+LOOM_DEFINE_OPERAND(loom_sanitizer_race_access_view, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_sanitizer_race_access_indices, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_race_access_kind, 0, loom_sanitizer_race_access_kind_t)
+LOOM_DEFINE_ATTR_BOOL(loom_sanitizer_race_access_atomic, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_race_access_ordering, 2, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_race_access_scope, 3, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_sanitizer_race_access_static_indices, 4)
+enum loom_sanitizer_race_access_build_flag_bits_e {
+  LOOM_SANITIZER_RACE_ACCESS_BUILD_FLAG_HAS_ORDERING = 1u << 0,
+  LOOM_SANITIZER_RACE_ACCESS_BUILD_FLAG_HAS_SCOPE = 1u << 1,
+};
+typedef uint32_t loom_sanitizer_race_access_build_flags_t;
+iree_status_t loom_sanitizer_race_access_build(
+    loom_builder_t* builder,
+    loom_sanitizer_race_access_build_flags_t build_flags,
+    loom_sanitizer_race_access_kind_t kind,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    bool atomic,
+    loom_optional uint8_t ordering,
+    loom_optional uint8_t scope,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_sanitizer_race_access_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_SANITIZER_RACE_SYNC: Observe a synchronization boundary for race detection. The original synchronization operation remains the semantic barrier or fence; this op records the boundary needed by race-detector materialization.
+// sanitizer.race.sync<workgroup> {ordering = acq_rel, scope = workgroup}
+LOOM_DEFINE_ISA(loom_sanitizer_race_sync_isa, LOOM_OP_SANITIZER_RACE_SYNC)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_race_sync_memory_space, 0, loom_value_fact_memory_space_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_race_sync_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_race_sync_scope, 2, loom_atomic_scope_t)
+iree_status_t loom_sanitizer_race_sync_build(
+    loom_builder_t* builder,
+    loom_value_fact_memory_space_t memory_space,
+    loom_atomic_ordering_t ordering,
+    loom_atomic_scope_t scope,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_sanitizer_race_sync_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

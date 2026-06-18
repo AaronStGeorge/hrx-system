@@ -220,6 +220,8 @@ typedef struct iree_hal_amdgpu_physical_device_t {
   uint32_t compute_unit_count;
   // Native wavefront size reported by HSA for this GPU agent.
   uint32_t wavefront_size;
+  // Maximum group segment byte length used for dispatch and sanitizer sizing.
+  uint32_t group_segment_max_size;
   // HDP flush register descriptor reported by HSA for this GPU agent.
   hsa_amd_hdp_flush_t hdp_flush;
   // Host memory pools for the CPU agent nearest to |device_agent|.

@@ -35,6 +35,9 @@ typedef struct iree_hal_device_t iree_hal_device_t;
 // ABI version for |iree_hal_device_ubsan_report_t|.
 #define IREE_HAL_DEVICE_UBSAN_REPORT_ABI_VERSION_0 0u
 
+// ABI version for |iree_hal_device_tsan_report_t|.
+#define IREE_HAL_DEVICE_TSAN_REPORT_ABI_VERSION_0 0u
+
 // ABI version for |iree_hal_device_printf_event_t|.
 #define IREE_HAL_DEVICE_PRINTF_EVENT_ABI_VERSION_0 0u
 
@@ -55,6 +58,8 @@ enum iree_hal_device_event_type_bits_t {
   IREE_HAL_DEVICE_EVENT_TYPE_PRINTF = 4u,
   // Device-originated host-call diagnostic report.
   IREE_HAL_DEVICE_EVENT_TYPE_HOST_CALL = 5u,
+  // Thread sanitizer report.
+  IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT = 6u,
   // First event type reserved for implementation-specific payloads.
   IREE_HAL_DEVICE_EVENT_TYPE_USER = 0x8000u,
 };
@@ -287,6 +292,93 @@ typedef struct iree_hal_device_ubsan_report_t {
   // Device-visible dispatch packet pointer, or 0 when unavailable.
   uint64_t source_dispatch_ptr;
 } iree_hal_device_ubsan_report_t;
+
+// TSAN check kind that triggered a report.
+typedef uint32_t iree_hal_device_tsan_check_kind_t;
+enum iree_hal_device_tsan_check_kind_bits_t {
+  IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN = 0u,
+  IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE = 1u,
+};
+
+// TSAN memory space containing the observed address.
+typedef uint32_t iree_hal_device_tsan_memory_space_t;
+enum iree_hal_device_tsan_memory_space_bits_t {
+  IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_UNKNOWN = 0u,
+  IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_GLOBAL = 1u,
+  IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP = 2u,
+  IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_PRIVATE = 3u,
+};
+
+// TSAN access kind participating in a race report.
+typedef uint32_t iree_hal_device_tsan_access_kind_t;
+enum iree_hal_device_tsan_access_kind_bits_t {
+  IREE_HAL_DEVICE_TSAN_ACCESS_KIND_UNKNOWN = 0u,
+  IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ = 1u,
+  IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE = 2u,
+  IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ_WRITE = 3u,
+  IREE_HAL_DEVICE_TSAN_ACCESS_KIND_ATOMIC = 4u,
+};
+
+// Bitfield specifying TSAN report properties.
+typedef uint32_t iree_hal_device_tsan_report_flags_t;
+enum iree_hal_device_tsan_report_flag_bits_t {
+  IREE_HAL_DEVICE_TSAN_REPORT_FLAG_NONE = 0u,
+  // Current access was an atomic memory operation.
+  IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_ATOMIC = 1u << 0,
+  // Prior access was an atomic memory operation.
+  IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_ATOMIC = 1u << 1,
+  // Prior workitem id is stored as a linear local id in prior_workitem_id[0].
+  IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR = 1u << 2,
+  // Current workitem id is stored as a linear local id in
+  // current_workitem_id[0].
+  IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR = 1u << 3,
+};
+
+// HAL-level TSAN report payload.
+typedef struct iree_hal_device_tsan_report_t {
+  // Size of this record in bytes.
+  uint32_t record_length;
+  // ABI version of this report payload.
+  uint32_t abi_version;
+  // Check kind that triggered the report.
+  iree_hal_device_tsan_check_kind_t check_kind;
+  // TSAN report flags.
+  iree_hal_device_tsan_report_flags_t flags;
+  // Memory space containing |memory_address|.
+  iree_hal_device_tsan_memory_space_t memory_space;
+  // Access kind performed by the reporting workitem.
+  iree_hal_device_tsan_access_kind_t current_access_kind;
+  // Access kind previously observed for the same memory location.
+  iree_hal_device_tsan_access_kind_t prior_access_kind;
+  // Access length in bytes.
+  uint32_t access_length;
+  // Compiler-assigned instrumentation site identifier for the current access.
+  uint64_t current_site_id;
+  // Compiler-assigned instrumentation site identifier for the prior access.
+  uint64_t prior_site_id;
+  // Address or memory-space-relative byte offset that raced.
+  uint64_t memory_address;
+  // Shadow address consulted by the check, or 0 when unavailable.
+  uint64_t shadow_address;
+  // Shadow value observed by the check, or 0 when unavailable.
+  uint64_t shadow_value;
+  // Workgroup id that produced the current access report.
+  uint32_t current_workgroup_id[3];
+  // Workitem id that produced the current access report. When
+  // IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR is set, element 0
+  // is the linear local id and elements 1/2 are zero.
+  uint32_t current_workitem_id[3];
+  // Workgroup id that produced the prior access.
+  uint32_t prior_workgroup_id[3];
+  // Workitem id that produced the prior access. When
+  // IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR is set, element 0 is
+  // the linear local id and elements 1/2 are zero.
+  uint32_t prior_workitem_id[3];
+  // Device-visible dispatch packet pointer, or 0 when unavailable.
+  uint64_t source_dispatch_ptr;
+} iree_hal_device_tsan_report_t;
+static_assert(sizeof(iree_hal_device_tsan_report_t) == 128,
+              "TSAN report payload size is part of the HAL event ABI");
 
 // Device printf stream classification.
 typedef uint32_t iree_hal_device_printf_stream_t;

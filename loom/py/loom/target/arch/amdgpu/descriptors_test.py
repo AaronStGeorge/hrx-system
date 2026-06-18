@@ -92,6 +92,7 @@ from loom.target.arch.amdgpu.descriptors.memory import (
     _s_load_dwordx4_overlay,
 )
 from loom.target.low_descriptors import (
+    Constraint,
     ConstraintKind,
     Descriptor,
     DescriptorFlag,
@@ -320,6 +321,61 @@ def test_div_fmas_low_asm_preserves_vcc_scale_mask_operand() -> None:
         form = descriptor.asm_forms[0]
         assert form.results == ("dst",)
         assert form.operands == ("a", "b", "c", "scale_mask")
+
+
+def test_scalar_scc_compare_results_are_rematerializable() -> None:
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        compare_keys = tuple(
+            descriptor_key
+            for descriptor_key in descriptors
+            if descriptor_key.startswith("amdgpu.s_cmp_")
+        )
+        assert compare_keys
+        for descriptor_key in compare_keys:
+            descriptor = descriptors[descriptor_key]
+            assert (
+                Constraint(ConstraintKind.REMATERIALIZABLE, lhs_operand_index=0)
+                in descriptor.constraints
+            )
+            assert len(descriptor.implicit_operands) == 1
+            scc_operand = descriptor.implicit_operands[0].descriptor_operand
+            assert scc_operand is not None
+            assert scc_operand.field_name == "scc"
+            assert scc_operand.role is OperandRole.RESULT
+            assert OperandFlag.IMPLICIT in scc_operand.flags
+            assert OperandFlag.STATE_WRITE in scc_operand.flags
+            assert OperandFlag.STATE_READ not in scc_operand.flags
+            assert OperandFlag.SCHEDULE_ONLY_STATE not in scc_operand.flags
+
+        assert not any(
+            constraint.kind is ConstraintKind.REMATERIALIZABLE
+            for constraint in descriptors["amdgpu.s_and_saveexec_b64"].constraints
+        )
+
+
+def test_v_mov_b32_literal_results_are_rematerializable() -> None:
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        descriptor = descriptors["amdgpu.v_mov_b32"]
+        assert (
+            Constraint(ConstraintKind.REMATERIALIZABLE, lhs_operand_index=0)
+            in descriptor.constraints
+        )
 
 
 def test_scalar_descriptors_do_not_get_execution_mask_state_read() -> None:
@@ -763,6 +819,7 @@ def _assert_feedback_atomic64_overlay(
     memory_space: MemorySpace,
     payload_field_name: str,
     payload_units: int,
+    implicit_data_format: str = "FMT_NUM_U64",
 ) -> None:
     assert descriptor.mnemonic == mnemonic
     assert descriptor.semantic_tag == semantic_tag
@@ -779,7 +836,7 @@ def _assert_feedback_atomic64_overlay(
     assert payload_operand.unit_count == payload_units
     assert any(
         operand.operand_type == "OPR_GPUMEM"
-        and operand.data_format_name == "FMT_NUM_U64"
+        and operand.data_format_name == implicit_data_format
         and operand.size_bits == 64
         for operand in descriptor.implicit_operands
     )
@@ -837,6 +894,15 @@ def test_feedback_atomic64_descriptors_cover_execution_families() -> None:
             payload_units=2,
         )
         _assert_feedback_atomic64_overlay(
+            descriptors["amdgpu.global_atomic_swap_u64_rtn_saddr"],
+            mnemonic=f"global_atomic_swap_{wide_mnemonic_suffix}",
+            semantic_tag="memory.global.atomic.exchange.u64.return",
+            memory_space=MemorySpace.GLOBAL,
+            payload_field_name="value",
+            payload_units=2,
+            implicit_data_format="FMT_NUM_B64",
+        )
+        _assert_feedback_atomic64_overlay(
             descriptors["amdgpu.global_atomic_cmpswap_b64_rtn_saddr"],
             mnemonic=(
                 f"global_atomic_cmpswap_{'x2' if wide_mnemonic_suffix == 'x2' else 'b64'}"
@@ -858,6 +924,7 @@ def test_feedback_atomic64_descriptors_do_not_expand_source_atomic_candidates() 
     assert "amdgpu.flat_atomic_cmpswap_b64_rtn" not in keys
     assert "amdgpu.global_atomic_add_u64_saddr" not in keys
     assert "amdgpu.global_atomic_add_u64_rtn_saddr" not in keys
+    assert "amdgpu.global_atomic_swap_u64_rtn_saddr" not in keys
     assert "amdgpu.global_atomic_cmpswap_b64_rtn_saddr" not in keys
 
 

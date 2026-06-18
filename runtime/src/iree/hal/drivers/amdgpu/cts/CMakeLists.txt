@@ -104,7 +104,7 @@ iree_cc_library(
   SRCS
     "asan_executable_test.cc"
   DEPS
-    iree::hal::cts::sanitizer::asan_test_util
+    iree::hal::cts::sanitizer::sanitizer_test_util
     iree::hal::drivers::amdgpu::abi
     iree::hal::drivers::amdgpu::headers
   TESTONLY
@@ -141,12 +141,55 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    tsan_executable_test
+  SRCS
+    "tsan_executable_test.cc"
+  DEPS
+    iree::hal::cts::sanitizer::sanitizer_test_util
+    iree::hal::cts::util::test_base
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::headers
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    tsan_executable_tests
+  SRCS
+    "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/cts/util/test_main.cc"
+  DEPS
+    ::backends
+    ::testdata_amdgpu
+    ::tsan_executable_test
+    iree::base::tooling::flags
+    iree::hal::cts::util::registry
+    iree::hal::cts::util::test_base
+    iree::testing::gtest
+  ARGS
+    "--amdgpu_tsan=true"
+    "--amdgpu_tsan_report_policy=report-only"
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     manual_asan_executable_test
   SRCS
     "manual_asan_executable_test.cc"
   DEPS
     iree::hal
-    iree::hal::cts::sanitizer::asan_test_util
+    iree::hal::cts::sanitizer::sanitizer_test_util
     iree::hal::cts::util::registry
     iree::hal::cts::util::test_base
     iree::hal::drivers::amdgpu::buffer

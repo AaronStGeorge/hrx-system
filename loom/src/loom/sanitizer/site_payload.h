@@ -15,10 +15,10 @@ extern "C" {
 
 // Compact metadata carried by LOOM_LOCATION_TAG_SANITIZER_SITE locations.
 //
-// The payload identifies what a sanitizer assertion means. It deliberately does
+// The payload identifies what a sanitizer site means. It deliberately does
 // not contain the final emitted site ID, an SSA value ID, a raw pointer, a
 // string table reference, or target ABI data. Emission-time site collectors can
-// assign dense target-local IDs from the surviving assertion operations and use
+// assign dense target-local IDs from the surviving sanitizer operations and use
 // this payload as optional diagnostic context when it is present.
 
 // Format version byte written by the sanitizer site payload encoder.
@@ -27,22 +27,24 @@ extern "C" {
 // Number of fixed header bytes before optional extension data.
 #define LOOM_SANITIZER_SITE_PAYLOAD_HEADER_LENGTH 8u
 
-enum loom_sanitizer_assertion_kind_e {
-  // No known assertion category.
-  LOOM_SANITIZER_ASSERTION_KIND_UNKNOWN = 0,
+enum loom_sanitizer_site_kind_e {
+  // No known sanitizer site category.
+  LOOM_SANITIZER_SITE_KIND_UNKNOWN = 0,
   // Memory access assertion.
-  LOOM_SANITIZER_ASSERTION_KIND_ACCESS = 1,
+  LOOM_SANITIZER_SITE_KIND_ACCESS = 1,
   // SSA value assertion.
-  LOOM_SANITIZER_ASSERTION_KIND_VALUE = 2,
+  LOOM_SANITIZER_SITE_KIND_VALUE = 2,
   // Operation-level assertion.
-  LOOM_SANITIZER_ASSERTION_KIND_OPERATION = 3,
+  LOOM_SANITIZER_SITE_KIND_OPERATION = 3,
   // View layout, shape, or encoding assertion.
-  LOOM_SANITIZER_ASSERTION_KIND_LAYOUT = 4,
-  // Number of known assertion categories.
-  LOOM_SANITIZER_ASSERTION_KIND_COUNT_,
+  LOOM_SANITIZER_SITE_KIND_LAYOUT = 4,
+  // Race observation site.
+  LOOM_SANITIZER_SITE_KIND_RACE = 5,
+  // Number of known sanitizer site categories.
+  LOOM_SANITIZER_SITE_KIND_COUNT_,
 };
-// One-byte assertion category carried in a sanitizer site payload.
-typedef uint8_t loom_sanitizer_assertion_kind_t;
+// One-byte sanitizer site category carried in a sanitizer site payload.
+typedef uint8_t loom_sanitizer_site_kind_t;
 
 enum loom_sanitizer_check_kind_e {
   // No known checked contract.
@@ -75,6 +77,8 @@ enum loom_sanitizer_check_kind_e {
   LOOM_SANITIZER_CHECK_KIND_VALUE_RELATION = 13,
   // Value must satisfy multiple or generic predicate constraints.
   LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS = 14,
+  // Memory access participates in a data race.
+  LOOM_SANITIZER_CHECK_KIND_DATA_RACE = 15,
   // Number of known checked contracts.
   LOOM_SANITIZER_CHECK_KIND_COUNT_,
 };
@@ -146,8 +150,8 @@ typedef uint8_t loom_sanitizer_lineage_role_t;
 typedef uint16_t loom_sanitizer_site_flags_t;
 
 typedef struct loom_sanitizer_site_payload_t {
-  // Assertion category.
-  loom_sanitizer_assertion_kind_t assertion_kind;
+  // Sanitizer site category.
+  loom_sanitizer_site_kind_t site_kind;
   // Specific checked contract.
   loom_sanitizer_check_kind_t check_kind;
   // Origin of the checked contract.
@@ -162,10 +166,10 @@ typedef struct loom_sanitizer_site_payload_t {
   iree_const_byte_span_t extension_data;
 } loom_sanitizer_site_payload_t;
 
-// Returns the known name for |assertion_kind|, or an empty string for values
+// Returns the known name for |site_kind|, or an empty string for values
 // unknown to this compiler.
-iree_string_view_t loom_sanitizer_assertion_kind_name(
-    loom_sanitizer_assertion_kind_t assertion_kind);
+iree_string_view_t loom_sanitizer_site_kind_name(
+    loom_sanitizer_site_kind_t site_kind);
 
 // Returns the known name for |check_kind|, or an empty string for values
 // unknown to this compiler.
@@ -190,7 +194,7 @@ iree_string_view_t loom_sanitizer_lineage_role_name(
 // Encodes a sanitizer site payload into |storage|.
 //
 // The first byte stores LOOM_SANITIZER_SITE_PAYLOAD_CURRENT_VERSION. The next
-// five bytes store assertion kind, check kind, provenance kind, lane policy,
+// five bytes store site kind, check kind, provenance kind, lane policy,
 // and lineage role. Bytes six and seven store little-endian flag bits. Any
 // remaining bytes are uninterpreted extension data owned by the caller.
 iree_status_t loom_sanitizer_site_payload_encode(

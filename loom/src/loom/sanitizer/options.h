@@ -23,8 +23,10 @@ enum loom_sanitizer_check_bit_e {
   LOOM_SANITIZER_CHECK_VALUE = 1u << 1,
   // Enables operation-level assertions.
   LOOM_SANITIZER_CHECK_OPERATION = 1u << 2,
+  // Enables data-race observations.
+  LOOM_SANITIZER_CHECK_RACE = 1u << 3,
 };
-// Bitset of loom_sanitizer_check_bit_e values selecting assertion classes.
+// Bitset of loom_sanitizer_check_bit_e values selecting sanitizer checks.
 typedef uint64_t loom_sanitizer_checks_t;
 
 enum loom_sanitizer_flag_bit_e {
@@ -42,16 +44,17 @@ typedef enum loom_sanitizer_reporting_mode_e {
 } loom_sanitizer_reporting_mode_t;
 
 // Check bits understood by this compiler.
-#define LOOM_SANITIZER_CHECKS_KNOWN                        \
-  ((loom_sanitizer_checks_t)(LOOM_SANITIZER_CHECK_ACCESS | \
-                             LOOM_SANITIZER_CHECK_VALUE |  \
-                             LOOM_SANITIZER_CHECK_OPERATION))
+#define LOOM_SANITIZER_CHECKS_KNOWN                           \
+  ((loom_sanitizer_checks_t)(LOOM_SANITIZER_CHECK_ACCESS |    \
+                             LOOM_SANITIZER_CHECK_VALUE |     \
+                             LOOM_SANITIZER_CHECK_OPERATION | \
+                             LOOM_SANITIZER_CHECK_RACE))
 
 // Flag bits understood by this compiler.
 #define LOOM_SANITIZER_FLAGS_KNOWN ((loom_sanitizer_flags_t)0u)
 
 typedef struct loom_sanitizer_options_t {
-  // Assertion classes enabled by the caller.
+  // Sanitizer checks enabled by the caller.
   loom_sanitizer_checks_t checks;
   // Additional behavior flags enabled by the caller.
   loom_sanitizer_flags_t flags;

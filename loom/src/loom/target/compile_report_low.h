@@ -23,6 +23,13 @@ iree_status_t loom_target_compile_report_record_low_emission_frame(
     loom_target_compile_report_t* report,
     const loom_low_emission_frame_t* frame);
 
+// Records allocation, pressure-row, spill-row, and allocation-failure summaries
+// for one low allocation table. This accepts partial tables produced when
+// allocation emitted user-facing diagnostics.
+iree_status_t loom_target_compile_report_record_low_allocation(
+    loom_target_compile_report_t* report,
+    const loom_low_allocation_table_t* allocation);
+
 // Records source-to-low selection and emission summaries for one lowered
 // source function.
 iree_status_t loom_target_compile_report_record_low_lowering(

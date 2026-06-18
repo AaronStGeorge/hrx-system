@@ -12,8 +12,17 @@
 #include "iree/hal/api.h"
 #include "iree/tooling/device_util.h"
 
+void loom_run_hal_runtime_options_initialize(
+    iree_string_view_t hal_driver_name,
+    loom_run_hal_runtime_options_t* out_options) {
+  *out_options = (loom_run_hal_runtime_options_t){
+      .hal_driver_name = hal_driver_name,
+      .event_sink = iree_hal_device_event_sink_stderr(),
+  };
+}
+
 iree_status_t loom_run_hal_runtime_initialize(
-    iree_string_view_t hal_driver_name, iree_allocator_t allocator,
+    const loom_run_hal_runtime_options_t* options, iree_allocator_t allocator,
     loom_run_hal_runtime_t* out_runtime) {
   *out_runtime = (loom_run_hal_runtime_t){0};
 
@@ -31,9 +40,10 @@ iree_status_t loom_run_hal_runtime_initialize(
     iree_hal_device_create_params_t create_params =
         iree_hal_device_create_params_default();
     create_params.proactor_pool = proactor_pool;
+    create_params.event_sink = options->event_sink;
     status = iree_hal_create_device_from_flags(
-        iree_hal_available_driver_registry(), hal_driver_name, &create_params,
-        allocator, &out_runtime->device);
+        iree_hal_available_driver_registry(), options->hal_driver_name,
+        &create_params, allocator, &out_runtime->device);
   }
   iree_async_proactor_pool_release(proactor_pool);
   if (iree_status_is_ok(status)) {

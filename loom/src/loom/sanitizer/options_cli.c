@@ -33,12 +33,26 @@ static iree_status_t loom_sanitizer_parse_check_token(
     *inout_checks |= LOOM_SANITIZER_CHECK_ACCESS;
     return iree_ok_status();
   }
+  if (iree_string_view_equal(token, IREE_SV("asan"))) {
+    *inout_checks |= LOOM_SANITIZER_CHECK_ACCESS;
+    return iree_ok_status();
+  }
   if (iree_string_view_equal(token, IREE_SV("value"))) {
     *inout_checks |= LOOM_SANITIZER_CHECK_VALUE;
     return iree_ok_status();
   }
   if (iree_string_view_equal(token, IREE_SV("operation"))) {
     *inout_checks |= LOOM_SANITIZER_CHECK_OPERATION;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("ubsan"))) {
+    *inout_checks |=
+        LOOM_SANITIZER_CHECK_VALUE | LOOM_SANITIZER_CHECK_OPERATION;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("race")) ||
+      iree_string_view_equal(token, IREE_SV("tsan"))) {
+    *inout_checks |= LOOM_SANITIZER_CHECK_RACE;
     return iree_ok_status();
   }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -138,6 +152,9 @@ iree_status_t loom_sanitizer_checks_format(loom_sanitizer_checks_t checks,
     case LOOM_SANITIZER_CHECK_OPERATION:
       *out_value = IREE_SV("operation");
       return iree_ok_status();
+    case LOOM_SANITIZER_CHECK_RACE:
+      *out_value = IREE_SV("race");
+      return iree_ok_status();
     case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE:
       *out_value = IREE_SV("access|value");
       return iree_ok_status();
@@ -147,9 +164,34 @@ iree_status_t loom_sanitizer_checks_format(loom_sanitizer_checks_t checks,
     case LOOM_SANITIZER_CHECK_VALUE | LOOM_SANITIZER_CHECK_OPERATION:
       *out_value = IREE_SV("value|operation");
       return iree_ok_status();
+    case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_RACE:
+      *out_value = IREE_SV("access|race");
+      return iree_ok_status();
+    case LOOM_SANITIZER_CHECK_VALUE | LOOM_SANITIZER_CHECK_RACE:
+      *out_value = IREE_SV("value|race");
+      return iree_ok_status();
+    case LOOM_SANITIZER_CHECK_OPERATION | LOOM_SANITIZER_CHECK_RACE:
+      *out_value = IREE_SV("operation|race");
+      return iree_ok_status();
     case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
         LOOM_SANITIZER_CHECK_OPERATION:
       *out_value = IREE_SV("access|value|operation");
+      return iree_ok_status();
+    case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
+        LOOM_SANITIZER_CHECK_RACE:
+      *out_value = IREE_SV("access|value|race");
+      return iree_ok_status();
+    case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_OPERATION |
+        LOOM_SANITIZER_CHECK_RACE:
+      *out_value = IREE_SV("access|operation|race");
+      return iree_ok_status();
+    case LOOM_SANITIZER_CHECK_VALUE | LOOM_SANITIZER_CHECK_OPERATION |
+        LOOM_SANITIZER_CHECK_RACE:
+      *out_value = IREE_SV("value|operation|race");
+      return iree_ok_status();
+    case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
+        LOOM_SANITIZER_CHECK_OPERATION | LOOM_SANITIZER_CHECK_RACE:
+      *out_value = IREE_SV("access|value|operation|race");
       return iree_ok_status();
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

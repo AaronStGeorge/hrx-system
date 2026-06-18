@@ -53,6 +53,8 @@ enum loom_contract_family_bits_e {
   LOOM_CONTRACT_KERNEL_SYNCHRONIZATION = 1u << 6,
   // Tensor memory transfer contract.
   LOOM_CONTRACT_TENSOR_MEMORY = 1u << 7,
+  // Sanitizer race observation contract.
+  LOOM_CONTRACT_SANITIZER_RACE = 1u << 8,
 };
 
 // Returns true when |set| contains any contract family from |mask|.

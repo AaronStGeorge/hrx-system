@@ -25,8 +25,10 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @wave_sized_workgroup_me
   %one = v_mov_b32 1
   %13 = s_mov_b32_m0_imm 0
   ds_write_addtid_b32 %one, %13
-  %loaded = ds_read_addtid_b32 %13
-  ds_write_addtid_b32 %loaded, %13
+  %14 = s_mov_b32_m0_imm 0
+  %loaded = ds_read_addtid_b32 %14
+  %16 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %loaded, %16
   return
 }
 
@@ -90,7 +92,9 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @wave_sized_workgroup_me
   %one = v_mov_b32 1
   %15 = s_mov_b32_m0_imm 0
   ds_write_addtid_b32 %one, %15 {offset = 16}
-  %loaded = ds_read_addtid_b32 %15 {offset = 16}
-  ds_write_addtid_b32 %loaded, %15 {offset = 16}
+  %16 = s_mov_b32_m0_imm 0
+  %loaded = ds_read_addtid_b32 %16 {offset = 16}
+  %18 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %loaded, %18 {offset = 16}
   return
 }

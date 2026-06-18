@@ -9,11 +9,12 @@ routing. Project-specific policy stays in each project under
 ## Commit Contract
 
 A successful Git commit must not commit stale formatter or generated-file
-output. The generated Git commit hook uses commit scope: files staged for commit
-plus files changed by `HEAD`, so `git commit --amend` validates the commit being
-replaced without scanning the full feature branch. Test-bearing hook profiles
-run a mechanical fix pass first, stage files owned by those fixers, and then run
-the same profile in non-mutating check mode:
+output or private work-tracking breadcrumbs. The generated Git commit hook uses
+commit scope: files staged for commit plus files changed by `HEAD`, so
+`git commit --amend` validates the commit being replaced without scanning the
+full feature branch. Test-bearing hook profiles run a mechanical fix pass first,
+stage files owned by those fixers, and then run the same profile in
+non-mutating check mode:
 
 ```bash
 python dev.py <lane> precommit --profile <profile> --commit
@@ -36,6 +37,26 @@ python dev.py cmake fix
 `precommit` checks the current local change set, with autofix enabled for
 commit-scope, staged, and explicit-path test-bearing runs. `presubmit` is
 non-mutating and runs the full-tree CI-shaped profile.
+
+The `commit-msg` hook validates the final Git commit message text. The subject
+line must start with a bracketed subsystem tag such as `[Loom]`, `[HRX]`,
+`[HAL]`, `[Runtime]`, `[Infra]`, or `[CI]`, followed by the short description.
+Slash-qualified tags such as `[HAL/AMDGPU]`, `[Loom/WASM]`, or `[Runtime/VM]`
+are accepted when the narrower ownership surface is useful.
+
+Git autosquash subjects such as `fixup! [Loom] ...`, `squash! [Loom] ...`,
+and `amend! [Loom] ...` are accepted. The hook strips the autosquash wrapper
+and validates the target subject with the same tag and subject-length policy.
+
+Subjects and prose body lines must stay at or below 72 characters. Long lines
+inside fenced code blocks are accepted so literal examples can remain faithful.
+When a tag is missing, the hook ranks suggested tags from the staged paths and
+prints the paths used for the suggestion so the next edit is obvious.
+
+The hook also rejects literal `\n`/`\r` escape sequences that should have been
+real paragraph breaks and bead-shaped issue identifiers such as `loom-20r1y`,
+`loom-qof73.1`, or `bd-123`. Legitimate tool names such as `loom-check`,
+`loom-compile`, and `loom-opt` are not issue identifiers and are accepted.
 
 Normal presubmit output is terse: major phases, named checks, pass/fail status,
 and failure details. Large captured failures print the beginning and end with an

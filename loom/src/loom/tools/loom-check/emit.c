@@ -1155,7 +1155,7 @@ static iree_status_t loom_check_emit_write_low_allocation_json(
       diagnostic_collector, budgets, budget_count, fixed_specs,
       fixed_spec_count, diagnostic_flags, emitter, analysis_arena, &built,
       &table));
-  if (!built || table.error_count != 0) {
+  if (!built) {
     return iree_ok_status();
   }
   return loom_low_allocation_format_json(&table, &result->actual_output);

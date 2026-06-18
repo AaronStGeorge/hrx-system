@@ -175,6 +175,20 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_sanitizer_access_plan_t,
                 loom_amdgpu_select_sanitizer_assert_access_dispatch,
                 loom_amdgpu_emit_sanitizer_assert_access_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SANITIZER_RACE_ACCESS)] =
+            LOOM_AMDGPU_RECIPE_DATA_ROW(
+                LOOM_OP_SANITIZER_RACE_ACCESS,
+                loom_amdgpu_sanitizer_race_access_plan_t,
+                loom_amdgpu_select_sanitizer_race_access_dispatch,
+                loom_amdgpu_emit_sanitizer_race_access_dispatch,
+                loom_amdgpu_low_legality_verify_sanitizer_race_access),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SANITIZER_RACE_SYNC)] =
+            LOOM_AMDGPU_RECIPE_DATA_ROW(
+                LOOM_OP_SANITIZER_RACE_SYNC,
+                loom_amdgpu_sanitizer_race_sync_plan_t,
+                loom_amdgpu_select_sanitizer_race_sync_dispatch,
+                loom_amdgpu_emit_sanitizer_race_sync_dispatch,
+                loom_amdgpu_low_legality_verify_sanitizer_race_sync),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t

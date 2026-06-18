@@ -74,6 +74,11 @@ typedef enum iree_hal_amdgpu_command_buffer_binding_source_flag_bits_e {
 typedef enum iree_hal_amdgpu_command_buffer_dispatch_flag_bits_e {
   IREE_HAL_AMDGPU_COMMAND_BUFFER_DISPATCH_FLAG_NONE = 0u,
   IREE_HAL_AMDGPU_COMMAND_BUFFER_DISPATCH_FLAG_INDIRECT_PARAMETERS = 1u << 0,
+  // |kernel_object| stores a host pointer to a uint64_t table indexed by the
+  // executing queue's physical_queue_ordinal instead of a direct HSA kernel
+  // object. Used when executable globals are queue scoped.
+  IREE_HAL_AMDGPU_COMMAND_BUFFER_DISPATCH_FLAG_QUEUE_SCOPED_KERNEL_OBJECT =
+      1u << 1,
 } iree_hal_amdgpu_command_buffer_dispatch_flag_bits_t;
 
 // Kernarg storage mode for a dispatch command.
@@ -95,6 +100,8 @@ typedef uint8_t iree_hal_amdgpu_command_buffer_binding_kind_t;
 // Block flags reserved for optional block metadata.
 typedef enum iree_hal_amdgpu_command_buffer_block_flag_bits_e {
   IREE_HAL_AMDGPU_COMMAND_BUFFER_BLOCK_FLAG_NONE = 0u,
+  // Block begins with a TSAN assignment dispatch before recorded commands.
+  IREE_HAL_AMDGPU_COMMAND_BUFFER_BLOCK_FLAG_TSAN_ASSIGNMENT = 1u << 0,
 } iree_hal_amdgpu_command_buffer_block_flag_bits_t;
 // Compact block flag storage.
 typedef uint8_t iree_hal_amdgpu_command_buffer_block_flags_t;
@@ -150,6 +157,13 @@ typedef struct IREE_AMDGPU_ALIGNAS(8)
 IREE_AMDGPU_STATIC_ASSERT(
     sizeof(iree_hal_amdgpu_command_buffer_block_header_t) == 64,
     "command-buffer block header must stay cache-line sized");
+
+// Returns true when |block| has a block-prefix TSAN assignment dispatch.
+static inline bool iree_hal_amdgpu_command_buffer_block_has_tsan_assignment(
+    const iree_hal_amdgpu_command_buffer_block_header_t* block) {
+  return (block->flags &
+          IREE_HAL_AMDGPU_COMMAND_BUFFER_BLOCK_FLAG_TSAN_ASSIGNMENT) != 0;
+}
 
 // Header common to every command record.
 typedef struct IREE_AMDGPU_ALIGNAS(8)
@@ -270,7 +284,8 @@ typedef struct IREE_AMDGPU_ALIGNAS(8)
     iree_hal_amdgpu_command_buffer_dispatch_command_t {
   // Common command record header.
   iree_hal_amdgpu_command_buffer_command_header_t header;
-  // HSA kernel object for the command buffer's selected physical device.
+  // HSA kernel object, or a host pointer to per-queue kernel objects when
+  // QUEUE_SCOPED_KERNEL_OBJECT is set in |dispatch_flags|.
   uint64_t kernel_object;
   // Byte offset from the block header to this dispatch's first binding source.
   uint32_t binding_source_offset;

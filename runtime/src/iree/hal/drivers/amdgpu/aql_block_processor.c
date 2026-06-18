@@ -391,8 +391,9 @@ iree_hal_amdgpu_aql_block_processor_resolve_static_binding_source_ptr(
 
 static void iree_hal_amdgpu_aql_block_processor_write_dispatch_packet_body(
     const iree_hal_amdgpu_command_buffer_dispatch_command_t* dispatch_command,
-    iree_hal_amdgpu_aql_packet_t* packet, uint8_t* kernarg_data,
-    iree_hsa_signal_t completion_signal, uint16_t* out_setup) {
+    uint64_t kernel_object, iree_hal_amdgpu_aql_packet_t* packet,
+    uint8_t* kernarg_data, iree_hsa_signal_t completion_signal,
+    uint16_t* out_setup) {
   packet->dispatch.setup = dispatch_command->setup;
   packet->dispatch.workgroup_size[0] = dispatch_command->workgroup_size[0];
   packet->dispatch.workgroup_size[1] = dispatch_command->workgroup_size[1];
@@ -404,11 +405,52 @@ static void iree_hal_amdgpu_aql_block_processor_write_dispatch_packet_body(
   packet->dispatch.private_segment_size =
       dispatch_command->private_segment_size;
   packet->dispatch.group_segment_size = dispatch_command->group_segment_size;
-  packet->dispatch.kernel_object = dispatch_command->kernel_object;
+  packet->dispatch.kernel_object = kernel_object;
   packet->dispatch.kernarg_address = kernarg_data;
   packet->dispatch.reserved2 = 0;
   packet->dispatch.completion_signal = completion_signal;
   *out_setup = packet->dispatch.setup;
+}
+
+static iree_status_t
+iree_hal_amdgpu_aql_block_processor_resolve_dispatch_kernel_object(
+    const iree_hal_amdgpu_aql_block_processor_t* processor,
+    const iree_hal_amdgpu_command_buffer_dispatch_command_t* dispatch_command,
+    uint64_t* out_kernel_object) {
+  *out_kernel_object = dispatch_command->kernel_object;
+  if (IREE_LIKELY(!iree_any_bit_set(
+          dispatch_command->dispatch_flags,
+          IREE_HAL_AMDGPU_COMMAND_BUFFER_DISPATCH_FLAG_QUEUE_SCOPED_KERNEL_OBJECT))) {
+    return iree_ok_status();
+  }
+
+  const uint64_t* queue_kernel_objects =
+      (const uint64_t*)(uintptr_t)dispatch_command->kernel_object;
+  if (IREE_UNLIKELY(!queue_kernel_objects)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AQL command-buffer queue-scoped dispatch has no kernel-object table");
+  }
+  if (IREE_UNLIKELY(processor->queue.physical_queue_ordinal >=
+                    processor->queue.physical_queue_count)) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AQL command-buffer queue-scoped dispatch physical queue ordinal "
+        "%" PRIhsz " exceeds recorded table count %u",
+        processor->queue.physical_queue_ordinal,
+        processor->queue.physical_queue_count);
+  }
+  const uint64_t kernel_object =
+      queue_kernel_objects[processor->queue.physical_queue_ordinal];
+  if (IREE_UNLIKELY(kernel_object == 0)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AQL command-buffer queue-scoped dispatch has no kernel object for "
+        "physical queue ordinal %" PRIhsz,
+        processor->queue.physical_queue_ordinal);
+  }
+  *out_kernel_object = kernel_object;
+  return iree_ok_status();
 }
 
 static inline void iree_hal_amdgpu_aql_block_processor_copy_dispatch_template(
@@ -581,8 +623,13 @@ iree_hal_amdgpu_aql_block_processor_replay_dispatch_packet_body(
             block, processor->command_buffer, processor->bindings.ptrs,
             dispatch_command, kernarg_data));
   }
+  uint64_t kernel_object = 0;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_aql_block_processor_resolve_dispatch_kernel_object(
+          processor, dispatch_command, &kernel_object));
   iree_hal_amdgpu_aql_block_processor_write_dispatch_packet_body(
-      dispatch_command, packet, kernarg_data, completion_signal, out_setup);
+      dispatch_command, kernel_object, packet, kernarg_data, completion_signal,
+      out_setup);
   return iree_ok_status();
 }
 

@@ -72,3 +72,85 @@ amdgpu.target<gfx1100> @target
 low.func.def target(@target) @gfx11_forced_vgpr_spill_reports_missing_scratch_storage(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) {
   low.return %a, %b, %c : reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>
 }
+
+// ====
+
+// RUN: emit low-allocation-json @scc_active_conflict_reports_failure amdgpu.scc=1
+
+amdgpu.target<gfx1100> @target
+
+// ERROR@+1: BACKEND/005 {function_name="scc_active_conflict_reports_failure", value_class="amdgpu.scc", budget="1", peak="2", failure_code="unspillable-register-exhausted"}
+low.func.def target(@target) @scc_active_conflict_reports_failure(%leader: reg<amdgpu.scc>, %blocked: reg<amdgpu.scc>) -> (reg<amdgpu.scc>, reg<amdgpu.scc>) {
+  low.return %leader, %blocked : reg<amdgpu.scc>, reg<amdgpu.scc>
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"scc_active_conflict_reports_failure","target":"target","descriptor_set":"amdgpu.rdna3.core","allocation_mode":"virtual","assignment_count":1,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"leader","type":"reg<amdgpu.scc>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.scc"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[],"failure":{"code":"unspillable-register-exhausted","blocking_kind":"active-assignment","value":{"id":1,"name":"blocked","type":"reg<amdgpu.scc>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.scc"},"start_point":0,"end_point":1,"required_units":1,"budget_units":1,"peak_live_units":2,"location":{"kind":"physical_register","base":0,"count":1},"conflict":{"assignment":0,"value":{"id":0,"name":"leader","type":"reg<amdgpu.scc>"},"start_point":0,"end_point":1,"location":{"kind":"physical_register","base":0,"count":1}}}}
+
+// ====
+
+// RUN: pass low-materialize-allocation{budgets=amdgpu.scc=1}
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @scc_compare_rematerializes_active_conflict(%row: reg<amdgpu.sgpr>, %limit: reg<amdgpu.sgpr>, %other_lhs: reg<amdgpu.sgpr>, %other_rhs: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %row_in_range = s_cmp_lt_i32 %row, %limit
+  %other_in_range = s_cmp_gt_i32 %other_lhs, %other_rhs
+  low.cond_br %other_in_range, ^then, ^else : reg<amdgpu.scc>
+^then:
+  low.cond_br %row_in_range, ^exit, ^exit : reg<amdgpu.scc>
+^else:
+  low.cond_br %row_in_range, ^exit, ^exit : reg<amdgpu.scc>
+^exit:
+  return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @scc_compare_rematerializes_active_conflict(%row: reg<amdgpu.sgpr>, %limit: reg<amdgpu.sgpr>, %other_lhs: reg<amdgpu.sgpr>, %other_rhs: reg<amdgpu.sgpr>) {
+  %other_in_range = low.op<amdgpu.s_cmp_gt_i32>(%other_lhs, %other_rhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.scc>
+  low.cond_br %other_in_range, ^then, ^else : reg<amdgpu.scc>
+^then:
+  %row_in_range_remat$6 = low.op<amdgpu.s_cmp_lt_i32>(%row, %limit) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.scc>
+  low.cond_br %row_in_range_remat$6, ^exit, ^exit : reg<amdgpu.scc>
+^else:
+  %row_in_range_remat$7 = low.op<amdgpu.s_cmp_lt_i32>(%row, %limit) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.scc>
+  low.cond_br %row_in_range_remat$7, ^exit, ^exit : reg<amdgpu.scc>
+^exit:
+  low.return
+}
+
+// ====
+
+// RUN: pass low-materialize-allocation{budgets=amdgpu.scc=1}
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @scc_u64_compare_rematerializes_active_conflict(%mask: reg<amdgpu.sgpr x2>, %reference: reg<amdgpu.sgpr x2>, %other_lhs: reg<amdgpu.sgpr>, %other_rhs: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %mask_matches = s_cmp_eq_u64 %mask, %reference
+  %other_in_range = s_cmp_gt_i32 %other_lhs, %other_rhs
+  low.cond_br %other_in_range, ^then, ^else : reg<amdgpu.scc>
+^then:
+  low.cond_br %mask_matches, ^exit, ^exit : reg<amdgpu.scc>
+^else:
+  low.cond_br %mask_matches, ^exit, ^exit : reg<amdgpu.scc>
+^exit:
+  return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @scc_u64_compare_rematerializes_active_conflict(%mask: reg<amdgpu.sgpr x2>, %reference: reg<amdgpu.sgpr x2>, %other_lhs: reg<amdgpu.sgpr>, %other_rhs: reg<amdgpu.sgpr>) {
+  %other_in_range = low.op<amdgpu.s_cmp_gt_i32>(%other_lhs, %other_rhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.scc>
+  low.cond_br %other_in_range, ^then, ^else : reg<amdgpu.scc>
+^then:
+  %mask_matches_remat$6 = low.op<amdgpu.s_cmp_eq_u64>(%mask, %reference) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.scc>
+  low.cond_br %mask_matches_remat$6, ^exit, ^exit : reg<amdgpu.scc>
+^else:
+  %mask_matches_remat$7 = low.op<amdgpu.s_cmp_eq_u64>(%mask, %reference) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.scc>
+  low.cond_br %mask_matches_remat$7, ^exit, ^exit : reg<amdgpu.scc>
+^exit:
+  low.return
+}

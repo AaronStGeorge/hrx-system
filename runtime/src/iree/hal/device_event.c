@@ -18,6 +18,8 @@ static const char* iree_hal_device_event_type_string(
       return "asan_report";
     case IREE_HAL_DEVICE_EVENT_TYPE_UBSAN_REPORT:
       return "ubsan_report";
+    case IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT:
+      return "tsan_report";
     case IREE_HAL_DEVICE_EVENT_TYPE_PRINTF:
       return "printf";
     case IREE_HAL_DEVICE_EVENT_TYPE_HOST_CALL:
@@ -76,6 +78,49 @@ static const char* iree_hal_device_ubsan_check_kind_string(
     case IREE_HAL_DEVICE_UBSAN_CHECK_KIND_UNREACHABLE:
       return "unreachable";
     case IREE_HAL_DEVICE_UBSAN_CHECK_KIND_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static const char* iree_hal_device_tsan_check_kind_string(
+    iree_hal_device_tsan_check_kind_t check_kind) {
+  switch (check_kind) {
+    case IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE:
+      return "data_race";
+    case IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static const char* iree_hal_device_tsan_memory_space_string(
+    iree_hal_device_tsan_memory_space_t memory_space) {
+  switch (memory_space) {
+    case IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_GLOBAL:
+      return "global";
+    case IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP:
+      return "workgroup";
+    case IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_PRIVATE:
+      return "private";
+    case IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static const char* iree_hal_device_tsan_access_kind_string(
+    iree_hal_device_tsan_access_kind_t access_kind) {
+  switch (access_kind) {
+    case IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ:
+      return "read";
+    case IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE:
+      return "write";
+    case IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ_WRITE:
+      return "read_write";
+    case IREE_HAL_DEVICE_TSAN_ACCESS_KIND_ATOMIC:
+      return "atomic";
+    case IREE_HAL_DEVICE_TSAN_ACCESS_KIND_UNKNOWN:
     default:
       return "unknown";
   }
@@ -188,6 +233,57 @@ static void iree_hal_device_event_sink_stderr_print_ubsan(
           report->workitem_id[2], report->source_dispatch_ptr);
 }
 
+static void iree_hal_device_event_sink_stderr_print_tsan(
+    const iree_hal_device_tsan_report_t* report,
+    const iree_hal_device_event_site_t* site) {
+  if (!site) {
+    fprintf(stderr, "  site: id=0x%016" PRIx64 " unresolved\n",
+            report->current_site_id);
+  }
+  const bool prior_workitem_linear = iree_all_bits_set(
+      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR);
+  const bool current_workitem_linear = iree_all_bits_set(
+      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR);
+  fprintf(stderr,
+          "  tsan: check=%s memory=%s address=0x%016" PRIx64
+          " access_length=%u\n"
+          "  access: current=%s prior=%s prior_site=0x%016" PRIx64
+          "\n"
+          "  shadow: address=0x%016" PRIx64 " value=0x%016" PRIx64 "\n",
+          iree_hal_device_tsan_check_kind_string(report->check_kind),
+          iree_hal_device_tsan_memory_space_string(report->memory_space),
+          report->memory_address, report->access_length,
+          iree_hal_device_tsan_access_kind_string(report->current_access_kind),
+          iree_hal_device_tsan_access_kind_string(report->prior_access_kind),
+          report->prior_site_id, report->shadow_address, report->shadow_value);
+  if (current_workitem_linear) {
+    fprintf(stderr, "  current: workgroup=(%u,%u,%u) workitem_linear=%u\n",
+            report->current_workgroup_id[0], report->current_workgroup_id[1],
+            report->current_workgroup_id[2], report->current_workitem_id[0]);
+  } else {
+    fprintf(stderr, "  current: workgroup=(%u,%u,%u) workitem=(%u,%u,%u)\n",
+            report->current_workgroup_id[0], report->current_workgroup_id[1],
+            report->current_workgroup_id[2], report->current_workitem_id[0],
+            report->current_workitem_id[1], report->current_workitem_id[2]);
+  }
+  if (prior_workitem_linear) {
+    fprintf(stderr,
+            "  prior: workgroup=(%u,%u,%u) workitem_linear=%u "
+            "dispatch=0x%016" PRIx64 "\n",
+            report->prior_workgroup_id[0], report->prior_workgroup_id[1],
+            report->prior_workgroup_id[2], report->prior_workitem_id[0],
+            report->source_dispatch_ptr);
+  } else {
+    fprintf(stderr,
+            "  prior: workgroup=(%u,%u,%u) workitem=(%u,%u,%u) "
+            "dispatch=0x%016" PRIx64 "\n",
+            report->prior_workgroup_id[0], report->prior_workgroup_id[1],
+            report->prior_workgroup_id[2], report->prior_workitem_id[0],
+            report->prior_workitem_id[1], report->prior_workitem_id[2],
+            report->source_dispatch_ptr);
+  }
+}
+
 static void iree_hal_device_event_sink_stderr_print_printf(
     const iree_hal_device_printf_event_t* event) {
   if (!iree_string_view_is_empty(event->text)) {
@@ -240,6 +336,14 @@ static void iree_hal_device_event_sink_stderr_callback(
               event->payload, sizeof(iree_hal_device_ubsan_report_t))) {
         iree_hal_device_event_sink_stderr_print_ubsan(
             (const iree_hal_device_ubsan_report_t*)event->payload.data,
+            event->site);
+      }
+      break;
+    case IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT:
+      if (iree_hal_device_event_payload_has_prefix(
+              event->payload, sizeof(iree_hal_device_tsan_report_t))) {
+        iree_hal_device_event_sink_stderr_print_tsan(
+            (const iree_hal_device_tsan_report_t*)event->payload.data,
             event->site);
       }
       break;

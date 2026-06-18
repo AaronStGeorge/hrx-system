@@ -51,6 +51,7 @@
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/preamble.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_race.h"
 #include "loom/target/arch/amdgpu/lower/structural.h"
 #include "loom/target/arch/amdgpu/lower/subgroup.h"
 #include "loom/target/arch/amdgpu/lower/sync.h"
@@ -696,6 +697,23 @@ LOOM_AMDGPU_DEFINE_DATA_SELECT(
 LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_sanitizer_assert_access_dispatch,
                              loom_amdgpu_sanitizer_access_plan_t,
                              loom_amdgpu_lower_sanitizer_assert_access)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_sanitizer_race_access_dispatch,
+    loom_amdgpu_sanitizer_race_access_plan_t,
+    loom_amdgpu_select_sanitizer_race_access_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_sanitizer_race_access_dispatch,
+                             loom_amdgpu_sanitizer_race_access_plan_t,
+                             loom_amdgpu_lower_sanitizer_race_access)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_sanitizer_race_sync_dispatch,
+                               loom_amdgpu_sanitizer_race_sync_plan_t,
+                               loom_amdgpu_select_sanitizer_race_sync_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_sanitizer_race_sync_dispatch,
+                             loom_amdgpu_sanitizer_race_sync_plan_t,
+                             loom_amdgpu_lower_sanitizer_race_sync)
 
 #undef LOOM_AMDGPU_DEFINE_DATA_SELECT
 #undef LOOM_AMDGPU_DEFINE_DATA_EMIT

@@ -1412,6 +1412,7 @@ def _manual_scalar_descriptors(
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             encoding_id=s_getpc_b64_opcode,
+            effects=(_PC_RELATIVE_EFFECT,),
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -1897,6 +1898,11 @@ _INSTRUCTION_PREFETCH_EFFECT = Effect(
 )
 
 _CONVERGENT_EFFECT = Effect(
+    EffectKind.CONVERGENT,
+    flags=(EffectFlag.ORDERED,),
+)
+
+_PC_RELATIVE_EFFECT = Effect(
     EffectKind.CONVERGENT,
     flags=(EffectFlag.ORDERED,),
 )
@@ -2800,6 +2806,7 @@ __all__ = (
     "_MATRIX_B_SCALE_IMMEDIATE",
     "_MUBUF_SOFFSET_INLINE_ZERO",
     "_MUBUF_VADDR_OFFSET_ONLY_SIZE_REASON",
+    "_PC_RELATIVE_EFFECT",
     "_VBUFFER_SOFFSET_NULL",
     "_PREFETCH_COUNT_IMMEDIATE",
     "_PREFETCH_DISTANCE_IMMEDIATE",

@@ -256,6 +256,7 @@ iree_cc_library(
     "profile_metadata.h"
     "profile_traces.c"
     "profile_traces.h"
+    "queue_scope.h"
     "semaphore.c"
     "semaphore.h"
     "slab_provider.c"
@@ -264,6 +265,8 @@ iree_cc_library(
     "system.h"
     "transient_buffer.c"
     "transient_buffer.h"
+    "tsan_state.c"
+    "tsan_state.h"
     "virtual_queue.h"
   DEPS
     ::access_policy
@@ -290,6 +293,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::device::dispatch
     iree::hal::drivers::amdgpu::device::headers
     iree::hal::drivers::amdgpu::device::timestamp
+    iree::hal::drivers::amdgpu::device::tsan
     iree::hal::drivers::amdgpu::util::block_pool
     iree::hal::drivers::amdgpu::util::code_object_target
     iree::hal::drivers::amdgpu::util::device_clock
@@ -372,6 +376,7 @@ iree_cc_library(
     "slab_provider.h"
     "system.h"
     "transient_buffer.h"
+    "tsan_state.h"
     "virtual_queue.h"
   DEPS
     ::profile_events

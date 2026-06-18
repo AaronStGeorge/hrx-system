@@ -16,6 +16,7 @@
 #include "loom/ops/global/ops.h"
 #include "loom/ops/sanitizer/ops.h"
 #include "loom/sanitizer/site_table.h"
+#include "loom/target/arch/amdgpu/abi/tsan.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_access.h"
@@ -68,18 +69,23 @@ typedef struct loom_amdgpu_sanitizer_lower_state_t {
   bool has_asan_config_symbol;
   // Module-local ASAN shadow configuration symbol.
   loom_symbol_ref_t asan_config_symbol;
-  // True once read access failures have a shared cold report/trap island.
+  // True once the runtime TSAN shadow config symbol has been looked up or
+  // created.
+  bool has_tsan_config_symbol;
+  // Module-local TSAN shadow configuration symbol.
+  loom_symbol_ref_t tsan_config_symbol;
+  // True once read access failures have a shared cold report island.
   bool has_read_island;
   // Shared cold island for read access failures.
-  loom_amdgpu_sanitizer_access_report_trap_island_t read_island;
-  // True once write access failures have a shared cold report/trap island.
+  loom_amdgpu_sanitizer_access_report_island_t read_island;
+  // True once write access failures have a shared cold report island.
   bool has_write_island;
   // Shared cold island for write access failures.
-  loom_amdgpu_sanitizer_access_report_trap_island_t write_island;
-  // True once atomic access failures have a shared cold report/trap island.
+  loom_amdgpu_sanitizer_access_report_island_t write_island;
+  // True once atomic access failures have a shared cold report island.
   bool has_atomic_island;
   // Shared cold island for atomic access failures.
-  loom_amdgpu_sanitizer_access_report_trap_island_t atomic_island;
+  loom_amdgpu_sanitizer_access_report_island_t atomic_island;
 } loom_amdgpu_sanitizer_lower_state_t;
 
 static int loom_amdgpu_sanitizer_lower_state_key;
@@ -176,12 +182,47 @@ static iree_status_t loom_amdgpu_sanitizer_ensure_asan_config_symbol(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_sanitizer_ensure_tsan_config_symbol(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_sanitizer_lower_state_t* state) {
+  if (!state->has_tsan_config_symbol) {
+    loom_module_t* module = loom_low_lower_context_module(context);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_or_create_symbol(
+        module, IREE_SV(LOOM_AMDGPU_TSAN_CONFIG_GLOBAL_NAME),
+        &state->tsan_config_symbol));
+    state->has_tsan_config_symbol = true;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_sanitizer_ensure_config_symbols(
     loom_low_lower_context_t* context,
     loom_amdgpu_sanitizer_lower_state_t* state) {
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_sanitizer_ensure_feedback_config_symbol(context, state));
   return loom_amdgpu_sanitizer_ensure_asan_config_symbol(context, state);
+}
+
+iree_status_t loom_amdgpu_sanitizer_feedback_config_symbol(
+    loom_low_lower_context_t* context, loom_symbol_ref_t* out_symbol_ref) {
+  *out_symbol_ref = loom_symbol_ref_null();
+  loom_amdgpu_sanitizer_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_lower_state(context, &state));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_ensure_feedback_config_symbol(context, state));
+  *out_symbol_ref = state->feedback_config_symbol;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_sanitizer_tsan_config_symbol(
+    loom_low_lower_context_t* context, loom_symbol_ref_t* out_symbol_ref) {
+  *out_symbol_ref = loom_symbol_ref_null();
+  loom_amdgpu_sanitizer_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_lower_state(context, &state));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_ensure_tsan_config_symbol(context, state));
+  *out_symbol_ref = state->tsan_config_symbol;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_sanitizer_ensure_site_collection(
@@ -348,7 +389,7 @@ iree_status_t loom_amdgpu_finalize_sanitizer_module(
   return loom_amdgpu_sanitizer_emit_site_table_rodata(module, site_table);
 }
 
-static iree_status_t loom_amdgpu_sanitizer_site_id_for_op(
+iree_status_t loom_amdgpu_sanitizer_site_id_for_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_sanitizer_site_id_t* out_site_id) {
   *out_site_id = LOOM_SANITIZER_SITE_ID_INVALID;
@@ -517,7 +558,7 @@ static iree_status_t loom_amdgpu_sanitizer_emit_vgpr_u32_constant(
                                     vgpr_type, out_value);
 }
 
-static loom_amdgpu_sanitizer_access_report_trap_island_t*
+static loom_amdgpu_sanitizer_access_report_island_t*
 loom_amdgpu_sanitizer_island_for_kind(
     loom_amdgpu_sanitizer_lower_state_t* state,
     loom_amdgpu_sanitizer_access_kind_t access_kind, bool** out_has_island) {
@@ -542,10 +583,10 @@ static iree_status_t loom_amdgpu_sanitizer_get_access_island(
     loom_amdgpu_sanitizer_lower_state_t* state,
     loom_amdgpu_sanitizer_access_kind_t access_kind,
     loom_location_id_t location,
-    const loom_amdgpu_sanitizer_access_report_trap_island_t** out_island) {
+    const loom_amdgpu_sanitizer_access_report_island_t** out_island) {
   *out_island = NULL;
   bool* has_island = NULL;
-  loom_amdgpu_sanitizer_access_report_trap_island_t* island =
+  loom_amdgpu_sanitizer_access_report_island_t* island =
       loom_amdgpu_sanitizer_island_for_kind(state, access_kind, &has_island);
   if (island == NULL) {
     return iree_make_status(IREE_STATUS_INTERNAL,
@@ -553,7 +594,7 @@ static iree_status_t loom_amdgpu_sanitizer_get_access_island(
   }
   if (!*has_island) {
     loom_builder_ip_t saved_ip = loom_builder_save(builder);
-    IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_trap_island(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_island(
         builder, descriptor_set, saved_ip.block, state->feedback_config_symbol,
         access_kind, LOOM_AMDGPU_SANITIZER_REPORT_FLAG_NONE, location, island));
     loom_builder_restore(builder, saved_ip);
@@ -611,6 +652,12 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
         &branch);
   }
 
+  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
+          builder, descriptor_set, check.failure_mask, source_op->location,
+          &branch));
+
   loom_amdgpu_sanitizer_report_source_t source = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(
       context, source_op, 0, &source.dispatch_ptr));
@@ -631,12 +678,12 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_emit_vgpr_u64_constant(
       context, source_op, plan->site_id, &report.site_id));
 
-  const loom_amdgpu_sanitizer_access_report_trap_island_t* island = NULL;
+  const loom_amdgpu_sanitizer_access_report_island_t* island = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_access_island(
       builder, descriptor_set, state, plan->report_access_kind,
       source_op->location, &island));
-  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
-  return loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
-      builder, descriptor_set, island, check.failure_mask, &source, &report,
-      source_op->location, &branch);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_branch(
+      builder, descriptor_set, island, &source, &report, source_op->location));
+  loom_builder_set_block(builder, branch.continuation_block);
+  return iree_ok_status();
 }

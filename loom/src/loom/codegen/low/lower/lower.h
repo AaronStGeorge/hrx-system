@@ -923,6 +923,35 @@ iree_status_t loom_low_lower_get_or_allocate_module_target_state(
     loom_low_lower_context_t* context, const void* key,
     iree_host_size_t data_length, void** out_data);
 
+typedef struct loom_low_lower_entry_interposition_t {
+  // Physical low entry block that remains the function entry.
+  loom_block_t* setup_block;
+  // Replacement low block where source entry body emission will continue.
+  loom_block_t* body_block;
+  // Physical entry block arguments forwarded to body_block.
+  const loom_value_id_t* forwarded_args;
+  // Number of entries in forwarded_args.
+  uint16_t forwarded_arg_count;
+  // Target-owned body_block arguments appended after forwarded_args.
+  loom_value_id_t* target_args;
+  // Number of entries in target_args.
+  uint16_t target_arg_count;
+} loom_low_lower_entry_interposition_t;
+
+// Interposes a low-only setup block before the mapped source entry block.
+//
+// This may only be called from an emit_entry_setup callback while the builder
+// is positioned at the end of the current physical entry block. The physical
+// entry block remains the function entry and must be terminated by the caller.
+// Source body emission will continue in the returned body_block, which receives
+// the original physical entry block arguments followed by target-owned
+// arguments of |target_arg_types|. Direct source entry arguments are rebound to
+// the forwarded body_block arguments.
+iree_status_t loom_low_lower_interpose_entry_block(
+    loom_low_lower_context_t* context, const loom_type_t* target_arg_types,
+    uint16_t target_arg_count,
+    loom_low_lower_entry_interposition_t* out_interposition);
+
 // Appends a low-only block to the low function being emitted.
 //
 // This is for target control packets that need a dispatch/restore block with no

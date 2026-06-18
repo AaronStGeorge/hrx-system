@@ -23,3 +23,12 @@ loom_cc_library(
         "//runtime/src/iree/io:file_handle",
     ],
 )
+
+loom_cc_library(
+    name = "source_path",
+    srcs = ["source_path.c"],
+    hdrs = ["source_path.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)

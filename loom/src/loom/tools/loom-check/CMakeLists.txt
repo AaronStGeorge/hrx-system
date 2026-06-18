@@ -308,6 +308,7 @@ loom_cc_library(
     iree::io::file_handle
     loom::ir
     loom::tooling::io::file
+    loom::tooling::io::source_path
     loom::util::stream
   TESTONLY
   PUBLIC

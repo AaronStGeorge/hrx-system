@@ -707,43 +707,6 @@ static iree_status_t loom_low_select_operand_form_can_rewrite_destructive(
   return iree_ok_status();
 }
 
-static bool loom_low_descriptor_result_has_unary_constraint(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor, uint16_t result_index,
-    loom_low_constraint_kind_t kind) {
-  if (result_index >= descriptor->result_count) return false;
-  for (uint16_t i = 0; i < descriptor->constraint_count; ++i) {
-    const loom_low_constraint_t* constraint =
-        &descriptor_set->constraints[descriptor->constraint_start + i];
-    if (constraint->kind == kind &&
-        constraint->lhs_operand_index == result_index &&
-        constraint->rhs_operand_index == LOOM_LOW_ID_NONE) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool loom_low_descriptor_result_can_rematerialize(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor, uint16_t result_index) {
-  if (descriptor == NULL) return false;
-  if (!iree_all_bits_set(descriptor->flags,
-                         LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE)) {
-    return false;
-  }
-  if (!loom_low_descriptor_result_has_unary_constraint(
-          descriptor_set, descriptor, result_index,
-          LOOM_LOW_CONSTRAINT_KIND_REMATERIALIZABLE)) {
-    return false;
-  }
-
-  const loom_trait_flags_t traits =
-      loom_low_descriptor_effective_traits(descriptor_set, descriptor);
-  return iree_all_bits_set(traits, LOOM_TRAIT_PURE) &&
-         !loom_traits_may_read(traits) && !loom_traits_has_side_effects(traits);
-}
-
 static bool loom_low_packet_kind_may_rematerialize(
     loom_low_descriptor_packet_kind_t kind) {
   return kind == LOOM_LOW_DESCRIPTOR_PACKET_OP ||

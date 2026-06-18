@@ -29,6 +29,25 @@ static iree_status_t loom_sanitizer_emit(iree_diagnostic_emitter_t emitter,
   return iree_diagnostic_emit(emitter, &emission);
 }
 
+static bool loom_sanitizer_optional_attr_is_present(const loom_op_t* op,
+                                                    uint16_t attr_index) {
+  return attr_index < op->attribute_count &&
+         !loom_attr_is_absent(loom_op_attrs(op)[attr_index]);
+}
+
+static iree_status_t loom_sanitizer_emit_attribute_value_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t attr_name, int64_t actual_value,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(attr_name),
+      loom_param_i64(actual_value),
+      loom_param_string(expected_constraint),
+  };
+  return loom_sanitizer_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                             IREE_ARRAYSIZE(params));
+}
+
 //===----------------------------------------------------------------------===//
 // Predicate assertions
 //===----------------------------------------------------------------------===//
@@ -221,6 +240,62 @@ iree_status_t loom_sanitizer_assert_access_verify(
       module, op, emitter, IREE_SV("view"), view_type,
       loom_sanitizer_assert_access_static_indices(op),
       loom_sanitizer_assert_access_indices(op).count);
+}
+
+iree_status_t loom_sanitizer_race_access_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_sanitizer_race_access_view(op));
+  IREE_RETURN_IF_ERROR(loom_view_verify_element_access(
+      module, op, emitter, IREE_SV("view"), view_type,
+      loom_sanitizer_race_access_static_indices(op),
+      loom_sanitizer_race_access_indices(op).count));
+
+  const bool atomic = loom_sanitizer_race_access_atomic(op);
+  const bool has_ordering = loom_sanitizer_optional_attr_is_present(
+      op, loom_sanitizer_race_access_ordering_ATTR_INDEX);
+  const bool has_scope = loom_sanitizer_optional_attr_is_present(
+      op, loom_sanitizer_race_access_scope_ATTR_INDEX);
+  if (atomic) {
+    if (!has_ordering) {
+      return loom_sanitizer_emit_attribute_value_constraint(
+          emitter, op, IREE_SV("ordering"), /*actual_value=*/0,
+          IREE_SV("present when atomic is true"));
+    }
+    if (!has_scope) {
+      return loom_sanitizer_emit_attribute_value_constraint(
+          emitter, op, IREE_SV("scope"), /*actual_value=*/0,
+          IREE_SV("present when atomic is true"));
+    }
+    return iree_ok_status();
+  }
+  if (has_ordering) {
+    return loom_sanitizer_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("ordering"),
+        loom_sanitizer_race_access_ordering(op),
+        IREE_SV("absent when atomic is false"));
+  }
+  if (has_scope) {
+    return loom_sanitizer_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("scope"), loom_sanitizer_race_access_scope(op),
+        IREE_SV("absent when atomic is false"));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_sanitizer_race_sync_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  (void)module;
+
+  loom_atomic_ordering_t ordering = loom_sanitizer_race_sync_ordering(op);
+  if (ordering == LOOM_ATOMIC_ORDERING_RELAXED) {
+    return loom_sanitizer_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("ordering"), ordering,
+        IREE_SV("acquire, release, acq_rel, or seq_cst ordering"));
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_sanitizer_assert_value_verify(

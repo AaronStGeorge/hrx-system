@@ -13,6 +13,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
+#include "loom/sanitizer/options_cli.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
@@ -35,6 +36,10 @@ IREE_FLAG_NAMED(int32_t, max_samples_per_case, "max-samples-per-case",
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used for HAL actual invocations. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
+IREE_FLAG(string, sanitizer, "none",
+          "Sanitizer checks inserted by the target pipeline. Use 'none', "
+          "'access', 'value', 'operation', 'race', 'asan', 'ubsan', 'tsan', "
+          "'all', or a '|' separated list.");
 
 enum {
   // Target-linked requirement providers.
@@ -146,6 +151,7 @@ static iree_status_t iree_test_loom_configure_hal_actual_sequence(
     loom_run_session_t* session, const loom_run_module_t* run_module,
     const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_case_plan_t* case_plan,
+    const loom_sanitizer_options_t* sanitizer_options,
     loom_run_hal_testbench_context_t* hal_context,
     loom_testbench_case_execution_options_t* execution_options,
     loom_run_hal_testbench_actual_sequence_t* out_sequence) {
@@ -165,6 +171,7 @@ static iree_status_t iree_test_loom_configure_hal_actual_sequence(
       .filename = run_module->filename,
       .source = run_module->source,
       .pipeline = iree_make_cstring_view(FLAG_pipeline),
+      .sanitizer = *sanitizer_options,
       .test_module = module_plan->module,
       .case_plan = case_plan,
   };
@@ -184,6 +191,7 @@ static iree_status_t iree_test_loom_run_case_samples(
     const loom_testbench_module_plan_t* module_plan,
     iree_host_size_t case_index,
     const loom_testbench_case_execution_options_t* base_execution_options,
+    const loom_sanitizer_options_t* sanitizer_options,
     loom_run_hal_testbench_context_t* hal_context,
     iree_arena_allocator_t* arena, iree_string_builder_t* sample_output,
     iree_string_builder_t* skipped_output, bool* inout_first_sample,
@@ -234,8 +242,9 @@ static iree_status_t iree_test_loom_run_case_samples(
   bool hal_actual_sequence_initialized = false;
   if (iree_test_loom_case_has_actual_invocation(case_plan)) {
     status = iree_test_loom_configure_hal_actual_sequence(
-        configuration, session, run_module, module_plan, case_plan, hal_context,
-        &execution_options, &hal_actual_sequence);
+        configuration, session, run_module, module_plan, case_plan,
+        sanitizer_options, hal_context, &execution_options,
+        &hal_actual_sequence);
     hal_actual_sequence_initialized = iree_status_is_ok(status);
     if (iree_status_is_ok(status)) {
       matmul_oracle_options =
@@ -355,6 +364,7 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "iree-test-loom module.loom --case=@sampled_choice --sample=1\n"
       "iree-test-loom module.loom --max-samples-per-case=16\n"
       "iree-test-loom module.loom --pipeline=@hal_actual_pipeline\n"
+      "iree-test-loom module.loom --sanitizer=tsan\n"
       "```\n"
       "\n"
       "`--case=@name` selects one checked case; empty selection runs cases in\n"
@@ -369,7 +379,9 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "invocations use the selected HAL artifact provider and execution "
       "provider\n"
       "linked into this binary. `--pipeline=default|none|@symbol|pass,list`\n"
-      "controls the HAL actual compile pipeline.\n"
+      "controls the HAL actual compile pipeline. `--sanitizer=...` enables "
+      "the same target-pipeline instrumentation accepted by "
+      "`iree-benchmark-loom`.\n"
       "\n"
       "### Report shape\n"
       "\n"
@@ -417,6 +429,7 @@ int iree_test_loom_main(int argc, char** argv,
   iree_io_file_contents_t* contents = NULL;
   loom_run_session_t session = {0};
   loom_run_module_t run_module = {0};
+  loom_sanitizer_options_t sanitizer_options = {0};
   loom_run_hal_testbench_context_t hal_context = {0};
   iree_arena_allocator_t plan_arena;
   memset(&plan_arena, 0, sizeof(plan_arena));
@@ -443,6 +456,11 @@ int iree_test_loom_main(int argc, char** argv,
                               "--max-samples-per-case must be positive; got "
                               "%d",
                               (int)FLAG_max_samples_per_case);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_sanitizer_options_parse_checks(
+        iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
+        &sanitizer_options);
   }
 
   if (iree_status_is_ok(status)) {
@@ -518,9 +536,10 @@ int iree_test_loom_main(int argc, char** argv,
       ++selected_case_count;
       status = iree_test_loom_run_case_samples(
           configuration, &session, &run_module, &module_plan, case_index,
-          &execution_options, &hal_context, &execution_arena, &sample_output,
-          &skipped_output, &first_sample, &first_skipped_case, &sample_count,
-          &failed_sample_count, &skipped_case_count);
+          &execution_options, &sanitizer_options, &hal_context,
+          &execution_arena, &sample_output, &skipped_output, &first_sample,
+          &first_skipped_case, &sample_count, &failed_sample_count,
+          &skipped_case_count);
     }
     if (iree_status_is_ok(status) && selected_case_count == 0) {
       status = iree_make_status(

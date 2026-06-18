@@ -506,6 +506,10 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
       module, plan->low_function_op, &frame_options, &spill_free_options,
       table_arena, &frame));
   if (diagnostic_emitter->error_count != 0) {
+    if (report != NULL && frame.allocation.function_op != NULL) {
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_record_low_allocation(
+          report, &frame.allocation));
+    }
     return iree_ok_status();
   }
   const loom_amdgpu_native_preflight_options_t preflight_options = {

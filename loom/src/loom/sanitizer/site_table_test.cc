@@ -37,7 +37,7 @@ static iree_const_byte_span_t Record(iree_const_byte_span_t table,
 static loom_sanitizer_site_payload_t MakePayload(
     iree_const_byte_span_t extension_data = iree_const_byte_span_empty()) {
   loom_sanitizer_site_payload_t payload = {};
-  payload.assertion_kind = LOOM_SANITIZER_ASSERTION_KIND_ACCESS;
+  payload.site_kind = LOOM_SANITIZER_SITE_KIND_ACCESS;
   payload.check_kind = LOOM_SANITIZER_CHECK_KIND_ACCESS_RANGE;
   payload.provenance_kind = LOOM_SANITIZER_PROVENANCE_KIND_ANALYSIS;
   payload.lane_policy = LOOM_SANITIZER_LANE_POLICY_ANY_LANE;

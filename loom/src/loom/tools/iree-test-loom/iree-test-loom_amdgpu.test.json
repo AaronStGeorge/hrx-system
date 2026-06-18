@@ -22,6 +22,40 @@
           ]
         }
       }
+    },
+    {
+      "name": "reports loom-authored amdgpu tsan race",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/testdata/amdgpu_sanitizer_actual.loom",
+          "--device=amdgpu",
+          "--sanitizer=tsan",
+          "--amdgpu_tsan=true",
+          "--amdgpu_tsan_report_policy=report-only"
+        ]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "\"format\":\"loom.test.v0\"",
+            {
+              "regex": "\"case\":\"tsan_workgroup_write_race_case\"[^}]*\"passed\":true"
+            },
+            "\"failed_sample_count\":0"
+          ]
+        }
+      },
+      "stderr": {
+        "contains": [
+          "IREE HAL device event: type=tsan_report severity=error",
+          "tsan: check=data_race memory=workgroup",
+          "access: current=write prior=write",
+          "current: workgroup=(0,0,0)",
+          "prior: workgroup=(0,0,0)",
+          "device: driver=amdgpu"
+        ]
+      }
     }
   ]
 }

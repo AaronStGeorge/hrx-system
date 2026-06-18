@@ -462,6 +462,19 @@ iree_status_t loom_low_lower_get_or_allocate_module_target_state(
                                                      data_length, out_data);
 }
 
+static iree_status_t loom_low_lower_replace_value_binding(
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id,
+    loom_value_id_t low_value_id) {
+  IREE_ASSERT_LT(low_value_id, context->module->values.count);
+  const loom_value_ordinal_t source_ordinal =
+      loom_low_lowering_frame_value_ordinal(&context->lowering,
+                                            source_value_id);
+  IREE_ASSERT_NE(context->lowering.value_map[source_ordinal],
+                 LOOM_VALUE_ID_INVALID);
+  context->lowering.value_map[source_ordinal] = low_value_id;
+  return loom_low_lower_copy_value_name(context, source_value_id, low_value_id);
+}
+
 static loom_region_t* loom_low_lower_context_low_body(
     const loom_low_lower_context_t* context) {
   if (loom_low_func_def_isa(context->low_func_op)) {
@@ -471,6 +484,99 @@ static loom_region_t* loom_low_lower_context_low_body(
     return loom_low_kernel_def_body(context->low_func_op);
   }
   return NULL;
+}
+
+iree_status_t loom_low_lower_interpose_entry_block(
+    loom_low_lower_context_t* context, const loom_type_t* target_arg_types,
+    uint16_t target_arg_count,
+    loom_low_lower_entry_interposition_t* out_interposition) {
+  IREE_ASSERT(target_arg_count == 0 || target_arg_types != NULL);
+  IREE_ASSERT(out_interposition != NULL);
+  *out_interposition = (loom_low_lower_entry_interposition_t){0};
+
+  loom_region_t* low_body = loom_low_lower_context_low_body(context);
+  IREE_ASSERT(low_body != NULL);
+  loom_block_t* setup_block = loom_region_entry_block(low_body);
+  if (context->builder.ip.block != setup_block ||
+      context->builder.ip.before_op != NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "source-to-low entry interposition requires the end of the physical "
+        "entry block");
+  }
+  if (context->lowering.block_map == NULL ||
+      context->lowering.block_map[0] != setup_block) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "source-to-low entry block has already been interposed");
+  }
+
+  loom_block_t* body_block = NULL;
+  IREE_RETURN_IF_ERROR(loom_region_insert_block(
+      context->module, low_body, (uint16_t)(setup_block->region_index + 1),
+      &body_block));
+  body_block->label_id = setup_block->label_id;
+  setup_block->label_id = LOOM_STRING_ID_INVALID;
+
+  const uint16_t forwarded_arg_count = setup_block->arg_count;
+  loom_value_id_t* forwarded_args = NULL;
+  if (forwarded_arg_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
+        context, forwarded_arg_count, sizeof(*forwarded_args),
+        (void**)&forwarded_args));
+  }
+  for (uint16_t i = 0; i < forwarded_arg_count; ++i) {
+    const loom_value_id_t setup_arg = loom_block_arg_id(setup_block, i);
+    forwarded_args[i] = setup_arg;
+    loom_value_id_t body_arg = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
+        &context->builder, body_block,
+        loom_module_value_type(context->module, setup_arg), &body_arg));
+    IREE_RETURN_IF_ERROR(
+        loom_module_copy_value_name(context->module, setup_arg, body_arg));
+  }
+
+  loom_value_id_t* target_args = NULL;
+  if (target_arg_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
+        context, target_arg_count, sizeof(*target_args), (void**)&target_args));
+  }
+  for (uint16_t i = 0; i < target_arg_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
+        &context->builder, body_block, target_arg_types[i], &target_args[i]));
+  }
+
+  loom_region_t* source_body = loom_func_like_body(context->source_function);
+  IREE_ASSERT(source_body != NULL);
+  loom_block_t* source_entry_block = loom_region_entry_block(source_body);
+  uint16_t source_argument_count = 0;
+  const loom_value_id_t* source_arguments =
+      loom_func_like_arg_ids(context->source_function, &source_argument_count);
+  IREE_ASSERT_EQ(source_entry_block->arg_count, source_argument_count);
+  uint16_t direct_argument_index = 0;
+  for (uint16_t i = 0; i < source_argument_count; ++i) {
+    if (context->lowering.argument_map[i].kind !=
+        LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT) {
+      continue;
+    }
+    IREE_ASSERT_LT(direct_argument_index, forwarded_arg_count);
+    IREE_RETURN_IF_ERROR(loom_low_lower_replace_value_binding(
+        context, source_arguments[i],
+        loom_block_arg_id(body_block, direct_argument_index)));
+    ++direct_argument_index;
+  }
+  IREE_ASSERT_EQ(direct_argument_index, forwarded_arg_count);
+
+  context->lowering.block_map[0] = body_block;
+  *out_interposition = (loom_low_lower_entry_interposition_t){
+      .setup_block = setup_block,
+      .body_block = body_block,
+      .forwarded_args = forwarded_args,
+      .forwarded_arg_count = forwarded_arg_count,
+      .target_args = target_args,
+      .target_arg_count = target_arg_count,
+  };
+  return iree_ok_status();
 }
 
 iree_status_t loom_low_lower_append_low_block(loom_low_lower_context_t* context,

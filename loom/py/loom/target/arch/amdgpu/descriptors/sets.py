@@ -1577,6 +1577,8 @@ def _rdna4_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         *_with_zero_accumulator_form(_v_wmma_i32_16x16x32_iu4_overlay()),
         *_rdna4_swmmac_overlays(),
+        _s_barrier_signal_all_overlay(),
+        _s_barrier_wait_all_overlay(),
         _s_sendmsg_overlay(),
         _s_sendmsg_rtn_b32_overlay(),
         _s_sethalt_overlay(),

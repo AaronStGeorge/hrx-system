@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "iree/hal/drivers/amdgpu/device/support/feedback.h"
+#include "iree/hal/drivers/amdgpu/device/support/tsan.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -41,6 +42,17 @@ struct DrainState {
   std::vector<DrainedPacket> packets;
 };
 
+struct TsanDrainState {
+  // Packet sequence observed by the host drain.
+  uint64_t sequence = 0;
+  // Packet kind observed by the host drain.
+  uint16_t kind = 0;
+  // Packet header source dispatch pointer observed by the host drain.
+  uint64_t source_dispatch_ptr = 0;
+  // Captured TSAN report payload.
+  iree_hal_amdgpu_tsan_report_t report = {};
+};
+
 static iree_status_t CapturePacket(
     const iree_hal_amdgpu_feedback_packet_t* packet, void* user_data) {
   DrainState* state = reinterpret_cast<DrainState*>(user_data);
@@ -51,6 +63,18 @@ static iree_status_t CapturePacket(
   drained.kind = packet->kind;
   drained.payload = *payload;
   state->packets.push_back(drained);
+  return iree_ok_status();
+}
+
+static iree_status_t CaptureTsanPacket(
+    const iree_hal_amdgpu_feedback_packet_t* packet, void* user_data) {
+  TsanDrainState* state = reinterpret_cast<TsanDrainState*>(user_data);
+  const auto* report = reinterpret_cast<const iree_hal_amdgpu_tsan_report_t*>(
+      iree_hal_amdgpu_feedback_packet_const_payload(packet));
+  state->sequence = packet->sequence;
+  state->kind = packet->kind;
+  state->source_dispatch_ptr = packet->source_dispatch_ptr;
+  state->report = *report;
   return iree_ok_status();
 }
 
@@ -175,6 +199,61 @@ TEST_F(FeedbackChannelTest, WrapsPacketStorage) {
   EXPECT_EQ(state.packets[0].sequence, start_position);
   EXPECT_EQ(state.packets[0].payload.value, 0xFEEDFACECAFEBEEFull);
   EXPECT_EQ(state.packets[0].payload.ordinal, 42u);
+  EXPECT_EQ(channel_.control->read_tail, channel_.control->reservation_head);
+}
+
+TEST_F(FeedbackChannelTest, HostTsanProducerDrain) {
+  ASSERT_TRUE(iree_hal_amdgpu_tsan_report_data_race(
+      &channel_.config, IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_NONE,
+      IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_WORKGROUP,
+      IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_WRITE,
+      IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_READ,
+      /*access_size=*/4, /*current_site_id=*/17, /*prior_site_id=*/11,
+      /*memory_address=*/0x20, /*shadow_address=*/0xABC0,
+      /*shadow_value=*/0x12345678, /*current_workgroup_id_x=*/2,
+      /*current_workgroup_id_y=*/3, /*current_workgroup_id_z=*/4,
+      /*current_workitem_id_x=*/5, /*current_workitem_id_y=*/6,
+      /*current_workitem_id_z=*/7, /*prior_workgroup_id_x=*/8,
+      /*prior_workgroup_id_y=*/9, /*prior_workgroup_id_z=*/10,
+      /*prior_workitem_id_x=*/11, /*prior_workitem_id_y=*/12,
+      /*prior_workitem_id_z=*/13));
+
+  TsanDrainState state;
+  iree_host_size_t packet_count = 0;
+  IREE_ASSERT_OK(iree_hal_amdgpu_feedback_channel_drain(
+      &channel_, 1, CaptureTsanPacket, &state, &packet_count));
+  ASSERT_EQ(packet_count, 1u);
+  EXPECT_EQ(state.kind, IREE_HAL_AMDGPU_FEEDBACK_PACKET_KIND_TSAN);
+  EXPECT_EQ(state.source_dispatch_ptr, 0u);
+  EXPECT_EQ(state.report.record_length, sizeof(iree_hal_amdgpu_tsan_report_t));
+  EXPECT_EQ(state.report.abi_version,
+            IREE_HAL_AMDGPU_TSAN_REPORT_ABI_VERSION_0);
+  EXPECT_EQ(state.report.check_kind, IREE_HAL_AMDGPU_TSAN_CHECK_KIND_DATA_RACE);
+  EXPECT_EQ(state.report.flags, IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_NONE);
+  EXPECT_EQ(state.report.memory_space,
+            IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_WORKGROUP);
+  EXPECT_EQ(state.report.current_access_kind,
+            IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_WRITE);
+  EXPECT_EQ(state.report.prior_access_kind,
+            IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_READ);
+  EXPECT_EQ(state.report.access_size, 4u);
+  EXPECT_EQ(state.report.current_site_id, 17u);
+  EXPECT_EQ(state.report.prior_site_id, 11u);
+  EXPECT_EQ(state.report.memory_address, 0x20u);
+  EXPECT_EQ(state.report.shadow_address, 0xABC0u);
+  EXPECT_EQ(state.report.shadow_value, 0x12345678u);
+  EXPECT_EQ(state.report.current_workgroup_id[0], 2u);
+  EXPECT_EQ(state.report.current_workgroup_id[1], 3u);
+  EXPECT_EQ(state.report.current_workgroup_id[2], 4u);
+  EXPECT_EQ(state.report.current_workitem_id[0], 5u);
+  EXPECT_EQ(state.report.current_workitem_id[1], 6u);
+  EXPECT_EQ(state.report.current_workitem_id[2], 7u);
+  EXPECT_EQ(state.report.prior_workgroup_id[0], 8u);
+  EXPECT_EQ(state.report.prior_workgroup_id[1], 9u);
+  EXPECT_EQ(state.report.prior_workgroup_id[2], 10u);
+  EXPECT_EQ(state.report.prior_workitem_id[0], 11u);
+  EXPECT_EQ(state.report.prior_workitem_id[1], 12u);
+  EXPECT_EQ(state.report.prior_workitem_id[2], 13u);
   EXPECT_EQ(channel_.control->read_tail, channel_.control->reservation_head);
 }
 

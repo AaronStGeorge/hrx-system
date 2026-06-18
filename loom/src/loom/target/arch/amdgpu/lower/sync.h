@@ -9,6 +9,8 @@
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_SYNC_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_SYNC_H_
 
+#include <stdbool.h>
+
 #include "loom/codegen/low/lower/lower.h"
 #include "loom/target/arch/amdgpu/lower/plan.h"
 #include "loom/target/low_legality.h"
@@ -16,6 +18,21 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Returns true when the descriptor set has a multi-wave workgroup barrier
+// lowering available.
+bool loom_amdgpu_workgroup_barrier_lowering_available(
+    const loom_low_descriptor_set_t* descriptor_set);
+
+// Selects a target synchronization packet sequence for a workgroup barrier.
+iree_status_t loom_amdgpu_select_workgroup_barrier_plan(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_kernel_barrier_plan_t* out_plan, bool* out_selected);
+
+// Lowers a workgroup barrier according to |plan|.
+iree_status_t loom_amdgpu_lower_workgroup_barrier_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_kernel_barrier_plan_t* plan);
 
 // Selects a target synchronization packet for a source kernel.barrier op.
 iree_status_t loom_amdgpu_select_kernel_barrier_plan(

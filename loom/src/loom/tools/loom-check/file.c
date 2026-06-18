@@ -49,7 +49,8 @@ static iree_status_t loom_check_write_updates(
 }
 
 static iree_status_t loom_check_process_file(
-    iree_string_view_t filename, iree_string_view_t source, bool is_stdin,
+    iree_string_view_t path, iree_string_view_t filename,
+    iree_string_view_t source, bool is_stdin,
     const loom_check_process_options_t* options,
     const loom_check_environment_t* environment, loom_context_t* context,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
@@ -196,12 +197,12 @@ static iree_status_t loom_check_process_file(
     }
     if (any_updates) {
       status =
-          loom_check_write_updates(filename, source, &file, updates, allocator);
+          loom_check_write_updates(path, source, &file, updates, allocator);
     } else if (template_sync_changed) {
-      status = loom_check_write_source(filename, source, allocator);
+      status = loom_check_write_source(path, source, allocator);
       if (iree_status_is_ok(status)) {
-        fprintf(stderr, "synchronized template cases in %.*s\n",
-                (int)filename.size, filename.data);
+        fprintf(stderr, "synchronized template cases in %.*s\n", (int)path.size,
+                path.data);
       }
     }
   }
@@ -242,9 +243,18 @@ iree_status_t loom_check_read_and_process(
     iree_string_view_t source =
         loom_tooling_file_contents_string_view(contents);
     iree_string_view_t filename = is_stdin ? IREE_SV("<stdin>") : path;
-    status = loom_check_process_file(
-        filename, source, is_stdin, options, environment, context, block_pool,
-        host_allocator, pass_count, fail_count, skip_count);
+    char* filename_storage = NULL;
+    if (!is_stdin) {
+      status = loom_tooling_source_path_remap(
+          filename, &options->source_path_options, host_allocator, &filename,
+          &filename_storage);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_check_process_file(
+          path, filename, source, is_stdin, options, environment, context,
+          block_pool, host_allocator, pass_count, fail_count, skip_count);
+    }
+    iree_allocator_free(host_allocator, filename_storage);
   }
 
   iree_io_file_contents_free(contents);

@@ -21,6 +21,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::codegen::low::allocation
     loom::codegen::low::allocation_materialization
+    loom::codegen::low::allocation_rematerialization
     loom::codegen::low::descriptors
     loom::codegen::low::function
     loom::codegen::low::pipeline::pass_environment

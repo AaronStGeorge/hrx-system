@@ -24,7 +24,8 @@ low.func.def target(@target) abi(hal_kernel) @generic_atomic_i32_static() asm<am
   %14 = v_mov_b32 1
   flat_atomic_add %12, %14, %13
   %19 = concat(%10, %11) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %old_add = flat_atomic_add_rtn %19, %14, %13 : reg<amdgpu.vgpr>
+  %20 = s_mov_b32_m0_imm 0
+  %old_add = flat_atomic_add_rtn %19, %14, %20 : reg<amdgpu.vgpr>
   return
 }
 

@@ -152,6 +152,8 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:special_values",
+        "//loom/src/loom/sanitizer:options",
+        "//loom/src/loom/sanitizer:options_cli",
         "//loom/src/loom/target:artifact_manifest",
         "//loom/src/loom/tooling/cli:help",
         "//loom/src/loom/tooling/compile:pipeline",

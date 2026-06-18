@@ -1038,6 +1038,7 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsRequestedRuntimeGlobals) {
       /*.processor=*/{},
       /*.target_selection=*/{},
       /*.runtime_globals=*/LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG |
+          LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG |
           LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
       /*.data_symbols=*/{},
       /*.data_symbol_count=*/{},
@@ -1065,15 +1066,17 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsRequestedRuntimeGlobals) {
                             LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC);
   EXPECT_EQ(data.size,
             LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH +
+                LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_BYTE_LENGTH +
                 LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
 
   const std::string dynstr_contents =
       hsaco.substr((size_t)dynstr.offset, (size_t)dynstr.size);
   ASSERT_EQ(dynsym.entry_size, 24u);
-  ASSERT_EQ(dynsym.size, 5u * 24u);
+  ASSERT_EQ(dynsym.size, 6u * 24u);
 
   const size_t asan_symbol = (size_t)dynsym.offset + 3u * 24u;
-  const size_t feedback_symbol = asan_symbol + 24u;
+  const size_t tsan_symbol = asan_symbol + 24u;
+  const size_t final_feedback_symbol = tsan_symbol + 24u;
   EXPECT_EQ(ReadNullTerminatedString(dynstr_contents,
                                      LoadLeU32(hsaco, asan_symbol + 0)),
             StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_NAME));
@@ -1082,13 +1085,21 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsRequestedRuntimeGlobals) {
   EXPECT_EQ(LoadLeU64(hsaco, asan_symbol + 16),
             LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH);
 
+  EXPECT_EQ(ReadNullTerminatedString(dynstr_contents,
+                                     LoadLeU32(hsaco, tsan_symbol + 0)),
+            StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_NAME));
+  EXPECT_EQ((uint8_t)hsaco[tsan_symbol + 4], 0x11u);
+  EXPECT_EQ(LoadLeU16(hsaco, tsan_symbol + 6), data.index);
+  EXPECT_EQ(LoadLeU64(hsaco, tsan_symbol + 16),
+            LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_BYTE_LENGTH);
+
   EXPECT_EQ(
       ReadNullTerminatedString(dynstr_contents,
-                               LoadLeU32(hsaco, feedback_symbol + 0)),
+                               LoadLeU32(hsaco, final_feedback_symbol + 0)),
       StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_NAME));
-  EXPECT_EQ((uint8_t)hsaco[feedback_symbol + 4], 0x11u);
-  EXPECT_EQ(LoadLeU16(hsaco, feedback_symbol + 6), data.index);
-  EXPECT_EQ(LoadLeU64(hsaco, feedback_symbol + 16),
+  EXPECT_EQ((uint8_t)hsaco[final_feedback_symbol + 4], 0x11u);
+  EXPECT_EQ(LoadLeU16(hsaco, final_feedback_symbol + 6), data.index);
+  EXPECT_EQ(LoadLeU64(hsaco, final_feedback_symbol + 16),
             LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
 
   loom_amdgpu_hal_kernel_library_deinitialize(&library,

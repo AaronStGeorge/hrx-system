@@ -61,6 +61,12 @@ static bool loom_target_pipeline_sanitizer_enabled(
   return loom_sanitizer_options_is_enabled(&context->sanitizer_options);
 }
 
+static bool loom_target_pipeline_sanitizer_has_checks(
+    const loom_target_pipeline_build_context_t* context,
+    loom_sanitizer_checks_t checks) {
+  return iree_any_bit_set(context->sanitizer_options.checks, checks);
+}
+
 static iree_status_t loom_target_pipeline_build_string_attr(
     loom_builder_t* builder, iree_string_view_t name, iree_string_view_t value,
     loom_named_attr_t* out_attr) {
@@ -110,6 +116,18 @@ static iree_status_t loom_target_pipeline_build_sanitizer_assertion_selection(
       context->sanitizer_options.checks, &checks_value));
   return loom_target_pipeline_build_run_with_string_option(
       builder, IREE_SV("sanitizer-insert-assertions"), IREE_SV("checks"),
+      checks_value);
+}
+
+static iree_status_t loom_target_pipeline_build_sanitizer_race_observations(
+    loom_builder_t* builder, void* user_data) {
+  const loom_target_pipeline_build_context_t* context =
+      (const loom_target_pipeline_build_context_t*)user_data;
+  iree_string_view_t checks_value = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_sanitizer_checks_format(
+      context->sanitizer_options.checks, &checks_value));
+  return loom_target_pipeline_build_run_with_string_option(
+      builder, IREE_SV("sanitizer-insert-race-observations"), IREE_SV("checks"),
       checks_value);
 }
 
@@ -293,7 +311,9 @@ static iree_status_t loom_target_pipeline_build_low_preparation(
       (const loom_target_pipeline_build_context_t*)user_data;
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION));
-  if (loom_target_pipeline_sanitizer_enabled(context)) {
+  if (loom_target_pipeline_sanitizer_has_checks(
+          context, LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
+                       LOOM_SANITIZER_CHECK_OPERATION)) {
     IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
         builder, IREE_SV("sanitizer-materialize-assertions")));
   }
@@ -326,9 +346,17 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       builder, source_finish_body, user_data, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
-  if (loom_target_pipeline_sanitizer_enabled(context)) {
+  if (loom_target_pipeline_sanitizer_has_checks(
+          context, LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
+                       LOOM_SANITIZER_CHECK_OPERATION)) {
     IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
         builder, loom_target_pipeline_build_sanitizer_assertion_selection,
+        user_data, &for_op));
+  }
+  if (loom_target_pipeline_sanitizer_has_checks(context,
+                                                LOOM_SANITIZER_CHECK_RACE)) {
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
+        builder, loom_target_pipeline_build_sanitizer_race_observations,
         user_data, &for_op));
   }
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(

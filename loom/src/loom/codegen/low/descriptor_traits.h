@@ -25,6 +25,20 @@ loom_trait_flags_t loom_low_descriptor_effective_traits(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor);
 
+// Returns true when |descriptor| permits cloning |result_index| near each use
+// instead of preserving the original producer live range.
+//
+// Rematerialization is deliberately opt-in per result. The descriptor must be
+// dead-removable, the result must carry a unary REMATERIALIZABLE constraint,
+// and replaying the packet must not observe or mutate state beyond the explicit
+// rematerialized result. This is narrower than the generic effective-trait
+// projection: descriptors such as explicit SCC compares still carry target
+// state-write rows for scheduling, but replaying that state write is the same
+// act as producing the rematerialized SSA value.
+bool loom_low_descriptor_result_can_rematerialize(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t result_index);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

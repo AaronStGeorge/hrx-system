@@ -16,6 +16,46 @@ func.def @access_static_index_out_of_bounds(%layout: encoding<layout>, %view: vi
 
 // ====
 
+func.def @race_access_index_count_mismatch(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: SUBRANGE/001 "view" "1" "2"
+  sanitizer.race.access<read> %view[%row] : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @race_access_static_index_out_of_bounds(%layout: encoding<layout>, %view: view<4x4xf32, %layout>) {
+  // ERROR@+1: SUBRANGE/004
+  sanitizer.race.access<write> %view[4, 0] : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @race_access_atomic_requires_ordering(%layout: encoding<layout>, %view: view<4xf32, %layout>, %i: index) {
+  // ERROR@+1: STRUCTURE/014 "ordering" "0" "present when atomic is true"
+  sanitizer.race.access<write> %view[%i] {atomic = true, scope = workgroup} : view<4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @race_access_nonatomic_rejects_ordering(%layout: encoding<layout>, %view: view<4xf32, %layout>, %i: index) {
+  // ERROR@+1: STRUCTURE/014 "ordering" "0" "absent when atomic is false"
+  sanitizer.race.access<read> %view[%i] {ordering = relaxed} : view<4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @race_sync_rejects_relaxed_ordering() {
+  // ERROR@+1: STRUCTURE/014 "ordering" "0" "acquire, release, acq_rel, or seq_cst ordering"
+  sanitizer.race.sync<workgroup> {ordering = relaxed, scope = workgroup}
+  func.return
+}
+
+// ====
+
 func.def @count_mismatch(%x: index) -> (index, index) {
   // ERROR@+1: STRUCTURE/013 "values" "1" "results" "2"
   %a, %b = sanitizer.assert.value %x [ge(%x, 0)] : index, index

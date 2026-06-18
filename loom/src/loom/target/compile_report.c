@@ -44,6 +44,8 @@ void loom_target_compile_report_deinitialize(
                                                    &report->pressure_rows);
   loom_target_compile_report_row_list_deinitialize(allocator,
                                                    &report->spill_rows);
+  loom_target_compile_report_row_list_deinitialize(
+      allocator, &report->allocation_failure_rows);
   loom_target_compile_report_row_list_deinitialize(allocator,
                                                    &report->source_low_rows);
   loom_target_compile_report_row_list_deinitialize(
@@ -56,6 +58,7 @@ void loom_target_compile_report_deinitialize(
 static bool loom_target_compile_report_has_rows(
     const loom_target_compile_report_t* report) {
   return report->pressure_rows.count != 0 || report->spill_rows.count != 0 ||
+         report->allocation_failure_rows.count != 0 ||
          report->entry_rows.count != 0 || report->source_low_rows.count != 0 ||
          report->source_low_memory_rows.count != 0 ||
          report->target_legalization_rows.count != 0;
@@ -147,11 +150,14 @@ iree_status_t loom_target_compile_report_clone(
   target.entry_rows = (loom_target_compile_report_row_list_t){0};
   target.pressure_rows = (loom_target_compile_report_row_list_t){0};
   target.spill_rows = (loom_target_compile_report_row_list_t){0};
+  target.allocation_failure_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_memory_rows = (loom_target_compile_report_row_list_t){0};
   target.target_legalization_rows = (loom_target_compile_report_row_list_t){0};
   if (source->entry_rows.count == 0 && source->pressure_rows.count == 0 &&
-      source->spill_rows.count == 0 && source->source_low_rows.count == 0 &&
+      source->spill_rows.count == 0 &&
+      source->allocation_failure_rows.count == 0 &&
+      source->source_low_rows.count == 0 &&
       source->source_low_memory_rows.count == 0 &&
       source->target_legalization_rows.count == 0) {
     *out_target = target;
@@ -174,6 +180,12 @@ iree_status_t loom_target_compile_report_clone(
     status = loom_target_compile_report_row_list_clone(
         &source->spill_rows, sizeof(loom_target_compile_report_spill_row_t),
         allocator, &target.spill_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->allocation_failure_rows,
+        sizeof(loom_target_compile_report_allocation_failure_row_t), allocator,
+        &target.allocation_failure_rows);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_row_list_clone(
@@ -521,6 +533,15 @@ iree_status_t loom_target_compile_report_record_entry_report(
         &report->spill_rows, &entry_report->spill_rows,
         sizeof(loom_target_compile_report_spill_row_t), report->allocator));
   }
+  if (iree_any_bit_set(
+          entry_report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_append_rows(
+        &report->allocation_failure_rows,
+        &entry_report->allocation_failure_rows,
+        sizeof(loom_target_compile_report_allocation_failure_row_t),
+        report->allocator));
+  }
   return iree_ok_status();
 }
 
@@ -538,6 +559,15 @@ iree_status_t loom_target_compile_report_record_spill_row(
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS;
   return loom_target_compile_report_row_list_append(
       &report->spill_rows, sizeof(*row), report->allocator, row);
+}
+
+iree_status_t loom_target_compile_report_record_allocation_failure_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_allocation_failure_row_t* row) {
+  report->detail_flags |=
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS;
+  return loom_target_compile_report_row_list_append(
+      &report->allocation_failure_rows, sizeof(*row), report->allocator, row);
 }
 
 iree_status_t loom_target_compile_report_record_source_low_row(

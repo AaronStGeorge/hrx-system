@@ -20,10 +20,9 @@ namespace {
 
 loom_sanitizer_site_payload_t MakePayload(
     loom_sanitizer_check_kind_t check_kind,
-    loom_sanitizer_assertion_kind_t assertion_kind =
-        LOOM_SANITIZER_ASSERTION_KIND_VALUE) {
+    loom_sanitizer_site_kind_t site_kind = LOOM_SANITIZER_SITE_KIND_VALUE) {
   loom_sanitizer_site_payload_t payload = {};
-  payload.assertion_kind = assertion_kind;
+  payload.site_kind = site_kind;
   payload.check_kind = check_kind;
   payload.provenance_kind = LOOM_SANITIZER_PROVENANCE_KIND_ASSUME;
   payload.lane_policy = LOOM_SANITIZER_LANE_POLICY_SCALAR;
@@ -48,7 +47,7 @@ loom_predicate_t MakeRangePredicate(loom_value_id_t value_id) {
 
 void ExpectSamePayload(const loom_sanitizer_site_payload_t& expected,
                        const loom_sanitizer_site_payload_t& actual) {
-  EXPECT_EQ(actual.assertion_kind, expected.assertion_kind);
+  EXPECT_EQ(actual.site_kind, expected.site_kind);
   EXPECT_EQ(actual.check_kind, expected.check_kind);
   EXPECT_EQ(actual.provenance_kind, expected.provenance_kind);
   EXPECT_EQ(actual.lane_policy, expected.lane_policy);
@@ -140,6 +139,17 @@ class SiteCollectionTest : public ::testing::Test {
     IREE_CHECK_OK(loom_sanitizer_assert_access_build(
         &builder_, LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ, view_id, NULL, 0,
         static_indices, IREE_ARRAYSIZE(static_indices), location, &op));
+    return op;
+  }
+
+  loom_op_t* BuildRaceAccess(loom_value_id_t view_id,
+                             loom_location_id_t location) {
+    const int64_t static_indices[] = {0};
+    loom_op_t* op = NULL;
+    IREE_CHECK_OK(loom_sanitizer_race_access_build(
+        &builder_, 0, LOOM_SANITIZER_RACE_ACCESS_KIND_WRITE, view_id, NULL, 0,
+        static_indices, IREE_ARRAYSIZE(static_indices), false, 0, 0, location,
+        &op));
     return op;
   }
 
@@ -304,7 +314,7 @@ TEST_F(SiteCollectionTest, UnknownLocationsStillProduceDistinctRegionRows) {
   iree_arena_deinitialize(&arena);
 }
 
-TEST_F(SiteCollectionTest, CollectsEverySanitizerAssertionKind) {
+TEST_F(SiteCollectionTest, CollectsEverySanitizerReportSiteKind) {
   loom_op_t* constant = BuildConstant(12);
   loom_value_id_t value = loom_test_constant_result(constant);
   loom_op_t* view = BuildViewValue(value);
@@ -316,6 +326,7 @@ TEST_F(SiteCollectionTest, CollectsEverySanitizerAssertionKind) {
   loom_op_t* op_assert = BuildAssertOp(value, LOOM_LOCATION_UNKNOWN);
   loom_op_t* layout_assert =
       BuildAssertLayout(view_value, LOOM_LOCATION_UNKNOWN);
+  loom_op_t* race_access = BuildRaceAccess(view_value, LOOM_LOCATION_UNKNOWN);
   FinalizeModule();
 
   iree_arena_allocator_t arena;
@@ -324,7 +335,7 @@ TEST_F(SiteCollectionTest, CollectsEverySanitizerAssertionKind) {
   IREE_ASSERT_OK(loom_sanitizer_site_collection_build_region(
       module_, body_, &arena, &collection));
 
-  ASSERT_EQ(collection.row_count, 4u);
+  ASSERT_EQ(collection.row_count, 5u);
   EXPECT_EQ(collection.rows[0].site_id, 0u);
   EXPECT_EQ(collection.rows[0].op, access_assert);
   EXPECT_EQ(collection.rows[0].op_kind, LOOM_OP_SANITIZER_ASSERT_ACCESS);
@@ -337,6 +348,9 @@ TEST_F(SiteCollectionTest, CollectsEverySanitizerAssertionKind) {
   EXPECT_EQ(collection.rows[3].site_id, 3u);
   EXPECT_EQ(collection.rows[3].op, layout_assert);
   EXPECT_EQ(collection.rows[3].op_kind, LOOM_OP_SANITIZER_ASSERT_LAYOUT);
+  EXPECT_EQ(collection.rows[4].site_id, 4u);
+  EXPECT_EQ(collection.rows[4].op, race_access);
+  EXPECT_EQ(collection.rows[4].op_kind, LOOM_OP_SANITIZER_RACE_ACCESS);
   iree_arena_deinitialize(&arena);
 }
 

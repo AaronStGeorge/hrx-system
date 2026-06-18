@@ -4,33 +4,35 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Shared helpers for HAL ASAN executable CTS coverage.
+// Shared helpers for HAL sanitizer CTS coverage.
 
-#ifndef IREE_HAL_CTS_SANITIZER_ASAN_TEST_UTIL_H_
-#define IREE_HAL_CTS_SANITIZER_ASAN_TEST_UTIL_H_
+#ifndef IREE_HAL_CTS_SANITIZER_SANITIZER_TEST_UTIL_H_
+#define IREE_HAL_CTS_SANITIZER_SANITIZER_TEST_UTIL_H_
 
 #include <condition_variable>
 #include <cstring>
 #include <map>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "iree/hal/cts/util/test_base.h"
 
 namespace iree::hal::cts {
 
-// Captures ASAN device events produced by the ASAN CTS backend device.
-class AsanDeviceEventRecorder {
+// Captures sanitizer device events produced by CTS backend devices.
+class SanitizerDeviceEventRecorder {
  public:
-  AsanDeviceEventRecorder() = default;
+  SanitizerDeviceEventRecorder() = default;
 
-  AsanDeviceEventRecorder(const AsanDeviceEventRecorder&) = delete;
-  AsanDeviceEventRecorder& operator=(const AsanDeviceEventRecorder&) = delete;
+  SanitizerDeviceEventRecorder(const SanitizerDeviceEventRecorder&) = delete;
+  SanitizerDeviceEventRecorder& operator=(const SanitizerDeviceEventRecorder&) =
+      delete;
 
   iree_hal_device_event_sink_t sink() {
     iree_hal_device_event_sink_t sink;
-    sink.fn = AsanDeviceEventRecorder::Capture;
+    sink.fn = SanitizerDeviceEventRecorder::Capture;
     sink.user_data = this;
     return sink;
   }
@@ -38,6 +40,7 @@ class AsanDeviceEventRecorder {
   void Reset() {
     std::lock_guard<std::mutex> lock(mutex_);
     asan_report_count_ = 0;
+    tsan_report_count_ = 0;
     last_source_ = iree_hal_device_event_source_default();
     last_site_available_ = false;
     last_site_ = iree_hal_device_event_site_default();
@@ -45,7 +48,8 @@ class AsanDeviceEventRecorder {
     last_site_function_name_.clear();
     last_site_operation_name_.clear();
     last_site_producer_payload_.clear();
-    std::memset(&last_report_, 0, sizeof(last_report_));
+    std::memset(&last_asan_report_, 0, sizeof(last_asan_report_));
+    std::memset(&last_tsan_report_, 0, sizeof(last_tsan_report_));
   }
 
   void WaitForAsanReportCount(iree_host_size_t expected_count) {
@@ -58,14 +62,29 @@ class AsanDeviceEventRecorder {
     return asan_report_count_;
   }
 
+  void WaitForTsanReportCount(iree_host_size_t expected_count) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [&] { return tsan_report_count_ >= expected_count; });
+  }
+
+  iree_host_size_t tsan_report_count() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return tsan_report_count_;
+  }
+
   iree_hal_device_event_source_t last_source() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return last_source_;
   }
 
-  iree_hal_device_asan_report_t last_report() const {
+  iree_hal_device_asan_report_t last_asan_report() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return last_report_;
+    return last_asan_report_;
+  }
+
+  iree_hal_device_tsan_report_t last_tsan_report() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_tsan_report_;
   }
 
   bool last_site_available() const {
@@ -108,7 +127,7 @@ class AsanDeviceEventRecorder {
     }
   }
 
-  static void CaptureSite(AsanDeviceEventRecorder* recorder,
+  static void CaptureSite(SanitizerDeviceEventRecorder* recorder,
                           const iree_hal_device_event_site_t* site) {
     recorder->last_site_available_ = site != nullptr;
     recorder->last_site_ = iree_hal_device_event_site_default();
@@ -127,33 +146,62 @@ class AsanDeviceEventRecorder {
   }
 
   static void Capture(void* user_data, const iree_hal_device_event_t* event) {
-    auto* recorder = static_cast<AsanDeviceEventRecorder*>(user_data);
-    if (event->type != IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT ||
-        !event->payload.data ||
-        event->payload.data_length < sizeof(iree_hal_device_asan_report_t)) {
-      return;
+    auto* recorder = static_cast<SanitizerDeviceEventRecorder*>(user_data);
+    if (!event->payload.data) return;
+    switch (event->type) {
+      case IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT:
+        if (event->payload.data_length <
+            sizeof(iree_hal_device_asan_report_t)) {
+          return;
+        }
+        break;
+      case IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT:
+        if (event->payload.data_length <
+            sizeof(iree_hal_device_tsan_report_t)) {
+          return;
+        }
+        break;
+      default:
+        return;
     }
-    std::lock_guard<std::mutex> lock(recorder->mutex_);
-    recorder->last_source_ = event->source;
-    CaptureSite(recorder, event->site);
-    std::memcpy(&recorder->last_report_, event->payload.data,
-                sizeof(recorder->last_report_));
-    ++recorder->asan_report_count_;
+
+    {
+      std::lock_guard<std::mutex> lock(recorder->mutex_);
+      recorder->last_source_ = event->source;
+      CaptureSite(recorder, event->site);
+      switch (event->type) {
+        case IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT:
+          std::memcpy(&recorder->last_asan_report_, event->payload.data,
+                      sizeof(recorder->last_asan_report_));
+          ++recorder->asan_report_count_;
+          break;
+        case IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT:
+          std::memcpy(&recorder->last_tsan_report_, event->payload.data,
+                      sizeof(recorder->last_tsan_report_));
+          ++recorder->tsan_report_count_;
+          break;
+        default:
+          break;
+      }
+    }
     recorder->condition_.notify_all();
   }
 
   // Protects captured report state.
   mutable std::mutex mutex_;
-  // Notifies tests waiting for captured ASAN reports.
+  // Notifies tests waiting for captured sanitizer reports.
   std::condition_variable condition_;
   // Count of ASAN reports captured since the last reset.
   iree_host_size_t asan_report_count_ = 0;
-  // Source attribution from the last captured ASAN report.
+  // Count of TSAN reports captured since the last reset.
+  iree_host_size_t tsan_report_count_ = 0;
+  // Source attribution from the last captured sanitizer report.
   iree_hal_device_event_source_t last_source_ =
       iree_hal_device_event_source_default();
-  // True when the last captured ASAN report carried resolved site metadata.
+  // True when the last captured sanitizer report carried resolved site
+  // metadata.
   bool last_site_available_ = false;
-  // Resolved site metadata from the last captured ASAN report.
+  // Resolved site metadata from the last captured sanitizer report.
   iree_hal_device_event_site_t last_site_ =
       iree_hal_device_event_site_default();
   // Owned source file storage referenced by |last_site_|.
@@ -165,12 +213,14 @@ class AsanDeviceEventRecorder {
   // Owned producer payload storage referenced by |last_site_|.
   std::vector<uint8_t> last_site_producer_payload_;
   // Payload from the last captured ASAN report.
-  iree_hal_device_asan_report_t last_report_ = {0};
+  iree_hal_device_asan_report_t last_asan_report_ = {0};
+  // Payload from the last captured TSAN report.
+  iree_hal_device_tsan_report_t last_tsan_report_ = {0};
 };
 
-// Cached backend resources for ASAN report tests.
-struct AsanCachedBackendResources {
-  ~AsanCachedBackendResources() { Reset(); }
+// Cached backend resources for sanitizer report tests.
+struct SanitizerCachedBackendResources {
+  ~SanitizerCachedBackendResources() { Reset(); }
 
   void Reset() {
     iree_hal_allocator_release(allocator);
@@ -186,7 +236,7 @@ struct AsanCachedBackendResources {
   }
 
   // Event recorder bound as the device creation sink.
-  AsanDeviceEventRecorder recorder;
+  SanitizerDeviceEventRecorder recorder;
   // Device creation storage borrowed by the backend factory.
   DeviceCreateContext create_context;
   // Owned HAL driver for the cached device.
@@ -201,33 +251,42 @@ struct AsanCachedBackendResources {
   bool unavailable = false;
 };
 
-inline std::map<std::string, AsanCachedBackendResources>&
-GetAsanBackendCache() {
-  static std::map<std::string, AsanCachedBackendResources> cache;
+inline std::map<std::string, SanitizerCachedBackendResources>&
+GetSanitizerBackendCache() {
+  static std::map<std::string, SanitizerCachedBackendResources> cache;
   return cache;
 }
 
 // Returns true if |status_code| means the CTS backend cannot run on this host.
-inline bool AsanStatusCodeIsBackendUnavailable(iree_status_code_t status_code) {
+inline bool SanitizerStatusCodeIsBackendUnavailable(
+    iree_status_code_t status_code) {
   return status_code == IREE_STATUS_UNAVAILABLE ||
          status_code == IREE_STATUS_NOT_FOUND;
 }
 
-// Borrows the cached ASAN CTS backend device for one test.
-class AsanCachedBackendDevice {
+// Borrows the cached sanitizer CTS backend device for one test.
+class SanitizerCachedBackendDevice {
  public:
-  AsanCachedBackendDevice() = default;
-  ~AsanCachedBackendDevice() { Reset(); }
+  SanitizerCachedBackendDevice() = default;
+  ~SanitizerCachedBackendDevice() { Reset(); }
 
-  AsanCachedBackendDevice(const AsanCachedBackendDevice&) = delete;
-  AsanCachedBackendDevice& operator=(const AsanCachedBackendDevice&) = delete;
+  SanitizerCachedBackendDevice(const SanitizerCachedBackendDevice&) = delete;
+  SanitizerCachedBackendDevice& operator=(const SanitizerCachedBackendDevice&) =
+      delete;
 
-  // Gets or creates a cached ASAN backend device using |backend|.
-  iree_status_t Initialize(const BackendInfo& backend) {
+  // Gets or creates a cached sanitizer backend device using |backend|.
+  //
+  // |sanitizer_name| partitions the CTS device cache. The backend factory or
+  // test binary flags still own the actual device creation options.
+  iree_status_t Initialize(const BackendInfo& backend,
+                           std::string_view sanitizer_name) {
+    std::string cache_key = GetBackendDeviceCacheKey(backend);
+    cache_key.append(":");
+    cache_key.append(sanitizer_name.data(), sanitizer_name.size());
     auto [cached_it, inserted] =
-        GetAsanBackendCache().try_emplace(GetBackendDeviceCacheKey(backend));
+        GetSanitizerBackendCache().try_emplace(std::move(cache_key));
     (void)inserted;
-    AsanCachedBackendResources& cached = cached_it->second;
+    SanitizerCachedBackendResources& cached = cached_it->second;
     if (!cached.device && !cached.unavailable) {
       iree_hal_driver_t* driver = nullptr;
       iree_hal_device_t* device = nullptr;
@@ -237,7 +296,7 @@ class AsanCachedBackendDevice {
         status =
             backend.factory(cached.create_context.params(), &driver, &device);
       }
-      if (AsanStatusCodeIsBackendUnavailable(iree_status_code(status))) {
+      if (SanitizerStatusCodeIsBackendUnavailable(iree_status_code(status))) {
         iree_status_free(status);
         cached.unavailable = true;
         cached.create_context.Deinitialize();
@@ -261,7 +320,7 @@ class AsanCachedBackendDevice {
     }
     if (cached.unavailable) {
       return iree_make_status(IREE_STATUS_UNAVAILABLE,
-                              "ASAN CTS backend '%s' is unavailable",
+                              "sanitizer CTS backend '%s' is unavailable",
                               backend.name.c_str());
     }
 
@@ -284,8 +343,8 @@ class AsanCachedBackendDevice {
   // Returns the cached HAL device allocator.
   iree_hal_allocator_t* allocator() const { return allocator_; }
 
-  // Returns the ASAN event recorder bound to the cached HAL device.
-  AsanDeviceEventRecorder* recorder() const { return &cached_->recorder; }
+  // Returns the sanitizer event recorder bound to the cached HAL device.
+  SanitizerDeviceEventRecorder* recorder() const { return &cached_->recorder; }
 
  private:
   void Reset() {
@@ -301,7 +360,7 @@ class AsanCachedBackendDevice {
   }
 
   // Borrowed cached resources for this test.
-  AsanCachedBackendResources* cached_ = nullptr;
+  SanitizerCachedBackendResources* cached_ = nullptr;
   // Retained HAL driver from the cached device.
   iree_hal_driver_t* driver_ = nullptr;
   // Retained group keeping the cached device topology alive.
@@ -313,9 +372,9 @@ class AsanCachedBackendDevice {
 };
 
 // Allocates a dispatch/transfer-capable device-local buffer.
-inline iree_status_t AsanCreateDeviceBuffer(iree_hal_allocator_t* allocator,
-                                            iree_device_size_t buffer_size,
-                                            iree_hal_buffer_t** out_buffer) {
+inline iree_status_t SanitizerCreateDeviceBuffer(
+    iree_hal_allocator_t* allocator, iree_device_size_t buffer_size,
+    iree_hal_buffer_t** out_buffer) {
   *out_buffer = nullptr;
   iree_hal_buffer_params_t params = {0};
   params.type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
@@ -326,17 +385,17 @@ inline iree_status_t AsanCreateDeviceBuffer(iree_hal_allocator_t* allocator,
 }
 
 // Reads device-local data through a queue copy into host-visible memory.
-inline iree_status_t AsanReadBufferBytes(iree_hal_device_t* device,
-                                         iree_hal_allocator_t* allocator,
-                                         iree_hal_buffer_t* source_buffer,
-                                         iree_device_size_t source_offset,
-                                         iree_device_size_t length,
-                                         std::vector<uint8_t>* out_data) {
+inline iree_status_t SanitizerReadBufferBytes(iree_hal_device_t* device,
+                                              iree_hal_allocator_t* allocator,
+                                              iree_hal_buffer_t* source_buffer,
+                                              iree_device_size_t source_offset,
+                                              iree_device_size_t length,
+                                              std::vector<uint8_t>* out_data) {
   IREE_ASSERT_ARGUMENT(out_data);
   out_data->clear();
   if (length > IREE_HOST_SIZE_MAX) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "HAL ASAN CTS readback length %" PRIu64
+                            "HAL sanitizer CTS readback length %" PRIu64
                             " exceeds host vector capacity",
                             (uint64_t)length);
   }
@@ -369,17 +428,17 @@ inline iree_status_t AsanReadBufferBytes(iree_hal_device_t* device,
 
 // Reads buffer contents back to host as a vector of T.
 template <typename T>
-inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
-                                        iree_hal_allocator_t* allocator,
-                                        iree_hal_buffer_t* source_buffer,
-                                        iree_device_size_t source_offset,
-                                        std::vector<T>* out_data) {
+inline iree_status_t SanitizerReadBufferData(iree_hal_device_t* device,
+                                             iree_hal_allocator_t* allocator,
+                                             iree_hal_buffer_t* source_buffer,
+                                             iree_device_size_t source_offset,
+                                             std::vector<T>* out_data) {
   IREE_ASSERT_ARGUMENT(out_data);
   out_data->clear();
   if (source_offset > iree_hal_buffer_byte_length(source_buffer)) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "HAL ASAN CTS readback offset %" PRIu64
+        "HAL sanitizer CTS readback offset %" PRIu64
         " exceeds buffer length %" PRIu64,
         (uint64_t)source_offset,
         (uint64_t)iree_hal_buffer_byte_length(source_buffer));
@@ -388,14 +447,14 @@ inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
       iree_hal_buffer_byte_length(source_buffer) - source_offset;
   if (byte_length % sizeof(T) != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "HAL ASAN CTS readback length %" PRIu64
+                            "HAL sanitizer CTS readback length %" PRIu64
                             " is not divisible by element size %" PRIhsz,
                             (uint64_t)byte_length, sizeof(T));
   }
 
   std::vector<uint8_t> bytes;
-  IREE_RETURN_IF_ERROR(AsanReadBufferBytes(device, allocator, source_buffer,
-                                           source_offset, byte_length, &bytes));
+  IREE_RETURN_IF_ERROR(SanitizerReadBufferBytes(
+      device, allocator, source_buffer, source_offset, byte_length, &bytes));
   std::vector<T> data((iree_host_size_t)(byte_length / sizeof(T)));
   std::memcpy(data.data(), bytes.data(), (iree_host_size_t)byte_length);
   *out_data = std::move(data);
@@ -403,14 +462,14 @@ inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
 }
 
 template <typename T>
-inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
-                                        iree_hal_allocator_t* allocator,
-                                        iree_hal_buffer_t* source_buffer,
-                                        std::vector<T>* out_data) {
-  return AsanReadBufferData(device, allocator, source_buffer,
-                            /*source_offset=*/0, out_data);
+inline iree_status_t SanitizerReadBufferData(iree_hal_device_t* device,
+                                             iree_hal_allocator_t* allocator,
+                                             iree_hal_buffer_t* source_buffer,
+                                             std::vector<T>* out_data) {
+  return SanitizerReadBufferData(device, allocator, source_buffer,
+                                 /*source_offset=*/0, out_data);
 }
 
 }  // namespace iree::hal::cts
 
-#endif  // IREE_HAL_CTS_SANITIZER_ASAN_TEST_UTIL_H_
+#endif  // IREE_HAL_CTS_SANITIZER_SANITIZER_TEST_UTIL_H_

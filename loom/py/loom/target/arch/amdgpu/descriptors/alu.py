@@ -553,6 +553,7 @@ def _s_cmp_i32_overlay(
         ),
         implicit_operands=(_scc_output(_scc_result()),),
         asm_forms=_asm(results=("scc",), operands=("lhs", "rhs")),
+        constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -577,6 +578,7 @@ def _s_cmp_u64_overlay(
         ),
         implicit_operands=(_scc_output(_scc_result()),),
         asm_forms=_asm(results=("scc",), operands=("lhs", "rhs")),
+        constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 

@@ -969,6 +969,11 @@ class ContractFamily(Enum):
         "LOOM_CONTRACT_TENSOR_MEMORY",
         "tensor memory transfer",
     )
+    SANITIZER_RACE = (
+        "sanitizer.race",
+        "LOOM_CONTRACT_SANITIZER_RACE",
+        "sanitizer race observation",
+    )
 
     def __init__(self, key: str, c_name: str, diagnostic_name: str) -> None:
         self.key = key

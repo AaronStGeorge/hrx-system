@@ -16,7 +16,9 @@
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/amdgpu/abi/profile.h"
 #include "iree/hal/drivers/amdgpu/abi/signal.h"
+#include "iree/hal/drivers/amdgpu/abi/tsan.h"
 #include "iree/hal/drivers/amdgpu/device/blit.h"
+#include "iree/hal/drivers/amdgpu/queue_scope.h"
 #include "iree/hal/drivers/amdgpu/util/aql_ring.h"
 #include "iree/hal/drivers/amdgpu/util/block_pool.h"
 #include "iree/hal/drivers/amdgpu/util/epoch_signal_table.h"
@@ -200,6 +202,22 @@ typedef struct iree_hal_amdgpu_host_queue_t {
   // is indexed by the matching AQL packet id and inherits the AQL ring's
   // lifetime/backpressure.
   iree_hal_amdgpu_pm4_ib_slot_t* pm4_ib_slots;
+
+  // Queue-owned TSAN state used by instrumented command buffers.
+  struct {
+    // Base pointer returned by HSA for the combined TSAN allocation.
+    void* allocation_base;
+    // Total byte length of |allocation_base|.
+    iree_device_size_t allocation_size;
+    // Device-visible queue state header inside |allocation_base|.
+    iree_hal_amdgpu_tsan_queue_state_t* queue_state;
+    // Per-AQL-slot dispatch states inside |allocation_base|.
+    iree_hal_amdgpu_tsan_dispatch_state_t* dispatch_states;
+    // Queue-local dispatch shadow storage inside |allocation_base|.
+    void* shadow_base;
+    // Byte length of |shadow_base|.
+    iree_device_size_t shadow_size;
+  } tsan;
 
   // Epoch-driven notification ring mapping submission completions to
   // semaphore signals. Serialized completion drain consumes this ring.
@@ -437,6 +455,12 @@ typedef struct iree_hal_amdgpu_host_queue_t {
   // PREFER_ORIGIN dealloca routes back to the same queue.
   iree_hal_queue_affinity_t queue_affinity;
 
+  // Flattened logical queue ordinal in the owning HAL device.
+  iree_host_size_t queue_ordinal;
+
+  // Queue ordinal relative to |device_ordinal|.
+  iree_host_size_t physical_queue_ordinal;
+
   // Shared epoch signal table for cross-queue barrier emission (tier 2 wait
   // resolution). Maps (device_index, queue_index) to hsa_signal_t for each
   // queue's epoch signal. Used to look up peer queues' epoch signals when
@@ -488,9 +512,8 @@ typedef struct iree_hal_amdgpu_host_queue_t {
   // lifetime of the queue.
   iree_arena_block_pool_t* block_pool;
 
-  // Ordinal of this queue's physical device within the topology. Used to look
-  // up device-specific kernel_args from executables via
-  // iree_hal_amdgpu_executable_lookup_kernel_args_for_device.
+  // Ordinal of this queue's physical device within the topology. Used by
+  // device-specific executable metadata paths and queue-local helpers.
   iree_host_size_t device_ordinal;
 
   // Builtin blit kernel table for this queue's physical device. Borrowed from
@@ -639,7 +662,8 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
     const iree_hal_amdgpu_kernarg_ring_memory_t* kernarg_memory,
     hsa_amd_memory_pool_t pm4_ib_pool,
     iree_async_frontier_tracker_t* frontier_tracker, iree_async_axis_t axis,
-    iree_hal_queue_affinity_t queue_affinity,
+    iree_hal_queue_affinity_t queue_affinity, iree_host_size_t queue_ordinal,
+    iree_host_size_t physical_queue_ordinal,
     iree_thread_affinity_t completion_thread_affinity,
     iree_hal_amdgpu_wait_barrier_strategy_t wait_barrier_strategy,
     iree_hal_amdgpu_vendor_packet_capability_flags_t vendor_packet_capabilities,
@@ -657,6 +681,23 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
     uint32_t upload_capacity, iree_allocator_t host_allocator,
     iree_hal_amdgpu_host_queue_t* out_queue);
 
+// Initializes queue-owned TSAN state.
+//
+// This is called after queue creation when logical TSAN is enabled. The queue
+// owns the HSA allocation and releases it during queue deinitialization.
+iree_status_t iree_hal_amdgpu_host_queue_initialize_tsan_state(
+    iree_hal_amdgpu_host_queue_t* queue, hsa_agent_t gpu_agent,
+    hsa_amd_memory_pool_t memory_pool, iree_host_size_t queue_ordinal,
+    iree_host_size_t physical_queue_ordinal,
+    iree_device_size_t workgroup_shadow_stride,
+    iree_device_size_t dispatch_shadow_stride, uint32_t workgroup_capacity,
+    uint32_t shadow_entry_size, uint32_t memory_granule_shift,
+    uint32_t shadow_slot_count);
+
+// Deinitializes queue-owned TSAN state if present.
+void iree_hal_amdgpu_host_queue_deinitialize_tsan_state(
+    iree_hal_amdgpu_host_queue_t* queue);
+
 // Deinitializes the queue. Destroys all owned resources and stops the
 // completion thread.
 //
@@ -664,6 +705,11 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
 // The caller must ensure no concurrent access to the queue during deinit.
 void iree_hal_amdgpu_host_queue_deinitialize(
     iree_hal_amdgpu_host_queue_t* queue);
+
+// Populates |out_scope| with immutable queue identity and AQL ring facts.
+void iree_hal_amdgpu_host_queue_query_scope(
+    const iree_hal_amdgpu_host_queue_t* queue,
+    iree_hal_amdgpu_queue_scope_t* out_scope);
 
 // Drains completed notification entries, retires queue-owned resources, runs
 // post-drain continuations, and advances the queue frontier tracker.

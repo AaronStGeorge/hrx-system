@@ -7,6 +7,7 @@
 #include "loom/codegen/low/frame.h"
 
 #include "loom/codegen/low/addressability.h"
+#include "loom/codegen/low/allocation_rematerialization.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
@@ -19,6 +20,7 @@ typedef enum loom_low_emission_frame_failure_e {
   LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ITERATION_LIMIT = 1,
   LOOM_LOW_EMISSION_FRAME_FAILURE_ADDRESS_STATE_ITERATION_LIMIT = 2,
   LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_NO_PROGRESS = 3,
+  LOOM_LOW_EMISSION_FRAME_FAILURE_REMATERIALIZATION_ITERATION_LIMIT = 4,
 } loom_low_emission_frame_failure_t;
 
 static iree_status_t loom_low_emission_frame_liveness_order_from_schedule(
@@ -113,10 +115,11 @@ static iree_status_t loom_low_emission_frame_liveness_order_from_schedule(
   return iree_ok_status();
 }
 
-iree_status_t loom_low_emission_frame_build(
+static iree_status_t loom_low_emission_frame_build_with_allocation_emitter(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_emission_frame_options_t* options,
-    iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame) {
+    iree_diagnostic_emitter_t allocation_emitter, iree_arena_allocator_t* arena,
+    loom_low_emission_frame_t* out_frame) {
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");
@@ -161,16 +164,28 @@ iree_status_t loom_low_emission_frame_build(
       .reserved_ranges = options->allocation_reserved_ranges,
       .reserved_range_count = options->allocation_reserved_range_count,
       .storage_leases = storage_leases,
-      .emitter = options->emitter,
+      .emitter = allocation_emitter,
       .diagnostic_flags = options->allocation_diagnostic_flags,
   };
   IREE_RETURN_IF_ERROR(loom_low_allocate_function(
       module, low_func_op, &allocation_options, arena, &out_frame->allocation));
 
+  if (out_frame->allocation.error_count != 0) {
+    out_frame->target = out_frame->schedule.target;
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(&out_frame->schedule,
                                                        &out_frame->allocation));
   out_frame->target = out_frame->schedule.target;
   return iree_ok_status();
+}
+
+iree_status_t loom_low_emission_frame_build(
+    loom_module_t* module, loom_op_t* low_func_op,
+    const loom_low_emission_frame_options_t* options,
+    iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame) {
+  return loom_low_emission_frame_build_with_allocation_emitter(
+      module, low_func_op, options, options->emitter, arena, out_frame);
 }
 
 static iree_status_t loom_low_emission_frame_lower_spill_traffic(
@@ -295,6 +310,8 @@ static iree_string_view_t loom_low_emission_frame_failure_code(
       return IREE_SV("address-state-iteration-limit");
     case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_NO_PROGRESS:
       return IREE_SV("spill-materialization-no-progress");
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_REMATERIALIZATION_ITERATION_LIMIT:
+      return IREE_SV("allocation-rematerialization-iteration-limit");
     default:
       return IREE_SV("<unknown>");
   }
@@ -347,6 +364,20 @@ static iree_status_t loom_low_emission_frame_fail_final(
           frame, iteration_count);
     case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_NO_PROGRESS:
       return loom_low_emission_frame_make_no_progress_status(frame);
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_REMATERIALIZATION_ITERATION_LIMIT:
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low emission frame for target '%.*s' function '@%.*s' did not "
+          "reach an allocation-successful frame after %zu allocation "
+          "rematerialization iteration(s)",
+          (int)loom_low_diagnostic_target_key(&frame->target).size,
+          loom_low_diagnostic_target_key(&frame->target).data,
+          (int)loom_low_diagnostic_function_name(frame->module,
+                                                 frame->function_op)
+              .size,
+          loom_low_diagnostic_function_name(frame->module, frame->function_op)
+              .data,
+          iteration_count);
     default:
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                               "unknown low emission-frame failure");
@@ -378,10 +409,45 @@ iree_status_t loom_low_emission_frame_build_spill_free(
   iree_host_size_t iteration_limit = 0;
   iree_host_size_t address_state_iteration_count = 0;
   iree_host_size_t address_state_iteration_limit = 0;
+  iree_host_size_t rematerialization_iteration_count = 0;
+  iree_host_size_t rematerialization_iteration_limit = 0;
   for (;;) {
     loom_low_emission_frame_t frame = {0};
-    IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
-        module, low_func_op, frame_options, arena, &frame));
+    IREE_RETURN_IF_ERROR(loom_low_emission_frame_build_with_allocation_emitter(
+        module, low_func_op, frame_options, (iree_diagnostic_emitter_t){0},
+        arena, &frame));
+    if (frame.allocation.error_count != 0) {
+      if (rematerialization_iteration_limit == 0) {
+        if (frame.allocation.liveness.value_count == IREE_HOST_SIZE_MAX) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "low emission frame allocation rematerialization iteration "
+              "limit overflows host size");
+        }
+        rematerialization_iteration_limit =
+            frame.allocation.liveness.value_count + 1;
+      }
+      loom_low_allocation_rematerialization_result_t result = {0};
+      IREE_RETURN_IF_ERROR(loom_low_allocation_rematerialize_failure(
+          module, &frame.allocation, arena, &result));
+      if (result.rewritten_operand_count != 0) {
+        if (rematerialization_iteration_count >=
+            rematerialization_iteration_limit) {
+          return loom_low_emission_frame_fail_final(
+              frame_options, &frame,
+              LOOM_LOW_EMISSION_FRAME_FAILURE_REMATERIALIZATION_ITERATION_LIMIT,
+              rematerialization_iteration_count,
+              rematerialization_iteration_limit);
+        }
+        ++rematerialization_iteration_count;
+        continue;
+      }
+      frame = (loom_low_emission_frame_t){0};
+      IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
+          module, low_func_op, frame_options, arena, &frame));
+      *out_frame = frame;
+      return iree_ok_status();
+    }
     if (iteration_limit == 0) {
       if (frame.allocation.liveness.value_count == IREE_HOST_SIZE_MAX) {
         return iree_make_status(

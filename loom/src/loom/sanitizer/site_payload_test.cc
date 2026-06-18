@@ -21,7 +21,7 @@ std::string StringViewToString(iree_string_view_t value) {
 
 loom_sanitizer_site_payload_t BaselinePayload() {
   loom_sanitizer_site_payload_t payload = {};
-  payload.assertion_kind = LOOM_SANITIZER_ASSERTION_KIND_ACCESS;
+  payload.site_kind = LOOM_SANITIZER_SITE_KIND_ACCESS;
   payload.check_kind = LOOM_SANITIZER_CHECK_KIND_ACCESS_RANGE;
   payload.provenance_kind = LOOM_SANITIZER_PROVENANCE_KIND_ASSUME;
   payload.lane_policy = LOOM_SANITIZER_LANE_POLICY_PER_LANE;
@@ -33,7 +33,7 @@ loom_sanitizer_site_payload_t BaselinePayload() {
 
 void ExpectSamePayload(const loom_sanitizer_site_payload_t& expected,
                        const loom_sanitizer_site_payload_t& actual) {
-  EXPECT_EQ(actual.assertion_kind, expected.assertion_kind);
+  EXPECT_EQ(actual.site_kind, expected.site_kind);
   EXPECT_EQ(actual.check_kind, expected.check_kind);
   EXPECT_EQ(actual.provenance_kind, expected.provenance_kind);
   EXPECT_EQ(actual.lane_policy, expected.lane_policy);
@@ -80,7 +80,7 @@ TEST(SanitizerSitePayloadTest, EncodesMinimumPayload) {
   EXPECT_EQ(encoded_length, LOOM_SANITIZER_SITE_PAYLOAD_HEADER_LENGTH);
   const uint8_t expected_bytes[] = {
       LOOM_SANITIZER_SITE_PAYLOAD_CURRENT_VERSION,
-      LOOM_SANITIZER_ASSERTION_KIND_ACCESS,
+      LOOM_SANITIZER_SITE_KIND_ACCESS,
       LOOM_SANITIZER_CHECK_KIND_ACCESS_RANGE,
       LOOM_SANITIZER_PROVENANCE_KIND_ASSUME,
       LOOM_SANITIZER_LANE_POLICY_PER_LANE,
@@ -94,7 +94,7 @@ TEST(SanitizerSitePayloadTest, EncodesMinimumPayload) {
 TEST(SanitizerSitePayloadTest, DecodesMinimumPayload) {
   const uint8_t bytes[] = {
       LOOM_SANITIZER_SITE_PAYLOAD_CURRENT_VERSION,
-      LOOM_SANITIZER_ASSERTION_KIND_VALUE,
+      LOOM_SANITIZER_SITE_KIND_VALUE,
       LOOM_SANITIZER_CHECK_KIND_VALUE_NOT_NAN,
       LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT,
       LOOM_SANITIZER_LANE_POLICY_SCALAR,
@@ -107,8 +107,7 @@ TEST(SanitizerSitePayloadTest, DecodesMinimumPayload) {
   IREE_EXPECT_OK(loom_sanitizer_site_payload_decode(
       iree_make_const_byte_span(bytes, sizeof(bytes)), &decoded_payload));
 
-  EXPECT_EQ(decoded_payload.assertion_kind,
-            LOOM_SANITIZER_ASSERTION_KIND_VALUE);
+  EXPECT_EQ(decoded_payload.site_kind, LOOM_SANITIZER_SITE_KIND_VALUE);
   EXPECT_EQ(decoded_payload.check_kind,
             LOOM_SANITIZER_CHECK_KIND_VALUE_NOT_NAN);
   EXPECT_EQ(decoded_payload.provenance_kind,
@@ -141,12 +140,10 @@ TEST(SanitizerSitePayloadTest, PreservesExtensionBytes) {
 }
 
 TEST(SanitizerSitePayloadTest, RoundTripsAllKnownEnumValues) {
-  const loom_sanitizer_assertion_kind_t assertion_kinds[] = {
-      LOOM_SANITIZER_ASSERTION_KIND_UNKNOWN,
-      LOOM_SANITIZER_ASSERTION_KIND_ACCESS,
-      LOOM_SANITIZER_ASSERTION_KIND_VALUE,
-      LOOM_SANITIZER_ASSERTION_KIND_OPERATION,
-      LOOM_SANITIZER_ASSERTION_KIND_LAYOUT,
+  const loom_sanitizer_site_kind_t site_kinds[] = {
+      LOOM_SANITIZER_SITE_KIND_UNKNOWN, LOOM_SANITIZER_SITE_KIND_ACCESS,
+      LOOM_SANITIZER_SITE_KIND_VALUE,   LOOM_SANITIZER_SITE_KIND_OPERATION,
+      LOOM_SANITIZER_SITE_KIND_LAYOUT,  LOOM_SANITIZER_SITE_KIND_RACE,
   };
   const loom_sanitizer_check_kind_t check_kinds[] = {
       LOOM_SANITIZER_CHECK_KIND_UNKNOWN,
@@ -164,6 +161,7 @@ TEST(SanitizerSitePayloadTest, RoundTripsAllKnownEnumValues) {
       LOOM_SANITIZER_CHECK_KIND_VALUE_POWER_OF_TWO,
       LOOM_SANITIZER_CHECK_KIND_VALUE_RELATION,
       LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS,
+      LOOM_SANITIZER_CHECK_KIND_DATA_RACE,
   };
   const loom_sanitizer_provenance_kind_t provenance_kinds[] = {
       LOOM_SANITIZER_PROVENANCE_KIND_UNKNOWN,
@@ -190,9 +188,9 @@ TEST(SanitizerSitePayloadTest, RoundTripsAllKnownEnumValues) {
       LOOM_SANITIZER_LINEAGE_ROLE_UKERNEL_SELECTION,
   };
 
-  for (loom_sanitizer_assertion_kind_t assertion_kind : assertion_kinds) {
+  for (loom_sanitizer_site_kind_t site_kind : site_kinds) {
     loom_sanitizer_site_payload_t payload = BaselinePayload();
-    payload.assertion_kind = assertion_kind;
+    payload.site_kind = site_kind;
     ExpectRoundTrip(payload);
   }
   for (loom_sanitizer_check_kind_t check_kind : check_kinds) {
@@ -219,7 +217,7 @@ TEST(SanitizerSitePayloadTest, RoundTripsAllKnownEnumValues) {
 
 TEST(SanitizerSitePayloadTest, PreservesUnknownFieldValues) {
   loom_sanitizer_site_payload_t payload = BaselinePayload();
-  payload.assertion_kind = (loom_sanitizer_assertion_kind_t)0xE1;
+  payload.site_kind = (loom_sanitizer_site_kind_t)0xE1;
   payload.check_kind = (loom_sanitizer_check_kind_t)0xE2;
   payload.provenance_kind = (loom_sanitizer_provenance_kind_t)0xE3;
   payload.lane_policy = (loom_sanitizer_lane_policy_t)0xE4;
@@ -228,7 +226,7 @@ TEST(SanitizerSitePayloadTest, PreservesUnknownFieldValues) {
 
   ExpectRoundTrip(payload);
   EXPECT_TRUE(iree_string_view_is_empty(
-      loom_sanitizer_assertion_kind_name(payload.assertion_kind)));
+      loom_sanitizer_site_kind_name(payload.site_kind)));
   EXPECT_TRUE(iree_string_view_is_empty(
       loom_sanitizer_check_kind_name(payload.check_kind)));
   EXPECT_TRUE(iree_string_view_is_empty(
@@ -348,12 +346,15 @@ TEST(SanitizerSitePayloadTest, RejectsMissingDecodeInputs) {
 //===----------------------------------------------------------------------===//
 
 TEST(SanitizerSitePayloadTest, ReturnsKnownFieldNames) {
-  EXPECT_EQ(StringViewToString(loom_sanitizer_assertion_kind_name(
-                LOOM_SANITIZER_ASSERTION_KIND_OPERATION)),
+  EXPECT_EQ(StringViewToString(loom_sanitizer_site_kind_name(
+                LOOM_SANITIZER_SITE_KIND_OPERATION)),
             "operation");
-  EXPECT_EQ(StringViewToString(loom_sanitizer_assertion_kind_name(
-                LOOM_SANITIZER_ASSERTION_KIND_LAYOUT)),
+  EXPECT_EQ(StringViewToString(
+                loom_sanitizer_site_kind_name(LOOM_SANITIZER_SITE_KIND_LAYOUT)),
             "layout");
+  EXPECT_EQ(StringViewToString(
+                loom_sanitizer_site_kind_name(LOOM_SANITIZER_SITE_KIND_RACE)),
+            "race");
   EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
                 LOOM_SANITIZER_CHECK_KIND_VALUE_DIVISIBILITY)),
             "value_divisibility");
@@ -375,6 +376,9 @@ TEST(SanitizerSitePayloadTest, ReturnsKnownFieldNames) {
   EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
                 LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS)),
             "value_constraints");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
+                LOOM_SANITIZER_CHECK_KIND_DATA_RACE)),
+            "data_race");
   EXPECT_EQ(StringViewToString(loom_sanitizer_provenance_kind_name(
                 LOOM_SANITIZER_PROVENANCE_KIND_USER_ASSERTION)),
             "user_assertion");

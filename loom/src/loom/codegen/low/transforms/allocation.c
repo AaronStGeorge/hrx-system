@@ -10,6 +10,7 @@
 
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_materialization.h"
+#include "loom/codegen/low/allocation_rematerialization.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/ops/low/ops.h"
@@ -54,7 +55,9 @@ static const loom_pass_option_def_t kLowMaterializeAllocationOptions[] = {
   V(statistics_type, storage, "storage",                                       \
     "Number of low.storage.reserve ops inserted.")                             \
   V(statistics_type, spills, "spills", "Number of low.spill stores inserted.") \
-  V(statistics_type, reloads, "reloads", "Number of low.reload ops inserted.")
+  V(statistics_type, reloads, "reloads", "Number of low.reload ops inserted.") \
+  V(statistics_type, rematerializations, "rematerializations",                 \
+    "Number of allocation-pressure rematerialized packets inserted.")
 
 LOOM_PASS_STATISTICS_DEFINE(loom_low_materialize_allocation_statistics,
                             loom_low_materialize_allocation_statistics_t,
@@ -365,13 +368,17 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
       .budget_count = state ? state->budget_count : 0,
       .emitter = pass->diagnostic_emitter,
   };
+  loom_low_allocation_options_t allocation_probe_options = allocation_options;
+  allocation_probe_options.emitter = (iree_diagnostic_emitter_t){0};
   iree_host_size_t iteration_count = 0;
   iree_host_size_t iteration_limit = 0;
+  iree_host_size_t rematerialization_iteration_count = 0;
+  iree_host_size_t rematerialization_iteration_limit = 0;
   bool allow_existing_storage_traffic = false;
   for (;;) {
     loom_low_allocation_table_t table = {0};
     IREE_RETURN_IF_ERROR(loom_low_allocate_function(
-        module, function.op, &allocation_options, pass->arena, &table));
+        module, function.op, &allocation_probe_options, pass->arena, &table));
     if (iteration_limit == 0) {
       if (table.liveness.value_count == IREE_HOST_SIZE_MAX) {
         return iree_make_status(
@@ -380,6 +387,39 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
             "size");
       }
       iteration_limit = table.liveness.value_count + 1;
+    }
+    if (table.error_count != 0) {
+      if (rematerialization_iteration_limit == 0) {
+        if (table.liveness.value_count == IREE_HOST_SIZE_MAX) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "low allocation rematerialization iteration limit overflows "
+              "host size");
+        }
+        rematerialization_iteration_limit = table.liveness.value_count + 1;
+      }
+      loom_low_allocation_rematerialization_result_t result = {0};
+      IREE_RETURN_IF_ERROR(loom_low_allocation_rematerialize_failure(
+          module, &table, pass->arena, &result));
+      if (result.rewritten_operand_count != 0) {
+        if (rematerialization_iteration_count >=
+            rematerialization_iteration_limit) {
+          return iree_make_status(
+              IREE_STATUS_FAILED_PRECONDITION,
+              "low allocation rematerialization did not reach an "
+              "allocation-successful fixed point after %zu iteration(s)",
+              rematerialization_iteration_count);
+        }
+        loom_low_materialize_allocation_statistics_t* statistics =
+            loom_low_materialize_allocation_statistics(pass);
+        statistics->rematerializations += (int64_t)result.cloned_packet_count;
+        loom_pass_mark_changed(pass);
+        ++rematerialization_iteration_count;
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(loom_low_allocate_function(
+          module, function.op, &allocation_options, pass->arena, &table));
+      return iree_ok_status();
     }
     if (table.spill_plan_count == 0) {
       return iree_ok_status();

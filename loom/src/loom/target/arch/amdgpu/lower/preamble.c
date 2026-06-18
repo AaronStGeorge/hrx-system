@@ -10,12 +10,14 @@
 #include "loom/ir/context.h"
 #include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/sanitizer/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/hal/kernel_abi.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_race.h"
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
@@ -610,6 +612,30 @@ static iree_status_t loom_amdgpu_lookup_dispatch_ptr_live_in(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_lookup_current_dispatch_ptr(
+    loom_low_lower_context_t* context, loom_value_id_t* out_low_value_id) {
+  return loom_amdgpu_lookup_dispatch_ptr_live_in(context, out_low_value_id);
+}
+
+iree_status_t loom_amdgpu_lookup_current_workgroup_id(
+    loom_low_lower_context_t* context, loom_kernel_dimension_t dimension,
+    loom_value_id_t* out_low_value_id) {
+  return loom_amdgpu_lookup_workgroup_id_live_in(context, dimension,
+                                                 out_low_value_id);
+}
+
+iree_status_t loom_amdgpu_lookup_current_workitem_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_kernel_dimension_t dimension, loom_value_id_t* out_low_value_id) {
+  uint32_t packed_dimension_count = 0;
+  loom_value_id_t packed_workitem_id = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_packed_workitem_id_live_in(
+      context, &packed_dimension_count, &packed_workitem_id));
+  return loom_amdgpu_lookup_workitem_id(
+      context, source_op, packed_dimension_count, packed_workitem_id, dimension,
+      out_low_value_id);
+}
+
 static iree_status_t loom_amdgpu_mark_lane_query_workitem_id_live_ins(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t optional_exact_source_result,
@@ -825,6 +851,7 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
   (void)user_data;
   const loom_op_t* first_workitem_id_ops[LOOM_KERNEL_DIMENSION_COUNT_] = {0};
   const loom_op_t* first_workgroup_id_ops[LOOM_KERNEL_DIMENSION_COUNT_] = {0};
+  const loom_op_t* first_dispatch_ptr_op = NULL;
   const iree_host_size_t plan_count =
       loom_low_lower_context_selected_plan_count(context);
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
@@ -887,6 +914,34 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
             context, source_op, LOOM_VALUE_ID_INVALID, first_workitem_id_ops));
         break;
       }
+      case LOOM_OP_SANITIZER_RACE_ACCESS: {
+        if (first_dispatch_ptr_op == NULL) {
+          first_dispatch_ptr_op = source_op;
+        }
+        for (uint32_t j = 0; j < LOOM_KERNEL_DIMENSION_COUNT_; ++j) {
+          if (first_workitem_id_ops[j] == NULL) {
+            first_workitem_id_ops[j] = source_op;
+          }
+          if (first_workgroup_id_ops[j] == NULL) {
+            first_workgroup_id_ops[j] = source_op;
+          }
+        }
+        break;
+      }
+      case LOOM_OP_SANITIZER_RACE_SYNC: {
+        if (first_dispatch_ptr_op == NULL) {
+          first_dispatch_ptr_op = source_op;
+        }
+        for (uint32_t j = 0; j < LOOM_KERNEL_DIMENSION_COUNT_; ++j) {
+          if (first_workitem_id_ops[j] == NULL) {
+            first_workitem_id_ops[j] = source_op;
+          }
+          if (first_workgroup_id_ops[j] == NULL) {
+            first_workgroup_id_ops[j] = source_op;
+          }
+        }
+        break;
+      }
       default:
         break;
     }
@@ -924,13 +979,20 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
   const loom_op_t* first_workgroup_count_ops[LOOM_KERNEL_DIMENSION_COUNT_];
   loom_amdgpu_find_first_dynamic_workgroup_count_ops(context,
                                                      first_workgroup_count_ops);
+  bool emitted_dispatch_ptr = false;
   for (uint32_t i = 0; i < LOOM_KERNEL_DIMENSION_COUNT_; ++i) {
     if (first_workgroup_count_ops[i] != NULL) {
       loom_value_id_t unused_low_dispatch_ptr = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_dispatch_ptr_live_in(
           context, first_workgroup_count_ops[i], &unused_low_dispatch_ptr));
+      emitted_dispatch_ptr = true;
       break;
     }
+  }
+  if (!emitted_dispatch_ptr && first_dispatch_ptr_op != NULL) {
+    loom_value_id_t unused_low_dispatch_ptr = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_dispatch_ptr_live_in(
+        context, first_dispatch_ptr_op, &unused_low_dispatch_ptr));
   }
 
   loom_value_id_t packed_workitem_id = LOOM_VALUE_ID_INVALID;
@@ -1253,6 +1315,90 @@ static iree_status_t loom_amdgpu_emit_workgroup_count_value(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_emit_current_workgroup_count(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_kernel_dimension_t dimension, loom_type_t result_type,
+    loom_value_id_t* out_low_value_id) {
+  *out_low_value_id = LOOM_VALUE_ID_INVALID;
+  uint32_t workgroup_size = 0;
+  if (!loom_amdgpu_required_workgroup_size_dim(
+          loom_low_lower_context_module(context),
+          loom_low_lower_context_source_function(context),
+          loom_low_lower_context_bundle(context), dimension, &workgroup_size)) {
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU workgroup-count workgroup size");
+    IREE_BUILTIN_UNREACHABLE();
+  }
+  if (!loom_amdgpu_u32_is_power_of_two(workgroup_size)) {
+    IREE_ASSERT_UNREACHABLE(
+        "selected AMDGPU power-of-two workgroup-count size");
+    IREE_BUILTIN_UNREACHABLE();
+  }
+
+  loom_value_id_t dispatch_ptr = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_lookup_dispatch_ptr_live_in(context, &dispatch_ptr));
+  loom_value_id_t grid_size = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_dispatch_packet_grid_size(
+      context, source_op, dispatch_ptr, dimension, result_type, &grid_size));
+  if (workgroup_size == 1) {
+    *out_low_value_id = grid_size;
+    return iree_ok_status();
+  }
+  loom_value_id_t shift = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
+      loom_amdgpu_u32_log2(workgroup_size), result_type, &shift));
+  return loom_amdgpu_emit_sgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_LSHR_B32, grid_size,
+      shift, result_type, out_low_value_id);
+}
+
+iree_status_t loom_amdgpu_emit_current_workgroup_linear_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_type_t result_type, loom_value_id_t* out_linear_id) {
+  *out_linear_id = LOOM_VALUE_ID_INVALID;
+
+  loom_value_id_t workgroup_x = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_workgroup_id_live_in(
+      context, LOOM_KERNEL_DIMENSION_X, &workgroup_x));
+  loom_value_id_t workgroup_y = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_workgroup_id_live_in(
+      context, LOOM_KERNEL_DIMENSION_Y, &workgroup_y));
+  loom_value_id_t workgroup_z = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_workgroup_id_live_in(
+      context, LOOM_KERNEL_DIMENSION_Z, &workgroup_z));
+
+  loom_value_id_t workgroup_count_x = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_workgroup_count(
+      context, source_op, LOOM_KERNEL_DIMENSION_X, result_type,
+      &workgroup_count_x));
+  loom_value_id_t workgroup_count_y = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_workgroup_count(
+      context, source_op, LOOM_KERNEL_DIMENSION_Y, result_type,
+      &workgroup_count_y));
+
+  loom_value_id_t scaled_y = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MUL_I32, workgroup_y,
+      workgroup_count_x, result_type, &scaled_y));
+  loom_value_id_t linear_id = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32, workgroup_x,
+      scaled_y, result_type, &linear_id));
+
+  loom_value_id_t workgroup_xy_count = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MUL_I32,
+      workgroup_count_x, workgroup_count_y, result_type, &workgroup_xy_count));
+  loom_value_id_t scaled_z = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MUL_I32, workgroup_z,
+      workgroup_xy_count, result_type, &scaled_z));
+  return loom_amdgpu_emit_sgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32, linear_id,
+      scaled_z, result_type, out_linear_id);
+}
+
 iree_status_t loom_amdgpu_emit_entry_setup(void* user_data,
                                            loom_low_lower_context_t* context) {
   (void)user_data;
@@ -1317,7 +1463,7 @@ iree_status_t loom_amdgpu_emit_entry_setup(void* user_data,
           context, source_result, low_workgroup_counts[dimension]));
     }
   }
-  return iree_ok_status();
+  return loom_amdgpu_sanitizer_race_emit_entry_setup(context);
 }
 
 iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,

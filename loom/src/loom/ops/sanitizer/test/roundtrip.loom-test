@@ -30,3 +30,19 @@ func.def @assert_layout_roundtrip(%m: index, %layout: encoding<layout>, %view: v
   %checked = sanitizer.assert.layout %view : view<[%m]x32xf32, %layout> -> view<16x32xf32, %layout>
   func.return %checked : view<16x32xf32, %layout>
 }
+
+// ====
+
+func.def @race_access_roundtrip(%layout: encoding<layout>, %view: view<64xi32, %layout>, %lane: index) {
+  sanitizer.race.access<read> %view[%lane] : view<64xi32, %layout>
+  sanitizer.race.access<write> %view[%lane] : view<64xi32, %layout>
+  sanitizer.race.access<read_write> %view[%lane] {atomic = true, ordering = acq_rel, scope = workgroup} : view<64xi32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @race_sync_roundtrip() {
+  sanitizer.race.sync<workgroup> {ordering = acq_rel, scope = workgroup}
+  func.return
+}

@@ -22,6 +22,16 @@ TEST(SanitizerOptionsCliTest, ParsesNamedCheckSets) {
   EXPECT_EQ(options.reporting_mode, LOOM_SANITIZER_REPORTING_MODE_DEFAULT);
 
   IREE_ASSERT_OK(loom_sanitizer_options_parse_checks(
+      IREE_SV("asan | tsan"), IREE_SV("--sanitizer"), &options));
+  EXPECT_EQ(options.checks,
+            LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_RACE);
+
+  IREE_ASSERT_OK(loom_sanitizer_options_parse_checks(
+      IREE_SV("ubsan"), IREE_SV("--sanitizer"), &options));
+  EXPECT_EQ(options.checks,
+            LOOM_SANITIZER_CHECK_VALUE | LOOM_SANITIZER_CHECK_OPERATION);
+
+  IREE_ASSERT_OK(loom_sanitizer_options_parse_checks(
       IREE_SV("all"), IREE_SV("--sanitizer"), &options));
   EXPECT_EQ(options.checks, LOOM_SANITIZER_CHECKS_KNOWN);
 
@@ -53,8 +63,8 @@ TEST(SanitizerOptionsCliTest, FormatsCanonicalCheckSets) {
 
   IREE_ASSERT_OK(
       loom_sanitizer_checks_format(LOOM_SANITIZER_CHECKS_KNOWN, &formatted));
-  EXPECT_TRUE(
-      iree_string_view_equal(formatted, IREE_SV("access|value|operation")));
+  EXPECT_TRUE(iree_string_view_equal(formatted,
+                                     IREE_SV("access|value|operation|race")));
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_sanitizer_checks_format(1ull << 63, &formatted));

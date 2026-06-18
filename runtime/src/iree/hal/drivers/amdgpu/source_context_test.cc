@@ -53,6 +53,7 @@ constexpr uint32_t kRecordHasPayload = 1u << 0;
 constexpr uint32_t kRecordHasSourceLocation = 1u << 1;
 constexpr uint16_t kSourceKindFile = 1u;
 constexpr uint32_t kLoomOpSanitizerAssertAccess = (0x1Du << 8) | 0u;
+constexpr uint32_t kLoomOpSanitizerRaceAccess = (0x1Du << 8) | 4u;
 
 static void StoreU8(std::vector<uint8_t>* data, size_t offset, uint8_t value) {
   (*data)[offset] = value;
@@ -70,7 +71,8 @@ static void StoreU32(std::vector<uint8_t>* data, size_t offset,
       reinterpret_cast<uint32_t*>(data->data() + offset), value);
 }
 
-static std::vector<uint8_t> MakeSingleSiteTable() {
+static std::vector<uint8_t> MakeSingleSiteTable(
+    uint32_t op_kind = kLoomOpSanitizerAssertAccess) {
   constexpr char kSourceFile[] = "model/layer.loom";
   const std::vector<uint8_t> payload = {0xA5, 0x5A};
   const uint32_t string_table_offset =
@@ -93,8 +95,7 @@ static std::vector<uint8_t> MakeSingleSiteTable() {
 
   const uint32_t record_offset = kSiteTableHeaderLength;
   StoreU32(&table, record_offset + kRecordSiteIdOffset, 0);
-  StoreU32(&table, record_offset + kRecordOpKindOffset,
-           kLoomOpSanitizerAssertAccess);
+  StoreU32(&table, record_offset + kRecordOpKindOffset, op_kind);
   StoreU32(&table, record_offset + kRecordFlagsOffset,
            kRecordHasPayload | kRecordHasSourceLocation);
   StoreU32(&table, record_offset + kRecordPayloadOffsetOffset, 0);
@@ -177,6 +178,19 @@ TEST(SourceContextTest, ResolvesSanitizerSiteTableRecord) {
 
   EXPECT_FALSE(iree_hal_amdgpu_source_context_try_resolve_sanitizer_site(
       &context, /*site_id=*/1, &site));
+}
+
+TEST(SourceContextTest, ResolvesRaceSanitizerSiteName) {
+  std::vector<uint8_t> table = MakeSingleSiteTable(kLoomOpSanitizerRaceAccess);
+  iree_hal_amdgpu_source_context_t context = MakeContext();
+  IREE_ASSERT_OK(iree_hal_amdgpu_source_context_set_sanitizer_site_table(
+      &context, iree_make_const_byte_span(table.data(), table.size())));
+
+  iree_hal_device_event_site_t site = iree_hal_device_event_site_default();
+  ASSERT_TRUE(iree_hal_amdgpu_source_context_try_resolve_sanitizer_site(
+      &context, /*site_id=*/0, &site));
+  EXPECT_TRUE(iree_string_view_equal(site.operation_name,
+                                     IREE_SV("sanitizer.race.access")));
 }
 
 TEST(SourceContextTest, RejectsMalformedSanitizerSiteTable) {

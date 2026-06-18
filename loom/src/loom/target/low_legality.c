@@ -721,6 +721,10 @@ static iree_string_view_t loom_target_low_legality_contract_family_constraint(
                                        LOOM_CONTRACT_TENSOR_MEMORY)) {
     return IREE_SV("target_contract.tensor_memory.provider_required");
   }
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_SANITIZER_RACE)) {
+    return IREE_SV("target_contract.sanitizer_race.provider_required");
+  }
   return IREE_SV("target_contract.provider_required");
 }
 

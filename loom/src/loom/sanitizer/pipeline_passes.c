@@ -19,6 +19,7 @@
 #include "loom/rewrite/rewriter.h"
 #include "loom/sanitizer/options.h"
 #include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/site_location.h"
 #include "loom/sanitizer/site_payload.h"
 
 typedef struct loom_sanitizer_insert_assertions_state_t {
@@ -200,40 +201,6 @@ static loom_sanitizer_check_kind_t loom_sanitizer_check_kind_for_predicates(
     return LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS;
   }
   return check_kind;
-}
-
-static iree_status_t loom_sanitizer_make_site_location(
-    loom_module_t* module, loom_location_id_t source_location,
-    loom_sanitizer_assertion_kind_t assertion_kind,
-    loom_sanitizer_check_kind_t check_kind,
-    loom_sanitizer_provenance_kind_t provenance_kind,
-    loom_sanitizer_lane_policy_t lane_policy,
-    loom_sanitizer_lineage_role_t lineage_role,
-    loom_location_id_t* out_location) {
-  uint8_t payload_storage[LOOM_SANITIZER_SITE_PAYLOAD_HEADER_LENGTH] = {0};
-  const loom_sanitizer_site_payload_t payload = {
-      .assertion_kind = assertion_kind,
-      .check_kind = check_kind,
-      .provenance_kind = provenance_kind,
-      .lane_policy = lane_policy,
-      .lineage_role = lineage_role,
-      .flags = 0,
-      .extension_data = iree_const_byte_span_empty(),
-  };
-  iree_host_size_t encoded_length = 0;
-  IREE_RETURN_IF_ERROR(loom_sanitizer_site_payload_encode(
-      &payload, iree_make_byte_span(payload_storage, sizeof(payload_storage)),
-      &encoded_length));
-
-  uint8_t* stored_payload = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate(&module->arena, encoded_length,
-                                           (void**)&stored_payload));
-  memcpy(stored_payload, payload_storage, encoded_length);
-  return loom_module_add_location(
-      module,
-      loom_location_tagged(LOOM_LOCATION_TAG_SANITIZER_SITE, source_location,
-                           stored_payload, (uint32_t)encoded_length),
-      out_location);
 }
 
 static bool loom_sanitizer_find_value(loom_value_slice_t values,
@@ -510,11 +477,18 @@ static iree_status_t loom_sanitizer_build_value_assertion(
   IREE_RETURN_IF_ERROR(loom_sanitizer_result_types_for_values(
       module, rewriter, values, &result_types));
   loom_location_id_t site_location = LOOM_LOCATION_UNKNOWN;
+  const loom_sanitizer_site_payload_t payload = {
+      .site_kind = LOOM_SANITIZER_SITE_KIND_VALUE,
+      .check_kind =
+          loom_sanitizer_check_kind_for_predicates(predicates, predicate_count),
+      .provenance_kind = provenance_kind,
+      .lane_policy = LOOM_SANITIZER_LANE_POLICY_SCALAR,
+      .lineage_role = LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL,
+      .flags = 0,
+      .extension_data = iree_const_byte_span_empty(),
+  };
   IREE_RETURN_IF_ERROR(loom_sanitizer_make_site_location(
-      module, source_location, LOOM_SANITIZER_ASSERTION_KIND_VALUE,
-      loom_sanitizer_check_kind_for_predicates(predicates, predicate_count),
-      provenance_kind, LOOM_SANITIZER_LANE_POLICY_SCALAR,
-      LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL, &site_location));
+      module, source_location, &payload, &site_location));
   return loom_sanitizer_assert_value_build(
       &rewriter->builder, values.values, values.count, predicates,
       predicate_count, result_types, values.count, site_location, out_op);
@@ -570,12 +544,17 @@ static iree_status_t loom_sanitizer_build_access_assertion(
     loom_value_slice_t indices, loom_attribute_t static_indices,
     loom_location_id_t source_location, loom_op_t** out_op) {
   loom_location_id_t site_location = LOOM_LOCATION_UNKNOWN;
+  const loom_sanitizer_site_payload_t payload = {
+      .site_kind = LOOM_SANITIZER_SITE_KIND_ACCESS,
+      .check_kind = LOOM_SANITIZER_CHECK_KIND_ACCESS_RANGE,
+      .provenance_kind = LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT,
+      .lane_policy = LOOM_SANITIZER_LANE_POLICY_SCALAR,
+      .lineage_role = LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL,
+      .flags = 0,
+      .extension_data = iree_const_byte_span_empty(),
+  };
   IREE_RETURN_IF_ERROR(loom_sanitizer_make_site_location(
-      module, source_location, LOOM_SANITIZER_ASSERTION_KIND_ACCESS,
-      LOOM_SANITIZER_CHECK_KIND_ACCESS_RANGE,
-      LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT,
-      LOOM_SANITIZER_LANE_POLICY_SCALAR, LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL,
-      &site_location));
+      module, source_location, &payload, &site_location));
   return loom_sanitizer_assert_access_build(
       &rewriter->builder, kind, view, indices.values, indices.count,
       static_indices.i64_array, static_indices.count, site_location, out_op);
