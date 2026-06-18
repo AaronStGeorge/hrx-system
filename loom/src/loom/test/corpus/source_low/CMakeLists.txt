@@ -47,6 +47,7 @@ loom_check_test_suite(
     "packed_dot_integer.loom-test"
     "packed_dot_wide.loom-test"
     "packed_i8_arithmetic.loom-test"
+    "packed_integer_arithmetic.loom-test"
     "packed_payload_offsets.loom-test"
     "packed_q8_dequant_dot.loom-test"
     "sync_barrier.loom-test"

@@ -22,9 +22,30 @@ low.func.def target(@target) abi(hal_kernel) @i8x4_addi_arguments(%lhs: reg<amdg
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @i8x8_addi_storage_tuple(%lhs: vector<8xi8>, %rhs: vector<8xi8>) -> (vector<8xi8>) {
-  // ERROR@+1: TARGET/003 {subject_role="storage-width", subject_name="vector<i8>", constraint_key="amdgpu.arithmetic.vector_i8_packed_word"}
   %sum = vector.addi %lhs, %rhs : vector<8xi8>
   func.return %sum : vector<8xi8>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i8x8_addi_storage_tuple(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %7 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %8 = v_and_b32_lit %7, 2139062143
+  %9 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %10 = v_and_b32_lit %9, 2139062143
+  %11 = v_add_u32 %8, %10
+  %14 = v_xor_b32 %7, %9
+  %15 = v_and_b32_lit %14, 2155905152
+  %16 = v_xor_b32 %11, %15
+  %17 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %18 = v_and_b32_lit %17, 2139062143
+  %19 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %20 = v_and_b32_lit %19, 2139062143
+  %21 = v_add_u32 %18, %20
+  %24 = v_xor_b32 %17, %19
+  %25 = v_and_b32_lit %24, 2155905152
+  %26 = v_xor_b32 %21, %25
+  %sum = concat(%16, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %sum
 }
 
 // ====

@@ -1,0 +1,120 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/packed_integer_arithmetic.loom-test
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i8x8_bitwise_storage_tuple(%lhs: vector<8xi8>, %rhs: vector<8xi8>) -> (vector<8xi8>, vector<8xi8>, vector<8xi8>) {
+  %and = vector.andi %lhs, %rhs : vector<8xi8>
+  %or = vector.ori %lhs, %rhs : vector<8xi8>
+  %xor = vector.xori %lhs, %rhs : vector<8xi8>
+  func.return %and, %or, %xor : vector<8xi8>, vector<8xi8>, vector<8xi8>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i8x8_bitwise_storage_tuple(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %13 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %15 = v_and_b32 %13, %14
+  %16 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %17 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %18 = v_and_b32 %16, %17
+  %and = concat(%15, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %22 = v_or_b32 %13, %14
+  %25 = v_or_b32 %16, %17
+  %or = concat(%22, %25) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %29 = v_xor_b32 %13, %14
+  %32 = v_xor_b32 %16, %17
+  %xor = concat(%29, %32) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %and, %or, %xor
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i16x4_bitwise_storage_tuple(%lhs: vector<4xi16>, %rhs: vector<4xi16>) -> (vector<4xi16>, vector<4xi16>, vector<4xi16>) {
+  %and = vector.andi %lhs, %rhs : vector<4xi16>
+  %or = vector.ori %lhs, %rhs : vector<4xi16>
+  %xor = vector.xori %lhs, %rhs : vector<4xi16>
+  func.return %and, %or, %xor : vector<4xi16>, vector<4xi16>, vector<4xi16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i16x4_bitwise_storage_tuple(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %13 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %15 = v_and_b32 %13, %14
+  %16 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %17 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %18 = v_and_b32 %16, %17
+  %and = concat(%15, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %22 = v_or_b32 %13, %14
+  %25 = v_or_b32 %16, %17
+  %or = concat(%22, %25) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %29 = v_xor_b32 %13, %14
+  %32 = v_xor_b32 %16, %17
+  %xor = concat(%29, %32) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %and, %or, %xor
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i16x4_select_xori(%lhs: i32, %rhs: i32, %true_value: vector<4xi16>, %false_value: vector<4xi16>, %mask: vector<4xi16>) -> (vector<4xi16>) {
+  %condition = scalar.cmpi slt, %lhs, %rhs : i32
+  %predicate = vector.splat %condition : vector<4xi1>
+  %selected = vector.select %predicate, %true_value, %false_value : vector<4xi16>
+  %result = vector.xori %selected, %mask : vector<4xi16>
+  func.return %result : vector<4xi16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i16x4_select_xori(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.vgpr x2>, %false_value: reg<amdgpu.vgpr x2>, %mask: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %16 = v_mov_b32_copy %lhs
+  %17 = v_mov_b32_copy %rhs
+  %condition = v_cmp_lt_i32 %16, %17
+  %19 = slice %true_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %20 = slice %false_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %21 = v_cndmask_b32 %20, %19, %condition
+  %22 = slice %true_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %23 = slice %false_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %24 = v_cndmask_b32 %23, %22, %condition
+  %27 = slice %mask[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %28 = v_xor_b32 %21, %27
+  %30 = slice %mask[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %31 = v_xor_b32 %24, %30
+  %result = concat(%28, %31) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i16x4_cfg_arg_andi(%lhs: i32, %rhs: i32, %true_value: vector<4xi16>, %false_value: vector<4xi16>, %mask: vector<4xi16>) -> (vector<4xi16>) {
+  %condition = scalar.cmpi slt, %lhs, %rhs : i32
+  cfg.cond_br %condition, ^then, ^else
+^then:
+  cfg.br ^join(%true_value: vector<4xi16>)
+^else:
+  cfg.br ^join(%false_value: vector<4xi16>)
+^join(%selected: vector<4xi16>):
+  %result = vector.andi %selected, %mask : vector<4xi16>
+  func.return %result : vector<4xi16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i16x4_cfg_arg_andi(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.vgpr x2>, %false_value: reg<amdgpu.vgpr x2>, %mask: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %condition = s_cmp_lt_i32 %lhs, %rhs
+  low.cond_br %condition, ^then, ^else : reg<amdgpu.scc>
+^then:
+  low.br ^join(%true_value: reg<amdgpu.vgpr x2>)
+^else:
+  low.br ^join(%false_value: reg<amdgpu.vgpr x2>)
+^join(%selected: reg<amdgpu.vgpr x2>):
+  %17 = slice %selected[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %18 = slice %mask[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %19 = v_and_b32 %17, %18
+  %20 = slice %selected[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %21 = slice %mask[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %22 = v_and_b32 %20, %21
+  %result = concat(%19, %22) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
+}

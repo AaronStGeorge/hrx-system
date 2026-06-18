@@ -258,11 +258,6 @@ _VEC_I8_PACKED_DIAGNOSTIC = GuardDiagnostic(
     subject_name="vector<i8>",
     constraint_key="amdgpu.arithmetic.vector_i8_packed",
 )
-_VEC_I8_PACKED_WORD_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="storage-width",
-    subject_name="vector<i8>",
-    constraint_key="amdgpu.arithmetic.vector_i8_packed_word",
-)
 _VEC_I16_PACKED_EVEN_LANES_DIAGNOSTIC = GuardDiagnostic(
     subject_role="lane-count",
     subject_name="vector<i16>",
@@ -465,16 +460,6 @@ def _typed_guards(
     type_pattern: TypePattern,
 ) -> tuple[Guard, ...]:
     return tuple(_value_type(field, type_pattern) for field in fields)
-
-
-def _storage_word_guards(
-    fields: tuple[str, ...],
-    diagnostic: GuardDiagnostic,
-) -> tuple[Guard, ...]:
-    return tuple(
-        Guard.low_value_register_unit_count(field, 1, diagnostic=diagnostic)
-        for field in fields
-    )
 
 
 def _f32_vgpr_operand(field: str) -> ValueRef:
@@ -1814,10 +1799,6 @@ def _packed_i8_add_rule() -> DescriptorRule:
         descriptor=add,
         guards=(
             *_typed_guards(("lhs", "rhs", "result"), _VEC_I8_PACKED),
-            *_storage_word_guards(
-                ("lhs", "rhs", "result"),
-                _VEC_I8_PACKED_WORD_DIAGNOSTIC,
-            ),
             Guard.descriptor_available(and_literal),
             Guard.descriptor_available(add),
             Guard.descriptor_available(xor_bits),
@@ -1829,7 +1810,7 @@ def _packed_i8_add_rule() -> DescriptorRule:
                 results={"dst": ValueRef.temporary("lhs_low")},
                 result_types=result_type,
                 immediates={"imm32": _PACKED_I8_LOW7_MASK},
-                form=DescriptorEmitForm.OP,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=and_literal,
@@ -1837,7 +1818,7 @@ def _packed_i8_add_rule() -> DescriptorRule:
                 results={"dst": ValueRef.temporary("rhs_low")},
                 result_types=result_type,
                 immediates={"imm32": _PACKED_I8_LOW7_MASK},
-                form=DescriptorEmitForm.OP,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=add,
@@ -1847,7 +1828,7 @@ def _packed_i8_add_rule() -> DescriptorRule:
                 },
                 results={"dst": ValueRef.temporary("low_sum")},
                 result_types=result_type,
-                form=DescriptorEmitForm.OP,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=xor_bits,
@@ -1857,7 +1838,7 @@ def _packed_i8_add_rule() -> DescriptorRule:
                 },
                 results={"dst": ValueRef.temporary("high_xor")},
                 result_types=result_type,
-                form=DescriptorEmitForm.OP,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=and_literal,
@@ -1865,7 +1846,7 @@ def _packed_i8_add_rule() -> DescriptorRule:
                 results={"dst": ValueRef.temporary("high_bits")},
                 result_types=result_type,
                 immediates={"imm32": _PACKED_I8_SIGN_MASK},
-                form=DescriptorEmitForm.OP,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=xor_bits,
@@ -1874,7 +1855,7 @@ def _packed_i8_add_rule() -> DescriptorRule:
                     "rhs": ValueRef.temporary("high_bits"),
                 },
                 results={"dst": ValueRef.result("result")},
-                form=DescriptorEmitForm.OP,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
         ),
     )
@@ -2954,6 +2935,20 @@ def _rules() -> tuple[ContractCase, ...]:
         (vector.vector_ori, "amdgpu.v_or_b32"),
         (vector.vector_xori, "amdgpu.v_xor_b32"),
     ):
+        rules.extend(
+            (
+                _binary_rule(
+                    source_op,
+                    _VEC_I8_PACKED,
+                    descriptor_key,
+                ),
+                _binary_rule(
+                    source_op,
+                    _VEC_I16_PACKED_STORAGE,
+                    descriptor_key,
+                ),
+            )
+        )
         rules.extend(
             (
                 _literal_binary_rule(
