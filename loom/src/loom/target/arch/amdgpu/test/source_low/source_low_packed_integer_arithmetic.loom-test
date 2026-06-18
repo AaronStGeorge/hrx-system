@@ -58,6 +58,30 @@ low.func.def target(@target) abi(hal_kernel) @i16x4_bitwise_storage_tuple(%lhs: 
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @i16x4_add_sub_storage_tuple(%lhs: vector<4xi16>, %rhs: vector<4xi16>) -> (vector<4xi16>, vector<4xi16>) {
+  %sum = vector.addi %lhs, %rhs : vector<4xi16>
+  %diff = vector.subi %lhs, %rhs : vector<4xi16>
+  func.return %sum, %diff : vector<4xi16>, vector<4xi16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i16x4_add_sub_storage_tuple(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %10 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %11 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %12 = v_pk_add_u16 %10, %11
+  %13 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %15 = v_pk_add_u16 %13, %14
+  %sum = concat(%12, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %19 = v_pk_sub_i16 %10, %11
+  %22 = v_pk_sub_i16 %13, %14
+  %diff = concat(%19, %22) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %sum, %diff
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @i16x4_select_xori(%lhs: i32, %rhs: i32, %true_value: vector<4xi16>, %false_value: vector<4xi16>, %mask: vector<4xi16>) -> (vector<4xi16>) {
   %condition = scalar.cmpi slt, %lhs, %rhs : i32
   %predicate = vector.splat %condition : vector<4xi1>

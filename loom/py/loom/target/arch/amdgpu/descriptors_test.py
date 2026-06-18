@@ -1611,6 +1611,34 @@ def test_packed_fma_mad_descriptors_pin_lane_container_widths() -> None:
         assert "amdgpu.v_pk_fma_f32" not in descriptors
 
 
+def test_packed_i16_binary_descriptors_pin_lane_container_widths() -> None:
+    packed_keys = (
+        "amdgpu.v_pk_add_u16",
+        "amdgpu.v_pk_sub_i16",
+    )
+    for descriptor_set in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key in packed_keys:
+            descriptor = descriptors[descriptor_key]
+            assert descriptor.encoding_name == "ENC_VOP3P"
+            assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+                "VDST",
+                "SRC0",
+                "SRC1",
+            )
+            assert tuple(
+                operand.descriptor_operand.unit_count for operand in descriptor.operands
+            ) == (1, 1, 1)
+
+
 def test_packed_fma_mad_rdna_literal_forms_cover_source_positions() -> None:
     source_fields = {
         "src0": ("SRC0", "a", ("VDST", "SRC1", "SRC2")),

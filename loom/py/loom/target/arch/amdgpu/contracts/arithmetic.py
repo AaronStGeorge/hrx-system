@@ -81,6 +81,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_cvt_f16_f32",
     "amdgpu.v_pk_fmac_f16",
     "amdgpu.v_pk_fma_f16",
+    "amdgpu.v_pk_add_u16",
+    "amdgpu.v_pk_sub_i16",
     "amdgpu.v_pk_mad_i16",
     "amdgpu.v_pk_mad_u16",
     "amdgpu.v_cvt_f32_i32",
@@ -2904,6 +2906,11 @@ def _rules() -> tuple[ContractCase, ...]:
     )
     rules.extend(
         (
+            _binary_rule(
+                vector.vector_addi,
+                _VEC_I16_PACKED_STORAGE,
+                "amdgpu.v_pk_add_u16",
+            ),
             _packed_i8_add_rule(),
             _literal_binary_rule(
                 vector.vector_addi,
@@ -2922,6 +2929,11 @@ def _rules() -> tuple[ContractCase, ...]:
     )
     rules.extend(
         (
+            _binary_rule(
+                vector.vector_subi,
+                _VEC_I16_PACKED_STORAGE,
+                "amdgpu.v_pk_sub_i16",
+            ),
             _binary_rule(vector.vector_subi, _VEC_I32, "amdgpu.v_sub_u32"),
             _binary_rule(vector.vector_muli, _VEC_I32, "amdgpu.v_mul_lo_u32"),
             _binary_rule(vector.vector_minsi, _VEC_I32, "amdgpu.v_min_i32"),

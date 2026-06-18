@@ -140,6 +140,20 @@ def test_bitfield_insert_rules_try_native_bfi_before_mask_merge_fallback() -> No
     )
 
 
+def test_packed_i16_arithmetic_rules_try_native_pk_ops_before_word_ops() -> None:
+    compiled = _compiled_arithmetic_rules()
+
+    add_positions = _descriptor_sequence_positions(compiled, vector.vector_addi)
+    assert (
+        add_positions[("amdgpu.v_pk_add_u16",)] < add_positions[("amdgpu.v_add_u32",)]
+    )
+
+    sub_positions = _descriptor_sequence_positions(compiled, vector.vector_subi)
+    assert (
+        sub_positions[("amdgpu.v_pk_sub_i16",)] < sub_positions[("amdgpu.v_sub_u32",)]
+    )
+
+
 def test_vector_extract_rules_publish_contract_only_shape_rows() -> None:
     compiled = _compiled_arithmetic_rules()
     rules = _rules_for_source_op(compiled, vector.vector_extract)

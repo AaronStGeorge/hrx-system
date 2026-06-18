@@ -3376,6 +3376,30 @@ def _v_pk_ternary_overlay(
     )
 
 
+def _v_pk_binary_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    units: int = 1,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_VOP3P",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=units)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs", units=units)),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("rhs", units=units)),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 _V_PK_TERNARY_SOURCES = (
     ("src0", "SRC0", "a", _sgpr_vgpr_operand),
     ("src1", "SRC1", "b", _sgpr_vgpr_operand),
@@ -3472,6 +3496,24 @@ def _v_pk_fma_f16_literal_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         instruction_name="V_PK_FMA_F16",
         mnemonic="v_pk_fma_f16",
         semantic_tag="float.fma.pk2.f16",
+    )
+
+
+def _v_pk_add_u16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_add_u16",
+        instruction_name="V_PK_ADD_U16",
+        mnemonic="v_pk_add_u16",
+        semantic_tag="integer.add.pk2.u16",
+    )
+
+
+def _v_pk_sub_i16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_binary_overlay(
+        descriptor_key="amdgpu.v_pk_sub_i16",
+        instruction_name="V_PK_SUB_I16",
+        mnemonic="v_pk_sub_i16",
+        semantic_tag="integer.sub.pk2.i16",
     )
 
 
@@ -4690,12 +4732,15 @@ __all__ = (
     "_v_fmamk_f32_overlay",
     "_v_pk_fma_f16_overlay",
     "_v_pk_fma_f16_literal_overlays",
+    "_v_pk_add_u16_overlay",
     "_v_pk_fma_f32_overlay",
     "_v_pk_fmac_f16_overlay",
     "_v_pk_mad_i16_overlay",
     "_v_pk_mad_i16_literal_overlays",
     "_v_pk_mad_u16_overlay",
     "_v_pk_mad_u16_literal_overlays",
+    "_v_pk_sub_i16_overlay",
+    "_v_pk_binary_overlay",
     "_v_pk_ternary_overlay",
     "_v_perm_b32_overlay",
     "_v_perm_b32_src2_literal_overlay",
