@@ -130,6 +130,38 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32_arcp_div() asm<amdg
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @f32_guarded_arcp_reciprocal_scale(%amax: f32) -> (f32) {
+  %zero = scalar.constant 0.0 : f32
+  %one = scalar.constant 1.0 : f32
+  %one_over_127 = scalar.constant 0.007874015700000001 : f32
+  %scale = scalar.constant 127.0 : f32
+  %d = scalar.mulf<nnan|ninf|nsz|arcp> %amax, %one_over_127 : f32
+  %zero_for_cmp = scalar.subf %d, %d : f32
+  %nonzero = scalar.cmpf one, %d, %zero_for_cmp : f32
+  %d_inv = scf.if %nonzero -> (f32) {
+    %amax_inv = scalar.divf<nnan|ninf|nsz|arcp> %one, %amax : f32
+    %candidate = scalar.mulf<nnan|ninf|nsz|arcp> %amax_inv, %scale : f32
+    scf.yield %candidate : f32
+  } else {
+    scf.yield %zero : f32
+  }
+  func.return %d_inv : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32_guarded_arcp_reciprocal_scale(%amax: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %d = v_mul_f32_lit %amax, 1006699012
+  %zero_for_cmp = v_sub_f32 %d, %d
+  %nonzero = v_cmp_lg_f32 %d, %zero_for_cmp
+  %amax_inv = v_rcp_f32 %amax
+  %candidate = v_mul_f32_lit %amax_inv, 1123942400
+  %d_inv = v_cndmask_b32_src0_inline %candidate, %nonzero {false_value = 0}
+  return %d_inv
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @f32_exact_vector_div() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 64 : index
