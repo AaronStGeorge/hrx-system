@@ -311,6 +311,9 @@ static iree_status_t loom_check_test_synthetic_hazard_execute(
       request->diagnostic_collector->count != 0) {
     return iree_ok_status();
   }
+  if (frame.schedule.error_count != 0 || frame.allocation.error_count != 0) {
+    return iree_ok_status();
+  }
 
   loom_check_test_synthetic_hazard_context_t context = {
       .test_case = options.test_case,

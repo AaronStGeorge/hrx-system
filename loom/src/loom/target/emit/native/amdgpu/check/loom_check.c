@@ -371,6 +371,9 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
       request->diagnostic_collector->count != 0) {
     return iree_ok_status();
   }
+  if (frame.schedule.error_count != 0 || frame.allocation.error_count != 0) {
+    return iree_ok_status();
+  }
   if (iree_string_view_equal(request->target_name, IREE_SV("amdgpu-native"))) {
     return loom_amdgpu_loom_check_emit_native(&frame, &options,
                                               request->case_arena);

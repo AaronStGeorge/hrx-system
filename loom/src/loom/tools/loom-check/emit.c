@@ -1297,6 +1297,9 @@ static iree_status_t loom_check_emit_write_low_packet_json(
   loom_low_emission_frame_t frame = {0};
   IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
       module, low_function, &frame_options, analysis_arena, &frame));
+  if (frame.schedule.error_count != 0 || frame.allocation.error_count != 0) {
+    return iree_ok_status();
+  }
   const loom_target_low_packet_diagnostics_options_t diagnostic_options = {
       .provider_list = packet_diagnostic_provider_list,
       .diagnostic_flags = packet_diagnostic_flags,

@@ -165,6 +165,13 @@ static iree_status_t loom_amdgpu_occupancy_check_emit_provider_execute(
       options.allocation_fixed_value_spec_count,
       loom_low_schedule_pair_affinity_list_empty(), &storage_lease_provider,
       /*spill_free_options=*/NULL, &frame));
+  if (request->diagnostic_collector != NULL &&
+      request->diagnostic_collector->count != 0) {
+    return iree_ok_status();
+  }
+  if (frame.schedule.error_count != 0 || frame.allocation.error_count != 0) {
+    return iree_ok_status();
+  }
 
   loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
       .diagnostic_collector = request->diagnostic_collector,

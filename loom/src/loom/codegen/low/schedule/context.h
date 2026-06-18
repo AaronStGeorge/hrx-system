@@ -203,6 +203,10 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t dependency_set_capacity;
   // Number of populated scheduled_node_indices entries.
   iree_host_size_t scheduled_node_count;
+  // Number of error diagnostics emitted while attempting scheduling.
+  uint32_t error_count;
+  // Terminal hard-scheduling failure recorded during schedule construction.
+  loom_low_schedule_failure_t failure;
   // Number of populated pressure_steps entries.
   iree_host_size_t pressure_step_count;
   // Number of populated candidate_decisions entries.

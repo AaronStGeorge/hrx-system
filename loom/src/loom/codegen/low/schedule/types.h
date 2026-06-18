@@ -68,6 +68,58 @@ typedef enum loom_low_schedule_dependency_kind_e {
   LOOM_LOW_SCHEDULE_DEPENDENCY_STORAGE = 6,
 } loom_low_schedule_dependency_kind_t;
 
+#define LOOM_LOW_SCHEDULE_FAILURE_CYCLE_NODE_CAPACITY 16
+
+typedef enum loom_low_schedule_failure_kind_e {
+  // No terminal schedule failure was recorded.
+  LOOM_LOW_SCHEDULE_FAILURE_NONE = 0,
+  // Remaining same-block dependencies formed a cycle.
+  LOOM_LOW_SCHEDULE_FAILURE_DEPENDENCY_CYCLE = 1,
+} loom_low_schedule_failure_kind_t;
+
+enum loom_low_schedule_failure_flag_bits_e {
+  // The cycle path exceeded the inline diagnostic node capacity.
+  LOOM_LOW_SCHEDULE_FAILURE_FLAG_CYCLE_PATH_TRUNCATED = 1u << 0,
+  // The scheduler found an unresolved witness edge but not a closed cycle path.
+  LOOM_LOW_SCHEDULE_FAILURE_FLAG_WITNESS_EDGE_ONLY = 1u << 1,
+};
+typedef uint16_t loom_low_schedule_failure_flags_t;
+
+// Terminal schedule failure evidence. This is populated only when
+// loom_low_schedule_table_t::error_count is non-zero.
+typedef struct loom_low_schedule_failure_t {
+  // Recorded terminal schedule failure kind.
+  loom_low_schedule_failure_kind_t kind;
+  // Additional evidence flags for the recorded failure.
+  loom_low_schedule_failure_flags_t flags;
+  // Region block containing the scheduler failure.
+  uint32_t block_index;
+  // Number of nodes owned by the failed block.
+  uint32_t block_node_count;
+  // Number of nodes scheduled in the failed block before progress stopped.
+  uint32_t scheduled_node_count;
+  // Number of unscheduled nodes remaining in the failed block.
+  uint32_t unscheduled_node_count;
+  // Producer node for the representative unresolved dependency edge.
+  uint32_t producer_node;
+  // Consumer node for the representative unresolved dependency edge.
+  uint32_t consumer_node;
+  // Dependency kind for the representative unresolved edge.
+  loom_low_schedule_dependency_kind_t dependency_kind;
+  // Operand index for the representative edge, or UINT32_MAX.
+  uint32_t operand_index;
+  // Inline same-block cycle node path. When non-empty, the last node has a
+  // dependency edge back to the first node.
+  uint32_t cycle_nodes[LOOM_LOW_SCHEDULE_FAILURE_CYCLE_NODE_CAPACITY];
+  // Number of populated entries in |cycle_nodes|.
+  uint32_t cycle_node_count;
+} loom_low_schedule_failure_t;
+
+static inline bool loom_low_schedule_failure_is_present(
+    const loom_low_schedule_failure_t* failure) {
+  return failure && failure->kind != LOOM_LOW_SCHEDULE_FAILURE_NONE;
+}
+
 enum loom_low_schedule_diagnostic_bits_e {
   // Emits one BACKEND/003 remark per hard-bounded register-pressure summary.
   LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS = 1u << 0,
@@ -625,6 +677,10 @@ typedef struct loom_low_schedule_table_t {
   const uint32_t* scheduled_node_indices;
   // Number of scheduled node indices.
   iree_host_size_t scheduled_node_count;
+  // Number of error diagnostics emitted while attempting scheduling.
+  uint32_t error_count;
+  // Terminal hard-scheduling failure when |error_count| is non-zero.
+  loom_low_schedule_failure_t failure;
   // Pressure-model steps in scheduled order when the selected strategy records
   // them. Empty for the default source-priority strategy.
   const loom_low_schedule_pressure_step_t* pressure_steps;

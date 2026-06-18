@@ -655,6 +655,22 @@ TEST_LOW_ADD_SPECIAL_DESCRIPTOR = Descriptor(
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
 )
 
+TEST_LOW_STATE_ADD_SPECIAL_DESCRIPTOR = Descriptor(
+    key="test.state.add.special",
+    mnemonic="test.state.add.special",
+    semantic_tag="test.state.add.special",
+    operands=(
+        _special_result(),
+        _special_operand("lhs"),
+        _special_operand("rhs"),
+        _special_state_write(),
+        _special_state_read(),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
 TEST_LOW_STATE_ADD_I32_DESCRIPTOR = Descriptor(
     key="test.state.add.i32",
     mnemonic="test.state.add.i32",
@@ -1070,6 +1086,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR,
         TEST_LOW_ADD_PHYS_DESCRIPTOR,
         TEST_LOW_ADD_SPECIAL_DESCRIPTOR,
+        TEST_LOW_STATE_ADD_SPECIAL_DESCRIPTOR,
         TEST_LOW_STATE_ADD_I32_DESCRIPTOR,
         TEST_LOW_STATE_ADD_I32_RHS_ZERO_DESCRIPTOR,
         TEST_LOW_LOAD_V4I32_DESCRIPTOR,

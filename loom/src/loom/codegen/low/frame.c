@@ -142,6 +142,10 @@ static iree_status_t loom_low_emission_frame_build_with_allocation_emitter(
   };
   IREE_RETURN_IF_ERROR(loom_low_schedule_function(
       module, low_func_op, &schedule_options, arena, &out_frame->schedule));
+  if (out_frame->schedule.error_count != 0) {
+    out_frame->target = out_frame->schedule.target;
+    return iree_ok_status();
+  }
 
   loom_low_storage_lease_table_t storage_leases = {0};
   if (options->storage_lease_provider != NULL) {
@@ -416,6 +420,10 @@ iree_status_t loom_low_emission_frame_build_spill_free(
     IREE_RETURN_IF_ERROR(loom_low_emission_frame_build_with_allocation_emitter(
         module, low_func_op, frame_options, (iree_diagnostic_emitter_t){0},
         arena, &frame));
+    if (frame.schedule.error_count != 0) {
+      *out_frame = frame;
+      return iree_ok_status();
+    }
     if (frame.allocation.error_count != 0) {
       if (rematerialization_iteration_limit == 0) {
         if (frame.allocation.liveness.value_count == IREE_HOST_SIZE_MAX) {
