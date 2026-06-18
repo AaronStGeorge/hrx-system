@@ -18,6 +18,7 @@
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
+#include "loom/util/math.h"
 
 //===----------------------------------------------------------------------===//
 // State and helpers
@@ -148,6 +149,71 @@ static bool loom_vector_memory_footprint_origin_value(
   return false;
 }
 
+static iree_string_view_t loom_vector_memory_footprint_value_name(
+    loom_value_id_t value, char* value_buffer,
+    iree_host_size_t value_buffer_capacity) {
+  if (value == LOOM_VALUE_ID_INVALID) {
+    return IREE_SV("<unknown>");
+  }
+  int length =
+      snprintf(value_buffer, value_buffer_capacity, "%%%u", (unsigned)value);
+  if (length <= 0 || (iree_host_size_t)length >= value_buffer_capacity) {
+    return IREE_SV("<unknown>");
+  }
+  return iree_make_string_view(value_buffer, (iree_host_size_t)length);
+}
+
+static bool loom_vector_memory_footprint_expr_exact_i64(
+    const loom_symbolic_expr_t* expression, int64_t* out_value) {
+  if (!loom_symbolic_expr_is_constant(expression)) {
+    return false;
+  }
+  *out_value = expression->constant;
+  return true;
+}
+
+static iree_string_view_t loom_vector_memory_footprint_i64_text(
+    int64_t value, char* text_buffer, iree_host_size_t text_buffer_capacity) {
+  int length = snprintf(text_buffer, text_buffer_capacity, "%" PRId64, value);
+  if (length <= 0 || (iree_host_size_t)length >= text_buffer_capacity) {
+    return IREE_SV("<unknown>");
+  }
+  return iree_make_string_view(text_buffer, (iree_host_size_t)length);
+}
+
+static iree_string_view_t loom_vector_memory_footprint_expr_text(
+    const loom_symbolic_expr_t* expression, char* text_buffer,
+    iree_host_size_t text_buffer_capacity) {
+  int64_t exact_value = 0;
+  if (loom_vector_memory_footprint_expr_exact_i64(expression, &exact_value)) {
+    return loom_vector_memory_footprint_i64_text(exact_value, text_buffer,
+                                                 text_buffer_capacity);
+  }
+  if (loom_symbolic_expr_is_linear(expression) && expression->constant == 0 &&
+      expression->term_count == 1 && expression->terms[0].coefficient == 1) {
+    return loom_vector_memory_footprint_value_name(
+        expression->terms[0].value_id, text_buffer, text_buffer_capacity);
+  }
+  return IREE_SV("<dynamic>");
+}
+
+static iree_string_view_t
+loom_vector_memory_footprint_required_origin_upper_bound_text(
+    const loom_symbolic_expr_t* bound, const loom_symbolic_expr_t* extent,
+    char* text_buffer, iree_host_size_t text_buffer_capacity) {
+  int64_t bound_value = 0;
+  int64_t extent_value = 0;
+  int64_t required_origin_upper_bound = 0;
+  if (!loom_vector_memory_footprint_expr_exact_i64(bound, &bound_value) ||
+      !loom_vector_memory_footprint_expr_exact_i64(extent, &extent_value) ||
+      !loom_checked_sub_i64(bound_value, extent_value,
+                            &required_origin_upper_bound)) {
+    return IREE_SV("<dynamic>");
+  }
+  return loom_vector_memory_footprint_i64_text(
+      required_origin_upper_bound, text_buffer, text_buffer_capacity);
+}
+
 static bool loom_vector_memory_footprint_lookup_config_decl_bound(
     const loom_vector_memory_footprint_state_t* state,
     const loom_vector_memory_footprint_access_t* access, uint8_t view_axis,
@@ -211,34 +277,84 @@ static iree_status_t loom_vector_memory_footprint_fail_axis(
   ++state->result->error_count;
   iree_string_view_t op_name =
       loom_vector_memory_footprint_op_name(state->module, access->op);
-  if (error == LOOM_ERR_SUBRANGE_010 || error == LOOM_ERR_SUBRANGE_011) {
-    iree_string_view_t config_key = iree_string_view_empty();
-    if (loom_vector_memory_footprint_lookup_config_decl_bound(
-            state, access, view_axis, &config_key)) {
-      loom_diagnostic_param_t params[] = {
-          loom_param_string(op_name),
-          loom_param_i64(view_axis),
-          loom_param_i64(vector_axis),
-          loom_param_string(origin),
-          loom_param_string(config_key),
-          loom_param_string(
-              IREE_SV("config_decl.where.vector_footprint_upper_bound")),
-      };
-      loom_diagnostic_emission_t emission = {
-          .op = access->op,
-          .error = LOOM_ERR_SUBRANGE_018,
-          .params = params,
-          .param_count = IREE_ARRAYSIZE(params),
-      };
-      return iree_diagnostic_emit(state->options->emitter, &emission);
-    }
-  }
-
   loom_diagnostic_param_t params[] = {
       loom_param_string(op_name),
       loom_param_i64(view_axis),
       loom_param_i64(vector_axis),
       loom_param_string(origin),
+  };
+  loom_diagnostic_emission_t emission = {
+      .op = access->op,
+      .error = error,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(state->options->emitter, &emission);
+}
+
+static iree_status_t loom_vector_memory_footprint_fail_upper_axis(
+    loom_vector_memory_footprint_state_t* state,
+    const loom_vector_memory_footprint_access_t* access, uint8_t view_axis,
+    int64_t vector_axis, const loom_symbolic_expr_t* extent,
+    const loom_symbolic_expr_t* bound, const loom_error_def_t* error,
+    iree_string_view_t constraint_key) {
+  char origin_buffer[32];
+  iree_string_view_t origin = loom_vector_memory_footprint_origin_name(
+      access->static_indices, access->dynamic_indices, view_axis, origin_buffer,
+      IREE_ARRAYSIZE(origin_buffer));
+  state->current_access_failed = true;
+  if (loom_vector_memory_footprint_should_suppress_error(state)) {
+    return iree_ok_status();
+  }
+  ++state->result->error_count;
+  iree_string_view_t op_name =
+      loom_vector_memory_footprint_op_name(state->module, access->op);
+
+  iree_string_view_t config_key = iree_string_view_empty();
+  if (loom_vector_memory_footprint_lookup_config_decl_bound(
+          state, access, view_axis, &config_key)) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(op_name),
+        loom_param_i64(view_axis),
+        loom_param_i64(vector_axis),
+        loom_param_string(origin),
+        loom_param_string(config_key),
+        loom_param_string(
+            IREE_SV("config_decl.where.vector_footprint_upper_bound")),
+    };
+    loom_diagnostic_emission_t emission = {
+        .op = access->op,
+        .error = LOOM_ERR_SUBRANGE_018,
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    return iree_diagnostic_emit(state->options->emitter, &emission);
+  }
+
+  char view_buffer[32];
+  char extent_buffer[32];
+  char bound_buffer[32];
+  char required_origin_upper_bound_buffer[32];
+  iree_string_view_t view = loom_vector_memory_footprint_value_name(
+      access->view, view_buffer, IREE_ARRAYSIZE(view_buffer));
+  iree_string_view_t vector_extent = loom_vector_memory_footprint_expr_text(
+      extent, extent_buffer, IREE_ARRAYSIZE(extent_buffer));
+  iree_string_view_t view_bound = loom_vector_memory_footprint_expr_text(
+      bound, bound_buffer, IREE_ARRAYSIZE(bound_buffer));
+  iree_string_view_t required_origin_upper_bound =
+      loom_vector_memory_footprint_required_origin_upper_bound_text(
+          bound, extent, required_origin_upper_bound_buffer,
+          IREE_ARRAYSIZE(required_origin_upper_bound_buffer));
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(op_name),
+      loom_param_i64(view_axis),
+      loom_param_i64(vector_axis),
+      loom_param_string(view),
+      loom_param_string(origin),
+      loom_param_string(vector_extent),
+      loom_param_string(view_bound),
+      loom_param_string(required_origin_upper_bound),
+      loom_param_string(constraint_key),
   };
   loom_diagnostic_emission_t emission = {
       .op = access->op,
@@ -376,15 +492,6 @@ static iree_status_t loom_vector_memory_footprint_expr_add_i64(
   loom_symbolic_expr_constant(value, &constant);
   return loom_vector_memory_footprint_expr_add(state, expression, &constant,
                                                out_expression);
-}
-
-static bool loom_vector_memory_footprint_expr_exact_i64(
-    const loom_symbolic_expr_t* expression, int64_t* out_value) {
-  if (!loom_symbolic_expr_is_constant(expression)) {
-    return false;
-  }
-  *out_value = expression->constant;
-  return true;
 }
 
 static iree_status_t loom_vector_memory_footprint_prove_le(
@@ -647,14 +754,14 @@ static iree_status_t loom_vector_memory_footprint_check_direct_axis(
         LOOM_ERR_SUBRANGE_009);
   }
 
+  loom_symbolic_expr_t extent = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_memory_footprint_axis_extent_expr(
+      state, memory_access, view_axis, &extent));
   loom_symbolic_expr_t end = {0};
   bool has_tail_end = false;
   IREE_RETURN_IF_ERROR(loom_vector_memory_footprint_tail_end_expr(
       state, access, memory_access, view_axis, &origin, &end, &has_tail_end));
   if (!has_tail_end) {
-    loom_symbolic_expr_t extent = {0};
-    IREE_RETURN_IF_ERROR(loom_vector_memory_footprint_axis_extent_expr(
-        state, memory_access, view_axis, &extent));
     IREE_RETURN_IF_ERROR(
         loom_vector_memory_footprint_expr_add(state, &origin, &extent, &end));
   }
@@ -671,13 +778,17 @@ static iree_status_t loom_vector_memory_footprint_check_direct_axis(
             state, access, memory_access, view_axis, &upper_proven));
   }
   if (!upper_proven) {
-    bool unit_extent = false;
-    IREE_RETURN_IF_ERROR(loom_vector_memory_footprint_axis_has_unit_extent(
-        state, memory_access, view_axis, &unit_extent));
-    return loom_vector_memory_footprint_fail_axis(
+    int64_t extent_value = 0;
+    bool unit_extent =
+        loom_vector_memory_footprint_expr_exact_i64(&extent, &extent_value) &&
+        extent_value == 1;
+    return loom_vector_memory_footprint_fail_upper_axis(
         state, access, view_axis,
         loom_vector_memory_footprint_vector_axis(memory_access, view_axis),
-        unit_extent ? LOOM_ERR_SUBRANGE_011 : LOOM_ERR_SUBRANGE_010);
+        &extent, &bound,
+        unit_extent ? LOOM_ERR_SUBRANGE_011 : LOOM_ERR_SUBRANGE_010,
+        unit_extent ? IREE_SV("vector_footprint.scalar_axis_upper_bound")
+                    : IREE_SV("vector_footprint.full_vector_upper_bound"));
   }
   return iree_ok_status();
 }
@@ -747,8 +858,12 @@ static iree_status_t loom_vector_memory_footprint_check_origin_axis(
             state, access, memory_access, view_axis, &upper_proven));
   }
   if (!upper_proven) {
-    return loom_vector_memory_footprint_fail_axis(
-        state, access, view_axis, /*vector_axis=*/-1, LOOM_ERR_SUBRANGE_011);
+    loom_symbolic_expr_t extent = {0};
+    loom_symbolic_expr_constant(1, &extent);
+    return loom_vector_memory_footprint_fail_upper_axis(
+        state, access, view_axis, /*vector_axis=*/-1, &extent, &bound,
+        LOOM_ERR_SUBRANGE_011,
+        IREE_SV("vector_footprint.scalar_axis_upper_bound"));
   }
   return iree_ok_status();
 }

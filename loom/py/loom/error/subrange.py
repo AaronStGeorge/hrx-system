@@ -130,13 +130,20 @@ ERR_SUBRANGE_010 = ErrorDef(
     message=(
         "{op_name} full-vector footprint upper bound is not proven on view axis "
         "{view_axis} (vector axis {vector_axis}); origin {origin} must satisfy "
-        "origin + vector_extent <= view_bound"
+        "origin + vector_extent <= view_bound for view {view}; vector_extent "
+        "is {vector_extent}, view_bound is {view_bound}, and the maximum "
+        "legal origin is {required_origin_upper_bound}"
     ),
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("view_axis", ParamKind.I64),
         ErrorParam("vector_axis", ParamKind.I64),
+        ErrorParam("view", ParamKind.STRING),
         ErrorParam("origin", ParamKind.STRING),
+        ErrorParam("vector_extent", ParamKind.STRING),
+        ErrorParam("view_bound", ParamKind.STRING),
+        ErrorParam("required_origin_upper_bound", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use a full-tile guard, vector.mask.range tail mask, padded view "
@@ -153,13 +160,20 @@ ERR_SUBRANGE_011 = ErrorDef(
     message=(
         "{op_name} scalar-axis footprint upper bound is not proven on view axis "
         "{view_axis} (vector axis {vector_axis}); origin {origin} must satisfy "
-        "origin + 1 <= view_bound"
+        "origin + 1 <= view_bound for view {view}; vector_extent is "
+        "{vector_extent}, view_bound is {view_bound}, and the maximum legal "
+        "origin is {required_origin_upper_bound}"
     ),
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("view_axis", ParamKind.I64),
         ErrorParam("vector_axis", ParamKind.I64),
+        ErrorParam("view", ParamKind.STRING),
         ErrorParam("origin", ParamKind.STRING),
+        ErrorParam("vector_extent", ParamKind.STRING),
+        ErrorParam("view_bound", ParamKind.STRING),
+        ErrorParam("required_origin_upper_bound", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
     ),
     fix_hint=(
         "Use a guard, assume, launch/view relation, or padded view extent "

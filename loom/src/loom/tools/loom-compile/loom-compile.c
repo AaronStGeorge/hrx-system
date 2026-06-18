@@ -53,6 +53,8 @@ typedef struct loom_compile_diagnostic_sink_t {
   const loom_run_module_t* run_module;
   // Printer context used to render target-owned register and storage types.
   loom_low_descriptor_text_print_context_t type_print_context;
+  // Optional compile report capture receiving canonical diagnostic JSON.
+  loom_run_compile_report_capture_t* compile_report_capture;
 } loom_compile_diagnostic_sink_t;
 
 static iree_status_t loom_compile_format_diagnostic_type(
@@ -73,6 +75,8 @@ static iree_status_t loom_compile_format_diagnostic_type(
 
 static iree_status_t loom_compile_diagnostic_sink(
     void* user_data, const loom_diagnostic_t* diagnostic) {
+  loom_compile_diagnostic_sink_t* sink =
+      (loom_compile_diagnostic_sink_t*)user_data;
   loom_output_stream_t stream;
   loom_output_stream_for_file(stderr, &stream);
   const loom_diagnostic_format_options_t format_options = {
@@ -82,8 +86,15 @@ static iree_status_t loom_compile_diagnostic_sink(
               .user_data = user_data,
           },
   };
-  return loom_diagnostic_format_with_options(diagnostic, &format_options,
-                                             &stream);
+  iree_status_t status =
+      loom_diagnostic_format_with_options(diagnostic, &format_options, &stream);
+  if (iree_status_is_ok(status)) {
+    loom_run_compile_report_capture_t* compile_report_capture =
+        sink ? sink->compile_report_capture : NULL;
+    status = loom_run_compile_report_capture_record_diagnostic(
+        compile_report_capture, diagnostic, format_options.type_formatter);
+  }
+  return status;
 }
 
 #define LOOM_COMPILE_HAVE_ANY_PROVIDER                      \
@@ -499,6 +510,7 @@ static iree_status_t loom_compile_run_pass_pipeline(
       loom_run_session_low_descriptor_registry(session);
   loom_compile_diagnostic_sink_t diagnostic_sink = {
       .run_module = run_module,
+      .compile_report_capture = compile_options->report_capture,
   };
   loom_low_descriptor_text_print_context_initialize(
       &pipeline_options.low_descriptor_registry->registry,

@@ -324,6 +324,7 @@ static iree_status_t loom_target_compile_report_append_string_field(
 
 static iree_status_t loom_target_compile_report_format_summary(
     const loom_target_compile_report_t* report,
+    const loom_target_compile_report_format_options_t* options,
     iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
       builder, IREE_SV("COMPILE-REPORT: summary")));
@@ -486,6 +487,12 @@ static iree_status_t loom_target_compile_report_format_summary(
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder, "COMPILE-REPORT: spill_rows count=%" PRIhsz "\n",
         report->spill_rows.count));
+  }
+
+  if (options->diagnostic_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "COMPILE-REPORT: diagnostics count=%" PRIhsz "\n",
+        options->diagnostic_count));
   }
 
   if (iree_any_bit_set(
@@ -1687,6 +1694,15 @@ loom_target_compile_report_format_allocation_failure_rows_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
+static iree_status_t loom_target_compile_report_format_diagnostics_json(
+    const loom_target_compile_report_format_options_t* options,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write(stream, options->diagnostic_json_objects));
+  return loom_output_stream_write_cstring(stream, "]");
+}
+
 static iree_status_t loom_target_compile_report_format_source_low_row_json(
     const loom_target_compile_report_source_low_row_t* row,
     iree_host_size_t row_index, loom_output_stream_t* stream) {
@@ -1971,7 +1987,7 @@ iree_status_t loom_target_compile_report_format_text(
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(
-      loom_target_compile_report_format_summary(report, builder));
+      loom_target_compile_report_format_summary(report, options, builder));
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES)) {
     IREE_RETURN_IF_ERROR(
@@ -2135,6 +2151,16 @@ iree_status_t loom_target_compile_report_format_json(
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_allocation_failure_rows_json(
             report, options->mode, stream));
+  }
+  if (options->diagnostic_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+        stream, &first_field, "diagnostic_count", options->diagnostic_count));
+    if (options->mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+          stream, &first_field, "diagnostics"));
+      IREE_RETURN_IF_ERROR(
+          loom_target_compile_report_format_diagnostics_json(options, stream));
+    }
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {

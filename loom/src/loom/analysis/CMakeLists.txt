@@ -243,6 +243,7 @@ loom_cc_library(
     loom::ops::type_registry
     loom::ops::vector
     loom::util::fact_table
+    loom::util::math
   PUBLIC
 )
 

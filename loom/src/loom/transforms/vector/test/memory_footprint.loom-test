@@ -21,7 +21,7 @@ func.def @static_dense_store_in_bounds(%buffer: buffer, %base: offset, %value: v
 func.def @static_dense_load_out_of_bounds(%buffer: buffer, %base: offset) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%base] : buffer -> view<8xf32, %layout>
-  // ERROR@+1: SUBRANGE/010 "vector.load" "full-vector footprint upper bound" "origin + vector_extent <= view_bound"
+  // ERROR@+1: SUBRANGE/010 {op_name="vector.load", view_axis="0", vector_axis="0", vector_extent="4", view_bound="8", required_origin_upper_bound="4", constraint_key="vector_footprint.full_vector_upper_bound"}
   %loaded = vector.load %view[5] : view<8xf32, %layout> -> vector<4xf32>
   func.return
 }
@@ -42,7 +42,7 @@ func.def @dynamic_unproven_tail(%buffer: buffer, %base: offset, %n: index, %iv: 
   %layout = encoding.layout.dense : encoding<layout>
   %iv2 = index.assume %iv [range(%iv, 0, 4096)] : index
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]xf32, %layout>
-  // ERROR@+1: SUBRANGE/010 "full-vector footprint upper bound" "origin + vector_extent <= view_bound"
+  // ERROR@+1: SUBRANGE/010 {op_name="vector.load", vector_extent="16", constraint_key="vector_footprint.full_vector_upper_bound"}
   %loaded = vector.load %view[%iv2] : view<[%n]xf32, %layout> -> vector<16xf32>
   func.return
 }
@@ -81,6 +81,80 @@ func.def @dynamic_scaled_vector_origin_proven_by_assume_relation(%buffer: buffer
   %origin = index.mul %i_in_bounds, %four : index
   %view = buffer.view %buffer[%base] : buffer -> view<[%element_count]xf32, %layout>
   %loaded = vector.load %view[%origin] : view<[%element_count]xf32, %layout> -> vector<4xf32>
+  func.return
+}
+
+// ====
+
+func.def @quantized_q8_x4_word_chunk_vector_load_is_proven(%buffer: buffer, %base: offset, %lane0: index, %iter0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %two = index.constant 2 : index
+  %four = index.constant 4 : index
+  %eight = index.constant 8 : index
+  %sixteen = index.constant 16 : index
+  %thirtytwo = index.constant 32 : index
+  %thirtysix = index.constant 36 : index
+  %tentwentyfour = index.constant 1024 : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %iter = index.assume %iter0 [range(%iter0, 0, 31)] : index
+  %q8_word_pair = index.rem %lane, %two : index
+  %lane_column = index.mul %lane, %sixteen : index
+  %iter_column_base = index.mul %iter, %tentwentyfour : index
+  %column = index.add %iter_column_base, %lane_column : index
+  %block_column = index.div %column, %thirtytwo : index
+  %block_outer = index.div %block_column, %four : index
+  %block_inner = index.rem %block_column, %four : index
+  %outer_word_base = index.mul %block_outer, %thirtysix : index
+  %payload_base = index.add %outer_word_base, %four : index
+  %inner_word_base = index.mul %block_inner, %eight : index
+  %q8_word_offset = index.mul %q8_word_pair, %four : index
+  %payload_word_base = index.add %payload_base, %inner_word_base : index
+  %word_origin = index.add %payload_word_base, %q8_word_offset : index
+  %view = buffer.view %buffer[%base] : buffer -> view<9216xi32, %layout>
+  %words = vector.load %view[%word_origin] : view<9216xi32, %layout> -> vector<4xi32>
+  test.use %words : vector<4xi32>
+  func.return
+}
+
+// ====
+
+func.def @quantized_q4_row_word_chunk_reports_storage_envelope(%buffer: buffer, %base: offset, %row0: index, %ncols0: index, %lane0: index, %iter0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %two = index.constant 2 : index
+  %four = index.constant 4 : index
+  %eight = index.constant 8 : index
+  %sixteen = index.constant 16 : index
+  %thirtytwo = index.constant 32 : index
+  %thirtysix = index.constant 36 : index
+  %tentwentyfour = index.constant 1024 : index
+  %row = index.assume %row0 [range(%row0, 0, 32767)] : index
+  %ncols = index.assume %ncols0 [range(%ncols0, 256, 32768), mul(%ncols0, 256)] : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %iter = index.assume %iter0 [range(%iter0, 0, 31)] : index
+  %q8_word_pair = index.rem %lane, %two : index
+  %lane_column = index.mul %lane, %sixteen : index
+  %row_column_base = index.mul %row, %ncols : index
+  %iter_column_base = index.mul %iter, %tentwentyfour : index
+  %column = index.add %iter_column_base, %lane_column : index
+  %element = index.add %row_column_base, %column : index
+  %block_column = index.div %element, %thirtytwo : index
+  %block = index.div %block_column, %eight : index
+  %group = index.rem %block_column, %eight : index
+  %group_payload_base = index.mul %group, %eight : index
+  %q8_payload_base = index.mul %q8_word_pair, %four : index
+  %intra_block_payload = index.add %group_payload_base, %q8_payload_base : index
+  %scale_group_divisor = index.constant 16 : index
+  %payload_group = index.div %intra_block_payload, %scale_group_divisor : index
+  %payload_lane = index.rem %intra_block_payload, %eight : index
+  %payload_group_base = index.mul %payload_group, %eight : index
+  %payload_word = index.add %payload_group_base, %payload_lane : index
+  %block_word_base = index.mul %block, %thirtysix : index
+  %payload_word_base = index.add %block_word_base, %four : index
+  %word_origin = index.add %payload_word_base, %payload_word : index
+  %view = buffer.view %buffer[%base] : buffer -> view<8388608xi32, %layout>
+  // ERROR@+1: SUBRANGE/010 {op_name="vector.load", vector_extent="4", view_bound="8388608", required_origin_upper_bound="8388604", constraint_key="vector_footprint.full_vector_upper_bound"}
+  %words = vector.load %view[%word_origin] : view<8388608xi32, %layout> -> vector<4xi32>
+  test.use %words : vector<4xi32>
   func.return
 }
 
@@ -307,7 +381,7 @@ kernel.def @dynamic_scaled_vector_origin_rejects_offset_workitem_id(%columns: in
   %next_column = index.add %column, %one : index
   %origin = index.mul %next_column, %four : index
   %view = buffer.view %buffer[%base] : buffer -> view<[%element_count]xf32, %layout>
-  // ERROR@+1: SUBRANGE/010 "full-vector footprint upper bound" "origin + vector_extent <= view_bound"
+  // ERROR@+1: SUBRANGE/010 {op_name="vector.load", vector_extent="4", constraint_key="vector_footprint.full_vector_upper_bound"}
   %loaded = vector.load %view[%origin] : view<[%element_count]xf32, %layout> -> vector<4xf32>
   kernel.return
 }
@@ -324,7 +398,7 @@ kernel.def @dynamic_unit_axis_rejects_offset_workgroup_id(%rows: index) {
   %next_row = index.add %row, %one : index
   %row_count = kernel.workgroup.count<x> : index
   %view = buffer.view %buffer[%base] : buffer -> view<[%row_count]x2xf32, %layout>
-  // ERROR@+1: SUBRANGE/011 "scalar-axis footprint upper bound" "origin + 1 <= view_bound"
+  // ERROR@+1: SUBRANGE/011 {op_name="vector.load", vector_extent="1", constraint_key="vector_footprint.scalar_axis_upper_bound"}
   %loaded = vector.load %view[%next_row, 0] : view<[%row_count]x2xf32, %layout> -> vector<2xf32>
   kernel.return
 }
