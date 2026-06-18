@@ -246,6 +246,23 @@ iree_string_view_t loom_amdgpu_memory_space_name(
 iree_string_view_t loom_amdgpu_memory_operation_name(
     loom_amdgpu_memory_operation_kind_t kind);
 
+// Returns the stable report/diagnostic name for a memory address form.
+iree_string_view_t loom_amdgpu_memory_address_form_name(
+    loom_amdgpu_memory_address_form_t address_form);
+
+// Returns the stable report/diagnostic name for the selected dynamic term path.
+iree_string_view_t loom_amdgpu_memory_access_dynamic_term_kind_name(
+    const loom_amdgpu_memory_access_t* access);
+
+// Returns the stable report/diagnostic reason key explaining why an LDS access
+// did or did not select the DS addtid address form.
+iree_string_view_t loom_amdgpu_memory_ds_addtid_reason_key(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_module_t* module, loom_func_like_t source_function,
+    const loom_target_bundle_t* bundle,
+    const loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_memory_operation_kind_t kind);
+
 // Returns the stable diagnostic name for a cache scope.
 iree_string_view_t loom_amdgpu_cache_scope_name(uint8_t scope);
 

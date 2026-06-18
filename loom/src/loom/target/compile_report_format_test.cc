@@ -130,7 +130,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.memory_space=*/IREE_SVL("workgroup"),
               /*.operation_kind=*/IREE_SVL("load"),
               /*.packet_key=*/IREE_SVL("amdgpu.ds_read2_b32"),
+              /*.address_form=*/IREE_SVL("ds_2addr"),
+              /*.dynamic_term_kind=*/IREE_SVL("vaddr"),
+              /*.fallback_reason=*/IREE_SVL("cross_wave_workgroup"),
               /*.descriptor_id=*/11,
+              /*.static_offset_bytes=*/0,
               /*.element_byte_count=*/4,
               /*.vector_lane_count=*/2,
               /*.dynamic_stride_bytes=*/32,
@@ -476,7 +480,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                 IREE_SV("source_low_memory[0] function=branchy "
                         "source_op=vector.load memory_space=workgroup "
                         "operation=load packet=amdgpu.ds_read2_b32 "
-                        "descriptor=11 element_bytes=4 vector_lanes=2 "
+                        "address_form=ds_2addr dynamic_term_kind=vaddr "
+                        "fallback_reason=cross_wave_workgroup descriptor=11 "
+                        "static_offset_bytes=0 element_bytes=4 vector_lanes=2 "
                         "dynamic_stride_bytes=32 "
                         "vector_lane_stride_bytes=8 bank_stride_words=8 "
                         "bank_conflict_degree=8 "
@@ -657,7 +663,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "\"branchy\",\"source_op\":\"vector.load\","
                         "\"source_op_kind\":43,\"memory_space\":\"workgroup\","
                         "\"operation\":\"load\",\"packet\":"
-                        "\"amdgpu.ds_read2_b32\",\"descriptor_id\":11,"
+                        "\"amdgpu.ds_read2_b32\","
+                        "\"address_form\":\"ds_2addr\","
+                        "\"dynamic_term_kind\":\"vaddr\","
+                        "\"fallback_reason\":\"cross_wave_workgroup\","
+                        "\"descriptor_id\":11,\"static_offset_bytes\":0,"
                         "\"element_bytes\":4,\"vector_lanes\":2,"
                         "\"dynamic_stride_bytes\":32,"
                         "\"vector_lane_stride_bytes\":8,"

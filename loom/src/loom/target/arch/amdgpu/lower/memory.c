@@ -1474,6 +1474,101 @@ static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
   return true;
 }
 
+static iree_string_view_t loom_amdgpu_memory_ds_addtid_topology_reason_key(
+    const loom_module_t* module, loom_func_like_t source_function,
+    const loom_target_bundle_t* bundle) {
+  const uint32_t wavefront_size = bundle != NULL && bundle->snapshot != NULL
+                                      ? bundle->snapshot->subgroup_size
+                                      : 0;
+  if (wavefront_size == 0) {
+    return IREE_SV("wavefront_size_unknown");
+  }
+  loom_target_workgroup_size_t workgroup_size = {0};
+  if (!loom_amdgpu_required_workgroup_size(module, source_function, bundle,
+                                           &workgroup_size) ||
+      workgroup_size.x == 0) {
+    return IREE_SV("workgroup_size_unknown");
+  }
+  if (workgroup_size.x > wavefront_size) {
+    return IREE_SV("cross_wave_workgroup");
+  }
+  if (workgroup_size.y != 1 || workgroup_size.z != 1) {
+    return IREE_SV("multidimensional_workgroup");
+  }
+  return iree_string_view_empty();
+}
+
+iree_string_view_t loom_amdgpu_memory_ds_addtid_reason_key(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_module_t* module, loom_func_like_t source_function,
+    const loom_target_bundle_t* bundle,
+    const loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_memory_operation_kind_t kind) {
+  if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
+    return IREE_SV("selected");
+  }
+  if (access->source.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    return IREE_SV("not_applicable");
+  }
+  const iree_string_view_t topology_reason =
+      loom_amdgpu_memory_ds_addtid_topology_reason_key(module, source_function,
+                                                       bundle);
+  if (!iree_string_view_is_empty(topology_reason)) {
+    return topology_reason;
+  }
+  if (access->payload_register_count != 1) {
+    return IREE_SV("payload_width");
+  }
+  if (access->source.dynamic_term_count != 1) {
+    return IREE_SV("dynamic_term_count");
+  }
+  const loom_low_source_memory_dynamic_term_t* term =
+      &access->source.dynamic_terms[0];
+  if (access->dynamic_term_kinds[0] != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR) {
+    return IREE_SV("dynamic_term_kind");
+  }
+  if (term->source != LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID) {
+    return IREE_SV("dynamic_term_source");
+  }
+  if (term->stride_value_count != 0) {
+    return IREE_SV("dynamic_stride_value");
+  }
+  if (term->dimension != LOOM_KERNEL_DIMENSION_X) {
+    return IREE_SV("dynamic_dimension");
+  }
+  if (term->byte_stride != access->source.element_byte_count) {
+    return IREE_SV("dynamic_stride_bytes");
+  }
+  if (!loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
+    return IREE_SV("vector_lane_layout");
+  }
+
+  const loom_low_descriptor_t* descriptor = NULL;
+  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  if (!loom_amdgpu_select_memory_descriptor_candidate(
+          descriptor_set, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
+          LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID, kind,
+          access->packet_byte_count, access->payload_register_class,
+          access->payload_format, access->payload_register_count, &descriptor,
+          &descriptor_ordinal)) {
+    return IREE_SV("descriptor_missing");
+  }
+  loom_amdgpu_descriptor_offset_immediate_info_t offset_info;
+  if (!loom_amdgpu_descriptor_offset_immediate_info(
+          descriptor_set, descriptor_ordinal, 1,
+          LOOM_LOW_IMMEDIATE_KIND_UNSIGNED, &offset_info)) {
+    return IREE_SV("descriptor_offset_immediate");
+  }
+  loom_amdgpu_memory_access_t access_copy = *access;
+  loom_amdgpu_memory_access_diagnostic_t ignored_diagnostic = {0};
+  if (!loom_amdgpu_memory_access_split_static_offset(
+          &access_copy, offset_info.unit_byte_count, offset_info.unsigned_max,
+          &ignored_diagnostic)) {
+    return IREE_SV("static_offset_range");
+  }
+  return IREE_SV("not_selected");
+}
+
 static bool loom_amdgpu_memory_access_offset_is_aligned(
     const loom_amdgpu_memory_access_t* access, uint32_t byte_alignment,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {

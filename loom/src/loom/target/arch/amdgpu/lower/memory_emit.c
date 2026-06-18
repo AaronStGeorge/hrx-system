@@ -216,7 +216,17 @@ static iree_status_t loom_amdgpu_record_memory_packet_report(
       .memory_space = loom_amdgpu_memory_space_name(source->memory_space),
       .operation_kind = loom_amdgpu_memory_operation_name(operation_kind),
       .packet_key = packet_key,
+      .address_form =
+          loom_amdgpu_memory_address_form_name(packet->access.address_form),
+      .dynamic_term_kind =
+          loom_amdgpu_memory_access_dynamic_term_kind_name(&packet->access),
+      .fallback_reason = loom_amdgpu_memory_ds_addtid_reason_key(
+          descriptor_set, loom_low_lower_context_module(context),
+          loom_low_lower_context_source_function(context),
+          loom_low_lower_context_bundle(context), &packet->access,
+          operation_kind),
       .descriptor_id = packet->access.descriptor->stable_id,
+      .static_offset_bytes = source->static_byte_offset,
       .element_byte_count = source->element_byte_count,
       .vector_lane_count = source->vector_lane_count,
       .dynamic_stride_bytes =

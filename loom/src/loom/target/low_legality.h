@@ -245,7 +245,9 @@ iree_status_t loom_target_low_legality_emit_error_ref(
 iree_status_t loom_target_low_legality_record_memory_access(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     iree_string_view_t memory_space, iree_string_view_t operation_kind,
-    iree_string_view_t packet_key, iree_string_view_t decision,
+    iree_string_view_t packet_key, iree_string_view_t address_form,
+    iree_string_view_t dynamic_term_kind, iree_string_view_t fallback_reason,
+    iree_string_view_t decision, int64_t static_offset_bytes,
     uint32_t element_bytes, uint32_t vector_lanes,
     uint32_t dynamic_stride_bytes, uint32_t vector_lane_stride_bytes,
     uint32_t bank_stride_words, uint32_t bank_conflict_degree,

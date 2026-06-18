@@ -50,6 +50,52 @@ iree_string_view_t loom_amdgpu_memory_operation_name(
   return IREE_SV("invalid");
 }
 
+iree_string_view_t loom_amdgpu_memory_address_form_name(
+    loom_amdgpu_memory_address_form_t address_form) {
+  switch (address_form) {
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT:
+      return IREE_SV("default");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO:
+      return IREE_SV("buffer_off_zero");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR:
+      return IREE_SV("ds_2addr");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR:
+      return IREE_SV("global_saddr");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID:
+      return IREE_SV("ds_addtid");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT:
+      return IREE_SV("flat");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM:
+      return IREE_SV("global_smem");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_SCRATCH_VADDR:
+      return IREE_SV("scratch_vaddr");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_COUNT_:
+      break;
+  }
+  return IREE_SV("invalid");
+}
+
+iree_string_view_t loom_amdgpu_memory_access_dynamic_term_kind_name(
+    const loom_amdgpu_memory_access_t* access) {
+  switch (access->source.dynamic_term_count) {
+    case 0:
+      return IREE_SV("none");
+    case 1:
+      break;
+    default:
+      return IREE_SV("multiple");
+  }
+  switch (access->dynamic_term_kinds[0]) {
+    case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE:
+      return IREE_SV("none");
+    case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR:
+      return IREE_SV("vaddr");
+    case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET:
+      return IREE_SV("soffset");
+  }
+  return IREE_SV("invalid");
+}
+
 static iree_string_view_t loom_amdgpu_cache_policy_scope_param(
     const loom_vector_memory_cache_policy_t* policy) {
   return iree_all_bits_set(policy->build_flags,
@@ -387,7 +433,14 @@ iree_status_t loom_amdgpu_record_memory_access_diagnostic(
           access, loom_amdgpu_memory_bank_default_lds_geometry());
   return loom_target_low_legality_record_memory_access(
       context, op, loom_amdgpu_memory_space_name(access->source.memory_space),
-      loom_amdgpu_memory_operation_name(kind), packet_key, IREE_SV("selected"),
+      loom_amdgpu_memory_operation_name(kind), packet_key,
+      loom_amdgpu_memory_address_form_name(access->address_form),
+      loom_amdgpu_memory_access_dynamic_term_kind_name(access),
+      loom_amdgpu_memory_ds_addtid_reason_key(
+          descriptor_set, loom_target_low_legality_module(context),
+          loom_target_low_legality_function(context),
+          loom_target_low_legality_bundle(context), access, kind),
+      IREE_SV("selected"), access->source.static_byte_offset,
       access->source.element_byte_count, access->payload_register_count,
       access->source.dynamic_term_count == 1
           ? access->source.dynamic_terms[0].byte_stride
