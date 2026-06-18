@@ -1125,6 +1125,10 @@ static iree_status_t loom_amdgpu_atomic_select(
           memory_diagnostic)) {
     return iree_ok_status();
   }
+  if (out_selection->source.memory_space ==
+      LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(&memory_access);
+  }
   for (iree_host_size_t i = 0; i < LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY;
        ++i) {
     out_selection->dynamic_term_kinds[i] = memory_access.dynamic_term_kinds[i];

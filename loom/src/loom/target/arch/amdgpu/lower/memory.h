@@ -183,6 +183,10 @@ bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic);
 
+// Routes all dynamic source terms through the VGPR byte-address operand.
+void loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(
+    loom_amdgpu_memory_access_t* access);
+
 // Emits the VGPR address operand for a selected memory access.
 iree_status_t loom_amdgpu_emit_memory_vaddr(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

@@ -1440,8 +1440,7 @@ static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
           LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID ||
       access->source.dynamic_terms[0].stride_value_count != 0 ||
       access->source.dynamic_terms[0].dimension != LOOM_KERNEL_DIMENSION_X ||
-      access->source.dynamic_terms[0].byte_stride !=
-          access->source.element_byte_count ||
+      access->source.dynamic_terms[0].byte_stride != 1 ||
       !loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
     return false;
   }
@@ -1536,7 +1535,7 @@ iree_string_view_t loom_amdgpu_memory_ds_addtid_reason_key(
   if (term->dimension != LOOM_KERNEL_DIMENSION_X) {
     return IREE_SV("dynamic_dimension");
   }
-  if (term->byte_stride != access->source.element_byte_count) {
+  if (term->byte_stride != 1) {
     return IREE_SV("dynamic_stride_bytes");
   }
   if (!loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
@@ -1896,7 +1895,7 @@ static bool loom_amdgpu_memory_access_dynamic_terms_can_vaddr(
   return true;
 }
 
-static void loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(
+void loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(
     loom_amdgpu_memory_access_t* access) {
   for (uint8_t i = 0; i < access->source.dynamic_term_count; ++i) {
     access->dynamic_term_kinds[i] = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
@@ -2378,6 +2377,9 @@ static bool loom_amdgpu_memory_access_select_packet(
           loom_amdgpu_memory_access_alloca_root_rejection_bit(
               access->source.memory_space);
       return false;
+    }
+    if (descriptor_domain == LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS) {
+      loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(access);
     }
   }
   if (!loom_amdgpu_memory_access_signed_i16_repair_is_available(descriptor_set,

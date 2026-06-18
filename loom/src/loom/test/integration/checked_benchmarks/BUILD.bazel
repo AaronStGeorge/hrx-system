@@ -126,6 +126,23 @@ _CHECKED_BENCHMARK_CASES = [
         ],
     },
     {
+        "name": "workgroup_rank_sort_f32_i32",
+        "rows": [
+            {
+                "benchmark": "@workgroup_rank_sort_distinct",
+                "target_name": "workgroup_rank_sort_distinct",
+            },
+            {
+                "benchmark": "@workgroup_rank_sort_tie",
+                "target_name": "workgroup_rank_sort_tie",
+            },
+        ],
+        "source": "workgroup_rank_sort_f32_i32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
         "name": "packed_s8_fields_f16scale_f32dot",
         "rows": [
             {
