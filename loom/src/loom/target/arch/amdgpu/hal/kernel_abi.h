@@ -4,12 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU HAL-kernel ABI layout over target-low resources.
+// AMDGPU HAL-kernel ABI layout over authored kernel signatures.
 //
-// This layer derives kernarg storage from function-local low.resource imports.
-// It intentionally stays below LLVMIR/native artifact emission so the same
-// resource ABI can feed the temporary assembly path, direct HSACO writing, and
-// future backends.
+// Source lowering records the declared kernel.def parameter sequence in a
+// low.kernel.def ABI snapshot. Function-local low.resource imports and low
+// entry-block arguments are use sites attached to that declaration; they do not
+// define the exported ABI shape after cleanup removes unused values. This layer
+// stays below LLVMIR/native artifact emission so the same ABI can feed the
+// temporary assembly path, direct HSACO writing, and future backends.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_HAL_KERNEL_ABI_H_
 #define LOOM_TARGET_ARCH_AMDGPU_HAL_KERNEL_ABI_H_
@@ -146,6 +148,8 @@ typedef struct loom_amdgpu_hal_kernarg_resource_t {
   iree_string_view_t name;
   // HAL binding ordinal used by the runtime dispatch path.
   uint32_t binding_index;
+  // Authored source kernel parameter index for native metadata ordering.
+  uint32_t parameter_index;
   // Byte offset of the pointer entry in the kernarg segment.
   uint32_t kernarg_offset;
   // Byte length of the pointer entry in the kernarg segment.
@@ -163,6 +167,8 @@ typedef struct loom_amdgpu_hal_kernarg_direct_arg_t {
   loom_value_id_t arg_id;
   // Metadata name copied from the entry block argument when present.
   iree_string_view_t name;
+  // Authored source kernel parameter index for native metadata ordering.
+  uint32_t parameter_index;
   // Entry block argument index before ABI materialization removes arguments.
   uint16_t argument_index;
   // Byte offset of the direct argument in the kernarg segment.
@@ -178,6 +184,8 @@ typedef struct loom_amdgpu_hal_kernarg_direct_arg_t {
 typedef struct loom_amdgpu_hal_kernel_abi_layout_t {
   // Target-low function operation whose resources are laid out.
   const loom_op_t* function_op;
+  // Authored source kernel parameter count represented by this ABI layout.
+  uint32_t parameter_count;
   // Total kernarg segment size in bytes.
   uint32_t kernarg_segment_size;
   // Required kernarg segment alignment in bytes.
@@ -215,14 +223,12 @@ iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
 
 // Derives the AMDGPU HAL-kernel ABI layout for |function_op|.
 //
-// Supports low.resource imports with kind hal_binding, dense unique binding
-// indexes starting at zero, and result type reg<amdgpu.sgpr x2>. The
-// source_type attribute records the high-level resource handle type, but the
-// AMDGPU ABI layout is determined by the import kind and target-low result
-// type. The kernarg segment stores one 64-bit global pointer per binding in
-// binding-index order, then tightly packed 32-bit direct constant words for
-// remaining entry block arguments. Later lowering materializes the target
-// buffer descriptor value consumed by packets that need one.
+// Source-lowered low.kernel.def ops carry a prepared ABI snapshot preserving
+// the source parameter count and native kernarg offsets. Direct low IR without
+// a snapshot falls back to dense low.resource imports with kind hal_binding,
+// unique binding indexes starting at zero, and result type reg<amdgpu.sgpr x2>.
+// Later lowering materializes the target buffer descriptor value consumed by
+// packets that need one.
 //
 // The function must already have passed
 // loom_amdgpu_hal_kernel_abi_verify_low. Status is reserved for allocation and

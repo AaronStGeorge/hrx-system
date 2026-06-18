@@ -1367,6 +1367,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .map_contract_value = {.fn = loom_amdgpu_map_contract_value,
                            .user_data = NULL},
     .map_argument = {.fn = loom_amdgpu_map_argument, .user_data = NULL},
+    .map_abi_layout = {.fn = loom_amdgpu_map_abi_layout, .user_data = NULL},
     .emit_preamble = {.fn = loom_amdgpu_emit_preamble, .user_data = NULL},
     .emit_entry_setup = {.fn = loom_amdgpu_emit_entry_setup, .user_data = NULL},
     .prepare_branch = {.fn = loom_amdgpu_prepare_branch, .user_data = NULL},

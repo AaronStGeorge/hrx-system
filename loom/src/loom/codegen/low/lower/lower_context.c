@@ -194,6 +194,13 @@ loom_func_like_t loom_low_lower_context_source_function(
   return context->source_function;
 }
 
+const loom_low_lower_abi_argument_t* loom_low_lower_context_argument_map(
+    const loom_low_lower_context_t* context, uint16_t* out_argument_count) {
+  IREE_ASSERT_ARGUMENT(out_argument_count);
+  *out_argument_count = context->lowering.argument_map_count;
+  return context->lowering.argument_map;
+}
+
 loom_op_t* loom_low_lower_context_low_function(
     const loom_low_lower_context_t* context) {
   return context->low_func_op;

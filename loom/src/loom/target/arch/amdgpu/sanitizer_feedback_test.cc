@@ -1585,8 +1585,11 @@ class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
     source += "> @gfx_target\n";
     source +=
         "low.kernel.def target(@gfx_target) abi_layout({constant_count = 0, "
-        "direct_arg_count = 0, direct_arg_names = {}, direct_arg_sizes = [], "
-        "resource_count = 2, uses_kernarg_segment_ptr = true}) "
+        "direct_arg_count = 0, direct_arg_names = {}, direct_arg_offsets = [], "
+        "direct_arg_parameter_indices = [], direct_arg_sizes = [], "
+        "parameter_count = 2, resource_count = 2, resource_offsets = [0, 8], "
+        "resource_parameter_indices = [0, 1], "
+        "uses_kernarg_segment_ptr = true}) "
         "workgroup_size(1, 1, 1) "
         "@loom_shadow_probe_kernel() {\n"
         "  low.return\n"

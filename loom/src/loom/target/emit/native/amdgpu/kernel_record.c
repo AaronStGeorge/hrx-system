@@ -548,8 +548,7 @@ static iree_status_t loom_amdgpu_kernel_record_build_metadata_arguments(
     const loom_amdgpu_metadata_argument_t** out_arguments,
     iree_arena_allocator_t* arena) {
   *out_arguments = NULL;
-  const iree_host_size_t argument_count =
-      abi_layout->resource_count + abi_layout->direct_arg_count;
+  const iree_host_size_t argument_count = abi_layout->parameter_count;
   if (argument_count == 0) {
     return iree_ok_status();
   }
@@ -559,7 +558,12 @@ static iree_status_t loom_amdgpu_kernel_record_build_metadata_arguments(
   for (iree_host_size_t i = 0; i < abi_layout->resource_count; ++i) {
     const loom_amdgpu_hal_kernarg_resource_t* resource =
         &abi_layout->resources[i];
-    arguments[i] = (loom_amdgpu_metadata_argument_t){
+    if (resource->parameter_index >= argument_count) {
+      return iree_make_status(
+          IREE_STATUS_INTERNAL,
+          "AMDGPU kernel emission reached an invalid resource parameter index");
+    }
+    arguments[resource->parameter_index] = (loom_amdgpu_metadata_argument_t){
         .name = resource->name,
         .offset = resource->kernarg_offset,
         .size = resource->kernarg_size,
@@ -571,14 +575,18 @@ static iree_status_t loom_amdgpu_kernel_record_build_metadata_arguments(
   for (iree_host_size_t i = 0; i < abi_layout->direct_arg_count; ++i) {
     const loom_amdgpu_hal_kernarg_direct_arg_t* direct_arg =
         &abi_layout->direct_args[i];
-    arguments[abi_layout->resource_count + i] =
-        (loom_amdgpu_metadata_argument_t){
-            .name = direct_arg->name,
-            .offset = direct_arg->kernarg_offset,
-            .size = direct_arg->kernarg_size,
-            .alignment = direct_arg->kernarg_alignment,
-            .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
-        };
+    if (direct_arg->parameter_index >= argument_count) {
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "AMDGPU kernel emission reached an invalid "
+                              "direct argument parameter index");
+    }
+    arguments[direct_arg->parameter_index] = (loom_amdgpu_metadata_argument_t){
+        .name = direct_arg->name,
+        .offset = direct_arg->kernarg_offset,
+        .size = direct_arg->kernarg_size,
+        .alignment = direct_arg->kernarg_alignment,
+        .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
+    };
   }
   *out_arguments = arguments;
   return iree_ok_status();
@@ -738,8 +746,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
               .required_workgroup_size = hal_kernel->required_workgroup_size,
               .has_required_workgroup_size = has_required_workgroup_size,
               .arguments = arguments,
-              .argument_count =
-                  abi_layout->resource_count + abi_layout->direct_arg_count,
+              .argument_count = abi_layout->parameter_count,
           },
       .descriptor_flags = descriptor_flags,
       .system_vgpr_workitem_id = system_vgpr_workitem_id,

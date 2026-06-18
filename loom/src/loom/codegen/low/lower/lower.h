@@ -801,6 +801,12 @@ loom_builder_t* loom_low_lower_context_builder(
 loom_func_like_t loom_low_lower_context_source_function(
     const loom_low_lower_context_t* context);
 
+// Returns the mapped ABI argument records for every source function argument.
+// Resource entries may not appear in the emitted low function signature; this
+// preserves the authored source boundary for target ABI metadata callbacks.
+const loom_low_lower_abi_argument_t* loom_low_lower_context_argument_map(
+    const loom_low_lower_context_t* context, uint16_t* out_argument_count);
+
 // Returns the source function name used in source-to-low diagnostics.
 iree_string_view_t loom_low_lower_context_function_name(
     const loom_low_lower_context_t* context);

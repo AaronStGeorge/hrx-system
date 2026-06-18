@@ -459,6 +459,9 @@ static iree_status_t loom_amdgpu_hal_binding_materialize_one(
 static bool loom_amdgpu_hal_binding_resource_is_used(
     const loom_module_t* module,
     const loom_amdgpu_hal_kernarg_resource_t* resource) {
+  if (resource->resource_op == NULL) {
+    return false;
+  }
   const loom_value_id_t result =
       loom_low_resource_result(resource->resource_op);
   const loom_value_t* value = loom_module_value(module, result);
@@ -473,6 +476,9 @@ static bool loom_amdgpu_hal_binding_has_used_resources_from(
   for (iree_host_size_t i = start_index; i < layout->resource_count; ++i) {
     const loom_amdgpu_hal_kernarg_resource_t* resource = &layout->resources[i];
     const loom_op_t* resource_op = resource->resource_op;
+    if (resource_op == NULL) {
+      continue;
+    }
     if (iree_any_bit_set(resource_op->flags, LOOM_OP_FLAG_DEAD)) {
       continue;
     }
@@ -756,6 +762,9 @@ static iree_status_t loom_amdgpu_hal_binding_materialize_resources(
   for (iree_host_size_t i = 0; i < layout->resource_count; ++i) {
     const loom_amdgpu_hal_kernarg_resource_t* resource = &layout->resources[i];
     loom_op_t* resource_op = (loom_op_t*)resource->resource_op;
+    if (resource_op == NULL) {
+      continue;
+    }
     if (iree_any_bit_set(resource_op->flags, LOOM_OP_FLAG_DEAD)) {
       continue;
     }
