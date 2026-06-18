@@ -59,6 +59,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES = 1u << 11,
   // Per-allocation-failure rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS = 1u << 12,
+  // Final target resource and occupancy summaries were recorded.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES = 1u << 13,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -251,6 +253,28 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   uint64_t register_move_count;
 } loom_target_compile_report_static_instruction_mix_t;
 
+// Final target resource and occupancy summary for one emitted entry.
+typedef struct loom_target_compile_report_target_resources_t {
+  // Stable target register class counted by |scalar_register_count|.
+  iree_string_view_t scalar_register_class;
+  // Final scalar register units declared by target metadata.
+  uint64_t scalar_register_count;
+  // Stable target register class counted by |vector_register_count|.
+  iree_string_view_t vector_register_class;
+  // Final vector register units declared by target metadata.
+  uint64_t vector_register_count;
+  // Target subgroup width in lanes.
+  uint32_t subgroup_size;
+  // Maximum resident subgroups per SIMD modeled for the target.
+  uint32_t max_subgroups_per_simd;
+  // Estimated resident subgroups per SIMD after final target resources.
+  uint32_t resident_subgroups_per_simd;
+  // Estimated final occupancy as a percentage of |max_subgroups_per_simd|.
+  uint32_t occupancy_percent;
+  // Stable resource name limiting final occupancy, or "max_waves".
+  iree_string_view_t limiting_resource;
+} loom_target_compile_report_target_resources_t;
+
 // One emitted artifact entry summary in a compile report.
 typedef struct loom_target_compile_report_entry_t {
   // Target artifact function symbol emitted for this entry.
@@ -311,6 +335,8 @@ typedef struct loom_target_compile_report_entry_t {
       move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
   // Static descriptor-backed instruction-mix feature counters.
   loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
+  // Final target resource and occupancy summary.
+  loom_target_compile_report_target_resources_t target_resources;
   // Number of detailed register-pressure rows copied for this entry.
   iree_host_size_t pressure_row_count;
   // Number of detailed spill rows copied for this entry.
@@ -670,6 +696,8 @@ typedef struct loom_target_compile_report_t {
       move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
   // Static descriptor-backed instruction-mix feature counters.
   loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
+  // Final target resource and occupancy summary.
+  loom_target_compile_report_target_resources_t target_resources;
   // Owned emitted artifact entry summary rows.
   loom_target_compile_report_row_list_t entry_rows;
   // Owned register-pressure peak rows.
@@ -766,6 +794,11 @@ void loom_target_compile_report_record_emission(
 void loom_target_compile_report_record_memory(
     loom_target_compile_report_t* report, uint64_t private_memory_bytes,
     uint64_t local_memory_bytes);
+
+// Records final target resource and occupancy summary facts.
+void loom_target_compile_report_record_target_resources(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_target_resources_t* target_resources);
 
 // Records one emitted artifact entry and copies its detailed pressure and spill
 // rows into |report|. String views remain borrowed from |entry_report|'s

@@ -480,6 +480,128 @@ static iree_string_view_t loom_amdgpu_occupancy_limiting_resource_name(
   }
 }
 
+static bool loom_amdgpu_occupancy_is_scalar_register_class(
+    iree_string_view_t register_class) {
+  return iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"));
+}
+
+static bool loom_amdgpu_occupancy_is_vector_register_class(
+    iree_string_view_t register_class) {
+  return iree_string_view_equal(register_class, IREE_SV("amdgpu.vgpr"));
+}
+
+iree_status_t loom_amdgpu_occupancy_build_target_resources(
+    const loom_amdgpu_processor_info_t* processor, uint32_t wave_size,
+    uint32_t scalar_register_count, uint32_t vector_register_count,
+    iree_arena_allocator_t* arena,
+    loom_amdgpu_occupancy_target_resources_t* out_resources) {
+  *out_resources = (loom_amdgpu_occupancy_target_resources_t){0};
+  if (processor == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU final occupancy requires a resolved processor");
+  }
+  if (!loom_amdgpu_processor_supports_wavefront_size(processor, wave_size)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU final occupancy processor '%.*s' does not support wave size "
+        "%" PRIu32,
+        (int)processor->name.size, processor->name.data, wave_size);
+  }
+
+  const loom_amdgpu_occupancy_model_t* model = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_select_model(
+      processor->descriptor_set.ordinal, processor->descriptor_set.key,
+      &model));
+
+  loom_amdgpu_occupancy_register_class_t* register_classes = NULL;
+  if (model->register_class_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, model->register_class_count, sizeof(*register_classes),
+        (void**)&register_classes));
+    memset(register_classes, 0,
+           model->register_class_count * sizeof(*register_classes));
+  }
+  loom_amdgpu_occupancy_pressure_resource_t* pressure_resources = NULL;
+  if (model->resource_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, model->resource_count, sizeof(*pressure_resources),
+        (void**)&pressure_resources));
+    memset(pressure_resources, 0,
+           model->resource_count * sizeof(*pressure_resources));
+  }
+
+  iree_string_view_t scalar_register_class = iree_string_view_empty();
+  iree_string_view_t vector_register_class = iree_string_view_empty();
+  for (iree_host_size_t i = 0; i < model->register_class_count; ++i) {
+    const loom_amdgpu_occupancy_register_class_model_t* class_model =
+        &model->register_classes[i];
+    register_classes[i] = (loom_amdgpu_occupancy_register_class_t){
+        .register_class = class_model->register_class,
+        .descriptor_reg_class_id = LOOM_LOW_ID_NONE,
+        .pool_units = class_model->pool_units,
+        .allocation_granularity = class_model->allocation_granularity,
+        .units_until_next_cliff = UINT32_MAX,
+    };
+    if (loom_amdgpu_occupancy_is_scalar_register_class(
+            class_model->register_class)) {
+      scalar_register_class = class_model->register_class;
+      register_classes[i].allocated_units = scalar_register_count;
+    } else if (loom_amdgpu_occupancy_is_vector_register_class(
+                   class_model->register_class)) {
+      vector_register_class = class_model->register_class;
+      register_classes[i].allocated_units = vector_register_count;
+    }
+  }
+  if (iree_string_view_is_empty(scalar_register_class) ||
+      iree_string_view_is_empty(vector_register_class)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU occupancy model for descriptor set '%.*s' must define SGPR "
+        "and VGPR register classes",
+        (int)processor->descriptor_set.key.size,
+        processor->descriptor_set.key.data);
+  }
+
+  for (iree_host_size_t i = 0; i < model->resource_count; ++i) {
+    pressure_resources[i] = (loom_amdgpu_occupancy_pressure_resource_t){
+        .resource = model->resources[i].resource,
+        .pool_units = model->resources[i].pool_units,
+        .allocation_granularity = model->resources[i].allocation_granularity,
+        .units_until_next_cliff = UINT32_MAX,
+    };
+  }
+
+  loom_amdgpu_occupancy_table_t table = {
+      .processor = processor->name,
+      .wave_size = wave_size,
+      .max_waves_per_simd = model->max_waves_per_simd,
+      .resident_waves_per_simd = model->max_waves_per_simd,
+      .limiting_resource_kind =
+          LOOM_AMDGPU_OCCUPANCY_LIMITING_RESOURCE_MAX_WAVES,
+      .limiting_resource_index = LOOM_AMDGPU_OCCUPANCY_RESOURCE_NONE,
+      .register_classes = register_classes,
+      .register_class_count = model->register_class_count,
+      .pressure_resources = pressure_resources,
+      .pressure_resource_count = model->resource_count,
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_finalize_limits(
+      model, register_classes, pressure_resources, &table));
+
+  *out_resources = (loom_amdgpu_occupancy_target_resources_t){
+      .scalar_register_class = scalar_register_class,
+      .scalar_register_count = scalar_register_count,
+      .vector_register_class = vector_register_class,
+      .vector_register_count = vector_register_count,
+      .wave_size = wave_size,
+      .max_waves_per_simd = table.max_waves_per_simd,
+      .resident_waves_per_simd = table.resident_waves_per_simd,
+      .occupancy_percent = table.occupancy_percent,
+      .limiting_resource = loom_amdgpu_occupancy_limiting_resource_name(&table),
+  };
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_occupancy_emit_resource_summary(
     const loom_amdgpu_occupancy_table_t* table,
     iree_string_view_t resource_name, uint32_t pool_units,

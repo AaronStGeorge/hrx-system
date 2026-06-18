@@ -21,6 +21,7 @@
 #include "iree/base/string_builder.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
+#include "loom/target/arch/amdgpu/target_info_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -155,6 +156,28 @@ typedef struct loom_amdgpu_occupancy_table_t {
   uint32_t spill_reload_count;
 } loom_amdgpu_occupancy_table_t;
 
+// Final target resource and occupancy facts derived from emitted metadata.
+typedef struct loom_amdgpu_occupancy_target_resources_t {
+  // Stable scalar register class represented by |scalar_register_count|.
+  iree_string_view_t scalar_register_class;
+  // Final scalar register units declared by target metadata.
+  uint32_t scalar_register_count;
+  // Stable vector register class represented by |vector_register_count|.
+  iree_string_view_t vector_register_class;
+  // Final vector register units declared by target metadata.
+  uint32_t vector_register_count;
+  // Target wavefront width in lanes.
+  uint32_t wave_size;
+  // Maximum resident waves per SIMD in this model.
+  uint32_t max_waves_per_simd;
+  // Estimated resident waves per SIMD after final target resources.
+  uint32_t resident_waves_per_simd;
+  // Estimated final occupancy as a percentage of |max_waves_per_simd|.
+  uint32_t occupancy_percent;
+  // Stable resource name limiting final occupancy, or "max_waves".
+  iree_string_view_t limiting_resource;
+} loom_amdgpu_occupancy_target_resources_t;
+
 // Builds an AMDGPU occupancy estimate from |allocation|. The caller must keep
 // |allocation| immutable and |arena| alive for as long as |out_table| is
 // used.
@@ -162,6 +185,14 @@ iree_status_t loom_amdgpu_occupancy_build(
     const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_occupancy_options_t* options,
     iree_arena_allocator_t* arena, loom_amdgpu_occupancy_table_t* out_table);
+
+// Builds an AMDGPU occupancy estimate from final target metadata. |arena| is
+// used only as scratch during construction.
+iree_status_t loom_amdgpu_occupancy_build_target_resources(
+    const loom_amdgpu_processor_info_t* processor, uint32_t wave_size,
+    uint32_t scalar_register_count, uint32_t vector_register_count,
+    iree_arena_allocator_t* arena,
+    loom_amdgpu_occupancy_target_resources_t* out_resources);
 
 // Builds target-provided schedule pressure cliffs for |descriptor_set|. The
 // returned list is sorted by descriptor register-class ID and cliff unit count

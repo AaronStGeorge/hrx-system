@@ -192,6 +192,17 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                                            &instruction_mix);
   loom_target_compile_report_record_emission(&report, 8, 64, 80);
   loom_target_compile_report_record_memory(&report, 16, 32);
+  const loom_target_compile_report_target_resources_t target_resources = {
+      /*.scalar_register_class=*/IREE_SVL("amdgpu.sgpr"),
+      /*.scalar_register_count=*/38,
+      /*.vector_register_class=*/IREE_SVL("amdgpu.vgpr"),
+      /*.vector_register_count=*/112,
+      /*.subgroup_size=*/32,
+      /*.max_subgroups_per_simd=*/16,
+      /*.resident_subgroups_per_simd=*/8,
+      /*.occupancy_percent=*/50,
+      /*.limiting_resource=*/IREE_SVL("amdgpu.vgpr"),
+  };
   loom_target_compile_report_t entry_report = {};
   loom_target_compile_report_initialize(&entry_report, iree_allocator_system());
   entry_report.function_name = IREE_SVL("branchy_export");
@@ -213,6 +224,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION, 1, 1);
   loom_target_compile_report_record_emission(&entry_report, 8, 64, 80);
   loom_target_compile_report_record_memory(&entry_report, 16, 32);
+  loom_target_compile_report_record_target_resources(&entry_report,
+                                                     &target_resources);
   loom_target_compile_report_record_static_instruction_mix(&entry_report,
                                                            &instruction_mix);
   IREE_ASSERT_OK(
@@ -268,6 +281,17 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "descriptors=9"),
                                   0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("target_resources scalar_register_class=amdgpu.sgpr "
+                        "scalar_registers=38 "
+                        "vector_register_class=amdgpu.vgpr "
+                        "vector_registers=112 subgroup_size=32 "
+                        "resident_subgroups_per_simd=8 "
+                        "max_subgroups_per_simd=16 "
+                        "occupancy_percent=50 limiting=amdgpu.vgpr"),
+                0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("vector_alu=3"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
@@ -304,6 +328,19 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "model_summaries=1 "
                                           "pressure_summaries=1 peak_live=7"),
                                   0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("instructions=8 code_bytes=64 storage_bytes=80 "
+                        "private_bytes=16 local_bytes=32 "
+                        "scalar_register_class=amdgpu.sgpr "
+                        "scalar_registers=38 "
+                        "vector_register_class=amdgpu.vgpr "
+                        "vector_registers=112 subgroup_size=32 "
+                        "resident_subgroups_per_simd=8 "
+                        "max_subgroups_per_simd=16 "
+                        "occupancy_percent=50 limiting=amdgpu.vgpr"),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("spill_plans=1 coalesced_copies=2 "
@@ -393,6 +430,18 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           output, IREE_SV("\"static_instruction_mix\":{\"descriptor_count\":9"),
           0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"target_resources\":{\"scalar_register_class\":"
+                        "\"amdgpu.sgpr\",\"scalar_register_count\":38,"
+                        "\"vector_register_class\":\"amdgpu.vgpr\","
+                        "\"vector_register_count\":112,\"subgroup_size\":32,"
+                        "\"max_subgroups_per_simd\":16,"
+                        "\"resident_subgroups_per_simd\":8,"
+                        "\"occupancy_percent\":50,\"limiting_resource\":"
+                        "\"amdgpu.vgpr\"}"),
+                0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("\"wmma_count\":1"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(

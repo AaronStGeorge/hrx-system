@@ -246,6 +246,24 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_hsaco_contribution(
       table_arena);
 }
 
+static loom_target_compile_report_target_resources_t
+loom_amdgpu_hal_kernel_library_target_resources_from_hsaco(
+    const loom_amdgpu_kernel_hsaco_summary_t* summary) {
+  const loom_amdgpu_kernel_hsaco_target_resources_t* target_resources =
+      &summary->target_resources;
+  return (loom_target_compile_report_target_resources_t){
+      .scalar_register_class = target_resources->scalar_register_class,
+      .scalar_register_count = target_resources->scalar_register_count,
+      .vector_register_class = target_resources->vector_register_class,
+      .vector_register_count = target_resources->vector_register_count,
+      .subgroup_size = target_resources->wave_size,
+      .max_subgroups_per_simd = target_resources->max_waves_per_simd,
+      .resident_subgroups_per_simd = target_resources->resident_waves_per_simd,
+      .occupancy_percent = target_resources->occupancy_percent,
+      .limiting_resource = target_resources->limiting_resource,
+  };
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_library_write_hsaco(
     const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
     iree_host_size_t contribution_count,
@@ -541,6 +559,11 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
     loom_target_compile_report_record_memory(
         report, out_contribution->summary.private_segment_fixed_size,
         out_contribution->summary.group_segment_fixed_size);
+    const loom_target_compile_report_target_resources_t target_resources =
+        loom_amdgpu_hal_kernel_library_target_resources_from_hsaco(
+            &out_contribution->summary);
+    loom_target_compile_report_record_target_resources(report,
+                                                       &target_resources);
   }
   return iree_ok_status();
 }

@@ -83,6 +83,11 @@
                 "\"function\":\"compile_report_store_i8\"",
                 "\"source_function\":\"compile_report_store_i32\"",
                 "\"source_function\":\"compile_report_store_i8\"",
+                "\"target_resources\":{\"scalar_register_class\":\"amdgpu.sgpr\"",
+                "\"vector_register_class\":\"amdgpu.vgpr\"",
+                "\"subgroup_size\":",
+                "\"occupancy_percent\":",
+                "\"limiting_resource\":",
                 "\"pressure_rows\":{\"count\":",
                 "\"status\":\"OK\""
               ]

@@ -313,6 +313,13 @@ void loom_target_compile_report_record_memory(
   report->local_memory_bytes = local_memory_bytes;
 }
 
+void loom_target_compile_report_record_target_resources(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_target_resources_t* target_resources) {
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES;
+  report->target_resources = *target_resources;
+}
+
 static void loom_target_compile_report_accumulate_instruction_mix(
     loom_target_compile_report_static_instruction_mix_t* target,
     const loom_target_compile_report_static_instruction_mix_t* source) {
@@ -360,10 +367,42 @@ static iree_string_view_t loom_target_compile_report_shared_string(
              : iree_string_view_empty();
 }
 
+static uint32_t loom_target_compile_report_shared_u32(uint32_t current,
+                                                      uint32_t next) {
+  return current == next ? current : 0;
+}
+
+static void loom_target_compile_report_merge_target_resources(
+    loom_target_compile_report_target_resources_t* target,
+    const loom_target_compile_report_target_resources_t* source) {
+  target->scalar_register_class = loom_target_compile_report_shared_string(
+      target->scalar_register_class, source->scalar_register_class);
+  target->scalar_register_count =
+      iree_max(target->scalar_register_count, source->scalar_register_count);
+  target->vector_register_class = loom_target_compile_report_shared_string(
+      target->vector_register_class, source->vector_register_class);
+  target->vector_register_count =
+      iree_max(target->vector_register_count, source->vector_register_count);
+  target->subgroup_size = loom_target_compile_report_shared_u32(
+      target->subgroup_size, source->subgroup_size);
+  target->max_subgroups_per_simd = loom_target_compile_report_shared_u32(
+      target->max_subgroups_per_simd, source->max_subgroups_per_simd);
+  if (source->occupancy_percent < target->occupancy_percent ||
+      (source->occupancy_percent == target->occupancy_percent &&
+       source->resident_subgroups_per_simd <
+           target->resident_subgroups_per_simd)) {
+    target->resident_subgroups_per_simd = source->resident_subgroups_per_simd;
+    target->occupancy_percent = source->occupancy_percent;
+    target->limiting_resource = source->limiting_resource;
+  }
+}
+
 static void loom_target_compile_report_merge_entry_summary(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_t* entry_report) {
   const bool first_entry = report->entry_rows.count == 0;
+  const bool report_had_target_resources = iree_any_bit_set(
+      report->detail_flags, LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES);
   report->detail_flags |=
       entry_report->detail_flags | LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES;
   if (first_entry) {
@@ -402,6 +441,7 @@ static void loom_target_compile_report_merge_entry_summary(
     report->private_memory_bytes = entry_report->private_memory_bytes;
     report->local_memory_bytes = entry_report->local_memory_bytes;
     report->static_instruction_mix = entry_report->static_instruction_mix;
+    report->target_resources = entry_report->target_resources;
     memcpy(report->move_causes, entry_report->move_causes,
            sizeof(report->move_causes));
     return;
@@ -449,6 +489,15 @@ static void loom_target_compile_report_merge_entry_summary(
       iree_max(report->local_memory_bytes, entry_report->local_memory_bytes);
   loom_target_compile_report_accumulate_instruction_mix(
       &report->static_instruction_mix, &entry_report->static_instruction_mix);
+  if (iree_any_bit_set(entry_report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES)) {
+    if (report_had_target_resources) {
+      loom_target_compile_report_merge_target_resources(
+          &report->target_resources, &entry_report->target_resources);
+    } else {
+      report->target_resources = entry_report->target_resources;
+    }
+  }
   loom_target_compile_report_accumulate_move_causes(report->move_causes,
                                                     entry_report->move_causes);
 }
@@ -490,6 +539,7 @@ loom_target_compile_report_entry_from_report(
       .private_memory_bytes = entry_report->private_memory_bytes,
       .local_memory_bytes = entry_report->local_memory_bytes,
       .static_instruction_mix = entry_report->static_instruction_mix,
+      .target_resources = entry_report->target_resources,
       .pressure_row_count = entry_report->pressure_rows.count,
       .spill_row_count = entry_report->spill_rows.count,
   };

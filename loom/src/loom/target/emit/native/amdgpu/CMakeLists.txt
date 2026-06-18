@@ -394,6 +394,7 @@ loom_cc_library(
     loom::codegen::low::allocation
     loom::codegen::low::schedule
     loom::target::arch::amdgpu::hal::kernel_abi
+    loom::target::arch::amdgpu::planning::occupancy
     loom::target::arch::amdgpu::planning::packet_plan
   PUBLIC
 )
