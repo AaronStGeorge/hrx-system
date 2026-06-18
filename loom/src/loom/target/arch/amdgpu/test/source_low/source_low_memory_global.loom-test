@@ -24,6 +24,102 @@ low.func.def target(@target) abi(hal_kernel) @global_saddr_fallback() asm<amdgpu
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @global_f32x7_roundtrip(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<7xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<7xf32, #dense>
+  %loaded = vector.load %input_view[0] : view<7xf32, #dense> -> vector<7xf32>
+  vector.store %loaded, %output_view[0] : vector<7xf32>, view<7xf32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_f32x7_roundtrip() asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 28} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 28} : reg<amdgpu.sgpr x2>
+  %8 = v_mov_b32 0
+  %9 = global_load_b128_saddr %8, %input_view
+  %11 = global_load_b96_saddr %8, %input_view {offset = 16}
+  global_store_b128_saddr %8, %9, %output_view
+  global_store_b96_saddr %8, %11, %output_view {offset = 16}
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @global_bf16x14_roundtrip(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<14xbf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<14xbf16, #dense>
+  %loaded = vector.load %input_view[0] : view<14xbf16, #dense> -> vector<14xbf16>
+  vector.store %loaded, %output_view[0] : vector<14xbf16>, view<14xbf16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_bf16x14_roundtrip() asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 28} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 28} : reg<amdgpu.sgpr x2>
+  %8 = v_mov_b32 0
+  %9 = global_load_b128_saddr %8, %input_view
+  %11 = global_load_b96_saddr %8, %input_view {offset = 16}
+  global_store_b128_saddr %8, %9, %output_view
+  global_store_b96_saddr %8, %11, %output_view {offset = 16}
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @global_f16x7_roundtrip(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<7xf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<7xf16, #dense>
+  %loaded = vector.load %input_view[0] : view<7xf16, #dense> -> vector<7xf16>
+  vector.store %loaded, %output_view[0] : vector<7xf16>, view<7xf16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_f16x7_roundtrip() asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 14} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 14} : reg<amdgpu.sgpr x2>
+  %8 = v_mov_b32 0
+  %9 = global_load_b96_saddr %8, %input_view
+  %11 = global_load_u16_saddr %8, %input_view {offset = 12}
+  global_store_b96_saddr %8, %9, %output_view
+  global_store_short_saddr %8, %11, %output_view {offset = 12}
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @global_bf16x7_roundtrip(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<7xbf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<7xbf16, #dense>
+  %loaded = vector.load %input_view[0] : view<7xbf16, #dense> -> vector<7xbf16>
+  vector.store %loaded, %output_view[0] : vector<7xbf16>, view<7xbf16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_bf16x7_roundtrip() asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 14} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 14} : reg<amdgpu.sgpr x2>
+  %8 = v_mov_b32 0
+  %9 = global_load_b96_saddr %8, %input_view
+  %11 = global_load_u16_saddr %8, %input_view {offset = 12}
+  global_store_b96_saddr %8, %9, %output_view
+  global_store_short_saddr %8, %11, %output_view {offset = 12}
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @global_saddr_dynamic_offset_argument(%input: buffer, %byte_offset: offset) -> (i32) {
   %input_global = buffer.assume.memory_space<global> %input : buffer
   %input_view = buffer.view %input_global[%byte_offset] : buffer -> view<1xi32, #dense>

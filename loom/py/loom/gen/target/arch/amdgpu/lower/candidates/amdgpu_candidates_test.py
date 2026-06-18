@@ -296,6 +296,40 @@ def test_memory_generator_preserves_same_key_fallback_order() -> None:
     ]
 
 
+def test_memory_generator_covers_96_bit_source_memory_packets() -> None:
+    memory_candidates = amdgpu_memory_candidates.amdgpu_memory_descriptor_candidates()
+    candidates = amdgpu_memory_candidates._ordered_candidates(memory_candidates)
+    register_class = amdgpu_memory_candidates.AmdgpuMemoryPayloadRegisterClass.VGPR
+    payload_format = amdgpu_memory_candidates.AmdgpuMemoryPayloadFormat.GENERIC
+    operations = (
+        amdgpu_memory_candidates.AmdgpuMemoryOperationKind.LOAD,
+        amdgpu_memory_candidates.AmdgpuMemoryOperationKind.STORE,
+    )
+    domains = (
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.BUFFER_RESOURCE,
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.GLOBAL_SADDR,
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.GLOBAL_FLAT,
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.LDS,
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.SCRATCH,
+    )
+
+    b96_candidates = {
+        (candidate.domain, candidate.operation_kind): candidate.descriptor_key
+        for candidate in candidates
+        if (
+            candidate.packet_byte_count,
+            candidate.payload_register_class,
+            candidate.payload_format,
+            candidate.payload_register_count,
+        )
+        == (12, register_class, payload_format, 3)
+    }
+
+    for domain in domains:
+        for operation_kind in operations:
+            assert (domain, operation_kind) in b96_candidates
+
+
 def test_memory_generator_rejects_missing_descriptor_ref() -> None:
     candidates = amdgpu_memory_candidates.amdgpu_memory_descriptor_candidates()
     bad_candidate = replace(candidates[0], descriptor_key="amdgpu.missing")

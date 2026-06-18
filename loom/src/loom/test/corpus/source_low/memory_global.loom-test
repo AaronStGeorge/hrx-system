@@ -11,6 +11,50 @@ func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
 
 // ====
 
+func.def @global_f32x7_roundtrip(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<7xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<7xf32, #dense>
+  %loaded = vector.load %input_view[0] : view<7xf32, #dense> -> vector<7xf32>
+  vector.store %loaded, %output_view[0] : vector<7xf32>, view<7xf32, #dense>
+  func.return
+}
+
+// ====
+
+func.def @global_bf16x14_roundtrip(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<14xbf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<14xbf16, #dense>
+  %loaded = vector.load %input_view[0] : view<14xbf16, #dense> -> vector<14xbf16>
+  vector.store %loaded, %output_view[0] : vector<14xbf16>, view<14xbf16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @global_f16x7_roundtrip(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<7xf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<7xf16, #dense>
+  %loaded = vector.load %input_view[0] : view<7xf16, #dense> -> vector<7xf16>
+  vector.store %loaded, %output_view[0] : vector<7xf16>, view<7xf16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @global_bf16x7_roundtrip(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<7xbf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<7xbf16, #dense>
+  %loaded = vector.load %input_view[0] : view<7xbf16, #dense> -> vector<7xbf16>
+  vector.store %loaded, %output_view[0] : vector<7xbf16>, view<7xbf16, #dense>
+  func.return
+}
+
+// ====
+
 func.def @global_saddr_dynamic_offset_argument(%input: buffer, %byte_offset: offset) -> (i32) {
   %input_global = buffer.assume.memory_space<global> %input : buffer
   %input_view = buffer.view %input_global[%byte_offset] : buffer -> view<1xi32, #dense>
