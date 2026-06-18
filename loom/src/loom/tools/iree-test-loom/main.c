@@ -40,6 +40,9 @@ IREE_FLAG(string, sanitizer, "none",
           "Sanitizer checks inserted by the target pipeline. Use 'none', "
           "'access', 'value', 'operation', 'race', 'asan', 'ubsan', 'tsan', "
           "'all', or a '|' separated list.");
+IREE_FLAG_NAMED(string, sanitizer_reporting, "sanitizer-reporting", "default",
+                "Sanitizer reporting mode used by the target pipeline. Use "
+                "'default', 'trap', or 'report-only'.");
 
 enum {
   // Target-linked requirement providers.
@@ -365,6 +368,8 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "iree-test-loom module.loom --max-samples-per-case=16\n"
       "iree-test-loom module.loom --pipeline=@hal_actual_pipeline\n"
       "iree-test-loom module.loom --sanitizer=tsan\n"
+      "iree-test-loom module.loom --sanitizer=asan "
+      "--sanitizer-reporting=report-only\n"
       "```\n"
       "\n"
       "`--case=@name` selects one checked case; empty selection runs cases in\n"
@@ -377,11 +382,11 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "A case can mix reference/oracle checks with HAL actual invocations. "
       "Actual\n"
       "invocations use the selected HAL artifact provider and execution "
-      "provider\n"
-      "linked into this binary. `--pipeline=default|none|@symbol|pass,list`\n"
-      "controls the HAL actual compile pipeline. `--sanitizer=...` enables "
-      "the same target-pipeline instrumentation accepted by "
-      "`iree-benchmark-loom`.\n"
+      "provider linked into this binary. "
+      "`--pipeline=default|none|@symbol|pass,list` controls the HAL actual "
+      "compile pipeline. `--sanitizer=...` and "
+      "`--sanitizer-reporting=...` enable the same target-pipeline "
+      "instrumentation accepted by `iree-benchmark-loom`.\n"
       "\n"
       "### Report shape\n"
       "\n"
@@ -461,6 +466,11 @@ int iree_test_loom_main(int argc, char** argv,
     status = loom_sanitizer_options_parse_checks(
         iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
         &sanitizer_options);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_sanitizer_reporting_mode_parse(
+        iree_make_cstring_view(FLAG_sanitizer_reporting),
+        IREE_SV("--sanitizer-reporting"), &sanitizer_options.reporting_mode);
   }
 
   if (iree_status_is_ok(status)) {

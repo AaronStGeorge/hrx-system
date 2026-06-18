@@ -97,6 +97,7 @@ iree_execution_test_suite(
   TOOLS
     "iree-test-loom=::iree-test-loom"
   DATA
+    "testdata/amdgpu_asan_actual.loom"
     "testdata/amdgpu_hal_actual.loom"
     "testdata/amdgpu_sanitizer_actual.loom"
   LABELS

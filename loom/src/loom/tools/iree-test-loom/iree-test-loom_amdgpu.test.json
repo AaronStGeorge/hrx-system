@@ -24,13 +24,79 @@
       }
     },
     {
+      "name": "keeps valid loom-authored amdgpu asan access silent",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/testdata/amdgpu_asan_actual.loom",
+          "--case=@asan_global_store_valid_case",
+          "--device=amdgpu",
+          "--sanitizer=asan",
+          "--sanitizer-reporting=report-only",
+          "--amdgpu_asan=true",
+          "--amdgpu_asan_report_policy=report-only"
+        ]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "\"format\":\"loom.test.v0\"",
+            {
+              "regex": "\"case\":\"asan_global_store_valid_case\"[^}]*\"passed\":true"
+            },
+            "\"failed_sample_count\":0"
+          ]
+        }
+      },
+      "stderr": {
+        "not_contains": [
+          "IREE HAL device event: type=asan_report"
+        ]
+      }
+    },
+    {
+      "name": "reports loom-authored amdgpu asan redzone store",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/testdata/amdgpu_asan_actual.loom",
+          "--case=@asan_global_store_redzone_case",
+          "--device=amdgpu",
+          "--sanitizer=asan",
+          "--sanitizer-reporting=report-only",
+          "--amdgpu_asan=true",
+          "--amdgpu_asan_report_policy=report-only"
+        ]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "\"format\":\"loom.test.v0\"",
+            {
+              "regex": "\"case\":\"asan_global_store_redzone_case\"[^}]*\"passed\":true"
+            },
+            "\"failed_sample_count\":0"
+          ]
+        }
+      },
+      "stderr": {
+        "contains": [
+          "IREE HAL device event: type=asan_report severity=error",
+          "asan: write access of 4 bytes",
+          "device: driver=amdgpu"
+        ]
+      }
+    },
+    {
       "name": "reports loom-authored amdgpu tsan race",
       "run": {
         "tool": "iree-test-loom",
         "args": [
           "{srcdir}/testdata/amdgpu_sanitizer_actual.loom",
+          "--case=@tsan_workgroup_write_race_case",
           "--device=amdgpu",
           "--sanitizer=tsan",
+          "--sanitizer-reporting=report-only",
           "--amdgpu_tsan=true",
           "--amdgpu_tsan_report_policy=report-only"
         ]
