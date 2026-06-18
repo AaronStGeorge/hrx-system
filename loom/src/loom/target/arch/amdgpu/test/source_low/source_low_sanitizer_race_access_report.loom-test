@@ -81,55 +81,55 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_access_report_defa
   %72 = s_mul_i32 %68, %69
   %73 = s_mul_i32 %9, %72
   %74 = s_add_u32 %71, %73
-  %75 = v_and_b32_lit %packed_tid, 1023
-  %76 = slice %10[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %77 = v_mov_b32_copy %76
-  %82 = v_mov_b32_copy %49
-  %90, %91 = v_sub_co_u32 %77, %82
-  %96 = v_lshrrev_b32_src0_inline %90, 6
-  %98 = v_mov_b32_copy %56
-  %99 = v_and_b32 %96, %98
-  %100 = v_lshlrev_b32_src0_inline %99, 4
-  %102 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %104 = s_mov_b32 3
-  %105 = s_and_b32 %20, %104
-  %106 = s_cmp_eq_i32 %105, %104
-  low.cond_br %106, ^_bb1, ^_bb12 : reg<amdgpu.scc>
+  %75 = v_mov_b32_copy %74
+  %76 = v_mov_b32 0
+  %79 = v_mov_b32_copy %42
+  %81 = v_mov_b32_copy %43
+  %87 = v_mul_lo_u32 %75, %79
+  %88 = v_mul_hi_u32 %75, %79
+  %89 = v_mul_lo_u32 %75, %81
+  %90 = v_mul_lo_u32 %76, %79
+  %91 = v_add_u32 %88, %89
+  %92 = v_add_u32 %91, %90
+  %94 = v_and_b32_lit %packed_tid, 1023
+  %95 = slice %10[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %96 = v_mov_b32_copy %95
+  %101 = v_mov_b32_copy %49
+  %109, %110 = v_sub_co_u32 %96, %101
+  %115 = v_lshrrev_b32_src0_inline %109, 6
+  %117 = v_mov_b32_copy %56
+  %118 = v_and_b32 %115, %117
+  %119 = v_lshlrev_b32_src0_inline %118, 4
+  %121 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %123 = s_mov_b32 3
+  %124 = s_and_b32 %20, %123
+  %125 = s_cmp_eq_i32 %124, %123
+  low.cond_br %125, ^_bb1, ^_bb12 : reg<amdgpu.scc>
 ^_bb1:
   s_waitcnt {vmcnt = 0}
   buffer_gl1_inv
   buffer_gl0_inv
-  %109 = global_load_b64_saddr %100, %65 {glc = 1, dlc = 1}
-  %110 = v_add_u32_src0_inline %100, 8
-  %111 = global_load_b32_saddr %110, %65 {glc = 1, dlc = 1}
-  %112 = v_mov_b32 0
-  %115 = v_mov_b32_copy %35
-  %117 = v_mov_b32_copy %36
-  %123 = v_mul_lo_u32 %111, %115
-  %124 = v_mul_hi_u32 %111, %115
-  %125 = v_mul_lo_u32 %111, %117
-  %126 = v_mul_lo_u32 %112, %115
-  %127 = v_add_u32 %124, %125
-  %128 = v_add_u32 %127, %126
-  %130 = v_mov_b32_copy %74
-  %134 = v_mov_b32_copy %42
-  %136 = v_mov_b32_copy %43
+  %128 = global_load_b64_saddr %119, %65 {glc = 1, dlc = 1}
+  %129 = v_add_u32_src0_inline %119, 8
+  %130 = global_load_b32_saddr %129, %65 {glc = 1, dlc = 1}
+  %134 = v_mov_b32_copy %35
+  %136 = v_mov_b32_copy %36
   %142 = v_mul_lo_u32 %130, %134
   %143 = v_mul_hi_u32 %130, %134
   %144 = v_mul_lo_u32 %130, %136
-  %145 = v_mul_lo_u32 %112, %134
+  %145 = v_mul_lo_u32 %76, %134
   %146 = v_add_u32 %143, %144
   %147 = v_add_u32 %146, %145
-  %153, %154 = v_add_co_u32 %123, %142
-  %155, %156 = v_add_co_ci_u32 %128, %147, %154
-  %158 = v_lshlrev_b32_src0_inline %75, 2
-  %160 = concat(%158, %112) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %153, %154 = v_add_co_u32 %142, %87
+  %155, %156 = v_add_co_ci_u32 %147, %92, %154
+  %158 = v_lshlrev_b32_src0_inline %94, 2
+  %160 = concat(%158, %76) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %161 = v_mov_b32_copy %23
   %162 = v_lshrrev_b32 %161, %158
   %163 = v_lshlrev_b32_src0_inline %162, 3
   %164 = v_add_u32_src0_inline %163, 8
   %171, %172 = v_add_co_u32 %153, %164
-  %173, %174 = v_add_co_ci_u32 %155, %112, %172
+  %173, %174 = v_add_co_ci_u32 %155, %76, %172
   %177 = v_mov_b32_copy %28
   %179 = v_mov_b32_copy %29
   %185, %186 = v_add_co_u32 %177, %171
@@ -140,11 +140,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_access_report_defa
   buffer_gl1_inv
   buffer_gl0_inv
   %192 = slice %191[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %193 = v_and_b32_lit %75, 1023
+  %193 = v_and_b32_lit %94, 1023
   %194 = v_lshlrev_b32_src0_inline %193, 3
   %195 = v_and_b32_lit %192, 1023
   %196 = v_lshlrev_b32_src0_inline %195, 13
-  %197 = slice %109[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %197 = slice %128[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %198 = v_and_b32_lit %197, 511
   %199 = v_lshlrev_b32_src0_inline %198, 23
   %200 = v_mov_b32 2
@@ -173,7 +173,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_access_report_defa
   %219 = v_lshlrev_b32_src0_inline %218, 9
   %220 = v_or_b32 %217, %219
   %221 = v_lshrrev_b32_src0_inline %210, 11
-  %223 = v_cmp_ne_i32 %211, %112
+  %223 = v_cmp_ne_i32 %211, %76
   %225 = v_and_b32_lit %197, 1048575
   %226 = v_cmp_eq_i32 %220, %225
   %228 = v_cmp_eq_i32 %215, %195
@@ -191,7 +191,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_access_report_defa
   low.br ^_bb12
 ^_bb3:
   %240, %241 = s_and_saveexec_b64 %235
-  %242 = v_mov_b32_copy %75
+  %242 = v_mov_b32_copy %94
   %243 = v_mov_b32 0
   %244 = v_mov_b32 4
   %245 = v_cmp_eq_i32 %211, %244

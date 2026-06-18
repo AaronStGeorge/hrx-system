@@ -59,6 +59,8 @@ typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
   bool has_topology_values;
   // Entry-dominating flattened workgroup id for the active dispatch.
   loom_value_id_t workgroup_linear_id;
+  // Entry-dominating byte offset of this workgroup inside a dispatch shadow.
+  loom_value_id_t workgroup_shadow_offset;
   // Entry-dominating flattened workitem id for the active invocation.
   loom_value_id_t workitem_linear_id;
   // True once entry-block dispatch-slot values have been materialized.
@@ -483,6 +485,23 @@ static iree_status_t loom_amdgpu_sanitizer_race_emit_queue_slot_offset(
       masked_slot, vgpr_type, out_slot_offset);
 }
 
+static iree_status_t loom_amdgpu_sanitizer_race_build_scaled_shadow_offset(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t ordinal, loom_value_id_t stride,
+    loom_value_id_t* out_offset) {
+  *out_offset = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t ordinal_wide = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr64_from_u32(
+      context, source_op, ordinal, &ordinal_wide));
+  loom_value_id_t stride_vgpr = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
+      loom_low_lower_context_builder(context),
+      loom_low_lower_context_descriptor_set(context), stride,
+      /*expected_unit_count=*/2, source_op->location, &stride_vgpr));
+  return loom_amdgpu_emit_vgpr64_mul_lo(context, source_op, ordinal_wide,
+                                        stride_vgpr, out_offset);
+}
+
 iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
     loom_low_lower_context_t* context) {
   const loom_op_t* first_race_op = NULL;
@@ -520,6 +539,10 @@ iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_workgroup_linear_id(
       context, first_race_op, sgpr_type, &state->workgroup_linear_id));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_scaled_shadow_offset(
+      context, first_race_op, state->workgroup_linear_id,
+      state->config_values.workgroup_shadow_stride,
+      &state->workgroup_shadow_offset));
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_workitem_linear_id(
@@ -550,9 +573,9 @@ static iree_status_t loom_amdgpu_sanitizer_race_get_config_values(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_sanitizer_race_get_workgroup_linear_id(
-    loom_low_lower_context_t* context, loom_value_id_t* out_linear_id) {
-  *out_linear_id = LOOM_VALUE_ID_INVALID;
+static iree_status_t loom_amdgpu_sanitizer_race_get_workgroup_shadow_offset(
+    loom_low_lower_context_t* context, loom_value_id_t* out_offset) {
+  *out_offset = LOOM_VALUE_ID_INVALID;
   loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
   if (!state->has_topology_values) {
@@ -560,7 +583,7 @@ static iree_status_t loom_amdgpu_sanitizer_race_get_workgroup_linear_id(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU TSAN topology values were not materialized in entry setup");
   }
-  *out_linear_id = state->workgroup_linear_id;
+  *out_offset = state->workgroup_shadow_offset;
   return iree_ok_status();
 }
 
@@ -952,23 +975,6 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_dispatch_values(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_sanitizer_race_build_scaled_shadow_offset(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t ordinal, loom_value_id_t stride,
-    loom_value_id_t* out_offset) {
-  *out_offset = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t ordinal_wide = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr64_from_u32(
-      context, source_op, ordinal, &ordinal_wide));
-  loom_value_id_t stride_vgpr = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
-      loom_low_lower_context_builder(context),
-      loom_low_lower_context_descriptor_set(context), stride,
-      /*expected_unit_count=*/2, source_op->location, &stride_vgpr));
-  return loom_amdgpu_emit_vgpr64_mul_lo(context, source_op, ordinal_wide,
-                                        stride_vgpr, out_offset);
-}
-
 static iree_status_t loom_amdgpu_sanitizer_race_build_workgroup_shadow_offset(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_race_config_values_t* config,
@@ -981,13 +987,9 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_workgroup_shadow_offset(
       context, source_op, dispatch->shadow_slot, config->dispatch_shadow_stride,
       &dispatch_offset));
 
-  loom_value_id_t workgroup_linear_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_workgroup_linear_id(
-      context, &workgroup_linear_id));
   loom_value_id_t workgroup_offset = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_scaled_shadow_offset(
-      context, source_op, workgroup_linear_id, config->workgroup_shadow_stride,
-      &workgroup_offset));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_workgroup_shadow_offset(
+      context, &workgroup_offset));
   return loom_amdgpu_emit_vgpr64_add(context, source_op, dispatch_offset,
                                      workgroup_offset, out_offset);
 }
