@@ -38,6 +38,8 @@ typedef struct loom_run_hal_testbench_context_t {
   const loom_run_hal_artifact_provider_registry_t* artifact_provider_registry;
   // Host allocator used for runtime and candidate storage.
   iree_allocator_t host_allocator;
+  // Device event sink used when initializing |runtime|.
+  iree_hal_device_event_sink_t device_event_sink;
   // Selected HAL artifact provider for the active device.
   const loom_run_hal_artifact_provider_t* artifact_provider;
   // Shared HAL runtime used by actual invocations.
@@ -51,6 +53,11 @@ void loom_run_hal_testbench_context_initialize(
     const loom_run_hal_artifact_provider_registry_t* artifact_provider_registry,
     iree_allocator_t host_allocator,
     loom_run_hal_testbench_context_t* out_context);
+
+// Sets the device event sink used by future HAL runtime initialization.
+void loom_run_hal_testbench_context_set_device_event_sink(
+    loom_run_hal_testbench_context_t* context,
+    iree_hal_device_event_sink_t device_event_sink);
 
 // Releases HAL runtime resources owned by |context|.
 void loom_run_hal_testbench_context_deinitialize(

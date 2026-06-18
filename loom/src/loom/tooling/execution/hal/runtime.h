@@ -26,9 +26,21 @@ typedef struct loom_run_hal_runtime_t {
   iree_hal_executable_cache_t* executable_cache;
 } loom_run_hal_runtime_t;
 
-// Initializes the HAL runtime state for |hal_driver_name|.
+typedef struct loom_run_hal_runtime_options_t {
+  // HAL driver component of the selected `--device=` URI.
+  iree_string_view_t hal_driver_name;
+  // Device event sink used for feedback emitted by the HAL device.
+  iree_hal_device_event_sink_t event_sink;
+} loom_run_hal_runtime_options_t;
+
+// Initializes |out_options| with default HAL runtime creation policy.
+void loom_run_hal_runtime_options_initialize(
+    iree_string_view_t hal_driver_name,
+    loom_run_hal_runtime_options_t* out_options);
+
+// Initializes the HAL runtime state using |options|.
 iree_status_t loom_run_hal_runtime_initialize(
-    iree_string_view_t hal_driver_name, iree_allocator_t allocator,
+    const loom_run_hal_runtime_options_t* options, iree_allocator_t allocator,
     loom_run_hal_runtime_t* out_runtime);
 
 // Releases all resources owned by |runtime|.

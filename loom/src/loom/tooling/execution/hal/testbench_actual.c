@@ -27,7 +27,15 @@ void loom_run_hal_testbench_context_initialize(
       .host_allocator = iree_allocator_is_null(host_allocator)
                             ? iree_allocator_system()
                             : host_allocator,
+      .device_event_sink = iree_hal_device_event_sink_stderr(),
   };
+}
+
+void loom_run_hal_testbench_context_set_device_event_sink(
+    loom_run_hal_testbench_context_t* context,
+    iree_hal_device_event_sink_t device_event_sink) {
+  IREE_ASSERT(!context->runtime_initialized);
+  context->device_event_sink = device_event_sink;
 }
 
 void loom_run_hal_testbench_context_deinitialize(
@@ -112,9 +120,12 @@ iree_status_t loom_run_hal_testbench_context_ensure_runtime(
   }
   IREE_RETURN_IF_ERROR(
       loom_run_hal_testbench_context_select_artifact_provider(context));
+  loom_run_hal_runtime_options_t runtime_options;
+  loom_run_hal_runtime_options_initialize(
+      context->artifact_provider->hal_driver_name, &runtime_options);
+  runtime_options.event_sink = context->device_event_sink;
   IREE_RETURN_IF_ERROR(loom_run_hal_runtime_initialize(
-      context->artifact_provider->hal_driver_name, context->host_allocator,
-      &context->runtime));
+      &runtime_options, context->host_allocator, &context->runtime));
   context->runtime_initialized = true;
   return iree_ok_status();
 }

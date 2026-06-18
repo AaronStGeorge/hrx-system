@@ -76,8 +76,11 @@ iree_status_t loom_run_hal_execution_backend_probe(
   loom_run_hal_runtime_t runtime = {0};
   loom_run_hal_device_target_t target = {0};
 
+  loom_run_hal_runtime_options_t runtime_options;
+  loom_run_hal_runtime_options_initialize(artifact_provider->hal_driver_name,
+                                          &runtime_options);
   iree_status_t status = loom_run_hal_runtime_initialize(
-      artifact_provider->hal_driver_name, request->host_allocator, &runtime);
+      &runtime_options, request->host_allocator, &runtime);
   if (iree_status_is_ok(status)) {
     status = artifact_provider->select_device_target(
         artifact_provider, &runtime, request->host_allocator, &target);
@@ -118,8 +121,11 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
   loom_run_hal_invocation_result_initialize(request->host_allocator,
                                             &invocation_result);
 
+  loom_run_hal_runtime_options_t runtime_options;
+  loom_run_hal_runtime_options_initialize(artifact_provider->hal_driver_name,
+                                          &runtime_options);
   iree_status_t status = loom_run_hal_runtime_initialize(
-      artifact_provider->hal_driver_name, request->host_allocator, &runtime);
+      &runtime_options, request->host_allocator, &runtime);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_candidate_compile(
         artifact_provider, &runtime, request->run_module,
