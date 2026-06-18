@@ -324,6 +324,52 @@ TEST_F(SymbolicExprTest, ScaledStrictRelationProvesLessEqualWithUnitExtent) {
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
 }
 
+TEST_F(SymbolicExprTest, ShiftedStrictRelationProvesWideExtent) {
+  loom_value_id_t origin = DefineIndexValue();
+  loom_value_id_t element_count = DefineIndexValue();
+  loom_value_id_t three = loom_index_constant_result(BuildIndexConstant(3));
+  loom_op_t* last_valid_start_op = nullptr;
+  IREE_ASSERT_OK(loom_index_sub_build(
+      &builder_, element_count, three, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      LOOM_LOCATION_UNKNOWN, &last_valid_start_op));
+  loom_value_id_t last_valid_start = loom_index_sub_result(last_valid_start_op);
+  loom_predicate_t predicate = {
+      /*.kind=*/LOOM_PREDICATE_LT,
+      /*.arg_count=*/2,
+      /*.arg_tags=*/{LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE},
+      /*.reserved=*/{},
+      /*.args=*/{origin, last_valid_start},
+  };
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_index_assume_build(&builder_, &origin, 1, &predicate, 1,
+                                         &index_type, 1, LOOM_LOCATION_UNKNOWN,
+                                         &assume_op));
+  loom_value_id_t assumed_origin =
+      loom_index_assume_results(assume_op).values[0];
+
+  loom_value_id_t four = loom_index_constant_result(BuildIndexConstant(4));
+  loom_op_t* end_op = nullptr;
+  IREE_ASSERT_OK(loom_index_add_build(&builder_, assumed_origin, four,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &end_op));
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LE,
+      loom_index_add_result(end_op), element_count, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+
+  loom_value_id_t five = loom_index_constant_result(BuildIndexConstant(5));
+  loom_op_t* too_wide_end_op = nullptr;
+  IREE_ASSERT_OK(loom_index_add_build(&builder_, assumed_origin, five,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &too_wide_end_op));
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LE,
+      loom_index_add_result(too_wide_end_op), element_count, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_UNKNOWN);
+}
+
 TEST_F(SymbolicExprTest, AssumedRightValueRelationPredicatesAreSwapped) {
   loom_value_id_t induction = DefineIndexValue();
   loom_value_id_t upper_bound = DefineIndexValue();

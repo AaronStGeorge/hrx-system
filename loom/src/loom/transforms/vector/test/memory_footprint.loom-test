@@ -86,6 +86,35 @@ func.def @dynamic_scaled_vector_origin_proven_by_assume_relation(%buffer: buffer
 
 // ====
 
+func.def @dynamic_vector_origin_proven_by_shifted_assume_relation(%buffer: buffer, %base: offset, %origin0: index, %n0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %n = index.assume %n0 [range(%n0, 4, 4096)] : index
+  %three = index.constant 3 : index
+  %last_valid_start = index.sub %n, %three : index
+  %origin = index.assume %origin0 [ge(%origin0, 0), lt(%origin0, %last_valid_start)] : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%n]xi32, %layout>
+  %words = vector.load %view[%origin] : view<[%n]xi32, %layout> -> vector<4xi32>
+  test.use %words : vector<4xi32>
+  func.return
+}
+
+// ====
+
+func.def @dynamic_vector_origin_rejects_insufficient_shifted_assume_relation(%buffer: buffer, %base: offset, %origin0: index, %n0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %n = index.assume %n0 [range(%n0, 4, 4096)] : index
+  %two = index.constant 2 : index
+  %late_start = index.sub %n, %two : index
+  %origin = index.assume %origin0 [ge(%origin0, 0), lt(%origin0, %late_start)] : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%n]xi32, %layout>
+  // ERROR@+1: SUBRANGE/010 {op_name="vector.load", vector_extent="4", constraint_key="vector_footprint.full_vector_upper_bound"}
+  %words = vector.load %view[%origin] : view<[%n]xi32, %layout> -> vector<4xi32>
+  test.use %words : vector<4xi32>
+  func.return
+}
+
+// ====
+
 func.def @quantized_q8_x4_word_chunk_vector_load_is_proven(%buffer: buffer, %base: offset, %lane0: index, %iter0: index) {
   %layout = encoding.layout.dense : encoding<layout>
   %two = index.constant 2 : index
