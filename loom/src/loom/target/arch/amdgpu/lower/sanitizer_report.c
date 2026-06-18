@@ -678,6 +678,25 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
   *out_branch = (loom_amdgpu_sanitizer_access_report_failure_branch_t){0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_validate_access_report_for_island(
       island, report, IREE_SV("access report failure mask branch")));
+  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
+          builder, descriptor_set, failure_mask, location, &branch));
+
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_branch(
+      builder, descriptor_set, island, source, report, location));
+
+  loom_builder_set_block(builder, branch.continuation_block);
+  *out_branch = branch;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t failure_mask, loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch) {
+  IREE_ASSERT_ARGUMENT(out_branch);
+  *out_branch = (loom_amdgpu_sanitizer_access_report_failure_branch_t){0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_register_class(
       builder, descriptor_set, failure_mask, 2, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
       IREE_SV("failure_mask")));
@@ -693,10 +712,7 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_exec_narrow(
       builder, descriptor_set, failure_mask, location,
       /*out_saved_exec=*/NULL));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_branch(
-      builder, descriptor_set, island, source, report, location));
 
-  loom_builder_set_block(builder, branch.continuation_block);
   *out_branch = branch;
   return iree_ok_status();
 }

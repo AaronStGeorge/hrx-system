@@ -176,8 +176,8 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_branch(
 // failed. The current block receives no report operations, only the conditional
 // branch terminator. The false edge falls through to a newly-created
 // continuation block, while the true edge enters a per-site cold block that
-// materializes report arguments and branches to |island|. Leaves the builder
-// positioned at the continuation block.
+// converts the already-built report tuple to |island| arguments. Leaves the
+// builder positioned at the continuation block.
 iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_access_report_island_t* island,
@@ -193,10 +193,10 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_branch(
 // |failure_mask| must be an SGPRx2 native lane mask where set bits identify
 // lanes that failed the assertion. The hot block only compares the mask against
 // zero and conditionally branches. The per-site cold block narrows EXEC to the
-// failed lanes before materializing report arguments and branching to |island|.
-// Since the island terminates the failed wave, the saved EXEC value is
-// intentionally not restored. Leaves the builder positioned at the continuation
-// block.
+// failed lanes before converting the already-built report tuple to |island|
+// arguments. Since the island terminates the failed wave, the saved EXEC value
+// is intentionally not restored. Leaves the builder positioned at the
+// continuation block.
 iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_access_report_island_t* island,
@@ -204,6 +204,21 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
     const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
+
+// Splits the current hot block on an EXEC-width failure mask and enters the
+// cold per-site failure block.
+//
+// |failure_mask| must be an SGPRx2 native lane mask where set bits identify
+// lanes that failed the assertion. The hot block only compares the mask against
+// zero and conditionally branches. The builder is left positioned in the
+// per-site cold failure block after EXEC has been narrowed to the failed lanes.
+// The caller must terminate that block, usually with
+// loom_amdgpu_build_sanitizer_access_report_branch, and then move the builder
+// to |out_branch->continuation_block|.
+iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t failure_mask, loom_location_id_t location,
     loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
 
 // Splits the current hot block on an EXEC-width failure mask and traps failed
