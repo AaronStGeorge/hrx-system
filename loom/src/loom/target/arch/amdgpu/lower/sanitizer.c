@@ -700,12 +700,6 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
       context, source_op, plan->site_id, &report.site_id));
 
   loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
-  if (reporting_mode == LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY) {
-    return loom_amdgpu_build_sanitizer_access_report_only_failure_mask_branch(
-        builder, descriptor_set, state->feedback_config_symbol,
-        check.failure_mask, &source, &report, source_op->location, &branch);
-  }
-
   const loom_amdgpu_sanitizer_access_report_island_t* island = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_access_island(
       builder, descriptor_set, state, plan->report_access_kind,

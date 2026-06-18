@@ -2208,7 +2208,8 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_access(
           builder, descriptor_set, failure_mask, source_op->location, &branch));
       break;
     }
-    case LOOM_SANITIZER_REPORTING_MODE_DEFAULT: {
+    case LOOM_SANITIZER_REPORTING_MODE_DEFAULT:
+    case LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY: {
       loom_amdgpu_sanitizer_race_report_failure_branch_t branch = {0};
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_build_sanitizer_race_report_failure_mask_split(

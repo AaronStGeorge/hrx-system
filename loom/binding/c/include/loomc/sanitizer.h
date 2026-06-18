@@ -65,7 +65,7 @@ typedef enum loomc_sanitizer_reporting_mode_e {
   /// Trap directly on sanitizer failures without emitting structured reports.
   LOOMC_SANITIZER_REPORTING_MODE_TRAP = 1,
 
-  /// Emit structured sanitizer reports and continue execution.
+  /// Emit structured sanitizer reports without using a direct trap.
   LOOMC_SANITIZER_REPORTING_MODE_REPORT_ONLY = 2,
 } loomc_sanitizer_reporting_mode_t;
 
