@@ -29,13 +29,6 @@
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/registers.h"
 
-typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
-  // True once TSAN data-race failures have a shared cold report island.
-  bool has_report_island;
-  // Shared cold island for TSAN data-race reports.
-  loom_amdgpu_sanitizer_race_report_island_t report_island;
-} loom_amdgpu_sanitizer_race_lower_state_t;
-
 typedef struct loom_amdgpu_sanitizer_race_config_values_t {
   // Address of the runtime-published TSAN config global.
   loom_value_id_t address;
@@ -56,6 +49,17 @@ typedef struct loom_amdgpu_sanitizer_race_config_values_t {
   // Owning queue TSAN state pointer.
   loom_value_id_t queue_state_base;
 } loom_amdgpu_sanitizer_race_config_values_t;
+
+typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
+  // True once entry-block TSAN config values have been materialized.
+  bool has_config_values;
+  // Entry-dominating TSAN config values loaded from iree_tsan_config.
+  loom_amdgpu_sanitizer_race_config_values_t config_values;
+  // True once TSAN data-race failures have a shared cold report island.
+  bool has_report_island;
+  // Shared cold island for TSAN data-race reports.
+  loom_amdgpu_sanitizer_race_report_island_t report_island;
+} loom_amdgpu_sanitizer_race_lower_state_t;
 
 typedef struct loom_amdgpu_sanitizer_race_dispatch_values_t {
   // Device-visible pointer to the current AQL dispatch packet.
@@ -440,6 +444,57 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_config_values(
       LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE, location,
       &values.queue_state_base));
   *out_values = values;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_sanitizer_race_emit_entry_setup(
+    loom_low_lower_context_t* context) {
+  const loom_op_t* first_race_op = NULL;
+  const iree_host_size_t plan_count =
+      loom_low_lower_context_selected_plan_count(context);
+  for (iree_host_size_t i = 0; i < plan_count; ++i) {
+    const loom_low_lower_selected_plan_view_t selected_plan =
+        loom_low_lower_context_selected_plan_view(context, i);
+    if (selected_plan.elided) {
+      continue;
+    }
+    if (selected_plan.plan.id == LOOM_OP_SANITIZER_RACE_ACCESS ||
+        selected_plan.plan.id == LOOM_OP_SANITIZER_RACE_SYNC) {
+      first_race_op = selected_plan.source_op;
+      break;
+    }
+  }
+  if (first_race_op == NULL) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
+  if (state->has_config_values) {
+    return iree_ok_status();
+  }
+
+  loom_symbol_ref_t config_symbol = loom_symbol_ref_null();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_tsan_config_symbol(context, &config_symbol));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_config_values(
+      context, first_race_op, config_symbol, &state->config_values));
+  state->has_config_values = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_race_get_config_values(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_sanitizer_race_config_values_t* out_config) {
+  *out_config = (loom_amdgpu_sanitizer_race_config_values_t){0};
+  loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
+  if (!state->has_config_values) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU TSAN config values were not materialized in entry setup");
+  }
+  *out_config = state->config_values;
   return iree_ok_status();
 }
 
@@ -1378,11 +1433,8 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_config_guard(
   *out_config = (loom_amdgpu_sanitizer_race_config_values_t){0};
   *out_continuation_block = NULL;
 
-  loom_symbol_ref_t config_symbol = loom_symbol_ref_null();
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_sanitizer_tsan_config_symbol(context, &config_symbol));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_config_values(
-      context, source_op, config_symbol, out_config));
+      loom_amdgpu_sanitizer_race_get_config_values(context, out_config));
   loom_value_id_t enabled_scc = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_required_config_scc(
       context, source_op, out_config->flags, &enabled_scc));

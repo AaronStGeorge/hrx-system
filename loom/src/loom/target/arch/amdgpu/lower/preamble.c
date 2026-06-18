@@ -17,6 +17,7 @@
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_race.h"
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
@@ -1462,7 +1463,7 @@ iree_status_t loom_amdgpu_emit_entry_setup(void* user_data,
           context, source_result, low_workgroup_counts[dimension]));
     }
   }
-  return iree_ok_status();
+  return loom_amdgpu_sanitizer_race_emit_entry_setup(context);
 }
 
 iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
