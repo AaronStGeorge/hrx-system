@@ -3944,12 +3944,14 @@ def _v_cvt_i32_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_cvt_f32_f16_overlay() -> AmdgpuDescriptorOverlay:
+def _v_cvt_f32_f16_overlay(
+    *, encoding_name: str = "ENC_VOP1"
+) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_cvt_f32_f16",
         instruction_name="V_CVT_F32_F16",
         mnemonic="v_cvt_f32_f16",
-        encoding_name="ENC_VOP1",
+        encoding_name=encoding_name,
         semantic_tag="convert.float.f16.f32",
         schedule_class=_SCHEDULE_VALU,
         operands=(

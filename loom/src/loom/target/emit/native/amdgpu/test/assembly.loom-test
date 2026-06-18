@@ -2279,6 +2279,32 @@ low.func.def target(@gfx11_target) @gfx11_predicated_tile_sweep_kq_reduction(%sr
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_cvt_f32_f16_high_vgpr_source waits=none strategy=source fixed=%input:physical_register:131:1 fixed=%converted:physical_register:187:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_cvt_f32_f16_high_vgpr_source(%input: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %converted = v_cvt_f32_f16 %input
+  return
+}
+
+// ----
+  v_cvt_f32_f16 v187, v131
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx12_cvt_f32_f16_high_vgpr_source waits=none strategy=source fixed=%input:physical_register:131:1 fixed=%converted:physical_register:187:1
+amdgpu.target<gfx1200> @gfx12_target
+low.func.def target(@gfx12_target) @gfx12_cvt_f32_f16_high_vgpr_source(%input: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.core> {
+  %converted = v_cvt_f32_f16 %input
+  return
+}
+
+// ----
+  v_cvt_f32_f16 v187, v131
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_buffer_off_zero waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_buffer_off_zero(%resource: reg<amdgpu.sgpr x4>) {
