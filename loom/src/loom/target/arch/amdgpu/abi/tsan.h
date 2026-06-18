@@ -49,6 +49,8 @@ enum loom_amdgpu_tsan_config_layout_e {
   LOOM_AMDGPU_TSAN_CONFIG_QUEUE_STATE_BASE_OFFSET = 72u,
   // Offset of the queue-local shadow slot count.
   LOOM_AMDGPU_TSAN_CONFIG_SHADOW_SLOT_COUNT_OFFSET = 80u,
+  // Offset of the queue-local dispatch-state table pointer.
+  LOOM_AMDGPU_TSAN_CONFIG_DISPATCH_STATE_BASE_OFFSET = 88u,
 };
 
 enum loom_amdgpu_tsan_config_flag_bits_e {

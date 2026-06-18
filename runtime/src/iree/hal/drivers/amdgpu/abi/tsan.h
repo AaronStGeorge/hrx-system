@@ -36,7 +36,7 @@ enum iree_hal_amdgpu_tsan_config_flag_bits_t {
   IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_NONE = 0u,
   // TSAN race checking is enabled for the owning logical device.
   IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_ENABLED = 1u << 0,
-  // Queue-scoped TSAN state is available through |queue_state_base|.
+  // Queue-scoped TSAN state is available through queue-local config fields.
   IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_STATE = 1u << 1,
 };
 
@@ -157,8 +157,8 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   uint32_t shadow_slot_count;
   // Reserved for future TSAN runtime state. Must be zero.
   uint32_t reserved0;
-  // Reserved for future TSAN runtime state. Must be zero.
-  uint64_t reserved1;
+  // Fast-path device-visible base of dispatch-state entries, or zero.
+  uint64_t dispatch_state_base;
 } iree_hal_amdgpu_tsan_config_t;
 IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_config_t) == 96,
                           "TSAN config size is part of the device ABI");
@@ -168,6 +168,10 @@ IREE_AMDGPU_STATIC_ASSERT(
 IREE_AMDGPU_STATIC_ASSERT(
     IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_config_t, queue_state_base) == 72,
     "TSAN config queue state fields must follow the queue AQL fields");
+IREE_AMDGPU_STATIC_ASSERT(
+    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_config_t, dispatch_state_base) ==
+        88,
+    "TSAN config dispatch state base must be in the tail slot");
 
 // Queue-owned TSAN state read by assignment dispatches and instrumented
 // kernels.

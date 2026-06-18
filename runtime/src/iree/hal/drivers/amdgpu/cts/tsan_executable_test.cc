@@ -208,10 +208,11 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
   EXPECT_NE(config.queue_aql_base, 0u);
   EXPECT_NE(config.queue_aql_slot_mask, 0u);
   EXPECT_NE(config.queue_state_base, 0u);
+  EXPECT_NE(config.dispatch_state_base, 0u);
 
   Ref<iree_hal_buffer_t> output_buffer;
   IREE_ASSERT_OK(
-      CreateZeroedDeviceBuffer(12 * sizeof(uint64_t), output_buffer.out()));
+      CreateZeroedDeviceBuffer(13 * sizeof(uint64_t), output_buffer.out()));
   Ref<iree_hal_buffer_t> fallback_buffer;
   const uint64_t fallback_value = 0xAAAAAAAA55555555ull;
   IREE_ASSERT_OK(CreateDeviceBufferWithData(
@@ -243,7 +244,7 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
       dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
 
   std::vector<uint64_t> output_data = ReadBufferData<uint64_t>(output_buffer);
-  ASSERT_EQ(output_data.size(), 12u);
+  ASSERT_EQ(output_data.size(), 13u);
   EXPECT_EQ(output_data[0], config.record_length);
   EXPECT_EQ(output_data[1], config.flags);
   EXPECT_EQ(output_data[2], config.shadow_base);
@@ -256,6 +257,7 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
   EXPECT_EQ(output_data[9], config.queue_aql_slot_mask);
   EXPECT_EQ(output_data[10], config.queue_state_base);
   EXPECT_EQ(output_data[11], config.shadow_slot_count);
+  EXPECT_EQ(output_data[12], config.dispatch_state_base);
 }
 
 TEST_P(TsanExecutableTest, EnablesFeedbackConfigGlobal) {

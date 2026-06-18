@@ -134,7 +134,7 @@ static iree_status_t iree_hal_amdgpu_tsan_state_initialize_device(
         .queue_state_base = 0,
         .shadow_slot_count = options->tsan.shadow_slot_count,
         .reserved0 = 0,
-        .reserved1 = 0,
+        .dispatch_state_base = 0,
     };
   } else if (shadow_base) {
     status = iree_status_join(
@@ -321,6 +321,7 @@ iree_status_t iree_hal_amdgpu_tsan_state_populate_queue_config(
     out_config->memory_granule_shift = queue_state->memory_granule_shift;
     out_config->queue_state_base = queue_state_base;
     out_config->shadow_slot_count = queue_state->shadow_slot_count;
+    out_config->dispatch_state_base = queue_state->dispatch_state_base;
   }
   return iree_ok_status();
 }

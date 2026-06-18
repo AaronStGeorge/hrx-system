@@ -32,11 +32,11 @@
 typedef struct loom_amdgpu_sanitizer_race_config_values_t {
   // Address of the runtime-published TSAN config global.
   loom_value_id_t address;
-  // TSAN config flags from loom_amdgpu_tsan_config_layout_e.
+  // TSAN config flags from loom_amdgpu_tsan_config_flag_bits_e.
   loom_value_id_t flags;
   // Log2 application bytes represented by one shadow entry.
   loom_value_id_t memory_granule_shift;
-  // Queue-visible shadow allocation base.
+  // Queue-local shadow allocation base.
   loom_value_id_t shadow_base;
   // Bytes reserved for one dispatch shadow slot.
   loom_value_id_t dispatch_shadow_stride;
@@ -46,8 +46,8 @@ typedef struct loom_amdgpu_sanitizer_race_config_values_t {
   loom_value_id_t queue_aql_base;
   // Owning queue AQL ring slot mask.
   loom_value_id_t queue_aql_slot_mask;
-  // Owning queue TSAN state pointer.
-  loom_value_id_t queue_state_base;
+  // Fast-path owning queue dispatch-state table pointer.
+  loom_value_id_t dispatch_state_base;
 } loom_amdgpu_sanitizer_race_config_values_t;
 
 typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
@@ -440,9 +440,9 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_config_values(
       &values.queue_aql_slot_mask));
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_uniform_load_b64(
       builder, descriptor_set, values.address,
-      LOOM_AMDGPU_TSAN_CONFIG_QUEUE_STATE_BASE_OFFSET,
+      LOOM_AMDGPU_TSAN_CONFIG_DISPATCH_STATE_BASE_OFFSET,
       LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE, location,
-      &values.queue_state_base));
+      &values.dispatch_state_base));
   *out_values = values;
   return iree_ok_status();
 }
@@ -877,13 +877,6 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_dispatch_values(
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_emit_queue_slot_offset(
       context, source_op, config, values.dispatch_ptr, &queue_slot_offset));
 
-  loom_value_id_t dispatch_state_base = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_uniform_load_b64(
-      builder, descriptor_set, config->queue_state_base,
-      LOOM_AMDGPU_TSAN_QUEUE_STATE_DISPATCH_STATE_BASE_OFFSET,
-      LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE, location,
-      &dispatch_state_base));
-
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
   loom_value_id_t flags_offset = LOOM_VALUE_ID_INVALID;
@@ -893,11 +886,11 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_dispatch_values(
       vgpr_type, &flags_offset));
   loom_value_id_t unused_flags = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_load_b32(
-      builder, descriptor_set, dispatch_state_base, flags_offset,
+      builder, descriptor_set, config->dispatch_state_base, flags_offset,
       LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_ACQUIRE, location, &unused_flags));
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_load_b64(
-      builder, descriptor_set, dispatch_state_base, queue_slot_offset,
+      builder, descriptor_set, config->dispatch_state_base, queue_slot_offset,
       LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE, location, &values.generation));
   loom_value_id_t shadow_slot_offset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
@@ -905,7 +898,7 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_dispatch_values(
       queue_slot_offset, LOOM_AMDGPU_TSAN_DISPATCH_STATE_SHADOW_SLOT_OFFSET,
       vgpr_type, &shadow_slot_offset));
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_load_b32(
-      builder, descriptor_set, dispatch_state_base, shadow_slot_offset,
+      builder, descriptor_set, config->dispatch_state_base, shadow_slot_offset,
       LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE, location, &values.shadow_slot));
   *out_values = values;
   return iree_ok_status();
