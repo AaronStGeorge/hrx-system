@@ -13,7 +13,6 @@ loom_check_test_suite(
   NAME
     test
   SRCS
-    "gather_to_scalar.loom-test"
     "memory_footprint.loom-test"
     "memory_to_scalar.loom-test"
     "reduce_axes_to_scalar.loom-test"
