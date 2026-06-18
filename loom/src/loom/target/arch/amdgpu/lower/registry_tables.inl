@@ -449,12 +449,13 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_vector_extract_dispatch, NULL,
                 LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FROM_ELEMENTS)] =
-            LOOM_AMDGPU_VALUE_STRUCTURAL_DIRECT_STORAGE_ROW(
+            LOOM_AMDGPU_VALUE_STRUCTURAL_DIRECT_POLICY_ROW(
                 LOOM_OP_VECTOR_FROM_ELEMENTS,
                 loom_amdgpu_select_structural_value_dispatch,
                 loom_amdgpu_emit_structural_value_dispatch,
                 loom_amdgpu_low_legality_verify_vector_from_elements,
-                LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN),
+                LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN,
+                LOOM_AMDGPU_PRESELECT_STRUCTURAL_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_INSERT)] =
             LOOM_AMDGPU_VALUE_STRUCTURAL_DIRECT_POLICY_ROW(
                 LOOM_OP_VECTOR_INSERT,
