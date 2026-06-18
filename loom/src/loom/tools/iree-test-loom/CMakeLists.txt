@@ -20,6 +20,7 @@ loom_cc_library(
     iree::base
     iree::base::tooling::flags
     iree::io::file_handle
+    loom::sanitizer::options_cli
     loom::target::provider
     loom::tooling::cli::help
     loom::tooling::context
@@ -97,6 +98,7 @@ iree_execution_test_suite(
     "iree-test-loom=::iree-test-loom"
   DATA
     "testdata/amdgpu_hal_actual.loom"
+    "testdata/amdgpu_sanitizer_actual.loom"
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
     "requires-gpu-amd"

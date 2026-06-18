@@ -14,6 +14,7 @@
             "--case=@case_q8_block_unroll_wg64",
             "--sample=1",
             "--max-samples-per-case=16",
+            "--sanitizer=tsan",
             "loom.test.v0",
             "failed_sample_count",
             "{case, provider, op, code, provider_code}",
@@ -29,6 +30,7 @@
         "args": [
           "{srcdir}/testdata/scalar_cases.loom",
           "--case=@sampled_choice",
+          "--sanitizer=tsan",
           "--sample=1"
         ]
       },
@@ -79,6 +81,19 @@
           "\"case\":\"missing_provider_skip_if\",\"provider\":\"missing.provider\",\"op\":\"skip_if\",\"code\":\"provider_not_registered\",\"display_message\":\"human skip display text\""
         ],
         "not_contains": ["\"reason\""]
+      }
+    },
+    {
+      "name": "rejects unknown sanitizer token",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": ["{srcdir}/testdata/scalar_cases.loom", "--sanitizer=bogus"]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": ["--sanitizer has unknown token 'bogus'"]
       }
     }
   ]
