@@ -656,6 +656,13 @@ typedef enum loom_amdgpu_subgroup_reduce_crosslane_kind_e {
   LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_PERMLANEX16 = 2,
 } loom_amdgpu_subgroup_reduce_crosslane_kind_t;
 
+typedef enum loom_amdgpu_subgroup_reduce_publication_kind_e {
+  // Publish a correct reduced VGPR payload to every active subgroup lane.
+  LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_ALL_LANES = 0,
+  // Publish a correct reduced VGPR payload only for lane-zero-guarded uses.
+  LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_LEADER_LANE = 1,
+} loom_amdgpu_subgroup_reduce_publication_kind_t;
+
 typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   // Source value reduced across subgroup lanes.
   loom_value_id_t value;
@@ -667,6 +674,8 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t dpp_combine_descriptor;
   // Descriptor row selected for paired 16-lane row exchanges.
   loom_low_lower_resolved_descriptor_t permlanex16_descriptor;
+  // Descriptor row selected for reading a fixed VGPR lane into an SGPR.
+  loom_low_lower_resolved_descriptor_t readlane_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
   // Descriptor row selected to guard inactive source lanes.
@@ -687,6 +696,8 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   uint32_t identity_bits;
   // Cross-lane exchange strategy selected for the subgroup tree.
   loom_amdgpu_subgroup_reduce_crosslane_kind_t crosslane_kind;
+  // Strategy used to publish the final reduced value to result users.
+  loom_amdgpu_subgroup_reduce_publication_kind_t publication_kind;
 } loom_amdgpu_subgroup_reduce_plan_t;
 
 typedef enum loom_amdgpu_workgroup_reduce_publication_kind_e {

@@ -31,7 +31,7 @@ typedef enum loom_amdgpu_descriptor_trait_bit_e {
   LOOM_AMDGPU_DESCRIPTOR_TRAIT_TRANSCENDENTAL = 1u << 3,
   // Descriptor is a DPP lane-crossing packet.
   LOOM_AMDGPU_DESCRIPTOR_TRAIT_DPP = 1u << 4,
-  // Descriptor reads the first active lane of a VGPR into an SGPR.
+  // Descriptor reads one VGPR lane into an SGPR.
   LOOM_AMDGPU_DESCRIPTOR_TRAIT_READFIRSTLANE = 1u << 5,
   // Descriptor uses an SDWA packet encoding.
   LOOM_AMDGPU_DESCRIPTOR_TRAIT_SDWA = 1u << 6,
@@ -73,7 +73,7 @@ bool loom_amdgpu_descriptor_is_dpp(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor);
 
-// Returns true when |descriptor| is a readfirstlane packet.
+// Returns true when |descriptor| reads one VGPR lane into an SGPR.
 bool loom_amdgpu_descriptor_is_readfirstlane(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor);

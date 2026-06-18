@@ -181,12 +181,13 @@ loom_amdgpu_descriptor_traits_t loom_amdgpu_descriptor_traits(
           IREE_ARRAYSIZE(kDppDescriptorRefs))) {
     traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_DPP;
   }
-  static const loom_amdgpu_descriptor_ref_t kReadfirstlaneDescriptorRefs[] = {
+  static const loom_amdgpu_descriptor_ref_t kReadLaneDescriptorRefs[] = {
       LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_READLANE_B32_SRC1_INLINE,
   };
   if (loom_amdgpu_descriptor_matches_any_ref(
-          descriptor_set, descriptor, kReadfirstlaneDescriptorRefs,
-          IREE_ARRAYSIZE(kReadfirstlaneDescriptorRefs))) {
+          descriptor_set, descriptor, kReadLaneDescriptorRefs,
+          IREE_ARRAYSIZE(kReadLaneDescriptorRefs))) {
     traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_READFIRSTLANE;
   }
   return traits;
