@@ -1741,14 +1741,11 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_current_epoch(
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
       context, source_op, shadow_address->workgroup_offset, /*lane_offset=*/0,
       vgpr_type, &epoch_offset));
-  loom_value_id_t epoch_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_load_b64(
+  return loom_amdgpu_sanitizer_race_build_global_load_b32(
       loom_low_lower_context_builder(context),
       loom_low_lower_context_descriptor_set(context), config->shadow_base,
       epoch_offset, LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_ACQUIRE,
-      source_op->location, &epoch_value));
-  return loom_amdgpu_emit_low_slice(context, source_op, epoch_value,
-                                    /*lane_offset=*/0, vgpr_type, out_epoch);
+      source_op->location, out_epoch);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_race_build_shadow_entry_offset(
