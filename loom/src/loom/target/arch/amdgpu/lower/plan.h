@@ -966,6 +966,16 @@ typedef struct loom_amdgpu_fragment_memory_packet_plan_t {
   loom_amdgpu_descriptor_ref_t descriptor_ref;
 } loom_amdgpu_fragment_memory_packet_plan_t;
 
+typedef enum loom_amdgpu_fragment_memory_store_conversion_kind_e {
+  // Store payload and destination view elements match the selected fragment
+  // layout element type.
+  LOOM_AMDGPU_FRAGMENT_MEMORY_STORE_CONVERSION_NONE = 0,
+  // A f32 result fragment is rounded to BF16 lanes before a 16-bit store.
+  LOOM_AMDGPU_FRAGMENT_MEMORY_STORE_CONVERSION_NARROW_F32_TO_BF16 = 1,
+  // A f16 low-subword result fragment is widened to f32 lanes before store.
+  LOOM_AMDGPU_FRAGMENT_MEMORY_STORE_CONVERSION_EXTEND_F16_TO_F32 = 2,
+} loom_amdgpu_fragment_memory_store_conversion_kind_t;
+
 typedef struct loom_amdgpu_fragment_memory_plan_t {
   // Direction of the fragment memory movement.
   loom_amdgpu_memory_operation_kind_t operation_kind;
@@ -992,8 +1002,8 @@ typedef struct loom_amdgpu_fragment_memory_plan_t {
       packets[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
   // Number of populated packet plans.
   uint16_t packet_count;
-  // True when a f32 result fragment is stored into 16-bit memory.
-  bool narrowed_result_store;
+  // Store-boundary payload/view conversion selected for result fragments.
+  loom_amdgpu_fragment_memory_store_conversion_kind_t store_conversion_kind;
   // Optional f32 fragment source to round directly for narrowed stores.
   loom_value_id_t narrowed_result_round_source;
 } loom_amdgpu_fragment_memory_plan_t;
