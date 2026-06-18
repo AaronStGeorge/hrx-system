@@ -2135,3 +2135,104 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @loop_index_madd_guarded_
 ^_bb5:
   return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @wave64_target {subgroup_size = 64}
+
+kernel.def target(@wave64_target) @predicated_tile_sweep_kq_src1_reduction_shape() {
+  %unit = index.constant 1 : index
+  %workgroups_x = index.constant 32 : index
+  %workgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%workgroups_x, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch(%src0: buffer, %src1: buffer, %dst: buffer) {
+  %base = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %sixteen = index.constant 16 : index
+  %sixty_four = index.constant 64 : index
+  %one_twenty_eight = index.constant 128 : index
+  %tile_elements = index.constant 256 : index
+  %src0_count = index.constant 262144 : index
+  %src1_count = index.constant 1577184 : index
+  %dst_count = index.constant 262144 : index
+  %src1_stride_col_elem = index.constant 3072 : index
+  %src0_global = buffer.assume.memory_space<global> %src0 : buffer
+  %src1_global = buffer.assume.memory_space<global> %src1 : buffer
+  %dst_global = buffer.assume.memory_space<global> %dst : buffer
+  %src0_aligned = buffer.assume.alignment %src0_global {minimum_alignment = 16} : buffer
+  %src1_aligned = buffer.assume.alignment %src1_global {minimum_alignment = 16} : buffer
+  %dst_aligned = buffer.assume.alignment %dst_global {minimum_alignment = 16} : buffer
+  %src0_noalias, %src1_noalias, %dst_noalias = buffer.assume.noalias %src0_aligned, %src1_aligned, %dst_aligned : buffer, buffer, buffer
+  %src0_view = buffer.view %src0_noalias[%base] : buffer -> view<[%src0_count]xf16, #dense>
+  %src1_view = buffer.view %src1_noalias[%base] : buffer -> view<[%src1_count]xf32, #dense>
+  %dst_view = buffer.view %dst_noalias[%base] : buffer -> view<[%dst_count]xf32, #dense>
+  %lane0 = kernel.workitem.id<x> : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 31)] : index
+  %seed_f16 = view.load %src0_view[%zero] : view<[%src0_count]xf16, #dense> -> f16
+  %seed = scalar.extf %seed_f16 : f16 to f32
+  %sum = scf.for %kk = [%zero to %one_twenty_eight step %sixteen](%outer_acc = %seed : f32) -> (f32) {
+    %inner_sum = scf.for %i = [%lane to %tile_elements step %sixty_four](%inner_acc = %outer_acc : f32) -> (f32) {
+      %rhs_k_inner = index.rem %i, %sixteen : index
+      %rhs_col_inner = index.div %i, %sixteen : index
+      %rhs_col_base = index.mul %rhs_col_inner, %src1_stride_col_elem : index
+      %rhs_k = index.add %kk, %rhs_k_inner : index
+      %rhs_index = index.add %rhs_col_base, %rhs_k : index
+      %rhs_f32 = view.load %src1_view[%rhs_index] : view<[%src1_count]xf32, #dense> -> f32
+      %next = scalar.addf<reassoc|nnan|ninf|nsz> %inner_acc, %rhs_f32 : f32
+      scf.yield %next : f32
+    }
+    scf.yield %inner_sum : f32
+  }
+  view.store %sum, %dst_view[%zero] : f32, view<[%dst_count]xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@wave64_target) workgroup_size(32, 1, 1) @predicated_tile_sweep_kq_src1_reduction_shape() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %src0_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 524288} : reg<amdgpu.sgpr x2>
+  %src1_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 6308736} : reg<amdgpu.sgpr x2>
+  %dst_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1048576} : reg<amdgpu.sgpr x2>
+  %zero = s_mov_b32 0
+  %sixteen = s_mov_b32 16
+  %one_twenty_eight = s_mov_b32 128
+  %77 = v_mov_b32 0
+  %seed_f16 = global_load_d16_b16_saddr %77, %src0_view
+  %seed = v_cvt_f32_f16 %seed_f16
+  low.br ^_bb1(%zero: reg<amdgpu.sgpr>, %seed: reg<amdgpu.vgpr>)
+^_bb1(%kk: reg<amdgpu.sgpr>, %outer_acc: reg<amdgpu.vgpr>):
+  %80 = s_cmp_lt_i32 %kk, %one_twenty_eight
+  low.cond_br %80, ^_bb2, ^_bb6 : reg<amdgpu.scc>
+^_bb2:
+  low.br ^_bb7
+^_bb3(%i: reg<amdgpu.vgpr>, %inner_acc: reg<amdgpu.vgpr>):
+  %81 = v_mov_b32 256
+  %82 = v_cmp_lt_i32 %i, %81
+  %84, %85 = s_and_saveexec_b64 %82
+  low.cond_br %85, ^_bb4, ^_bb8 : reg<amdgpu.scc>
+^_bb4:
+  %87 = v_mov_b32 15
+  %rhs_k_inner = v_and_b32 %i, %87
+  %rhs_col_inner = v_lshrrev_b32_lit %i, 4
+  %90 = v_mov_b32_copy %kk
+  %rhs_k = v_add_u32 %90, %rhs_k_inner
+  %rhs_index = v_mad_u32_u24_src1_lit %rhs_col_inner, %rhs_k, 3072
+  %93 = v_lshlrev_b32_src0_inline %rhs_index, 2
+  %rhs_f32 = global_load_b32_saddr %93, %src1_view
+  %next = v_add_f32 %inner_acc, %rhs_f32
+  %96 = v_mov_b32 64
+  %97 = v_add_u32 %i, %96
+  low.br ^_bb3(%97: reg<amdgpu.vgpr>, %next: reg<amdgpu.vgpr>)
+^_bb5:
+  %98 = s_add_u32 %kk, %sixteen
+  low.br ^_bb1(%98: reg<amdgpu.sgpr>, %inner_acc: reg<amdgpu.vgpr>)
+^_bb6:
+  global_store_b32_saddr %77, %outer_acc, %dst_view
+  return
+^_bb7:
+  %83 = s_mov_b64_exec_read
+  low.br ^_bb3(%lane: reg<amdgpu.vgpr>, %outer_acc: reg<amdgpu.vgpr>)
+^_bb8:
+  s_mov_b64_exec %83
+  low.br ^_bb5
+}

@@ -2101,6 +2101,91 @@ low.func.def target(@gfx11_target) @gfx11_exec_mask_branch(%lhs: reg<amdgpu.vgpr
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_predicated_tile_sweep_kq_reduction waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_predicated_tile_sweep_kq_reduction(%src0_view: reg<amdgpu.sgpr x2>, %src1_view: reg<amdgpu.sgpr x2>, %dst_view: reg<amdgpu.sgpr x2>, %lane: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %zero = s_mov_b32 0
+  %sixteen = s_mov_b32 16
+  %limit = s_mov_b32 128
+  %zero_v = v_mov_b32 0
+  %seed_f16 = global_load_d16_b16_saddr %zero_v, %src0_view
+  %seed = v_cvt_f32_f16 %seed_f16
+  low.br ^outer(%zero: reg<amdgpu.sgpr>, %seed: reg<amdgpu.vgpr>)
+^outer(%kk: reg<amdgpu.sgpr>, %outer_acc: reg<amdgpu.vgpr>):
+  %outer_active = s_cmp_lt_i32 %kk, %limit
+  low.cond_br %outer_active, ^inner_preheader, ^after : reg<amdgpu.scc>
+^inner_preheader:
+  %saved_wave_exec = s_mov_b64_exec_read
+  low.br ^inner(%lane: reg<amdgpu.vgpr>, %outer_acc: reg<amdgpu.vgpr>)
+^inner(%i: reg<amdgpu.vgpr>, %inner_acc: reg<amdgpu.vgpr>):
+  %tile_limit = v_mov_b32 256
+  %inside = v_cmp_lt_i32 %i, %tile_limit
+  %saved_inner_exec, %has_lanes = s_and_saveexec_b64 %inside
+  low.cond_br %has_lanes, ^body, ^inner_exit : reg<amdgpu.scc>
+^body:
+  %mask = v_mov_b32 15
+  %rhs_k_inner = v_and_b32 %i, %mask
+  %rhs_col_inner = v_lshrrev_b32_lit %i, 4
+  %kk_v = v_mov_b32_copy %kk
+  %rhs_k = v_add_u32 %kk_v, %rhs_k_inner
+  %rhs_index = v_mad_u32_u24_src1_lit %rhs_col_inner, %rhs_k, 3072
+  %rhs_address = v_lshlrev_b32_src0_inline %rhs_index, 2
+  %rhs = global_load_b32_saddr %rhs_address, %src1_view
+  %next = v_add_f32 %inner_acc, %rhs
+  %lane_step = v_mov_b32 64
+  %next_i = v_add_u32 %i, %lane_step
+  low.br ^inner(%next_i: reg<amdgpu.vgpr>, %next: reg<amdgpu.vgpr>)
+^inner_exit:
+  s_mov_b64_exec %saved_wave_exec
+  %next_kk = s_add_u32 %kk, %sixteen
+  low.br ^outer(%next_kk: reg<amdgpu.sgpr>, %inner_acc: reg<amdgpu.vgpr>)
+^after:
+  global_store_b32_saddr %zero_v, %outer_acc, %dst_view
+  return
+}
+
+// ----
+  s_mov_b32 s6, 16
+  s_mov_b32 s7, 128
+  s_mov_b32 s8, 0
+  v_mov_b32 v1, 0
+  global_load_d16_b16 v2, v1, s[0:1] offset:0
+  v_cvt_f32_f16 v2, v2
+.Lbb1:
+  s_cmp_lt_i32 s8, s7
+  s_cbranch_scc0 .Lbb6
+.Lbb2:
+  s_mov_b64_exec_read s[0:1]
+  v_mov_b32 v3, v0
+.Lbb3:
+  v_mov_b32 v4, 256
+  v_cmp_lt_i32 s[10:11], v3, v4
+  s_and_saveexec_b64 s[10:11], s[10:11]
+  s_cbranch_scc0 .Lbb5
+.Lbb4:
+  v_mov_b32_copy v4, s8
+  v_mov_b32 v5, 15
+  v_mov_b32 v6, 64
+  v_lshrrev_b32 v7, 4, v3
+  v_and_b32 v5, v3, v5
+  v_add_u32 v4, v4, v5
+  v_mad_u32_u24 v4, v7, 3072, v4
+  v_add_u32 v3, v3, v6
+  v_lshlrev_b32 v4, 2, v4
+  global_load_b32 v4, v4, s[2:3] offset:0
+  v_add_f32 v4, v2, v4
+  v_mov_b32 v2, v4
+  s_branch .Lbb3
+.Lbb5:
+  s_mov_b64 exec, s[0:1]
+  s_add_u32 s8, s8, s6
+  s_branch .Lbb1
+.Lbb6:
+  global_store_b32 v1, v2, s[4:5] offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_buffer_off_zero waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_buffer_off_zero(%resource: reg<amdgpu.sgpr x4>) {
