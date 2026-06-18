@@ -34,13 +34,26 @@ typedef struct loom_amdgpu_sanitizer_access_plan_t {
   uint32_t access_size;
 } loom_amdgpu_sanitizer_access_plan_t;
 
+// Resolves the shared AMDGPU feedback configuration symbol used by sanitizer
+// report producers.
+iree_status_t loom_amdgpu_sanitizer_feedback_config_symbol(
+    loom_low_lower_context_t* context, loom_symbol_ref_t* out_symbol_ref);
+
+// Resolves the AMDGPU TSAN runtime configuration symbol used by race observers.
+iree_status_t loom_amdgpu_sanitizer_tsan_config_symbol(
+    loom_low_lower_context_t* context, loom_symbol_ref_t* out_symbol_ref);
+
+// Returns the dense sanitizer site ID assigned to |source_op|.
+iree_status_t loom_amdgpu_sanitizer_site_id_for_op(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_sanitizer_site_id_t* out_site_id);
+
 // Selects an AMDGPU shadow-check lowering for sanitizer.assert.access.
 iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_sanitizer_access_plan_t* out_plan, bool* out_selected);
 
-// Lowers sanitizer.assert.access to a hot shadow check and cold report/trap
-// CFG.
+// Lowers sanitizer.assert.access to a hot shadow check and cold report CFG.
 iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_access_plan_t* plan);

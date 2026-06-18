@@ -239,7 +239,7 @@ TEST_F(AmdgpuHalArtifactProviderTest,
       /*.control_flow_lowering=*/{},
       /*.sanitizer=*/
       {
-          /*.checks=*/LOOM_SANITIZER_CHECK_ACCESS,
+          /*.checks=*/LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_RACE,
       },
   };
   loom_run_hal_artifact_t artifact = {};
@@ -260,6 +260,9 @@ TEST_F(AmdgpuHalArtifactProviderTest,
                             artifact.target_artifact_data.data_length);
   EXPECT_NE(iree_string_view_find(
                 hsaco, LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_NAME, 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                hsaco, LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_NAME, 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 hsaco, LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_NAME, 0),

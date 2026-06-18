@@ -38,6 +38,46 @@ kernel.def @workgroup_load_store_and_barrier() {
 
 // ====
 
+kernel.def @workgroup_atomics_are_observed() {
+  %one = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%threads, %one, %one) : index
+} launch() {
+  %zero = index.constant 0 : offset
+  %lane = kernel.workitem.id<x> : index
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %value = scalar.constant 1 : i32
+  view.atomic.reduce<addi> %value, %view[%lane] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  %old = view.atomic.rmw<addi> %value, %view[%lane] {ordering = release, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %cmp = view.atomic.cmpxchg %old, %value, %view[%lane] {success_ordering = acq_rel, failure_ordering = acquire, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  kernel.return
+}
+
+// ----
+kernel.def @workgroup_atomics_are_observed() {
+  %one = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%threads, %one, %one) : index
+} launch() {
+  %zero = index.constant 0 : offset
+  %lane = kernel.workitem.id<x> : index
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %value = scalar.constant 1 : i32
+  sanitizer.race.access<read_write> %view[%lane] {atomic = true, ordering = relaxed, scope = workgroup} : view<64xi32, #dense>
+  view.atomic.reduce<addi> %value, %view[%lane] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  sanitizer.race.access<read_write> %view[%lane] {atomic = true, ordering = release, scope = workgroup} : view<64xi32, #dense>
+  %old = view.atomic.rmw<addi> %value, %view[%lane] {ordering = release, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  sanitizer.race.access<read_write> %view[%lane] {atomic = true, ordering = acq_rel, scope = workgroup} : view<64xi32, #dense>
+  %cmp = view.atomic.cmpxchg %old, %value, %view[%lane] {failure_ordering = acquire, scope = workgroup, success_ordering = acq_rel} : i32, view<64xi32, #dense> -> i32
+  kernel.return
+}
+
+// ====
+
 kernel.def @non_workgroup_memory_is_not_observed() {
   %one = index.constant 1 : index
   kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index

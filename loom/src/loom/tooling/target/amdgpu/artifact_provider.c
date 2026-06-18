@@ -148,6 +148,10 @@ loom_amdgpu_hal_artifact_provider_runtime_globals(
                        LOOM_AMDGPU_RUNTIME_REQUIREMENT_ASAN_SHADOW)) {
     runtime_globals |= LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG;
   }
+  if (iree_any_bit_set(requirements,
+                       LOOM_AMDGPU_RUNTIME_REQUIREMENT_TSAN_SHADOW)) {
+    runtime_globals |= LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG;
+  }
   return runtime_globals;
 }
 

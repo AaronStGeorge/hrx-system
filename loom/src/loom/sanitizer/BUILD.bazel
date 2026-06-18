@@ -63,6 +63,7 @@ loom_cc_library(
         ":site_location",
         ":site_payload",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops:atomic",
         "//loom/src/loom/ops/kernel",
         "//loom/src/loom/ops/sanitizer",
         "//loom/src/loom/ops/view",

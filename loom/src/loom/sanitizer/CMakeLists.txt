@@ -72,6 +72,7 @@ loom_cc_library(
     ::site_payload
     iree::base
     loom::ir
+    loom::ops::atomic
     loom::ops::kernel
     loom::ops::sanitizer
     loom::ops::view

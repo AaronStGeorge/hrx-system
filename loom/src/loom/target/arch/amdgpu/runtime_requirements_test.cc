@@ -17,7 +17,8 @@ TEST(AmdgpuRuntimeRequirementsTest, ValidateKnownRequirements) {
       LOOM_AMDGPU_RUNTIME_REQUIREMENT_NONE));
   IREE_EXPECT_OK(loom_amdgpu_runtime_requirements_validate(
       LOOM_AMDGPU_RUNTIME_REQUIREMENT_FEEDBACK |
-      LOOM_AMDGPU_RUNTIME_REQUIREMENT_ASAN_SHADOW));
+      LOOM_AMDGPU_RUNTIME_REQUIREMENT_ASAN_SHADOW |
+      LOOM_AMDGPU_RUNTIME_REQUIREMENT_TSAN_SHADOW));
 }
 
 TEST(AmdgpuRuntimeRequirementsTest, RejectUnknownRequirements) {
@@ -57,6 +58,15 @@ TEST(AmdgpuRuntimeRequirementsTest, AccessSanitizerRequiresAsanShadow) {
           LOOM_AMDGPU_RUNTIME_REQUIREMENT_ASAN_SHADOW);
 }
 
+TEST(AmdgpuRuntimeRequirementsTest, RaceSanitizerRequiresTsanShadow) {
+  loom_target_pipeline_options_t options = {};
+  options.sanitizer.checks = LOOM_SANITIZER_CHECK_RACE;
+  EXPECT_EQ(
+      loom_amdgpu_runtime_requirements_from_target_pipeline_options(&options),
+      LOOM_AMDGPU_RUNTIME_REQUIREMENT_FEEDBACK |
+          LOOM_AMDGPU_RUNTIME_REQUIREMENT_TSAN_SHADOW);
+}
+
 TEST(AmdgpuRuntimeRequirementsTest, TrapReportingDoesNotRequireFeedback) {
   loom_target_pipeline_options_t options = {};
   options.sanitizer.checks = LOOM_SANITIZER_CHECK_ACCESS;
@@ -69,6 +79,11 @@ TEST(AmdgpuRuntimeRequirementsTest, TrapReportingDoesNotRequireFeedback) {
   EXPECT_EQ(
       loom_amdgpu_runtime_requirements_from_target_pipeline_options(&options),
       LOOM_AMDGPU_RUNTIME_REQUIREMENT_NONE);
+
+  options.sanitizer.checks = LOOM_SANITIZER_CHECK_RACE;
+  EXPECT_EQ(
+      loom_amdgpu_runtime_requirements_from_target_pipeline_options(&options),
+      LOOM_AMDGPU_RUNTIME_REQUIREMENT_TSAN_SHADOW);
 }
 
 }  // namespace

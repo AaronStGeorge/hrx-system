@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/ops/atomic.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/sanitizer/ops.h"
 #include "loom/ops/view/ops.h"
@@ -156,12 +157,17 @@ static bool loom_sanitizer_value_slices_equal(loom_value_slice_t lhs,
 
 static bool loom_sanitizer_preceded_by_matching_race_access(
     loom_op_t* op, loom_sanitizer_race_access_kind_t kind, loom_value_id_t view,
-    loom_value_slice_t indices, loom_attribute_t static_indices) {
+    loom_value_slice_t indices, loom_attribute_t static_indices, bool atomic,
+    loom_atomic_ordering_t ordering, loom_atomic_scope_t scope) {
   loom_op_t* previous_op = op->prev_op;
   if (!previous_op || !loom_sanitizer_race_access_isa(previous_op) ||
       loom_sanitizer_race_access_kind(previous_op) != kind ||
       loom_sanitizer_race_access_view(previous_op) != view ||
-      loom_sanitizer_race_access_atomic(previous_op)) {
+      loom_sanitizer_race_access_atomic(previous_op) != atomic) {
+    return false;
+  }
+  if (atomic && (loom_sanitizer_race_access_ordering(previous_op) != ordering ||
+                 loom_sanitizer_race_access_scope(previous_op) != scope)) {
     return false;
   }
   return loom_sanitizer_value_slices_equal(
@@ -199,7 +205,8 @@ static bool loom_sanitizer_view_memory_space(
 static iree_status_t loom_sanitizer_build_race_access(
     loom_module_t* module, loom_rewriter_t* rewriter,
     loom_sanitizer_race_access_kind_t kind, loom_value_id_t view,
-    loom_value_slice_t indices, loom_attribute_t static_indices,
+    loom_value_slice_t indices, loom_attribute_t static_indices, bool atomic,
+    loom_atomic_ordering_t ordering, loom_atomic_scope_t scope,
     loom_location_id_t source_location, loom_op_t** out_op) {
   const loom_sanitizer_site_payload_t payload = {
       .site_kind = LOOM_SANITIZER_SITE_KIND_RACE,
@@ -213,10 +220,14 @@ static iree_status_t loom_sanitizer_build_race_access(
   loom_location_id_t site_location = LOOM_LOCATION_UNKNOWN;
   IREE_RETURN_IF_ERROR(loom_sanitizer_make_site_location(
       module, source_location, &payload, &site_location));
+  const loom_sanitizer_race_access_build_flags_t build_flags =
+      atomic ? LOOM_SANITIZER_RACE_ACCESS_BUILD_FLAG_HAS_ORDERING |
+                   LOOM_SANITIZER_RACE_ACCESS_BUILD_FLAG_HAS_SCOPE
+             : 0;
   return loom_sanitizer_race_access_build(
-      &rewriter->builder, 0, kind, view, indices.values, indices.count,
-      static_indices.i64_array, static_indices.count, /*atomic=*/false,
-      /*ordering=*/0, /*scope=*/0, site_location, out_op);
+      &rewriter->builder, build_flags, kind, view, indices.values,
+      indices.count, static_indices.i64_array, static_indices.count, atomic,
+      ordering, scope, site_location, out_op);
 }
 
 static iree_status_t loom_sanitizer_try_instrument_race_access_op(
@@ -226,6 +237,9 @@ static iree_status_t loom_sanitizer_try_instrument_race_access_op(
   loom_value_id_t view = LOOM_VALUE_ID_INVALID;
   loom_value_slice_t indices = {0};
   loom_attribute_t static_indices = loom_attr_absent();
+  bool atomic = false;
+  loom_atomic_ordering_t ordering = 0;
+  loom_atomic_scope_t scope = 0;
   if (loom_view_load_isa(op)) {
     kind = LOOM_SANITIZER_RACE_ACCESS_KIND_READ;
     view = loom_view_load_view(op);
@@ -236,6 +250,30 @@ static iree_status_t loom_sanitizer_try_instrument_race_access_op(
     view = loom_view_store_view(op);
     indices = loom_view_store_indices(op);
     static_indices = loom_view_store_static_indices(op);
+  } else if (loom_view_atomic_reduce_isa(op)) {
+    kind = LOOM_SANITIZER_RACE_ACCESS_KIND_READ_WRITE;
+    view = loom_view_atomic_reduce_view(op);
+    indices = loom_view_atomic_reduce_indices(op);
+    static_indices = loom_view_atomic_reduce_static_indices(op);
+    atomic = true;
+    ordering = loom_view_atomic_reduce_ordering(op);
+    scope = loom_view_atomic_reduce_scope(op);
+  } else if (loom_view_atomic_rmw_isa(op)) {
+    kind = LOOM_SANITIZER_RACE_ACCESS_KIND_READ_WRITE;
+    view = loom_view_atomic_rmw_view(op);
+    indices = loom_view_atomic_rmw_indices(op);
+    static_indices = loom_view_atomic_rmw_static_indices(op);
+    atomic = true;
+    ordering = loom_view_atomic_rmw_ordering(op);
+    scope = loom_view_atomic_rmw_scope(op);
+  } else if (loom_view_atomic_cmpxchg_isa(op)) {
+    kind = LOOM_SANITIZER_RACE_ACCESS_KIND_READ_WRITE;
+    view = loom_view_atomic_cmpxchg_view(op);
+    indices = loom_view_atomic_cmpxchg_indices(op);
+    static_indices = loom_view_atomic_cmpxchg_static_indices(op);
+    atomic = true;
+    ordering = loom_view_atomic_cmpxchg_success_ordering(op);
+    scope = loom_view_atomic_cmpxchg_scope(op);
   } else {
     return iree_ok_status();
   }
@@ -246,16 +284,16 @@ static iree_status_t loom_sanitizer_try_instrument_race_access_op(
       memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     return iree_ok_status();
   }
-  if (loom_sanitizer_preceded_by_matching_race_access(op, kind, view, indices,
-                                                      static_indices)) {
+  if (loom_sanitizer_preceded_by_matching_race_access(
+          op, kind, view, indices, static_indices, atomic, ordering, scope)) {
     return iree_ok_status();
   }
 
   loom_builder_set_before(&rewriter->builder, op);
   loom_op_t* observe_op = NULL;
   IREE_RETURN_IF_ERROR(loom_sanitizer_build_race_access(
-      module, rewriter, kind, view, indices, static_indices, op->location,
-      &observe_op));
+      module, rewriter, kind, view, indices, static_indices, atomic, ordering,
+      scope, op->location, &observe_op));
   (void)observe_op;
   loom_sanitizer_insert_race_observations_statistics_t* statistics =
       loom_sanitizer_insert_race_observations_statistics(pass);

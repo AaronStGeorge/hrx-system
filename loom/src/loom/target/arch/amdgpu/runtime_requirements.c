@@ -34,5 +34,8 @@ loom_amdgpu_runtime_requirements_from_target_pipeline_options(
                        LOOM_SANITIZER_CHECK_ACCESS)) {
     requirements |= LOOM_AMDGPU_RUNTIME_REQUIREMENT_ASAN_SHADOW;
   }
+  if (iree_any_bit_set(options->sanitizer.checks, LOOM_SANITIZER_CHECK_RACE)) {
+    requirements |= LOOM_AMDGPU_RUNTIME_REQUIREMENT_TSAN_SHADOW;
+  }
   return requirements;
 }

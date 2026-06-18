@@ -409,15 +409,11 @@ TEST_F(AmdgpuSanitizerAccessTest, FeedsMaskedFailuresToSharedReportIsland) {
       /*.shadow_value=*/check.shadow_value,
   };
 
-  loom_amdgpu_sanitizer_access_report_trap_island_t island = {};
-  IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_access_report_trap_island(
+  loom_amdgpu_sanitizer_access_report_island_t island = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_access_report_island(
       &builder_, descriptor_set_, body_block_, feedback_config_symbol,
       LOOM_AMDGPU_SANITIZER_ACCESS_KIND_READ,
       LOOM_AMDGPU_SANITIZER_REPORT_FLAG_NONE, LOOM_LOCATION_UNKNOWN, &island));
-  loom_op_t* trap_return_op = NULL;
-  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/NULL,
-                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
-                                       &trap_return_op));
 
   loom_builder_set_block(&builder_, body_block_);
   loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {};
@@ -478,7 +474,7 @@ TEST_F(AmdgpuSanitizerAccessTest, FeedsMaskedFailuresToSharedReportIsland) {
     ExpectAttrI64(loom_low_op_attrs(waitcnt_op), IREE_SV("vmcnt"), 0);
     ExpectAttrI64(loom_low_op_attrs(waitcnt_op), IREE_SV("lgkmcnt"), 63);
   }
-  EXPECT_EQ(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP).size(), 1u);
+  EXPECT_TRUE(OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP).empty());
 }
 
 TEST_F(AmdgpuSanitizerAccessTest, RejectsUnsupportedStaticAccessSize) {

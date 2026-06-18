@@ -27,6 +27,8 @@ typedef enum loom_amdgpu_runtime_global_flag_bits_e {
   LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG = 1u << 0,
   // Emits the AMDGPU ASAN configuration global consumed by sanitizer reports.
   LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG = 1u << 1,
+  // Emits the AMDGPU TSAN configuration global consumed by race observers.
+  LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG = 1u << 2,
 } loom_amdgpu_runtime_global_flag_bits_t;
 
 // Bitset of loom_amdgpu_runtime_global_flag_bits_t values.
@@ -34,22 +36,26 @@ typedef uint32_t loom_amdgpu_runtime_global_flags_t;
 
 #define LOOM_AMDGPU_RUNTIME_GLOBALS_KNOWN                                            \
   ((loom_amdgpu_runtime_global_flags_t)(LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG | \
-                                        LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG))
+                                        LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG |     \
+                                        LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG))
 
 enum {
   // Maximum number of symbols produced by the current runtime-global bitset.
-  LOOM_AMDGPU_RUNTIME_GLOBAL_SYMBOL_CAPACITY = 2u,
+  LOOM_AMDGPU_RUNTIME_GLOBAL_SYMBOL_CAPACITY = 3u,
   // Writable configuration globals use pointer-granularity alignment.
   LOOM_AMDGPU_RUNTIME_GLOBAL_CONFIG_ALIGNMENT = 8u,
   // Byte length of the AMDGPU HAL feedback-channel configuration global.
   LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH = 64u,
   // Byte length of the AMDGPU HAL ASAN configuration global.
   LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH = 96u,
+  // Byte length of the AMDGPU HAL TSAN configuration global.
+  LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_BYTE_LENGTH = 96u,
 };
 
 #define LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_NAME \
   IREE_SVL("iree_feedback_config")
 #define LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_NAME IREE_SVL("iree_asan_config")
+#define LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_NAME IREE_SVL("iree_tsan_config")
 
 // Validates that all runtime-global option bits are understood.
 iree_status_t loom_amdgpu_runtime_global_flags_validate(

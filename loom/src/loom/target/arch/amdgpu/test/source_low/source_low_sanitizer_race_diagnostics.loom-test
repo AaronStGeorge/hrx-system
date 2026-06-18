@@ -1,4 +1,4 @@
-// RUN: emit source-low output=low
+// RUN: emit source-low output=low sanitizer=race
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @race_access_global_rejected(%input: buffer) {
@@ -13,42 +13,8 @@ func.def target(@target) @race_access_global_rejected(%input: buffer) {
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @race_access_workgroup_requires_runtime_config() {
-  %one = index.constant 1 : index
-  %workgroup_size = index.constant 64 : index
-  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%workgroup_size, %one, %one) : index
-} launch() {
-  %lane = kernel.workitem.id<x> : index
-  %zero = index.constant 0 : offset
-  %bytes = index.constant 256 : offset
-  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
-  %view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
-  // ERROR@+1: AMDGPU/023 {constraint_key="target_contract.sanitizer_race.runtime_config_required"}
-  sanitizer.race.access<write> %view[%lane] : view<64xi32, #dense>
-  kernel.return
-}
-
-// ====
-
-amdgpu.target<gfx1100> @target
-kernel.def target(@target) @race_access_atomic_rejected() {
-  %one = index.constant 1 : index
-  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
-} launch() {
-  %zero = index.constant 0 : offset
-  %bytes = index.constant 4 : offset
-  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
-  %view = buffer.view %scratch[%zero] : buffer -> view<1xi32, #dense>
-  // ERROR@+1: AMDGPU/023 {constraint_key="target_contract.sanitizer_race.atomic_access_unsupported"}
-  sanitizer.race.access<read_write> %view[0] {atomic = true, ordering = acq_rel, scope = workgroup} : view<1xi32, #dense>
-  kernel.return
-}
-
-// ====
-
-amdgpu.target<gfx1100> @target
-func.def target(@target) @race_sync_requires_runtime_config() {
-  // ERROR@+1: AMDGPU/023 {constraint_key="target_contract.sanitizer_race.runtime_config_required"}
+func.def target(@target) @race_sync_requires_fixed_workgroup() {
+  // ERROR@+1: AMDGPU/023 {constraint_key="target_contract.sanitizer_race.fixed_power_of_two_workgroup_required"}
   sanitizer.race.sync<workgroup> {ordering = acq_rel, scope = workgroup}
   func.return
 }
