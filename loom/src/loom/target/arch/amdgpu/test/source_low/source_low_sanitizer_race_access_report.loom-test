@@ -81,26 +81,26 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_access_report_defa
   %72 = s_mul_i32 %68, %69
   %73 = s_mul_i32 %9, %72
   %74 = s_add_u32 %71, %73
+  %75 = slice %10[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %76 = v_mov_b32_copy %75
+  %81 = v_mov_b32_copy %49
+  %89, %90 = v_sub_co_u32 %76, %81
+  %95 = v_lshrrev_b32_src0_inline %89, 6
+  %97 = v_mov_b32_copy %56
+  %98 = v_and_b32 %95, %97
+  %99 = v_lshlrev_b32_src0_inline %98, 4
   %lane = v_and_b32_lit %packed_tid, 1023
-  %76 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %78 = s_mov_b32 3
-  %79 = s_and_b32 %20, %78
-  %80 = s_cmp_eq_i32 %79, %78
-  low.cond_br %80, ^_bb1, ^_bb12 : reg<amdgpu.scc>
+  %101 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %103 = s_mov_b32 3
+  %104 = s_and_b32 %20, %103
+  %105 = s_cmp_eq_i32 %104, %103
+  low.cond_br %105, ^_bb1, ^_bb12 : reg<amdgpu.scc>
 ^_bb1:
-  %81 = slice %10[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %82 = v_mov_b32_copy %81
-  %87 = v_mov_b32_copy %49
-  %95, %96 = v_sub_co_u32 %82, %87
-  %101 = v_lshrrev_b32_src0_inline %95, 6
-  %103 = v_mov_b32_copy %56
-  %104 = v_and_b32 %101, %103
-  %105 = v_lshlrev_b32_src0_inline %104, 4
   s_waitcnt {vmcnt = 0}
   buffer_gl1_inv
   buffer_gl0_inv
-  %108 = global_load_b64_saddr %105, %65 {glc = 1, dlc = 1}
-  %109 = v_add_u32_src0_inline %105, 8
+  %108 = global_load_b64_saddr %99, %65 {glc = 1, dlc = 1}
+  %109 = v_add_u32_src0_inline %99, 8
   %110 = global_load_b32_saddr %109, %65 {glc = 1, dlc = 1}
   %111 = v_mov_b32 0
   %114 = v_mov_b32_copy %35
