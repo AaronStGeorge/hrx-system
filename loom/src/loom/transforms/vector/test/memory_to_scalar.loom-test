@@ -1,0 +1,99 @@
+// RUN: pass vector-memory-to-scalar,canonicalize,cse
+
+func.def @dense_vector_memory_stays_vector(%input: buffer, %output: buffer, %origin: index, %value: vector<4xf32>) -> (vector<4xf32>) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<32xf32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<32xf32, #dense>
+  %loaded = vector.load %input_view[%origin] : view<32xf32, #dense> -> vector<4xf32>
+  vector.store %value, %output_view[%origin] : vector<4xf32>, view<32xf32, #dense>
+  func.return %loaded : vector<4xf32>
+}
+
+// ====
+
+func.def @masked_dense_memory_scalarizes(%input: buffer, %output: buffer, %origin: index, %mask: vector<2xi1>, %old: vector<2xf32>, %value: vector<2xf32>) -> (vector<2xf32>) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<32xf32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<32xf32, #dense>
+  %loaded = vector.load.mask %input_view[%origin], %mask, %old : view<32xf32, #dense>, vector<2xi1>, vector<2xf32>
+  vector.store.mask %value, %output_view[%origin], %mask : vector<2xf32>, view<32xf32, #dense>, vector<2xi1>
+  func.return %loaded : vector<2xf32>
+}
+
+// ----
+func.def @masked_dense_memory_scalarizes(%input: buffer, %output: buffer, %origin: index, %mask: vector<2xi1>, %old: vector<2xf32>, %value: vector<2xf32>) -> (vector<2xf32>) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<32xf32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<32xf32, #dense>
+  %17 = vector.extract %mask[0] : vector<2xi1> -> i1
+  %18 = scf.if %17 -> (f32) {
+    %19 = view.load %input_view[%origin] : view<32xf32, #dense> -> f32
+    scf.yield %19 : f32
+  } else {
+    %20 = vector.extract %old[0] : vector<2xf32> -> f32
+    scf.yield %20 : f32
+  }
+  %21 = vector.extract %mask[1] : vector<2xi1> -> i1
+  %22 = scf.if %21 -> (f32) {
+    %23 = index.constant 1 : index
+    %24 = index.add %origin, %23 : index
+    %25 = view.load %input_view[%24] : view<32xf32, #dense> -> f32
+    scf.yield %25 : f32
+  } else {
+    %26 = vector.extract %old[1] : vector<2xf32> -> f32
+    scf.yield %26 : f32
+  }
+  %loaded = vector.from_elements %18, %22 : vector<2xf32>
+  scf.if %17 {
+    %12 = vector.extract %value[0] : vector<2xf32> -> f32
+    view.store %12, %output_view[%origin] : f32, view<32xf32, #dense>
+  } else {
+  }
+  scf.if %21 {
+    %14 = vector.extract %value[1] : vector<2xf32> -> f32
+    %15 = index.constant 1 : index
+    %16 = index.add %origin, %15 : index
+    view.store %14, %output_view[%16] : f32, view<32xf32, #dense>
+  } else {
+  }
+  func.return %loaded : vector<2xf32>
+}
+
+// ====
+
+func.def @per_lane_memory_scalarizes(%input: buffer, %output: buffer, %origin: index, %offsets: vector<2xindex>, %value: vector<2xf32>) -> (vector<2xf32>) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<32xf32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<32xf32, #dense>
+  %loaded = vector.gather %input_view[%origin][%offsets] : view<32xf32, #dense>, vector<2xindex> -> vector<2xf32>
+  vector.scatter %value, %output_view[%origin][%offsets] : vector<2xf32>, view<32xf32, #dense>, vector<2xindex>
+  func.return %loaded : vector<2xf32>
+}
+
+// ----
+func.def @per_lane_memory_scalarizes(%input: buffer, %output: buffer, %origin: index, %offsets: vector<2xindex>, %value: vector<2xf32>) -> (vector<2xf32>) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<32xf32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<32xf32, #dense>
+  %16 = vector.extract %offsets[0] : vector<2xindex> -> index
+  %17 = index.add %origin, %16 : index
+  %18 = view.load %input_view[%17] : view<32xf32, #dense> -> f32
+  %19 = vector.extract %offsets[1] : vector<2xindex> -> index
+  %20 = index.add %origin, %19 : index
+  %21 = view.load %input_view[%20] : view<32xf32, #dense> -> f32
+  %loaded = vector.from_elements %18, %21 : vector<2xf32>
+  %10 = vector.extract %value[0] : vector<2xf32> -> f32
+  view.store %10, %output_view[%17] : f32, view<32xf32, #dense>
+  %13 = vector.extract %value[1] : vector<2xf32> -> f32
+  view.store %13, %output_view[%20] : f32, view<32xf32, #dense>
+  func.return %loaded : vector<2xf32>
+}
+
+// ====
+
+func.def @atomic_memory_stays_vector(%buffer: buffer, %origin: index, %offsets: vector<2xindex>, %value: vector<2xi32>) -> (vector<2xi32>) {
+  %base = index.constant 0 : offset
+  %view = buffer.view %buffer[%base] : buffer -> view<32xi32, #dense>
+  %old = vector.atomic.rmw<addi> %value, %view[%origin][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<32xi32, #dense>, vector<2xindex>
+  func.return %old : vector<2xi32>
+}

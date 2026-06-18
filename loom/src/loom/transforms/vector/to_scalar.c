@@ -16,6 +16,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
@@ -78,6 +79,18 @@ static const loom_pass_info_t loom_vector_gather_to_scalar_pass_info_storage = {
 
 const loom_pass_info_t* loom_vector_gather_to_scalar_pass_info(void) {
   return &loom_vector_gather_to_scalar_pass_info_storage;
+}
+
+static const loom_pass_info_t loom_vector_memory_to_scalar_pass_info_storage = {
+    .name = IREE_SVL("vector-memory-to-scalar"),
+    .description = IREE_SVL("Expose non-dense vector memory accesses as scalar "
+                            "view operations."),
+    .kind = LOOM_PASS_FUNCTION,
+    .statistic_layout = &loom_vector_to_scalar_statistics_layout,
+};
+
+const loom_pass_info_t* loom_vector_memory_to_scalar_pass_info(void) {
+  return &loom_vector_memory_to_scalar_pass_info_storage;
 }
 
 iree_status_t loom_vector_to_scalar_static_element_count(
@@ -985,6 +998,40 @@ static iree_status_t loom_vector_gather_to_scalar_lower_op(
   return loom_vector_to_scalar_lower_descriptor_op(pass, rewriter, op);
 }
 
+static iree_status_t loom_vector_memory_to_scalar_lower_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
+  const loom_fact_context_t* fact_context =
+      rewriter->fact_table ? &rewriter->fact_table->context : NULL;
+  loom_vector_memory_footprint_t footprint = {0};
+  if (!loom_vector_memory_footprint_describe(fact_context, rewriter->module, op,
+                                             &footprint)) {
+    return iree_ok_status();
+  }
+  switch (footprint.kind) {
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_NONE:
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_DENSE:
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_FRAGMENT:
+      return iree_ok_status();
+    // Preserve vector atomics for target legalization; scalarizing them can
+    // destroy native packed atomic selection.
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_ATOMIC_PER_LANE:
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_ATOMIC_PER_LANE:
+      return iree_ok_status();
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_DENSE:
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_COMPRESS_EXPAND:
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PER_LANE_OFFSET:
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_MASKED_PER_LANE_OFFSET:
+      break;
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  bool handled = false;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_try_direct_lowerer(pass, rewriter, op, &handled));
+  if (handled) return iree_ok_status();
+  return loom_vector_to_scalar_lower_descriptor_op(pass, rewriter, op);
+}
+
 typedef iree_status_t (*loom_vector_to_scalar_lower_op_fn_t)(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
 
@@ -1056,5 +1103,13 @@ iree_status_t loom_vector_gather_to_scalar_run(loom_pass_t* pass,
                                                loom_func_like_t function) {
   return loom_vector_to_scalar_run_with_lowerer(
       pass, module, function, loom_vector_gather_to_scalar_lower_op,
+      LOOM_VECTOR_TO_SCALAR_RUN_FLAG_ERASE_DEAD_OPS);
+}
+
+iree_status_t loom_vector_memory_to_scalar_run(loom_pass_t* pass,
+                                               loom_module_t* module,
+                                               loom_func_like_t function) {
+  return loom_vector_to_scalar_run_with_lowerer(
+      pass, module, function, loom_vector_memory_to_scalar_lower_op,
       LOOM_VECTOR_TO_SCALAR_RUN_FLAG_ERASE_DEAD_OPS);
 }
