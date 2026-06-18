@@ -133,9 +133,17 @@ static bool loom_amdgpu_subgroup_reduce_dpp_row_is_applicable(
   if (active_lane_count <= LOOM_AMDGPU_DPP_ROW_LANE_COUNT) {
     return true;
   }
-  // Keep full-wave DPP row strategy on wave32. Wave64 targets use the
-  // lane-addressed bpermute tree for full-wave reductions so they do not depend
-  // on family-specific DPP row-control behavior.
+  return loom_amdgpu_u32_is_power_of_two(active_lane_count);
+}
+
+static bool loom_amdgpu_subgroup_reduce_dpp_row_bpermute_is_applicable(
+    uint32_t wavefront_size, uint32_t active_lane_count) {
+  if (active_lane_count == 0 || active_lane_count > wavefront_size) {
+    return false;
+  }
+  if (active_lane_count <= LOOM_AMDGPU_DPP_ROW_LANE_COUNT) {
+    return true;
+  }
   return active_lane_count == wavefront_size && wavefront_size == 32;
 }
 
@@ -171,12 +179,20 @@ static iree_status_t loom_amdgpu_select_subgroup_reduce_crosslane_kind(
     loom_amdgpu_subgroup_payload_kind_t payload_kind,
     loom_low_lower_resolved_descriptor_t* dpp_move,
     loom_low_lower_resolved_descriptor_t* dpp_combine,
+    loom_low_lower_resolved_descriptor_t* permlanex16,
     loom_amdgpu_subgroup_reduce_crosslane_kind_t* out_crosslane_kind) {
   *dpp_move = (loom_low_lower_resolved_descriptor_t){0};
   *dpp_combine = (loom_low_lower_resolved_descriptor_t){0};
+  *permlanex16 = (loom_low_lower_resolved_descriptor_t){0};
   *out_crosslane_kind = LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_BPERMUTE;
-  if (!loom_amdgpu_subgroup_reduce_dpp_row_is_applicable(wavefront_size,
-                                                         active_lane_count)) {
+  const bool dpp_row_bpermute_applicable =
+      loom_amdgpu_subgroup_reduce_dpp_row_bpermute_is_applicable(
+          wavefront_size, active_lane_count);
+  const bool dpp_row_permlanex16_applicable =
+      active_lane_count > LOOM_AMDGPU_DPP_ROW_LANE_COUNT &&
+      loom_amdgpu_subgroup_reduce_dpp_row_is_applicable(wavefront_size,
+                                                        active_lane_count);
+  if (!dpp_row_bpermute_applicable && !dpp_row_permlanex16_applicable) {
     return iree_ok_status();
   }
 
@@ -195,7 +211,22 @@ static iree_status_t loom_amdgpu_select_subgroup_reduce_crosslane_kind(
         context, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_DPP, dpp_move,
         &dpp_descriptor_present));
   }
-  if (dpp_combine_descriptor_present || dpp_descriptor_present) {
+  if (!dpp_combine_descriptor_present && !dpp_descriptor_present) {
+    return iree_ok_status();
+  }
+
+  if (dpp_row_permlanex16_applicable) {
+    bool permlanex16_descriptor_present = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+        context, LOOM_AMDGPU_DESCRIPTOR_REF_V_PERMLANEX16_B32_SRC12_INLINE,
+        permlanex16, &permlanex16_descriptor_present));
+    if (permlanex16_descriptor_present) {
+      *out_crosslane_kind =
+          LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_PERMLANEX16;
+      return iree_ok_status();
+    }
+  }
+  if (dpp_row_bpermute_applicable) {
     *out_crosslane_kind =
         LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_BPERMUTE;
   }
@@ -669,7 +700,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
   IREE_RETURN_IF_ERROR(loom_amdgpu_select_subgroup_reduce_crosslane_kind(
       context, wavefront_size, active_lane_count, kind, payload_kind,
       &out_plan->dpp_descriptor, &out_plan->dpp_combine_descriptor,
-      &out_plan->crosslane_kind));
+      &out_plan->permlanex16_descriptor, &out_plan->crosslane_kind));
 
   uint32_t identity_bits = 0;
   if (!loom_amdgpu_u32_is_power_of_two(active_lane_count)) {
@@ -798,7 +829,8 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_reduce_plan(
   IREE_RETURN_IF_ERROR(loom_amdgpu_select_subgroup_reduce_crosslane_kind(
       context, partition_wavefront_size, per_wave_active_lane_count, kind,
       payload_kind, &out_plan->dpp_descriptor,
-      &out_plan->dpp_combine_descriptor, &out_plan->crosslane_kind));
+      &out_plan->dpp_combine_descriptor, &out_plan->permlanex16_descriptor,
+      &out_plan->crosslane_kind));
 
   uint32_t identity_bits = 0;
   if (needs_identity_guard) {
@@ -902,6 +934,30 @@ static iree_status_t loom_amdgpu_emit_subgroup_bpermute_register(
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
       context, descriptor, operands, IREE_ARRAYSIZE(operands),
       loom_make_named_attr_slice(NULL, 0), &lane_type, 1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+      &low_op));
+  *out_low_result = loom_value_slice_get(loom_low_op_results(low_op), 0);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_emit_subgroup_permlanex16_register(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
+    loom_value_id_t source_value, loom_type_t lane_type,
+    loom_value_id_t* out_low_result) {
+  *out_low_result = LOOM_VALUE_ID_INVALID;
+  loom_named_attr_t attrs[2];
+  iree_host_size_t attr_count = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_append_i64_attr(context, IREE_SV("selector_low"), 0, attrs,
+                                  IREE_ARRAYSIZE(attrs), &attr_count));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_append_i64_attr(context, IREE_SV("selector_high"), 0, attrs,
+                                  IREE_ARRAYSIZE(attrs), &attr_count));
+  loom_op_t* low_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, descriptor, &source_value, 1,
+      loom_make_named_attr_slice(attrs, attr_count), &lane_type, 1,
       /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
       &low_op));
   *out_low_result = loom_value_slice_get(loom_low_op_results(low_op), 0);
@@ -1132,6 +1188,13 @@ static uint32_t loom_amdgpu_subgroup_reduce_dpp_ctrl(uint32_t lane_count) {
   }
 }
 
+static bool loom_amdgpu_subgroup_reduce_cross_row_uses_permlanex16(
+    const loom_amdgpu_subgroup_reduce_plan_t* plan, uint32_t offset) {
+  return plan->crosslane_kind ==
+             LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_PERMLANEX16 &&
+         offset == LOOM_AMDGPU_DPP_ROW_LANE_COUNT;
+}
+
 static iree_status_t loom_amdgpu_emit_subgroup_reduce_cross_row_xor_tree(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_reduce_plan_t* plan, loom_value_id_t lane_id,
@@ -1143,6 +1206,10 @@ static iree_status_t loom_amdgpu_emit_subgroup_reduce_cross_row_xor_tree(
   if (precompute_step_values) {
     for (uint32_t offset = LOOM_AMDGPU_DPP_ROW_LANE_COUNT;
          offset < plan->active_lane_count; offset <<= 1) {
+      if (loom_amdgpu_subgroup_reduce_cross_row_uses_permlanex16(plan,
+                                                                 offset)) {
+        continue;
+      }
       IREE_ASSERT_LT(step_count, IREE_ARRAYSIZE(source_byte_offsets));
       loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_xor_lane(
@@ -1159,21 +1226,29 @@ static iree_status_t loom_amdgpu_emit_subgroup_reduce_cross_row_xor_tree(
     uint32_t step_index = 0;
     for (uint32_t offset = LOOM_AMDGPU_DPP_ROW_LANE_COUNT;
          offset < plan->active_lane_count; offset <<= 1) {
-      loom_value_id_t low_source_byte_offset = LOOM_VALUE_ID_INVALID;
-      if (precompute_step_values) {
-        low_source_byte_offset = source_byte_offsets[step_index++];
-      } else {
-        loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
-        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_xor_lane(
-            context, source_op, lane_id, offset, lane_type, &source_lane));
-        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_lane_byte_offset(
-            context, source_op, source_lane, lane_type,
-            &low_source_byte_offset));
-      }
       loom_value_id_t peer = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_bpermute_register(
-          context, source_op, &plan->bpermute_descriptor,
-          low_source_byte_offset, accumulator, lane_type, &peer));
+      if (loom_amdgpu_subgroup_reduce_cross_row_uses_permlanex16(plan,
+                                                                 offset)) {
+        IREE_ASSERT(plan->permlanex16_descriptor.descriptor != NULL);
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_permlanex16_register(
+            context, source_op, &plan->permlanex16_descriptor, accumulator,
+            lane_type, &peer));
+      } else {
+        loom_value_id_t low_source_byte_offset = LOOM_VALUE_ID_INVALID;
+        if (precompute_step_values) {
+          low_source_byte_offset = source_byte_offsets[step_index++];
+        } else {
+          loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
+          IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_xor_lane(
+              context, source_op, lane_id, offset, lane_type, &source_lane));
+          IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_lane_byte_offset(
+              context, source_op, source_lane, lane_type,
+              &low_source_byte_offset));
+        }
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_bpermute_register(
+            context, source_op, &plan->bpermute_descriptor,
+            low_source_byte_offset, accumulator, lane_type, &peer));
+      }
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_combine(
           context, source_op, &plan->combine_descriptor, accumulator, peer,
           lane_type, &accumulator));
@@ -1323,8 +1398,10 @@ static iree_status_t loom_amdgpu_emit_subgroup_reduce_tree(
   if (dynamic_active_lane_count == LOOM_VALUE_ID_INVALID &&
       (plan->active_lane_count <= 1 ||
        loom_amdgpu_u32_is_power_of_two(plan->active_lane_count))) {
-    if (plan->crosslane_kind ==
-            LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_BPERMUTE &&
+    if ((plan->crosslane_kind ==
+             LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_BPERMUTE ||
+         plan->crosslane_kind ==
+             LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_PERMLANEX16) &&
         loom_amdgpu_subgroup_reduce_dpp_row_is_applicable(
             plan->wavefront_size, plan->active_lane_count)) {
       return loom_amdgpu_emit_subgroup_reduce_dpp_row_tree(
@@ -1480,6 +1557,7 @@ iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
         .bpermute_descriptor = plan->bpermute_descriptor,
         .dpp_descriptor = plan->dpp_descriptor,
         .dpp_combine_descriptor = plan->dpp_combine_descriptor,
+        .permlanex16_descriptor = plan->permlanex16_descriptor,
         .combine_descriptor = plan->combine_descriptor,
         .guard_descriptor = plan->guard_descriptor,
         .select_descriptor = plan->select_descriptor,
@@ -1580,6 +1658,7 @@ iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
         .bpermute_descriptor = plan->bpermute_descriptor,
         .dpp_descriptor = plan->dpp_descriptor,
         .dpp_combine_descriptor = plan->dpp_combine_descriptor,
+        .permlanex16_descriptor = plan->permlanex16_descriptor,
         .combine_descriptor = plan->combine_descriptor,
         .guard_descriptor = plan->guard_descriptor,
         .select_descriptor = plan->select_descriptor,

@@ -1796,6 +1796,39 @@ def _v_perm_b32_src2_literal_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_permlanex16_b32_src12_inline_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_permlanex16_b32.src12_inline",
+        instruction_name="V_PERMLANEX16_B32",
+        mnemonic="v_permlanex16_b32_src12_inline",
+        encoding_name="ENC_VOP3",
+        semantic_tag="lane.permlanex16.b32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("src")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("src",),
+            immediates=("selector_low", "selector_high"),
+            native_assembly_values=(
+                _native_result("dst"),
+                _native_operand("src"),
+                _native_i64_immediate("selector_low"),
+                _native_i64_immediate("selector_high"),
+            ),
+        ),
+        immediate_fields=("SRC1", "SRC2"),
+        immediates=(
+            _source_inline_u32_immediate("selector_low"),
+            _source_inline_u32_immediate("selector_high"),
+        ),
+        effects=(_CONVERGENT_EFFECT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_lshrrev_b32_overlay() -> AmdgpuDescriptorOverlay:
     return _v_binary_u32_overlay(
         descriptor_key="amdgpu.v_lshrrev_b32",
@@ -4638,6 +4671,7 @@ __all__ = (
     "_v_pk_ternary_overlay",
     "_v_perm_b32_overlay",
     "_v_perm_b32_src2_literal_overlay",
+    "_v_permlanex16_b32_src12_inline_overlay",
     "_v_lshl_add_u32_shift_immediate_overlay",
     "_v_lshlrev_b32_literal_overlay",
     "_v_lshlrev_b32_overlay",

@@ -652,6 +652,8 @@ typedef enum loom_amdgpu_subgroup_reduce_crosslane_kind_e {
   LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_BPERMUTE = 0,
   // Use DPP row moves within 16-lane rows and DS bpermute between rows.
   LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_BPERMUTE = 1,
+  // Use DPP row moves within 16-lane rows and permlanex16 between row pairs.
+  LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_PERMLANEX16 = 2,
 } loom_amdgpu_subgroup_reduce_crosslane_kind_t;
 
 typedef struct loom_amdgpu_subgroup_reduce_plan_t {
@@ -663,6 +665,8 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t dpp_descriptor;
   // Descriptor row selected for fused DPP row moves and lane combines.
   loom_low_lower_resolved_descriptor_t dpp_combine_descriptor;
+  // Descriptor row selected for paired 16-lane row exchanges.
+  loom_low_lower_resolved_descriptor_t permlanex16_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
   // Descriptor row selected to guard inactive source lanes.
@@ -722,6 +726,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t dpp_descriptor;
   // Descriptor row selected for fused DPP row moves and lane combines.
   loom_low_lower_resolved_descriptor_t dpp_combine_descriptor;
+  // Descriptor row selected for paired 16-lane row exchanges.
+  loom_low_lower_resolved_descriptor_t permlanex16_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
   // Descriptor row selected to guard inactive source lanes.
