@@ -9,9 +9,8 @@
 from __future__ import annotations
 
 from loom.dialect.sanitizer import ALL_SANITIZER_OPS
-from loom.dialect.sanitizer import defs as sanitizer
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
-from loom.target.contracts import ContractFragment, RecipeRule
+from loom.target.contracts import ContractFragment
 
 _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
     key="amdgpu.sanitizer",
@@ -26,5 +25,5 @@ AMDGPU_SANITIZER_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.sanitizer",
     descriptor_set=_DESCRIPTOR_SET,
     public_header="loom/target/arch/amdgpu/contracts/sanitizer.h",
-    cases=(RecipeRule(source_op=sanitizer.sanitizer_assert_access),),
+    cases=(),
 )
