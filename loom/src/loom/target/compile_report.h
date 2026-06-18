@@ -260,10 +260,20 @@ typedef struct loom_target_compile_report_target_resources_t {
   iree_string_view_t scalar_register_class;
   // Final scalar register units declared by target metadata.
   uint64_t scalar_register_count;
+  // Peak live units observed for |scalar_register_class| before final target
+  // metadata rounding and hidden target resources.
+  uint64_t scalar_pressure_peak_live_units;
+  // Extra final scalar register units beyond |scalar_pressure_peak_live_units|.
+  uint64_t scalar_register_overhead_units;
   // Stable target register class counted by |vector_register_count|.
   iree_string_view_t vector_register_class;
   // Final vector register units declared by target metadata.
   uint64_t vector_register_count;
+  // Peak live units observed for |vector_register_class| before final target
+  // metadata rounding and hidden target resources.
+  uint64_t vector_pressure_peak_live_units;
+  // Extra final vector register units beyond |vector_pressure_peak_live_units|.
+  uint64_t vector_register_overhead_units;
   // Target subgroup width in lanes.
   uint32_t subgroup_size;
   // Maximum resident subgroups per SIMD modeled for the target.

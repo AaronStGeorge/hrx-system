@@ -419,16 +419,23 @@ static iree_status_t loom_target_compile_report_format_summary(
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder,
         "COMPILE-REPORT: target_resources scalar_register_class=%.*s "
-        "scalar_registers=%" PRIu64
+        "scalar_registers=%" PRIu64 " scalar_pressure_peak=%" PRIu64
+        " scalar_register_overhead=%" PRIu64
         " vector_register_class=%.*s "
-        "vector_registers=%" PRIu64 " subgroup_size=%" PRIu32
+        "vector_registers=%" PRIu64 " vector_pressure_peak=%" PRIu64
+        " vector_register_overhead=%" PRIu64 " subgroup_size=%" PRIu32
         " resident_subgroups_per_simd=%" PRIu32
         " max_subgroups_per_simd=%" PRIu32 " occupancy_percent=%" PRIu32
         " limiting=%.*s\n",
         (int)scalar_register_class.size, scalar_register_class.data,
-        resources->scalar_register_count, (int)vector_register_class.size,
-        vector_register_class.data, resources->vector_register_count,
-        resources->subgroup_size, resources->resident_subgroups_per_simd,
+        resources->scalar_register_count,
+        resources->scalar_pressure_peak_live_units,
+        resources->scalar_register_overhead_units,
+        (int)vector_register_class.size, vector_register_class.data,
+        resources->vector_register_count,
+        resources->vector_pressure_peak_live_units,
+        resources->vector_register_overhead_units, resources->subgroup_size,
+        resources->resident_subgroups_per_simd,
         resources->max_subgroups_per_simd, resources->occupancy_percent,
         (int)limiting_resource.size, limiting_resource.data));
   }
@@ -617,14 +624,23 @@ static iree_status_t loom_target_compile_report_format_entry_rows(
         IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
             builder,
             " scalar_register_class=%.*s scalar_registers=%" PRIu64
+            " scalar_pressure_peak=%" PRIu64
+            " scalar_register_overhead=%" PRIu64
             " vector_register_class=%.*s vector_registers=%" PRIu64
-            " subgroup_size=%" PRIu32 " resident_subgroups_per_simd=%" PRIu32
+            " vector_pressure_peak=%" PRIu64
+            " vector_register_overhead=%" PRIu64 " subgroup_size=%" PRIu32
+            " resident_subgroups_per_simd=%" PRIu32
             " max_subgroups_per_simd=%" PRIu32 " occupancy_percent=%" PRIu32
             " limiting=%.*s",
             (int)scalar_register_class.size, scalar_register_class.data,
-            resources->scalar_register_count, (int)vector_register_class.size,
-            vector_register_class.data, resources->vector_register_count,
-            resources->subgroup_size, resources->resident_subgroups_per_simd,
+            resources->scalar_register_count,
+            resources->scalar_pressure_peak_live_units,
+            resources->scalar_register_overhead_units,
+            (int)vector_register_class.size, vector_register_class.data,
+            resources->vector_register_count,
+            resources->vector_pressure_peak_live_units,
+            resources->vector_register_overhead_units, resources->subgroup_size,
+            resources->resident_subgroups_per_simd,
             resources->max_subgroups_per_simd, resources->occupancy_percent,
             (int)limiting_resource.size, limiting_resource.data));
       }
@@ -1325,6 +1341,12 @@ static iree_status_t loom_target_compile_report_format_target_resources_json(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "scalar_register_count",
       resources->scalar_register_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "scalar_pressure_peak_live_units",
+      resources->scalar_pressure_peak_live_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "scalar_register_overhead_units",
+      resources->scalar_register_overhead_units));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "vector_register_class",
@@ -1332,6 +1354,12 @@ static iree_status_t loom_target_compile_report_format_target_resources_json(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "vector_register_count",
       resources->vector_register_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "vector_pressure_peak_live_units",
+      resources->vector_pressure_peak_live_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "vector_register_overhead_units",
+      resources->vector_register_overhead_units));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
       stream, &first_field, "subgroup_size", resources->subgroup_size));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(

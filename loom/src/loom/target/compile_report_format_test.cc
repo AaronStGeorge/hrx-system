@@ -21,14 +21,25 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   loom_target_compile_report_pressure_row_t pressure_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
-          /*.register_class=*/IREE_SVL("test.i32"),
+          /*.register_class=*/IREE_SVL("amdgpu.sgpr"),
           /*.type_kind=*/LOOM_TYPE_REGISTER,
           /*.element_type=*/LOOM_SCALAR_TYPE_I32,
-          /*.peak_live_units=*/7,
+          /*.peak_live_units=*/32,
           /*.peak_live_values=*/4,
           /*.peak_point=*/3,
           /*.peak_block_name=*/IREE_SVL("entry"),
-          /*.peak_operation_name=*/IREE_SVL("low.op<test.add.i32>"),
+          /*.peak_operation_name=*/IREE_SVL("low.op<amdgpu.s_add_u32>"),
+      },
+      {
+          /*.function_name=*/IREE_SVL("branchy"),
+          /*.register_class=*/IREE_SVL("amdgpu.vgpr"),
+          /*.type_kind=*/LOOM_TYPE_REGISTER,
+          /*.element_type=*/LOOM_SCALAR_TYPE_I32,
+          /*.peak_live_units=*/96,
+          /*.peak_live_values=*/16,
+          /*.peak_point=*/4,
+          /*.peak_block_name=*/IREE_SVL("entry"),
+          /*.peak_operation_name=*/IREE_SVL("low.op<amdgpu.v_add_u32>"),
       },
   };
   loom_target_compile_report_spill_row_t spill_rows[] = {
@@ -159,7 +170,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   report.target_config_name = IREE_SVL("vm_o0");
   report.lowered_symbol = IREE_SVL("branchy");
   loom_target_compile_report_record_artifact_size(&report, 128);
-  loom_target_compile_report_record_schedule(&report, 5, 5, 4, 2, 1, 1, 1, 7);
+  loom_target_compile_report_record_schedule(&report, 5, 5, 4, 2, 1, 1, 2, 96);
   loom_target_compile_report_record_allocation(&report, 6, 1, 1, 2, 0);
   loom_target_compile_report_record_move_cause(
       &report, LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION,
@@ -195,8 +206,12 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   const loom_target_compile_report_target_resources_t target_resources = {
       /*.scalar_register_class=*/IREE_SVL("amdgpu.sgpr"),
       /*.scalar_register_count=*/38,
+      /*.scalar_pressure_peak_live_units=*/{},
+      /*.scalar_register_overhead_units=*/{},
       /*.vector_register_class=*/IREE_SVL("amdgpu.vgpr"),
       /*.vector_register_count=*/112,
+      /*.vector_pressure_peak_live_units=*/{},
+      /*.vector_register_overhead_units=*/{},
       /*.subgroup_size=*/32,
       /*.max_subgroups_per_simd=*/16,
       /*.resident_subgroups_per_simd=*/8,
@@ -211,8 +226,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   entry_report.target_export_name = IREE_SVL("vm_export");
   entry_report.target_export_symbol = IREE_SVL("branchy_export");
   entry_report.target_config_name = IREE_SVL("vm_o0");
-  loom_target_compile_report_record_schedule(&entry_report, 5, 5, 4, 2, 1, 1, 1,
-                                             7);
+  loom_target_compile_report_record_schedule(&entry_report, 5, 5, 4, 2, 1, 1, 2,
+                                             96);
   loom_target_compile_report_record_allocation(&entry_report, 6, 1, 1, 2, 0);
   loom_target_compile_report_record_move_cause(
       &entry_report,
@@ -224,14 +239,16 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION, 1, 1);
   loom_target_compile_report_record_emission(&entry_report, 8, 64, 80);
   loom_target_compile_report_record_memory(&entry_report, 16, 32);
+  IREE_ASSERT_OK(loom_target_compile_report_record_pressure_row(
+      &entry_report, &pressure_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_pressure_row(
+      &entry_report, &pressure_rows[1]));
   loom_target_compile_report_record_target_resources(&entry_report,
                                                      &target_resources);
   loom_target_compile_report_record_static_instruction_mix(&entry_report,
                                                            &instruction_mix);
   IREE_ASSERT_OK(
       loom_target_compile_report_record_entry_report(&report, &entry_report));
-  IREE_ASSERT_OK(loom_target_compile_report_record_pressure_row(
-      &report, &pressure_rows[0]));
   IREE_ASSERT_OK(
       loom_target_compile_report_record_spill_row(&report, &spill_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_allocation_failure_row(
@@ -256,9 +273,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   iree_string_view_t output = iree_string_builder_view(&builder);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("artifact=vm-archive"), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output, IREE_SV("pressure_classes=1"), 0),
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("pressure_classes=2"), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output, IREE_SV("pressure_rows count=1"), 0),
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("pressure_rows count=2"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("move_causes kinds=3 packets=6 "
@@ -285,8 +302,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                 output,
                 IREE_SV("target_resources scalar_register_class=amdgpu.sgpr "
                         "scalar_registers=38 "
+                        "scalar_pressure_peak=32 "
+                        "scalar_register_overhead=6 "
                         "vector_register_class=amdgpu.vgpr "
-                        "vector_registers=112 subgroup_size=32 "
+                        "vector_registers=112 vector_pressure_peak=96 "
+                        "vector_register_overhead=16 subgroup_size=32 "
                         "resident_subgroups_per_simd=8 "
                         "max_subgroups_per_simd=16 "
                         "occupancy_percent=50 limiting=amdgpu.vgpr"),
@@ -296,7 +316,12 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("pressure[0] function=branchy "
-                                          "class=test.i32"),
+                                          "class=amdgpu.sgpr"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("pressure[1] function=branchy "
+                                          "class=amdgpu.vgpr"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
@@ -326,7 +351,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("resource_uses=2 hazard_gaps=1 "
                                           "model_summaries=1 "
-                                          "pressure_summaries=1 peak_live=7"),
+                                          "pressure_summaries=2 peak_live=96"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
@@ -335,8 +360,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "private_bytes=16 local_bytes=32 "
                         "scalar_register_class=amdgpu.sgpr "
                         "scalar_registers=38 "
+                        "scalar_pressure_peak=32 "
+                        "scalar_register_overhead=6 "
                         "vector_register_class=amdgpu.vgpr "
-                        "vector_registers=112 subgroup_size=32 "
+                        "vector_registers=112 vector_pressure_peak=96 "
+                        "vector_register_overhead=16 subgroup_size=32 "
                         "resident_subgroups_per_simd=8 "
                         "max_subgroups_per_simd=16 "
                         "occupancy_percent=50 limiting=amdgpu.vgpr"),
@@ -434,8 +462,13 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                 output,
                 IREE_SV("\"target_resources\":{\"scalar_register_class\":"
                         "\"amdgpu.sgpr\",\"scalar_register_count\":38,"
+                        "\"scalar_pressure_peak_live_units\":32,"
+                        "\"scalar_register_overhead_units\":6,"
                         "\"vector_register_class\":\"amdgpu.vgpr\","
-                        "\"vector_register_count\":112,\"subgroup_size\":32,"
+                        "\"vector_register_count\":112,"
+                        "\"vector_pressure_peak_live_units\":96,"
+                        "\"vector_register_overhead_units\":16,"
+                        "\"subgroup_size\":32,"
                         "\"max_subgroups_per_simd\":16,"
                         "\"resident_subgroups_per_simd\":8,"
                         "\"occupancy_percent\":50,\"limiting_resource\":"
@@ -448,12 +481,15 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       iree_string_view_find(output, IREE_SV("\"cause\":\"low_concat\""), 0),
       IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
-                                  IREE_SV("\"pressure_rows\":{\"count\":1,"
+                                  IREE_SV("\"pressure_rows\":{\"count\":2,"
                                           "\"rows\":["),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
-                output, IREE_SV("\"register_class\":\"test.i32\""), 0),
+                output, IREE_SV("\"register_class\":\"amdgpu.sgpr\""), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"register_class\":\"amdgpu.vgpr\""), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("\"spill_rows\":{\"count\":1,"

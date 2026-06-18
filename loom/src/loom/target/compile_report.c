@@ -313,11 +313,65 @@ void loom_target_compile_report_record_memory(
   report->local_memory_bytes = local_memory_bytes;
 }
 
+static uint64_t loom_target_compile_report_register_overhead_units(
+    uint64_t final_register_count, uint64_t pressure_peak_live_units) {
+  if (final_register_count <= pressure_peak_live_units) {
+    return 0;
+  }
+  return final_register_count - pressure_peak_live_units;
+}
+
+static void loom_target_compile_report_update_target_resource_pressure_row(
+    loom_target_compile_report_target_resources_t* target_resources,
+    const loom_target_compile_report_pressure_row_t* row) {
+  if (iree_string_view_equal(row->register_class,
+                             target_resources->scalar_register_class)) {
+    target_resources->scalar_pressure_peak_live_units =
+        iree_max(target_resources->scalar_pressure_peak_live_units,
+                 row->peak_live_units);
+    target_resources->scalar_register_overhead_units =
+        loom_target_compile_report_register_overhead_units(
+            target_resources->scalar_register_count,
+            target_resources->scalar_pressure_peak_live_units);
+  }
+  if (iree_string_view_equal(row->register_class,
+                             target_resources->vector_register_class)) {
+    target_resources->vector_pressure_peak_live_units =
+        iree_max(target_resources->vector_pressure_peak_live_units,
+                 row->peak_live_units);
+    target_resources->vector_register_overhead_units =
+        loom_target_compile_report_register_overhead_units(
+            target_resources->vector_register_count,
+            target_resources->vector_pressure_peak_live_units);
+  }
+}
+
+static void loom_target_compile_report_populate_target_resource_pressure(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_target_resources_t* target_resources) {
+  target_resources->scalar_pressure_peak_live_units = 0;
+  target_resources->scalar_register_overhead_units = 0;
+  target_resources->vector_pressure_peak_live_units = 0;
+  target_resources->vector_register_overhead_units = 0;
+  for (const loom_target_compile_report_vec_t* vec = report->pressure_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_pressure_row_t* rows =
+        (const loom_target_compile_report_pressure_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i) {
+      loom_target_compile_report_update_target_resource_pressure_row(
+          target_resources, &rows[i]);
+    }
+  }
+}
+
 void loom_target_compile_report_record_target_resources(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_target_resources_t* target_resources) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES;
   report->target_resources = *target_resources;
+  loom_target_compile_report_populate_target_resource_pressure(
+      report, &report->target_resources);
 }
 
 static void loom_target_compile_report_accumulate_instruction_mix(
@@ -379,10 +433,42 @@ static void loom_target_compile_report_merge_target_resources(
       target->scalar_register_class, source->scalar_register_class);
   target->scalar_register_count =
       iree_max(target->scalar_register_count, source->scalar_register_count);
+  uint64_t scalar_register_overhead_units =
+      iree_max(target->scalar_register_overhead_units,
+               source->scalar_register_overhead_units);
+  target->scalar_pressure_peak_live_units =
+      iree_string_view_is_empty(target->scalar_register_class)
+          ? 0
+          : iree_max(target->scalar_pressure_peak_live_units,
+                     source->scalar_pressure_peak_live_units);
+  target->scalar_register_overhead_units =
+      iree_string_view_is_empty(target->scalar_register_class)
+          ? 0
+          : (target->scalar_pressure_peak_live_units != 0
+                 ? loom_target_compile_report_register_overhead_units(
+                       target->scalar_register_count,
+                       target->scalar_pressure_peak_live_units)
+                 : scalar_register_overhead_units);
   target->vector_register_class = loom_target_compile_report_shared_string(
       target->vector_register_class, source->vector_register_class);
   target->vector_register_count =
       iree_max(target->vector_register_count, source->vector_register_count);
+  uint64_t vector_register_overhead_units =
+      iree_max(target->vector_register_overhead_units,
+               source->vector_register_overhead_units);
+  target->vector_pressure_peak_live_units =
+      iree_string_view_is_empty(target->vector_register_class)
+          ? 0
+          : iree_max(target->vector_pressure_peak_live_units,
+                     source->vector_pressure_peak_live_units);
+  target->vector_register_overhead_units =
+      iree_string_view_is_empty(target->vector_register_class)
+          ? 0
+          : (target->vector_pressure_peak_live_units != 0
+                 ? loom_target_compile_report_register_overhead_units(
+                       target->vector_register_count,
+                       target->vector_pressure_peak_live_units)
+                 : vector_register_overhead_units);
   target->subgroup_size = loom_target_compile_report_shared_u32(
       target->subgroup_size, source->subgroup_size);
   target->max_subgroups_per_simd = loom_target_compile_report_shared_u32(
@@ -599,8 +685,15 @@ iree_status_t loom_target_compile_report_record_pressure_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_pressure_row_t* row) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS;
-  return loom_target_compile_report_row_list_append(
+  iree_status_t status = loom_target_compile_report_row_list_append(
       &report->pressure_rows, sizeof(*row), report->allocator, row);
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES)) {
+    loom_target_compile_report_update_target_resource_pressure_row(
+        &report->target_resources, row);
+  }
+  return status;
 }
 
 iree_status_t loom_target_compile_report_record_spill_row(
