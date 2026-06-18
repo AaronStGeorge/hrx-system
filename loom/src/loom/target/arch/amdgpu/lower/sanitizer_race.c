@@ -61,7 +61,7 @@ typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
   loom_value_id_t workgroup_linear_id;
   // Entry-dominating byte offset of this workgroup inside a dispatch shadow.
   loom_value_id_t workgroup_shadow_offset;
-  // Entry-dominating flattened workitem id for the active invocation.
+  // Entry-dominating flattened workitem id in the supported TSAN shadow range.
   loom_value_id_t workitem_linear_id;
   // True once entry-block dispatch-slot values have been materialized.
   bool has_dispatch_slot_values;
@@ -1059,17 +1059,11 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_shadow_entry(
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
 
-  loom_value_id_t workitem_low = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-      workitem_linear_id,
-      (1u << LOOM_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_BIT_COUNT) - 1u, vgpr_type,
-      &workitem_low));
   loom_value_id_t workitem_bits = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_SHIFT, workitem_low, vgpr_type,
-      &workitem_bits));
+      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_SHIFT, workitem_linear_id,
+      vgpr_type, &workitem_bits));
 
   loom_value_id_t epoch_low = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
@@ -1582,14 +1576,10 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_failure_mask(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32, prior_epoch,
       current_epoch_low, &same_epoch));
 
-  loom_value_id_t current_workitem_low = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_vgpr_u32_masked(
-      context, source_op, current_workitem_linear_id,
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_BIT_COUNT, &current_workitem_low));
   loom_value_id_t different_workitem = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_vgpr_cmp_mask(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_NE_I32,
-      prior_workitem, current_workitem_low, &different_workitem));
+      prior_workitem, current_workitem_linear_id, &different_workitem));
 
   loom_value_id_t conflict_kind = LOOM_VALUE_ID_INVALID;
   if (plan->shadow_access_kind == LOOM_AMDGPU_TSAN_SHADOW_ACCESS_KIND_READ) {
