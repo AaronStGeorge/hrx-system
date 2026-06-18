@@ -9,6 +9,26 @@
 #include "loomc/iree.h"
 #include "target.h"
 
+static loomc_status_t loomc_sanitizer_reporting_mode_to_internal(
+    loomc_sanitizer_reporting_mode_t reporting_mode,
+    loom_sanitizer_reporting_mode_t* out_reporting_mode) {
+  *out_reporting_mode = LOOM_SANITIZER_REPORTING_MODE_DEFAULT;
+  switch (reporting_mode) {
+    case LOOMC_SANITIZER_REPORTING_MODE_TRAP:
+      *out_reporting_mode = LOOM_SANITIZER_REPORTING_MODE_TRAP;
+      return loomc_ok_status();
+    case LOOMC_SANITIZER_REPORTING_MODE_REPORT_ONLY:
+      *out_reporting_mode = LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY;
+      return loomc_ok_status();
+    case LOOMC_SANITIZER_REPORTING_MODE_DEFAULT:
+      return loomc_ok_status();
+    default:
+      return loomc_make_status(
+          LOOMC_STATUS_INVALID_ARGUMENT,
+          "sanitizer options contain unknown reporting mode");
+  }
+}
+
 typedef struct loomc_descriptor_prefix_t {
   // Structure type identifying the descriptor.
   loomc_structure_type_t type;
@@ -38,9 +58,14 @@ loomc_status_t loomc_sanitizer_options_resolve(
                              "sanitizer options structure_size is too small");
   }
 
+  loom_sanitizer_reporting_mode_t reporting_mode =
+      LOOM_SANITIZER_REPORTING_MODE_DEFAULT;
+  LOOMC_RETURN_IF_ERROR(loomc_sanitizer_reporting_mode_to_internal(
+      options->reporting_mode, &reporting_mode));
   const loom_sanitizer_options_t resolved_options = {
       .checks = options->checks,
       .flags = options->flags,
+      .reporting_mode = reporting_mode,
   };
   LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(
       loom_sanitizer_options_validate(&resolved_options)));

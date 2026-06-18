@@ -52,7 +52,8 @@ static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
      IREE_SVL("Maximum number of source-to-low diagnostics to emit; zero "
               "means no limit.")},
     {IREE_SVL("sanitizer-reporting"),
-     IREE_SVL("Sanitizer assertion failure reporting mode: default or trap.")},
+     IREE_SVL("Sanitizer assertion failure reporting mode: default, trap, or "
+              "report-only.")},
 };
 
 #define LOOM_LOW_SOURCE_TO_LOW_STATISTICS(V, statistics_type)                \

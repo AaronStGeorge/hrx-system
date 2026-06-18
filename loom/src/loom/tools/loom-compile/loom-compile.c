@@ -146,6 +146,9 @@ IREE_FLAG(string, pipeline, "default",
 IREE_FLAG(string, sanitizer, "none",
           "Sanitizer checks to insert in the default target pipeline: none, "
           "all, or a '|'-separated set of access, value, and operation.");
+IREE_FLAG_NAMED(string, sanitizer_reporting, "sanitizer-reporting", "default",
+                "Sanitizer assertion failure reporting mode in the default "
+                "target pipeline: default, trap, or report-only.");
 IREE_FLAG_LIST(
     string, config,
     "Compile-time config binding. Repeat as --config=key=value. Bindings not "
@@ -408,9 +411,12 @@ static iree_status_t loom_compile_report_options_initialize(
 
 static iree_status_t loom_compile_sanitizer_options_initialize(
     loom_sanitizer_options_t* out_options) {
-  return loom_sanitizer_options_parse_checks(
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_parse_checks(
       iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
-      out_options);
+      out_options));
+  return loom_sanitizer_reporting_mode_parse(
+      iree_make_cstring_view(FLAG_sanitizer_reporting),
+      IREE_SV("--sanitizer-reporting"), &out_options->reporting_mode);
 }
 
 static iree_status_t loom_compile_make_artifact_manifest_path(

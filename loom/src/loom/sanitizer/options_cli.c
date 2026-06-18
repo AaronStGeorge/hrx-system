@@ -131,8 +131,13 @@ iree_status_t loom_sanitizer_reporting_mode_parse(
     *out_mode = LOOM_SANITIZER_REPORTING_MODE_TRAP;
     return iree_ok_status();
   }
+  if (iree_string_view_equal(value, IREE_SV("report-only"))) {
+    *out_mode = LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY;
+    return iree_ok_status();
+  }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "%.*s expected 'default' or 'trap', got '%.*s'",
+                          "%.*s expected 'default', 'trap', or "
+                          "'report-only', got '%.*s'",
                           (int)diagnostic_name.size, diagnostic_name.data,
                           (int)value.size, value.data);
 }
@@ -207,6 +212,9 @@ iree_status_t loom_sanitizer_reporting_mode_format(
       return iree_ok_status();
     case LOOM_SANITIZER_REPORTING_MODE_TRAP:
       *out_value = IREE_SV("trap");
+      return iree_ok_status();
+    case LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY:
+      *out_value = IREE_SV("report-only");
       return iree_ok_status();
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

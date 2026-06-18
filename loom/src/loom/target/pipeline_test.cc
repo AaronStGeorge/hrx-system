@@ -204,6 +204,34 @@ TEST_F(TargetPipelineTest, TrapReportingBuildsSourceToLowOption) {
   EXPECT_EQ(counts.other_sanitizer_runs, 0);
 }
 
+TEST_F(TargetPipelineTest, ReportOnlyBuildsSourceToLowOption) {
+  ModulePtr module = AllocateModule(IREE_SV("pipeline"));
+  const loom_target_pipeline_options_t options = {
+      /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
+      /*.control_flow_lowering=*/{},
+      /*.sanitizer=*/
+      {
+          /*.checks=*/0,
+          /*.flags=*/0,
+          /*.reporting_mode=*/LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY,
+      },
+  };
+
+  loom_op_t* pipeline_op = nullptr;
+  IREE_ASSERT_OK(loom_target_pipeline_build_to_prepared_low(
+      module.get(), IREE_SV("compile"), &options, &environment_,
+      loom_pass_environment_empty(), &pipeline_op));
+
+  const PipelineRunCounts counts = CountPipelineRuns(module.get(), pipeline_op);
+  EXPECT_EQ(counts.source_to_low, 1);
+  EXPECT_TRUE(iree_string_view_equal(counts.source_to_low_sanitizer_reporting,
+                                     IREE_SV("report-only")));
+  EXPECT_EQ(counts.sanitizer_insert_assertions, 0);
+  EXPECT_EQ(counts.sanitizer_materialize_assertions, 0);
+  EXPECT_EQ(counts.other_sanitizer_runs, 0);
+}
+
 TEST_F(TargetPipelineTest, EnabledChecksBuildSanitizerPassSlots) {
   ModulePtr module = AllocateModule(IREE_SV("pipeline"));
   const loom_target_pipeline_options_t options = {

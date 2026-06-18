@@ -142,6 +142,7 @@ static const loom_pass_option_enum_value_t kLowSourceToLowControlFlowValues[] =
 static const loom_pass_option_enum_value_t
     kLowSourceToLowSanitizerReportingValues[] = {
         {.value = IREE_SVL("default")},
+        {.value = IREE_SVL("report-only")},
         {.value = IREE_SVL("trap")},
 };
 

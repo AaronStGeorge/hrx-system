@@ -50,11 +50,24 @@ enum loomc_sanitizer_flag_bit_e {
 /// behavior.
 typedef uint32_t loomc_sanitizer_flags_t;
 
+/// Target-specific behavior when a lowered sanitizer assertion fails.
+typedef enum loomc_sanitizer_reporting_mode_e {
+  /// Use the target's default structured sanitizer report path.
+  LOOMC_SANITIZER_REPORTING_MODE_DEFAULT = 0,
+
+  /// Trap directly on sanitizer failures without emitting structured reports.
+  LOOMC_SANITIZER_REPORTING_MODE_TRAP = 1,
+
+  /// Emit structured sanitizer reports and continue execution.
+  LOOMC_SANITIZER_REPORTING_MODE_REPORT_ONLY = 2,
+} loomc_sanitizer_reporting_mode_t;
+
 /// Invocation option extension that enables sanitizer assertions.
 ///
 /// Attach this descriptor to `loomc_target_pipeline_options_t::next` when the
 /// target pipeline should contain sanitizer pass slots. The target pipeline
-/// treats `checks == 0` as disabled and emits no sanitizer pass IR.
+/// treats `checks == 0` as disabled and emits no sanitizer pass IR. The
+/// reporting mode is carried to the target assertion lowering path.
 typedef struct loomc_sanitizer_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS`.
   loomc_structure_type_t type;
@@ -70,6 +83,9 @@ typedef struct loomc_sanitizer_options_t {
 
   /// Additional behavior flags enabled by the caller.
   loomc_sanitizer_flags_t flags;
+
+  /// Target failure reporting behavior for lowered sanitizer assertions.
+  loomc_sanitizer_reporting_mode_t reporting_mode;
 } loomc_sanitizer_options_t;
 
 #ifdef __cplusplus

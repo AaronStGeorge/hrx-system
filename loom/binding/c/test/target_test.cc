@@ -1033,6 +1033,37 @@ TEST(TargetTest, RejectsUnknownSanitizerCheckBits) {
   EXPECT_EQ(result, nullptr);
 }
 
+TEST(TargetTest, RejectsUnknownSanitizerReportingMode) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  ContextPtr context = CreateSpirvContext(target_environment.get());
+  loomc_sanitizer_options_t sanitizer_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
+      /*.structure_size=*/sizeof(sanitizer_options),
+      /*.next=*/nullptr,
+      /*.checks=*/LOOMC_SANITIZER_CHECK_ACCESS,
+      /*.flags=*/0,
+      /*.reporting_mode=*/(loomc_sanitizer_reporting_mode_t)99,
+  };
+  loomc_target_pipeline_options_t pipeline_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_PIPELINE_OPTIONS,
+      /*.structure_size=*/sizeof(pipeline_options),
+      /*.next=*/&sanitizer_options,
+      /*.identifier=*/loomc_make_cstring_view("bad-sanitizer-reporting"),
+      /*.kind=*/LOOMC_TARGET_PIPELINE_KIND_SOURCE_LOW,
+      /*.control_flow_lowering=*/LOOMC_TARGET_CONTROL_FLOW_LOWERING_CFG,
+      /*.source_to_low_max_errors=*/0,
+  };
+
+  loomc_pass_program_t* pass_program = nullptr;
+  loomc_result_t* result = nullptr;
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT,
+                         loomc_pass_program_create_from_target_pipeline(
+                             context.get(), &pipeline_options,
+                             loomc_allocator_system(), &pass_program, &result));
+  EXPECT_EQ(pass_program, nullptr);
+  EXPECT_EQ(result, nullptr);
+}
+
 TEST(TargetTest, RejectsSanitizerOptionsOnPlainPassProgramOptions) {
   ContextPtr context = CreateContext();
   loomc_sanitizer_options_t sanitizer_options = {

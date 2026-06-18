@@ -49,6 +49,7 @@
 //                           Source-to-low tests use source-low
 //                           [output=module|low]
 //                           [sanitizer=none|access|value|operation|race|all]
+//                           [sanitizer-reporting=default|trap|report-only]
 //                           [diagnostics=none|memory|all]. Linked providers
 //                           may add target-specific emit forms.
 //                           Low schedule diagnostics are one of none,
