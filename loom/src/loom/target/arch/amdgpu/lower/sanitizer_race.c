@@ -23,6 +23,7 @@
 #include "loom/target/arch/amdgpu/lower/sanitizer.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_race_report.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_report.h"
+#include "loom/target/arch/amdgpu/lower/sync.h"
 #include "loom/target/arch/amdgpu/lower/system_memory.h"
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
@@ -995,7 +996,7 @@ static bool loom_amdgpu_sanitizer_race_workgroup_size_supported(
 }
 
 static bool loom_amdgpu_sanitizer_race_required_descriptors_present(
-    const loom_low_descriptor_set_t* descriptor_set, bool include_sync) {
+    const loom_low_descriptor_set_t* descriptor_set) {
   const loom_amdgpu_descriptor_ref_t required_refs[] = {
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32_SADDR,
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR,
@@ -1047,9 +1048,7 @@ static bool loom_amdgpu_sanitizer_race_required_descriptors_present(
       return false;
     }
   }
-  return !include_sync ||
-         loom_amdgpu_descriptor_set_has_ref(
-             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER);
+  return true;
 }
 
 static iree_status_t loom_amdgpu_sanitizer_race_vgpr_u64_constant(
@@ -1869,8 +1868,7 @@ iree_status_t loom_amdgpu_select_sanitizer_race_access_plan(
     return iree_ok_status();
   }
   if (!loom_amdgpu_sanitizer_race_required_descriptors_present(
-          loom_low_lower_context_descriptor_set(context),
-          /*include_sync=*/false)) {
+          loom_low_lower_context_descriptor_set(context))) {
     return iree_ok_status();
   }
   if (!loom_amdgpu_sanitizer_race_workgroup_size_supported(
@@ -2253,8 +2251,13 @@ iree_status_t loom_amdgpu_select_sanitizer_race_sync_plan(
     return iree_ok_status();
   }
   if (!loom_amdgpu_sanitizer_race_required_descriptors_present(
-          loom_low_lower_context_descriptor_set(context),
-          /*include_sync=*/true)) {
+          loom_low_lower_context_descriptor_set(context))) {
+    return iree_ok_status();
+  }
+  bool barrier_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_workgroup_barrier_plan(
+      context, &out_plan->barrier, &barrier_selected));
+  if (!barrier_selected) {
     return iree_ok_status();
   }
   if (loom_sanitizer_race_sync_memory_space(source_op) !=
@@ -2310,20 +2313,9 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_exec_restore(
       /*result_types=*/NULL, /*result_count=*/0, location, &op);
 }
 
-static iree_status_t loom_amdgpu_sanitizer_race_build_barrier(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_location_id_t location) {
-  loom_op_t* op = NULL;
-  return loom_amdgpu_sanitizer_race_build_descriptor_op(
-      builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER,
-      /*operands=*/NULL, /*operand_count=*/0, loom_named_attr_slice_empty(),
-      /*result_types=*/NULL, /*result_count=*/0, location, &op);
-}
-
 iree_status_t loom_amdgpu_lower_sanitizer_race_sync(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_race_sync_plan_t* plan) {
-  (void)plan;
   loom_builder_t* builder = loom_low_lower_context_builder(context);
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
@@ -2366,8 +2358,8 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_sync(
       source_op->location));
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_exec_restore(
       builder, descriptor_set, saved_exec, source_op->location));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_barrier(
-      builder, descriptor_set, source_op->location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lower_workgroup_barrier_plan(
+      context, source_op, &plan->barrier));
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_branch_to_continuation(
       builder, continuation_block, source_op->location));
@@ -2431,6 +2423,11 @@ iree_status_t loom_amdgpu_low_legality_verify_sanitizer_race_sync(
         context, op,
         IREE_SV("target_contract.sanitizer_race.fixed_power_of_two_workgroup_"
                 "required"));
+  }
+  if (!loom_amdgpu_workgroup_barrier_lowering_available(
+          loom_target_low_legality_descriptor_set(context))) {
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("descriptor.workgroup_barrier"));
   }
   return iree_ok_status();
 }

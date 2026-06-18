@@ -16,6 +16,7 @@
 #include "loom/sanitizer/site_collection.h"
 #include "loom/target/arch/amdgpu/abi/tsan.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
+#include "loom/target/arch/amdgpu/lower/plan.h"
 #include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
@@ -38,8 +39,8 @@ typedef struct loom_amdgpu_sanitizer_race_access_plan_t {
 } loom_amdgpu_sanitizer_race_access_plan_t;
 
 typedef struct loom_amdgpu_sanitizer_race_sync_plan_t {
-  // Reserved to keep the plan type non-empty and future-extensible.
-  uint8_t reserved;
+  // Workgroup barrier emitted after the epoch update.
+  loom_amdgpu_kernel_barrier_plan_t barrier;
 } loom_amdgpu_sanitizer_race_sync_plan_t;
 
 // Selects the AMDGPU lowering plan for a sanitizer.race.access op.

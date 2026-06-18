@@ -295,6 +295,47 @@ def _s_barrier_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_barrier_signal_all_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_barrier_signal_all",
+        instruction_name="S_BARRIER_SIGNAL",
+        mnemonic="s_barrier_signal_all",
+        encoding_name="ENC_SOP1",
+        encoding_condition="Nothas_lit_0_Nothas_lit_1",
+        semantic_tag="control.barrier.workgroup.signal.all",
+        schedule_class=_SCHEDULE_BARRIER,
+        operands=(),
+        fixed_encoding_fields=(("SSRC0", _predefined("-1", "OPR_SSRC_BARRIER_ID")),),
+        effects=(_WORKGROUP_BARRIER_EFFECT, _CONVERGENT_EFFECT),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=_asm(
+            mnemonic="s_barrier_signal_all",
+            native_assembly_mnemonic="s_barrier_signal",
+            native_assembly_values=(_native_literal("-1"),),
+        ),
+    )
+
+
+def _s_barrier_wait_all_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_barrier_wait_all",
+        instruction_name="S_BARRIER_WAIT",
+        mnemonic="s_barrier_wait_all",
+        encoding_name="ENC_SOPP",
+        semantic_tag="control.barrier.workgroup.wait.all",
+        schedule_class=_SCHEDULE_BARRIER,
+        operands=(),
+        fixed_encoding_fields=(("SIMM16", AmdgpuEncodingFieldAllOnes()),),
+        effects=(_WORKGROUP_BARRIER_EFFECT, _CONVERGENT_EFFECT),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=_asm(
+            mnemonic="s_barrier_wait_all",
+            native_assembly_mnemonic="s_barrier_wait",
+            native_assembly_values=(_native_literal("-1"),),
+        ),
+    )
+
+
 def _cache_control_overlay(
     *,
     descriptor_key: str,
@@ -593,6 +634,8 @@ __all__ = (
     "_gfx12_prefetch_overlays",
     "_gfx950_cache_control_overlays",
     "_s_barrier_overlay",
+    "_s_barrier_signal_all_overlay",
+    "_s_barrier_wait_all_overlay",
     "_s_delay_alu_descriptor",
     "_s_dcache_discard_overlay",
     "_s_prefetch_overlay",

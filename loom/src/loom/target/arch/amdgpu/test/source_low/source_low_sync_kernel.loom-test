@@ -35,3 +35,43 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @multi_wave_barrier() as
   s_barrier
   return
 }
+
+// ====
+
+amdgpu.target<gfx1200> @target {processor = "gfx1201"}
+
+kernel.def target(@target) @multi_wave_barrier_gfx1201() {
+  %one = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%threads, %one, %one) : index
+} launch() {
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @multi_wave_barrier_gfx1201() asm<amdgpu.rdna4.core> {
+  s_barrier_signal_all
+  s_barrier_wait_all
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1250> @target
+
+kernel.def target(@target) @multi_wave_barrier_gfx1250() {
+  %one = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%threads, %one, %one) : index
+} launch() {
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @multi_wave_barrier_gfx1250() asm<amdgpu.rdna4.gfx125x.core> {
+  s_barrier_signal_all
+  s_barrier_wait_all
+  return
+}

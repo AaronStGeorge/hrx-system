@@ -1029,6 +1029,8 @@ typedef enum loom_amdgpu_kernel_barrier_lowering_kind_e {
   LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_S_BARRIER = 1,
   // Emit a wait packet that drains LDS effects for a single-wave workgroup.
   LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_LDS_WAIT = 2,
+  // Emit the split signal/wait barrier packet pair used by GFX12+ targets.
+  LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_SPLIT_BARRIER = 3,
 } loom_amdgpu_kernel_barrier_lowering_kind_t;
 
 typedef struct loom_amdgpu_kernel_barrier_plan_t {
@@ -1036,6 +1038,10 @@ typedef struct loom_amdgpu_kernel_barrier_plan_t {
   loom_amdgpu_kernel_barrier_lowering_kind_t kind;
   // Explicit wait packet selected when |kind| is LDS_WAIT.
   loom_amdgpu_explicit_packet_plan_t wait;
+  // Explicit signal packet selected when |kind| is SPLIT_BARRIER.
+  loom_amdgpu_explicit_packet_plan_t split_signal;
+  // Explicit wait packet selected when |kind| is SPLIT_BARRIER.
+  loom_amdgpu_explicit_packet_plan_t split_wait;
 } loom_amdgpu_kernel_barrier_plan_t;
 
 #define LOOM_AMDGPU_ATOMIC_WAIT_CAPACITY 2

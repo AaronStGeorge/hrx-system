@@ -76,6 +76,60 @@ static iree_status_t loom_amdgpu_select_kernel_barrier_lds_wait(
   return iree_ok_status();
 }
 
+bool loom_amdgpu_workgroup_barrier_lowering_available(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  if (loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER)) {
+    return true;
+  }
+  return loom_amdgpu_descriptor_set_has_ref(
+             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER_SIGNAL_ALL) &&
+         loom_amdgpu_descriptor_set_has_ref(
+             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER_WAIT_ALL);
+}
+
+iree_status_t loom_amdgpu_select_workgroup_barrier_plan(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_kernel_barrier_plan_t* out_plan, bool* out_selected) {
+  *out_plan = (loom_amdgpu_kernel_barrier_plan_t){0};
+  *out_selected = false;
+
+  if (loom_amdgpu_kernel_barrier_has_single_wave_workgroup(context)) {
+    bool selected = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_select_kernel_barrier_lds_wait(
+        context, out_plan, &selected));
+    if (selected) {
+      *out_selected = true;
+      return iree_ok_status();
+    }
+  }
+
+  const uint32_t barrier_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+      loom_low_lower_context_descriptor_set(context),
+      LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER);
+  if (barrier_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    out_plan->kind = LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_S_BARRIER;
+    *out_selected = true;
+    return iree_ok_status();
+  }
+
+  bool signal_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_explicit_packet_plan(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER_SIGNAL_ALL,
+      /*immediates=*/NULL, /*immediate_count=*/0, &out_plan->split_signal,
+      &signal_present));
+  bool wait_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_explicit_packet_plan(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER_WAIT_ALL,
+      /*immediates=*/NULL, /*immediate_count=*/0, &out_plan->split_wait,
+      &wait_present));
+  if (signal_present && wait_present) {
+    out_plan->kind = LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_SPLIT_BARRIER;
+    *out_selected = true;
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_select_kernel_barrier_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
@@ -88,39 +142,22 @@ iree_status_t loom_amdgpu_select_kernel_barrier_plan(
   }
 
   loom_amdgpu_kernel_barrier_plan_t local_plan = {0};
-
-  if (loom_amdgpu_kernel_barrier_has_single_wave_workgroup(context)) {
-    bool selected = false;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_select_kernel_barrier_lds_wait(
-        context, &local_plan, &selected));
-    if (selected) {
-      loom_amdgpu_kernel_barrier_plan_t* plan = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan), (void**)&plan));
-      *plan = local_plan;
-      *out_plan = loom_low_lower_plan_make(source_op->kind, plan);
-      return iree_ok_status();
-    }
-  }
-
-  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
-      loom_low_lower_context_descriptor_set(context),
-      LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+  bool selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_workgroup_barrier_plan(
+      context, &local_plan, &selected));
+  if (!selected) {
     return iree_ok_status();
   }
 
   loom_amdgpu_kernel_barrier_plan_t* plan = NULL;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_allocate_plan_data(context, sizeof(*plan), (void**)&plan));
-  *plan = (loom_amdgpu_kernel_barrier_plan_t){
-      .kind = LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_S_BARRIER,
-  };
+  *plan = local_plan;
   *out_plan = loom_low_lower_plan_make(source_op->kind, plan);
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_lower_kernel_barrier(
+iree_status_t loom_amdgpu_lower_workgroup_barrier_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_kernel_barrier_plan_t* plan) {
   IREE_ASSERT(plan != NULL);
@@ -136,12 +173,24 @@ iree_status_t loom_amdgpu_lower_kernel_barrier(
     case LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_LDS_WAIT:
       return loom_amdgpu_emit_explicit_packet_plan(context, source_op,
                                                    &plan->wait);
+    case LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_SPLIT_BARRIER: {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_explicit_packet_plan(
+          context, source_op, &plan->split_signal));
+      return loom_amdgpu_emit_explicit_packet_plan(context, source_op,
+                                                   &plan->split_wait);
+    }
     case LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_NONE:
       IREE_ASSERT_UNREACHABLE("unselected AMDGPU kernel barrier plan");
       IREE_BUILTIN_UNREACHABLE();
   }
   IREE_ASSERT_UNREACHABLE("unknown AMDGPU kernel barrier lowering kind");
   IREE_BUILTIN_UNREACHABLE();
+}
+
+iree_status_t loom_amdgpu_lower_kernel_barrier(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_kernel_barrier_plan_t* plan) {
+  return loom_amdgpu_lower_workgroup_barrier_plan(context, source_op, plan);
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
@@ -159,9 +208,12 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
                                            IREE_SV("barrier.workgroup_scope"));
   }
 
-  return loom_amdgpu_low_legality_verify_descriptor_requirement(
-      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER,
-      IREE_SV("descriptor.s_barrier"));
+  if (!loom_amdgpu_workgroup_barrier_lowering_available(
+          loom_target_low_legality_descriptor_set(context))) {
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("descriptor.workgroup_barrier"));
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_collective(
