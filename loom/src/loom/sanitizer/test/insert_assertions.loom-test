@@ -147,6 +147,24 @@ func.def @access_only_instruments_scalar_view_memory(%layout: encoding<layout>, 
 // ====
 
 // RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_static_scalar_view_memory(%input: view<2xi32, #dense>, %output: view<2xi32, #dense>) {
+  %value = view.load %input[1] : view<2xi32, #dense> -> i32
+  view.store %value, %output[1] : i32, view<2xi32, #dense>
+  func.return
+}
+
+// ----
+func.def @access_only_instruments_static_scalar_view_memory(%input: view<2xi32, #dense>, %output: view<2xi32, #dense>) {
+  sanitizer.assert.access<read> %input[1] : view<2xi32, #dense>
+  %value = view.load %input[1] : view<2xi32, #dense> -> i32
+  sanitizer.assert.access<write> %output[1] : view<2xi32, #dense>
+  view.store %value, %output[1] : i32, view<2xi32, #dense>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
 func.def @access_only_instruments_rank1_vector_memory(%layout: encoding<layout>, %input: view<64x4xi32, %layout>, %output: view<64x4xi32, %layout>, %row: index) {
   %value = vector.load %input[%row, 0] : view<64x4xi32, %layout> -> vector<4xi32>
   vector.store %value, %output[%row, 0] : vector<4xi32>, view<64x4xi32, %layout>
