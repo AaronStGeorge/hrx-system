@@ -86,6 +86,59 @@ func.def @dynamic_scaled_vector_origin_proven_by_assume_relation(%buffer: buffer
 
 // ====
 
+config.decl @runtime.column_count : %value: index where [range(%value, 3072, 8192), mul(%value, 4)]
+
+func.def @config_decl_matvec_block_lane_vec4_origin_is_proven(%buffer: buffer, %base: offset, %lane0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %columns = config.get @runtime.column_count : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %block_begin = index.constant 0 : index
+  %block_end = index.constant 12 : index
+  %block_step = index.constant 4 : index
+  %lanes_per_group = index.constant 16 : index
+  %block_stride = index.constant 105 : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%columns]xf32, %layout>
+  scf.for %block_base = [%block_begin to %block_end step %block_step] {
+    %lane_group = index.div %lane, %lanes_per_group : index
+    %lane_offset = index.rem %lane, %lanes_per_group : index
+    %block = index.add %block_base, %lane_group : index
+    %block_origin = index.mul %block, %block_stride : index
+    %origin = index.add %block_origin, %lane_offset : index
+    %loaded = vector.load %view[%origin] : view<[%columns]xf32, %layout> -> vector<4xf32>
+    test.use %loaded : vector<4xf32>
+  }
+  func.return
+}
+
+// ====
+
+config.decl @runtime.column_count : index
+
+func.def @config_decl_matvec_block_lane_vec4_origin_missing_bound(%buffer: buffer, %base: offset, %lane0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %columns = config.get @runtime.column_count : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %block_begin = index.constant 0 : index
+  %block_end = index.constant 12 : index
+  %block_step = index.constant 4 : index
+  %lanes_per_group = index.constant 16 : index
+  %block_stride = index.constant 105 : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%columns]xf32, %layout>
+  scf.for %block_base = [%block_begin to %block_end step %block_step] {
+    %lane_group = index.div %lane, %lanes_per_group : index
+    %lane_offset = index.rem %lane, %lanes_per_group : index
+    %block = index.add %block_base, %lane_group : index
+    %block_origin = index.mul %block, %block_stride : index
+    %origin = index.add %block_origin, %lane_offset : index
+    // ERROR@+1: SUBRANGE/018 {config_key="runtime.column_count", constraint_key="config_decl.where.vector_footprint_upper_bound"}
+    %loaded = vector.load %view[%origin] : view<[%columns]xf32, %layout> -> vector<4xf32>
+    test.use %loaded : vector<4xf32>
+  }
+  func.return
+}
+
+// ====
+
 func.def @dynamic_unit_axis_proven_by_assume_relation_through_cast(%buffer: buffer, %base: offset, %row: index, %n: i32) {
   %layout = encoding.layout.dense : encoding<layout>
   %n_idx = index.cast %n : i32 to index
