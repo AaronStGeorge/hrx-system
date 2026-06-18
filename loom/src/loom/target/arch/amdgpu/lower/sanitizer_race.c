@@ -1755,6 +1755,12 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_access(
       break;
     }
     case LOOM_SANITIZER_REPORTING_MODE_DEFAULT: {
+      loom_amdgpu_sanitizer_race_report_failure_branch_t branch = {0};
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_build_sanitizer_race_report_failure_mask_split(
+              builder, descriptor_set, failure_mask, source_op->location,
+              &branch));
+
       loom_amdgpu_sanitizer_report_source_t source = {0};
       loom_amdgpu_sanitizer_race_report_t report = {0};
       IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_report(
@@ -1764,11 +1770,10 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_access(
       const loom_amdgpu_sanitizer_race_report_island_t* island = NULL;
       IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_report_island(
           context, source_op->location, &island));
-      loom_amdgpu_sanitizer_race_report_failure_branch_t branch = {0};
-      IREE_RETURN_IF_ERROR(
-          loom_amdgpu_build_sanitizer_race_report_failure_mask_branch(
-              builder, descriptor_set, island, failure_mask, &source, &report,
-              source_op->location, &branch));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_race_report_branch(
+          builder, descriptor_set, island, &source, &report,
+          source_op->location));
+      loom_builder_set_block(builder, branch.continuation_block);
       break;
     }
     default:
