@@ -62,6 +62,16 @@ iree_status_t iree_benchmark_loom_write_hal_profile_summary_json(
     const loom_run_hal_profile_summary_t* profile,
     loom_output_stream_t* stream);
 
+// Writes host-side timing summary statistics as a compact JSON object.
+iree_status_t iree_benchmark_loom_write_timing_stats_json(
+    const iree_benchmark_loom_timing_stats_t* stats,
+    loom_output_stream_t* stream);
+
+// Writes HAL benchmark timing summary statistics as a compact JSON object.
+iree_status_t iree_benchmark_loom_write_benchmark_timing_stats_json(
+    const loom_run_benchmark_timing_stats_t* stats,
+    loom_output_stream_t* stream);
+
 // Writes one field separator/name pair inside a JSON object.
 iree_status_t iree_benchmark_loom_write_json_object_field_name(
     loom_output_stream_t* stream, bool* first_field, const char* name);

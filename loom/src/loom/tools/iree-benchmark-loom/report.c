@@ -639,7 +639,7 @@ iree_status_t iree_benchmark_loom_append_plan_row(
   return iree_ok_status();
 }
 
-static iree_status_t iree_benchmark_loom_write_timing_stats_json(
+iree_status_t iree_benchmark_loom_write_timing_stats_json(
     const iree_benchmark_loom_timing_stats_t* stats,
     loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
@@ -661,7 +661,7 @@ static iree_status_t iree_benchmark_loom_write_timing_stats_json(
   return iree_ok_status();
 }
 
-static iree_status_t iree_benchmark_loom_write_benchmark_timing_stats_json(
+iree_status_t iree_benchmark_loom_write_benchmark_timing_stats_json(
     const loom_run_benchmark_timing_stats_t* stats,
     loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));

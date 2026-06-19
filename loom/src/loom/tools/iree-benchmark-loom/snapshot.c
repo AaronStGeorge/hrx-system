@@ -195,51 +195,6 @@ static iree_string_view_t iree_benchmark_loom_snapshot_result_status(
   return IREE_SV("skipped");
 }
 
-static iree_status_t iree_benchmark_loom_snapshot_write_case_timing_json(
-    const iree_benchmark_loom_timing_stats_t* timing,
-    loom_output_stream_t* stream) {
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, "\"count\":%" PRIhsz, timing->count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"total\":%" PRIi64, timing->total_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"min\":%" PRIi64, timing->minimum_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"max\":%" PRIi64, timing->maximum_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(stream, ",\"mean\":%.3f",
-                                                       timing->mean_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"p50\":%" PRIi64, timing->p50_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"p90\":%" PRIi64, timing->p90_ns));
-  return loom_output_stream_write_cstring(stream, "}");
-}
-
-static iree_status_t iree_benchmark_loom_snapshot_write_hal_timing_json(
-    const loom_run_benchmark_timing_stats_t* timing,
-    loom_output_stream_t* stream) {
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, "\"count\":%" PRIhsz, timing->count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"total\":%" PRIi64, timing->total_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"min\":%" PRIi64, timing->minimum_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"max\":%" PRIi64, timing->maximum_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(stream, ",\"mean\":%.3f",
-                                                       timing->mean_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"p50\":%" PRIi64, timing->p50_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"p90\":%" PRIi64, timing->p90_ns));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"p90_to_p50_delta_ppm\":%" PRIu64,
-      timing->p90_to_p50_delta_ppm));
-  return loom_output_stream_write_cstring(stream, "}");
-}
-
 static iree_status_t iree_benchmark_loom_snapshot_write_profile_json(
     const loom_run_hal_profile_summary_t* profile,
     loom_output_stream_t* stream) {
@@ -326,7 +281,7 @@ static iree_status_t iree_benchmark_loom_snapshot_write_measurement_fields(
   if (benchmark_result->executed && !benchmark_result->has_hal_benchmark) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
         stream, first_field, "timing_ns"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_case_timing_json(
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_timing_stats_json(
         &benchmark_result->timing, stream));
   }
   if (benchmark_result->has_hal_benchmark) {
@@ -349,15 +304,15 @@ static iree_status_t iree_benchmark_loom_snapshot_write_measurement_fields(
             benchmark_result, &mean_physical_dispatch_duration_ns));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
         stream, first_field, "timing_ns"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_hal_timing_json(
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_timing_stats_json(
         &timing->operation_timing, stream));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
         stream, first_field, "batch_timing_ns"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_hal_timing_json(
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_timing_stats_json(
         &timing->batch_timing, stream));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
         stream, first_field, "operation_timing_ns"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_hal_timing_json(
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_timing_stats_json(
         &timing->operation_timing, stream));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
         stream, first_field, "logical_operations_per_batch",
