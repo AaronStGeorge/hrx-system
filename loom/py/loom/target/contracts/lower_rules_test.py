@@ -106,9 +106,12 @@ def test_compile_lower_rule_set_compiles_direct_scalar_rule() -> None:
         name="test.scalar",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
-            _binary_rule(
-                source_op=scalar_arithmetic.scalar_addi,
-                type_pattern=Scalar("i32"),
+            replace(
+                _binary_rule(
+                    source_op=scalar_arithmetic.scalar_addi,
+                    type_pattern=Scalar("i32"),
+                ),
+                report_key="test.scalar_addi.strategy.direct",
             )
         ],
     )
@@ -123,6 +126,7 @@ def test_compile_lower_rule_set_compiles_direct_scalar_rule() -> None:
 
     assert len(compiled.rules) == 1
     assert compiled.rules[0].source_op is scalar_arithmetic.scalar_addi
+    assert compiled.rules[0].report_key == "test.scalar_addi.strategy.direct"
     assert compiled.rules[0].guard_count == 3
     assert compiled.rules[0].emit_count == 1
 

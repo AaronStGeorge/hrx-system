@@ -384,8 +384,16 @@ typedef struct loom_low_lower_memory_report_row_t {
   iree_string_view_t operation_kind;
   // Stable target packet key selected for this emitted low operation.
   iree_string_view_t packet_key;
+  // Stable target address-form key selected for this emitted low operation.
+  iree_string_view_t address_form;
+  // Stable target dynamic-term operand key for the source address.
+  iree_string_view_t dynamic_term_kind;
+  // Stable target-owned reason key for address-form selection or fallback.
+  iree_string_view_t fallback_reason;
   // Stable descriptor id for the emitted packet, or none when unavailable.
   uint64_t descriptor_id;
+  // Static source byte offset before target packet splitting.
+  int64_t static_offset_bytes;
   // Byte count of one addressed source element.
   uint32_t element_byte_count;
   // Number of source vector lanes moved by this packet.

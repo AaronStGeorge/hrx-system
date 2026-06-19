@@ -10,6 +10,7 @@
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/context.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/memory_bank_conflict.h"
@@ -46,6 +47,52 @@ iree_string_view_t loom_amdgpu_memory_operation_name(
       return IREE_SV("store");
     case LOOM_AMDGPU_MEMORY_OPERATION_COUNT_:
       break;
+  }
+  return IREE_SV("invalid");
+}
+
+iree_string_view_t loom_amdgpu_memory_address_form_name(
+    loom_amdgpu_memory_address_form_t address_form) {
+  switch (address_form) {
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT:
+      return IREE_SV("default");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO:
+      return IREE_SV("buffer_off_zero");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR:
+      return IREE_SV("ds_2addr");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR:
+      return IREE_SV("global_saddr");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID:
+      return IREE_SV("ds_addtid");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT:
+      return IREE_SV("flat");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM:
+      return IREE_SV("global_smem");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_SCRATCH_VADDR:
+      return IREE_SV("scratch_vaddr");
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_COUNT_:
+      break;
+  }
+  return IREE_SV("invalid");
+}
+
+iree_string_view_t loom_amdgpu_memory_access_dynamic_term_kind_name(
+    const loom_amdgpu_memory_access_t* access) {
+  switch (access->source.dynamic_term_count) {
+    case 0:
+      return IREE_SV("none");
+    case 1:
+      break;
+    default:
+      return IREE_SV("multiple");
+  }
+  switch (access->dynamic_term_kinds[0]) {
+    case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE:
+      return IREE_SV("none");
+    case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR:
+      return IREE_SV("vaddr");
+    case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET:
+      return IREE_SV("soffset");
   }
   return IREE_SV("invalid");
 }
@@ -88,6 +135,46 @@ static iree_string_view_t loom_amdgpu_source_memory_operation_name(
 static iree_string_view_t loom_amdgpu_memory_diagnostic_nonempty(
     iree_string_view_t value, iree_string_view_t placeholder) {
   return iree_string_view_is_empty(value) ? placeholder : value;
+}
+
+static bool loom_amdgpu_memory_access_has_vector_width_diagnostic(
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  return diagnostic->vector_lane_count != 0 &&
+         diagnostic->element_byte_count != 0 &&
+         diagnostic->required_32bit_lane_count != 0 &&
+         diagnostic->native_max_vector_lane_count != 0 &&
+         diagnostic->scalarized_max_vector_lane_count != 0;
+}
+
+static iree_status_t loom_amdgpu_emit_memory_access_vector_width_error(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_low_source_memory_access_plan_t* source,
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  const loom_module_t* module = loom_target_low_legality_module(context);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->export_plan->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->config->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_target_low_legality_function_name(context)),
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_string(
+          loom_amdgpu_source_memory_operation_name(source->operation_kind)),
+      loom_param_type(diagnostic->vector_type),
+      loom_param_u32(diagnostic->vector_lane_count),
+      loom_param_u32(diagnostic->element_byte_count),
+      loom_param_u32(diagnostic->required_32bit_lane_count),
+      loom_param_u32(LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES),
+      loom_param_u32(diagnostic->native_max_vector_lane_count),
+      loom_param_u32(LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES),
+      loom_param_u32(diagnostic->scalarized_max_vector_lane_count),
+      loom_param_string(IREE_SV("memory_access.vector_type")),
+  };
+  return loom_target_low_legality_emit_error_ref(
+      context, op, LOOM_ERR_AMDGPU_040_REF, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_amdgpu_emit_memory_access_packed_footprint_error(
@@ -199,6 +286,12 @@ iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(
     const loom_amdgpu_memory_access_diagnostic_t* diagnostic,
     bool* out_handled) {
   *out_handled = true;
+  if (iree_any_bit_set(diagnostic->rejection_bits,
+                       LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE) &&
+      loom_amdgpu_memory_access_has_vector_width_diagnostic(diagnostic)) {
+    return loom_amdgpu_emit_memory_access_vector_width_error(
+        context, op, source, diagnostic);
+  }
   if (iree_any_bit_set(
           diagnostic->rejection_bits,
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT)) {
@@ -387,7 +480,14 @@ iree_status_t loom_amdgpu_record_memory_access_diagnostic(
           access, loom_amdgpu_memory_bank_default_lds_geometry());
   return loom_target_low_legality_record_memory_access(
       context, op, loom_amdgpu_memory_space_name(access->source.memory_space),
-      loom_amdgpu_memory_operation_name(kind), packet_key, IREE_SV("selected"),
+      loom_amdgpu_memory_operation_name(kind), packet_key,
+      loom_amdgpu_memory_address_form_name(access->address_form),
+      loom_amdgpu_memory_access_dynamic_term_kind_name(access),
+      loom_amdgpu_memory_ds_addtid_reason_key(
+          descriptor_set, loom_target_low_legality_module(context),
+          loom_target_low_legality_function(context),
+          loom_target_low_legality_bundle(context), access, kind),
+      IREE_SV("selected"), access->source.static_byte_offset,
       access->source.element_byte_count, access->payload_register_count,
       access->source.dynamic_term_count == 1
           ? access->source.dynamic_terms[0].byte_stride

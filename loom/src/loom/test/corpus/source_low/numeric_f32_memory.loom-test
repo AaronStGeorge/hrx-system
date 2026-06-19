@@ -62,6 +62,26 @@ kernel.def @f32_arcp_div() {
 
 // ====
 
+func.def @f32_guarded_arcp_reciprocal_scale(%amax: f32) -> (f32) {
+  %zero = scalar.constant 0.0 : f32
+  %one = scalar.constant 1.0 : f32
+  %one_over_127 = scalar.constant 0.007874015700000001 : f32
+  %scale = scalar.constant 127.0 : f32
+  %d = scalar.mulf<nnan|ninf|nsz|arcp> %amax, %one_over_127 : f32
+  %zero_for_cmp = scalar.subf %d, %d : f32
+  %nonzero = scalar.cmpf one, %d, %zero_for_cmp : f32
+  %d_inv = scf.if %nonzero -> (f32) {
+    %amax_inv = scalar.divf<nnan|ninf|nsz|arcp> %one, %amax : f32
+    %candidate = scalar.mulf<nnan|ninf|nsz|arcp> %amax_inv, %scale : f32
+    scf.yield %candidate : f32
+  } else {
+    scf.yield %zero : f32
+  }
+  func.return %d_inv : f32
+}
+
+// ====
+
 kernel.def @f32_exact_vector_div() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 64 : index

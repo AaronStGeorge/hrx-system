@@ -321,6 +321,66 @@ def test_validate_c_table_shape_rejects_value_ref_materializer_index_oob() -> No
     )
 
 
+def test_generate_lower_rule_set_emits_report_key_ordinals() -> None:
+    table = ContractFragment(
+        name="test.low.report_keys",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_mulf,
+                descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                report_key="test.scalar_mulf.strategy.native",
+                guards=(
+                    Guard.value_type("lhs", Scalar("f32")),
+                    Guard.value_type("rhs", Scalar("f32")),
+                    Guard.value_type("result", Scalar("f32")),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    generated = generate_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert "static const iree_string_view_t" in generated.source
+    assert '.data = "test.scalar_mulf.strategy.native"' in generated.source
+    assert '.size = IREE_ARRAYSIZE("test.scalar_mulf.strategy.native") - 1' in generated.source
+    assert ".report_key_ordinal = 1," in generated.source
+    assert ".report_keys = " in generated.source
+    assert ".report_key_count = IREE_ARRAYSIZE(" in generated.source
+
+
+def test_validate_c_table_shape_rejects_invalid_report_key() -> None:
+    table = _compiled_lower_rule_set(
+        rules=(
+            LowerRule(
+                source_op=scalar_arithmetic.scalar_addi,
+                temporary_count=0,
+                guard_start=0,
+                guard_count=0,
+                emit_start=0,
+                emit_count=0,
+                report_key="test scalar_addi",
+            ),
+        ),
+    )
+
+    _expect_value_error(
+        lambda: _validate_c_table_shape(table, _c_shape_contract(), ()),
+        "lower-rule set 'test.low.generated_c_shape' rule 0 report key must not contain whitespace",
+    )
+
+
 def test_generate_lower_rule_set_emits_value_ref_for_f64_equals_guard() -> None:
     table = ContractFragment(
         name="test.low.f64_equals",

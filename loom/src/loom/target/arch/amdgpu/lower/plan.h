@@ -54,26 +54,30 @@ typedef struct loom_amdgpu_constant_plan_t {
   bool i1_value;
 } loom_amdgpu_constant_plan_t;
 
-typedef enum loom_amdgpu_vector_bf16_conversion_kind_e {
-  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_NONE = 0,
-  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_EXTF = 1,
-  LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_FPTRUNC = 2,
-} loom_amdgpu_vector_bf16_conversion_kind_t;
+typedef enum loom_amdgpu_vector_16bit_float_conversion_kind_e {
+  LOOM_AMDGPU_VECTOR_16BIT_FLOAT_CONVERSION_KIND_NONE = 0,
+  LOOM_AMDGPU_VECTOR_16BIT_FLOAT_CONVERSION_KIND_EXTF = 1,
+  LOOM_AMDGPU_VECTOR_16BIT_FLOAT_CONVERSION_KIND_FPTRUNC = 2,
+} loom_amdgpu_vector_16bit_float_conversion_kind_t;
 
-typedef struct loom_amdgpu_vector_bf16_conversion_plan_t {
+typedef struct loom_amdgpu_vector_16bit_float_conversion_plan_t {
   // Source vector value being converted.
   loom_value_id_t source;
   // Result vector value receiving the converted lane payload.
   loom_value_id_t result;
   // Conversion operation selected for the source/result type pair.
-  loom_amdgpu_vector_bf16_conversion_kind_t kind;
+  loom_amdgpu_vector_16bit_float_conversion_kind_t kind;
+  // Source scalar element type.
+  loom_scalar_type_t source_element_type;
+  // Result scalar element type.
+  loom_scalar_type_t result_element_type;
   // Static vector lane count.
   uint32_t lane_count;
   // Number of 32-bit source registers occupied by the source vector.
   uint32_t source_register_count;
   // Number of 32-bit result registers occupied by the result vector.
   uint32_t result_register_count;
-} loom_amdgpu_vector_bf16_conversion_plan_t;
+} loom_amdgpu_vector_16bit_float_conversion_plan_t;
 
 typedef enum loom_amdgpu_index_cast_kind_e {
   LOOM_AMDGPU_INDEX_CAST_KIND_NONE = 0,
@@ -93,16 +97,28 @@ typedef struct loom_amdgpu_index_cast_plan_t {
   uint32_t index_bitwidth;
 } loom_amdgpu_index_cast_plan_t;
 
-typedef struct loom_amdgpu_offset_add_plan_t {
-  // Left-hand offset value.
+typedef enum loom_amdgpu_address_i64_alu_kind_e {
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_NONE = 0,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_SGPR_ADD = 1,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_ADD = 2,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_SUB = 3,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_MUL_LO = 4,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_SHL = 5,
+  LOOM_AMDGPU_ADDRESS_I64_ALU_KIND_VGPR_MADD_LO = 6,
+} loom_amdgpu_address_i64_alu_kind_t;
+
+typedef struct loom_amdgpu_address_i64_alu_plan_t {
+  // Left-hand address-domain value.
   loom_value_id_t lhs;
-  // Right-hand offset value.
+  // Right-hand address-domain value.
   loom_value_id_t rhs;
-  // Result offset value receiving the full-width sum.
+  // Addend address-domain value for multiply-add operations.
+  loom_value_id_t addend;
+  // Result address-domain value receiving the full-width result.
   loom_value_id_t result;
-  // True when the result is a VGPR x2 value instead of an SGPR x2 value.
-  bool result_is_vgpr;
-} loom_amdgpu_offset_add_plan_t;
+  // Lowering strategy selected for the full-width address operation.
+  loom_amdgpu_address_i64_alu_kind_t kind;
+} loom_amdgpu_address_i64_alu_plan_t;
 
 typedef struct loom_amdgpu_i64_compare_plan_t {
   // Left-hand 64-bit source value.
@@ -278,6 +294,15 @@ typedef struct loom_amdgpu_dotf_plan_t {
   loom_amdgpu_descriptor_ref_t tied_accumulate_descriptor_ref;
 } loom_amdgpu_dotf_plan_t;
 
+typedef uint32_t loom_amdgpu_fma_mix_plan_flags_t;
+
+enum {
+  // Source 2 is encoded as a literal positive zero immediate.
+  LOOM_AMDGPU_FMA_MIX_PLAN_SRC2_LITERAL_ZERO = 1u << 0,
+  // Source 2 is supplied by a materialized VGPR positive zero.
+  LOOM_AMDGPU_FMA_MIX_PLAN_SRC2_MATERIALIZED_ZERO = 1u << 1,
+};
+
 typedef struct loom_amdgpu_fma_mix_plan_t {
   // Source values consumed by the selected descriptor in a, b, c order.
   loom_value_id_t sources[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT];
@@ -290,6 +315,8 @@ typedef struct loom_amdgpu_fma_mix_plan_t {
   // Descriptor source interpretation for each source value.
   loom_amdgpu_fma_mix_source_kind_t
       source_kinds[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT];
+  // Flags describing implicit literal or materialized operands.
+  loom_amdgpu_fma_mix_plan_flags_t flags;
 } loom_amdgpu_fma_mix_plan_t;
 
 typedef struct loom_amdgpu_packed_ternary_plan_t {
@@ -641,7 +668,16 @@ typedef enum loom_amdgpu_subgroup_reduce_crosslane_kind_e {
   LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_BPERMUTE = 0,
   // Use DPP row moves within 16-lane rows and DS bpermute between rows.
   LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_BPERMUTE = 1,
+  // Use DPP row moves within 16-lane rows and permlanex16 between row pairs.
+  LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_PERMLANEX16 = 2,
 } loom_amdgpu_subgroup_reduce_crosslane_kind_t;
+
+typedef enum loom_amdgpu_subgroup_reduce_publication_kind_e {
+  // Publish a correct reduced VGPR payload to every active subgroup lane.
+  LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_ALL_LANES = 0,
+  // Publish a correct reduced VGPR payload only for lane-zero-guarded uses.
+  LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_LEADER_LANE = 1,
+} loom_amdgpu_subgroup_reduce_publication_kind_t;
 
 typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   // Source value reduced across subgroup lanes.
@@ -652,6 +688,10 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t dpp_descriptor;
   // Descriptor row selected for fused DPP row moves and lane combines.
   loom_low_lower_resolved_descriptor_t dpp_combine_descriptor;
+  // Descriptor row selected for paired 16-lane row exchanges.
+  loom_low_lower_resolved_descriptor_t permlanex16_descriptor;
+  // Descriptor row selected for reading a fixed VGPR lane into an SGPR.
+  loom_low_lower_resolved_descriptor_t readlane_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
   // Descriptor row selected to guard inactive source lanes.
@@ -672,6 +712,8 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   uint32_t identity_bits;
   // Cross-lane exchange strategy selected for the subgroup tree.
   loom_amdgpu_subgroup_reduce_crosslane_kind_t crosslane_kind;
+  // Strategy used to publish the final reduced value to result users.
+  loom_amdgpu_subgroup_reduce_publication_kind_t publication_kind;
 } loom_amdgpu_subgroup_reduce_plan_t;
 
 typedef enum loom_amdgpu_workgroup_reduce_publication_kind_e {
@@ -711,6 +753,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t dpp_descriptor;
   // Descriptor row selected for fused DPP row moves and lane combines.
   loom_low_lower_resolved_descriptor_t dpp_combine_descriptor;
+  // Descriptor row selected for paired 16-lane row exchanges.
+  loom_low_lower_resolved_descriptor_t permlanex16_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
   // Descriptor row selected to guard inactive source lanes.

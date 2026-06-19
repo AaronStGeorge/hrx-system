@@ -126,6 +126,23 @@ _CHECKED_BENCHMARK_CASES = [
         ],
     },
     {
+        "name": "workgroup_rank_sort_f32_i32",
+        "rows": [
+            {
+                "benchmark": "@workgroup_rank_sort_distinct",
+                "target_name": "workgroup_rank_sort_distinct",
+            },
+            {
+                "benchmark": "@workgroup_rank_sort_tie",
+                "target_name": "workgroup_rank_sort_tie",
+            },
+        ],
+        "source": "workgroup_rank_sort_f32_i32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
         "name": "packed_s8_fields_f16scale_f32dot",
         "rows": [
             {
@@ -134,6 +151,19 @@ _CHECKED_BENCHMARK_CASES = [
             },
         ],
         "source": "packed_s8_fields_f16scale_f32dot.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
+        "name": "fragment_result_dynamic_strided_f16acc_f32_store",
+        "rows": [
+            {
+                "benchmark": "@fragment_result_dynamic_strided_f16acc_f32_store_smoke",
+                "target_name": "fragment_result_dynamic_strided_f16acc_f32_store",
+            },
+        ],
+        "source": "fragment_result_dynamic_strided_f16acc_f32_store.loom",
         "targets": [
             "amdgpu",
         ],

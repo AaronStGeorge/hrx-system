@@ -142,6 +142,31 @@ func.def @vector_quantize_roundeven_f32_to_i8x4(%values: vector<4xf32>, %inverse
 
 // ====
 
+func.def @vector_quantize_scalarized_roundeven_f32_to_i8x4(%values: vector<4xf32>, %inverse_scale: f32) -> (vector<4xi8>) {
+  %scale = vector.splat %inverse_scale : vector<4xf32>
+  %scaled = vector.mulf %values, %scale : vector<4xf32>
+  %lane0 = vector.extract %scaled[0] : vector<4xf32> -> f32
+  %rounded0 = scalar.roundevenf %lane0 : f32
+  %i32_0 = scalar.fptosi %rounded0 : f32 to i32
+  %i8_0 = scalar.trunci %i32_0 : i32 to i8
+  %lane1 = vector.extract %scaled[1] : vector<4xf32> -> f32
+  %rounded1 = scalar.roundevenf %lane1 : f32
+  %i32_1 = scalar.fptosi %rounded1 : f32 to i32
+  %i8_1 = scalar.trunci %i32_1 : i32 to i8
+  %lane2 = vector.extract %scaled[2] : vector<4xf32> -> f32
+  %rounded2 = scalar.roundevenf %lane2 : f32
+  %i32_2 = scalar.fptosi %rounded2 : f32 to i32
+  %i8_2 = scalar.trunci %i32_2 : i32 to i8
+  %lane3 = vector.extract %scaled[3] : vector<4xf32> -> f32
+  %rounded3 = scalar.roundevenf %lane3 : f32
+  %i32_3 = scalar.fptosi %rounded3 : f32 to i32
+  %i8_3 = scalar.trunci %i32_3 : i32 to i8
+  %packed = vector.from_elements %i8_0, %i8_1, %i8_2, %i8_3 : vector<4xi8>
+  func.return %packed : vector<4xi8>
+}
+
+// ====
+
 func.def @scalar_uitofp_i32(%input: i32) -> (f32) {
   %converted = scalar.uitofp %input : i32 to f32
   func.return %converted : f32
@@ -319,6 +344,27 @@ func.def @scalar_fptrunc_f32_store(%output: buffer, %input: f32) {
   %converted = scalar.fptrunc %input : f32 to f16
   view.store %converted, %output_view[0] : f16, view<1xf16, #dense>
   func.return
+}
+
+// ====
+
+func.def @vector_extf_f16x2(%input: vector<2xf16>) -> (vector<2xf32>) {
+  %converted = vector.extf %input : vector<2xf16> to vector<2xf32>
+  func.return %converted : vector<2xf32>
+}
+
+// ====
+
+func.def @vector_extf_f16x3(%input: vector<3xf16>) -> (vector<3xf32>) {
+  %converted = vector.extf %input : vector<3xf16> to vector<3xf32>
+  func.return %converted : vector<3xf32>
+}
+
+// ====
+
+func.def @vector_fptrunc_f16x3(%input: vector<3xf32>) -> (vector<3xf16>) {
+  %converted = vector.fptrunc %input : vector<3xf32> to vector<3xf16>
+  func.return %converted : vector<3xf16>
 }
 
 // ====

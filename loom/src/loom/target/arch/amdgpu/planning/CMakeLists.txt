@@ -423,6 +423,7 @@ loom_cc_library(
     loom::error::error_defs
     loom::ir
     loom::target::arch::amdgpu::target_id
+    loom::target::arch::amdgpu::target_info_defs
     loom::target::launch
     loom::target::types
     loom::util::json

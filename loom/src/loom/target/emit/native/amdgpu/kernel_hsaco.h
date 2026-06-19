@@ -27,6 +27,27 @@ extern "C" {
 
 typedef struct loom_amdgpu_native_preflight_t loom_amdgpu_native_preflight_t;
 
+typedef struct loom_amdgpu_kernel_hsaco_target_resources_t {
+  // Stable scalar register class represented by |scalar_register_count|.
+  iree_string_view_t scalar_register_class;
+  // Final scalar register units declared by target metadata.
+  uint32_t scalar_register_count;
+  // Stable vector register class represented by |vector_register_count|.
+  iree_string_view_t vector_register_class;
+  // Final vector register units declared by target metadata.
+  uint32_t vector_register_count;
+  // Target wavefront width in lanes.
+  uint32_t wave_size;
+  // Maximum resident waves per SIMD in the target occupancy model.
+  uint32_t max_waves_per_simd;
+  // Estimated resident waves per SIMD after final target resources.
+  uint32_t resident_waves_per_simd;
+  // Estimated final occupancy as a percentage of |max_waves_per_simd|.
+  uint32_t occupancy_percent;
+  // Stable resource name limiting final occupancy, or "max_waves".
+  iree_string_view_t limiting_resource;
+} loom_amdgpu_kernel_hsaco_target_resources_t;
+
 typedef struct loom_amdgpu_kernel_hsaco_summary_t {
   // Number of native instructions emitted into the kernel text stream.
   uint64_t instruction_count;
@@ -38,6 +59,8 @@ typedef struct loom_amdgpu_kernel_hsaco_summary_t {
   uint64_t private_segment_fixed_size;
   // Number of local/shared memory bytes declared by kernel metadata.
   uint64_t group_segment_fixed_size;
+  // Final target resource and occupancy facts from kernel metadata.
+  loom_amdgpu_kernel_hsaco_target_resources_t target_resources;
 } loom_amdgpu_kernel_hsaco_summary_t;
 
 typedef struct loom_amdgpu_kernel_hsaco_options_t {

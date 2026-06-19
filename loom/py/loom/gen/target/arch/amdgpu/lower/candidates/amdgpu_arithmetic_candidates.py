@@ -45,6 +45,13 @@ class _FmaMixDescriptorCube:
 
 
 @dataclass(frozen=True, slots=True)
+class _FmaMixSrc2LiteralTable:
+    array_name: str
+    descriptor_key_prefix: str
+    include_all_f32: bool
+
+
+@dataclass(frozen=True, slots=True)
 class _PackedTernaryDescriptorCandidate:
     descriptor_key: str
     source_permutation: tuple[int, int, int] = (0, 1, 2)
@@ -110,6 +117,24 @@ _FMA_MIX_DESCRIPTOR_CUBES = (
     _FmaMixDescriptorCube(
         array_name="kLoomAmdgpuMadMixhiF16DescriptorRefs",
         descriptor_key_prefix="amdgpu.v_mad_mixhi_f16",
+        include_all_f32=True,
+    ),
+)
+
+_FMA_MIX_SRC2_LITERAL_TABLES = (
+    _FmaMixSrc2LiteralTable(
+        array_name="kLoomAmdgpuFmaMixF32Src2LiteralDescriptorRefs",
+        descriptor_key_prefix="amdgpu.v_fma_mix_f32",
+        include_all_f32=False,
+    ),
+    _FmaMixSrc2LiteralTable(
+        array_name="kLoomAmdgpuFmaMixloF16Src2LiteralDescriptorRefs",
+        descriptor_key_prefix="amdgpu.v_fma_mixlo_f16",
+        include_all_f32=True,
+    ),
+    _FmaMixSrc2LiteralTable(
+        array_name="kLoomAmdgpuFmaMixhiF16Src2LiteralDescriptorRefs",
+        descriptor_key_prefix="amdgpu.v_fma_mixhi_f16",
         include_all_f32=True,
     ),
 )
@@ -182,10 +207,14 @@ def _fma_mix_descriptor_key(
     return f"{cube.descriptor_key_prefix}.{'_'.join(source_parts)}"
 
 
-def _fma_mix_src2_literal_descriptor_key(source0: str, source1: str) -> str | None:
-    if (source0, source1) == ("f32", "f32"):
+def _fma_mix_src2_literal_descriptor_key(
+    table: _FmaMixSrc2LiteralTable,
+    source0: str,
+    source1: str,
+) -> str | None:
+    if (source0, source1) == ("f32", "f32") and not table.include_all_f32:
         return None
-    return f"amdgpu.v_fma_mix_f32.{source0}_{source1}_f32.src2_lit"
+    return f"{table.descriptor_key_prefix}.{source0}_{source1}_f32.src2_lit"
 
 
 def _descriptor_ref_constant(
@@ -220,15 +249,16 @@ def _emit_fma_mix_cube(
 
 
 def _emit_fma_mix_src2_literal_table(
+    table: _FmaMixSrc2LiteralTable,
     descriptor_ref_key_set: set[str],
 ) -> Iterable[str]:
     yield "const loom_amdgpu_fma_mix_src2_literal_descriptor_ref_table_t"
-    yield "    kLoomAmdgpuFmaMixF32Src2LiteralDescriptorRefs = {"
+    yield f"    {table.array_name} = {{"
     for source0 in _SOURCE_KINDS:
         yield f"        [{source0.c_enum}] = {{"
         for source1 in _SOURCE_KINDS:
-            descriptor_key = _fma_mix_src2_literal_descriptor_key(source0.keyword, source1.keyword)
-            owner = f"AMDGPU FMA-mix source-2 literal descriptor candidate {source0.keyword} {source1.keyword}"
+            descriptor_key = _fma_mix_src2_literal_descriptor_key(table, source0.keyword, source1.keyword)
+            owner = f"AMDGPU FMA-mix source-2 literal descriptor candidate {table.array_name} {source0.keyword} {source1.keyword}"
             descriptor_ref = _descriptor_ref_constant(owner, descriptor_key, descriptor_ref_key_set)
             yield f"            [{source1.c_enum}] = {descriptor_ref},"
         yield "        },"
@@ -291,8 +321,9 @@ def _emit_source(*, public_header: str) -> str:
         expected_rows = len(_fma_mix_source_combinations(include_all_f32=cube.include_all_f32))
         if expected_rows != (27 if cube.include_all_f32 else 26):
             raise ValueError(f"AMDGPU FMA-mix cube {cube.array_name} generated {expected_rows} source rows")
-    data_lines.extend(_emit_fma_mix_src2_literal_table(descriptor_ref_key_set))
-    data_lines.append("")
+    for table in _FMA_MIX_SRC2_LITERAL_TABLES:
+        data_lines.extend(_emit_fma_mix_src2_literal_table(table, descriptor_ref_key_set))
+        data_lines.append("")
     for array in _PACKED_TERNARY_DESCRIPTOR_CANDIDATE_ARRAYS:
         data_lines.extend(_emit_packed_ternary_candidate_array(array, descriptor_ref_key_set))
         data_lines.append("")

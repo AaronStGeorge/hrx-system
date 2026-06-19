@@ -73,6 +73,18 @@ typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
 typedef struct loom_amdgpu_memory_access_diagnostic_t {
   // Rejection bits explaining why an access is not legal for this target.
   loom_amdgpu_memory_access_rejection_flags_t rejection_bits;
+  // Source vector type involved in vector-width diagnostics.
+  loom_type_t vector_type;
+  // Source vector lane count involved in vector-width diagnostics.
+  uint32_t vector_lane_count;
+  // Byte count of one source vector element in vector-width diagnostics.
+  uint32_t element_byte_count;
+  // Required 32-bit payload lanes for the source vector.
+  uint32_t required_32bit_lane_count;
+  // Maximum source lanes representable by one native memory packet.
+  uint32_t native_max_vector_lane_count;
+  // Maximum source lanes representable by scalarized fallback lowering.
+  uint32_t scalarized_max_vector_lane_count;
   // Source payload type involved in register-footprint diagnostics.
   loom_type_t payload_type;
   // Number of source payload bits involved in register-footprint diagnostics.
@@ -183,6 +195,10 @@ bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic);
 
+// Routes all dynamic source terms through the VGPR byte-address operand.
+void loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(
+    loom_amdgpu_memory_access_t* access);
+
 // Emits the VGPR address operand for a selected memory access.
 iree_status_t loom_amdgpu_emit_memory_vaddr(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -244,6 +260,23 @@ iree_string_view_t loom_amdgpu_memory_space_name(
 
 // Returns the stable report/diagnostic name for a memory operation kind.
 iree_string_view_t loom_amdgpu_memory_operation_name(
+    loom_amdgpu_memory_operation_kind_t kind);
+
+// Returns the stable report/diagnostic name for a memory address form.
+iree_string_view_t loom_amdgpu_memory_address_form_name(
+    loom_amdgpu_memory_address_form_t address_form);
+
+// Returns the stable report/diagnostic name for the selected dynamic term path.
+iree_string_view_t loom_amdgpu_memory_access_dynamic_term_kind_name(
+    const loom_amdgpu_memory_access_t* access);
+
+// Returns the stable report/diagnostic reason key explaining why an LDS access
+// did or did not select the DS addtid address form.
+iree_string_view_t loom_amdgpu_memory_ds_addtid_reason_key(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_module_t* module, loom_func_like_t source_function,
+    const loom_target_bundle_t* bundle,
+    const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_operation_kind_t kind);
 
 // Returns the stable diagnostic name for a cache scope.

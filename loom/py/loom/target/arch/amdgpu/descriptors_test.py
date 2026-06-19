@@ -378,6 +378,24 @@ def test_v_mov_b32_literal_results_are_rematerializable() -> None:
         )
 
 
+def test_rdna_f16_to_f32_convert_uses_wide_encoding() -> None:
+    for overlays in (
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        descriptor = descriptors["amdgpu.v_cvt_f32_f16"]
+        assert descriptor.encoding_name == "ENC_VOP3"
+
+
+def test_cdna_f16_to_f32_convert_keeps_compact_encoding() -> None:
+    for overlays in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        descriptor = descriptors["amdgpu.v_cvt_f32_f16"]
+        assert descriptor.encoding_name == "ENC_VOP1"
+
+
 def test_gfx11_wmma_wave64_asm_forms_keep_native_mnemonics_unsuffixed() -> None:
     descriptors = {
         descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
@@ -1611,6 +1629,42 @@ def test_packed_fma_mad_descriptors_pin_lane_container_widths() -> None:
         assert "amdgpu.v_pk_fma_f32" not in descriptors
 
 
+def test_packed_i16_binary_descriptors_pin_lane_container_widths() -> None:
+    packed_keys = (
+        "amdgpu.v_pk_add_u16",
+        "amdgpu.v_pk_sub_i16",
+        "amdgpu.v_pk_mul_lo_u16",
+        "amdgpu.v_pk_min_i16",
+        "amdgpu.v_pk_max_i16",
+        "amdgpu.v_pk_min_u16",
+        "amdgpu.v_pk_max_u16",
+        "amdgpu.v_pk_lshlrev_b16",
+        "amdgpu.v_pk_lshrrev_b16",
+        "amdgpu.v_pk_ashrrev_i16",
+    )
+    for descriptor_set in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key in packed_keys:
+            descriptor = descriptors[descriptor_key]
+            assert descriptor.encoding_name == "ENC_VOP3P"
+            assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+                "VDST",
+                "SRC0",
+                "SRC1",
+            )
+            assert tuple(
+                operand.descriptor_operand.unit_count for operand in descriptor.operands
+            ) == (1, 1, 1)
+
+
 def test_packed_fma_mad_rdna_literal_forms_cover_source_positions() -> None:
     source_fields = {
         "src0": ("SRC0", "a", ("VDST", "SRC1", "SRC2")),
@@ -1966,6 +2020,87 @@ def test_fma_mix_f32_source2_literal_forms_cover_full_f32_addends() -> None:
             key.startswith("amdgpu.v_fma_mix_f32.") and key.endswith("_f16hi.src2_lit")
             for key in descriptors
         )
+
+
+def test_fma_mix_half_result_source2_literal_forms_cover_zero_addends() -> None:
+    descriptor_sets = (
+        (_gfx11_core_overlays(), "OP_SEL", "OP_SEL_HI"),
+        (_gfx12_core_overlays(), "OPSEL", "OPSEL_HI"),
+        (_gfx1250_core_overlays(), "OPSEL", "OPSEL_HI"),
+    )
+    for descriptor_set, op_sel_field, op_sel_hi_field in descriptor_sets:
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key_prefix, result_register_part in (
+            ("amdgpu.v_fma_mixlo_f16", _REG_PART_VGPR_LOW16),
+            ("amdgpu.v_fma_mixhi_f16", _REG_PART_VGPR_HIGH16),
+        ):
+            for source0 in ("f32", "f16lo", "f16hi"):
+                for source1 in ("f32", "f16lo", "f16hi"):
+                    descriptor_key = f"{descriptor_key_prefix}.{source0}_{source1}_f32"
+                    literal_key = f"{descriptor_key}.src2_lit"
+                    descriptor = descriptors[descriptor_key]
+                    literal_descriptor = descriptors[literal_key]
+                    assert tuple(
+                        form.replacement_descriptor for form in descriptor.operand_forms
+                    ) == (literal_key,)
+                    assert literal_descriptor.encoding_name == "ENC_VOP3P"
+                    assert (
+                        literal_descriptor.encoding_format_id
+                        == AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL
+                    )
+                    assert tuple(
+                        operand.xml_field_name
+                        for operand in literal_descriptor.operands
+                    ) == ("VDST", "VDST", "SRC0", "SRC1")
+                    assert (
+                        literal_descriptor.operands[0].descriptor_operand.register_part
+                        == result_register_part
+                    )
+                    assert tuple(
+                        constraint.kind for constraint in literal_descriptor.constraints
+                    ) == (ConstraintKind.TIED, ConstraintKind.DESTRUCTIVE)
+                    assert literal_descriptor.asm_forms is not None
+                    assert literal_descriptor.asm_forms[0].operands == (
+                        "acc",
+                        "a",
+                        "b",
+                    )
+                    assert tuple(
+                        immediate.field_name
+                        for immediate in literal_descriptor.asm_forms[0].immediates
+                    ) == ("imm32",)
+                    assert tuple(
+                        immediate.field_name
+                        for immediate in literal_descriptor.immediates
+                    ) == ("imm32",)
+                    src2_field, src2_value = literal_descriptor.fixed_encoding_fields[2]
+                    assert (
+                        literal_descriptor.fixed_encoding_fields[0][0] == op_sel_field
+                    )
+                    assert (
+                        literal_descriptor.fixed_encoding_fields[1][0]
+                        == op_sel_hi_field
+                    )
+                    assert src2_field == "SRC2"
+                    assert isinstance(src2_value, AmdgpuOperandPredefinedValueRef)
+                    assert src2_value.value_name == "SRC_LITERAL"
+
+    for descriptor_set in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key_prefix in (
+            "amdgpu.v_mad_mixlo_f16",
+            "amdgpu.v_mad_mixhi_f16",
+        ):
+            assert f"{descriptor_key_prefix}.f32_f32_f32" in descriptors
+            assert not any(
+                key.startswith(f"{descriptor_key_prefix}.")
+                and key.endswith(".src2_lit")
+                for key in descriptors
+            )
 
 
 def test_mad_mix_descriptors_cover_cdna_half_lane_forms() -> None:
@@ -2456,6 +2591,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         buffer_store_key,
         buffer_mnemonic,
         global_mnemonic,
+        scratch_store_b16_mnemonic,
         offset_field_name,
     ) in (
         (
@@ -2467,6 +2603,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_dwordx3",
             "buffer_load_dwordx3",
             "global_load_dwordx3_saddr",
+            "scratch_store_short",
             "OFFSET",
         ),
         (
@@ -2478,6 +2615,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_dwordx3",
             "buffer_load_dwordx3",
             "global_load_dwordx3_saddr",
+            "scratch_store_short",
             "OFFSET",
         ),
         (
@@ -2489,6 +2627,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_b96",
             "buffer_load_b96",
             "global_load_b96_saddr",
+            "scratch_store_b16",
             "OFFSET",
         ),
         (
@@ -2500,6 +2639,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_b96",
             "buffer_load_b96",
             "global_load_b96_saddr",
+            "scratch_store_b16",
             "IOFFSET",
         ),
         (
@@ -2511,6 +2651,7 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "amdgpu.buffer_store_b96",
             "buffer_load_b96",
             "global_load_b96_saddr",
+            "scratch_store_b16",
             "IOFFSET",
         ),
     ):
@@ -2660,6 +2801,23 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         )
         assert scratch_store.asm_forms is not None
         assert scratch_store.asm_forms[0].mnemonic == "scratch_store_b96_vaddr"
+
+        scratch_store_b16 = descriptors["amdgpu.scratch_store_b16_vaddr"]
+        _assert_memory_width_overlay(
+            scratch_store_b16,
+            width_bits=16,
+            semantic_tag="memory.stack.store.u16",
+            mnemonic=scratch_store_b16_mnemonic,
+            operand_units=1,
+            payload_field_name="value",
+            effect_kind=EffectKind.WRITE,
+            memory_space=MemorySpace.STACK,
+        )
+        assert scratch_store_b16.asm_forms is not None
+        assert (
+            scratch_store_b16.asm_forms[0].mnemonic
+            == f"{scratch_store_b16_mnemonic}_vaddr"
+        )
 
 
 def test_cdna_global_load_lds_descriptors_cover_extension_rows() -> None:

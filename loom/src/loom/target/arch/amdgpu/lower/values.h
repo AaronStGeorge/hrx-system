@@ -47,17 +47,17 @@ iree_status_t loom_amdgpu_lower_index_cast(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_index_cast_plan_t* plan);
 
-// Selects an AMDGPU full-width offset addition plan.
-iree_status_t loom_amdgpu_select_offset_add_plan(
+// Selects an AMDGPU full-width address-domain arithmetic plan.
+iree_status_t loom_amdgpu_select_address_i64_alu_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_offset_add_plan_t* out_plan, bool* out_selected);
+    loom_amdgpu_address_i64_alu_plan_t* out_plan, bool* out_selected);
 
-// Lowers an AMDGPU full-width offset addition plan.
-iree_status_t loom_amdgpu_lower_offset_add(
+// Lowers an AMDGPU full-width address-domain arithmetic plan.
+iree_status_t loom_amdgpu_lower_address_i64_alu(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_offset_add_plan_t* plan);
+    const loom_amdgpu_address_i64_alu_plan_t* plan);
 
-// Selects an AMDGPU full-width offset comparison plan.
+// Selects an AMDGPU full-width address-domain comparison plan.
 iree_status_t loom_amdgpu_select_index_cmp_i64_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_i64_compare_plan_t* out_plan, bool* out_selected);
@@ -112,15 +112,16 @@ iree_status_t loom_amdgpu_lower_vector_extract(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_extract_plan_t* plan);
 
-// Selects an AMDGPU vector bf16 conversion plan.
-iree_status_t loom_amdgpu_select_vector_bf16_conversion_plan(
+// Selects an AMDGPU vector 16-bit-float conversion plan.
+iree_status_t loom_amdgpu_select_vector_16bit_float_conversion_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_bf16_conversion_plan_t* out_plan, bool* out_selected);
+    loom_amdgpu_vector_16bit_float_conversion_plan_t* out_plan,
+    bool* out_selected);
 
-// Lowers an AMDGPU vector bf16 conversion plan.
-iree_status_t loom_amdgpu_lower_vector_bf16_conversion(
+// Lowers an AMDGPU vector 16-bit-float conversion plan.
+iree_status_t loom_amdgpu_lower_vector_16bit_float_conversion(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_vector_bf16_conversion_plan_t* plan);
+    const loom_amdgpu_vector_16bit_float_conversion_plan_t* plan);
 
 // Selects a plan for structural value-construction source ops.
 iree_status_t loom_amdgpu_select_structural_value_plan(
@@ -155,14 +156,14 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_from_elements(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
-// Verifies AMDGPU low legality for full-width offset arithmetic source ops.
-iree_status_t loom_amdgpu_low_legality_verify_offset_add(
+// Verifies AMDGPU low legality for full-width address arithmetic source ops.
+iree_status_t loom_amdgpu_low_legality_verify_address_i64_alu(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
-// Verifies AMDGPU low legality for full-width offset compare source ops.
-iree_status_t loom_amdgpu_low_legality_verify_offset_compare(
+// Verifies AMDGPU low legality for full-width address compare source ops.
+iree_status_t loom_amdgpu_low_legality_verify_address_compare(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

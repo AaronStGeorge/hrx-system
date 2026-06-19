@@ -659,11 +659,17 @@ typedef uint16_t loom_low_lower_rule_flags_t;
 #define LOOM_LOW_LOWER_RULE_FLAG_CONTRACT_ONLY \
   ((loom_low_lower_rule_flags_t)1u << 0)
 
+// Rule row has no structured report key.
+#define LOOM_LOW_LOWER_RULE_REPORT_KEY_NONE ((uint16_t)0)
+
 typedef struct loom_low_lower_rule_t {
   // Source op kind this rule accepts.
   loom_op_kind_t source_op_kind;
   // Rule behavior flags.
   loom_low_lower_rule_flags_t flags;
+  // One-based report-key table ordinal. Zero means the selected rule has no
+  // stable strategy key for compile reports.
+  uint16_t report_key_ordinal;
   // Number of rule-local temporary low values available while emitting this
   // rule.
   uint16_t temporary_count;
@@ -713,6 +719,10 @@ typedef struct loom_low_lower_rule_set_t {
   const loom_low_lower_rule_t* rules;
   // Number of rows in rules.
   uint16_t rule_count;
+  // Structured report keys referenced by one-based rule report-key ordinals.
+  const iree_string_view_t* report_keys;
+  // Number of rows in report_keys.
+  uint16_t report_key_count;
   // Type-pattern rows referenced by guards.
   const loom_low_lower_type_pattern_t* type_patterns;
   // Number of rows in type_patterns.

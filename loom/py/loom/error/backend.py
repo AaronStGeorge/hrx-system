@@ -337,10 +337,12 @@ ERR_BACKEND_017 = ErrorDef(
     summary="Target memory access decision recorded.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "{decision} {operation_kind} memory packet '{packet_key}' for "
-        "'@{function_name}' in {memory_space}: element {element_bytes} "
-        "byte(s), vector lanes {vector_lanes}, dynamic stride "
-        "{dynamic_stride_bytes} byte(s), vector lane stride "
+        "{decision} {operation_kind} memory packet '{packet_key}' "
+        "address form '{address_form}' for '@{function_name}' in "
+        "{memory_space}: dynamic term '{dynamic_term_kind}', reason "
+        "'{fallback_reason}', static offset {static_offset_bytes} byte(s), "
+        "element {element_bytes} byte(s), vector lanes {vector_lanes}, "
+        "dynamic stride {dynamic_stride_bytes} byte(s), vector lane stride "
         "{vector_lane_stride_bytes} byte(s), bank stride {bank_stride_words} "
         "word(s), conflict degree {bank_conflict_degree}, bank conflict "
         "'{bank_conflict_kind}'"
@@ -353,7 +355,11 @@ ERR_BACKEND_017 = ErrorDef(
         ErrorParam("memory_space", ParamKind.STRING),
         ErrorParam("operation_kind", ParamKind.STRING),
         ErrorParam("packet_key", ParamKind.STRING),
+        ErrorParam("address_form", ParamKind.STRING),
+        ErrorParam("dynamic_term_kind", ParamKind.STRING),
+        ErrorParam("fallback_reason", ParamKind.STRING),
         ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("static_offset_bytes", ParamKind.I64),
         ErrorParam("element_bytes", ParamKind.U32),
         ErrorParam("vector_lanes", ParamKind.U32),
         ErrorParam("dynamic_stride_bytes", ParamKind.U32),

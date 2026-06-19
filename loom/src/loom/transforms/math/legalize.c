@@ -21,6 +21,7 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/rewrite/greedy.h"
+#include "loom/target/compile_report.h"
 #include "loom/target/math_policy.h"
 #include "loom/target/selection.h"
 #include "loom/transforms/math/patterns.h"
@@ -65,6 +66,10 @@ typedef struct loom_math_legalize_target_state_t {
   bool resolved;
   // Contract-set key selected for this function, or a synthetic key.
   iree_string_view_t contract_set_key;
+  // Target bundle selected for this function, if any.
+  iree_string_view_t target_bundle_name;
+  // Target config selected for this function, if any.
+  iree_string_view_t target_config_name;
   // Target math policy selected for this function, or NULL.
   const loom_target_math_policy_t* policy;
 } loom_math_legalize_target_state_t;
@@ -80,6 +85,8 @@ typedef struct loom_math_legalize_state_t {
   const loom_target_math_policy_registry_t* policy_registry;
   // Symbol facts used to resolve function target contracts.
   loom_symbol_fact_table_t symbol_facts;
+  // Optional target compile report receiving math legalization rows.
+  loom_target_compile_report_t* compile_report;
   // Lazily resolved target policy state for |function|.
   loom_math_legalize_target_state_t target;
 } loom_math_legalize_state_t;
@@ -458,11 +465,66 @@ static iree_status_t loom_math_legalize_resolve_policy(
   }
 
   state->target.contract_set_key = target->storage.config.contract_set_key;
+  state->target.target_bundle_name = target->storage.bundle.name;
+  state->target.target_config_name = target->storage.bundle.config
+                                         ? target->storage.bundle.config->name
+                                         : iree_string_view_empty();
   if (state->policy_registry != NULL) {
     state->target.policy = loom_target_math_policy_registry_lookup_for_bundle(
         state->policy_registry, &target->storage.bundle);
   }
   return iree_ok_status();
+}
+
+static iree_string_view_t loom_math_legalize_function_name(
+    const loom_math_legalize_state_t* state) {
+  const loom_symbol_ref_t callee = loom_func_like_callee(state->function);
+  if (!loom_symbol_ref_is_valid(callee) || callee.module_id != 0 ||
+      callee.symbol_id >= state->module->symbols.count) {
+    return iree_string_view_empty();
+  }
+  const loom_symbol_t* symbol =
+      &state->module->symbols.entries[callee.symbol_id];
+  if (symbol->name_id >= state->module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return state->module->strings.entries[symbol->name_id];
+}
+
+static iree_status_t loom_math_legalize_record_report_row(
+    loom_math_legalize_state_t* state, const loom_op_t* op,
+    const loom_target_math_query_t* query,
+    const loom_target_math_policy_decision_t* decision,
+    loom_target_compile_report_math_action_t action, uint64_t created_op_count,
+    uint64_t erased_op_count) {
+  if (state->compile_report == NULL) {
+    return iree_ok_status();
+  }
+  const loom_target_math_policy_decision_t empty_decision = {0};
+  if (decision == NULL) {
+    decision = &empty_decision;
+  }
+  const loom_target_compile_report_math_row_t row = {
+      .function_name = loom_math_legalize_function_name(state),
+      .source_op_name = loom_op_name(state->module, op),
+      .source_op_kind = op->kind,
+      .target_bundle_name = state->target.target_bundle_name,
+      .target_config_name = state->target.target_config_name,
+      .policy_name = state->target.policy ? state->target.policy->name
+                                          : iree_string_view_empty(),
+      .constraint_key = decision->constraint_key,
+      .math_op = query->math_op,
+      .lane_domain = query->lane_domain,
+      .element_type = query->element_type,
+      .action = action,
+      .recipe = decision->recipe,
+      .source_fastmath_flags = query->fastmath_flags,
+      .recipe_fastmath_flags = decision->recipe_fastmath_flags,
+      .created_op_count = created_op_count,
+      .erased_op_count = erased_op_count,
+  };
+  return loom_target_compile_report_record_math_row(state->compile_report,
+                                                    &row);
 }
 
 static iree_status_t loom_math_legalize_emit(
@@ -564,6 +626,10 @@ static iree_status_t loom_math_legalize_rewrite_op(
     return iree_ok_status();
   }
   if (state->target.policy == NULL) {
+    IREE_RETURN_IF_ERROR(loom_math_legalize_record_report_row(
+        state, op, &query, /*decision=*/NULL,
+        LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_POLICY,
+        /*created_op_count=*/0, /*erased_op_count=*/0));
     return loom_math_legalize_emit_missing_policy(state, op);
   }
 
@@ -582,6 +648,10 @@ static iree_status_t loom_math_legalize_rewrite_op(
     return iree_ok_status();
   }
   if (decision.action == LOOM_TARGET_MATH_POLICY_ACTION_REJECT) {
+    IREE_RETURN_IF_ERROR(loom_math_legalize_record_report_row(
+        state, op, &query, &decision,
+        LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REJECTED,
+        /*created_op_count=*/0, /*erased_op_count=*/0));
     return loom_math_legalize_emit_rejected(state, op, &query, &decision);
   }
 
@@ -592,12 +662,23 @@ static iree_status_t loom_math_legalize_rewrite_op(
       .decision = decision,
   };
   driver->rewriter.flags = 0;
+  const uint64_t created_op_count_before = driver->rewriter.created_op_count;
+  const uint64_t erased_op_count_before = driver->rewriter.erased_op_count;
   bool rewritten = false;
   IREE_RETURN_IF_ERROR(loom_math_legalize_rewrite_recipe(
       &context, op, &driver->rewriter, &rewritten));
   if (!rewritten) {
+    IREE_RETURN_IF_ERROR(loom_math_legalize_record_report_row(
+        state, op, &query, &decision,
+        LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_RECIPE,
+        /*created_op_count=*/0, /*erased_op_count=*/0));
     return loom_math_legalize_emit_missing_recipe(state, op, &query, &decision);
   }
+  IREE_RETURN_IF_ERROR(loom_math_legalize_record_report_row(
+      state, op, &query, &decision,
+      LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REWRITTEN,
+      driver->rewriter.created_op_count - created_op_count_before,
+      driver->rewriter.erased_op_count - erased_op_count_before));
   loom_greedy_rewrite_result_record_rewriter_flags(result, &driver->rewriter);
   if (iree_any_bit_set(driver->rewriter.flags, LOOM_REWRITER_FLAG_CHANGED)) {
     loom_greedy_rewrite_result_record_change(
@@ -627,11 +708,14 @@ iree_status_t loom_math_legalize_run(loom_pass_t* pass, loom_module_t* module,
       loom_target_math_pass_capability_from_pass(pass);
   const loom_target_math_policy_registry_t* policy_registry =
       loom_target_math_pass_capability_policy_registry(math_capability);
+  loom_target_compile_report_t* compile_report =
+      loom_target_math_pass_capability_compile_report(math_capability);
   loom_math_legalize_state_t state = {
       .pass = pass,
       .module = module,
       .function = function,
       .policy_registry = policy_registry,
+      .compile_report = compile_report,
   };
   loom_symbol_fact_table_initialize(&state.symbol_facts, pass->instance_arena);
 

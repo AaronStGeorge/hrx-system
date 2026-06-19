@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from loom.dsl import EffectKind, Op, RegionDef
+from loom.dsl import EffectKind, Op, RegionDef, TypeConstraint
 from loom.fields import compute_layout
 from loom.gen.ops.c_enums import TRAIT_MAP
 from loom.gen.ops.c_names import c_enum_name
@@ -68,13 +68,61 @@ def trait_op_kinds(
     return kinds
 
 
+def _has_trait(op: Op, trait_name: str) -> bool:
+    return any(trait.name == trait_name for trait in op.traits)
+
+
+_VECTOR_TYPE_CONSTRAINTS = frozenset(
+    {
+        TypeConstraint.VECTOR,
+        TypeConstraint.RANK_ONE_VECTOR,
+        TypeConstraint.ALL_STATIC_VECTOR,
+        TypeConstraint.ALL_STATIC_RANK_ONE_VECTOR,
+    }
+)
+
+
+def _same_type_constraint_covers(op: Op, field_names: set[str]) -> bool:
+    for constraint in op.constraints:
+        if constraint.name == "SameType" and field_names.issubset(constraint.args):
+            return True
+    return any(trait.name == "AllTypesMatch" and field_names.issubset(trait.args) for trait in op.traits)
+
+
+def _is_same_type_elementwise_vector_decomposable(op: Op) -> bool:
+    if not _has_trait(op, "Elementwise"):
+        return False
+    if len(op.results) != 1 or op.regions or op.successors:
+        return False
+    if any(getattr(result, "tied_to", None) for result in op.results):
+        return False
+    if any(operand.variadic or operand.optional for operand in op.operands):
+        return False
+    if any(result.variadic for result in op.results):
+        return False
+    value_fields = [*op.operands, *op.results]
+    if not value_fields:
+        return False
+    if any(field.type_constraint not in _VECTOR_TYPE_CONSTRAINTS for field in value_fields):
+        return False
+    return _same_type_constraint_covers(op, {field.name for field in value_fields})
+
+
 def trait_flags(op: Op) -> str:
     """Returns the C trait bitfield expression for an op."""
     bits = []
+    has_explicit_decomposable = False
     for trait in op.traits:
+        if trait.name == "Decomposable":
+            has_explicit_decomposable = True
         c_name = TRAIT_MAP.get(trait.name)
         if c_name:
             bits.append(c_name)
+    is_derived_decomposable = _is_same_type_elementwise_vector_decomposable(op)
+    if has_explicit_decomposable and not is_derived_decomposable:
+        raise ValueError(f"Op '{op.name}': Decomposable requires a single-result same-type elementwise vector op with no regions, successors, variadic fields, optional operands, or tied results")
+    if "LOOM_TRAIT_DECOMPOSABLE" not in bits and is_derived_decomposable:
+        bits.append("LOOM_TRAIT_DECOMPOSABLE")
 
     has_read = False
     has_write = False

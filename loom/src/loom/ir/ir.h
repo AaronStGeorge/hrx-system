@@ -633,7 +633,11 @@ enum loom_trait_bits_e {
   LOOM_TRAIT_INVOLUTION = 1u << 3,
   LOOM_TRAIT_TERMINATOR = 1u << 4,
   LOOM_TRAIT_CONSTANT_LIKE = 1u << 5,
+  // Op applies independently to each vector lane.
   LOOM_TRAIT_ELEMENTWISE = 1u << 6,
+  // Op does not need to observe a whole same-typed vector as one value; vector
+  // operands/results may be split into smaller vectors and cloned per chunk
+  // without changing the operation's semantics.
   LOOM_TRAIT_DECOMPOSABLE = 1u << 7,
   // Op defines a named symbol (function, global) rather than producing
   // SSA values. The printer omits the LHS result list (%name =) for

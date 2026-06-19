@@ -42,6 +42,10 @@ void loom_target_compile_report_deinitialize(
                                                    &report->entry_rows);
   loom_target_compile_report_row_list_deinitialize(allocator,
                                                    &report->pressure_rows);
+  loom_target_compile_report_row_list_deinitialize(
+      allocator, &report->pressure_origin_rows);
+  loom_target_compile_report_row_list_deinitialize(allocator,
+                                                   &report->schedule_band_rows);
   loom_target_compile_report_row_list_deinitialize(allocator,
                                                    &report->spill_rows);
   loom_target_compile_report_row_list_deinitialize(
@@ -51,6 +55,8 @@ void loom_target_compile_report_deinitialize(
   loom_target_compile_report_row_list_deinitialize(
       allocator, &report->source_low_memory_rows);
   loom_target_compile_report_row_list_deinitialize(
+      allocator, &report->math_legalization_rows);
+  loom_target_compile_report_row_list_deinitialize(
       allocator, &report->target_legalization_rows);
   *report = (loom_target_compile_report_t){0};
 }
@@ -58,9 +64,12 @@ void loom_target_compile_report_deinitialize(
 static bool loom_target_compile_report_has_rows(
     const loom_target_compile_report_t* report) {
   return report->pressure_rows.count != 0 || report->spill_rows.count != 0 ||
+         report->pressure_origin_rows.count != 0 ||
+         report->schedule_band_rows.count != 0 ||
          report->allocation_failure_rows.count != 0 ||
          report->entry_rows.count != 0 || report->source_low_rows.count != 0 ||
          report->source_low_memory_rows.count != 0 ||
+         report->math_legalization_rows.count != 0 ||
          report->target_legalization_rows.count != 0;
 }
 
@@ -149,16 +158,21 @@ iree_status_t loom_target_compile_report_clone(
   target.allocator = allocator;
   target.entry_rows = (loom_target_compile_report_row_list_t){0};
   target.pressure_rows = (loom_target_compile_report_row_list_t){0};
+  target.pressure_origin_rows = (loom_target_compile_report_row_list_t){0};
+  target.schedule_band_rows = (loom_target_compile_report_row_list_t){0};
   target.spill_rows = (loom_target_compile_report_row_list_t){0};
   target.allocation_failure_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_memory_rows = (loom_target_compile_report_row_list_t){0};
+  target.math_legalization_rows = (loom_target_compile_report_row_list_t){0};
   target.target_legalization_rows = (loom_target_compile_report_row_list_t){0};
   if (source->entry_rows.count == 0 && source->pressure_rows.count == 0 &&
-      source->spill_rows.count == 0 &&
+      source->pressure_origin_rows.count == 0 &&
+      source->schedule_band_rows.count == 0 && source->spill_rows.count == 0 &&
       source->allocation_failure_rows.count == 0 &&
       source->source_low_rows.count == 0 &&
       source->source_low_memory_rows.count == 0 &&
+      source->math_legalization_rows.count == 0 &&
       source->target_legalization_rows.count == 0) {
     *out_target = target;
     return iree_ok_status();
@@ -175,6 +189,18 @@ iree_status_t loom_target_compile_report_clone(
         &source->pressure_rows,
         sizeof(loom_target_compile_report_pressure_row_t), allocator,
         &target.pressure_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->pressure_origin_rows,
+        sizeof(loom_target_compile_report_pressure_origin_row_t), allocator,
+        &target.pressure_origin_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->schedule_band_rows,
+        sizeof(loom_target_compile_report_schedule_band_row_t), allocator,
+        &target.schedule_band_rows);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_row_list_clone(
@@ -198,6 +224,12 @@ iree_status_t loom_target_compile_report_clone(
         &source->source_low_memory_rows,
         sizeof(loom_target_compile_report_source_low_memory_row_t), allocator,
         &target.source_low_memory_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->math_legalization_rows,
+        sizeof(loom_target_compile_report_math_row_t), allocator,
+        &target.math_legalization_rows);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_row_list_clone(
@@ -313,6 +345,67 @@ void loom_target_compile_report_record_memory(
   report->local_memory_bytes = local_memory_bytes;
 }
 
+static uint64_t loom_target_compile_report_register_overhead_units(
+    uint64_t final_register_count, uint64_t pressure_peak_live_units) {
+  if (final_register_count <= pressure_peak_live_units) {
+    return 0;
+  }
+  return final_register_count - pressure_peak_live_units;
+}
+
+static void loom_target_compile_report_update_target_resource_pressure_row(
+    loom_target_compile_report_target_resources_t* target_resources,
+    const loom_target_compile_report_pressure_row_t* row) {
+  if (iree_string_view_equal(row->register_class,
+                             target_resources->scalar_register_class)) {
+    target_resources->scalar_pressure_peak_live_units =
+        iree_max(target_resources->scalar_pressure_peak_live_units,
+                 row->peak_live_units);
+    target_resources->scalar_register_overhead_units =
+        loom_target_compile_report_register_overhead_units(
+            target_resources->scalar_register_count,
+            target_resources->scalar_pressure_peak_live_units);
+  }
+  if (iree_string_view_equal(row->register_class,
+                             target_resources->vector_register_class)) {
+    target_resources->vector_pressure_peak_live_units =
+        iree_max(target_resources->vector_pressure_peak_live_units,
+                 row->peak_live_units);
+    target_resources->vector_register_overhead_units =
+        loom_target_compile_report_register_overhead_units(
+            target_resources->vector_register_count,
+            target_resources->vector_pressure_peak_live_units);
+  }
+}
+
+static void loom_target_compile_report_populate_target_resource_pressure(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_target_resources_t* target_resources) {
+  target_resources->scalar_pressure_peak_live_units = 0;
+  target_resources->scalar_register_overhead_units = 0;
+  target_resources->vector_pressure_peak_live_units = 0;
+  target_resources->vector_register_overhead_units = 0;
+  for (const loom_target_compile_report_vec_t* vec = report->pressure_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_pressure_row_t* rows =
+        (const loom_target_compile_report_pressure_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i) {
+      loom_target_compile_report_update_target_resource_pressure_row(
+          target_resources, &rows[i]);
+    }
+  }
+}
+
+void loom_target_compile_report_record_target_resources(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_target_resources_t* target_resources) {
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES;
+  report->target_resources = *target_resources;
+  loom_target_compile_report_populate_target_resource_pressure(
+      report, &report->target_resources);
+}
+
 static void loom_target_compile_report_accumulate_instruction_mix(
     loom_target_compile_report_static_instruction_mix_t* target,
     const loom_target_compile_report_static_instruction_mix_t* source) {
@@ -360,10 +453,74 @@ static iree_string_view_t loom_target_compile_report_shared_string(
              : iree_string_view_empty();
 }
 
+static uint32_t loom_target_compile_report_shared_u32(uint32_t current,
+                                                      uint32_t next) {
+  return current == next ? current : 0;
+}
+
+static void loom_target_compile_report_merge_target_resources(
+    loom_target_compile_report_target_resources_t* target,
+    const loom_target_compile_report_target_resources_t* source) {
+  target->scalar_register_class = loom_target_compile_report_shared_string(
+      target->scalar_register_class, source->scalar_register_class);
+  target->scalar_register_count =
+      iree_max(target->scalar_register_count, source->scalar_register_count);
+  uint64_t scalar_register_overhead_units =
+      iree_max(target->scalar_register_overhead_units,
+               source->scalar_register_overhead_units);
+  target->scalar_pressure_peak_live_units =
+      iree_string_view_is_empty(target->scalar_register_class)
+          ? 0
+          : iree_max(target->scalar_pressure_peak_live_units,
+                     source->scalar_pressure_peak_live_units);
+  target->scalar_register_overhead_units =
+      iree_string_view_is_empty(target->scalar_register_class)
+          ? 0
+          : (target->scalar_pressure_peak_live_units != 0
+                 ? loom_target_compile_report_register_overhead_units(
+                       target->scalar_register_count,
+                       target->scalar_pressure_peak_live_units)
+                 : scalar_register_overhead_units);
+  target->vector_register_class = loom_target_compile_report_shared_string(
+      target->vector_register_class, source->vector_register_class);
+  target->vector_register_count =
+      iree_max(target->vector_register_count, source->vector_register_count);
+  uint64_t vector_register_overhead_units =
+      iree_max(target->vector_register_overhead_units,
+               source->vector_register_overhead_units);
+  target->vector_pressure_peak_live_units =
+      iree_string_view_is_empty(target->vector_register_class)
+          ? 0
+          : iree_max(target->vector_pressure_peak_live_units,
+                     source->vector_pressure_peak_live_units);
+  target->vector_register_overhead_units =
+      iree_string_view_is_empty(target->vector_register_class)
+          ? 0
+          : (target->vector_pressure_peak_live_units != 0
+                 ? loom_target_compile_report_register_overhead_units(
+                       target->vector_register_count,
+                       target->vector_pressure_peak_live_units)
+                 : vector_register_overhead_units);
+  target->subgroup_size = loom_target_compile_report_shared_u32(
+      target->subgroup_size, source->subgroup_size);
+  target->max_subgroups_per_simd = loom_target_compile_report_shared_u32(
+      target->max_subgroups_per_simd, source->max_subgroups_per_simd);
+  if (source->occupancy_percent < target->occupancy_percent ||
+      (source->occupancy_percent == target->occupancy_percent &&
+       source->resident_subgroups_per_simd <
+           target->resident_subgroups_per_simd)) {
+    target->resident_subgroups_per_simd = source->resident_subgroups_per_simd;
+    target->occupancy_percent = source->occupancy_percent;
+    target->limiting_resource = source->limiting_resource;
+  }
+}
+
 static void loom_target_compile_report_merge_entry_summary(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_t* entry_report) {
   const bool first_entry = report->entry_rows.count == 0;
+  const bool report_had_target_resources = iree_any_bit_set(
+      report->detail_flags, LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES);
   report->detail_flags |=
       entry_report->detail_flags | LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES;
   if (first_entry) {
@@ -402,6 +559,15 @@ static void loom_target_compile_report_merge_entry_summary(
     report->private_memory_bytes = entry_report->private_memory_bytes;
     report->local_memory_bytes = entry_report->local_memory_bytes;
     report->static_instruction_mix = entry_report->static_instruction_mix;
+    report->target_resources = entry_report->target_resources;
+    report->math_legalization_rewritten_op_count =
+        entry_report->math_legalization_rewritten_op_count;
+    report->math_legalization_rejected_op_count =
+        entry_report->math_legalization_rejected_op_count;
+    report->math_legalization_missing_policy_op_count =
+        entry_report->math_legalization_missing_policy_op_count;
+    report->math_legalization_missing_recipe_op_count =
+        entry_report->math_legalization_missing_recipe_op_count;
     memcpy(report->move_causes, entry_report->move_causes,
            sizeof(report->move_causes));
     return;
@@ -449,6 +615,23 @@ static void loom_target_compile_report_merge_entry_summary(
       iree_max(report->local_memory_bytes, entry_report->local_memory_bytes);
   loom_target_compile_report_accumulate_instruction_mix(
       &report->static_instruction_mix, &entry_report->static_instruction_mix);
+  report->math_legalization_rewritten_op_count +=
+      entry_report->math_legalization_rewritten_op_count;
+  report->math_legalization_rejected_op_count +=
+      entry_report->math_legalization_rejected_op_count;
+  report->math_legalization_missing_policy_op_count +=
+      entry_report->math_legalization_missing_policy_op_count;
+  report->math_legalization_missing_recipe_op_count +=
+      entry_report->math_legalization_missing_recipe_op_count;
+  if (iree_any_bit_set(entry_report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES)) {
+    if (report_had_target_resources) {
+      loom_target_compile_report_merge_target_resources(
+          &report->target_resources, &entry_report->target_resources);
+    } else {
+      report->target_resources = entry_report->target_resources;
+    }
+  }
   loom_target_compile_report_accumulate_move_causes(report->move_causes,
                                                     entry_report->move_causes);
 }
@@ -490,7 +673,10 @@ loom_target_compile_report_entry_from_report(
       .private_memory_bytes = entry_report->private_memory_bytes,
       .local_memory_bytes = entry_report->local_memory_bytes,
       .static_instruction_mix = entry_report->static_instruction_mix,
+      .target_resources = entry_report->target_resources,
       .pressure_row_count = entry_report->pressure_rows.count,
+      .pressure_origin_row_count = entry_report->pressure_origin_rows.count,
+      .schedule_band_row_count = entry_report->schedule_band_rows.count,
       .spill_row_count = entry_report->spill_rows.count,
   };
 }
@@ -527,6 +713,21 @@ iree_status_t loom_target_compile_report_record_entry_report(
         &report->pressure_rows, &entry_report->pressure_rows,
         sizeof(loom_target_compile_report_pressure_row_t), report->allocator));
   }
+  if (iree_any_bit_set(
+          entry_report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_append_rows(
+        &report->pressure_origin_rows, &entry_report->pressure_origin_rows,
+        sizeof(loom_target_compile_report_pressure_origin_row_t),
+        report->allocator));
+  }
+  if (iree_any_bit_set(entry_report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_append_rows(
+        &report->schedule_band_rows, &entry_report->schedule_band_rows,
+        sizeof(loom_target_compile_report_schedule_band_row_t),
+        report->allocator));
+  }
   if (iree_any_bit_set(entry_report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_append_rows(
@@ -542,6 +743,13 @@ iree_status_t loom_target_compile_report_record_entry_report(
         sizeof(loom_target_compile_report_allocation_failure_row_t),
         report->allocator));
   }
+  if (iree_any_bit_set(
+          entry_report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_append_rows(
+        &report->math_legalization_rows, &entry_report->math_legalization_rows,
+        sizeof(loom_target_compile_report_math_row_t), report->allocator));
+  }
   return iree_ok_status();
 }
 
@@ -549,8 +757,32 @@ iree_status_t loom_target_compile_report_record_pressure_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_pressure_row_t* row) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS;
-  return loom_target_compile_report_row_list_append(
+  iree_status_t status = loom_target_compile_report_row_list_append(
       &report->pressure_rows, sizeof(*row), report->allocator, row);
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES)) {
+    loom_target_compile_report_update_target_resource_pressure_row(
+        &report->target_resources, row);
+  }
+  return status;
+}
+
+iree_status_t loom_target_compile_report_record_pressure_origin_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_pressure_origin_row_t* row) {
+  report->detail_flags |=
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS;
+  return loom_target_compile_report_row_list_append(
+      &report->pressure_origin_rows, sizeof(*row), report->allocator, row);
+}
+
+iree_status_t loom_target_compile_report_record_schedule_band_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_schedule_band_row_t* row) {
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS;
+  return loom_target_compile_report_row_list_append(
+      &report->schedule_band_rows, sizeof(*row), report->allocator, row);
 }
 
 iree_status_t loom_target_compile_report_record_spill_row(
@@ -584,6 +816,42 @@ iree_status_t loom_target_compile_report_record_source_low_memory_row(
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
   return loom_target_compile_report_row_list_append(
       &report->source_low_memory_rows, sizeof(*row), report->allocator, row);
+}
+
+static void loom_target_compile_report_count_math_action(
+    loom_target_compile_report_t* report,
+    loom_target_compile_report_math_action_t action) {
+  switch (action) {
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REWRITTEN:
+      ++report->math_legalization_rewritten_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REJECTED:
+      ++report->math_legalization_rejected_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_POLICY:
+      ++report->math_legalization_missing_policy_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_RECIPE:
+      ++report->math_legalization_missing_recipe_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_NONE:
+    default:
+      break;
+  }
+}
+
+iree_status_t loom_target_compile_report_record_math_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_math_row_t* row) {
+  report->detail_flags |=
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS;
+  loom_target_compile_report_count_math_action(report, row->action);
+  if (!loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS)) {
+    return iree_ok_status();
+  }
+  return loom_target_compile_report_row_list_append(
+      &report->math_legalization_rows, sizeof(*row), report->allocator, row);
 }
 
 static void loom_target_compile_report_count_legalization_action(

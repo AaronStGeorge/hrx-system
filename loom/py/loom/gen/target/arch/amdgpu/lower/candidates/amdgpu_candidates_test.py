@@ -37,6 +37,8 @@ def test_arithmetic_generator_emits_fma_mix_data_source_only() -> None:
     assert "\nreturn " not in source
     assert "kLoomAmdgpuFmaMixF32DescriptorRefs" in source
     assert "kLoomAmdgpuFmaMixF32Src2LiteralDescriptorRefs" in source
+    assert "kLoomAmdgpuFmaMixloF16Src2LiteralDescriptorRefs" in source
+    assert "kLoomAmdgpuFmaMixhiF16Src2LiteralDescriptorRefs" in source
     assert "kLoomAmdgpuMadMixhiF16DescriptorRefs" in source
     assert "kLoomAmdgpuPackedFmafF16DescriptorCandidates" in source
     assert "kLoomAmdgpuPackedFmaiUnsignedPreferenceDescriptorCandidates" in source
@@ -52,10 +54,14 @@ def test_arithmetic_generator_emits_fma_mix_data_source_only() -> None:
 def test_arithmetic_generator_covers_fma_mix_descriptor_lattice() -> None:
     assert len(amdgpu_arithmetic_candidates._SOURCE_KINDS) == 3
     assert len(amdgpu_arithmetic_candidates._FMA_MIX_DESCRIPTOR_CUBES) == 6
+    assert len(amdgpu_arithmetic_candidates._FMA_MIX_SRC2_LITERAL_TABLES) == 3
     assert len(amdgpu_arithmetic_candidates._fma_mix_source_combinations(include_all_f32=True)) == 27
     assert len(amdgpu_arithmetic_candidates._fma_mix_source_combinations(include_all_f32=False)) == 26
-    assert amdgpu_arithmetic_candidates._fma_mix_src2_literal_descriptor_key("f16lo", "f32") == "amdgpu.v_fma_mix_f32.f16lo_f32_f32.src2_lit"
-    assert amdgpu_arithmetic_candidates._fma_mix_src2_literal_descriptor_key("f32", "f32") is None
+    f32_table = amdgpu_arithmetic_candidates._FMA_MIX_SRC2_LITERAL_TABLES[0]
+    mixlo_table = amdgpu_arithmetic_candidates._FMA_MIX_SRC2_LITERAL_TABLES[1]
+    assert amdgpu_arithmetic_candidates._fma_mix_src2_literal_descriptor_key(f32_table, "f16lo", "f32") == "amdgpu.v_fma_mix_f32.f16lo_f32_f32.src2_lit"
+    assert amdgpu_arithmetic_candidates._fma_mix_src2_literal_descriptor_key(f32_table, "f32", "f32") is None
+    assert amdgpu_arithmetic_candidates._fma_mix_src2_literal_descriptor_key(mixlo_table, "f32", "f32") == "amdgpu.v_fma_mixlo_f16.f32_f32_f32.src2_lit"
 
 
 def test_arithmetic_generator_covers_packed_ternary_descriptor_candidates() -> None:
@@ -288,6 +294,40 @@ def test_memory_generator_preserves_same_key_fallback_order() -> None:
         "amdgpu.buffer_load_b64",
         "amdgpu.buffer_load_dwordx2",
     ]
+
+
+def test_memory_generator_covers_96_bit_source_memory_packets() -> None:
+    memory_candidates = amdgpu_memory_candidates.amdgpu_memory_descriptor_candidates()
+    candidates = amdgpu_memory_candidates._ordered_candidates(memory_candidates)
+    register_class = amdgpu_memory_candidates.AmdgpuMemoryPayloadRegisterClass.VGPR
+    payload_format = amdgpu_memory_candidates.AmdgpuMemoryPayloadFormat.GENERIC
+    operations = (
+        amdgpu_memory_candidates.AmdgpuMemoryOperationKind.LOAD,
+        amdgpu_memory_candidates.AmdgpuMemoryOperationKind.STORE,
+    )
+    domains = (
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.BUFFER_RESOURCE,
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.GLOBAL_SADDR,
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.GLOBAL_FLAT,
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.LDS,
+        amdgpu_memory_candidates.AmdgpuMemoryDescriptorDomain.SCRATCH,
+    )
+
+    b96_candidates = {
+        (candidate.domain, candidate.operation_kind): candidate.descriptor_key
+        for candidate in candidates
+        if (
+            candidate.packet_byte_count,
+            candidate.payload_register_class,
+            candidate.payload_format,
+            candidate.payload_register_count,
+        )
+        == (12, register_class, payload_format, 3)
+    }
+
+    for domain in domains:
+        for operation_kind in operations:
+            assert (domain, operation_kind) in b96_candidates
 
 
 def test_memory_generator_rejects_missing_descriptor_ref() -> None:

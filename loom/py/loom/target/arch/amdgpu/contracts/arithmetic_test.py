@@ -140,6 +140,32 @@ def test_bitfield_insert_rules_try_native_bfi_before_mask_merge_fallback() -> No
     )
 
 
+def test_packed_i16_arithmetic_rules_try_native_pk_ops_before_word_ops() -> None:
+    compiled = _compiled_arithmetic_rules()
+
+    arithmetic_cases = (
+        (vector.vector_addi, "amdgpu.v_pk_add_u16", "amdgpu.v_add_u32"),
+        (vector.vector_subi, "amdgpu.v_pk_sub_i16", "amdgpu.v_sub_u32"),
+        (vector.vector_muli, "amdgpu.v_pk_mul_lo_u16", "amdgpu.v_mul_lo_u32"),
+        (vector.vector_minsi, "amdgpu.v_pk_min_i16", "amdgpu.v_min_i32"),
+        (vector.vector_maxsi, "amdgpu.v_pk_max_i16", "amdgpu.v_max_i32"),
+        (vector.vector_minui, "amdgpu.v_pk_min_u16", "amdgpu.v_min_u32"),
+        (vector.vector_maxui, "amdgpu.v_pk_max_u16", "amdgpu.v_max_u32"),
+    )
+    for source_op, packed_descriptor, word_descriptor in arithmetic_cases:
+        positions = _descriptor_sequence_positions(compiled, source_op)
+        assert positions[(packed_descriptor,)] < positions[(word_descriptor,)]
+
+    shift_cases = (
+        (vector.vector_shli, "amdgpu.v_pk_lshlrev_b16"),
+        (vector.vector_shrsi, "amdgpu.v_pk_ashrrev_i16"),
+        (vector.vector_shrui, "amdgpu.v_pk_lshrrev_b16"),
+    )
+    for source_op, packed_descriptor in shift_cases:
+        positions = _descriptor_sequence_positions(compiled, source_op)
+        assert positions[(packed_descriptor,)] == 0
+
+
 def test_vector_extract_rules_publish_contract_only_shape_rows() -> None:
     compiled = _compiled_arithmetic_rules()
     rules = _rules_for_source_op(compiled, vector.vector_extract)
@@ -160,7 +186,7 @@ def test_vector_extract_rules_publish_contract_only_shape_rows() -> None:
         assert GuardKind.VECTOR_EXTRACT_SHAPE in guard_kinds
 
 
-def test_vector_bf16_conversion_rules_publish_contract_only_shape_rows() -> None:
+def test_vector_16bit_float_conversion_rules_publish_contract_only_shape_rows() -> None:
     compiled = _compiled_arithmetic_rules()
 
     for source_op in (vector.vector_extf, vector.vector_fptrunc):
@@ -169,7 +195,7 @@ def test_vector_bf16_conversion_rules_publish_contract_only_shape_rows() -> None
             rule for rule in rules if rule.flags & LOWER_RULE_FLAG_CONTRACT_ONLY
         )
 
-        assert len(contract_rules) == 1
+        assert len(contract_rules) == 2
         assert contract_rules[0].emit_count == 0
         guard_kinds = tuple(
             compiled.guards[guard_index].kind

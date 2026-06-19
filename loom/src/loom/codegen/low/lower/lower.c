@@ -1461,6 +1461,14 @@ static iree_status_t loom_low_lower_record_report_row(
     row.rule_set_index = selected_plan->rule_set_index;
     row.rule_index = selected_plan->rule_index;
     row.plan_id = LOOM_LOW_LOWER_PLAN_ID_NONE;
+    if (selected_plan->rule->report_key_ordinal !=
+        LOOM_LOW_LOWER_RULE_REPORT_KEY_NONE) {
+      const uint16_t report_key_index =
+          selected_plan->rule->report_key_ordinal - 1u;
+      IREE_ASSERT_LT(report_key_index,
+                     selected_plan->rule_set->report_key_count);
+      row.plan_key = selected_plan->rule_set->report_keys[report_key_index];
+    }
     if (selected_plan->rule->emit_count != 0 &&
         selected_plan->resolved_emits != NULL) {
       row.descriptor_id =

@@ -296,6 +296,14 @@ def descriptor_ref_row(key: str) -> list[str]:
     return [f'.key = IREE_SVL("{_c_string_literal(key)}")']
 
 
+def report_key_row(key: str) -> list[str]:
+    literal = _c_string_literal(key)
+    return [
+        f'.data = "{literal}"',
+        f'.size = IREE_ARRAYSIZE("{literal}") - 1',
+    ]
+
+
 def _descriptor_ref_index(descriptor_refs: Mapping[str, int], descriptor: Descriptor | None) -> int:
     if descriptor is None:
         return 0xFFFF
@@ -547,11 +555,21 @@ def emit_row(descriptor_refs: Mapping[str, int], row: LowerEmit) -> list[str]:
     return fields
 
 
-def rule_row(row: LowerRule) -> list[str]:
+def rule_row(
+    row: LowerRule,
+    report_key_ordinals: Mapping[str, int],
+) -> list[str]:
     fields: list[str] = []
     _append_field(fields, "source_op_kind", lower_rule_spelling.op_c_name(row.source_op), always=True)
     if row.flags:
         _append_field(fields, "flags", _rule_flags_c_expression(row.flags), always=True)
+    if row.report_key:
+        _append_field(
+            fields,
+            "report_key_ordinal",
+            report_key_ordinals[row.report_key],
+            always=True,
+        )
     _append_field(fields, "temporary_count", row.temporary_count)
     if row.guard_count:
         _append_field(fields, "guard_start", row.guard_start, always=True)
@@ -582,6 +600,8 @@ def rule_set_row(
     source_contract: ContractFragment,
     spans_name: str,
     rules_name: str,
+    report_keys: tuple[str, ...],
+    report_keys_name: str,
     type_patterns_name: str,
     value_refs_name: str,
     materializers_name: str,
@@ -600,6 +620,7 @@ def rule_set_row(
         fields.append(".flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY")
     _append_table_fields(fields, "spans", table.spans, spans_name)
     _append_table_fields(fields, "rules", table.rules, rules_name)
+    _append_table_fields(fields, "report_keys", report_keys, report_keys_name)
     _append_table_fields(
         fields,
         "type_patterns",

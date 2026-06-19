@@ -71,6 +71,11 @@ _SCRATCH_NARROW_B16_LOAD_ROWS: tuple[tuple[str, str, int, str, str], ...] = (
     ("i16", "SSHORT", 16, "memory.stack.load.i16.sign_extend", "FMT_NUM_I16"),
 )
 
+_SCRATCH_NARROW_STORE_ROWS: tuple[tuple[str, str, int], ...] = (
+    ("b8", "BYTE", 8),
+    ("b16", "SHORT", 16),
+)
+
 
 def _buffer_operand_forms(
     *,
@@ -3021,6 +3026,8 @@ def _scratch_store_overlay(
     offset_signed: bool,
     width_bits: int,
     units: int,
+    data_register_part: str | None = None,
+    data_size_exception_reason: str | None = None,
     fixed_vaddr: AmdgpuFixedEncodingValue | None,
     fixed_saddr: AmdgpuFixedEncodingValue | None,
     implicit_flat_scratch: bool,
@@ -3043,7 +3050,11 @@ def _scratch_store_overlay(
     else:
         fixed_encoding_fields += ((address_field_name, fixed_vaddr),)
     operands += (
-        AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value", units=units)),
+        AmdgpuOperandOverlay(
+            data_field_name,
+            _vgpr_operand("value", units=units, register_part=data_register_part),
+            size_exception_reason=data_size_exception_reason,
+        ),
     )
     if fixed_saddr is None:
         operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr")),)
@@ -3146,6 +3157,56 @@ def _scratch_load_narrow_overlays(
     )
 
 
+def _scratch_store_narrow_overlays(
+    *,
+    rows: tuple[tuple[str, str, int], ...],
+    mnemonic_suffixes: tuple[str, ...],
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    offset_signed: bool,
+    fixed_vaddr: AmdgpuFixedEncodingValue | None,
+    fixed_saddr: AmdgpuFixedEncodingValue | None,
+    implicit_flat_scratch: bool,
+    implicit_m0: bool,
+    descriptor_key_suffix: str = "",
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _scratch_store_overlay(
+            descriptor_key=(
+                f"amdgpu.scratch_store_{descriptor_suffix}{descriptor_key_suffix}"
+            ),
+            instruction_name=f"SCRATCH_STORE_{instruction_suffix}",
+            mnemonic=f"scratch_store_{mnemonic_suffix}",
+            encoding_name=encoding_name,
+            address_field_name=address_field_name,
+            data_field_name=data_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            offset_signed=offset_signed,
+            width_bits=width_bits,
+            units=1,
+            data_register_part=(_REG_PART_VGPR_LOW16 if width_bits == 16 else None),
+            data_size_exception_reason=(
+                _D16_PARTIAL_REGISTER_SIZE_REASON if width_bits == 16 else None
+            ),
+            fixed_vaddr=fixed_vaddr,
+            fixed_saddr=fixed_saddr,
+            implicit_flat_scratch=implicit_flat_scratch,
+            implicit_m0=implicit_m0,
+            cache_fields=cache_fields,
+        )
+        for (
+            descriptor_suffix,
+            instruction_suffix,
+            width_bits,
+        ), mnemonic_suffix in zip(rows, mnemonic_suffixes, strict=True)
+    )
+
+
 def _scratch_memory_overlays(
     *,
     instruction_suffixes: tuple[str, ...],
@@ -3164,6 +3225,7 @@ def _scratch_memory_overlays(
     descriptor_key_suffix: str = "",
     narrow_byte_load_mnemonic_suffixes: tuple[str, str] = ("u8", "i8"),
     narrow_b16_load_mnemonic_suffixes: tuple[str, str] = ("u16", "i16"),
+    narrow_store_mnemonic_suffixes: tuple[str, str] = ("b8", "b16"),
     cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
@@ -3189,6 +3251,22 @@ def _scratch_memory_overlays(
             encoding_name=encoding_name,
             address_field_name=address_field_name,
             data_field_name=load_data_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            offset_signed=offset_signed,
+            fixed_vaddr=fixed_vaddr,
+            fixed_saddr=fixed_saddr,
+            implicit_flat_scratch=implicit_flat_scratch,
+            implicit_m0=implicit_m0,
+            descriptor_key_suffix=descriptor_key_suffix,
+            cache_fields=cache_fields,
+        ),
+        *_scratch_store_narrow_overlays(
+            rows=_SCRATCH_NARROW_STORE_ROWS,
+            mnemonic_suffixes=narrow_store_mnemonic_suffixes,
+            encoding_name=encoding_name,
+            address_field_name=address_field_name,
+            data_field_name=store_data_field_name,
             offset_field_name=offset_field_name,
             offset_bit_width=offset_bit_width,
             offset_signed=offset_signed,

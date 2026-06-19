@@ -132,8 +132,10 @@ enum loom_amdgpu_report_key_kind_e {
   LOOM_AMDGPU_REPORT_KEY_WORKGROUP_REDUCE_PUBLICATION = 1,
   // Report the bounded table-lookup strategy selected by the plan.
   LOOM_AMDGPU_REPORT_KEY_TABLE_LOOKUP_STRATEGY = 2,
+  // Report the subgroup-reduce exchange and publication strategy.
+  LOOM_AMDGPU_REPORT_KEY_SUBGROUP_REDUCE_STRATEGY = 3,
   // Maximum report-key kind accepted by dispatch rows.
-  LOOM_AMDGPU_REPORT_KEY_MAX = LOOM_AMDGPU_REPORT_KEY_TABLE_LOOKUP_STRATEGY,
+  LOOM_AMDGPU_REPORT_KEY_MAX = LOOM_AMDGPU_REPORT_KEY_SUBGROUP_REDUCE_STRATEGY,
 };
 
 enum loom_amdgpu_lower_policy_bits_e {
@@ -248,13 +250,13 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_index_cast_dispatch,
                              loom_amdgpu_index_cast_plan_t,
                              loom_amdgpu_lower_index_cast)
 
-LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_offset_add_dispatch,
-                               loom_amdgpu_offset_add_plan_t,
-                               loom_amdgpu_select_offset_add_plan)
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_address_i64_alu_dispatch,
+                               loom_amdgpu_address_i64_alu_plan_t,
+                               loom_amdgpu_select_address_i64_alu_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_offset_add_dispatch,
-                             loom_amdgpu_offset_add_plan_t,
-                             loom_amdgpu_lower_offset_add)
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_address_i64_alu_dispatch,
+                             loom_amdgpu_address_i64_alu_plan_t,
+                             loom_amdgpu_lower_address_i64_alu)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_index_cmp_i64_dispatch,
                                loom_amdgpu_i64_compare_plan_t,
@@ -301,13 +303,14 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_extract_dispatch,
                              loom_amdgpu_lower_vector_extract)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(
-    loom_amdgpu_select_vector_bf16_conversion_dispatch,
-    loom_amdgpu_vector_bf16_conversion_plan_t,
-    loom_amdgpu_select_vector_bf16_conversion_plan)
+    loom_amdgpu_select_vector_16bit_float_conversion_dispatch,
+    loom_amdgpu_vector_16bit_float_conversion_plan_t,
+    loom_amdgpu_select_vector_16bit_float_conversion_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bf16_conversion_dispatch,
-                             loom_amdgpu_vector_bf16_conversion_plan_t,
-                             loom_amdgpu_lower_vector_bf16_conversion)
+LOOM_AMDGPU_DEFINE_DATA_EMIT(
+    loom_amdgpu_emit_vector_16bit_float_conversion_dispatch,
+    loom_amdgpu_vector_16bit_float_conversion_plan_t,
+    loom_amdgpu_lower_vector_16bit_float_conversion)
 
 static iree_status_t loom_amdgpu_select_buffer_dispatch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -1013,8 +1016,12 @@ static_assert(offsetof(loom_amdgpu_mulf_mix_plan_t, sources) == 0,
       offsetof(plan_type, field) == sizeof(loom_value_id_t) * (index),   \
       #plan_type "." #field " must match dispatch row storage policy")
 
-LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_offset_add_plan_t, lhs, 0);
-LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_offset_add_plan_t, rhs, 1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_address_i64_alu_plan_t, lhs,
+                                        0);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_address_i64_alu_plan_t, rhs,
+                                        1);
+LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_address_i64_alu_plan_t,
+                                        addend, 2);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_i64_compare_plan_t, lhs, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_i64_compare_plan_t, rhs, 1);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_scalar_i64_alu_plan_t, lhs,
@@ -1026,7 +1033,7 @@ LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_scalar_conversion_plan_t,
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_vector_conversion_plan_t,
                                         source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(
-    loom_amdgpu_vector_bf16_conversion_plan_t, source, 0);
+    loom_amdgpu_vector_16bit_float_conversion_plan_t, source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_bitpack_plan_t, source, 0);
 LOOM_AMDGPU_ASSERT_LEADING_SOURCE_FIELD(loom_amdgpu_bitunpack_plan_t, source,
                                         0);
@@ -1233,6 +1240,68 @@ static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_key(
       plan->publication_kind);
 }
 
+typedef struct loom_amdgpu_subgroup_reduce_strategy_report_row_t {
+  // Cross-lane exchange strategy selected for the subgroup tree.
+  loom_amdgpu_subgroup_reduce_crosslane_kind_t crosslane_kind;
+  // Publication strategy selected for the reduced value.
+  loom_amdgpu_subgroup_reduce_publication_kind_t publication_kind;
+  // Stable compile-report key for this strategy.
+  iree_string_view_t report_key;
+} loom_amdgpu_subgroup_reduce_strategy_report_row_t;
+
+static const loom_amdgpu_subgroup_reduce_strategy_report_row_t
+    kLoomAmdgpuSubgroupReduceStrategyReportRows[] = {
+        {
+            .crosslane_kind = LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_BPERMUTE,
+            .publication_kind =
+                LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_ALL_LANES,
+            .report_key =
+                IREE_SVL("amdgpu.subgroup_reduce.strategy.ds_bpermute."
+                         "all_lanes.full_crossbar"),
+        },
+        {
+            .crosslane_kind =
+                LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_BPERMUTE,
+            .publication_kind =
+                LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_ALL_LANES,
+            .report_key =
+                IREE_SVL("amdgpu.subgroup_reduce.strategy.dpp_row_bpermute."
+                         "all_lanes.row_local_crossbar"),
+        },
+        {
+            .crosslane_kind =
+                LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_PERMLANEX16,
+            .publication_kind =
+                LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_ALL_LANES,
+            .report_key =
+                IREE_SVL("amdgpu.subgroup_reduce.strategy.dpp_row_permlanex16."
+                         "all_lanes.row_pair"),
+        },
+        {
+            .crosslane_kind =
+                LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_PERMLANEX16,
+            .publication_kind =
+                LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_LEADER_LANE,
+            .report_key =
+                IREE_SVL("amdgpu.subgroup_reduce.strategy.dpp_row_permlanex16."
+                         "leader_lane.row_pair"),
+        },
+};
+
+static iree_string_view_t loom_amdgpu_subgroup_reduce_plan_key(
+    const loom_amdgpu_subgroup_reduce_plan_t* plan) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kLoomAmdgpuSubgroupReduceStrategyReportRows); ++i) {
+    const loom_amdgpu_subgroup_reduce_strategy_report_row_t* row =
+        &kLoomAmdgpuSubgroupReduceStrategyReportRows[i];
+    if (row->crosslane_kind == plan->crosslane_kind &&
+        row->publication_kind == plan->publication_kind) {
+      return row->report_key;
+    }
+  }
+  return iree_string_view_empty();
+}
+
 static iree_string_view_t loom_amdgpu_table_lookup_plan_key(
     const loom_amdgpu_table_lookup_plan_t* plan) {
   switch (plan->strategy) {
@@ -1262,6 +1331,12 @@ static iree_string_view_t loom_amdgpu_plan_key(
       }
       return loom_amdgpu_workgroup_reduce_plan_key(
           (const loom_amdgpu_workgroup_reduce_plan_t*)plan.target_data);
+    case LOOM_AMDGPU_REPORT_KEY_SUBGROUP_REDUCE_STRATEGY:
+      if (plan.target_data == NULL) {
+        return iree_string_view_empty();
+      }
+      return loom_amdgpu_subgroup_reduce_plan_key(
+          (const loom_amdgpu_subgroup_reduce_plan_t*)plan.target_data);
     case LOOM_AMDGPU_REPORT_KEY_TABLE_LOOKUP_STRATEGY:
       if (plan.target_data == NULL) {
         return iree_string_view_empty();

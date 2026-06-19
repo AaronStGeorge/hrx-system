@@ -464,9 +464,12 @@ static iree_status_t loom_check_execute_pass_with_output(
         &compile_report, iree_arena_allocator(&diagnostic_arena));
     compile_report.requested_detail_flags =
         LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS |
         LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
         LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS |
         LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS |
         LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
     compile_report_ref = &compile_report;
   }

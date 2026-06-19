@@ -30,12 +30,29 @@ bool loom_amdgpu_select_fma_mix_source(
     loom_amdgpu_fma_mix_source_kind_t* out_source_kind,
     uint32_t* out_source_register_offset);
 
+// Returns true when scalar.mulf fast-math flags permit adding positive zero.
+bool loom_amdgpu_scalar_mulf_fastmath_allows_zero_add(
+    const loom_op_t* source_op);
+
+// Canonicalizes mulf mix operands so f16 sources are preferred in source 0.
+void loom_amdgpu_canonicalize_mulf_mix_sources(
+    loom_value_id_t* sources, uint32_t* source_register_offsets,
+    loom_amdgpu_fma_mix_source_kind_t* source_kinds);
+
 // Selects a mixed-source FMA/MAD descriptor that rounds into one f16 result
 // lane.
 bool loom_amdgpu_select_fma_mix_half_result_descriptor(
     loom_low_lower_context_t* context,
     const loom_amdgpu_fma_mix_source_kind_t* source_kinds, bool high_result,
     loom_amdgpu_descriptor_ref_t* out_descriptor_ref);
+
+// Selects a mixed-source FMA/MAD descriptor that rounds into one f16 result
+// lane with an implicit positive-zero addend.
+bool loom_amdgpu_select_fma_mix_half_result_zero_addend_descriptor(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_fma_mix_source_kind_t* source_kinds, bool high_result,
+    loom_amdgpu_descriptor_ref_t* out_descriptor_ref,
+    loom_amdgpu_fma_mix_plan_flags_t* out_flags);
 
 // Selects a packed f16 FMA plan for vector.fmaf over even lane-pair vectors.
 iree_status_t loom_amdgpu_select_vector_packed_fmaf_plan(

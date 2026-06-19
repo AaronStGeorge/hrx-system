@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/target/arch/amdgpu/planning/occupancy.h"
 #include "loom/target/arch/amdgpu/planning/packet_plan.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/target/emit/native/amdgpu/hsaco.h"
@@ -60,6 +61,22 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
   };
   const uint64_t instruction_count =
       loom_amdgpu_packet_plan_instruction_count(schedule, packet_plan);
+  loom_amdgpu_occupancy_target_resources_t target_resources = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_build_target_resources(
+      record.processor, record.metadata.wavefront_size,
+      record.metadata.sgpr_count, record.metadata.vgpr_count, scratch_arena,
+      &target_resources));
+  const loom_amdgpu_kernel_hsaco_target_resources_t hsaco_target_resources = {
+      .scalar_register_class = target_resources.scalar_register_class,
+      .scalar_register_count = target_resources.scalar_register_count,
+      .vector_register_class = target_resources.vector_register_class,
+      .vector_register_count = target_resources.vector_register_count,
+      .wave_size = target_resources.wave_size,
+      .max_waves_per_simd = target_resources.max_waves_per_simd,
+      .resident_waves_per_simd = target_resources.resident_waves_per_simd,
+      .occupancy_percent = target_resources.occupancy_percent,
+      .limiting_resource = target_resources.limiting_resource,
+  };
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){
       .target = record.target_id,
       .processor = record.processor->name,
@@ -73,6 +90,7 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
                   record.metadata.private_segment_fixed_size,
               .group_segment_fixed_size =
                   record.metadata.group_segment_fixed_size,
+              .target_resources = hsaco_target_resources,
           },
   };
 

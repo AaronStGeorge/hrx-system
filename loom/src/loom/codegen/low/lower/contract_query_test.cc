@@ -529,47 +529,17 @@ TEST_F(LowContractQuerySourceMemoryTest,
       /*.tied_result_count=*/0,
       /*.source_memory_ordinal=*/1,
   };
-  const loom_low_lower_rule_t rule = {
-      /*.source_op_kind=*/LOOM_OP_VECTOR_LOAD,
-      /*.temporary_count=*/0,
-      /*.guard_start=*/0,
-      /*.guard_count=*/0,
-      /*.emit_start=*/0,
-      /*.emit_count=*/1,
-      /*.alias_ref_start=*/0,
-      /*.alias_ref_count=*/0,
-      /*.elide_ref_start=*/0,
-      /*.elide_ref_count=*/0,
-  };
-  const loom_low_lower_rule_set_t rule_set = {
-      /*.flags=*/0,
-      /*.spans=*/nullptr,
-      /*.span_count=*/0,
-      /*.rules=*/&rule,
-      /*.rule_count=*/1,
-      /*.type_patterns=*/nullptr,
-      /*.type_pattern_count=*/0,
-      /*.value_refs=*/nullptr,
-      /*.value_ref_count=*/0,
-      /*.materializers=*/nullptr,
-      /*.materializer_count=*/0,
-      /*.source_memories=*/&source_memory,
-      /*.source_memory_count=*/1,
-      /*.descriptor_refs=*/nullptr,
-      /*.descriptor_ref_count=*/0,
-      /*.diagnostic_params=*/nullptr,
-      /*.diagnostic_param_count=*/0,
-      /*.guards=*/nullptr,
-      /*.guard_count=*/0,
-      /*.attr_copies=*/nullptr,
-      /*.attr_copy_count=*/0,
-      /*.tied_results=*/nullptr,
-      /*.tied_result_count=*/0,
-      /*.emits=*/&emit,
-      /*.emit_count=*/1,
-      /*.diagnostics=*/nullptr,
-      /*.diagnostic_count=*/0,
-  };
+  loom_low_lower_rule_t rule = {};
+  rule.source_op_kind = LOOM_OP_VECTOR_LOAD;
+  rule.emit_count = 1;
+
+  loom_low_lower_rule_set_t rule_set = {};
+  rule_set.rules = &rule;
+  rule_set.rule_count = 1;
+  rule_set.source_memories = &source_memory;
+  rule_set.source_memory_count = 1;
+  rule_set.emits = &emit;
+  rule_set.emit_count = 1;
   const loom_low_lower_rule_set_t* rule_sets[] = {&rule_set};
 
   loom_target_contract_op_entry_t op_entries[LOOM_OP_VECTOR_COUNT_] = {};

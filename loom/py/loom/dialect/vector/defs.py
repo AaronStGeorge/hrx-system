@@ -64,6 +64,7 @@ from loom.dsl import (
     INVOLUTION,
     PURE,
     REFINABLE_RESULT_TYPE_REFS,
+    SAFE_TO_SPECULATE,
     SCALAR,
     VALUE_ALIAS,
     VECTOR,
@@ -274,6 +275,7 @@ def _lanewise_binary(
     result_constraint: TypeConstraint,
     doc: str,
     commutative: bool = False,
+    traits: list[Trait] | None = None,
     flags: tuple[str, EnumDef] | None = None,
     facts: str = "",
     canonicalize: str = "",
@@ -288,9 +290,11 @@ def _lanewise_binary(
         fmt.append(Flags(attr_name))
     fmt.extend([Ref("lhs"), COMMA, Ref("rhs"), COLON, TypeOf("result")])
 
-    traits: list[Trait] = [PURE, ELEMENTWISE]
+    op_traits: list[Trait] = [PURE, ELEMENTWISE]
     if commutative:
-        traits.append(COMMUTATIVE)
+        op_traits.append(COMMUTATIVE)
+    if traits:
+        op_traits.extend(traits)
     return Op(
         name,
         group=vector_ops,
@@ -305,7 +309,7 @@ def _lanewise_binary(
             result_element_constraint("result"),
             SameType("lhs", "rhs", "result"),
         ],
-        traits=traits,
+        traits=op_traits,
         facts=facts,
         canonicalize=canonicalize,
         format=fmt,
@@ -2361,6 +2365,7 @@ vector_addf = _lanewise_binary(
         "Lanewise floating-point addition of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.addf; reduction reassociation belongs on vector.reduce instead."
     ),
     commutative=True,
+    traits=[SAFE_TO_SPECULATE],
     flags=_VF,
     facts="loom_vector_addf_facts",
     canonicalize="loom_vector_uniform_result_canonicalize",
@@ -2371,6 +2376,7 @@ vector_subf = _lanewise_binary(
     phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point subtraction of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.subf."),
+    traits=[SAFE_TO_SPECULATE],
     flags=_VF,
     facts="loom_vector_subf_facts",
     canonicalize="loom_vector_subf_canonicalize",
@@ -2382,6 +2388,7 @@ vector_mulf = _lanewise_binary(
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point multiplication of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.mulf."),
     commutative=True,
+    traits=[SAFE_TO_SPECULATE],
     flags=_VF,
     facts="loom_vector_mulf_facts",
     canonicalize="loom_vector_mulf_canonicalize",
@@ -2394,6 +2401,7 @@ vector_divf = _lanewise_binary(
     doc=(
         "Lanewise floating-point division of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.divf, including arcp for reciprocal formation."
     ),
+    traits=[SAFE_TO_SPECULATE],
     flags=_VF,
     facts="loom_vector_divf_facts",
     canonicalize="loom_vector_uniform_result_canonicalize",

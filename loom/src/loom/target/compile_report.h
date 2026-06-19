@@ -59,6 +59,14 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES = 1u << 11,
   // Per-allocation-failure rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS = 1u << 12,
+  // Final target resource and occupancy summaries were recorded.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES = 1u << 13,
+  // Target math-legalization recipe rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS = 1u << 14,
+  // Per-pressure-peak origin contribution rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS = 1u << 15,
+  // Consecutive low-schedule band rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS = 1u << 16,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -116,6 +124,53 @@ typedef enum loom_target_compile_report_allocation_failure_blocking_kind_e {
   LOOM_TARGET_COMPILE_REPORT_ALLOCATION_FAILURE_BLOCKING_NO_ASSIGNABLE_LOCATION =
       4,
 } loom_target_compile_report_allocation_failure_blocking_kind_t;
+
+typedef enum loom_target_compile_report_pressure_origin_kind_e {
+  // No specific pressure origin was classified.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN = 0,
+  // Function, block, or region argument live across the peak.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_BLOCK_ARGUMENT = 1,
+  // Target-low constant materialization value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONSTANT = 2,
+  // Target-low copy value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_COPY = 3,
+  // Target-low slice value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SLICE = 4,
+  // Target-low concat value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONCAT = 5,
+  // Target-low storage address or storage view value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_STORAGE = 6,
+  // Target-low spill or reload value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SPILL_RELOAD = 7,
+  // Descriptor-backed scalar ALU value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SCALAR_ALU = 8,
+  // Descriptor-backed vector ALU value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_VECTOR_ALU = 9,
+  // Descriptor-backed matrix or tensor-core-like value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_MATRIX = 10,
+  // Descriptor-backed dot-product value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_DOT = 11,
+  // Descriptor-backed global or vector-memory value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY = 12,
+  // Descriptor-backed local, LDS, or workgroup-memory value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_LOCAL_MEMORY = 13,
+  // Descriptor-backed scalar-memory value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_SCALAR_MEMORY = 14,
+  // Descriptor-backed generic memory value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GENERIC_MEMORY = 15,
+  // Descriptor-backed control-flow value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONTROL = 16,
+  // Descriptor-backed barrier or synchronization value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_BARRIER = 17,
+  // Descriptor-backed numeric conversion value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CONVERSION = 18,
+  // Descriptor-backed register move or repair value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE = 19,
+  // Descriptor-backed cache or prefetch value.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_CACHE = 20,
+  // Operation-backed value not covered by a more specific origin.
+  LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_OPERATION = 21,
+} loom_target_compile_report_pressure_origin_kind_t;
 
 typedef enum loom_target_compile_report_legalization_mode_e {
   // No target-legalization mode was recorded.
@@ -195,6 +250,19 @@ typedef enum loom_target_compile_report_legalizer_strategy_e {
   LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE = 2,
 } loom_target_compile_report_legalizer_strategy_t;
 
+typedef enum loom_target_compile_report_math_action_e {
+  // No target math-legalization action was recorded.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_NONE = 0,
+  // A target math policy rewrote the source op through a recipe.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REWRITTEN = 1,
+  // A target math policy rejected the source op.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_REJECTED = 2,
+  // No target math policy was available for the source op.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_POLICY = 3,
+  // The selected target math recipe was not implemented by the compiler.
+  LOOM_TARGET_COMPILE_REPORT_MATH_ACTION_MISSING_RECIPE = 4,
+} loom_target_compile_report_math_action_t;
+
 // Residual move-cause counters for one category.
 typedef struct loom_target_compile_report_move_cause_counts_t {
   // Number of target packets attributed to this cause.
@@ -203,12 +271,13 @@ typedef struct loom_target_compile_report_move_cause_counts_t {
   uint64_t unit_count;
 } loom_target_compile_report_move_cause_counts_t;
 
-// Static feature counters for descriptor-backed low schedule nodes.
+// Static feature counters for low packets that survive target emission.
 //
 // These counters are compile-time proxies derived from descriptor semantic
-// tags, schedule classes, and schedule resources. They are intentionally
-// separate from measured HAL profiling counters and may overlap: for example an
-// AMDGPU global atomic packet is both global memory and atomic.
+// tags, schedule classes, schedule resources, and structural low terminators.
+// They are intentionally separate from measured HAL profiling counters and may
+// overlap: for example an AMDGPU global atomic packet is both global memory and
+// atomic.
 typedef struct loom_target_compile_report_static_instruction_mix_t {
   // Descriptor-backed schedule nodes inspected for feature classification.
   uint64_t descriptor_count;
@@ -236,11 +305,11 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   uint64_t generic_memory_count;
   // Descriptor-backed nodes identified as atomic memory operations.
   uint64_t atomic_count;
-  // Descriptor-backed nodes identified as branch, return, or call control flow.
+  // Low packets identified as branch, return, or call control flow.
   uint64_t branch_count;
   // Descriptor-backed nodes identified as barrier or synchronization packets.
   uint64_t barrier_count;
-  // Descriptor-backed nodes identified as other control packets.
+  // Low packets identified as control flow or other control packets.
   uint64_t control_count;
   // Descriptor-backed nodes identified as numeric conversion packets.
   uint64_t conversion_count;
@@ -250,6 +319,38 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   // Descriptor-backed nodes identified as register moves or copies.
   uint64_t register_move_count;
 } loom_target_compile_report_static_instruction_mix_t;
+
+// Final target resource and occupancy summary for one emitted entry.
+typedef struct loom_target_compile_report_target_resources_t {
+  // Stable target register class counted by |scalar_register_count|.
+  iree_string_view_t scalar_register_class;
+  // Final scalar register units declared by target metadata.
+  uint64_t scalar_register_count;
+  // Peak live units observed for |scalar_register_class| before final target
+  // metadata rounding and hidden target resources.
+  uint64_t scalar_pressure_peak_live_units;
+  // Extra final scalar register units beyond |scalar_pressure_peak_live_units|.
+  uint64_t scalar_register_overhead_units;
+  // Stable target register class counted by |vector_register_count|.
+  iree_string_view_t vector_register_class;
+  // Final vector register units declared by target metadata.
+  uint64_t vector_register_count;
+  // Peak live units observed for |vector_register_class| before final target
+  // metadata rounding and hidden target resources.
+  uint64_t vector_pressure_peak_live_units;
+  // Extra final vector register units beyond |vector_pressure_peak_live_units|.
+  uint64_t vector_register_overhead_units;
+  // Target subgroup width in lanes.
+  uint32_t subgroup_size;
+  // Maximum resident subgroups per SIMD modeled for the target.
+  uint32_t max_subgroups_per_simd;
+  // Estimated resident subgroups per SIMD after final target resources.
+  uint32_t resident_subgroups_per_simd;
+  // Estimated final occupancy as a percentage of |max_subgroups_per_simd|.
+  uint32_t occupancy_percent;
+  // Stable resource name limiting final occupancy, or "max_waves".
+  iree_string_view_t limiting_resource;
+} loom_target_compile_report_target_resources_t;
 
 // One emitted artifact entry summary in a compile report.
 typedef struct loom_target_compile_report_entry_t {
@@ -311,8 +412,14 @@ typedef struct loom_target_compile_report_entry_t {
       move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
   // Static descriptor-backed instruction-mix feature counters.
   loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
+  // Final target resource and occupancy summary.
+  loom_target_compile_report_target_resources_t target_resources;
   // Number of detailed register-pressure rows copied for this entry.
   iree_host_size_t pressure_row_count;
+  // Number of detailed pressure-origin rows copied for this entry.
+  iree_host_size_t pressure_origin_row_count;
+  // Number of detailed low-schedule band rows copied for this entry.
+  iree_host_size_t schedule_band_row_count;
   // Number of detailed spill rows copied for this entry.
   iree_host_size_t spill_row_count;
 } loom_target_compile_report_entry_t;
@@ -338,6 +445,64 @@ typedef struct loom_target_compile_report_pressure_row_t {
   // Operation name after which the peak was observed, or a boundary marker.
   iree_string_view_t peak_operation_name;
 } loom_target_compile_report_pressure_row_t;
+
+// One origin contribution to a register-pressure peak.
+typedef struct loom_target_compile_report_pressure_origin_row_t {
+  // Target artifact function symbol containing this pressure peak.
+  iree_string_view_t function_name;
+  // Register class name for register values, or an empty string otherwise.
+  iree_string_view_t register_class;
+  // Numeric Loom type kind for the pressure class.
+  uint32_t type_kind;
+  // Numeric Loom scalar element type for the pressure class.
+  uint32_t element_type;
+  // Program point associated with the pressure peak.
+  uint32_t peak_point;
+  // Block label containing the pressure peak.
+  iree_string_view_t peak_block_name;
+  // Operation name after which the peak was observed, or a boundary marker.
+  iree_string_view_t peak_operation_name;
+  // Structured family that produced this group of live values.
+  loom_target_compile_report_pressure_origin_kind_t origin_kind;
+  // Defining operation mnemonic for this group when available.
+  iree_string_view_t origin_operation_name;
+  // Descriptor semantic tag for descriptor-backed origins, if any.
+  iree_string_view_t semantic_tag;
+  // Representative SSA value from this contribution group.
+  iree_string_view_t sample_value_name;
+  // Number of live units contributed by this origin group at the peak.
+  uint64_t live_units;
+  // Number of live values contributed by this origin group at the peak.
+  uint64_t live_values;
+} loom_target_compile_report_pressure_origin_row_t;
+
+// One consecutive low-schedule band in a compile report.
+typedef struct loom_target_compile_report_schedule_band_row_t {
+  // Target artifact function symbol containing this schedule band.
+  iree_string_view_t function_name;
+  // Region block label containing this schedule band.
+  iree_string_view_t block_name;
+  // First global scheduled packet index in this band.
+  uint64_t first_packet_index;
+  // First scheduled ordinal within |block_name| in this band.
+  uint32_t first_scheduled_ordinal;
+  // Number of consecutive scheduled nodes in this band.
+  uint32_t node_count;
+  // Structured origin family shared by this band.
+  loom_target_compile_report_pressure_origin_kind_t origin_kind;
+  // Representative operation mnemonic for this band.
+  iree_string_view_t origin_operation_name;
+  // Shared descriptor semantic tag for descriptor-backed bands, if any.
+  iree_string_view_t semantic_tag;
+  // Representative SSA result value produced in this band, if any.
+  iree_string_view_t sample_value_name;
+  // Static descriptor-backed instruction-mix feature counters for this band.
+  loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
+  // Number of result values produced by nodes in this band.
+  uint64_t result_value_count;
+  // Number of allocation units produced by result values in this band.
+  uint64_t result_unit_count;
+} loom_target_compile_report_schedule_band_row_t;
 
 // One predicted spill row in a compile report.
 typedef struct loom_target_compile_report_spill_row_t {
@@ -458,8 +623,16 @@ typedef struct loom_target_compile_report_source_low_memory_row_t {
   iree_string_view_t operation_kind;
   // Stable target packet key selected for this emitted low operation.
   iree_string_view_t packet_key;
+  // Stable target address-form key selected for this emitted low operation.
+  iree_string_view_t address_form;
+  // Stable target dynamic-term operand key for the source address.
+  iree_string_view_t dynamic_term_kind;
+  // Stable target-owned reason key for address-form selection or fallback.
+  iree_string_view_t fallback_reason;
   // Stable descriptor id for the emitted packet, or none when unavailable.
   uint64_t descriptor_id;
+  // Static source byte offset before target packet splitting.
+  int64_t static_offset_bytes;
   // Byte count of one addressed source element.
   uint32_t element_byte_count;
   // Number of source vector lanes moved by this packet.
@@ -475,6 +648,42 @@ typedef struct loom_target_compile_report_source_low_memory_row_t {
   // Stable target-owned bank-conflict classification key.
   iree_string_view_t bank_conflict_kind;
 } loom_target_compile_report_source_low_memory_row_t;
+
+// One target math-legalization decision row copied into a compile report.
+typedef struct loom_target_compile_report_math_row_t {
+  // Source function symbol containing the legalized math operation.
+  iree_string_view_t function_name;
+  // Source operation mnemonic considered by math legalization.
+  iree_string_view_t source_op_name;
+  // Numeric source operation kind considered by math legalization.
+  uint32_t source_op_kind;
+  // Target bundle selected for the containing function.
+  iree_string_view_t target_bundle_name;
+  // Target config selected for the containing function, if any.
+  iree_string_view_t target_config_name;
+  // Stable target math policy name that decided this row, if any.
+  iree_string_view_t policy_name;
+  // Stable structured constraint or recipe key selected by the policy.
+  iree_string_view_t constraint_key;
+  // Semantic math operation requested by the source op.
+  uint32_t math_op;
+  // Whether the source op computes one scalar lane or a vector of lanes.
+  uint32_t lane_domain;
+  // Scalar element type rewritten or rejected by math legalization.
+  uint32_t element_type;
+  // Target math-legalization decision recorded for this source operation.
+  loom_target_compile_report_math_action_t action;
+  // Recipe selected when |action| is REWRITTEN or MISSING_RECIPE.
+  uint32_t recipe;
+  // Source fast-math flags observed on the original operation.
+  uint8_t source_fastmath_flags;
+  // Extra fast-math flags applied by the selected recipe.
+  uint8_t recipe_fastmath_flags;
+  // Operations created by the math legalization recipe.
+  uint64_t created_op_count;
+  // Operations erased by the math legalization recipe.
+  uint64_t erased_op_count;
+} loom_target_compile_report_math_row_t;
 
 // One target-legalization decision row copied into a compile report.
 typedef struct loom_target_compile_report_legalization_row_t {
@@ -664,16 +873,30 @@ typedef struct loom_target_compile_report_t {
   uint64_t target_legalization_unsupported_op_count;
   // Number of unsupported source ops with no legalizer opinion.
   uint64_t target_legalization_unhandled_op_count;
+  // Number of source math ops rewritten by target math legalization.
+  uint64_t math_legalization_rewritten_op_count;
+  // Number of source math ops rejected by target math legalization.
+  uint64_t math_legalization_rejected_op_count;
+  // Number of source math ops without a target math policy.
+  uint64_t math_legalization_missing_policy_op_count;
+  // Number of source math ops selecting an unimplemented recipe.
+  uint64_t math_legalization_missing_recipe_op_count;
   // Residual target move counts indexed by
   // loom_target_compile_report_move_cause_t.
   loom_target_compile_report_move_cause_counts_t
       move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
   // Static descriptor-backed instruction-mix feature counters.
   loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
+  // Final target resource and occupancy summary.
+  loom_target_compile_report_target_resources_t target_resources;
   // Owned emitted artifact entry summary rows.
   loom_target_compile_report_row_list_t entry_rows;
   // Owned register-pressure peak rows.
   loom_target_compile_report_row_list_t pressure_rows;
+  // Owned register-pressure origin contribution rows.
+  loom_target_compile_report_row_list_t pressure_origin_rows;
+  // Owned consecutive low-schedule band rows.
+  loom_target_compile_report_row_list_t schedule_band_rows;
   // Owned predicted spill rows.
   loom_target_compile_report_row_list_t spill_rows;
   // Owned hard allocation-failure rows.
@@ -682,6 +905,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t source_low_rows;
   // Owned emitted source-memory packet rows.
   loom_target_compile_report_row_list_t source_low_memory_rows;
+  // Owned target math-legalization decision rows.
+  loom_target_compile_report_row_list_t math_legalization_rows;
   // Owned target-legalization decision rows.
   loom_target_compile_report_row_list_t target_legalization_rows;
   // Estimated target private memory bytes.
@@ -767,6 +992,11 @@ void loom_target_compile_report_record_memory(
     loom_target_compile_report_t* report, uint64_t private_memory_bytes,
     uint64_t local_memory_bytes);
 
+// Records final target resource and occupancy summary facts.
+void loom_target_compile_report_record_target_resources(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_target_resources_t* target_resources);
+
 // Records one emitted artifact entry and copies its detailed pressure and spill
 // rows into |report|. String views remain borrowed from |entry_report|'s
 // original owners.
@@ -778,6 +1008,16 @@ iree_status_t loom_target_compile_report_record_entry_report(
 iree_status_t loom_target_compile_report_record_pressure_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_pressure_row_t* row);
+
+// Records one pressure-origin contribution row.
+iree_status_t loom_target_compile_report_record_pressure_origin_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_pressure_origin_row_t* row);
+
+// Records one low-schedule band row.
+iree_status_t loom_target_compile_report_record_schedule_band_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_schedule_band_row_t* row);
 
 // Records one spill row.
 iree_status_t loom_target_compile_report_record_spill_row(
@@ -798,6 +1038,11 @@ iree_status_t loom_target_compile_report_record_source_low_row(
 iree_status_t loom_target_compile_report_record_source_low_memory_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_memory_row_t* row);
+
+// Records one target math-legalization row.
+iree_status_t loom_target_compile_report_record_math_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_math_row_t* row);
 
 // Records one target-legalization decision for summary counters without
 // materializing a detailed row.
