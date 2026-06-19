@@ -272,6 +272,62 @@ bool loom_low_allocation_active_unit_index_conflicts(
   return false;
 }
 
+iree_status_t loom_low_allocation_active_unit_index_collect_conflicts(
+    loom_low_allocation_active_unit_index_t* index,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
+    const loom_low_allocation_assignment_t* assignments,
+    iree_host_size_t assignment_count,
+    const loom_low_allocation_assignment_t* candidate,
+    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
+    uint32_t* assignment_indices, uint16_t assignment_capacity,
+    uint16_t* inout_assignment_count) {
+  if (!loom_low_allocation_location_kind_is_register_like(
+          candidate->location_kind)) {
+    return iree_ok_status();
+  }
+  const uint32_t storage_key = loom_low_reg_class_storage_key(
+      descriptor_set, candidate->descriptor_reg_class_id);
+  const uint32_t generation =
+      loom_low_allocation_active_unit_next_seen_generation(index);
+  for (uint32_t unit_offset = 0; unit_offset < candidate->location_count;
+       ++unit_offset) {
+    if (candidate->location_base > UINT32_MAX - unit_offset) {
+      break;
+    }
+    const uint32_t location = candidate->location_base + unit_offset;
+    const uint32_t bucket_index = loom_low_allocation_active_unit_bucket_index(
+        index, candidate->location_kind, storage_key, location);
+    uint32_t entry_index = index->bucket_heads[bucket_index];
+    while (entry_index != UINT32_MAX) {
+      IREE_ASSERT_LT(entry_index, index->entry_count);
+      const loom_low_allocation_active_unit_entry_t* entry =
+          &index->entries[entry_index];
+      const uint32_t assignment_index = entry->assignment_index;
+      IREE_ASSERT_LT(assignment_index, assignment_count);
+      const loom_low_allocation_assignment_t* existing =
+          &assignments[assignment_index];
+      if (entry->location_kind == candidate->location_kind &&
+          entry->storage_key == storage_key && entry->location == location &&
+          existing->end_point > candidate->start_point &&
+          !loom_low_allocation_active_unit_mark_assignment_seen(
+              index, assignment_index, generation) &&
+          loom_low_allocation_active_assignment_conflicts(
+              descriptor_set, unit_end_points, unit_end_point_count, existing,
+              candidate, ignored_value_ids, ignored_value_count)) {
+        if (*inout_assignment_count == assignment_capacity) {
+          return iree_make_status(
+              IREE_STATUS_RESOURCE_EXHAUSTED,
+              "active allocation conflict set exceeds capacity");
+        }
+        assignment_indices[(*inout_assignment_count)++] = assignment_index;
+      }
+      entry_index = entry->next_entry;
+    }
+  }
+  return iree_ok_status();
+}
+
 void loom_low_allocation_active_unit_index_insert_assignment(
     loom_low_allocation_active_unit_index_t* index,
     const loom_low_descriptor_set_t* descriptor_set,
