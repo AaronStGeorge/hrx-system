@@ -19,6 +19,8 @@
             "Prepared-low reproducers",
             "--pipeline=none",
             "whole-module snapshots",
+            ".entries.rows[]",
+            "post-run slicing",
             "jq -r"
           ]
         }
