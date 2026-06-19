@@ -92,7 +92,7 @@ iree_status_t loom_encoding_layout_strided_facts(
   loom_attribute_t static_strides =
       loom_encoding_layout_strided_static_strides(op);
   if (static_strides.kind != LOOM_ATTR_I64_ARRAY ||
-      static_strides.count > UINT8_MAX) {
+      static_strides.count > LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK) {
     return loom_encoding_facts_make_unknown_address_layout(context,
                                                            &result_facts[0]);
   }
@@ -109,9 +109,7 @@ iree_status_t loom_encoding_layout_strided_facts(
                                                            &result_facts[0]);
   }
 
-  loom_value_facts_t* strides = NULL;
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_facts_scratch(
-      context->table, static_strides.count, &strides));
+  loom_value_facts_t strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {0};
   uint16_t dynamic_ordinal = 0;
   for (uint16_t i = 0; i < static_strides.count; ++i) {
     int64_t static_stride = static_strides.i64_array[i];
@@ -151,16 +149,14 @@ iree_status_t loom_encoding_layout_assume_strided_facts(
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
   int64_t rank = loom_encoding_layout_assume_strided_rank(op);
-  if (rank < 0 || rank > UINT8_MAX) {
+  if (rank < 0 || rank > LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK) {
     return loom_encoding_facts_make_summary(
         context, LOOM_ENCODING_ROLE_ADDRESS_LAYOUT,
         /*static_spec_encoding_id=*/0, (loom_value_fact_address_layout_t){0},
         (loom_value_fact_storage_schema_t){0}, &result_facts[0]);
   }
 
-  loom_value_facts_t* strides = NULL;
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_facts_scratch(
-      context->table, (iree_host_size_t)rank, &strides));
+  loom_value_facts_t strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {0};
   for (int64_t i = 0; i < rank; ++i) {
     strides[i] = loom_value_facts_make(0, INT64_MAX, 1);
   }

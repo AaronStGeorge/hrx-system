@@ -155,6 +155,19 @@ _CHECKED_BENCHMARK_CASES = [
             "amdgpu",
         ],
     },
+    {
+        "name": "fragment_result_dynamic_strided_f16acc_f32_store",
+        "rows": [
+            {
+                "benchmark": "@fragment_result_dynamic_strided_f16acc_f32_store_smoke",
+                "target_name": "fragment_result_dynamic_strided_f16acc_f32_store",
+            },
+        ],
+        "source": "fragment_result_dynamic_strided_f16acc_f32_store.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
 ]
 
 exports_files([_case["source"] for _case in _CHECKED_BENCHMARK_CASES])
