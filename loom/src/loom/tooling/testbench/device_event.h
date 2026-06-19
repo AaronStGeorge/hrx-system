@@ -47,13 +47,17 @@ typedef struct loom_testbench_device_event_record_t {
   char site_function_name_storage[LOOM_TESTBENCH_DEVICE_EVENT_STRING_CAPACITY];
   // Inline storage for |site.operation_name|.
   char site_operation_name_storage[LOOM_TESTBENCH_DEVICE_EVENT_STRING_CAPACITY];
-  // Inline storage for |event.payload|.
-  uint8_t payload_storage[LOOM_TESTBENCH_DEVICE_EVENT_PAYLOAD_CAPACITY];
-  // Inline storage for |event.implementation_payload|.
-  uint8_t implementation_payload_storage
+  // Inline storage for |event.payload|. Preserves alignment for fixed-layout
+  // typed HAL event payloads retained past the sink callback.
+  iree_alignas(iree_max_align_t) uint8_t
+      payload_storage[LOOM_TESTBENCH_DEVICE_EVENT_PAYLOAD_CAPACITY];
+  // Inline storage for |event.implementation_payload|. Preserves alignment for
+  // backend-native typed payloads retained past the sink callback.
+  iree_alignas(iree_max_align_t) uint8_t implementation_payload_storage
       [LOOM_TESTBENCH_DEVICE_EVENT_PAYLOAD_CAPACITY];
-  // Inline storage for |site.producer_payload|.
-  uint8_t site_producer_payload_storage
+  // Inline storage for |site.producer_payload|. Preserves alignment for
+  // producer-specific typed payloads retained past the sink callback.
+  iree_alignas(iree_max_align_t) uint8_t site_producer_payload_storage
       [LOOM_TESTBENCH_DEVICE_EVENT_PAYLOAD_CAPACITY];
 } loom_testbench_device_event_record_t;
 

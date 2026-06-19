@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
 
 static const char* iree_hal_device_event_type_string(
     iree_hal_device_event_type_t type) {
@@ -326,39 +327,41 @@ static void iree_hal_device_event_sink_stderr_callback(
     case IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT:
       if (iree_hal_device_event_payload_has_prefix(
               event->payload, sizeof(iree_hal_device_asan_report_t))) {
-        iree_hal_device_event_sink_stderr_print_asan(
-            (const iree_hal_device_asan_report_t*)event->payload.data,
-            event->site);
+        iree_hal_device_asan_report_t report = {0};
+        memcpy(&report, event->payload.data, sizeof(report));
+        iree_hal_device_event_sink_stderr_print_asan(&report, event->site);
       }
       break;
     case IREE_HAL_DEVICE_EVENT_TYPE_UBSAN_REPORT:
       if (iree_hal_device_event_payload_has_prefix(
               event->payload, sizeof(iree_hal_device_ubsan_report_t))) {
-        iree_hal_device_event_sink_stderr_print_ubsan(
-            (const iree_hal_device_ubsan_report_t*)event->payload.data,
-            event->site);
+        iree_hal_device_ubsan_report_t report = {0};
+        memcpy(&report, event->payload.data, sizeof(report));
+        iree_hal_device_event_sink_stderr_print_ubsan(&report, event->site);
       }
       break;
     case IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT:
       if (iree_hal_device_event_payload_has_prefix(
               event->payload, sizeof(iree_hal_device_tsan_report_t))) {
-        iree_hal_device_event_sink_stderr_print_tsan(
-            (const iree_hal_device_tsan_report_t*)event->payload.data,
-            event->site);
+        iree_hal_device_tsan_report_t report = {0};
+        memcpy(&report, event->payload.data, sizeof(report));
+        iree_hal_device_event_sink_stderr_print_tsan(&report, event->site);
       }
       break;
     case IREE_HAL_DEVICE_EVENT_TYPE_PRINTF:
       if (iree_hal_device_event_payload_has_prefix(
               event->payload, sizeof(iree_hal_device_printf_event_t))) {
-        iree_hal_device_event_sink_stderr_print_printf(
-            (const iree_hal_device_printf_event_t*)event->payload.data);
+        iree_hal_device_printf_event_t printf_event = {0};
+        memcpy(&printf_event, event->payload.data, sizeof(printf_event));
+        iree_hal_device_event_sink_stderr_print_printf(&printf_event);
       }
       break;
     case IREE_HAL_DEVICE_EVENT_TYPE_DRIVER_FAILURE:
       if (iree_hal_device_event_payload_has_prefix(
               event->payload, sizeof(iree_hal_device_driver_failure_event_t))) {
-        iree_hal_device_event_sink_stderr_print_driver_failure(
-            (const iree_hal_device_driver_failure_event_t*)event->payload.data);
+        iree_hal_device_driver_failure_event_t failure_event = {0};
+        memcpy(&failure_event, event->payload.data, sizeof(failure_event));
+        iree_hal_device_event_sink_stderr_print_driver_failure(&failure_event);
       }
       break;
     default:

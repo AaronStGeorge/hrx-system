@@ -6,6 +6,8 @@
 
 #include "loom/tooling/testbench/expectation.h"
 
+#include <string.h>
+
 #include <string>
 
 #include "iree/base/internal/arena.h"
@@ -381,6 +383,9 @@ check.case @device_event {
       loom_testbench_device_event_capture_sink(&capture), &event);
   loom_testbench_device_event_list_t event_list = {};
   loom_testbench_device_event_capture_events(&capture, &event_list);
+  ASSERT_EQ(event_list.count, 1u);
+  EXPECT_EQ((uintptr_t)0, (uintptr_t)event_list.records[0].event.payload.data %
+                              iree_alignof(iree_hal_device_tsan_report_t));
   loom_testbench_case_sample_observations_t observations =
       loom_testbench_case_sample_observations_empty();
   observations.device_events = &event_list;
@@ -397,6 +402,24 @@ check.case @device_event {
   IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(
       &schedule, &table, &observations, &report));
 
+  EXPECT_EQ(report.expectation_count, 2u);
+  EXPECT_EQ(report.passed_count, 2u);
+  EXPECT_EQ(report.failure_count, 0u);
+
+  uint8_t unaligned_payload_storage[sizeof(tsan_report) + 1] = {0};
+  memcpy(unaligned_payload_storage + 1, &tsan_report, sizeof(tsan_report));
+  loom_testbench_device_event_record_t unaligned_record = {};
+  unaligned_record.event = event;
+  unaligned_record.event.payload = iree_make_const_byte_span(
+      unaligned_payload_storage + 1, sizeof(tsan_report));
+  loom_testbench_device_event_list_t unaligned_event_list = {
+      /*.records=*/&unaligned_record,
+      /*.count=*/1,
+  };
+  observations.device_events = &unaligned_event_list;
+  loom_testbench_expectation_report_reset(&report);
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(
+      &schedule, &table, &observations, &report));
   EXPECT_EQ(report.expectation_count, 2u);
   EXPECT_EQ(report.passed_count, 2u);
   EXPECT_EQ(report.failure_count, 0u);

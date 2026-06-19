@@ -1116,8 +1116,8 @@ static iree_status_t loom_testbench_event_match_asan(
           event, sizeof(iree_hal_device_asan_report_t))) {
     return iree_ok_status();
   }
-  const iree_hal_device_asan_report_t* report =
-      (const iree_hal_device_asan_report_t*)event->payload.data;
+  iree_hal_device_asan_report_t report = {0};
+  memcpy(&report, event->payload.data, sizeof(report));
 
   bool access_present = false;
   uint32_t access = 0;
@@ -1140,12 +1140,12 @@ static iree_status_t loom_testbench_event_match_asan(
       module, attrs, IREE_SV("site_id"), &site_id_present, &site_id));
 
   *out_matches =
-      (!access_present || report->access_kind == access) &&
+      (!access_present || report.access_kind == access) &&
       loom_testbench_event_match_optional_u64(
-          report->access_length, access_length_present, access_length) &&
+          report.access_length, access_length_present, access_length) &&
       loom_testbench_event_match_optional_u64(
-          report->shadow_value, shadow_value_present, shadow_value) &&
-      loom_testbench_event_match_optional_u64(report->site_id, site_id_present,
+          report.shadow_value, shadow_value_present, shadow_value) &&
+      loom_testbench_event_match_optional_u64(report.site_id, site_id_present,
                                               site_id);
   return iree_ok_status();
 }
@@ -1167,8 +1167,8 @@ static iree_status_t loom_testbench_event_match_ubsan(
           event, sizeof(iree_hal_device_ubsan_report_t))) {
     return iree_ok_status();
   }
-  const iree_hal_device_ubsan_report_t* report =
-      (const iree_hal_device_ubsan_report_t*)event->payload.data;
+  iree_hal_device_ubsan_report_t report = {0};
+  memcpy(&report, event->payload.data, sizeof(report));
 
   bool check_present = false;
   uint32_t check = 0;
@@ -1188,13 +1188,13 @@ static iree_status_t loom_testbench_event_match_ubsan(
   IREE_RETURN_IF_ERROR(loom_testbench_event_optional_i64(
       module, attrs, IREE_SV("site_id"), &site_id_present, &site_id));
 
-  *out_matches = (!check_present || report->check_kind == check) &&
+  *out_matches = (!check_present || report.check_kind == check) &&
                  loom_testbench_event_match_optional_u64(
-                     report->operand0, operand0_present, operand0) &&
+                     report.operand0, operand0_present, operand0) &&
                  loom_testbench_event_match_optional_u64(
-                     report->operand1, operand1_present, operand1) &&
+                     report.operand1, operand1_present, operand1) &&
                  loom_testbench_event_match_optional_u64(
-                     report->site_id, site_id_present, site_id);
+                     report.site_id, site_id_present, site_id);
   return iree_ok_status();
 }
 
@@ -1222,8 +1222,8 @@ static iree_status_t loom_testbench_event_match_tsan(
           event, sizeof(iree_hal_device_tsan_report_t))) {
     return iree_ok_status();
   }
-  const iree_hal_device_tsan_report_t* report =
-      (const iree_hal_device_tsan_report_t*)event->payload.data;
+  iree_hal_device_tsan_report_t report = {0};
+  memcpy(&report, event->payload.data, sizeof(report));
 
   bool check_present = false;
   uint32_t check = 0;
@@ -1283,26 +1283,26 @@ static iree_status_t loom_testbench_event_match_tsan(
       &prior_linear));
 
   const bool report_current_atomic = iree_all_bits_set(
-      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_ATOMIC);
+      report.flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_ATOMIC);
   const bool report_prior_atomic = iree_all_bits_set(
-      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_ATOMIC);
+      report.flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_ATOMIC);
   const bool report_current_linear = iree_all_bits_set(
-      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR);
+      report.flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR);
   const bool report_prior_linear = iree_all_bits_set(
-      report->flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR);
+      report.flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR);
 
   *out_matches =
-      (!check_present || report->check_kind == check) &&
-      (!memory_present || report->memory_space == memory) &&
+      (!check_present || report.check_kind == check) &&
+      (!memory_present || report.memory_space == memory) &&
       (!current_access_present ||
-       report->current_access_kind == current_access) &&
-      (!prior_access_present || report->prior_access_kind == prior_access) &&
+       report.current_access_kind == current_access) &&
+      (!prior_access_present || report.prior_access_kind == prior_access) &&
       loom_testbench_event_match_optional_u32(
-          report->access_length, access_length_present, access_length) &&
+          report.access_length, access_length_present, access_length) &&
       loom_testbench_event_match_optional_u64(
-          report->current_site_id, current_site_id_present, current_site_id) &&
+          report.current_site_id, current_site_id_present, current_site_id) &&
       loom_testbench_event_match_optional_u64(
-          report->prior_site_id, prior_site_id_present, prior_site_id) &&
+          report.prior_site_id, prior_site_id_present, prior_site_id) &&
       (!current_atomic_present || report_current_atomic == current_atomic) &&
       (!prior_atomic_present || report_prior_atomic == prior_atomic) &&
       (!current_linear_present || report_current_linear == current_linear) &&
