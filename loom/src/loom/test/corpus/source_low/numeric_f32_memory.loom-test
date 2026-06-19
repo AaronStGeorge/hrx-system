@@ -62,6 +62,38 @@ kernel.def @f32_arcp_div() {
 
 // ====
 
+func.def @f32_scalar_arcp_constant_divisor(%value: f32) -> (f32) {
+  %scale = scalar.constant 127.0 : f32
+  %result = scalar.divf<nnan|ninf|nsz|arcp> %value, %scale : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @f32_scalar_arcp_literal_dividend(%value: f32) -> (f32) {
+  %scale = scalar.constant 127.0 : f32
+  %result = scalar.divf<nnan|ninf|nsz|arcp> %scale, %value : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @f32_vector_arcp_constant_divisor(%values: vector<4xf32>) -> (vector<4xf32>) {
+  %scale = vector.constant 127.0 : vector<4xf32>
+  %result = vector.divf<nnan|ninf|nsz|arcp> %values, %scale : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+func.def @f32_vector_arcp_literal_dividend(%values: vector<4xf32>) -> (vector<4xf32>) {
+  %scale = vector.constant 127.0 : vector<4xf32>
+  %result = vector.divf<nnan|ninf|nsz|arcp> %scale, %values : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
 func.def @f32_guarded_arcp_reciprocal_scale(%amax: f32) -> (f32) {
   %zero = scalar.constant 0.0 : f32
   %one = scalar.constant 1.0 : f32

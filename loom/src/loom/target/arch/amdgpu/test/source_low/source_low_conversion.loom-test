@@ -449,6 +449,46 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_round_afn_f32_to_i
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_quantize_arcp_round_afn_f32_to_i8x4(%values: vector<4xf32>, %amax: f32) -> (vector<4xi8>) {
+  %scale_limit = scalar.constant 127.0 : f32
+  %inverse_scale = scalar.divf<nnan|ninf|nsz|arcp> %scale_limit, %amax : f32
+  %scale = vector.splat %inverse_scale : vector<4xf32>
+  %scaled = vector.mulf<nnan|ninf|nsz|arcp> %values, %scale : vector<4xf32>
+  %rounded = vector.roundf<afn> %scaled : vector<4xf32>
+  %i32 = vector.fptosi %rounded : vector<4xf32> to vector<4xi32>
+  %packed = vector.trunci %i32 : vector<4xi32> to vector<4xi8>
+  func.return %packed : vector<4xi8>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @vector_quantize_arcp_round_afn_f32_to_i8x4(%values: reg<amdgpu.vgpr x4>, %amax: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %13 = v_rcp_f32 %amax
+  %inverse_scale = v_mul_f32_lit %13, 1123942400
+  %16 = slice %values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %18 = v_mul_f32 %16, %inverse_scale
+  %19 = slice %values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %21 = v_mul_f32 %19, %inverse_scale
+  %22 = slice %values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %24 = v_mul_f32 %22, %inverse_scale
+  %25 = slice %values[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %27 = v_mul_f32 %25, %inverse_scale
+  %30 = v_rndne_f32 %18
+  %32 = v_rndne_f32 %21
+  %34 = v_rndne_f32 %24
+  %36 = v_rndne_f32 %27
+  %39 = v_cvt_i32_f32 %30
+  %41 = v_cvt_i32_f32 %32
+  %43 = v_cvt_i32_f32 %34
+  %45 = v_cvt_i32_f32 %36
+  %51 = v_perm_b32_src2_lit %39, %41, 1024
+  %52 = v_perm_b32_src2_lit %43, %45, 1024
+  %packed = v_perm_b32_src2_lit %51, %52, 84148480
+  return %packed
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @vector_quantize_roundeven_f32_to_i8x4(%values: vector<4xf32>, %inverse_scale: f32) -> (vector<4xi8>) {
   %scale = vector.splat %inverse_scale : vector<4xf32>
   %scaled = vector.mulf %values, %scale : vector<4xf32>

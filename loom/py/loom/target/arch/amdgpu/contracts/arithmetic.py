@@ -1426,6 +1426,53 @@ def _divf_arcp_one_rule(
     )
 
 
+def _divf_arcp_literal_lhs_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    *,
+    f32_operand: bool = False,
+) -> DescriptorRule:
+    reciprocal = _descriptor("amdgpu.v_rcp_f32")
+    multiply = _descriptor("amdgpu.v_mul_f32.lit")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=reciprocal,
+        report_key=_report_key(source_op, "arcp_lhs_lit_rcp_mul"),
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), type_pattern),
+            Guard.instance_flags_has_all("fastmath", "arcp"),
+            Guard.value_exact_f64(
+                "lhs",
+                diagnostic=_LITERAL_EXACT_F32_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(reciprocal),
+            Guard.descriptor_available(multiply),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=reciprocal,
+                operands={
+                    "input": _f32_vgpr_operand("rhs")
+                    if f32_operand
+                    else ValueRef.operand("rhs")
+                },
+                results={"dst": ValueRef.temporary("reciprocal")},
+                result_types={"dst": ValueRef.result("result")},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=multiply,
+                operands={"rhs": ValueRef.temporary("reciprocal")},
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": ValueProject.f64_as_f32_bits("lhs"),
+                },
+                form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
 def _divf_arcp_rule(
     source_op: Op,
     type_pattern: TypePattern,
@@ -2996,6 +3043,7 @@ def _rules() -> tuple[ContractCase, ...]:
             _f32_abs_rule(vector.vector_absf, _VEC_F32, f32_operand=True),
             _f32_copysign_rule(vector.vector_copysignf, _VEC_F32),
             _divf_arcp_one_rule(vector.vector_divf, _VEC_F32),
+            _divf_arcp_literal_lhs_rule(vector.vector_divf, _VEC_F32),
             _divf_arcp_rule(vector.vector_divf, _VEC_F32),
             _divf_exact_rule(vector.vector_divf, _VEC_F32),
             *_commutative_f32_binary_rules(
@@ -3316,6 +3364,7 @@ def _rules() -> tuple[ContractCase, ...]:
             _f32_abs_rule(scalar_arithmetic.scalar_absf, _F32, f32_operand=True),
             _f32_copysign_rule(scalar_arithmetic.scalar_copysignf, _F32),
             _divf_arcp_one_rule(scalar_arithmetic.scalar_divf, _F32),
+            _divf_arcp_literal_lhs_rule(scalar_arithmetic.scalar_divf, _F32),
             _divf_arcp_rule(scalar_arithmetic.scalar_divf, _F32),
             _divf_exact_rule(scalar_arithmetic.scalar_divf, _F32),
             *_commutative_f32_binary_rules(

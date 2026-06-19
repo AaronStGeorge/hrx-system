@@ -208,6 +208,23 @@ func.def @from_elements_of_scalarized_quantizer_chain(%values: vector<4xf32>) ->
 
 // ====
 
+func.def @divf_arcp_constant_rhs_to_reciprocal_mulf(%values: vector<4xf32>) -> (vector<4xf32>, vector<4xf32>) {
+  %scale = vector.constant 127.0 : vector<4xf32>
+  %strict = vector.divf %values, %scale : vector<4xf32>
+  %fast = vector.divf<nnan|ninf|nsz|arcp> %values, %scale : vector<4xf32>
+  func.return %strict, %fast : vector<4xf32>, vector<4xf32>
+}
+// ----
+func.def @divf_arcp_constant_rhs_to_reciprocal_mulf(%values: vector<4xf32>) -> (vector<4xf32>, vector<4xf32>) {
+  %scale = vector.constant 127.0 : vector<4xf32>
+  %strict = vector.divf %values, %scale : vector<4xf32>
+  %6 = vector.constant 0.007874015748031496 : vector<4xf32>
+  %fast = vector.mulf<nnan|ninf|nsz|arcp> %values, %6 : vector<4xf32>
+  func.return %strict, %fast : vector<4xf32>, vector<4xf32>
+}
+
+// ====
+
 // A single scalar lane extracted from a vector load can narrow to a scalar
 // view.load. This avoids forcing wide payload lowering for table-style record
 // loads where only one field is used.
