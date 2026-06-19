@@ -1956,6 +1956,11 @@ iree_status_t loom_low_schedule_function(
 
   iree_host_size_t node_count = 0;
   loom_low_schedule_count_nodes(state.body, &node_count);
+  const bool needs_liveness =
+      iree_any_bit_set(options->flags,
+                       LOOM_LOW_SCHEDULE_FLAG_RETAIN_LIVENESS) ||
+      iree_any_bit_set(options->diagnostic_flags,
+                       LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS);
   loom_local_value_domain_t value_domain = {0};
   loom_liveness_analysis_t liveness = {0};
   iree_status_t status = loom_local_value_domain_acquire_for_region(
@@ -1977,7 +1982,7 @@ iree_status_t loom_low_schedule_function(
   if (iree_status_is_ok(status)) {
     status = loom_low_schedule_build_dependencies(&state);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && needs_liveness) {
     status = loom_liveness_analyze_local_value_domain(
         &value_domain, loom_liveness_order_empty(), arena, &liveness);
   }
@@ -2020,6 +2025,8 @@ iree_status_t loom_low_schedule_function(
         .function_op = low_func_op,
         .target = state.target,
         .memory_access_table = options->memory_access_table,
+        .value_ids = value_domain.value_ids,
+        .value_count = value_domain.value_count,
         .liveness = liveness,
         .blocks = state.blocks,
         .block_count = state.body->block_count,

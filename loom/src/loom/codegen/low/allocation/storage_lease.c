@@ -240,12 +240,12 @@ static iree_status_t loom_low_allocation_storage_lease_value_id(
         "storage lease record has invalid attachment kind %u",
         (unsigned)record->attachment);
   }
-  if (value_ordinal >= schedule->liveness.value_count) {
+  if (value_ordinal >= schedule->value_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "storage lease references a value outside schedule liveness");
+        "storage lease references a value outside schedule value domain");
   }
-  *out_value_id = schedule->liveness.value_ids[value_ordinal];
+  *out_value_id = schedule->value_ids[value_ordinal];
   return iree_ok_status();
 }
 

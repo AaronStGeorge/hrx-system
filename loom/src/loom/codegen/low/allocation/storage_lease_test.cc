@@ -133,6 +133,8 @@ loom_low_schedule_table_t Schedule(
   loom_low_schedule_table_t schedule = {};
   schedule.module = module;
   schedule.function_op = function_op;
+  schedule.value_ids = liveness.value_ids;
+  schedule.value_count = (loom_value_ordinal_t)liveness.value_count;
   schedule.liveness = liveness;
   schedule.blocks = blocks;
   schedule.block_count = block_count;
