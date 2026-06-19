@@ -690,19 +690,21 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   ds_write_b32 %34, %27
   s_mov_b64_exec %32
   s_barrier
-  %35 = v_mov_b32 2
-  %36 = v_cmp_lt_u32 %19, %35
+  %35 = v_mov_b32 1
+  %36 = v_cmp_lt_u32 %tid, %35
   %37, %38 = s_and_saveexec_b64 %36
-  %39 = v_lshlrev_b32_src0_inline %19, 2
-  %40 = v_add_u32 %21, %39
+  %39 = ds_read_b32 %21
+  %40 = v_add_u32_src0_inline %21, 4
   %41 = ds_read_b32 %40
-  %42 = v_xor_b32_src0_inline %19, 1
-  %43 = v_lshlrev_b32_src0_inline %42, 2
-  %44 = ds_bpermute_b32 %43, %41
-  %45 = v_add_f32 %41, %44
+  %42 = v_add_f32 %39, %41
   s_mov_b64_exec %37
-  %46 = v_mov_b32 0
-  %result = ds_bpermute_b32 %46, %45
+  %43 = v_mov_b32 1
+  %44 = v_cmp_lt_u32 %tid, %43
+  %45, %46 = s_and_saveexec_b64 %44
+  ds_write_b32 %21, %42
+  s_mov_b64_exec %45
+  s_barrier
+  %result = ds_read_b32 %21
   %48 = v_lshlrev_b32_src0_inline %tid, 2
   global_store_b32_saddr %48, %result, %output_view
   return
@@ -796,19 +798,21 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   ds_write_b32 %76, %69
   s_mov_b64_exec %74
   s_barrier
-  %77 = v_mov_b32 2
-  %78 = v_cmp_lt_u32 %61, %77
+  %77 = v_mov_b32 1
+  %78 = v_cmp_lt_u32 %tid, %77
   %79, %80 = s_and_saveexec_b64 %78
-  %81 = v_lshlrev_b32_src0_inline %61, 2
-  %82 = v_add_u32 %63, %81
+  %81 = ds_read_b32 %63
+  %82 = v_add_u32_src0_inline %63, 4
   %83 = ds_read_b32 %82
-  %84 = v_xor_b32_src0_inline %61, 1
-  %85 = v_lshlrev_b32_src0_inline %84, 2
-  %86 = ds_bpermute_b32 %85, %83
-  %87 = v_add_f32 %83, %86
+  %84 = v_add_f32 %81, %83
   s_mov_b64_exec %79
-  %88 = v_mov_b32 0
-  %sum0 = ds_bpermute_b32 %88, %87
+  %85 = v_mov_b32 1
+  %86 = v_cmp_lt_u32 %tid, %85
+  %87, %88 = s_and_saveexec_b64 %86
+  ds_write_b32 %63, %84
+  s_mov_b64_exec %87
+  s_barrier
+  %sum0 = ds_read_b32 %63
   %90 = v_and_b32_src0_inline %tid, 31
   %91 = storage {byte_alignment = 4, byte_length = 8} : low.storage<workgroup>
   %92 = storage_address %91 : low.storage<workgroup> -> reg<amdgpu.vgpr>
@@ -827,19 +831,21 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   ds_write_b32 %105, %98
   s_mov_b64_exec %103
   s_barrier
-  %106 = v_mov_b32 2
-  %107 = v_cmp_lt_u32 %90, %106
+  %106 = v_mov_b32 1
+  %107 = v_cmp_lt_u32 %tid, %106
   %108, %109 = s_and_saveexec_b64 %107
-  %110 = v_lshlrev_b32_src0_inline %90, 2
-  %111 = v_add_u32 %92, %110
+  %110 = ds_read_b32 %92
+  %111 = v_add_u32_src0_inline %92, 4
   %112 = ds_read_b32 %111
-  %113 = v_xor_b32_src0_inline %90, 1
-  %114 = v_lshlrev_b32_src0_inline %113, 2
-  %115 = ds_bpermute_b32 %114, %112
-  %116 = v_add_f32 %112, %115
+  %113 = v_add_f32 %110, %112
   s_mov_b64_exec %108
-  %117 = v_mov_b32 0
-  %sum1 = ds_bpermute_b32 %117, %116
+  %114 = v_mov_b32 1
+  %115 = v_cmp_lt_u32 %tid, %114
+  %116, %117 = s_and_saveexec_b64 %115
+  ds_write_b32 %92, %113
+  s_mov_b64_exec %116
+  s_barrier
+  %sum1 = ds_read_b32 %92
   %zero_i32 = s_mov_b32 0
   %one_i32 = s_mov_b32 1
   %has_bias_bits = s_and_b32 %fusion_flags, %one_i32
@@ -938,25 +944,29 @@ low.kernel.def target(@target) workgroup_size(128, 1, 1) @workgroup_reduce_addf_
   ds_write_b32 %34, %27
   s_mov_b64_exec %32
   s_barrier
-  %35 = v_mov_b32 4
-  %36 = v_cmp_lt_u32 %19, %35
+  %35 = v_mov_b32 1
+  %36 = v_cmp_lt_u32 %tid, %35
   %37, %38 = s_and_saveexec_b64 %36
-  %39 = v_lshlrev_b32_src0_inline %19, 2
-  %40 = v_add_u32 %21, %39
+  %39 = ds_read_b32 %21
+  %40 = v_add_u32_src0_inline %21, 4
   %41 = ds_read_b32 %40
-  %42 = v_xor_b32_src0_inline %19, 2
-  %43 = v_lshlrev_b32_src0_inline %42, 2
-  %44 = ds_bpermute_b32 %43, %41
-  %45 = v_add_f32 %41, %44
-  %46 = v_xor_b32_src0_inline %19, 1
-  %47 = v_lshlrev_b32_src0_inline %46, 2
-  %48 = ds_bpermute_b32 %47, %45
-  %49 = v_add_f32 %45, %48
+  %42 = v_add_f32 %39, %41
+  %43 = v_add_u32_src0_inline %21, 8
+  %44 = ds_read_b32 %43
+  %45 = v_add_f32 %42, %44
+  %46 = v_add_u32_src0_inline %21, 12
+  %47 = ds_read_b32 %46
+  %48 = v_add_f32 %45, %47
   s_mov_b64_exec %37
-  %50 = v_mov_b32 0
-  %result = ds_bpermute_b32 %50, %49
-  %52 = v_lshlrev_b32_src0_inline %tid, 2
-  global_store_b32_saddr %52, %result, %output_view
+  %49 = v_mov_b32 1
+  %50 = v_cmp_lt_u32 %tid, %49
+  %51, %52 = s_and_saveexec_b64 %50
+  ds_write_b32 %21, %48
+  s_mov_b64_exec %51
+  s_barrier
+  %result = ds_read_b32 %21
+  %54 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %54, %result, %output_view
   return
 }
 
@@ -1006,32 +1016,26 @@ low.kernel.def target(@target) workgroup_size(96, 1, 1) @workgroup_reduce_addf_f
   ds_write_b32 %34, %27
   s_mov_b64_exec %32
   s_barrier
-  %35 = v_mov_b32 3
-  %36 = v_cmp_lt_u32 %19, %35
+  %35 = v_mov_b32 1
+  %36 = v_cmp_lt_u32 %tid, %35
   %37, %38 = s_and_saveexec_b64 %36
-  %39 = v_lshlrev_b32_src0_inline %19, 2
-  %40 = v_add_u32 %21, %39
+  %39 = ds_read_b32 %21
+  %40 = v_add_u32_src0_inline %21, 4
   %41 = ds_read_b32 %40
-  %42 = v_mov_b32 3
-  %43 = v_mov_b32 0
-  %45 = v_add_u32_src0_inline %19, 2
-  %46 = v_lshlrev_b32_src0_inline %45, 2
-  %47 = v_cmp_lt_u32 %45, %42
-  %48 = ds_bpermute_b32 %46, %41
-  %49 = v_cndmask_b32 %43, %48, %47
-  %50 = v_add_f32 %41, %49
-  %51 = v_add_u32_src0_inline %19, 1
-  %52 = v_lshlrev_b32_src0_inline %51, 2
-  %53 = v_cmp_lt_u32 %51, %42
-  %54 = ds_bpermute_b32 %52, %50
-  %55 = v_cndmask_b32 %43, %54, %53
-  %56 = v_add_f32 %50, %55
-  %57 = ds_bpermute_b32 %43, %56
+  %42 = v_add_f32 %39, %41
+  %43 = v_add_u32_src0_inline %21, 8
+  %44 = ds_read_b32 %43
+  %45 = v_add_f32 %42, %44
   s_mov_b64_exec %37
-  %58 = v_mov_b32 0
-  %result = ds_bpermute_b32 %58, %57
-  %60 = v_lshlrev_b32_src0_inline %tid, 2
-  global_store_b32_saddr %60, %result, %output_view
+  %46 = v_mov_b32 1
+  %47 = v_cmp_lt_u32 %tid, %46
+  %48, %49 = s_and_saveexec_b64 %47
+  ds_write_b32 %21, %45
+  s_mov_b64_exec %48
+  s_barrier
+  %result = ds_read_b32 %21
+  %51 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %51, %result, %output_view
   return
 }
 
@@ -1085,26 +1089,23 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   ds_write_b32 %36, %29
   s_mov_b64_exec %34
   s_barrier
-  %37 = v_mov_b32 2
+  %37 = v_mov_b32 1
   %38 = v_cmp_lt_u32 %tid, %37
   %39, %40 = s_and_saveexec_b64 %38
-  %41 = v_lshlrev_b32_src0_inline %21, 2
-  %42 = v_add_u32 %23, %41
+  %41 = ds_read_b32 %23
+  %42 = v_add_u32_src0_inline %23, 4
   %43 = ds_read_b32 %42
-  %44 = v_xor_b32_src0_inline %21, 1
-  %45 = v_lshlrev_b32_src0_inline %44, 2
-  %46 = ds_bpermute_b32 %45, %43
-  %result = v_add_f32 %43, %46
+  %result = v_add_f32 %41, %43
   s_mov_b64_exec %39
   %is_leader = v_cmp_eq_i32_src1_inline %tid {rhs = 0}
-  %49, %50 = s_and_saveexec_b64 %is_leader
-  low.cond_br %50, ^_bb1, ^_bb2 : reg<amdgpu.scc>
+  %46, %47 = s_and_saveexec_b64 %is_leader
+  low.cond_br %47, ^_bb1, ^_bb2 : reg<amdgpu.scc>
 ^_bb1:
-  %51 = v_mov_b32 0
-  global_store_b32_saddr %51, %result, %output_view
+  %48 = v_mov_b32 0
+  global_store_b32_saddr %48, %result, %output_view
   low.br ^_bb2
 ^_bb2:
-  s_mov_b64_exec %49
+  s_mov_b64_exec %46
   return
 }
 
@@ -1158,30 +1159,29 @@ low.kernel.def target(@target) workgroup_size(128, 1, 1) @workgroup_reduce_addf_
   ds_write_b32 %36, %29
   s_mov_b64_exec %34
   s_barrier
-  %37 = v_mov_b32 4
+  %37 = v_mov_b32 1
   %38 = v_cmp_lt_u32 %tid, %37
   %39, %40 = s_and_saveexec_b64 %38
-  %41 = v_lshlrev_b32_src0_inline %21, 2
-  %42 = v_add_u32 %23, %41
+  %41 = ds_read_b32 %23
+  %42 = v_add_u32_src0_inline %23, 4
   %43 = ds_read_b32 %42
-  %44 = v_xor_b32_src0_inline %21, 2
-  %45 = v_lshlrev_b32_src0_inline %44, 2
-  %46 = ds_bpermute_b32 %45, %43
-  %47 = v_add_f32 %43, %46
-  %48 = v_xor_b32_src0_inline %21, 1
-  %49 = v_lshlrev_b32_src0_inline %48, 2
-  %50 = ds_bpermute_b32 %49, %47
-  %result = v_add_f32 %47, %50
+  %44 = v_add_f32 %41, %43
+  %45 = v_add_u32_src0_inline %23, 8
+  %46 = ds_read_b32 %45
+  %47 = v_add_f32 %44, %46
+  %48 = v_add_u32_src0_inline %23, 12
+  %49 = ds_read_b32 %48
+  %result = v_add_f32 %47, %49
   s_mov_b64_exec %39
   %is_leader = v_cmp_eq_i32_src1_inline %tid {rhs = 0}
-  %53, %54 = s_and_saveexec_b64 %is_leader
-  low.cond_br %54, ^_bb1, ^_bb2 : reg<amdgpu.scc>
+  %52, %53 = s_and_saveexec_b64 %is_leader
+  low.cond_br %53, ^_bb1, ^_bb2 : reg<amdgpu.scc>
 ^_bb1:
-  %55 = v_mov_b32 0
-  global_store_b32_saddr %55, %result, %output_view
+  %54 = v_mov_b32 0
+  global_store_b32_saddr %54, %result, %output_view
   low.br ^_bb2
 ^_bb2:
-  s_mov_b64_exec %53
+  s_mov_b64_exec %52
   return
 }
 

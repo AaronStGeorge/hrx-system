@@ -1455,6 +1455,7 @@ iree_status_t loom_vector_divf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_divf_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_divf_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,

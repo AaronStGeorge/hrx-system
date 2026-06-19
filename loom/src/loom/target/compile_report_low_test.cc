@@ -54,7 +54,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       {
           /*.name_string_offset=*/kRegisterClassGprOffset,
           /*.target_bank_id=*/{},
-          /*.flags=*/LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY,
+          /*.flags=*/LOOM_LOW_REG_CLASS_FLAG_PHYSICAL,
           /*.alloc_unit_bits=*/32,
           /*.allocatable_count=*/{},
           /*.alias_set_id=*/{},
@@ -115,11 +115,12 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       /*.reg_class_count=*/IREE_ARRAYSIZE(reg_classes),
   };
   loom_low_schedule_node_t schedule_nodes[13] = {};
-  loom_value_t module_values[6] = {};
-  loom_value_ordinal_t value_ordinals[6] = {
+  loom_value_t module_values[7] = {};
+  loom_value_ordinal_t value_ordinals[7] = {
       LOOM_VALUE_ORDINAL_INVALID, LOOM_VALUE_ORDINAL_INVALID,
       LOOM_VALUE_ORDINAL_INVALID, LOOM_VALUE_ORDINAL_INVALID,
       LOOM_VALUE_ORDINAL_INVALID, LOOM_VALUE_ORDINAL_INVALID,
+      LOOM_VALUE_ORDINAL_INVALID,
   };
   loom_module_t module = {
       /*.flags=*/{},
@@ -151,6 +152,8 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                                                  /*register_class_id=*/0, 1);
   module_values[5].type = loom_low_register_type(/*descriptor_set_stable_id=*/1,
                                                  /*register_class_id=*/0, 2);
+  module_values[6].type = loom_low_register_type(/*descriptor_set_stable_id=*/1,
+                                                 /*register_class_id=*/0, 2);
   loom_target_compile_report_t report = {};
   loom_target_compile_report_initialize(&report, iree_allocator_system());
   report.requested_detail_flags =
@@ -158,7 +161,8 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
-      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS;
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS;
 
   const loom_op_t peak_op = {};
   const loom_liveness_pressure_summary_t pressure_summaries[] = {
@@ -212,14 +216,27 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           /*.location_base=*/1,
           /*.location_count=*/1,
       },
+      {
+          /*.value_id=*/6,
+          /*.value_class=*/pressure_summaries[0].value_class,
+          /*.descriptor_reg_class_id=*/0,
+          /*.start_point=*/2,
+          /*.end_point=*/6,
+          /*.unit_count=*/2,
+          /*.location_kind=*/LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+          /*.location_base=*/7,
+          /*.location_count=*/2,
+      },
   };
   const loom_value_id_t liveness_value_ids[] = {
       4,
       5,
+      6,
   };
   const uint32_t liveness_value_interval_indices[] = {
       0,
       1,
+      2,
   };
   const loom_liveness_interval_t liveness_intervals[] = {
       {
@@ -236,10 +253,18 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           /*.value_class=*/pressure_summaries[1].value_class,
           /*.unit_count=*/2,
       },
+      {
+          /*.value_id=*/6,
+          /*.start_point=*/2,
+          /*.end_point=*/6,
+          /*.value_class=*/pressure_summaries[0].value_class,
+          /*.unit_count=*/2,
+      },
   };
   const uint32_t assignment_indices_by_value_ordinal[] = {
       0,
       1,
+      2,
   };
   const loom_low_allocation_copy_decision_t copy_decisions[] = {
       {
@@ -331,6 +356,19 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       /*.memory_access_record_index=*/{},
       /*.schedule_class_id=*/{},
       /*.schedule_class_name=*/IREE_SVL("amdgpu.vmem.load"),
+      /*.latency_cycles=*/{},
+      /*.latency_kind=*/{},
+      /*.model_quality=*/{},
+      /*.issue_use_count=*/{},
+      /*.hazard_count=*/{},
+      /*.effect_count=*/{},
+      /*.operand_count=*/0,
+      /*.result_count=*/1,
+      /*.flags=*/{},
+      /*.value_ordinals=*/
+      {
+          /*.inline_value_ordinals=*/{2},
+      },
   };
   schedule_nodes[2] = (loom_low_schedule_node_t){
       /*.op=*/{},
@@ -547,6 +585,9 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_TRUE(iree_all_bits_set(
       report.detail_flags,
       LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS));
+  EXPECT_TRUE(iree_all_bits_set(
+      report.detail_flags,
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS));
   EXPECT_TRUE(
       iree_string_view_equal(report.function_name, IREE_SV("<unnamed>")));
   EXPECT_EQ(report.schedule_node_count, 13u);
@@ -598,7 +639,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_TRUE(iree_string_view_equal(pressure_rows[0].peak_operation_name,
                                      IREE_SV("<block-boundary>")));
   EXPECT_EQ(pressure_rows[1].peak_live_units, 11u);
-  EXPECT_EQ(report.pressure_origin_rows.count, 2u);
+  EXPECT_EQ(report.pressure_origin_rows.count, 3u);
   ASSERT_NE(report.pressure_origin_rows.head, nullptr);
   const auto* pressure_origin_rows =
       static_cast<const loom_target_compile_report_pressure_origin_row_t*>(
@@ -609,11 +650,17 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_EQ(pressure_origin_rows[0].live_units, 1u);
   EXPECT_EQ(pressure_origin_rows[0].live_values, 1u);
   EXPECT_EQ(pressure_origin_rows[1].origin_kind,
-            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE);
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY);
   EXPECT_TRUE(iree_string_view_equal(pressure_origin_rows[1].semantic_tag,
-                                     IREE_SV("register.copy.b32")));
+                                     IREE_SV("memory.global.load.u32")));
   EXPECT_EQ(pressure_origin_rows[1].live_units, 2u);
   EXPECT_EQ(pressure_origin_rows[1].live_values, 1u);
+  EXPECT_EQ(pressure_origin_rows[2].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE);
+  EXPECT_TRUE(iree_string_view_equal(pressure_origin_rows[2].semantic_tag,
+                                     IREE_SV("register.copy.b32")));
+  EXPECT_EQ(pressure_origin_rows[2].live_units, 2u);
+  EXPECT_EQ(pressure_origin_rows[2].live_values, 1u);
   EXPECT_EQ(report.schedule_band_rows.count, 5u);
   ASSERT_NE(report.schedule_band_rows.head, nullptr);
   const auto* schedule_band_rows =
@@ -638,6 +685,8 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
                                      IREE_SV("memory.global.load.u32")));
   EXPECT_EQ(schedule_band_rows[1].static_instruction_mix.global_memory_count,
             1u);
+  EXPECT_EQ(schedule_band_rows[1].result_value_count, 1u);
+  EXPECT_EQ(schedule_band_rows[1].result_unit_count, 2u);
   EXPECT_EQ(schedule_band_rows[2].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_MATRIX);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[2].semantic_tag,
@@ -721,6 +770,24 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_TRUE(iree_string_view_equal(
       allocation_failure_rows[0].conflict_value_name, IREE_SV("<unnamed>")));
   EXPECT_EQ(allocation_failure_rows[0].conflict_location_base, 0u);
+  EXPECT_EQ(report.allocation_high_water_rows.count, 1u);
+  ASSERT_NE(report.allocation_high_water_rows.head, nullptr);
+  const auto* allocation_high_water_rows = static_cast<
+      const loom_target_compile_report_allocation_high_water_row_t*>(
+      loom_target_compile_report_vec_const_rows(
+          report.allocation_high_water_rows.head));
+  EXPECT_TRUE(iree_string_view_equal(
+      allocation_high_water_rows[0].function_name, IREE_SV("<unnamed>")));
+  EXPECT_TRUE(iree_string_view_equal(
+      allocation_high_water_rows[0].register_class, IREE_SV("test.gpr")));
+  EXPECT_EQ(allocation_high_water_rows[0].assignment_index, 2u);
+  EXPECT_EQ(allocation_high_water_rows[0].origin_kind,
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY);
+  EXPECT_TRUE(iree_string_view_equal(allocation_high_water_rows[0].semantic_tag,
+                                     IREE_SV("memory.global.load.u32")));
+  EXPECT_EQ(allocation_high_water_rows[0].location_base, 7u);
+  EXPECT_EQ(allocation_high_water_rows[0].location_count, 2u);
+  EXPECT_EQ(allocation_high_water_rows[0].high_water_units, 9u);
   loom_target_compile_report_deinitialize(&report);
 }
 

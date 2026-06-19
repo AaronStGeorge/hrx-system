@@ -49,7 +49,10 @@ loom_cc_library(
     loom::codegen::low::pipeline::pass_environment
     loom::error::error_defs
     loom::ir
+    loom::ops::index
+    loom::ops::kernel
     loom::ops::op_defs
+    loom::ops::scalar
     loom::pass::pipeline
     loom::pass::registry
     loom::pass::types

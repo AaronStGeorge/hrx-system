@@ -182,6 +182,29 @@ static iree_status_t loom_scalar_replace_mulf_with_negated_constant(
                                                       replacement);
 }
 
+static iree_status_t loom_scalar_replace_divf_with_reciprocal_mulf(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t lhs,
+    double divisor_value) {
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_type_t result_type = loom_scalar_single_result_type(rewriter, op);
+
+  loom_value_id_t reciprocal = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
+      rewriter, loom_value_facts_exact_f64(1.0 / divisor_value), result_type,
+      op->location, &reciprocal));
+
+  loom_op_t* replacement_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_mulf_build(
+      &rewriter->builder, loom_scalar_divf_fastmath(op), lhs, reciprocal,
+      result_type, op->location, &replacement_op));
+  loom_value_id_t replacement = loom_scalar_mulf_result(replacement_op);
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, &replacement, 1, value_checkpoint));
+  return loom_scalar_replace_single_result_with_value(op, rewriter,
+                                                      replacement);
+}
+
 static iree_status_t loom_scalar_materialize_or_reuse_i64_constant(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t candidate,
     int64_t value, loom_type_t type, loom_value_id_t* out_value_id) {
@@ -1128,10 +1151,18 @@ iree_status_t loom_scalar_mulf_canonicalize(loom_op_t* op,
 
 iree_status_t loom_scalar_divf_canonicalize(loom_op_t* op,
                                             loom_rewriter_t* rewriter) {
+  loom_value_id_t lhs = loom_scalar_divf_lhs(op);
   loom_value_id_t rhs = loom_scalar_divf_rhs(op);
   if (loom_scalar_value_facts_are_exact_f64(rewriter, rhs, 1.0)) {
-    return loom_scalar_replace_single_result_with_value(
-        op, rewriter, loom_scalar_divf_lhs(op));
+    return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
+  }
+  if (!loom_scalar_fastmath_has_all(op, LOOM_SCALAR_FASTMATHFLAGS_ARCP)) {
+    return iree_ok_status();
+  }
+  double divisor_value = 0.0;
+  if (loom_scalar_query_exact_f64(rewriter, rhs, &divisor_value)) {
+    return loom_scalar_replace_divf_with_reciprocal_mulf(op, rewriter, lhs,
+                                                         divisor_value);
   }
   return iree_ok_status();
 }

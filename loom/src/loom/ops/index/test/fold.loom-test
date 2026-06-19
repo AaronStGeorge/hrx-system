@@ -477,6 +477,45 @@ func.def @add_shift_canonicalizes_to_madd(%i: index, %j: index) -> (index) {
 
 // ====
 
+// index.madd flattens nested exact scales so generated address expressions do
+// not preserve source grouping that would force extra multiply/shift work.
+func.def @madd_nested_scale_canonicalizes_to_single_madd(%i: index) -> (index) {
+  %c9 = index.constant 9 : index
+  %c16 = index.constant 16 : index
+  %c2 = index.constant 2 : index
+  %scaled = index.mul %i, %c9 : index
+  %r = index.madd %scaled, %c2, %c16 : index
+  func.return %r : index
+}
+// ----
+func.def @madd_nested_scale_canonicalizes_to_single_madd(%i: index) -> (index) {
+  %c16 = index.constant 16 : index
+  %7 = index.constant 18 : index
+  %r = index.madd %i, %7, %c16 : index
+  func.return %r : index
+}
+
+// ====
+
+// The nested-scale fold is symmetric across the multiply operands.
+func.def @madd_nested_scale_canonicalizes_swapped_factor(%i: index) -> (index) {
+  %c9 = index.constant 9 : index
+  %c16 = index.constant 16 : index
+  %c2 = index.constant 2 : index
+  %scaled = index.mul %i, %c9 : index
+  %r = index.madd %c2, %scaled, %c16 : index
+  func.return %r : index
+}
+// ----
+func.def @madd_nested_scale_canonicalizes_swapped_factor(%i: index) -> (index) {
+  %c16 = index.constant 16 : index
+  %7 = index.constant 18 : index
+  %r = index.madd %i, %7, %c16 : index
+  func.return %r : index
+}
+
+// ====
+
 // index.add collapses scaled quotient/remainder reconstruction back to a
 // single scaled coordinate.
 func.def @add_scaled_div_rem_reconstruction(%lane: index) -> (index) {

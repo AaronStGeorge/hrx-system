@@ -176,6 +176,40 @@ low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_madd_constant_adde
 // ====
 
 amdgpu.target<gfx1100> @target
+kernel.def target(@target) @index_madd_nested_scale_global_b32() {
+  %unit = index.constant 1 : index
+  %row_count = index.constant 4 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%row_count, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %row = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %c9 = index.constant 9 : index
+  %c2 = index.constant 2 : index
+  %c16 = index.constant 16 : index
+  %scaled = index.mul %row, %c9 : index
+  %linear = index.madd %scaled, %c2, %c16 : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<80xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<80xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<80xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<80xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_madd_nested_scale_global_b32() asm<amdgpu.rdna3.core> {
+  %row = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 320} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 320} : reg<amdgpu.sgpr x2>
+  %19 = v_mov_b32 72
+  %20 = v_mul_lo_u32 %row, %19
+  %loaded = global_load_b32_saddr %20, %input_view {offset = 64}
+  global_store_b32_saddr %20, %loaded, %output_view {offset = 64}
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @index_shli_global_b32() {
   %unit = index.constant 1 : index
   %lane_count = index.constant 4 : index

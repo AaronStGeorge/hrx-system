@@ -143,10 +143,15 @@ loom_value_facts_t loom_value_facts_clamp_domain(loom_value_facts_t facts,
       range_hi > 0) {
     result.flags |= LOOM_VALUE_FACT_POWER_OF_TWO;
   }
+  const uint32_t preserved_topology_flags =
+      range_lo == facts.range_lo && range_hi == facts.range_hi
+          ? facts.flags & LOOM_VALUE_FACT_TOPOLOGY_DOMAIN_MASK
+          : 0;
   result.flags |=
-      facts.flags &
-      (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
-       LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
+      (facts.flags &
+       (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
+        LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_SUBGROUP_LANE_MASK)) |
+      preserved_topology_flags;
   result.extension_id = facts.extension_id;
   return result;
 }
@@ -280,7 +285,8 @@ void loom_value_facts_recompute_flags(loom_value_facts_t* facts) {
        LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_NOT_INF |
        LOOM_VALUE_FACT_FINITE | LOOM_VALUE_FACT_UNIFORM |
        LOOM_VALUE_FACT_LANE_VARYING | LOOM_VALUE_FACT_LANE_PREDICATE |
-       LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
+       LOOM_VALUE_FACT_SUBGROUP_LANE_MASK |
+       LOOM_VALUE_FACT_TOPOLOGY_DOMAIN_MASK);
   facts->flags =
       loom_value_facts_compute_flags(facts->range_lo, facts->range_hi) |
       preserved;

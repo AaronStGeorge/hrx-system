@@ -109,8 +109,15 @@ bool loom_matrix_fragment_coordinate_from_role_layout(
       return true;
     }
     case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN: {
+      const uint32_t lane_group_count =
+          layout->wave_size / tile_shape.result_column_count;
+      if (lane_group_count == 0 ||
+          (layout->wave_size % tile_shape.result_column_count) != 0) {
+        return false;
+      }
+      const uint32_t lane_group = lane / tile_shape.result_column_count;
       const uint32_t row =
-          (uint32_t)register_index * 2u + lane / tile_shape.result_column_count;
+          (uint32_t)register_index * lane_group_count + lane_group;
       if (row >= tile_shape.result_row_count) {
         return false;
       }
@@ -122,8 +129,15 @@ bool loom_matrix_fragment_coordinate_from_role_layout(
       if (element_index != 0) {
         return false;
       }
+      const uint32_t lane_group_count =
+          layout->wave_size / tile_shape.result_column_count;
+      if (lane_group_count == 0 ||
+          (layout->wave_size % tile_shape.result_column_count) != 0) {
+        return false;
+      }
+      const uint32_t lane_group = lane / tile_shape.result_column_count;
       const uint32_t row =
-          (uint32_t)register_index * 2u + lane / tile_shape.result_column_count;
+          (uint32_t)register_index * lane_group_count + lane_group;
       if (row >= tile_shape.result_row_count) {
         return false;
       }

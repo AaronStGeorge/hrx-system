@@ -190,6 +190,23 @@ static uint32_t loom_kernel_max_workgroup_count(
   return max_count;
 }
 
+static void loom_kernel_mark_workitem_topology_domain(
+    loom_kernel_dimension_t dimension, loom_value_facts_t* facts) {
+  switch (dimension) {
+    case LOOM_KERNEL_DIMENSION_X:
+      facts->flags |= LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_X;
+      break;
+    case LOOM_KERNEL_DIMENSION_Y:
+      facts->flags |= LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Y;
+      break;
+    case LOOM_KERNEL_DIMENSION_Z:
+      facts->flags |= LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Z;
+      break;
+    default:
+      break;
+  }
+}
+
 static bool loom_kernel_launch_config_operand_facts(
     const loom_fact_context_t* context, loom_kernel_dimension_t dimension,
     loom_value_id_t (*operand_lookup)(const loom_op_t* launch_config,
@@ -516,6 +533,8 @@ iree_status_t loom_kernel_workitem_id_facts(
       loom_kernel_launch_workgroup_size_facts(
           context, module, loom_kernel_workitem_id_dimension(op)));
   loom_value_facts_mark_lane_varying(&result_facts[0]);
+  loom_kernel_mark_workitem_topology_domain(
+      loom_kernel_workitem_id_dimension(op), &result_facts[0]);
   return iree_ok_status();
 }
 
@@ -574,6 +593,7 @@ iree_status_t loom_kernel_subgroup_lane_id_facts(
       loom_kernel_max_subgroup_lane_count(context, module);
   result_facts[0] = loom_value_facts_make(0, (int64_t)max_lane_count - 1, 1);
   loom_value_facts_mark_lane_varying(&result_facts[0]);
+  result_facts[0].flags |= LOOM_VALUE_FACT_TOPOLOGY_SUBGROUP_LANE;
   return iree_ok_status();
 }
 

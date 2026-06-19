@@ -107,12 +107,12 @@
               LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                      \
       .accumulator = MATRIX_ROLE_LAYOUT(                                       \
           LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,                              \
-          LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1, 32,   \
+          LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN, 4, 1, 32,  \
           LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                \
               LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                         \
       .result = MATRIX_ROLE_LAYOUT(                                            \
           LOOM_CONTRACT_OPERAND_ROLE_RESULT,                                   \
-          LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1, 32,   \
+          LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN, 4, 1, 32,  \
           LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                \
               LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                         \
   }

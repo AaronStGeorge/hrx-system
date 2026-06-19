@@ -1000,6 +1000,34 @@ ERR_TARGET_057 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_058: Kernel topology range assume excludes live invocations.
+ERR_TARGET_058 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=58,
+    severity=Severity.ERROR,
+    summary="Kernel topology range assume excludes live invocations.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': {value_kind} {axis} "
+        "has selected topology range [{required_min}, {required_max}] but "
+        "the range assume requires [{assumed_min}, {assumed_max}]"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("value_kind", ParamKind.STRING),
+        ErrorParam("axis", ParamKind.STRING),
+        ErrorParam("required_min", ParamKind.I64),
+        ErrorParam("required_max", ParamKind.I64),
+        ErrorParam("assumed_min", ParamKind.I64),
+        ErrorParam("assumed_max", ParamKind.I64),
+    ),
+    fix_hint=(
+        "Guard the use before narrowing the topology value, widen the range, "
+        "select a matching workgroup or subgroup size, or use the topology op "
+        "matching the intended lane domain."
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1050,4 +1078,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_055,
     ERR_TARGET_056,
     ERR_TARGET_057,
+    ERR_TARGET_058,
 )
