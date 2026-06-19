@@ -254,6 +254,40 @@
       ]
     },
     {
+      "name": "reports exact static scf loop without unroll policy",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pass=unroll-scf-for",
+          "--pass-report=json",
+          "--output={tmp}/structured-loop.loom"
+        ],
+        "stdin": {
+          "text": "func.def @static_loop_without_unroll_policy() {\n  %start = index.constant 0 : index\n  %end = index.constant 32 : index\n  %step = index.constant 16 : index\n  scf.for %i = [%start to %end step %step] {\n    test.use %i : index\n  }\n  func.return\n}\n"
+        }
+      },
+      "stderr": {
+        "contains": [
+          "\"pass\":\"unroll-scf-for\"",
+          "\"category\":\"scf-unroll\"",
+          "\"outcome\":\"structured\"",
+          "\"op\":\"scf.for\"",
+          "\"policy\":\"absent\"",
+          "\"trip_count_state\":\"exact\"",
+          "\"trip_count\":2",
+          "\"step\":16",
+          "\"lower_bound_kind\":\"static\"",
+          "\"lower\":0"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/structured-loop.loom",
+          "contains": ["scf.for %i"]
+        }
+      ]
+    },
+    {
       "name": "prints full target register types in text diagnostics",
       "run": {
         "tool": "loom-opt",
