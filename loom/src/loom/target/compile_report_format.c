@@ -613,6 +613,10 @@ static iree_status_t loom_target_compile_report_format_summary(
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder, "COMPILE-REPORT: schedule_band_rows count=%" PRIhsz "\n",
         report->schedule_band_rows.count));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        "COMPILE-REPORT: schedule_band_summary_rows count=%" PRIhsz "\n",
+        report->schedule_band_summary_rows.count));
   }
 
   if (iree_any_bit_set(report->detail_flags,
@@ -746,9 +750,11 @@ static iree_status_t loom_target_compile_report_format_entry_rows(
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder,
           " pressure_rows=%" PRIhsz " pressure_origin_rows=%" PRIhsz
-          " schedule_band_rows=%" PRIhsz " spill_rows=%" PRIhsz "\n",
+          " schedule_band_rows=%" PRIhsz " schedule_band_summary_rows=%" PRIhsz
+          " spill_rows=%" PRIhsz "\n",
           row->pressure_row_count, row->pressure_origin_row_count,
-          row->schedule_band_row_count, row->spill_row_count));
+          row->schedule_band_row_count, row->schedule_band_summary_row_count,
+          row->spill_row_count));
     }
   }
   return iree_ok_status();
@@ -928,6 +934,70 @@ static iree_status_t loom_target_compile_report_format_schedule_band_rows(
           row->first_scheduled_ordinal, row->node_count, (int)origin_kind.size,
           origin_kind.data, (int)origin_operation_name.size,
           origin_operation_name.data, (int)semantic_tag.size, semantic_tag.data,
+          (int)sample_value_name.size, sample_value_name.data,
+          mix->descriptor_count, mix->unknown_count, mix->scalar_alu_count,
+          mix->vector_alu_count, mix->matrix_count, mix->mfma_count,
+          mix->wmma_count, mix->dot_count, mix->global_memory_count,
+          mix->local_memory_count, mix->scalar_memory_count,
+          mix->generic_memory_count, mix->atomic_count, mix->branch_count,
+          mix->barrier_count, mix->control_count, mix->conversion_count,
+          mix->cache_count, mix->register_move_count, row->result_value_count,
+          row->result_unit_count));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_target_compile_report_format_schedule_band_summary_rows(
+    const loom_target_compile_report_t* report,
+    iree_string_builder_t* builder) {
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec =
+           report->schedule_band_summary_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_schedule_band_summary_row_t* rows =
+        (const loom_target_compile_report_schedule_band_summary_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_schedule_band_summary_row_t* row =
+          &rows[i];
+      const loom_target_compile_report_static_instruction_mix_t* mix =
+          &row->static_instruction_mix;
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
+      const iree_string_view_t block_name =
+          loom_target_compile_report_non_empty(row->block_name);
+      const iree_string_view_t origin_kind =
+          loom_target_compile_report_pressure_origin_kind_name(
+              row->origin_kind);
+      const iree_string_view_t origin_operation_name =
+          loom_target_compile_report_non_empty(row->origin_operation_name);
+      const iree_string_view_t semantic_tag =
+          loom_target_compile_report_non_empty(row->semantic_tag);
+      const iree_string_view_t sample_value_name =
+          loom_target_compile_report_non_empty(row->sample_value_name);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: schedule_band_summary[%" PRIhsz
+          "] function=%.*s block=%.*s first_packet=%" PRIu64 " bands=%" PRIu64
+          " nodes=%" PRIu64 " max_band_nodes=%" PRIu32
+          " origin=%.*s"
+          " origin_op=%.*s semantic=%.*s sample=%.*s"
+          " descriptors=%" PRIu64 " unknown=%" PRIu64 " scalar_alu=%" PRIu64
+          " vector_alu=%" PRIu64 " matrix=%" PRIu64 " mfma=%" PRIu64
+          " wmma=%" PRIu64 " dot=%" PRIu64 " global_memory=%" PRIu64
+          " local_memory=%" PRIu64 " scalar_memory=%" PRIu64
+          " generic_memory=%" PRIu64 " atomic=%" PRIu64 " branch=%" PRIu64
+          " barrier=%" PRIu64 " control=%" PRIu64 " conversion=%" PRIu64
+          " cache=%" PRIu64 " register_move=%" PRIu64 " result_values=%" PRIu64
+          " result_units=%" PRIu64 "\n",
+          row_index, (int)function_name.size, function_name.data,
+          (int)block_name.size, block_name.data, row->first_packet_index,
+          row->band_count, row->node_count, row->max_band_node_count,
+          (int)origin_kind.size, origin_kind.data,
+          (int)origin_operation_name.size, origin_operation_name.data,
+          (int)semantic_tag.size, semantic_tag.data,
           (int)sample_value_name.size, sample_value_name.data,
           mix->descriptor_count, mix->unknown_count, mix->scalar_alu_count,
           mix->vector_alu_count, mix->matrix_count, mix->mfma_count,
@@ -1831,6 +1901,9 @@ static iree_status_t loom_target_compile_report_format_entry_json(
       stream, &first_field, "schedule_band_row_count",
       row->schedule_band_row_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "schedule_band_summary_row_count",
+      row->schedule_band_summary_row_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
       stream, &first_field, "spill_row_count", row->spill_row_count));
   if (iree_any_bit_set(row->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES)) {
@@ -2109,6 +2182,88 @@ static iree_status_t loom_target_compile_report_format_schedule_band_rows_json(
         }
         IREE_RETURN_IF_ERROR(
             loom_target_compile_report_format_schedule_band_row_json(
+                &rows[i], row_index, stream));
+      }
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t
+loom_target_compile_report_format_schedule_band_summary_row_json(
+    const loom_target_compile_report_schedule_band_summary_row_t* row,
+    iree_host_size_t row_index, loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "index", row_index));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", row->function_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "block", row->block_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "first_packet_index", row->first_packet_index));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "band_count", row->band_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "node_count", row->node_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "max_band_node_count", row->max_band_node_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "origin_kind", row->origin_kind));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "origin",
+      loom_target_compile_report_pressure_origin_kind_name(row->origin_kind)));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "origin_operation",
+          row->origin_operation_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "semantic_tag", row->semantic_tag));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "sample_value", row->sample_value_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+      stream, &first_field, "static_instruction_mix"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entry_mix_json(
+      &row->static_instruction_mix, stream));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "result_value_count", row->result_value_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "result_unit_count", row->result_unit_count));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t
+loom_target_compile_report_format_schedule_band_summary_rows_json(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_format_mode_t mode,
+    loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "count", report->schedule_band_summary_rows.count));
+  if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "rows"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+    iree_host_size_t row_index = 0;
+    for (const loom_target_compile_report_vec_t* vec =
+             report->schedule_band_summary_rows.head;
+         vec != NULL; vec = vec->next) {
+      const loom_target_compile_report_schedule_band_summary_row_t* rows =
+          (const loom_target_compile_report_schedule_band_summary_row_t*)
+              loom_target_compile_report_vec_const_rows(vec);
+      for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+        if (row_index != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_target_compile_report_format_schedule_band_summary_row_json(
                 &rows[i], row_index, stream));
       }
     }
@@ -2728,6 +2883,9 @@ iree_status_t loom_target_compile_report_format_text(
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_schedule_band_rows(report, builder));
     IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_schedule_band_summary_rows(report,
+                                                                     builder));
+    IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_spill_rows(report, builder));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_allocation_failure_rows(report,
@@ -2890,6 +3048,11 @@ iree_status_t loom_target_compile_report_format_json(
         stream, &first_field, "schedule_band_rows"));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_schedule_band_rows_json(
+            report, options->mode, stream));
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "schedule_band_summary_rows"));
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_schedule_band_summary_rows_json(
             report, options->mode, stream));
   }
   if (iree_any_bit_set(report->detail_flags,

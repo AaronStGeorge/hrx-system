@@ -333,6 +333,30 @@ static void loom_target_compile_report_accumulate_low_node_static_mix(
       loom_target_compile_report_low_node_features_are_known(&features) ? 0 : 1;
 }
 
+static void loom_target_compile_report_accumulate_static_mix(
+    loom_target_compile_report_static_instruction_mix_t* target,
+    const loom_target_compile_report_static_instruction_mix_t* source) {
+  target->descriptor_count += source->descriptor_count;
+  target->unknown_count += source->unknown_count;
+  target->scalar_alu_count += source->scalar_alu_count;
+  target->vector_alu_count += source->vector_alu_count;
+  target->matrix_count += source->matrix_count;
+  target->mfma_count += source->mfma_count;
+  target->wmma_count += source->wmma_count;
+  target->dot_count += source->dot_count;
+  target->global_memory_count += source->global_memory_count;
+  target->local_memory_count += source->local_memory_count;
+  target->scalar_memory_count += source->scalar_memory_count;
+  target->generic_memory_count += source->generic_memory_count;
+  target->atomic_count += source->atomic_count;
+  target->branch_count += source->branch_count;
+  target->barrier_count += source->barrier_count;
+  target->control_count += source->control_count;
+  target->conversion_count += source->conversion_count;
+  target->cache_count += source->cache_count;
+  target->register_move_count += source->register_move_count;
+}
+
 static void loom_target_compile_report_record_low_static_instruction_mix(
     loom_target_compile_report_t* report,
     const loom_low_emission_frame_t* frame) {
@@ -640,6 +664,74 @@ static void loom_target_compile_report_accumulate_schedule_band_node(
       schedule->module, liveness, node, row);
 }
 
+static bool loom_target_compile_report_schedule_band_summary_matches(
+    const loom_target_compile_report_schedule_band_summary_row_t* summary,
+    const loom_target_compile_report_schedule_band_row_t* band) {
+  return iree_string_view_equal(summary->block_name, band->block_name) &&
+         summary->origin_kind == band->origin_kind &&
+         iree_string_view_equal(summary->origin_operation_name,
+                                band->origin_operation_name) &&
+         iree_string_view_equal(summary->semantic_tag, band->semantic_tag);
+}
+
+static void loom_target_compile_report_accumulate_schedule_band_summary(
+    loom_target_compile_report_schedule_band_summary_row_t* summary,
+    const loom_target_compile_report_schedule_band_row_t* band) {
+  ++summary->band_count;
+  summary->node_count += band->node_count;
+  summary->max_band_node_count =
+      iree_max(summary->max_band_node_count, band->node_count);
+  if (iree_string_view_is_empty(summary->sample_value_name)) {
+    summary->sample_value_name = band->sample_value_name;
+  }
+  loom_target_compile_report_accumulate_static_mix(
+      &summary->static_instruction_mix, &band->static_instruction_mix);
+  summary->result_value_count += band->result_value_count;
+  summary->result_unit_count += band->result_unit_count;
+}
+
+static iree_status_t loom_target_compile_report_add_schedule_band_summary(
+    loom_target_compile_report_schedule_band_summary_row_t* summaries,
+    iree_host_size_t summary_capacity, iree_host_size_t* summary_count,
+    const loom_target_compile_report_schedule_band_row_t* band) {
+  for (iree_host_size_t i = 0; i < *summary_count; ++i) {
+    if (loom_target_compile_report_schedule_band_summary_matches(&summaries[i],
+                                                                 band)) {
+      loom_target_compile_report_accumulate_schedule_band_summary(&summaries[i],
+                                                                  band);
+      return iree_ok_status();
+    }
+  }
+  if (*summary_count >= summary_capacity) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low schedule band summary capacity exceeded");
+  }
+  loom_target_compile_report_schedule_band_summary_row_t* summary =
+      &summaries[(*summary_count)++];
+  *summary = (loom_target_compile_report_schedule_band_summary_row_t){
+      .function_name = band->function_name,
+      .block_name = band->block_name,
+      .first_packet_index = band->first_packet_index,
+      .origin_kind = band->origin_kind,
+      .origin_operation_name = band->origin_operation_name,
+      .semantic_tag = band->semantic_tag,
+      .sample_value_name = band->sample_value_name,
+  };
+  loom_target_compile_report_accumulate_schedule_band_summary(summary, band);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_compile_report_record_schedule_band(
+    loom_target_compile_report_t* report,
+    loom_target_compile_report_schedule_band_summary_row_t* summaries,
+    iree_host_size_t summary_capacity, iree_host_size_t* summary_count,
+    const loom_target_compile_report_schedule_band_row_t* band) {
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_record_schedule_band_row(report, band));
+  return loom_target_compile_report_add_schedule_band_summary(
+      summaries, summary_capacity, summary_count, band);
+}
+
 static iree_status_t loom_target_compile_report_record_schedule_band_rows(
     loom_target_compile_report_t* report,
     const loom_liveness_analysis_t* liveness,
@@ -660,23 +752,41 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
   const loom_module_t* module = schedule->module;
   const loom_low_descriptor_set_t* descriptor_set =
       schedule->target.descriptor_set;
-  for (iree_host_size_t block_index = 0; block_index < schedule->block_count;
+  iree_host_size_t summary_bytes = 0;
+  if (!iree_host_size_checked_mul(
+          schedule->scheduled_node_count,
+          sizeof(loom_target_compile_report_schedule_band_summary_row_t),
+          &summary_bytes)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low schedule band summary scratch is too large");
+  }
+  loom_target_compile_report_schedule_band_summary_row_t* summaries = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(report->allocator, summary_bytes,
+                                             (void**)&summaries));
+  memset(summaries, 0, summary_bytes);
+  iree_status_t status = iree_ok_status();
+  iree_host_size_t summary_count = 0;
+  for (iree_host_size_t block_index = 0;
+       iree_status_is_ok(status) && block_index < schedule->block_count;
        ++block_index) {
     const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
     bool has_band = false;
     loom_target_compile_report_schedule_band_row_t band = {0};
-    for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
+    for (uint32_t i = 0;
+         iree_status_is_ok(status) && i < block->scheduled_node_count; ++i) {
       const iree_host_size_t packet_index =
           (iree_host_size_t)block->scheduled_node_start + (iree_host_size_t)i;
       if (packet_index >= schedule->scheduled_node_count) {
-        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "low schedule band packet index is invalid");
+        status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                  "low schedule band packet index is invalid");
+        break;
       }
       const uint32_t node_index =
           schedule->scheduled_node_indices[packet_index];
       if (node_index >= schedule->node_count) {
-        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "low schedule band node index is invalid");
+        status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                  "low schedule band node index is invalid");
+        break;
       }
       const loom_low_schedule_node_t* node = &schedule->nodes[node_index];
       const loom_target_compile_report_pressure_origin_info_t info =
@@ -685,9 +795,12 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
       if (!has_band ||
           !loom_target_compile_report_schedule_band_matches(&band, &info)) {
         if (has_band) {
-          IREE_RETURN_IF_ERROR(
-              loom_target_compile_report_record_schedule_band_row(report,
-                                                                  &band));
+          status = loom_target_compile_report_record_schedule_band(
+              report, summaries, schedule->scheduled_node_count, &summary_count,
+              &band);
+          if (!iree_status_is_ok(status)) {
+            break;
+          }
         }
         band = (loom_target_compile_report_schedule_band_row_t){
             .function_name = report->function_name,
@@ -704,12 +817,19 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
       loom_target_compile_report_accumulate_schedule_band_node(
           schedule, liveness, node, &band);
     }
-    if (has_band) {
-      IREE_RETURN_IF_ERROR(
-          loom_target_compile_report_record_schedule_band_row(report, &band));
+    if (iree_status_is_ok(status) && has_band) {
+      status = loom_target_compile_report_record_schedule_band(
+          report, summaries, schedule->scheduled_node_count, &summary_count,
+          &band);
     }
   }
-  return iree_ok_status();
+  for (iree_host_size_t i = 0; iree_status_is_ok(status) && i < summary_count;
+       ++i) {
+    status = loom_target_compile_report_record_schedule_band_summary_row(
+        report, &summaries[i]);
+  }
+  iree_allocator_free(report->allocator, summaries);
+  return status;
 }
 
 static bool loom_target_compile_report_interval_is_live_at_point(
