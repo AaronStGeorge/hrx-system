@@ -6,6 +6,7 @@
 
 #include "loom/target/arch/amdgpu/lower/sanitizer_access.h"
 
+#include "iree/base/bitfield.h"
 #include "loom/codegen/low/builder.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -32,6 +33,16 @@ typedef struct loom_amdgpu_sanitizer_access_packet_check_t {
   // Loaded shadow byte selected for reporting this packet.
   loom_value_id_t shadow_value;
 } loom_amdgpu_sanitizer_access_packet_check_t;
+
+// Bitfield controlling which values the access-check builder materializes.
+typedef uint32_t loom_amdgpu_sanitizer_access_build_flags_t;
+
+enum loom_amdgpu_sanitizer_access_build_flag_bits_e {
+  // Only builds the lane failure mask required by the hot assertion predicate.
+  LOOM_AMDGPU_SANITIZER_ACCESS_BUILD_FLAG_NONE = 0u,
+  // Also preserves the selected shadow address/value used in feedback reports.
+  LOOM_AMDGPU_SANITIZER_ACCESS_BUILD_FLAG_CAPTURE_REPORT_VALUES = 1u << 0,
+};
 
 static void loom_amdgpu_sanitizer_access_require_register(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
@@ -671,11 +682,14 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_packet_check(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_shadow_config_values_t* config_values,
     loom_value_id_t fault_address_vgpr, uint32_t packet_size,
+    loom_amdgpu_sanitizer_access_build_flags_t flags,
     loom_location_id_t location,
     loom_amdgpu_sanitizer_access_packet_check_t* out_check) {
   *out_check = (loom_amdgpu_sanitizer_access_packet_check_t){0};
   IREE_ASSERT_GT(packet_size, 0u);
   IREE_ASSERT_LE(packet_size, 8u);
+  const bool capture_report_values = iree_any_bit_set(
+      flags, LOOM_AMDGPU_SANITIZER_ACCESS_BUILD_FLAG_CAPTURE_REPORT_VALUES);
 
   loom_value_id_t first_shadow_address = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_address(
@@ -709,8 +723,12 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_packet_check(
       &first_failure_mask));
 
   loom_value_id_t failure_mask = first_failure_mask;
-  loom_value_id_t report_shadow_address = first_shadow_address;
-  loom_value_id_t report_shadow_value = first_shadow_value;
+  loom_value_id_t report_shadow_address = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t report_shadow_value = LOOM_VALUE_ID_INVALID;
+  if (capture_report_values) {
+    report_shadow_address = first_shadow_address;
+    report_shadow_value = first_shadow_value;
+  }
   if (packet_size > 1) {
     loom_value_id_t last_address_delta = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr_u64_const(
@@ -742,12 +760,14 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_packet_check(
         builder, descriptor_set, last_shadow_value, last_byte_offset, location,
         &last_failure_mask));
 
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr64_select(
-        builder, descriptor_set, first_shadow_address, last_shadow_address,
-        last_failure_mask, location, &report_shadow_address));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr_u32_select(
-        builder, descriptor_set, first_shadow_value, last_shadow_value,
-        last_failure_mask, location, &report_shadow_value));
+    if (capture_report_values) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr64_select(
+          builder, descriptor_set, first_shadow_address, last_shadow_address,
+          last_failure_mask, location, &report_shadow_address));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr_u32_select(
+          builder, descriptor_set, first_shadow_value, last_shadow_value,
+          last_failure_mask, location, &report_shadow_value));
+    }
 
     loom_type_t mask_type = loom_type_none();
     IREE_RETURN_IF_ERROR(loom_low_build_register_type(
@@ -771,13 +791,17 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_packet_check(
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_build_sanitizer_access_check(
+static iree_status_t loom_amdgpu_sanitizer_access_build_check(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t asan_config_symbol, loom_value_id_t fault_address,
-    uint32_t access_size, uint32_t wavefront_size, loom_location_id_t location,
+    uint32_t access_size, loom_amdgpu_sanitizer_access_build_flags_t flags,
+    uint32_t wavefront_size, loom_location_id_t location,
     loom_amdgpu_sanitizer_access_check_t* out_check) {
   IREE_ASSERT_ARGUMENT(out_check);
   *out_check = (loom_amdgpu_sanitizer_access_check_t){0};
+  const loom_amdgpu_sanitizer_access_build_flags_t valid_flags =
+      LOOM_AMDGPU_SANITIZER_ACCESS_BUILD_FLAG_CAPTURE_REPORT_VALUES;
+  IREE_ASSERT_EQ(flags & ~valid_flags, 0u);
   loom_amdgpu_sanitizer_access_require_register(builder, descriptor_set,
                                                 fault_address, 2);
   IREE_ASSERT_GT(access_size, 0u);
@@ -794,6 +818,8 @@ iree_status_t loom_amdgpu_build_sanitizer_access_check(
   loom_value_id_t failure_mask = LOOM_VALUE_ID_INVALID;
   loom_value_id_t report_shadow_address = LOOM_VALUE_ID_INVALID;
   loom_value_id_t report_shadow_value = LOOM_VALUE_ID_INVALID;
+  const bool capture_report_values = iree_any_bit_set(
+      flags, LOOM_AMDGPU_SANITIZER_ACCESS_BUILD_FLAG_CAPTURE_REPORT_VALUES);
   for (uint64_t packet_offset = 0; packet_offset < access_size;
        packet_offset += 8) {
     const uint64_t remaining_size = access_size - packet_offset;
@@ -812,21 +838,26 @@ iree_status_t loom_amdgpu_build_sanitizer_access_check(
     loom_amdgpu_sanitizer_access_packet_check_t packet_check = {0};
     IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_packet_check(
         builder, descriptor_set, &config_values, packet_address, packet_size,
-        location, &packet_check));
+        flags, location, &packet_check));
     if (packet_offset == 0) {
       failure_mask = packet_check.failure_mask;
-      report_shadow_address = packet_check.shadow_address;
-      report_shadow_value = packet_check.shadow_value;
+      if (capture_report_values) {
+        report_shadow_address = packet_check.shadow_address;
+        report_shadow_value = packet_check.shadow_value;
+      }
       continue;
     }
 
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr64_select(
-        builder, descriptor_set, report_shadow_address,
-        packet_check.shadow_address, packet_check.failure_mask, location,
-        &report_shadow_address));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr_u32_select(
-        builder, descriptor_set, report_shadow_value, packet_check.shadow_value,
-        packet_check.failure_mask, location, &report_shadow_value));
+    if (capture_report_values) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr64_select(
+          builder, descriptor_set, report_shadow_address,
+          packet_check.shadow_address, packet_check.failure_mask, location,
+          &report_shadow_address));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr_u32_select(
+          builder, descriptor_set, report_shadow_value,
+          packet_check.shadow_value, packet_check.failure_mask, location,
+          &report_shadow_value));
+    }
 
     loom_type_t mask_type = loom_type_none();
     IREE_RETURN_IF_ERROR(loom_low_build_register_type(
@@ -848,9 +879,64 @@ iree_status_t loom_amdgpu_build_sanitizer_access_check(
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_canonical_exec_mask(
       builder, descriptor_set, failure_mask, wavefront_size, location,
       &check.failure_mask));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_value_report(
-      builder, descriptor_set, report_shadow_value, location,
-      &check.shadow_value));
+  if (capture_report_values) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_value_report(
+        builder, descriptor_set, report_shadow_value, location,
+        &check.shadow_value));
+  }
   *out_check = check;
   return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_access_failure_mask(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_symbol_ref_t asan_config_symbol, loom_value_id_t fault_address,
+    uint32_t access_size, uint32_t wavefront_size, loom_location_id_t location,
+    loom_value_id_t* out_failure_mask) {
+  IREE_ASSERT_ARGUMENT(out_failure_mask);
+  *out_failure_mask = LOOM_VALUE_ID_INVALID;
+  loom_amdgpu_sanitizer_access_check_t check = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_check(
+      builder, descriptor_set, asan_config_symbol, fault_address, access_size,
+      LOOM_AMDGPU_SANITIZER_ACCESS_BUILD_FLAG_NONE, wavefront_size, location,
+      &check));
+  *out_failure_mask = check.failure_mask;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_access_failure_mask_union(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t lhs_failure_mask, loom_value_id_t rhs_failure_mask,
+    loom_location_id_t location, loom_value_id_t* out_failure_mask) {
+  IREE_ASSERT_ARGUMENT(out_failure_mask);
+  *out_failure_mask = LOOM_VALUE_ID_INVALID;
+  loom_amdgpu_sanitizer_access_require_register_class(
+      builder, descriptor_set, lhs_failure_mask, 2,
+      LOOM_AMDGPU_REG_CLASS_ID_SGPR);
+  loom_amdgpu_sanitizer_access_require_register_class(
+      builder, descriptor_set, rhs_failure_mask, 2,
+      LOOM_AMDGPU_REG_CLASS_ID_SGPR);
+
+  loom_type_t mask_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2, &mask_type));
+  const loom_value_id_t operands[] = {lhs_failure_mask, rhs_failure_mask};
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_descriptor_op(
+      builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B64, operands,
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0), &mask_type,
+      /*result_count=*/1, location, &op));
+  *out_failure_mask = loom_value_slice_get(loom_low_op_results(op), 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_access_check(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_symbol_ref_t asan_config_symbol, loom_value_id_t fault_address,
+    uint32_t access_size, uint32_t wavefront_size, loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_check_t* out_check) {
+  return loom_amdgpu_sanitizer_access_build_check(
+      builder, descriptor_set, asan_config_symbol, fault_address, access_size,
+      LOOM_AMDGPU_SANITIZER_ACCESS_BUILD_FLAG_CAPTURE_REPORT_VALUES,
+      wavefront_size, location, out_check);
 }

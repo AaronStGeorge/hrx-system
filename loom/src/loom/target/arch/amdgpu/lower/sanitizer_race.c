@@ -93,6 +93,10 @@ typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
   bool has_shadow_entry_base;
   // Entry-body shadow entry bits shared by all access observations.
   loom_amdgpu_sanitizer_race_shadow_entry_base_t shadow_entry_base;
+  // True once trap-mode TSAN failures have a shared cold island.
+  bool has_trap_island;
+  // Shared no-return cold island for trap-mode TSAN failures.
+  loom_amdgpu_sanitizer_trap_island_t trap_island;
   // True once TSAN data-race failures have a shared cold report island.
   bool has_report_island;
   // Shared cold island for TSAN data-race reports.
@@ -976,6 +980,27 @@ static iree_status_t loom_amdgpu_sanitizer_race_get_report_island(
     state->has_report_island = true;
   }
   *out_island = &state->report_island;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_race_get_trap_island(
+    loom_low_lower_context_t* context, loom_location_id_t location,
+    const loom_amdgpu_sanitizer_trap_island_t** out_island) {
+  *out_island = NULL;
+  loom_builder_t* builder = loom_low_lower_context_builder(context);
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
+  if (!state->has_trap_island) {
+    loom_builder_ip_t saved_ip = loom_builder_save(builder);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_trap_island(
+        builder, descriptor_set, saved_ip.block, location,
+        &state->trap_island));
+    loom_builder_restore(builder, saved_ip);
+    state->has_trap_island = true;
+  }
+  *out_island = &state->trap_island;
   return iree_ok_status();
 }
 
@@ -2211,8 +2236,13 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_access(
   switch (reporting_mode) {
     case LOOM_SANITIZER_REPORTING_MODE_TRAP: {
       loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
-      IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
-          builder, descriptor_set, failure_mask, source_op->location, &branch));
+      const loom_amdgpu_sanitizer_trap_island_t* island = NULL;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_get_trap_island(
+          context, source_op->location, &island));
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_build_sanitizer_trap_failure_mask_branch_to_island(
+              builder, descriptor_set, island, failure_mask,
+              source_op->location, &branch));
       break;
     }
     case LOOM_SANITIZER_REPORTING_MODE_DEFAULT:

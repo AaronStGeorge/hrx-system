@@ -2446,9 +2446,7 @@ static bool loom_amdgpu_memory_access_select_packet(
 
 bool loom_amdgpu_memory_access_select_flat_global_address(
     const loom_module_t* module,
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_memory_operation_kind_t kind,
-    const loom_low_source_memory_access_plan_t* source, loom_type_t vector_type,
+    const loom_low_source_memory_access_plan_t* source,
     loom_amdgpu_memory_access_t* out_access,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic) {
   *out_access = (loom_amdgpu_memory_access_t){
@@ -2464,10 +2462,6 @@ bool loom_amdgpu_memory_access_select_flat_global_address(
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_MEMORY_SPACE;
     return false;
   }
-  if (!loom_amdgpu_memory_access_register_footprint(vector_type, out_access,
-                                                    out_diagnostic)) {
-    return false;
-  }
   if (out_access->source.vector_lane_byte_stride <= 0 ||
       out_access->source.vector_lane_byte_stride > UINT32_MAX ||
       !loom_amdgpu_memory_access_has_contiguous_vector_lanes(out_access)) {
@@ -2481,10 +2475,6 @@ bool loom_amdgpu_memory_access_select_flat_global_address(
   }
   if (!loom_amdgpu_memory_access_dynamic_terms_can_emit_flat_address(
           module, out_access, out_diagnostic)) {
-    return false;
-  }
-  if (!loom_amdgpu_memory_access_select_global_flat_descriptor(
-          descriptor_set, kind, out_access, out_diagnostic)) {
     return false;
   }
   loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(out_access);

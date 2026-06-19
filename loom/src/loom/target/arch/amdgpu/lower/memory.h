@@ -158,9 +158,7 @@ bool loom_amdgpu_memory_access_plan_select(
 // application pointer rather than a memory packet for the source access.
 bool loom_amdgpu_memory_access_select_flat_global_address(
     const loom_module_t* module,
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_memory_operation_kind_t kind,
-    const loom_low_source_memory_access_plan_t* source, loom_type_t vector_type,
+    const loom_low_source_memory_access_plan_t* source,
     loom_amdgpu_memory_access_t* out_access,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic);
 
