@@ -688,6 +688,55 @@ static iree_status_t loom_index_replace_single_result_with_scaled_add(
 // Arithmetic
 //===----------------------------------------------------------------------===//
 
+static bool loom_index_madd_match_nested_scaled_factor(
+    loom_rewriter_t* rewriter, loom_value_id_t nested_scaled_value,
+    loom_value_id_t outer_factor_value,
+    loom_index_scaled_value_t* out_scaled_value) {
+  int64_t outer_factor = 0;
+  if (!loom_index_query_exact_i64(rewriter, outer_factor_value,
+                                  &outer_factor) ||
+      outer_factor <= 0) {
+    return false;
+  }
+
+  loom_op_t* nested_def = loom_index_defining_op(rewriter, nested_scaled_value);
+  loom_index_scaled_value_t nested_scaled;
+  if (!loom_index_match_scaled_value_with_exact_positive_factor(
+          rewriter, nested_def, &nested_scaled)) {
+    return false;
+  }
+
+  int64_t combined_factor = 0;
+  if (!loom_checked_mul_i64(nested_scaled.factor, outer_factor,
+                            &combined_factor) ||
+      combined_factor <= 0) {
+    return false;
+  }
+  *out_scaled_value = (loom_index_scaled_value_t){
+      .value = nested_scaled.value,
+      .factor = combined_factor,
+      .factor_value = LOOM_VALUE_ID_INVALID,
+  };
+  return true;
+}
+
+static iree_status_t loom_index_try_fold_madd_nested_scale(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t a,
+    loom_value_id_t b, loom_value_id_t c, bool* out_folded) {
+  *out_folded = false;
+
+  loom_index_scaled_value_t scaled;
+  if (!loom_index_madd_match_nested_scaled_factor(rewriter, a, b, &scaled) &&
+      !loom_index_madd_match_nested_scaled_factor(rewriter, b, a, &scaled)) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_index_replace_single_result_with_scaled_madd_op(
+      op, rewriter, scaled.value, scaled.factor, scaled.factor_value, c));
+  *out_folded = true;
+  return iree_ok_status();
+}
+
 typedef enum loom_index_minmax_kind_e {
   LOOM_INDEX_MINMAX_MIN,
   LOOM_INDEX_MINMAX_MAX,
@@ -963,6 +1012,12 @@ iree_status_t loom_index_madd_canonicalize(loom_op_t* op,
   loom_type_t result_type =
       loom_module_value_type(rewriter->module, loom_index_madd_result(op));
   if (!loom_index_type_is_index(result_type)) return iree_ok_status();
+
+  bool folded_nested_scale = false;
+  IREE_RETURN_IF_ERROR(loom_index_try_fold_madd_nested_scale(
+      op, rewriter, a, b, c, &folded_nested_scale));
+  if (folded_nested_scale) return iree_ok_status();
+
   bool folded_scaled_radix = false;
   IREE_RETURN_IF_ERROR(loom_index_try_fold_madd_scaled_radix_reconstruction(
       op, rewriter, a, b, c, &folded_scaled_radix));

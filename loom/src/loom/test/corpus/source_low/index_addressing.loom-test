@@ -98,6 +98,27 @@ kernel.def @index_madd_constant_addend_global_b32() {
 
 // ====
 
+kernel.def @index_madd_nested_scale_global_b32() {
+  %unit = index.constant 1 : index
+  %row_count = index.constant 4 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%row_count, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %row = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %c9 = index.constant 9 : index
+  %c2 = index.constant 2 : index
+  %c16 = index.constant 16 : index
+  %scaled = index.mul %row, %c9 : index
+  %linear = index.madd %scaled, %c2, %c16 : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<80xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<80xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<80xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<80xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @index_shli_global_b32() {
   %unit = index.constant 1 : index
   %lane_count = index.constant 4 : index
