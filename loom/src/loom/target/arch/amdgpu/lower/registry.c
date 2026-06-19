@@ -44,6 +44,7 @@
 #include "loom/target/arch/amdgpu/lower/buffer.h"
 #include "loom/target/arch/amdgpu/lower/control.h"
 #include "loom/target/arch/amdgpu/lower/dot.h"
+#include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/mask.h"
 #include "loom/target/arch/amdgpu/lower/matrix.h"
@@ -1448,6 +1449,8 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .prepare_branch = {.fn = loom_amdgpu_prepare_branch, .user_data = NULL},
     .materialize_branch_arg = {.fn = loom_amdgpu_materialize_branch_arg,
                                .user_data = NULL},
+    .materialize_structural_operand =
+        {.fn = loom_amdgpu_materialize_structural_operand, .user_data = NULL},
     .emit_cond_branch = {.fn = loom_amdgpu_emit_cond_branch, .user_data = NULL},
     .rule_sets =
         {

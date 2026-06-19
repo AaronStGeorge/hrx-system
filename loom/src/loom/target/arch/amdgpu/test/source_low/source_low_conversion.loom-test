@@ -557,6 +557,56 @@ low.func.def target(@target) abi(hal_kernel) @scalar_sitofp_i32(%input: reg<amdg
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_sitofp_i32_to_f16(%input: i32) -> (f16) {
+  %converted = scalar.sitofp %input : i32 to f16
+  func.return %converted : f16
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_sitofp_i32_to_f16(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %5 = v_cvt_f32_i32 %input
+  %converted = v_cvt_f16_f32 %5
+  %7 = v_bfe_u32_offset_0_width_16_low16 %converted
+  return %7
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_f16_cfg_cond_join(%lhs: i32, %rhs: i32, %then_input: i32, %else_input: i32) -> (f16) {
+  %condition = scalar.cmpi slt, %lhs, %rhs : i32
+  cfg.cond_br %condition, ^then, ^else
+^then:
+  %then_half = scalar.sitofp %then_input : i32 to f16
+  cfg.br ^join(%then_half: f16)
+^else:
+  %else_half = scalar.sitofp %else_input : i32 to f16
+  cfg.br ^join(%else_half: f16)
+^join(%selected: f16):
+  func.return %selected : f16
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_f16_cfg_cond_join(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %then_input: reg<amdgpu.sgpr>, %else_input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %condition = s_cmp_lt_i32 %lhs, %rhs
+  low.cond_br %condition, ^then, ^else : reg<amdgpu.scc>
+^then:
+  %16 = v_cvt_f32_i32 %then_input
+  %then_half = v_cvt_f16_f32 %16
+  %18 = v_bfe_u32_offset_0_width_16_low16 %then_half
+  low.br ^join(%18: reg<amdgpu.vgpr>)
+^else:
+  %19 = v_cvt_f32_i32 %else_input
+  %else_half = v_cvt_f16_f32 %19
+  %21 = v_bfe_u32_offset_0_width_16_low16 %else_half
+  low.br ^join(%21: reg<amdgpu.vgpr>)
+^join(%selected: reg<amdgpu.vgpr>):
+  return %selected
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @scalar_sitofp_i16(%input: i16) -> (f32) {
   %converted = scalar.sitofp %input : i16 to f32
   func.return %converted : f32
@@ -753,6 +803,32 @@ func.def target(@target) @scalar_trunci_i64_to_i32(%input: i64) -> (i32) {
 low.func.def target(@target) abi(hal_kernel) @scalar_trunci_i64_to_i32(%input: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   %converted = slice %input[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   return %converted
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_f16_dequant_pair(%q0: i32, %q1: i32, %scale: f16) -> (vector<2xf16>) {
+  %q0_half = scalar.sitofp %q0 : i32 to f16
+  %dequant0 = scalar.mulf %q0_half, %scale : f16
+  %q1_half = scalar.sitofp %q1 : i32 to f16
+  %dequant1 = scalar.mulf %q1_half, %scale : f16
+  %packed = vector.from_elements %dequant0, %dequant1 : vector<2xf16>
+  func.return %packed : vector<2xf16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_f16_dequant_pair(%q0: reg<amdgpu.sgpr>, %q1: reg<amdgpu.sgpr>, %scale: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %13 = v_cvt_f32_i32 %q0
+  %q0_half = v_cvt_f16_f32 %13
+  %dequant0 = v_mul_f16 %q0_half, %scale
+  %16 = v_cvt_f32_i32 %q1
+  %q1_half = v_cvt_f16_f32 %16
+  %dequant1 = v_mul_f16 %q1_half, %scale
+  %19 = v_bfe_u32_offset_0_width_16_low16 %dequant0
+  %20 = v_lshlrev_b32_src0_16_low16 %dequant1
+  %packed = v_or_b32 %19, %20
+  return %packed
 }
 
 // ====

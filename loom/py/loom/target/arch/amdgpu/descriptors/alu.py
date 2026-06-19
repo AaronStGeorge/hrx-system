@@ -2005,6 +2005,29 @@ def _v_binary_f32_overlay(
     )
 
 
+def _v_binary_f16_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_VOP2",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("VSRC1", _f16_vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_binary_f32_dpp_overlay(
     *,
     descriptor_key: str,
@@ -2113,6 +2136,15 @@ def _v_add_f32_src0_inline_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_add_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_f16_overlay(
+        descriptor_key="amdgpu.v_add_f16",
+        instruction_name="V_ADD_F16",
+        mnemonic="v_add_f16",
+        semantic_tag="float.add.f16",
+    )
+
+
 def _v_sub_f32_overlay() -> AmdgpuDescriptorOverlay:
     return _v_binary_f32_overlay(
         descriptor_key="amdgpu.v_sub_f32",
@@ -2137,6 +2169,15 @@ def _v_sub_f32_src0_inline_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="V_SUB_F32",
         mnemonic="v_sub_f32",
         semantic_tag="float.sub.f32",
+    )
+
+
+def _v_sub_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_f16_overlay(
+        descriptor_key="amdgpu.v_sub_f16",
+        instruction_name="V_SUB_F16",
+        mnemonic="v_sub_f16",
+        semantic_tag="float.sub.f16",
     )
 
 
@@ -2195,6 +2236,15 @@ def _v_mul_f32_src0_inline_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="V_MUL_F32",
         mnemonic="v_mul_f32",
         semantic_tag="float.mul.f32",
+    )
+
+
+def _v_mul_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_f16_overlay(
+        descriptor_key="amdgpu.v_mul_f16",
+        instruction_name="V_MUL_F16",
+        mnemonic="v_mul_f16",
+        semantic_tag="float.mul.f16",
     )
 
 
@@ -2269,6 +2319,14 @@ def _v_binary_f32_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_max_f32_overlay(),
         _v_max_f32_literal_overlay(),
         _v_max_f32_src0_inline_overlay(),
+    )
+
+
+def _v_binary_f16_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_add_f16_overlay(),
+        _v_sub_f16_overlay(),
+        _v_mul_f16_overlay(),
     )
 
 
@@ -4750,6 +4808,7 @@ __all__ = (
     "_s_xor_b64_overlay",
     "_v_add_co_ci_u32_overlay",
     "_v_add_co_u32_overlay",
+    "_v_add_f16_overlay",
     "_v_add_f32_literal_overlay",
     "_v_add_f32_overlay",
     "_v_add_f32_src0_inline_overlay",
@@ -4767,6 +4826,8 @@ __all__ = (
     "_v_bfe_u32_offset_0_width_16_low16_overlay",
     "_v_bfe_width_immediate",
     "_v_bfi_b32_src0_literal_overlay",
+    "_v_binary_f16_overlay",
+    "_v_binary_f16_overlays",
     "_v_binary_f32_dpp16_overlays",
     "_v_binary_f32_dpp_legacy_overlays",
     "_v_binary_f32_dpp_overlay",
@@ -4890,6 +4951,7 @@ __all__ = (
     "_v_mov_b32_literal_overlay",
     "_v_mov_b32_sdwa_overlay",
     "_v_native_f32_math_overlays",
+    "_v_mul_f16_overlay",
     "_v_mul_f32_literal_overlay",
     "_v_mul_f32_overlay",
     "_v_mul_f32_src0_inline_overlay",
@@ -4909,6 +4971,7 @@ __all__ = (
     "_v_sin_f32_overlay",
     "_v_sqrt_f32_overlay",
     "_v_trunc_f32_overlay",
+    "_v_sub_f16_overlay",
     "_v_sub_f32_literal_overlay",
     "_v_sub_f32_overlay",
     "_v_sub_f32_src0_inline_overlay",

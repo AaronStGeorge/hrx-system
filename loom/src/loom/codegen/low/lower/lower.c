@@ -2227,8 +2227,9 @@ static iree_status_t loom_low_lower_prepare_branches(
 }
 
 static iree_status_t loom_low_lower_remap_values(
-    loom_low_lower_context_t* context, const loom_value_id_t* source_values,
-    iree_host_size_t value_count, loom_value_id_t** out_low_values) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_value_id_t* source_values, iree_host_size_t value_count,
+    loom_value_id_t** out_low_values) {
   *out_low_values = NULL;
   if (value_count == 0) {
     return iree_ok_status();
@@ -2239,6 +2240,11 @@ static iree_status_t loom_low_lower_remap_values(
   for (iree_host_size_t i = 0; i < value_count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_low_lower_lookup_value(context, source_values[i], &low_values[i]));
+    const loom_type_t required_low_type =
+        loom_module_value_type(context->module, low_values[i]);
+    IREE_RETURN_IF_ERROR(loom_low_lower_materialize_structural_operand(
+        context, source_op, i, source_values[i], required_low_type,
+        &low_values[i]));
   }
   *out_low_values = low_values;
   return iree_ok_status();
@@ -2300,8 +2306,8 @@ static iree_status_t loom_low_lower_emit_scf_yield(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   loom_value_slice_t values = loom_scf_yield_values(source_op);
   loom_value_id_t* low_values = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(context, values.values,
-                                                   values.count, &low_values));
+  IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(
+      context, source_op, values.values, values.count, &low_values));
   loom_op_t* low_yield_op = NULL;
   return loom_low_scf_yield_build(&context->builder, low_values, values.count,
                                   source_op->location, &low_yield_op);
@@ -2387,7 +2393,7 @@ static iree_status_t loom_low_lower_emit_scf_for(
   loom_value_slice_t iter_args = loom_scf_for_iter_args(source_op);
   loom_value_id_t* low_iter_args = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(
-      context, iter_args.values, iter_args.count, &low_iter_args));
+      context, source_op, iter_args.values, iter_args.count, &low_iter_args));
 
   loom_value_id_t low_unroll_factor = LOOM_VALUE_ID_INVALID;
   loom_low_scf_for_build_flags_t build_flags = 0;
@@ -2457,7 +2463,7 @@ static iree_status_t loom_low_lower_structural_op(
       loom_value_slice_t values = loom_func_return_operands(source_op);
       loom_value_id_t* low_values = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(
-          context, values.values, values.count, &low_values));
+          context, source_op, values.values, values.count, &low_values));
       loom_op_t* low_return_op = NULL;
       return loom_low_return_build(&context->builder, low_values, values.count,
                                    source_op->location, &low_return_op);
@@ -2466,7 +2472,7 @@ static iree_status_t loom_low_lower_structural_op(
       loom_value_slice_t operands = loom_func_call_operands(source_op);
       loom_value_id_t* low_operands = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(
-          context, operands.values, operands.count, &low_operands));
+          context, source_op, operands.values, operands.count, &low_operands));
 
       const loom_value_id_t* source_results = loom_op_const_results(source_op);
       loom_type_t* result_types = NULL;

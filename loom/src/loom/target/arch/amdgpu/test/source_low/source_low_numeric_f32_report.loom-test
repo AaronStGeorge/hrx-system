@@ -12,7 +12,7 @@ func.def target(@target) @report_scalar_arcp_reciprocal_div(%rhs: f32) -> (f32) 
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=2 emitted_ops=1 rows=2
 COMPILE-REPORT: source_low[0] function=report_scalar_arcp_reciprocal_div source_op=scalar.constant selection=plan plan=597 descriptor=0 emitted_ops=0
-COMPILE-REPORT: source_low[1] function=report_scalar_arcp_reciprocal_div source_op=scalar.divf selection=rule rule_set=0 rule=384 plan_key=amdgpu.scalar_divf.strategy.arcp_one_rcp descriptor=4840188069245908019 emitted_ops=1
+COMPILE-REPORT: source_low[1] function=report_scalar_arcp_reciprocal_div source_op=scalar.divf selection=rule rule_set=0 rule=387 plan_key=amdgpu.scalar_divf.strategy.arcp_one_rcp descriptor=4840188069245908019 emitted_ops=1
 
 // ====
 
@@ -26,7 +26,7 @@ func.def target(@target) @report_scalar_arcp_div(%lhs: f32, %rhs: f32) -> (f32) 
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=1 emitted_ops=2 rows=1
-COMPILE-REPORT: source_low[0] function=report_scalar_arcp_div source_op=scalar.divf selection=rule rule_set=0 rule=385 plan_key=amdgpu.scalar_divf.strategy.arcp_rcp_mul descriptor=4840188069245908019 emitted_ops=2
+COMPILE-REPORT: source_low[0] function=report_scalar_arcp_div source_op=scalar.divf selection=rule rule_set=0 rule=388 plan_key=amdgpu.scalar_divf.strategy.arcp_rcp_mul descriptor=4840188069245908019 emitted_ops=2
 
 // ====
 
@@ -40,7 +40,7 @@ func.def target(@target) @report_scalar_exact_div(%lhs: f32, %rhs: f32) -> (f32)
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=1 emitted_ops=12 rows=1
-COMPILE-REPORT: source_low[0] function=report_scalar_exact_div source_op=scalar.divf selection=rule rule_set=0 rule=386 plan_key=amdgpu.scalar_divf.strategy.exact_fixup descriptor=935116443632018484 emitted_ops=12
+COMPILE-REPORT: source_low[0] function=report_scalar_exact_div source_op=scalar.divf selection=rule rule_set=0 rule=389 plan_key=amdgpu.scalar_divf.strategy.exact_fixup descriptor=935116443632018484 emitted_ops=12
 
 // ====
 
@@ -98,7 +98,7 @@ func.def target(@target) @report_scalar_roundeven(%input: f32) -> (f32) {
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=1 emitted_ops=1 rows=1
-COMPILE-REPORT: source_low[0] function=report_scalar_roundeven source_op=scalar.roundevenf selection=rule rule_set=0 rule=415 plan_key=amdgpu.scalar_roundevenf.strategy.rndne descriptor=5149499237128073059 emitted_ops=1
+COMPILE-REPORT: source_low[0] function=report_scalar_roundeven source_op=scalar.roundevenf selection=rule rule_set=0 rule=418 plan_key=amdgpu.scalar_roundevenf.strategy.rndne descriptor=5149499237128073059 emitted_ops=1
 
 // ====
 

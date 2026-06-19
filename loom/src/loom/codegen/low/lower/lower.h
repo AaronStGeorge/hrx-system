@@ -228,6 +228,21 @@ typedef struct loom_low_lower_materialize_branch_arg_callback_t {
   void* user_data;
 } loom_low_lower_materialize_branch_arg_callback_t;
 
+typedef iree_status_t (*loom_low_lower_materialize_structural_operand_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, iree_host_size_t operand_index,
+    loom_value_id_t source_value_id, loom_value_id_t low_value_id,
+    loom_type_t required_low_type, loom_value_id_t* out_low_value_id);
+
+typedef struct loom_low_lower_materialize_structural_operand_callback_t {
+  // Optional callback invoked for low structural op operands after source value
+  // lookup. Targets use this to materialize target-defined storage contracts
+  // that are not represented in the low type, such as register parts.
+  loom_low_lower_materialize_structural_operand_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_materialize_structural_operand_callback_t;
+
 typedef iree_status_t (*loom_low_lower_emit_cond_branch_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_value_id_t low_condition,
@@ -562,6 +577,10 @@ typedef struct loom_low_lower_policy_t {
   // Optionally materializes branch payloads to the exact destination block
   // argument type after the canonical low value has been looked up.
   loom_low_lower_materialize_branch_arg_callback_t materialize_branch_arg;
+  // Optionally materializes structural op operands that have the correct low
+  // type but still need target-owned storage-contract adaptation.
+  loom_low_lower_materialize_structural_operand_callback_t
+      materialize_structural_operand;
   // Optionally emits conditional branches that need target-specific structural
   // control packets instead of plain low.cond_br.
   loom_low_lower_emit_cond_branch_callback_t emit_cond_branch;
@@ -992,6 +1011,14 @@ iree_status_t loom_low_lower_remap_successor_args(
     uint8_t successor_index, loom_block_t* low_dest,
     const loom_value_id_t* source_args, uint16_t source_arg_count,
     loom_value_id_t** out_low_args);
+
+// Materializes a low structural operand through the active target policy. The
+// incoming value must already have the required low type; the policy may return
+// the same value when no target-owned storage-contract adaptation is needed.
+iree_status_t loom_low_lower_materialize_structural_operand(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    iree_host_size_t operand_index, loom_value_id_t source_value_id,
+    loom_type_t required_low_type, loom_value_id_t* inout_low_value_id);
 
 // Interposes a low-only destination block on one source successor edge.
 //
