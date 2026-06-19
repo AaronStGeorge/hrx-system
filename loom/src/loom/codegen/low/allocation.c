@@ -148,8 +148,8 @@ iree_status_t loom_low_allocate_function(
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_storage_lease_state_initialize(
-        &options->storage_leases, module, low_func_op, &state.liveness, arena,
-        &state.storage_leases);
+        &options->storage_leases, module, low_func_op, &value_domain,
+        &state.liveness, arena, &state.storage_leases);
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     const loom_low_allocation_interval_assignment_context_t

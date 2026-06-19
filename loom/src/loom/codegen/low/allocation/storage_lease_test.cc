@@ -11,9 +11,65 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/ir/context.h"
+#include "loom/ir/local_value_domain.h"
+#include "loom/ir/module.h"
+#include "loom/ir/types.h"
 
 namespace loom {
 namespace {
+
+class LowAllocationStorageLeaseTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(/*block_size=*/4096,
+                                     iree_allocator_system(), &block_pool_);
+    iree_arena_initialize(&block_pool_, &arena_);
+    loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
+  }
+
+  void TearDown() override {
+    iree_arena_deinitialize(&arena_);
+    loom_context_deinitialize(&context_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  loom_module_t* AllocateModule() {
+    loom_module_t* module = nullptr;
+    IREE_CHECK_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                       nullptr, iree_allocator_system(),
+                                       &module));
+    return module;
+  }
+
+  loom_value_id_t DefineValue(loom_module_t* module) {
+    loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_module_define_value(
+        module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &value_id));
+    return value_id;
+  }
+
+  void AcquireValueDomain(loom_module_t* module,
+                          const loom_value_id_t* value_ids,
+                          iree_host_size_t value_count,
+                          loom_local_value_domain_t* out_domain) {
+    *out_domain = loom_local_value_domain_t{};
+    out_domain->module = module;
+    out_domain->flags = LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED;
+    loom_module_value_ordinal_scratch_acquire(module);
+    for (iree_host_size_t i = 0; i < value_count; ++i) {
+      loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+      IREE_ASSERT_OK(loom_local_value_domain_register_value(
+          out_domain, &arena_, value_ids[i], &value_ordinal));
+      EXPECT_EQ((loom_value_ordinal_t)i, value_ordinal);
+    }
+  }
+
+  iree_arena_block_pool_t block_pool_;
+  iree_arena_allocator_t arena_;
+  loom_context_t context_;
+};
 
 loom_low_reg_class_t RegClass(uint16_t alias_set_id) {
   loom_low_reg_class_t reg_class = {};
@@ -137,13 +193,7 @@ loom_low_allocation_assignment_t Assignment(loom_value_id_t value_id,
   return assignment;
 }
 
-TEST(LowAllocationStorageLeaseTest, MaterializesAndReleasesConflictingLease) {
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  iree_arena_allocator_t arena;
-  iree_arena_initialize(&block_pool, &arena);
-
+TEST_F(LowAllocationStorageLeaseTest, MaterializesAndReleasesConflictingLease) {
   const loom_low_reg_class_t reg_classes[] = {
       RegClass(/*alias_set_id=*/1),
       RegClass(/*alias_set_id=*/1),
@@ -151,16 +201,23 @@ TEST(LowAllocationStorageLeaseTest, MaterializesAndReleasesConflictingLease) {
   const loom_low_descriptor_set_t descriptor_set =
       DescriptorSet(reg_classes, IREE_ARRAYSIZE(reg_classes));
 
-  const loom_module_t* module =
-      reinterpret_cast<const loom_module_t*>(static_cast<uintptr_t>(1));
+  loom_module_t* module = AllocateModule();
   const loom_op_t* function_op =
       reinterpret_cast<const loom_op_t*>(static_cast<uintptr_t>(2));
-  const loom_value_id_t value_ids[] = {100, 200};
+  const loom_value_id_t value_ids[] = {
+      DefineValue(module),
+      DefineValue(module),
+  };
+  loom_local_value_domain_t value_domain = {};
+  AcquireValueDomain(module, value_ids, IREE_ARRAYSIZE(value_ids),
+                     &value_domain);
+
   const loom_liveness_block_info_t blocks[] = {
       LivenessBlock(/*start_point=*/0, /*end_point=*/3),
   };
-  const loom_liveness_analysis_t liveness = Liveness(
-      blocks, IREE_ARRAYSIZE(blocks), value_ids, IREE_ARRAYSIZE(value_ids));
+  const loom_liveness_analysis_t liveness =
+      Liveness(blocks, IREE_ARRAYSIZE(blocks), value_domain.value_ids,
+               value_domain.value_count);
   const loom_low_schedule_block_t schedule_blocks[] = {
       ScheduleBlock(/*scheduled_node_start=*/0,
                     /*scheduled_node_count=*/3),
@@ -184,17 +241,19 @@ TEST(LowAllocationStorageLeaseTest, MaterializesAndReleasesConflictingLease) {
 
   loom_low_allocation_storage_lease_state_t state = {};
   IREE_ASSERT_OK(loom_low_allocation_storage_lease_state_initialize(
-      &lease_table, module, function_op, &liveness, &arena, &state));
+      &lease_table, module, function_op, &value_domain, &liveness, &arena_,
+      &state));
 
   const loom_low_allocation_assignment_t leased_assignment = Assignment(
-      /*value_id=*/100, /*descriptor_reg_class_id=*/0, /*start_point=*/0,
-      /*end_point=*/1, /*location_base=*/10, /*location_count=*/4);
+      /*value_id=*/value_ids[0], /*descriptor_reg_class_id=*/0,
+      /*start_point=*/0, /*end_point=*/1, /*location_base=*/10,
+      /*location_count=*/4);
   IREE_ASSERT_OK(loom_low_allocation_storage_lease_state_record_assignment(
       &state, &descriptor_set, &liveness, &leased_assignment,
       /*assignment_index=*/0, /*value_ordinal=*/0));
   ASSERT_EQ(state.instance_count, 1u);
   const loom_low_allocation_storage_lease_t* lease = &state.instances[0];
-  EXPECT_EQ(lease->value_id, 100u);
+  EXPECT_EQ(lease->value_id, value_ids[0]);
   EXPECT_EQ(lease->start_point, 0u);
   EXPECT_EQ(lease->end_point, 3u);
   EXPECT_EQ(lease->location_base, 11u);
@@ -203,8 +262,9 @@ TEST(LowAllocationStorageLeaseTest, MaterializesAndReleasesConflictingLease) {
             LOOM_LOW_STORAGE_RELEASE_ACTION_INDEX_NONE);
 
   const loom_low_allocation_assignment_t candidate = Assignment(
-      /*value_id=*/200, /*descriptor_reg_class_id=*/1, /*start_point=*/1,
-      /*end_point=*/2, /*location_base=*/11, /*location_count=*/2);
+      /*value_id=*/value_ids[1], /*descriptor_reg_class_id=*/1,
+      /*start_point=*/1, /*end_point=*/2, /*location_base=*/11,
+      /*location_count=*/2);
   EXPECT_TRUE(loom_low_allocation_storage_lease_state_conflicts(
       &state, &descriptor_set, &liveness, &candidate,
       /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0,
@@ -238,32 +298,30 @@ TEST(LowAllocationStorageLeaseTest, MaterializesAndReleasesConflictingLease) {
   EXPECT_EQ(action->lease_record_index, 0u);
   IREE_ASSERT_OK(loom_low_allocation_storage_lease_state_finalize(&state));
 
-  iree_arena_deinitialize(&arena);
-  iree_arena_block_pool_deinitialize(&block_pool);
+  loom_local_value_domain_release(&value_domain);
+  loom_module_free(module);
 }
 
-TEST(LowAllocationStorageLeaseTest, RejectsLeaseOutsideAllocationLiveness) {
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  iree_arena_allocator_t arena;
-  iree_arena_initialize(&block_pool, &arena);
-
-  const loom_module_t* module =
-      reinterpret_cast<const loom_module_t*>(static_cast<uintptr_t>(1));
+TEST_F(LowAllocationStorageLeaseTest, RejectsLeaseOutsideAllocationLiveness) {
+  loom_module_t* module = AllocateModule();
   const loom_op_t* function_op =
       reinterpret_cast<const loom_op_t*>(static_cast<uintptr_t>(2));
-  const loom_value_id_t schedule_value_ids[] = {100};
+  const loom_value_id_t schedule_value_ids[] = {DefineValue(module)};
+  const loom_value_id_t allocation_value_ids[] = {DefineValue(module)};
+  loom_local_value_domain_t allocation_value_domain = {};
+  AcquireValueDomain(module, allocation_value_ids,
+                     IREE_ARRAYSIZE(allocation_value_ids),
+                     &allocation_value_domain);
+
   const loom_liveness_block_info_t blocks[] = {
       LivenessBlock(/*start_point=*/0, /*end_point=*/2),
   };
   const loom_liveness_analysis_t schedule_liveness =
       Liveness(blocks, IREE_ARRAYSIZE(blocks), schedule_value_ids,
                IREE_ARRAYSIZE(schedule_value_ids));
-  const loom_value_id_t allocation_value_ids[] = {200};
-  const loom_liveness_analysis_t allocation_liveness =
-      Liveness(blocks, IREE_ARRAYSIZE(blocks), allocation_value_ids,
-               IREE_ARRAYSIZE(allocation_value_ids));
+  const loom_liveness_analysis_t allocation_liveness = Liveness(
+      blocks, IREE_ARRAYSIZE(blocks), allocation_value_domain.value_ids,
+      allocation_value_domain.value_count);
   const loom_low_schedule_block_t schedule_blocks[] = {
       ScheduleBlock(/*scheduled_node_start=*/0,
                     /*scheduled_node_count=*/1),
@@ -282,13 +340,14 @@ TEST(LowAllocationStorageLeaseTest, RejectsLeaseOutsideAllocationLiveness) {
       StorageLeaseTable(&schedule, records, IREE_ARRAYSIZE(records));
 
   loom_low_allocation_storage_lease_state_t state = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
-                        loom_low_allocation_storage_lease_state_initialize(
-                            &lease_table, module, function_op,
-                            &allocation_liveness, &arena, &state));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_low_allocation_storage_lease_state_initialize(
+          &lease_table, module, function_op, &allocation_value_domain,
+          &allocation_liveness, &arena_, &state));
 
-  iree_arena_deinitialize(&arena);
-  iree_arena_block_pool_deinitialize(&block_pool);
+  loom_local_value_domain_release(&allocation_value_domain);
+  loom_module_free(module);
 }
 
 }  // namespace

@@ -183,15 +183,18 @@ static iree_status_t loom_low_allocation_validate_storage_lease_table(
 }
 
 static bool loom_low_allocation_value_ordinal_for_liveness_value(
+    const loom_local_value_domain_t* value_domain,
     const loom_liveness_analysis_t* liveness, loom_value_id_t value_id,
     loom_value_ordinal_t* out_value_ordinal) {
-  for (iree_host_size_t i = 0; i < liveness->value_count; ++i) {
-    if (liveness->value_ids[i] == value_id) {
-      *out_value_ordinal = (loom_value_ordinal_t)i;
-      return true;
-    }
+  const loom_value_ordinal_t value_ordinal =
+      loom_local_value_domain_try_ordinal(value_domain, value_id);
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
+      value_ordinal >= liveness->value_count ||
+      liveness->value_ids[value_ordinal] != value_id) {
+    return false;
   }
-  return false;
+  *out_value_ordinal = value_ordinal;
+  return true;
 }
 
 static iree_status_t loom_low_allocation_storage_lease_value_id(
@@ -453,6 +456,7 @@ static bool loom_low_allocation_storage_lease_scan_conflicts(
 iree_status_t loom_low_allocation_storage_lease_state_initialize(
     const loom_low_storage_lease_table_t* lease_table,
     const loom_module_t* module, const loom_op_t* function_op,
+    const loom_local_value_domain_t* value_domain,
     const loom_liveness_analysis_t* liveness, iree_arena_allocator_t* arena,
     loom_low_allocation_storage_lease_state_t* out_state) {
   IREE_ASSERT_ARGUMENT(lease_table);
@@ -510,7 +514,7 @@ iree_status_t loom_low_allocation_storage_lease_state_initialize(
         lease_table, record, &value_id));
     loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
     if (!loom_low_allocation_value_ordinal_for_liveness_value(
-            liveness, value_id, &value_ordinal)) {
+            value_domain, liveness, value_id, &value_ordinal)) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
           "storage lease references value outside allocation liveness");

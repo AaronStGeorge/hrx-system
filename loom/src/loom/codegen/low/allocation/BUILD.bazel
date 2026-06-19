@@ -322,6 +322,7 @@ loom_cc_test(
     srcs = ["storage_lease_test.cc"],
     deps = [
         ":storage_lease",
+        "//loom/src/loom/ir",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
