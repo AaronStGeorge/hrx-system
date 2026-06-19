@@ -305,39 +305,8 @@ static iree_status_t iree_benchmark_loom_snapshot_write_failure_fields_json(
   }
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
       stream, first_field, "failure"));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-  bool first_failure_field = true;
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_failure_field, "stage", benchmark_result->failure_stage));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_failure_field, "kind", benchmark_result->failure_kind));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
-      stream, &first_failure_field, "message",
-      benchmark_result->failure_message));
-  if (benchmark_result->diagnostic_error_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_failure_field, "diagnostic_error_count",
-        benchmark_result->diagnostic_error_count));
-  }
-  if (benchmark_result->diagnostic_warning_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_failure_field, "diagnostic_warning_count",
-        benchmark_result->diagnostic_warning_count));
-  }
-  if (benchmark_result->diagnostic_remark_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_failure_field, "diagnostic_remark_count",
-        benchmark_result->diagnostic_remark_count));
-  }
-  if (!iree_string_view_is_empty(benchmark_result->diagnostic_json)) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
-        stream, &first_failure_field, "diagnostics"));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write(stream, benchmark_result->diagnostic_json));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
-  }
-  return loom_output_stream_write_cstring(stream, "}");
+  return iree_benchmark_loom_write_benchmark_failure_json(benchmark_result,
+                                                          stream);
 }
 
 static iree_status_t iree_benchmark_loom_snapshot_write_measurement_fields(

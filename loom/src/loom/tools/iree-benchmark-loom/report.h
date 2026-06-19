@@ -123,6 +123,11 @@ iree_status_t iree_benchmark_loom_write_hal_timing_interpretation_json(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
     loom_output_stream_t* stream);
 
+// Writes a benchmark failure object without the surrounding field name.
+iree_status_t iree_benchmark_loom_write_benchmark_failure_json(
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    loom_output_stream_t* stream);
+
 // Writes a benchmark result object without the surrounding JSONL row wrapper.
 iree_status_t iree_benchmark_loom_write_benchmark_result_json(
     const loom_testbench_benchmark_plan_t* benchmark_plan,

@@ -3130,13 +3130,10 @@ iree_status_t loom_target_compile_report_format_json(
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
         stream, &first_field, "artifact_size", report->artifact_size));
   }
-  if (iree_any_bit_set(report->detail_flags,
-                       LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES)) {
-    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
-        stream, &first_field, "entries"));
-    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entries_json(
-        report, options->mode, stream));
-  }
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+      stream, &first_field, "entries"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entries_json(
+      report, options->mode, stream));
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE)) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(

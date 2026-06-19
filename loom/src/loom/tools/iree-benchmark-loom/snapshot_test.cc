@@ -511,6 +511,13 @@ TEST(BenchmarkSnapshotSinkTest, IncludesFailurePayloadsOnFailure) {
       LookupObject(first_work_item, IREE_SV("failure"));
   iree_string_view_t failure_stage = LookupObject(failure, IREE_SV("stage"));
   EXPECT_TRUE(iree_string_view_equal(failure_stage, IREE_SV("compile")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(failure, IREE_SV("diagnostic_error_count")), IREE_SV("1")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(failure, IREE_SV("diagnostic_warning_count")),
+      IREE_SV("0")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(failure, IREE_SV("diagnostic_remark_count")), IREE_SV("0")));
   iree_string_view_t diagnostics =
       LookupObject(failure, IREE_SV("diagnostics"));
   iree_host_size_t diagnostic_count = 0;
