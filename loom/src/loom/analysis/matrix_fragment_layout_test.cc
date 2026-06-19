@@ -64,6 +64,22 @@ loom_matrix_fragment_layout_t RdnaLayout() {
   };
 }
 
+loom_matrix_fragment_layout_t RdnaWave64InterleavedLayout() {
+  loom_matrix_fragment_layout_t layout = RdnaLayout();
+  layout.kind = 5;
+  layout.name = IREE_SV("test.rdna.wave64.interleaved");
+  layout.wave_size = 64;
+  layout.accumulator =
+      RoleLayout(LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+                 LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN, 4, 1,
+                 kRowColumn);
+  layout.result =
+      RoleLayout(LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+                 LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN, 4, 1,
+                 kRowColumn);
+  return layout;
+}
+
 loom_matrix_fragment_layout_t RdnaLowSubwordLayout() {
   loom_matrix_fragment_layout_t layout = RdnaLayout();
   layout.kind = 2;
@@ -256,6 +272,19 @@ TEST(MatrixFragmentLayoutTest, MapsRegisterInterleavedRowColumnCoordinates) {
   ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 16, 0, 0,
                    kRowColumn, 1, 0, 0);
   ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 31, 7, 0,
+                   kRowColumn, 15, 15, 0);
+}
+
+TEST(MatrixFragmentLayoutTest,
+     MapsWave64RegisterInterleavedRowColumnCoordinates) {
+  loom_matrix_fragment_layout_t layout = RdnaWave64InterleavedLayout();
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 0, 0, 0,
+                   kRowColumn, 0, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 15, 1, 0,
+                   kRowColumn, 4, 15, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, 16, 0, 0,
+                   kRowColumn, 1, 0, 0);
+  ExpectCoordinate(&layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3, 0,
                    kRowColumn, 15, 15, 0);
 }
 
