@@ -601,6 +601,108 @@ TEST_F(SymbolicExprTest, ProvesLessEqualFromExpressionFactsAfterExpansion) {
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
 }
 
+TEST_F(SymbolicExprTest, ProvesIndexRemainderIsBelowDynamicDivisor) {
+  loom_value_id_t dividend = DefineIndexValue();
+  loom_value_id_t divisor = DefineIndexValue();
+  DefineFacts(dividend, loom_value_facts_make(0, 1024, 1));
+  DefineFacts(divisor, loom_value_facts_make(1, 512, 1));
+  loom_op_t* remainder_op = nullptr;
+  IREE_ASSERT_OK(loom_index_rem_build(&builder_, dividend, divisor,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &remainder_op));
+  loom_value_id_t remainder = loom_index_rem_result(remainder_op);
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT, remainder,
+      divisor, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_GE, remainder,
+      divisor, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_GT, divisor,
+      remainder, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+}
+
+TEST_F(SymbolicExprTest, ProvesAssumedIndexRemainderIsBelowDynamicDivisor) {
+  loom_value_id_t dividend = DefineIndexValue();
+  loom_value_id_t divisor = DefineIndexValue();
+  DefineFacts(dividend, loom_value_facts_make(0, 1024, 1));
+  DefineFacts(divisor, loom_value_facts_make(1, 512, 1));
+  loom_op_t* remainder_op = nullptr;
+  IREE_ASSERT_OK(loom_index_rem_build(&builder_, dividend, divisor,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &remainder_op));
+  loom_value_id_t remainder = loom_index_rem_result(remainder_op);
+
+  loom_predicate_t predicate = {
+      /*.kind=*/LOOM_PREDICATE_GE,
+      /*.arg_count=*/2,
+      /*.arg_tags=*/{LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+      /*.reserved=*/{},
+      /*.args=*/{remainder, 0},
+  };
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_index_assume_build(&builder_, &remainder, 1, &predicate,
+                                         1, &index_type, 1,
+                                         LOOM_LOCATION_UNKNOWN, &assume_op));
+  loom_value_id_t assumed_remainder =
+      loom_index_assume_results(assume_op).values[0];
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT,
+      assumed_remainder, divisor, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+}
+
+TEST_F(SymbolicExprTest, RemainderBoundRequiresUnsignedInputFacts) {
+  loom_value_id_t dividend = DefineIndexValue();
+  loom_value_id_t divisor = DefineIndexValue();
+  DefineFacts(dividend, loom_value_facts_make(-8, 1024, 1));
+  DefineFacts(divisor, loom_value_facts_make(1, 512, 1));
+  loom_op_t* remainder_op = nullptr;
+  IREE_ASSERT_OK(loom_index_rem_build(&builder_, dividend, divisor,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &remainder_op));
+  loom_value_id_t remainder = loom_index_rem_result(remainder_op);
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT, remainder,
+      divisor, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_UNKNOWN);
+}
+
+TEST_F(SymbolicExprTest, ProvesScalarUnsignedRemainderIsBelowDivisor) {
+  loom_value_id_t dividend = DefineI64Value();
+  loom_value_id_t divisor = DefineI64Value();
+  DefineFacts(dividend, loom_value_facts_make(0, 1024, 1));
+  DefineFacts(divisor, loom_value_facts_make(1, 512, 1));
+  loom_op_t* remainder_op = nullptr;
+  IREE_ASSERT_OK(loom_scalar_remui_build(&builder_, dividend, divisor,
+                                         loom_type_scalar(LOOM_SCALAR_TYPE_I64),
+                                         LOOM_LOCATION_UNKNOWN, &remainder_op));
+  loom_value_id_t remainder = loom_scalar_remui_result(remainder_op);
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LE, remainder,
+      divisor, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_EQ, remainder,
+      divisor, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+}
+
 TEST_F(SymbolicExprTest, SelectUsesExactConditionFacts) {
   loom_value_id_t condition = DefineIndexValue();
   loom_value_id_t true_value = DefineIndexValue();
