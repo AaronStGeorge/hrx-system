@@ -111,7 +111,7 @@ def amdgpu_common_reg_class_ids() -> tuple[tuple[str, int], ...]:
     """Returns descriptor-set-local register-class IDs shared by all AMDGPU sets."""
 
     result: list[tuple[str, int]] = []
-    for reg_class_name in (_REG_SGPR, _REG_VGPR, _REG_SCC, _REG_EXEC):
+    for reg_class_name in (_REG_SGPR, _REG_VGPR, _REG_SCC, _REG_EXEC, _REG_VCC):
         expected_reg_class_id: int | None = None
         for descriptor_set in _amdgpu_core_descriptor_set_bases():
             reg_class_id = next(

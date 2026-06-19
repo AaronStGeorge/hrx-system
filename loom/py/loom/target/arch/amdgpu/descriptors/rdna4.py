@@ -48,6 +48,13 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
         RegClass(
+            _REG_VCC,
+            64,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            allocatable_count=1,
+        ),
+        RegClass(
             _REG_M0,
             32,
             SpillSlotSpace.PRIVATE,

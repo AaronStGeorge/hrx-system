@@ -126,6 +126,7 @@ _REG_AGPR = "amdgpu.agpr"
 _REG_M0 = "amdgpu.m0"
 _REG_SCC = "amdgpu.scc"
 _REG_EXEC = "amdgpu.exec"
+_REG_VCC = "amdgpu.vcc"
 _REG_MODE = "amdgpu.mode"
 
 _REG_PART_SGPR_LOW16 = "amdgpu.sgpr.low16"
@@ -513,6 +514,7 @@ _VGPR_AGPR_CONST_ALT = (
 _M0_ALT = (RegClassAlt(_REG_M0, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 _SCC_ALT = (RegClassAlt(_REG_SCC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 _EXEC_ALT = (RegClassAlt(_REG_EXEC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
+_VCC_ALT = (RegClassAlt(_REG_VCC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 _MODE_ALT = (RegClassAlt(_REG_MODE, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 
 _VGPR_REGISTER_PARTS = (
@@ -1114,9 +1116,19 @@ def _vcc_state_read(field_name: str = "vcc_in") -> Operand:
     return Operand(
         field_name,
         OperandRole.IMPLICIT,
-        _SGPR_ALT,
+        _VCC_ALT,
         flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
-        unit_count=2,
+        unit_count=1,
+    )
+
+
+def _vcc_result(field_name: str = "vcc") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.RESULT,
+        _VCC_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+        unit_count=1,
     )
 
 
@@ -1124,9 +1136,9 @@ def _vcc_predicate(field_name: str) -> Operand:
     return Operand(
         field_name,
         OperandRole.PREDICATE,
-        _SGPR_ALT,
+        _VCC_ALT,
         flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
-        unit_count=2,
+        unit_count=1,
     )
 
 
@@ -2174,6 +2186,20 @@ def _vcc_input(descriptor_operand: Operand) -> AmdgpuImplicitOperandOverlay:
     )
 
 
+def _vcc_output(
+    descriptor_operand: Operand, *, xml_operand_required: bool = True
+) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_SDST",
+        descriptor_operand=descriptor_operand,
+        data_format_name="FMT_NUM_M64",
+        size_bits=64,
+        is_input=False,
+        is_output=True,
+        xml_operand_required=xml_operand_required,
+    )
+
+
 _SCC_CLOBBER_OUTPUT = _scc_output(_scc_clobber())
 
 _IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
@@ -2806,6 +2832,7 @@ __all__ = (
     "_LOADCNT_IMMEDIATE",
     "_M0_ALT",
     "_MODE_ALT",
+    "_VCC_ALT",
     "_MANUAL_SCALAR_DESCRIPTOR_KEYS",
     "_MATRIX_A_FORMAT_IMMEDIATE",
     "_MATRIX_A_REUSE_IMMEDIATE",
@@ -2834,6 +2861,7 @@ __all__ = (
     "_REG_PART_VGPR_LOW16",
     "_REG_SCC",
     "_REG_SGPR",
+    "_REG_VCC",
     "_REG_VGPR",
     "_RESOURCE_CONTROL",
     "_RESOURCE_LDS_CROSSLANE",
@@ -3004,7 +3032,9 @@ __all__ = (
     "_stack_memory_effect",
     "_u32_immediate",
     "_vcc_input",
+    "_vcc_output",
     "_vcc_predicate",
+    "_vcc_result",
     "_vcc_state_read",
     "_vgpr_agpr_const_operand",
     "_vgpr_agpr_operand",

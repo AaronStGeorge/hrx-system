@@ -17,6 +17,27 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_div_scale_vcc_state waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_div_scale_vcc_state(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %one = v_mov_b32 1065353216
+  %scaled, %mask = v_div_scale_f32 %value, %value, %one
+  %reciprocal = v_rcp_f32 %scaled
+  %quotient = v_div_fmas_f32 %scaled, %reciprocal, %scaled, %mask
+  %result = v_div_fixup_f32 %quotient, %value, %one
+  return
+}
+
+// ----
+  v_mov_b32 v1, 1065353216
+  v_div_scale_f32 v2, v0, v0, v1
+  v_rcp_f32 v3, v2
+  v_div_fmas_f32 v2, v2, v3, v2
+  v_div_fixup_f32 v0, v2, v0, v1
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_control_messages waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_control_messages() asm<amdgpu.rdna3.core> {

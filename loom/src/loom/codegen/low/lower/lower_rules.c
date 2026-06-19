@@ -2644,21 +2644,38 @@ static void loom_low_lower_rule_apply_operand_flags(
   }
 }
 
+static const loom_low_operand_t* loom_low_lower_rule_descriptor_result_operand(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t result_index) {
+  IREE_ASSERT(descriptor_set != NULL);
+  IREE_ASSERT(descriptor != NULL);
+  IREE_ASSERT_LT(result_index, descriptor->result_count);
+  IREE_ASSERT((uint64_t)descriptor->operand_start + result_index <
+              descriptor_set->operand_count);
+  return &descriptor_set->operands[descriptor->operand_start + result_index];
+}
+
 static iree_status_t loom_low_lower_rule_build_result_types(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    const loom_low_lower_emit_t* emit, loom_type_t** out_result_types) {
+    const loom_low_lower_resolved_emit_t* resolved_emit,
+    loom_type_t** out_result_types) {
   *out_result_types = NULL;
+  const loom_low_lower_emit_t* emit = resolved_emit->emit;
   if (emit->result_ref_count == 0) {
     return iree_ok_status();
   }
+  const bool use_type_patterns = iree_any_bit_set(
+      emit->flags, LOOM_LOW_LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN);
+  const bool use_descriptor_types = iree_any_bit_set(
+      emit->flags, LOOM_LOW_LOWER_EMIT_FLAG_RESULT_DESCRIPTOR_TYPE);
+  IREE_ASSERT_FALSE(use_type_patterns && use_descriptor_types);
   loom_type_t* result_types = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
       context, emit->result_ref_count, sizeof(*result_types),
       (void**)&result_types));
   for (uint16_t i = 0; i < emit->result_ref_count; ++i) {
-    if (iree_any_bit_set(emit->flags,
-                         LOOM_LOW_LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN)) {
+    if (use_type_patterns) {
       const uint16_t type_pattern_index =
           (uint16_t)(emit->result_type_pattern_start + i);
       const loom_type_t exact_type =
@@ -2667,6 +2684,23 @@ static iree_status_t loom_low_lower_rule_build_result_types(
       IREE_RETURN_IF_ERROR(loom_low_lower_map_type(
           context, source_op, exact_type, &result_types[i]));
       IREE_ASSERT(loom_low_type_is_register(result_types[i]));
+    } else if (use_descriptor_types) {
+      const loom_low_descriptor_set_t* descriptor_set =
+          loom_low_lower_context_descriptor_set(context);
+      const loom_low_operand_t* operand =
+          loom_low_lower_rule_descriptor_result_operand(
+              descriptor_set, resolved_emit->descriptor.descriptor, i);
+      IREE_ASSERT_EQ(operand->reg_class_alt_count, 1);
+      const uint32_t alt_index = operand->reg_class_alt_start;
+      IREE_ASSERT_LT(alt_index, descriptor_set->reg_class_alt_count);
+      const loom_low_reg_class_alt_t* alt =
+          &descriptor_set->reg_class_alts[alt_index];
+      IREE_ASSERT_NE(alt->reg_class_id, LOOM_LOW_REG_CLASS_NONE);
+      IREE_ASSERT_FALSE(
+          iree_any_bit_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE));
+      IREE_ASSERT_GT(operand->unit_count, 0);
+      IREE_RETURN_IF_ERROR(loom_low_lower_make_register_type(
+          context, alt->reg_class_id, operand->unit_count, &result_types[i]));
     } else {
       loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
           rule_set, source_op, (uint16_t)(emit->result_ref_start + i));
@@ -2784,7 +2818,7 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_const(
   IREE_ASSERT_EQ(emit->result_ref_count, 1);
   loom_type_t* result_types = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_result_types(
-      context, rule_set, source_op, emit, &result_types));
+      context, rule_set, source_op, resolved_emit, &result_types));
 
   loom_named_attr_slice_t attrs = loom_make_named_attr_slice(NULL, 0);
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_attrs(
@@ -2827,7 +2861,7 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op(
 
   loom_type_t* result_types = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_result_types(
-      context, rule_set, source_op, emit, &result_types));
+      context, rule_set, source_op, resolved_emit, &result_types));
 
   loom_named_attr_slice_t attrs = loom_make_named_attr_slice(NULL, 0);
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_attrs(
@@ -2856,17 +2890,6 @@ static const loom_tied_result_t* loom_low_lower_rule_emit_tied_results(
   return emit->tied_result_count == 0
              ? NULL
              : &rule_set->tied_results[emit->tied_result_start];
-}
-
-static const loom_low_operand_t* loom_low_lower_rule_descriptor_result_operand(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor, uint16_t result_index) {
-  IREE_ASSERT(descriptor_set != NULL);
-  IREE_ASSERT(descriptor != NULL);
-  IREE_ASSERT_LT(result_index, descriptor->result_count);
-  IREE_ASSERT((uint64_t)descriptor->operand_start + result_index <
-              descriptor_set->operand_count);
-  return &descriptor_set->operands[descriptor->operand_start + result_index];
 }
 
 static const loom_low_operand_t* loom_low_lower_rule_descriptor_packet_operand(
@@ -2971,7 +2994,7 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_first_lane(
 
   loom_type_t* result_types = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_result_types(
-      context, rule_set, source_op, emit, &result_types));
+      context, rule_set, source_op, resolved_emit, &result_types));
   IREE_ASSERT(loom_low_type_is_register(result_types[0]));
   IREE_ASSERT_EQ(loom_low_register_type_unit_count(result_types[0]), 1);
 
@@ -3025,7 +3048,7 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_per_lane(
 
   loom_type_t* result_types = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_result_types(
-      context, rule_set, source_op, emit, &result_types));
+      context, rule_set, source_op, resolved_emit, &result_types));
 
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
@@ -3260,7 +3283,7 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_per_lane_sequence(
     }
     loom_type_t* emit_result_types = NULL;
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_result_types(
-        context, rule_set, source_op, emit, &emit_result_types));
+        context, rule_set, source_op, resolved_emit, &emit_result_types));
     result_types[emit_ordinal] = emit_result_types[0];
     IREE_ASSERT(loom_low_type_is_register(result_types[emit_ordinal]));
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_attrs(

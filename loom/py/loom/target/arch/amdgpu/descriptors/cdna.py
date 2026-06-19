@@ -47,6 +47,13 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
         RegClass(
+            _REG_VCC,
+            64,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            allocatable_count=1,
+        ),
+        RegClass(
             _REG_AGPR,
             32,
             SpillSlotSpace.SCRATCH,
@@ -139,6 +146,13 @@ _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
         ),
         RegClass(
             _REG_EXEC,
+            64,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            allocatable_count=1,
+        ),
+        RegClass(
+            _REG_VCC,
             64,
             SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),

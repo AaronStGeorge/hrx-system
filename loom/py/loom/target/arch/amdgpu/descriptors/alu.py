@@ -3920,10 +3920,23 @@ def _v_div_scale_f32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SDST", _sgpr_result("mask", units=2)),
             AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("value")),
             AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("denominator")),
             AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("numerator")),
+        ),
+        ignored_operands=(
+            AmdgpuIgnoredOperandOverlay(
+                "SDST",
+                ignore_reason="fixed-architectural-vcc-scale-mask",
+                fixed_encoding_value=_predefined("VCC_LO", "OPR_SDST"),
+            ),
+        ),
+        implicit_operands=(
+            _vcc_output(_vcc_result("mask"), xml_operand_required=False),
+        ),
+        asm_forms=_asm(
+            results=("dst", "mask"),
+            operands=("value", "denominator", "numerator"),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )

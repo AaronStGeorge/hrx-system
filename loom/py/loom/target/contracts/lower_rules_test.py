@@ -17,10 +17,12 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.contracts import (
+    LOWER_EMIT_FLAG_RESULT_DESCRIPTOR_TYPE,
     LOWER_RULE_FLAG_CONTRACT_ONLY,
     AttrProject,
     ContractFragment,
     DescriptorEmitForm,
+    DescriptorResultType,
     DescriptorRule,
     DirectDescriptorCase,
     EmitDescriptorOp,
@@ -135,6 +137,51 @@ def test_compile_lower_rule_set_compiles_direct_scalar_rule() -> None:
     assert compiled.emits[0].descriptor is TEST_LOW_ADD_I32_DESCRIPTOR
     assert compiled.emits[0].operand_ref_count == 2
     assert compiled.emits[0].result_ref_count == 1
+
+
+def test_compile_lower_rule_set_compiles_descriptor_result_type_binding() -> None:
+    table = ContractFragment(
+        name="test.scalar",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_addi,
+                descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                guards=(
+                    Guard.value_type("lhs", Scalar("i32")),
+                    Guard.value_type("rhs", Scalar("i32")),
+                    Guard.value_type("result", Scalar("i32")),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.temporary("sum")},
+                        result_types={"dst": DescriptorResultType()},
+                    ),
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.temporary("sum"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert len(compiled.emits) == 2
+    emit = compiled.emits[0]
+    assert emit.flags & LOWER_EMIT_FLAG_RESULT_DESCRIPTOR_TYPE
+    assert emit.result_ref_count == 1
+    assert compiled.value_refs[emit.result_ref_start].kind == SourceValueKind.TEMPORARY
 
 
 def test_compile_lower_rule_set_infers_vector_per_lane_emit() -> None:

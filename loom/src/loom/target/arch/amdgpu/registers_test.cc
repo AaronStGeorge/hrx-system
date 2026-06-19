@@ -276,6 +276,9 @@ TEST_F(AmdgpuRegistersTest,
     ExpectRegisterClass(
         descriptor_set, IREE_SV("amdgpu.exec"), 64, 1,
         LOOM_LOW_REG_CLASS_FLAG_PHYSICAL | LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
+    ExpectRegisterClass(
+        descriptor_set, IREE_SV("amdgpu.vcc"), 64, 1,
+        LOOM_LOW_REG_CLASS_FLAG_PHYSICAL | LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
 
     if (!c.has_agpr) {
       ExpectRegisterClassMissing(descriptor_set, IREE_SV("amdgpu.agpr"));

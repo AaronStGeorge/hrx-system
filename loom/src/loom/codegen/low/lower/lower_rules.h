@@ -599,6 +599,8 @@ typedef uint16_t loom_low_lower_emit_flags_t;
 // Starts DESCRIPTOR_OP_ACCUMULATE_LANES at lane 1. The accumulator operand must
 // already contain the folded lane 0 contribution.
 #define LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SKIP_FIRST_LANE ((uint16_t)1u << 5)
+// Synthesizes emitted low result types from descriptor result operand rows.
+#define LOOM_LOW_LOWER_EMIT_FLAG_RESULT_DESCRIPTOR_TYPE ((uint16_t)1u << 6)
 
 typedef struct loom_low_lower_emit_t {
   // Emit action to perform.

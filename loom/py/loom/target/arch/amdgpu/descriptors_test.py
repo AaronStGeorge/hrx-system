@@ -30,6 +30,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _REG_PART_SGPR_LOW16,
     _REG_PART_VGPR_HIGH16,
     _REG_PART_VGPR_LOW16,
+    _REG_VCC,
     _RESOURCE_VALU,
     _SCHEDULE_MODE_CONTROL,
     _SCHEDULE_PACKED_DOT,
@@ -355,13 +356,51 @@ def test_div_fmas_low_asm_preserves_vcc_scale_mask_operand() -> None:
         assert scale_mask_operand is not None
         assert scale_mask_operand.field_name == "scale_mask"
         assert scale_mask_operand.role is OperandRole.PREDICATE
+        assert scale_mask_operand.reg_alts == (
+            RegClassAlt(_REG_VCC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),
+        )
         assert OperandFlag.IMPLICIT in scale_mask_operand.flags
         assert OperandFlag.STATE_READ in scale_mask_operand.flags
-        assert scale_mask_operand.unit_count == 2
+        assert scale_mask_operand.unit_count == 1
 
         form = descriptor.asm_forms[0]
         assert form.results == ("dst",)
         assert form.operands == ("a", "b", "c", "scale_mask")
+
+
+def test_div_scale_low_asm_writes_architectural_vcc_scale_mask() -> None:
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        descriptor = descriptors["amdgpu.v_div_scale_f32"]
+
+        assert len(descriptor.ignored_operands) == 1
+        ignored_operand = descriptor.ignored_operands[0]
+        assert ignored_operand.xml_field_name == "SDST"
+        assert ignored_operand.ignore_reason == "fixed-architectural-vcc-scale-mask"
+        assert ignored_operand.fixed_encoding_value == _predefined("VCC_LO", "OPR_SDST")
+
+        assert len(descriptor.implicit_operands) == 1
+        scale_mask_operand = descriptor.implicit_operands[0].descriptor_operand
+        assert scale_mask_operand is not None
+        assert scale_mask_operand.field_name == "mask"
+        assert scale_mask_operand.role is OperandRole.RESULT
+        assert scale_mask_operand.reg_alts == (
+            RegClassAlt(_REG_VCC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),
+        )
+        assert OperandFlag.IMPLICIT in scale_mask_operand.flags
+        assert OperandFlag.STATE_WRITE in scale_mask_operand.flags
+        assert scale_mask_operand.unit_count == 1
+
+        form = descriptor.asm_forms[0]
+        assert form.results == ("dst", "mask")
+        assert form.operands == ("value", "denominator", "numerator")
 
 
 def test_scalar_scc_compare_results_are_rematerializable() -> None:

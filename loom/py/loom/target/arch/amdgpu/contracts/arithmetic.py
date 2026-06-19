@@ -27,6 +27,7 @@ from loom.target.contracts import (
     ContractCase,
     ContractFragment,
     DescriptorEmitForm,
+    DescriptorResultType,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -202,7 +203,6 @@ _VEC_I8_PACKED = Vector(
     minimum_lanes=1,
     maximum_lanes="LOOM_AMDGPU_MAX_PACKED_I8_LANES",
 )
-_VCC_MASK = Vector("i1", lanes=1)
 _I8 = Scalar("i8")
 _I16 = Scalar("i16")
 _I32 = Scalar("i32")
@@ -1568,8 +1568,8 @@ def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule
                     "mask": ValueRef.temporary("denominator_scale_mask"),
                 },
                 result_types={
-                    "dst": result_type,
-                    "mask": _VCC_MASK,
+                    "dst": DescriptorResultType(),
+                    "mask": DescriptorResultType(),
                 },
                 form=_emit_form(type_pattern),
             ),
@@ -1622,8 +1622,8 @@ def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule
                     "mask": ValueRef.temporary("scale_mask"),
                 },
                 result_types={
-                    "dst": result_type,
-                    "mask": _VCC_MASK,
+                    "dst": DescriptorResultType(),
+                    "mask": DescriptorResultType(),
                 },
                 form=_emit_form(type_pattern),
             ),
