@@ -243,8 +243,16 @@ TEST(BenchmarkSnapshotSinkTest, IncludesRequestedProfileSummary) {
   iree_string_view_t first_work_item = FirstArrayElement(work_items);
   iree_string_view_t profile =
       LookupObject(first_work_item, IREE_SV("profile"));
-  iree_string_view_t profile_status = LookupObject(profile, IREE_SV("status"));
-  EXPECT_TRUE(iree_string_view_equal(profile_status, IREE_SV("requested")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(profile, IREE_SV("requested")), IREE_SV("true")));
+  EXPECT_TRUE(iree_string_view_equal(LookupObject(profile, IREE_SV("executed")),
+                                     IREE_SV("false")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(profile, IREE_SV("row_count")), IREE_SV("0")));
+  iree_host_size_t profile_row_count = 0;
+  IREE_ASSERT_OK(iree_json_array_length(LookupObject(profile, IREE_SV("rows")),
+                                        &profile_row_count));
+  EXPECT_EQ(profile_row_count, 0u);
 
   iree_string_builder_deinitialize(&output);
   iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot);

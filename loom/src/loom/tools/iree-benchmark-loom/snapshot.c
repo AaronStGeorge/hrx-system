@@ -195,51 +195,6 @@ static iree_string_view_t iree_benchmark_loom_snapshot_result_status(
   return IREE_SV("skipped");
 }
 
-static iree_status_t iree_benchmark_loom_snapshot_write_profile_json(
-    const loom_run_hal_profile_summary_t* profile,
-    loom_output_stream_t* stream) {
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-  bool first_field = true;
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_field, "status",
-      profile->executed ? IREE_SV("ok") : IREE_SV("requested")));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-      stream, &first_field, "row_count", profile->row_count));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-      stream, &first_field, "captured_row_count", profile->captured_row_count));
-  if (profile->truncated_row_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_field, "truncated_row_count",
-        profile->truncated_row_count));
-  }
-  if (profile->dropped_record_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u64_field(
-        stream, &first_field, "dropped_record_count",
-        profile->dropped_record_count));
-  }
-  if (profile->has_artifact_path) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-        stream, &first_field, "artifact_path",
-        iree_make_string_view(profile->artifact_path,
-                              profile->artifact_path_length)));
-  }
-  if (profile->has_error) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
-        stream, &first_field, "error"));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-    bool first_error_field = true;
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-        stream, &first_error_field, "status",
-        iree_make_cstring_view(iree_status_code_string(profile->error_code))));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-        stream, &first_error_field, "message",
-        iree_make_string_view(profile->error_message,
-                              profile->error_message_length)));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
-  }
-  return loom_output_stream_write_cstring(stream, "}");
-}
-
 static iree_status_t iree_benchmark_loom_snapshot_write_compile_report_json(
     const loom_run_compile_report_capture_t* compile_report_capture,
     loom_output_stream_t* stream, bool* first_field) {
@@ -349,7 +304,7 @@ static iree_status_t iree_benchmark_loom_snapshot_write_measurement_fields(
         benchmark_result->hal_benchmark.profile.has_error) {
       IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
           stream, first_field, "profile"));
-      IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_profile_json(
+      IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_hal_profile_summary_json(
           &benchmark_result->hal_benchmark.profile, stream));
     }
   }
