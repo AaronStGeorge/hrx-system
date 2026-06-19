@@ -807,72 +807,6 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_shadow_value_report(
   return iree_ok_status();
 }
 
-static iree_status_t
-loom_amdgpu_sanitizer_access_build_aligned_granule_failure_mask(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_sanitizer_access_config_t* config,
-    loom_value_id_t fault_address, uint32_t access_size,
-    uint32_t wavefront_size, loom_location_id_t location,
-    loom_value_id_t* out_failure_mask) {
-  *out_failure_mask = LOOM_VALUE_ID_INVALID;
-  loom_amdgpu_sanitizer_access_require_register(builder, descriptor_set,
-                                                fault_address, 2);
-
-  loom_value_id_t fault_address_vgpr = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
-      builder, descriptor_set, fault_address, /*expected_unit_count=*/2,
-      location, &fault_address_vgpr));
-
-  loom_type_t mask_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
-      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2, &mask_type));
-
-  loom_value_id_t failure_mask = LOOM_VALUE_ID_INVALID;
-  for (uint32_t chunk_offset = 0; chunk_offset < access_size;
-       chunk_offset += 64) {
-    loom_value_id_t chunk_address = fault_address_vgpr;
-    if (chunk_offset != 0) {
-      loom_value_id_t chunk_delta = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr_u64_const(
-          builder, descriptor_set, chunk_offset, location, &chunk_delta));
-      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr64_add(
-          builder, descriptor_set, fault_address_vgpr, chunk_delta, location,
-          &chunk_address));
-    }
-
-    loom_value_id_t shadow_address = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_address(
-        builder, descriptor_set, chunk_address, config->shadow_base, location,
-        &shadow_address));
-    loom_value_id_t shadow_value = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_load_u64(
-        builder, descriptor_set, shadow_address, location, &shadow_value));
-    loom_value_id_t chunk_failure_mask = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_sanitizer_access_build_shadow_word_failure_mask(
-            builder, descriptor_set, shadow_value, config->zero, location,
-            &chunk_failure_mask));
-
-    if (failure_mask == LOOM_VALUE_ID_INVALID) {
-      failure_mask = chunk_failure_mask;
-      continue;
-    }
-    const loom_value_id_t failure_operands[] = {failure_mask,
-                                                chunk_failure_mask};
-    loom_op_t* failure_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_descriptor_op(
-        builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B64,
-        failure_operands, IREE_ARRAYSIZE(failure_operands),
-        loom_make_named_attr_slice(NULL, 0), &mask_type, /*result_count=*/1,
-        location, &failure_op));
-    failure_mask = loom_value_slice_get(loom_low_op_results(failure_op), 0);
-  }
-
-  return loom_amdgpu_build_feedback_canonical_exec_mask(
-      builder, descriptor_set, failure_mask, wavefront_size, location,
-      out_failure_mask);
-}
-
 static iree_status_t loom_amdgpu_sanitizer_access_build_packet_check(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_access_config_t* config,
@@ -986,6 +920,101 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_packet_check(
       .shadow_value = report_shadow_value,
   };
   return iree_ok_status();
+}
+
+static iree_status_t
+loom_amdgpu_sanitizer_access_build_full_granule_failure_mask(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_access_config_t* config,
+    loom_value_id_t fault_address, uint32_t access_size,
+    uint32_t minimum_alignment, uint32_t wavefront_size,
+    loom_location_id_t location, loom_value_id_t* out_failure_mask) {
+  *out_failure_mask = LOOM_VALUE_ID_INVALID;
+  loom_amdgpu_sanitizer_access_require_register(builder, descriptor_set,
+                                                fault_address, 2);
+
+  loom_value_id_t fault_address_vgpr = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
+      builder, descriptor_set, fault_address, /*expected_unit_count=*/2,
+      location, &fault_address_vgpr));
+
+  loom_type_t mask_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2, &mask_type));
+
+  loom_value_id_t failure_mask = LOOM_VALUE_ID_INVALID;
+  for (uint32_t chunk_offset = 0; chunk_offset < access_size;
+       chunk_offset += 64) {
+    loom_value_id_t chunk_address = fault_address_vgpr;
+    if (chunk_offset != 0) {
+      loom_value_id_t chunk_delta = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr_u64_const(
+          builder, descriptor_set, chunk_offset, location, &chunk_delta));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr64_add(
+          builder, descriptor_set, fault_address_vgpr, chunk_delta, location,
+          &chunk_address));
+    }
+
+    loom_value_id_t shadow_address = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_address(
+        builder, descriptor_set, chunk_address, config->shadow_base, location,
+        &shadow_address));
+    loom_value_id_t shadow_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_load_u64(
+        builder, descriptor_set, shadow_address, location, &shadow_value));
+    loom_value_id_t chunk_failure_mask = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_sanitizer_access_build_shadow_word_failure_mask(
+            builder, descriptor_set, shadow_value, config->zero, location,
+            &chunk_failure_mask));
+
+    if (failure_mask == LOOM_VALUE_ID_INVALID) {
+      failure_mask = chunk_failure_mask;
+      continue;
+    }
+    const loom_value_id_t failure_operands[] = {failure_mask,
+                                                chunk_failure_mask};
+    loom_op_t* failure_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_descriptor_op(
+        builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B64,
+        failure_operands, IREE_ARRAYSIZE(failure_operands),
+        loom_make_named_attr_slice(NULL, 0), &mask_type, /*result_count=*/1,
+        location, &failure_op));
+    failure_mask = loom_value_slice_get(loom_low_op_results(failure_op), 0);
+  }
+
+  // Unknown address alignment can make each 64B access reach one final partial
+  // shadow granule beyond the full shadow word loaded above. Check that final
+  // byte precisely so row-strided fragments do not report on untouched padding.
+  if (minimum_alignment < 8) {
+    loom_value_id_t last_address_delta = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr_u64_const(
+        builder, descriptor_set, access_size - 1, location,
+        &last_address_delta));
+    loom_value_id_t last_address = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_vgpr64_add(
+        builder, descriptor_set, fault_address_vgpr, last_address_delta,
+        location, &last_address));
+    loom_amdgpu_sanitizer_access_packet_check_t last_check = {0};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_packet_check(
+        builder, descriptor_set, config, last_address, /*packet_size=*/1,
+        minimum_alignment, LOOM_AMDGPU_SANITIZER_ACCESS_BUILD_FLAG_NONE,
+        location, &last_check));
+
+    const loom_value_id_t failure_operands[] = {failure_mask,
+                                                last_check.failure_mask};
+    loom_op_t* failure_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_descriptor_op(
+        builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B64,
+        failure_operands, IREE_ARRAYSIZE(failure_operands),
+        loom_make_named_attr_slice(NULL, 0), &mask_type, /*result_count=*/1,
+        location, &failure_op));
+    failure_mask = loom_value_slice_get(loom_low_op_results(failure_op), 0);
+  }
+
+  return loom_amdgpu_build_feedback_canonical_exec_mask(
+      builder, descriptor_set, failure_mask, wavefront_size, location,
+      out_failure_mask);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_access_build_check(
@@ -1106,10 +1135,10 @@ iree_status_t loom_amdgpu_build_sanitizer_access_failure_mask_with_config(
     loom_location_id_t location, loom_value_id_t* out_failure_mask) {
   IREE_ASSERT_ARGUMENT(out_failure_mask);
   *out_failure_mask = LOOM_VALUE_ID_INVALID;
-  if (minimum_alignment >= 8 && access_size != 0 && access_size % 64 == 0) {
-    return loom_amdgpu_sanitizer_access_build_aligned_granule_failure_mask(
+  if (access_size != 0 && access_size % 64 == 0) {
+    return loom_amdgpu_sanitizer_access_build_full_granule_failure_mask(
         builder, descriptor_set, config, fault_address, access_size,
-        wavefront_size, location, out_failure_mask);
+        minimum_alignment, wavefront_size, location, out_failure_mask);
   }
   loom_amdgpu_sanitizer_access_check_t check = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_check(
