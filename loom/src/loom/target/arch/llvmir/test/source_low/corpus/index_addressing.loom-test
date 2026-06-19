@@ -231,15 +231,15 @@ llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
 kernel.def target(@target) @index_shli_previous_row_global_b128() {
-  %c1 = index.constant 1 : index
-  %c32 = index.constant 32 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %active_lanes = index.constant 31 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%active_lanes, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %x0 = kernel.workitem.id<x> : index
-  %x = index.assume %x0 [range(%x0, 1, 31)] : index
+  %lane = kernel.workitem.id<x> : index
   %base_offset = index.constant 0 : offset
   %one = index.constant 1 : index
-  %previous = index.sub %x, %one : index
+  %column = index.add %lane, %one : index
+  %previous = index.sub %column, %one : index
   %shift = index.constant 2 : index
   %linear = index.shli %previous, %shift : index
   %input_view = buffer.view %input[%base_offset] : buffer -> view<128xi32, #dense>
@@ -250,14 +250,12 @@ kernel.def target(@target) @index_shli_previous_row_global_b128() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(32, 1, 1) @index_shli_previous_row_global_b128() asm<llvmir.generic.core> {
+low.kernel.def target(@target) workgroup_size(31, 1, 1) @index_shli_previous_row_global_b128() asm<llvmir.generic.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
-  %x = kernel.workitem_id.x
-  %one = const.i64 1
-  %previous = sub.i64 %x, %one
+  %lane = kernel.workitem_id.x
   %shift = const.i64 2
-  %linear = shl.i64 %previous, %shift
+  %linear = shl.i64 %lane, %shift
   %loaded = load.indexed.v4i32 %input_view, %linear, 0, 16
   store.indexed.v4i32 %loaded, %output_view, %linear, 0, 16
   return

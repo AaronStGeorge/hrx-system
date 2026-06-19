@@ -94,11 +94,24 @@ enum loom_value_fact_flag_bits_e {
   // The integer value encodes subgroup lane membership as one bit per lane.
   // This is independent of whether each lane observes the same mask value.
   LOOM_VALUE_FACT_SUBGROUP_LANE_MASK = 1u << 10,
+  // The value is the full x-dimension workitem id domain for a kernel launch.
+  LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_X = 1u << 14,
+  // The value is the full y-dimension workitem id domain for a kernel launch.
+  LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Y = 1u << 15,
+  // The value is the full z-dimension workitem id domain for a kernel launch.
+  LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Z = 1u << 16,
+  // The value is the full subgroup lane id domain for a kernel launch.
+  LOOM_VALUE_FACT_TOPOLOGY_SUBGROUP_LANE = 1u << 17,
 };
 typedef uint32_t loom_value_fact_flags_t;
 
 #define LOOM_VALUE_FACT_DISTRIBUTION_MASK \
   (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING)
+
+#define LOOM_VALUE_FACT_TOPOLOGY_DOMAIN_MASK                                   \
+  (LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_X | LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Y | \
+   LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Z |                                       \
+   LOOM_VALUE_FACT_TOPOLOGY_SUBGROUP_LANE)
 
 // Context-local extension payload ID. Zero means the fact has no extension.
 typedef uint32_t loom_value_fact_extension_id_t;

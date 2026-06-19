@@ -13,7 +13,10 @@
 #include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
+#include "loom/ops/index/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
@@ -274,6 +277,8 @@ typedef struct loom_low_target_legalize_final_rejection_t {
 typedef struct loom_low_target_legalize_function_state_t {
   // Pass invocation being executed.
   loom_pass_t* pass;
+  // Immutable pass options for this invocation.
+  const loom_low_target_legalize_pass_state_t* pass_state;
   // Typed statistics storage for the current pass invocation.
   loom_low_target_legalize_statistics_t* statistics;
   // Module being legalized.
@@ -306,6 +311,8 @@ typedef struct loom_low_target_legalize_function_state_t {
   iree_host_size_t report_source_op_capacity;
   // First final legalizer rejection retained for final legality diagnostics.
   loom_low_target_legalize_final_rejection_t* final_rejections;
+  // User IR topology range diagnostics emitted before legalizer dispatch.
+  uint32_t preflight_error_count;
   // True when contract queries should surface retained legalizer rejections.
   bool use_final_rejections;
 } loom_low_target_legalize_function_state_t;
@@ -418,6 +425,233 @@ static iree_string_view_t loom_low_target_legalize_function_name(
 static iree_string_view_t loom_low_target_legalize_nonempty(
     iree_string_view_t value, iree_string_view_t placeholder) {
   return iree_string_view_is_empty(value) ? placeholder : value;
+}
+
+static bool loom_low_target_legalize_should_stop_preflight(
+    const loom_low_target_legalize_function_state_t* state) {
+  return state->pass_state->max_errors != 0 &&
+         state->preflight_error_count >= state->pass_state->max_errors;
+}
+
+static bool loom_low_target_legalize_op_is_in_function_entry_block(
+    const loom_low_target_legalize_function_state_t* state,
+    const loom_op_t* op) {
+  if (!op->parent_block) return false;
+  const loom_region_t* body = loom_func_like_body(state->selection->func);
+  return op->parent_block->parent_region == body &&
+         op->parent_block->region_index == 0;
+}
+
+static bool loom_low_target_legalize_predicate_const_range(
+    const loom_predicate_t* predicate, int64_t* out_minimum,
+    int64_t* out_maximum) {
+  *out_minimum = INT64_MIN;
+  *out_maximum = INT64_MAX;
+  if (predicate->arg_count < 1 ||
+      predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE) {
+    return false;
+  }
+  switch ((loom_predicate_kind_t)predicate->kind) {
+    case LOOM_PREDICATE_EQ:
+      if (predicate->arg_count < 2 ||
+          predicate->arg_tags[1] != LOOM_PRED_ARG_CONST) {
+        return false;
+      }
+      *out_minimum = predicate->args[1];
+      *out_maximum = predicate->args[1];
+      return true;
+    case LOOM_PREDICATE_LT:
+      if (predicate->arg_count < 2 ||
+          predicate->arg_tags[1] != LOOM_PRED_ARG_CONST ||
+          predicate->args[1] == INT64_MIN) {
+        return false;
+      }
+      *out_maximum = predicate->args[1] - 1;
+      return true;
+    case LOOM_PREDICATE_LE:
+    case LOOM_PREDICATE_MAX:
+      if (predicate->arg_count < 2 ||
+          predicate->arg_tags[1] != LOOM_PRED_ARG_CONST) {
+        return false;
+      }
+      *out_maximum = predicate->args[1];
+      return true;
+    case LOOM_PREDICATE_GT:
+      if (predicate->arg_count < 2 ||
+          predicate->arg_tags[1] != LOOM_PRED_ARG_CONST ||
+          predicate->args[1] == INT64_MAX) {
+        return false;
+      }
+      *out_minimum = predicate->args[1] + 1;
+      return true;
+    case LOOM_PREDICATE_GE:
+    case LOOM_PREDICATE_MIN:
+      if (predicate->arg_count < 2 ||
+          predicate->arg_tags[1] != LOOM_PRED_ARG_CONST) {
+        return false;
+      }
+      *out_minimum = predicate->args[1];
+      return true;
+    case LOOM_PREDICATE_RANGE:
+      if (predicate->arg_count < 3 ||
+          predicate->arg_tags[1] != LOOM_PRED_ARG_CONST ||
+          predicate->arg_tags[2] != LOOM_PRED_ARG_CONST) {
+        return false;
+      }
+      *out_minimum = predicate->args[1];
+      *out_maximum = predicate->args[2];
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_target_legalize_topology_domain(
+    loom_value_facts_t facts, iree_string_view_t* out_value_kind,
+    iree_string_view_t* out_axis) {
+  const uint32_t topology_flags =
+      facts.flags & LOOM_VALUE_FACT_TOPOLOGY_DOMAIN_MASK;
+  switch (topology_flags) {
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_X:
+      *out_value_kind = IREE_SV("workitem.id");
+      *out_axis = IREE_SV("x");
+      return true;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Y:
+      *out_value_kind = IREE_SV("workitem.id");
+      *out_axis = IREE_SV("y");
+      return true;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Z:
+      *out_value_kind = IREE_SV("workitem.id");
+      *out_axis = IREE_SV("z");
+      return true;
+    case LOOM_VALUE_FACT_TOPOLOGY_SUBGROUP_LANE:
+      *out_value_kind = IREE_SV("subgroup.lane.id");
+      *out_axis = IREE_SV("lane");
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_target_legalize_lookup_assume_operand_facts(
+    const loom_value_fact_table_t* fact_table, loom_value_slice_t values,
+    const loom_predicate_t* predicate, loom_value_facts_t* out_facts) {
+  *out_facts = loom_value_facts_unknown();
+  if (fact_table == NULL || predicate->arg_count < 1 ||
+      predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE || predicate->args[0] < 0 ||
+      predicate->args[0] > UINT32_MAX) {
+    return false;
+  }
+  const loom_value_id_t target_value = (loom_value_id_t)predicate->args[0];
+  for (uint16_t i = 0; i < values.count; ++i) {
+    if (values.values[i] != target_value) continue;
+    *out_facts = loom_value_fact_table_lookup(fact_table, target_value);
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_low_target_legalize_emit_topology_assume_error(
+    loom_low_target_legalize_function_state_t* state, const loom_op_t* op,
+    iree_string_view_t value_kind, iree_string_view_t axis,
+    int64_t required_minimum, int64_t required_maximum, int64_t assumed_minimum,
+    int64_t assumed_maximum) {
+  const loom_target_bundle_t* bundle = state->selection->target_bundle;
+  const loom_target_config_t* config = bundle ? bundle->config : NULL;
+  const loom_target_export_plan_t* export_plan =
+      bundle ? bundle->export_plan : NULL;
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_target_legalize_nonempty(
+          bundle ? bundle->name : iree_string_view_empty(),
+          IREE_SV("<empty>"))),
+      loom_param_string(loom_low_target_legalize_nonempty(
+          export_plan ? export_plan->name : iree_string_view_empty(),
+          IREE_SV("<empty>"))),
+      loom_param_string(loom_low_target_legalize_nonempty(
+          config ? config->name : iree_string_view_empty(),
+          IREE_SV("<empty>"))),
+      loom_param_string(loom_low_target_legalize_nonempty(
+          loom_low_target_legalize_function_name(state), IREE_SV("<module>"))),
+      loom_param_string(loom_op_name(state->module, op)),
+      loom_param_string(value_kind),
+      loom_param_string(axis),
+      loom_param_i64(required_minimum),
+      loom_param_i64(required_maximum),
+      loom_param_i64(assumed_minimum),
+      loom_param_i64(assumed_maximum),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = LOOM_ERR_TARGET_058,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  IREE_RETURN_IF_ERROR(
+      iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission));
+  ++state->preflight_error_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_target_legalize_check_assume_topology_domain(
+    loom_low_target_legalize_function_state_t* state, const loom_op_t* op,
+    const loom_value_fact_table_t* fact_table, loom_value_slice_t values,
+    const loom_predicate_t* predicates, uint16_t predicate_count) {
+  if (loom_low_target_legalize_should_stop_preflight(state)) {
+    return iree_ok_status();
+  }
+  for (uint16_t i = 0; i < predicate_count &&
+                       !loom_low_target_legalize_should_stop_preflight(state);
+       ++i) {
+    int64_t assumed_minimum = INT64_MIN;
+    int64_t assumed_maximum = INT64_MAX;
+    if (!loom_low_target_legalize_predicate_const_range(
+            &predicates[i], &assumed_minimum, &assumed_maximum)) {
+      continue;
+    }
+
+    loom_value_facts_t facts = loom_value_facts_unknown();
+    if (!loom_low_target_legalize_lookup_assume_operand_facts(
+            fact_table, values, &predicates[i], &facts)) {
+      continue;
+    }
+    iree_string_view_t value_kind = iree_string_view_empty();
+    iree_string_view_t axis = iree_string_view_empty();
+    if (!loom_low_target_legalize_topology_domain(facts, &value_kind, &axis)) {
+      continue;
+    }
+    if (assumed_minimum <= facts.range_lo &&
+        assumed_maximum >= facts.range_hi) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_low_target_legalize_emit_topology_assume_error(
+        state, op, value_kind, axis, facts.range_lo, facts.range_hi,
+        assumed_minimum, assumed_maximum));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_target_legalize_check_assume_topology_domains(
+    loom_low_target_legalize_function_state_t* state, const loom_op_t* op,
+    const loom_value_fact_table_t* fact_table) {
+  // Entry-block assumes are launch-wide author contracts. Assumes in nested
+  // regions or non-entry CFG blocks are path-sensitive facts from the control
+  // flow that reached them.
+  if (!loom_low_target_legalize_op_is_in_function_entry_block(state, op)) {
+    return iree_ok_status();
+  }
+  if (loom_index_assume_isa(op)) {
+    loom_attribute_t predicate_attr = loom_index_assume_predicates(op);
+    return loom_low_target_legalize_check_assume_topology_domain(
+        state, op, fact_table, loom_index_assume_values(op),
+        predicate_attr.predicate_list, predicate_attr.count);
+  }
+  if (loom_scalar_assume_isa(op)) {
+    loom_attribute_t predicate_attr = loom_scalar_assume_predicates(op);
+    return loom_low_target_legalize_check_assume_topology_domain(
+        state, op, fact_table, loom_scalar_assume_values(op),
+        predicate_attr.predicate_list, predicate_attr.count);
+  }
+  return iree_ok_status();
 }
 
 static uint64_t loom_low_target_legalize_report_descriptor_id(
@@ -872,6 +1106,14 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
     *out_changed = true;
     return iree_ok_status();
   }
+  if (state->preflight_error_count != 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_low_target_legalize_check_assume_topology_domains(
+      state, op, driver->latest_facts));
+  if (state->preflight_error_count != 0) {
+    return iree_ok_status();
+  }
 
   const loom_target_legalizer_op_entry_t op_entry =
       loom_target_legalizer_registry_lookup_kind(state->legalizer_registry,
@@ -1117,6 +1359,7 @@ static iree_status_t loom_low_target_legalize_function(
 
   loom_low_target_legalize_function_state_t state = {
       .pass = pass,
+      .pass_state = pass_state,
       .statistics = loom_low_target_legalize_statistics(pass),
       .module = module,
       .selection = selection,
@@ -1197,7 +1440,7 @@ static iree_status_t loom_low_target_legalize_function(
   }
 
   uint32_t final_error_count = 0;
-  if (iree_status_is_ok(status) &&
+  if (iree_status_is_ok(status) && state.preflight_error_count == 0 &&
       pass_state->mode == LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
     const loom_value_fact_table_t* final_facts = NULL;
     status = loom_low_target_legalize_acquire_final_facts(
@@ -1214,8 +1457,9 @@ static iree_status_t loom_low_target_legalize_function(
   IREE_RETURN_IF_ERROR(status);
 
   loom_low_target_legalize_statistics(pass)->errors +=
-      (int64_t)final_error_count;
-  *out_emitted_error_diagnostics = final_error_count != 0;
+      (int64_t)(state.preflight_error_count + final_error_count);
+  *out_emitted_error_diagnostics =
+      state.preflight_error_count != 0 || final_error_count != 0;
   return iree_ok_status();
 }
 

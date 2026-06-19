@@ -63,3 +63,113 @@ func.def target(@test_target) @require_native_rejects_reduce_axes_reference_fall
   %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<4xi32>, i32
   func.return %r : i32
 }
+
+// ====
+// RUN: pass target-legalize
+
+test.target<low_core> @test_target
+
+kernel.def target(@test_target) @rejects_workitem_id_assume_excluding_static_workgroup() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %lane0 = kernel.workitem.id<x> : index
+  // ERROR@+1: TARGET/058 {value_kind="workitem.id", axis="x", required_min="0", required_max="63", assumed_min="0", assumed_max="31"}
+  %lane = index.assume %lane0 [range(%lane0, 0, 31)] : index
+  test.use %lane : index
+  kernel.return
+}
+
+// ====
+// RUN: pass target-legalize
+
+test.target<low_core> @test_target
+
+kernel.def target(@test_target) @rejects_subgroup_lane_id_assume_excluding_static_workgroup() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %lane0 = kernel.subgroup.lane.id : index
+  // ERROR@+1: TARGET/058 {value_kind="subgroup.lane.id", axis="lane", required_min="0", required_max="63", assumed_min="0", assumed_max="31"}
+  %lane = index.assume %lane0 [range(%lane0, 0, 31)] : index
+  test.use %lane : index
+  kernel.return
+}
+
+// ====
+// RUN: pass target-legalize
+
+test.target<low_core> @test_target
+
+kernel.def target(@test_target) @rejects_cast_workitem_id_assume_excluding_static_workgroup() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %lane0 = kernel.workitem.id<x> : index
+  %lane_i32 = index.cast %lane0 : index to i32
+  // ERROR@+1: TARGET/058 {value_kind="workitem.id", axis="x", required_min="0", required_max="63", assumed_min="0", assumed_max="31"}
+  %lane = scalar.assume %lane_i32 [range(%lane_i32, 0, 31)] : i32
+  test.use %lane : i32
+  kernel.return
+}
+
+// ====
+// RUN: pass target-legalize
+
+test.target<low_core> @test_target
+
+kernel.def target(@test_target) @allows_guarded_workitem_id_assume_excluding_static_workgroup() {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %c16 = index.constant 16 : index
+  %inside = index.cmp ult, %lane, %c16 : index
+  scf.if %inside {
+    %guarded_lane = index.assume %lane [range(%lane, 0, 15)] : index
+    test.use %guarded_lane : index
+  }
+  kernel.return
+}
+
+// ====
+// RUN: pass scf-to-cfg,target-legalize
+
+test.target<low_core> @test_target
+
+kernel.def target(@test_target) @allows_cfg_guarded_workitem_id_assume_excluding_static_workgroup() {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %c16 = index.constant 16 : index
+  %inside = index.cmp ult, %lane, %c16 : index
+  scf.if %inside {
+    test.use %lane : index
+  }
+  kernel.return
+}
+
+// ----
+test.target<low_core> @test_target
+
+kernel.def target(@test_target) @allows_cfg_guarded_workitem_id_assume_excluding_static_workgroup() {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %c16 = index.constant 16 : index
+  %inside = index.cmp ult, %lane, %c16 : index
+  cfg.cond_br %inside, ^_bb1, ^_bb2
+^_bb1:
+  test.use %lane : index
+  cfg.br ^_bb2
+^_bb2:
+  kernel.return
+}
