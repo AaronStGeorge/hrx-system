@@ -784,32 +784,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_failure(
       &stream, &first_field, "kind", event->kind));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
       &stream, &first_field, "message", event->message));
-  if (event->diagnostics != NULL) {
-    if (event->diagnostics->error_count != 0) {
-      IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-          &stream, &first_field, "diagnostic_error_count",
-          event->diagnostics->error_count));
-    }
-    if (event->diagnostics->warning_count != 0) {
-      IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-          &stream, &first_field, "diagnostic_warning_count",
-          event->diagnostics->warning_count));
-    }
-    if (event->diagnostics->remark_count != 0) {
-      IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-          &stream, &first_field, "diagnostic_remark_count",
-          event->diagnostics->remark_count));
-    }
-    iree_string_view_t diagnostics_json =
-        iree_string_builder_view(&event->diagnostics->output);
-    if (!iree_string_view_is_empty(diagnostics_json)) {
-      IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
-          &stream, &first_field, "diagnostics"));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "["));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write(&stream, diagnostics_json));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
-    }
-  }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
+      event->diagnostics, &stream, &first_field));
   return loom_output_stream_write_cstring(&stream, "}");
 }
 

@@ -997,6 +997,25 @@ iree_status_t iree_benchmark_loom_write_json_size_field(
   return loom_output_stream_write_format(stream, "%" PRIhsz, value);
 }
 
+iree_status_t iree_benchmark_loom_write_diagnostic_capture_fields_json(
+    const iree_benchmark_loom_diagnostic_capture_t* diagnostics,
+    loom_output_stream_t* stream, bool* first_field) {
+  if (diagnostics == NULL) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, first_field, "diagnostic_error_count", diagnostics->error_count));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, first_field, "diagnostic_warning_count",
+      diagnostics->warning_count));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, first_field, "diagnostic_remark_count",
+      diagnostics->remark_count));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "diagnostics"));
+  return iree_benchmark_loom_write_diagnostic_array_json(diagnostics, stream);
+}
+
 enum {
   IREE_BENCHMARK_LOOM_SHORT_MEASURED_DURATION_NS = 1000 * 1000,
   IREE_BENCHMARK_LOOM_SUB_MICROSECOND_DURATION_NS = 1000,
@@ -1729,22 +1748,12 @@ static iree_status_t iree_benchmark_loom_append_compile_report_artifact_json(
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         &stream, provider->execution.compile_failure_kind));
   }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"diagnostic_error_count\":%" PRIhsz,
-      provider->diagnostics.error_count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"diagnostic_warning_count\":%" PRIhsz,
-      provider->diagnostics.warning_count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"diagnostic_remark_count\":%" PRIhsz,
-      provider->diagnostics.remark_count));
+  bool first_diagnostic_field = false;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
+      &provider->diagnostics, &stream, &first_diagnostic_field));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"sample_constant_argument_count\":%" PRIhsz,
       provider->execution.sample_constant_argument_count));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"diagnostics\":"));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_array_json(
-      &provider->diagnostics, &stream));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_report_json(
       &provider->compile_report_capture, &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
@@ -2081,15 +2090,9 @@ iree_status_t iree_benchmark_loom_append_compile_row(
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         &stream, provider->execution.compile_failure_kind));
   }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"diagnostic_error_count\":%" PRIhsz,
-      provider->diagnostics.error_count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"diagnostic_warning_count\":%" PRIhsz,
-      provider->diagnostics.warning_count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"diagnostic_remark_count\":%" PRIhsz,
-      provider->diagnostics.remark_count));
+  bool first_diagnostic_field = false;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
+      &provider->diagnostics, &stream, &first_diagnostic_field));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"sample_constant_argument_count\":%" PRIhsz,
       provider->execution.sample_constant_argument_count));
@@ -2123,10 +2126,6 @@ iree_status_t iree_benchmark_loom_append_compile_row(
     IREE_RETURN_IF_ERROR(
         loom_json_write_escaped_string(&stream, provider->hal_executable_path));
   }
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"diagnostics\":"));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_array_json(
-      &provider->diagnostics, &stream));
   if (provider->execution.compile_report_available) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_report_json(
         &provider->compile_report_capture, &stream));
@@ -2340,21 +2339,9 @@ iree_status_t iree_benchmark_loom_append_failure_row(
         loom_output_stream_write_cstring(&stream, ",\"message\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, message));
   }
-  if (diagnostics != NULL) {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        &stream, ",\"diagnostic_error_count\":%" PRIhsz,
-        diagnostics->error_count));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        &stream, ",\"diagnostic_warning_count\":%" PRIhsz,
-        diagnostics->warning_count));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        &stream, ",\"diagnostic_remark_count\":%" PRIhsz,
-        diagnostics->remark_count));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"diagnostics\":"));
-    IREE_RETURN_IF_ERROR(
-        iree_benchmark_loom_write_diagnostic_array_json(diagnostics, &stream));
-  }
+  bool first_diagnostic_field = false;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
+      diagnostics, &stream, &first_diagnostic_field));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   return iree_ok_status();
 }

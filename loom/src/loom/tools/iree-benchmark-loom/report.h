@@ -96,6 +96,12 @@ iree_status_t iree_benchmark_loom_write_json_size_field(
     loom_output_stream_t* stream, bool* first_field, const char* name,
     iree_host_size_t value);
 
+// Writes diagnostic capture count fields and diagnostics array fields into an
+// open JSON object.
+iree_status_t iree_benchmark_loom_write_diagnostic_capture_fields_json(
+    const iree_benchmark_loom_diagnostic_capture_t* diagnostics,
+    loom_output_stream_t* stream, bool* first_field);
+
 // Returns the number of physical dispatches recorded in one measured HAL batch.
 iree_status_t iree_benchmark_loom_hal_physical_dispatches_per_batch(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
