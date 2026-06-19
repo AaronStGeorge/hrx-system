@@ -546,6 +546,10 @@ bool loom_low_allocation_live_range_assignments_conflict(
       !loom_low_allocation_assignment_is_register_like(rhs)) {
     return false;
   }
+  if (lhs->start_point >= rhs->end_point ||
+      rhs->start_point >= lhs->end_point) {
+    return false;
+  }
   if (!loom_low_allocation_storage_assignment_classes_share(descriptor_set, lhs,
                                                             rhs)) {
     return false;

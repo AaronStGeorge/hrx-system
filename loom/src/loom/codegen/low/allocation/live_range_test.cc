@@ -453,6 +453,29 @@ TEST(LowAllocationLiveRangeTest, ChecksAssignmentConflicts) {
       &disjoint_location));
 }
 
+TEST(LowAllocationLiveRangeTest, AssignmentConflictsRejectDisjointLifetime) {
+  const loom_low_reg_class_t reg_classes[] = {
+      RegClass(/*alias_set_id=*/1),
+      RegClass(/*alias_set_id=*/1),
+  };
+  loom_low_descriptor_set_t descriptor_set = {};
+  descriptor_set.reg_classes = reg_classes;
+  descriptor_set.reg_class_count = IREE_ARRAYSIZE(reg_classes);
+
+  const loom_low_allocation_assignment_t lhs = Assignment(
+      /*value_id=*/1, /*descriptor_reg_class_id=*/0, /*start_point=*/0,
+      /*end_point=*/5, /*location_base=*/4, /*location_count=*/2,
+      /*unit_count=*/2, /*unit_end_point_start=*/0);
+  const loom_low_allocation_assignment_t rhs = Assignment(
+      /*value_id=*/2, /*descriptor_reg_class_id=*/1, /*start_point=*/5,
+      /*end_point=*/10, /*location_base=*/4, /*location_count=*/2,
+      /*unit_count=*/2, /*unit_end_point_start=*/2);
+
+  EXPECT_FALSE(loom_low_allocation_live_range_assignments_conflict(
+      &descriptor_set, /*unit_end_points=*/nullptr,
+      /*unit_end_point_count=*/0, &lhs, &rhs));
+}
+
 TEST(LowAllocationLiveRangeTest, AssignmentConflictsUsePhysicalStorageOverlap) {
   const loom_low_reg_class_t reg_classes[] = {
       RegClass(/*alias_set_id=*/1),
