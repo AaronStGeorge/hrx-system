@@ -1255,11 +1255,16 @@ static bool loom_amdgpu_wait_state_delay_alu_salu_delta(
 }
 
 static bool loom_amdgpu_wait_state_delay_alu_source_is_better(
-    uint16_t source_residual_cycles, uint8_t source_number,
+    uint16_t source_required_cycles, uint16_t source_residual_cycles,
+    uint8_t source_number, uint16_t target_required_cycles,
     uint16_t target_residual_cycles, uint8_t target_number) {
-  return source_residual_cycles > target_residual_cycles ||
-         (source_residual_cycles == target_residual_cycles &&
-          source_number < target_number);
+  if (source_residual_cycles != target_residual_cycles) {
+    return source_residual_cycles > target_residual_cycles;
+  }
+  if (source_required_cycles != target_required_cycles) {
+    return source_required_cycles > target_required_cycles;
+  }
+  return source_number > target_number;
 }
 
 static void loom_amdgpu_wait_state_delay_alu_merge_info(
@@ -1279,7 +1284,8 @@ static void loom_amdgpu_wait_state_delay_alu_merge_info(
             builder, target, &target_observed, &target_residual,
             &target_number) ||
         loom_amdgpu_wait_state_delay_alu_source_is_better(
-            source_residual, source_number, target_residual, target_number)) {
+            source->valu_required_cycles, source_residual, source_number,
+            target->valu_required_cycles, target_residual, target_number)) {
       target->epoch = source->epoch;
       target->valu_required_cycles = source->valu_required_cycles;
       target->valu_producer_node = source->valu_producer_node;
@@ -1299,7 +1305,8 @@ static void loom_amdgpu_wait_state_delay_alu_merge_info(
             builder, target, &target_observed, &target_residual,
             &target_trans_number, &target_trans_valu_number) ||
         loom_amdgpu_wait_state_delay_alu_source_is_better(
-            source_residual, source_trans_number, target_residual,
+            source->trans_required_cycles, source_residual, source_trans_number,
+            target->trans_required_cycles, target_residual,
             target_trans_number)) {
       target->epoch = source->epoch;
       target->trans_required_cycles = source->trans_required_cycles;

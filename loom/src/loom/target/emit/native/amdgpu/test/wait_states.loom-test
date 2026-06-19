@@ -81,6 +81,39 @@ state[0] reason=delay_alu_dependency action=amdgpu.s_delay_alu at=b0:n1/o1 produ
 
 // ====
 
+// RUN: emit amdgpu-wait-state-plan @gfx11_packed_dot_dependency_delay_alu strategy=source
+
+amdgpu.target<gfx1100> @gfx11_target
+
+low.func.def target(@gfx11_target) @gfx11_packed_dot_dependency_delay_alu(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>, %bias: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %dot = v_dot4_i32_iu8_u8s8 %lhs, %rhs, %acc
+  %sum = v_add_u32 %dot, %bias
+  return %sum
+}
+
+// ----
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=delay_alu_dependency action=amdgpu.s_delay_alu at=b0:n1/o1 producer=n0 consumer=n1 required=5 observed=1 residual=4 delay_alu=0x0001
+
+// ====
+
+// RUN: emit amdgpu-wait-state-plan @gfx11_packed_dot_dependency_delay_alu_observed_progress strategy=source
+
+amdgpu.target<gfx1100> @gfx11_target
+
+low.func.def target(@gfx11_target) @gfx11_packed_dot_dependency_delay_alu_observed_progress(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>, %bias: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %dot = v_dot4_i32_iu8_u8s8 %lhs, %rhs, %acc
+  %independent = v_add_u32 %bias, %bias
+  %sum = v_add_u32 %dot, %independent
+  return %sum
+}
+
+// ----
+amdgpu.wait_state_plan states=1 progress=4 hazards=1
+state[0] reason=delay_alu_dependency action=amdgpu.s_delay_alu at=b0:n2/o2 producer=n0 consumer=n2 required=5 observed=2 residual=3 delay_alu=0x0002
+
+// ====
+
 // RUN: emit amdgpu-wait-state-plan @gfx11_vopd_delay_alu_binary_pairs strategy=source
 
 amdgpu.target<gfx1100> @gfx11_target
