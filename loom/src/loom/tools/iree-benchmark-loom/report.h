@@ -86,6 +86,11 @@ iree_status_t iree_benchmark_loom_write_json_u64_field(
     loom_output_stream_t* stream, bool* first_field, const char* name,
     uint64_t value);
 
+// Writes a required bool field inside a JSON object.
+iree_status_t iree_benchmark_loom_write_json_bool_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    bool value);
+
 // Writes a required host-size field inside a JSON object.
 iree_status_t iree_benchmark_loom_write_json_size_field(
     loom_output_stream_t* stream, bool* first_field, const char* name,

@@ -989,6 +989,14 @@ iree_status_t iree_benchmark_loom_write_json_u64_field(
   return loom_output_stream_write_format(stream, "%" PRIu64, value);
 }
 
+iree_status_t iree_benchmark_loom_write_json_bool_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    bool value) {
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, name));
+  return loom_output_stream_write_cstring(stream, value ? "true" : "false");
+}
+
 iree_status_t iree_benchmark_loom_write_json_size_field(
     loom_output_stream_t* stream, bool* first_field, const char* name,
     iree_host_size_t value) {
@@ -1002,6 +1010,158 @@ enum {
   IREE_BENCHMARK_LOOM_SUB_MICROSECOND_DURATION_NS = 1000,
   IREE_BENCHMARK_LOOM_SMALL_PHYSICAL_DISPATCH_SAMPLE_COUNT = 100,
 };
+
+typedef struct iree_benchmark_loom_profiled_dispatch_timing_t {
+  // True when at least one profiled dispatch-function row contributed.
+  bool available;
+  // True when every contributing row uses the same device/time domain.
+  bool comparable;
+  // True when every contributing row has scaled nanosecond durations.
+  bool has_scaled_duration_ns;
+  // True when contributing dispatch durations overlap in the final batch.
+  bool overlapped;
+  // True when captured profile rows were truncated before reporting.
+  bool truncated;
+  // Number of dispatch-function rows that contributed to the summary.
+  iree_host_size_t row_count;
+  // Number of dispatch-function rows ignored as non-comparable.
+  iree_host_size_t ignored_row_count;
+  // Physical device ordinal for the comparable timing group.
+  uint32_t physical_device_ordinal;
+  // Time domain used by raw timing fields.
+  iree_hal_profile_statistics_time_domain_t time_domain;
+  // Source dispatch samples represented by contributing rows.
+  uint64_t sample_count;
+  // Source dispatch samples rejected by profiling.
+  uint64_t invalid_sample_count;
+  // Valid profiled dispatch samples represented by contributing rows.
+  uint64_t valid_sample_count;
+  // Sum of valid dispatch durations in |time_domain| units.
+  uint64_t total_duration;
+  // Minimum valid dispatch duration in |time_domain| units.
+  uint64_t minimum_duration;
+  // Maximum valid dispatch duration in |time_domain| units.
+  uint64_t maximum_duration;
+  // Earliest valid dispatch start in |time_domain| units.
+  uint64_t first_start_time;
+  // Latest valid dispatch end in |time_domain| units.
+  uint64_t last_end_time;
+  // Covered final-batch span in |time_domain| units.
+  uint64_t span_duration;
+  // Ratio of total dispatch duration to covered final-batch span.
+  uint64_t overlap_ratio_ppm;
+  // Sum of valid dispatch durations in nanoseconds when scaled.
+  uint64_t total_duration_ns;
+  // Minimum valid dispatch duration in nanoseconds when scaled.
+  uint64_t minimum_duration_ns;
+  // Maximum valid dispatch duration in nanoseconds when scaled.
+  uint64_t maximum_duration_ns;
+} iree_benchmark_loom_profiled_dispatch_timing_t;
+
+static uint64_t iree_benchmark_loom_saturating_add_u64(uint64_t lhs,
+                                                       uint64_t rhs) {
+  return UINT64_MAX - lhs < rhs ? UINT64_MAX : lhs + rhs;
+}
+
+static bool iree_benchmark_loom_profile_row_has_timing(
+    const loom_run_hal_profile_row_summary_t* row) {
+  return iree_all_bits_set(row->flags,
+                           IREE_HAL_PROFILE_STATISTICS_ROW_FLAG_TIMING) &&
+         row->sample_count > row->invalid_sample_count &&
+         row->last_end_time >= row->first_start_time;
+}
+
+static void iree_benchmark_loom_accumulate_profiled_dispatch_timing(
+    const loom_run_hal_profile_row_summary_t* row,
+    iree_benchmark_loom_profiled_dispatch_timing_t* timing) {
+  const uint64_t valid_sample_count =
+      row->sample_count - row->invalid_sample_count;
+  if (!timing->available) {
+    timing->available = true;
+    timing->comparable = true;
+    timing->has_scaled_duration_ns = row->has_scaled_duration_ns;
+    timing->physical_device_ordinal = row->physical_device_ordinal;
+    timing->time_domain = row->time_domain;
+    timing->minimum_duration = row->minimum_duration;
+    timing->maximum_duration = row->maximum_duration;
+    timing->first_start_time = row->first_start_time;
+    timing->last_end_time = row->last_end_time;
+    if (row->has_scaled_duration_ns) {
+      timing->minimum_duration_ns = row->minimum_duration_ns;
+      timing->maximum_duration_ns = row->maximum_duration_ns;
+    }
+  } else if (timing->physical_device_ordinal != row->physical_device_ordinal ||
+             timing->time_domain != row->time_domain) {
+    timing->comparable = false;
+    ++timing->ignored_row_count;
+    return;
+  } else {
+    timing->has_scaled_duration_ns =
+        timing->has_scaled_duration_ns && row->has_scaled_duration_ns;
+    if (row->minimum_duration < timing->minimum_duration) {
+      timing->minimum_duration = row->minimum_duration;
+    }
+    if (row->maximum_duration > timing->maximum_duration) {
+      timing->maximum_duration = row->maximum_duration;
+    }
+    if (row->first_start_time < timing->first_start_time) {
+      timing->first_start_time = row->first_start_time;
+    }
+    if (row->last_end_time > timing->last_end_time) {
+      timing->last_end_time = row->last_end_time;
+    }
+    if (row->has_scaled_duration_ns) {
+      if (row->minimum_duration_ns < timing->minimum_duration_ns) {
+        timing->minimum_duration_ns = row->minimum_duration_ns;
+      }
+      if (row->maximum_duration_ns > timing->maximum_duration_ns) {
+        timing->maximum_duration_ns = row->maximum_duration_ns;
+      }
+    }
+  }
+
+  ++timing->row_count;
+  timing->sample_count = iree_benchmark_loom_saturating_add_u64(
+      timing->sample_count, row->sample_count);
+  timing->invalid_sample_count = iree_benchmark_loom_saturating_add_u64(
+      timing->invalid_sample_count, row->invalid_sample_count);
+  timing->valid_sample_count = iree_benchmark_loom_saturating_add_u64(
+      timing->valid_sample_count, valid_sample_count);
+  timing->total_duration = iree_benchmark_loom_saturating_add_u64(
+      timing->total_duration, row->total_duration);
+  if (row->has_scaled_duration_ns) {
+    timing->total_duration_ns = iree_benchmark_loom_saturating_add_u64(
+        timing->total_duration_ns, row->total_duration_ns);
+  }
+}
+
+static iree_benchmark_loom_profiled_dispatch_timing_t
+iree_benchmark_loom_profiled_dispatch_timing(
+    const loom_run_hal_profile_summary_t* profile) {
+  iree_benchmark_loom_profiled_dispatch_timing_t timing = {0};
+  timing.truncated = profile->truncated_row_count != 0;
+  for (iree_host_size_t i = 0; i < profile->captured_row_count; ++i) {
+    const loom_run_hal_profile_row_summary_t* row = &profile->rows[i];
+    if (row->row_type !=
+            IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_FUNCTION ||
+        !iree_benchmark_loom_profile_row_has_timing(row)) {
+      continue;
+    }
+    iree_benchmark_loom_accumulate_profiled_dispatch_timing(row, &timing);
+  }
+  if (timing.available && timing.comparable) {
+    timing.span_duration = timing.last_end_time - timing.first_start_time;
+    timing.overlapped = timing.valid_sample_count > 1 &&
+                        timing.span_duration != 0 &&
+                        timing.total_duration > timing.span_duration;
+    if (timing.span_duration != 0) {
+      timing.overlap_ratio_ppm =
+          (uint64_t)(((double)timing.total_duration * 1000000.0) /
+                     (double)timing.span_duration);
+    }
+  }
+  return timing;
+}
 
 static iree_status_t iree_benchmark_loom_validate_hal_benchmark_result(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result) {
@@ -1117,6 +1277,71 @@ static iree_status_t iree_benchmark_loom_write_timing_warning_json(
   return loom_json_write_escaped_string(stream, warning);
 }
 
+static iree_status_t
+iree_benchmark_loom_write_profiled_dispatch_duration_ns_json(
+    const iree_benchmark_loom_profiled_dispatch_timing_t* timing,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "\"count\":%" PRIu64, timing->valid_sample_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"total\":%" PRIu64, timing->total_duration_ns));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"min\":%" PRIu64, timing->minimum_duration_ns));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"max\":%" PRIu64, timing->maximum_duration_ns));
+  if (timing->valid_sample_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, ",\"mean\":%.3f",
+        (double)timing->total_duration_ns /
+            (double)timing->valid_sample_count));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t iree_benchmark_loom_write_profiled_dispatch_timing_json(
+    const iree_benchmark_loom_profiled_dispatch_timing_t* timing,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "\"available\":%s", timing->available ? "true" : "false"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"comparable\":%s", timing->comparable ? "true" : "false"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"overlapped\":%s", timing->overlapped ? "true" : "false"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"truncated\":%s", timing->truncated ? "true" : "false"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"row_count\":%" PRIhsz, timing->row_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"ignored_row_count\":%" PRIhsz, timing->ignored_row_count));
+  if (timing->available) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream,
+        ",\"physical_device_ordinal\":%" PRIu32 ",\"sample_count\":%" PRIu64
+        ",\"invalid_sample_count\":%" PRIu64 ",\"valid_sample_count\":%" PRIu64
+        ",\"span\":%" PRIu64 ",\"total\":%" PRIu64 ",\"min\":%" PRIu64
+        ",\"max\":%" PRIu64 ",\"overlap_ratio_ppm\":%" PRIu64,
+        timing->physical_device_ordinal, timing->sample_count,
+        timing->invalid_sample_count, timing->valid_sample_count,
+        timing->span_duration, timing->total_duration, timing->minimum_duration,
+        timing->maximum_duration, timing->overlap_ratio_ppm));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"time_domain\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+        stream, iree_benchmark_loom_profile_statistics_time_domain_name(
+                    timing->time_domain)));
+  }
+  if (timing->available && timing->has_scaled_duration_ns) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"duration_ns\":"));
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_write_profiled_dispatch_duration_ns_json(timing,
+                                                                     stream));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 static iree_status_t iree_benchmark_loom_write_hal_timing_warnings_json(
     const iree_benchmark_loom_benchmark_policy_t* policy,
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
@@ -1156,6 +1381,17 @@ static iree_status_t iree_benchmark_loom_write_hal_timing_warnings_json(
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_timing_warning_json(
         stream, &first_warning, IREE_SV("unstable_p90_to_p50")));
   }
+  const iree_benchmark_loom_profiled_dispatch_timing_t profiled_dispatch =
+      iree_benchmark_loom_profiled_dispatch_timing(
+          &benchmark_result->hal_benchmark.profile);
+  if (timing->batch_size > 1 && profiled_dispatch.overlapped) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_timing_warning_json(
+        stream, &first_warning, IREE_SV("profiled_dispatch_overlap")));
+  }
+  if (profiled_dispatch.truncated) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_timing_warning_json(
+        stream, &first_warning, IREE_SV("profiled_dispatch_rows_truncated")));
+  }
   return loom_output_stream_write_cstring(stream, "]");
 }
 
@@ -1169,8 +1405,24 @@ iree_status_t iree_benchmark_loom_write_hal_timing_interpretation_json(
   bool first_field = true;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
       stream, &first_field, "score", IREE_SV("operation_timing_ns")));
+  const iree_benchmark_loom_profiled_dispatch_timing_t profiled_dispatch =
+      iree_benchmark_loom_profiled_dispatch_timing(
+          &benchmark_result->hal_benchmark.profile);
+  const bool overlapped_logical_batch =
+      benchmark_result->hal_benchmark.timing.batch_size > 1 &&
+      profiled_dispatch.overlapped;
+  const iree_string_view_t score_meaning =
+      overlapped_logical_batch ? IREE_SV("throughput_normalized_batch_time")
+                               : IREE_SV("normalized_logical_operation_time");
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      stream, &first_field, "score_meaning", score_meaning));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
       stream, &first_field, "score_unit", IREE_SV("logical_operation")));
+  if (profiled_dispatch.available) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_bool_field(
+        stream, &first_field, "profiled_dispatch_overlap",
+        profiled_dispatch.overlapped));
+  }
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
       stream, &first_field, "warnings"));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_hal_timing_warnings_json(
@@ -1753,6 +2005,16 @@ iree_status_t iree_benchmark_loom_write_benchmark_result_json(
         loom_output_stream_write_cstring(stream, ",\"operation_timing_ns\":"));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_timing_stats_json(
         &timing->operation_timing, stream));
+    const iree_benchmark_loom_profiled_dispatch_timing_t profiled_dispatch =
+        iree_benchmark_loom_profiled_dispatch_timing(
+            &benchmark_result->hal_benchmark.profile);
+    if (profiled_dispatch.available) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+          stream, ",\"profiled_dispatch_timing\":"));
+      IREE_RETURN_IF_ERROR(
+          iree_benchmark_loom_write_profiled_dispatch_timing_json(
+              &profiled_dispatch, stream));
+    }
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_data_cache_summary_json(
         &benchmark_result->data_cache, stream));
     IREE_RETURN_IF_ERROR(

@@ -270,6 +270,114 @@ TEST(BenchmarkReportTest, WritesHalTimingCountsAndWarnings) {
   iree_string_builder_deinitialize(&builder);
 }
 
+TEST(BenchmarkReportTest, LabelsOverlappedProfiledDispatchBatches) {
+  loom_testbench_benchmark_plan_t benchmark_plan = {};
+  benchmark_plan.name = IREE_SV("kernel_latency");
+  loom_testbench_case_plan_t case_plan = {};
+  case_plan.name = IREE_SV("kernel_case");
+  iree_benchmark_loom_benchmark_policy_t policy = {};
+  policy.measure = IREE_SV("dispatch_complete");
+
+  iree_benchmark_loom_benchmark_result_t result = {};
+  result.executed = true;
+  result.passed = true;
+  result.samples_per_iteration = 1;
+  result.has_hal_benchmark = true;
+  result.hal_benchmark.timing.batch_size = 16;
+  result.hal_benchmark.timing.measured_batch_count = 4;
+  result.hal_benchmark.timing.measured_operation_count = 64;
+  result.hal_benchmark.timing.measured_duration_ns = 64000;
+  result.hal_benchmark.timing.stop_reason =
+      LOOM_RUN_BENCHMARK_STOP_REASON_STABLE;
+  result.hal_benchmark.timing.batch_timing.count = 4;
+  result.hal_benchmark.timing.batch_timing.total_ns = 64000;
+  result.hal_benchmark.timing.batch_timing.minimum_ns = 15000;
+  result.hal_benchmark.timing.batch_timing.maximum_ns = 17000;
+  result.hal_benchmark.timing.batch_timing.mean_ns = 16000.0;
+  result.hal_benchmark.timing.batch_timing.p50_ns = 16000;
+  result.hal_benchmark.timing.batch_timing.p90_ns = 17000;
+  result.hal_benchmark.timing.operation_timing.count = 4;
+  result.hal_benchmark.timing.operation_timing.total_ns = 4000;
+  result.hal_benchmark.timing.operation_timing.minimum_ns = 900;
+  result.hal_benchmark.timing.operation_timing.maximum_ns = 1100;
+  result.hal_benchmark.timing.operation_timing.mean_ns = 1000.0;
+  result.hal_benchmark.timing.operation_timing.p50_ns = 1000;
+  result.hal_benchmark.timing.operation_timing.p90_ns = 1100;
+  result.data_cache.populated = true;
+  result.data_cache.dispatches_per_batch = 16;
+
+  loom_run_hal_profile_summary_t* profile = &result.hal_benchmark.profile;
+  profile->requested = true;
+  profile->executed = true;
+  profile->row_count = 1;
+  profile->captured_row_count = 1;
+  loom_run_hal_profile_row_summary_t* row = &profile->rows[0];
+  row->row_type = IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_FUNCTION;
+  row->time_domain = IREE_HAL_PROFILE_STATISTICS_TIME_DOMAIN_DEVICE_TICK;
+  row->flags = IREE_HAL_PROFILE_STATISTICS_ROW_FLAG_TIMING;
+  row->physical_device_ordinal = 0;
+  row->function_ordinal = 0;
+  row->sample_count = 16;
+  row->first_start_time = 100;
+  row->last_end_time = 900;
+  row->total_duration = 1600;
+  row->minimum_duration = 80;
+  row->maximum_duration = 120;
+  row->has_scaled_duration_ns = true;
+  row->total_duration_ns = 1600;
+  row->minimum_duration_ns = 80;
+  row->maximum_duration_ns = 120;
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_ASSERT_OK(iree_benchmark_loom_write_benchmark_result_json(
+      &benchmark_plan, &case_plan, &policy, &result,
+      /*correctness_sample_count=*/1,
+      /*correctness_failed_sample_count=*/0, &stream));
+
+  iree_string_view_t root =
+      ParseJsonDocument(iree_string_builder_view(&builder));
+  iree_string_view_t timing_interpretation =
+      LookupObject(root, IREE_SV("timing_interpretation"));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(timing_interpretation, IREE_SV("score_meaning")),
+      IREE_SV("throughput_normalized_batch_time")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(timing_interpretation, IREE_SV("profiled_dispatch_overlap")),
+      IREE_SV("true")));
+  iree_string_view_t warnings =
+      LookupObject(timing_interpretation, IREE_SV("warnings"));
+  EXPECT_TRUE(
+      JsonArrayContainsString(warnings, IREE_SV("profiled_dispatch_overlap")));
+
+  iree_string_view_t profiled_dispatch =
+      LookupObject(root, IREE_SV("profiled_dispatch_timing"));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(profiled_dispatch, IREE_SV("available")), IREE_SV("true")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(profiled_dispatch, IREE_SV("overlapped")), IREE_SV("true")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(profiled_dispatch, IREE_SV("valid_sample_count")),
+      IREE_SV("16")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(profiled_dispatch, IREE_SV("span")), IREE_SV("800")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(profiled_dispatch, IREE_SV("total")), IREE_SV("1600")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(profiled_dispatch, IREE_SV("overlap_ratio_ppm")),
+      IREE_SV("2000000")));
+  iree_string_view_t duration_ns =
+      LookupObject(profiled_dispatch, IREE_SV("duration_ns"));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(duration_ns, IREE_SV("count")), IREE_SV("16")));
+  EXPECT_TRUE(iree_string_view_equal(LookupObject(duration_ns, IREE_SV("mean")),
+                                     IREE_SV("100.000")));
+
+  iree_string_builder_deinitialize(&builder);
+}
+
 TEST(BenchmarkReportTest, WritesArtifactManifestSidecarPath) {
   iree::testing::TempFilePath bundle_dir("loom_benchmark_bundle");
   iree_benchmark_loom_artifact_bundle_options_t bundle_options = {};
