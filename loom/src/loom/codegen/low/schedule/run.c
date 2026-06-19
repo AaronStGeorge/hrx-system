@@ -25,6 +25,8 @@ enum loom_low_schedule_state_access_bits_e {
 typedef struct loom_low_schedule_pressure_state_t {
   // Current live register units by descriptor register-class ID.
   uint64_t* current_live_units_by_reg_class;
+  // Value ordinals with per-block pressure state to reset before reuse.
+  loom_value_ordinal_t* block_value_ordinals;
   // Scratch live-unit delta by descriptor register-class ID for one candidate.
   int64_t* candidate_delta_units_by_reg_class;
   // True when a register class has a nonzero or previously nonzero candidate
@@ -36,6 +38,8 @@ typedef struct loom_low_schedule_pressure_state_t {
   iree_host_size_t candidate_delta_touched_count;
   // Current aggregate live register units in the simulated schedule.
   uint64_t current_live_units;
+  // Number of populated entries in |block_value_ordinals|.
+  iree_host_size_t block_value_count;
 } loom_low_schedule_pressure_state_t;
 
 typedef struct loom_low_schedule_candidate_score_t {
@@ -558,6 +562,13 @@ static iree_status_t loom_low_schedule_allocate_pressure_state(
   if (!loom_low_schedule_uses_pressure_strategy(state)) {
     return iree_ok_status();
   }
+  const loom_value_ordinal_t value_count = state->value_domain->value_count;
+  if (value_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, value_count,
+        sizeof(*out_pressure_state->block_value_ordinals),
+        (void**)&out_pressure_state->block_value_ordinals));
+  }
   const uint32_t reg_class_count =
       state->target.descriptor_set->reg_class_count;
   if (reg_class_count != 0) {
@@ -587,16 +598,34 @@ static iree_status_t loom_low_schedule_allocate_pressure_state(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_schedule_note_block_pressure_use(
+    loom_low_schedule_build_state_t* state,
+    loom_low_schedule_pressure_state_t* pressure_state,
+    loom_value_ordinal_t value_ordinal) {
+  loom_low_schedule_value_record_t* value = &state->values[value_ordinal];
+  if (value->remaining_use_count == UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low schedule pressure use count exceeds uint32_t");
+  }
+  if (value->remaining_use_count == 0) {
+    pressure_state->block_value_ordinals[pressure_state->block_value_count++] =
+        value_ordinal;
+  }
+  ++value->remaining_use_count;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_schedule_initialize_block_pressure(
     loom_low_schedule_build_state_t* state,
     const loom_low_schedule_block_t* block_record,
     loom_low_schedule_pressure_state_t* pressure_state) {
   pressure_state->current_live_units = 0;
-  const loom_value_ordinal_t value_count = state->value_domain->value_count;
-  for (loom_value_ordinal_t ordinal = 0; ordinal < value_count; ++ordinal) {
+  for (iree_host_size_t i = 0; i < pressure_state->block_value_count; ++i) {
+    loom_value_ordinal_t ordinal = pressure_state->block_value_ordinals[i];
     state->values[ordinal].remaining_use_count = 0;
     state->values[ordinal].flags &= ~LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
   }
+  pressure_state->block_value_count = 0;
   if (pressure_state->current_live_units_by_reg_class) {
     memset(pressure_state->current_live_units_by_reg_class, 0,
            state->target.descriptor_set->reg_class_count *
@@ -612,19 +641,14 @@ static iree_status_t loom_low_schedule_initialize_block_pressure(
         loom_low_schedule_node_const_operand_ordinals(node);
     for (uint16_t operand_index = 0; operand_index < node->operand_count;
          ++operand_index) {
-      loom_low_schedule_value_record_t* value =
-          &state->values[operand_ordinals[operand_index]];
-      if (value->remaining_use_count == UINT32_MAX) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "low schedule pressure use count exceeds uint32_t");
-      }
-      ++value->remaining_use_count;
+      IREE_RETURN_IF_ERROR(loom_low_schedule_note_block_pressure_use(
+          state, pressure_state, operand_ordinals[operand_index]));
     }
   }
 
-  for (loom_value_ordinal_t ordinal = 0; ordinal < value_count; ++ordinal) {
-    loom_low_schedule_value_record_t* value = &state->values[ordinal];
+  for (iree_host_size_t i = 0; i < pressure_state->block_value_count; ++i) {
+    loom_low_schedule_value_record_t* value =
+        &state->values[pressure_state->block_value_ordinals[i]];
     if (value->remaining_use_count == 0) {
       continue;
     }
