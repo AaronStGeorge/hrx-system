@@ -30,7 +30,9 @@ from loom.target.arch.amdgpu.descriptors import (
     _REG_PART_SGPR_LOW16,
     _REG_PART_VGPR_HIGH16,
     _REG_PART_VGPR_LOW16,
+    _RESOURCE_VALU,
     _SCHEDULE_MODE_CONTROL,
+    _SCHEDULE_PACKED_DOT,
     _SCHEDULE_SALU,
     _SCHEDULE_SMEM_STORE,
     _SCHEDULE_VALU,
@@ -102,6 +104,7 @@ from loom.target.low_descriptors import (
     EffectKind,
     Immediate,
     ImmediateKind,
+    IssueUse,
     LatencyKind,
     MemorySpace,
     NativeAsmValue,
@@ -260,6 +263,44 @@ def test_trans_schedule_classes_accept_descriptor_latency_overrides() -> None:
             latency_cycles_by_descriptor_key={"amdgpu.v_bad_f32": 4}
         ),
     )
+
+
+def test_packed_dot_schedule_class_models_valu_latency() -> None:
+    for descriptor_set in _amdgpu_core_descriptor_set_bases():
+        schedule_classes = {
+            schedule_class.name: schedule_class
+            for schedule_class in descriptor_set.schedule_classes
+        }
+
+        schedule_class = schedule_classes[_SCHEDULE_PACKED_DOT]
+        assert schedule_class.latency_kind is LatencyKind.ESTIMATE
+        assert schedule_class.latency_cycles == 5
+        assert tuple(schedule_class.issue_uses) == (
+            IssueUse(_RESOURCE_VALU, cycles=1, units=1),
+        )
+
+
+def test_packed_dot_descriptors_use_packed_dot_schedule_class() -> None:
+    overlay_sets = (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    )
+    dot_descriptor_count = 0
+    for overlays in overlay_sets:
+        dot_descriptors = tuple(
+            overlay
+            for overlay in overlays
+            if overlay.semantic_tag is not None
+            and overlay.semantic_tag.startswith("dot.")
+        )
+
+        dot_descriptor_count += len(dot_descriptors)
+        for overlay in dot_descriptors:
+            assert overlay.schedule_class == _SCHEDULE_PACKED_DOT
+    assert dot_descriptor_count != 0
 
 
 def test_mode_control_schedule_class_covers_generated_descriptors() -> None:

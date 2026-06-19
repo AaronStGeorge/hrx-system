@@ -1150,7 +1150,7 @@ def _v_dot2_f32_packed_float_overlay(
         mnemonic=mnemonic,
         encoding_name="ENC_VOP3P",
         semantic_tag=semantic_tag,
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=_SCHEDULE_PACKED_DOT,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
@@ -1202,7 +1202,7 @@ def _v_dot4_i32_i8_overlay(
         mnemonic="v_dot4_i32_i8",
         encoding_name="ENC_VOP3P",
         semantic_tag="dot.s8s8.i32x1",
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=_SCHEDULE_PACKED_DOT,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
@@ -1229,7 +1229,7 @@ def _v_dot4_i32_iu8_overlay(
         mnemonic="v_dot4_i32_iu8",
         encoding_name="ENC_VOP3P",
         semantic_tag=f"dot.{lhs_tag}{rhs_tag}.i32x1",
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=_SCHEDULE_PACKED_DOT,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
@@ -1261,7 +1261,7 @@ def _v_dot4_u32_u8_overlay(
         mnemonic="v_dot4_u32_u8",
         encoding_name="ENC_VOP3P",
         semantic_tag="dot.u8u8.i32x1",
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=_SCHEDULE_PACKED_DOT,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
@@ -1286,7 +1286,7 @@ def _v_dot4_f32_packed8_overlay(
         mnemonic=f"v_dot4_f32_{lhs_type}_{rhs_type}",
         encoding_name="ENC_VOP3P",
         semantic_tag=f"dot.{lhs_type}{rhs_type}.f32x1",
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=_SCHEDULE_PACKED_DOT,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
@@ -1307,7 +1307,7 @@ def _v_dot8_i32_i4_overlay(
         mnemonic="v_dot8_i32_i4",
         encoding_name="ENC_VOP3P",
         semantic_tag="dot.s4s4.i32x1",
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=_SCHEDULE_PACKED_DOT,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
@@ -1334,7 +1334,7 @@ def _v_dot8_i32_iu4_overlay(
         mnemonic="v_dot8_i32_iu4",
         encoding_name="ENC_VOP3P",
         semantic_tag=f"dot.{lhs_tag}{rhs_tag}.i32x1",
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=_SCHEDULE_PACKED_DOT,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
@@ -1366,7 +1366,7 @@ def _v_dot8_u32_u4_overlay(
         mnemonic="v_dot8_u32_u4",
         encoding_name="ENC_VOP3P",
         semantic_tag="dot.u4u4.i32x1",
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=_SCHEDULE_PACKED_DOT,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
