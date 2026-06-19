@@ -53,6 +53,22 @@ func.decl public import("upstream") @relu(%x: f32) -> (f32)
 
 // ====
 
+// Retained private callable symbols remain ordinary private symbols but are
+// preserved by symbol DCE.
+func.def retain @retained_identity(%x: f32) -> (f32) {
+  func.return %x : f32
+}
+
+func.decl retain @retained_extern(%x: f32) -> (f32)
+
+func.template<test.effect> retain @retained_template(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.ukernel<test.effect> retain @retained_ukernel(%value: i32) -> (i32)
+
+// ====
+
 // Multiple function definitions in a single module.
 func.def @first(%a: i32, %b: i32) -> (i32) {
   func.return %a : i32

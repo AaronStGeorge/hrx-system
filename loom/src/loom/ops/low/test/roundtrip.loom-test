@@ -10,6 +10,20 @@ low.kernel.def target(@test_target) export("entry") linkage(dso_local) workgroup
 
 test.target<low_core> @test_target
 
+low.func.decl retain target(@test_target) @retained_decl(%value: reg<test.i32>) -> (reg<test.i32>)
+
+low.func.def retain target(@test_target) @retained_func(%value: reg<test.i32>) -> (reg<test.i32>) {
+  low.return %value : reg<test.i32>
+}
+
+low.kernel.def retain target(@test_target) @retained_kernel(%value: reg<test.i32>) {
+  low.return
+}
+
+// ====
+
+test.target<low_core> @test_target
+
 low.func.decl target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>)
 
 low.kernel.def allocation(fixed) schedule(locked) target(@test_target) @helper_entry(%lhs: reg<test.i32>, %rhs: reg<test.i32>) {

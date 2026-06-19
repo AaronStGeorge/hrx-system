@@ -62,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 15)
+//   4       1     format_version (currently 16)
 //   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 15
+#define LOOM_BYTECODE_FORMAT_VERSION 16
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -980,6 +980,9 @@ enum loom_bytecode_symbol_flag_bits_e {
   // source_symbol_id is still encoded for linker lookup but is the textual
   // default derived from name_id.
   LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL = 1u << 2,
+  // Symbol must be preserved by ordinary symbol DCE even when unreachable.
+  // Matches SYMBOL_FLAG_RETAIN in the Python IR.
+  LOOM_BYTECODE_SYMBOL_FLAG_RETAIN = 1u << 3,
 };
 typedef uint16_t loom_bytecode_symbol_flags_t;
 

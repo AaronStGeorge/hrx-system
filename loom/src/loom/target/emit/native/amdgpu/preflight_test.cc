@@ -106,7 +106,8 @@ class AmdgpuNativePreflightTest : public ::testing::Test {
     const loom_symbol_ref_t target_ref = AddSymbol(IREE_SV("target"));
     const loom_symbol_ref_t callee_ref = AddSymbol(IREE_SV("preflight"));
     IREE_ASSERT_OK(loom_low_func_def_build(
-        &module_builder, 0, /*visibility=*/0, /*cc=*/0, /*purity=*/0,
+        &module_builder, 0, /*visibility=*/0, /*retain=*/0, /*cc=*/0,
+        /*purity=*/0,
         /*allocation=*/0, /*schedule=*/0, target_ref, /*abi=*/0,
         loom_named_attr_slice_t{}, loom_named_attr_slice_t{},
         LOOM_STRING_ID_INVALID, loom_named_attr_slice_t{}, callee_ref,

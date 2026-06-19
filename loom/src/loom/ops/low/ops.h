@@ -83,6 +83,12 @@ typedef enum loom_low_schedule_e {
   LOOM_LOW_SCHEDULE_COUNT_ = 4,
 } loom_low_schedule_t;
 
+// Private symbol retention policy. Absent (0) permits ordinary DCE.
+typedef enum loom_low_retain_e {
+  LOOM_LOW_RETAIN_RETAIN = 1,
+  LOOM_LOW_RETAIN_COUNT_ = 2,
+} loom_low_retain_t;
+
 // External code source kind for an imported low function declaration.
 typedef enum loom_low_func_decl_import_kind_e {
   LOOM_LOW_FUNC_DECL_IMPORT_KIND_VM = 1,
@@ -127,21 +133,24 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_purity, 9, loom_low_purity_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_allocation, 10, loom_low_allocation_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_schedule, 11, loom_low_schedule_t)
 LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_low_func_def_predicates, 12)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_retain, 13, loom_low_retain_t)
 LOOM_DEFINE_REGION(loom_low_func_def_body, 0)
 enum loom_low_func_def_build_flag_bits_e {
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
-  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_CC = 1u << 1,
-  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_PURITY = 1u << 2,
-  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 3,
-  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_SCHEDULE = 1u << 4,
-  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_ABI = 1u << 5,
-  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 6,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_RETAIN = 1u << 1,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_CC = 1u << 2,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_PURITY = 1u << 3,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 4,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_SCHEDULE = 1u << 5,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_ABI = 1u << 6,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 7,
 };
 typedef uint32_t loom_low_func_def_build_flags_t;
 iree_status_t loom_low_func_def_build(
     loom_builder_t* builder,
     loom_low_func_def_build_flags_t build_flags,
     loom_optional uint8_t visibility,
+    loom_optional uint8_t retain,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,
     loom_optional uint8_t allocation,
@@ -183,20 +192,23 @@ LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_z, 7)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_allocation, 8, loom_low_allocation_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_schedule, 9, loom_low_schedule_t)
 LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_low_kernel_def_predicates, 10)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_retain, 11, loom_low_retain_t)
 LOOM_DEFINE_REGION(loom_low_kernel_def_body, 0)
 enum loom_low_kernel_def_build_flag_bits_e {
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 0,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_SCHEDULE = 1u << 1,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 2,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE = 1u << 3,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_X = 1u << 4,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Y = 1u << 5,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Z = 1u << 6,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_RETAIN = 1u << 0,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 1,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_SCHEDULE = 1u << 2,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 3,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE = 1u << 4,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_X = 1u << 5,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Y = 1u << 6,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Z = 1u << 7,
 };
 typedef uint32_t loom_low_kernel_def_build_flags_t;
 iree_status_t loom_low_kernel_def_build(
     loom_builder_t* builder,
     loom_low_kernel_def_build_flags_t build_flags,
+    loom_optional uint8_t retain,
     loom_optional uint8_t allocation,
     loom_optional uint8_t schedule,
     loom_symbol_ref_t target,
@@ -235,24 +247,27 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_purity, 9, loom_low_purity_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_allocation, 10, loom_low_allocation_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_schedule, 11, loom_low_schedule_t)
 LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_low_func_decl_predicates, 12)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_import_kind, 13, loom_low_func_decl_import_kind_t)
-LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 14)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_retain, 13, loom_low_retain_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_import_kind, 14, loom_low_func_decl_import_kind_t)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 15)
 enum loom_low_func_decl_build_flag_bits_e {
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
-  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CC = 1u << 1,
-  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_PURITY = 1u << 2,
-  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_ALLOCATION = 1u << 3,
-  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_SCHEDULE = 1u << 4,
-  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_KIND = 1u << 5,
-  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CODE_SYMBOL = 1u << 6,
-  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_ABI = 1u << 7,
-  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 8,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_RETAIN = 1u << 1,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CC = 1u << 2,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_PURITY = 1u << 3,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_ALLOCATION = 1u << 4,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_SCHEDULE = 1u << 5,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_KIND = 1u << 6,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CODE_SYMBOL = 1u << 7,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_ABI = 1u << 8,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 9,
 };
 typedef uint32_t loom_low_func_decl_build_flags_t;
 iree_status_t loom_low_func_decl_build(
     loom_builder_t* builder,
     loom_low_func_decl_build_flags_t build_flags,
     loom_optional uint8_t visibility,
+    loom_optional uint8_t retain,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,
     loom_optional uint8_t allocation,

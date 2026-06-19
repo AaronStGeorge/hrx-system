@@ -2657,14 +2657,23 @@ void loom_module_link_symbol_defining_op(loom_module_t* module, loom_op_t* op,
   loom_symbol_ref_t ref = loom_attr_as_symbol(attrs[symbol_attr_index]);
   if (loom_symbol_ref_is_valid(ref) && ref.module_id == 0 &&
       ref.symbol_id < module->symbols.count) {
-    if (module->symbols.entries[ref.symbol_id].defining_op &&
-        module->symbols.entries[ref.symbol_id].defining_op != op) {
+    loom_symbol_t* symbol = &module->symbols.entries[ref.symbol_id];
+    if (symbol->defining_op && symbol->defining_op != op) {
       return;
     }
-    module->symbols.entries[ref.symbol_id].defining_op = op;
-    module->symbols.entries[ref.symbol_id].definition = vtable->symbol_def;
-    module->symbols.entries[ref.symbol_id].kind =
-        vtable->symbol_def->bytecode_kind;
+    symbol->defining_op = op;
+    symbol->definition = vtable->symbol_def;
+    symbol->kind = vtable->symbol_def->bytecode_kind;
+    symbol->flags &= (loom_symbol_flags_t)~LOOM_SYMBOL_FLAG_RETAIN;
+    const uint8_t retain_attr_index_plus_one =
+        vtable->symbol_def->retain_attr_index_plus_one;
+    if (retain_attr_index_plus_one) {
+      const uint8_t retain_attr_index = retain_attr_index_plus_one - 1;
+      if (retain_attr_index < op->attribute_count &&
+          loom_attr_as_enum(attrs[retain_attr_index]) != 0) {
+        symbol->flags |= LOOM_SYMBOL_FLAG_RETAIN;
+      }
+    }
   }
 }
 

@@ -1348,6 +1348,15 @@ class TestCrossFormatRoundTrip:
         assert func_op.regions
         assert len(func_op.regions[0].blocks[0].ops) == 2
 
+    def test_retained_function_survives_bytecode(self) -> None:
+        text = (
+            "func.def retain @retained(%input: f32) -> (f32) {\n"
+            "  func.return %input : f32\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text) == text
+
     def test_optional_region_count_survives_bytecode(self) -> None:
         text = (
             "func.def @optional_region(%cond: i1) {\n"

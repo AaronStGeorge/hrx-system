@@ -29,7 +29,8 @@ static bool loom_symbol_pruning_symbol_is_erasable_with_options(
   if (!symbol || !symbol->defining_op) {
     return false;
   }
-  if (iree_any_bit_set(symbol->flags, LOOM_SYMBOL_FLAG_PUBLIC)) {
+  if (iree_any_bit_set(symbol->flags,
+                       LOOM_SYMBOL_FLAG_PUBLIC | LOOM_SYMBOL_FLAG_RETAIN)) {
     return false;
   }
 
