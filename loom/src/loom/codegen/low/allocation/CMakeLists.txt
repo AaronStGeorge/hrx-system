@@ -379,6 +379,7 @@ loom_cc_library(
     ::assignment
     ::storage
     iree::base
+    iree::base::internal::arena
     loom::analysis::liveness
     loom::codegen::low::descriptors
     loom::ir
@@ -467,6 +468,7 @@ loom_cc_test(
   DEPS
     ::live_range
     iree::base
+    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
 )
