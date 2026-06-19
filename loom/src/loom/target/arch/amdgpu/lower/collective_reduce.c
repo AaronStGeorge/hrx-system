@@ -1691,6 +1691,109 @@ static iree_status_t loom_amdgpu_emit_workgroup_reduce_restore_exec(
       source_op->location, &restore_op);
 }
 
+static iree_status_t loom_amdgpu_emit_workgroup_reduce_linear_leader_guard(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_workgroup_reduce_plan_t* plan, loom_value_id_t linear_id,
+    loom_type_t lane_type, loom_type_t mask_type,
+    loom_value_id_t* out_leader_guard) {
+  *out_leader_guard = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t leader_count = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, 1, lane_type,
+      &leader_count));
+  return loom_amdgpu_emit_subgroup_lane_compare(
+      context, source_op, &plan->guard_descriptor, linear_id, leader_count,
+      mask_type, out_leader_guard);
+}
+
+static iree_status_t loom_amdgpu_emit_workgroup_reduce_serial_scratch_fold(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_workgroup_reduce_plan_t* plan,
+    loom_value_id_t scratch_base, loom_value_id_t linear_id,
+    uint32_t wave_count, loom_type_t lane_type, loom_type_t mask_type,
+    loom_value_id_t* inout_registers) {
+  loom_value_id_t leader_guard = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_linear_leader_guard(
+      context, source_op, plan, linear_id, lane_type, mask_type,
+      &leader_guard));
+  loom_value_id_t saved_exec = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_saveexec(
+      context, source_op, plan, leader_guard, mask_type, &saved_exec));
+
+  for (uint32_t i = 0; i < plan->register_count; ++i) {
+    const uint32_t register_byte_offset = i * wave_count * 4u;
+    loom_value_id_t address = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_emit_workgroup_reduce_static_scratch_address(
+            context, source_op, scratch_base, register_byte_offset, lane_type,
+            &address));
+    loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_scratch_read(
+        context, source_op, plan, address, lane_type, &accumulator));
+    for (uint32_t wave_ordinal = 1; wave_ordinal < wave_count; ++wave_ordinal) {
+      const uint32_t scratch_byte_offset =
+          register_byte_offset + wave_ordinal * 4u;
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_emit_workgroup_reduce_static_scratch_address(
+              context, source_op, scratch_base, scratch_byte_offset, lane_type,
+              &address));
+      loom_value_id_t partial = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_scratch_read(
+          context, source_op, plan, address, lane_type, &partial));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_combine(
+          context, source_op, &plan->combine_descriptor, accumulator, partial,
+          lane_type, &accumulator));
+    }
+    inout_registers[i] = accumulator;
+  }
+
+  return loom_amdgpu_emit_workgroup_reduce_restore_exec(context, source_op,
+                                                        plan, saved_exec);
+}
+
+static iree_status_t
+loom_amdgpu_emit_workgroup_reduce_serial_scratch_publication(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_workgroup_reduce_plan_t* plan,
+    loom_value_id_t scratch_base, loom_value_id_t linear_id,
+    uint32_t wave_count, loom_type_t lane_type, loom_type_t mask_type,
+    loom_value_id_t* inout_registers) {
+  loom_value_id_t leader_guard = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_linear_leader_guard(
+      context, source_op, plan, linear_id, lane_type, mask_type,
+      &leader_guard));
+  loom_value_id_t saved_exec = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_saveexec(
+      context, source_op, plan, leader_guard, mask_type, &saved_exec));
+  for (uint32_t i = 0; i < plan->register_count; ++i) {
+    const uint32_t register_byte_offset = i * wave_count * 4u;
+    loom_value_id_t address = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_emit_workgroup_reduce_static_scratch_address(
+            context, source_op, scratch_base, register_byte_offset, lane_type,
+            &address));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_scratch_write(
+        context, source_op, plan, address, inout_registers[i]));
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_restore_exec(
+      context, source_op, plan, saved_exec));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_emit_workgroup_reduce_barrier(context, source_op, plan));
+
+  for (uint32_t i = 0; i < plan->register_count; ++i) {
+    const uint32_t register_byte_offset = i * wave_count * 4u;
+    loom_value_id_t address = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_emit_workgroup_reduce_static_scratch_address(
+            context, source_op, scratch_base, register_byte_offset, lane_type,
+            &address));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_scratch_read(
+        context, source_op, plan, address, lane_type, &inout_registers[i]));
+  }
+
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_workgroup_reduce_plan_t* plan) {
@@ -1853,6 +1956,27 @@ iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
 
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_emit_workgroup_reduce_barrier(context, source_op, plan));
+
+    // RDNA wave64 workgroups execute as native 32-lane partitions. Fold the
+    // partition partials through LDS under linear workitem 0 instead of forming
+    // a synthetic cross-lane subgroup from partition leaders.
+    if (plan->wavefront_size > partition_wavefront_size) {
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_emit_workgroup_reduce_serial_scratch_fold(
+              context, source_op, plan, scratch_base, linear_id, wave_count,
+              lane_type, mask_type, result_registers));
+      if (plan->publication_kind ==
+          LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LEADER_WORKITEM) {
+        return loom_amdgpu_collective_bind_payload_result(
+            context, source_op, plan->result, register_count, result_registers);
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_emit_workgroup_reduce_serial_scratch_publication(
+              context, source_op, plan, scratch_base, linear_id, wave_count,
+              lane_type, mask_type, result_registers));
+      return loom_amdgpu_collective_bind_payload_result(
+          context, source_op, plan->result, register_count, result_registers);
+    }
 
     if (plan->publication_kind ==
             LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP ||
