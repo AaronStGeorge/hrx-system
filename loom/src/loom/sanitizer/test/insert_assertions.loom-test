@@ -284,6 +284,44 @@ func.def @access_only_instruments_strided_fragment_memory(%buffer: buffer, %row:
 // ====
 
 // RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_non_contiguous_fragment_memory(%buffer: buffer, %row: index, %column: index, %value: vector<8xf32>) {
+  %two = index.constant 2 : index
+  %sixty_four = index.constant 64 : index
+  %layout = encoding.layout.strided [2, %sixty_four] : encoding<layout>
+  %base = index.constant 0 : offset
+  %global = buffer.assume.memory_space<global> %buffer : buffer
+  %output = buffer.view %global[%base] : buffer -> view<64x64xf32, %layout>
+  vector.fragment.store<result> %value, %output[%row, %column] shape [%two, %two] : vector<8xf32>, view<64x64xf32, %layout>
+  func.return
+}
+
+// ----
+func.def @access_only_instruments_non_contiguous_fragment_memory(%buffer: buffer, %row: index, %column: index, %value: vector<8xf32>) {
+  %two = index.constant 2 : index
+  %sixty_four = index.constant 64 : index
+  %layout = encoding.layout.strided [2, %sixty_four] : encoding<layout>
+  %base = index.constant 0 : offset
+  %global = buffer.assume.memory_space<global> %buffer : buffer
+  %output = buffer.view %global[%base] : buffer -> view<64x64xf32, %layout>
+  sanitizer.assert.access<write> %output[%row, %column] : view<64x64xf32, %layout>
+  %10 = index.constant 1 : index
+  %11 = index.add %column, %10 : index
+  sanitizer.assert.access<write> %output[%row, %11] : view<64x64xf32, %layout>
+  %12 = index.constant 1 : index
+  %13 = index.add %row, %12 : index
+  sanitizer.assert.access<write> %output[%13, %column] : view<64x64xf32, %layout>
+  %14 = index.constant 1 : index
+  %15 = index.add %row, %14 : index
+  %16 = index.constant 1 : index
+  %17 = index.add %column, %16 : index
+  sanitizer.assert.access<write> %output[%15, %17] : view<64x64xf32, %layout>
+  vector.fragment.store<result> %value, %output[%row, %column] shape [%two, %two] : vector<8xf32>, view<64x64xf32, %layout>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
 func.def @access_only_skips_workgroup_vector_memory() {
   %zero_offset = index.constant 0 : offset
   %zero_index = index.constant 0 : index
