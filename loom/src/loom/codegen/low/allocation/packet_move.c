@@ -300,8 +300,11 @@ static iree_status_t loom_low_allocation_packet_move_starts_cycle(
     }
     next_destination = next_source;
   }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "packet-local move cycle is malformed");
+  // The walk entered a different cycle in the destination-to-source graph.
+  // Any cycle in the storage class requires a temporary; the move sequencer
+  // will select the concrete active cycle when it emits the move set.
+  *out_has_cycle = true;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_packet_move_class_has_cycle(

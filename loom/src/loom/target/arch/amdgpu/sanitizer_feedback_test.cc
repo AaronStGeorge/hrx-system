@@ -976,7 +976,7 @@ iree_status_t InsertBlockAfter(loom_module_t* module, loom_block_t* block,
 iree_status_t BuildAsanReportPublishAndReturn(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t feedback_config_symbol,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location) {
   loom_block_t* entry_block = builder->ip.block;
@@ -1057,7 +1057,7 @@ iree_status_t BuildAsanReportPublishAndReturn(
 iree_status_t BuildTsanReportPublishAndReturn(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t feedback_config_symbol,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_race_report_t* report,
     loom_location_id_t location) {
   loom_block_t* entry_block = builder->ip.block;
@@ -1160,7 +1160,7 @@ iree_status_t AppendAsanReportProducer(
       module, IREE_SV(IREE_HAL_AMDGPU_FEEDBACK_CONFIG_GLOBAL_NAME),
       &feedback_config_symbol));
 
-  loom_amdgpu_sanitizer_report_source_t source = {};
+  loom_amdgpu_feedback_packet_source_t source = {};
   IREE_RETURN_IF_ERROR(BuildRegisterU64Constant(
       &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
       /*value=*/0, location, &source.dispatch_ptr));
@@ -1234,7 +1234,7 @@ iree_status_t AppendTsanReportProducer(
       descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
       /*unit_count=*/1, &vgpr_type));
 
-  loom_amdgpu_sanitizer_report_source_t source = {};
+  loom_amdgpu_feedback_packet_source_t source = {};
   IREE_RETURN_IF_ERROR(BuildLiveIn(
       &builder, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE),
       sgpr_x2_type, location, &source.dispatch_ptr));

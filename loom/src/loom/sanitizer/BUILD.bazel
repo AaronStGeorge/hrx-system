@@ -14,18 +14,9 @@ package(
 
 loom_cc_library(
     name = "options",
+    srcs = ["options.c"],
     hdrs = ["options.h"],
     deps = [
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "options_cli",
-    srcs = ["options_cli.c"],
-    hdrs = ["options_cli.h"],
-    deps = [
-        ":options",
         "//runtime/src/iree/base",
     ],
 )
@@ -35,8 +26,8 @@ loom_cc_library(
     srcs = ["pipeline_passes.c"],
     hdrs = ["pipeline_passes.h"],
     deps = [
+        ":memory",
         ":options",
-        ":options_cli",
         ":site_location",
         ":site_payload",
         "//loom/src/loom/error:error_defs",
@@ -61,8 +52,8 @@ loom_cc_library(
     srcs = ["race_insertion.c"],
     hdrs = ["race_insertion.h"],
     deps = [
+        ":memory",
         ":options",
-        ":options_cli",
         ":site_location",
         ":site_payload",
         "//loom/src/loom/error:error_defs",
@@ -80,6 +71,18 @@ loom_cc_library(
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "memory",
+    srcs = ["memory.c"],
+    hdrs = ["memory.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/util:fact_table",
     ],
 )
 
@@ -164,10 +167,10 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "options_cli_test",
-    srcs = ["options_cli_test.cc"],
+    name = "options_test",
+    srcs = ["options_test.cc"],
     deps = [
-        ":options_cli",
+        ":options",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

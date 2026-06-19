@@ -21,7 +21,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
-#include "loom/target/arch/amdgpu/lower/sanitizer_feedback.h"
+#include "loom/target/arch/amdgpu/lower/feedback.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -101,7 +101,7 @@ typedef struct loom_amdgpu_sanitizer_access_report_island_t {
   // Report flags handled by this island.
   loom_amdgpu_sanitizer_report_flags_t flags;
   // Block arguments carrying source coordinates in |entry_block|.
-  loom_amdgpu_sanitizer_report_source_t source_args;
+  loom_amdgpu_feedback_packet_source_t source_args;
   // Block arguments carrying access report values in |entry_block|.
   loom_amdgpu_sanitizer_access_report_t report_args;
 } loom_amdgpu_sanitizer_access_report_island_t;
@@ -138,7 +138,7 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_payload(
 iree_status_t loom_amdgpu_build_sanitizer_access_report_terminate(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t feedback_config_symbol,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location);
 
@@ -165,7 +165,7 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_island(
 iree_status_t loom_amdgpu_build_sanitizer_access_report_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_access_report_island_t* island,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location);
 
@@ -182,7 +182,7 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_access_report_island_t* island,
     loom_value_id_t failure_scc,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location,
     loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
@@ -201,7 +201,7 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_access_report_island_t* island,
     loom_value_id_t failure_mask,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location,
     loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
@@ -221,35 +221,16 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
     loom_value_id_t failure_mask, loom_location_id_t location,
     loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
 
-// Splits the current hot block on an EXEC-width failure mask and reports
-// failed lanes without trapping.
-//
-// |failure_mask| must be an SGPRx2 native lane mask where set bits identify
-// lanes that failed the assertion. The hot block only compares the mask
-// against zero and conditionally branches. The per-site cold block narrows EXEC
-// to the failed lanes, emits one structured ASAN feedback report when feedback
-// is enabled and reservation succeeds, restores EXEC, and rejoins the
-// continuation block whether reporting was emitted or dropped. Leaves the
-// builder positioned at the continuation block.
-iree_status_t
-loom_amdgpu_build_sanitizer_access_report_only_failure_mask_branch(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_symbol_ref_t feedback_config_symbol, loom_value_id_t failure_mask,
-    const loom_amdgpu_sanitizer_report_source_t* source,
-    const loom_amdgpu_sanitizer_access_report_t* report,
-    loom_location_id_t location,
-    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
-
 // Splits the current hot block on an EXEC-width failure mask and traps failed
 // lanes directly.
 //
-// This is the fatal/debug sanitizer reporting mode. |failure_mask| must be an
+// This is the fatal trap sanitizer reporting mode. |failure_mask| must be an
 // SGPRx2 native lane mask where set bits identify lanes that failed the
 // assertion. The hot block only compares the mask against zero and
 // conditionally branches. The per-site cold block narrows EXEC to the failed
-// lanes, emits S_TRAP, restores EXEC, and rejoins the continuation block
-// without structured feedback. Leaves the builder positioned at the
-// continuation block.
+// lanes, emits the target fatal-trap notification sequence, and branches to a
+// no-return halt loop without structured feedback. Leaves the builder
+// positioned at the continuation block for subsequent non-failing code.
 iree_status_t loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t failure_mask, loom_location_id_t location,

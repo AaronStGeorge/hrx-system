@@ -857,6 +857,10 @@ def test_feedback_control_descriptors_cover_execution_families() -> None:
                 _assert_s_sendmsg_low_asm_form(descriptor)
 
         assert descriptors["amdgpu.s_sendmsg_rtn_b32"].immediate_fields == ("SSRC0",)
+        message_immediate = descriptors["amdgpu.s_sendmsg_rtn_b32"].immediates[0]
+        assert message_immediate.field_name == "message"
+        assert message_immediate.bit_width == 8
+        assert message_immediate.unsigned_max >= 128
 
 
 def test_symbol_relative_salu_descriptors_have_lossless_low_asm_forms() -> None:

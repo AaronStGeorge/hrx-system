@@ -13,6 +13,8 @@
 namespace loom {
 namespace {
 
+static const loom_sanitizer_options_t kNoSanitizer = {};
+
 static iree_string_view_t SnapshotJson(
     iree_benchmark_loom_snapshot_sink_t* snapshot,
     iree_string_builder_t* storage) {
@@ -105,10 +107,13 @@ TEST(BenchmarkSnapshotSinkTest, AggregatesDeduplicatedWorkItems) {
   result.timing.mean_ns = 30.0;
   result.timing.p50_ns = 30;
   result.timing.p90_ns = 40;
+  loom_sanitizer_options_t sanitizer = {};
+  sanitizer.checks = LOOM_SANITIZER_CHECK_RACE;
+  sanitizer.reporting_mode = LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY;
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &event_sink, &run, /*dry_run=*/false,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, &sanitizer));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
       &event_sink, &run, &candidate0, /*work_item_index=*/7, &module,
       &benchmark_plan, &case_plan, &policy, &result,
@@ -135,6 +140,12 @@ TEST(BenchmarkSnapshotSinkTest, AggregatesDeduplicatedWorkItems) {
   iree_string_view_t output_format =
       LookupObject(root, IREE_SV("output_format"));
   EXPECT_TRUE(iree_string_view_equal(output_format, IREE_SV("snapshot")));
+  iree_string_view_t sanitizer_json = LookupObject(root, IREE_SV("sanitizer"));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(sanitizer_json, IREE_SV("checks")), IREE_SV("race")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(sanitizer_json, IREE_SV("reporting_mode")),
+      IREE_SV("report-only")));
 
   iree_string_view_t work_items = LookupObject(root, IREE_SV("work_items"));
   iree_host_size_t work_item_count = 0;
@@ -210,7 +221,7 @@ TEST(BenchmarkSnapshotSinkTest, IncludesRequestedProfileSummary) {
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &event_sink, &run, /*dry_run=*/false,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, &kNoSanitizer));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
       &event_sink, &run, &candidate, /*work_item_index=*/0, &module,
       &benchmark_plan, &case_plan, &policy, &result,
@@ -287,7 +298,7 @@ TEST(BenchmarkSnapshotSinkTest, IncludesHalTimingCountsAndWarnings) {
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &event_sink, &run, /*dry_run=*/false,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, &kNoSanitizer));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
       &event_sink, &run, &candidate, /*work_item_index=*/0, &module,
       &benchmark_plan, &case_plan, &policy, &result,
@@ -407,7 +418,7 @@ TEST(BenchmarkSnapshotSinkTest, IncludesRequestedCompileReport) {
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &event_sink, &run, /*dry_run=*/false,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, &kNoSanitizer));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
       &event_sink, &run, &candidate, /*work_item_index=*/0, &module,
       &benchmark_plan, &case_plan, &policy, &result,
@@ -469,7 +480,7 @@ TEST(BenchmarkSnapshotSinkTest, IncludesFailurePayloadsOnFailure) {
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &event_sink, &run, /*dry_run=*/false,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, &kNoSanitizer));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_failure(
       &event_sink, &run, IREE_SV("parse"), IREE_SV("diagnostics"),
       IREE_SV("input module has parse errors"), /*diagnostics=*/NULL));
@@ -578,7 +589,7 @@ TEST(BenchmarkSnapshotSinkTest, DryRunReportsPlannedWorkAliases) {
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &event_sink, &run, /*dry_run=*/true,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, &kNoSanitizer));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_work_plan(
       &event_sink, &run, &module, &work_plan));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(

@@ -15,6 +15,7 @@
             "--sample=1",
             "--max-samples-per-case=16",
             "--sanitizer=tsan",
+            "--sanitizer-reporting=report-only",
             "loom.test.v0",
             "failed_sample_count",
             "{case, provider, op, code, provider_code}",
@@ -31,6 +32,7 @@
           "{srcdir}/testdata/scalar_cases.loom",
           "--case=@sampled_choice",
           "--sanitizer=tsan",
+          "--sanitizer-reporting=report-only",
           "--sample=1"
         ]
       },
@@ -94,6 +96,25 @@
       },
       "stderr": {
         "contains": ["--sanitizer has unknown token 'bogus'"]
+      }
+    },
+    {
+      "name": "rejects unknown sanitizer reporting mode",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/testdata/scalar_cases.loom",
+          "--sanitizer=asan",
+          "--sanitizer-reporting=printf"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": [
+          "--sanitizer-reporting expected 'default', 'trap', or 'report-only', got 'printf'"
+        ]
       }
     }
   ]

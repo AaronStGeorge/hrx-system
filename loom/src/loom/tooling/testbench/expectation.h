@@ -16,6 +16,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/tooling/testbench/device_event.h"
 #include "loom/tooling/testbench/value_materializer.h"
 #include "loom/util/stream.h"
 
@@ -77,6 +78,18 @@ typedef struct loom_testbench_expectation_options_t {
   // Named custom validators visible to check.expect<provider>.
   loom_testbench_expectation_provider_list_t providers;
 } loom_testbench_expectation_options_t;
+
+typedef struct loom_testbench_case_sample_observations_t {
+  // Device events captured while executing the sample's actual invocations.
+  const loom_testbench_device_event_list_t* device_events;
+} loom_testbench_case_sample_observations_t;
+
+// Returns empty sample observations.
+static inline loom_testbench_case_sample_observations_t
+loom_testbench_case_sample_observations_empty(void) {
+  loom_testbench_case_sample_observations_t observations = {0};
+  return observations;
+}
 
 // Returns the stable lowercase name for |kind|.
 const char* loom_testbench_expectation_kind_name(
@@ -161,11 +174,14 @@ iree_string_view_t loom_testbench_expectation_failure_detail(
     const loom_testbench_expectation_failure_t* failure);
 
 // Evaluates all prepared expectations against |table| and records failures in
-// |report|. A non-OK status means the evaluator or custom provider could not
-// run; ordinary expectation mismatches are recorded in |report|.
+// |report|. |observations| supplies side-channel sample observations for event
+// expectations and may be NULL when the schedule has none. A non-OK status
+// means the evaluator or custom provider could not run; ordinary expectation
+// mismatches are recorded in |report|.
 iree_status_t loom_testbench_evaluate_case_expectations(
     const loom_testbench_expectation_schedule_t* schedule,
     const loom_testbench_value_table_t* table,
+    const loom_testbench_case_sample_observations_t* observations,
     loom_testbench_expectation_report_t* report);
 
 // Writes a deterministic JSON object for |report|. The schema is stable

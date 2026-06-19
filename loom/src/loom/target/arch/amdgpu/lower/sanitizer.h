@@ -18,6 +18,7 @@
 #include "loom/sanitizer/site_collection.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_report.h"
+#include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,6 +53,12 @@ iree_status_t loom_amdgpu_sanitizer_site_id_for_op(
 iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_sanitizer_access_plan_t* out_plan, bool* out_selected);
+
+// Verifies sanitizer.assert.access legality for AMDGPU target-low selection.
+iree_status_t loom_amdgpu_low_legality_verify_sanitizer_assert_access(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
 
 // Lowers sanitizer.assert.access to a hot shadow check and cold report CFG.
 iree_status_t loom_amdgpu_lower_sanitizer_assert_access(

@@ -147,6 +147,81 @@ func.def @access_only_instruments_scalar_view_memory(%layout: encoding<layout>, 
 // ====
 
 // RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_uses_memory_space_facts(%input: buffer, %output: buffer) {
+  %zero_offset = index.constant 0 : offset
+  %zero_index = index.constant 0 : index
+  %global_input = buffer.assume.memory_space<global> %input : buffer
+  %global_output = buffer.assume.memory_space<global> %output : buffer
+  %generic_input = buffer.assume.memory_space<generic> %input : buffer
+  %host_output = buffer.assume.memory_space<host> %output : buffer
+  %input_view = buffer.view %global_input[%zero_offset] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %global_output[%zero_offset] : buffer -> view<1xi32, #dense>
+  %generic_view = buffer.view %generic_input[%zero_offset] : buffer -> view<1xi32, #dense>
+  %host_view = buffer.view %host_output[%zero_offset] : buffer -> view<1xi32, #dense>
+  %global_value = view.load %input_view[%zero_index] : view<1xi32, #dense> -> i32
+  view.store %global_value, %output_view[%zero_index] : i32, view<1xi32, #dense>
+  %generic_value = view.load %generic_view[%zero_index] : view<1xi32, #dense> -> i32
+  view.store %generic_value, %host_view[%zero_index] : i32, view<1xi32, #dense>
+  %bytes = index.constant 4 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero_offset] : buffer -> view<1xi32, #dense>
+  %scratch_value = view.load %scratch_view[%zero_index] : view<1xi32, #dense> -> i32
+  %private = buffer.alloca %bytes {base_alignment = 4, memory_space = private} : buffer
+  %private_view = buffer.view %private[%zero_offset] : buffer -> view<1xi32, #dense>
+  view.store %scratch_value, %private_view[%zero_index] : i32, view<1xi32, #dense>
+  func.return
+}
+
+// ----
+func.def @access_only_uses_memory_space_facts(%input: buffer, %output: buffer) {
+  %zero_offset = index.constant 0 : offset
+  %zero_index = index.constant 0 : index
+  %global_input = buffer.assume.memory_space<global> %input : buffer
+  %global_output = buffer.assume.memory_space<global> %output : buffer
+  %generic_input = buffer.assume.memory_space<generic> %input : buffer
+  %host_output = buffer.assume.memory_space<host> %output : buffer
+  %input_view = buffer.view %global_input[%zero_offset] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %global_output[%zero_offset] : buffer -> view<1xi32, #dense>
+  %generic_view = buffer.view %generic_input[%zero_offset] : buffer -> view<1xi32, #dense>
+  %host_view = buffer.view %host_output[%zero_offset] : buffer -> view<1xi32, #dense>
+  sanitizer.assert.access<read> %input_view[%zero_index] : view<1xi32, #dense>
+  %global_value = view.load %input_view[%zero_index] : view<1xi32, #dense> -> i32
+  sanitizer.assert.access<write> %output_view[%zero_index] : view<1xi32, #dense>
+  view.store %global_value, %output_view[%zero_index] : i32, view<1xi32, #dense>
+  sanitizer.assert.access<read> %generic_view[%zero_index] : view<1xi32, #dense>
+  %generic_value = view.load %generic_view[%zero_index] : view<1xi32, #dense> -> i32
+  view.store %generic_value, %host_view[%zero_index] : i32, view<1xi32, #dense>
+  %bytes = index.constant 4 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero_offset] : buffer -> view<1xi32, #dense>
+  %scratch_value = view.load %scratch_view[%zero_index] : view<1xi32, #dense> -> i32
+  %private = buffer.alloca %bytes {base_alignment = 4, memory_space = private} : buffer
+  %private_view = buffer.view %private[%zero_offset] : buffer -> view<1xi32, #dense>
+  view.store %scratch_value, %private_view[%zero_index] : i32, view<1xi32, #dense>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_static_scalar_view_memory(%input: view<2xi32, #dense>, %output: view<2xi32, #dense>) {
+  %value = view.load %input[1] : view<2xi32, #dense> -> i32
+  view.store %value, %output[1] : i32, view<2xi32, #dense>
+  func.return
+}
+
+// ----
+func.def @access_only_instruments_static_scalar_view_memory(%input: view<2xi32, #dense>, %output: view<2xi32, #dense>) {
+  sanitizer.assert.access<read> %input[1] : view<2xi32, #dense>
+  %value = view.load %input[1] : view<2xi32, #dense> -> i32
+  sanitizer.assert.access<write> %output[1] : view<2xi32, #dense>
+  view.store %value, %output[1] : i32, view<2xi32, #dense>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
 func.def @access_only_instruments_rank1_vector_memory(%layout: encoding<layout>, %input: view<64x4xi32, %layout>, %output: view<64x4xi32, %layout>, %row: index) {
   %value = vector.load %input[%row, 0] : view<64x4xi32, %layout> -> vector<4xi32>
   vector.store %value, %output[%row, 0] : vector<4xi32>, view<64x4xi32, %layout>
@@ -165,6 +240,32 @@ func.def @access_only_instruments_rank1_vector_memory(%layout: encoding<layout>,
 // ====
 
 // RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_skips_workgroup_vector_memory() {
+  %zero_offset = index.constant 0 : offset
+  %zero_index = index.constant 0 : index
+  %bytes = index.constant 64 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %view = buffer.view %scratch[%zero_offset] : buffer -> view<4x4xi32, #dense>
+  %value = vector.load %view[%zero_index, 0] : view<4x4xi32, #dense> -> vector<4xi32>
+  vector.store %value, %view[%zero_index, 0] : vector<4xi32>, view<4x4xi32, #dense>
+  func.return
+}
+
+// ----
+func.def @access_only_skips_workgroup_vector_memory() {
+  %zero_offset = index.constant 0 : offset
+  %zero_index = index.constant 0 : index
+  %bytes = index.constant 64 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %view = buffer.view %scratch[%zero_offset] : buffer -> view<4x4xi32, #dense>
+  %value = vector.load %view[%zero_index, 0] : view<4x4xi32, #dense> -> vector<4xi32>
+  vector.store %value, %view[%zero_index, 0] : vector<4xi32>, view<4x4xi32, #dense>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
 func.def @access_only_keeps_existing_vector_assertions(%layout: encoding<layout>, %input: view<16xi32, %layout>, %i: index) -> (vector<2xi32>) {
   sanitizer.assert.access<read> %input[%i] {static_extents = [2]} : view<16xi32, %layout>
   %value = vector.load %input[%i] : view<16xi32, %layout> -> vector<2xi32>
@@ -176,6 +277,36 @@ func.def @access_only_keeps_existing_vector_assertions(%layout: encoding<layout>
   sanitizer.assert.access<read> %input[%i] {static_extents = [2]} : view<16xi32, %layout>
   %value = vector.load %input[%i] : view<16xi32, %layout> -> vector<2xi32>
   func.return %value : vector<2xi32>
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_skips_workgroup_vector_atomic_memory() {
+  %zero_offset = index.constant 0 : offset
+  %origin = index.constant 0 : index
+  %bytes = index.constant 64 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %view = buffer.view %scratch[%zero_offset] : buffer -> view<16xi32, #dense>
+  %offsets = vector.splat %origin : vector<2xindex>
+  %one = scalar.constant 1 : i32
+  %value = vector.splat %one : vector<2xi32>
+  vector.atomic.reduce<addi> %value, %view[%origin][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<16xi32, #dense>, vector<2xindex>
+  func.return
+}
+
+// ----
+func.def @access_only_skips_workgroup_vector_atomic_memory() {
+  %zero_offset = index.constant 0 : offset
+  %origin = index.constant 0 : index
+  %bytes = index.constant 64 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %view = buffer.view %scratch[%zero_offset] : buffer -> view<16xi32, #dense>
+  %offsets = vector.splat %origin : vector<2xindex>
+  %one = scalar.constant 1 : i32
+  %value = vector.splat %one : vector<2xi32>
+  vector.atomic.reduce<addi> %value, %view[%origin][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<16xi32, #dense>, vector<2xindex>
+  func.return
 }
 
 // ====

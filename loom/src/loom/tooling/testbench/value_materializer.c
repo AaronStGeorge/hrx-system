@@ -128,8 +128,10 @@ static iree_status_t loom_testbench_case_plan_walk_values(
        expectation_index < case_plan->expectation_count; ++expectation_index) {
     const loom_testbench_expectation_plan_t* expectation =
         &case_plan->expectations[expectation_index];
-    IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
-        callback, expectation->actual_value_id));
+    if (expectation->actual_value_id != LOOM_VALUE_ID_INVALID) {
+      IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+          callback, expectation->actual_value_id));
+    }
     if (expectation->expected_value_id != LOOM_VALUE_ID_INVALID) {
       IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
           callback, expectation->expected_value_id));

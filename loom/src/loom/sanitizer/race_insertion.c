@@ -20,11 +20,10 @@
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/sanitizer/memory.h"
 #include "loom/sanitizer/options.h"
-#include "loom/sanitizer/options_cli.h"
 #include "loom/sanitizer/site_location.h"
 #include "loom/sanitizer/site_payload.h"
-#include "loom/util/fact_table.h"
 
 typedef struct loom_sanitizer_insert_race_observations_state_t {
   // Check classes enabled for this pass invocation.
@@ -189,21 +188,6 @@ static bool loom_sanitizer_followed_by_matching_race_sync(
          loom_sanitizer_race_sync_memory_space(next_op) == memory_space &&
          loom_sanitizer_race_sync_ordering(next_op) == ordering &&
          loom_sanitizer_race_sync_scope(next_op) == scope;
-}
-
-static bool loom_sanitizer_view_memory_space(
-    const loom_rewriter_t* rewriter, loom_value_id_t view,
-    loom_value_fact_memory_space_t* out_memory_space) {
-  *out_memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
-  if (!rewriter->fact_table) return false;
-  loom_value_fact_view_reference_t reference = {0};
-  if (!loom_value_facts_query_view_reference(
-          &rewriter->fact_table->context,
-          loom_rewriter_value_facts(rewriter, view), &reference)) {
-    return false;
-  }
-  *out_memory_space = reference.memory_space;
-  return true;
 }
 
 static iree_status_t loom_sanitizer_emit_unsupported_race_memory_observation(
@@ -391,7 +375,7 @@ static iree_status_t loom_sanitizer_try_instrument_vector_race_access_op(
 
   loom_value_fact_memory_space_t memory_space =
       LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
-  if (!loom_sanitizer_view_memory_space(rewriter, view, &memory_space) ||
+  if (!loom_sanitizer_query_view_memory_space(rewriter, view, &memory_space) ||
       memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     return iree_ok_status();
   }
@@ -496,7 +480,7 @@ static iree_status_t loom_sanitizer_reject_unsupported_vector_race_access_op(
 
   loom_value_fact_memory_space_t memory_space =
       LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
-  if (!loom_sanitizer_view_memory_space(rewriter, view, &memory_space) ||
+  if (!loom_sanitizer_query_view_memory_space(rewriter, view, &memory_space) ||
       memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     return iree_ok_status();
   }
@@ -564,7 +548,7 @@ static iree_status_t loom_sanitizer_try_instrument_race_access_op(
 
   loom_value_fact_memory_space_t memory_space =
       LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
-  if (!loom_sanitizer_view_memory_space(rewriter, view, &memory_space) ||
+  if (!loom_sanitizer_query_view_memory_space(rewriter, view, &memory_space) ||
       memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     return iree_ok_status();
   }

@@ -62,6 +62,8 @@ typedef struct iree_benchmark_loom_run_event_t {
   bool dry_run;
   // Requested dispatch sample-compilation mode for this run.
   iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode;
+  // Sanitizer checks and reporting mode used for compiler-backed work.
+  loom_sanitizer_options_t sanitizer;
 } iree_benchmark_loom_run_event_t;
 
 typedef struct iree_benchmark_loom_plan_event_t {
@@ -306,7 +308,8 @@ iree_status_t iree_benchmark_loom_event_sink_emit(
 iree_status_t iree_benchmark_loom_event_sink_emit_run(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run, bool dry_run,
-    iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode);
+    iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode,
+    const loom_sanitizer_options_t* sanitizer);
 
 // Emits one selected benchmark plan event.
 iree_status_t iree_benchmark_loom_event_sink_emit_plan(

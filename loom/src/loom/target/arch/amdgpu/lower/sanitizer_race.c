@@ -2053,9 +2053,9 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_report(
     loom_value_id_t current_workitem_linear_id,
     const loom_amdgpu_sanitizer_race_shadow_entry_t* observed_entry,
     loom_value_id_t prior_access_kind,
-    loom_amdgpu_sanitizer_report_source_t* out_source,
+    loom_amdgpu_feedback_packet_source_t* out_source,
     loom_amdgpu_sanitizer_race_report_t* out_report) {
-  *out_source = (loom_amdgpu_sanitizer_report_source_t){0};
+  *out_source = (loom_amdgpu_feedback_packet_source_t){0};
   *out_report = (loom_amdgpu_sanitizer_race_report_t){0};
 
   loom_value_id_t workgroup_id_x = LOOM_VALUE_ID_INVALID;
@@ -2208,14 +2208,15 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_access(
           builder, descriptor_set, failure_mask, source_op->location, &branch));
       break;
     }
-    case LOOM_SANITIZER_REPORTING_MODE_DEFAULT: {
+    case LOOM_SANITIZER_REPORTING_MODE_DEFAULT:
+    case LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY: {
       loom_amdgpu_sanitizer_race_report_failure_branch_t branch = {0};
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_build_sanitizer_race_report_failure_mask_split(
               builder, descriptor_set, failure_mask, source_op->location,
               &branch));
 
-      loom_amdgpu_sanitizer_report_source_t source = {0};
+      loom_amdgpu_feedback_packet_source_t source = {0};
       loom_amdgpu_sanitizer_race_report_t report = {0};
       loom_value_id_t report_workitem_linear_id = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_b32_copy(

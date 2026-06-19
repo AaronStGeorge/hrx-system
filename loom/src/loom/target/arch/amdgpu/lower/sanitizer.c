@@ -19,6 +19,7 @@
 #include "loom/target/arch/amdgpu/abi/tsan.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
+#include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_access.h"
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
@@ -87,6 +88,16 @@ typedef struct loom_amdgpu_sanitizer_lower_state_t {
   // Shared cold island for atomic access failures.
   loom_amdgpu_sanitizer_access_report_island_t atomic_island;
 } loom_amdgpu_sanitizer_lower_state_t;
+
+typedef struct loom_amdgpu_sanitizer_access_diagnostic_t {
+  // Sanitizer-specific rejection key when the failure is not owned by memory
+  // planning.
+  iree_string_view_t sanitizer_constraint_key;
+  // Target-independent source memory planning rejection bits.
+  loom_low_source_memory_access_diagnostic_t source;
+  // AMDGPU flat-address selection rejection bits.
+  loom_amdgpu_memory_access_diagnostic_t memory;
+} loom_amdgpu_sanitizer_access_diagnostic_t;
 
 static int loom_amdgpu_sanitizer_lower_state_key;
 static int loom_amdgpu_sanitizer_module_state_key;
@@ -479,6 +490,98 @@ static bool loom_amdgpu_sanitizer_access_payload_type(
   return true;
 }
 
+static bool loom_amdgpu_sanitizer_assert_access_plan_build(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* op,
+    loom_amdgpu_sanitizer_access_plan_t* out_plan,
+    loom_amdgpu_sanitizer_access_diagnostic_t* out_diagnostic) {
+  *out_plan = (loom_amdgpu_sanitizer_access_plan_t){
+      .site_id = LOOM_SANITIZER_SITE_ID_INVALID,
+  };
+  *out_diagnostic = (loom_amdgpu_sanitizer_access_diagnostic_t){0};
+
+  loom_low_source_memory_operation_kind_t source_kind =
+      LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD;
+  loom_amdgpu_memory_operation_kind_t memory_kind =
+      LOOM_AMDGPU_MEMORY_OPERATION_LOAD;
+  loom_amdgpu_sanitizer_access_kind_t report_kind =
+      LOOM_AMDGPU_SANITIZER_ACCESS_KIND_UNKNOWN;
+  if (!loom_amdgpu_sanitizer_assert_access_kinds(
+          loom_sanitizer_assert_access_kind(op), &source_kind, &memory_kind,
+          &report_kind)) {
+    out_diagnostic->sanitizer_constraint_key =
+        IREE_SV("target_contract.sanitizer_access.access_kind");
+    return false;
+  }
+
+  loom_type_t vector_type = loom_type_none();
+  const loom_value_id_t view_value_id = loom_sanitizer_assert_access_view(op);
+  if (!loom_amdgpu_sanitizer_access_payload_type(
+          module, view_value_id,
+          loom_sanitizer_assert_access_static_extents(op), &vector_type)) {
+    out_diagnostic->sanitizer_constraint_key =
+        IREE_SV("target_contract.sanitizer_access.payload_type");
+    return false;
+  }
+
+  loom_low_source_memory_access_plan_t source = {0};
+  loom_vector_memory_cache_policy_t cache_policy = {0};
+  if (!loom_low_source_memory_access_plan_build_indexed(
+          module, fact_table, source_kind, view_value_id,
+          loom_sanitizer_assert_access_indices(op),
+          loom_sanitizer_assert_access_static_indices(op), vector_type,
+          cache_policy, &source, &out_diagnostic->source)) {
+    return false;
+  }
+  const uint64_t access_size =
+      (uint64_t)source.element_byte_count * source.vector_lane_count;
+  if (access_size == 0 || access_size > UINT32_MAX) {
+    out_diagnostic->sanitizer_constraint_key =
+        IREE_SV("target_contract.sanitizer_access.access_size");
+    return false;
+  }
+
+  if (!loom_amdgpu_memory_access_select_flat_global_address(
+          module, descriptor_set, memory_kind, &source, vector_type,
+          &out_plan->address, &out_diagnostic->memory)) {
+    return false;
+  }
+
+  out_plan->report_access_kind = report_kind;
+  out_plan->access_size = (uint32_t)access_size;
+  return true;
+}
+
+static iree_status_t loom_amdgpu_sanitizer_assert_access_reject(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_amdgpu_sanitizer_access_plan_t* plan,
+    const loom_amdgpu_sanitizer_access_diagnostic_t* diagnostic) {
+  if (!iree_string_view_is_empty(diagnostic->sanitizer_constraint_key)) {
+    return loom_amdgpu_low_legality_reject(
+        context, op, diagnostic->sanitizer_constraint_key);
+  }
+  if (diagnostic->source.rejection_bits != 0) {
+    return loom_amdgpu_low_legality_reject(
+        context, op,
+        loom_low_source_memory_access_rejection_key(
+            diagnostic->source.rejection_bits));
+  }
+  if (diagnostic->memory.rejection_bits != 0) {
+    bool handled = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_access_rejection_diagnostic(
+        context, op, &plan->address.source, &diagnostic->memory, &handled));
+    if (handled) {
+      return iree_ok_status();
+    }
+    return loom_amdgpu_low_legality_reject(
+        context, op,
+        loom_amdgpu_memory_access_rejection_key(
+            diagnostic->memory.rejection_bits));
+  }
+  return loom_amdgpu_low_legality_reject(
+      context, op, IREE_SV("target_contract.sanitizer_access.address"));
+}
+
 iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_sanitizer_access_plan_t* out_plan, bool* out_selected) {
@@ -489,53 +592,14 @@ iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
     return iree_ok_status();
   }
 
-  loom_low_source_memory_operation_kind_t source_kind =
-      LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD;
-  loom_amdgpu_memory_operation_kind_t memory_kind =
-      LOOM_AMDGPU_MEMORY_OPERATION_LOAD;
-  loom_amdgpu_sanitizer_access_kind_t report_kind =
-      LOOM_AMDGPU_SANITIZER_ACCESS_KIND_UNKNOWN;
-  if (!loom_amdgpu_sanitizer_assert_access_kinds(
-          loom_sanitizer_assert_access_kind(source_op), &source_kind,
-          &memory_kind, &report_kind)) {
+  loom_amdgpu_sanitizer_access_diagnostic_t diagnostic = {0};
+  if (!loom_amdgpu_sanitizer_assert_access_plan_build(
+          loom_low_lower_context_module(context),
+          loom_low_lower_context_fact_table(context),
+          loom_low_lower_context_descriptor_set(context), source_op, out_plan,
+          &diagnostic)) {
     return iree_ok_status();
   }
-
-  loom_type_t vector_type = loom_type_none();
-  const loom_value_id_t view_value_id =
-      loom_sanitizer_assert_access_view(source_op);
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  if (!loom_amdgpu_sanitizer_access_payload_type(
-          module, view_value_id,
-          loom_sanitizer_assert_access_static_extents(source_op),
-          &vector_type)) {
-    return iree_ok_status();
-  }
-
-  loom_low_source_memory_access_plan_t source = {0};
-  loom_low_source_memory_access_diagnostic_t source_diagnostic = {0};
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  if (!loom_low_source_memory_access_plan_build_indexed(
-          module, loom_low_lower_context_fact_table(context), source_kind,
-          view_value_id, loom_sanitizer_assert_access_indices(source_op),
-          loom_sanitizer_assert_access_static_indices(source_op), vector_type,
-          cache_policy, &source, &source_diagnostic)) {
-    return iree_ok_status();
-  }
-  const uint64_t access_size =
-      (uint64_t)source.element_byte_count * source.vector_lane_count;
-  if (access_size == 0 || access_size > UINT32_MAX) {
-    return iree_ok_status();
-  }
-
-  loom_amdgpu_memory_access_diagnostic_t diagnostic = {0};
-  if (!loom_amdgpu_memory_access_select_flat_global_address(
-          module, loom_low_lower_context_descriptor_set(context), memory_kind,
-          &source, vector_type, &out_plan->address, &diagnostic)) {
-    return iree_ok_status();
-  }
-  out_plan->report_access_kind = report_kind;
-  out_plan->access_size = (uint32_t)access_size;
   const loom_sanitizer_reporting_mode_t reporting_mode =
       loom_low_lower_context_sanitizer_reporting_mode(context);
   if (reporting_mode == LOOM_SANITIZER_REPORTING_MODE_DEFAULT ||
@@ -544,6 +608,30 @@ iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
         context, source_op, &out_plan->site_id));
   }
   *out_selected = true;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_sanitizer_assert_access(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  (void)provider;
+  *out_handled = false;
+  if (!loom_sanitizer_assert_access_isa(op)) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+
+  loom_amdgpu_sanitizer_access_plan_t plan = {0};
+  loom_amdgpu_sanitizer_access_diagnostic_t diagnostic = {0};
+  if (!loom_amdgpu_sanitizer_assert_access_plan_build(
+          loom_target_low_legality_module(context),
+          loom_target_low_legality_fact_table(context),
+          loom_target_low_legality_descriptor_set(context), op, &plan,
+          &diagnostic)) {
+    return loom_amdgpu_sanitizer_assert_access_reject(context, op, &plan,
+                                                      &diagnostic);
+  }
   return iree_ok_status();
 }
 
@@ -679,7 +767,7 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
         &branch);
   }
 
-  loom_amdgpu_sanitizer_report_source_t source = {0};
+  loom_amdgpu_feedback_packet_source_t source = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(
       context, source_op, 0, &source.dispatch_ptr));
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_emit_sgpr_u32_constant(
@@ -700,12 +788,6 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
       context, source_op, plan->site_id, &report.site_id));
 
   loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
-  if (reporting_mode == LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY) {
-    return loom_amdgpu_build_sanitizer_access_report_only_failure_mask_branch(
-        builder, descriptor_set, state->feedback_config_symbol,
-        check.failure_mask, &source, &report, source_op->location, &branch);
-  }
-
   const loom_amdgpu_sanitizer_access_report_island_t* island = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_access_island(
       builder, descriptor_set, state, plan->report_access_kind,

@@ -13,6 +13,7 @@
 #include "iree/base/internal/path.h"
 #include "iree/hal/api.h"
 #include "iree/tooling/device_util.h"
+#include "loom/sanitizer/options.h"
 #include "loom/tooling/execution/benchmark.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tools/iree-benchmark-loom/device_spec_report.h"
@@ -95,6 +96,25 @@ iree_status_t iree_benchmark_loom_write_sample_compilation_field_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"sample_compilation\":"));
   return loom_json_write_escaped_string(stream, sample_compilation);
+}
+
+iree_status_t iree_benchmark_loom_write_sanitizer_options_json(
+    const loom_sanitizer_options_t* sanitizer, loom_output_stream_t* stream) {
+  IREE_ASSERT_ARGUMENT(sanitizer);
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_validate(sanitizer));
+  iree_string_view_t checks = iree_string_view_empty();
+  iree_string_view_t reporting_mode = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(
+      loom_sanitizer_checks_format(sanitizer->checks, &checks));
+  IREE_RETURN_IF_ERROR(loom_sanitizer_reporting_mode_format(
+      sanitizer->reporting_mode, &reporting_mode));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\"checks\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, checks));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"reporting_mode\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, reporting_mode));
+  return loom_output_stream_write_cstring(stream, "}");
 }
 
 static iree_status_t iree_benchmark_loom_write_work_item_index_field_json(
@@ -310,7 +330,7 @@ iree_status_t iree_benchmark_loom_append_sample_row(
 iree_status_t iree_benchmark_loom_append_run_row(
     const iree_benchmark_loom_run_identity_t* run, bool dry_run,
     iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode,
-    iree_string_builder_t* output) {
+    const loom_sanitizer_options_t* sanitizer, iree_string_builder_t* output) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(output, &stream);
   IREE_RETURN_IF_ERROR(
@@ -354,6 +374,10 @@ iree_status_t iree_benchmark_loom_append_run_row(
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
       &stream, iree_benchmark_loom_sample_compilation_mode_name(
                    sample_compilation_mode)));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"sanitizer\":"));
+  IREE_RETURN_IF_ERROR(
+      iree_benchmark_loom_write_sanitizer_options_json(sanitizer, &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   return iree_ok_status();
 }

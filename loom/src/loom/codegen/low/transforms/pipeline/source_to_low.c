@@ -13,7 +13,7 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/low_legality.h"
 

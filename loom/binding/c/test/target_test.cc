@@ -972,7 +972,7 @@ TEST(TargetTest, AcceptsSanitizerAndTargetSelectionPipelineOptions) {
       /*.structure_size=*/sizeof(sanitizer_first),
       /*.next=*/&target_options,
       /*.checks=*/LOOMC_SANITIZER_CHECKS_ASAN_LIKE |
-          LOOMC_SANITIZER_CHECKS_UBSAN_LIKE,
+          LOOMC_SANITIZER_CHECKS_UBSAN_LIKE | LOOMC_SANITIZER_CHECKS_TSAN_LIKE,
       /*.flags=*/0,
   };
   loomc_target_pipeline_options_t pipeline_options = {
@@ -992,7 +992,7 @@ TEST(TargetTest, AcceptsSanitizerAndTargetSelectionPipelineOptions) {
       /*.type=*/LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
       /*.structure_size=*/sizeof(sanitizer_second),
       /*.next=*/nullptr,
-      /*.checks=*/LOOMC_SANITIZER_CHECK_ACCESS,
+      /*.checks=*/LOOMC_SANITIZER_CHECK_ACCESS | LOOMC_SANITIZER_CHECK_RACE,
       /*.flags=*/0,
   };
   target_options.next = &sanitizer_second;

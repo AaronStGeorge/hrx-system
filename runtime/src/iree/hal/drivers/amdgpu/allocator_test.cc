@@ -9,6 +9,7 @@
 
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/test_base.h"
+#include "iree/hal/drivers/amdgpu/buffer.h"
 #include "iree/hal/drivers/amdgpu/logical_device.h"
 #include "iree/hal/drivers/amdgpu/physical_device.h"
 #include "iree/hal/drivers/amdgpu/util/info.h"
@@ -1006,6 +1007,81 @@ TEST_F(AllocatorTest, AsanDeviceAllocationImportPublishesShadow) {
   EXPECT_TRUE(checked_neighbor);
 
   iree_hal_buffer_release(buffer);
+}
+
+TEST_F(AllocatorTest, AsanHostLocalDeviceVisibleAllocationPublishesShadow) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.quarantine_size = 0;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+
+  iree_hal_buffer_params_t params = {0};
+  params.type =
+      IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
+  params.usage = IREE_HAL_BUFFER_USAGE_TRANSFER |
+                 IREE_HAL_BUFFER_USAGE_DISPATCH | IREE_HAL_BUFFER_USAGE_MAPPING;
+
+  iree_hal_buffer_params_t resolved_params = {0};
+  iree_device_size_t resolved_allocation_size = 0;
+  const iree_device_size_t shadow_granule = (iree_device_size_t)1ull
+                                            << options.asan.shadow_scale_shift;
+  const iree_device_size_t accessible_size = shadow_granule + 4;
+  const iree_hal_buffer_compatibility_t compatibility =
+      iree_hal_allocator_query_buffer_compatibility(
+          test_device.allocator(), params, accessible_size, &resolved_params,
+          &resolved_allocation_size);
+  if (!iree_all_bits_set(compatibility,
+                         IREE_HAL_BUFFER_COMPATIBILITY_ALLOCATABLE)) {
+    GTEST_SKIP() << "host-local device-visible memory is not available";
+  }
+  EXPECT_TRUE(iree_all_bits_set(
+      resolved_params.type,
+      IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE));
+
+  iree_hal_buffer_t* buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_allocator_allocate_buffer(
+      test_device.allocator(), resolved_params, accessible_size, &buffer));
+  EXPECT_EQ(iree_hal_buffer_byte_length(buffer), accessible_size);
+  ASSERT_GT(iree_hal_buffer_allocation_size(buffer), accessible_size);
+
+  void* device_ptr = iree_hal_amdgpu_buffer_device_pointer(buffer);
+  ASSERT_NE(device_ptr, nullptr);
+
+  iree_hal_amdgpu_asan_state_t* asan_state =
+      &test_device.logical_device()->asan;
+  iree_hal_amdgpu_shadow_map_t* shadow_map =
+      iree_hal_amdgpu_asan_state_shadow_map(asan_state);
+  ASSERT_NE(shadow_map, nullptr);
+
+  iree_hal_amdgpu_shadow_map_range_t shadow_range;
+  IREE_ASSERT_OK(iree_hal_amdgpu_shadow_map_calculate_range(
+      shadow_map, (uint64_t)(uintptr_t)device_ptr,
+      iree_hal_buffer_allocation_size(buffer), &shadow_range));
+  ASSERT_GE(shadow_range.shadow_length, 2u);
+
+  std::array<uint8_t, 2> shadow_prefix = {};
+  IREE_ASSERT_OK(iree_hsa_memory_copy(
+      IREE_LIBHSA(&libhsa_), shadow_prefix.data(),
+      (void*)(uintptr_t)shadow_range.shadow_address, shadow_prefix.size()));
+  constexpr uint8_t kAddressableShadowValue = 0x00u;
+  EXPECT_EQ(shadow_prefix[0], kAddressableShadowValue);
+  EXPECT_EQ(shadow_prefix[1], 4u);
+
+  iree_hal_buffer_release(buffer);
+
+  constexpr uint8_t kHeapRedzoneShadowValue = 0xFAu;
+  std::array<uint8_t, 2> released_shadow_prefix = {};
+  IREE_ASSERT_OK(
+      iree_hsa_memory_copy(IREE_LIBHSA(&libhsa_), released_shadow_prefix.data(),
+                           (void*)(uintptr_t)shadow_range.shadow_address,
+                           released_shadow_prefix.size()));
+  for (uint8_t shadow_byte : released_shadow_prefix) {
+    EXPECT_EQ(shadow_byte, kHeapRedzoneShadowValue);
+  }
 }
 
 TEST_F(AllocatorTest, AsanPremappedShadowModeCoversUnpublishedAddresses) {

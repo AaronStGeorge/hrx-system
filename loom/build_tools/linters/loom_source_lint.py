@@ -13,9 +13,13 @@ function-local compiler phases: allocating or resetting scratch sized by
 `module->values.count`/`capacity` instead of using function-local domains,
 maintained facts, or reviewed module-owned structures.
 
-It also protects the Loom execution package boundary. Optional targets may
-project device/environment facts and emit artifacts, but they must not grow
-private runner/execution stacks under `loom/src/loom/target/**`.
+It also protects the Loom execution package boundary. Optional production
+targets may project device/environment facts and emit artifacts, but they must
+not grow private runner/execution stacks under `loom/src/loom/target/**`.
+
+The core Loom compiler must stay independent from command-line flag machinery.
+Only tools, tooling helpers, and tests may include `iree/base/tooling/flags.h`
+or define IREE flags.
 
 The SPIR-V backend has additional guardrails because its opcode, feature,
 property, ABI, and resource cross-products are especially easy to turn into a
@@ -85,6 +89,11 @@ TARGET_PRIVATE_EXECUTION_SYMBOL_PATTERN = re.compile(
     r"|loom_ireevm_execution_[A-Za-z0-9_]*"
     r")\b"
 )
+
+TOOLING_FLAGS_INCLUDE_PATTERN = re.compile(
+    r"#\s*include\s+[<\"]iree/base/tooling/flags\.h[>\"]"
+)
+TOOLING_FLAGS_MACRO_PATTERN = re.compile(r"\bIREE_FLAG(?:_LIST)?(?:_NAMED)?\s*\(")
 
 SPIRV_INTERNAL_HEADER_INCLUDE_PATTERN = re.compile(
     r'#\s*include\s+"loom/target/(?:arch|emit)/spirv/.+' r'(?:^|/|_)internal\.h"'
@@ -256,6 +265,56 @@ def _is_internal_header_name(relative_path: str) -> bool:
     return name == "internal.h" or name.endswith("_internal.h")
 
 
+def _is_test_source_name(name: str) -> bool:
+    return (
+        name.endswith("_test.c")
+        or name.endswith("_test.cc")
+        or name.endswith("_test.h")
+    )
+
+
+def _is_core_loom_source_path(relative_path: str) -> bool:
+    path = PurePosixPath(relative_path)
+    if path.suffix not in SOURCE_SUFFIXES:
+        return False
+    parts = path.parts
+    if len(parts) < 4 or parts[:3] != ("loom", "src", "loom"):
+        return False
+    if parts[3] in ("tools", "tooling"):
+        return False
+    if "test" in parts[3:] or "testing" in parts[3:]:
+        return False
+    return not _is_test_source_name(path.name)
+
+
+def _scan_core_tooling_flags_text(
+    relative_path: str, text: str
+) -> list[tuple[int, str, str]]:
+    if not _is_core_loom_source_path(relative_path):
+        return []
+
+    findings: list[tuple[int, str, str]] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        stripped_line = _strip_line_comments(line).strip()
+        if TOOLING_FLAGS_INCLUDE_PATTERN.search(stripped_line):
+            findings.append(
+                (
+                    line_number,
+                    "core Loom compiler source must not include tooling flags",
+                    stripped_line,
+                )
+            )
+        if TOOLING_FLAGS_MACRO_PATTERN.search(stripped_line):
+            findings.append(
+                (
+                    line_number,
+                    "core Loom compiler source must not define command-line flags",
+                    stripped_line,
+                )
+            )
+    return findings
+
+
 def _scan_spirv_backend_text(
     relative_path: str, text: str
 ) -> list[tuple[int, str, str]]:
@@ -424,6 +483,8 @@ def _scan_target_execution_boundaries(path: Path) -> list[Finding]:
                 ),
             )
         )
+    if path.suffix in SOURCE_SUFFIXES and _is_test_source_name(path.name):
+        return findings
 
     for line_number, line in enumerate(path.read_text().splitlines(), start=1):
         stripped_line = _strip_line_comments(line).strip()
@@ -474,10 +535,41 @@ def _scan_spirv_backend_guardrails(path: Path) -> list[Finding]:
     return findings
 
 
+def _scan_core_tooling_flags_guardrails(path: Path) -> list[Finding]:
+    relative_path = _relative_path(path)
+    findings: list[Finding] = []
+    for line, message, context in _scan_core_tooling_flags_text(
+        relative_path, path.read_text()
+    ):
+        findings.append(
+            Finding(
+                path=path,
+                line=line,
+                message=message,
+                context=context,
+            )
+        )
+    return findings
+
+
 def _expect_spirv_self_test(
     name: str, relative_path: str, text: str, expected_messages: tuple[str, ...]
 ) -> bool:
     findings = _scan_spirv_backend_text(relative_path, text)
+    messages = tuple(finding[1] for finding in findings)
+    if messages == expected_messages:
+        print(f"  PASS  {name}")
+        return True
+    print(f"  FAIL  {name}")
+    print(f"        expected: {expected_messages!r}")
+    print(f"        actual:   {messages!r}")
+    return False
+
+
+def _expect_core_tooling_flags_self_test(
+    name: str, relative_path: str, text: str, expected_messages: tuple[str, ...]
+) -> bool:
+    findings = _scan_core_tooling_flags_text(relative_path, text)
     messages = tuple(finding[1] for finding in findings)
     if messages == expected_messages:
         print(f"  PASS  {name}")
@@ -536,6 +628,30 @@ def _run_self_tests() -> int:
         "",
         (),
     )
+    ok &= _expect_core_tooling_flags_self_test(
+        "core tooling flags include fails",
+        "loom/src/loom/sanitizer/options.c",
+        '#include "iree/base/tooling/flags.h"\n',
+        ("core Loom compiler source must not include tooling flags",),
+    )
+    ok &= _expect_core_tooling_flags_self_test(
+        "core IREE flag macro fails",
+        "loom/src/loom/sanitizer/options.c",
+        'IREE_FLAG(string, sanitizer, "none", "Sanitizers");\n',
+        ("core Loom compiler source must not define command-line flags",),
+    )
+    ok &= _expect_core_tooling_flags_self_test(
+        "tooling flags include is in scope",
+        "loom/src/loom/tooling/sanitizer/options_cli.h",
+        '#include "iree/base/tooling/flags.h"\n',
+        (),
+    )
+    ok &= _expect_core_tooling_flags_self_test(
+        "test flags include is in scope",
+        "loom/src/loom/sanitizer/options_test.cc",
+        '#include "iree/base/tooling/flags.h"\n',
+        (),
+    )
     ok &= _expect_authoring_self_test(
         "authoring happy-path source passes",
         """
@@ -584,6 +700,7 @@ def main() -> int:
     for path in _iter_source_files():
         findings.extend(_scan_file(path))
     for path in _iter_lint_files():
+        findings.extend(_scan_core_tooling_flags_guardrails(path))
         findings.extend(_scan_target_execution_boundaries(path))
         findings.extend(_scan_spirv_backend_guardrails(path))
     for path in _iter_authoring_loom_files():

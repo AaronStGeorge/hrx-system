@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -12,7 +12,7 @@
 namespace loom {
 namespace {
 
-TEST(SanitizerOptionsCliTest, ParsesNamedCheckSets) {
+TEST(SanitizerOptionsTest, ParsesNamedCheckSets) {
   loom_sanitizer_options_t options = {};
   IREE_ASSERT_OK(loom_sanitizer_options_parse_checks(
       IREE_SV("access | operation"), IREE_SV("--sanitizer"), &options));
@@ -40,7 +40,7 @@ TEST(SanitizerOptionsCliTest, ParsesNamedCheckSets) {
   EXPECT_EQ(options.checks, 0u);
 }
 
-TEST(SanitizerOptionsCliTest, RejectsMalformedCheckSets) {
+TEST(SanitizerOptionsTest, RejectsMalformedCheckSets) {
   loom_sanitizer_checks_t checks = 0;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
@@ -55,7 +55,7 @@ TEST(SanitizerOptionsCliTest, RejectsMalformedCheckSets) {
                             IREE_SV("bogus"), IREE_SV("--sanitizer"), &checks));
 }
 
-TEST(SanitizerOptionsCliTest, FormatsCanonicalCheckSets) {
+TEST(SanitizerOptionsTest, FormatsCanonicalCheckSets) {
   iree_string_view_t formatted = iree_string_view_empty();
   IREE_ASSERT_OK(loom_sanitizer_checks_format(
       LOOM_SANITIZER_CHECK_OPERATION | LOOM_SANITIZER_CHECK_VALUE, &formatted));
@@ -70,7 +70,7 @@ TEST(SanitizerOptionsCliTest, FormatsCanonicalCheckSets) {
                         loom_sanitizer_checks_format(1ull << 63, &formatted));
 }
 
-TEST(SanitizerOptionsCliTest, ParsesReportingModes) {
+TEST(SanitizerOptionsTest, ParsesReportingModes) {
   loom_sanitizer_reporting_mode_t mode = LOOM_SANITIZER_REPORTING_MODE_DEFAULT;
   IREE_ASSERT_OK(loom_sanitizer_reporting_mode_parse(
       IREE_SV("trap"), IREE_SV("--sanitizer-reporting"), &mode));
@@ -90,7 +90,7 @@ TEST(SanitizerOptionsCliTest, ParsesReportingModes) {
           IREE_SV("printf"), IREE_SV("--sanitizer-reporting"), &mode));
 }
 
-TEST(SanitizerOptionsCliTest, FormatsReportingModes) {
+TEST(SanitizerOptionsTest, FormatsReportingModes) {
   iree_string_view_t formatted = iree_string_view_empty();
   IREE_ASSERT_OK(loom_sanitizer_reporting_mode_format(
       LOOM_SANITIZER_REPORTING_MODE_TRAP, &formatted));

@@ -89,7 +89,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(check)\\.(generate\\.random\\.uniform|expect\\.bitwise|file\\.write\\.npy|file\\.read\\.npy|generate\\.fill|generate\\.iota|expect\\.close|expect\\.equal|expect\\.shape|param\\.choice|oracle\\.call|param\\.range|param\\.seed|benchmark|requires|literal|skip_if|expect|return|case)\\b",
+          "match": "\\b(check)\\.(generate\\.random\\.uniform|expect\\.bitwise|file\\.write\\.npy|file\\.read\\.npy|generate\\.fill|generate\\.iota|expect\\.close|expect\\.equal|expect\\.event|expect\\.shape|param\\.choice|oracle\\.call|param\\.range|param\\.seed|benchmark|requires|literal|skip_if|expect|return|case)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"
@@ -197,7 +197,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(sanitizer)\\.(assert\\.access|assert\\.layout|assert\\.value|assert\\.op)\\b",
+          "match": "\\b(sanitizer)\\.(assert\\.access|assert\\.layout|assert\\.value|race\\.access|assert\\.op|race\\.sync)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"

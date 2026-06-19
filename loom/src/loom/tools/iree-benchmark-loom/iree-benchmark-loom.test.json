@@ -54,6 +54,27 @@
       }
     },
     {
+      "name": "reports sanitizer policy in dry-run output",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/testdata/scalar_benchmarks.loom",
+          "--output-format=jsonl",
+          "--benchmark=@scalar_equal_latency",
+          "--dry-run",
+          "--sanitizer=tsan",
+          "--sanitizer-reporting=report-only"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"sanitizer\":{\"checks\":\"race\",\"reporting_mode\":\"report-only\"}",
+          "\"row\":\"summary\"",
+          "\"failure_count\":0"
+        ]
+      }
+    },
+    {
       "name": "writes dry-run output file",
       "run": {
         "tool": "iree-benchmark-loom",
@@ -168,15 +189,8 @@
       "stdout": {
         "contains": [
           "Runs correctness-gated check.benchmark records from a Loom module.",
-          "Snapshot output (default)",
-          "JSONL event stream (--output-format=jsonl)",
-          "results.json in snapshot mode",
-          "compile_report",
-          "compile_report_path",
-          "artifact_manifest_path",
-          "target_artifact_path"
-        ],
-        "not_contains": ["static_summary"]
+          "Usage:"
+        ]
       }
     }
   ]

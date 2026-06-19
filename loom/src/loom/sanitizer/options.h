@@ -41,7 +41,7 @@ typedef enum loom_sanitizer_reporting_mode_e {
   LOOM_SANITIZER_REPORTING_MODE_DEFAULT = 0,
   // Trap directly on sanitizer failures without emitting structured reports.
   LOOM_SANITIZER_REPORTING_MODE_TRAP = 1,
-  // Emit structured sanitizer reports and continue execution.
+  // Emit structured sanitizer reports without using a direct trap.
   LOOM_SANITIZER_REPORTING_MODE_REPORT_ONLY = 2,
 } loom_sanitizer_reporting_mode_t;
 
@@ -96,6 +96,33 @@ static inline iree_status_t loom_sanitizer_options_validate(
   }
   return iree_ok_status();
 }
+
+// Parses a sanitizer check set such as "access", "value|operation", "all",
+// or "none". |diagnostic_name| is included in parse failures and should name
+// the option being parsed, such as "--sanitizer" or "pass option 'checks'".
+iree_status_t loom_sanitizer_checks_parse(iree_string_view_t value,
+                                          iree_string_view_t diagnostic_name,
+                                          loom_sanitizer_checks_t* out_checks);
+
+// Parses a sanitizer option check set with no behavior flags. |checks == 0|
+// returns disabled sanitizer options.
+iree_status_t loom_sanitizer_options_parse_checks(
+    iree_string_view_t value, iree_string_view_t diagnostic_name,
+    loom_sanitizer_options_t* out_options);
+
+// Parses a sanitizer reporting mode such as "default", "trap", or
+// "report-only".
+iree_status_t loom_sanitizer_reporting_mode_parse(
+    iree_string_view_t value, iree_string_view_t diagnostic_name,
+    loom_sanitizer_reporting_mode_t* out_mode);
+
+// Formats a sanitizer check set in canonical pass-pipeline spelling.
+iree_status_t loom_sanitizer_checks_format(loom_sanitizer_checks_t checks,
+                                           iree_string_view_t* out_value);
+
+// Formats a sanitizer reporting mode in canonical pass-pipeline spelling.
+iree_status_t loom_sanitizer_reporting_mode_format(
+    loom_sanitizer_reporting_mode_t mode, iree_string_view_t* out_value);
 
 #ifdef __cplusplus
 }  // extern "C"

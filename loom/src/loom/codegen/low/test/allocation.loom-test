@@ -47,6 +47,18 @@ low.func.def target(@test_target) @branch_concat_destination_layout(%cond: reg<t
 
 // ====
 
+// RUN: emit low-allocation-json @edge_copy_tail_enters_cycle fixed=%source_b:physical_register:1:1 fixed=%source_c:physical_register:2:1 fixed=%dst_a:physical_register:0:1 fixed=%dst_b:physical_register:1:1 fixed=%dst_c:physical_register:2:1 output=none
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @edge_copy_tail_enters_cycle(%source_b: reg<test.phys>, %source_c: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>, reg<test.phys>) asm<test.low.core> {
+  low.br ^join(%source_b: reg<test.phys>, %source_c: reg<test.phys>, %source_b: reg<test.phys>)
+^join(%dst_a: reg<test.phys>, %dst_b: reg<test.phys>, %dst_c: reg<test.phys>):
+  return %dst_a, %dst_b, %dst_c : reg<test.phys>, reg<test.phys>, reg<test.phys>
+}
+
+// ====
+
 // RUN: emit low-allocation-json @structural_physical_span_rebased_at_capacity fixed=%wide:physical_register:20:12 fixed=%tail:physical_register:0:1
 
 test.target<low_core> @test_target

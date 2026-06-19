@@ -394,7 +394,7 @@ TEST_F(AmdgpuSanitizerAccessTest, FeedsMaskedFailuresToSharedReportIsland) {
                                       sgpr_type, LOOM_LOCATION_UNKNOWN,
                                       &workgroup_id_op));
   const loom_value_id_t workgroup_id = loom_low_slice_result(workgroup_id_op);
-  const loom_amdgpu_sanitizer_report_source_t source = {
+  const loom_amdgpu_feedback_packet_source_t source = {
       /*.dispatch_ptr=*/fault_address,
       /*.workgroup_id_x=*/workgroup_id,
       /*.workitem_id_x=*/workgroup_id,

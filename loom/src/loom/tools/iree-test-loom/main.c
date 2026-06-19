@@ -13,11 +13,12 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/io/file.h"
+#include "loom/tooling/testbench/device_event.h"
 #include "loom/tooling/testbench/executor.h"
 #include "loom/tooling/testbench/reference.h"
 #include "loom/tooling/testbench/requirements.h"
@@ -40,10 +41,16 @@ IREE_FLAG(string, sanitizer, "none",
           "Sanitizer checks inserted by the target pipeline. Use 'none', "
           "'access', 'value', 'operation', 'race', 'asan', 'ubsan', 'tsan', "
           "'all', or a '|' separated list.");
+IREE_FLAG_NAMED(string, sanitizer_reporting, "sanitizer-reporting", "default",
+                "Sanitizer reporting mode used by the target pipeline. Use "
+                "'default', 'trap', or 'report-only'.");
 
 enum {
   // Target-linked requirement providers.
   IREE_TEST_LOOM_MAX_REQUIREMENT_PROVIDERS = 8,
+  // Maximum device events retained per sample for structured event
+  // expectations.
+  IREE_TEST_LOOM_DEVICE_EVENT_CAPACITY = 256,
 };
 
 static iree_status_t iree_test_loom_register_context(void* user_data,
@@ -97,6 +104,33 @@ static bool iree_test_loom_case_has_actual_invocation(
     const loom_testbench_case_plan_t* case_plan) {
   for (iree_host_size_t i = 0; i < case_plan->invocation_count; ++i) {
     if (case_plan->invocations[i].kind == LOOM_TESTBENCH_INVOCATION_ACTUAL) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool iree_test_loom_case_has_device_event_expectation(
+    const loom_testbench_case_plan_t* case_plan) {
+  for (iree_host_size_t i = 0; i < case_plan->expectation_count; ++i) {
+    const loom_testbench_expectation_plan_t* expectation =
+        &case_plan->expectations[i];
+    if (expectation->kind == LOOM_TESTBENCH_EXPECTATION_EVENT &&
+        iree_string_view_equal(expectation->event.provider,
+                               IREE_SV("device"))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool iree_test_loom_selected_cases_have_device_event_expectation(
+    const loom_testbench_module_plan_t* module_plan,
+    iree_string_view_t selected_case_name) {
+  for (iree_host_size_t i = 0; i < module_plan->case_count; ++i) {
+    const loom_testbench_case_plan_t* case_plan = &module_plan->cases[i];
+    if (iree_test_loom_case_matches_selection(case_plan, selected_case_name) &&
+        iree_test_loom_case_has_device_event_expectation(case_plan)) {
       return true;
     }
   }
@@ -365,6 +399,8 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "iree-test-loom module.loom --max-samples-per-case=16\n"
       "iree-test-loom module.loom --pipeline=@hal_actual_pipeline\n"
       "iree-test-loom module.loom --sanitizer=tsan\n"
+      "iree-test-loom module.loom --sanitizer=asan "
+      "--sanitizer-reporting=report-only\n"
       "```\n"
       "\n"
       "`--case=@name` selects one checked case; empty selection runs cases in\n"
@@ -377,11 +413,11 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "A case can mix reference/oracle checks with HAL actual invocations. "
       "Actual\n"
       "invocations use the selected HAL artifact provider and execution "
-      "provider\n"
-      "linked into this binary. `--pipeline=default|none|@symbol|pass,list`\n"
-      "controls the HAL actual compile pipeline. `--sanitizer=...` enables "
-      "the same target-pipeline instrumentation accepted by "
-      "`iree-benchmark-loom`.\n"
+      "provider linked into this binary. "
+      "`--pipeline=default|none|@symbol|pass,list` controls the HAL actual "
+      "compile pipeline. `--sanitizer=...` and "
+      "`--sanitizer-reporting=...` enable the same target-pipeline "
+      "instrumentation accepted by `iree-benchmark-loom`.\n"
       "\n"
       "### Report shape\n"
       "\n"
@@ -431,6 +467,8 @@ int iree_test_loom_main(int argc, char** argv,
   loom_run_module_t run_module = {0};
   loom_sanitizer_options_t sanitizer_options = {0};
   loom_run_hal_testbench_context_t hal_context = {0};
+  loom_testbench_device_event_capture_t device_event_capture = {0};
+  bool device_event_capture_initialized = false;
   iree_arena_allocator_t plan_arena;
   memset(&plan_arena, 0, sizeof(plan_arena));
   iree_arena_allocator_t execution_arena;
@@ -461,6 +499,11 @@ int iree_test_loom_main(int argc, char** argv,
     status = loom_sanitizer_options_parse_checks(
         iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
         &sanitizer_options);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_sanitizer_reporting_mode_parse(
+        iree_make_cstring_view(FLAG_sanitizer_reporting),
+        IREE_SV("--sanitizer-reporting"), &sanitizer_options.reporting_mode);
   }
 
   if (iree_status_is_ok(status)) {
@@ -517,6 +560,20 @@ int iree_test_loom_main(int argc, char** argv,
     loom_testbench_case_execution_options_t execution_options = {0};
     loom_testbench_case_execution_options_initialize(&execution_options);
     execution_options.materializer.host_allocator = allocator;
+    if (iree_status_is_ok(status) &&
+        iree_test_loom_selected_cases_have_device_event_expectation(
+            &module_plan, selected_case_name)) {
+      status = loom_testbench_device_event_capture_initialize(
+          IREE_TEST_LOOM_DEVICE_EVENT_CAPACITY, allocator,
+          &device_event_capture);
+      if (iree_status_is_ok(status)) {
+        device_event_capture_initialized = true;
+        execution_options.device_event_capture = &device_event_capture;
+        loom_run_hal_testbench_context_set_device_event_sink(
+            &hal_context,
+            loom_testbench_device_event_capture_sink(&device_event_capture));
+      }
+    }
 
     iree_host_size_t selected_case_count = 0;
     iree_host_size_t sample_count = 0;
@@ -574,6 +631,9 @@ int iree_test_loom_main(int argc, char** argv,
   iree_arena_deinitialize(&execution_arena);
   iree_arena_deinitialize(&plan_arena);
   loom_run_hal_testbench_context_deinitialize(&hal_context);
+  if (device_event_capture_initialized) {
+    loom_testbench_device_event_capture_deinitialize(&device_event_capture);
+  }
   loom_run_module_deinitialize(&run_module);
   iree_io_file_contents_free(contents);
   loom_run_session_deinitialize(&session);

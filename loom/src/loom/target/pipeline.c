@@ -8,7 +8,7 @@
 
 #include "loom/codegen/low/pipeline/pipeline.h"
 #include "loom/pass/builder.h"
-#include "loom/sanitizer/options_cli.h"
+#include "loom/sanitizer/options.h"
 
 typedef struct loom_target_pipeline_build_context_t {
   // Target providers linked into the current compile driver.

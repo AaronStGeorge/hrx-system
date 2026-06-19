@@ -20,7 +20,7 @@
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
 #include "loom/target/arch/amdgpu/abi/tsan.h"
-#include "loom/target/arch/amdgpu/lower/sanitizer_feedback.h"
+#include "loom/target/arch/amdgpu/lower/feedback.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -87,7 +87,7 @@ typedef struct loom_amdgpu_sanitizer_race_report_island_t {
   // available.
   loom_block_t* terminal_block;
   // Block arguments carrying current source coordinates in |entry_block|.
-  loom_amdgpu_sanitizer_report_source_t source_args;
+  loom_amdgpu_feedback_packet_source_t source_args;
   // Block arguments carrying race report values in |entry_block|.
   loom_amdgpu_sanitizer_race_report_t report_args;
 } loom_amdgpu_sanitizer_race_report_island_t;
@@ -124,7 +124,7 @@ iree_status_t loom_amdgpu_build_sanitizer_race_report_payload(
 iree_status_t loom_amdgpu_build_sanitizer_race_report_terminate(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t feedback_config_symbol,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_race_report_t* report,
     loom_location_id_t location);
 
@@ -150,7 +150,7 @@ iree_status_t loom_amdgpu_build_sanitizer_race_report_island(
 iree_status_t loom_amdgpu_build_sanitizer_race_report_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_race_report_island_t* island,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_race_report_t* report,
     loom_location_id_t location);
 
@@ -168,7 +168,7 @@ iree_status_t loom_amdgpu_build_sanitizer_race_report_failure_mask_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_race_report_island_t* island,
     loom_value_id_t failure_mask,
-    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_race_report_t* report,
     loom_location_id_t location,
     loom_amdgpu_sanitizer_race_report_failure_branch_t* out_branch);

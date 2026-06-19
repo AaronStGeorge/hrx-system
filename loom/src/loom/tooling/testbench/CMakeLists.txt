@@ -48,6 +48,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    device_event
+  HDRS
+    "device_event.h"
+  SRCS
+    "device_event.c"
+  DEPS
+    iree::base
+    iree::base::threading
+    iree::hal
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     invocation
   HDRS
     "invocation.h"
@@ -70,6 +84,7 @@ loom_cc_library(
   SRCS
     "expectation.c"
   DEPS
+    ::device_event
     ::testbench
     ::value_materializer
     iree::base
@@ -91,6 +106,7 @@ loom_cc_library(
   SRCS
     "executor.c"
   DEPS
+    ::device_event
     ::expectation
     ::invocation
     ::testbench
@@ -175,6 +191,7 @@ loom_cc_test(
   SRCS
     "expectation_test.cc"
   DEPS
+    ::device_event
     ::expectation
     ::testbench
     ::value_materializer

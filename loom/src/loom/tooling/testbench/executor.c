@@ -64,6 +64,7 @@ iree_status_t loom_testbench_case_executor_initialize(
   out_executor->prepared_case = prepared_case;
   out_executor->materializer_options = options->materializer;
   out_executor->materializer_options.host_allocator = host_allocator;
+  out_executor->device_event_capture = options->device_event_capture;
 
   iree_status_t status = loom_testbench_value_table_initialize(
       prepared_case->module, prepared_case->case_plan, host_allocator,
@@ -105,15 +106,26 @@ iree_status_t loom_testbench_run_case_sample(
       executor->prepared_case->case_plan;
   loom_testbench_value_table_reset(&executor->value_table);
   loom_testbench_expectation_report_reset(&executor->expectation_report);
+  if (executor->device_event_capture != NULL) {
+    loom_testbench_device_event_capture_reset(executor->device_event_capture);
+  }
 
   IREE_RETURN_IF_ERROR(loom_testbench_materialize_case_sample(
       &executor->materializer_options, case_plan, sample_ordinal,
       &executor->value_table));
   IREE_RETURN_IF_ERROR(loom_testbench_run_case_invocations(
       &executor->invocation_executor, &executor->value_table));
+  loom_testbench_case_sample_observations_t observations =
+      loom_testbench_case_sample_observations_empty();
+  loom_testbench_device_event_list_t device_events = {0};
+  if (executor->device_event_capture != NULL) {
+    loom_testbench_device_event_capture_events(executor->device_event_capture,
+                                               &device_events);
+    observations.device_events = &device_events;
+  }
   IREE_RETURN_IF_ERROR(loom_testbench_evaluate_case_expectations(
       &executor->prepared_case->expectation_schedule, &executor->value_table,
-      &executor->expectation_report));
+      &observations, &executor->expectation_report));
 
   bool case_failed = executor->expectation_report.failure_count != 0;
   IREE_RETURN_IF_ERROR(loom_testbench_write_case_files(

@@ -20,7 +20,7 @@ loom_cc_library(
     iree::base
     iree::base::tooling::flags
     iree::io::file_handle
-    loom::sanitizer::options_cli
+    loom::sanitizer::options
     loom::target::provider
     loom::tooling::cli::help
     loom::tooling::context
@@ -28,6 +28,7 @@ loom_cc_library(
     loom::tooling::execution::hal::testbench_actual
     loom::tooling::execution::session
     loom::tooling::io::file
+    loom::tooling::testbench::device_event
     loom::tooling::testbench::executor
     loom::tooling::testbench::reference
     loom::tooling::testbench::requirements
@@ -97,8 +98,9 @@ iree_execution_test_suite(
   TOOLS
     "iree-test-loom=::iree-test-loom"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_asan_actual.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_tsan_actual.loom"
     "testdata/amdgpu_hal_actual.loom"
-    "testdata/amdgpu_sanitizer_actual.loom"
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
     "requires-gpu-amd"

@@ -77,9 +77,18 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_explicit_rdna3_access_re
   return
 ^_bb2:
   %112, %113 = s_and_saveexec_b64 %105
-  s_trap {trapid = 256}
-  s_mov_b64_exec %112
-  low.br ^_bb1
+  s_trap {trapid = 2}
+  %114 = s_sendmsg_rtn_b32 {message = 128}
+  %115 = s_mov_b32 1023
+  %116 = s_and_b32 %114, %115
+  %117 = s_mov_b32 1024
+  %118 = s_or_b32 %116, %117
+  %119 = s_mov_b32_m0 %118
+  s_sendmsg %119 {message = 1}
+  low.br ^_bb3
+^_bb3:
+  s_sethalt {reason = 5}
+  low.br ^_bb3
 }
 
 // ====
@@ -199,16 +208,25 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_explicit_rdna3_vector_ac
   return
 ^_bb2:
   %217, %218 = s_and_saveexec_b64 %210
-  s_trap {trapid = 256}
-  s_mov_b64_exec %217
-  low.br ^_bb1
+  s_trap {trapid = 2}
+  %219 = s_sendmsg_rtn_b32 {message = 128}
+  %220 = s_mov_b32 1023
+  %221 = s_and_b32 %219, %220
+  %222 = s_mov_b32 1024
+  %223 = s_or_b32 %221, %222
+  %224 = s_mov_b32_m0 %223
+  s_sendmsg %224 {message = 1}
+  low.br ^_bb3
+^_bb3:
+  s_sethalt {reason = 5}
+  low.br ^_bb3
 }
 
 // ====
 
 amdgpu.target<gfx1100> @target
 
-func.def target(@target) @sanitizer_trap_rejoins_returning_func(%input: buffer, %value: i32) -> (i32) {
+func.def target(@target) @sanitizer_trap_terminates_returning_func(%input: buffer, %value: i32) -> (i32) {
   %base = index.constant 0 : offset
   %input_global = buffer.assume.memory_space<global> %input : buffer
   %input_view = buffer.view %input_global[%base] : buffer -> view<1xi32, #dense>
@@ -217,7 +235,7 @@ func.def target(@target) @sanitizer_trap_rejoins_returning_func(%input: buffer, 
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @sanitizer_trap_rejoins_returning_func(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+low.func.def target(@target) abi(hal_kernel) @sanitizer_trap_terminates_returning_func(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %9 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %10 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
@@ -283,9 +301,18 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_trap_rejoins_returning_f
   return %value
 ^_bb2:
   %116, %117 = s_and_saveexec_b64 %109
-  s_trap {trapid = 256}
-  s_mov_b64_exec %116
-  low.br ^_bb1
+  s_trap {trapid = 2}
+  %118 = s_sendmsg_rtn_b32 {message = 128}
+  %119 = s_mov_b32 1023
+  %120 = s_and_b32 %118, %119
+  %121 = s_mov_b32 1024
+  %122 = s_or_b32 %120, %121
+  %123 = s_mov_b32_m0 %122
+  s_sendmsg %123 {message = 1}
+  low.br ^_bb3
+^_bb3:
+  s_sethalt {reason = 5}
+  low.br ^_bb3
 }
 
 // ====
@@ -365,9 +392,11 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_explicit_cdna3_access_re
   return
 ^_bb2:
   %109, %110 = s_and_saveexec_b64 %102
-  s_trap {trapid = 256}
-  s_mov_b64_exec %109
-  low.br ^_bb1
+  s_trap {trapid = 2}
+  low.br ^_bb3
+^_bb3:
+  s_sethalt {reason = 5}
+  low.br ^_bb3
 }
 
 // ====
@@ -449,9 +478,18 @@ low.func.def target(@target) abi(hal_kernel) @sanitizer_explicit_rdna4_access_re
   return
 ^_bb2:
   %112, %113 = s_and_saveexec_b64 %105
-  s_trap {trapid = 256}
-  s_mov_b64_exec %112
-  low.br ^_bb1
+  s_trap {trapid = 2}
+  %114 = s_sendmsg_rtn_b32 {message = 128}
+  %115 = s_mov_b32 1023
+  %116 = s_and_b32 %114, %115
+  %117 = s_mov_b32 1024
+  %118 = s_or_b32 %116, %117
+  %119 = s_mov_b32_m0 %118
+  s_sendmsg %119 {message = 1}
+  low.br ^_bb3
+^_bb3:
+  s_sethalt {reason = 5}
+  low.br ^_bb3
 }
 
 // ====
@@ -524,7 +562,16 @@ low.kernel.def target(@target) workgroup_size(256, 1, 1) @sanitizer_dynamic_byte
   return
 ^_bb2:
   %70, %71 = s_and_saveexec_b64 %63
-  s_trap {trapid = 256}
-  s_mov_b64_exec %70
-  low.br ^_bb1
+  s_trap {trapid = 2}
+  %72 = s_sendmsg_rtn_b32 {message = 128}
+  %73 = s_mov_b32 1023
+  %74 = s_and_b32 %72, %73
+  %75 = s_mov_b32 1024
+  %76 = s_or_b32 %74, %75
+  %77 = s_mov_b32_m0 %76
+  s_sendmsg %77 {message = 1}
+  low.br ^_bb3
+^_bb3:
+  s_sethalt {reason = 5}
+  low.br ^_bb3
 }

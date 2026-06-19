@@ -24,8 +24,10 @@ iree_status_t iree_benchmark_loom_event_sink_emit(
 iree_status_t iree_benchmark_loom_event_sink_emit_run(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run, bool dry_run,
-    iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode) {
+    iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode,
+    const loom_sanitizer_options_t* sanitizer) {
   IREE_ASSERT_ARGUMENT(run);
+  IREE_ASSERT_ARGUMENT(sanitizer);
   return iree_benchmark_loom_event_sink_emit(
       sink, &(iree_benchmark_loom_event_t){
                 .kind = IREE_BENCHMARK_LOOM_EVENT_RUN,
@@ -34,6 +36,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_run(
                         .run = run,
                         .dry_run = dry_run,
                         .sample_compilation_mode = sample_compilation_mode,
+                        .sanitizer = *sanitizer,
                     },
             });
 }
@@ -350,10 +353,11 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
   switch (event->kind) {
     case IREE_BENCHMARK_LOOM_EVENT_RUN:
       return iree_benchmark_loom_jsonl_sink_end(
-          jsonl_sink, iree_benchmark_loom_append_run_row(
-                          event->run.run, event->run.dry_run,
-                          event->run.sample_compilation_mode,
-                          iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
+          jsonl_sink,
+          iree_benchmark_loom_append_run_row(
+              event->run.run, event->run.dry_run,
+              event->run.sample_compilation_mode, &event->run.sanitizer,
+              iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
     case IREE_BENCHMARK_LOOM_EVENT_PLAN:
       return iree_benchmark_loom_jsonl_sink_end(
           jsonl_sink,

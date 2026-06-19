@@ -1839,7 +1839,7 @@ bool loom_amdgpu_memory_access_select_u32_vaddr_byte_offset(
     return false;
   }
   loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(out_access);
-  if (out_access->source.static_byte_offset > UINT32_MAX ||
+  if ((uint64_t)out_access->source.static_byte_offset > UINT32_MAX ||
       !loom_amdgpu_memory_vaddr_offset_fits_u32(
           out_access, out_access->source.static_byte_offset)) {
     out_diagnostic->rejection_bits |=
@@ -2341,6 +2341,18 @@ bool loom_amdgpu_memory_access_select_flat_global_address(
     return false;
   }
   loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(out_access);
+  if ((uint64_t)out_access->source.static_byte_offset > UINT32_MAX ||
+      !loom_amdgpu_memory_vaddr_offset_fits_u32(
+          out_access, out_access->source.static_byte_offset)) {
+    out_diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE;
+    return false;
+  }
+  out_access->immediate_offset = 0;
+  out_access->secondary_immediate_offset = 0;
+  out_access->vaddr_static_byte_offset =
+      (uint64_t)out_access->source.static_byte_offset;
+  out_access->scalar_byte_offset = 0;
   out_access->address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT;
   return true;
 }

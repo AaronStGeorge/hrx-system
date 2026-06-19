@@ -6,6 +6,8 @@
 
 #include "loom/tooling/testbench/expectation.h"
 
+#include <string.h>
+
 #include <string>
 
 #include "iree/base/internal/arena.h"
@@ -132,8 +134,8 @@ check.case @scalar_mismatch {
   loom_testbench_expectation_report_t report = {};
   IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(
       schedule.expectation_count, host_allocator_, &report));
-  IREE_ASSERT_OK(
-      loom_testbench_evaluate_case_expectations(&schedule, &table, &report));
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(&schedule, &table,
+                                                           nullptr, &report));
 
   EXPECT_EQ(report.expectation_count, 1u);
   EXPECT_EQ(report.passed_count, 0u);
@@ -211,8 +213,8 @@ check.case @buffer_expectations {
   loom_testbench_expectation_report_t report = {};
   IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(
       schedule.expectation_count, host_allocator_, &report));
-  IREE_ASSERT_OK(
-      loom_testbench_evaluate_case_expectations(&schedule, &table, &report));
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(&schedule, &table,
+                                                           nullptr, &report));
 
   EXPECT_EQ(report.expectation_count, 4u);
   EXPECT_EQ(report.passed_count, 4u);
@@ -255,8 +257,8 @@ check.case @buffer_mismatch {
   loom_testbench_expectation_report_t report = {};
   IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(
       schedule.expectation_count, host_allocator_, &report));
-  IREE_ASSERT_OK(
-      loom_testbench_evaluate_case_expectations(&schedule, &table, &report));
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(&schedule, &table,
+                                                           nullptr, &report));
 
   ASSERT_EQ(report.failure_count, 1u);
   EXPECT_THAT(FailureDetail(report, report.failures[0]),
@@ -327,12 +329,153 @@ check.case @custom {
   loom_testbench_expectation_report_t report = {};
   IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(
       schedule.expectation_count, host_allocator_, &report));
-  IREE_ASSERT_OK(
-      loom_testbench_evaluate_case_expectations(&schedule, &table, &report));
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(&schedule, &table,
+                                                           nullptr, &report));
 
   ASSERT_EQ(report.failure_count, 1u);
   EXPECT_THAT(FailureDetail(report, report.failures[0]),
               ::testing::HasSubstr("custom validator failed"));
+
+  loom_testbench_expectation_report_deinitialize(&report);
+  loom_testbench_value_table_deinitialize(&table);
+  loom_module_free(module);
+}
+
+TEST_F(ExpectationTest, EvaluatesDeviceEventExpectations) {
+  loom_module_t* module = ParseModule(R"(
+check.case @device_event {
+  check.expect.event<device> {type = "tsan_report", severity = "error", count = 1, driver = "amdgpu", tsan = {check = "data_race", memory = "workgroup", current_access = "write", prior_access = "read", access_length = 4, current_atomic = false, prior_atomic = false}}
+  check.expect.event<device> {type = "asan_report", count = 0}
+  check.return
+}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = PlanModule(module);
+  ASSERT_EQ(plan.issue_count, 0u);
+  ASSERT_EQ(plan.case_count, 1u);
+  const loom_testbench_case_plan_t& case_plan = plan.cases[0];
+  ASSERT_EQ(case_plan.expectation_count, 2u);
+  EXPECT_EQ(case_plan.expectations[0].kind, LOOM_TESTBENCH_EXPECTATION_EVENT);
+  EXPECT_EQ(case_plan.expectations[1].kind, LOOM_TESTBENCH_EXPECTATION_EVENT);
+
+  loom_testbench_value_table_t table = {};
+  IREE_ASSERT_OK(loom_testbench_value_table_initialize(
+      module, &case_plan, host_allocator_, &table));
+
+  loom_testbench_device_event_capture_t capture = {};
+  IREE_ASSERT_OK(loom_testbench_device_event_capture_initialize(
+      4, host_allocator_, &capture));
+  iree_hal_device_tsan_report_t tsan_report = {};
+  tsan_report.record_length = sizeof(tsan_report);
+  tsan_report.abi_version = IREE_HAL_DEVICE_TSAN_REPORT_ABI_VERSION_0;
+  tsan_report.check_kind = IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE;
+  tsan_report.memory_space = IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP;
+  tsan_report.current_access_kind = IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE;
+  tsan_report.prior_access_kind = IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ;
+  tsan_report.access_length = 4;
+  iree_hal_device_event_t event = iree_hal_device_event_default();
+  event.type = IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT;
+  event.severity = IREE_HAL_DEVICE_EVENT_SEVERITY_ERROR;
+  event.source.driver_id = IREE_SV("amdgpu");
+  event.payload = iree_make_const_byte_span(&tsan_report, sizeof(tsan_report));
+  iree_hal_device_event_sink_publish(
+      loom_testbench_device_event_capture_sink(&capture), &event);
+  loom_testbench_device_event_list_t event_list = {};
+  loom_testbench_device_event_capture_events(&capture, &event_list);
+  ASSERT_EQ(event_list.count, 1u);
+  EXPECT_EQ((uintptr_t)0, (uintptr_t)event_list.records[0].event.payload.data %
+                              iree_alignof(iree_hal_device_tsan_report_t));
+  loom_testbench_case_sample_observations_t observations =
+      loom_testbench_case_sample_observations_empty();
+  observations.device_events = &event_list;
+
+  loom_testbench_expectation_options_t expectation_options = {};
+  loom_testbench_expectation_options_initialize(&expectation_options);
+  loom_testbench_expectation_schedule_t schedule = {};
+  IREE_ASSERT_OK(loom_testbench_prepare_case_expectations(
+      &expectation_options, &case_plan, &schedule_arena_, &schedule));
+
+  loom_testbench_expectation_report_t report = {};
+  IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(
+      schedule.expectation_count, host_allocator_, &report));
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(
+      &schedule, &table, &observations, &report));
+
+  EXPECT_EQ(report.expectation_count, 2u);
+  EXPECT_EQ(report.passed_count, 2u);
+  EXPECT_EQ(report.failure_count, 0u);
+
+  uint8_t unaligned_payload_storage[sizeof(tsan_report) + 1] = {0};
+  memcpy(unaligned_payload_storage + 1, &tsan_report, sizeof(tsan_report));
+  loom_testbench_device_event_record_t unaligned_record = {};
+  unaligned_record.event = event;
+  unaligned_record.event.payload = iree_make_const_byte_span(
+      unaligned_payload_storage + 1, sizeof(tsan_report));
+  loom_testbench_device_event_list_t unaligned_event_list = {
+      /*.records=*/&unaligned_record,
+      /*.count=*/1,
+  };
+  observations.device_events = &unaligned_event_list;
+  loom_testbench_expectation_report_reset(&report);
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(
+      &schedule, &table, &observations, &report));
+  EXPECT_EQ(report.expectation_count, 2u);
+  EXPECT_EQ(report.passed_count, 2u);
+  EXPECT_EQ(report.failure_count, 0u);
+
+  iree_string_builder_t json_builder;
+  iree_string_builder_initialize(host_allocator_, &json_builder);
+  loom_output_stream_t json_stream;
+  loom_output_stream_for_builder(&json_builder, &json_stream);
+  IREE_ASSERT_OK(
+      loom_testbench_expectation_report_write_json(&report, &json_stream));
+  std::string json(iree_string_builder_view(&json_builder).data,
+                   iree_string_builder_view(&json_builder).size);
+  EXPECT_THAT(json, ::testing::HasSubstr("\"expectation_count\":2"));
+  EXPECT_THAT(json, ::testing::HasSubstr("\"failure_count\":0"));
+  iree_string_builder_deinitialize(&json_builder);
+
+  loom_testbench_expectation_report_deinitialize(&report);
+  loom_testbench_device_event_capture_deinitialize(&capture);
+  loom_testbench_value_table_deinitialize(&table);
+  loom_module_free(module);
+}
+
+TEST_F(ExpectationTest, RejectsUnsupportedDeviceEventExpectationKeys) {
+  loom_module_t* module = ParseModule(R"(
+check.case @device_event {
+  check.expect.event<device> {typo = "tsan_report"}
+  check.return
+}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = PlanModule(module);
+  ASSERT_EQ(plan.issue_count, 0u);
+  ASSERT_EQ(plan.case_count, 1u);
+  const loom_testbench_case_plan_t& case_plan = plan.cases[0];
+
+  loom_testbench_value_table_t table = {};
+  IREE_ASSERT_OK(loom_testbench_value_table_initialize(
+      module, &case_plan, host_allocator_, &table));
+  loom_testbench_device_event_list_t event_list = {};
+  loom_testbench_case_sample_observations_t observations =
+      loom_testbench_case_sample_observations_empty();
+  observations.device_events = &event_list;
+
+  loom_testbench_expectation_options_t expectation_options = {};
+  loom_testbench_expectation_options_initialize(&expectation_options);
+  loom_testbench_expectation_schedule_t schedule = {};
+  IREE_ASSERT_OK(loom_testbench_prepare_case_expectations(
+      &expectation_options, &case_plan, &schedule_arena_, &schedule));
+
+  loom_testbench_expectation_report_t report = {};
+  IREE_ASSERT_OK(loom_testbench_expectation_report_initialize(
+      schedule.expectation_count, host_allocator_, &report));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_testbench_evaluate_case_expectations(
+                            &schedule, &table, &observations, &report));
 
   loom_testbench_expectation_report_deinitialize(&report);
   loom_testbench_value_table_deinitialize(&table);
