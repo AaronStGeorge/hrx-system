@@ -27,6 +27,10 @@ typedef struct loom_low_schedule_pressure_state_t {
   uint64_t* current_live_units_by_reg_class;
   // Value ordinals with per-block pressure state to reset before reuse.
   loom_value_ordinal_t* block_value_ordinals;
+  // Candidate operand multiplicity by local value ordinal.
+  uint16_t* candidate_operand_use_counts;
+  // Value ordinals touched in |candidate_operand_use_counts|.
+  loom_value_ordinal_t* candidate_operand_ordinals;
   // Scratch live-unit delta by descriptor register-class ID for one candidate.
   int64_t* candidate_delta_units_by_reg_class;
   // True when a register class has a nonzero or previously nonzero candidate
@@ -40,6 +44,8 @@ typedef struct loom_low_schedule_pressure_state_t {
   uint64_t current_live_units;
   // Number of populated entries in |block_value_ordinals|.
   iree_host_size_t block_value_count;
+  // Number of populated entries in |candidate_operand_ordinals|.
+  iree_host_size_t candidate_operand_count;
 } loom_low_schedule_pressure_state_t;
 
 typedef struct loom_low_schedule_candidate_score_t {
@@ -531,30 +537,6 @@ static bool loom_low_schedule_strategy_is_valid(
   }
 }
 
-static bool loom_low_schedule_ordinal_repeated_before(
-    const loom_value_ordinal_t* ordinals, uint16_t ordinal_index) {
-  const loom_value_ordinal_t value_ordinal = ordinals[ordinal_index];
-  for (uint16_t previous_ordinal_index = 0;
-       previous_ordinal_index < ordinal_index; ++previous_ordinal_index) {
-    if (ordinals[previous_ordinal_index] == value_ordinal) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static uint32_t loom_low_schedule_candidate_operand_use_count(
-    const loom_low_schedule_node_t* node, loom_value_ordinal_t value_ordinal) {
-  uint32_t use_count = 0;
-  const loom_value_ordinal_t* operand_ordinals =
-      loom_low_schedule_node_const_operand_ordinals(node);
-  for (uint16_t operand_index = 0; operand_index < node->operand_count;
-       ++operand_index) {
-    use_count += operand_ordinals[operand_index] == value_ordinal ? 1 : 0;
-  }
-  return use_count;
-}
-
 static iree_status_t loom_low_schedule_allocate_pressure_state(
     loom_low_schedule_build_state_t* state,
     loom_low_schedule_pressure_state_t* out_pressure_state) {
@@ -568,6 +550,17 @@ static iree_status_t loom_low_schedule_allocate_pressure_state(
         state->arena, value_count,
         sizeof(*out_pressure_state->block_value_ordinals),
         (void**)&out_pressure_state->block_value_ordinals));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, value_count,
+        sizeof(*out_pressure_state->candidate_operand_use_counts),
+        (void**)&out_pressure_state->candidate_operand_use_counts));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, value_count,
+        sizeof(*out_pressure_state->candidate_operand_ordinals),
+        (void**)&out_pressure_state->candidate_operand_ordinals));
+    memset(out_pressure_state->candidate_operand_use_counts, 0,
+           value_count *
+               sizeof(*out_pressure_state->candidate_operand_use_counts));
   }
   const uint32_t reg_class_count =
       state->target.descriptor_set->reg_class_count;
@@ -596,6 +589,29 @@ static iree_status_t loom_low_schedule_allocate_pressure_state(
                sizeof(*out_pressure_state->candidate_delta_touched_flags));
   }
   return iree_ok_status();
+}
+
+static void loom_low_schedule_reset_candidate_operand_uses(
+    loom_low_schedule_pressure_state_t* pressure_state) {
+  for (iree_host_size_t i = 0; i < pressure_state->candidate_operand_count;
+       ++i) {
+    const loom_value_ordinal_t value_ordinal =
+        pressure_state->candidate_operand_ordinals[i];
+    pressure_state->candidate_operand_use_counts[value_ordinal] = 0;
+  }
+  pressure_state->candidate_operand_count = 0;
+}
+
+static void loom_low_schedule_note_candidate_operand_use(
+    loom_low_schedule_pressure_state_t* pressure_state,
+    loom_value_ordinal_t value_ordinal) {
+  uint16_t* use_count =
+      &pressure_state->candidate_operand_use_counts[value_ordinal];
+  if (*use_count == 0) {
+    pressure_state->candidate_operand_ordinals
+        [pressure_state->candidate_operand_count++] = value_ordinal;
+  }
+  ++*use_count;
 }
 
 static iree_status_t loom_low_schedule_note_block_pressure_use(
@@ -1024,17 +1040,19 @@ static iree_status_t loom_low_schedule_score_candidate(
   for (uint16_t operand_index = 0; operand_index < node->operand_count;
        ++operand_index) {
     const loom_value_ordinal_t value_ordinal = operand_ordinals[operand_index];
-    if (loom_low_schedule_ordinal_repeated_before(operand_ordinals,
-                                                  operand_index)) {
-      continue;
-    }
+    loom_low_schedule_note_candidate_operand_use(pressure_state, value_ordinal);
+  }
+  for (iree_host_size_t i = 0; i < pressure_state->candidate_operand_count;
+       ++i) {
+    const loom_value_ordinal_t value_ordinal =
+        pressure_state->candidate_operand_ordinals[i];
     const loom_low_schedule_value_record_t* value =
         &state->values[value_ordinal];
     if (!iree_any_bit_set(value->flags, LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE)) {
       continue;
     }
     const uint32_t candidate_use_count =
-        loom_low_schedule_candidate_operand_use_count(node, value_ordinal);
+        pressure_state->candidate_operand_use_counts[value_ordinal];
     if (value->remaining_use_count != candidate_use_count) {
       continue;
     }
@@ -1043,6 +1061,7 @@ static iree_status_t loom_low_schedule_score_candidate(
     loom_low_schedule_note_candidate_pressure_delta(
         pressure_state, value->register_class_id, -(int64_t)unit_count);
   }
+  loom_low_schedule_reset_candidate_operand_uses(pressure_state);
 
   const loom_value_ordinal_t* result_ordinals =
       loom_low_schedule_node_const_result_ordinals(node);
