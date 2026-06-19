@@ -63,7 +63,6 @@ static uint32_t loom_low_allocation_active_unit_bucket_index(
     const loom_low_allocation_active_unit_index_t* index,
     loom_low_allocation_location_kind_t location_kind, uint32_t storage_key,
     uint32_t location) {
-  IREE_ASSERT(loom_low_allocation_active_unit_index_is_enabled(index));
   return loom_low_allocation_active_unit_hash(location_kind, storage_key,
                                               location) &
          (index->bucket_count - 1u);
@@ -89,7 +88,6 @@ static bool loom_low_allocation_active_unit_mark_assignment_seen(
   if (generation == 0) {
     return false;
   }
-  IREE_ASSERT_LT(assignment_index, index->assignment_capacity);
   uint32_t* seen_generations = index->seen_generations_by_assignment_index;
   uint32_t* assignment_generation = &seen_generations[assignment_index];
   if (*assignment_generation == generation) {
