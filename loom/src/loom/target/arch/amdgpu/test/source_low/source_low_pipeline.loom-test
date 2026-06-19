@@ -142,9 +142,9 @@ low.func.def target(@gfx11) abi(hal_kernel) @target_template_prunes_nonmatching_
   %16 = slice %codes[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %17 = slice %codes[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %18 = slice %codes[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %19 = v_perm_b32_src2_lit %15, %16, 1024
-  %20 = v_perm_b32_src2_lit %17, %18, 1024
-  %packed = v_perm_b32_src2_lit %19, %20, 84148480
+  %19 = v_perm_b32_src2_lit %15, %16, 4
+  %20 = v_perm_b32_src2_lit %17, %18, 4
+  %packed = v_perm_b32_src2_lit %19, %20, 16778500
   return %packed
 }
 
