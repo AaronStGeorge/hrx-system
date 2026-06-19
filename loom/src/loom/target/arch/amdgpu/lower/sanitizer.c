@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "iree/base/bitfield.h"
 #include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/module.h"
@@ -699,6 +700,7 @@ static bool loom_amdgpu_sanitizer_assert_access_plan_build(
 
   out_plan->report_access_kind = report_kind;
   out_plan->access_size = access_size;
+  out_plan->minimum_alignment = source.minimum_alignment;
   out_plan->static_repeat_count = static_repeat_count;
   out_plan->static_repeat_byte_stride = static_repeat_byte_stride;
   return true;
@@ -930,36 +932,82 @@ static iree_status_t loom_amdgpu_sanitizer_emit_repeat_fault_address(
                                             low_resource, out_fault_address);
 }
 
-static iree_status_t loom_amdgpu_sanitizer_build_repeat_failure_mask(
+typedef uint32_t loom_amdgpu_sanitizer_repeat_failure_flags_t;
+
+enum loom_amdgpu_sanitizer_repeat_failure_flag_bits_e {
+  LOOM_AMDGPU_SANITIZER_REPEAT_FAILURE_FLAG_NONE = 0u,
+  LOOM_AMDGPU_SANITIZER_REPEAT_FAILURE_FLAG_SELECT_FAULT_ADDRESS = 1u << 0,
+};
+
+typedef struct loom_amdgpu_sanitizer_repeat_failure_summary_t {
+  // Native lane mask identifying lanes that failed any repeated access.
+  loom_value_id_t failure_mask;
+  // VGPRx2 per-lane fault address selected from the first failed repeat.
+  loom_value_id_t selected_fault_address;
+} loom_amdgpu_sanitizer_repeat_failure_summary_t;
+
+static iree_status_t loom_amdgpu_sanitizer_build_repeat_failure_summary(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_access_plan_t* plan,
-    loom_value_id_t low_resource, loom_symbol_ref_t asan_config_symbol,
-    uint32_t wavefront_size, loom_value_id_t* out_failure_mask) {
-  *out_failure_mask = LOOM_VALUE_ID_INVALID;
+    loom_value_id_t low_resource,
+    const loom_amdgpu_sanitizer_access_config_t* access_config,
+    uint32_t wavefront_size, loom_amdgpu_sanitizer_repeat_failure_flags_t flags,
+    loom_amdgpu_sanitizer_repeat_failure_summary_t* out_summary) {
+  *out_summary = (loom_amdgpu_sanitizer_repeat_failure_summary_t){
+      .failure_mask = LOOM_VALUE_ID_INVALID,
+      .selected_fault_address = LOOM_VALUE_ID_INVALID,
+  };
   loom_builder_t* builder = loom_low_lower_context_builder(context);
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
+  const bool select_fault_address = iree_any_bit_set(
+      flags, LOOM_AMDGPU_SANITIZER_REPEAT_FAILURE_FLAG_SELECT_FAULT_ADDRESS);
+  loom_type_t mask_type = loom_type_none();
+  if (select_fault_address) {
+    IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+        descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2, &mask_type));
+  }
   for (uint16_t i = 0; i < plan->static_repeat_count; ++i) {
     loom_value_id_t fault_address = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_emit_repeat_fault_address(
         context, source_op, plan, low_resource, i, &fault_address));
     loom_value_id_t repeat_failure_mask = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_failure_mask(
-        builder, descriptor_set, asan_config_symbol, fault_address,
-        plan->access_size, wavefront_size, source_op->location,
-        &repeat_failure_mask));
-    if (*out_failure_mask == LOOM_VALUE_ID_INVALID) {
-      *out_failure_mask = repeat_failure_mask;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_build_sanitizer_access_failure_mask_with_config(
+            builder, descriptor_set, access_config, fault_address,
+            plan->access_size, plan->minimum_alignment, wavefront_size,
+            source_op->location, &repeat_failure_mask));
+    if (out_summary->failure_mask == LOOM_VALUE_ID_INVALID) {
+      out_summary->failure_mask = repeat_failure_mask;
+      if (select_fault_address) {
+        out_summary->selected_fault_address = fault_address;
+      }
     } else {
+      if (select_fault_address) {
+        loom_value_id_t changed_failure_mask = LOOM_VALUE_ID_INVALID;
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
+            context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_XOR_B64,
+            repeat_failure_mask, out_summary->failure_mask, mask_type,
+            &changed_failure_mask));
+        loom_value_id_t first_repeat_failure_mask = LOOM_VALUE_ID_INVALID;
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
+            context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B64,
+            repeat_failure_mask, changed_failure_mask, mask_type,
+            &first_repeat_failure_mask));
+        IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_vgpr64_select(
+            builder, descriptor_set, out_summary->selected_fault_address,
+            fault_address, first_repeat_failure_mask, source_op->location,
+            &out_summary->selected_fault_address));
+      }
       loom_value_id_t union_failure_mask = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_build_sanitizer_access_failure_mask_union(
-              builder, descriptor_set, *out_failure_mask, repeat_failure_mask,
-              source_op->location, &union_failure_mask));
-      *out_failure_mask = union_failure_mask;
+              builder, descriptor_set, out_summary->failure_mask,
+              repeat_failure_mask, source_op->location, &union_failure_mask));
+      out_summary->failure_mask = union_failure_mask;
     }
   }
-  if (*out_failure_mask == LOOM_VALUE_ID_INVALID) {
+  if (out_summary->failure_mask == LOOM_VALUE_ID_INVALID) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,
         "AMDGPU sanitizer repeated access plan has no accesses");
@@ -1006,10 +1054,18 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
-  loom_value_id_t failure_mask = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_repeat_failure_mask(
-      context, source_op, plan, low_resource, state->asan_config_symbol,
-      wavefront_size, &failure_mask));
+  loom_amdgpu_sanitizer_access_config_t access_config = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_config(
+      builder, descriptor_set, state->asan_config_symbol, source_op->location,
+      &access_config));
+  const loom_amdgpu_sanitizer_repeat_failure_flags_t repeat_failure_flags =
+      reporting_mode == LOOM_SANITIZER_REPORTING_MODE_TRAP
+          ? LOOM_AMDGPU_SANITIZER_REPEAT_FAILURE_FLAG_NONE
+          : LOOM_AMDGPU_SANITIZER_REPEAT_FAILURE_FLAG_SELECT_FAULT_ADDRESS;
+  loom_amdgpu_sanitizer_repeat_failure_summary_t repeat_failure = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_build_repeat_failure_summary(
+      context, source_op, plan, low_resource, &access_config, wavefront_size,
+      repeat_failure_flags, &repeat_failure));
 
   if (reporting_mode == LOOM_SANITIZER_REPORTING_MODE_TRAP) {
     loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
@@ -1017,8 +1073,8 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
     IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_trap_island(
         builder, descriptor_set, state, source_op->location, &island));
     return loom_amdgpu_build_sanitizer_trap_failure_mask_branch_to_island(
-        builder, descriptor_set, island, failure_mask, source_op->location,
-        &branch);
+        builder, descriptor_set, island, repeat_failure.failure_mask,
+        source_op->location, &branch);
   }
 
   loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
@@ -1028,7 +1084,8 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
       source_op->location, &island));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
-          builder, descriptor_set, failure_mask, source_op->location, &branch));
+          builder, descriptor_set, repeat_failure.failure_mask,
+          source_op->location, &branch));
 
   loom_amdgpu_feedback_packet_source_t source = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(
@@ -1044,37 +1101,23 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_emit_vgpr_u64_constant(
       context, source_op, plan->site_id, &report_site_id));
 
-  // Report the first failing sub-access in this wave and terminate. Once the
-  // sanitizer failure is observed, later sub-access reports are not reliable
-  // enough to justify saving and restoring EXEC around each report path.
-  for (uint16_t i = 0; i < plan->static_repeat_count; ++i) {
-    loom_value_id_t fault_address = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_emit_repeat_fault_address(
-        context, source_op, plan, low_resource, i, &fault_address));
-    loom_amdgpu_sanitizer_access_check_t report_check = {0};
-    IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_check(
-        builder, descriptor_set, state->asan_config_symbol, fault_address,
-        plan->access_size, wavefront_size, source_op->location, &report_check));
-    loom_amdgpu_sanitizer_access_report_t report = {
-        .access_kind = plan->report_access_kind,
-        .flags = LOOM_AMDGPU_SANITIZER_REPORT_FLAG_NONE,
-        .fault_address = fault_address,
-        .access_size = report_access_size,
-        .site_id = report_site_id,
-        .shadow_address = report_check.shadow_address,
-        .shadow_value = report_check.shadow_value,
-    };
-    loom_amdgpu_sanitizer_access_report_failure_branch_t repeat_branch = {0};
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
-            builder, descriptor_set, island, report_check.failure_mask, &source,
-            &report, source_op->location, &repeat_branch));
-  }
-
-  loom_op_t* branch_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_br_build(builder, branch.continuation_block,
-                                         /*args=*/NULL, /*args_count=*/0,
-                                         source_op->location, &branch_op));
+  loom_amdgpu_sanitizer_access_check_t report_check = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_check_with_config(
+      builder, descriptor_set, &access_config,
+      repeat_failure.selected_fault_address, plan->access_size,
+      plan->minimum_alignment, wavefront_size, source_op->location,
+      &report_check));
+  loom_amdgpu_sanitizer_access_report_t report = {
+      .access_kind = plan->report_access_kind,
+      .flags = LOOM_AMDGPU_SANITIZER_REPORT_FLAG_NONE,
+      .fault_address = repeat_failure.selected_fault_address,
+      .access_size = report_access_size,
+      .site_id = report_site_id,
+      .shadow_address = report_check.shadow_address,
+      .shadow_value = report_check.shadow_value,
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_branch(
+      builder, descriptor_set, island, &source, &report, source_op->location));
 
   loom_builder_set_block(builder, branch.continuation_block);
   return iree_ok_status();

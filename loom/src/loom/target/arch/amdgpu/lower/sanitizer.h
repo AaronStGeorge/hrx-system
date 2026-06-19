@@ -33,6 +33,8 @@ typedef struct loom_amdgpu_sanitizer_access_plan_t {
   loom_amdgpu_sanitizer_access_kind_t report_access_kind;
   // Number of application bytes covered by the assertion.
   uint32_t access_size;
+  // Minimum byte alignment proven for each repeated access address.
+  uint32_t minimum_alignment;
   // Number of regularly-strided sub-accesses covered by the assertion.
   uint16_t static_repeat_count;
   // Static byte stride between consecutive sub-access base addresses.
