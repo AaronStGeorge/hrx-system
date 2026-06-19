@@ -640,6 +640,15 @@ static iree_status_t loom_target_compile_report_format_summary(
         report->allocation_failure_rows.count));
   }
 
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        "COMPILE-REPORT: allocation_high_water_rows count=%" PRIhsz "\n",
+        report->allocation_high_water_rows.count));
+  }
+
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -751,10 +760,10 @@ static iree_status_t loom_target_compile_report_format_entry_rows(
           builder,
           " pressure_rows=%" PRIhsz " pressure_origin_rows=%" PRIhsz
           " schedule_band_rows=%" PRIhsz " schedule_band_summary_rows=%" PRIhsz
-          " spill_rows=%" PRIhsz "\n",
+          " spill_rows=%" PRIhsz " allocation_high_water_rows=%" PRIhsz "\n",
           row->pressure_row_count, row->pressure_origin_row_count,
           row->schedule_band_row_count, row->schedule_band_summary_row_count,
-          row->spill_row_count));
+          row->spill_row_count, row->allocation_high_water_row_count));
     }
   }
   return iree_ok_status();
@@ -1156,6 +1165,61 @@ static iree_status_t loom_target_compile_report_format_allocation_failure_rows(
       }
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder, ":%u]\n", row->conflict_location_count));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_target_compile_report_format_allocation_high_water_rows(
+    const loom_target_compile_report_t* report,
+    iree_string_builder_t* builder) {
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec =
+           report->allocation_high_water_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_allocation_high_water_row_t* rows =
+        (const loom_target_compile_report_allocation_high_water_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_allocation_high_water_row_t* row =
+          &rows[i];
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
+      const iree_string_view_t value_name =
+          loom_target_compile_report_non_empty(row->value_name);
+      const iree_string_view_t register_class =
+          loom_target_compile_report_non_empty(row->register_class);
+      const iree_string_view_t type_kind_name =
+          loom_target_compile_report_type_kind_name(row->type_kind);
+      const iree_string_view_t element_type_name =
+          loom_target_compile_report_scalar_type_name(row->element_type);
+      const iree_string_view_t origin_kind =
+          loom_target_compile_report_pressure_origin_kind_name(
+              row->origin_kind);
+      const iree_string_view_t origin_operation_name =
+          loom_target_compile_report_non_empty(row->origin_operation_name);
+      const iree_string_view_t semantic_tag =
+          loom_target_compile_report_non_empty(row->semantic_tag);
+      const iree_string_view_t location_kind =
+          loom_target_compile_report_non_empty(row->location_kind);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: allocation_high_water[%" PRIhsz
+          "] function=%.*s value=%.*s class=%.*s type=%.*s element=%.*s "
+          "assignment=%u origin=%.*s origin_op=%.*s semantic=%.*s start=%u "
+          "end=%u required_units=%u location=%.*s[%u:%u] high_water=%" PRIu64
+          "\n",
+          row_index, (int)function_name.size, function_name.data,
+          (int)value_name.size, value_name.data, (int)register_class.size,
+          register_class.data, (int)type_kind_name.size, type_kind_name.data,
+          (int)element_type_name.size, element_type_name.data,
+          row->assignment_index, (int)origin_kind.size, origin_kind.data,
+          (int)origin_operation_name.size, origin_operation_name.data,
+          (int)semantic_tag.size, semantic_tag.data, row->start_point,
+          row->end_point, row->required_unit_count, (int)location_kind.size,
+          location_kind.data, row->location_base, row->location_count,
+          row->high_water_units));
     }
   }
   return iree_ok_status();
@@ -1905,6 +1969,9 @@ static iree_status_t loom_target_compile_report_format_entry_json(
       row->schedule_band_summary_row_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
       stream, &first_field, "spill_row_count", row->spill_row_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "allocation_high_water_row_count",
+      row->allocation_high_water_row_count));
   if (iree_any_bit_set(row->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_RESOURCES)) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
@@ -2462,6 +2529,99 @@ loom_target_compile_report_format_allocation_failure_rows_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
+static iree_status_t
+loom_target_compile_report_format_allocation_high_water_row_json(
+    const loom_target_compile_report_allocation_high_water_row_t* row,
+    iree_host_size_t row_index, loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "index", row_index));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", row->function_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "value", row->value_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "register_class", row->register_class));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "type_kind", row->type_kind));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "type",
+      loom_target_compile_report_type_kind_name(row->type_kind)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "element_type", row->element_type));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "element",
+      loom_target_compile_report_scalar_type_name(row->element_type)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "assignment_index", row->assignment_index));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "origin_kind", row->origin_kind));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "origin",
+      loom_target_compile_report_pressure_origin_kind_name(row->origin_kind)));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "origin_operation",
+          row->origin_operation_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "semantic_tag", row->semantic_tag));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "start_point", row->start_point));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "end_point", row->end_point));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "required_unit_count", row->required_unit_count));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "location_kind", row->location_kind));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "location_base", row->location_base));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "location_count", row->location_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "high_water_units", row->high_water_units));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t
+loom_target_compile_report_format_allocation_high_water_rows_json(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_format_mode_t mode,
+    loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "count", report->allocation_high_water_rows.count));
+  if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "rows"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+    iree_host_size_t row_index = 0;
+    for (const loom_target_compile_report_vec_t* vec =
+             report->allocation_high_water_rows.head;
+         vec != NULL; vec = vec->next) {
+      const loom_target_compile_report_allocation_high_water_row_t* rows =
+          (const loom_target_compile_report_allocation_high_water_row_t*)
+              loom_target_compile_report_vec_const_rows(vec);
+      for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+        if (row_index != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_target_compile_report_format_allocation_high_water_row_json(
+                &rows[i], row_index, stream));
+      }
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 static iree_status_t loom_target_compile_report_format_diagnostics_json(
     const loom_target_compile_report_format_options_t* options,
     loom_output_stream_t* stream) {
@@ -2891,6 +3051,9 @@ iree_status_t loom_target_compile_report_format_text(
         loom_target_compile_report_format_allocation_failure_rows(report,
                                                                   builder));
     IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_allocation_high_water_rows(report,
+                                                                     builder));
+    IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_math_rows(report, builder));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_source_low_rows(report, builder));
@@ -3069,6 +3232,15 @@ iree_status_t loom_target_compile_report_format_json(
         stream, &first_field, "allocation_failure_rows"));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_allocation_failure_rows_json(
+            report, options->mode, stream));
+  }
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "allocation_high_water_rows"));
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_allocation_high_water_rows_json(
             report, options->mode, stream));
   }
   if (options->diagnostic_count != 0) {

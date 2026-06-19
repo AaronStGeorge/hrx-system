@@ -67,6 +67,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ORIGIN_ROWS = 1u << 15,
   // Consecutive low-schedule band rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS = 1u << 16,
+  // Per-register-class allocation high-water rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS = 1u << 17,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -424,6 +426,8 @@ typedef struct loom_target_compile_report_entry_t {
   iree_host_size_t schedule_band_summary_row_count;
   // Number of detailed spill rows copied for this entry.
   iree_host_size_t spill_row_count;
+  // Number of detailed allocation high-water rows copied for this entry.
+  iree_host_size_t allocation_high_water_row_count;
 } loom_target_compile_report_entry_t;
 
 // One register-pressure peak row in a compile report.
@@ -616,6 +620,42 @@ typedef struct loom_target_compile_report_allocation_failure_row_t {
   // Conflicting assignment location width, or zero when unavailable.
   uint32_t conflict_location_count;
 } loom_target_compile_report_allocation_failure_row_t;
+
+// One allocation assignment that sets the high-water mark for a register class.
+typedef struct loom_target_compile_report_allocation_high_water_row_t {
+  // Target artifact function symbol containing this allocation.
+  iree_string_view_t function_name;
+  // SSA value represented by the high-water assignment.
+  iree_string_view_t value_name;
+  // Register class name for the assignment.
+  iree_string_view_t register_class;
+  // Numeric Loom type kind for the assignment value class.
+  uint32_t type_kind;
+  // Numeric Loom scalar element type for the assignment value class.
+  uint32_t element_type;
+  // Allocation assignment index that sets this high-water mark.
+  uint32_t assignment_index;
+  // Operation mnemonic that produced the value, or a fallback context.
+  iree_string_view_t origin_operation_name;
+  // Structured family that produced this value.
+  loom_target_compile_report_pressure_origin_kind_t origin_kind;
+  // Descriptor semantic tag for descriptor-backed origins, if any.
+  iree_string_view_t semantic_tag;
+  // Program point where the assignment storage begins.
+  uint32_t start_point;
+  // One-past-last storage program point for the assignment.
+  uint32_t end_point;
+  // Allocation units required by the assignment interval.
+  uint32_t required_unit_count;
+  // Concrete allocation location kind.
+  iree_string_view_t location_kind;
+  // Base physical register, target ID, or spill slot ordinal.
+  uint32_t location_base;
+  // Number of contiguous units assigned at |location_base|.
+  uint32_t location_count;
+  // One-past-last concrete location unit reached by this assignment.
+  uint64_t high_water_units;
+} loom_target_compile_report_allocation_high_water_row_t;
 
 // One source-to-target-low selection row copied into a compile report.
 typedef struct loom_target_compile_report_source_low_row_t {
@@ -935,6 +975,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t spill_rows;
   // Owned hard allocation-failure rows.
   loom_target_compile_report_row_list_t allocation_failure_rows;
+  // Owned allocation high-water rows.
+  loom_target_compile_report_row_list_t allocation_high_water_rows;
   // Owned source-to-low selection rows.
   loom_target_compile_report_row_list_t source_low_rows;
   // Owned emitted source-memory packet rows.
@@ -1067,6 +1109,11 @@ iree_status_t loom_target_compile_report_record_spill_row(
 iree_status_t loom_target_compile_report_record_allocation_failure_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_allocation_failure_row_t* row);
+
+// Records one allocation high-water row.
+iree_status_t loom_target_compile_report_record_allocation_high_water_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_allocation_high_water_row_t* row);
 
 // Records one source-low row.
 iree_status_t loom_target_compile_report_record_source_low_row(

@@ -1388,6 +1388,168 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
   return iree_ok_status();
 }
 
+typedef struct loom_target_compile_report_allocation_high_water_scratch_t {
+  // Assignment index that reaches |high_water_units|, or UINT32_MAX.
+  uint32_t assignment_index;
+  // One-past-last physical register unit reached by the assignment.
+  uint64_t high_water_units;
+} loom_target_compile_report_allocation_high_water_scratch_t;
+
+static bool loom_target_compile_report_liveness_value_ordinal(
+    const loom_liveness_analysis_t* liveness, loom_value_id_t value_id,
+    loom_value_ordinal_t* out_value_ordinal) {
+  if (liveness == NULL || liveness->value_ids == NULL) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < liveness->value_count; ++i) {
+    if (liveness->value_ids[i] == value_id) {
+      *out_value_ordinal = (loom_value_ordinal_t)i;
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t
+loom_target_compile_report_record_allocation_high_water_rows(
+    loom_target_compile_report_t* report,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_schedule_table_t* schedule) {
+  if (!loom_target_compile_report_wants_details(
+          report,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS)) {
+    return iree_ok_status();
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      allocation->target.descriptor_set;
+  if (descriptor_set == NULL || descriptor_set->reg_class_count == 0 ||
+      allocation->assignment_count == 0 ||
+      iree_allocator_is_null(report->allocator)) {
+    return iree_ok_status();
+  }
+  iree_host_size_t scratch_bytes = 0;
+  if (!iree_host_size_checked_mul(
+          descriptor_set->reg_class_count,
+          sizeof(loom_target_compile_report_allocation_high_water_scratch_t),
+          &scratch_bytes)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "allocation high-water scratch is too large");
+  }
+  loom_target_compile_report_allocation_high_water_scratch_t* scratch = NULL;
+  iree_status_t status =
+      iree_allocator_malloc(report->allocator, scratch_bytes, (void**)&scratch);
+  if (iree_status_is_ok(status)) {
+    for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
+      scratch[i] = (loom_target_compile_report_allocation_high_water_scratch_t){
+          .assignment_index = UINT32_MAX,
+      };
+    }
+  }
+
+  const loom_liveness_analysis_t* liveness = &allocation->liveness;
+  loom_target_compile_report_pressure_origin_info_t* origin_infos = NULL;
+  if (iree_status_is_ok(status) && schedule != NULL &&
+      liveness->value_count != 0) {
+    iree_host_size_t origin_info_bytes = 0;
+    if (!iree_host_size_checked_mul(
+            liveness->value_count,
+            sizeof(loom_target_compile_report_pressure_origin_info_t),
+            &origin_info_bytes)) {
+      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "pressure origin info table is too large");
+    } else {
+      status = iree_allocator_malloc(report->allocator, origin_info_bytes,
+                                     (void**)&origin_infos);
+    }
+    if (iree_status_is_ok(status)) {
+      memset(origin_infos, 0, origin_info_bytes);
+      status = loom_target_compile_report_build_pressure_origin_infos(
+          schedule, origin_infos, liveness->value_count);
+    }
+  }
+
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < allocation->assignment_count; ++i) {
+    const loom_low_allocation_assignment_t* assignment =
+        &allocation->assignments[i];
+    if (assignment->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        assignment->location_count == 0) {
+      continue;
+    }
+    if (assignment->descriptor_reg_class_id >=
+        descriptor_set->reg_class_count) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "allocation assignment register class exceeds descriptor set");
+      break;
+    }
+    const uint64_t high_water_units =
+        (uint64_t)assignment->location_base + assignment->location_count;
+    loom_target_compile_report_allocation_high_water_scratch_t* entry =
+        &scratch[assignment->descriptor_reg_class_id];
+    if (high_water_units > entry->high_water_units) {
+      entry->assignment_index = (uint32_t)i;
+      entry->high_water_units = high_water_units;
+    }
+  }
+
+  for (uint32_t i = 0;
+       iree_status_is_ok(status) && i < descriptor_set->reg_class_count; ++i) {
+    const loom_target_compile_report_allocation_high_water_scratch_t* entry =
+        &scratch[i];
+    if (entry->assignment_index == UINT32_MAX ||
+        entry->assignment_index >= allocation->assignment_count) {
+      continue;
+    }
+    const loom_low_allocation_assignment_t* assignment =
+        &allocation->assignments[entry->assignment_index];
+    loom_target_compile_report_pressure_origin_info_t origin_info =
+        loom_target_compile_report_pressure_origin_from_value(
+            allocation->module, assignment->value_id);
+    loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+    if (origin_infos != NULL &&
+        loom_target_compile_report_liveness_value_ordinal(
+            liveness, assignment->value_id, &value_ordinal) &&
+        value_ordinal < liveness->value_count &&
+        origin_infos[value_ordinal].kind !=
+            LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_UNKNOWN) {
+      origin_info = origin_infos[value_ordinal];
+    }
+    const loom_target_compile_report_allocation_high_water_row_t row = {
+        .function_name = report->function_name,
+        .value_name = loom_target_compile_report_value_name(
+            allocation->module, assignment->value_id),
+        .register_class = loom_target_compile_report_value_class_name(
+            descriptor_set, assignment->value_class),
+        .type_kind = assignment->value_class.type_kind,
+        .element_type = assignment->value_class.element_type,
+        .assignment_index = entry->assignment_index,
+        .origin_operation_name = origin_info.operation_name,
+        .origin_kind = origin_info.kind,
+        .semantic_tag = origin_info.semantic_tag,
+        .start_point = assignment->start_point,
+        .end_point = assignment->end_point,
+        .required_unit_count = assignment->unit_count,
+        .location_kind =
+            loom_low_allocation_location_kind_name(assignment->location_kind),
+        .location_base = assignment->location_base,
+        .location_count = assignment->location_count,
+        .high_water_units = entry->high_water_units,
+    };
+    status = loom_target_compile_report_record_allocation_high_water_row(report,
+                                                                         &row);
+  }
+
+  if (origin_infos != NULL) {
+    iree_allocator_free(report->allocator, origin_infos);
+  }
+  if (scratch != NULL) {
+    iree_allocator_free(report->allocator, scratch);
+  }
+  return status;
+}
+
 static loom_target_compile_report_allocation_failure_blocking_kind_t
 loom_target_compile_report_allocation_failure_blocking_kind(
     loom_low_allocation_failure_blocking_kind_t kind) {
@@ -1534,6 +1696,10 @@ static iree_status_t loom_target_compile_report_record_low_allocation_contents(
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_record_allocation_failure_rows(
         report, allocation);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_record_allocation_high_water_rows(
+        report, allocation, schedule);
   }
   return status;
 }

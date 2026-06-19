@@ -186,6 +186,29 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           /*.conflict_location_count=*/1,
       },
   };
+  loom_target_compile_report_allocation_high_water_row_t
+      allocation_high_water_rows[] = {
+          {
+              /*.function_name=*/IREE_SVL("branchy_export"),
+              /*.value_name=*/IREE_SVL("rhs_window"),
+              /*.register_class=*/IREE_SVL("amdgpu.vgpr"),
+              /*.type_kind=*/LOOM_TYPE_REGISTER,
+              /*.element_type=*/LOOM_SCALAR_TYPE_I32,
+              /*.assignment_index=*/5,
+              /*.origin_operation_name=*/
+              IREE_SVL("low.op<amdgpu.ds_load_b128>"),
+              /*.origin_kind=*/
+              LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_LOCAL_MEMORY,
+              /*.semantic_tag=*/IREE_SVL("memory.workgroup.load.u128"),
+              /*.start_point=*/17,
+              /*.end_point=*/24,
+              /*.required_unit_count=*/4,
+              /*.location_kind=*/IREE_SVL("physical_register"),
+              /*.location_base=*/248,
+              /*.location_count=*/4,
+              /*.high_water_units=*/252,
+          },
+      };
   loom_target_compile_report_source_low_row_t source_low_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
@@ -285,6 +308,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_FAILURE_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
@@ -375,6 +399,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       &entry_report, &schedule_band_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_schedule_band_summary_row(
       &entry_report, &schedule_band_summary_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_allocation_high_water_row(
+      &entry_report, &allocation_high_water_rows[0]));
   loom_target_compile_report_record_target_resources(&entry_report,
                                                      &target_resources);
   loom_target_compile_report_record_static_instruction_mix(&entry_report,
@@ -494,6 +520,17 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                   IREE_SV("conflict_value=leader "
                                           "conflict_start=0 conflict_end=5"),
                                   0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("allocation_high_water[0] function=branchy_export "
+                        "value=rhs_window class=amdgpu.vgpr type=register "
+                        "element=i32 assignment=5 origin=local-memory "
+                        "origin_op=low.op<amdgpu.ds_load_b128> "
+                        "semantic=memory.workgroup.load.u128 start=17 end=24 "
+                        "required_units=4 location=physical_register[248:4] "
+                        "high_water=252"),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("entry[0] "
@@ -751,6 +788,29 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "\"conflict_start_point\":0,"
                                           "\"conflict_end_point\":5"),
                                   0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"allocation_high_water_rows\":{\"count\":1,"
+                        "\"rows\":[{\"index\":0,\"function\":"
+                        "\"branchy_export\",\"value\":\"rhs_window\","
+                        "\"register_class\":\"amdgpu.vgpr\""),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"origin_kind\":13,\"origin\":\"local-memory\","
+                        "\"origin_operation\":"
+                        "\"low.op<amdgpu.ds_load_b128>\","
+                        "\"semantic_tag\":\"memory.workgroup.load.u128\""),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"location_kind\":\"physical_register\","
+                        "\"location_base\":248,\"location_count\":4,"
+                        "\"high_water_units\":252"),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
