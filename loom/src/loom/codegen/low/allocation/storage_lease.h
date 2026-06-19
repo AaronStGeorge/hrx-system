@@ -53,6 +53,8 @@ typedef struct loom_low_allocation_storage_lease_unit_index_t {
 typedef struct loom_low_allocation_storage_lease_state_t {
   // Borrowed storage-lease table being materialized.
   const loom_low_storage_lease_table_t* lease_table;
+  // Borrowed value domain used to map value IDs to allocation-local ordinals.
+  const loom_local_value_domain_t* value_domain;
   // Mutable assignment-backed storage-lease records being built.
   loom_low_allocation_storage_lease_t* instances;
   // Mutable allocator-requested storage release actions being built.
