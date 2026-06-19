@@ -89,6 +89,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target/arch/amdgpu/planning:address_state",
         "//loom/src/loom/target/arch/amdgpu/planning:descriptor_semantics",
+        "//loom/src/loom/target/arch/amdgpu/planning:occupancy",
         "//loom/src/loom/target/arch/amdgpu/planning:packet_plan",
         "//loom/src/loom/target/arch/amdgpu/planning:storage_lease",
         "//loom/src/loom/target/arch/amdgpu/planning:vopd_plan",

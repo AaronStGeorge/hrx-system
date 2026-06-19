@@ -6,6 +6,7 @@
 
 #include "loom/target/arch/amdgpu/check/occupancy.h"
 
+#include "loom/codegen/low/target_binding.h"
 #include "loom/target/arch/amdgpu/planning/occupancy.h"
 #include "loom/target/arch/amdgpu/planning/storage_lease.h"
 #include "loom/tools/loom-check/diagnostics.h"
@@ -147,6 +148,43 @@ static iree_status_t loom_amdgpu_occupancy_check_parse_emit_options(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_occupancy_check_build_schedule_pressure_cliffs(
+    const loom_check_emit_provider_request_t* request,
+    iree_string_view_t function_symbol_name,
+    loom_low_schedule_pressure_cliff_list_t* out_pressure_cliffs) {
+  *out_pressure_cliffs = loom_low_schedule_pressure_cliff_list_empty();
+  loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
+      .diagnostic_collector = request->diagnostic_collector,
+      .module = request->module,
+      .source_resolver = request->source_resolver,
+      .emitter = LOOM_EMITTER_PASS,
+  };
+  iree_diagnostic_emitter_t emitter = {0};
+  if (request->diagnostic_collector != NULL) {
+    emitter = (iree_diagnostic_emitter_t){
+        .fn = loom_check_diagnostic_emitter_capture_emit,
+        .user_data = &diagnostic_capture,
+    };
+  }
+  loom_op_t* low_function = NULL;
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
+      request->module, function_symbol_name, request->test_case,
+      request->filename, request->diagnostic_collector, emitter,
+      &low_function));
+  if (!low_function) {
+    return iree_ok_status();
+  }
+  loom_low_resolved_target_t target = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
+      request->module, low_function, &request->low_registry->registry,
+      loom_target_selection_empty(), emitter, &target));
+  if (target.descriptor_set == NULL) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
+      target.descriptor_set, request->case_arena, out_pressure_cliffs);
+}
+
 static iree_status_t loom_amdgpu_occupancy_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
@@ -158,11 +196,16 @@ static iree_status_t loom_amdgpu_occupancy_check_emit_provider_execute(
   loom_low_emission_frame_t frame = {0};
   loom_low_storage_lease_provider_t storage_lease_provider = {0};
   loom_amdgpu_storage_lease_provider(&storage_lease_provider);
+  loom_low_schedule_pressure_cliff_list_t schedule_pressure_cliffs =
+      loom_low_schedule_pressure_cliff_list_empty();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_occupancy_check_build_schedule_pressure_cliffs(
+          request, options.function_symbol_name, &schedule_pressure_cliffs));
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count,
+      options.allocation_fixed_value_spec_count, schedule_pressure_cliffs,
       loom_low_schedule_pair_affinity_list_empty(),
       loom_low_schedule_structural_state_read_list_empty(),
       &storage_lease_provider,
