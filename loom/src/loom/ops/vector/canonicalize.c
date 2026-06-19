@@ -561,6 +561,8 @@ static bool loom_vector_scalar_lane_chain_kind_supported(
     case LOOM_OP_SCALAR_FPTOSI:
     case LOOM_OP_SCALAR_FPTOUI:
     case LOOM_OP_SCALAR_TRUNCI:
+    case LOOM_OP_SCALAR_SITOFP:
+    case LOOM_OP_SCALAR_UITOFP:
       return true;
     default:
       return false;
@@ -698,6 +700,12 @@ static iree_status_t loom_vector_build_lane_chain_step(
                                       location, out_op);
     case LOOM_OP_SCALAR_TRUNCI:
       return loom_vector_trunci_build(builder, input, input_type, result_type,
+                                      location, out_op);
+    case LOOM_OP_SCALAR_SITOFP:
+      return loom_vector_sitofp_build(builder, input, input_type, result_type,
+                                      location, out_op);
+    case LOOM_OP_SCALAR_UITOFP:
+      return loom_vector_uitofp_build(builder, input, input_type, result_type,
                                       location, out_op);
     default:
       break;
