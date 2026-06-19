@@ -68,6 +68,7 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::target::arch::amdgpu::planning::address_state
+    loom::target::arch::amdgpu::planning::descriptor_semantics
     loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::planning::storage_lease
     loom::target::arch::amdgpu::planning::vopd_plan
@@ -484,6 +485,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::planning::address_state
+    loom::target::arch::amdgpu::planning::descriptor_semantics
     loom::target::arch::amdgpu::planning::occupancy
     loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::planning::storage_lease

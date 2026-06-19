@@ -95,11 +95,14 @@ loom_cc_library(
     name = "descriptor_semantics",
     srcs = ["descriptor_semantics.c"],
     hdrs = ["descriptor_semantics.h"],
+    visibility = _AMDGPU_NATIVE_PLANNING_VISIBILITY,
     deps = [
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/target/arch/amdgpu/encoding",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

@@ -218,6 +218,32 @@ static inline bool loom_low_schedule_pair_affinity_list_is_empty(
   return list.count == 0;
 }
 
+// Target state dependency for structural low materializations.
+typedef struct loom_low_schedule_structural_state_read_t {
+  // Register class written by a structural low materialization.
+  uint16_t result_reg_class_id;
+  // Architectural state register class read by the materialization.
+  uint16_t state_reg_class_id;
+} loom_low_schedule_structural_state_read_t;
+
+// List of target-provided structural state-read rows.
+typedef struct loom_low_schedule_structural_state_read_list_t {
+  // Borrowed structural state-read rows.
+  const loom_low_schedule_structural_state_read_t* values;
+  // Number of entries in |values|.
+  iree_host_size_t count;
+} loom_low_schedule_structural_state_read_list_t;
+
+static inline loom_low_schedule_structural_state_read_list_t
+loom_low_schedule_structural_state_read_list_empty(void) {
+  return (loom_low_schedule_structural_state_read_list_t){0};
+}
+
+static inline bool loom_low_schedule_structural_state_read_list_is_empty(
+    loom_low_schedule_structural_state_read_list_t list) {
+  return list.count == 0;
+}
+
 // One scheduled operation in a low function body.
 typedef struct loom_low_schedule_node_t {
   // Operation represented by this node.
@@ -640,6 +666,9 @@ typedef struct loom_low_schedule_options_t {
   loom_low_schedule_pressure_cliff_list_t pressure_cliffs;
   // Optional target-provided pair-affinity table.
   loom_low_schedule_pair_affinity_list_t pair_affinities;
+  // Optional target-provided implicit state reads for structural low
+  // materializations that emit target packets without descriptor rows.
+  loom_low_schedule_structural_state_read_list_t structural_state_reads;
   // Structured diagnostic emitter for user IR failures.
   iree_diagnostic_emitter_t emitter;
   // Optional backend feedback diagnostics to emit after scheduling analysis.

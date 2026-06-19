@@ -36,6 +36,15 @@ static bool loom_low_schedule_op_is_descriptor_packet(const loom_op_t* op) {
   return loom_low_op_isa(op) || loom_low_const_isa(op);
 }
 
+// Structural low operations that may emit target register packets after
+// scheduling must carry any target state dependencies their eventual packets
+// require.
+static bool loom_low_schedule_op_is_structural_materialization(
+    const loom_op_t* op) {
+  return loom_low_copy_isa(op) || loom_low_slice_isa(op) ||
+         loom_low_concat_isa(op) || loom_low_storage_address_isa(op);
+}
+
 static bool loom_low_schedule_op_is_terminator(const loom_module_t* module,
                                                const loom_op_t* op) {
   return iree_any_bit_set(loom_op_effective_traits(module, op),
@@ -901,6 +910,41 @@ static iree_status_t loom_low_schedule_note_descriptor_state_accesses(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_schedule_note_structural_state_reads(
+    loom_low_schedule_build_state_t* state, uint32_t node_index) {
+  const loom_low_schedule_structural_state_read_list_t state_reads =
+      state->options->structural_state_reads;
+  if (loom_low_schedule_structural_state_read_list_is_empty(state_reads)) {
+    return iree_ok_status();
+  }
+  const loom_low_schedule_node_t* node = &state->nodes[node_index];
+  if (node->descriptor != NULL ||
+      !loom_low_schedule_op_is_structural_materialization(node->op)) {
+    return iree_ok_status();
+  }
+  const loom_value_ordinal_t* result_ordinals =
+      loom_low_schedule_node_const_result_ordinals(node);
+  for (iree_host_size_t i = 0; i < state_reads.count; ++i) {
+    const loom_low_schedule_structural_state_read_t* row =
+        &state_reads.values[i];
+    bool has_matching_result = false;
+    for (uint16_t result_index = 0; result_index < node->result_count;
+         ++result_index) {
+      const loom_value_ordinal_t result_ordinal = result_ordinals[result_index];
+      if (state->values[result_ordinal].register_class_id ==
+          row->result_reg_class_id) {
+        has_matching_result = true;
+        break;
+      }
+    }
+    if (has_matching_result) {
+      IREE_RETURN_IF_ERROR(loom_low_schedule_note_state_read(
+          state, node_index, row->state_reg_class_id));
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_schedule_initialize_node_value_ordinals(
     loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node) {
   const loom_op_t* op = node->op;
@@ -1355,6 +1399,8 @@ iree_status_t loom_low_schedule_build_dependencies(
           loom_low_schedule_note_storage_reads(state, node_index, descriptor));
       IREE_RETURN_IF_ERROR(loom_low_schedule_note_descriptor_state_accesses(
           state, node_index, descriptor));
+      IREE_RETURN_IF_ERROR(
+          loom_low_schedule_note_structural_state_reads(state, node_index));
       if (descriptor != NULL) {
         IREE_RETURN_IF_ERROR(loom_low_schedule_note_descriptor_effects(
             state, &effect_frontier, node_index, descriptor));
