@@ -44,6 +44,10 @@ typedef struct loom_low_emission_frame_options_t {
   loom_low_schedule_pressure_cliff_list_t schedule_pressure_cliffs;
   // Optional target-provided descriptor pair-affinity table.
   loom_low_schedule_pair_affinity_list_t schedule_pair_affinities;
+  // Optional target-provided implicit state reads for structural low
+  // materializations that emit target packets without descriptor rows.
+  loom_low_schedule_structural_state_read_list_t
+      schedule_structural_state_reads;
   // Candidate selection strategy used by the scheduler.
   loom_low_schedule_strategy_t schedule_strategy;
   // Optional structured scheduler feedback to emit.

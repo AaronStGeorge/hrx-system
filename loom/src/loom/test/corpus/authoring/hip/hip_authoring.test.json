@@ -353,7 +353,9 @@
           "bench_wave64_workgroup_reduce_full_wave",
           "case_wave64_workgroup_reduce_full_wave",
           "bench_wave64_workgroup_reduce_cross_wave",
-          "case_wave64_workgroup_reduce_cross_wave"
+          "case_wave64_workgroup_reduce_cross_wave",
+          "bench_wave64_workgroup_reduce_sparse_loop_accumulation",
+          "case_wave64_workgroup_reduce_sparse_loop_accumulation"
         ]
       }
     },
@@ -375,6 +377,7 @@
             "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_sub_wave",
             "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_full_wave",
             "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_cross_wave",
+            "kernel.def target(@gfx1100_wave64) @wave64_workgroup_reduce_sparse_loop_accumulation",
             "kernel.workgroup.reduce<addf>"
           ]
         }

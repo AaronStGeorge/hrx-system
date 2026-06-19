@@ -17,6 +17,27 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_div_scale_vcc_state waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_div_scale_vcc_state(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %one = v_mov_b32 1065353216
+  %scaled, %mask = v_div_scale_f32 %value, %value, %one
+  %reciprocal = v_rcp_f32 %scaled
+  %quotient = v_div_fmas_f32 %scaled, %reciprocal, %scaled, %mask
+  %result = v_div_fixup_f32 %quotient, %value, %one
+  return
+}
+
+// ----
+  v_mov_b32 v1, 1065353216
+  v_div_scale_f32 v2, v0, v0, v1
+  v_rcp_f32 v3, v2
+  v_div_fmas_f32 v2, v2, v3, v2
+  v_div_fixup_f32 v0, v2, v0, v1
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_control_messages waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_control_messages() asm<amdgpu.rdna3.core> {
@@ -2980,6 +3001,53 @@ low.func.def target(@gfx11_target) @gfx11_trans_result_depctr(%input: reg<amdgpu
   s_waitcnt_depctr depctr(0)
   v_mul_f32 v0, v0, v1
   buffer_store_dword v0, v2, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_grouped_trans_lanes strategy=source
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_grouped_trans_lanes(%input0: reg<amdgpu.vgpr>, %input1: reg<amdgpu.vgpr>, %input2: reg<amdgpu.vgpr>, %input3: reg<amdgpu.vgpr>, %bias: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %addr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %exp0 = v_exp_f32 %input0
+  %exp1 = v_exp_f32 %input1
+  %exp2 = v_exp_f32 %input2
+  %exp3 = v_exp_f32 %input3
+  %sum0 = v_add_f32 %exp0, %bias
+  %sum1 = v_add_f32 %exp1, %bias
+  %sum2 = v_add_f32 %exp2, %bias
+  %sum3 = v_add_f32 %exp3, %bias
+  %reciprocal0 = v_rcp_f32 %sum0
+  %reciprocal1 = v_rcp_f32 %sum1
+  %reciprocal2 = v_rcp_f32 %sum2
+  %reciprocal3 = v_rcp_f32 %sum3
+  %scaled0 = v_mul_f32 %reciprocal0, %input0
+  %scaled1 = v_mul_f32 %reciprocal1, %input1
+  %scaled2 = v_mul_f32 %reciprocal2, %input2
+  %scaled3 = v_mul_f32 %reciprocal3, %input3
+  %packed = concat(%scaled0, %scaled1, %scaled2, %scaled3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  buffer_store_b128 %packed, %resource, %addr, %soffset
+  return
+}
+
+// ----
+  v_exp_f32 v6, v1
+  v_exp_f32 v7, v2
+  v_exp_f32 v8, v3
+  v_exp_f32 v9, v4
+  v_add_f32 v6, v6, v0
+  v_add_f32 v7, v7, v0
+  s_waitcnt_depctr depctr(0)
+  v_add_f32 v8, v8, v0
+  v_add_f32 v0, v9, v0
+  v_rcp_f32 v6, v6
+  v_rcp_f32 v7, v7
+  v_rcp_f32 v8, v8
+  v_rcp_f32 v0, v0
+  v_dual_mul_f32 v12, v6, v1 :: v_dual_mul_f32 v13, v7, v2
+  s_waitcnt_depctr depctr(0)
+  v_mul_f32 v14, v8, v3
+  v_mul_f32 v15, v0, v4
+  buffer_store_b128 v[12:15], v5, s[0:3], s4 offen offset:0
   s_endpgm
 
 // ====

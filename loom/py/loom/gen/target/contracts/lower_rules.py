@@ -18,6 +18,7 @@ from loom.gen.support.generated_file import line_comment_header
 from loom.gen.target.contracts import lower_rule_rows, lower_rule_spelling
 from loom.target.contracts import (
     LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
+    LOWER_EMIT_FLAG_RESULT_DESCRIPTOR_TYPE,
     LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN,
     LOWER_SOURCE_MEMORY_NONE,
     CompiledLowerRuleSet,
@@ -582,6 +583,8 @@ def _validate_c_table_shape(
             f"{row_subject} result type-pattern start",
         )
         _require_u16(row.result_ref_count, f"{row_subject} result-ref count")
+        if row.flags & LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN and row.flags & LOWER_EMIT_FLAG_RESULT_DESCRIPTOR_TYPE:
+            raise ValueError(f"{row_subject} cannot use both result type-pattern and descriptor result-type flags")
         if row.flags & LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN:
             _require_table_range(
                 row.result_type_pattern_start,

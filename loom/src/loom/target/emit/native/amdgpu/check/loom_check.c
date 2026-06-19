@@ -11,6 +11,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/planning/address_state.h"
+#include "loom/target/arch/amdgpu/planning/descriptor_semantics.h"
 #include "loom/target/arch/amdgpu/planning/packet_plan.h"
 #include "loom/target/arch/amdgpu/planning/storage_lease.h"
 #include "loom/target/arch/amdgpu/planning/vopd_plan.h"
@@ -290,11 +291,13 @@ static iree_status_t loom_amdgpu_loom_check_lower_spill_traffic(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_loom_check_build_schedule_pair_affinities(
+static iree_status_t loom_amdgpu_loom_check_build_schedule_tables(
     const loom_check_emit_provider_request_t* request,
     iree_string_view_t function_symbol_name,
-    loom_low_schedule_pair_affinity_list_t* out_affinities) {
+    loom_low_schedule_pair_affinity_list_t* out_affinities,
+    loom_low_schedule_structural_state_read_list_t* out_state_reads) {
   *out_affinities = loom_low_schedule_pair_affinity_list_empty();
+  *out_state_reads = loom_low_schedule_structural_state_read_list_empty();
   loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
       .diagnostic_collector = request->diagnostic_collector,
       .module = request->module,
@@ -323,8 +326,10 @@ static iree_status_t loom_amdgpu_loom_check_build_schedule_pair_affinities(
   if (target.descriptor_set == NULL) {
     return iree_ok_status();
   }
-  return loom_amdgpu_vopd_build_schedule_pair_affinities(
-      &target, request->case_arena, out_affinities);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_build_schedule_pair_affinities(
+      &target, request->case_arena, out_affinities));
+  return loom_amdgpu_descriptor_build_structural_state_reads(
+      target.descriptor_set, request->case_arena, out_state_reads);
 }
 
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
@@ -359,14 +364,18 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
           : NULL;
   loom_low_schedule_pair_affinity_list_t schedule_pair_affinities =
       loom_low_schedule_pair_affinity_list_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_loom_check_build_schedule_pair_affinities(
-      request, options.function_symbol_name, &schedule_pair_affinities));
+  loom_low_schedule_structural_state_read_list_t schedule_state_reads =
+      loom_low_schedule_structural_state_read_list_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_loom_check_build_schedule_tables(
+      request, options.function_symbol_name, &schedule_pair_affinities,
+      &schedule_state_reads));
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
       options.allocation_fixed_value_spec_count, schedule_pair_affinities,
-      selected_storage_lease_provider, &spill_free_options, &frame));
+      schedule_state_reads, selected_storage_lease_provider,
+      &spill_free_options, &frame));
   if (request->diagnostic_collector != NULL &&
       request->diagnostic_collector->count != 0) {
     return iree_ok_status();

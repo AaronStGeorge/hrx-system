@@ -168,9 +168,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_fptosi_i8x4(%input: reg<amd
   %10 = v_cvt_i32_f32 %9
   %11 = slice %input[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %12 = v_cvt_i32_f32 %11
-  %13 = v_perm_b32_src2_lit %6, %8, 1024
-  %14 = v_perm_b32_src2_lit %10, %12, 1024
-  %converted = v_perm_b32_src2_lit %13, %14, 84148480
+  %13 = v_perm_b32_src2_lit %6, %8, 4
+  %14 = v_perm_b32_src2_lit %10, %12, 4
+  %converted = v_perm_b32_src2_lit %13, %14, 16778500
   return %converted
 }
 
@@ -192,9 +192,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_fptoui_i8x4(%input: reg<amd
   %10 = v_cvt_u32_f32 %9
   %11 = slice %input[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %12 = v_cvt_u32_f32 %11
-  %13 = v_perm_b32_src2_lit %6, %8, 1024
-  %14 = v_perm_b32_src2_lit %10, %12, 1024
-  %converted = v_perm_b32_src2_lit %13, %14, 84148480
+  %13 = v_perm_b32_src2_lit %6, %8, 4
+  %14 = v_perm_b32_src2_lit %10, %12, 4
+  %converted = v_perm_b32_src2_lit %13, %14, 16778500
   return %converted
 }
 
@@ -252,9 +252,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_trunci_i32_to_i8x4(%input: 
   %6 = slice %input[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %7 = slice %input[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %8 = slice %input[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %9 = v_perm_b32_src2_lit %5, %6, 1024
-  %10 = v_perm_b32_src2_lit %7, %8, 1024
-  %converted = v_perm_b32_src2_lit %9, %10, 84148480
+  %9 = v_perm_b32_src2_lit %5, %6, 4
+  %10 = v_perm_b32_src2_lit %7, %8, 4
+  %converted = v_perm_b32_src2_lit %9, %10, 16778500
   return %converted
 }
 
@@ -290,9 +290,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_trunci_i16_to_i8x4(%input: 
   %7 = v_lshrrev_b32_src0_inline %5, 16
   %8 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %10 = v_lshrrev_b32_src0_inline %8, 16
-  %11 = v_perm_b32_src2_lit %5, %7, 1024
-  %12 = v_perm_b32_src2_lit %8, %10, 1024
-  %converted = v_perm_b32_src2_lit %11, %12, 84148480
+  %11 = v_perm_b32_src2_lit %5, %7, 4
+  %12 = v_perm_b32_src2_lit %8, %10, 4
+  %converted = v_perm_b32_src2_lit %11, %12, 16778500
   return %converted
 }
 
@@ -344,9 +344,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_trunci_i64_to_i8x4(%input: 
   %6 = slice %input[2] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
   %7 = slice %input[4] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
   %8 = slice %input[6] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %9 = v_perm_b32_src2_lit %5, %6, 1024
-  %10 = v_perm_b32_src2_lit %7, %8, 1024
-  %converted = v_perm_b32_src2_lit %9, %10, 84148480
+  %9 = v_perm_b32_src2_lit %5, %6, 4
+  %10 = v_perm_b32_src2_lit %7, %8, 4
+  %converted = v_perm_b32_src2_lit %9, %10, 16778500
   return %converted
 }
 
@@ -401,9 +401,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_round_f32_to_i8x4(
   %111 = v_cvt_i32_f32 %98
   %113 = v_cvt_i32_f32 %102
   %115 = v_cvt_i32_f32 %106
-  %121 = v_perm_b32_src2_lit %109, %111, 1024
-  %122 = v_perm_b32_src2_lit %113, %115, 1024
-  %packed = v_perm_b32_src2_lit %121, %122, 84148480
+  %121 = v_perm_b32_src2_lit %109, %111, 4
+  %122 = v_perm_b32_src2_lit %113, %115, 4
+  %packed = v_perm_b32_src2_lit %121, %122, 16778500
   return %packed
 }
 
@@ -437,9 +437,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_round_afn_f32_to_i
   %37 = v_cvt_i32_f32 %28
   %39 = v_cvt_i32_f32 %30
   %41 = v_cvt_i32_f32 %32
-  %47 = v_perm_b32_src2_lit %35, %37, 1024
-  %48 = v_perm_b32_src2_lit %39, %41, 1024
-  %packed = v_perm_b32_src2_lit %47, %48, 84148480
+  %47 = v_perm_b32_src2_lit %35, %37, 4
+  %48 = v_perm_b32_src2_lit %39, %41, 4
+  %packed = v_perm_b32_src2_lit %47, %48, 16778500
   return %packed
 }
 
@@ -477,9 +477,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_arcp_round_afn_f32
   %41 = v_cvt_i32_f32 %32
   %43 = v_cvt_i32_f32 %34
   %45 = v_cvt_i32_f32 %36
-  %51 = v_perm_b32_src2_lit %39, %41, 1024
-  %52 = v_perm_b32_src2_lit %43, %45, 1024
-  %packed = v_perm_b32_src2_lit %51, %52, 84148480
+  %51 = v_perm_b32_src2_lit %39, %41, 4
+  %52 = v_perm_b32_src2_lit %43, %45, 4
+  %packed = v_perm_b32_src2_lit %51, %52, 16778500
   return %packed
 }
 
@@ -513,9 +513,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_roundeven_f32_to_i
   %37 = v_cvt_i32_f32 %28
   %39 = v_cvt_i32_f32 %30
   %41 = v_cvt_i32_f32 %32
-  %47 = v_perm_b32_src2_lit %35, %37, 1024
-  %48 = v_perm_b32_src2_lit %39, %41, 1024
-  %packed = v_perm_b32_src2_lit %47, %48, 84148480
+  %47 = v_perm_b32_src2_lit %35, %37, 4
+  %48 = v_perm_b32_src2_lit %39, %41, 4
+  %packed = v_perm_b32_src2_lit %47, %48, 16778500
   return %packed
 }
 
@@ -563,9 +563,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_scalarized_roundev
   %54 = v_cvt_i32_f32 %45
   %56 = v_cvt_i32_f32 %47
   %58 = v_cvt_i32_f32 %49
-  %64 = v_perm_b32_src2_lit %52, %54, 1024
-  %65 = v_perm_b32_src2_lit %56, %58, 1024
-  %packed = v_perm_b32_src2_lit %64, %65, 84148480
+  %64 = v_perm_b32_src2_lit %52, %54, 4
+  %65 = v_perm_b32_src2_lit %56, %58, 4
+  %packed = v_perm_b32_src2_lit %64, %65, 16778500
   return %packed
 }
 
@@ -620,9 +620,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_quantize_scalarized_roundev
   %70 = v_cvt_f32_i32 %61
   %72 = v_cvt_f32_i32 %63
   %q_f32 = concat(%66, %68, %70, %72) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %78 = v_perm_b32_src2_lit %57, %59, 1024
-  %79 = v_perm_b32_src2_lit %61, %63, 1024
-  %packed = v_perm_b32_src2_lit %78, %79, 84148480
+  %78 = v_perm_b32_src2_lit %57, %59, 4
+  %79 = v_perm_b32_src2_lit %61, %63, 4
+  %packed = v_perm_b32_src2_lit %78, %79, 16778500
   return %packed, %q_f32
 }
 

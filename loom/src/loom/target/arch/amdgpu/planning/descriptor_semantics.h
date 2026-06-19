@@ -14,7 +14,9 @@
 #define LOOM_TARGET_ARCH_AMDGPU_PLANNING_DESCRIPTOR_SEMANTICS_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/codegen/low/schedule/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -82,6 +84,12 @@ bool loom_amdgpu_descriptor_is_readfirstlane(
 bool loom_amdgpu_descriptor_is_sdwa(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor);
+
+// Builds AMDGPU schedule state-read rows for structural low materializations.
+iree_status_t loom_amdgpu_descriptor_build_structural_state_reads(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_arena_allocator_t* arena,
+    loom_low_schedule_structural_state_read_list_t* out_state_reads);
 
 #ifdef __cplusplus
 }  // extern "C"

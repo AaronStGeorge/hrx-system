@@ -37,7 +37,12 @@ from loom.target.contracts.source_memory import (
     SourceMemoryByteOffsetMaterializer,
     SourceMemoryConstraint,
 )
-from loom.target.low_descriptors import Descriptor, DescriptorSet
+from loom.target.low_descriptors import (
+    Descriptor,
+    DescriptorSet,
+    Operand,
+    RegClassAltFlag,
+)
 
 
 @unique
@@ -69,7 +74,12 @@ class DescriptorAccumulatorTree(Enum):
     BALANCED = "balanced"
 
 
-type ResultTypeBinding = ValueRef | TypePattern
+@dataclass(frozen=True, slots=True)
+class DescriptorResultType:
+    """Uses the descriptor result operand's concrete low register type."""
+
+
+type ResultTypeBinding = ValueRef | TypePattern | DescriptorResultType
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,11 +174,17 @@ class EmitDescriptorOp:
                         f"{source_op.name}: descriptor result '{descriptor_field}' "
                         f"redefines temporary '{value_ref.field}'"
                     )
-                if descriptor_field not in result_type_bindings:
+                result_type_binding = result_type_bindings.get(descriptor_field)
+                if result_type_binding is None:
                     raise ValueError(
                         f"{source_op.name}: descriptor result "
                         f"'{descriptor_field}' temporary '{value_ref.field}' "
                         "needs an explicit result type binding"
+                    )
+                if isinstance(result_type_binding, DescriptorResultType):
+                    _require_descriptor_result_type_operand(
+                        source_op,
+                        operand,
                     )
                 produced_temporaries.append(value_ref.field)
             else:
@@ -177,9 +193,13 @@ class EmitDescriptorOp:
                     f"descriptor '{self.descriptor.key}' result '{descriptor_field}'",
                 )
         for descriptor_field, binding in result_type_bindings.items():
-            _require_descriptor_operand(
+            operand = _require_descriptor_operand(
                 self.descriptor, descriptor_field, "descriptor result type binding"
             )
+            if isinstance(binding, DescriptorResultType):
+                _require_output_descriptor_role(self.descriptor, operand)
+                _require_descriptor_result_type_operand(source_op, operand)
+                continue
             if isinstance(binding, ValueRef):
                 if binding.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
                     raise ValueError(
@@ -384,3 +404,25 @@ class EmitDescriptorOp:
                     f"{source_op.name}: descriptor '{self.descriptor.key}' "
                     f"immediate '{immediate.field_name}' is not bound"
                 )
+
+
+def _require_descriptor_result_type_operand(
+    source_op: Op,
+    operand: Operand,
+) -> None:
+    if len(operand.reg_alts) != 1:
+        raise ValueError(
+            f"{source_op.name}: descriptor result '{operand.field_name}' cannot "
+            "infer a descriptor result type from multiple register alternatives"
+        )
+    reg_alt = operand.reg_alts[0]
+    if reg_alt.reg_class is None or RegClassAltFlag.IMMEDIATE in reg_alt.flags:
+        raise ValueError(
+            f"{source_op.name}: descriptor result '{operand.field_name}' cannot "
+            "infer a descriptor result type from an immediate alternative"
+        )
+    if operand.unit_count == 0:
+        raise ValueError(
+            f"{source_op.name}: descriptor result '{operand.field_name}' cannot "
+            "infer a descriptor result type with zero register units"
+        )

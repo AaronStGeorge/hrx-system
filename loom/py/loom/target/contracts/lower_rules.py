@@ -38,6 +38,7 @@ from loom.target.contracts.emits import (
     DescriptorAccumulatorSeed,
     DescriptorAccumulatorTree,
     DescriptorEmitForm,
+    DescriptorResultType,
     EmitDescriptorOp,
 )
 from loom.target.contracts.fragments import ContractFragment
@@ -118,6 +119,7 @@ LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN = 1 << 2
 LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE = 1 << 3
 LOWER_EMIT_FLAG_ACCUMULATE_TREE_BALANCED = 1 << 4
 LOWER_EMIT_FLAG_ACCUMULATE_SKIP_FIRST_LANE = 1 << 5
+LOWER_EMIT_FLAG_RESULT_DESCRIPTOR_TYPE = 1 << 6
 LOWER_SOURCE_MEMORY_NONE = 0
 LOWER_RULE_FLAG_CONTRACT_ONLY = 1 << 0
 
@@ -1220,6 +1222,7 @@ class _LowerRuleSetCompiler:
         result_bind_refs: list[LowerValueRef] = []
         result_type_refs: list[LowerValueRef] = []
         result_type_patterns: list[TypePattern] = []
+        result_descriptor_type_count = 0
         result_type_bindings = (
             emit.result_types if emit.result_types is not None else result_bindings
         )
@@ -1246,6 +1249,8 @@ class _LowerRuleSetCompiler:
                         type_binding,
                     )
                     result_type_patterns.append(type_binding)
+                elif isinstance(type_binding, DescriptorResultType):
+                    result_descriptor_type_count += 1
                 else:
                     result_type_refs.append(
                         self._lower_value_ref(
@@ -1260,6 +1265,11 @@ class _LowerRuleSetCompiler:
                 f"{source_op.name}: descriptor emit cannot mix value-ref and "
                 "type-pattern result type bindings"
             )
+        if result_descriptor_type_count and (result_type_patterns or result_type_refs):
+            raise ValueError(
+                f"{source_op.name}: descriptor emit cannot mix descriptor and "
+                "source result type bindings"
+            )
         if result_type_patterns and len(result_type_patterns) != result_ref_count:
             raise ValueError(
                 f"{source_op.name}: descriptor emit result type patterns must "
@@ -1268,6 +1278,14 @@ class _LowerRuleSetCompiler:
         if result_type_refs and len(result_type_refs) != result_ref_count:
             raise ValueError(
                 f"{source_op.name}: descriptor emit result type refs must "
+                "cover every result"
+            )
+        if (
+            result_descriptor_type_count
+            and result_descriptor_type_count != result_ref_count
+        ):
+            raise ValueError(
+                f"{source_op.name}: descriptor emit descriptor result types must "
                 "cover every result"
             )
 
@@ -1287,6 +1305,10 @@ class _LowerRuleSetCompiler:
             )
             result_ref_start = self._append_value_ref_sequence(tuple(result_bind_refs))
             flags |= LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN
+        elif result_descriptor_type_count:
+            result_type_pattern_start = 0
+            result_ref_start = self._append_value_ref_sequence(tuple(result_bind_refs))
+            flags |= LOWER_EMIT_FLAG_RESULT_DESCRIPTOR_TYPE
         else:
             result_type_pattern_start = 0
             result_ref_start = self._append_value_ref_sequence(tuple(result_type_refs))
@@ -1837,6 +1859,8 @@ def _lower_emit_kind(
             continue
         if isinstance(result_type_binding, TypePattern):
             result_type = result_type_binding
+        elif isinstance(result_type_binding, DescriptorResultType):
+            return LowerEmitKind.DESCRIPTOR_OP
         else:
             result_type = _require_type_pattern(
                 source_op,

@@ -295,6 +295,49 @@ static iree_status_t loom_low_schedule_initialize_pressure_cliff_ranges(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_schedule_verify_structural_state_reads(
+    loom_low_schedule_build_state_t* state) {
+  if (loom_low_schedule_structural_state_read_list_is_empty(
+          state->options->structural_state_reads)) {
+    return iree_ok_status();
+  }
+  if (state->options->structural_state_reads.values == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low schedule structural state reads require table rows");
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->target.descriptor_set;
+  for (iree_host_size_t i = 0; i < state->options->structural_state_reads.count;
+       ++i) {
+    const loom_low_schedule_structural_state_read_t* row =
+        &state->options->structural_state_reads.values[i];
+    if (row->result_reg_class_id >= descriptor_set->reg_class_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low schedule structural state read references invalid result "
+          "register class %" PRIu16,
+          row->result_reg_class_id);
+    }
+    if (row->state_reg_class_id >= descriptor_set->reg_class_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low schedule structural state read references invalid state "
+          "register class %" PRIu16,
+          row->state_reg_class_id);
+    }
+    if (state->reg_class_state_flags == NULL ||
+        state->reg_class_state_flags[row->state_reg_class_id] == 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low schedule structural state read references non-state register "
+          "class %" PRIu16,
+          row->state_reg_class_id);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_schedule_initialize_descriptor_tables(
     loom_low_schedule_build_state_t* state, iree_host_size_t node_count) {
   iree_host_size_t resource_use_capacity = 0;
@@ -349,6 +392,7 @@ static iree_status_t loom_low_schedule_initialize_descriptor_tables(
     }
     state->reg_class_state_flags[alt->reg_class_id] |= access_flags;
   }
+  IREE_RETURN_IF_ERROR(loom_low_schedule_verify_structural_state_reads(state));
   for (iree_host_size_t node_index = 0; node_index < node_count; ++node_index) {
     if (!iree_host_size_checked_add(resource_use_capacity,
                                     state->nodes[node_index].issue_use_count,

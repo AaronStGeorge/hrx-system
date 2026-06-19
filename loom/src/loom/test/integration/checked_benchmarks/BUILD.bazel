@@ -156,6 +156,23 @@ _CHECKED_BENCHMARK_CASES = [
         ],
     },
     {
+        "name": "signed_i8_tile_quantize_f32",
+        "rows": [
+            {
+                "benchmark": "@signed_i8_tile_quantize_even_ties_f32_smoke",
+                "target_name": "signed_i8_tile_quantize_even_ties_f32",
+            },
+            {
+                "benchmark": "@signed_i8_tile_quantize_arcp_f32_smoke",
+                "target_name": "signed_i8_tile_quantize_arcp_f32",
+            },
+        ],
+        "source": "signed_i8_tile_quantize_f32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
         "name": "fragment_result_dynamic_strided_f16acc_f32_store",
         "rows": [
             {

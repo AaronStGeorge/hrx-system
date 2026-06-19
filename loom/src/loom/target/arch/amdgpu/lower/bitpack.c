@@ -17,8 +17,11 @@
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 enum {
-  LOOM_AMDGPU_I8_BITPACK_PAIR_SELECTOR = 0x00000400u,
-  LOOM_AMDGPU_I8_BITPACK_MERGE_SELECTOR = 0x05040100u,
+  // V_PERM_B32 selector indices 0..3 read bytes from SRC1 and indices 4..7
+  // read bytes from SRC0. These selectors preserve Loom's logical packed-i8
+  // lane order: lane 0 in bits 0..7 and lane 3 in bits 24..31.
+  LOOM_AMDGPU_I8_BITPACK_PAIR_SELECTOR = 0x00000004u,
+  LOOM_AMDGPU_I8_BITPACK_MERGE_SELECTOR = 0x01000504u,
 };
 
 static void loom_amdgpu_bitpack_plan_from_accepted_op(
@@ -274,6 +277,8 @@ iree_status_t loom_amdgpu_lower_vector_bitpack(
   loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source, &low_source));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32_registers(
+      context, source_op, low_source, &low_source));
 
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
@@ -504,6 +509,8 @@ iree_status_t loom_amdgpu_lower_vector_bitunpack(
   loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source, &low_source));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32_registers(
+      context, source_op, low_source, &low_source));
 
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));

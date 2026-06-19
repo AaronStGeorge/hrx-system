@@ -23,6 +23,29 @@ def _contract(name: str) -> AmdgpuMatrixContract:
     raise ValueError(f"unknown AMDGPU matrix contract {name!r}")
 
 
+def _is_rdna4_contract(contract: AmdgpuMatrixContract) -> bool:
+    return any(
+        feature
+        in {
+            "wmma_gfx12",
+            "swmmac_gfx12",
+            "wmma_gfx1250",
+            "wmma_gfx1250_scale_f8f6f4",
+            "swmmac_gfx1250",
+        }
+        for feature in contract.features
+    )
+
+
+def _payload_numeric_types(contract: AmdgpuMatrixContract) -> tuple[str, ...]:
+    return (
+        contract.lhs.numeric_type,
+        contract.rhs.numeric_type,
+        contract.accumulator.numeric_type,
+        contract.result.numeric_type,
+    )
+
+
 def _contract_initializer(contract: AmdgpuMatrixContract) -> str:
     return amdgpu_matrix_contract_tables._contract_initializer(
         contract,
@@ -54,10 +77,10 @@ def test_generation_resolves_gfx1250_supplemental_matrix_descriptors() -> None:
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_SCALE16_F32_32X16X128_F4" in scaled_f4
 
 
-def test_generation_emits_empty_source_requirement_flags() -> None:
+def test_generation_emits_source_requirement_flags() -> None:
     initializer = _contract_initializer(_contract("swmmac.f32.16x16x32.f16"))
 
-    assert ".source_requirement_flags = 0" in initializer
+    assert ".source_requirement_flags = LOOM_AMDGPU_MATRIX_CONTRACT_SOURCE_REQUIREMENT_FRAGMENT_LAYOUT" in initializer
 
 
 def test_generation_resolves_gfx12_wmma_abi_shape_variants() -> None:
@@ -66,8 +89,45 @@ def test_generation_resolves_gfx12_wmma_abi_shape_variants() -> None:
     iu4 = _contract_initializer(_contract("wmma.i32.16x16x16.iu4.gfx12"))
 
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X16_F16" in f16
+    assert ".fragment_layout_kind = LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X16_F16" in f16
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_BF16_16X16X16_BF16" in bf16
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_I32_16X16X16_IU4" in iu4
+
+
+def test_generation_resolves_gfx1250_wmma_f32_fragment_layouts() -> None:
+    f32 = _contract_initializer(_contract("wmma.f32.16x16x4.f32"))
+    f16 = _contract_initializer(_contract("wmma.f32.16x16x32.f16"))
+    bf16 = _contract_initializer(_contract("wmma.f32.16x16x32.bf16"))
+
+    assert ".fragment_layout_kind = LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X4_F32" in f32
+    assert ".fragment_layout_kind = LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X32_F16" in f16
+    assert ".fragment_layout_kind = LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X32_BF16" in bf16
+
+
+def test_generation_audits_rdna4_float_fragment_layout_surface() -> None:
+    memory_numeric_types = {"f16", "bf16", "f32"}
+    missing = tuple(
+        contract.name
+        for contract in AMDGPU_MATRIX_CONTRACTS
+        if _is_rdna4_contract(contract)
+        and all(numeric_type in memory_numeric_types for numeric_type in _payload_numeric_types(contract))
+        and contract.fragment_layout is None
+        and "fragment_layout" not in contract.source_requirements
+    )
+
+    assert missing == ()
+
+
+def test_generation_audits_rdna4_unknown_fragment_layout_exceptions() -> None:
+    unknown_unrequired = tuple(
+        contract for contract in AMDGPU_MATRIX_CONTRACTS if _is_rdna4_contract(contract) and contract.fragment_layout is None and "fragment_layout" not in contract.source_requirements
+    )
+
+    assert unknown_unrequired
+    for contract in unknown_unrequired:
+        numeric_types = set(_payload_numeric_types(contract))
+        assert contract.family == "wmma", contract.name
+        assert numeric_types - {"f16", "bf16", "f32"} or "matrix_formats" in contract.flags or "scale_formats" in contract.flags or "sign_select" in contract.flags, contract.name
 
 
 def test_generation_resolves_gfx11_wmma_wave64_abi_shape_variants() -> None:

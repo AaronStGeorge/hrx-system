@@ -46,6 +46,20 @@ static inline bool loom_amdgpu_register_class_is_m0(
   return iree_string_view_equal(register_class, IREE_SV("amdgpu.m0"));
 }
 
+// Returns true when |reg_class_id| names the VCC condition-mask register class
+// in |descriptor_set|.
+static inline bool loom_amdgpu_register_class_is_vcc(
+    const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id) {
+  if (descriptor_set == NULL ||
+      reg_class_id >= descriptor_set->reg_class_count) {
+    return false;
+  }
+  iree_string_view_t register_class = loom_low_descriptor_set_string(
+      descriptor_set,
+      descriptor_set->reg_classes[reg_class_id].name_string_offset);
+  return iree_string_view_equal(register_class, IREE_SV("amdgpu.vcc"));
+}
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

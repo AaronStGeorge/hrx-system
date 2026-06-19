@@ -163,7 +163,9 @@ static iree_status_t loom_amdgpu_occupancy_check_emit_provider_execute(
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
       options.allocation_fixed_value_spec_count,
-      loom_low_schedule_pair_affinity_list_empty(), &storage_lease_provider,
+      loom_low_schedule_pair_affinity_list_empty(),
+      loom_low_schedule_structural_state_read_list_empty(),
+      &storage_lease_provider,
       /*spill_free_options=*/NULL, &frame));
   if (request->diagnostic_collector != NULL &&
       request->diagnostic_collector->count != 0) {

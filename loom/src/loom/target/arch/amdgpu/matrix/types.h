@@ -203,6 +203,16 @@ typedef enum loom_amdgpu_matrix_fragment_layout_kind_e {
   LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F16_16X16X32_F16 = 14,
   // RDNA4 gfx1250 WMMA 16x16x32 bf16 input, bf16 accumulator/result layout.
   LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_BF16_16X16X32_BF16 = 15,
+  // RDNA4 WMMA 16x16x16 f16 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X16_F16 = 16,
+  // RDNA4 WMMA 16x16x16 bf16 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X16_BF16 = 17,
+  // RDNA4 gfx1250 WMMA 16x16x32 f16 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X32_F16 = 18,
+  // RDNA4 gfx1250 WMMA 16x16x32 bf16 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X32_BF16 = 19,
+  // RDNA4 gfx1250 WMMA 16x16x4 f32 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA4_WMMA_F32_16X16X4_F32 = 20,
 } loom_amdgpu_matrix_fragment_layout_kind_t;
 
 typedef enum loom_amdgpu_matrix_fragment_map_kind_e {

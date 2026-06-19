@@ -1181,6 +1181,119 @@ static iree_status_t loom_symbolic_expr_kernel_coordinate_proves_relation(
   return iree_ok_status();
 }
 
+static bool loom_symbolic_expr_value_facts_are_non_negative(
+    const loom_symbolic_expr_context_t* context, loom_value_id_t value_id) {
+  return loom_value_facts_is_non_negative(
+      loom_symbolic_expr_lookup_facts(context, value_id));
+}
+
+static bool loom_symbolic_expr_value_facts_are_positive(
+    const loom_symbolic_expr_context_t* context, loom_value_id_t value_id) {
+  return loom_value_facts_is_positive(
+      loom_symbolic_expr_lookup_facts(context, value_id));
+}
+
+static bool loom_symbolic_expr_unsigned_remainder_def(
+    const loom_op_t* op, loom_value_id_t* out_dividend,
+    loom_value_id_t* out_divisor) {
+  if (loom_index_rem_isa(op)) {
+    *out_dividend = loom_index_rem_lhs(op);
+    *out_divisor = loom_index_rem_rhs(op);
+    return true;
+  }
+  if (loom_scalar_remui_isa(op)) {
+    *out_dividend = loom_scalar_remui_lhs(op);
+    *out_divisor = loom_scalar_remui_rhs(op);
+    return true;
+  }
+  return false;
+}
+
+static loom_value_id_t loom_symbolic_expr_assumption_source_value(
+    const loom_symbolic_expr_context_t* context, loom_value_id_t value_id) {
+  if (!context->module) return value_id;
+  iree_host_size_t remaining_steps = context->module->values.count;
+  while (remaining_steps-- > 0) {
+    if (value_id >= context->module->values.count) return value_id;
+    const loom_op_t* defining_op =
+        loom_symbolic_expr_value_defining_op(context, value_id);
+    if (!defining_op) return value_id;
+    loom_value_slice_t values = {.values = NULL, .count = 0};
+    if (loom_index_assume_isa(defining_op)) {
+      values = loom_index_assume_values(defining_op);
+    } else if (loom_scalar_assume_isa(defining_op)) {
+      values = loom_scalar_assume_values(defining_op);
+    } else {
+      return value_id;
+    }
+    const loom_value_t* value = loom_module_value(context->module, value_id);
+    uint16_t result_index = loom_value_def_index(value);
+    if (result_index >= values.count) return value_id;
+    value_id = values.values[result_index];
+  }
+  return value_id;
+}
+
+static bool loom_symbolic_expr_remainder_bound_relation(
+    loom_symbolic_integer_relation_t relation, bool swapped,
+    loom_symbolic_proof_result_t* out_result) {
+  bool result = false;
+  loom_symbolic_integer_relation_t implied_relation =
+      swapped ? LOOM_SYMBOLIC_INTEGER_RELATION_GT
+              : LOOM_SYMBOLIC_INTEGER_RELATION_LT;
+  if (!loom_symbolic_integer_relation_implies(implied_relation, relation,
+                                              &result)) {
+    return false;
+  }
+  *out_result = result ? LOOM_SYMBOLIC_PROOF_TRUE : LOOM_SYMBOLIC_PROOF_FALSE;
+  return true;
+}
+
+static iree_status_t loom_symbolic_expr_remainder_bound_proves_relation(
+    loom_symbolic_expr_context_t* context,
+    loom_symbolic_integer_relation_t relation, loom_value_id_t left_value,
+    loom_value_id_t right_value, bool* out_matched,
+    loom_symbolic_proof_result_t* out_result) {
+  *out_matched = false;
+  loom_value_id_t left_source =
+      loom_symbolic_expr_assumption_source_value(context, left_value);
+  const loom_op_t* left_op =
+      loom_symbolic_expr_value_defining_op(context, left_source);
+  loom_value_id_t dividend = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t divisor = LOOM_VALUE_ID_INVALID;
+  if (left_op &&
+      loom_symbolic_expr_unsigned_remainder_def(left_op, &dividend, &divisor)) {
+    bool right_matches_divisor = false;
+    IREE_RETURN_IF_ERROR(loom_symbolic_expr_values_match(
+        context, right_value, divisor, &right_matches_divisor));
+    if (right_matches_divisor &&
+        loom_symbolic_expr_value_facts_are_non_negative(context, dividend) &&
+        loom_symbolic_expr_value_facts_are_positive(context, divisor)) {
+      *out_matched = loom_symbolic_expr_remainder_bound_relation(
+          relation, /*swapped=*/false, out_result);
+      return iree_ok_status();
+    }
+  }
+
+  loom_value_id_t right_source =
+      loom_symbolic_expr_assumption_source_value(context, right_value);
+  const loom_op_t* right_op =
+      loom_symbolic_expr_value_defining_op(context, right_source);
+  if (right_op && loom_symbolic_expr_unsigned_remainder_def(right_op, &dividend,
+                                                            &divisor)) {
+    bool left_matches_divisor = false;
+    IREE_RETURN_IF_ERROR(loom_symbolic_expr_values_match(
+        context, left_value, divisor, &left_matches_divisor));
+    if (left_matches_divisor &&
+        loom_symbolic_expr_value_facts_are_non_negative(context, dividend) &&
+        loom_symbolic_expr_value_facts_are_positive(context, divisor)) {
+      *out_matched = loom_symbolic_expr_remainder_bound_relation(
+          relation, /*swapped=*/true, out_result);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_symbolic_expr_predicate_proves_relation(
     loom_symbolic_expr_context_t* context, const loom_predicate_t* predicate,
     loom_symbolic_integer_relation_t queried_relation,
@@ -1518,6 +1631,12 @@ static iree_status_t loom_symbolic_expr_prove_direct_value_relation(
   bool kernel_relation_matched = false;
   IREE_RETURN_IF_ERROR(loom_symbolic_expr_kernel_coordinate_proves_relation(
       context, relation, left_value, right_value, &kernel_relation_matched,
+      out_result));
+  if (kernel_relation_matched) return iree_ok_status();
+
+  bool remainder_bound_matched = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_remainder_bound_proves_relation(
+      context, relation, left_value, right_value, &remainder_bound_matched,
       out_result));
   return iree_ok_status();
 }

@@ -73,6 +73,19 @@ func.def @dynamic_unit_axis_proven_by_assume_relation(%buffer: buffer, %base: of
 
 // ====
 
+func.def @dynamic_unit_axis_proven_by_remainder_relation(%buffer: buffer, %base: offset, %lane0: index, %columns0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %lane = index.assume %lane0 [range(%lane0, 0, 4095)] : index
+  %columns = index.assume %columns0 [range(%columns0, 1, 1024)] : index
+  %column = index.rem %lane, %columns : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%columns]xf32, %layout>
+  %loaded = vector.load %view[%column] : view<[%columns]xf32, %layout> -> vector<1xf32>
+  test.use %loaded : vector<1xf32>
+  func.return
+}
+
+// ====
+
 func.def @dynamic_scaled_vector_origin_proven_by_assume_relation(%buffer: buffer, %base: offset, %i: index, %n: index) {
   %layout = encoding.layout.dense : encoding<layout>
   %four = index.constant 4 : index

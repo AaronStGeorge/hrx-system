@@ -26,6 +26,7 @@
 #include "loom/target/arch/amdgpu/ops/ops.h"
 #include "loom/target/arch/amdgpu/ops/target.h"
 #include "loom/target/arch/amdgpu/planning/address_state.h"
+#include "loom/target/arch/amdgpu/planning/descriptor_semantics.h"
 #include "loom/target/arch/amdgpu/planning/occupancy.h"
 #include "loom/target/arch/amdgpu/planning/packet_plan.h"
 #include "loom/target/arch/amdgpu/planning/storage_lease.h"
@@ -485,6 +486,10 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
   loom_target_bundle_storage_rebind(&resolved_target.bundle_storage);
   IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_build_schedule_pair_affinities(
       &resolved_target, table_arena, &schedule_pair_affinities));
+  loom_low_schedule_structural_state_read_list_t schedule_state_reads =
+      loom_low_schedule_structural_state_read_list_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_build_structural_state_reads(
+      descriptor_set, table_arena, &schedule_state_reads));
 
   loom_low_emission_frame_t frame = {0};
   loom_low_storage_lease_provider_t storage_lease_provider = {0};
@@ -498,6 +503,7 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
           },
       .schedule_pressure_cliffs = schedule_pressure_cliffs,
       .schedule_pair_affinities = schedule_pair_affinities,
+      .schedule_structural_state_reads = schedule_state_reads,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
       .memory_access_table = loom_low_memory_access_table_empty(),
       .allocation_fixed_values = plan->fixed_values,

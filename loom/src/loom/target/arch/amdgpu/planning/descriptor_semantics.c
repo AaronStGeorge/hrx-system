@@ -9,6 +9,9 @@
 #include "loom/target/arch/amdgpu/encoding/encoding.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
+#define LOOM_AMDGPU_VGPR_REGISTER_CLASS_NAME IREE_SV("amdgpu.vgpr")
+#define LOOM_AMDGPU_EXEC_REGISTER_CLASS_NAME IREE_SV("amdgpu.exec")
+
 static bool loom_amdgpu_descriptor_matches_ref(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor,
@@ -130,6 +133,45 @@ bool loom_amdgpu_descriptor_is_sdwa(
   return iree_any_bit_set(
       loom_amdgpu_descriptor_traits(descriptor_set, descriptor),
       LOOM_AMDGPU_DESCRIPTOR_TRAIT_SDWA);
+}
+
+iree_status_t loom_amdgpu_descriptor_build_structural_state_reads(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_arena_allocator_t* arena,
+    loom_low_schedule_structural_state_read_list_t* out_state_reads) {
+  *out_state_reads = loom_low_schedule_structural_state_read_list_empty();
+
+  uint16_t vgpr_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  if (!loom_low_descriptor_set_lookup_register_class(
+          descriptor_set, LOOM_AMDGPU_VGPR_REGISTER_CLASS_NAME,
+          &vgpr_reg_class_id, NULL)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU descriptor set does not define structural result register "
+        "class 'amdgpu.vgpr'");
+  }
+  uint16_t exec_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  if (!loom_low_descriptor_set_lookup_register_class(
+          descriptor_set, LOOM_AMDGPU_EXEC_REGISTER_CLASS_NAME,
+          &exec_reg_class_id, NULL)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU descriptor set does not define structural state register "
+        "class 'amdgpu.exec'");
+  }
+
+  loom_low_schedule_structural_state_read_t* state_reads = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, 1, sizeof(*state_reads),
+                                                 (void**)&state_reads));
+  state_reads[0] = (loom_low_schedule_structural_state_read_t){
+      .result_reg_class_id = vgpr_reg_class_id,
+      .state_reg_class_id = exec_reg_class_id,
+  };
+  *out_state_reads = (loom_low_schedule_structural_state_read_list_t){
+      .values = state_reads,
+      .count = 1,
+  };
+  return iree_ok_status();
 }
 
 loom_amdgpu_descriptor_traits_t loom_amdgpu_descriptor_traits(

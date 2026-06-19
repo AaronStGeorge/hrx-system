@@ -95,6 +95,8 @@ iree_status_t loom_check_low_emit_packetize_function(
     const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
     iree_host_size_t allocation_fixed_spec_count,
     loom_low_schedule_pair_affinity_list_t schedule_pair_affinities,
+    loom_low_schedule_structural_state_read_list_t
+        schedule_structural_state_reads,
     const loom_low_storage_lease_provider_t* storage_lease_provider,
     const loom_low_emission_frame_spill_free_options_t* spill_free_options,
     loom_low_emission_frame_t* out_frame);
