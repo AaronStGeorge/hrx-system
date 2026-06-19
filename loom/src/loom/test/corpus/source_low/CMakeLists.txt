@@ -54,6 +54,7 @@ loom_check_test_suite(
     "vector_bitcast.loom-test"
     "vector_dot.loom-test"
     "vector_mask_select.loom-test"
+    "vector_scalarization_diagnostics.loom-test"
     "vector_slice.loom-test"
     "vector_v16.loom-test"
     "vector_v4.loom-test"
