@@ -40,6 +40,54 @@ func.def @access_static_extent_out_of_bounds(%layout: encoding<layout>, %view: v
 
 // ====
 
+func.def @accesses_static_count_must_be_positive(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: STRUCTURE/014 "static_count" "0" "positive count"
+  sanitizer.assert.accesses<read> %view[%row, 0] {static_count = 0, static_extents = [1, 4], static_strides = [1, 0]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @accesses_static_extent_count_mismatch(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: SUBRANGE/003 "static_extents" "1" "2"
+  sanitizer.assert.accesses<read> %view[%row, 0] {static_count = 4, static_extents = [4], static_strides = [1, 0]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @accesses_static_stride_count_mismatch(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: SUBRANGE/003 "static_strides" "1" "2"
+  sanitizer.assert.accesses<read> %view[%row, 0] {static_count = 4, static_extents = [1, 4], static_strides = [1]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @accesses_static_stride_must_be_non_negative(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: STRUCTURE/014 "static_strides" "-1" "non-negative stride"
+  sanitizer.assert.accesses<read> %view[%row, 0] {static_count = 4, static_extents = [1, 4], static_strides = [-1, 0]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @accesses_repeated_accesses_need_non_zero_stride(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: STRUCTURE/014 "static_strides" "0" "non-zero stride for repeated accesses"
+  sanitizer.assert.accesses<read> %view[%row, 0] {static_count = 2, static_extents = [1, 4], static_strides = [0, 0]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @accesses_static_repeated_extent_out_of_bounds(%layout: encoding<layout>, %view: view<4x4xf32, %layout>) {
+  // ERROR@+1: SUBRANGE/004
+  sanitizer.assert.accesses<read> %view[2, 0] {static_count = 3, static_extents = [1, 4], static_strides = [1, 0]} : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
 func.def @race_access_index_count_mismatch(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
   // ERROR@+1: SUBRANGE/001 "view" "1" "2"
   sanitizer.race.access<read> %view[%row] : view<4x4xf32, %layout>

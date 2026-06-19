@@ -27,7 +27,8 @@ enum {
   LOOM_OP_SANITIZER_ASSERT_LAYOUT = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 3),
   LOOM_OP_SANITIZER_RACE_ACCESS = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 4),
   LOOM_OP_SANITIZER_RACE_SYNC = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 5),
-  LOOM_OP_SANITIZER_COUNT_ = 6,
+  LOOM_OP_SANITIZER_ASSERT_ACCESSES = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 6),
+  LOOM_OP_SANITIZER_COUNT_ = 7,
 };
 
 // Logical memory access kind covered by a sanitizer access assertion.
@@ -45,6 +46,14 @@ typedef enum loom_sanitizer_race_access_kind_e {
   LOOM_SANITIZER_RACE_ACCESS_KIND_READ_WRITE = 2,
   LOOM_SANITIZER_RACE_ACCESS_KIND_COUNT_ = 3,
 } loom_sanitizer_race_access_kind_t;
+
+// Logical memory access kind covered by a repeated sanitizer access assertion.
+typedef enum loom_sanitizer_assert_accesses_kind_e {
+  LOOM_SANITIZER_ASSERT_ACCESSES_KIND_READ = 0,
+  LOOM_SANITIZER_ASSERT_ACCESSES_KIND_WRITE = 1,
+  LOOM_SANITIZER_ASSERT_ACCESSES_KIND_READ_WRITE = 2,
+  LOOM_SANITIZER_ASSERT_ACCESSES_KIND_COUNT_ = 3,
+} loom_sanitizer_assert_accesses_kind_t;
 
 // LOOM_OP_SANITIZER_ASSERT_ACCESS: Assert that a logical indexed view access is valid. The assertion has the same index-list shape as ordinary view memory operations so source-level memory contracts remain typed until target lowering materializes address checks.
 // sanitizer.assert.access<read> %view[%row, %col] : view<[%M]x[%N]xf32, %layout>
@@ -184,6 +193,35 @@ iree_status_t loom_sanitizer_race_sync_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_sanitizer_race_sync_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_SANITIZER_ASSERT_ACCESSES: Assert that a static sequence of regularly-strided logical indexed view accesses is valid. Each sub-access has the same static extent tuple, and each successive sub-access origin is advanced by the static stride tuple. This keeps structured fragment and vector footprints as one executable assertion site instead of exploding one source memory operation into many independent assertions.
+// sanitizer.assert.accesses<write> %view[%row, %col] {static_extents = [1, 16], static_strides = [1, 0], static_count = 16} : view<128x128xf32, #dense>
+LOOM_DEFINE_ISA(loom_sanitizer_assert_accesses_isa, LOOM_OP_SANITIZER_ASSERT_ACCESSES)
+LOOM_DEFINE_OPERAND(loom_sanitizer_assert_accesses_view, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_sanitizer_assert_accesses_indices, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_assert_accesses_kind, 0, loom_sanitizer_assert_accesses_kind_t)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_sanitizer_assert_accesses_static_indices, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_sanitizer_assert_accesses_static_extents, 2)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_sanitizer_assert_accesses_static_strides, 3)
+LOOM_DEFINE_ATTR_I64(loom_sanitizer_assert_accesses_static_count, 4)
+iree_status_t loom_sanitizer_assert_accesses_build(
+    loom_builder_t* builder,
+    loom_sanitizer_assert_accesses_kind_t kind,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    const int64_t* static_extents,
+    iree_host_size_t static_extents_count,
+    const int64_t* static_strides,
+    iree_host_size_t static_strides_count,
+    int64_t static_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_sanitizer_assert_accesses_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

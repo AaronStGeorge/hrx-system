@@ -25,6 +25,7 @@ from loom.dsl import (
     ANY,
     ATTR_TYPE_BOOL,
     ATTR_TYPE_ENUM,
+    ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
     CONVERGENT,
     FACT_IDENTITY,
@@ -48,8 +49,10 @@ from loom.dsl import (
 __all__ = [
     "ALL_SANITIZER_OPS",
     "SanitizerAccessKind",
+    "SanitizerAccessesKind",
     "SanitizerRaceAccessKind",
     "sanitizer_assert_access",
+    "sanitizer_assert_accesses",
     "sanitizer_assert_layout",
     "sanitizer_assert_op",
     "sanitizer_assert_value",
@@ -82,6 +85,21 @@ SanitizerAccessKind = EnumDef(
         ),
     ],
     doc="Logical memory access kind covered by a sanitizer access assertion.",
+)
+
+
+SanitizerAccessesKind = EnumDef(
+    "SanitizerAccessesKind",
+    [
+        EnumCase("read", 0, doc="Assertion covers logical read accesses."),
+        EnumCase("write", 1, doc="Assertion covers logical write accesses."),
+        EnumCase(
+            "read_write",
+            2,
+            doc="Assertion covers logical read-modify-write accesses.",
+        ),
+    ],
+    doc="Logical memory access kind covered by a repeated sanitizer access assertion.",
 )
 
 
@@ -153,6 +171,74 @@ sanitizer_assert_access = Op(
     ],
     examples=[
         "sanitizer.assert.access<read> %view[%row, %col] : view<[%M]x[%N]xf32, %layout>",
+    ],
+)
+
+
+# ============================================================================
+# sanitizer.assert.accesses
+# ============================================================================
+
+sanitizer_assert_accesses = Op(
+    "sanitizer.assert.accesses",
+    group=sanitizer_ops,
+    doc=(
+        "Assert that a static sequence of regularly-strided logical indexed "
+        "view accesses is valid. Each sub-access has the same static extent "
+        "tuple, and each successive sub-access origin is advanced by the "
+        "static stride tuple. This keeps structured fragment and vector "
+        "footprints as one executable assertion site instead of exploding one "
+        "source memory operation into many independent assertions."
+    ),
+    operands=[
+        Operand("view", VIEW, doc="Typed view being accessed."),
+        Operand(
+            "indices",
+            INDEX,
+            variadic=True,
+            doc="Dynamic logical element indices for the first sub-access origin.",
+        ),
+    ],
+    attrs=[
+        AttrDef(
+            "kind",
+            ATTR_TYPE_ENUM,
+            enum_def=SanitizerAccessesKind,
+            doc="Logical access kind being asserted.",
+        ),
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical element indices for the first sub-access origin with INT64_MIN sentinels for dynamics.",
+        ),
+        AttrDef(
+            "static_extents",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Full-rank static logical footprint extents for each sub-access.",
+        ),
+        AttrDef(
+            "static_strides",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Full-rank static logical origin stride between consecutive sub-accesses.",
+        ),
+        AttrDef(
+            "static_count",
+            ATTR_TYPE_I64,
+            doc="Number of sub-accesses in the static sequence.",
+        ),
+    ],
+    traits=[UNKNOWN_EFFECTS],
+    verify="loom_sanitizer_assert_accesses_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        AttrDict(),
+        COLON,
+        TypeOf("view"),
+    ],
+    examples=[
+        "sanitizer.assert.accesses<write> %view[%row, %col] {static_extents = [1, 16], static_strides = [1, 0], static_count = 16} : view<128x128xf32, #dense>",
     ],
 )
 
@@ -424,4 +510,5 @@ ALL_SANITIZER_OPS: tuple[Op, ...] = (
     sanitizer_assert_layout,
     sanitizer_race_access,
     sanitizer_race_sync,
+    sanitizer_assert_accesses,
 )

@@ -240,6 +240,50 @@ func.def @access_only_instruments_rank1_vector_memory(%layout: encoding<layout>,
 // ====
 
 // RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_dense_fragment_memory(%output: view<64x64xf32, #dense>, %row: index, %column: index, %value: vector<8xf32>) {
+  %four = index.constant 4 : index
+  vector.fragment.store<result> %value, %output[%row, %column] shape [%four, %four] : vector<8xf32>, view<64x64xf32, #dense>
+  func.return
+}
+
+// ----
+func.def @access_only_instruments_dense_fragment_memory(%output: view<64x64xf32, #dense>, %row: index, %column: index, %value: vector<8xf32>) {
+  %four = index.constant 4 : index
+  sanitizer.assert.accesses<write> %output[%row, %column] {static_count = 4, static_extents = [1, 4], static_strides = [1, 0]} : view<64x64xf32, #dense>
+  vector.fragment.store<result> %value, %output[%row, %column] shape [%four, %four] : vector<8xf32>, view<64x64xf32, #dense>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_strided_fragment_memory(%buffer: buffer, %row: index, %column: index, %value: vector<8xf32>) {
+  %two = index.constant 2 : index
+  %sixty_four = index.constant 64 : index
+  %layout = encoding.layout.strided [1, %sixty_four] : encoding<layout>
+  %base = index.constant 0 : offset
+  %global = buffer.assume.memory_space<global> %buffer : buffer
+  %output = buffer.view %global[%base] : buffer -> view<64x64xf32, %layout>
+  vector.fragment.store<result> %value, %output[%row, %column] shape [%two, %two] : vector<8xf32>, view<64x64xf32, %layout>
+  func.return
+}
+
+// ----
+func.def @access_only_instruments_strided_fragment_memory(%buffer: buffer, %row: index, %column: index, %value: vector<8xf32>) {
+  %two = index.constant 2 : index
+  %sixty_four = index.constant 64 : index
+  %layout = encoding.layout.strided [1, %sixty_four] : encoding<layout>
+  %base = index.constant 0 : offset
+  %global = buffer.assume.memory_space<global> %buffer : buffer
+  %output = buffer.view %global[%base] : buffer -> view<64x64xf32, %layout>
+  sanitizer.assert.accesses<write> %output[%row, %column] {static_count = 2, static_extents = [2, 1], static_strides = [0, 1]} : view<64x64xf32, %layout>
+  vector.fragment.store<result> %value, %output[%row, %column] shape [%two, %two] : vector<8xf32>, view<64x64xf32, %layout>
+  func.return
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
 func.def @access_only_skips_workgroup_vector_memory() {
   %zero_offset = index.constant 0 : offset
   %zero_index = index.constant 0 : index
