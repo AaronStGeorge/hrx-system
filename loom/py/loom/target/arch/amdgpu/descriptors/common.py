@@ -151,6 +151,7 @@ _RESOURCE_CONTROL = "amdgpu.control"
 _SCHEDULE_SALU = "amdgpu.salu"
 _SCHEDULE_VALU = "amdgpu.valu"
 _SCHEDULE_TRANS = "amdgpu.trans"
+_SCHEDULE_PACKED_DOT = "amdgpu.dot.packed"
 _SCHEDULE_SMEM_LOAD = "amdgpu.smem.load"
 _SCHEDULE_SMEM_STORE = "amdgpu.smem.store"
 _SCHEDULE_VMEM_LOAD = "amdgpu.vmem.load"
@@ -204,6 +205,7 @@ _EXECUTION_MASKED_SCHEDULE_CLASSES = frozenset(
     (
         _SCHEDULE_VALU,
         _SCHEDULE_TRANS,
+        _SCHEDULE_PACKED_DOT,
         _SCHEDULE_VMEM_LOAD,
         _SCHEDULE_VMEM_LOAD_LDS,
         _SCHEDULE_VMEM_STORE,
@@ -709,6 +711,14 @@ def _common_scalar_vector_memory_schedule_classes(
         ),
         *_amdgpu_trans_schedule_classes(
             latency_cycles_by_descriptor_key=trans_latency_cycles_by_descriptor_key
+        ),
+        ScheduleClass(
+            _SCHEDULE_PACKED_DOT,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=5,
+            issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
+            model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
             _SCHEDULE_SMEM_LOAD,
@@ -2847,6 +2857,7 @@ __all__ = (
     "_SCHEDULE_LDS_STORE",
     "_SCHEDULE_MFMA",
     "_SCHEDULE_MODE_CONTROL",
+    "_SCHEDULE_PACKED_DOT",
     "_SCHEDULE_SALU",
     "_SCHEDULE_SMEM_LOAD",
     "_SCHEDULE_SMEM_STORE",

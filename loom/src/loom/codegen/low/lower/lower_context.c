@@ -629,6 +629,35 @@ iree_status_t loom_low_lower_lookup_successor_dest(
       context, source_successors[successor_index], out_low_dest);
 }
 
+iree_status_t loom_low_lower_materialize_structural_operand(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    iree_host_size_t operand_index, loom_value_id_t source_value_id,
+    loom_type_t required_low_type, loom_value_id_t* inout_low_value_id) {
+  if (context->policy->materialize_structural_operand.fn == NULL) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t materialized_low_value_id = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(context->policy->materialize_structural_operand.fn(
+      context->policy->materialize_structural_operand.user_data, context,
+      source_op, operand_index, source_value_id, *inout_low_value_id,
+      required_low_type, &materialized_low_value_id));
+  if (materialized_low_value_id == *inout_low_value_id) {
+    return iree_ok_status();
+  }
+
+  const loom_type_t materialized_type =
+      loom_module_value_type(context->module, materialized_low_value_id);
+  if (!loom_type_equal(materialized_type, required_low_type)) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "lowering policy materialized a structural operand with the wrong "
+        "type");
+  }
+  *inout_low_value_id = materialized_low_value_id;
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_lower_remap_successor_args(
     loom_low_lower_context_t* context, const loom_op_t* source_terminator,
     uint8_t successor_index, loom_block_t* low_dest,
@@ -652,27 +681,29 @@ iree_status_t loom_low_lower_remap_successor_args(
         loom_block_arg_type(context->module, low_dest, i);
     const loom_type_t actual_type =
         loom_module_value_type(context->module, low_args[i]);
-    if (loom_type_equal(actual_type, required_type)) {
-      continue;
-    }
+    if (!loom_type_equal(actual_type, required_type)) {
+      if (context->policy->materialize_branch_arg.fn == NULL) {
+        return iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "lowering policy produced a branch payload type mismatch");
+      }
+      IREE_RETURN_IF_ERROR(context->policy->materialize_branch_arg.fn(
+          context->policy->materialize_branch_arg.user_data, context,
+          source_terminator, successor_index, i, source_args[i], low_args[i],
+          required_type, &low_args[i]));
 
-    if (context->policy->materialize_branch_arg.fn == NULL) {
-      return iree_make_status(
-          IREE_STATUS_INTERNAL,
-          "lowering policy produced a branch payload type mismatch");
+      const loom_type_t materialized_type =
+          loom_module_value_type(context->module, low_args[i]);
+      if (!loom_type_equal(materialized_type, required_type)) {
+        return iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "lowering policy materialized a branch payload with the wrong "
+            "type");
+      }
     }
-    IREE_RETURN_IF_ERROR(context->policy->materialize_branch_arg.fn(
-        context->policy->materialize_branch_arg.user_data, context,
-        source_terminator, successor_index, i, source_args[i], low_args[i],
-        required_type, &low_args[i]));
-
-    const loom_type_t materialized_type =
-        loom_module_value_type(context->module, low_args[i]);
-    if (!loom_type_equal(materialized_type, required_type)) {
-      return iree_make_status(
-          IREE_STATUS_INTERNAL,
-          "lowering policy materialized a branch payload with the wrong type");
-    }
+    IREE_RETURN_IF_ERROR(loom_low_lower_materialize_structural_operand(
+        context, source_terminator, i, source_args[i], required_type,
+        &low_args[i]));
   }
   *out_low_args = low_args;
   return iree_ok_status();

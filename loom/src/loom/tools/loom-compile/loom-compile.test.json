@@ -15,7 +15,11 @@
             "--compile-report=summary",
             "--artifact-manifest=summary",
             "--emit-target-artifact=kernel.hsaco",
-            "--dump-ir-after-all"
+            "--dump-ir-after-all",
+            "Prepared-low reproducers",
+            "--pipeline=none",
+            "whole-module snapshots",
+            "jq -r"
           ]
         }
       }

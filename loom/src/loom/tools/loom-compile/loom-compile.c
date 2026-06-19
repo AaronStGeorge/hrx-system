@@ -1142,13 +1142,25 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "--dump-ir-output=trace.jsonl\n"
       "jq '.functions[] | {name, target, workgroup_size}' manifest.json\n"
       "jq 'select(.stage == \"prepared-low\") | .pass' trace.jsonl\n"
+      "jq -r 'select(.stage == \"prepared-low\") | .ir' trace.jsonl\n"
       "```\n"
       "\n"
       "`--compile-report=summary|details` records compiler-side facts and\n"
       "status. `--artifact-manifest=summary|details|analysis` records the\n"
       "artifact's functions, globals, targets, ABI metadata, and optional\n"
       "analysis. `--dump-ir-*` captures intermediate IR with the same tracing\n"
-      "flags used by `loom-opt`.\n");
+      "flags used by `loom-opt`. JSONL trace rows embed whole-module "
+      "snapshots\n"
+      "in `.ir`, even when an individual pass is anchored on a function.\n"
+      "\n"
+      "Prepared-low reproducers captured from `--dump-ir-after=source-to-low`\n"
+      "or similar pass-boundary dumps should usually be replayed with\n"
+      "`--pipeline=none`; the default pipeline expects source-level roots and\n"
+      "will try to lower them again. HAL artifact emission still requires the\n"
+      "prepared-low root to be ABI-complete, including target live-ins such "
+      "as\n"
+      "the AMDGPU kernarg segment pointer when the selected ABI uses "
+      "kernargs.\n");
 }
 
 int main(int argc, char** argv) {

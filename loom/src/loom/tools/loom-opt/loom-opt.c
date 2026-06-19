@@ -1170,7 +1170,7 @@ static void loom_opt_print_agents_markdown(FILE* stream) {
       "loom-opt input.loom --pass=unroll-scf-for --pass-report=json "
       "2>report.json\n"
       "jq '.passes[] | {pass, op, changed, details}' report.json\n"
-      "jq 'select(.pass == \"source-to-low\") | .ir' /tmp/trace.jsonl\n"
+      "jq -r 'select(.pass == \"source-to-low\") | .ir' /tmp/trace.jsonl\n"
       "```\n"
       "\n"
       "`--pass-report=json` is the structured channel for pass decisions and\n"
@@ -1178,7 +1178,12 @@ static void loom_opt_print_agents_markdown(FILE* stream) {
       "as\n"
       "JSONL. `--dump-ir-before*` and `--dump-ir-after*` capture intermediate "
       "IR\n"
-      "for bisection; prefer `--dump-ir-format=jsonl` for agent ingestion.\n");
+      "for bisection. Each trace event snapshots the whole module, even when "
+      "the\n"
+      "pass itself is anchored on one function. Prefer "
+      "`--dump-ir-format=jsonl`\n"
+      "for agent ingestion so `jq -r '.ir'` can extract a replayable "
+      "module.\n");
 }
 
 int main(int argc, char** argv) {

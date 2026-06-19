@@ -100,6 +100,47 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           /*.result_unit_count=*/16,
       },
   };
+  loom_target_compile_report_schedule_band_summary_row_t
+      schedule_band_summary_rows[] = {
+          {
+              /*.function_name=*/IREE_SVL("branchy_export"),
+              /*.block_name=*/IREE_SVL("body"),
+              /*.first_packet_index=*/17,
+              /*.band_count=*/3,
+              /*.node_count=*/12,
+              /*.max_band_node_count=*/4,
+              /*.origin_kind=*/
+              LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_LOCAL_MEMORY,
+              /*.origin_operation_name=*/
+              IREE_SVL("low.op<amdgpu.ds_read2_b32>"),
+              /*.semantic_tag=*/IREE_SVL("memory.workgroup.load2.u32"),
+              /*.sample_value_name=*/IREE_SVL("tile"),
+              /*.static_instruction_mix=*/
+              {
+                  /*.descriptor_count=*/12,
+                  /*.unknown_count=*/0,
+                  /*.scalar_alu_count=*/0,
+                  /*.vector_alu_count=*/0,
+                  /*.matrix_count=*/0,
+                  /*.mfma_count=*/0,
+                  /*.wmma_count=*/0,
+                  /*.dot_count=*/0,
+                  /*.global_memory_count=*/0,
+                  /*.local_memory_count=*/12,
+                  /*.scalar_memory_count=*/0,
+                  /*.generic_memory_count=*/0,
+                  /*.atomic_count=*/0,
+                  /*.branch_count=*/0,
+                  /*.barrier_count=*/0,
+                  /*.control_count=*/0,
+                  /*.conversion_count=*/0,
+                  /*.cache_count=*/0,
+                  /*.register_move_count=*/0,
+              },
+              /*.result_value_count=*/12,
+              /*.result_unit_count=*/48,
+          },
+      };
   loom_target_compile_report_spill_row_t spill_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
@@ -332,6 +373,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       &entry_report, &pressure_origin_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_schedule_band_row(
       &entry_report, &schedule_band_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_schedule_band_summary_row(
+      &entry_report, &schedule_band_summary_rows[0]));
   loom_target_compile_report_record_target_resources(&entry_report,
                                                      &target_resources);
   loom_target_compile_report_record_static_instruction_mix(&entry_report,
@@ -374,6 +417,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("schedule_band_rows count=1"), 0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("schedule_band_summary_rows count=1"), 0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("move_causes kinds=3 packets=6 "
                                           "units=12"),
@@ -487,8 +533,16 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("pressure_rows=2 "
                                           "pressure_origin_rows=1 "
-                                          "schedule_band_rows=1"),
+                                          "schedule_band_rows=1 "
+                                          "schedule_band_summary_rows=1"),
                                   0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("schedule_band_summary[0] function=branchy_export "
+                        "block=body first_packet=17 bands=3 nodes=12 "
+                        "max_band_nodes=4 origin=local-memory"),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("source_low selected_ops=4"), 0),
@@ -629,6 +683,17 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(
       iree_string_view_find(
           output, IREE_SV("\"schedule_band_rows\":{\"count\":1,\"rows\":["), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"schedule_band_summary_rows\":{\"count\":1,"
+                        "\"rows\":["),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"band_count\":3"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("\"max_band_node_count\":4"), 0),
       IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
       iree_string_view_find(

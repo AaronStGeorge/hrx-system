@@ -179,6 +179,37 @@
       ]
     },
     {
+      "name": "dumps function pass IR as whole-module JSONL",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pipeline=@trace_pipeline",
+          "--dump-ir-after=dce",
+          "--dump-ir-format=jsonl",
+          "--dump-ir-output=stderr",
+          "--output={tmp}/dumped-whole-module.loom"
+        ],
+        "stdin": {
+          "text": "pass.pipeline<module> @trace_pipeline pipeline {\n  for func {\n    dce\n  }\n}\n\nfunc.def @first(%x: i32) -> (i32) {\n  func.return %x : i32\n}\n\nfunc.def @second(%x: i32) -> (i32) {\n  func.return %x : i32\n}\n"
+        }
+      },
+      "stderr": {
+        "contains": [
+          "\"anchor\":\"func\"",
+          "\"symbol\":\"first\"",
+          "\"symbol\":\"second\"",
+          "func.def @first",
+          "func.def @second"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/dumped-whole-module.loom",
+          "non_empty": true
+        }
+      ]
+    },
+    {
       "name": "dumps selected before and after IR to a bundle",
       "run": {
         "tool": "loom-opt",
@@ -250,6 +281,40 @@
         {
           "path": "{tmp}/selected.loom",
           "contains": ["func.call inline @fallback"]
+        }
+      ]
+    },
+    {
+      "name": "reports exact static scf loop without unroll policy",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pass=unroll-scf-for",
+          "--pass-report=json",
+          "--output={tmp}/structured-loop.loom"
+        ],
+        "stdin": {
+          "text": "func.def @static_loop_without_unroll_policy() {\n  %start = index.constant 0 : index\n  %end = index.constant 32 : index\n  %step = index.constant 16 : index\n  scf.for %i = [%start to %end step %step] {\n    test.use %i : index\n  }\n  func.return\n}\n"
+        }
+      },
+      "stderr": {
+        "contains": [
+          "\"pass\":\"unroll-scf-for\"",
+          "\"category\":\"scf-unroll\"",
+          "\"outcome\":\"structured\"",
+          "\"op\":\"scf.for\"",
+          "\"policy\":\"absent\"",
+          "\"trip_count_state\":\"exact\"",
+          "\"trip_count\":2",
+          "\"step\":16",
+          "\"lower_bound_kind\":\"static\"",
+          "\"lower\":0"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/structured-loop.loom",
+          "contains": ["scf.for %i"]
         }
       ]
     },

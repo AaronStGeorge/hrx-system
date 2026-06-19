@@ -268,7 +268,8 @@ func.def target(@gfx11_target) @f16_fma_mixlo_insert_f32(%dest: vector<2xf16>, %
 // ----
 low.func.def target(@gfx11_target) abi(hal_kernel) @f16_fma_mixlo_insert_f32(%dest: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %result = v_fma_mixlo_f16_f32_f32_f32 %dest, %a, %b, %c
-  return %result
+  %14 = v_bfe_u32_offset_0_width_16_low16 %result
+  return %14
 }
 
 // ====
@@ -348,7 +349,8 @@ func.def target(@gfx942_target) @f16_mad_mixlo_insert_f32(%dest: vector<2xf16>, 
 // ----
 low.func.def target(@gfx942_target) abi(hal_kernel) @f16_mad_mixlo_insert_f32(%dest: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
   %result = v_mad_mixlo_f16_f32_f32_f32 %dest, %a, %b, %c
-  return %result
+  %14 = v_bfe_u32_offset_0_width_16_low16 %result
+  return %14
 }
 
 // ====

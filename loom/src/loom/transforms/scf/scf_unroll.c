@@ -422,6 +422,56 @@ static iree_status_t loom_scf_unroll_append_partial_report_detail(
                                         fields, field_count);
 }
 
+static iree_status_t loom_scf_unroll_append_policy_absent_report_detail(
+    const loom_scf_unroll_context_t* context, loom_op_t* op) {
+  if (!context->reports_enabled) {
+    return iree_ok_status();
+  }
+
+  loom_scf_unroll_trip_count_t trip_count = {0};
+  loom_scf_unroll_trip_count_state_t trip_count_state =
+      loom_scf_unroll_resolve_trip_count(context, op, &trip_count);
+  if (trip_count_state != LOOM_SCF_UNROLL_TRIP_COUNT_EXACT ||
+      trip_count.count <= 1) {
+    return iree_ok_status();
+  }
+
+  loom_pass_report_detail_field_t fields[12];
+  uint16_t field_count = 0;
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("outcome"), IREE_SV("structured"));
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("op"), loom_op_name(context->module, op));
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("policy"), IREE_SV("absent"));
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("trip_count_state"),
+      loom_scf_unroll_trip_count_state_name(trip_count_state));
+  fields[field_count++] = loom_pass_report_detail_uint64_field(
+      IREE_SV("trip_count"), trip_count.count);
+  fields[field_count++] =
+      loom_pass_report_detail_int64_field(IREE_SV("step"), trip_count.step);
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("lower_bound_kind"),
+      loom_scf_unroll_lower_bound_kind_name(trip_count.lower_kind));
+  switch (trip_count.lower_kind) {
+    case LOOM_SCF_UNROLL_LOWER_BOUND_STATIC:
+      fields[field_count++] = loom_pass_report_detail_int64_field(
+          IREE_SV("lower"), trip_count.lower_i64);
+      break;
+    case LOOM_SCF_UNROLL_LOWER_BOUND_DYNAMIC:
+      fields[field_count++] = loom_pass_report_detail_uint64_field(
+          IREE_SV("lower_value_id"), trip_count.lower_value);
+      fields[field_count++] = loom_pass_report_detail_int64_field(
+          IREE_SV("lower_range_min"), trip_count.lower_range_min);
+      fields[field_count++] = loom_pass_report_detail_int64_field(
+          IREE_SV("lower_range_max"), trip_count.lower_range_max);
+      break;
+  }
+  return loom_pass_report_append_detail(context->pass, IREE_SV("scf-unroll"),
+                                        fields, field_count);
+}
+
 static iree_status_t loom_scf_unroll_emit_trip_count_error(
     const loom_scf_unroll_context_t* context, loom_op_t* op,
     loom_scf_unroll_trip_count_state_t state) {
@@ -962,9 +1012,11 @@ static iree_status_t loom_scf_unroll_partial_unroll(
 static iree_status_t loom_scf_unroll_try_unroll(
     loom_scf_unroll_context_t* context, loom_op_t* op, bool* out_changed) {
   *out_changed = false;
-  if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD) ||
-      !loom_scf_unroll_policy_present(op)) {
+  if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
     return iree_ok_status();
+  }
+  if (!loom_scf_unroll_policy_present(op)) {
+    return loom_scf_unroll_append_policy_absent_report_detail(context, op);
   }
 
   bool has_unroll_factor = loom_scf_for_unroll_factor_is_present(op);

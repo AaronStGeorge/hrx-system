@@ -24,6 +24,21 @@ low.func.def target(@test_target) @candidate_decision_diagnostics(
 }
 
 // ====
+// RUN: emit low-schedule-json @resource_stall_hides_load_latency strategy=resource-stall diagnostics=candidates output=none
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @resource_stall_hides_load_latency(
+    %ptr: reg<test.ptr>, %lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32 x4>) {
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", candidate_count="2", chosen_packet="test.load.v4i32", rejected_packet="test.add.i32", chosen_latency_cycles="4", rejected_latency_cycles="1", chosen_data_ready_stall_cycles="0", rejected_data_ready_stall_cycles="0"}
+  %load = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32 x4>
+  %use = low.op<test.add.v4i32>(%load, %load) : (reg<test.i32 x4>, reg<test.i32 x4>) -> reg<test.i32 x4>
+  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", chosen_packet="test.add.i32", rejected_packet="test.add.v4i32", chosen_data_ready_stall_cycles="0", rejected_data_ready_stall_cycles="3", rejected_effective_stall_cycles="3", rejected_dependency_latency_cycles="4"}
+  %independent = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %independent, %use : reg<test.i32>, reg<test.i32 x4>
+}
+
+// ====
 // RUN: emit low-schedule-json @tied_storage_antidependency
 
 test.target<low_core> @test_target

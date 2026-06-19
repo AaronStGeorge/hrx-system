@@ -59,6 +59,9 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_max_f32",
     "amdgpu.v_max_f32.lit",
     "amdgpu.v_max_f32.src0_inline",
+    "amdgpu.v_add_f16",
+    "amdgpu.v_sub_f16",
+    "amdgpu.v_mul_f16",
     "amdgpu.v_fma_f32",
     "amdgpu.v_fmaak_f32",
     "amdgpu.v_fmamk_f32",
@@ -548,6 +551,7 @@ def _unary_rule(
     descriptor_key: str,
     *,
     f32_operand: bool = False,
+    extra_guards: tuple[Guard, ...] = (),
     report_key: str = "",
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
@@ -557,6 +561,7 @@ def _unary_rule(
         report_key=report_key,
         guards=(
             *_typed_guards(("input", "result"), type_pattern),
+            *extra_guards,
             Guard.descriptor_available(descriptor),
         ),
         emit=(
@@ -1671,6 +1676,36 @@ def _cast_rule(
                 },
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(result_type),
+            ),
+        ),
+    )
+
+
+def _sitofp_f16_rule(input_type: TypePattern) -> DescriptorRule:
+    convert_to_f32 = _descriptor("amdgpu.v_cvt_f32_i32")
+    convert_to_f16 = _descriptor("amdgpu.v_cvt_f16_f32")
+    return DescriptorRule(
+        source_op=scalar_conversion.scalar_sitofp,
+        descriptor=convert_to_f16,
+        guards=(
+            _value_type("input", input_type),
+            _value_type("result", _F16),
+            Guard.descriptor_available(convert_to_f32),
+            Guard.descriptor_available(convert_to_f16),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=convert_to_f32,
+                operands={"input": ValueRef.operand("input")},
+                results={"dst": ValueRef.temporary("f32")},
+                result_types={"dst": _F32},
+                form=DescriptorEmitForm.OP,
+            ),
+            EmitDescriptorOp(
+                descriptor=convert_to_f16,
+                operands={"input": ValueRef.temporary("f32")},
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
             ),
         ),
     )
@@ -2986,6 +3021,13 @@ def _rules() -> tuple[ContractCase, ...]:
             _unary_rule(vector.vector_floorf, _VEC_F32, "amdgpu.v_floor_f32"),
             _unary_rule(vector.vector_ceilf, _VEC_F32, "amdgpu.v_ceil_f32"),
             _unary_rule(
+                vector.vector_roundf,
+                _VEC_F32,
+                "amdgpu.v_rndne_f32",
+                extra_guards=(Guard.instance_flags_has_all("fastmath", "afn"),),
+                report_key=_report_key(vector.vector_roundf, "afn_rndne"),
+            ),
+            _unary_rule(
                 vector.vector_roundevenf,
                 _VEC_F32,
                 "amdgpu.v_rndne_f32",
@@ -3245,15 +3287,30 @@ def _rules() -> tuple[ContractCase, ...]:
                 "amdgpu.v_add_f32",
             ),
             _binary_rule(
+                scalar_arithmetic.scalar_addf,
+                _F16,
+                "amdgpu.v_add_f16",
+            ),
+            _binary_rule(
                 scalar_arithmetic.scalar_subf,
                 _F32,
                 "amdgpu.v_sub_f32",
                 f32_rhs=True,
             ),
+            _binary_rule(
+                scalar_arithmetic.scalar_subf,
+                _F16,
+                "amdgpu.v_sub_f16",
+            ),
             *_commutative_f32_binary_rules(
                 scalar_arithmetic.scalar_mulf,
                 _F32,
                 "amdgpu.v_mul_f32",
+            ),
+            _binary_rule(
+                scalar_arithmetic.scalar_mulf,
+                _F16,
+                "amdgpu.v_mul_f16",
             ),
             _f32_neg_rule(scalar_arithmetic.scalar_negf, _F32, f32_operand=True),
             _f32_abs_rule(scalar_arithmetic.scalar_absf, _F32, f32_operand=True),
@@ -3299,6 +3356,13 @@ def _rules() -> tuple[ContractCase, ...]:
             _unary_rule(scalar_math.scalar_floorf, _F32, "amdgpu.v_floor_f32"),
             _unary_rule(scalar_math.scalar_ceilf, _F32, "amdgpu.v_ceil_f32"),
             _unary_rule(
+                scalar_math.scalar_roundf,
+                _F32,
+                "amdgpu.v_rndne_f32",
+                extra_guards=(Guard.instance_flags_has_all("fastmath", "afn"),),
+                report_key=_report_key(scalar_math.scalar_roundf, "afn_rndne"),
+            ),
+            _unary_rule(
                 scalar_math.scalar_roundevenf,
                 _F32,
                 "amdgpu.v_rndne_f32",
@@ -3328,18 +3392,21 @@ def _rules() -> tuple[ContractCase, ...]:
                 _F32,
                 "amdgpu.v_cvt_f32_i32",
             ),
+            _sitofp_f16_rule(_I32),
             _cast_rule(
                 scalar_conversion.scalar_sitofp,
                 _I8,
                 _F32,
                 "amdgpu.v_cvt_f32_i32",
             ),
+            _sitofp_f16_rule(_I8),
             _cast_rule(
                 scalar_conversion.scalar_sitofp,
                 _I16,
                 _F32,
                 "amdgpu.v_cvt_f32_i32",
             ),
+            _sitofp_f16_rule(_I16),
             _cast_rule(
                 scalar_conversion.scalar_uitofp,
                 _I32,
