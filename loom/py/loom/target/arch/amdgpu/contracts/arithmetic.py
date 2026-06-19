@@ -551,6 +551,7 @@ def _unary_rule(
     descriptor_key: str,
     *,
     f32_operand: bool = False,
+    extra_guards: tuple[Guard, ...] = (),
     report_key: str = "",
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
@@ -560,6 +561,7 @@ def _unary_rule(
         report_key=report_key,
         guards=(
             *_typed_guards(("input", "result"), type_pattern),
+            *extra_guards,
             Guard.descriptor_available(descriptor),
         ),
         emit=(
@@ -3019,6 +3021,13 @@ def _rules() -> tuple[ContractCase, ...]:
             _unary_rule(vector.vector_floorf, _VEC_F32, "amdgpu.v_floor_f32"),
             _unary_rule(vector.vector_ceilf, _VEC_F32, "amdgpu.v_ceil_f32"),
             _unary_rule(
+                vector.vector_roundf,
+                _VEC_F32,
+                "amdgpu.v_rndne_f32",
+                extra_guards=(Guard.instance_flags_has_all("fastmath", "afn"),),
+                report_key=_report_key(vector.vector_roundf, "afn_rndne"),
+            ),
+            _unary_rule(
                 vector.vector_roundevenf,
                 _VEC_F32,
                 "amdgpu.v_rndne_f32",
@@ -3346,6 +3355,13 @@ def _rules() -> tuple[ContractCase, ...]:
             _unary_rule(scalar_math.scalar_costurnsf, _F32, "amdgpu.v_cos_f32"),
             _unary_rule(scalar_math.scalar_floorf, _F32, "amdgpu.v_floor_f32"),
             _unary_rule(scalar_math.scalar_ceilf, _F32, "amdgpu.v_ceil_f32"),
+            _unary_rule(
+                scalar_math.scalar_roundf,
+                _F32,
+                "amdgpu.v_rndne_f32",
+                extra_guards=(Guard.instance_flags_has_all("fastmath", "afn"),),
+                report_key=_report_key(scalar_math.scalar_roundf, "afn_rndne"),
+            ),
             _unary_rule(
                 scalar_math.scalar_roundevenf,
                 _F32,
