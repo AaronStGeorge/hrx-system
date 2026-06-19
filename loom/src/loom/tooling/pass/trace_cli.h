@@ -20,7 +20,8 @@ extern "C" {
 #define LOOM_TOOLING_PASS_TRACE_USAGE                                      \
   "Use --dump-ir-before/--dump-ir-after=<pass-or-stage> or "               \
   "--dump-ir-before-all/--dump-ir-after-all to capture pass-boundary IR. " \
-  "Use --dump-ir-format=jsonl for one event per line; "                    \
+  "Trace events snapshot the whole module, even for function passes. Use " \
+  "--dump-ir-format=jsonl for one event per line; "                        \
   "--dump-ir-output=dir/ writes trace.jsonl plus ir/*.loom.\n"
 
 typedef struct loom_tooling_pass_trace_stdout_conflict_t {

@@ -179,6 +179,37 @@
       ]
     },
     {
+      "name": "dumps function pass IR as whole-module JSONL",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pipeline=@trace_pipeline",
+          "--dump-ir-after=dce",
+          "--dump-ir-format=jsonl",
+          "--dump-ir-output=stderr",
+          "--output={tmp}/dumped-whole-module.loom"
+        ],
+        "stdin": {
+          "text": "pass.pipeline<module> @trace_pipeline pipeline {\n  for func {\n    dce\n  }\n}\n\nfunc.def @first(%x: i32) -> (i32) {\n  func.return %x : i32\n}\n\nfunc.def @second(%x: i32) -> (i32) {\n  func.return %x : i32\n}\n"
+        }
+      },
+      "stderr": {
+        "contains": [
+          "\"anchor\":\"func\"",
+          "\"symbol\":\"first\"",
+          "\"symbol\":\"second\"",
+          "func.def @first",
+          "func.def @second"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/dumped-whole-module.loom",
+          "non_empty": true
+        }
+      ]
+    },
+    {
       "name": "dumps selected before and after IR to a bundle",
       "run": {
         "tool": "loom-opt",

@@ -17,7 +17,9 @@
             "--emit-target-artifact=kernel.hsaco",
             "--dump-ir-after-all",
             "Prepared-low reproducers",
-            "--pipeline=none"
+            "--pipeline=none",
+            "whole-module snapshots",
+            "jq -r"
           ]
         }
       }
