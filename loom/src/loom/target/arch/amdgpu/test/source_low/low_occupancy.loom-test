@@ -41,6 +41,23 @@ low.func.def target(@gfx11_target) @gfx11_spill(%a: reg<amdgpu.vgpr>, %b: reg<am
 
 // ====
 
+// RUN: emit amdgpu-occupancy-json @gfx11_concat_reuses_releasable_memory_lease strategy=source fixed=%state:physical_register:0:184
+
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_concat_reuses_releasable_memory_lease(%state: reg<amdgpu.vgpr x184>) -> (reg<amdgpu.vgpr x184>, reg<amdgpu.vgpr x8>) asm<amdgpu.rdna3.core> {
+  %address = slice %state[0] : reg<amdgpu.vgpr x184> -> reg<amdgpu.vgpr>
+  %dead = ds_read_b128 %address
+  %lhs0 = ds_read_b128 %address {offset = 16}
+  %lhs1 = ds_read_b128 %address {offset = 32}
+  %lhs = concat(%lhs0, %lhs1) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
+  return %state, %lhs
+}
+
+// ----
+{"format":"loom.amdgpu.occupancy.v0","function":"gfx11_concat_reuses_releasable_memory_lease","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","processor":"gfx1100","wave_size":32,"max_waves_per_simd":16,"flat_workgroup_size":0,"waves_per_workgroup":0,"resident_waves_per_simd":5,"occupancy_percent":31,"limiting_resource":"amdgpu.vgpr","spill_count":0,"scratch_spill_bytes":0,"spill_store_count":0,"spill_reload_count":0,"register_classes":[{"register_class":"amdgpu.sgpr","allocated_units":0,"rounded_units":0,"pool_units":800,"allocation_granularity":16,"wave_limit":16,"next_cliff_units":49,"units_until_next_cliff":49,"spill_count":0,"spill_bytes":0,"spill_store_count":0,"spill_reload_count":0},{"register_class":"amdgpu.vgpr","allocated_units":192,"rounded_units":192,"pool_units":1024,"allocation_granularity":4,"wave_limit":5,"next_cliff_units":205,"units_until_next_cliff":13,"spill_count":0,"spill_bytes":0,"spill_store_count":0,"spill_reload_count":0}],"pressure_resources":[]}
+
+// ====
+
 // RUN: emit amdgpu-occupancy-json @cdna_mixed_vector_pressure diagnostics=summary
 
 amdgpu.target<gfx942> @gfx942_target

@@ -366,12 +366,14 @@ static iree_status_t loom_low_allocation_coalescing_append_interval_at_location(
   if (location_base % alignment != 0) {
     return iree_ok_status();
   }
+  // Coalesced assignments commit through the normal append path, which records
+  // release actions for storage leases that can be legally released here.
   if (loom_low_allocation_search_location_conflicts(
           context->search_context, interval, descriptor_reg_class_id,
           location_kind, location_base, unit_count, ignored_value_ids,
           ignored_value_count, ignored_storage_lease_value_ids,
           ignored_storage_lease_value_count,
-          LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
+          LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED)) {
     return iree_ok_status();
   }
 
@@ -880,7 +882,7 @@ loom_low_allocation_coalescing_find_concat_result_location_for_source(
             capacity.descriptor_reg_class_id, capacity.location_kind, base,
             result_interval->unit_count, ignored_value_ids, ignored_value_count,
             ignored_value_ids, ignored_value_count,
-            LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
+            LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED)) {
       bool source_location_ok = false;
       uint32_t source_location_base = 0;
       if (base <= UINT32_MAX - relation->result_unit_offset) {
@@ -906,7 +908,7 @@ loom_low_allocation_coalescing_find_concat_result_location_for_source(
               /*ignored_value_count=*/0,
               /*ignored_storage_lease_value_ids=*/NULL,
               /*ignored_storage_lease_value_count=*/0,
-              LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
+              LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED)) {
         *out_result_location_base = base;
         return true;
       }
