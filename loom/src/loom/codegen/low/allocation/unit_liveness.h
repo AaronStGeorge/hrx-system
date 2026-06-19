@@ -15,6 +15,7 @@
 #include "loom/codegen/low/placement.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ir/ir.h"
+#include "loom/ir/local_value_domain.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +40,7 @@ iree_status_t loom_low_allocation_unit_liveness_initialize(
     const loom_module_t* module, loom_region_t* body,
     const loom_low_resolved_target_t* target,
     loom_liveness_order_t liveness_order,
+    const loom_local_value_domain_t* value_domain,
     const loom_liveness_analysis_t* liveness, iree_arena_allocator_t* arena,
     loom_low_allocation_unit_liveness_t* out_unit_liveness);
 

@@ -252,6 +252,18 @@ iree_status_t loom_liveness_op_program_point(
     const loom_liveness_analysis_t* analysis, loom_liveness_order_t order,
     const loom_op_t* op, uint32_t* out_program_point);
 
+// Returns the number of program points occupied by |op| under |analysis|'s
+// point model.
+iree_status_t loom_liveness_analysis_op_point_span(
+    const loom_liveness_analysis_t* analysis, const loom_op_t* op,
+    uint32_t* out_span);
+
+// Returns the number of program points occupied by |region| under |analysis|'s
+// point model.
+iree_status_t loom_liveness_analysis_region_point_span(
+    const loom_liveness_analysis_t* analysis, const loom_region_t* region,
+    uint32_t* out_span);
+
 // Returns the interval for |value_id|, or NULL when the value is not touched by
 // the analyzed region. This convenience helper scans the compact local value
 // list; production hot paths should keep their own frame-local direct lookup.

@@ -9,9 +9,65 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/ir/context.h"
+#include "loom/ir/local_value_domain.h"
+#include "loom/ir/module.h"
+#include "loom/ir/types.h"
 
 namespace loom {
 namespace {
+
+class LowAllocationUnitLivenessTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &arena_);
+    loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
+  }
+
+  void TearDown() override {
+    iree_arena_deinitialize(&arena_);
+    loom_context_deinitialize(&context_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  loom_module_t* AllocateModule() {
+    loom_module_t* module = nullptr;
+    IREE_CHECK_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                       nullptr, iree_allocator_system(),
+                                       &module));
+    return module;
+  }
+
+  loom_value_id_t DefineValue(loom_module_t* module) {
+    loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_module_define_value(
+        module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &value_id));
+    return value_id;
+  }
+
+  void AcquireValueDomain(loom_module_t* module,
+                          const loom_value_id_t* value_ids,
+                          iree_host_size_t value_count,
+                          loom_local_value_domain_t* out_domain) {
+    *out_domain = loom_local_value_domain_t{};
+    out_domain->module = module;
+    out_domain->flags = LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED;
+    loom_module_value_ordinal_scratch_acquire(module);
+    for (iree_host_size_t i = 0; i < value_count; ++i) {
+      loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+      IREE_ASSERT_OK(loom_local_value_domain_register_value(
+          out_domain, &arena_, value_ids[i], &value_ordinal));
+      EXPECT_EQ((loom_value_ordinal_t)i, value_ordinal);
+    }
+  }
+
+  iree_arena_block_pool_t block_pool_;
+  iree_arena_allocator_t arena_;
+  loom_context_t context_;
+};
 
 loom_liveness_interval_t RegisterInterval(loom_value_id_t value_id,
                                           uint32_t start_point,
@@ -44,30 +100,32 @@ loom_liveness_analysis_t Liveness(const loom_value_id_t* value_ids,
   return liveness;
 }
 
-TEST(LowAllocationUnitLivenessTest, InitializesUnitStartsAndBoundaryUses) {
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  iree_arena_allocator_t arena;
-  iree_arena_initialize(&block_pool, &arena);
+TEST_F(LowAllocationUnitLivenessTest, InitializesUnitStartsAndBoundaryUses) {
+  loom_module_t* module = AllocateModule();
+  const loom_value_id_t value_ids[] = {
+      DefineValue(module),
+      DefineValue(module),
+  };
+  loom_local_value_domain_t value_domain = {};
+  AcquireValueDomain(module, value_ids, IREE_ARRAYSIZE(value_ids),
+                     &value_domain);
 
-  loom_module_t module = {};
-  loom_region_t body = {};
+  loom_region_t* body = module->body;
+  loom_block_t* block = loom_region_entry_block(body);
   loom_low_resolved_target_t target = {};
-  const loom_value_id_t value_ids[] = {10, 20};
   const uint32_t value_interval_indices[] = {0, 1};
   const loom_liveness_interval_t intervals[] = {
-      RegisterInterval(/*value_id=*/10, /*start_point=*/2,
+      RegisterInterval(value_ids[0], /*start_point=*/2,
                        /*end_point=*/2, /*unit_count=*/2),
-      RegisterInterval(/*value_id=*/20, /*start_point=*/4,
-                       /*end_point=*/8, /*unit_count=*/1),
+      RegisterInterval(value_ids[1], /*start_point=*/3,
+                       /*end_point=*/3, /*unit_count=*/1),
   };
-  const loom_value_id_t live_in_values[] = {10};
+  const loom_value_id_t live_in_values[] = {value_ids[0]};
   const loom_liveness_block_info_t blocks[] = {
       {
-          /*.block=*/nullptr,
+          /*.block=*/block,
           /*.start_point=*/5,
-          /*.end_point=*/9,
+          /*.end_point=*/5,
           /*.live_in_values=*/live_in_values,
           /*.live_in_count=*/IREE_ARRAYSIZE(live_in_values),
           /*.live_out_values=*/nullptr,
@@ -75,13 +133,13 @@ TEST(LowAllocationUnitLivenessTest, InitializesUnitStartsAndBoundaryUses) {
       },
   };
   const loom_liveness_analysis_t liveness = Liveness(
-      value_ids, IREE_ARRAYSIZE(value_ids), value_interval_indices, intervals,
-      IREE_ARRAYSIZE(intervals), blocks, IREE_ARRAYSIZE(blocks));
+      value_domain.value_ids, value_domain.value_count, value_interval_indices,
+      intervals, IREE_ARRAYSIZE(intervals), blocks, IREE_ARRAYSIZE(blocks));
 
   loom_low_allocation_unit_liveness_t unit_liveness = {};
   IREE_ASSERT_OK(loom_low_allocation_unit_liveness_initialize(
-      &module, &body, &target, loom_liveness_order_empty(), &liveness, &arena,
-      &unit_liveness));
+      module, body, &target, loom_liveness_order_empty(), &value_domain,
+      &liveness, &arena_, &unit_liveness));
 
   EXPECT_EQ(loom_low_allocation_unit_liveness_end_point_start_for_value_ordinal(
                 &unit_liveness, &liveness, /*value_ordinal=*/0),
@@ -94,51 +152,52 @@ TEST(LowAllocationUnitLivenessTest, InitializesUnitStartsAndBoundaryUses) {
   EXPECT_EQ(unit_liveness.end_points[1], 6u);
   EXPECT_EQ(unit_liveness.end_points[2], 4u);
 
-  iree_arena_deinitialize(&arena);
-  iree_arena_block_pool_deinitialize(&block_pool);
+  loom_local_value_domain_release(&value_domain);
+  loom_module_free(module);
 }
 
-TEST(LowAllocationUnitLivenessTest, ExtendsTiedResultSourceUnits) {
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  iree_arena_allocator_t arena;
-  iree_arena_initialize(&block_pool, &arena);
+TEST_F(LowAllocationUnitLivenessTest, ExtendsTiedResultSourceUnits) {
+  loom_module_t* module = AllocateModule();
+  const loom_value_id_t value_ids[] = {
+      DefineValue(module),
+      DefineValue(module),
+  };
+  loom_local_value_domain_t value_domain = {};
+  AcquireValueDomain(module, value_ids, IREE_ARRAYSIZE(value_ids),
+                     &value_domain);
 
-  loom_module_t module = {};
-  loom_region_t body = {};
+  loom_region_t* body = module->body;
+  loom_block_t* block = loom_region_entry_block(body);
   loom_low_resolved_target_t target = {};
-  const loom_value_id_t value_ids[] = {10, 20};
   const uint32_t value_interval_indices[] = {0, 1};
   const loom_liveness_interval_t intervals[] = {
-      RegisterInterval(/*value_id=*/10, /*start_point=*/0,
-                       /*end_point=*/5, /*unit_count=*/2),
-      RegisterInterval(/*value_id=*/20, /*start_point=*/4,
+      RegisterInterval(value_ids[0], /*start_point=*/0,
+                       /*end_point=*/0, /*unit_count=*/2),
+      RegisterInterval(value_ids[1], /*start_point=*/7,
                        /*end_point=*/7, /*unit_count=*/2),
   };
-  const loom_value_id_t live_out_values[] = {20};
   const loom_liveness_block_info_t blocks[] = {
       {
-          /*.block=*/nullptr,
+          /*.block=*/block,
           /*.start_point=*/0,
-          /*.end_point=*/7,
+          /*.end_point=*/0,
           /*.live_in_values=*/nullptr,
           /*.live_in_count=*/0,
-          /*.live_out_values=*/live_out_values,
-          /*.live_out_count=*/IREE_ARRAYSIZE(live_out_values),
+          /*.live_out_values=*/nullptr,
+          /*.live_out_count=*/0,
       },
   };
   const loom_liveness_analysis_t liveness = Liveness(
-      value_ids, IREE_ARRAYSIZE(value_ids), value_interval_indices, intervals,
-      IREE_ARRAYSIZE(intervals), blocks, IREE_ARRAYSIZE(blocks));
+      value_domain.value_ids, value_domain.value_count, value_interval_indices,
+      intervals, IREE_ARRAYSIZE(intervals), blocks, IREE_ARRAYSIZE(blocks));
 
   loom_low_allocation_unit_liveness_t unit_liveness = {};
   IREE_ASSERT_OK(loom_low_allocation_unit_liveness_initialize(
-      &module, &body, &target, loom_liveness_order_empty(), &liveness, &arena,
-      &unit_liveness));
+      module, body, &target, loom_liveness_order_empty(), &value_domain,
+      &liveness, &arena_, &unit_liveness));
   ASSERT_EQ(unit_liveness.end_point_count, 4u);
-  EXPECT_EQ(unit_liveness.end_points[0], 0u);
-  EXPECT_EQ(unit_liveness.end_points[1], 0u);
+  EXPECT_EQ(unit_liveness.end_points[0], 1u);
+  EXPECT_EQ(unit_liveness.end_points[1], 1u);
   EXPECT_EQ(unit_liveness.end_points[2], 8u);
   EXPECT_EQ(unit_liveness.end_points[3], 8u);
 
@@ -164,8 +223,8 @@ TEST(LowAllocationUnitLivenessTest, ExtendsTiedResultSourceUnits) {
   EXPECT_EQ(unit_liveness.end_points[0], 8u);
   EXPECT_EQ(unit_liveness.end_points[1], 8u);
 
-  iree_arena_deinitialize(&arena);
-  iree_arena_block_pool_deinitialize(&block_pool);
+  loom_local_value_domain_release(&value_domain);
+  loom_module_free(module);
 }
 
 }  // namespace

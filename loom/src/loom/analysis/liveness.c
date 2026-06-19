@@ -1659,6 +1659,19 @@ iree_status_t loom_liveness_op_program_point(
                           "liveness analysis cannot find operation");
 }
 
+iree_status_t loom_liveness_analysis_op_point_span(
+    const loom_liveness_analysis_t* analysis, const loom_op_t* op,
+    uint32_t* out_span) {
+  return loom_liveness_op_point_span_for_flags(analysis->flags, op, out_span);
+}
+
+iree_status_t loom_liveness_analysis_region_point_span(
+    const loom_liveness_analysis_t* analysis, const loom_region_t* region,
+    uint32_t* out_span) {
+  return loom_liveness_region_point_span_for_flags(analysis->flags, region,
+                                                   out_span);
+}
+
 iree_status_t loom_liveness_analyze_region(
     loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis) {
