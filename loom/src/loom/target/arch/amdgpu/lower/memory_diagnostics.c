@@ -10,6 +10,7 @@
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/context.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/memory_bank_conflict.h"
@@ -136,6 +137,46 @@ static iree_string_view_t loom_amdgpu_memory_diagnostic_nonempty(
   return iree_string_view_is_empty(value) ? placeholder : value;
 }
 
+static bool loom_amdgpu_memory_access_has_vector_width_diagnostic(
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  return diagnostic->vector_lane_count != 0 &&
+         diagnostic->element_byte_count != 0 &&
+         diagnostic->required_32bit_lane_count != 0 &&
+         diagnostic->native_max_vector_lane_count != 0 &&
+         diagnostic->scalarized_max_vector_lane_count != 0;
+}
+
+static iree_status_t loom_amdgpu_emit_memory_access_vector_width_error(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_low_source_memory_access_plan_t* source,
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  const loom_module_t* module = loom_target_low_legality_module(context);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->export_plan->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->config->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_target_low_legality_function_name(context)),
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_string(
+          loom_amdgpu_source_memory_operation_name(source->operation_kind)),
+      loom_param_type(diagnostic->vector_type),
+      loom_param_u32(diagnostic->vector_lane_count),
+      loom_param_u32(diagnostic->element_byte_count),
+      loom_param_u32(diagnostic->required_32bit_lane_count),
+      loom_param_u32(LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES),
+      loom_param_u32(diagnostic->native_max_vector_lane_count),
+      loom_param_u32(LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES),
+      loom_param_u32(diagnostic->scalarized_max_vector_lane_count),
+      loom_param_string(IREE_SV("memory_access.vector_type")),
+  };
+  return loom_target_low_legality_emit_error_ref(
+      context, op, LOOM_ERR_AMDGPU_040_REF, params, IREE_ARRAYSIZE(params));
+}
+
 static iree_status_t loom_amdgpu_emit_memory_access_packed_footprint_error(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
@@ -245,6 +286,12 @@ iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(
     const loom_amdgpu_memory_access_diagnostic_t* diagnostic,
     bool* out_handled) {
   *out_handled = true;
+  if (iree_any_bit_set(diagnostic->rejection_bits,
+                       LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE) &&
+      loom_amdgpu_memory_access_has_vector_width_diagnostic(diagnostic)) {
+    return loom_amdgpu_emit_memory_access_vector_width_error(
+        context, op, source, diagnostic);
+  }
   if (iree_any_bit_set(
           diagnostic->rejection_bits,
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT)) {

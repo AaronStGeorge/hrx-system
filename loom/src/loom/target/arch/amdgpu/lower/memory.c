@@ -140,6 +140,45 @@ static bool loom_amdgpu_memory_access_register_footprint(
   return true;
 }
 
+static uint32_t loom_amdgpu_memory_access_vector_lane_limit(
+    uint32_t element_byte_count, uint32_t max_32bit_lane_count) {
+  if (element_byte_count == 0) {
+    return 0;
+  }
+  const uint64_t max_byte_count = (uint64_t)max_32bit_lane_count * 4u;
+  return (uint32_t)(max_byte_count / element_byte_count);
+}
+
+static void loom_amdgpu_memory_access_try_record_vector_width_diagnostic(
+    const loom_low_source_memory_access_plan_t* source, loom_type_t vector_type,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  if (!loom_type_is_vector(vector_type) || source->vector_lane_count == 0 ||
+      source->element_byte_count == 0) {
+    return;
+  }
+  const uint64_t payload_byte_count =
+      (uint64_t)source->vector_lane_count * source->element_byte_count;
+  if (payload_byte_count == 0 ||
+      payload_byte_count > (uint64_t)UINT32_MAX * 4u) {
+    return;
+  }
+  const uint32_t required_32bit_lane_count =
+      (uint32_t)((payload_byte_count + 3u) / 4u);
+  if (required_32bit_lane_count <= LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
+    return;
+  }
+  diagnostic->vector_type = vector_type;
+  diagnostic->vector_lane_count = source->vector_lane_count;
+  diagnostic->element_byte_count = source->element_byte_count;
+  diagnostic->required_32bit_lane_count = required_32bit_lane_count;
+  diagnostic->native_max_vector_lane_count =
+      loom_amdgpu_memory_access_vector_lane_limit(
+          source->element_byte_count, LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES);
+  diagnostic->scalarized_max_vector_lane_count =
+      loom_amdgpu_memory_access_vector_lane_limit(
+          source->element_byte_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
+}
+
 static bool loom_amdgpu_memory_access_is_packed_16bit_float_tail(
     loom_type_t vector_type, const loom_amdgpu_memory_access_t* access) {
   uint32_t payload_bit_count = 0;
@@ -2599,6 +2638,8 @@ bool loom_amdgpu_memory_access_plan_select(
   };
   const loom_type_t vector_type =
       loom_amdgpu_memory_access_source_vector_type(module, source_op);
+  loom_amdgpu_memory_access_try_record_vector_width_diagnostic(
+      out_source, vector_type, out_diagnostic);
   if (!loom_amdgpu_memory_access_register_footprint(vector_type, &access,
                                                     out_diagnostic)) {
     return false;

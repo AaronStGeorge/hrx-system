@@ -889,6 +889,42 @@ ERR_AMDGPU_039 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_040: AMDGPU memory vector is wider than supported packets.
+ERR_AMDGPU_040 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=40,
+    severity=Severity.ERROR,
+    summary="AMDGPU memory vector is wider than supported packets.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected {operation_kind} '{op_name}' in "
+        "'@{function_name}': vector type {vector_type} has "
+        "{vector_lane_count} lanes of {element_byte_count} bytes "
+        "requiring {required_32bit_lane_count} 32-bit payload lanes, "
+        "but native memory packets support {native_max_vector_lane_count} "
+        "source lanes ({native_max_32bit_lane_count} 32-bit payload lanes) "
+        "and scalarized fallback supports {scalarized_max_vector_lane_count} "
+        "source lanes ({scalarized_max_32bit_lane_count} 32-bit payload lanes)"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("operation_kind", ParamKind.STRING),
+        ErrorParam("vector_type", ParamKind.TYPE),
+        ErrorParam("vector_lane_count", ParamKind.U32),
+        ErrorParam("element_byte_count", ParamKind.U32),
+        ErrorParam("required_32bit_lane_count", ParamKind.U32),
+        ErrorParam("native_max_32bit_lane_count", ParamKind.U32),
+        ErrorParam("native_max_vector_lane_count", ParamKind.U32),
+        ErrorParam("scalarized_max_32bit_lane_count", ParamKind.U32),
+        ErrorParam("scalarized_max_vector_lane_count", ParamKind.U32),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Decompose the vector memory operation before AMDGPU source-to-low "
+        "lowering so each native packet fits the reported lane limit"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -928,4 +964,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_037,
     ERR_AMDGPU_038,
     ERR_AMDGPU_039,
+    ERR_AMDGPU_040,
 )

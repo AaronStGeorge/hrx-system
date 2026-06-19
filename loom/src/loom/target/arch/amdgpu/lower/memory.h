@@ -73,6 +73,18 @@ typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
 typedef struct loom_amdgpu_memory_access_diagnostic_t {
   // Rejection bits explaining why an access is not legal for this target.
   loom_amdgpu_memory_access_rejection_flags_t rejection_bits;
+  // Source vector type involved in vector-width diagnostics.
+  loom_type_t vector_type;
+  // Source vector lane count involved in vector-width diagnostics.
+  uint32_t vector_lane_count;
+  // Byte count of one source vector element in vector-width diagnostics.
+  uint32_t element_byte_count;
+  // Required 32-bit payload lanes for the source vector.
+  uint32_t required_32bit_lane_count;
+  // Maximum source lanes representable by one native memory packet.
+  uint32_t native_max_vector_lane_count;
+  // Maximum source lanes representable by scalarized fallback lowering.
+  uint32_t scalarized_max_vector_lane_count;
   // Source payload type involved in register-footprint diagnostics.
   loom_type_t payload_type;
   // Number of source payload bits involved in register-footprint diagnostics.
