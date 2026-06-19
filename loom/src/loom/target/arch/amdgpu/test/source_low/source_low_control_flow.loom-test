@@ -121,6 +121,71 @@ low.func.def target(@target) abi(hal_kernel) @uniform_i1_reused_after_join(%coun
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @index_i1_reused_after_salu_scc_clobber(%row_i32: i32, %rows_i32: i32, %base_i32: i32, %scale_i32: i32) -> (index) {
+  %row0 = index.cast %row_i32 : i32 to index
+  %rows0 = index.cast %rows_i32 : i32 to index
+  %base0 = index.cast %base_i32 : i32 to index
+  %scale0 = index.cast %scale_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1022)] : index
+  %rows = index.assume %rows0 [range(%rows0, 1, 1024)] : index
+  %base = index.assume %base0 [range(%base0, 0, 1024)] : index
+  %scale = index.assume %scale0 [range(%scale0, 0, 1024)] : index
+  %one = index.constant 1 : index
+  %row1 = index.add %row, %one : index
+  %in_bounds = index.cmp ult, %row1, %rows : index
+  %entry_guard = scalar.cmpi ne, %base_i32, %scale_i32 : i32
+  %combined_guard = scalar.andi %in_bounds, %entry_guard : i1
+  cfg.cond_br %combined_guard, ^left, ^right
+^left:
+  cfg.br ^body(%base: index)
+^right:
+  cfg.br ^body(%scale: index)
+^body(%seed: index):
+  %bounded_seed = index.assume %seed [range(%seed, 0, 1024)] : index
+  %scaled = index.add %bounded_seed, %scale : index
+  cfg.cond_br %in_bounds, ^then, ^body_done
+^then:
+  %result = index.add %scaled, %one : index
+  cfg.br ^done(%result: index)
+^body_done:
+  cfg.br ^done(%scaled: index)
+^done(%out: index):
+  func.return %out : index
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @index_i1_reused_after_salu_scc_clobber(%row: reg<amdgpu.sgpr>, %rows: reg<amdgpu.sgpr>, %base: reg<amdgpu.sgpr>, %scale: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %one = s_mov_b32 1
+  %row1 = s_add_u32 %row, %one
+  %32 = s_cmp_lt_u32 %row1, %rows
+  %33 = s_mov_b32 0
+  %in_bounds = s_cselect_b32 %one, %33, %32
+  %entry_guard = s_cmp_lg_i32 %base, %scale
+  %39 = s_cselect_b32 %one, %33, %entry_guard
+  %40 = s_and_b32 %in_bounds, %39
+  %combined_guard = s_cmp_lg_i32 %40, %33
+  low.cond_br %combined_guard, ^left, ^right : reg<amdgpu.scc>
+^left:
+  low.br ^body(%base: reg<amdgpu.sgpr>)
+^right:
+  low.br ^body(%scale: reg<amdgpu.sgpr>)
+^body(%bounded_seed: reg<amdgpu.sgpr>):
+  %scaled = s_add_u32 %bounded_seed, %scale
+  %44 = s_cmp_lg_i32 %in_bounds, %33
+  low.cond_br %44, ^then, ^body_done : reg<amdgpu.scc>
+^then:
+  %result = s_add_u32 %scaled, %one
+  low.br ^done(%result: reg<amdgpu.sgpr>)
+^body_done:
+  low.br ^done(%scaled: reg<amdgpu.sgpr>)
+^done(%out: reg<amdgpu.sgpr>):
+  return %out
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @cfg_if_scalar_compare(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
   %cond = scalar.cmpi slt, %lhs, %rhs : i32
   cfg.cond_br %cond, ^then, ^else
