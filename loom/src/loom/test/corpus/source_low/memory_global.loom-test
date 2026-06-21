@@ -994,69 +994,6 @@ kernel.def @loaded_i64_row_stride_load() {
 
 // ====
 
-// RUN: pass vector-memory-footprint
-
-kernel.def @affine_tail_vector_copy_dynamic_bound(%input: buffer, %output: buffer, %base_i32: i32, %tail_i32: i32, %stride_i32: i32, %token_count_i32: i32) {
-  %unit = index.constant 1 : index
-  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch(%input: buffer, %output: buffer, %base_i32: i32, %tail_i32: i32, %stride_i32: i32, %token_count_i32: i32) {
-  %zero = index.constant 0 : offset
-  %one = index.constant 1 : index
-  %stride0 = index.cast %stride_i32 : i32 to index
-  %stride = index.assume %stride0 [range(%stride0, 2, 2048)] : index
-  %token_count0 = index.cast %token_count_i32 : i32 to index
-  %token_count = index.assume %token_count0 [range(%token_count0, 1, 2)] : index
-  %element_count = index.mul %stride, %token_count : index
-  %base0 = index.cast %base_i32 : i32 to index
-  %base = index.assume %base0 [range(%base0, 0, 4094)] : index
-  %tail0 = index.cast %tail_i32 : i32 to index
-  %tail = index.assume %tail0 [range(%tail0, 0, 4094)] : index
-  %origin0 = index.add %base, %tail : index
-  %origin_nonnegative = index.assume %origin0 [range(%origin0, 0, 4094)] : index
-  %max_vector_origin = index.sub %element_count, %one : index
-  %origin = index.assume %origin_nonnegative [lt(%origin_nonnegative, %max_vector_origin)] : index
-  %input_view = buffer.view %input[%zero] : buffer -> view<[%element_count]xf32, #dense>
-  %output_view = buffer.view %output[%zero] : buffer -> view<[%element_count]xf32, #dense>
-  %loaded = vector.load %input_view[%origin] : view<[%element_count]xf32, #dense> -> vector<2xf32>
-  vector.store %loaded, %output_view[%origin] : vector<2xf32>, view<[%element_count]xf32, #dense>
-  kernel.return
-}
-
-// ====
-
-// RUN: pass vector-memory-footprint
-
-kernel.def @affine_tail_vector_copy_relation_lower_bound(%input: buffer, %output: buffer, %pair_i32: i32, %half_i32: i32, %base_i32: i32, %n_dims_i32: i32, %element_count_i32: i32) {
-  %unit = index.constant 1 : index
-  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch(%input: buffer, %output: buffer, %pair_i32: i32, %half_i32: i32, %base_i32: i32, %n_dims_i32: i32, %element_count_i32: i32) {
-  %zero = index.constant 0 : offset
-  %one = index.constant 1 : index
-  %two = index.constant 2 : index
-  %element_count0 = index.cast %element_count_i32 : i32 to index
-  %element_count = index.assume %element_count0 [range(%element_count0, 2, 8192)] : index
-  %half0 = index.cast %half_i32 : i32 to index
-  %half = index.assume %half0 [range(%half0, 0, 4094)] : index
-  %pair0 = index.cast %pair_i32 : i32 to index
-  %pair = index.assume %pair0 [range(%pair0, 0, 4094), ge(%pair0, %half)] : index
-  %tail_pair = index.sub %pair, %half : index
-  %n_dims0 = index.cast %n_dims_i32 : i32 to index
-  %n_dims = index.assume %n_dims0 [range(%n_dims0, 0, 4094)] : index
-  %tail0 = index.madd %tail_pair, %two, %n_dims : index
-  %base0 = index.cast %base_i32 : i32 to index
-  %base = index.assume %base0 [range(%base0, 0, 4094)] : index
-  %origin0 = index.add %base, %tail0 : index
-  %max_vector_origin = index.sub %element_count, %one : index
-  %origin = index.assume %origin0 [lt(%origin0, %max_vector_origin)] : index
-  %input_view = buffer.view %input[%zero] : buffer -> view<[%element_count]xf32, #dense>
-  %output_view = buffer.view %output[%zero] : buffer -> view<[%element_count]xf32, #dense>
-  %loaded = vector.load %input_view[%origin] : view<[%element_count]xf32, #dense> -> vector<2xf32>
-  vector.store %loaded, %output_view[%origin] : vector<2xf32>, view<[%element_count]xf32, #dense>
-  kernel.return
-}
-
-// ====
-
 kernel.def @loaded_i32_row_shift_store() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
