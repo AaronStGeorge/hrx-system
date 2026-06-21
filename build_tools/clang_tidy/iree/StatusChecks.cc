@@ -476,6 +476,9 @@ bool IsBorrowedStatusCheckExemptFunction(StringRef Name) {
          IsKnownStatusNoOwnerProducer(Name) ||
          Name == "iree_async_proactor_io_uring_push_software_completion" ||
          Name == "iree_hal_status_as_semaphore_failure" ||
+         Name == "iree_status_from_loomc" || Name == "loomc_status_from_iree" ||
+         Name == "iree_status_from_loomc_status" ||
+         Name == "loomc_status_from_iree_status" ||
          Name == "iree_to_hrx_status";
 }
 
