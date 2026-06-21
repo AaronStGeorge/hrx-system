@@ -558,17 +558,117 @@ static iree_status_t loom_parse_format_template_param_flags(
                                           element->field_index, start_token);
 }
 
-static iree_status_t loom_parse_format_emit_operand_ref_type_mismatch(
-    loom_parser_t* parser, loom_token_t value_token, loom_type_t actual_type,
+static bool loom_parse_format_parsed_operand_field_span(
+    const loom_op_vtable_t* vtable, const loom_parsed_op_t* parsed,
+    uint8_t field_index, const loom_value_id_t** out_values,
+    uint16_t* out_count) {
+  *out_values = NULL;
+  *out_count = 0;
+  if (loom_op_vtable_has_segmented_operands(vtable)) {
+    uint8_t segment_count = loom_op_vtable_operand_segment_count(vtable);
+    if (field_index >= segment_count ||
+        field_index >= parsed->operand_segment_count) {
+      return false;
+    }
+    uint32_t start = 0;
+    for (uint8_t i = 0; i < field_index; ++i) {
+      start += parsed->operand_segment_counts[i];
+    }
+    uint16_t count = parsed->operand_segment_counts[field_index];
+    if (start > parsed->operand_count ||
+        count > parsed->operand_count - start) {
+      return false;
+    }
+    *out_values = parsed->operand_ids + start;
+    *out_count = count;
+    return true;
+  }
+
+  if (iree_any_bit_set(vtable->vtable_flags,
+                       LOOM_OP_VTABLE_VARIADIC_OPERANDS) &&
+      field_index == vtable->fixed_operand_count) {
+    if (field_index > parsed->operand_count) {
+      return false;
+    }
+    *out_values = parsed->operand_ids + field_index;
+    *out_count = (uint16_t)(parsed->operand_count - field_index);
+    return true;
+  }
+
+  if (field_index >= parsed->operand_count) {
+    return false;
+  }
+  *out_values = parsed->operand_ids + field_index;
+  *out_count = 1;
+  return true;
+}
+
+static iree_string_view_t loom_parse_format_operand_field_name(
+    const loom_op_vtable_t* vtable, uint8_t field_index, uint16_t element_index,
+    bool include_element_index, char* buffer,
+    iree_host_size_t buffer_capacity) {
+  iree_string_view_t field_name = IREE_SV("operand");
+  uint8_t descriptor_count = loom_op_vtable_operand_descriptor_count(vtable);
+  if (vtable->operand_descriptors && field_index < descriptor_count) {
+    field_name =
+        loom_bstring_view(vtable->operand_descriptors[field_index].name);
+  } else {
+    if (include_element_index) {
+      iree_snprintf(buffer, buffer_capacity, "operand %u[%u]", field_index,
+                    element_index);
+      return iree_make_cstring_view(buffer);
+    }
+    iree_snprintf(buffer, buffer_capacity, "operand %u", field_index);
+    return iree_make_cstring_view(buffer);
+  }
+  if (!include_element_index) {
+    return field_name;
+  }
+  iree_snprintf(buffer, buffer_capacity, "%.*s[%u]", (int)field_name.size,
+                field_name.data, element_index);
+  return iree_make_cstring_view(buffer);
+}
+
+static iree_status_t loom_parse_format_emit_operand_type_mismatch(
+    loom_parser_t* parser, loom_token_t annotation_token,
+    iree_string_view_t field_name, loom_type_t actual_type,
     loom_type_t annotated_type) {
   loom_diagnostic_param_t params[] = {
-      loom_param_string(value_token.text),
+      loom_param_string(field_name),
       loom_param_type(actual_type),
       loom_param_string(IREE_SV("type annotation")),
       loom_param_type(annotated_type),
   };
   return loom_parser_emit(parser, LOOM_ERR_TYPE_001, params,
-                          IREE_ARRAYSIZE(params), value_token);
+                          IREE_ARRAYSIZE(params), annotation_token);
+}
+
+static iree_status_t loom_parse_format_check_operand_type_annotation(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    const loom_parsed_op_t* parsed, const loom_format_element_t* element,
+    uint16_t element_index, bool include_element_index,
+    loom_token_t annotation_token, loom_type_t annotated_type) {
+  const loom_value_id_t* values = NULL;
+  uint16_t value_count = 0;
+  if (!loom_parse_format_parsed_operand_field_span(
+          vtable, parsed, element->field_index, &values, &value_count) ||
+      element_index >= value_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format OPERAND_TYPE field_index %u element %u out of range",
+        element->field_index, element_index);
+  }
+  loom_type_t actual_type =
+      loom_module_value_type(parser->module, values[element_index]);
+  if (loom_type_equal(actual_type, annotated_type)) {
+    return iree_ok_status();
+  }
+  char field_name_buffer[64];
+  iree_string_view_t field_name = loom_parse_format_operand_field_name(
+      vtable, element->field_index, element_index, include_element_index,
+      field_name_buffer, sizeof(field_name_buffer));
+  return loom_parse_format_emit_operand_type_mismatch(
+      parser, annotation_token, field_name, actual_type, annotated_type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -738,9 +838,8 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
           loom_type_t actual_type =
               loom_module_value_type(parser->module, value_id);
           if (!loom_type_equal(actual_type, annotated_type)) {
-            IREE_RETURN_IF_ERROR(
-                loom_parse_format_emit_operand_ref_type_mismatch(
-                    parser, token, actual_type, annotated_type));
+            IREE_RETURN_IF_ERROR(loom_parse_format_emit_operand_type_mismatch(
+                parser, token, token.text, actual_type, annotated_type));
             return iree_ok_status();
           }
           uint16_t operand_index = parsed->operand_count;
@@ -806,32 +905,49 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       }
 
       case LOOM_FORMAT_KIND_OPERAND_TYPE: {
-        // Type of an operand — parse and verify (or just consume).
-        loom_type_t type = {0};
+        loom_token_t annotation_token = loom_tokenizer_peek(&parser->tokenizer);
+        uint32_t type_errors_before = parser->error_count;
+        loom_type_t annotated_type = {0};
         IREE_RETURN_IF_ERROR(
-            loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &type));
+            loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &annotated_type));
+        if (parser->error_count > type_errors_before) {
+          return iree_ok_status();
+        }
+        IREE_RETURN_IF_ERROR(loom_parse_format_check_operand_type_annotation(
+            parser, vtable, parsed, element, /*element_index=*/0,
+            /*include_element_index=*/false, annotation_token, annotated_type));
         break;
       }
 
       case LOOM_FORMAT_KIND_OPERAND_TYPES: {
-        // Variadic operand types. Parse types separated by commas.
-        bool first = true;
-        for (;;) {
-          loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-          if (peek.kind == LOOM_TOKEN_EOF || peek.kind == LOOM_TOKEN_RPAREN ||
-              peek.kind == LOOM_TOKEN_RBRACE) {
-            break;
+        const loom_value_id_t* values = NULL;
+        uint16_t value_count = 0;
+        if (!loom_parse_format_parsed_operand_field_span(
+                vtable, parsed, element->field_index, &values, &value_count)) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "format OPERAND_TYPES field_index %u out of range",
+              element->field_index);
+        }
+        (void)values;
+        for (uint16_t element_index = 0; element_index < value_count;
+             ++element_index) {
+          if (element_index > 0) {
+            LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COMMA, NULL);
           }
-          if (!first) {
-            if (!loom_tokenizer_try_consume(&parser->tokenizer,
-                                            LOOM_TOKEN_COMMA)) {
-              break;
-            }
-          }
-          loom_type_t type = {0};
+          loom_token_t annotation_token =
+              loom_tokenizer_peek(&parser->tokenizer);
+          uint32_t type_errors_before = parser->error_count;
+          loom_type_t annotated_type = {0};
           IREE_RETURN_IF_ERROR(
-              loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &type));
-          first = false;
+              loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &annotated_type));
+          if (parser->error_count > type_errors_before) {
+            return iree_ok_status();
+          }
+          IREE_RETURN_IF_ERROR(loom_parse_format_check_operand_type_annotation(
+              parser, vtable, parsed, element, element_index,
+              /*include_element_index=*/true, annotation_token,
+              annotated_type));
         }
         break;
       }

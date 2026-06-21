@@ -770,6 +770,22 @@ class TestParseClauseCopyOp:
         assert _op_printer().print_operation(op, module) == source
 
 
+class TestParseOperandTypeAnnotations:
+    def test_typeof_operand_mismatch(self) -> None:
+        module, scope = _setup_scope(("input", I32))
+        with pytest.raises(ParseError, match="operand 'input' has type i32"):
+            _parse_op(
+                "%result = test.convergent %input : f32",
+                module=module,
+                scope=scope,
+            )
+
+    def test_typesof_operand_mismatch(self) -> None:
+        module, scope = _setup_scope(("lhs", I32), ("rhs", F32))
+        with pytest.raises(ParseError, match=r"operand 'values\[1\]' has type f32"):
+            _parse_op("test.use %lhs, %rhs : i32, i32", module=module, scope=scope)
+
+
 class TestParseComparisonOp:
     def test_cmp(self) -> None:
         module, scope = _setup_scope(("a", I32), ("b", I32))

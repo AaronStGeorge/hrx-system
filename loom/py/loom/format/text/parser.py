@@ -1538,6 +1538,36 @@ class Parser:
             return None
         return value_type
 
+    def _check_operand_type_annotation(
+        self,
+        parsed: ParsedFields,
+        field_name: str,
+        annotated_type: Type,
+        annotation_token: Token,
+        *,
+        element_index: int = 0,
+        include_element_index: bool = False,
+    ) -> None:
+        value_ids = parsed.operand_fields.get(field_name, ())
+        if element_index >= len(value_ids):
+            raise ParseError(
+                f"operand '{field_name}' has no value for type annotation",
+                annotation_token.location,
+                self._tokenizer._filename,
+            )
+        actual_type = self._module.values[value_ids[element_index]].type
+        if actual_type == annotated_type:
+            return
+        display_name = (
+            f"{field_name}[{element_index}]" if include_element_index else field_name
+        )
+        raise ParseError(
+            f"operand '{display_name}' has type {actual_type}, "
+            f"but type annotation is {annotated_type}",
+            annotation_token.location,
+            self._tokenizer._filename,
+        )
+
     def _field_value_type(
         self,
         op_decl: Op,
@@ -2133,6 +2163,7 @@ class Parser:
                         if self._definition_scope_active and is_result
                         else TypeParseMode.BODY
                     )
+                    annotation_token = tok.peek()
                     parsed_type, bindings = parse_type_from_tokens(
                         tok,
                         self._scope,
@@ -2145,11 +2176,19 @@ class Parser:
                         parsed.result_types.append(parsed_type)
                         parsed.result_bindings.append(bindings)
                         self._assign_reserved_binding_types(bindings)
+                    elif field_desc and field_desc.kind == FieldKind.OPERAND:
+                        self._check_operand_type_annotation(
+                            parsed, name, parsed_type, annotation_token
+                        )
 
                 case TypesOf(field=name):
                     field_desc = self._layout(op_decl).fields.get(name)
                     is_result = field_desc and field_desc.kind == FieldKind.RESULT
+                    parsed_types: list[Type] = []
+                    parsed_bindings: list[Mapping[int, int]] = []
+                    annotation_tokens: list[Token] = []
                     if _is_type_start(tok.peek(), self._type_registry):
+                        annotation_tokens.append(tok.peek())
                         t, bindings = parse_type_from_tokens(
                             tok,
                             self._scope,
@@ -2157,13 +2196,12 @@ class Parser:
                             self._type_registry,
                             TypeParseMode.BODY,
                         )
-                        if is_result:
-                            parsed.result_types.append(t)
-                            parsed.result_bindings.append(bindings)
-                            self._assign_reserved_binding_types(bindings)
+                        parsed_types.append(t)
+                        parsed_bindings.append(bindings)
                         while tok.try_consume(TokenKind.COMMA):
                             if not _is_type_start(tok.peek(), self._type_registry):
                                 break
+                            annotation_tokens.append(tok.peek())
                             t, bindings = parse_type_from_tokens(
                                 tok,
                                 self._scope,
@@ -2171,10 +2209,35 @@ class Parser:
                                 self._type_registry,
                                 TypeParseMode.BODY,
                             )
-                            if is_result:
-                                parsed.result_types.append(t)
-                                parsed.result_bindings.append(bindings)
-                                self._assign_reserved_binding_types(bindings)
+                            parsed_types.append(t)
+                            parsed_bindings.append(bindings)
+                    if is_result:
+                        for t, bindings in zip(
+                            parsed_types, parsed_bindings, strict=True
+                        ):
+                            parsed.result_types.append(t)
+                            parsed.result_bindings.append(bindings)
+                            self._assign_reserved_binding_types(bindings)
+                    elif field_desc and field_desc.kind == FieldKind.OPERAND:
+                        value_ids = parsed.operand_fields.get(name, ())
+                        if len(parsed_types) != len(value_ids):
+                            raise ParseError(
+                                "operand type annotation count does not match "
+                                "value count",
+                                tok.peek().location,
+                                tok._filename,
+                            )
+                        for element_index, (parsed_type, annotation_token) in enumerate(
+                            zip(parsed_types, annotation_tokens, strict=True)
+                        ):
+                            self._check_operand_type_annotation(
+                                parsed,
+                                name,
+                                parsed_type,
+                                annotation_token,
+                                element_index=element_index,
+                                include_element_index=True,
+                            )
 
                 case ResultType(field=name):
                     self._parse_result_type(parsed)
