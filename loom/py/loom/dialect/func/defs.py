@@ -83,6 +83,15 @@ Visibility = EnumDef(
     doc="Function visibility. Absent (0) means private (module-internal).",
 )
 
+Retain = EnumDef(
+    "Retain",
+    [
+        # Value 0 is reserved for "absent" (ordinary DCE may erase).
+        EnumCase("retain", 1, doc="Preserve the symbol across ordinary DCE."),
+    ],
+    doc="Private symbol retention policy. Absent (0) permits ordinary DCE.",
+)
+
 CallingConv = EnumDef(
     "CallingConv",
     [
@@ -121,6 +130,8 @@ InlinePolicy = EnumDef(
     doc="Author inline policy. Absent (0) leaves the edge to the current pass.",
 )
 
+_RETAIN_ATTR = AttrDef("retain", "enum", enum_def=Retain, optional=True)
+
 # ============================================================================
 # Shared format fragments
 # ============================================================================
@@ -133,6 +144,7 @@ InlinePolicy = EnumDef(
 #   func.def public pure @name(...)
 _MODIFIER_FORMAT: list[FormatElement] = [
     OptionalGroup([Attr("visibility")], anchor="visibility"),
+    OptionalGroup([Attr("retain")], anchor="retain"),
     OptionalGroup([Attr("cc")], anchor="cc"),
     OptionalGroup([Attr("purity")], anchor="purity"),
     OptionalGroup([Attr("temperature")], anchor="temperature"),
@@ -264,6 +276,7 @@ _DECL_ATTRS = [
     AttrDef("inline_policy", "enum", enum_def=InlinePolicy, optional=True),
     *_CONTRACT_ATTRS,
     AttrDef("predicates", "predicate_list", optional=True),
+    _RETAIN_ATTR,
 ]
 
 # ============================================================================
@@ -311,13 +324,14 @@ func_def = Op(
     phase=OpPhase.EXECUTABLE,
     doc="Function definition. Callable by name via func.call.",
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
-    attrs=[*_MODIFIER_ATTRS, *_CONTRACT_ATTRS],
+    attrs=[*_MODIFIER_ATTRS, *_CONTRACT_ATTRS, _RETAIN_ATTR],
     symbol_def=SymbolDefinition(
         field="callee",
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
         fact_domain="loom_func_symbol_fact_domain",
+        retain="retain",
     ),
     results=[Result("results", ANY, variadic=True)],
     regions=[RegionDef("body", doc="Function body.", terminator="func.return")],
@@ -356,12 +370,14 @@ func_decl = Op(
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DECL",
         fact_domain="loom_func_symbol_fact_domain",
+        retain="retain",
     ),
     results=[Result("results", ANY, variadic=True)],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_DECL_CONTRACT, args_as_operands=True)],
     verify="loom_func_decl_verify",
     format=[
         OptionalGroup([Attr("visibility")], anchor="visibility"),
+        OptionalGroup([Attr("retain")], anchor="retain"),
         *_IMPORT_FORMAT,
         OptionalGroup([Attr("cc")], anchor="cc"),
         OptionalGroup([Attr("purity")], anchor="purity"),
@@ -395,6 +411,7 @@ func_template = Op(
         *_MODIFIER_ATTRS,
         *_PROVIDER_ATTRS,
         AttrDef("priority", "i64", optional=True),
+        _RETAIN_ATTR,
     ],
     symbol_def=SymbolDefinition(
         field="callee",
@@ -402,6 +419,7 @@ func_template = Op(
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_TEMPLATE",
         fact_domain="loom_func_symbol_fact_domain",
+        retain="retain",
     ),
     results=[Result("results", ANY, variadic=True)],
     regions=[RegionDef("body", doc="Template body.", terminator="func.return")],
@@ -445,6 +463,7 @@ func_ukernel = Op(
         *_MODIFIER_ATTRS,
         *_PROVIDER_ATTRS,
         AttrDef("priority", "i64", optional=True),
+        _RETAIN_ATTR,
     ],
     symbol_def=SymbolDefinition(
         field="callee",
@@ -452,6 +471,7 @@ func_ukernel = Op(
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_UKERNEL",
         fact_domain="loom_func_symbol_fact_domain",
+        retain="retain",
     ),
     results=[Result("results", ANY, variadic=True)],
     interfaces=[

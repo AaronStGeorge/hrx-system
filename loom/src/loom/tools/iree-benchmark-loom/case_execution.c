@@ -222,7 +222,7 @@ static iree_status_t iree_benchmark_loom_emit_work_item_sample_aliases(
 
 static bool iree_benchmark_loom_benchmark_result_counts_as_failed(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result) {
-  if (iree_string_view_equal(benchmark_result->status, IREE_SV("skipped"))) {
+  if (iree_string_view_equal(benchmark_result->state, IREE_SV("skipped"))) {
     return false;
   }
   return !benchmark_result->executed || !benchmark_result->passed;

@@ -49,6 +49,7 @@ from loom.ir import (
     NONE_TYPE,
     SYMBOL_FLAG_IMPORT,
     SYMBOL_FLAG_PUBLIC,
+    SYMBOL_FLAG_RETAIN,
     Block,
     CanonicalAttrDict,
     DialectType,
@@ -109,6 +110,12 @@ _FUNC_PURITY_BYTES: list[str | None] = [None, "pure"]
 # Bytecode-only flag bit recording whether an import explicitly wrote its
 # source symbol, even when the source name matches the local symbol name.
 _SYMBOL_FLAG_IMPORT_SYMBOL = 0x0004
+_SYMBOL_SUPPORTED_FLAGS = (
+    SYMBOL_FLAG_PUBLIC
+    | SYMBOL_FLAG_IMPORT
+    | _SYMBOL_FLAG_IMPORT_SYMBOL
+    | SYMBOL_FLAG_RETAIN
+)
 
 
 class BytecodeError(Exception):
@@ -820,6 +827,8 @@ class BytecodeReader:
             name = self._strings[name_id]
             if visibility not in (0, 1):
                 raise BytecodeError(f"unsupported symbol visibility byte: {visibility}")
+            if flags & ~_SYMBOL_SUPPORTED_FLAGS:
+                raise BytecodeError("symbol has unsupported flag bits")
             if (visibility == 0) != ((flags & SYMBOL_FLAG_PUBLIC) != 0):
                 raise BytecodeError("symbol visibility byte does not match flags")
 
@@ -942,6 +951,8 @@ class BytecodeReader:
                 op_attrs: dict[str, Any] = {symbol_field: name}
                 if flags & SYMBOL_FLAG_PUBLIC:
                     op_attrs["visibility"] = "public"
+                if flags & SYMBOL_FLAG_RETAIN:
+                    op_attrs["retain"] = "retain"
                 cc_str = (
                     _FUNC_CC_BYTES[cc_byte] if cc_byte < len(_FUNC_CC_BYTES) else None
                 )

@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from loom.dsl import (
+    ATTR_TYPE_ENUM,
     ATTR_TYPE_FLAGS,
     ContractFamily,
     EffectKind,
@@ -119,6 +120,18 @@ SYMBOL_INTERFACE_MAP: dict[str, str] = {
 def _symbol_interface_flags(interfaces: Sequence[str]) -> str:
     flags = [SYMBOL_INTERFACE_MAP[interface] for interface in interfaces]
     return " | ".join(flags) if flags else "0"
+
+
+def _symbol_retain_attr_index(op: Op) -> int | None:
+    """Returns the optional retain marker attribute index for a symbol op."""
+
+    if op.symbol_def is None or op.symbol_def.retain is None:
+        return None
+    retain_attr_index = c_queries.resolve_attr_index(op, op.symbol_def.retain, "symbol_def.retain")
+    retain_attr = op.attrs[retain_attr_index]
+    if retain_attr.attr_type != ATTR_TYPE_ENUM:
+        raise ValueError(f"Op {op.name!r}: symbol_def.retain {op.symbol_def.retain!r} must name an enum attr")
+    return retain_attr_index
 
 
 def _symbol_kind(op: Op) -> str:
@@ -445,12 +458,15 @@ def generate_tables_c(
         # Symbol definition descriptor.
         if op.symbol_def is not None:
             attr_index = c_queries.resolve_attr_index(op, op.symbol_def.field, "symbol_def")
+            retain_attr_index = _symbol_retain_attr_index(op)
             flags = _symbol_interface_flags(op.symbol_def.interfaces)
             fact_domain = c_symbols.symbol_fact_domain_symbol(op)
             lines.append(f"static const loom_symbol_definition_descriptor_t {prefix}_symbol_def = {{")
             lines.append(f"    .name = {_bstring_expr(op.symbol_def.name)},")
             if attr_index != 0:
                 lines.append(f"    .name_attr_index = {attr_index},")
+            if retain_attr_index is not None:
+                lines.append(f"    .retain_attr_index_plus_one = {retain_attr_index + 1},")
             if flags != "0":
                 lines.append(f"    .interfaces = {flags},")
             if op.symbol_def.bytecode_kind != "LOOM_SYMBOL_NONE":

@@ -222,13 +222,15 @@ TEST_F(TargetFunctionContractTest,
   loom_target_bundle_storage_rebind(&storage);
   loom_target_function_contract_apply_compatible_selection(&selected_bundle,
                                                            &storage);
+  EXPECT_TRUE(iree_string_view_equal(storage.bundle.name, module_bundle.name));
   EXPECT_TRUE(
-      iree_string_view_equal(storage.snapshot.name, selected_snapshot.name));
+      iree_string_view_equal(storage.snapshot.name, module_snapshot.name));
   EXPECT_EQ(storage.snapshot.max_flat_workgroup_size,
             selected_snapshot.max_flat_workgroup_size);
   EXPECT_EQ(storage.snapshot.subgroup_size, module_snapshot.subgroup_size);
-  EXPECT_TRUE(
-      iree_string_view_equal(storage.config.name, selected_config.name));
+  EXPECT_TRUE(iree_string_view_equal(storage.config.name, module_config.name));
+  EXPECT_TRUE(iree_string_view_equal(storage.config.contract_set_key,
+                                     module_config.contract_set_key));
   EXPECT_EQ(storage.config.contract_feature_bits,
             selected_config.contract_feature_bits);
   EXPECT_EQ(storage.export_plan.abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);

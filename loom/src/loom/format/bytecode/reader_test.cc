@@ -162,6 +162,50 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateRetainedFunctionModule() {
+    loom_module_t* module = CreateModule("reader_retained_func");
+    loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+    IREE_CHECK_OK(loom_module_intern_type(module, i32_type, &i32_type));
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, IREE_SV("retained"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {/*.module_id=*/0, /*.symbol_id=*/symbol_id};
+    loom_type_t arg_types[1] = {i32_type};
+    loom_type_t result_types[1] = {i32_type};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_func_def_build(
+        &builder, LOOM_FUNC_DEF_BUILD_FLAG_HAS_RETAIN, /*visibility=*/0,
+        LOOM_FUNC_RETAIN_RETAIN, /*cc=*/0, /*purity=*/0, /*temperature=*/0,
+        /*inline_policy=*/0, loom_symbol_ref_null(), /*abi=*/0,
+        loom_named_attr_slice_empty(), /*export_symbol=*/LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+        nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 1) {
+      ADD_FAILURE() << "expected one retained function argument";
+      return module;
+    }
+    loom_region_t* body = loom_func_like_body(func_like);
+    loom_builder_t body_builder;
+    loom_builder_initialize(module, &module->arena,
+                            loom_region_entry_block(body), &body_builder);
+    loom_op_t* return_op = nullptr;
+    IREE_CHECK_OK(loom_func_return_build(&body_builder, arg_ids, arg_count,
+                                         LOOM_LOCATION_UNKNOWN, &return_op));
+    return module;
+  }
+
   loom_module_t* CreateImportedFunctionModule() {
     loom_module_t* module = CreateModule("reader_import");
     loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
@@ -189,8 +233,8 @@ class ReaderTest : public ::testing::Test {
         &builder,
         LOOM_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_MODULE |
             LOOM_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_SYMBOL,
-        /*visibility=*/0, import_module_id, import_symbol_id, /*cc=*/0,
-        /*purity=*/0, /*temperature=*/0, /*inline_policy=*/0,
+        /*visibility=*/0, /*retain=*/0, import_module_id, import_symbol_id,
+        /*cc=*/0, /*purity=*/0, /*temperature=*/0, /*inline_policy=*/0,
         loom_symbol_ref_null(), /*abi=*/0, loom_named_attr_slice_empty(),
         LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), callee,
         arg_types, IREE_ARRAYSIZE(arg_types), result_types,
@@ -1659,6 +1703,44 @@ TEST_F(ReaderTest, ReadsFunctionModuleIndex) {
   EXPECT_GE(symbol.body_absolute_offset, module_metadata.offset);
   EXPECT_GT(symbol.entry_length, 0u);
 
+  iree_arena_deinitialize(&metadata_arena);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RetainedFunctionSurvivesModuleRead) {
+  loom_module_t* module = CreateRetainedFunctionModule();
+  auto bytes = WriteModule(module);
+
+  iree_arena_allocator_t metadata_arena;
+  iree_arena_initialize(&block_pool_, &metadata_arena);
+  loom_bytecode_file_metadata_t metadata = {0};
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t metadata_result =
+      ReadIndex(bytes, &metadata_arena, &metadata, &error_ids);
+
+  EXPECT_EQ(metadata_result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_EQ(metadata.module_count, 1u);
+  const loom_bytecode_module_metadata_t& module_metadata = metadata.modules[0];
+  ASSERT_EQ(module_metadata.symbol_count, 1u);
+  const loom_bytecode_symbol_metadata_t& metadata_symbol =
+      module_metadata.symbols[0];
+  EXPECT_TRUE(iree_all_bits_set(metadata_symbol.flags,
+                                LOOM_BYTECODE_SYMBOL_FLAG_RETAIN));
+
+  loom_module_t* read_module = nullptr;
+  loom_bytecode_read_result_t read_result =
+      ReadModule(bytes, &read_module, &error_ids);
+  EXPECT_EQ(read_result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  const loom_symbol_t& symbol = read_module->symbols.entries[0];
+  EXPECT_TRUE(iree_all_bits_set(symbol.flags, LOOM_SYMBOL_FLAG_RETAIN));
+  ASSERT_NE(symbol.defining_op, nullptr);
+  EXPECT_EQ(loom_func_def_retain(symbol.defining_op), LOOM_FUNC_RETAIN_RETAIN);
+
+  loom_module_free(read_module);
   iree_arena_deinitialize(&metadata_arena);
   loom_module_free(module);
 }

@@ -300,7 +300,7 @@ static bool loom_amdgpu_symbolic_expr_is_zero(
 
 static iree_status_t loom_amdgpu_condition_implies_participant_zero(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t condition,
+    loom_value_id_t condition, bool assumed_truth,
     loom_amdgpu_participant_id_kind_t participant_id_kind,
     bool* out_implies_participant_zero) {
   *out_implies_participant_zero = false;
@@ -309,8 +309,8 @@ static iree_status_t loom_amdgpu_condition_implies_participant_zero(
   loom_condition_fact_set_t condition_facts = {0};
   loom_condition_fact_set_initialize(
       relation_storage, IREE_ARRAYSIZE(relation_storage), &condition_facts);
-  if (!loom_condition_facts_query(module, fact_table, condition,
-                                  /*assumed_truth=*/true, &condition_facts)) {
+  if (!loom_condition_facts_query(module, fact_table, condition, assumed_truth,
+                                  &condition_facts)) {
     return iree_ok_status();
   }
 
@@ -359,6 +359,72 @@ static iree_status_t loom_amdgpu_condition_implies_participant_zero(
   return status;
 }
 
+static iree_status_t loom_amdgpu_cfg_block_implies_participant_zero(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_region_t* region, const loom_block_t* block,
+    loom_amdgpu_participant_id_kind_t participant_id_kind,
+    uint16_t remaining_depth, bool* out_implies_participant_zero) {
+  *out_implies_participant_zero = false;
+  if (region == NULL || block == NULL || remaining_depth == 0 ||
+      block == loom_region_const_entry_block(region)) {
+    return iree_ok_status();
+  }
+
+  bool has_predecessor = false;
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* predecessor =
+        loom_region_const_block(region, block_index);
+    if (predecessor == NULL || predecessor->op_count == 0) {
+      continue;
+    }
+
+    const loom_op_t* terminator = loom_block_const_last_op(predecessor);
+    loom_value_id_t edge_condition = LOOM_VALUE_ID_INVALID;
+    bool edge_assumed_truth = true;
+    bool reaches_block = false;
+    if (loom_cfg_br_isa(terminator)) {
+      reaches_block = loom_cfg_br_dest(terminator) == block;
+    } else if (loom_cfg_cond_br_isa(terminator)) {
+      const bool true_edge_reaches_block =
+          loom_cfg_cond_br_true_dest(terminator) == block;
+      const bool false_edge_reaches_block =
+          loom_cfg_cond_br_false_dest(terminator) == block;
+      reaches_block = true_edge_reaches_block || false_edge_reaches_block;
+      if (true_edge_reaches_block != false_edge_reaches_block) {
+        edge_condition = loom_cfg_cond_br_condition(terminator);
+        edge_assumed_truth = true_edge_reaches_block;
+      }
+    }
+    if (!reaches_block) {
+      continue;
+    }
+
+    has_predecessor = true;
+    bool edge_implies_participant_zero = false;
+    if (edge_condition != LOOM_VALUE_ID_INVALID) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_condition_implies_participant_zero(
+          module, fact_table, edge_condition, edge_assumed_truth,
+          participant_id_kind, &edge_implies_participant_zero));
+    }
+    if (edge_implies_participant_zero) {
+      continue;
+    }
+
+    bool predecessor_implies_participant_zero = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_cfg_block_implies_participant_zero(
+        module, fact_table, region, predecessor, participant_id_kind,
+        (uint16_t)(remaining_depth - 1),
+        &predecessor_implies_participant_zero));
+    if (!predecessor_implies_participant_zero) {
+      return iree_ok_status();
+    }
+  }
+
+  *out_implies_participant_zero = has_predecessor;
+  return iree_ok_status();
+}
+
 static const loom_op_t* loom_amdgpu_use_enclosing_resultless_then_if(
     const loom_op_t* use_op) {
   for (const loom_op_t* current = use_op; current != NULL;
@@ -377,48 +443,29 @@ static const loom_op_t* loom_amdgpu_use_enclosing_resultless_then_if(
   return NULL;
 }
 
-static loom_value_id_t loom_amdgpu_use_cfg_true_guard_condition(
-    const loom_op_t* use_op) {
+static iree_status_t loom_amdgpu_use_implies_participant_zero(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_op_t* use_op,
+    loom_amdgpu_participant_id_kind_t participant_id_kind,
+    bool* out_implies_participant_zero) {
+  *out_implies_participant_zero = false;
+  const loom_op_t* guard_op =
+      loom_amdgpu_use_enclosing_resultless_then_if(use_op);
+  if (guard_op != NULL) {
+    return loom_amdgpu_condition_implies_participant_zero(
+        module, fact_table, loom_scf_if_condition(guard_op),
+        /*assumed_truth=*/true, participant_id_kind,
+        out_implies_participant_zero);
+  }
+
   const loom_block_t* block = use_op != NULL ? use_op->parent_block : NULL;
   const loom_region_t* region = block != NULL ? block->parent_region : NULL;
-  if (region == NULL || block == loom_region_const_entry_block(region)) {
-    return LOOM_VALUE_ID_INVALID;
+  if (region == NULL) {
+    return iree_ok_status();
   }
-
-  loom_value_id_t guard_condition = LOOM_VALUE_ID_INVALID;
-  for (uint16_t block_index = 0; block_index < region->block_count;
-       ++block_index) {
-    const loom_block_t* predecessor =
-        loom_region_const_block(region, block_index);
-    if (predecessor == NULL || predecessor->op_count == 0) {
-      continue;
-    }
-
-    const loom_op_t* terminator = loom_block_const_last_op(predecessor);
-    if (loom_cfg_br_isa(terminator)) {
-      if (loom_cfg_br_dest(terminator) == block) {
-        return LOOM_VALUE_ID_INVALID;
-      }
-      continue;
-    }
-    if (!loom_cfg_cond_br_isa(terminator)) {
-      continue;
-    }
-
-    const bool true_edge_reaches_block =
-        loom_cfg_cond_br_true_dest(terminator) == block;
-    const bool false_edge_reaches_block =
-        loom_cfg_cond_br_false_dest(terminator) == block;
-    if (!true_edge_reaches_block && !false_edge_reaches_block) {
-      continue;
-    }
-    if (!true_edge_reaches_block || false_edge_reaches_block ||
-        guard_condition != LOOM_VALUE_ID_INVALID) {
-      return LOOM_VALUE_ID_INVALID;
-    }
-    guard_condition = loom_cfg_cond_br_condition(terminator);
-  }
-  return guard_condition;
+  return loom_amdgpu_cfg_block_implies_participant_zero(
+      module, fact_table, region, block, participant_id_kind,
+      region->block_count, out_implies_participant_zero);
 }
 
 typedef enum loom_amdgpu_collective_result_demand_e {
@@ -531,30 +578,17 @@ static iree_status_t loom_amdgpu_collective_result_demand(
   const loom_use_t* uses = loom_value_uses(result_value);
   for (uint32_t i = 0; i < result_value->use_count; ++i) {
     const loom_op_t* user_op = loom_use_user_op(uses[i]);
-    loom_value_id_t guard_condition = LOOM_VALUE_ID_INVALID;
-    const loom_op_t* guard_op =
-        loom_amdgpu_use_enclosing_resultless_then_if(user_op);
-    if (guard_op != NULL) {
-      guard_condition = loom_scf_if_condition(guard_op);
-    } else {
-      guard_condition = loom_amdgpu_use_cfg_true_guard_condition(user_op);
-    }
-    if (guard_condition == LOOM_VALUE_ID_INVALID) {
-      return iree_ok_status();
-    }
-
     bool guard_is_leader_workitem = false;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_condition_implies_participant_zero(
-        module, fact_table, guard_condition,
-        LOOM_AMDGPU_PARTICIPANT_ID_WORKITEM_X, &guard_is_leader_workitem));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_use_implies_participant_zero(
+        module, fact_table, user_op, LOOM_AMDGPU_PARTICIPANT_ID_WORKITEM_X,
+        &guard_is_leader_workitem));
     if (guard_is_leader_workitem && has_one_dimensional_workgroup) {
       continue;
     }
 
     bool guard_is_subgroup_leader_lane = false;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_condition_implies_participant_zero(
-        module, fact_table, guard_condition,
-        LOOM_AMDGPU_PARTICIPANT_ID_SUBGROUP_LANE,
+    IREE_RETURN_IF_ERROR(loom_amdgpu_use_implies_participant_zero(
+        module, fact_table, user_op, LOOM_AMDGPU_PARTICIPANT_ID_SUBGROUP_LANE,
         &guard_is_subgroup_leader_lane));
     if (!guard_is_subgroup_leader_lane) {
       return iree_ok_status();

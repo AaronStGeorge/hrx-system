@@ -28,10 +28,9 @@
           "\"driver\":\"amdgpu\"",
           "\"provider\":\"amdgpu-hal\"",
           "\"row\":\"benchmark\"",
-          "\"status\":\"ok\"",
-          "\"correctness_failed_sample_count\":0",
-          "\"failure_count\":0",
-          "\"failed_benchmark_count\":0"
+          "\"state\":\"ok\"",
+          "\"correctness\":{\"sample_count\":1,\"failed_sample_count\":0}",
+          "\"failures\":{\"row_count\":0,\"failed_benchmark_count\":0}"
         ]
       }
     },
@@ -62,9 +61,8 @@
           "\"driver\":\"amdgpu\"",
           "\"provider\":\"amdgpu-hal\"",
           "\"row\":\"benchmark\"",
-          "\"status\":\"ok\"",
-          "\"failure_count\":0",
-          "\"failed_benchmark_count\":0"
+          "\"state\":\"ok\"",
+          "\"failures\":{\"row_count\":0,\"failed_benchmark_count\":0}"
         ]
       }
     }

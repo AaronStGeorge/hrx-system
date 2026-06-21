@@ -127,8 +127,8 @@ typedef struct iree_benchmark_loom_data_cache_summary_t {
 } iree_benchmark_loom_data_cache_summary_t;
 
 typedef struct iree_benchmark_loom_benchmark_result_t {
-  // Stable benchmark status string when it differs from the default.
-  iree_string_view_t status;
+  // Stable benchmark state string when it differs from the default.
+  iree_string_view_t state;
   // True when failure fields below describe why the benchmark did not run.
   bool has_failure;
   // Product stage that failed: compile, prepare, benchmark, etc.

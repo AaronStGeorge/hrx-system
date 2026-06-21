@@ -16,6 +16,7 @@ class LowBuilder(DialectBuilder):
         self,
         *,
         visibility: str | None = ...,
+        retain: str | None = ...,
         cc: str | None = ...,
         purity: str | None = ...,
         allocation: str | None = ...,
@@ -39,6 +40,7 @@ class LowBuilder(DialectBuilder):
     def kernel_def(
         self,
         *,
+        retain: str | None = ...,
         allocation: str | None = ...,
         schedule: str | None = ...,
         target: str,
@@ -58,6 +60,7 @@ class LowBuilder(DialectBuilder):
         self,
         *,
         visibility: str | None = ...,
+        retain: str | None = ...,
         cc: str | None = ...,
         purity: str | None = ...,
         allocation: str | None = ...,

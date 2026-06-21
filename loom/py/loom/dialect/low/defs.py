@@ -47,7 +47,7 @@ from loom.assembly import (
     TypesOf,
     kw,
 )
-from loom.dialect.func.defs import CallingConv, Purity, Visibility
+from loom.dialect.func.defs import CallingConv, Purity, Retain, Visibility
 from loom.dialect.target.defs import ExportAbiKind, ExportLinkage
 from loom.dsl import (
     ANY,
@@ -221,6 +221,7 @@ _FUNC_COMMON_ATTRS = [
     AttrDef("allocation", "enum", enum_def=LowAllocationMode, optional=True),
     AttrDef("schedule", "enum", enum_def=LowScheduleMode, optional=True),
     AttrDef("predicates", "predicate_list", optional=True),
+    AttrDef("retain", "enum", enum_def=Retain, optional=True),
 ]
 
 _KERNEL_COMMON_ATTRS = [
@@ -239,6 +240,7 @@ _KERNEL_COMMON_ATTRS = [
     AttrDef("allocation", "enum", enum_def=LowAllocationMode, optional=True),
     AttrDef("schedule", "enum", enum_def=LowScheduleMode, optional=True),
     AttrDef("predicates", "predicate_list", optional=True),
+    AttrDef("retain", "enum", enum_def=Retain, optional=True),
 ]
 
 _FUNC_DECL_IMPORT_ATTRS = [
@@ -248,6 +250,7 @@ _FUNC_DECL_IMPORT_ATTRS = [
 
 _FUNC_MODIFIER_FORMAT: list[FormatElement] = [
     OptionalGroup([Attr("visibility")], anchor="visibility"),
+    OptionalGroup([Attr("retain")], anchor="retain"),
     OptionalGroup([Attr("cc")], anchor="cc"),
     OptionalGroup([Attr("purity")], anchor="purity"),
     OptionalGroup(
@@ -261,6 +264,7 @@ _FUNC_MODIFIER_FORMAT: list[FormatElement] = [
 ]
 
 _LOW_EXACTNESS_FORMAT: list[FormatElement] = [
+    OptionalGroup([Attr("retain")], anchor="retain"),
     OptionalGroup(
         [kw("allocation"), GLUE, LPAREN, Attr("allocation"), GLUE, RPAREN],
         anchor="allocation",
@@ -430,6 +434,7 @@ low_func_def = Op(
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
         fact_domain="loom_func_symbol_fact_domain",
+        retain="retain",
     ),
     results=[Result("results", REGISTER, variadic=True)],
     regions=[RegionDef("body", doc="Low function body.", terminator="low.return")],
@@ -472,6 +477,7 @@ low_kernel_def = Op(
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
         fact_domain="loom_func_symbol_fact_domain",
+        retain="retain",
     ),
     regions=[RegionDef("body", doc="Low kernel body.", terminator="low.return")],
     interfaces=[FuncLikeInterface(**_KERNEL_FUNC_LIKE_COMMON, body="body")],
@@ -511,6 +517,7 @@ low_func_decl = Op(
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DECL",
         fact_domain="loom_func_symbol_fact_domain",
+        retain="retain",
     ),
     results=[Result("results", REGISTER, variadic=True)],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, args_as_operands=True)],

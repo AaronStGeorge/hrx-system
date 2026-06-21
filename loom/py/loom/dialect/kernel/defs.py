@@ -210,9 +210,22 @@ KernelWorkgroupScanDirection = EnumDef(
     doc="Workgroup scan workitem order.",
 )
 
+Retain = EnumDef(
+    "Retain",
+    [
+        # Value 0 is reserved for "absent" (ordinary DCE may erase).
+        EnumCase("retain", 1, doc="Preserve the symbol across ordinary DCE."),
+    ],
+    doc="Private symbol retention policy. Absent (0) permits ordinary DCE.",
+)
+
 # ============================================================================
 # Shared format fragments
 # ============================================================================
+
+_ENTRY_RETAIN_FORMAT: list[FormatElement] = [
+    OptionalGroup([Attr("retain")], anchor="retain"),
+]
 
 _ENTRY_TARGET_FORMAT: list[FormatElement] = [
     OptionalGroup(
@@ -261,6 +274,7 @@ _ENTRY_ATTRS = [
     AttrDef("export_symbol", "string", optional=True),
     AttrDef("export_linkage", "enum", enum_def=ExportLinkage, optional=True),
     AttrDef("predicates", "predicate_list", optional=True),
+    AttrDef("retain", "enum", enum_def=Retain, optional=True),
 ]
 
 
@@ -277,6 +291,7 @@ kernel_def = Op(
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
         fact_domain="loom_func_symbol_fact_domain",
+        retain="retain",
     ),
     regions=[
         RegionDef(
@@ -305,6 +320,7 @@ kernel_def = Op(
     ],
     verify="loom_kernel_def_verify",
     format=[
+        *_ENTRY_RETAIN_FORMAT,
         *_ENTRY_TARGET_FORMAT,
         *_ENTRY_EXPORT_FORMAT,
         *_ENTRY_CONFIG_FORMAT,

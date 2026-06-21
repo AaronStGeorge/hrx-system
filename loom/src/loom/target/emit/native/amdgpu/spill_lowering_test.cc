@@ -141,7 +141,8 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
     const loom_symbol_ref_t function_ref = AddSymbol(name);
     loom_op_t* function_op = nullptr;
     IREE_CHECK_OK(loom_low_func_def_build(
-        &module_builder, 0, /*visibility=*/0, /*cc=*/0, /*purity=*/0,
+        &module_builder, 0, /*visibility=*/0, /*retain=*/0, /*cc=*/0,
+        /*purity=*/0,
         /*allocation=*/0, /*schedule=*/0, target_ref, /*abi=*/0,
         loom_named_attr_slice_empty(), loom_named_attr_slice_empty(),
         LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), function_ref,

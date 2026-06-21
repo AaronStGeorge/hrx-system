@@ -940,9 +940,13 @@ TEST(CompileReportFormatTest, FormatsJsonSummaryWithoutDetailRows) {
   EXPECT_NE(iree_string_view_find(output, IREE_SV("\"artifact_size\":256"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"entries\":{\"count\":0,\"rows\":[]}"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"pressure_rows\":{\"count\":1}"), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_EQ(iree_string_view_find(output, IREE_SV("\"rows\""), 0),
+  EXPECT_EQ(iree_string_view_find(
+                output, IREE_SV("\"pressure_rows\":{\"count\":1,\"rows\""), 0),
             IREE_STRING_VIEW_NPOS);
 
   iree_string_builder_deinitialize(&builder);

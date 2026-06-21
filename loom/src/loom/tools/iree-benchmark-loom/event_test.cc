@@ -58,6 +58,13 @@ static iree_string_view_t LookupObject(iree_string_view_t object,
   return value;
 }
 
+static iree_string_view_t TryLookupObject(iree_string_view_t object,
+                                          iree_string_view_t key) {
+  iree_string_view_t value = iree_string_view_empty();
+  IREE_EXPECT_OK(iree_json_try_lookup_object_value(object, key, &value));
+  return value;
+}
+
 TEST(BenchmarkEventSinkTest, EmitsTypedLifecycleEvents) {
   event_collector_t collector = {};
   iree_benchmark_loom_event_sink_t sink = {};
@@ -245,8 +252,12 @@ TEST(BenchmarkEventSinkTest, JsonlAdapterWritesLifecycleRows) {
   EXPECT_TRUE(iree_string_view_equal(run_kind, IREE_SV("run")));
   iree_string_view_t summary_kind = LookupObject(summary_root, IREE_SV("row"));
   EXPECT_TRUE(iree_string_view_equal(summary_kind, IREE_SV("summary")));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(summary_root, IREE_SV("work_item_count"))));
+  iree_string_view_t summary = LookupObject(summary_root, IREE_SV("summary"));
+  iree_string_view_t planned = LookupObject(summary, IREE_SV("planned"));
   iree_string_view_t work_item_count =
-      LookupObject(summary_root, IREE_SV("work_item_count"));
+      LookupObject(planned, IREE_SV("work_item_count"));
   EXPECT_TRUE(iree_string_view_equal(work_item_count, IREE_SV("2")));
 }
 

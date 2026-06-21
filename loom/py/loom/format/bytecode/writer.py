@@ -156,12 +156,13 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 15
+FORMAT_VERSION = 16
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
 SYMBOL_FLAG_IMPORT = 0x0002
 SYMBOL_FLAG_IMPORT_SYMBOL = 0x0004
+SYMBOL_FLAG_RETAIN = 0x0008
 
 
 # ============================================================================

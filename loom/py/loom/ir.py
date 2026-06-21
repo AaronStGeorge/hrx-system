@@ -120,6 +120,7 @@ __all__ = [
     "SymbolName",
     "SYMBOL_FLAG_IMPORT",
     "SYMBOL_FLAG_PUBLIC",
+    "SYMBOL_FLAG_RETAIN",
     # Tables.
     "StringTable",
     "TypeTable",
@@ -1354,8 +1355,11 @@ class SymbolKind(IntEnum):
 
 
 # Symbol flags.
+# These bits are bytecode-stable. Bit 2 is reserved by the bytecode-only
+# explicit import-symbol marker.
 SYMBOL_FLAG_PUBLIC = 1 << 0
 SYMBOL_FLAG_IMPORT = 1 << 1
+SYMBOL_FLAG_RETAIN = 1 << 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -1432,6 +1436,8 @@ def symbol_from_operation(operation: Operation, op_decl: Any | None = None) -> S
     symbol_flags = 0
     if operation.attributes.get("visibility") == "public":
         symbol_flags |= SYMBOL_FLAG_PUBLIC
+    if operation.attributes.get("retain") == "retain":
+        symbol_flags |= SYMBOL_FLAG_RETAIN
 
     source_module = operation.attributes.get("import_module", "")
     if source_module:

@@ -560,6 +560,8 @@ class SymbolDefinition:
         leave this as LOOM_SYMBOL_NONE while still participating in IR symbol
         lookup and verification.
     fact_domain: Optional C symbol for the dialect-owned symbol fact domain.
+    retain: Optional enum attribute that marks symbols which ordinary symbol
+        DCE must preserve even when unreachable.
     """
 
     field: str
@@ -567,6 +569,7 @@ class SymbolDefinition:
     interfaces: tuple[str, ...]
     bytecode_kind: str = "LOOM_SYMBOL_NONE"
     fact_domain: str | None = None
+    retain: str | None = None
 
     def __init__(
         self,
@@ -576,12 +579,15 @@ class SymbolDefinition:
         interfaces: list[str] | tuple[str, ...],
         bytecode_kind: str = "LOOM_SYMBOL_NONE",
         fact_domain: str | None = None,
+        retain: str | None = None,
     ) -> None:
         frozen_interfaces = tuple(interfaces)
         if not field:
             raise ValueError("SymbolDefinition: field must be non-empty")
         if not name:
             raise ValueError("SymbolDefinition: name must be non-empty")
+        if retain is not None and not retain:
+            raise ValueError("SymbolDefinition: retain must be non-empty")
         if not frozen_interfaces:
             raise ValueError("SymbolDefinition: interfaces must be non-empty")
         for interface in frozen_interfaces:
@@ -596,6 +602,7 @@ class SymbolDefinition:
         object.__setattr__(self, "interfaces", frozen_interfaces)
         object.__setattr__(self, "bytecode_kind", bytecode_kind)
         object.__setattr__(self, "fact_domain", fact_domain)
+        object.__setattr__(self, "retain", retain)
 
 
 @dataclass(frozen=True, slots=True)
@@ -3823,6 +3830,21 @@ class Op:
                     f"Op '{name}': symbol_def field '{symbol_def.field}' "
                     "must be a symbol attr"
                 )
+            if symbol_def.retain is not None:
+                retain_attr = next(
+                    (attr for attr in frozen_attrs if attr.name == symbol_def.retain),
+                    None,
+                )
+                if retain_attr is None:
+                    raise ValueError(
+                        f"Op '{name}': symbol_def retain '{symbol_def.retain}' "
+                        "does not name an attr"
+                    )
+                if retain_attr.attr_type != ATTR_TYPE_ENUM:
+                    raise ValueError(
+                        f"Op '{name}': symbol_def retain '{symbol_def.retain}' "
+                        "must be an enum attr"
+                    )
         if successor_selector is not None:
             if len(frozen_successors) < 2:
                 raise ValueError(

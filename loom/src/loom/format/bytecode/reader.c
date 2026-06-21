@@ -3904,6 +3904,9 @@ static iree_status_t loom_bytecode_reader_predeclare_symbols(
     if (flags & LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC) {
       symbol->flags |= LOOM_SYMBOL_FLAG_PUBLIC;
     }
+    if (flags & LOOM_BYTECODE_SYMBOL_FLAG_RETAIN) {
+      symbol->flags |= LOOM_SYMBOL_FLAG_RETAIN;
+    }
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_skip_symbol_payload(reader, &cursor, kind, i));
     if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
@@ -4095,6 +4098,18 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
   if ((flags & LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC) &&
       func_like->visibility_attr_index != LOOM_ATTR_INDEX_NONE) {
     func_attrs[func_like->visibility_attr_index] = loom_attr_enum(1);
+  }
+  if (flags & LOOM_BYTECODE_SYMBOL_FLAG_RETAIN) {
+    if (!vtable->symbol_def ||
+        !vtable->symbol_def->retain_attr_index_plus_one) {
+      return loom_bytecode_reader_emit_invalid_field(
+          reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_id,
+          IREE_SV("flags"), 0,
+          IREE_SV("retained_symbol_op_has_no_retain_attr"));
+    }
+    const uint8_t retain_attr_index =
+        vtable->symbol_def->retain_attr_index_plus_one - 1;
+    func_attrs[retain_attr_index] = loom_attr_enum(1);
   }
   if (calling_convention != 0 &&
       func_like->cc_attr_index != LOOM_ATTR_INDEX_NONE) {
@@ -4714,7 +4729,8 @@ static iree_status_t loom_bytecode_reader_read_symbols(
     }
     if (flags &
         ~(LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC | LOOM_BYTECODE_SYMBOL_FLAG_IMPORT |
-          LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL)) {
+          LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL |
+          LOOM_BYTECODE_SYMBOL_FLAG_RETAIN)) {
       return loom_bytecode_reader_emit_invalid_field(
           reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
           IREE_SV("flags"), kind_offset + 2,

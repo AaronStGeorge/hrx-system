@@ -202,9 +202,9 @@ check.benchmark<@sampled_choice> @sampled_choice_value7 {value = 7}
   EXPECT_TRUE(iree_string_view_equal(work_item_index, IREE_SV("0")));
   iree_string_view_t benchmark_result =
       LookupObject(benchmark_root, IREE_SV("benchmark_result"));
-  iree_string_view_t benchmark_status =
-      LookupObject(benchmark_result, IREE_SV("status"));
-  EXPECT_TRUE(iree_string_view_equal(benchmark_status, IREE_SV("ok")));
+  iree_string_view_t benchmark_state =
+      LookupObject(benchmark_result, IREE_SV("state"));
+  EXPECT_TRUE(iree_string_view_equal(benchmark_state, IREE_SV("ok")));
 }
 
 }  // namespace

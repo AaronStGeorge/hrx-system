@@ -818,6 +818,8 @@ typedef struct loom_symbol_definition_descriptor_t {
   loom_bstring_t name;
   // Attribute index of the symbol identity field on the defining op.
   uint8_t name_attr_index;
+  // Attribute index plus one for the optional retain marker, or 0 if absent.
+  uint8_t retain_attr_index_plus_one;
   // Structural symbol interfaces implemented by this definition.
   loom_symbol_interface_flags_t interfaces;
   // Existing bytecode payload kind, or LOOM_SYMBOL_NONE if not serializable

@@ -1771,6 +1771,8 @@ static inline bool loom_symbol_kind_is_function_like(loom_symbol_kind_t kind) {
 enum loom_symbol_flag_bits_e {
   // Symbol is visible outside the module (exported for linking).
   LOOM_SYMBOL_FLAG_PUBLIC = 1u << 0,
+  // Symbol must be preserved by ordinary symbol DCE even when unreachable.
+  LOOM_SYMBOL_FLAG_RETAIN = 1u << 1,
 };
 typedef uint16_t loom_symbol_flags_t;
 
