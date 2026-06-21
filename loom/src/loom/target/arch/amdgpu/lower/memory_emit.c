@@ -371,6 +371,10 @@ static iree_status_t loom_amdgpu_ensure_memory_store_payload_vgpr(
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
   if (is_vgpr) {
+    if (access->payload_register_count == 1 && access->packet_byte_count == 2) {
+      return loom_amdgpu_materialize_full_low_vgpr_b32(
+          context, source_op, low_value, out_low_value);
+    }
     return iree_ok_status();
   }
   bool is_sgpr = false;

@@ -7,6 +7,7 @@
 #include "loom/codegen/low/allocation/coalescing.h"
 
 #include "loom/codegen/low/allocation/live_range.h"
+#include "loom/codegen/low/allocation/storage.h"
 
 static bool loom_low_allocation_coalescing_value_ordinal_for_value(
     const loom_low_allocation_coalescing_context_t* context,
@@ -349,9 +350,13 @@ static iree_status_t loom_low_allocation_coalescing_append_interval_at_location(
     return iree_ok_status();
   }
   loom_low_allocation_class_capacity_t capacity = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_low_allocation_target_constraints_reg_class_capacity(
-          context->target_constraints, descriptor_reg_class_id, &capacity));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_interval_capacity(
+      context->target_constraints, interval, &capacity));
+  if (!loom_low_allocation_storage_reg_classes_share(
+          context->search_context->descriptor_set,
+          capacity.descriptor_reg_class_id, descriptor_reg_class_id)) {
+    return iree_ok_status();
+  }
   if (!loom_low_allocation_target_constraints_location_range_fits_capacity(
           &capacity, location_kind, location_base, unit_count)) {
     return iree_ok_status();
@@ -924,8 +929,8 @@ loom_low_allocation_coalescing_assign_concat_result_reservation(
     bool* out_assigned) {
   *out_assigned = false;
   loom_low_allocation_class_capacity_t capacity = {0};
-  IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_class_capacity(
-      context->target_constraints, result_interval->value_class, &capacity));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_interval_capacity(
+      context->target_constraints, result_interval, &capacity));
 
   loom_value_id_t inline_ignored_value_ids[8];
   loom_value_id_t* ignored_value_ids = inline_ignored_value_ids;

@@ -163,6 +163,7 @@ loom_cc_library(
     ::assignment_map
     ::live_range
     ::search
+    ::storage
     ::target_constraints
     iree::base
     iree::base::internal::arena
@@ -523,6 +524,7 @@ loom_cc_library(
     loom::error::emitter
     loom::error::error_defs
     loom::ir
+    loom::ops::low
     loom::target::registers
   PUBLIC
 )

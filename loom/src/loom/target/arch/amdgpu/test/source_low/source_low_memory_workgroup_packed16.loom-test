@@ -236,7 +236,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_f16_scalar_roundtri
   %16 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %18 = v_lshlrev_b32_src0_inline %lane, 1
   %loaded = global_load_d16_b16_saddr %18, %input_view
-  ds_write_b16 %18, %loaded
+  %20 = v_bfe_u32_offset_0_width_16_low16 %loaded
+  ds_write_b16 %18, %20
   %roundtrip = ds_read_u16 %18
   global_store_short_saddr %18, %roundtrip, %output_view
   return
@@ -339,7 +340,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_bf16_scalar_roundtr
   %16 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %18 = v_lshlrev_b32_src0_inline %lane, 1
   %loaded = global_load_d16_b16_saddr %18, %input_view
-  ds_write_b16 %18, %loaded
+  %20 = v_bfe_u32_offset_0_width_16_low16 %loaded
+  ds_write_b16 %18, %20
   %roundtrip = ds_read_u16 %18
   global_store_short_saddr %18, %roundtrip, %output_view
   return
@@ -381,11 +383,12 @@ low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar
   %30 = v_lshl_add_u32_shift_imm %row, %column, 4
   %31 = v_lshlrev_b32_src0_inline %30, 1
   %loaded = global_load_d16_b16_saddr %31, %input_view
-  %33 = v_lshlrev_b32_src0_inline %row, 1
-  %34 = v_lshlrev_b32_src0_inline %column, 5
-  %35 = v_add_u32 %33, %34
-  ds_write_b16 %35, %loaded
-  %roundtrip = ds_read_u16 %35
+  %33 = v_bfe_u32_offset_0_width_16_low16 %loaded
+  %34 = v_lshlrev_b32_src0_inline %row, 1
+  %35 = v_lshlrev_b32_src0_inline %column, 5
+  %36 = v_add_u32 %34, %35
+  ds_write_b16 %36, %33
+  %roundtrip = ds_read_u16 %36
   global_store_short_saddr %31, %roundtrip, %output_view
   return
 }

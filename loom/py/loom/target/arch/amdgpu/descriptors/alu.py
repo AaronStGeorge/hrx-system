@@ -4045,7 +4045,12 @@ def _v_cvt_f16_f32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay(
-                "VDST", _vgpr_result(register_part=_REG_PART_VGPR_LOW16)
+                "VDST",
+                _vgpr_result(
+                    register_part=_REG_PART_VGPR_LOW16,
+                    address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+                    addressable_unit_count=_D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT,
+                ),
             ),
             AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("input")),
         ),

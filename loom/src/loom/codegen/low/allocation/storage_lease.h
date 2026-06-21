@@ -86,6 +86,12 @@ bool loom_low_allocation_storage_lease_state_conflicts(
     const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
     loom_low_allocation_storage_release_policy_t policy);
 
+// Returns true when |value_id| has storage-lease records that must be
+// materialized from a register-like assignment.
+bool loom_low_allocation_storage_lease_state_value_has_records(
+    const loom_low_allocation_storage_lease_state_t* state,
+    const loom_liveness_analysis_t* liveness, loom_value_id_t value_id);
+
 // Appends release actions for every materialized lease conflicting with
 // |candidate|. All conflicts must be legally releasable before |candidate|.
 iree_status_t loom_low_allocation_storage_lease_state_record_release_actions(

@@ -593,6 +593,20 @@ bool loom_low_allocation_storage_lease_state_conflicts(
   return false;
 }
 
+bool loom_low_allocation_storage_lease_state_value_has_records(
+    const loom_low_allocation_storage_lease_state_t* state,
+    const loom_liveness_analysis_t* liveness, loom_value_id_t value_id) {
+  if (!state || state->record_heads_by_value_ordinal == NULL) {
+    return false;
+  }
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  if (!loom_low_allocation_value_ordinal_for_liveness_value(liveness, value_id,
+                                                            &value_ordinal)) {
+    return false;
+  }
+  return state->record_heads_by_value_ordinal[value_ordinal] != UINT32_MAX;
+}
+
 iree_status_t loom_low_allocation_storage_lease_state_record_release_actions(
     loom_low_allocation_storage_lease_state_t* state,
     const loom_low_descriptor_set_t* descriptor_set,

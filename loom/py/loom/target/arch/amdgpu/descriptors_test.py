@@ -23,6 +23,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _AMDGPU_TRANS_DESCRIPTOR_KEYS,
     _AMDGPU_TRANS_PROXY_LATENCY_CYCLES,
     _COUNTER_VMEM_LOAD,
+    _D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
     _MUBUF_SOFFSET_INLINE_ZERO,
     _REG_EXEC,
@@ -474,6 +475,25 @@ def test_cdna_f16_to_f32_convert_keeps_compact_encoding() -> None:
         descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
         descriptor = descriptors["amdgpu.v_cvt_f32_f16"]
         assert descriptor.encoding_name == "ENC_VOP1"
+
+
+def test_f32_to_f16_convert_results_use_d16_low_window() -> None:
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        descriptor = descriptors["amdgpu.v_cvt_f16_f32"]
+        result = descriptor.operands[0].descriptor_operand
+        assert result.register_part == _REG_PART_VGPR_LOW16
+        assert result.address_map_kind is OperandAddressMapKind.LOW_SUBSET
+        assert result.addressable_unit_count == (
+            _D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT
+        )
 
 
 def test_gfx11_wmma_wave64_asm_forms_keep_native_mnemonics_unsuffixed() -> None:

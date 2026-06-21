@@ -14,6 +14,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from loom.target.arch.amdgpu.descriptor_overlay import (
+    AMDGPU_D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT,
+    AMDGPU_D16_PARTIAL_REGISTER_SIZE_REASON,
     AmdgpuDescriptorOverlay,
     AmdgpuEncodingFieldAllOnes,
     AmdgpuFixedEncodingValue,
@@ -495,7 +497,10 @@ _MUBUF_VADDR_OFFSET_ONLY_SIZE_REASON = "idxen-disabled-mubuf-vaddr-uses-one-offs
 _GLOBAL_SADDR_OFFSET_ONLY_SIZE_REASON = (
     "saddr-enabled-global-address-uses-one-offset-vgpr"
 )
-_D16_PARTIAL_REGISTER_SIZE_REASON = "d16-instruction-uses-half-vgpr-lane"
+_D16_PARTIAL_REGISTER_SIZE_REASON = AMDGPU_D16_PARTIAL_REGISTER_SIZE_REASON
+_D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT = (
+    AMDGPU_D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT
+)
 _U24_SOURCE_SIZE_REASON = "u24-instruction-reads-low-24-bits-of-b32-source"
 
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
@@ -1235,13 +1240,20 @@ def _with_mode_state_read(descriptor: Descriptor) -> Descriptor:
 
 
 def _vgpr_result(
-    field_name: str = "dst", *, units: int = 1, register_part: str | None = None
+    field_name: str = "dst",
+    *,
+    units: int = 1,
+    register_part: str | None = None,
+    address_map_kind: OperandAddressMapKind = OperandAddressMapKind.DIRECT,
+    addressable_unit_count: int = 0,
 ) -> Operand:
     return Operand(
         field_name,
         OperandRole.RESULT,
         _VGPR_ALT,
         unit_count=units,
+        address_map_kind=address_map_kind,
+        addressable_unit_count=addressable_unit_count,
         register_part=register_part,
     )
 
@@ -2766,6 +2778,7 @@ __all__ = (
     "_COUNTER_SMEM",
     "_COUNTER_VMEM_LOAD",
     "_COUNTER_VMEM_STORE",
+    "_D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT",
     "_D16_PARTIAL_REGISTER_SIZE_REASON",
     "_DEPCTR_IMMEDIATE",
     "_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS",

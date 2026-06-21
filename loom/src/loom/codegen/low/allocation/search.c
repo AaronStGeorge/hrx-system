@@ -167,6 +167,10 @@ iree_status_t loom_low_allocation_search_assignment_spill_capacity(
           context->target_constraints, assignment->value_id)) {
     return iree_ok_status();
   }
+  if (loom_low_allocation_storage_lease_state_value_has_records(
+          context->storage_leases, context->liveness, assignment->value_id)) {
+    return iree_ok_status();
+  }
   if (loom_low_allocation_spill_traffic_value_requires_register_location(
           context->module, assignment->value_id)) {
     return iree_ok_status();

@@ -123,14 +123,16 @@ low.kernel.def target(@target) workgroup_size(2, 1, 1) @private_f16_static_and_d
   %18 = storage {byte_alignment = 2, byte_length = 4} : low.storage<private>
   %20 = v_mov_b32 0
   %static_value = global_load_d16_b16_saddr %20, %input_view
-  scratch_store_b16_vaddr %20, %static_value
-  %23 = v_lshlrev_b32_src0_inline %lane, 1
-  %dynamic_value = global_load_d16_b16_saddr %23, %input_view
-  scratch_store_b16_vaddr %23, %dynamic_value
+  %22 = v_bfe_u32_offset_0_width_16_low16 %static_value
+  scratch_store_b16_vaddr %20, %22
+  %24 = v_lshlrev_b32_src0_inline %lane, 1
+  %dynamic_value = global_load_d16_b16_saddr %24, %input_view
+  %26 = v_bfe_u32_offset_0_width_16_low16 %dynamic_value
+  scratch_store_b16_vaddr %24, %26
   %static_roundtrip = scratch_load_u16_vaddr %20
   global_store_short_saddr %20, %static_roundtrip, %output_view
-  %dynamic_roundtrip = scratch_load_u16_vaddr %23
-  global_store_short_saddr %23, %dynamic_roundtrip, %output_view
+  %dynamic_roundtrip = scratch_load_u16_vaddr %24
+  global_store_short_saddr %24, %dynamic_roundtrip, %output_view
   return
 }
 
@@ -168,14 +170,16 @@ low.kernel.def target(@target) workgroup_size(2, 1, 1) @private_bf16_static_and_
   %18 = storage {byte_alignment = 2, byte_length = 4} : low.storage<private>
   %20 = v_mov_b32 0
   %static_value = global_load_d16_b16_saddr %20, %input_view
-  scratch_store_b16_vaddr %20, %static_value
-  %23 = v_lshlrev_b32_src0_inline %lane, 1
-  %dynamic_value = global_load_d16_b16_saddr %23, %input_view
-  scratch_store_b16_vaddr %23, %dynamic_value
+  %22 = v_bfe_u32_offset_0_width_16_low16 %static_value
+  scratch_store_b16_vaddr %20, %22
+  %24 = v_lshlrev_b32_src0_inline %lane, 1
+  %dynamic_value = global_load_d16_b16_saddr %24, %input_view
+  %26 = v_bfe_u32_offset_0_width_16_low16 %dynamic_value
+  scratch_store_b16_vaddr %24, %26
   %static_roundtrip = scratch_load_u16_vaddr %20
   global_store_short_saddr %20, %static_roundtrip, %output_view
-  %dynamic_roundtrip = scratch_load_u16_vaddr %23
-  global_store_short_saddr %23, %dynamic_roundtrip, %output_view
+  %dynamic_roundtrip = scratch_load_u16_vaddr %24
+  global_store_short_saddr %24, %dynamic_roundtrip, %output_view
   return
 }
 

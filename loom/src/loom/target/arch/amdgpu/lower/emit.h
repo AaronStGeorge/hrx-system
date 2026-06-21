@@ -184,6 +184,13 @@ iree_status_t loom_amdgpu_materialize_low_vgpr_b32(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_value, loom_value_id_t* out_low_value);
 
+// Returns a one-unit VGPR carrying a full 32-bit payload. If |low_value| is
+// defined by a descriptor that writes only the low 16-bit register part, emits
+// a full-width extraction before returning.
+iree_status_t loom_amdgpu_materialize_full_low_vgpr_b32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_value, loom_value_id_t* out_low_value);
+
 // Returns |low_value| when it is already a VGPR register range, otherwise
 // emits fresh VGPRs carrying the same 32-bit bit payloads as each SGPR unit.
 iree_status_t loom_amdgpu_materialize_low_vgpr_b32_registers(

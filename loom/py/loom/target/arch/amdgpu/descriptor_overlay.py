@@ -44,6 +44,7 @@ from loom.target.low_descriptors import (
     EncodingFieldValue,
     Immediate,
     Operand,
+    OperandAddressMapKind,
     OperandFlag,
     OperandForm,
     OperandRole,
@@ -69,6 +70,9 @@ _REGISTER_PART_WIDTH_BITS = {
     "amdgpu.vgpr.low16": 16,
     "amdgpu.vgpr.high16": 16,
 }
+
+AMDGPU_D16_PARTIAL_REGISTER_SIZE_REASON = "d16-instruction-uses-half-vgpr-lane"
+AMDGPU_D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT = 128
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,7 +244,7 @@ def _immediate_field_is_synthetic_literal(
 
 def _materialize_operand_overlay(operand_overlay: AmdgpuOperandOverlay) -> Operand:
     try:
-        return replace(
+        operand = replace(
             operand_overlay.descriptor_operand,
             encoding_field_id=amdgpu_encoding_field_id(operand_overlay.xml_field_name),
         )
@@ -249,6 +253,21 @@ def _materialize_operand_overlay(operand_overlay: AmdgpuOperandOverlay) -> Opera
             f"AMDGPU operand overlay references unmapped encoding field "
             f"'{operand_overlay.xml_field_name}'"
         ) from exc
+    if (
+        operand_overlay.size_exception_reason == AMDGPU_D16_PARTIAL_REGISTER_SIZE_REASON
+        and operand.role is OperandRole.RESULT
+    ):
+        if operand.address_map_kind is not OperandAddressMapKind.DIRECT:
+            raise AmdgpuDescriptorOverlayError(
+                f"AMDGPU D16 partial result '{operand.field_name}' already has an "
+                "address map"
+            )
+        operand = replace(
+            operand,
+            address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+            addressable_unit_count=AMDGPU_D16_PARTIAL_REGISTER_ADDRESSABLE_UNIT_COUNT,
+        )
+    return operand
 
 
 def _materialize_immediates(
