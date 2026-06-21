@@ -58,6 +58,7 @@ iree_status_t iree_benchmark_loom_hal_actual_provider_initialize(
         .source = source,
         .pipeline = pipeline,
         .sanitizer = sanitizer,
+        .config_set = context->config_set,
         .test_module = test_module,
         .actual_invocation = actual_invocation,
         .sample_constant_case_plan = sample_constant_case_plan,

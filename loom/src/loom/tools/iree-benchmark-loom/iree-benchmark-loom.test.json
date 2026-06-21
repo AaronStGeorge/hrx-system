@@ -116,6 +116,45 @@
       ]
     },
     {
+      "name": "accepts config flags during dry-run planning",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/testdata/scalar_benchmarks.loom",
+          "--output-format=jsonl",
+          "--benchmark=@scalar_equal_latency",
+          "--dry-run",
+          "--config=model.hidden_size=4096"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"row\":\"run\"",
+          "\"row\":\"plan\"",
+          "\"benchmark\":\"scalar_equal_latency\"",
+          "\"row\":\"summary\"",
+          "\"row_count\":0"
+        ]
+      }
+    },
+    {
+      "name": "rejects malformed config assignment",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/testdata/scalar_benchmarks.loom",
+          "--benchmark=@scalar_equal_latency",
+          "--config=model.hidden_size"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": ["config assignment must use key=value syntax"]
+      }
+    },
+    {
       "name": "rejects dispatch measurement without actual invocation",
       "run": {
         "tool": "iree-benchmark-loom",

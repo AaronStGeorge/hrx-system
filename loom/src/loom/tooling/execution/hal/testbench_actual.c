@@ -16,6 +16,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/special_values.h"
 #include "loom/tooling/compile/pipeline.h"
+#include "loom/tooling/config/config.h"
 #include "loom/util/fact_table.h"
 
 void loom_run_hal_testbench_context_initialize(
@@ -211,6 +212,7 @@ void loom_run_hal_testbench_actual_provider_initialize(
       .source = options->source,
       .pipeline = options->pipeline,
       .sanitizer = options->sanitizer,
+      .config_set = options->config_set,
       .test_module = options->test_module,
       .actual_invocation = options->actual_invocation,
       .sample_constant_case_plan = options->sample_constant_case_plan,
@@ -519,6 +521,16 @@ static iree_status_t loom_run_hal_testbench_apply_sample_constants(
   return iree_ok_status();
 }
 
+static iree_status_t loom_run_hal_testbench_materialize_config_set(
+    loom_run_hal_testbench_actual_provider_t* provider) {
+  loom_tooling_config_materialize_options_t options = {0};
+  loom_tooling_config_materialize_options_initialize(&options);
+  options.config_set = provider->config_set;
+  return loom_tooling_config_materialize_module(
+      provider->compile_module.module, &options,
+      loom_run_session_block_pool(provider->session), NULL);
+}
+
 static void loom_run_hal_testbench_record_compile_rejection(
     loom_run_hal_testbench_actual_provider_t* provider,
     iree_string_view_t stage, iree_string_view_t kind) {
@@ -621,6 +633,7 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   IREE_RETURN_IF_ERROR(loom_run_module_parse(provider->session, &parse_options,
                                              &provider->compile_module));
   provider->compile_module_initialized = true;
+  IREE_RETURN_IF_ERROR(loom_run_hal_testbench_materialize_config_set(provider));
   IREE_RETURN_IF_ERROR(
       loom_run_hal_testbench_apply_sample_constants(provider, entry_symbol));
 
@@ -987,6 +1000,7 @@ iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
         .source = options->source,
         .pipeline = options->pipeline,
         .sanitizer = options->sanitizer,
+        .config_set = options->config_set,
         .test_module = options->test_module,
         .actual_invocation = invocation,
         .sample_constant_case_plan = options->sample_constant_case_plan,

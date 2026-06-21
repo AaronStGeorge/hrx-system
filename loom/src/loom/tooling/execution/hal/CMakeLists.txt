@@ -107,6 +107,7 @@ loom_cc_library(
     loom::target::provider
     loom::target::types
     loom::tooling::compile::pipeline
+    loom::tooling::config
     loom::tooling::execution::compile_options
     loom::tooling::execution::session
     loom::tooling::testbench

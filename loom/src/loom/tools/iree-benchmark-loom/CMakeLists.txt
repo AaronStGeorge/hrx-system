@@ -87,6 +87,7 @@ loom_cc_library(
     loom::target::artifact_manifest
     loom::tooling::cli::help
     loom::tooling::compile::pipeline
+    loom::tooling::config
     loom::tooling::context
     loom::tooling::execution::benchmark
     loom::tooling::execution::compile_options

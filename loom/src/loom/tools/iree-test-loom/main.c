@@ -15,6 +15,7 @@
 #include "iree/base/tooling/flags.h"
 #include "loom/sanitizer/options.h"
 #include "loom/tooling/cli/help.h"
+#include "loom/tooling/config/config.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/io/file.h"
@@ -37,6 +38,15 @@ IREE_FLAG_NAMED(int32_t, max_samples_per_case, "max-samples-per-case",
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used for HAL actual invocations. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
+IREE_FLAG_LIST(
+    string, config,
+    "Compile-time config binding for HAL actual invocations. Repeat as "
+    "--config=key=value. Bindings not referenced by the loaded module are "
+    "ignored.");
+IREE_FLAG_LIST_NAMED(
+    string, config_file, "config-file",
+    "JSON/JSONC config object file for HAL actual invocations. Repeat for "
+    "multiple files. Nested object keys are flattened with '.' separators.");
 IREE_FLAG(string, sanitizer, "none",
           "Sanitizer checks inserted by the target pipeline. Use 'none', "
           "'access', 'value', 'operation', 'race', 'asan', 'ubsan', 'tsan', "
@@ -185,6 +195,7 @@ static iree_status_t iree_test_loom_configure_hal_actual_sequence(
     loom_run_session_t* session, const loom_run_module_t* run_module,
     const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_case_plan_t* case_plan,
+    const loom_tooling_config_set_t* config_set,
     const loom_sanitizer_options_t* sanitizer_options,
     loom_run_hal_testbench_context_t* hal_context,
     loom_testbench_case_execution_options_t* execution_options,
@@ -206,6 +217,7 @@ static iree_status_t iree_test_loom_configure_hal_actual_sequence(
       .source = run_module->source,
       .pipeline = iree_make_cstring_view(FLAG_pipeline),
       .sanitizer = *sanitizer_options,
+      .config_set = config_set,
       .test_module = module_plan->module,
       .case_plan = case_plan,
   };
@@ -225,6 +237,7 @@ static iree_status_t iree_test_loom_run_case_samples(
     const loom_testbench_module_plan_t* module_plan,
     iree_host_size_t case_index,
     const loom_testbench_case_execution_options_t* base_execution_options,
+    const loom_tooling_config_set_t* config_set,
     const loom_sanitizer_options_t* sanitizer_options,
     loom_run_hal_testbench_context_t* hal_context,
     iree_arena_allocator_t* arena, iree_string_builder_t* sample_output,
@@ -276,7 +289,7 @@ static iree_status_t iree_test_loom_run_case_samples(
   bool hal_actual_sequence_initialized = false;
   if (iree_test_loom_case_has_actual_invocation(case_plan)) {
     status = iree_test_loom_configure_hal_actual_sequence(
-        configuration, session, run_module, module_plan, case_plan,
+        configuration, session, run_module, module_plan, case_plan, config_set,
         sanitizer_options, hal_context, &execution_options,
         &hal_actual_sequence);
     hal_actual_sequence_initialized = iree_status_is_ok(status);
@@ -355,6 +368,26 @@ static iree_status_t iree_test_loom_run_case_samples(
   return status;
 }
 
+static iree_status_t iree_test_loom_append_config_flags(
+    loom_tooling_config_set_t* config_set) {
+  const iree_flag_string_list_t assignments = FLAG_config_list();
+  for (iree_host_size_t i = 0; i < assignments.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_assignment(
+        config_set, assignments.values[i]));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t iree_test_loom_append_config_files(
+    loom_tooling_config_set_t* config_set, iree_allocator_t allocator) {
+  const iree_flag_string_list_t paths = FLAG_config_file_list();
+  for (iree_host_size_t i = 0; i < paths.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_json_file(
+        config_set, paths.values[i], allocator));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t iree_test_loom_write_report(
     iree_host_size_t case_count, iree_host_size_t sample_count,
     iree_host_size_t failed_sample_count, iree_host_size_t skipped_case_count,
@@ -398,6 +431,8 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "iree-test-loom module.loom --case=@sampled_choice --sample=1\n"
       "iree-test-loom module.loom --max-samples-per-case=16\n"
       "iree-test-loom module.loom --pipeline=@hal_actual_pipeline\n"
+      "iree-test-loom module.loom --config=model.hidden_size=4096\n"
+      "iree-test-loom module.loom --config-file=model_config.jsonc\n"
       "iree-test-loom module.loom --sanitizer=tsan\n"
       "iree-test-loom module.loom --sanitizer=asan "
       "--sanitizer-reporting=report-only\n"
@@ -412,10 +447,12 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "\n"
       "A case can mix reference/oracle checks with HAL actual invocations. "
       "Actual\n"
-      "invocations use the selected HAL artifact provider and execution "
-      "provider linked into this binary. "
+      "invocations use the selected HAL artifact provider, target provider, "
+      "and HAL device linked into this binary. "
       "`--pipeline=default|none|@symbol|pass,list` controls the HAL actual "
-      "compile pipeline. `--sanitizer=...` and "
+      "compile pipeline. `--config=key=value` and `--config-file=path` "
+      "materialize config declarations in the private compile copy before "
+      "sample constants and lowering run. `--sanitizer=...` and "
       "`--sanitizer-reporting=...` enable the same target-pipeline "
       "instrumentation accepted by `iree-benchmark-loom`.\n"
       "\n"
@@ -462,6 +499,8 @@ int iree_test_loom_main(int argc, char** argv,
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(allocator, &config_set);
   iree_io_file_contents_t* contents = NULL;
   loom_run_session_t session = {0};
   loom_run_module_t run_module = {0};
@@ -494,6 +533,12 @@ int iree_test_loom_main(int argc, char** argv,
                               "--max-samples-per-case must be positive; got "
                               "%d",
                               (int)FLAG_max_samples_per_case);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_test_loom_append_config_flags(&config_set);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_test_loom_append_config_files(&config_set, allocator);
   }
   if (iree_status_is_ok(status)) {
     status = loom_sanitizer_options_parse_checks(
@@ -593,7 +638,7 @@ int iree_test_loom_main(int argc, char** argv,
       ++selected_case_count;
       status = iree_test_loom_run_case_samples(
           configuration, &session, &run_module, &module_plan, case_index,
-          &execution_options, &sanitizer_options, &hal_context,
+          &execution_options, &config_set, &sanitizer_options, &hal_context,
           &execution_arena, &sample_output, &skipped_output, &first_sample,
           &first_skipped_case, &sample_count, &failed_sample_count,
           &skipped_case_count);
@@ -631,6 +676,7 @@ int iree_test_loom_main(int argc, char** argv,
   iree_arena_deinitialize(&execution_arena);
   iree_arena_deinitialize(&plan_arena);
   loom_run_hal_testbench_context_deinitialize(&hal_context);
+  loom_tooling_config_set_deinitialize(&config_set);
   if (device_event_capture_initialized) {
     loom_testbench_device_event_capture_deinitialize(&device_event_capture);
   }

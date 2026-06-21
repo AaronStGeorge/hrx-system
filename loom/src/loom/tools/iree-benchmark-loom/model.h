@@ -23,6 +23,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_tooling_config_set_t loom_tooling_config_set_t;
+
 // Invalid stable ordinal for optional benchmark model indexes.
 #define IREE_BENCHMARK_LOOM_INDEX_INVALID IREE_HOST_SIZE_MAX
 
@@ -186,6 +188,8 @@ typedef struct iree_benchmark_loom_hal_context_t {
   const iree_benchmark_loom_configuration_t* configuration;
   // Optional artifact bundle receiving HAL profile artifact references.
   iree_benchmark_loom_artifact_bundle_t* artifact_bundle;
+  // Config bindings materialized into HAL actual candidate compile copies.
+  const loom_tooling_config_set_t* config_set;
   // Shared HAL runtime and artifact-provider state.
   loom_run_hal_testbench_context_t execution;
 } iree_benchmark_loom_hal_context_t;

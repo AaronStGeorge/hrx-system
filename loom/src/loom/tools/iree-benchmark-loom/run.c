@@ -13,6 +13,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/ir/module.h"
 #include "loom/target/artifact_manifest.h"
+#include "loom/tooling/config/config.h"
 #include "loom/tooling/execution/compile_options.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/io/file.h"
@@ -70,6 +71,26 @@ static iree_status_t iree_benchmark_loom_artifact_manifest_options_initialize(
   return iree_ok_status();
 }
 
+static iree_status_t iree_benchmark_loom_append_config_assignments(
+    loom_tooling_config_set_t* config_set,
+    iree_string_view_list_t assignments) {
+  for (iree_host_size_t i = 0; i < assignments.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_assignment(
+        config_set, assignments.values[i]));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t iree_benchmark_loom_append_config_files(
+    loom_tooling_config_set_t* config_set, iree_string_view_list_t paths,
+    iree_allocator_t allocator) {
+  for (iree_host_size_t i = 0; i < paths.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_json_file(
+        config_set, paths.values[i], allocator));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t iree_benchmark_loom_run_file(
     const iree_benchmark_loom_file_run_options_t* options,
     iree_benchmark_loom_run_result_t* out_result) {
@@ -88,6 +109,9 @@ iree_status_t iree_benchmark_loom_run_file(
   const iree_benchmark_loom_options_t* benchmark_options =
       &normalized_benchmark_options;
   const iree_allocator_t allocator = options->host_allocator;
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(allocator, &config_set);
+  normalized_benchmark_options.config_set = &config_set;
   const iree_string_view_t input_path = options->input_path;
   const bool compare_requested =
       !iree_string_view_is_empty(benchmark_options->compare);
@@ -100,6 +124,7 @@ iree_status_t iree_benchmark_loom_run_file(
   iree_benchmark_loom_hal_context_t hal_context = {0};
   iree_benchmark_loom_hal_context_initialize(options->configuration, allocator,
                                              &hal_context);
+  hal_context.config_set = benchmark_options->config_set;
   iree_arena_allocator_t plan_arena;
   memset(&plan_arena, 0, sizeof(plan_arena));
   iree_arena_allocator_t execution_arena;
@@ -122,9 +147,17 @@ iree_status_t iree_benchmark_loom_run_file(
   int exit_code = 0;
 
   iree_status_t status = iree_ok_status();
+  status = iree_benchmark_loom_append_config_assignments(
+      &config_set, benchmark_options->config_assignments);
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_append_config_files(
+        &config_set, benchmark_options->config_files, allocator);
+  }
   loom_run_compile_report_capture_options_t compile_report_options = {0};
-  status = iree_benchmark_loom_compile_report_options_initialize(
-      benchmark_options, &compile_report_options);
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_compile_report_options_initialize(
+        benchmark_options, &compile_report_options);
+  }
   loom_run_candidate_artifact_manifest_options_t artifact_manifest_options = {
       0};
   if (iree_status_is_ok(status)) {
@@ -426,6 +459,7 @@ iree_status_t iree_benchmark_loom_run_file(
   iree_arena_deinitialize(&plan_arena);
   loom_run_module_deinitialize(&run_module);
   iree_benchmark_loom_hal_context_deinitialize(&hal_context);
+  loom_tooling_config_set_deinitialize(&config_set);
   iree_benchmark_loom_file_provider_deinitialize(&file_provider);
   iree_benchmark_loom_artifact_bundle_deinitialize(&artifact_bundle);
   iree_io_file_contents_free(contents);

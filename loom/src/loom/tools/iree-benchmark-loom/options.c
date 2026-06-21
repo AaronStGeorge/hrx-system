@@ -37,6 +37,15 @@ IREE_FLAG_NAMED(int32_t, max_samples_per_case, "max-samples-per-case",
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used before HAL candidate emission. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
+IREE_FLAG_LIST(
+    string, config,
+    "Compile-time config binding for HAL actual invocations. Repeat as "
+    "--config=key=value. Bindings not referenced by the loaded module are "
+    "ignored.");
+IREE_FLAG_LIST_NAMED(
+    string, config_file, "config-file",
+    "JSON/JSONC config object file for HAL actual invocations. Repeat for "
+    "multiple files. Nested object keys are flattened with '.' separators.");
 IREE_FLAG(string, sanitizer, "none",
           "Sanitizer checks inserted by the target pipeline. Use 'none', "
           "'access', 'value', 'operation', 'race', 'asan', 'ubsan', 'tsan', "
@@ -237,6 +246,16 @@ iree_status_t iree_benchmark_loom_options_from_flags(
           iree_make_cstring_view(FLAG_benchmark));
   out_options->sample_ordinal = FLAG_sample;
   out_options->pipeline = iree_make_cstring_view(FLAG_pipeline);
+  const iree_flag_string_list_t config_assignments = FLAG_config_list();
+  out_options->config_assignments = (iree_string_view_list_t){
+      .count = config_assignments.count,
+      .values = config_assignments.values,
+  };
+  const iree_flag_string_list_t config_files = FLAG_config_file_list();
+  out_options->config_files = (iree_string_view_list_t){
+      .count = config_files.count,
+      .values = config_files.values,
+  };
   IREE_RETURN_IF_ERROR(loom_sanitizer_options_parse_checks(
       iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
       &out_options->sanitizer));
