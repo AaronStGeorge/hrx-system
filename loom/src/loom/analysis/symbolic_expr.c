@@ -1673,6 +1673,123 @@ static bool loom_symbolic_expr_scaled_pair_terms(
   return true;
 }
 
+static bool loom_symbolic_expr_scaled_pair_term_indices(
+    const loom_symbolic_term_t* terms, iree_host_size_t positive_index,
+    iree_host_size_t negative_index, int64_t* out_scale,
+    loom_value_id_t* out_positive_relation_value,
+    loom_value_id_t* out_negative_relation_value) {
+  const loom_symbolic_term_t* positive_term = &terms[positive_index];
+  const loom_symbolic_term_t* negative_term = &terms[negative_index];
+  if (positive_term->coefficient <= 0 || negative_term->coefficient >= 0 ||
+      negative_term->coefficient == INT64_MIN ||
+      positive_term->coefficient != -negative_term->coefficient) {
+    return false;
+  }
+  *out_scale = positive_term->coefficient;
+  *out_positive_relation_value = positive_term->relation_value_id;
+  if (*out_positive_relation_value == LOOM_VALUE_ID_INVALID) {
+    *out_positive_relation_value = positive_term->value_id;
+  }
+  *out_negative_relation_value = negative_term->relation_value_id;
+  if (*out_negative_relation_value == LOOM_VALUE_ID_INVALID) {
+    *out_negative_relation_value = negative_term->value_id;
+  }
+  return true;
+}
+
+static bool loom_symbolic_expr_scaled_pair_from_indices(
+    const loom_symbolic_term_t* terms, iree_host_size_t first_index,
+    iree_host_size_t second_index, int64_t* out_scale,
+    loom_value_id_t* out_positive_relation_value,
+    loom_value_id_t* out_negative_relation_value) {
+  if (terms[first_index].coefficient > 0) {
+    return loom_symbolic_expr_scaled_pair_term_indices(
+        terms, first_index, second_index, out_scale,
+        out_positive_relation_value, out_negative_relation_value);
+  }
+  return loom_symbolic_expr_scaled_pair_term_indices(
+      terms, second_index, first_index, out_scale, out_positive_relation_value,
+      out_negative_relation_value);
+}
+
+static bool loom_symbolic_expr_residual_interval_excluding_pair(
+    const loom_symbolic_expr_context_t* context,
+    const loom_symbolic_term_t* terms, iree_host_size_t term_count,
+    iree_host_size_t first_index, iree_host_size_t second_index,
+    int64_t constant, int64_t* out_maximum) {
+  int64_t minimum = constant;
+  int64_t maximum = constant;
+  for (iree_host_size_t i = 0; i < term_count; ++i) {
+    if (i == first_index || i == second_index) continue;
+    int64_t term_minimum = 0;
+    int64_t term_maximum = 0;
+    if (!loom_symbolic_expr_term_interval(context, terms[i], &term_minimum,
+                                          &term_maximum) ||
+        !loom_symbolic_expr_accumulate_checked(term_minimum, term_maximum,
+                                               &minimum, &maximum)) {
+      return false;
+    }
+  }
+  *out_maximum = maximum;
+  return true;
+}
+
+static iree_status_t
+loom_symbolic_expr_prove_le_by_scaled_relation_with_residual(
+    loom_symbolic_expr_context_t* context, int64_t constant,
+    const loom_symbolic_term_t* normalized_terms, iree_host_size_t term_count,
+    loom_symbolic_proof_result_t* out_result) {
+  *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  if (term_count < 2 || term_count > LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT) {
+    return iree_ok_status();
+  }
+
+  loom_symbolic_term_t terms[LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT];
+  memcpy(terms, normalized_terms, term_count * sizeof(*terms));
+
+  for (iree_host_size_t i = 0; i < term_count; ++i) {
+    for (iree_host_size_t j = i + 1; j < term_count; ++j) {
+      int64_t scale = 0;
+      loom_value_id_t positive_relation_value = LOOM_VALUE_ID_INVALID;
+      loom_value_id_t negative_relation_value = LOOM_VALUE_ID_INVALID;
+      if (!loom_symbolic_expr_scaled_pair_from_indices(
+              terms, i, j, &scale, &positive_relation_value,
+              &negative_relation_value)) {
+        continue;
+      }
+
+      int64_t residual_maximum = 0;
+      if (!loom_symbolic_expr_residual_interval_excluding_pair(
+              context, terms, term_count, i, j, constant, &residual_maximum)) {
+        continue;
+      }
+
+      loom_symbolic_proof_result_t strict_relation =
+          LOOM_SYMBOLIC_PROOF_UNKNOWN;
+      IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_direct_value_relation(
+          context, LOOM_SYMBOLIC_INTEGER_RELATION_LT, positive_relation_value,
+          negative_relation_value, &strict_relation));
+      if (strict_relation == LOOM_SYMBOLIC_PROOF_TRUE &&
+          residual_maximum <= scale) {
+        *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
+        return iree_ok_status();
+      }
+
+      loom_symbolic_proof_result_t nonstrict_relation =
+          LOOM_SYMBOLIC_PROOF_UNKNOWN;
+      IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_direct_value_relation(
+          context, LOOM_SYMBOLIC_INTEGER_RELATION_LE, positive_relation_value,
+          negative_relation_value, &nonstrict_relation));
+      if (nonstrict_relation == LOOM_SYMBOLIC_PROOF_TRUE &&
+          residual_maximum <= 0) {
+        *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
+        return iree_ok_status();
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_symbolic_expr_prove_le_by_scaled_relation(
     loom_symbolic_expr_context_t* context,
     const loom_symbolic_expr_t* left_expression,
@@ -1687,12 +1804,22 @@ static iree_status_t loom_symbolic_expr_prove_le_by_scaled_relation(
       &linear));
   if (!linear) return iree_ok_status();
 
+  const loom_symbolic_term_t* terms = context->scratch_terms;
+  loom_symbolic_term_t stable_terms[LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT];
+  if (term_count <= LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT) {
+    memcpy(stable_terms, context->scratch_terms, term_count * sizeof(*terms));
+    terms = stable_terms;
+  }
+
   int64_t scale = 0;
   loom_value_id_t positive_relation_value = LOOM_VALUE_ID_INVALID;
   loom_value_id_t negative_relation_value = LOOM_VALUE_ID_INVALID;
-  if (!loom_symbolic_expr_scaled_pair_terms(context->scratch_terms, term_count,
-                                            &scale, &positive_relation_value,
+  if (!loom_symbolic_expr_scaled_pair_terms(terms, term_count, &scale,
+                                            &positive_relation_value,
                                             &negative_relation_value)) {
+    IREE_RETURN_IF_ERROR(
+        loom_symbolic_expr_prove_le_by_scaled_relation_with_residual(
+            context, constant, terms, term_count, out_result));
     return iree_ok_status();
   }
 
@@ -1740,7 +1867,11 @@ static iree_status_t loom_symbolic_expr_prove_le_by_scaled_relation(
       loom_checked_add_i64(scale, constant, &false_lower_bound) &&
       false_lower_bound > 0) {
     *out_result = LOOM_SYMBOLIC_PROOF_FALSE;
+    return iree_ok_status();
   }
+  IREE_RETURN_IF_ERROR(
+      loom_symbolic_expr_prove_le_by_scaled_relation_with_residual(
+          context, constant, terms, term_count, out_result));
   return iree_ok_status();
 }
 

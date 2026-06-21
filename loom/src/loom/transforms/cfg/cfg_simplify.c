@@ -1269,6 +1269,9 @@ static bool loom_cfg_simplify_value_uses_stay_in_block(
     return false;
   }
   const loom_value_t* value = loom_module_value(state->module, value_id);
+  if (loom_module_value_has_predicate_attribute_uses(state->module, value_id)) {
+    return false;
+  }
   const loom_use_t* use = NULL;
   loom_value_for_each_use(value, use) {
     loom_op_t* user = loom_use_user_op(*use);
@@ -2512,6 +2515,7 @@ static bool loom_cfg_simplify_block_arg_unused(
   }
   const loom_value_t* value = loom_module_value(state->module, arg);
   return value->use_count == 0 &&
+         !loom_module_value_has_predicate_attribute_uses(state->module, arg) &&
          !loom_module_value_has_type_uses(state->module, arg);
 }
 

@@ -37,3 +37,20 @@ func.def @assumed_strided_layout_facts() -> (i64, i64, i64) {
   %stride1 = scalar.constant 9223372036854775807 : i64
   func.return %kind, %stride0, %stride1 : i64, i64, i64
 }
+
+// ====
+
+func.def @predicate_attribute_keeps_dynamic_bound(%origin0: index, %count: index) -> (index) {
+  %one = index.constant 1 : index
+  %max_vector_origin = index.sub %count, %one : index
+  %origin = index.assume %origin0 [lt(%origin0, %max_vector_origin)] : index
+  func.return %origin : index
+}
+
+// ----
+func.def @predicate_attribute_keeps_dynamic_bound(%origin0: index, %count: index) -> (index) {
+  %one = index.constant 1 : index
+  %max_vector_origin = index.sub %count, %one : index
+  %origin = index.assume %origin0 [lt(%origin0, %max_vector_origin)] : index
+  func.return %origin : index
+}
