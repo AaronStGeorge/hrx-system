@@ -577,6 +577,79 @@ loom_check_test_suite(
             converter.body,
         )
 
+    def test_cc_binary_benchmark_converts_location_args_to_source_paths(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+
+        functions.cc_binary_benchmark(
+            name="location_benchmark",
+            srcs=["location_benchmark.cc"],
+            args=[
+                "$(location input.txt)",
+                "--flag=$(rootpath nested/input.bin)",
+            ],
+        )
+
+        self.assertIn('"${PROJECT_SOURCE_DIR}/pkg/input.txt"', converter.body)
+        self.assertIn(
+            '"--flag=${PROJECT_SOURCE_DIR}/pkg/nested/input.bin"',
+            converter.body,
+        )
+
+    def test_hal_cts_test_suite_converts_location_args_to_source_paths(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+
+        functions._iree_hal_cts_test_suite(
+            backends_lib=":backends",
+            name="hal_cts",
+            args=[
+                "$(location input.txt)",
+                "--flag=$(rootpath nested/input.bin)",
+            ],
+        )
+
+        self.assertIn('"${PROJECT_SOURCE_DIR}/pkg/input.txt"', converter.body)
+        self.assertIn(
+            '"--flag=${PROJECT_SOURCE_DIR}/pkg/nested/input.bin"',
+            converter.body,
+        )
+
+    def test_execution_test_suite_converts_location_args_to_source_paths(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+
+        functions.iree_execution_test_suite(
+            name="execution_test",
+            manifests=["test.json"],
+            tools={"runner": "//tools:runner"},
+            args=[
+                "$(location input.txt)",
+                "--flag=$(rootpath nested/input.bin)",
+            ],
+        )
+
+        self.assertIn('"${PROJECT_SOURCE_DIR}/pkg/input.txt"', converter.body)
+        self.assertIn(
+            '"--flag=${PROJECT_SOURCE_DIR}/pkg/nested/input.bin"',
+            converter.body,
+        )
+
     def test_native_test_converts_location_env(self):
         converter = SimpleNamespace(body="")
         functions = bazel_to_cmake_converter.BuildFileFunctions(

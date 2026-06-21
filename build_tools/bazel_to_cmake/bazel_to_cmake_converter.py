@@ -2647,7 +2647,9 @@ class BuildFileFunctions(object):
         name_block = (
             self._convert_string_arg_block("NAME", name, quote=False) if name else ""
         )
-        args_block = self._convert_string_list_block("ARGS", args)
+        args_block = self._convert_string_list_block(
+            "ARGS", self._convert_location_args(args), sort=False
+        )
         labels_block = self._convert_string_list_block("LABELS", tags)
         resource_group_block = self._convert_string_arg_block(
             "RESOURCE_GROUP", resource_group, quote=False
@@ -2719,7 +2721,9 @@ class BuildFileFunctions(object):
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         manifests_block = self._convert_srcs_block(manifests, block_name="MANIFESTS")
         data_block = self._convert_srcs_block(data, block_name="DATA")
-        args_block = self._convert_string_list_block("ARGS", args)
+        args_block = self._convert_string_list_block(
+            "ARGS", self._convert_location_args(args), sort=False
+        )
         sanitizer_suppressions_block = self._convert_sanitizer_suppressions_block(
             sanitizer_suppressions
         )
@@ -2889,7 +2893,9 @@ class BuildFileFunctions(object):
         copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
         defines_block = self._convert_string_list_block("DEFINES", defines)
         linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
-        args_block = self._convert_string_list_block("ARGS", args)
+        args_block = self._convert_string_list_block(
+            "ARGS", self._convert_location_args(args), sort=False
+        )
         testonly_block = self._convert_option_block("TESTONLY", testonly)
         labels_block = self._convert_string_list_block("LABELS", tags)
         resource_group_block = self._convert_string_arg_block(
