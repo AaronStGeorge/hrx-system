@@ -1093,7 +1093,7 @@ static iree_status_t loom_amdgpu_wait_plan_drain_counter(
       &builder->schedule->blocks[block_index];
   for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
     const uint32_t packet_index = block->scheduled_node_start + i;
-    if (packet_index == node->scheduled_ordinal) {
+    if (i == node->scheduled_ordinal) {
       break;
     }
     const uint32_t prior_node_index =
