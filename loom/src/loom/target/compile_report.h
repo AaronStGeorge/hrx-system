@@ -299,6 +299,16 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   uint64_t dot_count;
   // Descriptor-backed nodes identified as global or vector-memory operations.
   uint64_t global_memory_count;
+  // Descriptor-backed AMDGPU global_load-family memory instructions.
+  uint64_t global_load_count;
+  // Descriptor-backed AMDGPU global_store-family memory instructions.
+  uint64_t global_store_count;
+  // Descriptor-backed AMDGPU buffer_load-family memory instructions.
+  uint64_t buffer_load_count;
+  // Descriptor-backed AMDGPU buffer_store-family memory instructions.
+  uint64_t buffer_store_count;
+  // Descriptor-backed AMDGPU flat-memory instructions.
+  uint64_t flat_memory_count;
   // Descriptor-backed nodes identified as local/shared/workgroup memory ops.
   uint64_t local_memory_count;
   // Descriptor-backed nodes identified as scalar-memory operations.

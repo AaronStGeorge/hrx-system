@@ -256,6 +256,44 @@ smoke coverage; serious timing should use larger batches, warmups, a stable
 minimum duration, and enough input-ring bytes to avoid measuring only cache-hot
 data reuse.
 
+## AMDGPU Global And Descriptor Memory Feedback
+
+The AMDGPU compile report separates raw global VMEM packets from descriptor
+MUBUF packets. This matters when comparing a Loom route against HIP, RADV,
+LLVM, or hand-written assembly: two sources can have the same semantic global
+memory operation while selecting very different instruction families.
+
+`static_instruction_mix.global_memory_count` remains the broad global-memory
+aggregate. The narrower family counters identify the selected packet family:
+`global_load_count` and `global_store_count` count raw global-address packets,
+`buffer_load_count` and `buffer_store_count` count descriptor-backed MUBUF
+packets, and `flat_memory_count` counts flat-memory packets.
+
+```bash
+jq '.static_instruction_mix
+  | {global_memory_count,
+     global_load_count, global_store_count,
+     buffer_load_count, buffer_store_count,
+     flat_memory_count}' \
+  /tmp/kernel.compile-report.json
+```
+
+For per-operation attribution, detailed reports expose the selected packet and
+memory-space facts in `source_low.memory_rows`:
+
+```bash
+jq '.source_low.memory_rows[]?
+  | {function, source_op, operation, memory_space, packet, address_form,
+     vector_lanes}' \
+  /tmp/kernel.compile-report.json
+```
+
+On AMDGPU, a source-low buffer with global memory facts lowers through the raw
+global-address family when the address form is legal. A buffer with descriptor
+memory facts can lower through the MUBUF family when the descriptor, offset, and
+range facts prove the packet requirements. The report counters make that choice
+visible before object disassembly enters the debugging loop.
+
 ## AMDGPU Shared-Memory Feedback
 
 The AMDGPU compile report can explain selected workgroup-memory packets and the

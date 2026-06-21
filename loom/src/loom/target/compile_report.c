@@ -442,6 +442,11 @@ static void loom_target_compile_report_accumulate_instruction_mix(
   target->wmma_count += source->wmma_count;
   target->dot_count += source->dot_count;
   target->global_memory_count += source->global_memory_count;
+  target->global_load_count += source->global_load_count;
+  target->global_store_count += source->global_store_count;
+  target->buffer_load_count += source->buffer_load_count;
+  target->buffer_store_count += source->buffer_store_count;
+  target->flat_memory_count += source->flat_memory_count;
   target->local_memory_count += source->local_memory_count;
   target->scalar_memory_count += source->scalar_memory_count;
   target->generic_memory_count += source->generic_memory_count;

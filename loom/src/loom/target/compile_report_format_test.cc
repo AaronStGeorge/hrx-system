@@ -85,6 +85,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.wmma_count=*/0,
               /*.dot_count=*/0,
               /*.global_memory_count=*/0,
+              /*.global_load_count=*/0,
+              /*.global_store_count=*/0,
+              /*.buffer_load_count=*/0,
+              /*.buffer_store_count=*/0,
+              /*.flat_memory_count=*/0,
               /*.local_memory_count=*/4,
               /*.scalar_memory_count=*/0,
               /*.generic_memory_count=*/0,
@@ -126,6 +131,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                   /*.wmma_count=*/0,
                   /*.dot_count=*/0,
                   /*.global_memory_count=*/0,
+                  /*.global_load_count=*/0,
+                  /*.global_store_count=*/0,
+                  /*.buffer_load_count=*/0,
+                  /*.buffer_store_count=*/0,
+                  /*.flat_memory_count=*/0,
                   /*.local_memory_count=*/12,
                   /*.scalar_memory_count=*/0,
                   /*.generic_memory_count=*/0,
@@ -340,6 +350,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       /*.wmma_count=*/1,
       /*.dot_count=*/{},
       /*.global_memory_count=*/2,
+      /*.global_load_count=*/1,
+      /*.global_store_count=*/{},
+      /*.buffer_load_count=*/1,
+      /*.buffer_store_count=*/{},
+      /*.flat_memory_count=*/{},
       /*.local_memory_count=*/{},
       /*.scalar_memory_count=*/{},
       /*.generic_memory_count=*/{},
@@ -467,6 +482,10 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "descriptors=9"),
                                   0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output, IREE_SV("global_load=1 global_store=0 buffer_load=1"), 0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
                 IREE_SV("target_resources scalar_register_class=amdgpu.sgpr "
@@ -686,6 +705,12 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           output, IREE_SV("\"static_instruction_mix\":{\"descriptor_count\":9"),
           0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"global_load_count\":1,\"global_store_count\":0,"
+                        "\"buffer_load_count\":1"),
+                0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
                 IREE_SV("\"target_resources\":{\"scalar_register_class\":"

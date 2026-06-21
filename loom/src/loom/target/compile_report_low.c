@@ -41,6 +41,17 @@ static iree_string_view_t loom_target_compile_report_descriptor_semantic_tag(
                                         descriptor->semantic_tag_string_offset);
 }
 
+static iree_string_view_t loom_target_compile_report_descriptor_key(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  if (descriptor_set == NULL || descriptor == NULL ||
+      descriptor->key_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
+    return iree_string_view_empty();
+  }
+  return loom_low_descriptor_set_string(descriptor_set,
+                                        descriptor->key_string_offset);
+}
+
 static bool loom_target_compile_report_string_contains(
     iree_string_view_t value, iree_string_view_t needle) {
   return iree_string_view_find(value, needle, /*pos=*/0) !=
@@ -157,6 +168,16 @@ typedef struct loom_target_compile_report_low_node_features_t {
   bool dot;
   // Node contributes global-memory work.
   bool global_memory;
+  // Node contributes AMDGPU global_load-family work.
+  bool global_load;
+  // Node contributes AMDGPU global_store-family work.
+  bool global_store;
+  // Node contributes AMDGPU buffer_load-family work.
+  bool buffer_load;
+  // Node contributes AMDGPU buffer_store-family work.
+  bool buffer_store;
+  // Node contributes AMDGPU flat-memory-family work.
+  bool flat_memory;
   // Node contributes local or workgroup-memory work.
   bool local_memory;
   // Node contributes scalar-memory work.
@@ -197,6 +218,8 @@ loom_target_compile_report_classify_low_node_features(
   const iree_string_view_t semantic_tag =
       loom_target_compile_report_descriptor_semantic_tag(descriptor_set,
                                                          descriptor);
+  const iree_string_view_t descriptor_key =
+      loom_target_compile_report_descriptor_key(descriptor_set, descriptor);
 
   features.scalar_alu =
       iree_string_view_starts_with(schedule_class_name,
@@ -231,6 +254,18 @@ loom_target_compile_report_classify_low_node_features(
       iree_string_view_starts_with(schedule_class_name,
                                    IREE_SV("amdgpu.vmem")) ||
       iree_string_view_starts_with(semantic_tag, IREE_SV("memory.global."));
+  features.global_load = iree_string_view_starts_with(
+      descriptor_key, IREE_SV("amdgpu.global_load_"));
+  features.global_store = iree_string_view_starts_with(
+      descriptor_key, IREE_SV("amdgpu.global_store_"));
+  features.buffer_load = iree_string_view_starts_with(
+      descriptor_key, IREE_SV("amdgpu.buffer_load_"));
+  features.buffer_store = iree_string_view_starts_with(
+      descriptor_key, IREE_SV("amdgpu.buffer_store_"));
+  features.flat_memory = iree_string_view_starts_with(
+                             descriptor_key, IREE_SV("amdgpu.flat_load_")) ||
+                         iree_string_view_starts_with(
+                             descriptor_key, IREE_SV("amdgpu.flat_store_"));
   features.local_memory =
       iree_string_view_starts_with(schedule_class_name,
                                    IREE_SV("amdgpu.lds")) ||
@@ -284,11 +319,13 @@ static bool loom_target_compile_report_low_node_features_are_known(
     const loom_target_compile_report_low_node_features_t* features) {
   return features->scalar_alu || features->vector_alu || features->matrix ||
          features->mfma || features->wmma || features->dot ||
-         features->global_memory || features->local_memory ||
-         features->scalar_memory || features->generic_memory ||
-         features->atomic || features->branch || features->barrier ||
-         features->control || features->conversion || features->cache ||
-         features->register_move;
+         features->global_memory || features->global_load ||
+         features->global_store || features->buffer_load ||
+         features->buffer_store || features->flat_memory ||
+         features->local_memory || features->scalar_memory ||
+         features->generic_memory || features->atomic || features->branch ||
+         features->barrier || features->control || features->conversion ||
+         features->cache || features->register_move;
 }
 
 static void loom_target_compile_report_accumulate_low_node_static_mix(
@@ -319,6 +356,11 @@ static void loom_target_compile_report_accumulate_low_node_static_mix(
   mix->wmma_count += features.wmma ? 1 : 0;
   mix->dot_count += features.dot ? 1 : 0;
   mix->global_memory_count += features.global_memory ? 1 : 0;
+  mix->global_load_count += features.global_load ? 1 : 0;
+  mix->global_store_count += features.global_store ? 1 : 0;
+  mix->buffer_load_count += features.buffer_load ? 1 : 0;
+  mix->buffer_store_count += features.buffer_store ? 1 : 0;
+  mix->flat_memory_count += features.flat_memory ? 1 : 0;
   mix->local_memory_count += features.local_memory ? 1 : 0;
   mix->scalar_memory_count += features.scalar_memory ? 1 : 0;
   mix->generic_memory_count += features.generic_memory ? 1 : 0;
@@ -345,6 +387,11 @@ static void loom_target_compile_report_accumulate_static_mix(
   target->wmma_count += source->wmma_count;
   target->dot_count += source->dot_count;
   target->global_memory_count += source->global_memory_count;
+  target->global_load_count += source->global_load_count;
+  target->global_store_count += source->global_store_count;
+  target->buffer_load_count += source->buffer_load_count;
+  target->buffer_store_count += source->buffer_store_count;
+  target->flat_memory_count += source->flat_memory_count;
   target->local_memory_count += source->local_memory_count;
   target->scalar_memory_count += source->scalar_memory_count;
   target->generic_memory_count += source->generic_memory_count;
