@@ -258,12 +258,6 @@ iree_status_t loom_symbolic_expr_value(loom_symbolic_expr_context_t* context,
                                        loom_value_id_t value_id,
                                        loom_symbolic_expr_t* out_expression) {
   loom_value_facts_t facts = loom_symbolic_expr_lookup_facts(context, value_id);
-  int64_t exact_value = 0;
-  if (loom_symbolic_expr_exact_integer_facts(facts, &exact_value)) {
-    loom_symbolic_expr_constant(exact_value, out_expression);
-    out_expression->facts = facts;
-    return iree_ok_status();
-  }
   if (!context->module || value_id >= context->module->values.count) {
     loom_symbolic_expr_unknown(facts, out_expression);
     return iree_ok_status();
@@ -1460,12 +1454,74 @@ static bool loom_symbolic_expr_scaled_upper_bound_proves_le(
          maximum_difference <= 0;
 }
 
+static bool loom_symbolic_expr_scaled_static_upper_bound_proves_le(
+    int64_t scale, int64_t constant,
+    loom_symbolic_integer_relation_t upper_relation, int64_t upper_bound) {
+  if (upper_relation != LOOM_SYMBOLIC_INTEGER_RELATION_LT &&
+      upper_relation != LOOM_SYMBOLIC_INTEGER_RELATION_LE) {
+    return false;
+  }
+  int64_t effective_upper_bound = upper_bound;
+  if (upper_relation == LOOM_SYMBOLIC_INTEGER_RELATION_LT &&
+      !loom_checked_sub_i64(effective_upper_bound, 1, &effective_upper_bound)) {
+    return false;
+  }
+  int64_t scaled_upper_bound = 0;
+  if (!loom_checked_mul_i64(scale, effective_upper_bound,
+                            &scaled_upper_bound)) {
+    return false;
+  }
+  int64_t maximum_difference = 0;
+  return loom_checked_add_i64(constant, scaled_upper_bound,
+                              &maximum_difference) &&
+         maximum_difference <= 0;
+}
+
 typedef struct loom_symbolic_expr_scaled_le_proof_t {
   loom_value_id_t positive_relation_value;
   loom_value_id_t negative_relation_value;
   int64_t scale;
   int64_t constant;
 } loom_symbolic_expr_scaled_le_proof_t;
+
+typedef struct loom_symbolic_expr_scaled_static_le_proof_t {
+  // SSA value whose identity-chain predicates constrain the positive term.
+  loom_value_id_t positive_relation_value;
+
+  // Positive coefficient multiplying positive_relation_value.
+  int64_t scale;
+
+  // Constant residual in the normalized less-or-equal comparison.
+  int64_t constant;
+} loom_symbolic_expr_scaled_static_le_proof_t;
+
+static iree_status_t loom_symbolic_expr_predicate_arg_upper_bound(
+    loom_symbolic_expr_context_t* context, loom_predicate_arg_tag_t arg_tag,
+    int64_t arg, int64_t* out_upper_bound, bool* out_known) {
+  *out_upper_bound = 0;
+  *out_known = false;
+  switch (arg_tag) {
+    case LOOM_PRED_ARG_VALUE: {
+      if (arg < 0) return iree_ok_status();
+      loom_symbolic_expr_t expression = {0};
+      IREE_RETURN_IF_ERROR(loom_symbolic_expr_from_value(
+          context, (loom_value_id_t)arg, &expression));
+      if (loom_value_facts_is_float(expression.facts) ||
+          expression.facts.range_hi == INT64_MAX) {
+        return iree_ok_status();
+      }
+      *out_upper_bound = expression.facts.range_hi;
+      *out_known = true;
+      return iree_ok_status();
+    }
+    case LOOM_PRED_ARG_CONST:
+      *out_upper_bound = arg;
+      *out_known = true;
+      return iree_ok_status();
+    default:
+      return iree_ok_status();
+  }
+}
 
 static iree_status_t loom_symbolic_expr_scaled_le_predicate_proof(
     loom_symbolic_expr_context_t* context, const loom_predicate_t* predicate,
@@ -1514,6 +1570,57 @@ static iree_status_t loom_symbolic_expr_scaled_le_predicate_proof(
   if (loom_symbolic_expr_scaled_upper_bound_proves_le(
           proof->scale, proof->constant, upper_relation,
           upper_minus_negative)) {
+    *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
+    *out_matched = true;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_symbolic_expr_scaled_static_le_predicate_proof(
+    loom_symbolic_expr_context_t* context, const loom_predicate_t* predicate,
+    const void* user_data, bool* out_matched,
+    loom_symbolic_proof_result_t* out_result) {
+  const loom_symbolic_expr_scaled_static_le_proof_t* proof =
+      (const loom_symbolic_expr_scaled_static_le_proof_t*)user_data;
+  *out_matched = false;
+  *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  if (predicate->arg_count != 2) return iree_ok_status();
+
+  loom_symbolic_integer_relation_t predicate_relation =
+      LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
+  if (!loom_symbolic_expr_predicate_relation(predicate, &predicate_relation)) {
+    return iree_ok_status();
+  }
+
+  bool positive_is_left = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_predicate_arg_matches_value(
+      context, (loom_predicate_arg_tag_t)predicate->arg_tags[0],
+      predicate->args[0], proof->positive_relation_value, &positive_is_left));
+  bool positive_is_right = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_predicate_arg_matches_value(
+      context, (loom_predicate_arg_tag_t)predicate->arg_tags[1],
+      predicate->args[1], proof->positive_relation_value, &positive_is_right));
+
+  loom_symbolic_integer_relation_t upper_relation = predicate_relation;
+  uint8_t upper_arg_index = 1;
+  if (positive_is_left) {
+    upper_arg_index = 1;
+  } else if (positive_is_right) {
+    upper_relation = loom_symbolic_integer_relation_swap(predicate_relation);
+    upper_arg_index = 0;
+  } else {
+    return iree_ok_status();
+  }
+
+  int64_t upper_bound = 0;
+  bool upper_bound_known = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_predicate_arg_upper_bound(
+      context, (loom_predicate_arg_tag_t)predicate->arg_tags[upper_arg_index],
+      predicate->args[upper_arg_index], &upper_bound, &upper_bound_known));
+  if (!upper_bound_known) return iree_ok_status();
+
+  if (loom_symbolic_expr_scaled_static_upper_bound_proves_le(
+          proof->scale, proof->constant, upper_relation, upper_bound)) {
     *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
     *out_matched = true;
   }
@@ -1594,6 +1701,16 @@ static iree_status_t loom_symbolic_expr_prove_identity_chain_scaled_assumption(
   return loom_symbolic_expr_prove_identity_chain_predicates(
       context, start_value, loom_symbolic_expr_scaled_le_predicate_proof, proof,
       out_matched, out_result);
+}
+
+static iree_status_t
+loom_symbolic_expr_prove_identity_chain_scaled_static_assumption(
+    loom_symbolic_expr_context_t* context, loom_value_id_t start_value,
+    const loom_symbolic_expr_scaled_static_le_proof_t* proof, bool* out_matched,
+    loom_symbolic_proof_result_t* out_result) {
+  return loom_symbolic_expr_prove_identity_chain_predicates(
+      context, start_value, loom_symbolic_expr_scaled_static_le_predicate_proof,
+      proof, out_matched, out_result);
 }
 
 static iree_status_t loom_symbolic_expr_prove_assumed_value_relation(
@@ -1809,6 +1926,25 @@ static iree_status_t loom_symbolic_expr_prove_le_by_scaled_relation(
   if (term_count <= LOOM_SYMBOLIC_EXPR_DEFAULT_TERM_LIMIT) {
     memcpy(stable_terms, context->scratch_terms, term_count * sizeof(*terms));
     terms = stable_terms;
+  }
+
+  if (term_count == 1 && terms[0].coefficient > 0) {
+    loom_value_id_t positive_relation_value = terms[0].relation_value_id;
+    if (positive_relation_value == LOOM_VALUE_ID_INVALID) {
+      positive_relation_value = terms[0].value_id;
+    }
+    bool scaled_static_assumption_matched = false;
+    const loom_symbolic_expr_scaled_static_le_proof_t
+        scaled_static_assumption_proof = {
+            .positive_relation_value = positive_relation_value,
+            .scale = terms[0].coefficient,
+            .constant = constant,
+        };
+    IREE_RETURN_IF_ERROR(
+        loom_symbolic_expr_prove_identity_chain_scaled_static_assumption(
+            context, positive_relation_value, &scaled_static_assumption_proof,
+            &scaled_static_assumption_matched, out_result));
+    if (scaled_static_assumption_matched) return iree_ok_status();
   }
 
   int64_t scale = 0;

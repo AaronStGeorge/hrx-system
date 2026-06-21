@@ -113,6 +113,20 @@ func.def @dynamic_vector_origin_proven_by_shifted_assume_relation(%buffer: buffe
 
 // ====
 
+func.def @dynamic_vector_origin_proven_by_exact_count_minus_extent_relation(%buffer: buffer, %base: offset, %origin0: index, %n0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %n = index.assume %n0 [range(%n0, 262144, 262144)] : index
+  %seven = index.constant 7 : index
+  %last_valid_start = index.sub %n, %seven : index
+  %origin = index.assume %origin0 [ge(%origin0, 0), lt(%origin0, %last_valid_start), mul(%origin0, 8)] : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%n]xf16, %layout>
+  %values = vector.load %view[%origin] : view<[%n]xf16, %layout> -> vector<8xf16>
+  test.use %values : vector<8xf16>
+  func.return
+}
+
+// ====
+
 func.def @dynamic_vector_tail_origin_proven_by_dynamic_bound(%input: buffer, %output: buffer, %base_i32: i32, %tail_i32: i32, %stride_i32: i32, %token_count_i32: i32) {
   %layout = encoding.layout.dense : encoding<layout>
   %zero = index.constant 0 : offset
