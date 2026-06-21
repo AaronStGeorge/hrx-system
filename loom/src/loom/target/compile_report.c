@@ -55,6 +55,8 @@ void loom_target_compile_report_deinitialize(
   loom_target_compile_report_row_list_deinitialize(
       allocator, &report->allocation_high_water_rows);
   loom_target_compile_report_row_list_deinitialize(allocator,
+                                                   &report->wait_counter_rows);
+  loom_target_compile_report_row_list_deinitialize(allocator,
                                                    &report->source_low_rows);
   loom_target_compile_report_row_list_deinitialize(
       allocator, &report->source_low_memory_rows);
@@ -73,6 +75,7 @@ static bool loom_target_compile_report_has_rows(
          report->schedule_band_summary_rows.count != 0 ||
          report->allocation_failure_rows.count != 0 ||
          report->allocation_high_water_rows.count != 0 ||
+         report->wait_counter_rows.count != 0 ||
          report->entry_rows.count != 0 || report->source_low_rows.count != 0 ||
          report->source_low_memory_rows.count != 0 ||
          report->math_legalization_rows.count != 0 ||
@@ -172,6 +175,7 @@ iree_status_t loom_target_compile_report_clone(
   target.allocation_failure_rows = (loom_target_compile_report_row_list_t){0};
   target.allocation_high_water_rows =
       (loom_target_compile_report_row_list_t){0};
+  target.wait_counter_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_rows = (loom_target_compile_report_row_list_t){0};
   target.source_low_memory_rows = (loom_target_compile_report_row_list_t){0};
   target.math_legalization_rows = (loom_target_compile_report_row_list_t){0};
@@ -182,6 +186,7 @@ iree_status_t loom_target_compile_report_clone(
       source->schedule_band_summary_rows.count == 0 &&
       source->allocation_failure_rows.count == 0 &&
       source->allocation_high_water_rows.count == 0 &&
+      source->wait_counter_rows.count == 0 &&
       source->source_low_rows.count == 0 &&
       source->source_low_memory_rows.count == 0 &&
       source->math_legalization_rows.count == 0 &&
@@ -236,6 +241,12 @@ iree_status_t loom_target_compile_report_clone(
         &source->allocation_high_water_rows,
         sizeof(loom_target_compile_report_allocation_high_water_row_t),
         allocator, &target.allocation_high_water_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->wait_counter_rows,
+        sizeof(loom_target_compile_report_wait_counter_row_t), allocator,
+        &target.wait_counter_rows);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_compile_report_row_list_clone(
@@ -430,6 +441,32 @@ void loom_target_compile_report_record_target_resources(
       report, &report->target_resources);
 }
 
+static void loom_target_compile_report_accumulate_wait_plan(
+    loom_target_compile_report_wait_plan_t* target,
+    const loom_target_compile_report_wait_plan_t* source) {
+  target->action_count += source->action_count;
+  target->explicit_action_count += source->explicit_action_count;
+  target->planned_action_count += source->planned_action_count;
+  target->full_drain_count += source->full_drain_count;
+  target->partial_wait_count += source->partial_wait_count;
+  target->max_outstanding_before =
+      iree_max(target->max_outstanding_before, source->max_outstanding_before);
+  target->max_full_drain_outstanding_before =
+      iree_max(target->max_full_drain_outstanding_before,
+               source->max_full_drain_outstanding_before);
+}
+
+void loom_target_compile_report_record_wait_plan(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_wait_plan_t* wait_plan) {
+  if (wait_plan->action_count == 0) {
+    return;
+  }
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN;
+  loom_target_compile_report_accumulate_wait_plan(&report->wait_plan,
+                                                  wait_plan);
+}
+
 static void loom_target_compile_report_accumulate_instruction_mix(
     loom_target_compile_report_static_instruction_mix_t* target,
     const loom_target_compile_report_static_instruction_mix_t* source) {
@@ -589,6 +626,7 @@ static void loom_target_compile_report_merge_entry_summary(
     report->local_memory_bytes = entry_report->local_memory_bytes;
     report->static_instruction_mix = entry_report->static_instruction_mix;
     report->target_resources = entry_report->target_resources;
+    report->wait_plan = entry_report->wait_plan;
     report->math_legalization_rewritten_op_count =
         entry_report->math_legalization_rewritten_op_count;
     report->math_legalization_rejected_op_count =
@@ -642,6 +680,8 @@ static void loom_target_compile_report_merge_entry_summary(
                                           entry_report->private_memory_bytes);
   report->local_memory_bytes =
       iree_max(report->local_memory_bytes, entry_report->local_memory_bytes);
+  loom_target_compile_report_accumulate_wait_plan(&report->wait_plan,
+                                                  &entry_report->wait_plan);
   loom_target_compile_report_accumulate_instruction_mix(
       &report->static_instruction_mix, &entry_report->static_instruction_mix);
   report->math_legalization_rewritten_op_count +=
@@ -703,6 +743,7 @@ loom_target_compile_report_entry_from_report(
       .local_memory_bytes = entry_report->local_memory_bytes,
       .static_instruction_mix = entry_report->static_instruction_mix,
       .target_resources = entry_report->target_resources,
+      .wait_plan = entry_report->wait_plan,
       .pressure_row_count = entry_report->pressure_rows.count,
       .pressure_origin_row_count = entry_report->pressure_origin_rows.count,
       .schedule_band_row_count = entry_report->schedule_band_rows.count,
@@ -711,6 +752,7 @@ loom_target_compile_report_entry_from_report(
       .spill_row_count = entry_report->spill_rows.count,
       .allocation_high_water_row_count =
           entry_report->allocation_high_water_rows.count,
+      .wait_counter_row_count = entry_report->wait_counter_rows.count,
   };
 }
 
@@ -790,6 +832,13 @@ iree_status_t loom_target_compile_report_record_entry_report(
         sizeof(loom_target_compile_report_allocation_high_water_row_t),
         report->allocator));
   }
+  if (iree_any_bit_set(entry_report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_append_rows(
+        &report->wait_counter_rows, &entry_report->wait_counter_rows,
+        sizeof(loom_target_compile_report_wait_counter_row_t),
+        report->allocator));
+  }
   if (iree_any_bit_set(
           entry_report->detail_flags,
           LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS)) {
@@ -866,6 +915,21 @@ iree_status_t loom_target_compile_report_record_allocation_high_water_row(
   return loom_target_compile_report_row_list_append(
       &report->allocation_high_water_rows, sizeof(*row), report->allocator,
       row);
+}
+
+iree_status_t loom_target_compile_report_record_wait_counter_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_wait_counter_row_t* row) {
+  if (row->summary.action_count == 0) {
+    return iree_ok_status();
+  }
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN;
+  if (!loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN)) {
+    return iree_ok_status();
+  }
+  return loom_target_compile_report_row_list_append(
+      &report->wait_counter_rows, sizeof(*row), report->allocator, row);
 }
 
 iree_status_t loom_target_compile_report_record_source_low_row(

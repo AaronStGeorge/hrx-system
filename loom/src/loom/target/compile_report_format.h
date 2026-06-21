@@ -53,8 +53,9 @@ iree_status_t loom_target_compile_report_format_text(
 // Formats |report| as one structured JSON object into |stream|.
 //
 // SUMMARY mode emits stable summary fields, row counts, and the entry index.
-// DETAILS mode additionally emits pressure, spill, source-low, and
-// target-legalization row arrays. NONE mode writes nothing.
+// DETAILS mode additionally emits copied row arrays such as pressure, spill,
+// wait-counter, source-low, and target-legalization rows. NONE mode writes
+// nothing.
 iree_status_t loom_target_compile_report_format_json(
     const loom_target_compile_report_t* report,
     const loom_target_compile_report_format_options_t* options,

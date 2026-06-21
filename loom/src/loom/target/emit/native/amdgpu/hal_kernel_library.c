@@ -212,16 +212,86 @@ static iree_status_t loom_amdgpu_hal_kernel_library_read_stream_contents(
   return status;
 }
 
+static void loom_amdgpu_hal_kernel_library_accumulate_wait_action(
+    loom_target_compile_report_wait_plan_t* summary,
+    const loom_amdgpu_wait_plan_action_t* action) {
+  ++summary->action_count;
+  switch (action->kind) {
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT:
+      ++summary->explicit_action_count;
+      break;
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED:
+      ++summary->planned_action_count;
+      break;
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_UNKNOWN:
+    default:
+      IREE_ASSERT(false, "wait plan action kind must be known");
+      break;
+  }
+  if (action->target_count == 0) {
+    ++summary->full_drain_count;
+    summary->max_full_drain_outstanding_before =
+        iree_max(summary->max_full_drain_outstanding_before,
+                 (uint64_t)action->outstanding_before);
+  } else {
+    ++summary->partial_wait_count;
+  }
+  summary->max_outstanding_before = iree_max(
+      summary->max_outstanding_before, (uint64_t)action->outstanding_before);
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_library_record_wait_plan(
+    loom_target_compile_report_t* report,
+    const loom_amdgpu_packet_plan_t* packet_plan) {
+  if (report == NULL || packet_plan->wait_plan.action_count == 0) {
+    return iree_ok_status();
+  }
+  const loom_amdgpu_wait_plan_t* wait_plan = &packet_plan->wait_plan;
+  loom_target_compile_report_wait_plan_t summary = {0};
+  loom_target_compile_report_wait_plan_t
+      counter_summaries[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT] = {0};
+  for (iree_host_size_t i = 0; i < wait_plan->action_count; ++i) {
+    const loom_amdgpu_wait_plan_action_t* action = &wait_plan->actions[i];
+    IREE_ASSERT(action->counter_id > LOOM_AMDGPU_WAIT_COUNTER_NONE &&
+                    action->counter_id <= LOOM_AMDGPU_WAIT_COUNTER_ALU,
+                "wait plan action must name a concrete counter");
+    loom_amdgpu_hal_kernel_library_accumulate_wait_action(&summary, action);
+    if (action->counter_id > LOOM_AMDGPU_WAIT_COUNTER_NONE &&
+        action->counter_id <= LOOM_AMDGPU_WAIT_COUNTER_ALU) {
+      loom_amdgpu_hal_kernel_library_accumulate_wait_action(
+          &counter_summaries[action->counter_id - 1], action);
+    }
+  }
+  loom_target_compile_report_record_wait_plan(report, &summary);
+  for (uint32_t i = 0; i < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++i) {
+    if (counter_summaries[i].action_count == 0) {
+      continue;
+    }
+    const uint32_t counter_id = i + 1;
+    const loom_target_compile_report_wait_counter_row_t row = {
+        .function_name = report->function_name,
+        .counter_name = loom_amdgpu_wait_counter_name(counter_id),
+        .counter_id = counter_id,
+        .summary = counter_summaries[i],
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_record_wait_counter_row(report, &row));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_library_build_hsaco_contribution(
     const loom_low_emission_frame_t* frame,
     const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
     const loom_amdgpu_native_preflight_t* preflight,
-    iree_string_builder_t* target_listing,
+    iree_string_builder_t* target_listing, loom_target_compile_report_t* report,
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     iree_arena_allocator_t* table_arena) {
   loom_amdgpu_packet_plan_t packet_plan = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
       &frame->schedule, &frame->allocation, table_arena, &packet_plan));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hal_kernel_library_record_wait_plan(report, &packet_plan));
 
   if (target_listing != NULL) {
     if (iree_string_builder_size(target_listing) != 0) {
@@ -555,8 +625,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
   }
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_library_build_hsaco_contribution(
-      &frame, &plan->abi_layout, &preflight, target_listing, out_contribution,
-      table_arena));
+      &frame, &plan->abi_layout, &preflight, target_listing, report,
+      out_contribution, table_arena));
   if (report != NULL) {
     loom_target_compile_report_record_emission(
         report, out_contribution->summary.instruction_count,

@@ -219,6 +219,47 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.high_water_units=*/252,
           },
       };
+  const loom_target_compile_report_wait_plan_t wait_plan = {
+      /*.action_count=*/5,
+      /*.explicit_action_count=*/1,
+      /*.planned_action_count=*/4,
+      /*.full_drain_count=*/2,
+      /*.partial_wait_count=*/3,
+      /*.max_outstanding_before=*/6,
+      /*.max_full_drain_outstanding_before=*/6,
+  };
+  loom_target_compile_report_wait_counter_row_t wait_counter_rows[] = {
+      {
+          /*.function_name=*/IREE_SVL("branchy_export"),
+          /*.counter_name=*/IREE_SVL("vmem_load"),
+          /*.counter_id=*/1,
+          /*.summary=*/
+          {
+              /*.action_count=*/3,
+              /*.explicit_action_count=*/0,
+              /*.planned_action_count=*/3,
+              /*.full_drain_count=*/1,
+              /*.partial_wait_count=*/2,
+              /*.max_outstanding_before=*/6,
+              /*.max_full_drain_outstanding_before=*/6,
+          },
+      },
+      {
+          /*.function_name=*/IREE_SVL("branchy_export"),
+          /*.counter_name=*/IREE_SVL("lds"),
+          /*.counter_id=*/3,
+          /*.summary=*/
+          {
+              /*.action_count=*/2,
+              /*.explicit_action_count=*/1,
+              /*.planned_action_count=*/1,
+              /*.full_drain_count=*/1,
+              /*.partial_wait_count=*/1,
+              /*.max_outstanding_before=*/2,
+              /*.max_full_drain_outstanding_before=*/2,
+          },
+      },
+  };
   loom_target_compile_report_source_low_row_t source_low_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
@@ -321,7 +362,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS |
-      LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN;
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
   report.function_name = IREE_SVL("branchy");
   report.target_bundle_name = IREE_SVL("vm_target");
@@ -385,6 +427,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   };
   loom_target_compile_report_t entry_report = {};
   loom_target_compile_report_initialize(&entry_report, iree_allocator_system());
+  entry_report.requested_detail_flags = report.requested_detail_flags;
   entry_report.function_name = IREE_SVL("branchy_export");
   entry_report.lowered_symbol = IREE_SVL("branchy");
   entry_report.target_bundle_name = IREE_SVL("vm_target");
@@ -416,6 +459,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       &entry_report, &schedule_band_summary_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_allocation_high_water_row(
       &entry_report, &allocation_high_water_rows[0]));
+  loom_target_compile_report_record_wait_plan(&entry_report, &wait_plan);
+  IREE_ASSERT_OK(loom_target_compile_report_record_wait_counter_row(
+      &entry_report, &wait_counter_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_wait_counter_row(
+      &entry_report, &wait_counter_rows[1]));
   loom_target_compile_report_record_target_resources(&entry_report,
                                                      &target_resources);
   loom_target_compile_report_record_static_instruction_mix(&entry_report,
@@ -469,6 +517,35 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("move_cause[low_concat] packets=2 "
                                           "units=8"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_plan actions=5 explicit=1 "
+                                          "planned=4 full_drains=2 "
+                                          "partial_waits=3 "
+                                          "max_outstanding=6 "
+                                          "max_full_drain_outstanding=6 "
+                                          "counter_rows=2"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_counter[0] "
+                                          "function=branchy_export "
+                                          "counter=vmem_load counter_id=1 "
+                                          "actions=3 explicit=0 planned=3 "
+                                          "full_drains=1 partial_waits=2 "
+                                          "max_outstanding=6 "
+                                          "max_full_drain_outstanding=6"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_counter[1] "
+                                          "function=branchy_export "
+                                          "counter=lds counter_id=3 "
+                                          "actions=2 explicit=1 planned=1 "
+                                          "full_drains=1 partial_waits=1 "
+                                          "max_outstanding=2 "
+                                          "max_full_drain_outstanding=2"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
@@ -587,6 +664,15 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_actions=5 wait_explicit=1 "
+                                          "wait_planned=4 "
+                                          "wait_full_drains=2 "
+                                          "wait_partial=3 "
+                                          "wait_max_outstanding=6 "
+                                          "wait_max_full_drain_outstanding=6"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("pressure_rows=2 "
                                           "pressure_origin_rows=1 "
                                           "schedule_band_rows=1 "
@@ -697,6 +783,48 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "\"packet_count\":6,\"unit_count\":12,\"causes\""),
                 0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"wait_plan\":{\"action_count\":5,"
+                                    "\"explicit_action_count\":1,"
+                                    "\"planned_action_count\":4,"
+                                    "\"full_drain_count\":2,"
+                                    "\"partial_wait_count\":3,"
+                                    "\"max_outstanding_before\":6,"
+                                    "\"max_full_drain_outstanding_before\":6}"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("\"wait_counter_row_count\":2"), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output, IREE_SV("\"wait_counter_rows\":{\"count\":2,\"rows\":["), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"counter\":\"vmem_load\",\"counter_id\":1,"
+                        "\"summary\":{\"action_count\":3,"
+                        "\"explicit_action_count\":0,"
+                        "\"planned_action_count\":3,"
+                        "\"full_drain_count\":1,"
+                        "\"partial_wait_count\":2,"
+                        "\"max_outstanding_before\":6,"
+                        "\"max_full_drain_outstanding_before\":6}"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"counter\":\"lds\",\"counter_id\":3,"
+                                    "\"summary\":{\"action_count\":2,"
+                                    "\"explicit_action_count\":1,"
+                                    "\"planned_action_count\":1,"
+                                    "\"full_drain_count\":1,"
+                                    "\"partial_wait_count\":1,"
+                                    "\"max_outstanding_before\":2,"
+                                    "\"max_full_drain_outstanding_before\":2}"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"move_causes\":{\"kind_count\":3"), 0),
             IREE_STRING_VIEW_NPOS);
