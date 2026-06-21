@@ -53,7 +53,7 @@ kernel.def target(@target) @report_lds_read2_write2_bank_fields() {
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=10 emitted_ops=13 rows=10
-COMPILE-REPORT: source_low_memory rows=2
+COMPILE-REPORT: source_low_memory rows=3
 COMPILE-REPORT: source_low[0] function=report_lds_read2_write2_bank_fields source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_lds_read2_write2_bank_fields source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[2] function=report_lds_read2_write2_bank_fields source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
@@ -66,6 +66,7 @@ COMPILE-REPORT: source_low[8] function=report_lds_read2_write2_bank_fields sourc
 COMPILE-REPORT: source_low[9] function=report_lds_read2_write2_bank_fields source_op=vector.store selection=plan plan=3606 descriptor=0 emitted_ops=2
 COMPILE-REPORT: source_low_memory[0] function=report_lds_read2_write2_bank_fields source_op=vector.store memory_space=workgroup operation=store packet=amdgpu.ds_write2_b32 address_form=ds_2addr dynamic_term_kind=vaddr fallback_reason=cross_wave_workgroup descriptor=2245861438422952198 static_offset_bytes=0 element_bytes=4 vector_lanes=2 dynamic_stride_bytes=32 vector_lane_stride_bytes=8 bank_stride_words=8 bank_conflict_degree=8 bank_conflict_kind=bank-conflict-risk
 COMPILE-REPORT: source_low_memory[1] function=report_lds_read2_write2_bank_fields source_op=vector.load memory_space=workgroup operation=load packet=amdgpu.ds_read2_b32 address_form=ds_2addr dynamic_term_kind=vaddr fallback_reason=cross_wave_workgroup descriptor=211090682926363697 static_offset_bytes=0 element_bytes=4 vector_lanes=2 dynamic_stride_bytes=32 vector_lane_stride_bytes=8 bank_stride_words=8 bank_conflict_degree=8 bank_conflict_kind=bank-conflict-risk
+COMPILE-REPORT: source_low_memory[2] function=report_lds_read2_write2_bank_fields source_op=vector.store memory_space=global operation=store packet=amdgpu.global_store_b64_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=264672273350364318 static_offset_bytes=0 element_bytes=4 vector_lanes=2 dynamic_stride_bytes=8 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
 
 // ====
 
@@ -94,7 +95,7 @@ kernel.def target(@target) @report_lds_b128_single_lane_extract() {
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=12 emitted_ops=11 rows=12
-COMPILE-REPORT: source_low_memory rows=2
+COMPILE-REPORT: source_low_memory rows=4
 COMPILE-REPORT: source_low[0] function=report_lds_b128_single_lane_extract source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_lds_b128_single_lane_extract source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[2] function=report_lds_b128_single_lane_extract source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
@@ -107,5 +108,43 @@ COMPILE-REPORT: source_low[8] function=report_lds_b128_single_lane_extract sourc
 COMPILE-REPORT: source_low[9] function=report_lds_b128_single_lane_extract source_op=vector.load selection=plan plan=3605 descriptor=0 emitted_ops=2
 COMPILE-REPORT: source_low[10] function=report_lds_b128_single_lane_extract source_op=vector.extract selection=plan plan=3592 descriptor=0 emitted_ops=1
 COMPILE-REPORT: source_low[11] function=report_lds_b128_single_lane_extract source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
-COMPILE-REPORT: source_low_memory[0] function=report_lds_b128_single_lane_extract source_op=vector.store memory_space=workgroup operation=store packet=amdgpu.ds_write_b128 address_form=default dynamic_term_kind=vaddr fallback_reason=cross_wave_workgroup descriptor=135153244011467798 static_offset_bytes=0 element_bytes=4 vector_lanes=4 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=4 bank_conflict_degree=4 bank_conflict_kind=bank-conflict-risk
-COMPILE-REPORT: source_low_memory[1] function=report_lds_b128_single_lane_extract source_op=vector.load memory_space=workgroup operation=load packet=amdgpu.ds_read_b128 address_form=default dynamic_term_kind=vaddr fallback_reason=cross_wave_workgroup descriptor=8908758602290675705 static_offset_bytes=0 element_bytes=4 vector_lanes=4 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=4 bank_conflict_degree=4 bank_conflict_kind=bank-conflict-risk
+COMPILE-REPORT: source_low_memory[0] function=report_lds_b128_single_lane_extract source_op=vector.load memory_space=global operation=load packet=amdgpu.global_load_b128_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=8410479038753834550 static_offset_bytes=0 element_bytes=4 vector_lanes=4 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_lds_b128_single_lane_extract source_op=vector.store memory_space=workgroup operation=store packet=amdgpu.ds_write_b128 address_form=default dynamic_term_kind=vaddr fallback_reason=cross_wave_workgroup descriptor=135153244011467798 static_offset_bytes=0 element_bytes=4 vector_lanes=4 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=4 bank_conflict_degree=4 bank_conflict_kind=bank-conflict-risk
+COMPILE-REPORT: source_low_memory[2] function=report_lds_b128_single_lane_extract source_op=vector.load memory_space=workgroup operation=load packet=amdgpu.ds_read_b128 address_form=default dynamic_term_kind=vaddr fallback_reason=cross_wave_workgroup descriptor=8908758602290675705 static_offset_bytes=0 element_bytes=4 vector_lanes=4 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=4 bank_conflict_degree=4 bank_conflict_kind=bank-conflict-risk
+COMPILE-REPORT: source_low_memory[3] function=report_lds_b128_single_lane_extract source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @report_global_and_descriptor_load_families() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch(%global_input: buffer, %descriptor_input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %global_view = buffer.view %global_input[%zero] : buffer -> view<1xi32, #dense>
+  %descriptor_buffer = buffer.assume.memory_space<descriptor> %descriptor_input : buffer
+  %descriptor_view = buffer.view %descriptor_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %global_value = view.load %global_view[0] : view<1xi32, #dense> -> i32
+  %descriptor_value = view.load %descriptor_view[0] : view<1xi32, #dense> -> i32
+  %sum = scalar.addi %global_value, %descriptor_value : i32
+  view.store %sum, %output_view[0] : i32, view<1xi32, #dense>
+  kernel.return
+}
+
+// ----
+COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
+COMPILE-REPORT: source_low selected_ops=8 emitted_ops=7 rows=8
+COMPILE-REPORT: source_low_memory rows=3
+COMPILE-REPORT: source_low[0] function=report_global_and_descriptor_load_families source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[1] function=report_global_and_descriptor_load_families source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[2] function=report_global_and_descriptor_load_families source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[3] function=report_global_and_descriptor_load_families source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[4] function=report_global_and_descriptor_load_families source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low[5] function=report_global_and_descriptor_load_families source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low[6] function=report_global_and_descriptor_load_families source_op=scalar.addi selection=rule rule_set=3 rule=1 descriptor=6352016612914038276 emitted_ops=1
+COMPILE-REPORT: source_low[7] function=report_global_and_descriptor_load_families source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low_memory[0] function=report_global_and_descriptor_load_families source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=none fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=0 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_global_and_descriptor_load_families source_op=view.load memory_space=descriptor operation=load packet=amdgpu.buffer_load_dword_off_zero address_form=buffer_off_zero dynamic_term_kind=none fallback_reason=- descriptor=4489960249363038096 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=0 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[2] function=report_global_and_descriptor_load_families source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=none fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=0 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-

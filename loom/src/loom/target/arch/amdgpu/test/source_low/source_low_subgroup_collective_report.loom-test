@@ -22,6 +22,7 @@ kernel.def target(@target) @report_workgroup_reduce_scalar_publication() {
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=7 emitted_ops=35 rows=7
+COMPILE-REPORT: source_low_memory rows=2
 COMPILE-REPORT: target_legalization legal=0 rewritten=1 target_rewritten=0 reference_rewritten=1 deferred=0 invalid_ir=0 unsupported=0 unhandled=0 rows=1
 COMPILE-REPORT: source_low[0] function=report_workgroup_reduce_scalar_publication source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_workgroup_reduce_scalar_publication source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
@@ -30,6 +31,8 @@ COMPILE-REPORT: source_low[3] function=report_workgroup_reduce_scalar_publicatio
 COMPILE-REPORT: source_low[4] function=report_workgroup_reduce_scalar_publication source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
 COMPILE-REPORT: source_low[5] function=report_workgroup_reduce_scalar_publication source_op=kernel.workgroup.reduce selection=plan plan=4132 plan_key=amdgpu.workgroup_reduce.publication.redundant_subgroup descriptor=0 emitted_ops=31
 COMPILE-REPORT: source_low[6] function=report_workgroup_reduce_scalar_publication source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low_memory[0] function=report_workgroup_reduce_scalar_publication source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_workgroup_reduce_scalar_publication source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
 COMPILE-REPORT: target_legalization[0] function=report_workgroup_reduce_scalar_publication source_op=vector.store mode=final policy=prefer-native action=rewritten outcome=reference-fallback contract=unhandled legalizer=vector strategy=reference bundle=target config=target binding=65535 case=65535 rule_set=65535 rule=65535 diagnostic=65535 descriptor=18446744073709551615 source_rejections=0x00000000 source_rejection_detail=0 target_rejections=0x00000000 missing_features=0x00000000 missing_facts=0x00000000 created_ops=1 erased_ops=1
 
 // ====
@@ -62,6 +65,7 @@ kernel.def target(@target) @report_workgroup_reduce_scalar_leader_publication() 
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=9 emitted_ops=34 rows=9
+COMPILE-REPORT: source_low_memory rows=2
 COMPILE-REPORT: target_legalization legal=0 rewritten=1 target_rewritten=0 reference_rewritten=1 deferred=0 invalid_ir=0 unsupported=0 unhandled=0 rows=1
 COMPILE-REPORT: source_low[0] function=report_workgroup_reduce_scalar_leader_publication source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_workgroup_reduce_scalar_leader_publication source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
@@ -72,6 +76,8 @@ COMPILE-REPORT: source_low[5] function=report_workgroup_reduce_scalar_leader_pub
 COMPILE-REPORT: source_low[6] function=report_workgroup_reduce_scalar_leader_publication source_op=kernel.workgroup.reduce selection=plan plan=4132 plan_key=amdgpu.workgroup_reduce.publication.leader_workitem descriptor=0 emitted_ops=29
 COMPILE-REPORT: source_low[7] function=report_workgroup_reduce_scalar_leader_publication source_op=index.cmp selection=rule rule_set=4 rule=75 descriptor=4582905300084092641 emitted_ops=1
 COMPILE-REPORT: source_low[8] function=report_workgroup_reduce_scalar_leader_publication source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low_memory[0] function=report_workgroup_reduce_scalar_leader_publication source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_workgroup_reduce_scalar_leader_publication source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=none fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=0 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
 COMPILE-REPORT: target_legalization[0] function=report_workgroup_reduce_scalar_leader_publication source_op=vector.store mode=final policy=prefer-native action=rewritten outcome=reference-fallback contract=unhandled legalizer=vector strategy=reference bundle=target config=target binding=65535 case=65535 rule_set=65535 rule=65535 diagnostic=65535 descriptor=18446744073709551615 source_rejections=0x00000000 source_rejection_detail=0 target_rejections=0x00000000 missing_features=0x00000000 missing_facts=0x00000000 created_ops=1 erased_ops=1
 
 // ====
@@ -105,6 +111,7 @@ kernel.def target(@target) @report_workgroup_reduce_scalar_wave_leader_publicati
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=10 emitted_ops=35 rows=10
+COMPILE-REPORT: source_low_memory rows=2
 COMPILE-REPORT: target_legalization legal=0 rewritten=1 target_rewritten=0 reference_rewritten=1 deferred=0 invalid_ir=0 unsupported=0 unhandled=0 rows=1
 COMPILE-REPORT: source_low[0] function=report_workgroup_reduce_scalar_wave_leader_publication source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_workgroup_reduce_scalar_wave_leader_publication source_op=kernel.subgroup.lane.id selection=plan plan=4120 descriptor=0 emitted_ops=1
@@ -116,6 +123,8 @@ COMPILE-REPORT: source_low[6] function=report_workgroup_reduce_scalar_wave_leade
 COMPILE-REPORT: source_low[7] function=report_workgroup_reduce_scalar_wave_leader_publication source_op=kernel.workgroup.reduce selection=plan plan=4132 plan_key=amdgpu.workgroup_reduce.publication.redundant_subgroup_leader_lane descriptor=0 emitted_ops=29
 COMPILE-REPORT: source_low[8] function=report_workgroup_reduce_scalar_wave_leader_publication source_op=index.cmp selection=rule rule_set=4 rule=75 descriptor=4582905300084092641 emitted_ops=1
 COMPILE-REPORT: source_low[9] function=report_workgroup_reduce_scalar_wave_leader_publication source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low_memory[0] function=report_workgroup_reduce_scalar_wave_leader_publication source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_workgroup_reduce_scalar_wave_leader_publication source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
 COMPILE-REPORT: target_legalization[0] function=report_workgroup_reduce_scalar_wave_leader_publication source_op=vector.store mode=final policy=prefer-native action=rewritten outcome=reference-fallback contract=unhandled legalizer=vector strategy=reference bundle=target config=target binding=65535 case=65535 rule_set=65535 rule=65535 diagnostic=65535 descriptor=18446744073709551615 source_rejections=0x00000000 source_rejection_detail=0 target_rejections=0x00000000 missing_features=0x00000000 missing_facts=0x00000000 created_ops=1 erased_ops=1
 
 // ====
@@ -140,6 +149,7 @@ kernel.def target(@target) @report_workgroup_reduce_vector_publication() {
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=18 emitted_ops=111 rows=18
+COMPILE-REPORT: source_low_memory rows=5
 COMPILE-REPORT: target_legalization legal=0 rewritten=1 target_rewritten=0 reference_rewritten=1 deferred=0 invalid_ir=0 unsupported=0 unhandled=0 rows=1
 COMPILE-REPORT: source_low[0] function=report_workgroup_reduce_vector_publication source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_workgroup_reduce_vector_publication source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
@@ -159,6 +169,11 @@ COMPILE-REPORT: source_low[14] function=report_workgroup_reduce_vector_publicati
 COMPILE-REPORT: source_low[15] function=report_workgroup_reduce_vector_publication source_op=vector.extract selection=plan plan=3592 descriptor=0 emitted_ops=1
 COMPILE-REPORT: source_low[16] function=report_workgroup_reduce_vector_publication source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[17] function=report_workgroup_reduce_vector_publication source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low_memory[0] function=report_workgroup_reduce_vector_publication source_op=vector.load memory_space=global operation=load packet=amdgpu.global_load_b128_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=8410479038753834550 static_offset_bytes=0 element_bytes=4 vector_lanes=4 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_workgroup_reduce_vector_publication source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[2] function=report_workgroup_reduce_vector_publication source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=4 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[3] function=report_workgroup_reduce_vector_publication source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=8 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[4] function=report_workgroup_reduce_vector_publication source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=12 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=16 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
 COMPILE-REPORT: target_legalization[0] function=report_workgroup_reduce_vector_publication source_op=vector.store mode=final policy=prefer-native action=rewritten outcome=reference-fallback contract=unhandled legalizer=vector strategy=reference bundle=target config=target binding=65535 case=65535 rule_set=65535 rule=65535 diagnostic=65535 descriptor=18446744073709551615 source_rejections=0x00000000 source_rejection_detail=0 target_rejections=0x00000000 missing_features=0x00000000 missing_facts=0x00000000 created_ops=12 erased_ops=1
 
 // ====
@@ -183,6 +198,7 @@ kernel.def target(@target) @report_subgroup_reduce_addf_f32_wave32_all_lanes() {
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=7 emitted_ops=10 rows=7
+COMPILE-REPORT: source_low_memory rows=2
 COMPILE-REPORT: source_low[0] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[2] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
@@ -190,6 +206,8 @@ COMPILE-REPORT: source_low[3] function=report_subgroup_reduce_addf_f32_wave32_al
 COMPILE-REPORT: source_low[4] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
 COMPILE-REPORT: source_low[5] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=kernel.subgroup.reduce selection=plan plan=4124 plan_key=amdgpu.subgroup_reduce.strategy.dpp_row_permlanex16.all_lanes.row_pair descriptor=0 emitted_ops=6
 COMPILE-REPORT: source_low[6] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low_memory[0] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_subgroup_reduce_addf_f32_wave32_all_lanes source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
 
 // ====
 
@@ -220,6 +238,7 @@ kernel.def target(@target) @report_subgroup_reduce_addf_f32_wave64_leader_lane()
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=10 emitted_ops=15 rows=10
+COMPILE-REPORT: source_low_memory rows=2
 COMPILE-REPORT: source_low[0] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=kernel.subgroup.lane.id selection=plan plan=4120 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[2] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
@@ -230,6 +249,8 @@ COMPILE-REPORT: source_low[6] function=report_subgroup_reduce_addf_f32_wave64_le
 COMPILE-REPORT: source_low[7] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=kernel.subgroup.reduce selection=plan plan=4124 plan_key=amdgpu.subgroup_reduce.strategy.dpp_row_permlanex16.leader_lane.row_pair descriptor=0 emitted_ops=10
 COMPILE-REPORT: source_low[8] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=index.cmp selection=rule rule_set=4 rule=75 descriptor=4582905300084092641 emitted_ops=1
 COMPILE-REPORT: source_low[9] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low_memory[0] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=none fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=0 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
 
 // ====
 
@@ -273,6 +294,7 @@ kernel.def target(@target) @report_subgroup_reduce_addf_f32_wave64_scalar_workit
 // ----
 COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
 COMPILE-REPORT: source_low selected_ops=17 emitted_ops=21 rows=17
+COMPILE-REPORT: source_low_memory rows=4
 COMPILE-REPORT: source_low[0] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[1] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
 COMPILE-REPORT: source_low[2] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
@@ -290,3 +312,7 @@ COMPILE-REPORT: source_low[13] function=report_subgroup_reduce_addf_f32_wave64_s
 COMPILE-REPORT: source_low[14] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
 COMPILE-REPORT: source_low[15] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=scalar.addf selection=rule rule_set=0 rule=379 descriptor=5183489740832503697 emitted_ops=1
 COMPILE-REPORT: source_low[16] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low_memory[0] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=vaddr fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=4 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[1] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=none fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=0 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[2] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.load memory_space=global operation=load packet=amdgpu.global_load_b32_saddr address_form=global_saddr dynamic_term_kind=none fallback_reason=- descriptor=5060686897858824470 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=0 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
+COMPILE-REPORT: source_low_memory[3] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.store memory_space=global operation=store packet=amdgpu.global_store_b32_saddr address_form=global_saddr dynamic_term_kind=none fallback_reason=- descriptor=5981444429804920281 static_offset_bytes=0 element_bytes=4 vector_lanes=1 dynamic_stride_bytes=0 vector_lane_stride_bytes=4 bank_stride_words=0 bank_conflict_degree=0 bank_conflict_kind=-
