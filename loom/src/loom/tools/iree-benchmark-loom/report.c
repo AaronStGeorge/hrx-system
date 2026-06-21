@@ -35,6 +35,29 @@ static iree_string_view_t iree_benchmark_loom_selected_device_uri(
   return iree_string_view_empty();
 }
 
+iree_status_t iree_benchmark_loom_write_status_code_json(
+    iree_status_code_t code, iree_string_view_t message,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u32_field(
+      stream, &first_field, "code", (uint32_t)code));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      stream, &first_field, "name",
+      iree_make_cstring_view(iree_status_code_string(code))));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
+      stream, &first_field, "message", message));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+iree_status_t iree_benchmark_loom_write_status_field_json(
+    iree_status_code_t code, iree_string_view_t message,
+    loom_output_stream_t* stream, bool* first_field) {
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "status"));
+  return iree_benchmark_loom_write_status_code_json(code, message, stream);
+}
+
 iree_status_t iree_benchmark_loom_write_status_object_json(
     const iree_status_t status, loom_output_stream_t* stream) {
   const iree_status_code_t code = iree_status_code(status);
@@ -54,19 +77,8 @@ iree_status_t iree_benchmark_loom_write_status_object_json(
     required_length = sizeof(message) - 1;
   }
 
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_format(stream, "\"code\":%d", (int)code));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"status\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      stream, iree_make_cstring_view(iree_status_code_string(code))));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"message\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      stream, iree_make_string_view(message, required_length)));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
-  return iree_ok_status();
+  return iree_benchmark_loom_write_status_code_json(
+      code, iree_make_string_view(message, required_length), stream);
 }
 
 iree_status_t iree_benchmark_loom_write_run_id_field_json(
@@ -404,7 +416,7 @@ iree_status_t iree_benchmark_loom_write_hal_context_identity_fields_json(
   if (context->execution.runtime_initialized &&
       context->execution.runtime.device != NULL) {
     IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"status\":\"created\""));
+        loom_output_stream_write_cstring(stream, ",\"state\":\"created\""));
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(stream, ",\"device_id\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
@@ -415,7 +427,7 @@ iree_status_t iree_benchmark_loom_write_hal_context_identity_fields_json(
         iree_hal_device_spec(context->execution.runtime.device), stream));
   } else {
     IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"status\":\"planned\""));
+        loom_output_stream_write_cstring(stream, ",\"state\":\"planned\""));
   }
   return iree_ok_status();
 }
@@ -877,30 +889,21 @@ iree_status_t iree_benchmark_loom_write_hal_profile_summary_json(
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
   if (profile->has_error) {
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"error\":{"));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, "\"code\":%d", (int)profile->error_code));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"status\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        stream,
-        iree_make_cstring_view(iree_status_code_string(profile->error_code))));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"message\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        stream, iree_make_string_view(profile->error_message,
-                                      profile->error_message_length)));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
+    bool first_field = false;
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_status_field_json(
+        profile->error_code,
+        iree_make_string_view(profile->error_message,
+                              profile->error_message_length),
+        stream, &first_field));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
   return iree_ok_status();
 }
 
-static iree_string_view_t iree_benchmark_loom_benchmark_result_status(
+static iree_string_view_t iree_benchmark_loom_benchmark_result_state(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result) {
-  if (!iree_string_view_is_empty(benchmark_result->status)) {
-    return benchmark_result->status;
+  if (!iree_string_view_is_empty(benchmark_result->state)) {
+    return benchmark_result->state;
   }
   if (benchmark_result->executed) {
     return benchmark_result->passed ? IREE_SV("ok") : IREE_SV("failed");
@@ -1756,7 +1759,7 @@ static iree_status_t iree_benchmark_loom_append_compile_report_artifact_json(
         loom_json_write_escaped_string(&stream, provider->hal_executable_path));
   }
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"status\":"));
+      loom_output_stream_write_cstring(&stream, ",\"state\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
       &stream, provider->execution.compile_rejected ? "failed" : "ok"));
   if (provider->execution.compile_rejected) {
@@ -2119,10 +2122,9 @@ iree_status_t iree_benchmark_loom_write_benchmark_result_json(
       loom_json_write_escaped_string(stream, benchmark_plan->name));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"case\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, case_plan->name));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"status\":"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"state\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      stream, iree_benchmark_loom_benchmark_result_status(benchmark_result)));
+      stream, iree_benchmark_loom_benchmark_result_state(benchmark_result)));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_compilation_field_json(
       benchmark_result->sample_compilation, stream));
   if (benchmark_result->has_sample_ordinal) {
@@ -2207,7 +2209,7 @@ iree_status_t iree_benchmark_loom_append_compile_row(
       loom_output_stream_write_cstring(&stream, ",\"entry\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, entry_symbol));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"status\":"));
+      loom_output_stream_write_cstring(&stream, ",\"state\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
       &stream, provider->execution.compile_rejected ? "failed" : "ok"));
   if (provider->execution.compile_rejected) {

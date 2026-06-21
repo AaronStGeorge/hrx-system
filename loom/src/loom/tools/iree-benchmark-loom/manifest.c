@@ -65,15 +65,10 @@ static iree_status_t iree_benchmark_loom_write_file_stat_error_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   bool first_field = true;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_field, "status", IREE_SV("stat_failed")));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u32_field(
-      stream, &first_field, "code", (uint32_t)code));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_field, "status_string",
-      iree_make_cstring_view(iree_status_code_string(code))));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_field, "message",
-      iree_make_cstring_view(strerror(error_number))));
+      stream, &first_field, "state", IREE_SV("stat_failed")));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_status_field_json(
+      code, iree_make_cstring_view(strerror(error_number)), stream,
+      &first_field));
   return loom_output_stream_write_cstring(stream, "}");
 }
 
@@ -81,10 +76,10 @@ static iree_status_t iree_benchmark_loom_write_file_identity_json(
     iree_string_view_t path, iree_allocator_t allocator,
     loom_output_stream_t* stream) {
   if (iree_string_view_equal(path, IREE_SV("<stdin>"))) {
-    return loom_output_stream_write_cstring(stream, "{\"status\":\"stdin\"}");
+    return loom_output_stream_write_cstring(stream, "{\"state\":\"stdin\"}");
   }
   if (loom_tooling_file_path_is_stdio(path)) {
-    return loom_output_stream_write_cstring(stream, "{\"status\":\"stdio\"}");
+    return loom_output_stream_write_cstring(stream, "{\"state\":\"stdio\"}");
   }
 
   char* storage = NULL;
@@ -121,7 +116,7 @@ static iree_status_t iree_benchmark_loom_write_file_identity_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   bool first_field = true;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_field, "status",
+      stream, &first_field, "state",
       is_regular_file ? IREE_SV("ok") : IREE_SV("not_regular")));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u64_field(
       stream, &first_field, "byte_count", (uint64_t)file_stat.st_size));

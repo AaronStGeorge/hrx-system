@@ -21,7 +21,7 @@
           "\"row\":\"sample\"",
           "\"passed\":true",
           "\"row\":\"benchmark\"",
-          "\"status\":\"ok\"",
+          "\"state\":\"ok\"",
           "\"row\":\"summary\"",
           "\"failures\":{\"row_count\":0,\"failed_benchmark_count\":0}"
         ]

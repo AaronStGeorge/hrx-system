@@ -150,10 +150,10 @@ static iree_status_t iree_benchmark_loom_snapshot_write_benchmark_fields(
                                                      "case", case_plan->name);
 }
 
-static iree_string_view_t iree_benchmark_loom_snapshot_result_status(
+static iree_string_view_t iree_benchmark_loom_snapshot_result_state(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result) {
-  if (!iree_string_view_is_empty(benchmark_result->status)) {
-    return benchmark_result->status;
+  if (!iree_string_view_is_empty(benchmark_result->state)) {
+    return benchmark_result->state;
   }
   if (benchmark_result->executed) {
     return benchmark_result->passed ? IREE_SV("ok") : IREE_SV("failed");
@@ -348,8 +348,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_work_item(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
       &stream, &first_field, "work_item_index", event->work_item_index));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      &stream, &first_field, "status",
-      iree_benchmark_loom_snapshot_result_status(event->benchmark_result)));
+      &stream, &first_field, "state",
+      iree_benchmark_loom_snapshot_result_state(event->benchmark_result)));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
       &stream, &first_field, "sample_compilation",
       event->benchmark_result->sample_compilation));
@@ -382,8 +382,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_benchmark(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_benchmark_fields(
       event->benchmark_plan, event->case_plan, &stream, &first_field));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      &stream, &first_field, "status",
-      iree_benchmark_loom_snapshot_result_status(event->benchmark_result)));
+      &stream, &first_field, "state",
+      iree_benchmark_loom_snapshot_result_state(event->benchmark_result)));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
       &stream, &first_field, "sample_compilation",
       event->benchmark_result->sample_compilation));
@@ -460,7 +460,7 @@ static iree_status_t iree_benchmark_loom_snapshot_append_planned_work_item(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
       &stream, &first_field, "work_item_index", work_item->work_item_index));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      &stream, &first_field, "status", IREE_SV("planned")));
+      &stream, &first_field, "state", IREE_SV("planned")));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
       &stream, &first_field, "kind",
       iree_benchmark_loom_snapshot_work_item_kind_name(work_item->kind)));
@@ -505,7 +505,7 @@ static iree_status_t iree_benchmark_loom_snapshot_append_planned_benchmark(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_benchmark_fields(
       selection->benchmark_plan, selection->case_plan, &stream, &first_field));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      &stream, &first_field, "status", IREE_SV("planned")));
+      &stream, &first_field, "state", IREE_SV("planned")));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
       &stream, &first_field, "measure", selection->policy.measure));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
@@ -584,8 +584,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_repetition(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(&stream, "\"%c\"",
                                                        event->schedule_token));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      &stream, &first_field, "status",
-      iree_benchmark_loom_snapshot_result_status(event->benchmark_result)));
+      &stream, &first_field, "state",
+      iree_benchmark_loom_snapshot_result_state(event->benchmark_result)));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_evidence_fields_json(
       &selection->policy, event->benchmark_result,
       event->candidate->correctness_sample_count,

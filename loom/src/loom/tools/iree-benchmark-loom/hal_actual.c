@@ -112,7 +112,7 @@ void iree_benchmark_loom_benchmark_result_set_compile_rejection(
     const iree_benchmark_loom_hal_actual_provider_t* provider,
     iree_benchmark_loom_benchmark_result_t* out_result) {
   memset(out_result, 0, sizeof(*out_result));
-  out_result->status = IREE_SV("compile_failed");
+  out_result->state = IREE_SV("compile_failed");
   out_result->has_failure = true;
   out_result->failure_stage = provider->execution.compile_failure_stage;
   out_result->failure_kind = provider->execution.compile_failure_kind;
@@ -165,7 +165,7 @@ void iree_benchmark_loom_benchmark_result_set_sequence_compile_rejection(
     iree_string_view_t sample_compilation,
     iree_benchmark_loom_benchmark_result_t* out_result) {
   memset(out_result, 0, sizeof(*out_result));
-  out_result->status = IREE_SV("compile_failed");
+  out_result->state = IREE_SV("compile_failed");
   out_result->has_failure = true;
   out_result->failure_stage = provider->compile_failure_stage;
   out_result->failure_kind = provider->compile_failure_kind;

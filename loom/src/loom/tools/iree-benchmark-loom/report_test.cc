@@ -6,6 +6,7 @@
 
 #include "loom/tools/iree-benchmark-loom/report.h"
 
+#include <cstring>
 #include <fstream>
 #include <string>
 
@@ -13,6 +14,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "iree/testing/temp_file.h"
+#include "loom/tools/iree-benchmark-loom/manifest.h"
 
 namespace loom {
 namespace {
@@ -58,6 +60,90 @@ static bool JsonArrayContainsString(iree_string_view_t array,
     }
   }
   return false;
+}
+
+TEST(BenchmarkReportTest, WritesStatusFieldJson) {
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+
+  IREE_ASSERT_OK(loom_output_stream_write_cstring(&stream, "{"));
+  bool first_field = true;
+  IREE_ASSERT_OK(iree_benchmark_loom_write_status_field_json(
+      IREE_STATUS_UNAVAILABLE, IREE_SV("profile decode failed"), &stream,
+      &first_field));
+  IREE_ASSERT_OK(loom_output_stream_write_cstring(&stream, "}"));
+
+  iree_string_view_t root =
+      ParseJsonDocument(iree_string_builder_view(&builder));
+  iree_string_view_t status = LookupObject(root, IREE_SV("status"));
+  std::string expected_code =
+      std::to_string(static_cast<uint32_t>(IREE_STATUS_UNAVAILABLE));
+  EXPECT_TRUE(
+      iree_string_view_equal(LookupObject(status, IREE_SV("code")),
+                             iree_make_cstring_view(expected_code.c_str())));
+  ExpectObjectValueEquals(status, IREE_SV("name"), IREE_SV("UNAVAILABLE"));
+  ExpectObjectValueEquals(status, IREE_SV("message"),
+                          IREE_SV("profile decode failed"));
+
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST(BenchmarkReportTest, OmitsEmptyStatusCodeMessage) {
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+
+  IREE_ASSERT_OK(loom_output_stream_write_cstring(&stream, "{"));
+  bool first_field = true;
+  IREE_ASSERT_OK(iree_benchmark_loom_write_status_field_json(
+      IREE_STATUS_UNAVAILABLE, iree_string_view_empty(), &stream,
+      &first_field));
+  IREE_ASSERT_OK(loom_output_stream_write_cstring(&stream, "}"));
+
+  iree_string_view_t root =
+      ParseJsonDocument(iree_string_builder_view(&builder));
+  iree_string_view_t status = LookupObject(root, IREE_SV("status"));
+  ExpectObjectValueEquals(status, IREE_SV("name"), IREE_SV("UNAVAILABLE"));
+  EXPECT_TRUE(
+      iree_string_view_is_empty(TryLookupObject(status, IREE_SV("message"))));
+
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST(BenchmarkReportTest, WritesHalProfileErrorWithStatusCodeFields) {
+  loom_run_hal_profile_summary_t profile = {};
+  profile.requested = true;
+  profile.executed = true;
+  profile.has_error = true;
+  profile.error_code = IREE_STATUS_RESOURCE_EXHAUSTED;
+  const iree_string_view_t message = IREE_SV("profile collection failed");
+  profile.error_message_length = message.size;
+  memcpy(profile.error_message, message.data, message.size);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_ASSERT_OK(
+      iree_benchmark_loom_write_hal_profile_summary_json(&profile, &stream));
+
+  iree_string_view_t root =
+      ParseJsonDocument(iree_string_builder_view(&builder));
+  iree_string_view_t status = LookupObject(root, IREE_SV("status"));
+  std::string expected_code =
+      std::to_string(static_cast<uint32_t>(IREE_STATUS_RESOURCE_EXHAUSTED));
+  EXPECT_TRUE(
+      iree_string_view_equal(LookupObject(status, IREE_SV("code")),
+                             iree_make_cstring_view(expected_code.c_str())));
+  ExpectObjectValueEquals(status, IREE_SV("name"),
+                          IREE_SV("RESOURCE_EXHAUSTED"));
+  ExpectObjectValueEquals(status, IREE_SV("message"),
+                          IREE_SV("profile collection failed"));
+
+  iree_string_builder_deinitialize(&builder);
 }
 
 TEST(BenchmarkReportTest, WritesCanonicalCompileReportTree) {
@@ -461,6 +547,61 @@ TEST(BenchmarkReportTest, WritesArtifactManifestSidecarPath) {
 
   iree_allocator_free(iree_allocator_system(),
                       provider.artifact_manifest_path_storage);
+  iree_benchmark_loom_artifact_bundle_deinitialize(&bundle);
+}
+
+TEST(BenchmarkReportTest, WritesManifestFileIdentityErrors) {
+  iree::testing::TempFilePath bundle_dir("loom_benchmark_manifest_bundle");
+  iree_benchmark_loom_artifact_bundle_options_t bundle_options = {};
+  bundle_options.dir = bundle_dir.path_view();
+  bundle_options.policy = IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
+  bundle_options.output_format = IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_SNAPSHOT;
+  iree_benchmark_loom_artifact_bundle_t bundle = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_artifact_bundle_initialize(
+      &bundle_options, iree_allocator_system(), &bundle));
+
+  std::string source_path = bundle_dir.path() + "/missing-source.loom";
+  iree_benchmark_loom_run_identity_t run = {};
+  run.run_id = IREE_SV("run");
+  run.source = iree_make_string_view(source_path.data(), source_path.size());
+  run.results_path = bundle.results_path;
+  run.file_output_dir = bundle.file_output_dir;
+  run.profile_artifacts_dir = bundle.profile_artifacts_dir;
+  run.artifact_bundle_dir = bundle.dir;
+  run.artifact_bundle_policy = IREE_SV("debug");
+  iree_benchmark_loom_hal_context_t hal_context = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_write_artifact_bundle_manifest(
+      &bundle, &run, &hal_context, IREE_SV("source text"),
+      IREE_SV("[\"iree-benchmark-loom\"]"), /*dry_run=*/false,
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE, iree_allocator_system()));
+
+  std::string manifest_path(bundle.manifest_path.data,
+                            bundle.manifest_path.size);
+  std::ifstream manifest_file(manifest_path);
+  ASSERT_TRUE(manifest_file.is_open());
+  std::string manifest_contents((std::istreambuf_iterator<char>(manifest_file)),
+                                std::istreambuf_iterator<char>());
+
+  iree_string_view_t root = ParseJsonDocument(iree_make_string_view(
+      manifest_contents.data(), manifest_contents.size()));
+  iree_string_view_t source_identity =
+      LookupObject(root, IREE_SV("source_identity"));
+  iree_string_view_t source_file =
+      LookupObject(source_identity, IREE_SV("file"));
+  iree_string_view_t identity = LookupObject(source_file, IREE_SV("identity"));
+  ExpectObjectValueEquals(identity, IREE_SV("state"), IREE_SV("stat_failed"));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(identity, IREE_SV("status_string"))));
+  EXPECT_TRUE(
+      iree_string_view_is_empty(TryLookupObject(identity, IREE_SV("error"))));
+  iree_string_view_t status = LookupObject(identity, IREE_SV("status"));
+  EXPECT_FALSE(
+      iree_string_view_is_empty(LookupObject(status, IREE_SV("code"))));
+  EXPECT_FALSE(
+      iree_string_view_is_empty(LookupObject(status, IREE_SV("name"))));
+  EXPECT_FALSE(
+      iree_string_view_is_empty(LookupObject(status, IREE_SV("message"))));
+
   iree_benchmark_loom_artifact_bundle_deinitialize(&bundle);
 }
 

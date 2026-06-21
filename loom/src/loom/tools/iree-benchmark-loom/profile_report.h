@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-// Writes the profile counter request object for plan and status rows.
+// Writes the profile counter request object for plan and state rows.
 iree_status_t iree_benchmark_loom_write_profile_counter_request_json(
     const iree_benchmark_loom_benchmark_policy_t* policy,
     loom_output_stream_t* stream);

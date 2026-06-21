@@ -235,7 +235,7 @@ iree_status_t iree_benchmark_loom_prepare_dispatch_work_item(
       options, compile_item, compile_context));
   if (compile_context->skipped) {
     iree_benchmark_loom_benchmark_result_t benchmark_result = {
-        .status = IREE_SV("skipped"),
+        .state = IREE_SV("skipped"),
         .sample_compilation = work_item->sample_compilation,
     };
     return iree_benchmark_loom_emit_work_item_result_aliases(
