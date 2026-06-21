@@ -7,6 +7,7 @@
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
 
 #include "iree/base/internal/arena.h"
+#include "iree/hal/api.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/text_asm.h"
@@ -22,11 +23,146 @@
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/runtime_globals.h"
 #include "loom/testing/module_ptr.h"
+#include "loom/tooling/execution/hal/runtime.h"
 
 namespace loom {
 namespace {
 
 using ::loom::testing::ModulePtr;
+
+typedef struct fake_hal_device_t {
+  // HAL resource header used by device vtable dispatch.
+  iree_hal_resource_t resource;
+  // Immutable device facts borrowed from the test.
+  const iree_hal_device_spec_t* device_spec;
+} fake_hal_device_t;
+
+typedef struct fake_executable_cache_t {
+  // HAL resource header used by executable-cache vtable dispatch.
+  iree_hal_resource_t resource;
+  // Executable formats accepted by this fake cache.
+  const iree_string_view_t* accepted_formats;
+  // Number of entries in |accepted_formats|.
+  iree_host_size_t accepted_format_count;
+} fake_executable_cache_t;
+
+static const iree_hal_device_spec_t* fake_hal_device_spec(
+    iree_hal_device_t* base_device) {
+  fake_hal_device_t* device = (fake_hal_device_t*)base_device;
+  return device->device_spec;
+}
+
+static bool fake_executable_cache_can_prepare_format(
+    iree_hal_executable_cache_t* base_executable_cache,
+    iree_hal_executable_caching_mode_t caching_mode,
+    iree_string_view_t executable_format) {
+  (void)caching_mode;
+  fake_executable_cache_t* executable_cache =
+      (fake_executable_cache_t*)base_executable_cache;
+  for (iree_host_size_t i = 0; i < executable_cache->accepted_format_count;
+       ++i) {
+    if (iree_string_view_equal(executable_cache->accepted_formats[i],
+                               executable_format)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_hal_device_vtable_t MakeFakeHalDeviceVtable() {
+  iree_hal_device_vtable_t vtable = {};
+  vtable.device_spec = fake_hal_device_spec;
+  return vtable;
+}
+
+static const iree_hal_device_vtable_t kFakeHalDeviceVtable =
+    MakeFakeHalDeviceVtable();
+
+static iree_hal_executable_cache_vtable_t MakeFakeExecutableCacheVtable() {
+  iree_hal_executable_cache_vtable_t vtable = {};
+  vtable.can_prepare_format = fake_executable_cache_can_prepare_format;
+  return vtable;
+}
+
+static const iree_hal_executable_cache_vtable_t kFakeExecutableCacheVtable =
+    MakeFakeExecutableCacheVtable();
+
+static fake_hal_device_t FakeDevice(const iree_hal_device_spec_t* device_spec) {
+  fake_hal_device_t device = {};
+  device.device_spec = device_spec;
+  iree_hal_resource_initialize(&kFakeHalDeviceVtable, &device.resource);
+  return device;
+}
+
+static fake_executable_cache_t FakeExecutableCache(
+    const iree_string_view_t* accepted_formats,
+    iree_host_size_t accepted_format_count) {
+  fake_executable_cache_t executable_cache = {};
+  executable_cache.accepted_formats = accepted_formats;
+  executable_cache.accepted_format_count = accepted_format_count;
+  iree_hal_resource_initialize(&kFakeExecutableCacheVtable,
+                               &executable_cache.resource);
+  return executable_cache;
+}
+
+static iree_status_t CreateAmdgpuExecutableDeviceSpec(
+    iree_hal_device_spec_t** out_device_spec) {
+  *out_device_spec = nullptr;
+
+  const iree_hal_executable_target_t executable_targets[] = {
+      {
+          /*.family=*/IREE_SV("amdgpu"),
+          /*.architecture=*/IREE_SV("gfxip"),
+          /*.processor=*/IREE_SV("gfx11-generic"),
+          /*.features=*/iree_string_view_empty(),
+          /*.artifact_format=*/IREE_SV("gfx11-generic"),
+          /*.runtime_abi=*/IREE_SV("hsa"),
+          /*.loader_namespace=*/IREE_SV("amdgpu"),
+          /*.loader_target=*/IREE_SV("gfx11-generic"),
+          /*.metadata_schema=*/IREE_SV("amdgpu.hsaco.metadata"),
+          /*.kind=*/IREE_HAL_EXECUTABLE_TARGET_KIND_GENERIC,
+          /*.priority=*/50,
+          /*.physical_device_affinity=*/1,
+          /*.flags=*/IREE_HAL_EXECUTABLE_TARGET_FLAG_NONE,
+      },
+      {
+          /*.family=*/IREE_SV("amdgpu"),
+          /*.architecture=*/IREE_SV("gfxip"),
+          /*.processor=*/IREE_SV("gfx1100"),
+          /*.features=*/iree_string_view_empty(),
+          /*.artifact_format=*/IREE_SV("gfx1100"),
+          /*.runtime_abi=*/IREE_SV("hsa"),
+          /*.loader_namespace=*/IREE_SV("amdgpu"),
+          /*.loader_target=*/IREE_SV("gfx1100"),
+          /*.metadata_schema=*/IREE_SV("amdgpu.hsaco.metadata"),
+          /*.kind=*/IREE_HAL_EXECUTABLE_TARGET_KIND_EXACT,
+          /*.priority=*/100,
+          /*.physical_device_affinity=*/1,
+          /*.flags=*/IREE_HAL_EXECUTABLE_TARGET_FLAG_NONE,
+      },
+  };
+  const iree_hal_device_executable_spec_t executables = {
+      /*.format_count=*/0,
+      /*.formats=*/nullptr,
+      /*.target_count=*/IREE_ARRAYSIZE(executable_targets),
+      /*.targets=*/executable_targets,
+      /*.flags=*/IREE_HAL_DEVICE_EXECUTABLE_SPEC_FLAG_NONE,
+  };
+  const iree_hal_device_spec_params_t params = {
+      /*.identity=*/nullptr,
+      /*.memory=*/nullptr,
+      /*.virtual_memory=*/nullptr,
+      /*.queues=*/nullptr,
+      /*.dispatch=*/nullptr,
+      /*.timing=*/nullptr,
+      /*.executables=*/&executables,
+      /*.sanitizer=*/nullptr,
+      /*.facet_count=*/0,
+      /*.facets=*/nullptr,
+  };
+  return iree_hal_device_spec_create(&params, iree_allocator_system(),
+                                     out_device_spec);
+}
 
 iree_status_t InitializeAmdgpuContext(loom_context_t* context) {
   loom_context_initialize(iree_allocator_system(), context);
@@ -140,6 +276,73 @@ TEST_F(AmdgpuHalArtifactProviderTest, SelectTargetKeyBuildsOfflineTarget) {
   const loom_amdgpu_processor_info_t* processor =
       static_cast<const loom_amdgpu_processor_info_t*>(target.data);
   EXPECT_TRUE(iree_string_view_equal(processor->name, IREE_SV("gfx1100")));
+}
+
+TEST_F(AmdgpuHalArtifactProviderTest,
+       SelectDeviceTargetPrefersExactDeviceTarget) {
+  iree_hal_device_spec_t* device_spec = nullptr;
+  IREE_ASSERT_OK(CreateAmdgpuExecutableDeviceSpec(&device_spec));
+
+  fake_hal_device_t device = FakeDevice(device_spec);
+  const iree_string_view_t accepted_formats[] = {
+      IREE_SV("amdgcn-amd-amdhsa--gfx11-generic"),
+      IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
+  };
+  fake_executable_cache_t executable_cache =
+      FakeExecutableCache(accepted_formats, IREE_ARRAYSIZE(accepted_formats));
+  const loom_run_hal_runtime_t runtime = {
+      /*.device=*/(iree_hal_device_t*)&device,
+      /*.device_group=*/nullptr,
+      /*.executable_cache=*/(iree_hal_executable_cache_t*)&executable_cache,
+  };
+
+  loom_run_hal_device_target_t target = {};
+  IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.select_device_target(
+      &loom_amdgpu_hal_artifact_provider, &runtime, iree_allocator_system(),
+      &target));
+
+  ASSERT_NE(target.data, nullptr);
+  EXPECT_NE(target.target_bundle, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(target.target_key, IREE_SV("gfx1100")));
+  const loom_amdgpu_processor_info_t* processor =
+      static_cast<const loom_amdgpu_processor_info_t*>(target.data);
+  EXPECT_TRUE(iree_string_view_equal(processor->name, IREE_SV("gfx1100")));
+
+  iree_hal_device_spec_release(device_spec);
+}
+
+TEST_F(AmdgpuHalArtifactProviderTest,
+       SelectDeviceTargetFallsBackToGenericWhenExactIsNotLoadable) {
+  iree_hal_device_spec_t* device_spec = nullptr;
+  IREE_ASSERT_OK(CreateAmdgpuExecutableDeviceSpec(&device_spec));
+
+  fake_hal_device_t device = FakeDevice(device_spec);
+  const iree_string_view_t accepted_formats[] = {
+      IREE_SV("amdgcn-amd-amdhsa--gfx11-generic"),
+  };
+  fake_executable_cache_t executable_cache =
+      FakeExecutableCache(accepted_formats, IREE_ARRAYSIZE(accepted_formats));
+  const loom_run_hal_runtime_t runtime = {
+      /*.device=*/(iree_hal_device_t*)&device,
+      /*.device_group=*/nullptr,
+      /*.executable_cache=*/(iree_hal_executable_cache_t*)&executable_cache,
+  };
+
+  loom_run_hal_device_target_t target = {};
+  IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.select_device_target(
+      &loom_amdgpu_hal_artifact_provider, &runtime, iree_allocator_system(),
+      &target));
+
+  ASSERT_NE(target.data, nullptr);
+  EXPECT_NE(target.target_bundle, nullptr);
+  EXPECT_TRUE(
+      iree_string_view_equal(target.target_key, IREE_SV("gfx11-generic")));
+  const loom_amdgpu_processor_info_t* processor =
+      static_cast<const loom_amdgpu_processor_info_t*>(target.data);
+  EXPECT_TRUE(
+      iree_string_view_equal(processor->name, IREE_SV("gfx11-generic")));
+
+  iree_hal_device_spec_release(device_spec);
 }
 
 TEST_F(AmdgpuHalArtifactProviderTest, RecordsDetailedReportRows) {

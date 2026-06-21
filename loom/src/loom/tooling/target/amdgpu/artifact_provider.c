@@ -6,6 +6,8 @@
 
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
 
+#include <inttypes.h>
+
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/runtime_requirements.h"
 #include "loom/target/arch/amdgpu/target_id/target_id.h"
@@ -27,6 +29,99 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_format_target_id(
                                              iree_string_view_empty(), builder);
 }
 
+static iree_status_t loom_amdgpu_hal_artifact_provider_try_select_processor(
+    const loom_amdgpu_processor_info_t* processor,
+    const loom_run_hal_runtime_t* runtime, iree_string_builder_t* builder,
+    bool* out_selected, loom_run_hal_device_target_t* out_target) {
+  IREE_ASSERT_ARGUMENT(runtime);
+  IREE_ASSERT_ARGUMENT(builder);
+  IREE_ASSERT_ARGUMENT(out_selected);
+  IREE_ASSERT_ARGUMENT(out_target);
+  *out_selected = false;
+  if (processor == NULL) {
+    return iree_ok_status();
+  }
+
+  bool emit_supported = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_processor_supports_hsaco(
+      processor, &emit_supported));
+  if (!emit_supported) {
+    return iree_ok_status();
+  }
+
+  const loom_target_bundle_t* target_bundle =
+      loom_amdgpu_target_bundle_for_descriptor_set(
+          processor->descriptor_set.ordinal);
+  if (target_bundle == NULL) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hal_artifact_provider_format_target_id(processor, builder));
+  if (!iree_hal_executable_cache_can_prepare_format(
+          runtime->executable_cache,
+          IREE_HAL_EXECUTABLE_CACHING_MODE_ALLOW_OPTIMIZATION,
+          iree_string_builder_view(builder))) {
+    return iree_ok_status();
+  }
+
+  *out_target = (loom_run_hal_device_target_t){
+      .data = processor,
+      .target_bundle = target_bundle,
+      .target_key = processor->name,
+  };
+  *out_selected = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_artifact_provider_try_select_device_target(
+    const loom_run_hal_runtime_t* runtime,
+    iree_hal_executable_target_selection_policy_t policy,
+    iree_string_builder_t* builder, bool* out_selected,
+    loom_run_hal_device_target_t* out_target) {
+  IREE_ASSERT_ARGUMENT(runtime);
+  IREE_ASSERT_ARGUMENT(builder);
+  IREE_ASSERT_ARGUMENT(out_selected);
+  IREE_ASSERT_ARGUMENT(out_target);
+  *out_selected = false;
+
+  const iree_hal_device_spec_t* device_spec =
+      iree_hal_device_spec(runtime->device);
+  if (device_spec == NULL) {
+    return iree_ok_status();
+  }
+
+  const iree_hal_executable_target_t* target = NULL;
+  const iree_hal_executable_target_selection_t selection = {
+      .policy = policy,
+      .family = IREE_SV("amdgpu"),
+      .architecture = IREE_SV("gfxip"),
+      .runtime_abi = IREE_SV("hsa"),
+      .loader_namespace = IREE_SV("amdgpu"),
+      .metadata_schema = IREE_SV("amdgpu.hsaco.metadata"),
+  };
+  const iree_hal_executable_target_selection_result_t result =
+      iree_hal_device_spec_select_executable_target(device_spec, &selection,
+                                                    &target);
+  switch (result) {
+    case IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_SELECTED:
+      return loom_amdgpu_hal_artifact_provider_try_select_processor(
+          loom_amdgpu_target_info_find_processor(target->processor), runtime,
+          builder, out_selected, out_target);
+    case IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_NO_MATCH:
+      return iree_ok_status();
+    case IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_AMBIGUOUS:
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU HAL device spec reports ambiguous executable targets");
+    default:
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "AMDGPU HAL device spec target selection "
+                              "returned invalid result %" PRIu32,
+                              result);
+  }
+}
+
 static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
     const loom_run_hal_artifact_provider_t* provider,
     const loom_run_hal_runtime_t* runtime, iree_allocator_t allocator,
@@ -41,41 +136,14 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
   iree_string_builder_initialize(allocator, &target_id_builder);
 
   iree_status_t status = iree_ok_status();
-  const iree_host_size_t processor_count =
-      loom_amdgpu_target_info_processor_count();
-  for (iree_host_size_t i = 0;
-       i < processor_count && out_target->data == NULL &&
-       iree_status_is_ok(status);
-       ++i) {
-    const loom_amdgpu_processor_info_t* processor =
-        loom_amdgpu_target_info_processor_at(i);
-    bool emit_supported = false;
-    status = loom_amdgpu_target_info_processor_supports_hsaco(processor,
-                                                              &emit_supported);
-    if (!iree_status_is_ok(status) || !emit_supported) {
-      continue;
-    }
-    const loom_target_bundle_t* target_bundle =
-        loom_amdgpu_target_bundle_for_descriptor_set(
-            processor->descriptor_set.ordinal);
-    if (target_bundle == NULL) {
-      continue;
-    }
-    status = loom_amdgpu_hal_artifact_provider_format_target_id(
-        processor, &target_id_builder);
-    if (!iree_status_is_ok(status)) {
-      break;
-    }
-    if (iree_hal_executable_cache_can_prepare_format(
-            runtime->executable_cache,
-            IREE_HAL_EXECUTABLE_CACHING_MODE_ALLOW_OPTIMIZATION,
-            iree_string_builder_view(&target_id_builder))) {
-      *out_target = (loom_run_hal_device_target_t){
-          .data = processor,
-          .target_bundle = target_bundle,
-          .target_key = processor->name,
-      };
-    }
+  bool selected = false;
+  status = loom_amdgpu_hal_artifact_provider_try_select_device_target(
+      runtime, IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_EXACT_DEVICE,
+      &target_id_builder, &selected, out_target);
+  if (iree_status_is_ok(status) && !selected) {
+    status = loom_amdgpu_hal_artifact_provider_try_select_device_target(
+        runtime, IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_COMPATIBLE_GENERIC,
+        &target_id_builder, &selected, out_target);
   }
 
   iree_string_builder_deinitialize(&target_id_builder);

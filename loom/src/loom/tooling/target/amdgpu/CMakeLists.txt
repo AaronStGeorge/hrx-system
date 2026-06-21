@@ -19,6 +19,7 @@ loom_cc_library(
     "artifact_provider.c"
   DEPS
     iree::base
+    iree::hal
     loom::ir
     loom::ops::op_defs
     loom::target::arch::amdgpu::ops
@@ -64,6 +65,7 @@ loom_cc_test(
     ::artifact_provider
     iree::base
     iree::base::internal::arena
+    iree::hal
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::text_asm
@@ -78,6 +80,7 @@ loom_cc_test(
     loom::target::compile_report
     loom::target::emit::native::amdgpu::runtime_globals
     loom::testing::module_ptr
+    loom::tooling::execution::hal::runtime
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
