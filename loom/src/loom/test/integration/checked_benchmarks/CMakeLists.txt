@@ -297,6 +297,22 @@ iree_native_test(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
+    "fragment_result_f16_lds_roundtrip_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/fragment_result_f16_lds_roundtrip.loom}}"
+    "--benchmark=@fragment_result_f16_lds_roundtrip_smoke"
+    "--dry-run"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 iree_native_test(
   NAME
@@ -746,6 +762,32 @@ iree_native_test(
   ARGS
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/fragment_result_dynamic_strided_f16acc_f32_store.loom}}"
     "--benchmark=@fragment_result_dynamic_strided_f16acc_f32_store_smoke"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "fragment_result_f16_lds_roundtrip_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/fragment_result_f16_lds_roundtrip.loom}}"
+    "--benchmark=@fragment_result_f16_lds_roundtrip_smoke"
     "--device=amdgpu"
     "--measure=dispatch_complete"
     "--iterations=1"

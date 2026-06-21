@@ -185,6 +185,19 @@ _CHECKED_BENCHMARK_CASES = [
             "amdgpu",
         ],
     },
+    {
+        "name": "fragment_result_f16_lds_roundtrip",
+        "rows": [
+            {
+                "benchmark": "@fragment_result_f16_lds_roundtrip_smoke",
+                "target_name": "fragment_result_f16_lds_roundtrip",
+            },
+        ],
+        "source": "fragment_result_f16_lds_roundtrip.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
 ]
 
 exports_files([_case["source"] for _case in _CHECKED_BENCHMARK_CASES])
