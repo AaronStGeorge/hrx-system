@@ -52,6 +52,58 @@
       ]
     },
     {
+      "name": "compiles configured AMDGPU HAL root without target attr",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/targetless_configured_amdgpu.loom",
+            "text": "config.decl @smoke.workgroups_x : %value: index where [range(%value, 1, 16)]\nconfig.decl @smoke.workgroup_size_x : %value: index where [range(%value, 1, 256)]\n\nkernel.def export(\"targetless_configured_store_i32\") @targetless_configured_store_i32() {\n  %workgroups_x = config.get @smoke.workgroups_x : index\n  %workgroup_size_x = config.get @smoke.workgroup_size_x : index\n  %unit = index.constant 1 : index\n  kernel.launch.config workgroups(%workgroups_x, %unit, %unit) workgroup_size(%workgroup_size_x, %unit, %unit) : index\n} launch(%output: buffer) {\n  %zero_offset = index.constant 0 : offset\n  %zero_index = index.constant 0 : index\n  %value = scalar.constant 7 : i32\n  %global = buffer.assume.memory_space<global> %output : buffer\n  %view = buffer.view %global[%zero_offset] : buffer -> view<1xi32, #dense>\n  view.store %value, %view[%zero_index] : i32, view<1xi32, #dense>\n  kernel.return\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/targetless_configured_amdgpu.loom",
+              "--backend=amdgpu-hal",
+              "--target=gfx11-generic",
+              "--config=smoke.workgroups_x=2",
+              "--config=smoke.workgroup_size_x=64",
+              "--output={tmp}/targetless_configured_amdgpu.vmfb",
+              "--emit-target-artifact={tmp}/targetless_configured_amdgpu.hsaco",
+              "--artifact-manifest=summary",
+              "--compile-report=summary"
+            ]
+          },
+          "stderr": {
+            "contains": {
+              "unordered": [
+                "\"target_key\":\"gfx11-generic\"",
+                "\"executable_format\":\"amdgcn-amd-amdhsa--gfx11-generic\"",
+                "\"status\":\"OK\""
+              ]
+            }
+          },
+          "files": [
+            {
+              "path": "{tmp}/targetless_configured_amdgpu.vmfb",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/targetless_configured_amdgpu.hsaco",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/targetless_configured_amdgpu.hsaco.manifest.json",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "reports multi-entry AMDGPU HAL artifacts by emitted function",
       "steps": [
         {
