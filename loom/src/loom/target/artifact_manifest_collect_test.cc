@@ -207,7 +207,7 @@ func.def target(@test_target) abi(object_function) export("forward") @forward() 
 }
 
 TEST_F(ArtifactManifestCollectTest,
-       CollectsEffectiveSelectionWithAuthoredSubgroupSize) {
+       CollectsAuthoredTargetWithEffectiveSelectionFacts) {
   loom_target_snapshot_t selected_snapshot = {};
   selected_snapshot.name = IREE_SV("runtime-wave32");
   selected_snapshot.codegen_format = LOOM_TARGET_CODEGEN_FORMAT_VM;
@@ -254,10 +254,10 @@ func.def target(@authored_wave64) abi(object_function) export("run") @entry() {
                       "\"schema_version\":1,"
                       "\"mode\":\"summary\","
                       "\"artifact\":{\"format\":\"elf\"},"
-                      "\"targets\":[{\"name\":\"runtime_wave32\"}],"
+                      "\"targets\":[{\"name\":\"authored_wave64\"}],"
                       "\"functions\":[{\"name\":\"run\","
                       "\"source\":\"entry\","
-                      "\"targets\":[\"runtime_wave32\"],"
+                      "\"targets\":[\"authored_wave64\"],"
                       "\"interface\":{\"parameter_count\":0},"
                       "\"execution\":{\"subgroup_size\":64}}]}")))
       << std::string(output.data, output.size);

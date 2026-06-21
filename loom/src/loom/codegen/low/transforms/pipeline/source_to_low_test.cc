@@ -306,9 +306,19 @@ TEST_F(LowLowerPassTest,
       FindSymbolRef(module.get(), IREE_SV("test_target"));
   EXPECT_EQ(selections.values[0].target_ref.module_id, target_ref.module_id);
   EXPECT_EQ(selections.values[0].target_ref.symbol_id, target_ref.symbol_id);
+  EXPECT_TRUE(iree_string_view_equal(selections.values[0].target_bundle->name,
+                                     IREE_SV("test_target")));
   EXPECT_TRUE(
       iree_string_view_equal(selections.values[0].target_bundle->snapshot->name,
-                             IREE_SV("test-quirky")));
+                             IREE_SV("test_target")));
+  EXPECT_EQ(selections.values[0].target_bundle->snapshot->index_bitwidth, 32u);
+  EXPECT_EQ(selections.values[0].target_bundle->snapshot->subgroup_size, 7u);
+  EXPECT_TRUE(
+      iree_string_view_equal(selections.values[0].target_bundle->config->name,
+                             IREE_SV("test_target")));
+  EXPECT_TRUE(iree_string_view_equal(
+      selections.values[0].target_bundle->config->contract_set_key,
+      IREE_SV("test.low.core")));
   EXPECT_EQ(selections.values[0].target_data, &target_payload);
   iree_arena_deinitialize(&arena);
 }

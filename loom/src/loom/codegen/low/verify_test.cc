@@ -146,7 +146,7 @@ low.func.def target(@target) @uses_workgroup_storage() {
   ASSERT_EQ(emission.params.size(), 4u);
   ASSERT_EQ(emission.string_params.size(), 2u);
   EXPECT_EQ(emission.string_params[0], "uses_workgroup_storage");
-  EXPECT_EQ(emission.string_params[1], "test-low");
+  EXPECT_EQ(emission.string_params[1], "target");
   ASSERT_EQ(emission.u64_params.size(), 2u);
   EXPECT_EQ(emission.u64_params[0], 80u);
   EXPECT_EQ(emission.u64_params[1], 64u);

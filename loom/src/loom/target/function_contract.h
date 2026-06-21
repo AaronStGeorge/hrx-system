@@ -39,9 +39,10 @@ bool loom_target_function_contract_bundles_compatible(
     const loom_target_bundle_t* module_bundle,
     const loom_target_bundle_t* selected_bundle);
 
-// Refines |bundle_storage|'s target snapshot and config with a compatible
-// runtime-selected bundle while preserving the already resolved function-local
-// export plan and authored fixed execution facts.
+// Refines |bundle_storage|'s target snapshot and feature bits with a compatible
+// runtime-selected bundle while preserving authored target identity, target
+// contract selection, the already resolved function-local export plan, and
+// authored fixed execution facts.
 //
 // Callers must first validate compatibility with
 // loom_target_function_contract_bundles_compatible. This helper only performs

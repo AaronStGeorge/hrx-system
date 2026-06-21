@@ -230,3 +230,63 @@ COMPILE-REPORT: source_low[6] function=report_subgroup_reduce_addf_f32_wave64_le
 COMPILE-REPORT: source_low[7] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=kernel.subgroup.reduce selection=plan plan=4124 plan_key=amdgpu.subgroup_reduce.strategy.dpp_row_permlanex16.leader_lane.row_pair descriptor=0 emitted_ops=10
 COMPILE-REPORT: source_low[8] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=index.cmp selection=rule rule_set=4 rule=75 descriptor=4582905300084092641 emitted_ops=1
 COMPILE-REPORT: source_low[9] function=report_subgroup_reduce_addf_f32_wave64_leader_lane source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2
+
+// ====
+
+amdgpu.target<gfx1100> @target {subgroup_size = 64}
+
+kernel.def target(@target) @report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested() {
+  %one = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%workgroup_size, %one, %one) : index
+} launch(%input: buffer, %output: buffer, %bias: buffer, %flags: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : index
+  %start = index.constant 0 : offset
+  %zero_i32 = scalar.constant 0 : i32
+  %input_view = buffer.view %input[%start] : buffer -> view<64xf32, #dense>
+  %output_view = buffer.view %output[%start] : buffer -> view<1xf32, #dense>
+  %bias_view = buffer.view %bias[%start] : buffer -> view<1xf32, #dense>
+  %flags_view = buffer.view %flags[%start] : buffer -> view<1xi32, #dense>
+  %value = view.load %input_view[%tid] : view<64xf32, #dense> -> f32
+  %sum = kernel.subgroup.reduce<addf> %value : f32
+  %tid_i32 = index.cast %tid : index to i32
+  %is_leader = scalar.cmpi eq, %tid_i32, %zero_i32 : i32
+  cfg.cond_br %is_leader, ^then, ^done
+^then:
+  %flag = view.load %flags_view[%zero] : view<1xi32, #dense> -> i32
+  %has_bias = scalar.cmpi ne, %flag, %zero_i32 : i32
+  cfg.cond_br %has_bias, ^bias, ^no_bias
+^bias:
+  %bias_value = view.load %bias_view[%zero] : view<1xf32, #dense> -> f32
+  %biased = scalar.addf %sum, %bias_value : f32
+  cfg.br ^join(%biased: f32)
+^no_bias:
+  cfg.br ^join(%sum: f32)
+^join(%out: f32):
+  view.store %out, %output_view[%zero] : f32, view<1xf32, #dense>
+  cfg.br ^done
+^done:
+  kernel.return
+}
+
+// ----
+COMPILE-REPORT: summary artifact=none status=OK function=- backend=- bundle=- export=- export_symbol=- config=- lowered=-
+COMPILE-REPORT: source_low selected_ops=17 emitted_ops=21 rows=17
+COMPILE-REPORT: source_low[0] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=kernel.workitem.id selection=plan plan=4112 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[1] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[2] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=index.constant selection=plan plan=3840 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[3] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=scalar.constant selection=plan plan=597 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[4] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[5] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[6] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[7] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=buffer.view selection=rule rule_set=1 rule=0 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[8] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low[9] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=kernel.subgroup.reduce selection=plan plan=4124 plan_key=amdgpu.subgroup_reduce.strategy.dpp_row_permlanex16.leader_lane.row_pair descriptor=0 emitted_ops=10
+COMPILE-REPORT: source_low[10] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=index.cast selection=plan plan=3841 descriptor=0 emitted_ops=0
+COMPILE-REPORT: source_low[11] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=scalar.cmpi selection=rule rule_set=4 rule=25 descriptor=4582905300084092641 emitted_ops=1
+COMPILE-REPORT: source_low[12] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low[13] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=scalar.cmpi selection=rule rule_set=4 rule=27 descriptor=7817635603246018082 emitted_ops=1
+COMPILE-REPORT: source_low[14] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.load selection=plan plan=3330 descriptor=0 emitted_ops=2
+COMPILE-REPORT: source_low[15] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=scalar.addf selection=rule rule_set=0 rule=379 descriptor=5183489740832503697 emitted_ops=1
+COMPILE-REPORT: source_low[16] function=report_subgroup_reduce_addf_f32_wave64_scalar_workitem_guard_nested source_op=view.store selection=plan plan=3331 descriptor=0 emitted_ops=2

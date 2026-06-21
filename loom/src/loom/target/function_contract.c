@@ -31,14 +31,24 @@ void loom_target_function_contract_apply_compatible_selection(
     loom_target_bundle_storage_t* bundle_storage) {
   IREE_ASSERT_ARGUMENT(selected_bundle);
   IREE_ASSERT_ARGUMENT(bundle_storage);
+  const iree_string_view_t authored_bundle_name = bundle_storage->bundle.name;
+  const iree_string_view_t authored_snapshot_name =
+      bundle_storage->snapshot.name;
+  const iree_string_view_t authored_config_name = bundle_storage->config.name;
+  const iree_string_view_t authored_contract_set_key =
+      bundle_storage->config.contract_set_key;
   const uint32_t authored_subgroup_size =
       bundle_storage->snapshot.subgroup_size;
   bundle_storage->snapshot = *selected_bundle->snapshot;
+  bundle_storage->snapshot.name = authored_snapshot_name;
   if (authored_subgroup_size != 0) {
     bundle_storage->snapshot.subgroup_size = authored_subgroup_size;
   }
-  bundle_storage->config = *selected_bundle->config;
-  bundle_storage->bundle = *selected_bundle;
+  bundle_storage->config.contract_feature_bits =
+      selected_bundle->config->contract_feature_bits;
+  bundle_storage->config.name = authored_config_name;
+  bundle_storage->config.contract_set_key = authored_contract_set_key;
+  bundle_storage->bundle.name = authored_bundle_name;
   bundle_storage->bundle.snapshot = &bundle_storage->snapshot;
   bundle_storage->bundle.export_plan = &bundle_storage->export_plan;
   bundle_storage->bundle.config = &bundle_storage->config;
