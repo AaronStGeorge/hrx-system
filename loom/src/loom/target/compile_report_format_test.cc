@@ -260,6 +260,40 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           },
       },
   };
+  loom_target_compile_report_wait_action_row_t wait_action_rows[] = {
+      {
+          /*.function_name=*/IREE_SVL("branchy_export"),
+          /*.counter_name=*/IREE_SVL("vmem_load"),
+          /*.action_name=*/IREE_SVL("planned"),
+          /*.reason_name=*/IREE_SVL("amdgpu.ssa_use"),
+          /*.counter_id=*/1,
+          /*.action_id=*/2,
+          /*.reason_id=*/2,
+          /*.block_index=*/1,
+          /*.node_index=*/42,
+          /*.scheduled_ordinal=*/17,
+          /*.producer_node=*/8,
+          /*.consumer_node=*/42,
+          /*.target_count=*/2,
+          /*.outstanding_before=*/6,
+      },
+      {
+          /*.function_name=*/IREE_SVL("branchy_export"),
+          /*.counter_name=*/IREE_SVL("smem"),
+          /*.action_name=*/IREE_SVL("explicit"),
+          /*.reason_name=*/IREE_SVL("amdgpu.explicit_packet"),
+          /*.counter_id=*/4,
+          /*.action_id=*/1,
+          /*.reason_id=*/1,
+          /*.block_index=*/1,
+          /*.node_index=*/44,
+          /*.scheduled_ordinal=*/19,
+          /*.producer_node=*/UINT32_MAX,
+          /*.consumer_node=*/UINT32_MAX,
+          /*.target_count=*/0,
+          /*.outstanding_before=*/2,
+      },
+  };
   loom_target_compile_report_source_low_row_t source_low_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
@@ -464,6 +498,10 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       &entry_report, &wait_counter_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_wait_counter_row(
       &entry_report, &wait_counter_rows[1]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_wait_action_row(
+      &entry_report, &wait_action_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_wait_action_row(
+      &entry_report, &wait_action_rows[1]));
   loom_target_compile_report_record_target_resources(&entry_report,
                                                      &target_resources);
   loom_target_compile_report_record_static_instruction_mix(&entry_report,
@@ -525,7 +563,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "partial_waits=3 "
                                           "max_outstanding=6 "
                                           "max_full_drain_outstanding=6 "
-                                          "counter_rows=2"),
+                                          "counter_rows=2 action_rows=2"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
@@ -547,6 +585,27 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "max_outstanding=2 "
                                           "max_full_drain_outstanding=2"),
                                   0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_action[0] "
+                                          "function=branchy_export "
+                                          "counter=vmem_load counter_id=1 "
+                                          "action=planned action_id=2 "
+                                          "reason=amdgpu.ssa_use reason_id=2 "
+                                          "block=1 node=42 ordinal=17 "
+                                          "producer_node=8 consumer_node=42 "
+                                          "target_count=2 "
+                                          "outstanding_before=6"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("wait_action[1] function=branchy_export counter=smem "
+                        "counter_id=4 action=explicit action_id=1 "
+                        "reason=amdgpu.explicit_packet reason_id=1 block=1 "
+                        "node=44 ordinal=19 producer_node=- consumer_node=- "
+                        "target_count=0 outstanding_before=2"),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
@@ -676,7 +735,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                   IREE_SV("pressure_rows=2 "
                                           "pressure_origin_rows=1 "
                                           "schedule_band_rows=1 "
-                                          "schedule_band_summary_rows=1"),
+                                          "schedule_band_summary_rows=1 "
+                                          "spill_rows=0 "
+                                          "allocation_high_water_rows=1 "
+                                          "wait_counter_rows=2 "
+                                          "wait_action_rows=2"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
@@ -798,6 +861,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       iree_string_view_find(output, IREE_SV("\"wait_counter_row_count\":2"), 0),
       IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("\"wait_action_row_count\":2"), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
       iree_string_view_find(
           output, IREE_SV("\"wait_counter_rows\":{\"count\":2,\"rows\":["), 0),
       IREE_STRING_VIEW_NPOS);
@@ -825,6 +891,32 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                     "\"max_full_drain_outstanding_before\":2}"),
                             0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output, IREE_SV("\"wait_action_rows\":{\"count\":2,\"rows\":["), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"counter\":\"vmem_load\",\"counter_id\":1,"
+                        "\"action\":\"planned\",\"action_id\":2,"
+                        "\"reason\":\"amdgpu.ssa_use\",\"reason_id\":2,"
+                        "\"block_index\":1,\"node_index\":42,"
+                        "\"scheduled_ordinal\":17,\"producer_node\":8,"
+                        "\"consumer_node\":42,\"target_count\":2,"
+                        "\"outstanding_before\":6"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"counter\":\"smem\",\"counter_id\":4,"
+                        "\"action\":\"explicit\",\"action_id\":1,"
+                        "\"reason\":\"amdgpu.explicit_packet\","
+                        "\"reason_id\":1,\"block_index\":1,"
+                        "\"node_index\":44,\"scheduled_ordinal\":19,"
+                        "\"producer_node\":null,\"consumer_node\":null,"
+                        "\"target_count\":0,\"outstanding_before\":2"),
+                0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"move_causes\":{\"kind_count\":3"), 0),
             IREE_STRING_VIEW_NPOS);

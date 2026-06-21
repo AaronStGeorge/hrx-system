@@ -54,7 +54,7 @@ iree_status_t loom_target_compile_report_format_text(
 //
 // SUMMARY mode emits stable summary fields, row counts, and the entry index.
 // DETAILS mode additionally emits copied row arrays such as pressure, spill,
-// wait-counter, source-low, and target-legalization rows. NONE mode writes
+// wait-plan, source-low, and target-legalization rows. NONE mode writes
 // nothing.
 iree_status_t loom_target_compile_report_format_json(
     const loom_target_compile_report_t* report,

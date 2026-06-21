@@ -240,6 +240,19 @@ static void loom_amdgpu_hal_kernel_library_accumulate_wait_action(
       summary->max_outstanding_before, (uint64_t)action->outstanding_before);
 }
 
+static iree_string_view_t loom_amdgpu_hal_kernel_library_wait_action_name(
+    loom_amdgpu_wait_plan_action_kind_t kind) {
+  switch (kind) {
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT:
+      return IREE_SV("explicit");
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED:
+      return IREE_SV("planned");
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_library_record_wait_plan(
     loom_target_compile_report_t* report,
     const loom_amdgpu_packet_plan_t* packet_plan) {
@@ -276,6 +289,32 @@ static iree_status_t loom_amdgpu_hal_kernel_library_record_wait_plan(
     };
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_record_wait_counter_row(report, &row));
+  }
+  if (!loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN)) {
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < wait_plan->action_count; ++i) {
+    const loom_amdgpu_wait_plan_action_t* action = &wait_plan->actions[i];
+    const loom_target_compile_report_wait_action_row_t row = {
+        .function_name = report->function_name,
+        .counter_name = loom_amdgpu_wait_counter_name(action->counter_id),
+        .action_name =
+            loom_amdgpu_hal_kernel_library_wait_action_name(action->kind),
+        .reason_name = loom_amdgpu_wait_plan_reason_name(action->reason),
+        .counter_id = action->counter_id,
+        .action_id = (uint32_t)action->kind,
+        .reason_id = (uint32_t)action->reason,
+        .block_index = action->block_index,
+        .node_index = action->node_index,
+        .scheduled_ordinal = action->scheduled_ordinal,
+        .producer_node = action->producer_node,
+        .consumer_node = action->consumer_node,
+        .target_count = action->target_count,
+        .outstanding_before = action->outstanding_before,
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_record_wait_action_row(report, &row));
   }
   return iree_ok_status();
 }
