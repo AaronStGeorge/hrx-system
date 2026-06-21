@@ -59,8 +59,7 @@
           "\"measure\":\"dispatch_complete\"",
           "\"row\":\"benchmark\"",
           "\"row\":\"summary\"",
-          "\"failure_count\":0",
-          "\"failed_benchmark_count\":0"
+          "\"failures\":{\"row_count\":0,\"failed_benchmark_count\":0}"
         ]
       }
     },
@@ -89,8 +88,7 @@
           "\"row\":\"comparison\"",
           "\"method\":\"ABABA\"",
           "\"benchmark_count\":2",
-          "\"failure_count\":0",
-          "\"failed_benchmark_count\":0"
+          "\"failures\":{\"row_count\":0,\"failed_benchmark_count\":0}"
         ]
       }
     }

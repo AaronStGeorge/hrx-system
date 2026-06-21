@@ -20,6 +20,45 @@
 extern "C" {
 #endif
 
+typedef struct iree_benchmark_loom_summary_counts_t {
+  // Number of planned check.case records.
+  iree_host_size_t planned_case_count;
+  // Number of planned check.benchmark records.
+  iree_host_size_t planned_benchmark_count;
+  // Number of selected benchmark candidates.
+  iree_host_size_t selected_benchmark_count;
+  // Number of logical benchmark samples selected for reporting.
+  iree_host_size_t logical_sample_count;
+  // Number of unique physical work items selected for execution.
+  iree_host_size_t work_item_count;
+  // Number of top-level failure rows emitted.
+  iree_host_size_t failure_count;
+  // Number of benchmark rows that failed or did not execute successfully.
+  iree_host_size_t failed_benchmark_count;
+  // Number of correctness samples executed.
+  iree_host_size_t correctness_sample_count;
+  // Number of correctness samples that failed expectations.
+  iree_host_size_t correctness_failed_sample_count;
+  // True when an artifact bundle was active.
+  bool artifact_bundle_enabled;
+  // Number of fixture-read files observed.
+  iree_host_size_t fixture_read_count;
+  // Number of file-output files observed.
+  iree_host_size_t file_output_count;
+  // Number of profile artifact files observed.
+  iree_host_size_t profile_count;
+  // Number of compile-report artifact files observed.
+  iree_host_size_t compile_report_count;
+  // Number of artifact-manifest files observed.
+  iree_host_size_t artifact_manifest_count;
+  // Number of target artifact files observed.
+  iree_host_size_t target_artifact_count;
+  // Number of target listing files observed.
+  iree_host_size_t target_listing_count;
+  // Number of HAL executable artifact files observed.
+  iree_host_size_t hal_executable_count;
+} iree_benchmark_loom_summary_counts_t;
+
 // Writes a borrowed status as a structured JSON object.
 iree_status_t iree_benchmark_loom_write_status_object_json(
     const iree_status_t status, loom_output_stream_t* stream);
@@ -72,6 +111,35 @@ iree_status_t iree_benchmark_loom_write_benchmark_timing_stats_json(
     const loom_run_benchmark_timing_stats_t* stats,
     loom_output_stream_t* stream);
 
+// Writes the effective benchmark policy as a compact JSON object.
+iree_status_t iree_benchmark_loom_write_benchmark_policy_json(
+    const iree_benchmark_loom_benchmark_policy_t* policy,
+    loom_output_stream_t* stream);
+
+// Writes correctness sample counts as a compact JSON object.
+iree_status_t iree_benchmark_loom_write_benchmark_correctness_json(
+    iree_host_size_t sample_count, iree_host_size_t failed_sample_count,
+    loom_output_stream_t* stream);
+
+// Writes benchmark measurement evidence as a compact JSON object.
+iree_status_t iree_benchmark_loom_write_benchmark_measurement_json(
+    const iree_benchmark_loom_benchmark_policy_t* policy,
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    loom_output_stream_t* stream);
+
+// Writes shared benchmark evidence fields into an open JSON object.
+iree_status_t iree_benchmark_loom_write_benchmark_evidence_fields_json(
+    const iree_benchmark_loom_benchmark_policy_t* policy,
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    iree_host_size_t correctness_sample_count,
+    iree_host_size_t correctness_failed_sample_count,
+    loom_output_stream_t* stream, bool* first_field);
+
+// Writes final aggregate run counts as a compact JSON object.
+iree_status_t iree_benchmark_loom_write_summary_counts_json(
+    const iree_benchmark_loom_summary_counts_t* counts,
+    loom_output_stream_t* stream);
+
 // Writes one field separator/name pair inside a JSON object.
 iree_status_t iree_benchmark_loom_write_json_object_field_name(
     loom_output_stream_t* stream, bool* first_field, const char* name);
@@ -95,6 +163,11 @@ iree_status_t iree_benchmark_loom_write_json_u32_field(
 iree_status_t iree_benchmark_loom_write_json_u64_field(
     loom_output_stream_t* stream, bool* first_field, const char* name,
     uint64_t value);
+
+// Writes a required int64 field inside a JSON object.
+iree_status_t iree_benchmark_loom_write_json_i64_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    int64_t value);
 
 // Writes a required bool field inside a JSON object.
 iree_status_t iree_benchmark_loom_write_json_bool_field(

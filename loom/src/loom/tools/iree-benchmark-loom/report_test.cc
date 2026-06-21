@@ -127,6 +127,22 @@ TEST(BenchmarkReportTest, WritesCanonicalCompileReportTree) {
 
   iree_string_view_t root =
       ParseJsonDocument(iree_string_builder_view(&builder));
+  EXPECT_TRUE(
+      iree_string_view_is_empty(TryLookupObject(root, IREE_SV("measure"))));
+  iree_string_view_t policy_json = LookupObject(root, IREE_SV("policy"));
+  ExpectObjectValueEquals(policy_json, IREE_SV("measure"),
+                          IREE_SV("case_end_to_end"));
+  iree_string_view_t correctness = LookupObject(root, IREE_SV("correctness"));
+  ExpectObjectValueEquals(correctness, IREE_SV("sample_count"), IREE_SV("1"));
+  ExpectObjectValueEquals(correctness, IREE_SV("failed_sample_count"),
+                          IREE_SV("0"));
+  iree_string_view_t measurement = LookupObject(root, IREE_SV("measurement"));
+  ExpectObjectValueEquals(measurement, IREE_SV("samples_per_iteration"),
+                          IREE_SV("1"));
+  ExpectObjectValueEquals(measurement, IREE_SV("failed_sample_count"),
+                          IREE_SV("0"));
+  EXPECT_FALSE(iree_string_view_is_empty(
+      LookupObject(measurement, IREE_SV("timing_ns"))));
   EXPECT_TRUE(iree_string_view_is_empty(
       TryLookupObject(root, IREE_SV("static_summary"))));
   iree_string_view_t compile_report =
@@ -218,36 +234,51 @@ TEST(BenchmarkReportTest, WritesHalTimingCountsAndWarnings) {
 
   iree_string_view_t root =
       ParseJsonDocument(iree_string_builder_view(&builder));
+  iree_string_view_t policy_json = LookupObject(root, IREE_SV("policy"));
+  ExpectObjectValueEquals(policy_json, IREE_SV("measure"),
+                          IREE_SV("dispatch_complete"));
+  iree_string_view_t correctness = LookupObject(root, IREE_SV("correctness"));
+  ExpectObjectValueEquals(correctness, IREE_SV("sample_count"), IREE_SV("1"));
+  ExpectObjectValueEquals(correctness, IREE_SV("failed_sample_count"),
+                          IREE_SV("0"));
+  iree_string_view_t measurement = LookupObject(root, IREE_SV("measurement"));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(root, IREE_SV("logical_operations_per_batch"))));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(root, IREE_SV("operation_timing_ns"))));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(measurement, IREE_SV("timing_ns"))));
   EXPECT_TRUE(iree_string_view_equal(
-      LookupObject(root, IREE_SV("logical_operations_per_batch")),
+      LookupObject(measurement, IREE_SV("logical_operations_per_batch")),
       IREE_SV("1")));
   EXPECT_TRUE(iree_string_view_equal(
-      LookupObject(root, IREE_SV("physical_dispatches_per_batch")),
+      LookupObject(measurement, IREE_SV("physical_dispatches_per_batch")),
       IREE_SV("6")));
   EXPECT_TRUE(iree_string_view_equal(
-      LookupObject(root, IREE_SV("physical_dispatches_per_logical_operation")),
+      LookupObject(measurement,
+                   IREE_SV("physical_dispatches_per_logical_operation")),
       IREE_SV("6")));
   EXPECT_TRUE(iree_string_view_equal(
-      LookupObject(root, IREE_SV("measured_logical_operation_count")),
+      LookupObject(measurement, IREE_SV("measured_logical_operation_count")),
       IREE_SV("3")));
   EXPECT_TRUE(iree_string_view_equal(
-      LookupObject(root, IREE_SV("measured_physical_dispatch_count")),
+      LookupObject(measurement, IREE_SV("measured_physical_dispatch_count")),
       IREE_SV("18")));
   EXPECT_TRUE(iree_string_view_equal(
-      LookupObject(root, IREE_SV("mean_physical_dispatch_duration_ns")),
+      LookupObject(measurement, IREE_SV("mean_physical_dispatch_duration_ns")),
       IREE_SV("50.000")));
   EXPECT_TRUE(iree_string_view_is_empty(
-      TryLookupObject(root, IREE_SV("dispatch_timing_ns"))));
+      TryLookupObject(measurement, IREE_SV("dispatch_timing_ns"))));
   EXPECT_TRUE(iree_string_view_is_empty(
-      TryLookupObject(root, IREE_SV("measured_dispatch_count"))));
+      TryLookupObject(measurement, IREE_SV("measured_dispatch_count"))));
   EXPECT_TRUE(iree_string_view_is_empty(
-      TryLookupObject(root, IREE_SV("measured_operation_count"))));
+      TryLookupObject(measurement, IREE_SV("measured_operation_count"))));
   EXPECT_TRUE(iree_string_view_equal(
       LookupObject(root, IREE_SV("artifact_manifest_path")),
       result.artifact_manifest_path));
 
   iree_string_view_t timing_interpretation =
-      LookupObject(root, IREE_SV("timing_interpretation"));
+      LookupObject(measurement, IREE_SV("timing_interpretation"));
   EXPECT_TRUE(iree_string_view_equal(
       LookupObject(timing_interpretation, IREE_SV("score")),
       IREE_SV("operation_timing_ns")));
@@ -339,8 +370,9 @@ TEST(BenchmarkReportTest, LabelsOverlappedProfiledDispatchBatches) {
 
   iree_string_view_t root =
       ParseJsonDocument(iree_string_builder_view(&builder));
+  iree_string_view_t measurement = LookupObject(root, IREE_SV("measurement"));
   iree_string_view_t timing_interpretation =
-      LookupObject(root, IREE_SV("timing_interpretation"));
+      LookupObject(measurement, IREE_SV("timing_interpretation"));
   EXPECT_TRUE(iree_string_view_equal(
       LookupObject(timing_interpretation, IREE_SV("score_meaning")),
       IREE_SV("throughput_normalized_batch_time")));

@@ -981,6 +981,14 @@ iree_status_t iree_benchmark_loom_write_json_u64_field(
   return loom_output_stream_write_format(stream, "%" PRIu64, value);
 }
 
+iree_status_t iree_benchmark_loom_write_json_i64_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    int64_t value) {
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, name));
+  return loom_output_stream_write_format(stream, "%" PRIi64, value);
+}
+
 iree_status_t iree_benchmark_loom_write_json_bool_field(
     loom_output_stream_t* stream, bool* first_field, const char* name,
     bool value) {
@@ -1455,6 +1463,19 @@ static iree_status_t iree_benchmark_loom_write_compile_report_json(
   return iree_ok_status();
 }
 
+static iree_status_t iree_benchmark_loom_write_compile_report_field_json(
+    const loom_run_compile_report_capture_t* compile_report_capture,
+    loom_output_stream_t* stream, bool* first_field) {
+  if (compile_report_capture == NULL ||
+      !loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "compile_report"));
+  return loom_run_compile_report_capture_append_json(compile_report_capture,
+                                                     stream);
+}
+
 static iree_status_t iree_benchmark_loom_append_candidate_artifact_stem(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
@@ -1826,36 +1847,260 @@ iree_status_t iree_benchmark_loom_write_compile_report_artifact(
 static iree_status_t iree_benchmark_loom_write_data_cache_summary_json(
     const iree_benchmark_loom_data_cache_summary_t* summary,
     loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      stream, &first_field, "validity", IREE_SV("check_ops")));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      stream, &first_field, "cache_policy", IREE_SV("binding_ring")));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "binding_count", summary->binding_count));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "binding_ring_count", summary->binding_ring_count));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "command_buffer_ring_count",
+      summary->command_buffer_ring_count));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "dispatches_per_batch",
+      summary->dispatches_per_batch));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u64_field(
+      stream, &first_field, "requested_min_ring_bytes",
+      summary->requested_min_ring_bytes));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u64_field(
+      stream, &first_field, "binding_set_bytes", summary->binding_set_bytes));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u64_field(
+      stream, &first_field, "binding_ring_bytes", summary->binding_ring_bytes));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_bool_field(
+      stream, &first_field, "hot_reuse", summary->binding_ring_count <= 1));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t iree_benchmark_loom_write_data_cache_summary_field_json(
+    const iree_benchmark_loom_data_cache_summary_t* summary,
+    loom_output_stream_t* stream, bool* first_field) {
   if (!summary->populated) {
     return iree_ok_status();
   }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "data_cache"));
+  return iree_benchmark_loom_write_data_cache_summary_json(summary, stream);
+}
+
+iree_status_t iree_benchmark_loom_write_benchmark_policy_json(
+    const iree_benchmark_loom_benchmark_policy_t* policy,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      stream, &first_field, "measure", policy->measure));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "warmup_iterations", policy->warmup_iterations));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "iterations", policy->iterations));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+iree_status_t iree_benchmark_loom_write_benchmark_correctness_json(
+    iree_host_size_t sample_count, iree_host_size_t failed_sample_count,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "sample_count", sample_count));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "failed_sample_count", failed_sample_count));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static bool iree_benchmark_loom_benchmark_result_has_measurement(
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result) {
+  return benchmark_result->executed || benchmark_result->has_hal_benchmark;
+}
+
+iree_status_t iree_benchmark_loom_write_benchmark_measurement_json(
+    const iree_benchmark_loom_benchmark_policy_t* policy,
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "samples_per_iteration",
+      benchmark_result->samples_per_iteration));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, &first_field, "failed_sample_count",
+      benchmark_result->failed_sample_count));
+  if (benchmark_result->executed && !benchmark_result->has_hal_benchmark) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, &first_field, "timing_ns"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_timing_stats_json(
+        &benchmark_result->timing, stream));
+  }
+  if (benchmark_result->has_hal_benchmark) {
+    const loom_run_benchmark_result_t* timing =
+        &benchmark_result->hal_benchmark.timing;
+    iree_host_size_t physical_dispatches_per_batch = 0;
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_hal_physical_dispatches_per_batch(
+        benchmark_result, &physical_dispatches_per_batch));
+    iree_host_size_t physical_dispatches_per_logical_operation = 0;
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_hal_physical_dispatches_per_logical_operation(
+            benchmark_result, &physical_dispatches_per_logical_operation));
+    iree_host_size_t measured_physical_dispatch_count = 0;
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_hal_measured_physical_dispatch_count(
+            benchmark_result, &measured_physical_dispatch_count));
+    double mean_physical_dispatch_duration_ns = 0.0;
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_hal_mean_physical_dispatch_duration_ns(
+            benchmark_result, &mean_physical_dispatch_duration_ns));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, &first_field, "logical_operations_per_batch",
+        timing->batch_size));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, &first_field, "physical_dispatches_per_batch",
+        physical_dispatches_per_batch));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, &first_field, "physical_dispatches_per_logical_operation",
+        physical_dispatches_per_logical_operation));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, &first_field, "warmup_batch_count",
+        timing->warmup_batch_count));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_i64_field(
+        stream, &first_field, "warmup_duration_ns",
+        timing->warmup_duration_ns));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, &first_field, "measured_batch_count",
+        timing->measured_batch_count));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, &first_field, "measured_logical_operation_count",
+        timing->measured_operation_count));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, &first_field, "measured_physical_dispatch_count",
+        measured_physical_dispatch_count));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_i64_field(
+        stream, &first_field, "measured_duration_ns",
+        timing->measured_duration_ns));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, &first_field, "mean_physical_dispatch_duration_ns"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, "%.3f", mean_physical_dispatch_duration_ns));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+        stream, &first_field, "stop_reason",
+        loom_run_benchmark_stop_reason_name(timing->stop_reason)));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, &first_field, "timing_interpretation"));
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_write_hal_timing_interpretation_json(
+            policy, benchmark_result, stream));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, &first_field, "batch_timing_ns"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_timing_stats_json(
+        &timing->batch_timing, stream));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, &first_field, "operation_timing_ns"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_timing_stats_json(
+        &timing->operation_timing, stream));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+iree_status_t iree_benchmark_loom_write_benchmark_evidence_fields_json(
+    const iree_benchmark_loom_benchmark_policy_t* policy,
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    iree_host_size_t correctness_sample_count,
+    iree_host_size_t correctness_failed_sample_count,
+    loom_output_stream_t* stream, bool* first_field) {
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "policy"));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"data_cache\":{"));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, "\"validity\":\"check_ops\""));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-      stream, ",\"cache_policy\":\"binding_ring\""));
+      iree_benchmark_loom_write_benchmark_policy_json(policy, stream));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "correctness"));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_correctness_json(
+      correctness_sample_count, correctness_failed_sample_count, stream));
+  if (iree_benchmark_loom_benchmark_result_has_measurement(benchmark_result)) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, first_field, "measurement"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_measurement_json(
+        policy, benchmark_result, stream));
+  }
+  if (benchmark_result->has_hal_benchmark) {
+    const iree_benchmark_loom_profiled_dispatch_timing_t profiled_dispatch =
+        iree_benchmark_loom_profiled_dispatch_timing(
+            &benchmark_result->hal_benchmark.profile);
+    if (profiled_dispatch.available) {
+      IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+          stream, first_field, "profiled_dispatch_timing"));
+      IREE_RETURN_IF_ERROR(
+          iree_benchmark_loom_write_profiled_dispatch_timing_json(
+              &profiled_dispatch, stream));
+    }
+  }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_data_cache_summary_field_json(
+      &benchmark_result->data_cache, stream, first_field));
+  if (benchmark_result->hal_benchmark.profile.requested ||
+      benchmark_result->hal_benchmark.profile.executed ||
+      benchmark_result->hal_benchmark.profile.has_error) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, first_field, "profile"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_hal_profile_summary_json(
+        &benchmark_result->hal_benchmark.profile, stream));
+  }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_report_field_json(
+      benchmark_result->compile_report_capture, stream, first_field));
+  if (benchmark_result->has_failure) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, first_field, "failure"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_failure_json(
+        benchmark_result, stream));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t iree_benchmark_loom_write_summary_counts_json(
+    const iree_benchmark_loom_summary_counts_t* counts,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"binding_count\":%" PRIhsz, summary->binding_count));
+      stream,
+      "\"planned\":{\"case_count\":%" PRIhsz ",\"benchmark_count\":%" PRIhsz
+      ",\"selected_benchmark_count\":%" PRIhsz
+      ",\"logical_sample_count\":%" PRIhsz ",\"work_item_count\":%" PRIhsz "}",
+      counts->planned_case_count, counts->planned_benchmark_count,
+      counts->selected_benchmark_count, counts->logical_sample_count,
+      counts->work_item_count));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"binding_ring_count\":%" PRIhsz, summary->binding_ring_count));
+      stream,
+      ",\"failures\":{\"row_count\":%" PRIhsz
+      ",\"failed_benchmark_count\":%" PRIhsz "}",
+      counts->failure_count, counts->failed_benchmark_count));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"command_buffer_ring_count\":%" PRIhsz,
-      summary->command_buffer_ring_count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"dispatches_per_batch\":%" PRIhsz,
-      summary->dispatches_per_batch));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"requested_min_ring_bytes\":%" PRIu64,
-      summary->requested_min_ring_bytes));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"binding_set_bytes\":%" PRIu64, summary->binding_set_bytes));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"binding_ring_bytes\":%" PRIu64, summary->binding_ring_bytes));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"hot_reuse\":"));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-      stream, summary->binding_ring_count <= 1 ? "true" : "false"));
+      stream,
+      ",\"correctness\":{\"sample_count\":%" PRIhsz
+      ",\"failed_sample_count\":%" PRIhsz "}",
+      counts->correctness_sample_count,
+      counts->correctness_failed_sample_count));
+  if (counts->artifact_bundle_enabled || counts->fixture_read_count != 0 ||
+      counts->file_output_count != 0 || counts->profile_count != 0 ||
+      counts->compile_report_count != 0 ||
+      counts->artifact_manifest_count != 0 ||
+      counts->target_artifact_count != 0 || counts->target_listing_count != 0 ||
+      counts->hal_executable_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream,
+        ",\"artifacts\":{\"bundle_enabled\":%s,\"fixture_read_count\":%" PRIhsz
+        ",\"file_output_count\":%" PRIhsz ",\"profile_count\":%" PRIhsz
+        ",\"compile_report_count\":%" PRIhsz
+        ",\"artifact_manifest_count\":%" PRIhsz
+        ",\"target_artifact_count\":%" PRIhsz
+        ",\"target_listing_count\":%" PRIhsz
+        ",\"hal_executable_count\":%" PRIhsz "}",
+        counts->artifact_bundle_enabled ? "true" : "false",
+        counts->fixture_read_count, counts->file_output_count,
+        counts->profile_count, counts->compile_report_count,
+        counts->artifact_manifest_count, counts->target_artifact_count,
+        counts->target_listing_count, counts->hal_executable_count));
+  }
   return loom_output_stream_write_cstring(stream, "}");
 }
 
@@ -1916,125 +2161,10 @@ iree_status_t iree_benchmark_loom_write_benchmark_result_json(
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         stream, benchmark_result->hal_executable_path));
   }
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"measure\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, policy->measure));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"warmup_iterations\":%" PRIhsz, policy->warmup_iterations));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"iterations\":%" PRIhsz, policy->iterations));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"samples_per_iteration\":%" PRIhsz,
-      benchmark_result->samples_per_iteration));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"correctness_sample_count\":%" PRIhsz,
-      correctness_sample_count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"correctness_failed_sample_count\":%" PRIhsz,
-      correctness_failed_sample_count));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"benchmark_failed_sample_count\":%" PRIhsz,
-      benchmark_result->failed_sample_count));
-  if (benchmark_result->executed && !benchmark_result->has_hal_benchmark) {
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"timing_ns\":"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_timing_stats_json(
-        &benchmark_result->timing, stream));
-  }
-  if (benchmark_result->has_hal_benchmark) {
-    const loom_run_benchmark_result_t* timing =
-        &benchmark_result->hal_benchmark.timing;
-    iree_host_size_t physical_dispatches_per_batch = 0;
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_hal_physical_dispatches_per_batch(
-        benchmark_result, &physical_dispatches_per_batch));
-    iree_host_size_t physical_dispatches_per_logical_operation = 0;
-    IREE_RETURN_IF_ERROR(
-        iree_benchmark_loom_hal_physical_dispatches_per_logical_operation(
-            benchmark_result, &physical_dispatches_per_logical_operation));
-    iree_host_size_t measured_physical_dispatch_count = 0;
-    IREE_RETURN_IF_ERROR(
-        iree_benchmark_loom_hal_measured_physical_dispatch_count(
-            benchmark_result, &measured_physical_dispatch_count));
-    double mean_physical_dispatch_duration_ns = 0.0;
-    IREE_RETURN_IF_ERROR(
-        iree_benchmark_loom_hal_mean_physical_dispatch_duration_ns(
-            benchmark_result, &mean_physical_dispatch_duration_ns));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"logical_operations_per_batch\":%" PRIhsz,
-        timing->batch_size));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"physical_dispatches_per_batch\":%" PRIhsz,
-        physical_dispatches_per_batch));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"physical_dispatches_per_logical_operation\":%" PRIhsz,
-        physical_dispatches_per_logical_operation));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"warmup_batch_count\":%" PRIhsz,
-        timing->warmup_batch_count));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"warmup_duration_ns\":%" PRIi64,
-        timing->warmup_duration_ns));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"measured_batch_count\":%" PRIhsz,
-        timing->measured_batch_count));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"measured_logical_operation_count\":%" PRIhsz,
-        timing->measured_operation_count));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"measured_physical_dispatch_count\":%" PRIhsz,
-        measured_physical_dispatch_count));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"measured_duration_ns\":%" PRIi64,
-        timing->measured_duration_ns));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"mean_physical_dispatch_duration_ns\":%.3f",
-        mean_physical_dispatch_duration_ns));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"stop_reason\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        stream, loom_run_benchmark_stop_reason_name(timing->stop_reason)));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-        stream, ",\"timing_interpretation\":"));
-    IREE_RETURN_IF_ERROR(
-        iree_benchmark_loom_write_hal_timing_interpretation_json(
-            policy, benchmark_result, stream));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"batch_timing_ns\":"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_timing_stats_json(
-        &timing->batch_timing, stream));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"operation_timing_ns\":"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_timing_stats_json(
-        &timing->operation_timing, stream));
-    const iree_benchmark_loom_profiled_dispatch_timing_t profiled_dispatch =
-        iree_benchmark_loom_profiled_dispatch_timing(
-            &benchmark_result->hal_benchmark.profile);
-    if (profiled_dispatch.available) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-          stream, ",\"profiled_dispatch_timing\":"));
-      IREE_RETURN_IF_ERROR(
-          iree_benchmark_loom_write_profiled_dispatch_timing_json(
-              &profiled_dispatch, stream));
-    }
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_data_cache_summary_json(
-        &benchmark_result->data_cache, stream));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"profile\":"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_hal_profile_summary_json(
-        &benchmark_result->hal_benchmark.profile, stream));
-  }
-  if (benchmark_result->compile_report_capture != NULL &&
-      loom_run_compile_report_capture_is_enabled(
-          benchmark_result->compile_report_capture)) {
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_compile_report_json(
-        benchmark_result->compile_report_capture, stream));
-  }
-  if (benchmark_result->has_failure) {
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"failure\":"));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_failure_json(
-        benchmark_result, stream));
-  }
+  bool first_field = false;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_evidence_fields_json(
+      policy, benchmark_result, correctness_sample_count,
+      correctness_failed_sample_count, stream, &first_field));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
   return iree_ok_status();
 }
@@ -2371,71 +2501,38 @@ iree_status_t iree_benchmark_loom_append_summary_row(
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
       &stream, iree_benchmark_loom_sample_compilation_mode_name(
                    sample_compilation_mode)));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"planned_case_count\":%" PRIhsz, planned_case_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"planned_benchmark_count\":%" PRIhsz,
-      planned_benchmark_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"benchmark_count\":%" PRIhsz, selected_benchmark_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"logical_sample_count\":%" PRIhsz, logical_sample_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"work_item_count\":%" PRIhsz, work_item_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"failure_count\":%" PRIhsz, failure_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"failed_benchmark_count\":%" PRIhsz, failed_benchmark_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"correctness_sample_count\":%" PRIhsz,
-      correctness_sample_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output, ",\"correctness_failed_sample_count\":%" PRIhsz,
-      correctness_failed_sample_count));
   IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(output, ",\"summary\":{"));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output,
-      "\"planned\":{\"case_count\":%" PRIhsz ",\"benchmark_count\":%" PRIhsz
-      ",\"selected_benchmark_count\":%" PRIhsz
-      ",\"logical_sample_count\":%" PRIhsz ",\"work_item_count\":%" PRIhsz "}",
-      planned_case_count, planned_benchmark_count, selected_benchmark_count,
-      logical_sample_count, work_item_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output,
-      ",\"failures\":{\"row_count\":%" PRIhsz
-      ",\"failed_benchmark_count\":%" PRIhsz "}",
-      failure_count, failed_benchmark_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output,
-      ",\"correctness\":{\"sample_count\":%" PRIhsz
-      ",\"failed_sample_count\":%" PRIhsz "}",
-      correctness_sample_count, correctness_failed_sample_count));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      output,
-      ",\"artifacts\":{\"bundle_enabled\":%s,\"fixture_read_count\":%" PRIhsz
-      ",\"file_output_count\":%" PRIhsz ",\"profile_count\":%" PRIhsz
-      ",\"compile_report_count\":%" PRIhsz
-      ",\"artifact_manifest_count\":%" PRIhsz
-      ",\"target_artifact_count\":%" PRIhsz ",\"target_listing_count\":%" PRIhsz
-      ",\"hal_executable_count\":%" PRIhsz "}}",
-      bundle != NULL && bundle->enabled ? "true" : "false",
-      iree_benchmark_loom_artifact_bundle_file_count(
+      iree_string_builder_append_cstring(output, ",\"summary\":"));
+  const iree_benchmark_loom_summary_counts_t counts = {
+      .planned_case_count = planned_case_count,
+      .planned_benchmark_count = planned_benchmark_count,
+      .selected_benchmark_count = selected_benchmark_count,
+      .logical_sample_count = logical_sample_count,
+      .work_item_count = work_item_count,
+      .failure_count = failure_count,
+      .failed_benchmark_count = failed_benchmark_count,
+      .correctness_sample_count = correctness_sample_count,
+      .correctness_failed_sample_count = correctness_failed_sample_count,
+      .artifact_bundle_enabled = bundle != NULL && bundle->enabled,
+      .fixture_read_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_FIXTURE_READ),
-      iree_benchmark_loom_artifact_bundle_file_count(
+      .file_output_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_OUTPUT),
-      iree_benchmark_loom_artifact_bundle_file_count(
+      .profile_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_PROFILE),
-      iree_benchmark_loom_artifact_bundle_file_count(
+      .compile_report_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REPORT),
-      iree_benchmark_loom_artifact_bundle_file_count(
+      .artifact_manifest_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST),
-      iree_benchmark_loom_artifact_bundle_file_count(
+      .target_artifact_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_TARGET_ARTIFACT),
-      iree_benchmark_loom_artifact_bundle_file_count(
+      .target_listing_count = iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_TARGET_LISTING),
-      iree_benchmark_loom_artifact_bundle_file_count(
-          bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_HAL_EXECUTABLE)));
+      .hal_executable_count = iree_benchmark_loom_artifact_bundle_file_count(
+          bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_HAL_EXECUTABLE),
+  };
+  IREE_RETURN_IF_ERROR(
+      iree_benchmark_loom_write_summary_counts_json(&counts, &stream));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "}\n"));
   return iree_ok_status();
 }

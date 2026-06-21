@@ -23,8 +23,7 @@
           "\"row\":\"benchmark\"",
           "\"status\":\"ok\"",
           "\"row\":\"summary\"",
-          "\"failure_count\":0",
-          "\"failed_benchmark_count\":0"
+          "\"failures\":{\"row_count\":0,\"failed_benchmark_count\":0}"
         ]
       }
     },
@@ -49,7 +48,7 @@
           "\"benchmark\":\"sampled_choice_latency\"",
           "\"warmup_iterations\":0",
           "\"iterations\":2",
-          "\"correctness_sample_count\":1"
+          "\"correctness\":{\"sample_count\":1,\"failed_sample_count\":0}"
         ]
       }
     },
@@ -70,7 +69,7 @@
         "contains": [
           "\"sanitizer\":{\"checks\":\"race\",\"reporting_mode\":\"report-only\"}",
           "\"row\":\"summary\"",
-          "\"failure_count\":0"
+          "\"failures\":{\"row_count\":0,\"failed_benchmark_count\":0}"
         ]
       }
     },
@@ -156,7 +155,7 @@
           "\"domain\":\"SYMBOL\"",
           "\"message\":\"symbol '@duplicate_symbol' is already defined\"",
           "\"row\":\"summary\"",
-          "\"failure_count\":1"
+          "\"failures\":{\"row_count\":1,\"failed_benchmark_count\":0}"
         ]
       }
     },
