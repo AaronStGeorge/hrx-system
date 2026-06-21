@@ -145,6 +145,23 @@ TEST_F(AmdgpuWaitPacketTest, SelectsArchitectureSpecificCombinedNoWaitValues) {
   }
 }
 
+TEST_F(AmdgpuWaitPacketTest, ClampsTargetCountToNoWaitEncoding) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_registry_lookup(&low_registry_.registry,
+                                          IREE_SV("amdgpu.rdna3.core"));
+  ASSERT_NE(descriptor_set, nullptr);
+
+  loom_amdgpu_wait_packet_selection_t selection = {};
+  IREE_ASSERT_OK(loom_amdgpu_wait_packet_select_counter_mask(
+      descriptor_set, LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD,
+      /*target_count=*/UINT16_MAX, &selection));
+
+  const loom_amdgpu_wait_packet_immediate_t* vmcnt =
+      FindImmediate(selection, IREE_SV("vmcnt"));
+  ASSERT_NE(vmcnt, nullptr);
+  EXPECT_EQ(vmcnt->value, 63);
+}
+
 TEST_F(AmdgpuWaitPacketTest, SelectsRdna4SplitWaits) {
   const ExpectedWaitSelection cases[] = {
       {
