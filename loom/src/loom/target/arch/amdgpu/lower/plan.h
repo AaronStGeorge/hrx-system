@@ -65,6 +65,8 @@ typedef struct loom_amdgpu_vector_16bit_float_conversion_plan_t {
   loom_value_id_t source;
   // Result vector value receiving the converted lane payload.
   loom_value_id_t result;
+  // Source vector whose storage materializes the logical conversion lanes.
+  loom_value_id_t storage_source;
   // Conversion operation selected for the source/result type pair.
   loom_amdgpu_vector_16bit_float_conversion_kind_t kind;
   // Source scalar element type.
@@ -75,6 +77,12 @@ typedef struct loom_amdgpu_vector_16bit_float_conversion_plan_t {
   uint32_t lane_count;
   // Number of 32-bit source registers occupied by the source vector.
   uint32_t source_register_count;
+  // First logical lane read from storage_source for result lane zero.
+  uint32_t storage_lane_offset;
+  // Logical lane stride through storage_source for adjacent result lanes.
+  uint32_t storage_lane_stride;
+  // Number of 32-bit registers occupied by storage_source.
+  uint32_t storage_register_count;
   // Number of 32-bit result registers occupied by the result vector.
   uint32_t result_register_count;
 } loom_amdgpu_vector_16bit_float_conversion_plan_t;
