@@ -93,26 +93,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_shuffle_plan(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_emit_subgroup_bpermute_register(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_low_lower_resolved_descriptor_t* descriptor,
-    loom_value_id_t low_source_byte_offset, loom_value_id_t low_source_value,
-    loom_type_t lane_type, loom_value_id_t* out_low_result) {
-  *out_low_result = LOOM_VALUE_ID_INVALID;
-  const loom_value_id_t operands[] = {
-      low_source_byte_offset,
-      low_source_value,
-  };
-  loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
-      context, descriptor, operands, IREE_ARRAYSIZE(operands),
-      loom_make_named_attr_slice(NULL, 0), &lane_type, 1,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
-      &low_op));
-  *out_low_result = loom_value_slice_get(loom_low_op_results(low_op), 0);
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_emit_subgroup_mask_compare(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t lhs,
@@ -140,15 +120,6 @@ static iree_status_t loom_amdgpu_emit_subgroup_valid_true(
   return loom_amdgpu_emit_subgroup_mask_compare(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32, zero, zero,
       valid_type, out_valid);
-}
-
-static iree_status_t loom_amdgpu_emit_subgroup_lane_byte_offset(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t lane, loom_type_t lane_type,
-    loom_value_id_t* out_byte_offset) {
-  return loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 2, lane,
-      lane_type, out_byte_offset);
 }
 
 static iree_status_t loom_amdgpu_emit_subgroup_cluster_base(
