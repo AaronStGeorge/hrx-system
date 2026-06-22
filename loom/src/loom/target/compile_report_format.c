@@ -1739,11 +1739,9 @@ static iree_status_t loom_target_compile_report_format_schedule_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
-static iree_status_t
-loom_target_compile_report_format_static_instruction_mix_json(
-    const loom_target_compile_report_t* report, loom_output_stream_t* stream) {
-  const loom_target_compile_report_static_instruction_mix_t* mix =
-      &report->static_instruction_mix;
+static iree_status_t loom_target_compile_report_format_instruction_mix_json(
+    const loom_target_compile_report_static_instruction_mix_t* mix,
+    loom_output_stream_t* stream) {
   bool first_field = true;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
@@ -2116,52 +2114,6 @@ static iree_status_t loom_target_compile_report_format_target_resources_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
-static iree_status_t loom_target_compile_report_format_entry_mix_json(
-    const loom_target_compile_report_static_instruction_mix_t* mix,
-    loom_output_stream_t* stream) {
-  bool first_field = true;
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "descriptor_count", mix->descriptor_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "unknown_count", mix->unknown_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "scalar_alu_count", mix->scalar_alu_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "vector_alu_count", mix->vector_alu_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "matrix_count", mix->matrix_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "mfma_count", mix->mfma_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "wmma_count", mix->wmma_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "dot_count", mix->dot_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "global_memory_count", mix->global_memory_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "local_memory_count", mix->local_memory_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "scalar_memory_count", mix->scalar_memory_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "generic_memory_count", mix->generic_memory_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "atomic_count", mix->atomic_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "branch_count", mix->branch_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "barrier_count", mix->barrier_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "control_count", mix->control_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "conversion_count", mix->conversion_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "cache_count", mix->cache_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
-      stream, &first_field, "register_move_count", mix->register_move_count));
-  return loom_output_stream_write_cstring(stream, "}");
-}
-
 static iree_status_t loom_target_compile_report_format_entry_json(
     const loom_target_compile_report_entry_t* row, iree_host_size_t row_index,
     loom_target_compile_report_format_mode_t mode,
@@ -2289,7 +2241,7 @@ static iree_status_t loom_target_compile_report_format_entry_json(
           LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX)) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
         stream, &first_field, "static_instruction_mix"));
-    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entry_mix_json(
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_instruction_mix_json(
         &row->static_instruction_mix, stream));
   }
   return loom_output_stream_write_cstring(stream, "}");
@@ -2521,7 +2473,7 @@ static iree_status_t loom_target_compile_report_format_schedule_band_row_json(
           stream, &first_field, "sample_value", row->sample_value_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
       stream, &first_field, "static_instruction_mix"));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entry_mix_json(
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_format_instruction_mix_json(
       &row->static_instruction_mix, stream));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "result_value_count", row->result_value_count));
@@ -2604,7 +2556,7 @@ loom_target_compile_report_format_schedule_band_summary_row_json(
           stream, &first_field, "sample_value", row->sample_value_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
       stream, &first_field, "static_instruction_mix"));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entry_mix_json(
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_format_instruction_mix_json(
       &row->static_instruction_mix, stream));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "result_value_count", row->result_value_count));
@@ -3458,9 +3410,8 @@ iree_status_t loom_target_compile_report_format_json(
           LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX)) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
         stream, &first_field, "static_instruction_mix"));
-    IREE_RETURN_IF_ERROR(
-        loom_target_compile_report_format_static_instruction_mix_json(report,
-                                                                      stream));
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_instruction_mix_json(
+        &report->static_instruction_mix, stream));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION)) {

@@ -934,11 +934,14 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           output, IREE_SV("\"static_instruction_mix\":{\"descriptor_count\":9"),
           0),
       IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(
-                output,
-                IREE_SV("\"global_load_count\":1,\"global_store_count\":0,"
-                        "\"buffer_load_count\":1"),
-                0),
+  const iree_string_view_t split_memory_mix_fields = IREE_SV(
+      "\"global_load_count\":1,\"global_store_count\":0,"
+      "\"buffer_load_count\":1");
+  const iree_host_size_t first_split_memory_mix =
+      iree_string_view_find(output, split_memory_mix_fields, 0);
+  EXPECT_NE(first_split_memory_mix, IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, split_memory_mix_fields,
+                                  first_split_memory_mix + 1),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
