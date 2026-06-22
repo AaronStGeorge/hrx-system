@@ -233,62 +233,40 @@ static iree_status_t loom_amdgpu_select_subgroup_reduce_crosslane_kind(
   return iree_ok_status();
 }
 
-static bool loom_amdgpu_value_is_workitem_x(const loom_module_t* module,
-                                            loom_value_id_t value_id) {
-  if (module == NULL || value_id >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) {
-    return false;
-  }
-  const loom_op_t* defining_op = loom_value_def_op(value);
-  return defining_op != NULL && loom_kernel_workitem_id_isa(defining_op) &&
-         loom_kernel_workitem_id_dimension(defining_op) ==
-             LOOM_KERNEL_DIMENSION_X;
-}
-
-static bool loom_amdgpu_value_is_subgroup_lane_id(const loom_module_t* module,
-                                                  loom_value_id_t value_id) {
-  if (module == NULL || value_id >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) {
-    return false;
-  }
-  const loom_op_t* defining_op = loom_value_def_op(value);
-  return defining_op != NULL && loom_kernel_subgroup_lane_id_isa(defining_op);
-}
-
 typedef enum loom_amdgpu_participant_id_kind_e {
   LOOM_AMDGPU_PARTICIPANT_ID_WORKITEM_X = 0,
   LOOM_AMDGPU_PARTICIPANT_ID_SUBGROUP_LANE = 1,
 } loom_amdgpu_participant_id_kind_t;
 
-static bool loom_amdgpu_value_is_participant_id(
-    const loom_module_t* module, loom_value_id_t value_id,
+static bool loom_amdgpu_value_facts_identify_participant_id(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
     loom_amdgpu_participant_id_kind_t participant_id_kind) {
+  if (fact_table == NULL) return false;
+  const loom_value_facts_t facts =
+      loom_value_fact_table_lookup(fact_table, value_id);
   switch (participant_id_kind) {
     case LOOM_AMDGPU_PARTICIPANT_ID_WORKITEM_X:
-      return loom_amdgpu_value_is_workitem_x(module, value_id);
+      return iree_all_bits_set(facts.flags,
+                               LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_X);
     case LOOM_AMDGPU_PARTICIPANT_ID_SUBGROUP_LANE:
-      return loom_amdgpu_value_is_subgroup_lane_id(module, value_id);
+      return iree_all_bits_set(facts.flags,
+                               LOOM_VALUE_FACT_TOPOLOGY_SUBGROUP_LANE);
     default:
       return false;
   }
 }
 
 static bool loom_amdgpu_symbolic_expr_is_participant_id(
-    const loom_module_t* module, const loom_symbolic_expr_t* expression,
+    const loom_value_fact_table_t* fact_table,
+    const loom_symbolic_expr_t* expression,
     loom_amdgpu_participant_id_kind_t participant_id_kind) {
   return loom_symbolic_expr_is_linear(expression) &&
          expression->constant == 0 && expression->term_count == 1 &&
          expression->terms[0].coefficient == 1 &&
-         (loom_amdgpu_value_is_participant_id(
-              module, expression->terms[0].value_id, participant_id_kind) ||
-          loom_amdgpu_value_is_participant_id(
-              module, expression->terms[0].relation_value_id,
+         (loom_amdgpu_value_facts_identify_participant_id(
+              fact_table, expression->terms[0].value_id, participant_id_kind) ||
+          loom_amdgpu_value_facts_identify_participant_id(
+              fact_table, expression->terms[0].relation_value_id,
               participant_id_kind));
 }
 
@@ -344,11 +322,11 @@ static iree_status_t loom_amdgpu_condition_implies_participant_zero(
     if (!iree_status_is_ok(status)) {
       break;
     }
-    if ((loom_amdgpu_symbolic_expr_is_participant_id(module, &left_expression,
-                                                     participant_id_kind) &&
+    if ((loom_amdgpu_symbolic_expr_is_participant_id(
+             fact_table, &left_expression, participant_id_kind) &&
          loom_amdgpu_symbolic_expr_is_zero(&right_expression)) ||
-        (loom_amdgpu_symbolic_expr_is_participant_id(module, &right_expression,
-                                                     participant_id_kind) &&
+        (loom_amdgpu_symbolic_expr_is_participant_id(
+             fact_table, &right_expression, participant_id_kind) &&
          loom_amdgpu_symbolic_expr_is_zero(&left_expression))) {
       *out_implies_participant_zero = true;
       break;
