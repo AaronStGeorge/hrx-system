@@ -35,7 +35,8 @@ typedef struct loom_amdgpu_sanitizer_access_check_t {
 // Emits an AMDGPU ASAN-style shadow check for one static access range.
 //
 // |fault_address| must be a 64-bit SGPR or VGPR register range. |access_size|
-// is packetized into <=8 byte chunks so every touched shadow byte is covered.
+// must be non-zero and is packetized into <=8 byte chunks so every touched
+// shadow byte is covered.
 // |wavefront_size| must be 32 or 64 and controls whether the returned SGPRx2
 // |failure_mask| needs wave32 zero-extension before it is consumed as an
 // EXEC-width lane mask by

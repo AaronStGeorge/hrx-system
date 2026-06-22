@@ -73,6 +73,7 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTRS,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_INFOS,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_TEMPORAL_TH,
     AMDGPU_WAVEFRONT_SIZE_FLAG_32,
@@ -591,6 +592,8 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
                 raise ValueError(f"AMDGPU descriptor set {info.key} storage target '{storage_info.generator_target}' uses ISA XML key '{storage_info.isa_xml_key}', expected '{info.isa_xml_key}'")
         _buffer_resource_cache_swizzle_expr(info.buffer_resource.cache_swizzle)
         _vector_memory_cache_policy_encoding_expr(info.vector_memory.cache_policy_encoding)
+        if info.vector_memory.cache_policy_encoding == AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE:
+            raise ValueError(f"AMDGPU descriptor set {info.key} must declare a non-none vector-memory cache-policy encoding")
 
 
 def _validate_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> None:

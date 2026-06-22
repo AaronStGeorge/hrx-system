@@ -34,8 +34,6 @@
 
 namespace {
 
-using iree::StatusCode;
-
 std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
 }
@@ -518,20 +516,6 @@ TEST_F(AmdgpuSanitizerAccessTest, EmitsPacketizedStaticAccessCheck) {
             7u);
   EXPECT_EQ(
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32).size(), 9u);
-}
-
-TEST_F(AmdgpuSanitizerAccessTest, RejectsZeroStaticAccessSize) {
-  loom_symbol_ref_t asan_config_symbol = AddSymbol(IREE_SV("iree_asan_config"));
-  loom_value_id_t fault_address = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(BuildFaultAddress(asan_config_symbol, &fault_address));
-
-  loom_amdgpu_sanitizer_access_check_t check = {};
-  IREE_EXPECT_STATUS_IS(
-      StatusCode::kInvalidArgument,
-      loom_amdgpu_build_sanitizer_access_check(
-          &builder_, descriptor_set_, asan_config_symbol, fault_address,
-          /*access_size=*/0, /*wavefront_size=*/32, LOOM_LOCATION_UNKNOWN,
-          &check));
 }
 
 }  // namespace

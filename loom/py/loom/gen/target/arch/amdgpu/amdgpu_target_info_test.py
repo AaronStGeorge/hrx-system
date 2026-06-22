@@ -88,6 +88,11 @@ def test_memory_cache_policy_rejects_unknown_descriptor_encoding() -> None:
         amdgpu_target_info._ordered_memory_cache_policy_encoding_infos(descriptor_sets=(descriptor_set_info,))
 
 
+def test_descriptor_sets_reject_none_memory_cache_policy() -> None:
+    with _raises_value_error("non-none vector-memory cache-policy encoding"):
+        amdgpu_target_info._validate_descriptor_sets((_descriptor_set_info(),))
+
+
 def test_memory_cache_policy_rejects_incomplete_temporal_th_table() -> None:
     temporal_th = amdgpu_target_info_data.AMDGPU_VECTOR_MEMORY_CACHE_POLICY_TEMPORAL_TH
     rows = tuple(row for row in temporal_th if row[0] != "bypass")
