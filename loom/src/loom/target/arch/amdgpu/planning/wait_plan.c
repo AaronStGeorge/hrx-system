@@ -1579,6 +1579,14 @@ static iree_status_t loom_amdgpu_wait_plan_handle_consumer(
                 builder, link->producer_node, slot, &target_count)) {
           continue;
         }
+        if (counter_mask == LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM) {
+          // Scalar-memory result dependencies require the producing SMEM
+          // packet to be fully drained before a later packet consumes the
+          // SGPR. Partial lgkmcnt waits are insufficient for SMEM data or
+          // address dependencies even when the producer is oldest among
+          // several outstanding scalar-memory packets.
+          target_count = 0;
+        }
       } else {
         // Across block boundaries, the producer is safe only if a wait in its
         // own block drained it before control could reach the consumer block.

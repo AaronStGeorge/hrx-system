@@ -45,3 +45,59 @@ low.func.def target(@target) @copy_forwards_lds_wait(%addr: reg<amdgpu.vgpr>, %r
 // Node 1 is the coalesced copy. The wait must be planned at node 2, where the
 // copied LDS payload is actually consumed by VALU.
 {"format":"loom.low.packet_hazard_plan.v1","function":"copy_forwards_lds_wait","target":"target","descriptor_set":"amdgpu.rdna3.core","progress_count":1,"hazard_count":1,"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":3,"class_name":"amdgpu.lds","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.wait_packet","reason_id":2,"reason_name":"amdgpu.ssa_use","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":2,"insertion_packet":2,"block":0,"scheduled_ordinal":2,"progress_class_id":3,"progress_class_name":"amdgpu.lds","required":1,"observed":0,"residual":1}]}
+
+// ====
+// RUN: emit amdgpu-wait-counter-plan-json @smem_load_address_dependency strategy=source
+
+amdgpu.target<gfx1100> @target
+low.func.def target(@target) @smem_load_address_dependency(%kernarg: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %zero = s_mov_b32 0
+  %base = s_load_dwordx2 %kernarg, %zero {offset = 16}
+  %noise0 = s_load_dword %kernarg, %zero {offset = 0}
+  %noise1 = s_load_dword %kernarg, %zero {offset = 8}
+  %noise2 = s_load_dword %kernarg, %zero {offset = 12}
+  %value = s_load_dword %base, %zero
+  return %value, %noise0, %noise1, %noise2 : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
+}
+
+// ----
+// The pointer-producing scalar load is oldest among four outstanding SMEM
+// packets, but dependent SMEM consumers must still request a full SMEM drain.
+{"format":"loom.low.packet_hazard_plan.v1","function":"smem_load_address_dependency","target":"target","descriptor_set":"amdgpu.rdna3.core","progress_count":5,"hazard_count":2,"progress":[{"index":0,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":4,"class_name":"amdgpu.smem","action":"advance","units":1},{"index":1,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":4,"class_name":"amdgpu.smem","action":"advance","units":1},{"index":2,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":4,"class_name":"amdgpu.smem","action":"advance","units":1},{"index":3,"packet":4,"node":4,"block":0,"scheduled_ordinal":4,"class_id":4,"class_name":"amdgpu.smem","action":"advance","units":1},{"index":4,"packet":5,"node":5,"block":0,"scheduled_ordinal":5,"class_id":4,"class_name":"amdgpu.smem","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.wait_packet","reason_id":2,"reason_name":"amdgpu.ssa_use","producer_node":1,"producer_packet":1,"producer_scheduled_ordinal":1,"consumer_node":5,"insertion_packet":5,"block":0,"scheduled_ordinal":5,"progress_class_id":4,"progress_class_name":"amdgpu.smem","required":4,"observed":0,"residual":4},{"index":1,"kind":"action","action_id":1,"action_name":"amdgpu.wait_packet","reason_id":2,"reason_name":"amdgpu.ssa_use","producer_node":5,"producer_packet":5,"producer_scheduled_ordinal":5,"consumer_node":6,"insertion_packet":6,"block":0,"scheduled_ordinal":6,"progress_class_id":4,"progress_class_name":"amdgpu.smem","required":1,"observed":0,"residual":1}]}
+
+// ====
+// RUN: emit amdgpu-assembly @smem_load_address_dependency_assembly strategy=source
+
+amdgpu.target<gfx1100> @target
+low.func.def target(@target) @smem_load_address_dependency_assembly(%kernarg: reg<amdgpu.sgpr x2>, %output: reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  %zero = s_mov_b32 0
+  %zero_v = v_mov_b32 0
+  %base = s_load_dwordx2 %kernarg, %zero {offset = 16}
+  %noise0 = s_load_dword %kernarg, %zero {offset = 0}
+  %noise1 = s_load_dword %kernarg, %zero {offset = 8}
+  %noise2 = s_load_dword %kernarg, %zero {offset = 12}
+  %value = s_load_dword %base, %zero
+  %sum0 = s_add_u32 %value, %noise0
+  %sum1 = s_add_u32 %sum0, %noise1
+  %sum2 = s_add_u32 %sum1, %noise2
+  %sum_v = v_mov_b32_copy %sum2
+  global_store_b32_saddr %zero_v, %sum_v, %output
+  return
+}
+
+// ----
+s_mov_b32 s4, 0
+  v_mov_b32 v0, 0
+  s_load_dwordx2 s[6:7], s[0:1], s4 offset:16
+  s_load_dword s5, s[0:1], s4 offset:0
+  s_load_dword s8, s[0:1], s4 offset:8
+  s_load_dword s9, s[0:1], s4 offset:12
+  s_waitcnt vmcnt(63) lgkmcnt(0)
+  s_load_dword s0, s[6:7], s4 offset:0
+  s_waitcnt vmcnt(63) lgkmcnt(0)
+  s_add_u32 s0, s0, s5
+  s_add_u32 s0, s0, s8
+  s_add_u32 s0, s0, s9
+  v_mov_b32_copy v1, s0
+  global_store_b32 v0, v1, s[2:3] offset:0
+  s_endpgm
