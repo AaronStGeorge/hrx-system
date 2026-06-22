@@ -516,6 +516,91 @@ kernel.def @dynamic_unit_axis_rejects_offset_workgroup_id(%rows: index) {
 
 // ====
 
+func.def @scalar_view_access_rejects_same_padding_edge_tap_without_origin_proof(%input: buffer, %output: buffer, %base: offset, %x0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %zero = index.constant 0 : index
+  %unit = index.constant 1 : index
+  %two = index.constant 2 : index
+  %three = index.constant 3 : index
+  %width = index.constant 64 : index
+  %x = index.assume %x0 [range(%x0, 0, 63)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<64xi32, %layout>
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32, %layout>
+  %last_x = index.sub %width, %unit : index
+  %is_left_edge = index.cmp eq, %x, %zero : index
+  %kernel_x_begin = scf.if %is_left_edge -> (index) {
+    scf.yield %unit : index
+  } else {
+    scf.yield %zero : index
+  }
+  %is_right_edge = index.cmp eq, %x, %last_x : index
+  %kernel_x_end = scf.if %is_right_edge -> (index) {
+    scf.yield %two : index
+  } else {
+    scf.yield %three : index
+  }
+  scf.for %kernel_x = [%kernel_x_begin to %kernel_x_end step %unit] {
+    %x_with_kernel = index.add %x, %kernel_x : index
+    %source_x = index.sub %x_with_kernel, %unit : index
+    // ERROR@+1: SUBRANGE/023 {op_name="view.load", view_axis="0"}
+    %loaded = view.load %input_view[%source_x] : view<64xi32, %layout> -> i32
+    // ERROR@+1: SUBRANGE/023 {op_name="view.store", view_axis="0"}
+    view.store %loaded, %output_view[%source_x] : i32, view<64xi32, %layout>
+  }
+  func.return
+}
+
+// ====
+
+func.def @scalar_view_access_accepts_same_padding_edge_tap_with_origin_proof(%input: buffer, %output: buffer, %base: offset, %x0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %zero = index.constant 0 : index
+  %unit = index.constant 1 : index
+  %two = index.constant 2 : index
+  %three = index.constant 3 : index
+  %width = index.constant 64 : index
+  %x = index.assume %x0 [range(%x0, 0, 63)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<64xi32, %layout>
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32, %layout>
+  %last_x = index.sub %width, %unit : index
+  %is_left_edge = index.cmp eq, %x, %zero : index
+  %kernel_x_begin = scf.if %is_left_edge -> (index) {
+    scf.yield %unit : index
+  } else {
+    scf.yield %zero : index
+  }
+  %is_right_edge = index.cmp eq, %x, %last_x : index
+  %kernel_x_end = scf.if %is_right_edge -> (index) {
+    scf.yield %two : index
+  } else {
+    scf.yield %three : index
+  }
+  scf.for %kernel_x = [%kernel_x_begin to %kernel_x_end step %unit] {
+    %x_with_kernel0 = index.add %x, %kernel_x : index
+    %x_with_kernel = index.assume %x_with_kernel0 [range(%x_with_kernel0, 1, 64)] : index
+    %source_x = index.sub %x_with_kernel, %unit : index
+    %loaded = view.load %input_view[%source_x] : view<64xi32, %layout> -> i32
+    view.store %loaded, %output_view[%source_x] : i32, view<64xi32, %layout>
+  }
+  func.return
+}
+
+// ====
+
+func.def @scalar_view_atomic_rejects_unproven_origin_while_prefetch_is_ignored(%buffer: buffer, %base: offset, %value: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %zero = index.constant 0 : index
+  %unit = index.constant 1 : index
+  %origin = index.sub %zero, %unit : index
+  %view = buffer.view %buffer[%base] : buffer -> view<64xi32, %layout>
+  // ERROR@+1: SUBRANGE/023 {op_name="view.atomic.reduce", view_axis="0"}
+  view.atomic.reduce<addi> %value, %view[%origin] {ordering = relaxed, scope = device} : i32, view<64xi32, %layout>
+  view.prefetch %view[%origin] {intent = read, locality = l1} : view<64xi32, %layout>
+  func.return
+}
+
+// ====
+
 func.def @mask_range_tail_uses_upper_bound(%buffer: buffer, %base: offset, %n: index, %iv: index, %old: vector<16xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %c1 = index.constant 1 : index

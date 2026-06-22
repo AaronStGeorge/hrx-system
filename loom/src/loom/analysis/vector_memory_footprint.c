@@ -17,6 +17,7 @@
 #include "loom/ops/config/ops.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/math.h"
 
@@ -44,9 +45,18 @@ typedef struct loom_vector_memory_footprint_state_t {
   bool current_access_failed;
 } loom_vector_memory_footprint_state_t;
 
+typedef enum loom_vector_memory_footprint_access_kind_e {
+  LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_DIRECT_VECTOR = 0,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_SCALAR,
+} loom_vector_memory_footprint_access_kind_t;
+
 typedef struct loom_vector_memory_footprint_access_t {
   // Memory op being checked.
   const loom_op_t* op;
+
+  // Mutually exclusive footprint shape selected by the memory op family.
+  loom_vector_memory_footprint_access_kind_t kind;
 
   // View value addressed by the memory op.
   loom_value_id_t view;
@@ -65,9 +75,6 @@ typedef struct loom_vector_memory_footprint_access_t {
 
   // Optional lane offset vector for gather, scatter, and vector atomics.
   loom_value_id_t offsets;
-
-  // Whether offsets participates in the logical footprint.
-  bool has_offsets;
 } loom_vector_memory_footprint_access_t;
 
 static bool loom_vector_memory_footprint_should_suppress_error(
@@ -277,6 +284,36 @@ static iree_status_t loom_vector_memory_footprint_fail_axis(
   ++state->result->error_count;
   iree_string_view_t op_name =
       loom_vector_memory_footprint_op_name(state->module, access->op);
+  if (access->kind == LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_SCALAR &&
+      error == LOOM_ERR_SUBRANGE_008) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(op_name),
+        loom_param_i64(view_axis),
+        loom_param_string(origin),
+    };
+    loom_diagnostic_emission_t emission = {
+        .op = access->op,
+        .error = LOOM_ERR_SUBRANGE_022,
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    return iree_diagnostic_emit(state->options->emitter, &emission);
+  }
+  if (access->kind == LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_SCALAR &&
+      error == LOOM_ERR_SUBRANGE_009) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(op_name),
+        loom_param_i64(view_axis),
+        loom_param_string(origin),
+    };
+    loom_diagnostic_emission_t emission = {
+        .op = access->op,
+        .error = LOOM_ERR_SUBRANGE_023,
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    return iree_diagnostic_emit(state->options->emitter, &emission);
+  }
   loom_diagnostic_param_t params[] = {
       loom_param_string(op_name),
       loom_param_i64(view_axis),
@@ -313,6 +350,23 @@ static iree_status_t loom_vector_memory_footprint_fail_upper_axis(
   iree_string_view_t config_key = iree_string_view_empty();
   if (loom_vector_memory_footprint_lookup_config_decl_bound(
           state, access, view_axis, &config_key)) {
+    if (access->kind == LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_SCALAR) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(op_name),
+          loom_param_i64(view_axis),
+          loom_param_string(origin),
+          loom_param_string(config_key),
+          loom_param_string(
+              IREE_SV("config_decl.where.memory_footprint_upper_bound")),
+      };
+      loom_diagnostic_emission_t emission = {
+          .op = access->op,
+          .error = LOOM_ERR_SUBRANGE_025,
+          .params = params,
+          .param_count = IREE_ARRAYSIZE(params),
+      };
+      return iree_diagnostic_emit(state->options->emitter, &emission);
+    }
     loom_diagnostic_param_t params[] = {
         loom_param_string(op_name),
         loom_param_i64(view_axis),
@@ -345,6 +399,24 @@ static iree_status_t loom_vector_memory_footprint_fail_upper_axis(
       loom_vector_memory_footprint_required_origin_upper_bound_text(
           bound, extent, required_origin_upper_bound_buffer,
           IREE_ARRAYSIZE(required_origin_upper_bound_buffer));
+  if (access->kind == LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_SCALAR) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(op_name),
+        loom_param_i64(view_axis),
+        loom_param_string(view),
+        loom_param_string(origin),
+        loom_param_string(view_bound),
+        loom_param_string(required_origin_upper_bound),
+        loom_param_string(IREE_SV("memory_footprint.scalar_axis_upper_bound")),
+    };
+    loom_diagnostic_emission_t emission = {
+        .op = access->op,
+        .error = LOOM_ERR_SUBRANGE_024,
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    return iree_diagnostic_emit(state->options->emitter, &emission);
+  }
   loom_diagnostic_param_t params[] = {
       loom_param_string(op_name),
       loom_param_i64(view_axis),
@@ -858,6 +930,32 @@ static iree_status_t loom_vector_memory_footprint_check_origin_axis(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_memory_footprint_check_scalar(
+    loom_vector_memory_footprint_state_t* state,
+    const loom_vector_memory_footprint_access_t* access) {
+  loom_type_t view_type = loom_module_value_type(state->module, access->view);
+  loom_vector_memory_access_t memory_access = {0};
+  const loom_fact_context_t* fact_context =
+      state->fact_table ? &state->fact_table->context : NULL;
+  if (!loom_vector_memory_access_describe(fact_context, state->module,
+                                          view_type, access->vector_type,
+                                          &memory_access)) {
+    return iree_ok_status();
+  }
+  if (memory_access.layout_kind == LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN) {
+    return loom_vector_memory_footprint_fail_unresolved_layout(state, access);
+  }
+
+  for (uint8_t axis = 0; axis < memory_access.view_rank; ++axis) {
+    IREE_RETURN_IF_ERROR(loom_vector_memory_footprint_check_origin_axis(
+        state, access, &memory_access, axis));
+    if (state->current_access_failed) {
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
 static bool loom_vector_memory_footprint_offset_bounds_from_facts(
     loom_vector_memory_footprint_state_t* state, loom_value_facts_t facts,
     int64_t* out_lower, int64_t* out_upper) {
@@ -1198,10 +1296,52 @@ static iree_status_t loom_vector_memory_footprint_check_access(
   }
 
   ++state->result->checked_op_count;
-  if (access->has_offsets) {
+  if (access->kind == LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_SCALAR) {
+    return loom_vector_memory_footprint_check_scalar(state, access);
+  }
+  if (access->kind == LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR) {
     return loom_vector_memory_footprint_check_offsets(state, access);
   }
   return loom_vector_memory_footprint_check_direct(state, access);
+}
+
+static bool loom_vector_memory_footprint_describe_view_op(
+    loom_vector_memory_footprint_state_t* state, const loom_op_t* op,
+    loom_vector_memory_footprint_access_t* out_access) {
+  switch (op->kind) {
+    case LOOM_OP_VIEW_LOAD:
+    case LOOM_OP_VIEW_STORE:
+    case LOOM_OP_VIEW_ATOMIC_REDUCE:
+    case LOOM_OP_VIEW_ATOMIC_RMW:
+    case LOOM_OP_VIEW_ATOMIC_CMPXCHG:
+      break;
+    default:
+      return false;
+  }
+
+  loom_memory_access_t memory_access =
+      loom_memory_access_cast(state->module, op);
+  if (!loom_memory_access_isa(memory_access)) {
+    return false;
+  }
+  const loom_value_id_t view = loom_memory_access_view(memory_access);
+  if (view >= state->module->values.count) {
+    return false;
+  }
+  const loom_type_t view_type = loom_module_value_type(state->module, view);
+  if (!loom_type_is_view(view_type) || loom_type_rank(view_type) == 0) {
+    return false;
+  }
+
+  out_access->view = view;
+  out_access->vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, loom_type_element_type(view_type),
+                          loom_dim_pack_static(1), /*encoding_id=*/0);
+  out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_SCALAR;
+  out_access->static_indices = loom_memory_access_static_indices(memory_access);
+  out_access->dynamic_indices =
+      loom_memory_access_dynamic_indices(memory_access);
+  return true;
 }
 
 static bool loom_vector_memory_footprint_describe_op(
@@ -1268,7 +1408,7 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->static_indices = loom_vector_gather_static_indices(op);
       out_access->dynamic_indices = loom_vector_gather_indices(op);
       out_access->offsets = loom_vector_gather_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     case LOOM_OP_VECTOR_SCATTER:
       out_access->view = loom_vector_scatter_view(op);
@@ -1277,7 +1417,7 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->static_indices = loom_vector_scatter_static_indices(op);
       out_access->dynamic_indices = loom_vector_scatter_indices(op);
       out_access->offsets = loom_vector_scatter_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     case LOOM_OP_VECTOR_GATHER_MASK:
       out_access->view = loom_vector_gather_mask_view(op);
@@ -1287,7 +1427,7 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->dynamic_indices = loom_vector_gather_mask_indices(op);
       out_access->mask = loom_vector_gather_mask_mask(op);
       out_access->offsets = loom_vector_gather_mask_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     case LOOM_OP_VECTOR_SCATTER_MASK:
       out_access->view = loom_vector_scatter_mask_view(op);
@@ -1297,7 +1437,7 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->dynamic_indices = loom_vector_scatter_mask_indices(op);
       out_access->mask = loom_vector_scatter_mask_mask(op);
       out_access->offsets = loom_vector_scatter_mask_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     case LOOM_OP_VECTOR_ATOMIC_REDUCE:
       out_access->view = loom_vector_atomic_reduce_view(op);
@@ -1306,7 +1446,7 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->static_indices = loom_vector_atomic_reduce_static_indices(op);
       out_access->dynamic_indices = loom_vector_atomic_reduce_indices(op);
       out_access->offsets = loom_vector_atomic_reduce_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     case LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK:
       out_access->view = loom_vector_atomic_reduce_mask_view(op);
@@ -1317,7 +1457,7 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->dynamic_indices = loom_vector_atomic_reduce_mask_indices(op);
       out_access->mask = loom_vector_atomic_reduce_mask_mask(op);
       out_access->offsets = loom_vector_atomic_reduce_mask_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     case LOOM_OP_VECTOR_ATOMIC_RMW:
       out_access->view = loom_vector_atomic_rmw_view(op);
@@ -1326,7 +1466,7 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->static_indices = loom_vector_atomic_rmw_static_indices(op);
       out_access->dynamic_indices = loom_vector_atomic_rmw_indices(op);
       out_access->offsets = loom_vector_atomic_rmw_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
       out_access->view = loom_vector_atomic_rmw_mask_view(op);
@@ -1337,7 +1477,7 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->dynamic_indices = loom_vector_atomic_rmw_mask_indices(op);
       out_access->mask = loom_vector_atomic_rmw_mask_mask(op);
       out_access->offsets = loom_vector_atomic_rmw_mask_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
       out_access->view = loom_vector_atomic_cmpxchg_view(op);
@@ -1347,10 +1487,11 @@ static bool loom_vector_memory_footprint_describe_op(
           loom_vector_atomic_cmpxchg_static_indices(op);
       out_access->dynamic_indices = loom_vector_atomic_cmpxchg_indices(op);
       out_access->offsets = loom_vector_atomic_cmpxchg_offsets(op);
-      out_access->has_offsets = true;
+      out_access->kind = LOOM_VECTOR_MEMORY_FOOTPRINT_ACCESS_OFFSET_VECTOR;
       return true;
     default:
-      return false;
+      return loom_vector_memory_footprint_describe_view_op(state, op,
+                                                           out_access);
   }
 }
 

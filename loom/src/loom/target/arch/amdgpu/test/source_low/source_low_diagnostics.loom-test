@@ -208,23 +208,24 @@ amdgpu.target<gfx1100> @target
 
 func.def target(@target) @dynamic_scaled_index_large_extent_flat_load(%input: buffer, %index: index) -> (i32) {
   %zero = index.constant 0 : offset
+  %bounded_index = index.assume %index [range(%index, 0, 1073741823)] : index
   %input_view = buffer.view %input[%zero] : buffer -> view<1073741824xi32, #dense>
-  %loaded = view.load %input_view[%index] : view<1073741824xi32, #dense> -> i32
+  %loaded = view.load %input_view[%bounded_index] : view<1073741824xi32, #dense> -> i32
   func.return %loaded : i32
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @dynamic_scaled_index_large_extent_flat_load(%index: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+low.func.def target(@target) abi(hal_kernel) @dynamic_scaled_index_large_extent_flat_load(%bounded_index: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4294967296} : reg<amdgpu.sgpr x2>
-  %9 = v_mov_b32 0
-  %10 = s_lshl_b32_rhs_inline %index, 2
-  %11 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %12 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %13 = s_mov_b32 0
-  %14 = s_add_u32 %11, %10
-  %15 = s_addc_u32 %12, %13
-  %16 = concat(%14, %15) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32_saddr %9, %16
+  %10 = v_mov_b32 0
+  %11 = s_lshl_b32_rhs_inline %bounded_index, 2
+  %12 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %13 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %14 = s_mov_b32 0
+  %15 = s_add_u32 %12, %11
+  %16 = s_addc_u32 %13, %14
+  %17 = concat(%15, %16) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32_saddr %10, %17
   return %loaded
 }
 

@@ -71,15 +71,15 @@ ERR_SUBRANGE_004 = ErrorDef(
     fix_hint="Ensure offset + size <= {bound} for dimension {dim_index}",
 )
 
-# ERR_SUBRANGE_007: Vector memory view layout is unresolved.
+# ERR_SUBRANGE_007: View memory layout is unresolved.
 ERR_SUBRANGE_007 = ErrorDef(
     domain=ErrorDomain.SUBRANGE,
     code=7,
     severity=Severity.ERROR,
-    summary="Vector memory view layout is unresolved.",
+    summary="View memory layout is unresolved.",
     message="{op_name} footprint proof requires a resolved view layout",
     params=(ErrorParam("op_name", ParamKind.STRING),),
-    fix_hint="Use a concrete view layout before vector footprint verification",
+    fix_hint="Use a concrete view layout before memory footprint verification",
 )
 
 # ERR_SUBRANGE_008: Vector memory footprint origin is unresolved.
@@ -333,6 +333,92 @@ ERR_SUBRANGE_021 = ErrorDef(
     ),
 )
 
+# ERR_SUBRANGE_022: Scalar view memory footprint origin is unresolved.
+ERR_SUBRANGE_022 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=22,
+    severity=Severity.ERROR,
+    summary="Scalar view memory footprint origin is unresolved.",
+    message=(
+        "{op_name} footprint origin {origin} is unresolved on view axis {view_axis}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("view_axis", ParamKind.I64),
+        ErrorParam("origin", ParamKind.STRING),
+    ),
+    fix_hint="Use a static index or an index SSA value for the footprint origin",
+)
+
+# ERR_SUBRANGE_023: Scalar view memory origin lower bound is not proven.
+ERR_SUBRANGE_023 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=23,
+    severity=Severity.ERROR,
+    summary="Scalar view memory origin lower bound is not proven.",
+    message=(
+        "{op_name} footprint origin lower bound is not proven on view axis "
+        "{view_axis}; origin {origin} must satisfy 0 <= origin"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("view_axis", ParamKind.I64),
+        ErrorParam("origin", ParamKind.STRING),
+    ),
+    fix_hint="Prove that origin {origin} is non-negative at the memory op",
+)
+
+# ERR_SUBRANGE_024: Scalar view memory upper bound is not proven.
+ERR_SUBRANGE_024 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=24,
+    severity=Severity.ERROR,
+    summary="Scalar view memory upper bound is not proven.",
+    message=(
+        "{op_name} scalar footprint upper bound is not proven on view axis "
+        "{view_axis}; origin {origin} must satisfy origin + 1 <= view_bound "
+        "for view {view}; view_bound is {view_bound}, and the maximum legal "
+        "origin is {required_origin_upper_bound}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("view_axis", ParamKind.I64),
+        ErrorParam("view", ParamKind.STRING),
+        ErrorParam("origin", ParamKind.STRING),
+        ErrorParam("view_bound", ParamKind.STRING),
+        ErrorParam("required_origin_upper_bound", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use a guard, assume, launch/view relation, or padded view extent "
+        "visible at the memory op"
+    ),
+)
+
+# ERR_SUBRANGE_025: Scalar view memory config-declared upper bound is not proven.
+ERR_SUBRANGE_025 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=25,
+    severity=Severity.ERROR,
+    summary="Scalar view memory config-declared upper bound is not proven.",
+    message=(
+        "{op_name} footprint upper bound is not proven on view axis "
+        "{view_axis}; view_bound comes from config.decl @{config_key}, whose "
+        "where predicates do not prove origin {origin} remains in bounds"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("view_axis", ParamKind.I64),
+        ErrorParam("origin", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Strengthen config.decl @{config_key} where predicates or add a "
+        "launch/view relation proving {constraint_key}"
+    ),
+)
+
 ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SUBRANGE_001,
     ERR_SUBRANGE_002,
@@ -353,4 +439,8 @@ ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SUBRANGE_019,
     ERR_SUBRANGE_020,
     ERR_SUBRANGE_021,
+    ERR_SUBRANGE_022,
+    ERR_SUBRANGE_023,
+    ERR_SUBRANGE_024,
+    ERR_SUBRANGE_025,
 )
