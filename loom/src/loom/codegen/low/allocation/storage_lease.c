@@ -418,6 +418,21 @@ static bool loom_low_allocation_storage_lease_can_release_before(
          packet_index > record->packet_index;
 }
 
+static bool loom_low_allocation_storage_release_policy_allows_record(
+    loom_low_allocation_storage_release_policy_t policy,
+    const loom_low_storage_lease_record_t* record) {
+  switch (policy) {
+    case LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN:
+      return false;
+    case LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FOR_PRESSURE:
+      return iree_all_bits_set(
+          record->flags, LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE);
+    case LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED:
+      return true;
+  }
+  return false;
+}
+
 static bool loom_low_allocation_storage_lease_scan_conflicts(
     const loom_low_allocation_storage_lease_state_t* state,
     const loom_low_descriptor_set_t* descriptor_set,
@@ -503,6 +518,10 @@ iree_status_t loom_low_allocation_storage_lease_state_initialize(
     out_state->next_record_indices[i] =
         out_state->record_heads_by_value_ordinal[value_ordinal];
     out_state->record_heads_by_value_ordinal[value_ordinal] = (uint32_t)i;
+    if (iree_all_bits_set(record->flags,
+                          LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE)) {
+      ++out_state->pressure_release_record_count;
+    }
     if (!iree_host_size_checked_add(lease_unit_capacity, record->unit_count,
                                     &lease_unit_capacity)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -527,7 +546,7 @@ bool loom_low_allocation_storage_lease_state_conflicts(
   if (state->lease_table == NULL || state->lease_table->record_count == 0) {
     return false;
   }
-  if (policy == LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED) {
+  if (policy != LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN) {
     const iree_host_size_t record_count = state->lease_table->record_count;
     for (iree_host_size_t i = 0; i < record_count; ++i) {
       if (state->instance_written[i] == 0) {
@@ -541,6 +560,12 @@ bool loom_low_allocation_storage_lease_state_conflicts(
       if (!loom_low_allocation_storage_lease_instance_conflicts(
               descriptor_set, lease, candidate)) {
         continue;
+      }
+      const loom_low_storage_lease_record_t* record =
+          &state->lease_table->records[i];
+      if (!loom_low_allocation_storage_release_policy_allows_record(policy,
+                                                                    record)) {
+        return true;
       }
       if (!loom_low_allocation_storage_lease_can_release_before(
               state, liveness, lease, candidate)) {

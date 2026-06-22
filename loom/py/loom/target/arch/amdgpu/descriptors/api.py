@@ -366,6 +366,11 @@ _AMDGPU_STORAGE_LEASE_FLAGS = (
     StorageLeaseFlag.STARTS_AT_ISSUE,
     StorageLeaseFlag.RELEASE_BEFORE_BOUNDARY,
 )
+_AMDGPU_PRESSURE_STORAGE_LEASE_FLAGS = (
+    StorageLeaseFlag.STARTS_AT_ISSUE,
+    StorageLeaseFlag.RELEASE_BEFORE_BOUNDARY,
+    StorageLeaseFlag.RELEASE_FOR_PRESSURE,
+)
 
 
 def _amdgpu_wait_counter_mask(counter_id: int) -> int:
@@ -456,6 +461,7 @@ def _amdgpu_storage_lease(
     release_class_id: int,
     release_reason_id: int,
     release_reason_name: str,
+    flags: tuple[StorageLeaseFlag, ...],
 ) -> StorageLease:
     return StorageLease(
         kind=kind,
@@ -470,7 +476,7 @@ def _amdgpu_storage_lease(
         release_action_name=_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET_NAME,
         release_reason_id=release_reason_id,
         release_reason_name=release_reason_name,
-        flags=_AMDGPU_STORAGE_LEASE_FLAGS,
+        flags=flags,
     )
 
 
@@ -521,6 +527,7 @@ def _amdgpu_descriptor_storage_leases(
                     release_reason_name=(
                         _AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE_NAME
                     ),
+                    flags=_AMDGPU_PRESSURE_STORAGE_LEASE_FLAGS,
                 )
             )
     if (write_counter_mask & _AMDGPU_WAIT_COUNTER_MASKS[_COUNTER_VMEM_STORE]) != 0:
@@ -543,6 +550,7 @@ def _amdgpu_descriptor_storage_leases(
                     release_reason_name=(
                         _AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE_NAME
                     ),
+                    flags=_AMDGPU_STORAGE_LEASE_FLAGS,
                 )
             )
     return tuple(storage_leases)

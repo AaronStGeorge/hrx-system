@@ -43,6 +43,18 @@ static bool loom_low_allocation_search_align_up_u32(uint32_t value,
   return true;
 }
 
+static bool loom_low_allocation_search_has_storage_release_records(
+    const loom_low_allocation_search_context_t* context) {
+  return context->storage_leases && context->storage_leases->lease_table &&
+         context->storage_leases->lease_table->record_count != 0;
+}
+
+static bool loom_low_allocation_search_has_pressure_release_records(
+    const loom_low_allocation_search_context_t* context) {
+  return context->storage_leases &&
+         context->storage_leases->pressure_release_record_count != 0;
+}
+
 bool loom_low_allocation_search_location_conflicts(
     loom_low_allocation_search_context_t* context,
     const loom_liveness_interval_t* interval, uint16_t reg_class_id,
@@ -120,6 +132,8 @@ bool loom_low_allocation_search_find_free_location(
     }
   }
 
+  bool found_release_free = false;
+  uint32_t release_free_base = 0;
   for (uint32_t base = 0; base <= last_base;) {
     if (!loom_low_allocation_search_location_conflicts(
             context, interval, capacity.descriptor_reg_class_id,
@@ -128,13 +142,48 @@ bool loom_low_allocation_search_find_free_location(
             /*ignored_storage_lease_value_ids=*/NULL,
             /*ignored_storage_lease_value_count=*/0,
             LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
-      *out_base = base;
-      return true;
+      found_release_free = true;
+      release_free_base = base;
+      break;
     }
     if (base > UINT32_MAX - alignment) {
       break;
     }
     base += alignment;
+  }
+
+  bool found_pressure_release = false;
+  uint32_t pressure_release_base = 0;
+  if (loom_low_allocation_search_has_pressure_release_records(context)) {
+    for (uint32_t base = 0; base <= last_base;) {
+      if (!loom_low_allocation_search_location_conflicts(
+              context, interval, capacity.descriptor_reg_class_id,
+              capacity.location_kind, base, interval->unit_count,
+              /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0,
+              /*ignored_storage_lease_value_ids=*/NULL,
+              /*ignored_storage_lease_value_count=*/0,
+              LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FOR_PRESSURE)) {
+        found_pressure_release = true;
+        pressure_release_base = base;
+        break;
+      }
+      if (base > UINT32_MAX - alignment) {
+        break;
+      }
+      base += alignment;
+    }
+  }
+  if (found_pressure_release &&
+      (!found_release_free || pressure_release_base < release_free_base)) {
+    *out_base = pressure_release_base;
+    return true;
+  }
+  if (found_release_free) {
+    *out_base = release_free_base;
+    return true;
+  }
+  if (!loom_low_allocation_search_has_storage_release_records(context)) {
+    return false;
   }
   for (uint32_t base = 0; base <= last_base;) {
     if (!loom_low_allocation_search_location_conflicts(

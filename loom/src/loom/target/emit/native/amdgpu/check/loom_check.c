@@ -6,6 +6,7 @@
 
 #include "loom/target/emit/native/amdgpu/check/loom_check.h"
 
+#include "loom/codegen/low/allocation_json.h"
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/packet_json.h"
 #include "loom/codegen/low/target_binding.h"
@@ -61,6 +62,8 @@ static bool loom_amdgpu_loom_check_emit_provider_matches(
   (void)provider;
   return iree_string_view_equal(target_name, IREE_SV("amdgpu-assembly")) ||
          iree_string_view_equal(target_name, IREE_SV("amdgpu-asm")) ||
+         iree_string_view_equal(target_name,
+                                IREE_SV("amdgpu-allocation-json")) ||
          iree_string_view_equal(target_name, IREE_SV("amdgpu-packet-json")) ||
          iree_string_view_equal(target_name,
                                 IREE_SV("amdgpu-vopd-plan-json")) ||
@@ -254,6 +257,7 @@ static bool loom_amdgpu_loom_check_needs_storage_leases(
     iree_string_view_t target_name,
     const loom_amdgpu_loom_check_emit_options_t* options) {
   if (iree_string_view_equal(target_name, IREE_SV("amdgpu-vopd-plan-json")) ||
+      iree_string_view_equal(target_name, IREE_SV("amdgpu-allocation-json")) ||
       iree_string_view_equal(target_name,
                              IREE_SV("amdgpu-wait-counter-plan-json")) ||
       iree_string_view_equal(target_name, IREE_SV("amdgpu-wait-state-plan")) ||
@@ -390,6 +394,11 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
                                               request->case_arena);
   }
   if (iree_string_view_equal(request->target_name,
+                             IREE_SV("amdgpu-allocation-json"))) {
+    return loom_low_allocation_format_json(&frame.allocation,
+                                           &request->result->actual_output);
+  }
+  if (iree_string_view_equal(request->target_name,
                              IREE_SV("amdgpu-packet-json"))) {
     return loom_low_packet_format_json(&frame.schedule, &frame.allocation,
                                        &request->result->actual_output);
@@ -424,9 +433,10 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_append_names(
   (void)provider;
   return iree_string_builder_append_cstring(
       builder,
-      "amdgpu-assembly, amdgpu-asm, amdgpu-packet-json, "
-      "amdgpu-vopd-plan-json, amdgpu-wait-counter-plan-json, "
-      "amdgpu-wait-state-plan, amdgpu-wait-state-plan-json, amdgpu-native");
+      "amdgpu-assembly, amdgpu-asm, amdgpu-allocation-json, "
+      "amdgpu-packet-json, amdgpu-vopd-plan-json, "
+      "amdgpu-wait-counter-plan-json, amdgpu-wait-state-plan, "
+      "amdgpu-wait-state-plan-json, amdgpu-native");
 }
 
 const loom_check_emit_provider_t loom_amdgpu_native_loom_check_emit_provider = {
