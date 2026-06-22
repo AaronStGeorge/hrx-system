@@ -683,6 +683,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
               report.schedule_band_rows.head));
   EXPECT_EQ(schedule_band_rows[0].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE);
+  EXPECT_EQ(schedule_band_rows[0].block_index, 0u);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[0].semantic_tag,
                                      IREE_SV("register.copy.b32")));
   EXPECT_EQ(schedule_band_rows[0].node_count, 1u);
@@ -695,6 +696,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_EQ(schedule_band_rows[0].result_unit_count, 2u);
   EXPECT_EQ(schedule_band_rows[1].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY);
+  EXPECT_EQ(schedule_band_rows[1].block_index, 0u);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[1].semantic_tag,
                                      IREE_SV("memory.global.load.u32")));
   EXPECT_EQ(schedule_band_rows[1].static_instruction_mix.global_memory_count,
@@ -725,11 +727,13 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           report.schedule_band_summary_rows.head));
   EXPECT_EQ(schedule_band_summary_rows[0].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE);
+  EXPECT_EQ(schedule_band_summary_rows[0].block_index, 0u);
   EXPECT_EQ(schedule_band_summary_rows[0].band_count, 1u);
   EXPECT_EQ(schedule_band_summary_rows[0].node_count, 1u);
   EXPECT_EQ(schedule_band_summary_rows[0].max_band_node_count, 1u);
   EXPECT_EQ(schedule_band_summary_rows[1].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY);
+  EXPECT_EQ(schedule_band_summary_rows[1].block_index, 0u);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_summary_rows[1].semantic_tag,
                                      IREE_SV("memory.global.load.u32")));
   EXPECT_EQ(schedule_band_summary_rows[1].band_count, 2u);

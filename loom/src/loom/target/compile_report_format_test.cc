@@ -65,6 +65,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       {
           /*.function_name=*/IREE_SVL("branchy_export"),
           /*.block_name=*/IREE_SVL("body"),
+          /*.block_index=*/2,
           /*.first_packet_index=*/17,
           /*.first_scheduled_ordinal=*/5,
           /*.node_count=*/4,
@@ -110,6 +111,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           {
               /*.function_name=*/IREE_SVL("branchy_export"),
               /*.block_name=*/IREE_SVL("body"),
+              /*.block_index=*/2,
               /*.first_packet_index=*/17,
               /*.band_count=*/3,
               /*.node_count=*/12,
@@ -744,9 +746,16 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
+                IREE_SV("schedule_band[0] function=branchy_export "
+                        "block=body block_index=2 first_packet=17 "
+                        "first_ordinal=5 nodes=4 origin=local-memory"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
                 IREE_SV("schedule_band_summary[0] function=branchy_export "
-                        "block=body first_packet=17 bands=3 nodes=12 "
-                        "max_band_nodes=4 origin=local-memory"),
+                        "block=body block_index=2 first_packet=17 bands=3 "
+                        "nodes=12 max_band_nodes=4 origin=local-memory"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
@@ -968,10 +977,25 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
+                IREE_SV("\"schedule_band_rows\":{\"count\":1,\"rows\":[{"
+                        "\"index\":0,\"function\":\"branchy_export\","
+                        "\"block\":\"body\",\"block_index\":2"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
                 IREE_SV("\"schedule_band_summary_rows\":{\"count\":1,"
                         "\"rows\":["),
                 0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output,
+          IREE_SV("\"schedule_band_summary_rows\":{\"count\":1,"
+                  "\"rows\":[{\"index\":0,\"function\":\"branchy_export\","
+                  "\"block\":\"body\",\"block_index\":2"),
+          0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("\"band_count\":3"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(

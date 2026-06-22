@@ -714,7 +714,8 @@ static void loom_target_compile_report_accumulate_schedule_band_node(
 static bool loom_target_compile_report_schedule_band_summary_matches(
     const loom_target_compile_report_schedule_band_summary_row_t* summary,
     const loom_target_compile_report_schedule_band_row_t* band) {
-  return iree_string_view_equal(summary->block_name, band->block_name) &&
+  return summary->block_index == band->block_index &&
+         iree_string_view_equal(summary->block_name, band->block_name) &&
          summary->origin_kind == band->origin_kind &&
          iree_string_view_equal(summary->origin_operation_name,
                                 band->origin_operation_name) &&
@@ -758,6 +759,7 @@ static iree_status_t loom_target_compile_report_add_schedule_band_summary(
   *summary = (loom_target_compile_report_schedule_band_summary_row_t){
       .function_name = band->function_name,
       .block_name = band->block_name,
+      .block_index = band->block_index,
       .first_packet_index = band->first_packet_index,
       .origin_kind = band->origin_kind,
       .origin_operation_name = band->origin_operation_name,
@@ -853,6 +855,7 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
             .function_name = report->function_name,
             .block_name =
                 loom_target_compile_report_block_name(module, node->block),
+            .block_index = (uint32_t)block_index,
             .first_packet_index = (uint64_t)packet_index,
             .first_scheduled_ordinal = node->scheduled_ordinal,
             .origin_kind = info.kind,

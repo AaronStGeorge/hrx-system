@@ -1048,8 +1048,8 @@ static iree_status_t loom_target_compile_report_format_schedule_band_rows(
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder,
           "COMPILE-REPORT: schedule_band[%" PRIhsz
-          "] function=%.*s block=%.*s first_packet=%" PRIu64
-          " first_ordinal=%" PRIu32 " nodes=%" PRIu32
+          "] function=%.*s block=%.*s block_index=%" PRIu32
+          " first_packet=%" PRIu64 " first_ordinal=%" PRIu32 " nodes=%" PRIu32
           " origin=%.*s"
           " origin_op=%.*s semantic=%.*s sample=%.*s"
           " descriptors=%" PRIu64 " unknown=%" PRIu64 " scalar_alu=%" PRIu64
@@ -1061,10 +1061,11 @@ static iree_status_t loom_target_compile_report_format_schedule_band_rows(
           " cache=%" PRIu64 " register_move=%" PRIu64 " result_values=%" PRIu64
           " result_units=%" PRIu64 "\n",
           row_index, (int)function_name.size, function_name.data,
-          (int)block_name.size, block_name.data, row->first_packet_index,
-          row->first_scheduled_ordinal, row->node_count, (int)origin_kind.size,
-          origin_kind.data, (int)origin_operation_name.size,
-          origin_operation_name.data, (int)semantic_tag.size, semantic_tag.data,
+          (int)block_name.size, block_name.data, row->block_index,
+          row->first_packet_index, row->first_scheduled_ordinal,
+          row->node_count, (int)origin_kind.size, origin_kind.data,
+          (int)origin_operation_name.size, origin_operation_name.data,
+          (int)semantic_tag.size, semantic_tag.data,
           (int)sample_value_name.size, sample_value_name.data,
           mix->descriptor_count, mix->unknown_count, mix->scalar_alu_count,
           mix->vector_alu_count, mix->matrix_count, mix->mfma_count,
@@ -1111,8 +1112,9 @@ loom_target_compile_report_format_schedule_band_summary_rows(
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder,
           "COMPILE-REPORT: schedule_band_summary[%" PRIhsz
-          "] function=%.*s block=%.*s first_packet=%" PRIu64 " bands=%" PRIu64
-          " nodes=%" PRIu64 " max_band_nodes=%" PRIu32
+          "] function=%.*s block=%.*s block_index=%" PRIu32
+          " first_packet=%" PRIu64 " bands=%" PRIu64 " nodes=%" PRIu64
+          " max_band_nodes=%" PRIu32
           " origin=%.*s"
           " origin_op=%.*s semantic=%.*s sample=%.*s"
           " descriptors=%" PRIu64 " unknown=%" PRIu64 " scalar_alu=%" PRIu64
@@ -1124,9 +1126,9 @@ loom_target_compile_report_format_schedule_band_summary_rows(
           " cache=%" PRIu64 " register_move=%" PRIu64 " result_values=%" PRIu64
           " result_units=%" PRIu64 "\n",
           row_index, (int)function_name.size, function_name.data,
-          (int)block_name.size, block_name.data, row->first_packet_index,
-          row->band_count, row->node_count, row->max_band_node_count,
-          (int)origin_kind.size, origin_kind.data,
+          (int)block_name.size, block_name.data, row->block_index,
+          row->first_packet_index, row->band_count, row->node_count,
+          row->max_band_node_count, (int)origin_kind.size, origin_kind.data,
           (int)origin_operation_name.size, origin_operation_name.data,
           (int)semantic_tag.size, semantic_tag.data,
           (int)sample_value_name.size, sample_value_name.data,
@@ -2493,6 +2495,8 @@ static iree_status_t loom_target_compile_report_format_schedule_band_row_json(
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "block", row->block_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "block_index", row->block_index));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "first_packet_index", row->first_packet_index));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
@@ -2573,6 +2577,8 @@ loom_target_compile_report_format_schedule_band_summary_row_json(
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "block", row->block_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "block_index", row->block_index));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "first_packet_index", row->first_packet_index));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(

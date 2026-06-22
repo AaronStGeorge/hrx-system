@@ -524,6 +524,8 @@ typedef struct loom_target_compile_report_schedule_band_row_t {
   iree_string_view_t function_name;
   // Region block label containing this schedule band.
   iree_string_view_t block_name;
+  // Region block index containing this schedule band.
+  uint32_t block_index;
   // First global scheduled packet index in this band.
   uint64_t first_packet_index;
   // First scheduled ordinal within |block_name| in this band.
@@ -552,6 +554,8 @@ typedef struct loom_target_compile_report_schedule_band_summary_row_t {
   iree_string_view_t function_name;
   // Region block label containing these schedule bands.
   iree_string_view_t block_name;
+  // Region block index containing these schedule bands.
+  uint32_t block_index;
   // First global scheduled packet index in the first matching band.
   uint64_t first_packet_index;
   // Number of matching bands in this block.
