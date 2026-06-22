@@ -114,6 +114,49 @@
           }
         },
         {
+          "name": "compile-summary",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/multi_entry_report_amdgpu.loom",
+              "--backend=amdgpu-hal",
+              "--target=gfx11-generic",
+              "--output={tmp}/multi_entry_report_summary_amdgpu.hsaco",
+              "--artifact-manifest=summary",
+              "--compile-report=summary",
+              "--compile-report-output=-"
+            ]
+          },
+          "stdout": {
+            "contains": {
+              "unordered": [
+                "\"target_export\":null",
+                "\"entries\":{\"count\":2,\"rows\":[",
+                "\"target_resources\":{\"scalar_register_class\":\"amdgpu.sgpr\"",
+                { "regex": "\"scalar_pressure_peak_live_units\":[1-9][0-9]*" },
+                "\"scalar_register_overhead_units\":",
+                "\"vector_register_class\":\"amdgpu.vgpr\"",
+                { "regex": "\"vector_pressure_peak_live_units\":[1-9][0-9]*" },
+                "\"vector_register_overhead_units\":",
+                "\"subgroup_size\":",
+                "\"occupancy_percent\":",
+                "\"limiting_resource\":",
+                "\"status\":\"OK\""
+              ]
+            }
+          },
+          "files": [
+            {
+              "path": "{tmp}/multi_entry_report_summary_amdgpu.hsaco",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/multi_entry_report_summary_amdgpu.hsaco.manifest.json",
+              "non_empty": true
+            }
+          ]
+        },
+        {
           "name": "compile",
           "run": {
             "tool": "loom-compile",

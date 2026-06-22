@@ -1370,31 +1370,40 @@ static iree_status_t loom_target_compile_report_record_pressure_rows(
     loom_target_compile_report_t* report,
     const loom_liveness_analysis_t* liveness,
     const loom_low_descriptor_set_t* descriptor_set) {
-  if (!loom_target_compile_report_wants_details(
-          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS)) {
-    return iree_ok_status();
-  }
+  const bool wants_pressure_rows = loom_target_compile_report_wants_details(
+      report, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS);
   for (iree_host_size_t i = 0; i < liveness->pressure_summary_count; ++i) {
     const loom_liveness_pressure_summary_t* summary =
         &liveness->pressure_summaries[i];
-    const loom_target_compile_report_pressure_row_t row = {
-        .function_name = report->function_name,
-        .register_class = loom_target_compile_report_value_class_name(
-            descriptor_set, summary->value_class),
-        .type_kind = summary->value_class.type_kind,
-        .element_type = summary->value_class.element_type,
+    const iree_string_view_t register_class =
+        loom_target_compile_report_value_class_name(descriptor_set,
+                                                    summary->value_class);
+    const loom_target_compile_report_pressure_summary_t pressure_summary = {
+        .register_class = register_class,
         .peak_live_units = summary->peak_live_units,
-        .peak_live_values = summary->peak_live_values,
-        .peak_point = summary->peak_point,
-        .peak_block_name = loom_target_compile_report_block_name(
-            liveness->module, summary->peak_block),
-        .peak_operation_name = summary->peak_op
-                                   ? loom_target_compile_report_op_name(
-                                         liveness->module, summary->peak_op)
-                                   : IREE_SV("<block-boundary>"),
     };
-    IREE_RETURN_IF_ERROR(
-        loom_target_compile_report_record_pressure_row(report, &row));
+    if (wants_pressure_rows) {
+      const loom_target_compile_report_pressure_row_t row = {
+          .function_name = report->function_name,
+          .register_class = register_class,
+          .type_kind = summary->value_class.type_kind,
+          .element_type = summary->value_class.element_type,
+          .peak_live_units = summary->peak_live_units,
+          .peak_live_values = summary->peak_live_values,
+          .peak_point = summary->peak_point,
+          .peak_block_name = loom_target_compile_report_block_name(
+              liveness->module, summary->peak_block),
+          .peak_operation_name = summary->peak_op
+                                     ? loom_target_compile_report_op_name(
+                                           liveness->module, summary->peak_op)
+                                     : IREE_SV("<block-boundary>"),
+      };
+      IREE_RETURN_IF_ERROR(
+          loom_target_compile_report_record_pressure_row(report, &row));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_record_pressure_summary(
+          report, &pressure_summary));
+    }
   }
   return iree_ok_status();
 }

@@ -334,6 +334,14 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   uint64_t register_move_count;
 } loom_target_compile_report_static_instruction_mix_t;
 
+// Register-class pressure peak retained for summary target-resource reporting.
+typedef struct loom_target_compile_report_pressure_summary_t {
+  // Stable target register class counted by |peak_live_units|.
+  iree_string_view_t register_class;
+  // Peak live units observed for |register_class|.
+  uint64_t peak_live_units;
+} loom_target_compile_report_pressure_summary_t;
+
 // Final target resource and occupancy summary for one emitted entry.
 typedef struct loom_target_compile_report_target_resources_t {
   // Stable target register class counted by |scalar_register_count|.
@@ -1109,6 +1117,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_wait_plan_t wait_plan;
   // Owned emitted artifact entry summary rows.
   loom_target_compile_report_row_list_t entry_rows;
+  // Owned register-class pressure summaries used by target resources.
+  loom_target_compile_report_row_list_t pressure_summaries;
   // Owned register-pressure peak rows.
   loom_target_compile_report_row_list_t pressure_rows;
   // Owned register-pressure origin contribution rows.
@@ -1224,6 +1234,11 @@ void loom_target_compile_report_record_memory(
 void loom_target_compile_report_record_target_resources(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_target_resources_t* target_resources);
+
+// Records one register-class pressure summary for aggregate reporting.
+iree_status_t loom_target_compile_report_record_pressure_summary(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_pressure_summary_t* summary);
 
 // Records target wait-counter planning summary facts.
 void loom_target_compile_report_record_wait_plan(

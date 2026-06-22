@@ -28,6 +28,29 @@
       }
     },
     {
+      "name": "includes benchmark identity on compact work items",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/testdata/scalar_benchmarks.loom",
+          "--benchmark=@scalar_equal_latency",
+          "--iterations=1",
+          "--warmup-iterations=0",
+          "--min-time-ms=0",
+          "--max-batches=1"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"output_format\":\"snapshot\"",
+          "\"work_items\":[{\"work_item_index\":0,\"benchmark\":\"scalar_equal_latency\",\"case\":\"scalar_equal\"",
+          "\"benchmarks\":[{\"candidate_id\":",
+          "\"benchmark\":\"scalar_equal_latency\"",
+          "\"case\":\"scalar_equal\""
+        ]
+      }
+    },
+    {
       "name": "reports selected benchmark check.case planning issues",
       "run": {
         "tool": "iree-benchmark-loom",

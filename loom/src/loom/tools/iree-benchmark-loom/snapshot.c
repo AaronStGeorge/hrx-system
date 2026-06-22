@@ -347,6 +347,8 @@ static iree_status_t iree_benchmark_loom_snapshot_append_work_item(
   bool first_field = true;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
       &stream, &first_field, "work_item_index", event->work_item_index));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_benchmark_fields(
+      event->benchmark_plan, event->case_plan, &stream, &first_field));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
       &stream, &first_field, "state",
       iree_benchmark_loom_snapshot_result_state(event->benchmark_result)));
