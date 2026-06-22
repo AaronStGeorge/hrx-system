@@ -167,6 +167,14 @@ iree_status_t loom_amdgpu_emit_resolved_const_u32(
     loom_string_id_t imm32_attr_name_id, uint32_t value,
     loom_type_t result_type, loom_value_id_t* out_value_id);
 
+// Emits one resolved VGPR descriptor op with two VGPR operands and one imm32
+// immediate attribute.
+iree_status_t loom_amdgpu_emit_resolved_vgpr_binary_immediate(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor, loom_value_id_t lhs,
+    loom_value_id_t rhs, uint32_t immediate, loom_type_t lane_type,
+    loom_value_id_t* out_value);
+
 // Emits a fresh VGPR carrying the same 32-bit bit payload as |low_source|.
 iree_status_t loom_amdgpu_emit_vgpr_b32_copy(loom_low_lower_context_t* context,
                                              const loom_op_t* source_op,
