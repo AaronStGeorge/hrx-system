@@ -695,6 +695,14 @@ typedef struct loom_target_compile_report_allocation_high_water_row_t {
   uint32_t location_count;
   // One-past-last concrete location unit reached by this assignment.
   uint64_t high_water_units;
+  // Number of other active assignments below |high_water_units|.
+  uint32_t active_assignment_blocker_count;
+  // Total units occupied by other active assignments below |high_water_units|.
+  uint64_t active_assignment_blocker_units;
+  // Number of active target storage leases below |high_water_units|.
+  uint32_t active_storage_lease_blocker_count;
+  // Total target storage-lease units below |high_water_units|.
+  uint64_t active_storage_lease_blocker_units;
 } loom_target_compile_report_allocation_high_water_row_t;
 
 // One target wait-counter summary row copied into a compile report.

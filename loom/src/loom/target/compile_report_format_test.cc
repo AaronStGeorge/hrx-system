@@ -219,6 +219,10 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.location_base=*/248,
               /*.location_count=*/4,
               /*.high_water_units=*/252,
+              /*.active_assignment_blocker_count=*/47,
+              /*.active_assignment_blocker_units=*/244,
+              /*.active_storage_lease_blocker_count=*/3,
+              /*.active_storage_lease_blocker_units=*/12,
           },
       };
   const loom_target_compile_report_wait_plan_t wait_plan = {
@@ -722,7 +726,10 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "origin_op=low.op<amdgpu.ds_load_b128> "
                         "semantic=memory.workgroup.load.u128 start=17 end=24 "
                         "required_units=4 location=physical_register[248:4] "
-                        "high_water=252"),
+                        "high_water=252 active_assignment_blockers=47 "
+                        "active_assignment_blocker_units=244 "
+                        "active_storage_lease_blockers=3 "
+                        "active_storage_lease_blocker_units=12"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
@@ -1138,7 +1145,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                 output,
                 IREE_SV("\"location_kind\":\"physical_register\","
                         "\"location_base\":248,\"location_count\":4,"
-                        "\"high_water_units\":252"),
+                        "\"high_water_units\":252,"
+                        "\"active_assignment_blocker_count\":47,"
+                        "\"active_assignment_blocker_units\":244,"
+                        "\"active_storage_lease_blocker_count\":3,"
+                        "\"active_storage_lease_blocker_units\":12"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(

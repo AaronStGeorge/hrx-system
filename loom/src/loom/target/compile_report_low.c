@@ -1460,6 +1460,109 @@ static bool loom_target_compile_report_liveness_value_ordinal(
   return false;
 }
 
+typedef struct loom_target_compile_report_allocation_high_water_blockers_t {
+  // Number of active assignment blockers below the high-water assignment.
+  uint32_t active_assignment_count;
+  // Total units owned by active assignment blockers.
+  uint64_t active_assignment_units;
+  // Number of active target storage-lease blockers below the high-water
+  // assignment.
+  uint32_t active_storage_lease_count;
+  // Total units owned by active target storage-lease blockers.
+  uint64_t active_storage_lease_units;
+} loom_target_compile_report_allocation_high_water_blockers_t;
+
+static bool loom_target_compile_report_assignment_active_at(
+    const loom_low_allocation_assignment_t* assignment, uint32_t point) {
+  return assignment->start_point <= point && point < assignment->end_point;
+}
+
+static uint64_t loom_target_compile_report_units_below_high_water(
+    uint32_t location_base, uint32_t location_count,
+    uint64_t high_water_units) {
+  if (location_count == 0 || (uint64_t)location_base >= high_water_units) {
+    return 0;
+  }
+  const uint64_t location_end = (uint64_t)location_base + location_count;
+  const uint64_t clipped_end = iree_min(location_end, high_water_units);
+  return clipped_end - location_base;
+}
+
+static void loom_target_compile_report_add_high_water_assignment_blockers(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint64_t high_water_units,
+    loom_target_compile_report_allocation_high_water_blockers_t* blockers) {
+  const uint32_t point = high_water_assignment->start_point;
+  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
+    if (i == high_water_assignment_index) {
+      continue;
+    }
+    const loom_low_allocation_assignment_t* assignment =
+        &allocation->assignments[i];
+    if (assignment->descriptor_reg_class_id !=
+            high_water_assignment->descriptor_reg_class_id ||
+        assignment->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        !loom_target_compile_report_assignment_active_at(assignment, point)) {
+      continue;
+    }
+    const uint64_t blocker_units =
+        loom_target_compile_report_units_below_high_water(
+            assignment->location_base, assignment->location_count,
+            high_water_units);
+    if (blocker_units == 0) {
+      continue;
+    }
+    ++blockers->active_assignment_count;
+    blockers->active_assignment_units += blocker_units;
+  }
+}
+
+static void loom_target_compile_report_add_high_water_storage_lease_blockers(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint64_t high_water_units,
+    loom_target_compile_report_allocation_high_water_blockers_t* blockers) {
+  const uint32_t point = high_water_assignment->start_point;
+  for (iree_host_size_t i = 0; i < allocation->storage_lease_instance_count;
+       ++i) {
+    const loom_low_allocation_storage_lease_t* lease =
+        &allocation->storage_lease_instances[i];
+    if (lease->assignment_index == high_water_assignment_index ||
+        lease->descriptor_reg_class_id !=
+            high_water_assignment->descriptor_reg_class_id ||
+        lease->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        point < lease->start_point || point >= lease->end_point) {
+      continue;
+    }
+    const uint64_t blocker_units =
+        loom_target_compile_report_units_below_high_water(
+            lease->location_base, lease->location_count, high_water_units);
+    if (blocker_units == 0) {
+      continue;
+    }
+    ++blockers->active_storage_lease_count;
+    blockers->active_storage_lease_units += blocker_units;
+  }
+}
+
+static loom_target_compile_report_allocation_high_water_blockers_t
+loom_target_compile_report_allocation_high_water_blockers(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint64_t high_water_units) {
+  loom_target_compile_report_allocation_high_water_blockers_t blockers = {0};
+  loom_target_compile_report_add_high_water_assignment_blockers(
+      allocation, high_water_assignment, high_water_assignment_index,
+      high_water_units, &blockers);
+  loom_target_compile_report_add_high_water_storage_lease_blockers(
+      allocation, high_water_assignment, high_water_assignment_index,
+      high_water_units, &blockers);
+  return blockers;
+}
+
 static iree_status_t
 loom_target_compile_report_record_allocation_high_water_rows(
     loom_target_compile_report_t* report,
@@ -1554,6 +1657,10 @@ loom_target_compile_report_record_allocation_high_water_rows(
     }
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[entry->assignment_index];
+    const loom_target_compile_report_allocation_high_water_blockers_t blockers =
+        loom_target_compile_report_allocation_high_water_blockers(
+            allocation, assignment, entry->assignment_index,
+            entry->high_water_units);
     loom_target_compile_report_pressure_origin_info_t origin_info =
         loom_target_compile_report_pressure_origin_from_value(
             allocation->module, assignment->value_id);
@@ -1586,6 +1693,12 @@ loom_target_compile_report_record_allocation_high_water_rows(
         .location_base = assignment->location_base,
         .location_count = assignment->location_count,
         .high_water_units = entry->high_water_units,
+        .active_assignment_blocker_count = blockers.active_assignment_count,
+        .active_assignment_blocker_units = blockers.active_assignment_units,
+        .active_storage_lease_blocker_count =
+            blockers.active_storage_lease_count,
+        .active_storage_lease_blocker_units =
+            blockers.active_storage_lease_units,
     };
     status = loom_target_compile_report_record_allocation_high_water_row(report,
                                                                          &row);

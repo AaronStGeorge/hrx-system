@@ -1359,7 +1359,10 @@ loom_target_compile_report_format_allocation_high_water_rows(
           "] function=%.*s value=%.*s class=%.*s type=%.*s element=%.*s "
           "assignment=%u origin=%.*s origin_op=%.*s semantic=%.*s start=%u "
           "end=%u required_units=%u location=%.*s[%u:%u] high_water=%" PRIu64
-          "\n",
+          " active_assignment_blockers=%u "
+          "active_assignment_blocker_units=%" PRIu64
+          " active_storage_lease_blockers=%u "
+          "active_storage_lease_blocker_units=%" PRIu64 "\n",
           row_index, (int)function_name.size, function_name.data,
           (int)value_name.size, value_name.data, (int)register_class.size,
           register_class.data, (int)type_kind_name.size, type_kind_name.data,
@@ -1369,7 +1372,10 @@ loom_target_compile_report_format_allocation_high_water_rows(
           (int)semantic_tag.size, semantic_tag.data, row->start_point,
           row->end_point, row->required_unit_count, (int)location_kind.size,
           location_kind.data, row->location_base, row->location_count,
-          row->high_water_units));
+          row->high_water_units, row->active_assignment_blocker_count,
+          row->active_assignment_blocker_units,
+          row->active_storage_lease_blocker_count,
+          row->active_storage_lease_blocker_units));
     }
   }
   return iree_ok_status();
@@ -2901,6 +2907,18 @@ loom_target_compile_report_format_allocation_high_water_row_json(
       stream, &first_field, "location_count", row->location_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "high_water_units", row->high_water_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "active_assignment_blocker_count",
+      row->active_assignment_blocker_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "active_assignment_blocker_units",
+      row->active_assignment_blocker_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "active_storage_lease_blocker_count",
+      row->active_storage_lease_blocker_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "active_storage_lease_blocker_units",
+      row->active_storage_lease_blocker_units));
   return loom_output_stream_write_cstring(stream, "}");
 }
 
