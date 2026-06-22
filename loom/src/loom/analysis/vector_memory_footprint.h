@@ -4,12 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Vector memory footprint legality analysis.
+// View memory footprint legality analysis.
 //
-// This is the production proof gate for view-based vector memory ops. It keeps
-// cheap structural checks in the ordinary verifier and proves dynamic footprint
-// inequalities with value facts, symbolic expressions, and view region
-// summaries immediately before lowering out of Loom IR.
+// This is the production proof gate for view-based scalar and vector memory
+// ops. It keeps cheap structural checks in the ordinary verifier and proves
+// dynamic footprint inequalities with value facts, symbolic expressions, and
+// view region summaries immediately before lowering out of Loom IR.
 
 #ifndef LOOM_ANALYSIS_VECTOR_MEMORY_FOOTPRINT_H_
 #define LOOM_ANALYSIS_VECTOR_MEMORY_FOOTPRINT_H_
@@ -45,7 +45,7 @@ typedef struct loom_vector_memory_footprint_result_t {
   uint32_t error_count;
 } loom_vector_memory_footprint_result_t;
 
-// Verifies all vector memory footprints in |function|.
+// Verifies all scalar and vector view memory footprints in |function|.
 //
 // User IR proof failures are counted in |out_result| and emitted through
 // |options->emitter|. Infrastructure failures such as fact table allocation

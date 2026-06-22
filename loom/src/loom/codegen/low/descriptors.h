@@ -243,6 +243,8 @@ enum loom_low_storage_lease_flag_bits_e {
   LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_BEFORE_BOUNDARY = 1u << 1,
   // The lease may be represented as carried state across block edges.
   LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY = 1u << 2,
+  // The allocator may opportunistically release the lease to reduce pressure.
+  LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE = 1u << 3,
 };
 typedef uint16_t loom_low_storage_lease_flags_t;
 

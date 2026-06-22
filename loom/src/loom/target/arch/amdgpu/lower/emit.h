@@ -167,6 +167,14 @@ iree_status_t loom_amdgpu_emit_resolved_const_u32(
     loom_string_id_t imm32_attr_name_id, uint32_t value,
     loom_type_t result_type, loom_value_id_t* out_value_id);
 
+// Emits one resolved VGPR descriptor op with two VGPR operands and one imm32
+// immediate attribute.
+iree_status_t loom_amdgpu_emit_resolved_vgpr_binary_immediate(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor, loom_value_id_t lhs,
+    loom_value_id_t rhs, uint32_t immediate, loom_type_t lane_type,
+    loom_value_id_t* out_value);
+
 // Emits a fresh VGPR carrying the same 32-bit bit payload as |low_source|.
 iree_status_t loom_amdgpu_emit_vgpr_b32_copy(loom_low_lower_context_t* context,
                                              const loom_op_t* source_op,
@@ -181,6 +189,13 @@ bool loom_amdgpu_low_value_defines_vgpr_low16(loom_low_lower_context_t* context,
 // Returns |low_value| when it is already a one-unit VGPR, otherwise emits a
 // fresh VGPR carrying the same 32-bit bit payload.
 iree_status_t loom_amdgpu_materialize_low_vgpr_b32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_value, loom_value_id_t* out_low_value);
+
+// Returns a one-unit VGPR carrying a full 32-bit payload. If |low_value| is
+// defined by a descriptor that writes only the low 16-bit register part, emits
+// a full-width extraction before returning.
+iree_status_t loom_amdgpu_materialize_full_low_vgpr_b32(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_value, loom_value_id_t* out_low_value);
 

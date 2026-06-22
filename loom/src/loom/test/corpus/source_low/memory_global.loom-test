@@ -435,7 +435,8 @@ kernel.def target(@target) @i32_dynamic_leading_dim_global_saddr() {
   %workgroup = kernel.workgroup.id<x> : index
   %column = kernel.workitem.id<x> : index
   %base = index.constant 0 : offset
-  %columns = index.cast %columns_i32 : i32 to index
+  %columns0 = index.cast %columns_i32 : i32 to index
+  %columns = index.assume %columns0 [range(%columns0, 32, 2147483647)] : index
   %output_global = buffer.assume.memory_space<global> %output : buffer
   %output_view = buffer.view %output_global[%base] : buffer -> view<2x[%columns]x8xi32, #dense>
   %zero = scalar.constant 0 : i32
@@ -915,7 +916,7 @@ kernel.def @i32_dynamic_flat_store() {
   %row_count0 = index.cast %row_count_i32 : i32 to index
   %row_count = index.assume %row_count0 [range(%row_count0, 1, 2147483647)] : index
   %row0 = index.cast %row_i32 : i32 to index
-  %row = index.assume %row0 [range(%row0, 0, 2147483646)] : index
+  %row = index.assume %row0 [range(%row0, 0, 2147483646), lt(%row0, %row_count)] : index
   %input_view = buffer.view %input[%base] : buffer -> view<1xi32, #dense>
   %output_view = buffer.view %output[%base] : buffer -> view<[%row_count]x128xi32, #dense>
   %loaded = view.load %input_view[%start] : view<1xi32, #dense> -> i32

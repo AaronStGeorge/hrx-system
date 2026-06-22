@@ -8,6 +8,7 @@
 
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
+#include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 
 static loom_amdgpu_subgroup_payload_kind_t loom_amdgpu_collective_payload_kind(
@@ -54,6 +55,61 @@ bool loom_amdgpu_collective_payload_is_float(
     loom_amdgpu_subgroup_payload_kind_t payload_kind) {
   return payload_kind == LOOM_AMDGPU_SUBGROUP_PAYLOAD_F32_SCALAR ||
          payload_kind == LOOM_AMDGPU_SUBGROUP_PAYLOAD_F32_VECTOR;
+}
+
+bool loom_amdgpu_collective_resolve_workgroup_shape(
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_target_bundle_t* bundle, uint32_t partition_lane_count,
+    uint32_t register_count,
+    loom_amdgpu_workgroup_collective_shape_t* out_shape,
+    loom_amdgpu_workgroup_collective_shape_failure_t* out_failure) {
+  *out_shape = (loom_amdgpu_workgroup_collective_shape_t){0};
+  *out_failure = LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_NONE;
+  if (partition_lane_count == 0 || register_count == 0) {
+    *out_failure =
+        LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WORKGROUP_SIZE;
+    return false;
+  }
+
+  uint32_t flat_workgroup_size = 0;
+  if (!loom_amdgpu_required_flat_workgroup_size(module, function, bundle,
+                                                &flat_workgroup_size) ||
+      flat_workgroup_size == 0) {
+    *out_failure =
+        LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WORKGROUP_SIZE;
+    return false;
+  }
+
+  const uint32_t wave_count =
+      (flat_workgroup_size + partition_lane_count - 1) / partition_lane_count;
+  if (flat_workgroup_size > partition_lane_count &&
+      wave_count > partition_lane_count) {
+    *out_failure = LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WAVE_COUNT;
+    return false;
+  }
+
+  const uint64_t scratch_byte_length =
+      (uint64_t)wave_count * register_count * 4u;
+  if (scratch_byte_length > UINT32_MAX) {
+    *out_failure =
+        LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_SCRATCH_BYTE_LENGTH;
+    return false;
+  }
+
+  loom_amdgpu_workgroup_collective_shape_flags_t flags = 0;
+  if (flat_workgroup_size > partition_lane_count) {
+    flags |= LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_MULTI_WAVE;
+    if ((flat_workgroup_size % partition_lane_count) != 0) {
+      flags |= LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_PARTIAL_TAIL;
+    }
+  }
+
+  *out_shape = (loom_amdgpu_workgroup_collective_shape_t){
+      .flat_workgroup_size = flat_workgroup_size,
+      .wave_count = wave_count,
+      .flags = flags,
+  };
+  return true;
 }
 
 iree_status_t loom_amdgpu_collective_lookup_payload(

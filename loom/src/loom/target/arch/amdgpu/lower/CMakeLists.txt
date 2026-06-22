@@ -175,6 +175,7 @@ loom_cc_library(
     "signal.c"
     "structural.c"
     "subgroup_broadcast.c"
+    "subgroup_crosslane.c"
     "subgroup_mask.c"
     "subgroup_shuffle.c"
     "support.c"

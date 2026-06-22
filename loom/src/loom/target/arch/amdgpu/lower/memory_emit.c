@@ -194,8 +194,7 @@ static iree_status_t loom_amdgpu_record_memory_packet_report(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_packet_plan_t* packet) {
   const loom_low_source_memory_access_plan_t* source = &packet->access.source;
-  if (!loom_low_lower_context_wants_report_rows(context) ||
-      source->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+  if (!loom_low_lower_context_wants_report_rows(context)) {
     return iree_ok_status();
   }
 
@@ -205,9 +204,22 @@ static iree_status_t loom_amdgpu_record_memory_packet_report(
       descriptor_set, packet->access.descriptor->key_string_offset);
   const loom_amdgpu_memory_operation_kind_t operation_kind =
       loom_amdgpu_memory_operation_kind_from_source(source);
-  const loom_amdgpu_memory_bank_conflict_summary_t bank_summary =
-      loom_amdgpu_memory_access_bank_conflict_summary(
-          &packet->access, loom_amdgpu_memory_bank_default_lds_geometry());
+  const bool is_workgroup_memory =
+      source->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP;
+  loom_amdgpu_memory_bank_conflict_summary_t bank_summary = {0};
+  iree_string_view_t fallback_reason = iree_string_view_empty();
+  iree_string_view_t bank_conflict_kind = iree_string_view_empty();
+  if (is_workgroup_memory) {
+    bank_summary = loom_amdgpu_memory_access_bank_conflict_summary(
+        &packet->access, loom_amdgpu_memory_bank_default_lds_geometry());
+    fallback_reason = loom_amdgpu_memory_ds_addtid_reason_key(
+        descriptor_set, loom_low_lower_context_module(context),
+        loom_low_lower_context_source_function(context),
+        loom_low_lower_context_bundle(context), &packet->access,
+        operation_kind);
+    bank_conflict_kind =
+        loom_amdgpu_memory_bank_conflict_kind_key(bank_summary.kind);
+  }
   const loom_low_lower_memory_report_row_t row = {
       .function_name = loom_low_lower_context_function_name(context),
       .source_op_name =
@@ -220,11 +232,7 @@ static iree_status_t loom_amdgpu_record_memory_packet_report(
           loom_amdgpu_memory_address_form_name(packet->access.address_form),
       .dynamic_term_kind =
           loom_amdgpu_memory_access_dynamic_term_kind_name(&packet->access),
-      .fallback_reason = loom_amdgpu_memory_ds_addtid_reason_key(
-          descriptor_set, loom_low_lower_context_module(context),
-          loom_low_lower_context_source_function(context),
-          loom_low_lower_context_bundle(context), &packet->access,
-          operation_kind),
+      .fallback_reason = fallback_reason,
       .descriptor_id = packet->access.descriptor->stable_id,
       .static_offset_bytes = source->static_byte_offset,
       .element_byte_count = source->element_byte_count,
@@ -235,8 +243,7 @@ static iree_status_t loom_amdgpu_record_memory_packet_report(
           source->vector_lane_byte_stride),
       .bank_stride_words = bank_summary.bank_stride_words,
       .bank_conflict_degree = bank_summary.conflict_degree,
-      .bank_conflict_kind =
-          loom_amdgpu_memory_bank_conflict_kind_key(bank_summary.kind),
+      .bank_conflict_kind = bank_conflict_kind,
   };
   return loom_low_lower_record_memory_report_row(context, &row);
 }
@@ -371,6 +378,10 @@ static iree_status_t loom_amdgpu_ensure_memory_store_payload_vgpr(
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
   if (is_vgpr) {
+    if (access->payload_register_count == 1 && access->packet_byte_count == 2) {
+      return loom_amdgpu_materialize_full_low_vgpr_b32(
+          context, source_op, low_value, out_low_value);
+    }
     return iree_ok_status();
   }
   bool is_sgpr = false;

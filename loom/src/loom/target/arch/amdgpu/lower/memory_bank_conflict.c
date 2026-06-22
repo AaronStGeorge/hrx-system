@@ -26,6 +26,8 @@ iree_string_view_t loom_amdgpu_memory_bank_conflict_kind_key(
       return IREE_SV("padded-bank-conflict-free");
     case LOOM_AMDGPU_MEMORY_BANK_CONFLICT_KIND_RISK:
       return IREE_SV("bank-conflict-risk");
+    case LOOM_AMDGPU_MEMORY_BANK_CONFLICT_KIND_SUBWORD_RISK:
+      return IREE_SV("subword-bank-conflict-risk");
     case LOOM_AMDGPU_MEMORY_BANK_CONFLICT_KIND_UNKNOWN:
     default:
       return IREE_SV("bank-pattern-unknown");
@@ -51,6 +53,11 @@ static uint32_t loom_amdgpu_memory_access_packet_footprint_bytes(
   return access->source.element_byte_count * payload_register_count;
 }
 
+static uint32_t loom_amdgpu_memory_subword_conflict_degree(
+    uint32_t byte_stride, uint32_t bank_width_bytes) {
+  return bank_width_bytes / loom_amdgpu_gcd_u32(byte_stride, bank_width_bytes);
+}
+
 loom_amdgpu_memory_bank_conflict_summary_t
 loom_amdgpu_memory_access_bank_conflict_summary(
     const loom_amdgpu_memory_access_t* access,
@@ -67,13 +74,22 @@ loom_amdgpu_memory_access_bank_conflict_summary(
       loom_low_source_memory_access_single_dynamic_term(&access->source);
   if (!term ||
       access->dynamic_term_kinds[0] != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR ||
-      term->byte_stride <= 0 ||
-      (term->byte_stride % geometry.bank_width_bytes) != 0) {
+      term->byte_stride <= 0) {
+    return summary;
+  }
+  if (term->byte_stride > UINT32_MAX) {
     return summary;
   }
 
-  summary.bank_stride_words =
-      (uint32_t)(term->byte_stride / geometry.bank_width_bytes);
+  const uint32_t byte_stride = (uint32_t)term->byte_stride;
+  if ((byte_stride % geometry.bank_width_bytes) != 0) {
+    summary.conflict_degree = loom_amdgpu_memory_subword_conflict_degree(
+        byte_stride, geometry.bank_width_bytes);
+    summary.kind = LOOM_AMDGPU_MEMORY_BANK_CONFLICT_KIND_SUBWORD_RISK;
+    return summary;
+  }
+
+  summary.bank_stride_words = byte_stride / geometry.bank_width_bytes;
   summary.conflict_degree =
       loom_amdgpu_gcd_u32(summary.bank_stride_words, geometry.bank_count);
   if (summary.conflict_degree == 1) {

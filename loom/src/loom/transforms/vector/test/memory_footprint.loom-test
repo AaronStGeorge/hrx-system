@@ -63,6 +63,37 @@ func.def @counted_loop_iv_proves_pair_load_extent(%buffer: buffer, %base: offset
 
 // ====
 
+func.def @static_vector_origin_proven_by_shifted_assume_relation(%buffer: buffer, %base: offset, %row: index, %column: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %stride = index.constant 1024 : index
+  %limit = index.constant 262137 : index
+  %row_offset = index.mul %row, %stride : index
+  %origin0 = index.add %row_offset, %column : index
+  %origin = index.assume %origin0 [range(%origin0, 0, 262137), lt(%origin0, %limit), mul(%origin0, 8)] : index
+  %view = buffer.view %buffer[%base] : buffer -> view<262144xf16, %layout>
+  %loaded = vector.load %view[%origin] : view<262144xf16, %layout> -> vector<8xf16>
+  test.use %loaded : vector<8xf16>
+  func.return
+}
+
+// ====
+
+func.def @static_vector_origin_rejects_insufficient_shifted_assume_relation(%buffer: buffer, %base: offset, %row: index, %column: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %stride = index.constant 1024 : index
+  %late_limit = index.constant 262138 : index
+  %row_offset = index.mul %row, %stride : index
+  %origin0 = index.add %row_offset, %column : index
+  %origin = index.assume %origin0 [range(%origin0, 0, 262137), lt(%origin0, %late_limit), mul(%origin0, 8)] : index
+  %view = buffer.view %buffer[%base] : buffer -> view<262144xf16, %layout>
+  // ERROR@+1: SUBRANGE/010 {op_name="vector.load", vector_extent="8", view_bound="262144", required_origin_upper_bound="262136", constraint_key="vector_footprint.full_vector_upper_bound"}
+  %loaded = vector.load %view[%origin] : view<262144xf16, %layout> -> vector<8xf16>
+  test.use %loaded : vector<8xf16>
+  func.return
+}
+
+// ====
+
 func.def @dynamic_unit_axis_proven_by_assume_relation(%buffer: buffer, %base: offset, %row: index, %n: index) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]x4xf32, %layout>
@@ -108,6 +139,75 @@ func.def @dynamic_vector_origin_proven_by_shifted_assume_relation(%buffer: buffe
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]xi32, %layout>
   %words = vector.load %view[%origin] : view<[%n]xi32, %layout> -> vector<4xi32>
   test.use %words : vector<4xi32>
+  func.return
+}
+
+// ====
+
+func.def @dynamic_vector_origin_proven_by_exact_count_minus_extent_relation(%buffer: buffer, %base: offset, %origin0: index, %n0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %n = index.assume %n0 [range(%n0, 262144, 262144)] : index
+  %seven = index.constant 7 : index
+  %last_valid_start = index.sub %n, %seven : index
+  %origin = index.assume %origin0 [ge(%origin0, 0), lt(%origin0, %last_valid_start), mul(%origin0, 8)] : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%n]xf16, %layout>
+  %values = vector.load %view[%origin] : view<[%n]xf16, %layout> -> vector<8xf16>
+  test.use %values : vector<8xf16>
+  func.return
+}
+
+// ====
+
+func.def @dynamic_vector_tail_origin_proven_by_dynamic_bound(%input: buffer, %output: buffer, %base_i32: i32, %tail_i32: i32, %stride_i32: i32, %token_count_i32: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %zero = index.constant 0 : offset
+  %one = index.constant 1 : index
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 2, 2048)] : index
+  %token_count0 = index.cast %token_count_i32 : i32 to index
+  %token_count = index.assume %token_count0 [range(%token_count0, 1, 2)] : index
+  %element_count = index.mul %stride, %token_count : index
+  %base0 = index.cast %base_i32 : i32 to index
+  %base = index.assume %base0 [range(%base0, 0, 4094)] : index
+  %tail0 = index.cast %tail_i32 : i32 to index
+  %tail = index.assume %tail0 [range(%tail0, 0, 4094)] : index
+  %origin0 = index.add %base, %tail : index
+  %origin_nonnegative = index.assume %origin0 [range(%origin0, 0, 4094)] : index
+  %max_vector_origin = index.sub %element_count, %one : index
+  %origin = index.assume %origin_nonnegative [lt(%origin_nonnegative, %max_vector_origin)] : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<[%element_count]xf32, %layout>
+  %output_view = buffer.view %output[%zero] : buffer -> view<[%element_count]xf32, %layout>
+  %loaded = vector.load %input_view[%origin] : view<[%element_count]xf32, %layout> -> vector<2xf32>
+  vector.store %loaded, %output_view[%origin] : vector<2xf32>, view<[%element_count]xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @dynamic_vector_tail_origin_proven_by_relation_lower_bound(%input: buffer, %output: buffer, %pair_i32: i32, %half_i32: i32, %base_i32: i32, %n_dims_i32: i32, %element_count_i32: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %zero = index.constant 0 : offset
+  %one = index.constant 1 : index
+  %two = index.constant 2 : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 2, 8192)] : index
+  %half0 = index.cast %half_i32 : i32 to index
+  %half = index.assume %half0 [range(%half0, 0, 4094)] : index
+  %pair0 = index.cast %pair_i32 : i32 to index
+  %pair = index.assume %pair0 [range(%pair0, 0, 4094), ge(%pair0, %half)] : index
+  %tail_pair = index.sub %pair, %half : index
+  %n_dims0 = index.cast %n_dims_i32 : i32 to index
+  %n_dims = index.assume %n_dims0 [range(%n_dims0, 0, 4094)] : index
+  %tail0 = index.madd %tail_pair, %two, %n_dims : index
+  %base0 = index.cast %base_i32 : i32 to index
+  %base = index.assume %base0 [range(%base0, 0, 4094)] : index
+  %origin0 = index.add %base, %tail0 : index
+  %max_vector_origin = index.sub %element_count, %one : index
+  %origin = index.assume %origin0 [lt(%origin0, %max_vector_origin)] : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<[%element_count]xf32, %layout>
+  %output_view = buffer.view %output[%zero] : buffer -> view<[%element_count]xf32, %layout>
+  %loaded = vector.load %input_view[%origin] : view<[%element_count]xf32, %layout> -> vector<2xf32>
+  vector.store %loaded, %output_view[%origin] : vector<2xf32>, view<[%element_count]xf32, %layout>
   func.return
 }
 
@@ -443,6 +543,91 @@ kernel.def @dynamic_unit_axis_rejects_offset_workgroup_id(%rows: index) {
   // ERROR@+1: SUBRANGE/011 {op_name="vector.load", vector_extent="1", constraint_key="vector_footprint.scalar_axis_upper_bound"}
   %loaded = vector.load %view[%next_row, 0] : view<[%row_count]x2xf32, %layout> -> vector<2xf32>
   kernel.return
+}
+
+// ====
+
+func.def @scalar_view_access_rejects_same_padding_edge_tap_without_origin_proof(%input: buffer, %output: buffer, %base: offset, %x0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %zero = index.constant 0 : index
+  %unit = index.constant 1 : index
+  %two = index.constant 2 : index
+  %three = index.constant 3 : index
+  %width = index.constant 64 : index
+  %x = index.assume %x0 [range(%x0, 0, 63)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<64xi32, %layout>
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32, %layout>
+  %last_x = index.sub %width, %unit : index
+  %is_left_edge = index.cmp eq, %x, %zero : index
+  %kernel_x_begin = scf.if %is_left_edge -> (index) {
+    scf.yield %unit : index
+  } else {
+    scf.yield %zero : index
+  }
+  %is_right_edge = index.cmp eq, %x, %last_x : index
+  %kernel_x_end = scf.if %is_right_edge -> (index) {
+    scf.yield %two : index
+  } else {
+    scf.yield %three : index
+  }
+  scf.for %kernel_x = [%kernel_x_begin to %kernel_x_end step %unit] {
+    %x_with_kernel = index.add %x, %kernel_x : index
+    %source_x = index.sub %x_with_kernel, %unit : index
+    // ERROR@+1: SUBRANGE/023 {op_name="view.load", view_axis="0"}
+    %loaded = view.load %input_view[%source_x] : view<64xi32, %layout> -> i32
+    // ERROR@+1: SUBRANGE/023 {op_name="view.store", view_axis="0"}
+    view.store %loaded, %output_view[%source_x] : i32, view<64xi32, %layout>
+  }
+  func.return
+}
+
+// ====
+
+func.def @scalar_view_access_accepts_same_padding_edge_tap_with_origin_proof(%input: buffer, %output: buffer, %base: offset, %x0: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %zero = index.constant 0 : index
+  %unit = index.constant 1 : index
+  %two = index.constant 2 : index
+  %three = index.constant 3 : index
+  %width = index.constant 64 : index
+  %x = index.assume %x0 [range(%x0, 0, 63)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<64xi32, %layout>
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32, %layout>
+  %last_x = index.sub %width, %unit : index
+  %is_left_edge = index.cmp eq, %x, %zero : index
+  %kernel_x_begin = scf.if %is_left_edge -> (index) {
+    scf.yield %unit : index
+  } else {
+    scf.yield %zero : index
+  }
+  %is_right_edge = index.cmp eq, %x, %last_x : index
+  %kernel_x_end = scf.if %is_right_edge -> (index) {
+    scf.yield %two : index
+  } else {
+    scf.yield %three : index
+  }
+  scf.for %kernel_x = [%kernel_x_begin to %kernel_x_end step %unit] {
+    %x_with_kernel0 = index.add %x, %kernel_x : index
+    %x_with_kernel = index.assume %x_with_kernel0 [range(%x_with_kernel0, 1, 64)] : index
+    %source_x = index.sub %x_with_kernel, %unit : index
+    %loaded = view.load %input_view[%source_x] : view<64xi32, %layout> -> i32
+    view.store %loaded, %output_view[%source_x] : i32, view<64xi32, %layout>
+  }
+  func.return
+}
+
+// ====
+
+func.def @scalar_view_atomic_rejects_unproven_origin_while_prefetch_is_ignored(%buffer: buffer, %base: offset, %value: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %zero = index.constant 0 : index
+  %unit = index.constant 1 : index
+  %origin = index.sub %zero, %unit : index
+  %view = buffer.view %buffer[%base] : buffer -> view<64xi32, %layout>
+  // ERROR@+1: SUBRANGE/023 {op_name="view.atomic.reduce", view_axis="0"}
+  view.atomic.reduce<addi> %value, %view[%origin] {ordering = relaxed, scope = device} : i32, view<64xi32, %layout>
+  view.prefetch %view[%origin] {intent = read, locality = l1} : view<64xi32, %layout>
+  func.return
 }
 
 // ====

@@ -30,6 +30,7 @@ namespace {
 using ::loom::testing::CapturedDiagnostic;
 using ::loom::testing::DiagnosticCapture;
 using ::loom::testing::ExpectError;
+using ::loom::testing::ExpectTypeParam;
 using ::loom::testing::ExpectU32Param;
 using ::loom::testing::FindDiagnostic;
 using ::loom::testing::GetStringParam;
@@ -1941,6 +1942,31 @@ TEST_F(ParserTest, OperandDictTypeAnnotationMismatch) {
   EXPECT_EQ(GetStringParam(diagnostics[0], 2), "type annotation");
 }
 
+TEST_F(ParserTest, OperandTypeAnnotationMismatch) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%input = test.constant 0 : i32\n"
+      "%result = test.convergent %input : f32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "input");
+  ExpectTypeParam(diagnostics[0], 1, loom_type_scalar(LOOM_SCALAR_TYPE_I32));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 2), "type annotation");
+  ExpectTypeParam(diagnostics[0], 3, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
+}
+
+TEST_F(ParserTest, VariadicOperandTypeAnnotationMismatch) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%lhs = test.constant 0 : i32\n"
+      "%rhs = test.constant 1 : f32\n"
+      "test.use %lhs, %rhs : i32, i32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "values[1]");
+  ExpectTypeParam(diagnostics[0], 1, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 2), "type annotation");
+  ExpectTypeParam(diagnostics[0], 3, loom_type_scalar(LOOM_SCALAR_TYPE_I32));
+}
+
 TEST_F(ParserTest, DuplicateNestedAttrDictKey) {
   const auto& diagnostics = ParseExpectErrors(
       "%c = test.constant 0 : f32\n"
@@ -2094,8 +2120,8 @@ TEST_F(ParserTest, InlineEncoding) {
   // Inline encoding definition directly in a tile type.
   loom_module_t* module = ParseOk(
       "test.func @test_enc(%x: tile<4xf32, #dense<block=32>>) -> "
-      "(tile<4xf32>) {\n"
-      "  test.yield %x : tile<4xf32>\n"
+      "(tile<4xf32, #dense<block=32>>) {\n"
+      "  test.yield %x : tile<4xf32, #dense<block=32>>\n"
       "}\n");
   if (module) {
     std::string text = PrintModule(module);

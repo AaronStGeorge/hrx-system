@@ -69,6 +69,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE_BAND_ROWS = 1u << 16,
   // Per-register-class allocation high-water rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS = 1u << 17,
+  // Target wait-planning summaries or rows were recorded.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN = 1u << 18,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -299,6 +301,16 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   uint64_t dot_count;
   // Descriptor-backed nodes identified as global or vector-memory operations.
   uint64_t global_memory_count;
+  // Descriptor-backed AMDGPU global_load-family memory instructions.
+  uint64_t global_load_count;
+  // Descriptor-backed AMDGPU global_store-family memory instructions.
+  uint64_t global_store_count;
+  // Descriptor-backed AMDGPU buffer_load-family memory instructions.
+  uint64_t buffer_load_count;
+  // Descriptor-backed AMDGPU buffer_store-family memory instructions.
+  uint64_t buffer_store_count;
+  // Descriptor-backed AMDGPU flat-memory instructions.
+  uint64_t flat_memory_count;
   // Descriptor-backed nodes identified as local/shared/workgroup memory ops.
   uint64_t local_memory_count;
   // Descriptor-backed nodes identified as scalar-memory operations.
@@ -354,6 +366,24 @@ typedef struct loom_target_compile_report_target_resources_t {
   iree_string_view_t limiting_resource;
 } loom_target_compile_report_target_resources_t;
 
+// Wait-counter planning summary for target packets that survive emission.
+typedef struct loom_target_compile_report_wait_plan_t {
+  // Number of wait-counter actions recorded by target planning.
+  uint64_t action_count;
+  // Number of wait-counter actions already present in the low stream.
+  uint64_t explicit_action_count;
+  // Number of wait-counter actions inserted by target planning.
+  uint64_t planned_action_count;
+  // Number of wait actions that drain all outstanding packets.
+  uint64_t full_drain_count;
+  // Number of wait actions that leave younger packets outstanding.
+  uint64_t partial_wait_count;
+  // Maximum outstanding packet count observed before any wait action.
+  uint64_t max_outstanding_before;
+  // Maximum outstanding packet count observed before a full-drain action.
+  uint64_t max_full_drain_outstanding_before;
+} loom_target_compile_report_wait_plan_t;
+
 // One emitted artifact entry summary in a compile report.
 typedef struct loom_target_compile_report_entry_t {
   // Target artifact function symbol emitted for this entry.
@@ -398,6 +428,12 @@ typedef struct loom_target_compile_report_entry_t {
   uint64_t allocation_coalesced_copy_count;
   // Number of low.copy ops that must remain materialized.
   uint64_t allocation_materialized_copy_count;
+  // Number of target storage-lease records.
+  uint64_t allocation_storage_lease_count;
+  // Number of assignment-backed target storage-lease instances.
+  uint64_t allocation_storage_lease_instance_count;
+  // Number of allocator-requested storage release actions.
+  uint64_t allocation_storage_release_action_count;
   // Number of target instructions or bytecode opcodes emitted.
   uint64_t emitted_instruction_count;
   // Number of semantic target code bytes before target-local padding.
@@ -416,6 +452,8 @@ typedef struct loom_target_compile_report_entry_t {
   loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
   // Final target resource and occupancy summary.
   loom_target_compile_report_target_resources_t target_resources;
+  // Target wait-counter planning summary.
+  loom_target_compile_report_wait_plan_t wait_plan;
   // Number of detailed register-pressure rows copied for this entry.
   iree_host_size_t pressure_row_count;
   // Number of detailed pressure-origin rows copied for this entry.
@@ -428,6 +466,10 @@ typedef struct loom_target_compile_report_entry_t {
   iree_host_size_t spill_row_count;
   // Number of detailed allocation high-water rows copied for this entry.
   iree_host_size_t allocation_high_water_row_count;
+  // Number of target wait-counter rows copied for this entry.
+  iree_host_size_t wait_counter_row_count;
+  // Number of target wait-action rows copied for this entry.
+  iree_host_size_t wait_action_row_count;
 } loom_target_compile_report_entry_t;
 
 // One register-pressure peak row in a compile report.
@@ -488,6 +530,8 @@ typedef struct loom_target_compile_report_schedule_band_row_t {
   iree_string_view_t function_name;
   // Region block label containing this schedule band.
   iree_string_view_t block_name;
+  // Region block index containing this schedule band.
+  uint32_t block_index;
   // First global scheduled packet index in this band.
   uint64_t first_packet_index;
   // First scheduled ordinal within |block_name| in this band.
@@ -516,6 +560,8 @@ typedef struct loom_target_compile_report_schedule_band_summary_row_t {
   iree_string_view_t function_name;
   // Region block label containing these schedule bands.
   iree_string_view_t block_name;
+  // Region block index containing these schedule bands.
+  uint32_t block_index;
   // First global scheduled packet index in the first matching band.
   uint64_t first_packet_index;
   // Number of matching bands in this block.
@@ -655,7 +701,99 @@ typedef struct loom_target_compile_report_allocation_high_water_row_t {
   uint32_t location_count;
   // One-past-last concrete location unit reached by this assignment.
   uint64_t high_water_units;
+  // Number of unoccupied concrete units below |location_base| at |start_point|.
+  uint64_t lower_free_unit_count;
+  // Number of contiguous unoccupied-unit runs below |location_base|.
+  uint32_t lower_free_run_count;
+  // Largest contiguous unoccupied-unit run below |location_base|.
+  uint32_t lower_largest_free_run_unit_count;
+  // Upper-bound free units below |location_base| when pressure-releasable
+  // storage leases are discounted.
+  uint64_t lower_pressure_releasable_free_unit_count;
+  // Upper-bound free runs below |location_base| when pressure-releasable
+  // storage leases are discounted.
+  uint32_t lower_pressure_releasable_free_run_count;
+  // Largest upper-bound free run below |location_base| when pressure-releasable
+  // storage leases are discounted.
+  uint32_t lower_pressure_releasable_largest_free_run_unit_count;
+  // Number of other active assignments below |high_water_units|.
+  uint32_t active_assignment_blocker_count;
+  // Total units occupied by other active assignments below |high_water_units|.
+  uint64_t active_assignment_blocker_units;
+  // Number of active target storage leases below |high_water_units|.
+  uint32_t active_storage_lease_blocker_count;
+  // Total target storage-lease units below |high_water_units|.
+  uint64_t active_storage_lease_blocker_units;
+  // Number of pressure-releasable storage leases below |high_water_units|.
+  uint32_t active_pressure_storage_lease_blocker_count;
+  // Total pressure-releasable storage-lease units below |high_water_units|.
+  uint64_t active_pressure_storage_lease_blocker_units;
+  // Number of fallback-release storage leases below |high_water_units|.
+  uint32_t active_fallback_storage_lease_blocker_count;
+  // Total fallback-release storage-lease units below |high_water_units|.
+  uint64_t active_fallback_storage_lease_blocker_units;
 } loom_target_compile_report_allocation_high_water_row_t;
+
+// One target wait-counter summary row copied into a compile report.
+typedef struct loom_target_compile_report_wait_counter_row_t {
+  // Target artifact function symbol containing this wait plan.
+  iree_string_view_t function_name;
+  // Stable target-owned wait-counter name.
+  iree_string_view_t counter_name;
+  // Target-owned wait-counter id.
+  uint32_t counter_id;
+  // Aggregate wait-plan counts for this counter.
+  loom_target_compile_report_wait_plan_t summary;
+} loom_target_compile_report_wait_counter_row_t;
+
+// One target wait-action row copied into a compile report.
+typedef struct loom_target_compile_report_wait_action_row_t {
+  // Target artifact function symbol containing this wait action.
+  iree_string_view_t function_name;
+  // Stable target-owned wait-counter name.
+  iree_string_view_t counter_name;
+  // Stable target-owned action name.
+  iree_string_view_t action_name;
+  // Stable target-owned wait reason name.
+  iree_string_view_t reason_name;
+  // Target-owned wait-counter id.
+  uint32_t counter_id;
+  // Target-owned wait-action id.
+  uint32_t action_id;
+  // Target-owned wait reason id.
+  uint32_t reason_id;
+  // Region block containing the insertion point or explicit wait.
+  uint32_t block_index;
+  // Node before which a planned wait is inserted, or explicit wait node.
+  uint32_t node_index;
+  // Scheduled ordinal before which a planned wait is inserted, or explicit
+  // wait node's scheduled ordinal.
+  uint32_t scheduled_ordinal;
+  // Producer node that forced the wait, or UINT32_MAX.
+  uint32_t producer_node;
+  // Scheduled ordinal of |producer_node|, or UINT32_MAX.
+  uint32_t producer_scheduled_ordinal;
+  // Operation mnemonic for |producer_node|, or empty.
+  iree_string_view_t producer_operation_name;
+  // Descriptor key for |producer_node|, or empty.
+  iree_string_view_t producer_descriptor_key;
+  // Descriptor semantic tag for |producer_node|, or empty.
+  iree_string_view_t producer_semantic_tag;
+  // Consumer node that needs the wait, or UINT32_MAX.
+  uint32_t consumer_node;
+  // Scheduled ordinal of |consumer_node|, or UINT32_MAX.
+  uint32_t consumer_scheduled_ordinal;
+  // Operation mnemonic for |consumer_node|, or empty.
+  iree_string_view_t consumer_operation_name;
+  // Descriptor key for |consumer_node|, or empty.
+  iree_string_view_t consumer_descriptor_key;
+  // Descriptor semantic tag for |consumer_node|, or empty.
+  iree_string_view_t consumer_semantic_tag;
+  // Wait target value. Zero drains all outstanding packets for the counter.
+  uint32_t target_count;
+  // Outstanding packet count for this counter before the wait action.
+  uint32_t outstanding_before;
+} loom_target_compile_report_wait_action_row_t;
 
 // One source-to-target-low selection row copied into a compile report.
 typedef struct loom_target_compile_report_source_low_row_t {
@@ -919,6 +1057,12 @@ typedef struct loom_target_compile_report_t {
   uint64_t allocation_coalesced_copy_count;
   // Number of low.copy ops that must remain materialized.
   uint64_t allocation_materialized_copy_count;
+  // Number of target storage-lease records.
+  uint64_t allocation_storage_lease_count;
+  // Number of assignment-backed target storage-lease instances.
+  uint64_t allocation_storage_lease_instance_count;
+  // Number of allocator-requested storage release actions.
+  uint64_t allocation_storage_release_action_count;
   // Number of target instructions or bytecode opcodes emitted.
   uint64_t emitted_instruction_count;
   // Number of semantic target code bytes before target-local padding.
@@ -961,6 +1105,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
   // Final target resource and occupancy summary.
   loom_target_compile_report_target_resources_t target_resources;
+  // Target wait-counter planning summary.
+  loom_target_compile_report_wait_plan_t wait_plan;
   // Owned emitted artifact entry summary rows.
   loom_target_compile_report_row_list_t entry_rows;
   // Owned register-pressure peak rows.
@@ -977,6 +1123,10 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_row_list_t allocation_failure_rows;
   // Owned allocation high-water rows.
   loom_target_compile_report_row_list_t allocation_high_water_rows;
+  // Owned target wait-counter summary rows.
+  loom_target_compile_report_row_list_t wait_counter_rows;
+  // Owned target wait-action rows.
+  loom_target_compile_report_row_list_t wait_action_rows;
   // Owned source-to-low selection rows.
   loom_target_compile_report_row_list_t source_low_rows;
   // Owned emitted source-memory packet rows.
@@ -1045,7 +1195,9 @@ void loom_target_compile_report_record_schedule(
 void loom_target_compile_report_record_allocation(
     loom_target_compile_report_t* report, uint64_t assignment_count,
     uint64_t spill_count, uint64_t spill_plan_count,
-    uint64_t coalesced_copy_count, uint64_t materialized_copy_count);
+    uint64_t coalesced_copy_count, uint64_t materialized_copy_count,
+    uint64_t storage_lease_count, uint64_t storage_lease_instance_count,
+    uint64_t storage_release_action_count);
 
 // Records target move materialization attributed to one residual move cause.
 void loom_target_compile_report_record_move_cause(
@@ -1072,6 +1224,11 @@ void loom_target_compile_report_record_memory(
 void loom_target_compile_report_record_target_resources(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_target_resources_t* target_resources);
+
+// Records target wait-counter planning summary facts.
+void loom_target_compile_report_record_wait_plan(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_wait_plan_t* wait_plan);
 
 // Records one emitted artifact entry and copies its detailed pressure and spill
 // rows into |report|. String views remain borrowed from |entry_report|'s
@@ -1114,6 +1271,18 @@ iree_status_t loom_target_compile_report_record_allocation_failure_row(
 iree_status_t loom_target_compile_report_record_allocation_high_water_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_allocation_high_water_row_t* row);
+
+// Records one target wait-counter summary row. This does not update the
+// aggregate wait-plan summary; callers that produce detail rows must also call
+// loom_target_compile_report_record_wait_plan with their aggregate summary.
+iree_status_t loom_target_compile_report_record_wait_counter_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_wait_counter_row_t* row);
+
+// Records one target wait-action row.
+iree_status_t loom_target_compile_report_record_wait_action_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_wait_action_row_t* row);
 
 // Records one source-low row.
 iree_status_t loom_target_compile_report_record_source_low_row(

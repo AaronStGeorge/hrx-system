@@ -54,6 +54,14 @@ typedef struct loom_ireevm_archive_emit_report_totals_t {
   uint64_t allocation_coalesced_copy_count;
   // Total materialized low.copy count across emitted local functions.
   uint64_t allocation_materialized_copy_count;
+  // Total target storage-lease record count across emitted local functions.
+  uint64_t allocation_storage_lease_count;
+  // Total assignment-backed storage-lease instance count across emitted local
+  // functions.
+  uint64_t allocation_storage_lease_instance_count;
+  // Total allocator-requested storage release action count across emitted local
+  // functions.
+  uint64_t allocation_storage_release_action_count;
   // Total emitted VM bytecode opcode count across emitted local functions.
   uint64_t emitted_instruction_count;
   // Total semantic VM bytecode bytes across emitted local functions.
@@ -268,6 +276,12 @@ static void loom_ireevm_archive_emit_accumulate_frame_report(
       frame->allocation.coalesced_copy_count;
   totals->allocation_materialized_copy_count +=
       frame->allocation.materialized_copy_count;
+  totals->allocation_storage_lease_count +=
+      frame->allocation.storage_leases.record_count;
+  totals->allocation_storage_lease_instance_count +=
+      frame->allocation.storage_lease_instance_count;
+  totals->allocation_storage_release_action_count +=
+      frame->allocation.storage_release_action_count;
 }
 
 static void loom_ireevm_archive_emit_accumulate_bytecode_report(
@@ -298,7 +312,10 @@ static void loom_ireevm_archive_emit_record_report_totals(
       state->report, totals->allocation_assignment_count,
       totals->allocation_spill_count, totals->allocation_spill_plan_count,
       totals->allocation_coalesced_copy_count,
-      totals->allocation_materialized_copy_count);
+      totals->allocation_materialized_copy_count,
+      totals->allocation_storage_lease_count,
+      totals->allocation_storage_lease_instance_count,
+      totals->allocation_storage_release_action_count);
   loom_target_compile_report_record_emission(
       state->report, totals->emitted_instruction_count,
       totals->emitted_code_byte_count, totals->emitted_code_storage_byte_count);

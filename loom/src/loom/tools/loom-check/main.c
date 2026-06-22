@@ -208,7 +208,7 @@ int loom_check_main(int argc, char** argv,
       "              control-flow=cfg|structured-low,\n"
       "              sanitizer=none|access|value|operation|race|all,\n"
       "              sanitizer-reporting=default|trap|report-only, and\n"
-      "              diagnostics=none|memory|all.\n"
+      "              diagnostics=none|memory|operand-forms|all.\n"
       "              low-allocation, low-allocation-json, and low-packet-json\n"
       "              accept "
       "fixed=%value:<physical_register|target_id>:<base>:<count>\n"

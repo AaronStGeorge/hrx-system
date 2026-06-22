@@ -41,13 +41,13 @@ low.func.def target(@vm_target) abi(vm_module_function) @vm_constants() -> (reg<
 
 ireevm.target<core> @vm_target
 
-func.def target(@vm_target) @vm_i64_ops(%lhs: i64, %rhs: i64, %amount: i32) -> (i64, i64, i32, i64) {
+func.def target(@vm_target) @vm_i64_ops(%lhs: i64, %rhs: i64, %amount: i32) -> (i64, i64, i1, i64) {
   %sum = scalar.addi %lhs, %rhs : i64
   %product = scalar.muli %sum, %rhs : i64
   %signed_less = scalar.cmpi slt, %lhs, %rhs : i64
   %widened = scalar.extsi %amount : i32 to i64
   %mixed = scalar.xori %product, %widened : i64
-  func.return %sum, %mixed, %signed_less, %widened : i64, i64, i32, i64
+  func.return %sum, %mixed, %signed_less, %widened : i64, i64, i1, i64
 }
 
 // ----
@@ -66,14 +66,14 @@ low.func.def target(@vm_target) abi(vm_module_function) @vm_i64_ops(%lhs: reg<ir
 
 ireevm.target<core> @vm_target
 
-func.def target(@vm_target) @vm_float_ops(%x: f32, %y: f32, %wide: f64) -> (f32, f64, i32, i64) {
+func.def target(@vm_target) @vm_float_ops(%x: f32, %y: f32, %wide: f64) -> (f32, f64, i1, i64) {
   %sum = scalar.addf %x, %y : f32
   %root = scalar.sqrtf %sum : f32
   %extended = scalar.extf %root : f32 to f64
   %wide_sum = scalar.addf %extended, %wide : f64
   %ordered = scalar.cmpf olt, %extended, %wide_sum : f64
   %bits = scalar.bitcast %wide_sum : f64 to i64
-  func.return %root, %wide_sum, %ordered, %bits : f32, f64, i32, i64
+  func.return %root, %wide_sum, %ordered, %bits : f32, f64, i1, i64
 }
 
 // ----

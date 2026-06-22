@@ -49,6 +49,8 @@ typedef struct loom_low_schedule_candidate_score_t {
   uint16_t dependency_latency_cycles;
   // Descriptor latency for the candidate itself.
   uint16_t latency_cycles;
+  // Longest same-block latency path starting at the candidate.
+  uint32_t critical_path_cycles;
   // Cycles until all same-block SSA producers are ready.
   uint32_t data_ready_stall_cycles;
   // Cycles until descriptor resources can accept this candidate.
@@ -200,6 +202,11 @@ static iree_status_t loom_low_schedule_initialize_storage(
           (void**)&state->node_ready_issue_cycles));
       memset(state->node_ready_issue_cycles, 0,
              node_count * sizeof(*state->node_ready_issue_cycles));
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->arena, node_count, sizeof(*state->node_critical_path_cycles),
+          (void**)&state->node_critical_path_cycles));
+      memset(state->node_critical_path_cycles, 0,
+             node_count * sizeof(*state->node_critical_path_cycles));
     }
   }
   return iree_ok_status();
@@ -1066,6 +1073,9 @@ static iree_status_t loom_low_schedule_score_candidate(
       .produced_live_units = produced_live_units,
       .dependency_latency_cycles = dependency_latency_cycles,
       .latency_cycles = node->latency_cycles,
+      .critical_path_cycles = state->node_critical_path_cycles != NULL
+                                  ? state->node_critical_path_cycles[node_index]
+                                  : node->latency_cycles,
       .data_ready_stall_cycles = data_ready_stall_cycles,
       .pair_affinity_score =
           loom_low_schedule_score_candidate_pair_affinity(state, node_index),
@@ -1088,10 +1098,45 @@ static iree_status_t loom_low_schedule_score_candidate(
   return iree_ok_status();
 }
 
+static int loom_low_schedule_compare_candidate_pressure(
+    loom_low_schedule_candidate_score_t lhs,
+    loom_low_schedule_candidate_score_t rhs) {
+  if (lhs.projected_live_units != rhs.projected_live_units) {
+    return lhs.projected_live_units < rhs.projected_live_units ? -1 : 1;
+  }
+  if (lhs.killed_live_units != rhs.killed_live_units) {
+    return lhs.killed_live_units > rhs.killed_live_units ? -1 : 1;
+  }
+  if (lhs.produced_live_units != rhs.produced_live_units) {
+    return lhs.produced_live_units < rhs.produced_live_units ? -1 : 1;
+  }
+  if (lhs.units_until_pressure_cliff != rhs.units_until_pressure_cliff) {
+    if (lhs.units_until_pressure_cliff > rhs.units_until_pressure_cliff) {
+      return -1;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+static bool loom_low_schedule_candidate_shortens_producer_live_range(
+    loom_low_schedule_candidate_score_t score) {
+  return score.dependency_latency_cycles != 0 &&
+         score.killed_live_units > score.produced_live_units;
+}
+
+static bool loom_low_schedule_candidate_has_better_pair_affinity(
+    loom_low_schedule_candidate_score_t lhs,
+    loom_low_schedule_candidate_score_t rhs) {
+  return lhs.pair_affinity_score > rhs.pair_affinity_score;
+}
+
 static bool loom_low_schedule_candidate_score_less(
     const loom_low_schedule_build_state_t* state,
     loom_low_schedule_candidate_score_t lhs,
     loom_low_schedule_candidate_score_t rhs) {
+  const int pressure_order =
+      loom_low_schedule_compare_candidate_pressure(lhs, rhs);
   if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
     if (lhs.effective_stall_cycles != rhs.effective_stall_cycles) {
       return lhs.effective_stall_cycles < rhs.effective_stall_cycles;
@@ -1108,8 +1153,26 @@ static bool loom_low_schedule_candidate_score_less(
     if (lhs.data_ready_stall_cycles != rhs.data_ready_stall_cycles) {
       return lhs.data_ready_stall_cycles < rhs.data_ready_stall_cycles;
     }
-    if (lhs.latency_cycles != rhs.latency_cycles) {
-      return lhs.latency_cycles > rhs.latency_cycles;
+    if (lhs.pair_affinity_score != rhs.pair_affinity_score) {
+      return loom_low_schedule_candidate_has_better_pair_affinity(lhs, rhs);
+    }
+    if (pressure_order != 0) {
+      const bool lhs_shortens =
+          loom_low_schedule_candidate_shortens_producer_live_range(lhs);
+      const bool rhs_shortens =
+          loom_low_schedule_candidate_shortens_producer_live_range(rhs);
+      if (lhs_shortens && !rhs_shortens && pressure_order < 0) {
+        return true;
+      }
+      if (rhs_shortens && !lhs_shortens && pressure_order > 0) {
+        return false;
+      }
+      if (lhs_shortens && rhs_shortens) {
+        return pressure_order < 0;
+      }
+    }
+    if (lhs.critical_path_cycles != rhs.critical_path_cycles) {
+      return lhs.critical_path_cycles > rhs.critical_path_cycles;
     }
   }
   if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING) {
@@ -1124,19 +1187,10 @@ static bool loom_low_schedule_candidate_score_less(
     return lhs.pressure_cliff_penalty < rhs.pressure_cliff_penalty;
   }
   if (lhs.pair_affinity_score != rhs.pair_affinity_score) {
-    return lhs.pair_affinity_score > rhs.pair_affinity_score;
+    return loom_low_schedule_candidate_has_better_pair_affinity(lhs, rhs);
   }
-  if (lhs.projected_live_units != rhs.projected_live_units) {
-    return lhs.projected_live_units < rhs.projected_live_units;
-  }
-  if (lhs.killed_live_units != rhs.killed_live_units) {
-    return lhs.killed_live_units > rhs.killed_live_units;
-  }
-  if (lhs.produced_live_units != rhs.produced_live_units) {
-    return lhs.produced_live_units < rhs.produced_live_units;
-  }
-  if (lhs.units_until_pressure_cliff != rhs.units_until_pressure_cliff) {
-    return lhs.units_until_pressure_cliff > rhs.units_until_pressure_cliff;
+  if (pressure_order != 0) {
+    return pressure_order < 0;
   }
   return lhs.source_ordinal < rhs.source_ordinal;
 }
@@ -1594,6 +1648,42 @@ static iree_status_t loom_low_schedule_handle_dependency_cycle(
   return iree_ok_status();
 }
 
+static void loom_low_schedule_compute_node_critical_paths(
+    loom_low_schedule_build_state_t* state, iree_host_size_t node_count,
+    const uint32_t* outgoing_heads, const uint32_t* outgoing_next_indices) {
+  if (state->node_critical_path_cycles == NULL) {
+    return;
+  }
+  for (iree_host_size_t i = node_count; i > 0; --i) {
+    const uint32_t node_index = (uint32_t)(i - 1);
+    const loom_low_schedule_node_t* node = &state->nodes[node_index];
+    uint32_t successor_path_cycles = 0;
+    if (outgoing_next_indices != NULL) {
+      for (uint32_t dependency_index = outgoing_heads[node_index];
+           dependency_index != LOOM_LOW_SCHEDULE_NODE_NONE;
+           dependency_index = outgoing_next_indices[dependency_index]) {
+        const loom_low_schedule_dependency_t* dependency =
+            &state->dependencies[dependency_index];
+        if (dependency->producer_node != node_index ||
+            dependency->consumer_node >= node_count) {
+          continue;
+        }
+        const loom_low_schedule_node_t* consumer =
+            &state->nodes[dependency->consumer_node];
+        if (consumer->block_index != node->block_index) {
+          continue;
+        }
+        successor_path_cycles = loom_low_schedule_max_u32(
+            successor_path_cycles,
+            state->node_critical_path_cycles[dependency->consumer_node]);
+      }
+    }
+    state->node_critical_path_cycles[node_index] =
+        loom_low_schedule_saturating_add_u32(node->latency_cycles,
+                                             successor_path_cycles);
+  }
+}
+
 static iree_status_t loom_low_schedule_run_list_scheduler(
     loom_low_schedule_build_state_t* state, iree_host_size_t node_count) {
   uint32_t* indegrees = NULL;
@@ -1649,6 +1739,8 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
   }
   state->outgoing_heads = outgoing_heads;
   state->outgoing_next_indices = outgoing_next_indices;
+  loom_low_schedule_compute_node_critical_paths(
+      state, node_count, outgoing_heads, outgoing_next_indices);
 
   for (iree_host_size_t block_index = 0; block_index < state->body->block_count;
        ++block_index) {

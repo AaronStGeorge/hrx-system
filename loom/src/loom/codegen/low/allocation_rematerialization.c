@@ -106,7 +106,8 @@ static iree_status_t loom_low_allocation_try_rematerialize_value(
 
   const loom_value_t* value = loom_module_value(module, value_id);
   if (loom_value_is_block_arg(value) || loom_value_is_consumed(value) ||
-      loom_value_has_attribute_uses(value) || value->use_count == 0 ||
+      loom_module_value_has_predicate_attribute_uses(module, value_id) ||
+      value->use_count == 0 ||
       loom_low_allocation_value_has_type_uses(module, value_id)) {
     return iree_ok_status();
   }

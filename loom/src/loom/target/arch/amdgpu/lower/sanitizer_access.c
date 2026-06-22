@@ -33,52 +33,27 @@ typedef struct loom_amdgpu_sanitizer_access_packet_check_t {
   loom_value_id_t shadow_value;
 } loom_amdgpu_sanitizer_access_packet_check_t;
 
-static iree_status_t loom_amdgpu_sanitizer_access_require_register(
+static void loom_amdgpu_sanitizer_access_require_register(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t value, uint32_t unit_count, iree_string_view_t value_name) {
-  if (value >= builder->module->values.count) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AMDGPU sanitizer access value `%.*s` is an invalid low value",
-        (int)value_name.size, value_name.data);
-  }
+    loom_value_id_t value, uint32_t unit_count) {
+  IREE_ASSERT_LT(value, builder->module->values.count);
   const loom_type_t type = loom_module_value_type(builder->module, value);
-  if (!loom_low_type_is_register(type) ||
-      loom_low_register_type_descriptor_set_stable_id(type) !=
-          descriptor_set->stable_id ||
-      loom_low_register_type_unit_count(type) != unit_count) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AMDGPU sanitizer access value `%.*s` has an unsupported register "
-        "shape",
-        (int)value_name.size, value_name.data);
-  }
+  IREE_ASSERT(loom_low_type_is_register(type));
+  IREE_ASSERT_EQ(loom_low_register_type_descriptor_set_stable_id(type),
+                 descriptor_set->stable_id);
+  IREE_ASSERT_EQ(loom_low_register_type_unit_count(type), unit_count);
   const uint16_t register_class = loom_low_register_type_class_id(type);
-  if (register_class != LOOM_AMDGPU_REG_CLASS_ID_SGPR &&
-      register_class != LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AMDGPU sanitizer access value `%.*s` must be an SGPR or VGPR",
-        (int)value_name.size, value_name.data);
-  }
-  return iree_ok_status();
+  IREE_ASSERT(register_class == LOOM_AMDGPU_REG_CLASS_ID_SGPR ||
+              register_class == LOOM_AMDGPU_REG_CLASS_ID_VGPR);
 }
 
-static iree_status_t loom_amdgpu_sanitizer_access_require_register_class(
+static void loom_amdgpu_sanitizer_access_require_register_class(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t value, uint32_t unit_count, uint16_t register_class,
-    iree_string_view_t value_name) {
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register(
-      builder, descriptor_set, value, unit_count, value_name));
+    loom_value_id_t value, uint32_t unit_count, uint16_t register_class) {
+  loom_amdgpu_sanitizer_access_require_register(builder, descriptor_set, value,
+                                                unit_count);
   const loom_type_t type = loom_module_value_type(builder->module, value);
-  if (loom_low_register_type_class_id(type) != register_class) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AMDGPU sanitizer access value `%.*s` has an unsupported register "
-        "class",
-        (int)value_name.size, value_name.data);
-  }
-  return iree_ok_status();
+  IREE_ASSERT_EQ(loom_low_register_type_class_id(type), register_class);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_access_build_u32_attr(
@@ -91,20 +66,17 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_u32_attr(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_sanitizer_access_canonical_asm_form(
+static const loom_low_asm_form_t*
+loom_amdgpu_sanitizer_access_canonical_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor,
-    const loom_low_asm_form_t** out_asm_form) {
-  *out_asm_form = NULL;
+    const loom_low_descriptor_t* descriptor) {
   if (descriptor->canonical_asm_form_ordinal ==
       LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU sanitizer access descriptor has no canonical asm form");
+    IREE_ASSERT_UNREACHABLE(
+        "validated AMDGPU sanitizer access descriptor asm form");
+    IREE_BUILTIN_UNREACHABLE();
   }
-  *out_asm_form =
-      &descriptor_set->asm_forms[descriptor->canonical_asm_form_ordinal];
-  return iree_ok_status();
+  return &descriptor_set->asm_forms[descriptor->canonical_asm_form_ordinal];
 }
 
 static iree_status_t loom_amdgpu_sanitizer_access_build_descriptor_op(
@@ -189,12 +161,10 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_sgpr_u32_binary(
     loom_value_id_t rhs, loom_location_id_t location,
     loom_value_id_t* out_value) {
   *out_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register_class(
-      builder, descriptor_set, lhs, 1, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
-      IREE_SV("lhs")));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register_class(
-      builder, descriptor_set, rhs, 1, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
-      IREE_SV("rhs")));
+  loom_amdgpu_sanitizer_access_require_register_class(
+      builder, descriptor_set, lhs, 1, LOOM_AMDGPU_REG_CLASS_ID_SGPR);
+  loom_amdgpu_sanitizer_access_require_register_class(
+      builder, descriptor_set, rhs, 1, LOOM_AMDGPU_REG_CLASS_ID_SGPR);
 
   loom_type_t sgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_build_register_type(
@@ -305,10 +275,10 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_vgpr64_add(
     loom_value_id_t lhs, loom_value_id_t rhs, loom_location_id_t location,
     loom_value_id_t* out_sum) {
   *out_sum = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register(
-      builder, descriptor_set, lhs, 2, IREE_SV("lhs")));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register(
-      builder, descriptor_set, rhs, 2, IREE_SV("rhs")));
+  loom_amdgpu_sanitizer_access_require_register(builder, descriptor_set, lhs,
+                                                2);
+  loom_amdgpu_sanitizer_access_require_register(builder, descriptor_set, rhs,
+                                                2);
   loom_value_id_t vgpr_lhs = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
       builder, descriptor_set, lhs, /*expected_unit_count=*/2, location,
@@ -379,9 +349,9 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_vgpr_u32_select(
     loom_value_id_t condition_mask, loom_location_id_t location,
     loom_value_id_t* out_value) {
   *out_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register_class(
-      builder, descriptor_set, condition_mask, 2, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
-      IREE_SV("condition_mask")));
+  loom_amdgpu_sanitizer_access_require_register_class(
+      builder, descriptor_set, condition_mask, 2,
+      LOOM_AMDGPU_REG_CLASS_ID_SGPR);
   loom_value_id_t vgpr_false_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
       builder, descriptor_set, false_value, /*expected_unit_count=*/1, location,
@@ -563,9 +533,9 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_shadow_load_u8(
     loom_value_id_t shadow_address, loom_location_id_t location,
     loom_value_id_t* out_shadow_value) {
   *out_shadow_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register_class(
-      builder, descriptor_set, shadow_address, 2, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
-      IREE_SV("shadow_address")));
+  loom_amdgpu_sanitizer_access_require_register_class(
+      builder, descriptor_set, shadow_address, 2,
+      LOOM_AMDGPU_REG_CLASS_ID_VGPR);
 
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_build_register_type(
@@ -576,15 +546,11 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_shadow_load_u8(
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
       builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_FLAT_LOAD_U8,
       &descriptor, &opcode_id));
-  const loom_low_asm_form_t* asm_form = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_canonical_asm_form(
-      descriptor_set, descriptor, &asm_form));
-  if (asm_form->operand_index_count != 1 &&
-      asm_form->operand_index_count != 2) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU sanitizer access flat load descriptor has "
-                            "an unsupported canonical asm operand count");
-  }
+  const loom_low_asm_form_t* asm_form =
+      loom_amdgpu_sanitizer_access_canonical_asm_form(descriptor_set,
+                                                      descriptor);
+  IREE_ASSERT(asm_form->operand_index_count == 1 ||
+              asm_form->operand_index_count == 2);
   loom_named_attr_t attrs[3] = {0};
   iree_host_size_t attr_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_append_load_attrs(
@@ -706,18 +672,13 @@ static iree_status_t loom_amdgpu_sanitizer_access_normalize_failure_mask(
     loom_value_id_t failure_mask, uint32_t wavefront_size,
     loom_location_id_t location, loom_value_id_t* out_failure_mask) {
   *out_failure_mask = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register_class(
-      builder, descriptor_set, failure_mask, 2, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
-      IREE_SV("failure_mask")));
+  loom_amdgpu_sanitizer_access_require_register_class(
+      builder, descriptor_set, failure_mask, 2, LOOM_AMDGPU_REG_CLASS_ID_SGPR);
   if (wavefront_size == 64) {
     *out_failure_mask = failure_mask;
     return iree_ok_status();
   }
-  if (wavefront_size != 32) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU sanitizer access checks require wavefront size 32 or 64");
-  }
+  IREE_ASSERT_EQ(wavefront_size, 32);
 
   loom_type_t sgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_build_register_type(
@@ -756,11 +717,8 @@ static iree_status_t loom_amdgpu_sanitizer_access_build_packet_check(
     loom_location_id_t location,
     loom_amdgpu_sanitizer_access_packet_check_t* out_check) {
   *out_check = (loom_amdgpu_sanitizer_access_packet_check_t){0};
-  if (packet_size == 0 || packet_size > 8) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "AMDGPU sanitizer access packet size must be in "
-                            "[1, 8]");
-  }
+  IREE_ASSERT_GT(packet_size, 0u);
+  IREE_ASSERT_LE(packet_size, 8u);
 
   loom_value_id_t first_shadow_address = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_address(
@@ -863,12 +821,9 @@ iree_status_t loom_amdgpu_build_sanitizer_access_check(
     loom_amdgpu_sanitizer_access_check_t* out_check) {
   IREE_ASSERT_ARGUMENT(out_check);
   *out_check = (loom_amdgpu_sanitizer_access_check_t){0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_require_register(
-      builder, descriptor_set, fault_address, 2, IREE_SV("fault_address")));
-  if (access_size == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU sanitizer access check size must be > 0");
-  }
+  loom_amdgpu_sanitizer_access_require_register(builder, descriptor_set,
+                                                fault_address, 2);
+  IREE_ASSERT_GT(access_size, 0u);
 
   loom_amdgpu_sanitizer_shadow_config_values_t config_values = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_access_build_shadow_config_values(

@@ -39,7 +39,18 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     amdgpu_descriptor_set_ordinal,
     sorted_descriptor_set_infos,
 )
-from loom.target.low_descriptors import target_relative_name  # noqa: E402
+from loom.target.low_descriptors import (  # noqa: E402
+    Descriptor,
+    DescriptorSet,
+    target_relative_name,
+)
+
+_SYSTEM_MEMORY_GLOBAL_LOAD_DESCRIPTOR_KEYS = (
+    "amdgpu.global_load_b32_saddr",
+    "amdgpu.global_load_b64_saddr",
+)
+
+_SANITIZER_ACCESS_FLAT_LOAD_DESCRIPTOR_KEYS = ("amdgpu.flat_load_u8",)
 
 
 def _parse_isa_xml_argument(value: str) -> tuple[str, Path]:
@@ -93,6 +104,34 @@ def _descriptor_set_table_name(key: str) -> str:
     return f"kAmdgpu{''.join(part[:1].upper() + part[1:] for part in suffix.split('.') if part)}DescriptorRefOrdinals"
 
 
+def _descriptor_by_key(descriptor_set: DescriptorSet, key: str) -> Descriptor:
+    for descriptor in descriptor_set.descriptors:
+        if descriptor.key == key:
+            return descriptor
+    raise ValueError(f"AMDGPU descriptor set '{descriptor_set.key}' is missing descriptor '{key}' required by target lowering")
+
+
+def _validate_canonical_asm_operand_count(
+    descriptor_set: DescriptorSet,
+    descriptor_key: str,
+    accepted_operand_counts: tuple[int, ...],
+) -> None:
+    descriptor = _descriptor_by_key(descriptor_set, descriptor_key)
+    if len(descriptor.asm_forms) != 1:
+        raise ValueError(f"AMDGPU descriptor set '{descriptor_set.key}' descriptor '{descriptor_key}' must have exactly one canonical asm form for target lowering; found {len(descriptor.asm_forms)}")
+    operand_count = len(descriptor.asm_forms[0].operands)
+    if operand_count not in accepted_operand_counts:
+        accepted = ", ".join(str(count) for count in accepted_operand_counts)
+        raise ValueError(f"AMDGPU descriptor set '{descriptor_set.key}' descriptor '{descriptor_key}' canonical asm form has {operand_count} operand(s); expected one of: {accepted}")
+
+
+def _validate_lowering_descriptor_contracts(descriptor_set: DescriptorSet) -> None:
+    for descriptor_key in _SYSTEM_MEMORY_GLOBAL_LOAD_DESCRIPTOR_KEYS:
+        _validate_canonical_asm_operand_count(descriptor_set, descriptor_key, (2, 3))
+    for descriptor_key in _SANITIZER_ACCESS_FLAT_LOAD_DESCRIPTOR_KEYS:
+        _validate_canonical_asm_operand_count(descriptor_set, descriptor_key, (1, 2))
+
+
 def _materialize_descriptor_ref_tables(
     isa_specs: Mapping[str, AmdgpuIsaFactSource],
     descriptor_set_keys: Sequence[str],
@@ -117,6 +156,7 @@ def _materialize_descriptor_ref_tables(
         )
         if descriptor_set.key != descriptor_set_info.key:
             raise ValueError(f"AMDGPU descriptor-set builder '{descriptor_set_info.generator_target}' produced '{descriptor_set.key}', expected '{descriptor_set_info.key}'")
+        _validate_lowering_descriptor_contracts(descriptor_set)
         descriptor_ordinals = {descriptor.key: ordinal for ordinal, descriptor in enumerate(descriptor_set.descriptors)}
         descriptor_set_tables.append(
             (

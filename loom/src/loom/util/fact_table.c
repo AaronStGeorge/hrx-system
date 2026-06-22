@@ -101,6 +101,32 @@ static iree_status_t loom_value_fact_table_ensure_uniform_origin_capacity(
   return iree_ok_status();
 }
 
+static loom_value_fact_static_lane_origin_t
+loom_value_fact_static_lane_origin_invalid(void) {
+  return (loom_value_fact_static_lane_origin_t){
+      .source_value_id = LOOM_VALUE_ID_INVALID,
+  };
+}
+
+static iree_status_t loom_value_fact_table_ensure_static_lane_origin_capacity(
+    loom_value_fact_table_t* table, iree_host_size_t capacity) {
+  if (capacity <= table->static_lane_origins.capacity) {
+    return iree_ok_status();
+  }
+  const iree_host_size_t old_capacity = table->static_lane_origins.capacity;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_grow_array(table->arena, old_capacity, capacity,
+                            sizeof(loom_value_fact_static_lane_origin_t),
+                            &table->static_lane_origins.capacity,
+                            (void**)&table->static_lane_origins.entries));
+  for (iree_host_size_t i = old_capacity;
+       i < table->static_lane_origins.capacity; ++i) {
+    table->static_lane_origins.entries[i] =
+        loom_value_fact_static_lane_origin_invalid();
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_value_fact_table_allocate_initial_capacity(
     loom_value_fact_table_t* table, iree_host_size_t capacity) {
   return loom_value_fact_table_ensure_capacity(table, capacity);
@@ -132,6 +158,22 @@ static iree_status_t loom_value_fact_table_append_touched_uniform_origin(
   table->uniform_element_origins
       .touched_values[table->uniform_element_origins.touched_count++] =
       value_id;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_value_fact_table_append_touched_static_lane_origin(
+    loom_value_fact_table_t* table, loom_value_id_t value_id) {
+  if (table->static_lane_origins.touched_count >=
+      table->static_lane_origins.touched_capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        table->arena, table->static_lane_origins.touched_count,
+        table->static_lane_origins.touched_count + 1,
+        sizeof(*table->static_lane_origins.touched_values),
+        &table->static_lane_origins.touched_capacity,
+        (void**)&table->static_lane_origins.touched_values));
+  }
+  table->static_lane_origins
+      .touched_values[table->static_lane_origins.touched_count++] = value_id;
   return iree_ok_status();
 }
 
@@ -1138,6 +1180,12 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
         .entries[table->uniform_element_origins.touched_values[i]] =
         LOOM_VALUE_ID_INVALID;
   }
+  for (iree_host_size_t i = 0; i < table->static_lane_origins.touched_count;
+       ++i) {
+    table->static_lane_origins
+        .entries[table->static_lane_origins.touched_values[i]] =
+        loom_value_fact_static_lane_origin_invalid();
+  }
   table->touched_count = 0;
   table->count = 0;
   table->extensions.entries = NULL;
@@ -1146,6 +1194,7 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
   table->extensions.buckets = NULL;
   table->extensions.bucket_count = 0;
   table->uniform_element_origins.touched_count = 0;
+  table->static_lane_origins.touched_count = 0;
   table->scratch.facts.values = NULL;
   table->scratch.facts.capacity = 0;
   table->scratch.value_ids.values = NULL;
@@ -1240,6 +1289,100 @@ bool loom_value_fact_table_query_uniform_element_origin(
   }
   if (out_scalar_value_id) {
     *out_scalar_value_id = scalar_value_id;
+  }
+  return true;
+}
+
+static bool loom_value_fact_table_lookup_static_lane_origin(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_fact_static_lane_origin_t* out_origin) {
+  if (out_origin) {
+    *out_origin = loom_value_fact_static_lane_origin_invalid();
+  }
+  if (value_id >= table->static_lane_origins.capacity ||
+      table->static_lane_origins.entries == NULL) {
+    return false;
+  }
+  const loom_value_fact_static_lane_origin_t origin =
+      table->static_lane_origins.entries[value_id];
+  if (origin.source_value_id == LOOM_VALUE_ID_INVALID) {
+    return false;
+  }
+  if (out_origin) {
+    *out_origin = origin;
+  }
+  return true;
+}
+
+iree_status_t loom_value_fact_table_define_static_lane_origin(
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_fact_static_lane_origin_t origin) {
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      origin.source_value_id == LOOM_VALUE_ID_INVALID) {
+    return iree_ok_status();
+  }
+  IREE_ASSERT_NE(origin.source_lane_stride, 0u);
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_ensure_static_lane_origin_capacity(
+      table, (iree_host_size_t)value_id + 1));
+  if (table->static_lane_origins.entries[value_id].source_value_id ==
+      LOOM_VALUE_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(
+        loom_value_fact_table_append_touched_static_lane_origin(table,
+                                                                value_id));
+  }
+  table->static_lane_origins.entries[value_id] = origin;
+  return iree_ok_status();
+}
+
+bool loom_value_fact_table_query_static_lane_origin(
+    const loom_value_fact_table_t* table, const loom_module_t* module,
+    loom_value_id_t value_id,
+    loom_value_fact_static_lane_origin_t* out_origin) {
+  if (out_origin) {
+    *out_origin = loom_value_fact_static_lane_origin_invalid();
+  }
+  if (table == NULL || module == NULL || value_id >= module->values.count) {
+    return false;
+  }
+  loom_value_fact_static_lane_origin_t origin =
+      loom_value_fact_static_lane_origin_invalid();
+  if (!loom_value_fact_table_lookup_static_lane_origin(table, value_id,
+                                                       &origin) ||
+      origin.source_value_id >= module->values.count ||
+      origin.source_lane_stride == 0) {
+    return false;
+  }
+
+  const loom_type_t value_type = loom_module_value_type(module, value_id);
+  const loom_type_t source_type =
+      loom_module_value_type(module, origin.source_value_id);
+  if (!loom_type_is_vector(value_type) || !loom_type_is_vector(source_type) ||
+      loom_type_element_type(value_type) !=
+          loom_type_element_type(source_type)) {
+    return false;
+  }
+
+  uint64_t value_lane_count = 0;
+  uint64_t source_lane_count = 0;
+  if (!loom_type_static_element_count(value_type, &value_lane_count) ||
+      !loom_type_static_element_count(source_type, &source_lane_count)) {
+    return false;
+  }
+  uint64_t max_source_lane = origin.source_lane_offset;
+  if (value_lane_count > 0) {
+    const uint64_t lane_delta_count = value_lane_count - 1u;
+    const uint64_t stride = origin.source_lane_stride;
+    if (lane_delta_count > (UINT64_MAX - max_source_lane) / stride) {
+      return false;
+    }
+    max_source_lane += lane_delta_count * stride;
+  }
+  if (max_source_lane >= source_lane_count) {
+    return false;
+  }
+
+  if (out_origin) {
+    *out_origin = origin;
   }
   return true;
 }
@@ -1519,6 +1662,13 @@ iree_status_t loom_value_fact_table_clone_defined_facts(
       IREE_RETURN_IF_ERROR(loom_value_fact_table_define_uniform_element_origin(
           target, value_id, scalar_origin));
     }
+    loom_value_fact_static_lane_origin_t lane_origin =
+        loom_value_fact_static_lane_origin_invalid();
+    if (loom_value_fact_table_lookup_static_lane_origin(source, value_id,
+                                                        &lane_origin)) {
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_static_lane_origin(
+          target, value_id, lane_origin));
+    }
   }
   return iree_ok_status();
 }
@@ -1756,7 +1906,26 @@ static iree_status_t loom_value_fact_table_forward_uniform_origin(
       table, result_value_id, scalar_origin);
 }
 
-static iree_status_t loom_value_fact_table_propagate_uniform_origins(
+static iree_status_t loom_value_fact_table_forward_static_lane_origin(
+    loom_value_fact_table_t* table, loom_value_id_t source_value_id,
+    loom_value_id_t result_value_id) {
+  loom_value_fact_static_lane_origin_t existing_origin =
+      loom_value_fact_static_lane_origin_invalid();
+  if (loom_value_fact_table_lookup_static_lane_origin(table, result_value_id,
+                                                      &existing_origin)) {
+    return iree_ok_status();
+  }
+  loom_value_fact_static_lane_origin_t lane_origin =
+      loom_value_fact_static_lane_origin_invalid();
+  if (!loom_value_fact_table_lookup_static_lane_origin(table, source_value_id,
+                                                       &lane_origin)) {
+    return iree_ok_status();
+  }
+  return loom_value_fact_table_define_static_lane_origin(table, result_value_id,
+                                                         lane_origin);
+}
+
+static iree_status_t loom_value_fact_table_propagate_origins(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_op_t* op) {
   const loom_trait_flags_t traits = loom_op_effective_traits(module, op);
@@ -1766,6 +1935,8 @@ static iree_status_t loom_value_fact_table_propagate_uniform_origins(
       op->result_count >= 1) {
     IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_uniform_origin(
         table, operands[0], results[0]));
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_static_lane_origin(
+        table, operands[0], results[0]));
   }
   if (loom_traits_are_fact_identity(traits)) {
     const uint16_t pair_count = op->operand_count < op->result_count
@@ -1773,6 +1944,8 @@ static iree_status_t loom_value_fact_table_propagate_uniform_origins(
                                     : op->result_count;
     for (uint16_t i = 0; i < pair_count; ++i) {
       IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_uniform_origin(
+          table, operands[i], results[i]));
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_static_lane_origin(
           table, operands[i], results[i]));
     }
   }
@@ -2761,7 +2934,7 @@ iree_status_t loom_value_fact_table_compute_op_and_report(
           /*result_ids=*/NULL, /*result_count=*/0, /*result_facts=*/NULL,
           out_changed));
     }
-    return loom_value_fact_table_propagate_uniform_origins(table, module, op);
+    return loom_value_fact_table_propagate_origins(table, module, op);
   }
 
   // Get scratch for operand + result facts.
@@ -2817,7 +2990,7 @@ iree_status_t loom_value_fact_table_compute_op_and_report(
     }
   }
 
-  return loom_value_fact_table_propagate_uniform_origins(table, module, op);
+  return loom_value_fact_table_propagate_origins(table, module, op);
 }
 
 iree_status_t loom_value_fact_table_compute_region(

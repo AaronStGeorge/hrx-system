@@ -17,6 +17,20 @@
 extern "C" {
 #endif
 
+// Emits one ds_bpermute_b32 cross-lane read for a 32-bit payload register.
+iree_status_t loom_amdgpu_emit_subgroup_bpermute_register(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
+    loom_value_id_t low_source_byte_offset, loom_value_id_t low_source_value,
+    loom_type_t lane_type, loom_value_id_t* out_low_result);
+
+// Emits the byte-addressed lane offset expected by ds_bpermute_b32 from a
+// low VGPR lane index.
+iree_status_t loom_amdgpu_emit_subgroup_lane_byte_offset(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_source_lane, loom_type_t lane_type,
+    loom_value_id_t* out_low_source_byte_offset);
+
 // Selects a native AMDGPU cross-lane packet for a source subgroup shuffle.
 iree_status_t loom_amdgpu_select_kernel_subgroup_shuffle_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

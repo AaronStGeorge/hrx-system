@@ -279,7 +279,6 @@ static iree_status_t loom_amdgpu_wait_packet_allocate(
 
 static iree_status_t loom_amdgpu_wait_packet_append_immediate(
     loom_amdgpu_wait_packet_builder_t* builder,
-    const loom_low_descriptor_t* packet_descriptor,
     const loom_amdgpu_wait_packet_descriptor_immediate_template_t*
         immediate_descriptor,
     uint16_t value) {
@@ -290,15 +289,7 @@ static iree_status_t loom_amdgpu_wait_packet_append_immediate(
   }
   const uint16_t descriptor_immediate_index =
       immediate_descriptor->descriptor_immediate_index;
-  if (value > immediate_descriptor->no_wait_value) {
-    iree_string_view_t key = loom_low_descriptor_set_string(
-        builder->descriptor_set, packet_descriptor->key_string_offset);
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU wait descriptor '%.*s' immediate %" PRIu16
-                            " value %" PRIu16 " exceeds maximum %" PRIu16,
-                            (int)key.size, key.data, descriptor_immediate_index,
-                            value, immediate_descriptor->no_wait_value);
-  }
+  value = iree_min(value, immediate_descriptor->no_wait_value);
 
   builder->immediates[builder->immediate_count++] =
       (loom_amdgpu_wait_packet_immediate_t){
@@ -360,8 +351,8 @@ static iree_status_t loom_amdgpu_wait_packet_append_packet(
       IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_target_count(
           group, immediate_counter_mask, &value));
     }
-    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_append_immediate(
-        builder, descriptor, immediate, value));
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_wait_packet_append_immediate(builder, immediate, value));
   }
   builder->packets[builder->packet_count++] = (loom_amdgpu_wait_packet_t){
       .descriptor = descriptor,
@@ -462,16 +453,7 @@ iree_status_t loom_amdgpu_wait_packet_try_select_counter_mask(
     if (iree_any_bit_set(immediate->counter_mask, covered_counter_mask)) {
       value = target_count;
     }
-    if (value > immediate->no_wait_value) {
-      iree_string_view_t key = loom_low_descriptor_set_string(
-          descriptor_set, descriptor->key_string_offset);
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "AMDGPU wait descriptor '%.*s' immediate %" PRIu16
-                              " value %" PRIu16 " exceeds maximum %" PRIu16,
-                              (int)key.size, key.data,
-                              immediate->descriptor_immediate_index, value,
-                              immediate->no_wait_value);
-    }
+    value = iree_min(value, immediate->no_wait_value);
     out_selection->immediates[i] = (loom_amdgpu_wait_packet_immediate_t){
         .descriptor_immediate_index = immediate->descriptor_immediate_index,
         .name = immediate->name,

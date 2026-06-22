@@ -15,6 +15,7 @@
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/verify.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/global/ops.h"
@@ -212,16 +213,187 @@ static iree_status_t loom_amdgpu_hal_kernel_library_read_stream_contents(
   return status;
 }
 
+static void loom_amdgpu_hal_kernel_library_accumulate_wait_action(
+    loom_target_compile_report_wait_plan_t* summary,
+    const loom_amdgpu_wait_plan_action_t* action) {
+  ++summary->action_count;
+  switch (action->kind) {
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT:
+      ++summary->explicit_action_count;
+      break;
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED:
+      ++summary->planned_action_count;
+      break;
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_UNKNOWN:
+    default:
+      IREE_ASSERT(false, "wait plan action kind must be known");
+      break;
+  }
+  if (action->target_count == 0) {
+    ++summary->full_drain_count;
+    summary->max_full_drain_outstanding_before =
+        iree_max(summary->max_full_drain_outstanding_before,
+                 (uint64_t)action->outstanding_before);
+  } else {
+    ++summary->partial_wait_count;
+  }
+  summary->max_outstanding_before = iree_max(
+      summary->max_outstanding_before, (uint64_t)action->outstanding_before);
+}
+
+static iree_string_view_t loom_amdgpu_hal_kernel_library_wait_action_name(
+    loom_amdgpu_wait_plan_action_kind_t kind) {
+  switch (kind) {
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT:
+      return IREE_SV("explicit");
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED:
+      return IREE_SV("planned");
+    case LOOM_AMDGPU_WAIT_PLAN_ACTION_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+typedef struct loom_amdgpu_hal_kernel_library_wait_endpoint_t {
+  // Node index in the schedule table, or UINT32_MAX.
+  uint32_t node_index;
+  // Scheduled ordinal for |node_index|, or UINT32_MAX.
+  uint32_t scheduled_ordinal;
+  // Operation mnemonic for |node_index|, or empty.
+  iree_string_view_t operation_name;
+  // Descriptor key for |node_index|, or empty.
+  iree_string_view_t descriptor_key;
+  // Descriptor semantic tag for |node_index|, or empty.
+  iree_string_view_t semantic_tag;
+} loom_amdgpu_hal_kernel_library_wait_endpoint_t;
+
+static loom_amdgpu_hal_kernel_library_wait_endpoint_t
+loom_amdgpu_hal_kernel_library_wait_endpoint(
+    const loom_amdgpu_wait_plan_t* wait_plan, uint32_t node_index) {
+  loom_amdgpu_hal_kernel_library_wait_endpoint_t endpoint = {
+      .node_index = UINT32_MAX,
+      .scheduled_ordinal = UINT32_MAX,
+      .operation_name = iree_string_view_empty(),
+      .descriptor_key = iree_string_view_empty(),
+      .semantic_tag = iree_string_view_empty(),
+  };
+  const loom_low_schedule_table_t* schedule = wait_plan->schedule;
+  if (node_index == LOOM_LOW_SCHEDULE_NODE_NONE ||
+      node_index >= schedule->node_count) {
+    return endpoint;
+  }
+
+  const loom_low_schedule_node_t* node = &schedule->nodes[node_index];
+  endpoint.node_index = node_index;
+  endpoint.scheduled_ordinal = node->scheduled_ordinal;
+  if (node->op != NULL) {
+    endpoint.operation_name = loom_op_name(schedule->module, node->op);
+  }
+  if (node->descriptor != NULL) {
+    endpoint.descriptor_key = loom_low_descriptor_set_string(
+        schedule->target.descriptor_set, node->descriptor->key_string_offset);
+    if (node->descriptor->semantic_tag_string_offset !=
+        LOOM_LOW_STRING_OFFSET_NONE) {
+      endpoint.semantic_tag = loom_low_descriptor_set_string(
+          schedule->target.descriptor_set,
+          node->descriptor->semantic_tag_string_offset);
+    }
+  }
+  return endpoint;
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_library_record_wait_plan(
+    loom_target_compile_report_t* report,
+    const loom_amdgpu_packet_plan_t* packet_plan) {
+  if (report == NULL || packet_plan->wait_plan.action_count == 0) {
+    return iree_ok_status();
+  }
+  const loom_amdgpu_wait_plan_t* wait_plan = &packet_plan->wait_plan;
+  loom_target_compile_report_wait_plan_t summary = {0};
+  loom_target_compile_report_wait_plan_t
+      counter_summaries[LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT] = {0};
+  for (iree_host_size_t i = 0; i < wait_plan->action_count; ++i) {
+    const loom_amdgpu_wait_plan_action_t* action = &wait_plan->actions[i];
+    IREE_ASSERT(action->counter_id > LOOM_AMDGPU_WAIT_COUNTER_NONE &&
+                    action->counter_id <= LOOM_AMDGPU_WAIT_COUNTER_ALU,
+                "wait plan action must name a concrete counter");
+    loom_amdgpu_hal_kernel_library_accumulate_wait_action(&summary, action);
+    if (action->counter_id > LOOM_AMDGPU_WAIT_COUNTER_NONE &&
+        action->counter_id <= LOOM_AMDGPU_WAIT_COUNTER_ALU) {
+      loom_amdgpu_hal_kernel_library_accumulate_wait_action(
+          &counter_summaries[action->counter_id - 1], action);
+    }
+  }
+  loom_target_compile_report_record_wait_plan(report, &summary);
+  for (uint32_t i = 0; i < LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT; ++i) {
+    if (counter_summaries[i].action_count == 0) {
+      continue;
+    }
+    const uint32_t counter_id = i + 1;
+    const loom_target_compile_report_wait_counter_row_t row = {
+        .function_name = report->function_name,
+        .counter_name = loom_amdgpu_wait_counter_name(counter_id),
+        .counter_id = counter_id,
+        .summary = counter_summaries[i],
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_record_wait_counter_row(report, &row));
+  }
+  if (!loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN)) {
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < wait_plan->action_count; ++i) {
+    const loom_amdgpu_wait_plan_action_t* action = &wait_plan->actions[i];
+    const loom_amdgpu_hal_kernel_library_wait_endpoint_t producer =
+        loom_amdgpu_hal_kernel_library_wait_endpoint(wait_plan,
+                                                     action->producer_node);
+    const loom_amdgpu_hal_kernel_library_wait_endpoint_t consumer =
+        loom_amdgpu_hal_kernel_library_wait_endpoint(wait_plan,
+                                                     action->consumer_node);
+    const loom_target_compile_report_wait_action_row_t row = {
+        .function_name = report->function_name,
+        .counter_name = loom_amdgpu_wait_counter_name(action->counter_id),
+        .action_name =
+            loom_amdgpu_hal_kernel_library_wait_action_name(action->kind),
+        .reason_name = loom_amdgpu_wait_plan_reason_name(action->reason),
+        .counter_id = action->counter_id,
+        .action_id = (uint32_t)action->kind,
+        .reason_id = (uint32_t)action->reason,
+        .block_index = action->block_index,
+        .node_index = action->node_index,
+        .scheduled_ordinal = action->scheduled_ordinal,
+        .producer_node = producer.node_index,
+        .producer_scheduled_ordinal = producer.scheduled_ordinal,
+        .producer_operation_name = producer.operation_name,
+        .producer_descriptor_key = producer.descriptor_key,
+        .producer_semantic_tag = producer.semantic_tag,
+        .consumer_node = consumer.node_index,
+        .consumer_scheduled_ordinal = consumer.scheduled_ordinal,
+        .consumer_operation_name = consumer.operation_name,
+        .consumer_descriptor_key = consumer.descriptor_key,
+        .consumer_semantic_tag = consumer.semantic_tag,
+        .target_count = action->target_count,
+        .outstanding_before = action->outstanding_before,
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_record_wait_action_row(report, &row));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_library_build_hsaco_contribution(
     const loom_low_emission_frame_t* frame,
     const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
     const loom_amdgpu_native_preflight_t* preflight,
-    iree_string_builder_t* target_listing,
+    iree_string_builder_t* target_listing, loom_target_compile_report_t* report,
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     iree_arena_allocator_t* table_arena) {
   loom_amdgpu_packet_plan_t packet_plan = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
       &frame->schedule, &frame->allocation, table_arena, &packet_plan));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hal_kernel_library_record_wait_plan(report, &packet_plan));
 
   if (target_listing != NULL) {
     if (iree_string_builder_size(target_listing) != 0) {
@@ -555,8 +727,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
   }
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_library_build_hsaco_contribution(
-      &frame, &plan->abi_layout, &preflight, target_listing, out_contribution,
-      table_arena));
+      &frame, &plan->abi_layout, &preflight, target_listing, report,
+      out_contribution, table_arena));
   if (report != NULL) {
     loom_target_compile_report_record_emission(
         report, out_contribution->summary.instruction_count,

@@ -24,6 +24,7 @@
 #include "iree/hal/drivers/amdgpu/pm4_command_buffer.h"
 #include "iree/hal/drivers/amdgpu/queue_affinity.h"
 #include "iree/hal/drivers/amdgpu/util/aql_emitter.h"
+#include "iree/hal/drivers/amdgpu/util/pm4_emitter.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -65,6 +66,23 @@ class HostQueueCommandBufferTest : public ::testing::Test {
 iree_allocator_t HostQueueCommandBufferTest::host_allocator_;
 iree_hal_amdgpu_libhsa_t HostQueueCommandBufferTest::libhsa_;
 iree_hal_amdgpu_topology_t HostQueueCommandBufferTest::topology_;
+
+static const uint32_t* FindPm4DispatchDirectPacket(
+    const iree_hal_amdgpu_pm4_program_t* pm4_program,
+    uint32_t dispatch_direct_ordinal) {
+  const uint32_t dispatch_direct_header =
+      iree_hal_amdgpu_pm4_make_compute_header(
+          IREE_HAL_AMDGPU_PM4_HDR_IT_OPCODE_DISPATCH_DIRECT,
+          IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT);
+  for (uint32_t i = 0; i + IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT <=
+                       pm4_program->dword_count;
+       ++i) {
+    if (pm4_program->dwords[i] != dispatch_direct_header) continue;
+    if (dispatch_direct_ordinal == 0) return &pm4_program->dwords[i];
+    --dispatch_direct_ordinal;
+  }
+  return nullptr;
+}
 
 TEST_F(HostQueueCommandBufferTest, DispatchSummariesRetainPacketOrdinals) {
   iree_hal_amdgpu_logical_device_options_t options;
@@ -665,6 +683,118 @@ TEST_F(HostQueueCommandBufferTest,
       /*binding_capacity=*/0, command_buffer.out()));
   EXPECT_TRUE(iree_hal_amdgpu_aql_command_buffer_isa(command_buffer));
   EXPECT_FALSE(iree_hal_amdgpu_pm4_command_buffer_isa(command_buffer));
+}
+
+TEST_F(HostQueueCommandBufferTest,
+       Pm4DispatchDirectUsesThreadDimensionsForMultiWorkgroupDispatch) {
+  constexpr uint32_t kWorkgroupCount = 32u;
+
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.command_buffer_mode = IREE_HAL_AMDGPU_COMMAND_BUFFER_MODE_PM4;
+  options.host_queues.upload_capacity = 64 * 1024;
+  options.preallocate_pools = 0;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(
+      test_device.Initialize(&options, &libhsa_, &topology_, host_allocator_));
+
+  iree_hal_amdgpu_physical_device_t* physical_device =
+      test_device.logical_device()->physical_devices[0];
+  if (!iree_hal_amdgpu_vendor_packet_capabilities_support_pm4_dispatch_command_buffers(
+          physical_device->vendor_packet_capabilities)) {
+    GTEST_SKIP() << "PM4 dispatch command buffers are not supported on this "
+                    "physical device";
+  }
+
+  iree_hal_executable_cache_t* executable_cache = NULL;
+  iree_hal_executable_t* executable = NULL;
+  IREE_ASSERT_OK(LoadCtsExecutable(
+      test_device.base_device(),
+      iree_make_cstring_view("command_buffer_dispatch_multi_workgroup_test."
+                             "bin"),
+      &executable_cache, &executable));
+
+  const iree_hal_amdgpu_executable_dispatch_descriptor_t* descriptor = nullptr;
+  IREE_ASSERT_OK(
+      iree_hal_amdgpu_executable_lookup_dispatch_descriptor_for_queue(
+          executable, iree_hal_executable_function_from_index(0),
+          IREE_HAL_QUEUE_AFFINITY_ANY, &descriptor));
+  ASSERT_NE(descriptor, nullptr);
+  ASSERT_GT(descriptor->kernel_args.workgroup_size[0], 1u);
+
+  Ref<iree_hal_buffer_t> output_buffer;
+  IREE_ASSERT_OK(CreateHostVisibleDispatchBuffer(
+      test_device.allocator(), kWorkgroupCount * sizeof(uint32_t),
+      output_buffer.out()));
+  IREE_ASSERT_OK(iree_hal_buffer_map_zero(output_buffer, /*offset=*/0,
+                                          IREE_HAL_WHOLE_BUFFER));
+
+  iree_hal_buffer_ref_t binding_refs[1] = {
+      iree_hal_make_buffer_ref(output_buffer, /*offset=*/0,
+                               iree_hal_buffer_byte_length(output_buffer)),
+  };
+  const iree_hal_buffer_ref_list_t dispatch_bindings = {
+      /*count=*/IREE_ARRAYSIZE(binding_refs),
+      /*values=*/binding_refs,
+  };
+
+  Ref<iree_hal_command_buffer_t> command_buffer;
+  IREE_ASSERT_OK(iree_hal_command_buffer_create(
+      test_device.base_device(), IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+      IREE_HAL_COMMAND_CATEGORY_DISPATCH, IREE_HAL_QUEUE_AFFINITY_ANY,
+      /*binding_capacity=*/0, command_buffer.out()));
+  IREE_ASSERT_OK(iree_hal_command_buffer_begin(command_buffer));
+  IREE_ASSERT_OK(iree_hal_command_buffer_dispatch(
+      command_buffer, executable, iree_hal_executable_function_from_index(0),
+      iree_hal_make_static_dispatch_config(kWorkgroupCount, 1, 1),
+      iree_const_byte_span_empty(), dispatch_bindings,
+      IREE_HAL_DISPATCH_FLAG_NONE));
+  IREE_ASSERT_OK(iree_hal_command_buffer_end(command_buffer));
+
+  ASSERT_TRUE(iree_hal_amdgpu_pm4_command_buffer_isa(command_buffer));
+  const iree_hal_amdgpu_pm4_program_t* pm4_program =
+      iree_hal_amdgpu_pm4_command_buffer_program(command_buffer);
+  ASSERT_NE(pm4_program, nullptr);
+  const uint32_t* dispatch_direct =
+      FindPm4DispatchDirectPacket(pm4_program, /*dispatch_direct_ordinal=*/0);
+  ASSERT_NE(dispatch_direct, nullptr);
+  EXPECT_EQ(dispatch_direct[1],
+            kWorkgroupCount * descriptor->kernel_args.workgroup_size[0]);
+  EXPECT_EQ(dispatch_direct[2], descriptor->kernel_args.workgroup_size[1]);
+  EXPECT_EQ(dispatch_direct[3], descriptor->kernel_args.workgroup_size[2]);
+  EXPECT_TRUE(iree_all_bits_set(
+      dispatch_direct[4],
+      IREE_HAL_AMDGPU_PM4_DISPATCH_INITIATOR_USE_THREAD_DIMENSIONS));
+
+  Ref<iree_hal_semaphore_t> command_buffer_signal;
+  IREE_ASSERT_OK(
+      CreateSemaphore(test_device.base_device(), command_buffer_signal.out()));
+  uint64_t command_buffer_signal_value = 1;
+  iree_hal_semaphore_t* command_buffer_signal_ptr = command_buffer_signal.get();
+  const iree_hal_semaphore_list_t command_buffer_signal_list = {
+      /*count=*/1,
+      /*semaphores=*/&command_buffer_signal_ptr,
+      /*payload_values=*/&command_buffer_signal_value,
+  };
+  IREE_ASSERT_OK(iree_hal_device_queue_execute(
+      test_device.base_device(), IREE_HAL_QUEUE_AFFINITY_ANY,
+      iree_hal_semaphore_list_empty(), command_buffer_signal_list,
+      command_buffer, iree_hal_buffer_binding_table_empty(),
+      IREE_HAL_EXECUTE_FLAG_NONE));
+  IREE_ASSERT_OK(iree_hal_semaphore_wait(
+      command_buffer_signal, command_buffer_signal_value,
+      iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+
+  uint32_t output_values[kWorkgroupCount] = {};
+  IREE_ASSERT_OK(iree_hal_buffer_map_read(
+      output_buffer, /*offset=*/0, output_values, sizeof(output_values)));
+  for (uint32_t i = 0; i < kWorkgroupCount; ++i) {
+    EXPECT_EQ(output_values[i], i);
+  }
+
+  iree_hal_executable_release(executable);
+  iree_hal_executable_cache_release(executable_cache);
 }
 
 TEST_F(HostQueueCommandBufferTest,

@@ -185,6 +185,9 @@ static iree_status_t loom_target_pipeline_build_source_to_low(
       case LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS:
         diagnostics_value = IREE_SV("memory");
         break;
+      case LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM:
+        diagnostics_value = IREE_SV("operand-forms");
+        break;
       case LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL:
         diagnostics_value = IREE_SV("all");
         break;

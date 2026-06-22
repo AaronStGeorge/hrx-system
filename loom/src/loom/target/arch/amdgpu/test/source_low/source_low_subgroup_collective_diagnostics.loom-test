@@ -87,6 +87,26 @@ kernel.def target(@target) @subgroup_shuffle_dynamic_offset_rejected() {
 
 amdgpu.target<gfx1100> @target
 
+kernel.def target(@target) @subgroup_shuffle_dynamic_width_rejected() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>
+  %width_vector = vector.load %input_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %width = vector.extract %width_vector[0] : vector<1xi32> -> i32
+  %offset = scalar.constant 1 : i32
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_shuffle.exact_width"}
+  %shuffle, %valid = kernel.subgroup.shuffle<down> %value, %offset, %width : i32, i32, i32
+  kernel.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 kernel.def target(@target) @subgroup_shuffle_non_power_of_two_width_rejected() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
@@ -146,6 +166,36 @@ kernel.def target(@target) @subgroup_reduce_cluster_stride_rejected() {
   %value = scalar.constant 1 : i32
   // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.cluster_stride"}
   %sum = kernel.subgroup.reduce<addi> %value {cluster_size = 16, cluster_stride = 2} : i32
+  kernel.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @subgroup_reduce_cluster_size_rejected() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.power_of_two_cluster_size"}
+  %sum = kernel.subgroup.reduce<addi> %value {cluster_size = 24} : i32
+  kernel.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @subgroup_reduce_cluster_multiple_rejected() {
+  %c1 = index.constant 1 : index
+  %c24 = index.constant 24 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c24, %c1, %c1) : index
+} launch() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.fixed_workgroup_cluster_multiple"}
+  %sum = kernel.subgroup.reduce<addi> %value {cluster_size = 16} : i32
   kernel.return
 }
 
@@ -385,10 +435,36 @@ kernel.def target(@target) @subgroup_reduce_wave64_native_width_rejected() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch() {
+} launch(%output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>
   %value = scalar.constant 1.0 : f32
-  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.native_width"}
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.native_width.result_all_workitems"}
   %sum = kernel.subgroup.reduce<addf> %value : f32
+  view.store %sum, %output_view[%tid] : f32, view<64xf32, #dense>
+  kernel.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target {subgroup_size = 64}
+kernel.def target(@target) @subgroup_reduce_wave64_leader_publication_rejected() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch(%output: buffer) {
+  %lane = kernel.subgroup.lane.id : index
+  %zero_index = index.constant 0 : index
+  %zero_offset = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<1xi32, #dense>
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.native_width.leader_lane_publication"}
+  %sum = kernel.subgroup.reduce<addi> %value : i32
+  %is_leader_lane = index.cmp eq, %lane, %zero_index : index
+  scf.if %is_leader_lane {
+    view.store %sum, %output_view[%zero_index] : i32, view<1xi32, #dense>
+  }
   kernel.return
 }
 

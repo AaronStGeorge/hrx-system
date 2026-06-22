@@ -184,8 +184,8 @@ static iree_status_t loom_low_packet_json_write_value(
   }
   uint32_t assignment_index = UINT32_MAX;
   const loom_low_allocation_assignment_t* assignment =
-      loom_low_allocation_map_active_value_assignment(allocation, value_id,
-                                                      &assignment_index);
+      loom_low_allocation_try_map_active_value_assignment(allocation, value_id,
+                                                          &assignment_index);
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"location\":"));
   IREE_RETURN_IF_ERROR(loom_low_packet_json_write_location(

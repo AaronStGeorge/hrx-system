@@ -250,6 +250,59 @@ func.def @unused(%x: i32) -> (i32) {
   EXPECT_EQ(text.find("func.def @unused"), std::string::npos);
 }
 
+TEST_F(LinkerTest, SelectiveRootMaterializesApplyContractProviders) {
+  loom_module_t* module = Parse(IREE_SV(R"(
+func.template<demo.apply> @provider(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+func.template<demo.unused> @unused_provider(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+func.def @caller(%x: i32) -> (i32) {
+  %y = func.apply<demo.apply>(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+)"));
+
+  loom_module_t* linked = LinkRoots({module}, {IREE_SV("@caller")});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_NE(text.find("func.def @caller"), std::string::npos);
+  EXPECT_NE(text.find("func.apply<demo.apply>"), std::string::npos);
+  EXPECT_NE(text.find("func.template<demo.apply>"), std::string::npos);
+  EXPECT_EQ(text.find("func.template<demo.unused>"), std::string::npos);
+}
+
+TEST_F(LinkerTest, SelectiveRootMaterializesLibraryApplyContractProviders) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+func.def @caller(%x: i32) -> (i32) {
+  %y = func.apply<demo.apply>(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+)"));
+  loom_module_t* library = Parse(IREE_SV(R"(
+func.template<demo.apply> @provider(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+func.template<demo.unused> @unused_provider(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = LinkRoots({harness, library}, {IREE_SV("@caller")});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_NE(text.find("func.def @caller"), std::string::npos);
+  EXPECT_NE(text.find("func.apply<demo.apply>"), std::string::npos);
+  EXPECT_NE(text.find("func.template<demo.apply>"), std::string::npos);
+  EXPECT_EQ(text.find("func.template<demo.unused>"), std::string::npos);
+}
+
 TEST_F(LinkerTest, SelectiveRootReplacesDeclarationAtStructuralPosition) {
   loom_module_t* harness = Parse(IREE_SV(R"(
 func.def @before(%x: i32) -> (i32) {

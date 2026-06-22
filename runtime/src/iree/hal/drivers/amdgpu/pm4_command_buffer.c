@@ -72,6 +72,8 @@ typedef struct iree_hal_amdgpu_pm4_dispatch_record_t {
   uint64_t executable_id;
   // Dispatch workgroup counts.
   uint32_t workgroup_count[3];
+  // DISPATCH_DIRECT thread dimensions.
+  uint32_t dispatch_thread_count[3];
   // HAL command ordinal within this command buffer.
   uint32_t command_index;
   // Executable export ordinal dispatched by this command.
@@ -1389,7 +1391,7 @@ static iree_status_t iree_hal_amdgpu_pm4_dword_builder_emit_user_data(
 
 static iree_status_t iree_hal_amdgpu_pm4_dword_builder_emit_dispatch_direct(
     iree_hal_amdgpu_pm4_dword_builder_t* builder,
-    const uint32_t workgroup_count[3], uint32_t dispatch_initiator) {
+    const uint32_t dispatch_thread_count[3], uint32_t dispatch_initiator) {
   uint32_t* dispatch_dwords = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_pm4_dword_builder_append(
       builder, IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT,
@@ -1397,9 +1399,9 @@ static iree_status_t iree_hal_amdgpu_pm4_dword_builder_emit_dispatch_direct(
   dispatch_dwords[0] = iree_hal_amdgpu_pm4_make_compute_header(
       IREE_HAL_AMDGPU_PM4_HDR_IT_OPCODE_DISPATCH_DIRECT,
       IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT);
-  dispatch_dwords[1] = workgroup_count[0];
-  dispatch_dwords[2] = workgroup_count[1];
-  dispatch_dwords[3] = workgroup_count[2];
+  dispatch_dwords[1] = dispatch_thread_count[0];
+  dispatch_dwords[2] = dispatch_thread_count[1];
+  dispatch_dwords[3] = dispatch_thread_count[2];
   dispatch_dwords[4] = dispatch_initiator;
   return iree_ok_status();
 }
@@ -2096,6 +2098,27 @@ static iree_status_t iree_hal_amdgpu_pm4_command_buffer_validate_dispatch_shape(
   return iree_ok_status();
 }
 
+static iree_status_t
+iree_hal_amdgpu_pm4_command_buffer_resolve_dispatch_thread_count(
+    const iree_hal_amdgpu_executable_dispatch_descriptor_t* descriptor,
+    const iree_hal_dispatch_config_t config,
+    uint32_t out_dispatch_thread_count[3]) {
+  for (iree_host_size_t i = 0; i < 3; ++i) {
+    const uint64_t thread_count = (uint64_t)config.workgroup_count[i] *
+                                  descriptor->kernel_args.workgroup_size[i];
+    if (IREE_UNLIKELY(thread_count > UINT32_MAX)) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "PM4 DISPATCH_DIRECT dimension %" PRIhsz
+          " overflows uint32_t (workgroup_count=%u, workgroup_size=%u)",
+          i, config.workgroup_count[i],
+          descriptor->kernel_args.workgroup_size[i]);
+    }
+    out_dispatch_thread_count[i] = (uint32_t)thread_count;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t iree_hal_amdgpu_pm4_command_buffer_resolve_buffer_ref(
     const iree_hal_buffer_ref_t* buffer_ref, uint64_t* out_device_pointer) {
   *out_device_pointer = 0;
@@ -2364,7 +2387,8 @@ static iree_status_t iree_hal_amdgpu_pm4_command_buffer_append_dispatch_record(
     iree_hal_amdgpu_pm4_command_buffer_t* command_buffer,
     const iree_hal_amdgpu_executable_dispatch_descriptor_t* descriptor,
     uint64_t executable_id, uint32_t command_index, uint32_t export_ordinal,
-    const iree_hal_dispatch_config_t config, iree_const_byte_span_t constants,
+    const iree_hal_dispatch_config_t config,
+    const uint32_t dispatch_thread_count[3], iree_const_byte_span_t constants,
     iree_hal_buffer_ref_list_t bindings,
     iree_hal_amdgpu_pm4_dispatch_record_flags_t flags,
     iree_hsa_fence_scope_t barrier_acquire_scope,
@@ -2614,6 +2638,9 @@ static iree_status_t iree_hal_amdgpu_pm4_command_buffer_append_dispatch_record(
   record->workgroup_count[0] = config.workgroup_count[0];
   record->workgroup_count[1] = config.workgroup_count[1];
   record->workgroup_count[2] = config.workgroup_count[2];
+  record->dispatch_thread_count[0] = dispatch_thread_count[0];
+  record->dispatch_thread_count[1] = dispatch_thread_count[1];
+  record->dispatch_thread_count[2] = dispatch_thread_count[2];
   record->command_index = command_index;
   record->export_ordinal = export_ordinal;
   record->template_offset = (uint32_t)template_offset;
@@ -2785,7 +2812,7 @@ static iree_status_t iree_hal_amdgpu_pm4_command_buffer_materialize_dispatch(
           record->template_offset, user_data_program_dword_offset));
   dword_count_before = command_buffer->dword_builder.dword_count;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_pm4_dword_builder_emit_dispatch_direct(
-      &command_buffer->dword_builder, record->workgroup_count,
+      &command_buffer->dword_builder, record->dispatch_thread_count,
       launch_state->dispatch_initiator));
   command_buffer->publish_stats.dispatch_direct_dwords +=
       command_buffer->dword_builder.dword_count - dword_count_before;
@@ -2948,7 +2975,7 @@ iree_hal_amdgpu_pm4_command_buffer_materialize_profile_dispatch(
           timestamp_binding_slot));
 
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_pm4_dword_builder_emit_dispatch_direct(
-      &command_buffer->profile.dword_builder, record->workgroup_count,
+      &command_buffer->profile.dword_builder, record->dispatch_thread_count,
       launch_state->dispatch_initiator));
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_pm4_dword_builder_emit_barrier(
       &command_buffer->profile.dword_builder,
@@ -3276,6 +3303,10 @@ static iree_status_t iree_hal_amdgpu_pm4_command_buffer_record_dispatch(
       workgroup_count[2] == 0) {
     return iree_ok_status();
   }
+  uint32_t dispatch_thread_count[3] = {0, 0, 0};
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_pm4_command_buffer_resolve_dispatch_thread_count(
+          descriptor, config, dispatch_thread_count));
 
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_pm4_command_buffer_retain_dispatch(
       command_buffer, executable, bindings));
@@ -3321,8 +3352,9 @@ static iree_status_t iree_hal_amdgpu_pm4_command_buffer_record_dispatch(
   iree_status_t status =
       iree_hal_amdgpu_pm4_command_buffer_append_dispatch_record(
           command_buffer, descriptor, iree_hal_amdgpu_executable_id(executable),
-          command_index, function_index, config, constants, bindings,
-          record_flags, barrier_acquire_scope, barrier_release_scope);
+          command_index, function_index, config, dispatch_thread_count,
+          constants, bindings, record_flags, barrier_acquire_scope,
+          barrier_release_scope);
   if (iree_status_is_ok(status)) {
     ++command_buffer->record_command_count;
   }

@@ -358,6 +358,29 @@ func.def @load_index_count_mismatch(%buffer: buffer, %offset: offset) {
 
 // ====
 
+// Memory op view annotations must match the actual SSA view type.
+func.def @load_view_annotation_mismatch(%buffer: buffer, %offset: offset) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<8xf32, %layout>
+  // ERROR@+1: TYPE/001 "view" "type annotation"
+  %r = vector.load %view[0] : view<4xf32, %layout> -> vector<4xf32>
+  func.return
+}
+
+// ====
+
+// Store view annotations are the same contract: the printed type describes the
+// operand, not an independent memory shape.
+func.def @store_view_annotation_mismatch(%buffer: buffer, %offset: offset, %value: vector<2xf16>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<8xf16, %layout>
+  // ERROR@+1: TYPE/001 "view" "type annotation"
+  vector.store %value, %view[0] : vector<2xf16>, view<4xf16, %layout>
+  func.return
+}
+
+// ====
+
 // The vector lane footprint rank cannot exceed the view rank.
 func.def @load_vector_rank_too_large(%buffer: buffer, %offset: offset) {
   %layout = encoding.layout.dense : encoding<layout>
@@ -1019,12 +1042,36 @@ func.def @fragment_load_requires_matching_element_type(%buffer: buffer, %offset:
 
 // ====
 
+// Fragment memory syntax also carries operand type annotations, and those
+// annotations must not drift from the actual SSA view type.
+func.def @fragment_load_view_annotation_mismatch(%buffer: buffer, %offset: offset, %row: index, %m: index, %k: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16x16xf16, %layout>
+  // ERROR@+1: TYPE/001 "view" "type annotation"
+  %lhs = vector.fragment.load<lhs> %view[%row, 0] shape [%m, %k] : view<8x16xf16, %layout> -> vector<16xf16>
+  func.return
+}
+
+// ====
+
 // Fragment stores may request a target-shaped element conversion at the store
 // boundary. Target legality owns selecting or rejecting the conversion.
 func.def @fragment_store_allows_store_boundary_conversion(%buffer: buffer, %offset: offset, %row: index, %col: index, %m: index, %n: index, %value: vector<8xf16>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<16x16xf32, %layout>
   vector.fragment.store<result> %value, %view[%row, %col] shape [%m, %n] : vector<8xf16>, view<16x16xf32, %layout>
+  func.return
+}
+
+// ====
+
+// Fragment store view annotations are checked before target lowering sees the
+// fragment movement boundary.
+func.def @fragment_store_view_annotation_mismatch(%buffer: buffer, %offset: offset, %row: index, %col: index, %m: index, %n: index, %value: vector<8xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16x16xf32, %layout>
+  // ERROR@+1: TYPE/001 "view" "type annotation"
+  vector.fragment.store<result> %value, %view[%row, %col] shape [%m, %n] : vector<8xf32>, view<8x16xf32, %layout>
   func.return
 }
 

@@ -53,25 +53,128 @@ static bool loom_amdgpu_subgroup_full_wave_workgroups(
          (flat_workgroup_size % wavefront_size) == 0;
 }
 
-static const loom_amdgpu_descriptor_ref_t
-    kLoomAmdgpuSubgroupScanDirectionGuardDescriptorRefs
-        [LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_] = {
-            [LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD] =
-                LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32,
-            [LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE] =
-                LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
+typedef enum loom_amdgpu_scan_mode_flag_bits_t {
+  LOOM_AMDGPU_SCAN_MODE_REQUIRES_IDENTITY = 1u << 0,
+} loom_amdgpu_scan_mode_flag_bits_t;
+
+typedef uint32_t loom_amdgpu_scan_mode_flags_t;
+
+typedef struct loom_amdgpu_scan_mode_rule_t {
+  // Subgroup scan mode used by lowering plans.
+  loom_kernel_subgroup_scan_mode_t subgroup_mode;
+  // Mode properties consumed by selection, legality, and lowering setup.
+  loom_amdgpu_scan_mode_flags_t flags;
+} loom_amdgpu_scan_mode_rule_t;
+
+static const loom_amdgpu_scan_mode_rule_t
+    kLoomAmdgpuSubgroupScanModeRules[LOOM_KERNEL_SUBGROUP_SCAN_MODE_COUNT_] = {
+        [LOOM_KERNEL_SUBGROUP_SCAN_MODE_INCLUSIVE] =
+            {LOOM_KERNEL_SUBGROUP_SCAN_MODE_INCLUSIVE, 0},
+        [LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE] =
+            {LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE,
+             LOOM_AMDGPU_SCAN_MODE_REQUIRES_IDENTITY},
 };
 
-static bool loom_amdgpu_subgroup_scan_direction_guard_descriptor_ref(
-    loom_kernel_subgroup_scan_direction_t direction,
-    loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
-  *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
-  if ((uint32_t)direction >= LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_) {
-    return false;
+static const loom_amdgpu_scan_mode_rule_t
+    kLoomAmdgpuWorkgroupScanModeRules[LOOM_KERNEL_WORKGROUP_SCAN_MODE_COUNT_] =
+        {
+            [LOOM_KERNEL_WORKGROUP_SCAN_MODE_INCLUSIVE] =
+                {LOOM_KERNEL_SUBGROUP_SCAN_MODE_INCLUSIVE, 0},
+            [LOOM_KERNEL_WORKGROUP_SCAN_MODE_EXCLUSIVE] =
+                {LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE,
+                 LOOM_AMDGPU_SCAN_MODE_REQUIRES_IDENTITY},
+};
+
+static const loom_amdgpu_scan_mode_rule_t* loom_amdgpu_subgroup_scan_mode_rule(
+    loom_kernel_subgroup_scan_mode_t mode) {
+  if ((uint32_t)mode >= LOOM_KERNEL_SUBGROUP_SCAN_MODE_COUNT_) {
+    return NULL;
   }
-  *out_descriptor_ref =
-      kLoomAmdgpuSubgroupScanDirectionGuardDescriptorRefs[direction];
-  return *out_descriptor_ref != LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  return &kLoomAmdgpuSubgroupScanModeRules[mode];
+}
+
+static const loom_amdgpu_scan_mode_rule_t* loom_amdgpu_workgroup_scan_mode_rule(
+    loom_kernel_workgroup_scan_mode_t mode) {
+  if ((uint32_t)mode >= LOOM_KERNEL_WORKGROUP_SCAN_MODE_COUNT_) {
+    return NULL;
+  }
+  return &kLoomAmdgpuWorkgroupScanModeRules[mode];
+}
+
+static bool loom_amdgpu_scan_mode_requires_identity(
+    const loom_amdgpu_scan_mode_rule_t* rule) {
+  return iree_all_bits_set(rule->flags,
+                           LOOM_AMDGPU_SCAN_MODE_REQUIRES_IDENTITY);
+}
+
+typedef struct loom_amdgpu_scan_direction_rule_t {
+  // Subgroup scan direction used by lowering plans.
+  loom_kernel_subgroup_scan_direction_t subgroup_direction;
+  // Guard descriptor used to select active lanes for the direction.
+  loom_amdgpu_descriptor_ref_t guard_descriptor_ref;
+} loom_amdgpu_scan_direction_rule_t;
+
+static const loom_amdgpu_scan_direction_rule_t
+    kLoomAmdgpuSubgroupScanDirectionRules
+        [LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_] = {
+            [LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD] =
+                {LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32},
+            [LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE] =
+                {LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32},
+};
+
+static const loom_amdgpu_scan_direction_rule_t
+    kLoomAmdgpuWorkgroupScanDirectionRules
+        [LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_COUNT_] = {
+            [LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_FORWARD] =
+                {LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32},
+            [LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_REVERSE] =
+                {LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE,
+                 LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32},
+};
+
+static const loom_amdgpu_scan_direction_rule_t*
+loom_amdgpu_subgroup_scan_direction_rule(
+    loom_kernel_subgroup_scan_direction_t direction) {
+  if ((uint32_t)direction >= LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_) {
+    return NULL;
+  }
+  const loom_amdgpu_scan_direction_rule_t* rule =
+      &kLoomAmdgpuSubgroupScanDirectionRules[direction];
+  return rule->guard_descriptor_ref == LOOM_AMDGPU_DESCRIPTOR_REF_NONE ? NULL
+                                                                       : rule;
+}
+
+static const loom_amdgpu_scan_direction_rule_t*
+loom_amdgpu_workgroup_scan_direction_rule(
+    loom_kernel_workgroup_scan_direction_t direction) {
+  if ((uint32_t)direction >= LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_COUNT_) {
+    return NULL;
+  }
+  const loom_amdgpu_scan_direction_rule_t* rule =
+      &kLoomAmdgpuWorkgroupScanDirectionRules[direction];
+  return rule->guard_descriptor_ref == LOOM_AMDGPU_DESCRIPTOR_REF_NONE ? NULL
+                                                                       : rule;
+}
+
+static iree_string_view_t loom_amdgpu_workgroup_scan_shape_failure_key(
+    loom_amdgpu_workgroup_collective_shape_failure_t failure) {
+  switch (failure) {
+    case LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WORKGROUP_SIZE:
+      return IREE_SV("workgroup_scan.fixed_workgroup_size");
+    case LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WAVE_COUNT:
+      return IREE_SV("workgroup_scan.wave_count");
+    case LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_SCRATCH_BYTE_LENGTH:
+      return IREE_SV("workgroup_scan.scratch_byte_length");
+    case LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_NONE:
+      break;
+  }
+  IREE_ASSERT_UNREACHABLE(
+      "AMDGPU workgroup scan shape failure requires reason");
+  return IREE_SV("workgroup_scan.fixed_workgroup_size");
 }
 
 iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
@@ -103,46 +206,35 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
                                                      &combine_descriptor_ref)) {
     return iree_ok_status();
   }
-  const loom_kernel_subgroup_scan_mode_t mode =
-      loom_kernel_subgroup_scan_mode(source_op);
-  switch (mode) {
-    case LOOM_KERNEL_SUBGROUP_SCAN_MODE_INCLUSIVE:
-      break;
-    case LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE: {
-      uint32_t unused_identity_bits = 0;
-      if (!loom_amdgpu_collective_combine_identity_bits(
-              kind, &unused_identity_bits)) {
-        return iree_ok_status();
-      }
-      break;
-    }
-    case LOOM_KERNEL_SUBGROUP_SCAN_MODE_COUNT_:
+  const loom_amdgpu_scan_mode_rule_t* mode_rule =
+      loom_amdgpu_subgroup_scan_mode_rule(
+          loom_kernel_subgroup_scan_mode(source_op));
+  if (mode_rule == NULL) {
+    return iree_ok_status();
+  }
+  if (loom_amdgpu_scan_mode_requires_identity(mode_rule)) {
+    uint32_t unused_identity_bits = 0;
+    if (!loom_amdgpu_collective_combine_identity_bits(kind,
+                                                      &unused_identity_bits)) {
       return iree_ok_status();
+    }
   }
 
-  loom_amdgpu_descriptor_ref_t guard_descriptor_ref =
-      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
-  const loom_kernel_subgroup_scan_direction_t direction =
-      loom_kernel_subgroup_scan_direction(source_op);
-  if (!loom_amdgpu_subgroup_scan_direction_guard_descriptor_ref(
-          direction, &guard_descriptor_ref)) {
+  const loom_amdgpu_scan_direction_rule_t* direction_rule =
+      loom_amdgpu_subgroup_scan_direction_rule(
+          loom_kernel_subgroup_scan_direction(source_op));
+  if (direction_rule == NULL) {
     return iree_ok_status();
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size) ||
+  bool full_wave_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_full_wave_direct_subgroup_width(
+      context, &wavefront_size, &full_wave_selected));
+  if (!full_wave_selected ||
       !loom_amdgpu_subgroup_full_wave_workgroups(
           module, loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), wavefront_size)) {
-    return iree_ok_status();
-  }
-  bool direct_width_supported = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
-      module, loom_low_lower_context_target_ref(context), wavefront_size,
-      wavefront_size, &direct_width_supported));
-  if (!direct_width_supported) {
     return iree_ok_status();
   }
 
@@ -156,7 +248,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
           .out_descriptor = &out_plan->combine_descriptor,
       },
       {
-          .descriptor_ref = guard_descriptor_ref,
+          .descriptor_ref = direction_rule->guard_descriptor_ref,
           .out_descriptor = &out_plan->guard_descriptor,
       },
       {
@@ -176,44 +268,12 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
   out_plan->payload_kind = payload_kind;
   out_plan->register_count = register_count;
   out_plan->kind = kind;
-  out_plan->mode = mode;
-  out_plan->direction = direction;
+  out_plan->mode = mode_rule->subgroup_mode;
+  out_plan->direction = direction_rule->subgroup_direction;
   out_plan->wavefront_size = wavefront_size;
   out_plan->active_lane_count = wavefront_size;
   *out_selected = true;
   return iree_ok_status();
-}
-
-static bool loom_amdgpu_map_workgroup_scan_mode(
-    loom_kernel_workgroup_scan_mode_t source_mode,
-    loom_kernel_subgroup_scan_mode_t* out_mode) {
-  switch (source_mode) {
-    case LOOM_KERNEL_WORKGROUP_SCAN_MODE_INCLUSIVE:
-      *out_mode = LOOM_KERNEL_SUBGROUP_SCAN_MODE_INCLUSIVE;
-      return true;
-    case LOOM_KERNEL_WORKGROUP_SCAN_MODE_EXCLUSIVE:
-      *out_mode = LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE;
-      return true;
-    case LOOM_KERNEL_WORKGROUP_SCAN_MODE_COUNT_:
-      return false;
-  }
-  return false;
-}
-
-static bool loom_amdgpu_map_workgroup_scan_direction(
-    loom_kernel_workgroup_scan_direction_t source_direction,
-    loom_kernel_subgroup_scan_direction_t* out_direction) {
-  switch (source_direction) {
-    case LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_FORWARD:
-      *out_direction = LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD;
-      return true;
-    case LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_REVERSE:
-      *out_direction = LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE;
-      return true;
-    case LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_COUNT_:
-      return false;
-  }
-  return false;
 }
 
 iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
@@ -243,12 +303,13 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
     return iree_ok_status();
   }
 
-  loom_kernel_subgroup_scan_mode_t mode = LOOM_KERNEL_SUBGROUP_SCAN_MODE_COUNT_;
-  if (!loom_amdgpu_map_workgroup_scan_mode(
-          loom_kernel_workgroup_scan_mode(source_op), &mode)) {
+  const loom_amdgpu_scan_mode_rule_t* mode_rule =
+      loom_amdgpu_workgroup_scan_mode_rule(
+          loom_kernel_workgroup_scan_mode(source_op));
+  if (mode_rule == NULL) {
     return iree_ok_status();
   }
-  if (mode == LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE) {
+  if (loom_amdgpu_scan_mode_requires_identity(mode_rule)) {
     uint32_t unused_identity_bits = 0;
     if (!loom_amdgpu_collective_combine_identity_bits(kind,
                                                       &unused_identity_bits)) {
@@ -256,45 +317,34 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
     }
   }
 
-  loom_kernel_subgroup_scan_direction_t direction =
-      LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_;
-  if (!loom_amdgpu_map_workgroup_scan_direction(
-          loom_kernel_workgroup_scan_direction(source_op), &direction)) {
-    return iree_ok_status();
-  }
-  loom_amdgpu_descriptor_ref_t guard_descriptor_ref =
-      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
-  if (!loom_amdgpu_subgroup_scan_direction_guard_descriptor_ref(
-          direction, &guard_descriptor_ref)) {
+  const loom_amdgpu_scan_direction_rule_t* direction_rule =
+      loom_amdgpu_workgroup_scan_direction_rule(
+          loom_kernel_workgroup_scan_direction(source_op));
+  if (direction_rule == NULL) {
     return iree_ok_status();
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
+  bool wavefront_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_subgroup_wavefront_size(
+      context, &wavefront_size, &wavefront_selected));
+  if (!wavefront_selected) {
     return iree_ok_status();
   }
 
-  uint32_t flat_workgroup_size = 0;
-  if (!loom_amdgpu_required_flat_workgroup_size(
+  loom_amdgpu_workgroup_collective_shape_t shape = {0};
+  loom_amdgpu_workgroup_collective_shape_failure_t shape_failure =
+      LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_NONE;
+  if (!loom_amdgpu_collective_resolve_workgroup_shape(
           module, loom_low_lower_context_source_function(context),
-          loom_low_lower_context_bundle(context), &flat_workgroup_size) ||
-      flat_workgroup_size == 0) {
+          loom_low_lower_context_bundle(context), wavefront_size,
+          register_count, &shape, &shape_failure)) {
     return iree_ok_status();
   }
-  const bool has_partial_tail = flat_workgroup_size > wavefront_size &&
-                                (flat_workgroup_size % wavefront_size) != 0;
-  const uint32_t wave_count =
-      (flat_workgroup_size + wavefront_size - 1) / wavefront_size;
-  if (flat_workgroup_size > wavefront_size && wave_count > wavefront_size) {
-    return iree_ok_status();
-  }
-  const uint64_t scratch_byte_length =
-      (uint64_t)wave_count * register_count * 4u;
-  if (scratch_byte_length > UINT32_MAX) {
-    return iree_ok_status();
-  }
+  const bool is_multi_wave = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_MULTI_WAVE);
+  const bool has_partial_tail = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_PARTIAL_TAIL);
 
   const loom_amdgpu_descriptor_resolution_t resolutions[] = {
       {
@@ -306,7 +356,7 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
           .out_descriptor = &out_plan->combine_descriptor,
       },
       {
-          .descriptor_ref = guard_descriptor_ref,
+          .descriptor_ref = direction_rule->guard_descriptor_ref,
           .out_descriptor = &out_plan->guard_descriptor,
       },
       {
@@ -321,8 +371,7 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
     return iree_ok_status();
   }
 
-  if (mode == LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE ||
-      flat_workgroup_size > wavefront_size) {
+  if (loom_amdgpu_scan_mode_requires_identity(mode_rule) || is_multi_wave) {
     uint32_t unused_identity_bits = 0;
     if (!loom_amdgpu_collective_combine_identity_bits(kind,
                                                       &unused_identity_bits)) {
@@ -330,7 +379,7 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
     }
   }
 
-  if (flat_workgroup_size > wavefront_size) {
+  if (is_multi_wave) {
     const loom_amdgpu_descriptor_resolution_t lane_lt_resolution[] = {
         {
             .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
@@ -371,41 +420,12 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
   out_plan->payload_kind = payload_kind;
   out_plan->register_count = register_count;
   out_plan->kind = kind;
-  out_plan->mode = mode;
-  out_plan->direction = direction;
+  out_plan->mode = mode_rule->subgroup_mode;
+  out_plan->direction = direction_rule->subgroup_direction;
   out_plan->wavefront_size = wavefront_size;
-  out_plan->flat_workgroup_size = flat_workgroup_size;
+  out_plan->flat_workgroup_size = shape.flat_workgroup_size;
   *out_selected = true;
   return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_emit_subgroup_bpermute_register(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_low_lower_resolved_descriptor_t* descriptor,
-    loom_value_id_t low_source_byte_offset, loom_value_id_t low_source_value,
-    loom_type_t lane_type, loom_value_id_t* out_low_result) {
-  *out_low_result = LOOM_VALUE_ID_INVALID;
-  const loom_value_id_t operands[] = {
-      low_source_byte_offset,
-      low_source_value,
-  };
-  loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
-      context, descriptor, operands, IREE_ARRAYSIZE(operands),
-      loom_make_named_attr_slice(NULL, 0), &lane_type, 1,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
-      &low_op));
-  *out_low_result = loom_value_slice_get(loom_low_op_results(low_op), 0);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_emit_subgroup_lane_byte_offset(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t lane, loom_type_t lane_type,
-    loom_value_id_t* out_byte_offset) {
-  return loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 2, lane,
-      lane_type, out_byte_offset);
 }
 
 static iree_status_t loom_amdgpu_emit_subgroup_combine(
@@ -1097,13 +1117,13 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
         context, op, IREE_SV("workgroup_scan.combining_kind"));
   }
 
-  loom_kernel_subgroup_scan_mode_t mode = LOOM_KERNEL_SUBGROUP_SCAN_MODE_COUNT_;
-  if (!loom_amdgpu_map_workgroup_scan_mode(loom_kernel_workgroup_scan_mode(op),
-                                           &mode)) {
+  const loom_amdgpu_scan_mode_rule_t* mode_rule =
+      loom_amdgpu_workgroup_scan_mode_rule(loom_kernel_workgroup_scan_mode(op));
+  if (mode_rule == NULL) {
     return loom_amdgpu_low_legality_reject(context, op,
                                            IREE_SV("workgroup_scan.mode"));
   }
-  if (mode == LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE) {
+  if (loom_amdgpu_scan_mode_requires_identity(mode_rule)) {
     uint32_t unused_identity_bits = 0;
     if (!loom_amdgpu_collective_combine_identity_bits(kind,
                                                       &unused_identity_bits)) {
@@ -1112,17 +1132,10 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
     }
   }
 
-  loom_kernel_subgroup_scan_direction_t direction =
-      LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_;
-  if (!loom_amdgpu_map_workgroup_scan_direction(
-          loom_kernel_workgroup_scan_direction(op), &direction)) {
-    return loom_amdgpu_low_legality_reject(context, op,
-                                           IREE_SV("workgroup_scan.direction"));
-  }
-  loom_amdgpu_descriptor_ref_t guard_descriptor_ref =
-      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
-  if (!loom_amdgpu_subgroup_scan_direction_guard_descriptor_ref(
-          direction, &guard_descriptor_ref)) {
+  const loom_amdgpu_scan_direction_rule_t* direction_rule =
+      loom_amdgpu_workgroup_scan_direction_rule(
+          loom_kernel_workgroup_scan_direction(op));
+  if (direction_rule == NULL) {
     return loom_amdgpu_low_legality_reject(context, op,
                                            IREE_SV("workgroup_scan.direction"));
   }
@@ -1135,30 +1148,21 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
         context, op, IREE_SV("workgroup_scan.wavefront_size"));
   }
 
-  uint32_t flat_workgroup_size = 0;
-  if (!loom_amdgpu_required_flat_workgroup_size(
+  loom_amdgpu_workgroup_collective_shape_t shape = {0};
+  loom_amdgpu_workgroup_collective_shape_failure_t shape_failure =
+      LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_NONE;
+  if (!loom_amdgpu_collective_resolve_workgroup_shape(
           module, loom_target_low_legality_function(context), bundle,
-          &flat_workgroup_size) ||
-      flat_workgroup_size == 0) {
+          wavefront_size, unused_register_count, &shape, &shape_failure)) {
     return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("workgroup_scan.fixed_workgroup_size"));
+        context, op,
+        loom_amdgpu_workgroup_scan_shape_failure_key(shape_failure));
   }
-  const bool has_partial_tail = flat_workgroup_size > wavefront_size &&
-                                (flat_workgroup_size % wavefront_size) != 0;
-  const uint32_t wave_count =
-      (flat_workgroup_size + wavefront_size - 1) / wavefront_size;
-  if (flat_workgroup_size > wavefront_size && wave_count > wavefront_size) {
-    return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("workgroup_scan.wave_count"));
-  }
-  const uint64_t scratch_byte_length =
-      (uint64_t)wave_count * unused_register_count * 4u;
-  if (scratch_byte_length > UINT32_MAX) {
-    return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("workgroup_scan.scratch_byte_length"));
-  }
-  if (mode != LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE &&
-      flat_workgroup_size > wavefront_size) {
+  const bool is_multi_wave = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_MULTI_WAVE);
+  const bool has_partial_tail = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_PARTIAL_TAIL);
+  if (!loom_amdgpu_scan_mode_requires_identity(mode_rule) && is_multi_wave) {
     uint32_t unused_identity_bits = 0;
     if (!loom_amdgpu_collective_combine_identity_bits(kind,
                                                       &unused_identity_bits)) {
@@ -1178,7 +1182,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
       },
       {
           .constraint_key = IREE_SVL("descriptor.scan_guard"),
-          .descriptor_ref = guard_descriptor_ref,
+          .descriptor_ref = direction_rule->guard_descriptor_ref,
       },
       {
           .constraint_key = IREE_SVL("descriptor.v_cndmask_b32"),
@@ -1187,7 +1191,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirements(
       context, op, requirements, IREE_ARRAYSIZE(requirements)));
-  if (flat_workgroup_size > wavefront_size) {
+  if (is_multi_wave) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirement(
         context, op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
         IREE_SV("descriptor.v_cmp_ult_u32")));
@@ -1240,27 +1244,25 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
         context, op, IREE_SV("subgroup_scan.combining_kind"));
   }
 
-  switch (loom_kernel_subgroup_scan_mode(op)) {
-    case LOOM_KERNEL_SUBGROUP_SCAN_MODE_INCLUSIVE:
-      break;
-    case LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE: {
-      uint32_t unused_identity_bits = 0;
-      if (!loom_amdgpu_collective_combine_identity_bits(
-              kind, &unused_identity_bits)) {
-        return loom_amdgpu_low_legality_reject(
-            context, op, IREE_SV("subgroup_scan.identity"));
-      }
-      break;
-    }
-    case LOOM_KERNEL_SUBGROUP_SCAN_MODE_COUNT_:
+  const loom_amdgpu_scan_mode_rule_t* mode_rule =
+      loom_amdgpu_subgroup_scan_mode_rule(loom_kernel_subgroup_scan_mode(op));
+  if (mode_rule == NULL) {
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("subgroup_scan.mode"));
+  }
+  if (loom_amdgpu_scan_mode_requires_identity(mode_rule)) {
+    uint32_t unused_identity_bits = 0;
+    if (!loom_amdgpu_collective_combine_identity_bits(kind,
+                                                      &unused_identity_bits)) {
       return loom_amdgpu_low_legality_reject(context, op,
-                                             IREE_SV("subgroup_scan.mode"));
+                                             IREE_SV("subgroup_scan.identity"));
+    }
   }
 
-  loom_amdgpu_descriptor_ref_t guard_descriptor_ref =
-      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
-  if (!loom_amdgpu_subgroup_scan_direction_guard_descriptor_ref(
-          loom_kernel_subgroup_scan_direction(op), &guard_descriptor_ref)) {
+  const loom_amdgpu_scan_direction_rule_t* direction_rule =
+      loom_amdgpu_subgroup_scan_direction_rule(
+          loom_kernel_subgroup_scan_direction(op));
+  if (direction_rule == NULL) {
     return loom_amdgpu_low_legality_reject(context, op,
                                            IREE_SV("subgroup_scan.direction"));
   }
@@ -1293,7 +1295,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
       },
       {
           .constraint_key = IREE_SVL("descriptor.scan_guard"),
-          .descriptor_ref = guard_descriptor_ref,
+          .descriptor_ref = direction_rule->guard_descriptor_ref,
       },
       {
           .constraint_key = IREE_SVL("descriptor.v_cndmask_b32"),

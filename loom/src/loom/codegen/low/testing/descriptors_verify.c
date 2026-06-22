@@ -1646,7 +1646,8 @@ static iree_status_t loom_low_verify_storage_lease(
       lease->flags,
       LOOM_LOW_STORAGE_LEASE_FLAG_STARTS_AT_ISSUE |
           LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_BEFORE_BOUNDARY |
-          LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY,
+          LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY |
+          LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE,
       "storage lease", lease_index));
   if (iree_all_bits_set(
           lease->flags,

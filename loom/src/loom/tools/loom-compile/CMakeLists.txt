@@ -87,6 +87,8 @@ iree_execution_test_suite(
   TOOLS
     "loom-compile=::loom-compile"
     "loom-format=loom::tools::loom-format"
+  DATA
+    "rooted_template_provider.loom"
   LABELS
     "hostonly"
 )

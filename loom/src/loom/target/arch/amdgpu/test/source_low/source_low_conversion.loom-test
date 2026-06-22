@@ -1066,8 +1066,9 @@ func.def target(@target) @scalar_fptrunc_f32_store(%output: buffer, %input: f32)
 low.func.def target(@target) abi(hal_kernel) @scalar_fptrunc_f32_store(%input: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
   %converted = v_cvt_f16_f32 %input
-  %8 = v_mov_b32 0
-  global_store_short_saddr %8, %converted, %output_view
+  %8 = v_bfe_u32_offset_0_width_16_low16 %converted
+  %9 = v_mov_b32 0
+  global_store_short_saddr %9, %8, %output_view
   return
 }
 
@@ -1081,12 +1082,10 @@ func.def target(@target) @vector_extf_f16x2(%input: vector<2xf16>) -> (vector<2x
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @vector_extf_f16x2(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
-  %5 = v_and_b32_lit %input, 65535
-  %6 = v_cvt_f32_f16 %5
-  %7 = v_lshrrev_b32_src0_inline %input, 16
-  %8 = v_and_b32_lit %7, 65535
-  %9 = v_cvt_f32_f16 %8
-  %converted = concat(%6, %9) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %5 = v_cvt_f32_f16 %input
+  %6 = v_lshrrev_b32_src0_inline %input, 16
+  %7 = v_cvt_f32_f16 %6
+  %converted = concat(%5, %7) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %converted
 }
 
@@ -1101,15 +1100,12 @@ func.def target(@target) @vector_extf_f16x3(%input: vector<3xf16>) -> (vector<3x
 // ----
 low.func.def target(@target) abi(hal_kernel) @vector_extf_f16x3(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x3>) asm<amdgpu.rdna3.core> {
   %5 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %6 = v_and_b32_lit %5, 65535
-  %7 = v_cvt_f32_f16 %6
-  %9 = v_lshrrev_b32_src0_inline %5, 16
-  %10 = v_and_b32_lit %9, 65535
+  %6 = v_cvt_f32_f16 %5
+  %8 = v_lshrrev_b32_src0_inline %5, 16
+  %9 = v_cvt_f32_f16 %8
+  %10 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %11 = v_cvt_f32_f16 %10
-  %12 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %13 = v_and_b32_lit %12, 65535
-  %14 = v_cvt_f32_f16 %13
-  %converted = concat(%7, %11, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
+  %converted = concat(%6, %9, %11) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
   return %converted
 }
 

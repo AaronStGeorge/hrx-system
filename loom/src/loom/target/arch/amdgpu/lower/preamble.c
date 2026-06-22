@@ -148,6 +148,42 @@ iree_status_t loom_amdgpu_target_supports_direct_subgroup_width(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_select_subgroup_wavefront_size(
+    loom_low_lower_context_t* context, uint32_t* out_wavefront_size,
+    bool* out_selected) {
+  *out_wavefront_size = 0;
+  *out_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
+      loom_low_lower_context_bundle(context), out_wavefront_size));
+  *out_selected = loom_amdgpu_wavefront_size_is_valid(*out_wavefront_size);
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_select_direct_subgroup_width(
+    loom_low_lower_context_t* context, uint32_t source_wavefront_size,
+    uint32_t required_width, bool* out_selected) {
+  *out_selected = false;
+  if (!loom_amdgpu_wavefront_size_is_valid(source_wavefront_size)) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_target_supports_direct_subgroup_width(
+      loom_low_lower_context_module(context),
+      loom_low_lower_context_target_ref(context), source_wavefront_size,
+      required_width, out_selected);
+}
+
+iree_status_t loom_amdgpu_select_full_wave_direct_subgroup_width(
+    loom_low_lower_context_t* context, uint32_t* out_wavefront_size,
+    bool* out_selected) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_subgroup_wavefront_size(
+      context, out_wavefront_size, out_selected));
+  if (!*out_selected) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_select_direct_subgroup_width(
+      context, *out_wavefront_size, *out_wavefront_size, out_selected);
+}
+
 static uint32_t loom_amdgpu_ceil_div_u32(uint32_t numerator,
                                          uint32_t denominator) {
   IREE_ASSERT_NE(denominator, 0u);

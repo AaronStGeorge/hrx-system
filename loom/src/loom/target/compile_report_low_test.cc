@@ -21,6 +21,8 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   constexpr uint32_t kMemoryGlobalTagOffset = 18;
   constexpr uint32_t kMatrixWmmaTagOffset = 41;
   constexpr uint32_t kRegisterClassGprOffset = 57;
+  constexpr uint32_t kBufferLoadKeyOffset = 66;
+  constexpr uint32_t kGlobalLoadKeyOffset = 91;
   static const uint8_t kDescriptorStringTable[] =
       "\x11"
       "register.copy.b32"
@@ -29,7 +31,11 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       "\x0f"
       "matrix.wmma.f32"
       "\x08"
-      "test.gpr";
+      "test.gpr"
+      "\x18"
+      "amdgpu.buffer_load_dword"
+      "\x1c"
+      "amdgpu.global_load_b32_saddr";
   const loom_low_descriptor_t descriptors[] = {
       {
           /*.key_string_offset=*/{},
@@ -38,7 +44,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           /*.semantic_tag_string_offset=*/kRegisterCopyTagOffset,
       },
       {
-          /*.key_string_offset=*/{},
+          /*.key_string_offset=*/kGlobalLoadKeyOffset,
           /*.stable_id=*/{},
           /*.mnemonic_string_offset=*/{},
           /*.semantic_tag_string_offset=*/kMemoryGlobalTagOffset,
@@ -48,6 +54,12 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           /*.stable_id=*/{},
           /*.mnemonic_string_offset=*/{},
           /*.semantic_tag_string_offset=*/kMatrixWmmaTagOffset,
+      },
+      {
+          /*.key_string_offset=*/kBufferLoadKeyOffset,
+          /*.stable_id=*/{},
+          /*.mnemonic_string_offset=*/{},
+          /*.semantic_tag_string_offset=*/kMemoryGlobalTagOffset,
       },
   };
   const loom_low_reg_class_t reg_classes[] = {
@@ -391,7 +403,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       /*.scheduled_ordinal=*/3,
       /*.kind=*/LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
       /*.traits=*/{},
-      /*.descriptor=*/&descriptors[1],
+      /*.descriptor=*/&descriptors[3],
       /*.memory_access_record_index=*/{},
       /*.schedule_class_id=*/{},
       /*.schedule_class_name=*/IREE_SVL("amdgpu.vmem.load"),
@@ -597,6 +609,8 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_EQ(report.static_instruction_mix.descriptor_count, 5u);
   EXPECT_EQ(report.static_instruction_mix.vector_alu_count, 1u);
   EXPECT_EQ(report.static_instruction_mix.global_memory_count, 2u);
+  EXPECT_EQ(report.static_instruction_mix.global_load_count, 1u);
+  EXPECT_EQ(report.static_instruction_mix.buffer_load_count, 1u);
   EXPECT_EQ(report.static_instruction_mix.matrix_count, 2u);
   EXPECT_EQ(report.static_instruction_mix.wmma_count, 2u);
   EXPECT_EQ(report.static_instruction_mix.register_move_count, 1u);
@@ -669,6 +683,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
               report.schedule_band_rows.head));
   EXPECT_EQ(schedule_band_rows[0].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE);
+  EXPECT_EQ(schedule_band_rows[0].block_index, 0u);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[0].semantic_tag,
                                      IREE_SV("register.copy.b32")));
   EXPECT_EQ(schedule_band_rows[0].node_count, 1u);
@@ -681,10 +696,12 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_EQ(schedule_band_rows[0].result_unit_count, 2u);
   EXPECT_EQ(schedule_band_rows[1].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY);
+  EXPECT_EQ(schedule_band_rows[1].block_index, 0u);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[1].semantic_tag,
                                      IREE_SV("memory.global.load.u32")));
   EXPECT_EQ(schedule_band_rows[1].static_instruction_mix.global_memory_count,
             1u);
+  EXPECT_EQ(schedule_band_rows[1].static_instruction_mix.global_load_count, 1u);
   EXPECT_EQ(schedule_band_rows[1].result_value_count, 1u);
   EXPECT_EQ(schedule_band_rows[1].result_unit_count, 2u);
   EXPECT_EQ(schedule_band_rows[2].origin_kind,
@@ -697,6 +714,7 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[3].semantic_tag,
                                      IREE_SV("memory.global.load.u32")));
+  EXPECT_EQ(schedule_band_rows[3].static_instruction_mix.buffer_load_count, 1u);
   EXPECT_EQ(schedule_band_rows[4].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_MATRIX);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_rows[4].semantic_tag,
@@ -709,11 +727,13 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
           report.schedule_band_summary_rows.head));
   EXPECT_EQ(schedule_band_summary_rows[0].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_REGISTER_MOVE);
+  EXPECT_EQ(schedule_band_summary_rows[0].block_index, 0u);
   EXPECT_EQ(schedule_band_summary_rows[0].band_count, 1u);
   EXPECT_EQ(schedule_band_summary_rows[0].node_count, 1u);
   EXPECT_EQ(schedule_band_summary_rows[0].max_band_node_count, 1u);
   EXPECT_EQ(schedule_band_summary_rows[1].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_GLOBAL_MEMORY);
+  EXPECT_EQ(schedule_band_summary_rows[1].block_index, 0u);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_summary_rows[1].semantic_tag,
                                      IREE_SV("memory.global.load.u32")));
   EXPECT_EQ(schedule_band_summary_rows[1].band_count, 2u);
@@ -722,6 +742,12 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_EQ(
       schedule_band_summary_rows[1].static_instruction_mix.global_memory_count,
       2u);
+  EXPECT_EQ(
+      schedule_band_summary_rows[1].static_instruction_mix.global_load_count,
+      1u);
+  EXPECT_EQ(
+      schedule_band_summary_rows[1].static_instruction_mix.buffer_load_count,
+      1u);
   EXPECT_EQ(schedule_band_summary_rows[2].origin_kind,
             LOOM_TARGET_COMPILE_REPORT_PRESSURE_ORIGIN_MATRIX);
   EXPECT_TRUE(iree_string_view_equal(schedule_band_summary_rows[2].semantic_tag,
@@ -788,6 +814,37 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_EQ(allocation_high_water_rows[0].location_base, 7u);
   EXPECT_EQ(allocation_high_water_rows[0].location_count, 2u);
   EXPECT_EQ(allocation_high_water_rows[0].high_water_units, 9u);
+  EXPECT_EQ(allocation_high_water_rows[0].lower_free_unit_count, 7u);
+  EXPECT_EQ(allocation_high_water_rows[0].lower_free_run_count, 1u);
+  EXPECT_EQ(allocation_high_water_rows[0].lower_largest_free_run_unit_count,
+            7u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].lower_pressure_releasable_free_unit_count,
+      7u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].lower_pressure_releasable_free_run_count,
+      1u);
+  EXPECT_EQ(allocation_high_water_rows[0]
+                .lower_pressure_releasable_largest_free_run_unit_count,
+            7u);
+  EXPECT_EQ(allocation_high_water_rows[0].active_assignment_blocker_count, 0u);
+  EXPECT_EQ(allocation_high_water_rows[0].active_assignment_blocker_units, 0u);
+  EXPECT_EQ(allocation_high_water_rows[0].active_storage_lease_blocker_count,
+            0u);
+  EXPECT_EQ(allocation_high_water_rows[0].active_storage_lease_blocker_units,
+            0u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].active_pressure_storage_lease_blocker_count,
+      0u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].active_pressure_storage_lease_blocker_units,
+      0u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].active_fallback_storage_lease_blocker_count,
+      0u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].active_fallback_storage_lease_blocker_units,
+      0u);
   loom_target_compile_report_deinitialize(&report);
 }
 

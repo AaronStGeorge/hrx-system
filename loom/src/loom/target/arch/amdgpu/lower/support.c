@@ -458,6 +458,18 @@ iree_status_t loom_amdgpu_low_legality_verify_direct_subgroup_width(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_low_legality_verify_full_wave_direct_subgroup_width(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t wavefront_constraint_key,
+    iree_string_view_t direct_width_constraint_key,
+    uint32_t* out_wavefront_size) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
+      context, op, wavefront_constraint_key, out_wavefront_size));
+  return loom_amdgpu_low_legality_verify_direct_subgroup_width(
+      context, op, *out_wavefront_size, *out_wavefront_size,
+      direct_width_constraint_key);
+}
+
 bool loom_amdgpu_value_is_i32(loom_low_lower_context_t* context,
                               loom_value_id_t value_id) {
   return loom_amdgpu_type_is_i32(

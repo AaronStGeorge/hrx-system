@@ -607,6 +607,8 @@ TEST_F(BuilderTest, ReplaceAllUsesWithUpdatesPredicateAttrs) {
   ASSERT_NE(predicate_attr.predicate_list, nullptr);
   EXPECT_EQ(predicate_attr.predicate_list[0].args[0], (int64_t)new_id);
   EXPECT_EQ(predicate_attr.predicate_list[0].args[1], (int64_t)bound_id);
+  EXPECT_FALSE(
+      loom_value_has_attribute_uses(loom_module_value(module_, old_id)));
   EXPECT_TRUE(
       loom_value_has_attribute_uses(loom_module_value(module_, new_id)));
 }

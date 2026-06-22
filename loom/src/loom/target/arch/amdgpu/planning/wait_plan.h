@@ -112,7 +112,8 @@ typedef struct loom_amdgpu_wait_plan_action_t {
   loom_amdgpu_wait_plan_reason_t reason;
   // AMDGPU wait counter affected by the action.
   uint16_t counter_id;
-  // Wait target value. The first planning slice always drains to zero.
+  // Wait target value. Zero drains all outstanding packets for the counter;
+  // nonzero waits only far enough for the required producer.
   uint16_t target_count;
   // Region block containing the insertion point or explicit wait.
   uint32_t block_index;

@@ -68,6 +68,117 @@ low.func.def target(@target) abi(hal_kernel) @f32x4_interleave_pair(%even: reg<a
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @f16x8_deinterleave_pair(%interleaved: vector<8xf16>) -> (vector<4xf16>, vector<4xf16>) {
+  %even, %odd = vector.deinterleave<0> %interleaved : vector<8xf16> -> vector<4xf16>, vector<4xf16>
+  func.return %even, %odd : vector<4xf16>, vector<4xf16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f16x8_deinterleave_pair(%interleaved: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %8 = slice %interleaved[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %9 = slice %interleaved[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %10 = v_perm_b32_src2_lit %8, %9, 16778500
+  %11 = slice %interleaved[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %12 = slice %interleaved[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %13 = v_perm_b32_src2_lit %11, %12, 16778500
+  %even = concat(%10, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %17 = v_perm_b32_src2_lit %8, %9, 50464518
+  %20 = v_perm_b32_src2_lit %11, %12, 50464518
+  %odd = concat(%17, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %even, %odd
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @bf16x8_deinterleave_pair(%interleaved: vector<8xbf16>) -> (vector<4xbf16>, vector<4xbf16>) {
+  %even, %odd = vector.deinterleave<0> %interleaved : vector<8xbf16> -> vector<4xbf16>, vector<4xbf16>
+  func.return %even, %odd : vector<4xbf16>, vector<4xbf16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @bf16x8_deinterleave_pair(%interleaved: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %8 = slice %interleaved[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %9 = slice %interleaved[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %10 = v_perm_b32_src2_lit %8, %9, 16778500
+  %11 = slice %interleaved[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %12 = slice %interleaved[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %13 = v_perm_b32_src2_lit %11, %12, 16778500
+  %even = concat(%10, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %17 = v_perm_b32_src2_lit %8, %9, 50464518
+  %20 = v_perm_b32_src2_lit %11, %12, 50464518
+  %odd = concat(%17, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %even, %odd
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @bf16x6_deinterleave_pair(%interleaved: vector<6xbf16>) -> (vector<3xbf16>, vector<3xbf16>) {
+  %even, %odd = vector.deinterleave<0> %interleaved : vector<6xbf16> -> vector<3xbf16>, vector<3xbf16>
+  func.return %even, %odd : vector<3xbf16>, vector<3xbf16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @bf16x6_deinterleave_pair(%interleaved: reg<amdgpu.vgpr x3>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %8 = slice %interleaved[0] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
+  %9 = slice %interleaved[1] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
+  %10 = v_perm_b32_src2_lit %8, %9, 16778500
+  %11 = slice %interleaved[2] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
+  %12 = v_and_b32_lit %11, 65535
+  %even = concat(%10, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %16 = v_perm_b32_src2_lit %8, %9, 50464518
+  %18 = v_lshrrev_b32_src0_inline %11, 16
+  %odd = concat(%16, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %even, %odd
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @f16x4_interleave_pair(%even: vector<4xf16>, %odd: vector<4xf16>) -> (vector<8xf16>) {
+  %interleaved = vector.interleave<0> %even, %odd : vector<4xf16>, vector<4xf16> -> vector<8xf16>
+  func.return %interleaved : vector<8xf16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f16x4_interleave_pair(%even: reg<amdgpu.vgpr x2>, %odd: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.rdna3.core> {
+  %7 = slice %even[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %8 = slice %odd[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %9 = v_perm_b32_src2_lit %7, %8, 16778500
+  %12 = v_perm_b32_src2_lit %7, %8, 50464518
+  %13 = slice %even[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = slice %odd[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %15 = v_perm_b32_src2_lit %13, %14, 16778500
+  %18 = v_perm_b32_src2_lit %13, %14, 50464518
+  %interleaved = concat(%9, %12, %15, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  return %interleaved
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @bf16x3_interleave_pair(%even: vector<3xbf16>, %odd: vector<3xbf16>) -> (vector<6xbf16>) {
+  %interleaved = vector.interleave<0> %even, %odd : vector<3xbf16>, vector<3xbf16> -> vector<6xbf16>
+  func.return %interleaved : vector<6xbf16>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @bf16x3_interleave_pair(%even: reg<amdgpu.vgpr x2>, %odd: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x3>) asm<amdgpu.rdna3.core> {
+  %7 = slice %even[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %8 = slice %odd[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %9 = v_perm_b32_src2_lit %7, %8, 16778500
+  %12 = v_perm_b32_src2_lit %7, %8, 50464518
+  %13 = slice %even[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = slice %odd[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %15 = v_perm_b32_src2_lit %13, %14, 16778500
+  %interleaved = concat(%9, %12, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
+  return %interleaved
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @f32x4_shuffle_reverse(%values: vector<4xf32>) -> (vector<4xf32>) {
   %shuffled = vector.shuffle<[3, 2, 1, 0]> %values : vector<4xf32>
   func.return %shuffled : vector<4xf32>

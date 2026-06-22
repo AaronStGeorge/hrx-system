@@ -41,6 +41,17 @@ static iree_string_view_t loom_target_compile_report_descriptor_semantic_tag(
                                         descriptor->semantic_tag_string_offset);
 }
 
+static iree_string_view_t loom_target_compile_report_descriptor_key(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  if (descriptor_set == NULL || descriptor == NULL ||
+      descriptor->key_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
+    return iree_string_view_empty();
+  }
+  return loom_low_descriptor_set_string(descriptor_set,
+                                        descriptor->key_string_offset);
+}
+
 static bool loom_target_compile_report_string_contains(
     iree_string_view_t value, iree_string_view_t needle) {
   return iree_string_view_find(value, needle, /*pos=*/0) !=
@@ -157,6 +168,16 @@ typedef struct loom_target_compile_report_low_node_features_t {
   bool dot;
   // Node contributes global-memory work.
   bool global_memory;
+  // Node contributes AMDGPU global_load-family work.
+  bool global_load;
+  // Node contributes AMDGPU global_store-family work.
+  bool global_store;
+  // Node contributes AMDGPU buffer_load-family work.
+  bool buffer_load;
+  // Node contributes AMDGPU buffer_store-family work.
+  bool buffer_store;
+  // Node contributes AMDGPU flat-memory-family work.
+  bool flat_memory;
   // Node contributes local or workgroup-memory work.
   bool local_memory;
   // Node contributes scalar-memory work.
@@ -197,6 +218,8 @@ loom_target_compile_report_classify_low_node_features(
   const iree_string_view_t semantic_tag =
       loom_target_compile_report_descriptor_semantic_tag(descriptor_set,
                                                          descriptor);
+  const iree_string_view_t descriptor_key =
+      loom_target_compile_report_descriptor_key(descriptor_set, descriptor);
 
   features.scalar_alu =
       iree_string_view_starts_with(schedule_class_name,
@@ -231,6 +254,18 @@ loom_target_compile_report_classify_low_node_features(
       iree_string_view_starts_with(schedule_class_name,
                                    IREE_SV("amdgpu.vmem")) ||
       iree_string_view_starts_with(semantic_tag, IREE_SV("memory.global."));
+  features.global_load = iree_string_view_starts_with(
+      descriptor_key, IREE_SV("amdgpu.global_load_"));
+  features.global_store = iree_string_view_starts_with(
+      descriptor_key, IREE_SV("amdgpu.global_store_"));
+  features.buffer_load = iree_string_view_starts_with(
+      descriptor_key, IREE_SV("amdgpu.buffer_load_"));
+  features.buffer_store = iree_string_view_starts_with(
+      descriptor_key, IREE_SV("amdgpu.buffer_store_"));
+  features.flat_memory = iree_string_view_starts_with(
+                             descriptor_key, IREE_SV("amdgpu.flat_load_")) ||
+                         iree_string_view_starts_with(
+                             descriptor_key, IREE_SV("amdgpu.flat_store_"));
   features.local_memory =
       iree_string_view_starts_with(schedule_class_name,
                                    IREE_SV("amdgpu.lds")) ||
@@ -284,11 +319,13 @@ static bool loom_target_compile_report_low_node_features_are_known(
     const loom_target_compile_report_low_node_features_t* features) {
   return features->scalar_alu || features->vector_alu || features->matrix ||
          features->mfma || features->wmma || features->dot ||
-         features->global_memory || features->local_memory ||
-         features->scalar_memory || features->generic_memory ||
-         features->atomic || features->branch || features->barrier ||
-         features->control || features->conversion || features->cache ||
-         features->register_move;
+         features->global_memory || features->global_load ||
+         features->global_store || features->buffer_load ||
+         features->buffer_store || features->flat_memory ||
+         features->local_memory || features->scalar_memory ||
+         features->generic_memory || features->atomic || features->branch ||
+         features->barrier || features->control || features->conversion ||
+         features->cache || features->register_move;
 }
 
 static void loom_target_compile_report_accumulate_low_node_static_mix(
@@ -319,6 +356,11 @@ static void loom_target_compile_report_accumulate_low_node_static_mix(
   mix->wmma_count += features.wmma ? 1 : 0;
   mix->dot_count += features.dot ? 1 : 0;
   mix->global_memory_count += features.global_memory ? 1 : 0;
+  mix->global_load_count += features.global_load ? 1 : 0;
+  mix->global_store_count += features.global_store ? 1 : 0;
+  mix->buffer_load_count += features.buffer_load ? 1 : 0;
+  mix->buffer_store_count += features.buffer_store ? 1 : 0;
+  mix->flat_memory_count += features.flat_memory ? 1 : 0;
   mix->local_memory_count += features.local_memory ? 1 : 0;
   mix->scalar_memory_count += features.scalar_memory ? 1 : 0;
   mix->generic_memory_count += features.generic_memory ? 1 : 0;
@@ -345,6 +387,11 @@ static void loom_target_compile_report_accumulate_static_mix(
   target->wmma_count += source->wmma_count;
   target->dot_count += source->dot_count;
   target->global_memory_count += source->global_memory_count;
+  target->global_load_count += source->global_load_count;
+  target->global_store_count += source->global_store_count;
+  target->buffer_load_count += source->buffer_load_count;
+  target->buffer_store_count += source->buffer_store_count;
+  target->flat_memory_count += source->flat_memory_count;
   target->local_memory_count += source->local_memory_count;
   target->scalar_memory_count += source->scalar_memory_count;
   target->generic_memory_count += source->generic_memory_count;
@@ -667,7 +714,8 @@ static void loom_target_compile_report_accumulate_schedule_band_node(
 static bool loom_target_compile_report_schedule_band_summary_matches(
     const loom_target_compile_report_schedule_band_summary_row_t* summary,
     const loom_target_compile_report_schedule_band_row_t* band) {
-  return iree_string_view_equal(summary->block_name, band->block_name) &&
+  return summary->block_index == band->block_index &&
+         iree_string_view_equal(summary->block_name, band->block_name) &&
          summary->origin_kind == band->origin_kind &&
          iree_string_view_equal(summary->origin_operation_name,
                                 band->origin_operation_name) &&
@@ -711,6 +759,7 @@ static iree_status_t loom_target_compile_report_add_schedule_band_summary(
   *summary = (loom_target_compile_report_schedule_band_summary_row_t){
       .function_name = band->function_name,
       .block_name = band->block_name,
+      .block_index = band->block_index,
       .first_packet_index = band->first_packet_index,
       .origin_kind = band->origin_kind,
       .origin_operation_name = band->origin_operation_name,
@@ -806,6 +855,7 @@ static iree_status_t loom_target_compile_report_record_schedule_band_rows(
             .function_name = report->function_name,
             .block_name =
                 loom_target_compile_report_block_name(module, node->block),
+            .block_index = (uint32_t)block_index,
             .first_packet_index = (uint64_t)packet_index,
             .first_scheduled_ordinal = node->scheduled_ordinal,
             .origin_kind = info.kind,
@@ -1410,6 +1460,263 @@ static bool loom_target_compile_report_liveness_value_ordinal(
   return false;
 }
 
+typedef struct loom_target_compile_report_allocation_high_water_blockers_t {
+  // Number of active assignment blockers below the high-water assignment.
+  uint32_t active_assignment_count;
+  // Total units owned by active assignment blockers.
+  uint64_t active_assignment_units;
+  // Number of active target storage-lease blockers below the high-water
+  // assignment.
+  uint32_t active_storage_lease_count;
+  // Total units owned by active target storage-lease blockers.
+  uint64_t active_storage_lease_units;
+  // Number of pressure-releasable storage-lease blockers below the high-water
+  // assignment.
+  uint32_t active_pressure_storage_lease_count;
+  // Total units owned by pressure-releasable storage-lease blockers.
+  uint64_t active_pressure_storage_lease_units;
+  // Number of fallback-release storage-lease blockers below the high-water
+  // assignment.
+  uint32_t active_fallback_storage_lease_count;
+  // Total units owned by fallback-release storage-lease blockers.
+  uint64_t active_fallback_storage_lease_units;
+} loom_target_compile_report_allocation_high_water_blockers_t;
+
+typedef struct loom_target_compile_report_allocation_lower_free_runs_t {
+  // Number of unoccupied physical units below the high-water assignment base.
+  uint64_t free_unit_count;
+  // Number of contiguous unoccupied-unit runs below the assignment base.
+  uint32_t free_run_count;
+  // Largest contiguous unoccupied-unit run below the assignment base.
+  uint32_t largest_free_run_unit_count;
+} loom_target_compile_report_allocation_lower_free_runs_t;
+
+typedef enum loom_target_compile_report_storage_lease_occupancy_e {
+  // Treat active storage leases as occupied.
+  LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_ACTIVE = 0,
+  // Treat pressure-releasable storage leases as free.
+  LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_PRESSURE_RELEASE_UPPER_BOUND =
+      1,
+} loom_target_compile_report_storage_lease_occupancy_t;
+
+static bool loom_target_compile_report_assignment_active_at(
+    const loom_low_allocation_assignment_t* assignment, uint32_t point) {
+  return assignment->start_point <= point && point < assignment->end_point;
+}
+
+static bool loom_target_compile_report_unit_inside_range(
+    uint32_t unit, uint32_t location_base, uint32_t location_count) {
+  return unit >= location_base &&
+         (uint64_t)unit < (uint64_t)location_base + location_count;
+}
+
+static bool loom_target_compile_report_storage_lease_is_pressure_releasable(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_storage_lease_t* lease) {
+  if (allocation->storage_leases.records == NULL ||
+      lease->lease_record_index >= allocation->storage_leases.record_count) {
+    return false;
+  }
+  return iree_all_bits_set(
+      allocation->storage_leases.records[lease->lease_record_index].flags,
+      LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE);
+}
+
+static bool loom_target_compile_report_unit_blocked_by_assignment(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit) {
+  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
+    if (i == high_water_assignment_index) {
+      continue;
+    }
+    const loom_low_allocation_assignment_t* assignment =
+        &allocation->assignments[i];
+    if (assignment->descriptor_reg_class_id !=
+            high_water_assignment->descriptor_reg_class_id ||
+        assignment->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        !loom_target_compile_report_assignment_active_at(assignment, point)) {
+      continue;
+    }
+    if (loom_target_compile_report_unit_inside_range(
+            unit, assignment->location_base, assignment->location_count)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_target_compile_report_unit_blocked_by_storage_lease(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit,
+    loom_target_compile_report_storage_lease_occupancy_t occupancy) {
+  for (iree_host_size_t i = 0; i < allocation->storage_lease_instance_count;
+       ++i) {
+    const loom_low_allocation_storage_lease_t* lease =
+        &allocation->storage_lease_instances[i];
+    if (lease->assignment_index == high_water_assignment_index ||
+        lease->descriptor_reg_class_id !=
+            high_water_assignment->descriptor_reg_class_id ||
+        lease->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        point < lease->start_point || point >= lease->end_point) {
+      continue;
+    }
+    if (occupancy ==
+            LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_PRESSURE_RELEASE_UPPER_BOUND &&
+        loom_target_compile_report_storage_lease_is_pressure_releasable(
+            allocation, lease)) {
+      continue;
+    }
+    if (loom_target_compile_report_unit_inside_range(unit, lease->location_base,
+                                                     lease->location_count)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_target_compile_report_unit_blocked_in_lower_window(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit,
+    loom_target_compile_report_storage_lease_occupancy_t occupancy) {
+  return loom_target_compile_report_unit_blocked_by_assignment(
+             allocation, high_water_assignment, high_water_assignment_index,
+             point, unit) ||
+         loom_target_compile_report_unit_blocked_by_storage_lease(
+             allocation, high_water_assignment, high_water_assignment_index,
+             point, unit, occupancy);
+}
+
+static loom_target_compile_report_allocation_lower_free_runs_t
+loom_target_compile_report_allocation_lower_free_runs(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index,
+    loom_target_compile_report_storage_lease_occupancy_t occupancy) {
+  loom_target_compile_report_allocation_lower_free_runs_t free_runs = {0};
+  const uint32_t point = high_water_assignment->start_point;
+  uint32_t current_free_run = 0;
+  for (uint32_t unit = 0; unit < high_water_assignment->location_base; ++unit) {
+    if (loom_target_compile_report_unit_blocked_in_lower_window(
+            allocation, high_water_assignment, high_water_assignment_index,
+            point, unit, occupancy)) {
+      current_free_run = 0;
+      continue;
+    }
+    ++free_runs.free_unit_count;
+    if (current_free_run == 0) {
+      ++free_runs.free_run_count;
+    }
+    ++current_free_run;
+    free_runs.largest_free_run_unit_count =
+        iree_max(free_runs.largest_free_run_unit_count, current_free_run);
+  }
+  return free_runs;
+}
+
+static uint64_t loom_target_compile_report_units_below_high_water(
+    uint32_t location_base, uint32_t location_count,
+    uint64_t high_water_units) {
+  if (location_count == 0 || (uint64_t)location_base >= high_water_units) {
+    return 0;
+  }
+  const uint64_t location_end = (uint64_t)location_base + location_count;
+  const uint64_t clipped_end = iree_min(location_end, high_water_units);
+  return clipped_end - location_base;
+}
+
+static void loom_target_compile_report_add_high_water_assignment_blockers(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint64_t high_water_units,
+    loom_target_compile_report_allocation_high_water_blockers_t* blockers) {
+  const uint32_t point = high_water_assignment->start_point;
+  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
+    if (i == high_water_assignment_index) {
+      continue;
+    }
+    const loom_low_allocation_assignment_t* assignment =
+        &allocation->assignments[i];
+    if (assignment->descriptor_reg_class_id !=
+            high_water_assignment->descriptor_reg_class_id ||
+        assignment->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        !loom_target_compile_report_assignment_active_at(assignment, point)) {
+      continue;
+    }
+    const uint64_t blocker_units =
+        loom_target_compile_report_units_below_high_water(
+            assignment->location_base, assignment->location_count,
+            high_water_units);
+    if (blocker_units == 0) {
+      continue;
+    }
+    ++blockers->active_assignment_count;
+    blockers->active_assignment_units += blocker_units;
+  }
+}
+
+static void loom_target_compile_report_add_high_water_storage_lease_blockers(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint64_t high_water_units,
+    loom_target_compile_report_allocation_high_water_blockers_t* blockers) {
+  const uint32_t point = high_water_assignment->start_point;
+  for (iree_host_size_t i = 0; i < allocation->storage_lease_instance_count;
+       ++i) {
+    const loom_low_allocation_storage_lease_t* lease =
+        &allocation->storage_lease_instances[i];
+    if (lease->assignment_index == high_water_assignment_index ||
+        lease->descriptor_reg_class_id !=
+            high_water_assignment->descriptor_reg_class_id ||
+        lease->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        point < lease->start_point || point >= lease->end_point) {
+      continue;
+    }
+    const uint64_t blocker_units =
+        loom_target_compile_report_units_below_high_water(
+            lease->location_base, lease->location_count, high_water_units);
+    if (blocker_units == 0) {
+      continue;
+    }
+    ++blockers->active_storage_lease_count;
+    blockers->active_storage_lease_units += blocker_units;
+    const bool pressure_releasable =
+        lease->lease_record_index < allocation->storage_leases.record_count &&
+        allocation->storage_leases.records != NULL &&
+        iree_all_bits_set(
+            allocation->storage_leases.records[lease->lease_record_index].flags,
+            LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE);
+    if (pressure_releasable) {
+      ++blockers->active_pressure_storage_lease_count;
+      blockers->active_pressure_storage_lease_units += blocker_units;
+    } else {
+      ++blockers->active_fallback_storage_lease_count;
+      blockers->active_fallback_storage_lease_units += blocker_units;
+    }
+  }
+}
+
+static loom_target_compile_report_allocation_high_water_blockers_t
+loom_target_compile_report_allocation_high_water_blockers(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint64_t high_water_units) {
+  loom_target_compile_report_allocation_high_water_blockers_t blockers = {0};
+  loom_target_compile_report_add_high_water_assignment_blockers(
+      allocation, high_water_assignment, high_water_assignment_index,
+      high_water_units, &blockers);
+  loom_target_compile_report_add_high_water_storage_lease_blockers(
+      allocation, high_water_assignment, high_water_assignment_index,
+      high_water_units, &blockers);
+  return blockers;
+}
+
 static iree_status_t
 loom_target_compile_report_record_allocation_high_water_rows(
     loom_target_compile_report_t* report,
@@ -1504,6 +1811,19 @@ loom_target_compile_report_record_allocation_high_water_rows(
     }
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[entry->assignment_index];
+    const loom_target_compile_report_allocation_high_water_blockers_t blockers =
+        loom_target_compile_report_allocation_high_water_blockers(
+            allocation, assignment, entry->assignment_index,
+            entry->high_water_units);
+    const loom_target_compile_report_allocation_lower_free_runs_t free_runs =
+        loom_target_compile_report_allocation_lower_free_runs(
+            allocation, assignment, entry->assignment_index,
+            LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_ACTIVE);
+    const loom_target_compile_report_allocation_lower_free_runs_t
+        pressure_release_free_runs =
+            loom_target_compile_report_allocation_lower_free_runs(
+                allocation, assignment, entry->assignment_index,
+                LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_PRESSURE_RELEASE_UPPER_BOUND);
     loom_target_compile_report_pressure_origin_info_t origin_info =
         loom_target_compile_report_pressure_origin_from_value(
             allocation->module, assignment->value_id);
@@ -1536,6 +1856,30 @@ loom_target_compile_report_record_allocation_high_water_rows(
         .location_base = assignment->location_base,
         .location_count = assignment->location_count,
         .high_water_units = entry->high_water_units,
+        .lower_free_unit_count = free_runs.free_unit_count,
+        .lower_free_run_count = free_runs.free_run_count,
+        .lower_largest_free_run_unit_count =
+            free_runs.largest_free_run_unit_count,
+        .lower_pressure_releasable_free_unit_count =
+            pressure_release_free_runs.free_unit_count,
+        .lower_pressure_releasable_free_run_count =
+            pressure_release_free_runs.free_run_count,
+        .lower_pressure_releasable_largest_free_run_unit_count =
+            pressure_release_free_runs.largest_free_run_unit_count,
+        .active_assignment_blocker_count = blockers.active_assignment_count,
+        .active_assignment_blocker_units = blockers.active_assignment_units,
+        .active_storage_lease_blocker_count =
+            blockers.active_storage_lease_count,
+        .active_storage_lease_blocker_units =
+            blockers.active_storage_lease_units,
+        .active_pressure_storage_lease_blocker_count =
+            blockers.active_pressure_storage_lease_count,
+        .active_pressure_storage_lease_blocker_units =
+            blockers.active_pressure_storage_lease_units,
+        .active_fallback_storage_lease_blocker_count =
+            blockers.active_fallback_storage_lease_count,
+        .active_fallback_storage_lease_blocker_units =
+            blockers.active_fallback_storage_lease_units,
     };
     status = loom_target_compile_report_record_allocation_high_water_row(report,
                                                                          &row);
@@ -1679,7 +2023,10 @@ static iree_status_t loom_target_compile_report_record_low_allocation_contents(
   loom_target_compile_report_record_allocation(
       report, allocation->assignment_count, allocation->spill_count,
       allocation->spill_plan_count, allocation->coalesced_copy_count,
-      allocation->materialized_copy_count);
+      allocation->materialized_copy_count,
+      allocation->storage_leases.record_count,
+      allocation->storage_lease_instance_count,
+      allocation->storage_release_action_count);
   iree_status_t status = loom_target_compile_report_record_pressure_rows(
       report, liveness, allocation->target.descriptor_set);
   if (iree_status_is_ok(status)) {

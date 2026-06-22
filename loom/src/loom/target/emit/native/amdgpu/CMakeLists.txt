@@ -63,7 +63,9 @@ loom_cc_library(
     ::encoding
     ::spill_lowering
     iree::base
+    loom::codegen::low::allocation_json
     loom::codegen::low::frame
+    loom::codegen::low::packet_json
     loom::codegen::low::target_binding
     loom::ir
     loom::ops::low
@@ -83,9 +85,11 @@ loom_check_test_suite(
   NAME
     loom_check_file_test
   SRCS
+    "test/allocation_json.loom-test"
     "test/assembly.loom-test"
     "test/assembly_q8.loom-test"
     "test/assembly_wmma.loom-test"
+    "test/packet_json.loom-test"
     "test/vopd_plan.loom-test"
     "test/wait_plan.loom-test"
     "test/wait_states.loom-test"

@@ -440,13 +440,11 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_vector_deinterleave_dispatch,
                 loom_amdgpu_low_legality_verify_vector_structural, 1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_INTERLEAVE)] =
-            LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
-                LOOM_OP_VECTOR_INTERLEAVE,
-                loom_amdgpu_vector_register_map_plan_t,
+            LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW(
+                LOOM_OP_VECTOR_INTERLEAVE, loom_amdgpu_vector_interleave_plan_t,
                 loom_amdgpu_select_vector_interleave_dispatch,
-                loom_amdgpu_emit_vector_register_map_dispatch,
-                loom_amdgpu_low_legality_verify_vector_structural,
-                LOOM_AMDGPU_STORAGE_VECTOR_REGISTER_MAP_PLAN),
+                loom_amdgpu_emit_vector_interleave_dispatch,
+                loom_amdgpu_low_legality_verify_vector_structural, 2),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SHUFFLE)] =
             LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_SHUFFLE, loom_amdgpu_vector_register_map_plan_t,
@@ -490,19 +488,19 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN,
                 LOOM_AMDGPU_PRESELECT_STRUCTURAL_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_EXTF)] =
-            LOOM_AMDGPU_VALUE_DATA_SOURCE_ROW(
+            LOOM_AMDGPU_VALUE_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_EXTF,
                 loom_amdgpu_vector_16bit_float_conversion_plan_t,
                 loom_amdgpu_select_vector_16bit_float_conversion_dispatch,
                 loom_amdgpu_emit_vector_16bit_float_conversion_dispatch, NULL,
-                1),
+                LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FPTRUNC)] =
-            LOOM_AMDGPU_VALUE_DATA_SOURCE_ROW(
+            LOOM_AMDGPU_VALUE_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_FPTRUNC,
                 loom_amdgpu_vector_16bit_float_conversion_plan_t,
                 loom_amdgpu_select_vector_16bit_float_conversion_dispatch,
                 loom_amdgpu_emit_vector_16bit_float_conversion_dispatch, NULL,
-                1),
+                LOOM_AMDGPU_STORAGE_STRUCTURAL_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_LOAD)] =
             LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_LOAD, loom_amdgpu_memory_access_plan_t,

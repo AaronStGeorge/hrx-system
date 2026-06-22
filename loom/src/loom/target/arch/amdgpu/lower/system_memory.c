@@ -23,9 +23,8 @@ loom_amdgpu_system_memory_cache_policy_encoding(
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
       loom_amdgpu_target_info_descriptor_set_at(
           descriptor_set->descriptor_set_ordinal);
-  return descriptor_set_info == NULL
-             ? LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
-             : descriptor_set_info->vector_memory.cache_policy_encoding;
+  IREE_ASSERT(descriptor_set_info != NULL);
+  return descriptor_set_info->vector_memory.cache_policy_encoding;
 }
 
 iree_status_t loom_amdgpu_system_memory_build_u32_attr(
@@ -56,24 +55,14 @@ static bool loom_amdgpu_system_memory_type_is_register_class(
          loom_low_register_type_class_id(type) == reg_class_id;
 }
 
-static iree_status_t loom_amdgpu_system_memory_require_register_class(
+static void loom_amdgpu_system_memory_require_register_class(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t value, uint16_t reg_class_id, uint32_t unit_count) {
-  if (value >= builder->module->values.count) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AMDGPU system-memory builder received an invalid low value");
-  }
+  IREE_ASSERT_LT(value, builder->module->values.count);
   const loom_type_t type = loom_module_value_type(builder->module, value);
-  if (!loom_amdgpu_system_memory_type_is_register_class(descriptor_set, type,
-                                                        reg_class_id) ||
-      loom_low_register_type_unit_count(type) != unit_count) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "AMDGPU system-memory builder received a low value with an "
-        "unsupported register shape");
-  }
-  return iree_ok_status();
+  IREE_ASSERT(loom_amdgpu_system_memory_type_is_register_class(
+      descriptor_set, type, reg_class_id));
+  IREE_ASSERT_EQ(loom_low_register_type_unit_count(type), unit_count);
 }
 
 static iree_status_t loom_amdgpu_system_memory_build_const_u32(
@@ -127,10 +116,10 @@ static iree_status_t loom_amdgpu_system_memory_build_sgpr_u32_binary(
     loom_value_id_t rhs, loom_location_id_t location,
     loom_value_id_t* out_value) {
   *out_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_require_register_class(
-      builder, descriptor_set, lhs, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_require_register_class(
-      builder, descriptor_set, rhs, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1));
+  loom_amdgpu_system_memory_require_register_class(
+      builder, descriptor_set, lhs, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
+  loom_amdgpu_system_memory_require_register_class(
+      builder, descriptor_set, rhs, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
 
   loom_type_t sgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_build_register_type(
@@ -168,8 +157,8 @@ iree_status_t loom_amdgpu_system_memory_build_saddr_byte_offset(
     loom_value_id_t base_address, uint32_t byte_offset,
     loom_location_id_t location, loom_value_id_t* out_address) {
   *out_address = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_require_register_class(
-      builder, descriptor_set, base_address, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2));
+  loom_amdgpu_system_memory_require_register_class(
+      builder, descriptor_set, base_address, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
   if (byte_offset == 0) {
     *out_address = base_address;
     return iree_ok_status();
@@ -229,21 +218,12 @@ static iree_status_t loom_amdgpu_system_memory_global_memory_descriptor(
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
       builder, descriptor_set, descriptor_ref, &descriptor, &opcode_id));
-  if (descriptor->canonical_asm_form_ordinal >=
-      descriptor_set->asm_form_count) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU system-memory load descriptor has no canonical asm form");
-  }
+  IREE_ASSERT_LT(descriptor->canonical_asm_form_ordinal,
+                 descriptor_set->asm_form_count);
   const loom_low_asm_form_t* asm_form =
       &descriptor_set->asm_forms[descriptor->canonical_asm_form_ordinal];
-  if (asm_form->operand_index_count != 2 &&
-      asm_form->operand_index_count != 3) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU system-memory load descriptor has an unsupported packet "
-        "operand count");
-  }
+  IREE_ASSERT(asm_form->operand_index_count == 2 ||
+              asm_form->operand_index_count == 3);
   *out_descriptor = descriptor;
   *out_opcode_id = opcode_id;
   *out_asm_form = asm_form;
@@ -257,8 +237,8 @@ static iree_status_t loom_amdgpu_system_memory_build_global_load_saddr(
     loom_amdgpu_system_memory_load_flags_t flags, loom_location_id_t location,
     loom_value_id_t* out_value) {
   *out_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_require_register_class(
-      builder, descriptor_set, base_address, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2));
+  loom_amdgpu_system_memory_require_register_class(
+      builder, descriptor_set, base_address, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
 
   loom_value_id_t zero_vaddr = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_vgpr_u32_const(
@@ -311,8 +291,8 @@ static iree_status_t loom_amdgpu_system_memory_build_readfirstlane_b32(
     loom_value_id_t source, loom_location_id_t location,
     loom_value_id_t* out_value) {
   *out_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_require_register_class(
-      builder, descriptor_set, source, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1));
+  loom_amdgpu_system_memory_require_register_class(
+      builder, descriptor_set, source, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
 
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_build_register_type(
@@ -336,10 +316,7 @@ static iree_status_t loom_amdgpu_system_memory_append_u32_attr(
     loom_builder_t* builder, iree_string_view_t name, uint32_t value,
     loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
     iree_host_size_t* inout_attr_count) {
-  if (*inout_attr_count >= attr_capacity) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "AMDGPU system-memory attr capacity exceeded");
-  }
+  IREE_ASSERT_LT(*inout_attr_count, attr_capacity);
   loom_named_attr_t attr = {0};
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_system_memory_build_u32_attr(builder, name, value, &attr));
@@ -396,9 +373,8 @@ iree_status_t loom_amdgpu_system_memory_append_load_attrs(
       return loom_amdgpu_system_memory_append_scope_attr(
           builder, attrs, attr_capacity, inout_attr_count);
     default:
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU descriptor set has no system-memory load policy");
+      IREE_ASSERT_UNREACHABLE("validated AMDGPU system-memory load policy");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -416,9 +392,9 @@ iree_status_t loom_amdgpu_system_memory_append_release_store_attrs(
       return loom_amdgpu_system_memory_append_scope_attr(
           builder, attrs, attr_capacity, inout_attr_count);
     default:
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU descriptor set has no system-memory release-store policy");
+      IREE_ASSERT_UNREACHABLE(
+          "validated AMDGPU system-memory release-store policy");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -436,9 +412,9 @@ iree_status_t loom_amdgpu_system_memory_append_no_return_atomic_attrs(
       return loom_amdgpu_system_memory_append_scope_attr(
           builder, attrs, attr_capacity, inout_attr_count);
     default:
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU descriptor set has no system-memory no-return atomic policy");
+      IREE_ASSERT_UNREACHABLE(
+          "validated AMDGPU system-memory no-return atomic policy");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -456,9 +432,9 @@ iree_status_t loom_amdgpu_system_memory_append_return_atomic_attrs(
       return loom_amdgpu_system_memory_append_scope_attr(
           builder, attrs, attr_capacity, inout_attr_count);
     default:
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU descriptor set has no system-memory returning atomic policy");
+      IREE_ASSERT_UNREACHABLE(
+          "validated AMDGPU system-memory returning atomic policy");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -577,9 +553,9 @@ iree_status_t loom_amdgpu_system_memory_build_release_ordering(
           /*target_count=*/0, location);
     }
     default:
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU descriptor set has no system-memory release ordering");
+      IREE_ASSERT_UNREACHABLE(
+          "validated AMDGPU system-memory release ordering");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -597,9 +573,8 @@ iree_status_t loom_amdgpu_system_memory_build_load_wait(
           builder, descriptor_set, LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD,
           /*target_count=*/0, location);
     default:
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU descriptor set has no system-memory load wait");
+      IREE_ASSERT_UNREACHABLE("validated AMDGPU system-memory load wait");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -634,9 +609,9 @@ iree_status_t loom_amdgpu_system_memory_build_acquire_ordering(
           location);
     }
     default:
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU descriptor set has no system-memory acquire ordering");
+      IREE_ASSERT_UNREACHABLE(
+          "validated AMDGPU system-memory acquire ordering");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 

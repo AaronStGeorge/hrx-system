@@ -279,14 +279,17 @@ static iree_status_t loom_check_emit_parse_source_low_option(
     } else if (iree_string_view_equal(value, IREE_SV("memory"))) {
       request->source_low_diagnostic_flags =
           LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS;
+    } else if (iree_string_view_equal(value, IREE_SV("operand-forms"))) {
+      request->source_low_diagnostic_flags =
+          LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM;
     } else if (iree_string_view_equal(value, IREE_SV("all"))) {
       request->source_low_diagnostic_flags =
           LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL;
     } else {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "source-low option 'diagnostics' expected 'none', 'memory', or "
-          "'all', got '%.*s'",
+          "source-low option 'diagnostics' expected 'none', 'memory', "
+          "'operand-forms', or 'all', got '%.*s'",
           (int)value.size, value.data);
     }
     request->has_source_low_diagnostics_option = true;
@@ -1421,6 +1424,14 @@ static iree_string_view_t loom_check_emit_diagnostic_source_low_pipeline(
                      "source-to-low{control-flow=structured-low,"
                      "diagnostics=memory}")
                : IREE_SV("source-to-low{diagnostics=memory}");
+  }
+  if (request->source_low_diagnostic_flags ==
+      LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM) {
+    return structured_control_flow
+               ? IREE_SV(
+                     "source-to-low{control-flow=structured-low,"
+                     "diagnostics=operand-forms}")
+               : IREE_SV("source-to-low{diagnostics=operand-forms}");
   }
   return structured_control_flow
              ? IREE_SV(

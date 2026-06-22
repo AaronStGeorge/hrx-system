@@ -876,8 +876,9 @@ iree_status_t loom_low_allocation_interval_assignment_build(
     }
 
     loom_low_allocation_class_capacity_t capacity = {0};
-    IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_class_capacity(
-        context->target_constraints, interval->value_class, &capacity));
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_target_constraints_interval_capacity(
+            context->target_constraints, interval, &capacity));
     if (state.result.spill_count > UINT32_MAX) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "allocation table exceeds uint32_t range");
@@ -887,6 +888,8 @@ iree_status_t loom_low_allocation_interval_assignment_build(
     bool assigned = loom_low_allocation_search_find_free_location(
         &search_context, interval, capacity, &location_base);
     const bool requires_register =
+        loom_low_allocation_storage_lease_state_value_has_records(
+            context->storage_leases, context->liveness, interval->value_id) ||
         loom_low_allocation_spill_traffic_interval_requires_register_location(
             context->module, interval);
     if (!assigned && (capacity.is_spillable || requires_register)) {

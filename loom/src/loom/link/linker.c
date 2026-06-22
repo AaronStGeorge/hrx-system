@@ -16,9 +16,11 @@
 #include "loom/link/symbol_policy.h"
 #include "loom/ops/config/contract.h"
 #include "loom/ops/config/ops.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/rewrite/materialize.h"
 #include "loom/rewrite/remap.h"
+#include "loom/util/walk.h"
 
 typedef struct loom_link_func_contract_attr_t {
   // Source declaration attribute index.
@@ -950,6 +952,94 @@ static iree_status_t loom_linker_mark_source_symbol_live(
   return iree_ok_status();
 }
 
+static bool loom_linker_source_symbol_is_func_provider(
+    const loom_symbol_t* symbol) {
+  return symbol && (symbol->kind == LOOM_SYMBOL_FUNC_TEMPLATE ||
+                    symbol->kind == LOOM_SYMBOL_FUNC_UKERNEL);
+}
+
+static iree_status_t loom_linker_mark_contract_providers_live(
+    loom_linker_source_t* source, iree_string_view_t contract) {
+  if (iree_string_view_is_empty(contract)) return iree_ok_status();
+  for (uint16_t symbol_id = 0; symbol_id < source->target_symbol_count;
+       ++symbol_id) {
+    const loom_symbol_t* symbol = &source->module->symbols.entries[symbol_id];
+    if (!loom_linker_source_symbol_is_func_provider(symbol)) continue;
+    loom_func_like_t provider =
+        loom_func_like_cast(source->module, symbol->defining_op);
+    if (!loom_func_like_isa(provider)) continue;
+
+    const loom_string_id_t contract_id = loom_func_like_implements(provider);
+    if (contract_id == LOOM_STRING_ID_INVALID ||
+        contract_id >= source->module->strings.count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "func provider symbol has an invalid "
+                              "implementation contract key");
+    }
+    if (!iree_string_view_equal(source->module->strings.entries[contract_id],
+                                contract)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_linker_mark_source_symbol_live(source, symbol_id));
+  }
+  return iree_ok_status();
+}
+
+typedef struct loom_linker_apply_dependency_walk_t {
+  // Source module currently being selectively linked.
+  loom_linker_source_t* source;
+
+  // Module containing the func.apply operations being scanned.
+  const loom_module_t* apply_module;
+} loom_linker_apply_dependency_walk_t;
+
+static iree_status_t loom_linker_visit_apply_dependency(
+    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
+    loom_walk_result_t* out_result) {
+  (void)context;
+  *out_result = LOOM_WALK_CONTINUE;
+  if (!loom_func_apply_isa(op)) return iree_ok_status();
+
+  loom_linker_apply_dependency_walk_t* walk =
+      (loom_linker_apply_dependency_walk_t*)user_data;
+  loom_linker_source_t* source = walk->source;
+  const loom_string_id_t contract_id = loom_func_apply_contract(op);
+  if (contract_id == LOOM_STRING_ID_INVALID ||
+      contract_id >= walk->apply_module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "func.apply has an invalid contract string id");
+  }
+  return loom_linker_mark_contract_providers_live(
+      source, walk->apply_module->strings.entries[contract_id]);
+}
+
+static iree_status_t loom_linker_mark_function_apply_dependencies_live(
+    loom_linker_source_t* source, const loom_module_t* apply_module,
+    loom_func_like_t function) {
+  if (!loom_func_like_isa(function)) return iree_ok_status();
+  loom_linker_apply_dependency_walk_t walk = {
+      .source = source,
+      .apply_module = apply_module,
+  };
+  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
+  return loom_walk_function(apply_module, function, LOOM_WALK_PRE_ORDER,
+                            (loom_walk_callback_t){
+                                .fn = loom_linker_visit_apply_dependency,
+                                .user_data = &walk,
+                            },
+                            source->arena, &walk_result);
+}
+
+static iree_status_t loom_linker_mark_apply_dependencies_live(
+    loom_linker_source_t* source, const loom_symbol_t* symbol) {
+  if (!symbol || !symbol->defining_op) return iree_ok_status();
+  loom_func_like_t function =
+      loom_func_like_cast(source->module, symbol->defining_op);
+  return loom_linker_mark_function_apply_dependencies_live(
+      source, source->module, function);
+}
+
 static iree_string_view_t loom_link_normalize_root_name(
     iree_string_view_t root_name) {
   if (iree_string_view_starts_with_char(root_name, '@')) {
@@ -1018,6 +1108,20 @@ static iree_status_t loom_linker_mark_existing_target_anchors_live(
   return iree_ok_status();
 }
 
+static iree_status_t loom_linker_mark_existing_target_apply_dependencies_live(
+    loom_linker_source_t* source) {
+  loom_linker_t* linker = source->linker;
+  const loom_symbol_t* symbol = NULL;
+  loom_module_for_each_symbol(linker->target_module, symbol) {
+    if (!symbol->defining_op) continue;
+    loom_func_like_t function =
+        loom_func_like_cast(linker->target_module, symbol->defining_op);
+    IREE_RETURN_IF_ERROR(loom_linker_mark_function_apply_dependencies_live(
+        source, linker->target_module, function));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_linker_resolve_live_symbols(
     loom_linker_source_t* source) {
   IREE_RETURN_IF_ERROR(loom_symbol_dependency_table_build(
@@ -1051,6 +1155,10 @@ static iree_status_t loom_linker_resolve_live_symbols(
             source, edge->target_symbol_id));
         edge_id = edge->next_outgoing_edge_id;
       }
+
+      const loom_symbol_t* symbol = &source->module->symbols.entries[symbol_id];
+      IREE_RETURN_IF_ERROR(
+          loom_linker_mark_apply_dependencies_live(source, symbol));
     }
   }
   return iree_ok_status();
@@ -1211,6 +1319,9 @@ iree_status_t loom_linker_add_module(loom_linker_t* linker,
   }
   if (iree_status_is_ok(status) && source.selective) {
     status = loom_linker_mark_existing_target_anchors_live(&source);
+  }
+  if (iree_status_is_ok(status) && source.selective) {
+    status = loom_linker_mark_existing_target_apply_dependencies_live(&source);
   }
   if (iree_status_is_ok(status) && source.selective) {
     status = loom_linker_resolve_live_symbols(&source);

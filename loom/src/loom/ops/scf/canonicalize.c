@@ -11,6 +11,7 @@
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
+#include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/math.h"
@@ -993,7 +994,9 @@ static bool loom_scf_value_has_no_uses(const loom_module_t* module,
   if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
     return false;
   }
-  return loom_value_has_no_uses(loom_module_value(module, value_id)) &&
+  const loom_value_t* value = loom_module_value(module, value_id);
+  return loom_value_has_no_uses(value) &&
+         !loom_module_value_has_predicate_attribute_uses(module, value_id) &&
          !loom_module_value_has_type_uses(module, value_id);
 }
 

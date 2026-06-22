@@ -25,8 +25,10 @@ extern "C" {
 typedef enum loom_low_allocation_storage_release_policy_e {
   // Active storage leases are hard conflicts.
   LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN = 0,
+  // Pressure-friendly storage leases may be released before the candidate.
+  LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FOR_PRESSURE = 1,
   // Active storage leases may be released before the candidate assignment.
-  LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED = 1,
+  LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED = 2,
 } loom_low_allocation_storage_release_policy_t;
 
 typedef struct loom_low_allocation_storage_lease_unit_entry_t
@@ -66,6 +68,8 @@ typedef struct loom_low_allocation_storage_lease_state_t {
   iree_host_size_t instance_count;
   // Number of initialized storage release actions.
   iree_host_size_t release_action_count;
+  // Number of storage-lease records marked releasable for pressure.
+  iree_host_size_t pressure_release_record_count;
 } loom_low_allocation_storage_lease_state_t;
 
 // Initializes |out_state| and builds the value-to-lease-record index for
@@ -85,6 +89,12 @@ bool loom_low_allocation_storage_lease_state_conflicts(
     const loom_low_allocation_assignment_t* candidate,
     const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
     loom_low_allocation_storage_release_policy_t policy);
+
+// Returns true when |value_id| has storage-lease records that must be
+// materialized from a register-like assignment.
+bool loom_low_allocation_storage_lease_state_value_has_records(
+    const loom_low_allocation_storage_lease_state_t* state,
+    const loom_liveness_analysis_t* liveness, loom_value_id_t value_id);
 
 // Appends release actions for every materialized lease conflicting with
 // |candidate|. All conflicts must be legally releasable before |candidate|.

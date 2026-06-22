@@ -35,11 +35,11 @@ low.func.def target(@vm_target) abi(vm_module_function) @vm_import_length(%buffe
 // RUN: emit source-low output=low
 ireevm.target<core> @vm_target
 
-func.def target(@vm_target) @vm_wide_scalar(%lhs: i64, %rhs: i64, %x: f32, %y: f32) -> (i64, f32, i32) {
+func.def target(@vm_target) @vm_wide_scalar(%lhs: i64, %rhs: i64, %x: f32, %y: f32) -> (i64, f32, i1) {
   %sum = scalar.addi %lhs, %rhs : i64
   %product = scalar.mulf %x, %y : f32
   %predicate = scalar.cmpi sgt, %lhs, %rhs : i64
-  func.return %sum, %product, %predicate : i64, f32, i32
+  func.return %sum, %product, %predicate : i64, f32, i1
 }
 // ----
 low.func.def target(@vm_target) abi(vm_module_function) @vm_wide_scalar(%lhs: reg<ireevm.i64 x2>, %rhs: reg<ireevm.i64 x2>, %x: reg<ireevm.f32>, %y: reg<ireevm.f32>) -> (reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.i32>) asm<ireevm.core> {

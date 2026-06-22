@@ -29,6 +29,7 @@ loom_cc_library(
     loom::ops::special_values
     loom::ops::type_registry
     loom::ops::vector
+    loom::ops::view
     loom::pass::pipeline
     loom::pass::registry
     loom::pass::types
@@ -37,6 +38,7 @@ loom_cc_library(
     loom::rewrite::rewriter
     loom::rewrite::type_propagation
     loom::util::fact_table
+    loom::util::math
     loom::util::walk
   PUBLIC
 )

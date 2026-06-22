@@ -1103,9 +1103,14 @@ bool loom_op_may_write(const loom_module_t* module, const loom_op_t* op);
 bool loom_op_regions_have_hints(const loom_module_t* module,
                                 const loom_op_t* op);
 
-// Returns true if every result of |op| has zero operand uses and no external
-// value type references. Type references carried by another result of |op| do
-// not keep the whole op alive.
+// Returns true if |value_id| is referenced by a live predicate-list attribute.
+// Type attributes are tracked by the module type-use table instead.
+bool loom_module_value_has_predicate_attribute_uses(const loom_module_t* module,
+                                                    loom_value_id_t value_id);
+
+// Returns true if every result of |op| has zero operand uses, no live
+// predicate-list attribute uses, and no external value type references. Type
+// references carried by another result of |op| do not keep the whole op alive.
 bool loom_op_results_unused(const loom_module_t* module, const loom_op_t* op);
 
 // Returns true if |op| is trivially dead: it has results, does not

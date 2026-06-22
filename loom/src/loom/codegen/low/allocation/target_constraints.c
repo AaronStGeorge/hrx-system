@@ -14,6 +14,8 @@
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/error/error_catalog.h"
+#include "loom/ir/module.h"
+#include "loom/ops/low/ops.h"
 
 static const loom_low_reg_class_t*
 loom_low_allocation_target_constraints_reg_class_at(
@@ -75,6 +77,16 @@ static iree_string_view_t loom_low_allocation_target_constraints_reg_class_name(
                                                           reg_class_id);
   return loom_low_descriptor_set_string(descriptor_set,
                                         reg_class->name_string_offset);
+}
+
+static iree_string_view_t
+loom_low_allocation_target_constraints_string_or_empty(
+    const loom_module_t* module, loom_string_id_t string_id) {
+  if (string_id == LOOM_STRING_ID_INVALID ||
+      string_id >= module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return module->strings.entries[string_id];
 }
 
 static iree_status_t loom_low_allocation_target_constraints_emit(
@@ -224,6 +236,90 @@ iree_status_t loom_low_allocation_target_constraints_class_capacity(
       constraints, value_class, &reg_class_id, NULL));
   return loom_low_allocation_target_constraints_reg_class_capacity(
       constraints, reg_class_id, out_capacity);
+}
+
+static const loom_low_operand_t*
+loom_low_allocation_target_constraints_defining_result_operand(
+    const loom_low_allocation_target_constraints_t* constraints,
+    loom_value_id_t value_id) {
+  const loom_module_t* module = constraints->module;
+  if (value_id >= module->values.count) {
+    IREE_ASSERT_LT(value_id, module->values.count);
+    return NULL;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return NULL;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op || !loom_low_op_isa(defining_op)) {
+    return NULL;
+  }
+  const uint16_t result_index = loom_value_def_index(value);
+  if (result_index >= defining_op->result_count) {
+    IREE_ASSERT_LT(result_index, defining_op->result_count);
+    return NULL;
+  }
+  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  const int64_t packet_descriptor_ordinal =
+      loom_low_op_descriptor_ordinal(defining_op);
+  if (packet_descriptor_ordinal >= 0) {
+    if ((uint64_t)packet_descriptor_ordinal >=
+        constraints->target->descriptor_set->descriptor_count) {
+      return NULL;
+    }
+    descriptor_ordinal = (uint32_t)packet_descriptor_ordinal;
+  } else {
+    const iree_string_view_t descriptor_key =
+        loom_low_allocation_target_constraints_string_or_empty(
+            module, loom_low_op_opcode(defining_op));
+    descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor(
+        constraints->target->descriptor_set, descriptor_key);
+  }
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return NULL;
+  }
+  const loom_low_descriptor_t* descriptor =
+      &constraints->target->descriptor_set->descriptors[descriptor_ordinal];
+  if (result_index >= descriptor->result_count) {
+    return NULL;
+  }
+  const uint32_t operand_row = descriptor->operand_start + result_index;
+  if (operand_row >= constraints->target->descriptor_set->operand_count) {
+    IREE_ASSERT_LT(operand_row,
+                   constraints->target->descriptor_set->operand_count);
+    return NULL;
+  }
+  return &constraints->target->descriptor_set->operands[operand_row];
+}
+
+static void loom_low_allocation_target_constraints_apply_operand_window(
+    const loom_low_operand_t* operand,
+    loom_low_allocation_class_capacity_t* capacity) {
+  if (!operand ||
+      operand->address_map_kind != LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET ||
+      operand->addressable_unit_count == 0) {
+    return;
+  }
+  if (!capacity->is_bounded ||
+      capacity->max_units > operand->addressable_unit_count) {
+    capacity->max_units = operand->addressable_unit_count;
+    capacity->is_bounded = true;
+  }
+}
+
+iree_status_t loom_low_allocation_target_constraints_interval_capacity(
+    const loom_low_allocation_target_constraints_t* constraints,
+    const loom_liveness_interval_t* interval,
+    loom_low_allocation_class_capacity_t* out_capacity) {
+  IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_class_capacity(
+      constraints, interval->value_class, out_capacity));
+  const loom_low_operand_t* result_operand =
+      loom_low_allocation_target_constraints_defining_result_operand(
+          constraints, interval->value_id);
+  loom_low_allocation_target_constraints_apply_operand_window(result_operand,
+                                                              out_capacity);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_target_constraints_resolve_budgets(

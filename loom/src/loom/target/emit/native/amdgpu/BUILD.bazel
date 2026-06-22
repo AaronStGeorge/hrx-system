@@ -81,7 +81,9 @@ loom_cc_library(
         ":assembly",
         ":encoding",
         ":spill_lowering",
+        "//loom/src/loom/codegen/low:allocation_json",
         "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:packet_json",
         "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
@@ -98,9 +100,11 @@ loom_cc_library(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
+        "test/allocation_json.loom-test",
         "test/assembly.loom-test",
         "test/assembly_q8.loom-test",
         "test/assembly_wmma.loom-test",
+        "test/packet_json.loom-test",
         "test/vopd_plan.loom-test",
         "test/wait_plan.loom-test",
         "test/wait_states.loom-test",

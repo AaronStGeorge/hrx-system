@@ -379,6 +379,23 @@ static bool loom_vector_fragment_facts_match_except_role(
   return loom_vector_fragment_fact_equal(lhs, rhs);
 }
 
+static bool loom_vector_fragment_facts_match_contract_except_native_storage(
+    loom_vector_fragment_fact_t lhs, loom_vector_fragment_fact_t rhs) {
+  lhs.flags &= ~LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_NATIVE_STORAGE;
+  rhs.flags &= ~LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_NATIVE_STORAGE;
+  return loom_vector_fragment_fact_equal(lhs, rhs);
+}
+
+static bool loom_vector_fragment_facts_have_compatible_native_storage(
+    loom_vector_fragment_fact_t target, loom_vector_fragment_fact_t source) {
+  if ((target.role_flags & source.role_flags) == 0) {
+    return false;
+  }
+  target.role_flags = source.role_flags;
+  return loom_vector_fragment_facts_match_contract_except_native_storage(
+      target, source);
+}
+
 static iree_status_t loom_vector_try_preserve_accumulator_fragment_facts(
     loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
     uint16_t operand_count, loom_value_facts_t* result_facts,
@@ -497,6 +514,16 @@ iree_status_t loom_vector_fragment_facts(
     }
   }
 
+  loom_vector_fragment_fact_t data_fragment;
+  if (loom_vector_fragment_fact_query_value_facts(context, operand_facts[0],
+                                                  &data_fragment) &&
+      iree_all_bits_set(data_fragment.flags,
+                        LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_NATIVE_STORAGE) &&
+      loom_vector_fragment_facts_have_compatible_native_storage(
+          fact, data_fragment)) {
+    fact.flags |= LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_NATIVE_STORAGE;
+  }
+
   return loom_vector_fragment_fact_make_value_facts(context, fact,
                                                     &result_facts[0]);
 }
@@ -517,6 +544,7 @@ iree_status_t loom_vector_fragment_load_facts(
   fact.shape_rank = 2;
   fact.shape_value_ids[0] = loom_vector_fragment_load_rows(op);
   fact.shape_value_ids[1] = loom_vector_fragment_load_columns(op);
+  fact.flags |= LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_NATIVE_STORAGE;
 
   const loom_value_id_t view_value_id = loom_vector_fragment_load_view(op);
   loom_value_fact_storage_schema_t storage_schema = {0};
@@ -2094,8 +2122,8 @@ iree_status_t loom_vector_deinterleave_facts(
     return loom_vector_make_unknown_result_facts(result_facts,
                                                  op->result_count);
   }
-  loom_type_t source_type =
-      loom_module_value_type(module, loom_vector_deinterleave_source(op));
+  const loom_value_id_t source = loom_vector_deinterleave_source(op);
+  loom_type_t source_type = loom_module_value_type(module, source);
   int64_t axis = loom_vector_deinterleave_axis(op);
   if (axis < 0 || axis >= loom_type_rank(source_type)) {
     return loom_vector_make_unknown_result_facts(result_facts,
@@ -2108,11 +2136,23 @@ iree_status_t loom_vector_deinterleave_facts(
     loom_type_t result_type =
         loom_module_value_type(module, results[result_index]);
     iree_host_size_t result_lane_count = 0;
-    if (loom_type_rank(result_type) != loom_type_rank(source_type) ||
-        !loom_vector_type_static_lane_count(result_type, &result_lane_count) ||
-        result_lane_count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
+    if (loom_type_rank(result_type) != loom_type_rank(source_type)) {
       return loom_vector_make_unknown_result_facts(result_facts,
                                                    op->result_count);
+    }
+    if (axis == 0 && loom_type_rank(source_type) == 1) {
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_static_lane_origin(
+          context->table, results[result_index],
+          (loom_value_fact_static_lane_origin_t){
+              .source_value_id = source,
+              .source_lane_offset = result_index,
+              .source_lane_stride = 2,
+          }));
+    }
+    if (!loom_vector_type_static_lane_count(result_type, &result_lane_count) ||
+        result_lane_count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
+      result_facts[result_index] = loom_value_facts_unknown();
+      continue;
     }
 
     loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
@@ -3966,6 +4006,7 @@ iree_status_t loom_vector_mma_facts(loom_fact_context_t* context,
   }
   init_fragment.role_flags = LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
                              LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
+  init_fragment.flags |= LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_NATIVE_STORAGE;
   return loom_vector_fragment_fact_make_value_facts(context, init_fragment,
                                                     &result_facts[0]);
 }

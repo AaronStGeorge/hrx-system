@@ -203,28 +203,6 @@ iree_status_t loom_amdgpu_pack_lane_bits_into_register(
       context, source_op, low_bits, bit_offset, lane_type, inout_packed);
 }
 
-static iree_status_t loom_amdgpu_emit_i8_bitpack_permute(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_low_lower_resolved_descriptor_t* descriptor, loom_value_id_t lhs,
-    loom_value_id_t rhs, uint32_t selector, loom_type_t lane_type,
-    loom_value_id_t* out_value) {
-  *out_value = LOOM_VALUE_ID_INVALID;
-  loom_named_attr_t attrs[1] = {0};
-  iree_host_size_t attr_count = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_append_i64_attr(context, IREE_SV("imm32"), selector, attrs,
-                                  IREE_ARRAYSIZE(attrs), &attr_count));
-  const loom_value_id_t operands[] = {lhs, rhs};
-  loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
-      context, descriptor, operands, IREE_ARRAYSIZE(operands),
-      loom_make_named_attr_slice(attrs, attr_count), &lane_type, 1,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
-      &low_op));
-  *out_value = loom_value_slice_get(loom_low_op_results(low_op), 0);
-  return iree_ok_status();
-}
-
 iree_status_t loom_amdgpu_pack_i8_lanes_with_permute(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_resolved_descriptor_t* descriptor,
@@ -236,16 +214,16 @@ iree_status_t loom_amdgpu_pack_i8_lanes_with_permute(
        ++register_index) {
     const uint32_t lane_base = register_index * 4u;
     loom_value_id_t packed_low = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_i8_bitpack_permute(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_resolved_vgpr_binary_immediate(
         context, source_op, descriptor, source_lanes[lane_base],
         source_lanes[lane_base + 1], LOOM_AMDGPU_I8_BITPACK_PAIR_SELECTOR,
         lane_type, &packed_low));
     loom_value_id_t packed_high = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_i8_bitpack_permute(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_resolved_vgpr_binary_immediate(
         context, source_op, descriptor, source_lanes[lane_base + 2],
         source_lanes[lane_base + 3], LOOM_AMDGPU_I8_BITPACK_PAIR_SELECTOR,
         lane_type, &packed_high));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_i8_bitpack_permute(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_resolved_vgpr_binary_immediate(
         context, source_op, descriptor, packed_low, packed_high,
         LOOM_AMDGPU_I8_BITPACK_MERGE_SELECTOR, lane_type,
         &out_packed_registers[register_index]));

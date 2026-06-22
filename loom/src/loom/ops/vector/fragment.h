@@ -48,6 +48,8 @@ typedef enum loom_vector_fragment_fact_flag_bits_e {
   LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_SCHEMA = 1u << 0,
   // The schema was resolved to an exact static storage-schema encoding.
   LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_STATIC_SCHEMA = 1u << 1,
+  // The payload is already in native target-fragment storage order.
+  LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_NATIVE_STORAGE = 1u << 2,
 } loom_vector_fragment_fact_flag_bits_t;
 
 typedef uint32_t loom_vector_fragment_fact_flags_t;

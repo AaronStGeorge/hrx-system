@@ -127,6 +127,14 @@ static const char* loom_low_allocation_json_failure_blocking_kind_name(
   }
 }
 
+static bool loom_low_allocation_json_has_storage_lease_details(
+    const loom_low_allocation_table_t* table) {
+  return table->storage_leases.records != NULL ||
+         table->storage_leases.record_count != 0 ||
+         table->storage_lease_instance_count != 0 ||
+         table->storage_release_action_count != 0;
+}
+
 static iree_status_t loom_low_allocation_json_write_u32_or_null(
     uint32_t value, loom_output_stream_t* stream) {
   if (value == UINT32_MAX) {
@@ -146,11 +154,65 @@ static iree_status_t loom_low_allocation_json_write_string_or_null(
                                         module->strings.entries[string_id]);
 }
 
+static iree_status_t loom_low_allocation_json_write_string_view_or_null(
+    iree_string_view_t value, loom_output_stream_t* stream) {
+  if (iree_string_view_is_empty(value)) {
+    return loom_output_stream_write_cstring(stream, "null");
+  }
+  return loom_json_write_escaped_string(stream, value);
+}
+
 static iree_status_t loom_low_allocation_json_write_scalar_name_or_null(
     loom_scalar_type_t scalar_type, loom_output_stream_t* stream) {
   const char* name = loom_scalar_type_name(scalar_type);
   if (!name) return loom_output_stream_write_cstring(stream, "null");
   return loom_json_write_escaped_cstring(stream, name);
+}
+
+static iree_status_t loom_low_allocation_json_write_host_size_or_null(
+    iree_host_size_t value, iree_host_size_t null_value,
+    loom_output_stream_t* stream) {
+  if (value == null_value) {
+    return loom_output_stream_write_cstring(stream, "null");
+  }
+  return loom_output_stream_write_format(stream, "%zu", value);
+}
+
+static const char* loom_low_allocation_json_storage_lease_kind_name(
+    loom_low_storage_lease_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_STORAGE_LEASE_SOURCE_READ:
+      return "source_read";
+    case LOOM_LOW_STORAGE_LEASE_RESULT_WRITE:
+      return "result_write";
+    case LOOM_LOW_STORAGE_LEASE_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static const char* loom_low_allocation_json_storage_lease_attachment_name(
+    loom_low_storage_lease_attachment_t attachment) {
+  switch (attachment) {
+    case LOOM_LOW_STORAGE_LEASE_ATTACHMENT_OPERAND:
+      return "operand";
+    case LOOM_LOW_STORAGE_LEASE_ATTACHMENT_RESULT:
+      return "result";
+    case LOOM_LOW_STORAGE_LEASE_ATTACHMENT_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static const char* loom_low_allocation_json_storage_lease_release_scope_name(
+    loom_low_storage_lease_release_scope_t release_scope) {
+  switch (release_scope) {
+    case LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_PROGRESS_CLASS:
+      return "progress_class";
+    case LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_UNKNOWN:
+    default:
+      return "unknown";
+  }
 }
 
 static iree_status_t loom_low_allocation_json_write_type(
@@ -220,21 +282,27 @@ static iree_status_t loom_low_allocation_json_write_value_class(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
+static iree_status_t loom_low_allocation_json_write_location_parts(
+    loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
+    uint32_t location_count, loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\"kind\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, loom_low_allocation_location_kind_name(location_kind)));
+  const char* base_name =
+      location_kind == LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT ? "slot"
+                                                               : "base";
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"%s\":%" PRIu32 ",\"count\":%" PRIu32 "}", base_name,
+      location_base, location_count));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_json_write_location(
     const loom_low_allocation_assignment_t* assignment,
     loom_output_stream_t* stream) {
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\"kind\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      stream,
-      loom_low_allocation_location_kind_name(assignment->location_kind)));
-  const char* base_name =
-      assignment->location_kind == LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT
-          ? "slot"
-          : "base";
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"%s\":%" PRIu32 ",\"count\":%" PRIu32 "}", base_name,
-      assignment->location_base, assignment->location_count));
-  return iree_ok_status();
+  return loom_low_allocation_json_write_location_parts(
+      assignment->location_kind, assignment->location_base,
+      assignment->location_count, stream);
 }
 
 static iree_status_t loom_low_allocation_json_write_assignment(
@@ -258,6 +326,163 @@ static iree_status_t loom_low_allocation_json_write_assignment(
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_json_write_location(assignment, stream));
   return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_low_allocation_json_write_register_class_or_null(
+    const loom_low_allocation_table_t* table, uint16_t descriptor_reg_class_id,
+    loom_output_stream_t* stream) {
+  if (descriptor_reg_class_id >=
+      table->target.descriptor_set->reg_class_count) {
+    return loom_output_stream_write_cstring(stream, "null");
+  }
+  const loom_low_reg_class_t* reg_class =
+      &table->target.descriptor_set->reg_classes[descriptor_reg_class_id];
+  return loom_json_write_escaped_string(
+      stream, loom_low_descriptor_set_string(table->target.descriptor_set,
+                                             reg_class->name_string_offset));
+}
+
+static iree_status_t loom_low_allocation_json_write_storage_lease_record(
+    const loom_low_allocation_table_t* table, iree_host_size_t index,
+    loom_output_stream_t* stream) {
+  const loom_low_storage_lease_record_t* record =
+      &table->storage_leases.records[index];
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"index\":%zu,\"packet\":", index));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_host_size_or_null(
+      record->packet_index, LOOM_LOW_STORAGE_LEASE_PACKET_NONE, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"node\":%" PRIu32 ",\"block\":%" PRIu32
+      ",\"scheduled_ordinal\":%" PRIu32 ",\"kind\":%u,\"kind_name\":",
+      record->node_index, record->block_index, record->scheduled_ordinal,
+      (unsigned)record->kind));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+      stream, loom_low_allocation_json_storage_lease_kind_name(record->kind)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"attachment\":%u,\"attachment_name\":", (unsigned)record->attachment));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+      stream, loom_low_allocation_json_storage_lease_attachment_name(
+                  record->attachment)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"attachment_index\":%" PRIu16 ",\"unit_offset\":%" PRIu32
+      ",\"unit_count\":%" PRIu32
+      ",\"release_scope\":%u"
+      ",\"release_scope_name\":",
+      record->attachment_index, record->unit_offset, record->unit_count,
+      (unsigned)record->release_scope));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+      stream, loom_low_allocation_json_storage_lease_release_scope_name(
+                  record->release_scope)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"release_class_id\":%" PRIu16 ",\"release_class_name\":",
+      record->release_class_id));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_string_view_or_null(
+      record->release_class_name, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"release_action_id\":%" PRIu16 ",\"release_action_name\":",
+      record->release_action_id));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_string_view_or_null(
+      record->release_action_name, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"release_reason_id\":%" PRIu16 ",\"release_reason_name\":",
+      record->release_reason_id));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_string_view_or_null(
+      record->release_reason_name, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"flags\":%" PRIu16
+      ",\"starts_at_issue\":%s"
+      ",\"release_before_boundary\":%s,\"may_carry_across_boundary\":%s"
+      ",\"release_for_pressure\":%s}",
+      record->flags,
+      iree_all_bits_set(record->flags,
+                        LOOM_LOW_STORAGE_LEASE_FLAG_STARTS_AT_ISSUE)
+          ? "true"
+          : "false",
+      iree_all_bits_set(record->flags,
+                        LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_BEFORE_BOUNDARY)
+          ? "true"
+          : "false",
+      iree_all_bits_set(record->flags,
+                        LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY)
+          ? "true"
+          : "false",
+      iree_all_bits_set(record->flags,
+                        LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE)
+          ? "true"
+          : "false"));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_json_write_storage_lease_instance(
+    const loom_low_allocation_table_t* table,
+    const loom_text_print_options_t* type_print_options, iree_host_size_t index,
+    loom_output_stream_t* stream) {
+  const loom_low_allocation_storage_lease_t* lease =
+      &table->storage_lease_instances[index];
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      "{\"index\":%zu,\"lease_record\":%" PRIu32 ",\"assignment\":%" PRIu32
+      ",\"value\":",
+      index, lease->lease_record_index, lease->assignment_index));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value(
+      table, type_print_options, lease->value_id, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"start_point\":%" PRIu32 ",\"end_point\":%" PRIu32
+      ",\"release_action\":",
+      lease->start_point, lease->end_point));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_u32_or_null(
+      lease->release_action_index, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"reg_class_id\":%" PRIu16 ",\"reg_class_name\":",
+      lease->descriptor_reg_class_id));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_register_class_or_null(
+      table, lease->descriptor_reg_class_id, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"location\":"));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_location_parts(
+      lease->location_kind, lease->location_base, lease->location_count,
+      stream));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_low_allocation_json_write_storage_release_action(
+    const loom_low_allocation_table_t* table, iree_host_size_t index,
+    loom_output_stream_t* stream) {
+  const loom_low_storage_release_action_t* action =
+      &table->storage_release_actions[index];
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"index\":%zu,\"insertion_packet\":", index));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_host_size_or_null(
+      action->insertion_packet_index, LOOM_LOW_STORAGE_LEASE_PACKET_NONE,
+      stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"insertion_node\":%" PRIu32 ",\"block\":%" PRIu32
+      ",\"scheduled_ordinal\":%" PRIu32 ",\"release_class_id\":%" PRIu16
+      ",\"release_class_name\":",
+      action->insertion_node_index, action->block_index,
+      action->scheduled_ordinal, action->release_class_id));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_string_view_or_null(
+      action->release_class_name, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"release_action_id\":%" PRIu16 ",\"release_action_name\":",
+      action->release_action_id));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_string_view_or_null(
+      action->release_action_name, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"release_reason_id\":%" PRIu16 ",\"release_reason_name\":",
+      action->release_reason_id));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_string_view_or_null(
+      action->release_reason_name, stream));
+  return loom_output_stream_write_format(
+      stream,
+      ",\"required_progress\":%" PRIu32 ",\"lease_record\":%" PRIu32 "}",
+      action->required_progress, action->lease_record_index);
 }
 
 static iree_status_t loom_low_allocation_json_write_spill_plan(
@@ -439,6 +664,18 @@ iree_status_t loom_low_allocation_format_json(
       table->spill_count, table->spill_plan_count, table->coalesced_copy_count,
       table->materialized_copy_count));
 
+  const bool has_storage_lease_details =
+      loom_low_allocation_json_has_storage_lease_details(table);
+  if (has_storage_lease_details) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        &stream,
+        ",\"storage_lease_count\":%zu"
+        ",\"storage_lease_instance_count\":%zu"
+        ",\"storage_release_action_count\":%zu",
+        table->storage_leases.record_count, table->storage_lease_instance_count,
+        table->storage_release_action_count));
+  }
+
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"assignments\":["));
   for (iree_host_size_t i = 0; i < table->assignment_count; ++i) {
@@ -449,6 +686,43 @@ iree_status_t loom_low_allocation_format_json(
         table, &type_print_context.options, i, &stream));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+
+  if (has_storage_lease_details) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"storage_leases\":["));
+    for (iree_host_size_t i = 0; i < table->storage_leases.record_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_storage_lease_record(
+          table, i, &stream));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"storage_lease_instances\":["));
+    for (iree_host_size_t i = 0; i < table->storage_lease_instance_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_json_write_storage_lease_instance(
+              table, &type_print_context.options, i, &stream));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"storage_release_actions\":["));
+    for (iree_host_size_t i = 0; i < table->storage_release_action_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_json_write_storage_release_action(table, i,
+                                                                &stream));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+  }
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"spill_plans\":["));

@@ -99,6 +99,77 @@ low.kernel.def target(@target) abi_layout({constant_count = 2, direct_arg_count 
 // ====
 
 amdgpu.target<gfx1100> @target
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @direct_i32_quad(%a: reg<amdgpu.sgpr>, %b: reg<amdgpu.sgpr>, %c: reg<amdgpu.sgpr>, %d: reg<amdgpu.sgpr>) {
+  %ab = low.op<amdgpu.s_add_u32>(%a, %b) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %cd = low.op<amdgpu.s_add_u32>(%c, %d) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %sum = low.op<amdgpu.s_add_u32>(%ab, %cd) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.kernel.def target(@target) abi_layout({constant_count = 4, direct_arg_count = 4, direct_arg_names = {arg0 = "a", arg1 = "b", arg2 = "c", arg3 = "d"}, direct_arg_offsets = [0, 4, 8, 12], direct_arg_parameter_indices = [0, 1, 2, 3], direct_arg_sizes = [4, 4, 4, 4], parameter_count = 4, resource_count = 0, resource_offsets = [], resource_parameter_indices = [], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) @direct_i32_quad() {
+  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
+  %8 = low.op<amdgpu.s_load_dwordx4_offset_only>(%kernarg) {offset = 0} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %a = low.slice %8[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %b = low.slice %8[1] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %c = low.slice %8[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %d = low.slice %8[3] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %ab = low.op<amdgpu.s_add_u32>(%a, %b) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %cd = low.op<amdgpu.s_add_u32>(%c, %d) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %sum = low.op<amdgpu.s_add_u32>(%ab, %cd) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @direct_i64_pair(%byte_length: reg<amdgpu.sgpr x2>, %stride: reg<amdgpu.sgpr x2>) {
+  %byte_length_lo = low.slice %byte_length[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %stride_lo = low.slice %stride[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %sum = low.op<amdgpu.s_add_u32>(%byte_length_lo, %stride_lo) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.kernel.def target(@target) abi_layout({constant_count = 4, direct_arg_count = 2, direct_arg_names = {arg0 = "byte_length", arg1 = "stride"}, direct_arg_offsets = [0, 8], direct_arg_parameter_indices = [0, 1], direct_arg_sizes = [8, 8], parameter_count = 2, resource_count = 0, resource_offsets = [], resource_parameter_indices = [], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) @direct_i64_pair() {
+  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
+  %6 = low.op<amdgpu.s_load_dwordx4_offset_only>(%kernarg) {offset = 0} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %byte_length = low.slice %6[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %stride = low.slice %6[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %byte_length_lo = low.slice %byte_length[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %stride_lo = low.slice %stride[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %sum = low.op<amdgpu.s_add_u32>(%byte_length_lo, %stride_lo) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @direct_mixed_width(%a: reg<amdgpu.sgpr>, %byte_length: reg<amdgpu.sgpr x2>) {
+  %byte_length_lo = low.slice %byte_length[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %sum = low.op<amdgpu.s_add_u32>(%a, %byte_length_lo) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.kernel.def target(@target) abi_layout({constant_count = 3, direct_arg_count = 2, direct_arg_names = {arg0 = "a", arg1 = "byte_length"}, direct_arg_offsets = [0, 4], direct_arg_parameter_indices = [0, 1], direct_arg_sizes = [4, 8], parameter_count = 2, resource_count = 0, resource_offsets = [], resource_parameter_indices = [], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) @direct_mixed_width() {
+  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
+  %a = low.op<amdgpu.s_load_dword_offset_only>(%kernarg) {offset = 0} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr>
+  %byte_length = low.op<amdgpu.s_load_dwordx2_offset_only>(%kernarg) {offset = 4} : (reg<amdgpu.sgpr x2>) -> %kernarg as reg<amdgpu.sgpr x2>
+  %byte_length_lo = low.slice %byte_length[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %sum = low.op<amdgpu.s_add_u32>(%a, %byte_length_lo) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @binding_pair() {
   %a = low.resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %b = low.resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
@@ -121,6 +192,42 @@ low.kernel.def target(@target) abi_layout({constant_count = 0, direct_arg_count 
   %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : reg<amdgpu.vgpr>
   low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %a) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
   low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %b) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @binding_quad() {
+  %a = low.resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %b = low.resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %c = low.resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %d = low.resource<hal_binding> {index = 3, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %offset = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : reg<amdgpu.vgpr>
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %a) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %b) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %c) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %d) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.kernel.def target(@target) abi_layout({constant_count = 0, direct_arg_count = 0, direct_arg_names = {}, direct_arg_offsets = [], direct_arg_parameter_indices = [], direct_arg_sizes = [], parameter_count = 4, resource_count = 4, resource_offsets = [0, 8, 16, 24], resource_parameter_indices = [0, 1, 2, 3], uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) @binding_quad() {
+  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
+  %7 = low.op<amdgpu.s_load_dwordx8_offset_only>(%kernarg) {offset = 0} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x8>
+  %a = low.slice %7[0] : reg<amdgpu.sgpr x8> -> reg<amdgpu.sgpr x2>
+  %b = low.slice %7[2] : reg<amdgpu.sgpr x8> -> reg<amdgpu.sgpr x2>
+  %c = low.slice %7[4] : reg<amdgpu.sgpr x8> -> reg<amdgpu.sgpr x2>
+  %d = low.slice %7[6] : reg<amdgpu.sgpr x8> -> reg<amdgpu.sgpr x2>
+  %offset = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : reg<amdgpu.vgpr>
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %a) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %b) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %c) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %d) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
   low.return
 }
 

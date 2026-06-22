@@ -65,6 +65,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       {
           /*.function_name=*/IREE_SVL("branchy_export"),
           /*.block_name=*/IREE_SVL("body"),
+          /*.block_index=*/2,
           /*.first_packet_index=*/17,
           /*.first_scheduled_ordinal=*/5,
           /*.node_count=*/4,
@@ -85,6 +86,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.wmma_count=*/0,
               /*.dot_count=*/0,
               /*.global_memory_count=*/0,
+              /*.global_load_count=*/0,
+              /*.global_store_count=*/0,
+              /*.buffer_load_count=*/0,
+              /*.buffer_store_count=*/0,
+              /*.flat_memory_count=*/0,
               /*.local_memory_count=*/4,
               /*.scalar_memory_count=*/0,
               /*.generic_memory_count=*/0,
@@ -105,6 +111,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           {
               /*.function_name=*/IREE_SVL("branchy_export"),
               /*.block_name=*/IREE_SVL("body"),
+              /*.block_index=*/2,
               /*.first_packet_index=*/17,
               /*.band_count=*/3,
               /*.node_count=*/12,
@@ -126,6 +133,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                   /*.wmma_count=*/0,
                   /*.dot_count=*/0,
                   /*.global_memory_count=*/0,
+                  /*.global_load_count=*/0,
+                  /*.global_store_count=*/0,
+                  /*.buffer_load_count=*/0,
+                  /*.buffer_store_count=*/0,
+                  /*.flat_memory_count=*/0,
                   /*.local_memory_count=*/12,
                   /*.scalar_memory_count=*/0,
                   /*.generic_memory_count=*/0,
@@ -207,8 +219,115 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.location_base=*/248,
               /*.location_count=*/4,
               /*.high_water_units=*/252,
+              /*.lower_free_unit_count=*/13,
+              /*.lower_free_run_count=*/3,
+              /*.lower_largest_free_run_unit_count=*/6,
+              /*.lower_pressure_releasable_free_unit_count=*/21,
+              /*.lower_pressure_releasable_free_run_count=*/2,
+              /*.lower_pressure_releasable_largest_free_run_unit_count=*/
+              14,
+              /*.active_assignment_blocker_count=*/47,
+              /*.active_assignment_blocker_units=*/244,
+              /*.active_storage_lease_blocker_count=*/3,
+              /*.active_storage_lease_blocker_units=*/12,
+              /*.active_pressure_storage_lease_blocker_count=*/2,
+              /*.active_pressure_storage_lease_blocker_units=*/8,
+              /*.active_fallback_storage_lease_blocker_count=*/1,
+              /*.active_fallback_storage_lease_blocker_units=*/4,
           },
       };
+  const loom_target_compile_report_wait_plan_t wait_plan = {
+      /*.action_count=*/5,
+      /*.explicit_action_count=*/1,
+      /*.planned_action_count=*/4,
+      /*.full_drain_count=*/2,
+      /*.partial_wait_count=*/3,
+      /*.max_outstanding_before=*/6,
+      /*.max_full_drain_outstanding_before=*/6,
+  };
+  loom_target_compile_report_wait_counter_row_t wait_counter_rows[] = {
+      {
+          /*.function_name=*/IREE_SVL("branchy_export"),
+          /*.counter_name=*/IREE_SVL("vmem_load"),
+          /*.counter_id=*/1,
+          /*.summary=*/
+          {
+              /*.action_count=*/3,
+              /*.explicit_action_count=*/0,
+              /*.planned_action_count=*/3,
+              /*.full_drain_count=*/1,
+              /*.partial_wait_count=*/2,
+              /*.max_outstanding_before=*/6,
+              /*.max_full_drain_outstanding_before=*/6,
+          },
+      },
+      {
+          /*.function_name=*/IREE_SVL("branchy_export"),
+          /*.counter_name=*/IREE_SVL("lds"),
+          /*.counter_id=*/3,
+          /*.summary=*/
+          {
+              /*.action_count=*/2,
+              /*.explicit_action_count=*/1,
+              /*.planned_action_count=*/1,
+              /*.full_drain_count=*/1,
+              /*.partial_wait_count=*/1,
+              /*.max_outstanding_before=*/2,
+              /*.max_full_drain_outstanding_before=*/2,
+          },
+      },
+  };
+  loom_target_compile_report_wait_action_row_t wait_action_rows[] = {
+      {
+          /*.function_name=*/IREE_SVL("branchy_export"),
+          /*.counter_name=*/IREE_SVL("vmem_load"),
+          /*.action_name=*/IREE_SVL("planned"),
+          /*.reason_name=*/IREE_SVL("amdgpu.ssa_use"),
+          /*.counter_id=*/1,
+          /*.action_id=*/2,
+          /*.reason_id=*/2,
+          /*.block_index=*/1,
+          /*.node_index=*/42,
+          /*.scheduled_ordinal=*/17,
+          /*.producer_node=*/8,
+          /*.producer_scheduled_ordinal=*/3,
+          /*.producer_operation_name=*/
+          IREE_SVL("low.op<amdgpu.global_load_b32>"),
+          /*.producer_descriptor_key=*/IREE_SVL("amdgpu.global_load_b32"),
+          /*.producer_semantic_tag=*/IREE_SVL("memory.load.u32"),
+          /*.consumer_node=*/42,
+          /*.consumer_scheduled_ordinal=*/17,
+          /*.consumer_operation_name=*/IREE_SVL("low.op<amdgpu.v_add_u32>"),
+          /*.consumer_descriptor_key=*/IREE_SVL("amdgpu.v_add_u32"),
+          /*.consumer_semantic_tag=*/IREE_SVL("vector.add.i32"),
+          /*.target_count=*/2,
+          /*.outstanding_before=*/6,
+      },
+      {
+          /*.function_name=*/IREE_SVL("branchy_export"),
+          /*.counter_name=*/IREE_SVL("smem"),
+          /*.action_name=*/IREE_SVL("explicit"),
+          /*.reason_name=*/IREE_SVL("amdgpu.explicit_packet"),
+          /*.counter_id=*/4,
+          /*.action_id=*/1,
+          /*.reason_id=*/1,
+          /*.block_index=*/1,
+          /*.node_index=*/44,
+          /*.scheduled_ordinal=*/19,
+          /*.producer_node=*/UINT32_MAX,
+          /*.producer_scheduled_ordinal=*/UINT32_MAX,
+          /*.producer_operation_name=*/IREE_SVL(""),
+          /*.producer_descriptor_key=*/IREE_SVL(""),
+          /*.producer_semantic_tag=*/IREE_SVL(""),
+          /*.consumer_node=*/UINT32_MAX,
+          /*.consumer_scheduled_ordinal=*/UINT32_MAX,
+          /*.consumer_operation_name=*/IREE_SVL(""),
+          /*.consumer_descriptor_key=*/IREE_SVL(""),
+          /*.consumer_semantic_tag=*/IREE_SVL(""),
+          /*.target_count=*/0,
+          /*.outstanding_before=*/2,
+      },
+  };
   loom_target_compile_report_source_low_row_t source_low_rows[] = {
       {
           /*.function_name=*/IREE_SVL("branchy"),
@@ -311,7 +430,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION_HIGH_WATER_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS |
-      LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_WAIT_PLAN;
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
   report.function_name = IREE_SVL("branchy");
   report.target_bundle_name = IREE_SVL("vm_target");
@@ -321,7 +441,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   report.lowered_symbol = IREE_SVL("branchy");
   loom_target_compile_report_record_artifact_size(&report, 128);
   loom_target_compile_report_record_schedule(&report, 5, 5, 4, 2, 1, 1, 2, 96);
-  loom_target_compile_report_record_allocation(&report, 6, 1, 1, 2, 0);
+  loom_target_compile_report_record_allocation(&report, 6, 1, 1, 2, 0, 11, 9,
+                                               3);
   loom_target_compile_report_record_move_cause(
       &report, LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION,
       3, 3);
@@ -340,6 +461,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       /*.wmma_count=*/1,
       /*.dot_count=*/{},
       /*.global_memory_count=*/2,
+      /*.global_load_count=*/1,
+      /*.global_store_count=*/{},
+      /*.buffer_load_count=*/1,
+      /*.buffer_store_count=*/{},
+      /*.flat_memory_count=*/{},
       /*.local_memory_count=*/{},
       /*.scalar_memory_count=*/{},
       /*.generic_memory_count=*/{},
@@ -370,6 +496,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   };
   loom_target_compile_report_t entry_report = {};
   loom_target_compile_report_initialize(&entry_report, iree_allocator_system());
+  entry_report.requested_detail_flags = report.requested_detail_flags;
   entry_report.function_name = IREE_SVL("branchy_export");
   entry_report.lowered_symbol = IREE_SVL("branchy");
   entry_report.target_bundle_name = IREE_SVL("vm_target");
@@ -378,7 +505,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   entry_report.target_config_name = IREE_SVL("vm_o0");
   loom_target_compile_report_record_schedule(&entry_report, 5, 5, 4, 2, 1, 1, 2,
                                              96);
-  loom_target_compile_report_record_allocation(&entry_report, 6, 1, 1, 2, 0);
+  loom_target_compile_report_record_allocation(&entry_report, 6, 1, 1, 2, 0, 11,
+                                               9, 3);
   loom_target_compile_report_record_move_cause(
       &entry_report,
       LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION, 3, 3);
@@ -401,6 +529,15 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       &entry_report, &schedule_band_summary_rows[0]));
   IREE_ASSERT_OK(loom_target_compile_report_record_allocation_high_water_row(
       &entry_report, &allocation_high_water_rows[0]));
+  loom_target_compile_report_record_wait_plan(&entry_report, &wait_plan);
+  IREE_ASSERT_OK(loom_target_compile_report_record_wait_counter_row(
+      &entry_report, &wait_counter_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_wait_counter_row(
+      &entry_report, &wait_counter_rows[1]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_wait_action_row(
+      &entry_report, &wait_action_rows[0]));
+  IREE_ASSERT_OK(loom_target_compile_report_record_wait_action_row(
+      &entry_report, &wait_action_rows[1]));
   loom_target_compile_report_record_target_resources(&entry_report,
                                                      &target_resources);
   loom_target_compile_report_record_static_instruction_mix(&entry_report,
@@ -456,6 +593,75 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "units=8"),
                                   0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_plan actions=5 explicit=1 "
+                                          "planned=4 full_drains=2 "
+                                          "partial_waits=3 "
+                                          "max_outstanding=6 "
+                                          "max_full_drain_outstanding=6 "
+                                          "counter_rows=2 action_rows=2"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_counter[0] "
+                                          "function=branchy_export "
+                                          "counter=vmem_load counter_id=1 "
+                                          "actions=3 explicit=0 planned=3 "
+                                          "full_drains=1 partial_waits=2 "
+                                          "max_outstanding=6 "
+                                          "max_full_drain_outstanding=6"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_counter[1] "
+                                          "function=branchy_export "
+                                          "counter=lds counter_id=3 "
+                                          "actions=2 explicit=1 planned=1 "
+                                          "full_drains=1 partial_waits=1 "
+                                          "max_outstanding=2 "
+                                          "max_full_drain_outstanding=2"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_action[0] "
+                                          "function=branchy_export "
+                                          "counter=vmem_load counter_id=1 "
+                                          "action=planned action_id=2 "
+                                          "reason=amdgpu.ssa_use reason_id=2 "
+                                          "block=1 node=42 ordinal=17 "
+                                          "producer_node=8 "
+                                          "producer_ordinal=3 "
+                                          "producer_operation=low.op<amdgpu."
+                                          "global_load_b32> "
+                                          "producer_descriptor_key=amdgpu."
+                                          "global_load_b32 "
+                                          "producer_semantic_tag="
+                                          "memory.load.u32 consumer_node=42 "
+                                          "consumer_ordinal=17 "
+                                          "consumer_operation=low.op<amdgpu."
+                                          "v_add_u32> "
+                                          "consumer_descriptor_key=amdgpu."
+                                          "v_add_u32 "
+                                          "consumer_semantic_tag="
+                                          "vector.add.i32 "
+                                          "target_count=2 "
+                                          "outstanding_before=6"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("wait_action[1] function=branchy_export counter=smem "
+                        "counter_id=4 action=explicit action_id=1 "
+                        "reason=amdgpu.explicit_packet reason_id=1 block=1 "
+                        "node=44 ordinal=19 producer_node=- "
+                        "producer_ordinal=- producer_operation=- "
+                        "producer_descriptor_key=- producer_semantic_tag=- "
+                        "consumer_node=- "
+                        "consumer_ordinal=- consumer_operation=- "
+                        "consumer_descriptor_key=- consumer_semantic_tag=- "
+                        "target_count=0 outstanding_before=2"),
+                0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
                 IREE_SV("move_cause[operand_bank_materialization] packets=1 "
@@ -467,6 +673,10 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "descriptors=9"),
                                   0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output, IREE_SV("global_load=1 global_store=0 buffer_load=1"), 0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
                 IREE_SV("target_resources scalar_register_class=amdgpu.sgpr "
@@ -529,7 +739,19 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "origin_op=low.op<amdgpu.ds_load_b128> "
                         "semantic=memory.workgroup.load.u128 start=17 end=24 "
                         "required_units=4 location=physical_register[248:4] "
-                        "high_water=252"),
+                        "high_water=252 lower_free_units=13 "
+                        "lower_free_runs=3 lower_largest_free_run_units=6 "
+                        "lower_pressure_releasable_free_units=21 "
+                        "lower_pressure_releasable_free_runs=2 "
+                        "lower_pressure_releasable_largest_free_run_units=14 "
+                        "active_assignment_blockers=47 "
+                        "active_assignment_blocker_units=244 "
+                        "active_storage_lease_blockers=3 "
+                        "active_storage_lease_blocker_units=12 "
+                        "active_pressure_storage_lease_blockers=2 "
+                        "active_pressure_storage_lease_blocker_units=8 "
+                        "active_fallback_storage_lease_blockers=1 "
+                        "active_fallback_storage_lease_blocker_units=4"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
@@ -563,22 +785,45 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("spill_plans=1 coalesced_copies=2 "
                                           "materialized_copies=0 "
+                                          "storage_leases=11 "
+                                          "storage_lease_instances=9 "
+                                          "storage_release_actions=3 "
                                           "move_kinds=3 move_packets=6 "
                                           "move_units=12"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("wait_actions=5 wait_explicit=1 "
+                                          "wait_planned=4 "
+                                          "wait_full_drains=2 "
+                                          "wait_partial=3 "
+                                          "wait_max_outstanding=6 "
+                                          "wait_max_full_drain_outstanding=6"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("pressure_rows=2 "
                                           "pressure_origin_rows=1 "
                                           "schedule_band_rows=1 "
-                                          "schedule_band_summary_rows=1"),
+                                          "schedule_band_summary_rows=1 "
+                                          "spill_rows=0 "
+                                          "allocation_high_water_rows=1 "
+                                          "wait_counter_rows=2 "
+                                          "wait_action_rows=2"),
                                   0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
+                IREE_SV("schedule_band[0] function=branchy_export "
+                        "block=body block_index=2 first_packet=17 "
+                        "first_ordinal=5 nodes=4 origin=local-memory"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
                 IREE_SV("schedule_band_summary[0] function=branchy_export "
-                        "block=body first_packet=17 bands=3 nodes=12 "
-                        "max_band_nodes=4 origin=local-memory"),
+                        "block=body block_index=2 first_packet=17 bands=3 "
+                        "nodes=12 max_band_nodes=4 origin=local-memory"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
@@ -678,6 +923,98 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "\"packet_count\":6,\"unit_count\":12,\"causes\""),
                 0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"wait_plan\":{\"action_count\":5,"
+                                    "\"explicit_action_count\":1,"
+                                    "\"planned_action_count\":4,"
+                                    "\"full_drain_count\":2,"
+                                    "\"partial_wait_count\":3,"
+                                    "\"max_outstanding_before\":6,"
+                                    "\"max_full_drain_outstanding_before\":6}"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("\"wait_counter_row_count\":2"), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("\"wait_action_row_count\":2"), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output, IREE_SV("\"wait_counter_rows\":{\"count\":2,\"rows\":["), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"counter\":\"vmem_load\",\"counter_id\":1,"
+                        "\"summary\":{\"action_count\":3,"
+                        "\"explicit_action_count\":0,"
+                        "\"planned_action_count\":3,"
+                        "\"full_drain_count\":1,"
+                        "\"partial_wait_count\":2,"
+                        "\"max_outstanding_before\":6,"
+                        "\"max_full_drain_outstanding_before\":6}"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"counter\":\"lds\",\"counter_id\":3,"
+                                    "\"summary\":{\"action_count\":2,"
+                                    "\"explicit_action_count\":1,"
+                                    "\"planned_action_count\":1,"
+                                    "\"full_drain_count\":1,"
+                                    "\"partial_wait_count\":1,"
+                                    "\"max_outstanding_before\":2,"
+                                    "\"max_full_drain_outstanding_before\":2}"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output, IREE_SV("\"wait_action_rows\":{\"count\":2,\"rows\":["), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"counter\":\"vmem_load\",\"counter_id\":1,"
+                        "\"action\":\"planned\",\"action_id\":2,"
+                        "\"reason\":\"amdgpu.ssa_use\",\"reason_id\":2,"
+                        "\"block_index\":1,\"node_index\":42,"
+                        "\"scheduled_ordinal\":17,\"producer_node\":8,"
+                        "\"producer_scheduled_ordinal\":3,"
+                        "\"producer_operation\":"
+                        "\"low.op<amdgpu.global_load_b32>\","
+                        "\"producer_descriptor_key\":"
+                        "\"amdgpu.global_load_b32\","
+                        "\"producer_semantic_tag\":\"memory.load.u32\","
+                        "\"consumer_node\":42,"
+                        "\"consumer_scheduled_ordinal\":17,"
+                        "\"consumer_operation\":"
+                        "\"low.op<amdgpu.v_add_u32>\","
+                        "\"consumer_descriptor_key\":\"amdgpu.v_add_u32\","
+                        "\"consumer_semantic_tag\":\"vector.add.i32\","
+                        "\"target_count\":2,"
+                        "\"outstanding_before\":6"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"counter\":\"smem\",\"counter_id\":4,"
+                        "\"action\":\"explicit\",\"action_id\":1,"
+                        "\"reason\":\"amdgpu.explicit_packet\","
+                        "\"reason_id\":1,\"block_index\":1,"
+                        "\"node_index\":44,\"scheduled_ordinal\":19,"
+                        "\"producer_node\":null,"
+                        "\"producer_scheduled_ordinal\":null,"
+                        "\"producer_operation\":null,"
+                        "\"producer_descriptor_key\":null,"
+                        "\"producer_semantic_tag\":null,"
+                        "\"consumer_node\":null,"
+                        "\"consumer_scheduled_ordinal\":null,"
+                        "\"consumer_operation\":null,"
+                        "\"consumer_descriptor_key\":null,"
+                        "\"consumer_semantic_tag\":null,"
+                        "\"target_count\":0,\"outstanding_before\":2"),
+                0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"move_causes\":{\"kind_count\":3"), 0),
             IREE_STRING_VIEW_NPOS);
@@ -686,6 +1023,26 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           output, IREE_SV("\"static_instruction_mix\":{\"descriptor_count\":9"),
           0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"allocation\":{\"assignment_count\":6,"
+                                    "\"spill_count\":1,\"spill_plan_count\":1,"
+                                    "\"coalesced_copy_count\":2,"
+                                    "\"materialized_copy_count\":0,"
+                                    "\"storage_lease_count\":11,"
+                                    "\"storage_lease_instance_count\":9,"
+                                    "\"storage_release_action_count\":3}"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
+  const iree_string_view_t split_memory_mix_fields = IREE_SV(
+      "\"global_load_count\":1,\"global_store_count\":0,"
+      "\"buffer_load_count\":1");
+  const iree_host_size_t first_split_memory_mix =
+      iree_string_view_find(output, split_memory_mix_fields, 0);
+  EXPECT_NE(first_split_memory_mix, IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, split_memory_mix_fields,
+                                  first_split_memory_mix + 1),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
                 IREE_SV("\"target_resources\":{\"scalar_register_class\":"
@@ -723,10 +1080,25 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output,
+                IREE_SV("\"schedule_band_rows\":{\"count\":1,\"rows\":[{"
+                        "\"index\":0,\"function\":\"branchy_export\","
+                        "\"block\":\"body\",\"block_index\":2"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
                 IREE_SV("\"schedule_band_summary_rows\":{\"count\":1,"
                         "\"rows\":["),
                 0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output,
+          IREE_SV("\"schedule_band_summary_rows\":{\"count\":1,"
+                  "\"rows\":[{\"index\":0,\"function\":\"branchy_export\","
+                  "\"block\":\"body\",\"block_index\":2"),
+          0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("\"band_count\":3"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
@@ -809,7 +1181,22 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                 output,
                 IREE_SV("\"location_kind\":\"physical_register\","
                         "\"location_base\":248,\"location_count\":4,"
-                        "\"high_water_units\":252"),
+                        "\"high_water_units\":252,"
+                        "\"lower_free_unit_count\":13,"
+                        "\"lower_free_run_count\":3,"
+                        "\"lower_largest_free_run_unit_count\":6,"
+                        "\"lower_pressure_releasable_free_unit_count\":21,"
+                        "\"lower_pressure_releasable_free_run_count\":2,"
+                        "\"lower_pressure_releasable_largest_free_run_unit_"
+                        "count\":14,"
+                        "\"active_assignment_blocker_count\":47,"
+                        "\"active_assignment_blocker_units\":244,"
+                        "\"active_storage_lease_blocker_count\":3,"
+                        "\"active_storage_lease_blocker_units\":12,"
+                        "\"active_pressure_storage_lease_blocker_count\":2,"
+                        "\"active_pressure_storage_lease_blocker_units\":8,"
+                        "\"active_fallback_storage_lease_blocker_count\":1,"
+                        "\"active_fallback_storage_lease_blocker_units\":4"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(

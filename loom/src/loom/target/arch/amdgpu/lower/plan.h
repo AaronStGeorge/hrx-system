@@ -65,6 +65,8 @@ typedef struct loom_amdgpu_vector_16bit_float_conversion_plan_t {
   loom_value_id_t source;
   // Result vector value receiving the converted lane payload.
   loom_value_id_t result;
+  // Source vector whose storage materializes the logical conversion lanes.
+  loom_value_id_t storage_source;
   // Conversion operation selected for the source/result type pair.
   loom_amdgpu_vector_16bit_float_conversion_kind_t kind;
   // Source scalar element type.
@@ -75,6 +77,12 @@ typedef struct loom_amdgpu_vector_16bit_float_conversion_plan_t {
   uint32_t lane_count;
   // Number of 32-bit source registers occupied by the source vector.
   uint32_t source_register_count;
+  // First logical lane read from storage_source for result lane zero.
+  uint32_t storage_lane_offset;
+  // Logical lane stride through storage_source for adjacent result lanes.
+  uint32_t storage_lane_stride;
+  // Number of 32-bit registers occupied by storage_source.
+  uint32_t storage_register_count;
   // Number of 32-bit result registers occupied by the result vector.
   uint32_t result_register_count;
 } loom_amdgpu_vector_16bit_float_conversion_plan_t;
@@ -378,16 +386,43 @@ typedef struct loom_amdgpu_vector_register_map_plan_t {
   uint32_t source_register_indices[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
 } loom_amdgpu_vector_register_map_plan_t;
 
+typedef enum loom_amdgpu_vector_even_odd_kind_e {
+  LOOM_AMDGPU_VECTOR_EVEN_ODD_KIND_NONE = 0,
+  LOOM_AMDGPU_VECTOR_EVEN_ODD_KIND_32BIT_LANES = 1,
+  LOOM_AMDGPU_VECTOR_EVEN_ODD_KIND_PACKED_16BIT_FLOAT = 2,
+} loom_amdgpu_vector_even_odd_kind_t;
+
 typedef struct loom_amdgpu_vector_deinterleave_plan_t {
   // Source vector value split into even and odd lane payloads.
   loom_value_id_t source;
   // Even-position result vector followed by odd-position result vector.
   loom_value_id_t results[2];
+  // Selected lowering strategy for source/result storage.
+  loom_amdgpu_vector_even_odd_kind_t kind;
+  // Static logical lane count for each result vector.
+  uint32_t result_lane_count;
   // Static 32-bit backing register count for the source vector.
   uint32_t source_register_count;
   // Static 32-bit backing register count for each result vector.
   uint32_t result_register_count;
+  // Optional literal-selector byte permute descriptor for packed 16-bit lanes.
+  loom_low_lower_resolved_descriptor_t packed_permute_descriptor;
 } loom_amdgpu_vector_deinterleave_plan_t;
+
+typedef struct loom_amdgpu_vector_interleave_plan_t {
+  // Even-position source vector followed by odd-position source vector.
+  loom_value_id_t sources[2];
+  // Result vector value receiving the interleaved payload.
+  loom_value_id_t result;
+  // Selected lowering strategy for source/result storage.
+  loom_amdgpu_vector_even_odd_kind_t kind;
+  // Static 32-bit backing register count for each source vector.
+  uint32_t source_register_count;
+  // Static 32-bit backing register count for the result vector.
+  uint32_t result_register_count;
+  // Optional literal-selector byte permute descriptor for packed 16-bit lanes.
+  loom_low_lower_resolved_descriptor_t packed_permute_descriptor;
+} loom_amdgpu_vector_interleave_plan_t;
 
 typedef struct loom_amdgpu_vector_extract_plan_t {
   // Source vector value containing the extracted payload.

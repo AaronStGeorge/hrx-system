@@ -151,6 +151,21 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @predicated_tile_sweep_b
 
 // ====
 
+// RUN: emit low-allocation-json @d16_result_uses_low_vgpr_window fixed=%low_window:physical_register:0:128 amdgpu.vgpr=129
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @d16_result_uses_low_vgpr_window(%low_window: reg<amdgpu.vgpr x128>, %source: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x128>, reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %half = v_cvt_f16_f32 %source
+  %widened = v_cvt_f32_f16 %half
+  return %low_window, %widened
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"d16_result_uses_low_vgpr_window","target":"target","descriptor_set":"amdgpu.rdna3.core","allocation_mode":"virtual","assignment_count":4,"remark_count":1,"copy_decision_count":0,"spill_count":1,"spill_plan_count":1,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":1,"name":"source","type":"reg<amdgpu.vgpr>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.vgpr"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":128,"count":1}},{"index":1,"value":{"id":0,"name":"low_window","type":"reg<amdgpu.vgpr x128>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.vgpr"},"start_point":0,"end_point":3,"unit_count":128,"location":{"kind":"physical_register","base":0,"count":128}},{"index":2,"value":{"id":4,"name":"half","type":"reg<amdgpu.vgpr>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.vgpr"},"start_point":1,"end_point":2,"unit_count":1,"location":{"kind":"spill_slot","slot":0,"count":1}},{"index":3,"value":{"id":5,"name":"widened","type":"reg<amdgpu.vgpr>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.vgpr"},"start_point":2,"end_point":3,"unit_count":1,"location":{"kind":"physical_register","base":128,"count":1}}],"spill_plans":[{"index":0,"assignment":2,"slot":0,"space":"scratch","value":{"id":4,"name":"half","type":"reg<amdgpu.vgpr>"},"byte_size":4,"byte_alignment":4,"store_count":1,"reload_count":1}],"copy_decisions":[],"remarks":[{"kind":"spill","assignment":2,"budget_units":128,"required_units":1}]}
+
+// ====
+
 // RUN: emit low-allocation-json @gfx11_multi_accumulator_gemv_lifetimes
 
 amdgpu.target<gfx1100> @target

@@ -1254,12 +1254,14 @@ TEST(MatrixContractTest, Rdna3Wmmar3Wave64LayoutsMapFragments) {
   EXPECT_EQ(f16_layout->wave_size, 64);
   ExpectFragmentRoleLayout(
       f16_layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
-      LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN_LOW_SUBWORD,
+      LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN_LOW_SUBWORD,
       4, 2, 16, kAccumulatorCoordinates);
   ExpectFragmentCoordinate(f16_layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
                            0, 0, 0, kAccumulatorCoordinates, 0, 0, 0);
   ExpectFragmentCoordinate(f16_layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
-                           15, 3, 0, kAccumulatorCoordinates, 3, 15, 0);
+                           15, 1, 0, kAccumulatorCoordinates, 4, 15, 0);
+  ExpectFragmentCoordinate(f16_layout, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+                           16, 0, 0, kAccumulatorCoordinates, 1, 0, 0);
   ExpectFragmentCoordinate(f16_layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT, 63, 3,
                            0, kAccumulatorCoordinates, 15, 15, 0);
 
