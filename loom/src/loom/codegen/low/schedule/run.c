@@ -1098,10 +1098,45 @@ static iree_status_t loom_low_schedule_score_candidate(
   return iree_ok_status();
 }
 
+static int loom_low_schedule_compare_candidate_pressure(
+    loom_low_schedule_candidate_score_t lhs,
+    loom_low_schedule_candidate_score_t rhs) {
+  if (lhs.projected_live_units != rhs.projected_live_units) {
+    return lhs.projected_live_units < rhs.projected_live_units ? -1 : 1;
+  }
+  if (lhs.killed_live_units != rhs.killed_live_units) {
+    return lhs.killed_live_units > rhs.killed_live_units ? -1 : 1;
+  }
+  if (lhs.produced_live_units != rhs.produced_live_units) {
+    return lhs.produced_live_units < rhs.produced_live_units ? -1 : 1;
+  }
+  if (lhs.units_until_pressure_cliff != rhs.units_until_pressure_cliff) {
+    if (lhs.units_until_pressure_cliff > rhs.units_until_pressure_cliff) {
+      return -1;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+static bool loom_low_schedule_candidate_shortens_producer_live_range(
+    loom_low_schedule_candidate_score_t score) {
+  return score.dependency_latency_cycles != 0 &&
+         score.killed_live_units > score.produced_live_units;
+}
+
+static bool loom_low_schedule_candidate_has_better_pair_affinity(
+    loom_low_schedule_candidate_score_t lhs,
+    loom_low_schedule_candidate_score_t rhs) {
+  return lhs.pair_affinity_score > rhs.pair_affinity_score;
+}
+
 static bool loom_low_schedule_candidate_score_less(
     const loom_low_schedule_build_state_t* state,
     loom_low_schedule_candidate_score_t lhs,
     loom_low_schedule_candidate_score_t rhs) {
+  const int pressure_order =
+      loom_low_schedule_compare_candidate_pressure(lhs, rhs);
   if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
     if (lhs.effective_stall_cycles != rhs.effective_stall_cycles) {
       return lhs.effective_stall_cycles < rhs.effective_stall_cycles;
@@ -1117,6 +1152,24 @@ static bool loom_low_schedule_candidate_score_less(
     }
     if (lhs.data_ready_stall_cycles != rhs.data_ready_stall_cycles) {
       return lhs.data_ready_stall_cycles < rhs.data_ready_stall_cycles;
+    }
+    if (lhs.pair_affinity_score != rhs.pair_affinity_score) {
+      return loom_low_schedule_candidate_has_better_pair_affinity(lhs, rhs);
+    }
+    if (pressure_order != 0) {
+      const bool lhs_shortens =
+          loom_low_schedule_candidate_shortens_producer_live_range(lhs);
+      const bool rhs_shortens =
+          loom_low_schedule_candidate_shortens_producer_live_range(rhs);
+      if (lhs_shortens && !rhs_shortens && pressure_order < 0) {
+        return true;
+      }
+      if (rhs_shortens && !lhs_shortens && pressure_order > 0) {
+        return false;
+      }
+      if (lhs_shortens && rhs_shortens) {
+        return pressure_order < 0;
+      }
     }
     if (lhs.critical_path_cycles != rhs.critical_path_cycles) {
       return lhs.critical_path_cycles > rhs.critical_path_cycles;
@@ -1134,19 +1187,10 @@ static bool loom_low_schedule_candidate_score_less(
     return lhs.pressure_cliff_penalty < rhs.pressure_cliff_penalty;
   }
   if (lhs.pair_affinity_score != rhs.pair_affinity_score) {
-    return lhs.pair_affinity_score > rhs.pair_affinity_score;
+    return loom_low_schedule_candidate_has_better_pair_affinity(lhs, rhs);
   }
-  if (lhs.projected_live_units != rhs.projected_live_units) {
-    return lhs.projected_live_units < rhs.projected_live_units;
-  }
-  if (lhs.killed_live_units != rhs.killed_live_units) {
-    return lhs.killed_live_units > rhs.killed_live_units;
-  }
-  if (lhs.produced_live_units != rhs.produced_live_units) {
-    return lhs.produced_live_units < rhs.produced_live_units;
-  }
-  if (lhs.units_until_pressure_cliff != rhs.units_until_pressure_cliff) {
-    return lhs.units_until_pressure_cliff > rhs.units_until_pressure_cliff;
+  if (pressure_order != 0) {
+    return pressure_order < 0;
   }
   return lhs.source_ordinal < rhs.source_ordinal;
 }
