@@ -670,6 +670,15 @@ static bool loom_amdgpu_subgroup_reduce_leader_lane_publication_is_supported(
               LOOM_AMDGPU_COLLECTIVE_RESULT_DEMAND_SUBGROUP_LEADER_LANE);
 }
 
+static iree_string_view_t
+loom_amdgpu_subgroup_reduce_native_width_rejection_key(
+    loom_amdgpu_collective_result_demand_t result_demand) {
+  if (result_demand == LOOM_AMDGPU_COLLECTIVE_RESULT_DEMAND_ALL_WORKITEMS) {
+    return IREE_SV("subgroup_reduce.native_width.result_all_workitems");
+  }
+  return IREE_SV("subgroup_reduce.native_width.leader_lane_publication");
+}
+
 iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected) {
@@ -2217,7 +2226,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
             loom_amdgpu_subgroup_reduce_has_cluster_attrs(op), result_demand);
     if (!leader_lane_publication_supported) {
       return loom_amdgpu_low_legality_reject(
-          context, op, IREE_SV("subgroup_reduce.native_width"));
+          context, op,
+          loom_amdgpu_subgroup_reduce_native_width_rejection_key(
+              result_demand));
     }
   }
   if (!loom_amdgpu_u32_is_power_of_two(active_lane_count)) {
