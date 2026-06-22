@@ -51,21 +51,14 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
+  bool full_wave_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_full_wave_direct_subgroup_width(
+      context, &wavefront_size, &full_wave_selected));
+  if (!full_wave_selected) {
     return iree_ok_status();
   }
 
   const loom_module_t* module = loom_low_lower_context_module(context);
-  bool direct_width_supported = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
-      module, loom_low_lower_context_target_ref(context), wavefront_size,
-      wavefront_size, &direct_width_supported));
-  if (!direct_width_supported) {
-    return iree_ok_status();
-  }
-
   const loom_value_id_t mask = loom_kernel_subgroup_active_mask_mask(source_op);
   uint32_t mask_bit_count = 0;
   if (!loom_amdgpu_subgroup_mask_bit_count(module, mask, &mask_bit_count) ||
@@ -107,21 +100,14 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
+  bool full_wave_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_full_wave_direct_subgroup_width(
+      context, &wavefront_size, &full_wave_selected));
+  if (!full_wave_selected) {
     return iree_ok_status();
   }
 
   const loom_module_t* module = loom_low_lower_context_module(context);
-  bool direct_width_supported = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
-      module, loom_low_lower_context_target_ref(context), wavefront_size,
-      wavefront_size, &direct_width_supported));
-  if (!direct_width_supported) {
-    return iree_ok_status();
-  }
-
   const loom_value_id_t predicate =
       loom_kernel_subgroup_vote_ballot_predicate(source_op);
   bool predicate_is_native_mask = false;
@@ -164,18 +150,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
-    return iree_ok_status();
-  }
-
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  bool direct_width_supported = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
-      module, loom_low_lower_context_target_ref(context), wavefront_size,
-      wavefront_size, &direct_width_supported));
-  if (!direct_width_supported) {
+  bool full_wave_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_full_wave_direct_subgroup_width(
+      context, &wavefront_size, &full_wave_selected));
+  if (!full_wave_selected) {
     return iree_ok_status();
   }
 
@@ -220,18 +198,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_all_plan(
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
-    return iree_ok_status();
-  }
-
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  bool direct_width_supported = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
-      module, loom_low_lower_context_target_ref(context), wavefront_size,
-      wavefront_size, &direct_width_supported));
-  if (!direct_width_supported) {
+  bool full_wave_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_full_wave_direct_subgroup_width(
+      context, &wavefront_size, &full_wave_selected));
+  if (!full_wave_selected) {
     return iree_ok_status();
   }
 

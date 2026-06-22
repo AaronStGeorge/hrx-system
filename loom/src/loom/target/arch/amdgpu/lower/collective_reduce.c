@@ -699,9 +699,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
+  bool wavefront_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_subgroup_wavefront_size(
+      context, &wavefront_size, &wavefront_selected));
+  if (!wavefront_selected) {
     return iree_ok_status();
   }
   uint32_t active_lane_count = 0;
@@ -722,13 +723,12 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
       return iree_ok_status();
     }
   }
-  bool direct_width_supported = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
-      module, loom_low_lower_context_target_ref(context), wavefront_size,
-      active_lane_count, &direct_width_supported));
+  bool direct_width_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_direct_subgroup_width(
+      context, wavefront_size, active_lane_count, &direct_width_selected));
   loom_amdgpu_subgroup_reduce_publication_kind_t publication_kind =
       LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_ALL_LANES;
-  if (!direct_width_supported) {
+  if (!direct_width_selected) {
     loom_amdgpu_collective_result_demand_t result_demand =
         LOOM_AMDGPU_COLLECTIVE_RESULT_DEMAND_ALL_WORKITEMS;
     IREE_RETURN_IF_ERROR(loom_amdgpu_collective_result_demand(
@@ -851,9 +851,10 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_reduce_plan(
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
+  bool wavefront_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_subgroup_wavefront_size(
+      context, &wavefront_size, &wavefront_selected));
+  if (!wavefront_selected) {
     return iree_ok_status();
   }
   uint32_t partition_wavefront_size = 0;

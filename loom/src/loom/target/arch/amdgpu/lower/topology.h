@@ -57,6 +57,25 @@ iree_status_t loom_amdgpu_target_supports_direct_subgroup_width(
     uint32_t source_wavefront_size, uint32_t required_width,
     bool* out_supported);
 
+// Selects the active target wavefront size when it is valid for native
+// subgroup lowering.
+iree_status_t loom_amdgpu_select_subgroup_wavefront_size(
+    loom_low_lower_context_t* context, uint32_t* out_wavefront_size,
+    bool* out_selected);
+
+// Selects whether a direct subgroup operation with |required_width| semantic
+// lanes can be represented by native subgroup communication for the selected
+// target.
+iree_status_t loom_amdgpu_select_direct_subgroup_width(
+    loom_low_lower_context_t* context, uint32_t source_wavefront_size,
+    uint32_t required_width, bool* out_selected);
+
+// Selects the active target wavefront size when full-wave native subgroup
+// communication is available.
+iree_status_t loom_amdgpu_select_full_wave_direct_subgroup_width(
+    loom_low_lower_context_t* context, uint32_t* out_wavefront_size,
+    bool* out_selected);
+
 // Returns the fixed per-dimension workgroup size required by the source
 // function or target ABI.
 bool loom_amdgpu_required_workgroup_size(

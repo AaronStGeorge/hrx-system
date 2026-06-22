@@ -53,16 +53,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
-    return iree_ok_status();
-  }
-  bool direct_width_supported = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
-      module, loom_low_lower_context_target_ref(context), wavefront_size,
-      wavefront_size, &direct_width_supported));
-  if (!direct_width_supported) {
+  bool full_wave_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_full_wave_direct_subgroup_width(
+      context, &wavefront_size, &full_wave_selected));
+  if (!full_wave_selected) {
     return iree_ok_status();
   }
 
@@ -119,16 +113,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_first_plan(
   }
 
   uint32_t wavefront_size = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
-      loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
-    return iree_ok_status();
-  }
-  bool direct_width_supported = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
-      module, loom_low_lower_context_target_ref(context), wavefront_size,
-      wavefront_size, &direct_width_supported));
-  if (!direct_width_supported) {
+  bool full_wave_selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_full_wave_direct_subgroup_width(
+      context, &wavefront_size, &full_wave_selected));
+  if (!full_wave_selected) {
     return iree_ok_status();
   }
 
