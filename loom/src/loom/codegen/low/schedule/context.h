@@ -151,6 +151,8 @@ typedef struct loom_low_schedule_build_state_t {
   uint32_t* resource_ready_issue_cycles;
   // Earliest issue cycle at which each node's SSA inputs are ready.
   uint32_t* node_ready_issue_cycles;
+  // Longest same-block latency path starting at each node.
+  uint32_t* node_critical_path_cycles;
   // Per-node head of outgoing dependency lists during list scheduling.
   const uint32_t* outgoing_heads;
   // Per-dependency next link for outgoing dependency lists.
