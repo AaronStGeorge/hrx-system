@@ -172,6 +172,7 @@ loom_cc_library(
         "//loom/src/loom/tooling/io:file",
         "//loom/src/loom/tooling/testbench",
         "//loom/src/loom/tooling/testbench:executor",
+        "//loom/src/loom/tooling/testbench:issue_report",
         "//loom/src/loom/tooling/testbench:reference",
         "//loom/src/loom/tooling/testbench:requirements",
         "//loom/src/loom/util:json",
@@ -292,6 +293,7 @@ iree_execution_test_suite(
     data = [
         "testdata/duplicate_symbol.loom",
         "testdata/scalar_benchmarks.loom",
+        "//loom/src/loom/tools/iree-test-loom:testdata/planning_issue_cases.loom",
     ],
     manifests = ["iree-benchmark-loom.test.json"],
     tags = ["hostonly"],

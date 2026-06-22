@@ -552,6 +552,9 @@ static iree_status_t iree_benchmark_loom_snapshot_append_failure(
       &stream, &first_field, "message", event->message));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
       event->diagnostics, &stream, &first_field));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_planning_issue_fields_json(
+      event->testbench_plan, event->planning_issues,
+      event->planning_issue_count, &stream, &first_field));
   return loom_output_stream_write_cstring(&stream, "}");
 }
 

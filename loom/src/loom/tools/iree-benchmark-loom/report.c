@@ -16,6 +16,7 @@
 #include "loom/sanitizer/options.h"
 #include "loom/tooling/execution/benchmark.h"
 #include "loom/tooling/io/file.h"
+#include "loom/tooling/testbench/issue_report.h"
 #include "loom/tools/iree-benchmark-loom/device_spec_report.h"
 #include "loom/tools/iree-benchmark-loom/diagnostics.h"
 #include "loom/tools/iree-benchmark-loom/module_query.h"
@@ -1025,6 +1026,24 @@ iree_status_t iree_benchmark_loom_write_diagnostic_capture_fields_json(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
       stream, first_field, "diagnostics"));
   return iree_benchmark_loom_write_diagnostic_array_json(diagnostics, stream);
+}
+
+iree_status_t iree_benchmark_loom_write_planning_issue_fields_json(
+    const loom_testbench_module_plan_t* testbench_plan,
+    const loom_testbench_issue_t* planning_issues,
+    iree_host_size_t planning_issue_count, loom_output_stream_t* stream,
+    bool* first_field) {
+  if (planning_issue_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_ASSERT_ARGUMENT(testbench_plan);
+  IREE_ASSERT_ARGUMENT(planning_issues);
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, first_field, "planning_issue_count", planning_issue_count));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "planning_issues"));
+  return loom_testbench_issue_array_write_json(testbench_plan, planning_issues,
+                                               planning_issue_count, stream);
 }
 
 enum {
@@ -2454,6 +2473,9 @@ iree_status_t iree_benchmark_loom_append_failure_row(
     const iree_benchmark_loom_run_identity_t* run, iree_string_view_t stage,
     iree_string_view_t kind, iree_string_view_t message,
     const iree_benchmark_loom_diagnostic_capture_t* diagnostics,
+    const loom_testbench_module_plan_t* testbench_plan,
+    const loom_testbench_issue_t* planning_issues,
+    iree_host_size_t planning_issue_count,
     iree_string_builder_t* failure_output) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(failure_output, &stream);
@@ -2474,6 +2496,10 @@ iree_status_t iree_benchmark_loom_append_failure_row(
   bool first_diagnostic_field = false;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
       diagnostics, &stream, &first_diagnostic_field));
+  bool first_planning_issue_field = false;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_planning_issue_fields_json(
+      testbench_plan, planning_issues, planning_issue_count, &stream,
+      &first_planning_issue_field));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   return iree_ok_status();
 }

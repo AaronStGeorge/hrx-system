@@ -19,6 +19,8 @@
             "loom.test.v0",
             "failed_sample_count",
             "{case, provider, op, code, provider_code}",
+            "{case, kind, op, source_location, fix_hint}",
+            "planning_issue_count",
             "`display_message` is human-facing only"
           ]
         }
@@ -44,6 +46,35 @@
           "\"failed_sample_count\":0",
           "\"skipped_case_count\":0",
           "\"case\":\"sampled_choice\",\"sample_ordinal\":1,\"passed\":true"
+        ]
+      }
+    },
+    {
+      "name": "reports unsupported check.case planning issue before sample validation",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/testdata/planning_issue_cases.loom",
+          "--case=@unsupported_constant_case",
+          "--sample=0"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stdout": {
+        "contains": [
+          "\"format\":\"loom.test.v0\"",
+          "\"case_count\":1",
+          "\"sample_count\":0",
+          "\"failed_sample_count\":0",
+          "\"planning_issue_count\":1",
+          "\"planning_issues\":[",
+          "\"kind\":\"unsupported_case_body_op\"",
+          "\"case\":\"unsupported_constant_case\"",
+          "\"op\":\"index.constant\"",
+          "\"source_location\":",
+          "\"fix_hint\":\"use check.literal for scalar literals inside check.case\""
         ]
       }
     },

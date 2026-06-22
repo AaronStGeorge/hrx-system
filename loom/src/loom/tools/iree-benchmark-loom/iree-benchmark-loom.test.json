@@ -28,6 +28,37 @@
       }
     },
     {
+      "name": "reports selected benchmark check.case planning issues",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/../iree-test-loom/testdata/planning_issue_cases.loom",
+          "--output-format=jsonl",
+          "--benchmark=@unsupported_constant_latency"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stdout": {
+        "contains": [
+          "\"row\":\"failure\"",
+          "\"stage\":\"plan\"",
+          "\"kind\":\"testbench_planning\"",
+          "\"planning_issue_count\":1",
+          "\"planning_issues\":[",
+          "\"kind\":\"unsupported_case_body_op\"",
+          "\"case\":\"unsupported_constant_case\"",
+          "\"op\":\"index.constant\"",
+          "\"source_location\":",
+          "\"fix_hint\":\"use check.literal for scalar literals inside check.case\"",
+          "\"row\":\"summary\"",
+          "\"failures\":{\"row_count\":1,\"failed_benchmark_count\":0}"
+        ],
+        "not_contains": ["zero executable samples"]
+      }
+    },
+    {
       "name": "honors sampled benchmark selection and cli iteration overrides",
       "run": {
         "tool": "iree-benchmark-loom",

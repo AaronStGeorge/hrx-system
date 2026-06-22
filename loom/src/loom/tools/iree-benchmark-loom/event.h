@@ -204,6 +204,12 @@ typedef struct iree_benchmark_loom_failure_event_t {
   iree_string_view_t message;
   // Optional captured diagnostics for this failure.
   const iree_benchmark_loom_diagnostic_capture_t* diagnostics;
+  // Optional testbench module plan that owns |planning_issues|.
+  const loom_testbench_module_plan_t* testbench_plan;
+  // Optional testbench planning issues explaining this failure.
+  const loom_testbench_issue_t* planning_issues;
+  // Number of entries in |planning_issues|.
+  iree_host_size_t planning_issue_count;
 } iree_benchmark_loom_failure_event_t;
 
 typedef struct iree_benchmark_loom_benchmark_repetition_event_t {
@@ -397,6 +403,15 @@ iree_status_t iree_benchmark_loom_event_sink_emit_failure(
     const iree_benchmark_loom_run_identity_t* run, iree_string_view_t stage,
     iree_string_view_t kind, iree_string_view_t message,
     const iree_benchmark_loom_diagnostic_capture_t* diagnostics);
+
+// Emits a failure row with attached testbench planning issues.
+iree_status_t iree_benchmark_loom_event_sink_emit_planning_failure(
+    const iree_benchmark_loom_event_sink_t* sink,
+    const iree_benchmark_loom_run_identity_t* run, iree_string_view_t stage,
+    iree_string_view_t kind, iree_string_view_t message,
+    const loom_testbench_module_plan_t* testbench_plan,
+    const loom_testbench_issue_t* planning_issues,
+    iree_host_size_t planning_issue_count);
 
 // Emits one interleaved comparison benchmark repetition.
 iree_status_t iree_benchmark_loom_event_sink_emit_benchmark_repetition(

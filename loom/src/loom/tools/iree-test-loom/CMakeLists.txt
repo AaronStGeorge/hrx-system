@@ -31,6 +31,7 @@ loom_cc_library(
     loom::tooling::io::file
     loom::tooling::testbench::device_event
     loom::tooling::testbench::executor
+    loom::tooling::testbench::issue_report
     loom::tooling::testbench::reference
     loom::tooling::testbench::requirements
     loom::util::json
@@ -84,6 +85,7 @@ iree_execution_test_suite(
   TOOLS
     "iree-test-loom=::iree-test-loom"
   DATA
+    "testdata/planning_issue_cases.loom"
     "testdata/requirement_cases.loom"
     "testdata/scalar_cases.loom"
   LABELS
