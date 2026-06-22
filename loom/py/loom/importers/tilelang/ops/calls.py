@@ -287,12 +287,14 @@ def _convert_unary_call(
         )
         return None
     result_type = _call_result_type(expr, context, spec.result_kind)
+    builder_kwargs = _float_call_kwargs(context, result_type)
     result = cast(
         ValueRef,
         getattr(context.builder.scalar, spec.builder_name)(
             input=input_value,
             results=[result_type],
             name=context.fresh_name(spec.builder_name),
+            **builder_kwargs,
         ),
     )
     _map_call_result(expr, context, result, op_name)
@@ -319,6 +321,7 @@ def _convert_binary_call(
         )
         return None
     result_type = context.type_converter.map_dtype(dtype(expr))
+    builder_kwargs = _float_call_kwargs(context, result_type)
     result = cast(
         ValueRef,
         getattr(context.builder.scalar, spec.builder_name)(
@@ -326,6 +329,7 @@ def _convert_binary_call(
             rhs=rhs,
             results=[result_type],
             name=context.fresh_name(spec.builder_name),
+            **builder_kwargs,
         ),
     )
     _map_call_result(expr, context, result, op_name)
@@ -353,6 +357,7 @@ def _convert_ternary_call(
         )
         return None
     result_type = context.type_converter.map_dtype(dtype(expr))
+    builder_kwargs = _float_call_kwargs(context, result_type)
     result = cast(
         ValueRef,
         getattr(context.builder.scalar, spec.builder_name)(
@@ -361,6 +366,7 @@ def _convert_ternary_call(
             c=c,
             results=[result_type],
             name=context.fresh_name(spec.builder_name),
+            **builder_kwargs,
         ),
     )
     _map_call_result(expr, context, result, op_name)
@@ -394,6 +400,15 @@ def _convert_float_predicate_call(
     )
     _map_call_result(expr, context, result, op_name)
     return result
+
+
+def _float_call_kwargs(
+    context: TileLangConversionContext,
+    result_type: Type,
+) -> dict[str, str]:
+    if not _is_float_type(str(result_type)):
+        return {}
+    return context.float_operation_kwargs()
 
 
 def _convert_abs_call(
