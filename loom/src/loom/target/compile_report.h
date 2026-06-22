@@ -734,8 +734,24 @@ typedef struct loom_target_compile_report_wait_action_row_t {
   uint32_t scheduled_ordinal;
   // Producer node that forced the wait, or UINT32_MAX.
   uint32_t producer_node;
+  // Scheduled ordinal of |producer_node|, or UINT32_MAX.
+  uint32_t producer_scheduled_ordinal;
+  // Operation mnemonic for |producer_node|, or empty.
+  iree_string_view_t producer_operation_name;
+  // Descriptor key for |producer_node|, or empty.
+  iree_string_view_t producer_descriptor_key;
+  // Descriptor semantic tag for |producer_node|, or empty.
+  iree_string_view_t producer_semantic_tag;
   // Consumer node that needs the wait, or UINT32_MAX.
   uint32_t consumer_node;
+  // Scheduled ordinal of |consumer_node|, or UINT32_MAX.
+  uint32_t consumer_scheduled_ordinal;
+  // Operation mnemonic for |consumer_node|, or empty.
+  iree_string_view_t consumer_operation_name;
+  // Descriptor key for |consumer_node|, or empty.
+  iree_string_view_t consumer_descriptor_key;
+  // Descriptor semantic tag for |consumer_node|, or empty.
+  iree_string_view_t consumer_semantic_tag;
   // Wait target value. Zero drains all outstanding packets for the counter.
   uint32_t target_count;
   // Outstanding packet count for this counter before the wait action.

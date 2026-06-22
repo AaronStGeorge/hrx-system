@@ -15,6 +15,7 @@
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/verify.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/global/ops.h"
@@ -253,6 +254,54 @@ static iree_string_view_t loom_amdgpu_hal_kernel_library_wait_action_name(
   }
 }
 
+typedef struct loom_amdgpu_hal_kernel_library_wait_endpoint_t {
+  // Node index in the schedule table, or UINT32_MAX.
+  uint32_t node_index;
+  // Scheduled ordinal for |node_index|, or UINT32_MAX.
+  uint32_t scheduled_ordinal;
+  // Operation mnemonic for |node_index|, or empty.
+  iree_string_view_t operation_name;
+  // Descriptor key for |node_index|, or empty.
+  iree_string_view_t descriptor_key;
+  // Descriptor semantic tag for |node_index|, or empty.
+  iree_string_view_t semantic_tag;
+} loom_amdgpu_hal_kernel_library_wait_endpoint_t;
+
+static loom_amdgpu_hal_kernel_library_wait_endpoint_t
+loom_amdgpu_hal_kernel_library_wait_endpoint(
+    const loom_amdgpu_wait_plan_t* wait_plan, uint32_t node_index) {
+  loom_amdgpu_hal_kernel_library_wait_endpoint_t endpoint = {
+      .node_index = UINT32_MAX,
+      .scheduled_ordinal = UINT32_MAX,
+      .operation_name = iree_string_view_empty(),
+      .descriptor_key = iree_string_view_empty(),
+      .semantic_tag = iree_string_view_empty(),
+  };
+  const loom_low_schedule_table_t* schedule = wait_plan->schedule;
+  if (node_index == LOOM_LOW_SCHEDULE_NODE_NONE ||
+      node_index >= schedule->node_count) {
+    return endpoint;
+  }
+
+  const loom_low_schedule_node_t* node = &schedule->nodes[node_index];
+  endpoint.node_index = node_index;
+  endpoint.scheduled_ordinal = node->scheduled_ordinal;
+  if (node->op != NULL) {
+    endpoint.operation_name = loom_op_name(schedule->module, node->op);
+  }
+  if (node->descriptor != NULL) {
+    endpoint.descriptor_key = loom_low_descriptor_set_string(
+        schedule->target.descriptor_set, node->descriptor->key_string_offset);
+    if (node->descriptor->semantic_tag_string_offset !=
+        LOOM_LOW_STRING_OFFSET_NONE) {
+      endpoint.semantic_tag = loom_low_descriptor_set_string(
+          schedule->target.descriptor_set,
+          node->descriptor->semantic_tag_string_offset);
+    }
+  }
+  return endpoint;
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_library_record_wait_plan(
     loom_target_compile_report_t* report,
     const loom_amdgpu_packet_plan_t* packet_plan) {
@@ -296,6 +345,12 @@ static iree_status_t loom_amdgpu_hal_kernel_library_record_wait_plan(
   }
   for (iree_host_size_t i = 0; i < wait_plan->action_count; ++i) {
     const loom_amdgpu_wait_plan_action_t* action = &wait_plan->actions[i];
+    const loom_amdgpu_hal_kernel_library_wait_endpoint_t producer =
+        loom_amdgpu_hal_kernel_library_wait_endpoint(wait_plan,
+                                                     action->producer_node);
+    const loom_amdgpu_hal_kernel_library_wait_endpoint_t consumer =
+        loom_amdgpu_hal_kernel_library_wait_endpoint(wait_plan,
+                                                     action->consumer_node);
     const loom_target_compile_report_wait_action_row_t row = {
         .function_name = report->function_name,
         .counter_name = loom_amdgpu_wait_counter_name(action->counter_id),
@@ -308,8 +363,16 @@ static iree_status_t loom_amdgpu_hal_kernel_library_record_wait_plan(
         .block_index = action->block_index,
         .node_index = action->node_index,
         .scheduled_ordinal = action->scheduled_ordinal,
-        .producer_node = action->producer_node,
-        .consumer_node = action->consumer_node,
+        .producer_node = producer.node_index,
+        .producer_scheduled_ordinal = producer.scheduled_ordinal,
+        .producer_operation_name = producer.operation_name,
+        .producer_descriptor_key = producer.descriptor_key,
+        .producer_semantic_tag = producer.semantic_tag,
+        .consumer_node = consumer.node_index,
+        .consumer_scheduled_ordinal = consumer.scheduled_ordinal,
+        .consumer_operation_name = consumer.operation_name,
+        .consumer_descriptor_key = consumer.descriptor_key,
+        .consumer_semantic_tag = consumer.semantic_tag,
         .target_count = action->target_count,
         .outstanding_before = action->outstanding_before,
     };

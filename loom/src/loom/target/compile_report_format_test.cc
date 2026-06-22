@@ -275,7 +275,16 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           /*.node_index=*/42,
           /*.scheduled_ordinal=*/17,
           /*.producer_node=*/8,
+          /*.producer_scheduled_ordinal=*/3,
+          /*.producer_operation_name=*/
+          IREE_SVL("low.op<amdgpu.global_load_b32>"),
+          /*.producer_descriptor_key=*/IREE_SVL("amdgpu.global_load_b32"),
+          /*.producer_semantic_tag=*/IREE_SVL("memory.load.u32"),
           /*.consumer_node=*/42,
+          /*.consumer_scheduled_ordinal=*/17,
+          /*.consumer_operation_name=*/IREE_SVL("low.op<amdgpu.v_add_u32>"),
+          /*.consumer_descriptor_key=*/IREE_SVL("amdgpu.v_add_u32"),
+          /*.consumer_semantic_tag=*/IREE_SVL("vector.add.i32"),
           /*.target_count=*/2,
           /*.outstanding_before=*/6,
       },
@@ -291,7 +300,15 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           /*.node_index=*/44,
           /*.scheduled_ordinal=*/19,
           /*.producer_node=*/UINT32_MAX,
+          /*.producer_scheduled_ordinal=*/UINT32_MAX,
+          /*.producer_operation_name=*/IREE_SVL(""),
+          /*.producer_descriptor_key=*/IREE_SVL(""),
+          /*.producer_semantic_tag=*/IREE_SVL(""),
           /*.consumer_node=*/UINT32_MAX,
+          /*.consumer_scheduled_ordinal=*/UINT32_MAX,
+          /*.consumer_operation_name=*/IREE_SVL(""),
+          /*.consumer_descriptor_key=*/IREE_SVL(""),
+          /*.consumer_semantic_tag=*/IREE_SVL(""),
           /*.target_count=*/0,
           /*.outstanding_before=*/2,
       },
@@ -595,7 +612,21 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                           "action=planned action_id=2 "
                                           "reason=amdgpu.ssa_use reason_id=2 "
                                           "block=1 node=42 ordinal=17 "
-                                          "producer_node=8 consumer_node=42 "
+                                          "producer_node=8 "
+                                          "producer_ordinal=3 "
+                                          "producer_operation=low.op<amdgpu."
+                                          "global_load_b32> "
+                                          "producer_descriptor_key=amdgpu."
+                                          "global_load_b32 "
+                                          "producer_semantic_tag="
+                                          "memory.load.u32 consumer_node=42 "
+                                          "consumer_ordinal=17 "
+                                          "consumer_operation=low.op<amdgpu."
+                                          "v_add_u32> "
+                                          "consumer_descriptor_key=amdgpu."
+                                          "v_add_u32 "
+                                          "consumer_semantic_tag="
+                                          "vector.add.i32 "
                                           "target_count=2 "
                                           "outstanding_before=6"),
                                   0),
@@ -605,7 +636,12 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                 IREE_SV("wait_action[1] function=branchy_export counter=smem "
                         "counter_id=4 action=explicit action_id=1 "
                         "reason=amdgpu.explicit_packet reason_id=1 block=1 "
-                        "node=44 ordinal=19 producer_node=- consumer_node=- "
+                        "node=44 ordinal=19 producer_node=- "
+                        "producer_ordinal=- producer_operation=- "
+                        "producer_descriptor_key=- producer_semantic_tag=- "
+                        "consumer_node=- "
+                        "consumer_ordinal=- consumer_operation=- "
+                        "consumer_descriptor_key=- consumer_semantic_tag=- "
                         "target_count=0 outstanding_before=2"),
                 0),
             IREE_STRING_VIEW_NPOS);
@@ -911,7 +947,19 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "\"reason\":\"amdgpu.ssa_use\",\"reason_id\":2,"
                         "\"block_index\":1,\"node_index\":42,"
                         "\"scheduled_ordinal\":17,\"producer_node\":8,"
-                        "\"consumer_node\":42,\"target_count\":2,"
+                        "\"producer_scheduled_ordinal\":3,"
+                        "\"producer_operation\":"
+                        "\"low.op<amdgpu.global_load_b32>\","
+                        "\"producer_descriptor_key\":"
+                        "\"amdgpu.global_load_b32\","
+                        "\"producer_semantic_tag\":\"memory.load.u32\","
+                        "\"consumer_node\":42,"
+                        "\"consumer_scheduled_ordinal\":17,"
+                        "\"consumer_operation\":"
+                        "\"low.op<amdgpu.v_add_u32>\","
+                        "\"consumer_descriptor_key\":\"amdgpu.v_add_u32\","
+                        "\"consumer_semantic_tag\":\"vector.add.i32\","
+                        "\"target_count\":2,"
                         "\"outstanding_before\":6"),
                 0),
             IREE_STRING_VIEW_NPOS);
@@ -922,7 +970,16 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "\"reason\":\"amdgpu.explicit_packet\","
                         "\"reason_id\":1,\"block_index\":1,"
                         "\"node_index\":44,\"scheduled_ordinal\":19,"
-                        "\"producer_node\":null,\"consumer_node\":null,"
+                        "\"producer_node\":null,"
+                        "\"producer_scheduled_ordinal\":null,"
+                        "\"producer_operation\":null,"
+                        "\"producer_descriptor_key\":null,"
+                        "\"producer_semantic_tag\":null,"
+                        "\"consumer_node\":null,"
+                        "\"consumer_scheduled_ordinal\":null,"
+                        "\"consumer_operation\":null,"
+                        "\"consumer_descriptor_key\":null,"
+                        "\"consumer_semantic_tag\":null,"
                         "\"target_count\":0,\"outstanding_before\":2"),
                 0),
             IREE_STRING_VIEW_NPOS);

@@ -909,9 +909,35 @@ static iree_status_t loom_target_compile_report_format_wait_action_rows(
       IREE_RETURN_IF_ERROR(loom_target_compile_report_append_optional_u32(
           builder, row->producer_node));
       IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+          builder, IREE_SV(" producer_ordinal=")));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_append_optional_u32(
+          builder, row->producer_scheduled_ordinal));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+          builder, IREE_SV("producer_operation"),
+          row->producer_operation_name));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+          builder, IREE_SV("producer_descriptor_key"),
+          row->producer_descriptor_key));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+          builder, IREE_SV("producer_semantic_tag"),
+          row->producer_semantic_tag));
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
           builder, IREE_SV(" consumer_node=")));
       IREE_RETURN_IF_ERROR(loom_target_compile_report_append_optional_u32(
           builder, row->consumer_node));
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+          builder, IREE_SV(" consumer_ordinal=")));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_append_optional_u32(
+          builder, row->consumer_scheduled_ordinal));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+          builder, IREE_SV("consumer_operation"),
+          row->consumer_operation_name));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+          builder, IREE_SV("consumer_descriptor_key"),
+          row->consumer_descriptor_key));
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+          builder, IREE_SV("consumer_semantic_tag"),
+          row->consumer_semantic_tag));
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder, " target_count=%" PRIu32 " outstanding_before=%" PRIu32 "\n",
           row->target_count, row->outstanding_before));
@@ -1998,7 +2024,37 @@ static iree_status_t loom_target_compile_report_format_wait_action_row_json(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u32_field(
       stream, &first_field, "producer_node", row->producer_node));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u32_field(
+      stream, &first_field, "producer_scheduled_ordinal",
+      row->producer_scheduled_ordinal));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "producer_operation",
+          row->producer_operation_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "producer_descriptor_key",
+          row->producer_descriptor_key));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "producer_semantic_tag",
+          row->producer_semantic_tag));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u32_field(
       stream, &first_field, "consumer_node", row->consumer_node));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u32_field(
+      stream, &first_field, "consumer_scheduled_ordinal",
+      row->consumer_scheduled_ordinal));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "consumer_operation",
+          row->consumer_operation_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "consumer_descriptor_key",
+          row->consumer_descriptor_key));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "consumer_semantic_tag",
+          row->consumer_semantic_tag));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
       stream, &first_field, "target_count", row->target_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
