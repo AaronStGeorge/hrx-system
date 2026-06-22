@@ -941,6 +941,20 @@ iree_status_t iree_benchmark_loom_write_benchmark_failure_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
+static iree_status_t iree_benchmark_loom_write_compile_rejection_fields_json(
+    const iree_benchmark_loom_hal_actual_provider_t* provider,
+    loom_output_stream_t* stream) {
+  bool first_field = false;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      stream, &first_field, "stage",
+      provider->execution.compile_failure_stage));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      stream, &first_field, "kind", provider->execution.compile_failure_kind));
+  return iree_benchmark_loom_write_json_optional_string_field(
+      stream, &first_field, "message",
+      provider->execution.compile_failure_message);
+}
+
 iree_status_t iree_benchmark_loom_write_json_object_field_name(
     loom_output_stream_t* stream, bool* first_field, const char* name) {
   if (!*first_field) {
@@ -1783,13 +1797,8 @@ static iree_status_t iree_benchmark_loom_append_compile_report_artifact_json(
       &stream, provider->execution.compile_rejected ? "failed" : "ok"));
   if (provider->execution.compile_rejected) {
     IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"stage\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        &stream, provider->execution.compile_failure_stage));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"kind\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        &stream, provider->execution.compile_failure_kind));
+        iree_benchmark_loom_write_compile_rejection_fields_json(provider,
+                                                                &stream));
   }
   bool first_diagnostic_field = false;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(
@@ -2233,13 +2242,8 @@ iree_status_t iree_benchmark_loom_append_compile_row(
       &stream, provider->execution.compile_rejected ? "failed" : "ok"));
   if (provider->execution.compile_rejected) {
     IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"stage\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        &stream, provider->execution.compile_failure_stage));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"kind\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        &stream, provider->execution.compile_failure_kind));
+        iree_benchmark_loom_write_compile_rejection_fields_json(provider,
+                                                                &stream));
   }
   bool first_diagnostic_field = false;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_diagnostic_capture_fields_json(

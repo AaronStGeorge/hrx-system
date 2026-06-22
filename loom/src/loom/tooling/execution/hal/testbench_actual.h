@@ -181,6 +181,8 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   iree_string_view_t compile_failure_stage;
   // Stable diagnostic category for |compile_rejected|.
   iree_string_view_t compile_failure_kind;
+  // Optional human-facing explanation for |compile_rejected|.
+  iree_string_view_t compile_failure_message;
   // Number of error diagnostics observed while compiling this candidate.
   iree_host_size_t diagnostic_error_count;
   // Number of warning diagnostics observed while compiling this candidate.

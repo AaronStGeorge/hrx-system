@@ -533,10 +533,12 @@ static iree_status_t loom_run_hal_testbench_materialize_config_set(
 
 static void loom_run_hal_testbench_record_compile_rejection(
     loom_run_hal_testbench_actual_provider_t* provider,
-    iree_string_view_t stage, iree_string_view_t kind) {
+    iree_string_view_t stage, iree_string_view_t kind,
+    iree_string_view_t message) {
   provider->compile_rejected = true;
   provider->compile_failure_stage = stage;
   provider->compile_failure_kind = kind;
+  provider->compile_failure_message = message;
 }
 
 static iree_status_t loom_run_hal_testbench_forward_diagnostic(
@@ -648,10 +650,13 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
           provider->compile_module.module, entry_func, &workgroup_count,
           &workgroup_count_resolved));
   if (!workgroup_count_resolved) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "HAL actual invocation requires a statically resolved workgroup count "
-        "after sample constants are applied");
+    loom_run_hal_testbench_record_compile_rejection(
+        provider, IREE_SV("compile"), IREE_SV("unresolved_workgroup_count"),
+        IREE_SV("HAL actual invocation requires a statically resolved "
+                "workgroup count after sample constants are applied; use "
+                "--sample-compilation=per_sample or make launch geometry "
+                "static for once-compiled candidates"));
+    return iree_ok_status();
   }
   provider->invocation_options.workgroup_count[0] = workgroup_count.x;
   provider->invocation_options.workgroup_count[1] = workgroup_count.y;
@@ -692,14 +697,16 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
     if (provider->diagnostic_error_count != compile_error_count) {
       iree_status_free(status);
       loom_run_hal_testbench_record_compile_rejection(
-          provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"));
+          provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"),
+          iree_string_view_empty());
       return iree_ok_status();
     }
     return status;
   }
   if (provider->pass_result.error_count != 0) {
     loom_run_hal_testbench_record_compile_rejection(
-        provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"));
+        provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"),
+        iree_string_view_empty());
     return iree_ok_status();
   }
 
@@ -728,7 +735,8 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
     if (provider->diagnostic_error_count != emit_error_count) {
       iree_status_free(status);
       loom_run_hal_testbench_record_compile_rejection(
-          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"));
+          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"),
+          iree_string_view_empty());
       return iree_ok_status();
     }
     return status;
@@ -736,7 +744,8 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   if (!provider->candidate.compiled) {
     if (provider->diagnostic_error_count != emit_error_count) {
       loom_run_hal_testbench_record_compile_rejection(
-          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"));
+          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"),
+          iree_string_view_empty());
       return iree_ok_status();
     }
     return iree_make_status(

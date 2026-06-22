@@ -213,10 +213,15 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::format::text::parser
     loom::ir
+    loom::ops::check
+    loom::ops::func
     loom::ops::index
     loom::ops::kernel
     loom::ops::test
+    loom::target::low_descriptor_registry_core_test
     loom::testing::module_ptr
+    loom::tooling::execution::session
+    loom::tooling::testbench
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

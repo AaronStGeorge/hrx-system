@@ -117,6 +117,7 @@ void iree_benchmark_loom_benchmark_result_set_compile_rejection(
   out_result->has_failure = true;
   out_result->failure_stage = provider->execution.compile_failure_stage;
   out_result->failure_kind = provider->execution.compile_failure_kind;
+  out_result->failure_message = provider->execution.compile_failure_message;
   out_result->diagnostic_error_count = provider->diagnostics.error_count;
   out_result->diagnostic_warning_count = provider->diagnostics.warning_count;
   out_result->diagnostic_remark_count = provider->diagnostics.remark_count;
@@ -170,6 +171,7 @@ void iree_benchmark_loom_benchmark_result_set_sequence_compile_rejection(
   out_result->has_failure = true;
   out_result->failure_stage = provider->compile_failure_stage;
   out_result->failure_kind = provider->compile_failure_kind;
+  out_result->failure_message = provider->compile_failure_message;
   out_result->diagnostic_error_count = provider->diagnostic_error_count;
   out_result->diagnostic_warning_count = provider->diagnostic_warning_count;
   out_result->diagnostic_remark_count = provider->diagnostic_remark_count;
