@@ -160,6 +160,23 @@ loom_amdgpu_workgroup_scan_direction_rule(
                                                                        : rule;
 }
 
+static iree_string_view_t loom_amdgpu_workgroup_scan_shape_failure_key(
+    loom_amdgpu_workgroup_collective_shape_failure_t failure) {
+  switch (failure) {
+    case LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WORKGROUP_SIZE:
+      return IREE_SV("workgroup_scan.fixed_workgroup_size");
+    case LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WAVE_COUNT:
+      return IREE_SV("workgroup_scan.wave_count");
+    case LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_SCRATCH_BYTE_LENGTH:
+      return IREE_SV("workgroup_scan.scratch_byte_length");
+    case LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_NONE:
+      break;
+  }
+  IREE_ASSERT_UNREACHABLE(
+      "AMDGPU workgroup scan shape failure requires reason");
+  return IREE_SV("workgroup_scan.fixed_workgroup_size");
+}
+
 iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_scan_plan_t* out_plan, bool* out_selected) {
@@ -315,25 +332,19 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
     return iree_ok_status();
   }
 
-  uint32_t flat_workgroup_size = 0;
-  if (!loom_amdgpu_required_flat_workgroup_size(
+  loom_amdgpu_workgroup_collective_shape_t shape = {0};
+  loom_amdgpu_workgroup_collective_shape_failure_t shape_failure =
+      LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_NONE;
+  if (!loom_amdgpu_collective_resolve_workgroup_shape(
           module, loom_low_lower_context_source_function(context),
-          loom_low_lower_context_bundle(context), &flat_workgroup_size) ||
-      flat_workgroup_size == 0) {
+          loom_low_lower_context_bundle(context), wavefront_size,
+          register_count, &shape, &shape_failure)) {
     return iree_ok_status();
   }
-  const bool has_partial_tail = flat_workgroup_size > wavefront_size &&
-                                (flat_workgroup_size % wavefront_size) != 0;
-  const uint32_t wave_count =
-      (flat_workgroup_size + wavefront_size - 1) / wavefront_size;
-  if (flat_workgroup_size > wavefront_size && wave_count > wavefront_size) {
-    return iree_ok_status();
-  }
-  const uint64_t scratch_byte_length =
-      (uint64_t)wave_count * register_count * 4u;
-  if (scratch_byte_length > UINT32_MAX) {
-    return iree_ok_status();
-  }
+  const bool is_multi_wave = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_MULTI_WAVE);
+  const bool has_partial_tail = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_PARTIAL_TAIL);
 
   const loom_amdgpu_descriptor_resolution_t resolutions[] = {
       {
@@ -360,8 +371,7 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
     return iree_ok_status();
   }
 
-  if (loom_amdgpu_scan_mode_requires_identity(mode_rule) ||
-      flat_workgroup_size > wavefront_size) {
+  if (loom_amdgpu_scan_mode_requires_identity(mode_rule) || is_multi_wave) {
     uint32_t unused_identity_bits = 0;
     if (!loom_amdgpu_collective_combine_identity_bits(kind,
                                                       &unused_identity_bits)) {
@@ -369,7 +379,7 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
     }
   }
 
-  if (flat_workgroup_size > wavefront_size) {
+  if (is_multi_wave) {
     const loom_amdgpu_descriptor_resolution_t lane_lt_resolution[] = {
         {
             .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
@@ -413,7 +423,7 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
   out_plan->mode = mode_rule->subgroup_mode;
   out_plan->direction = direction_rule->subgroup_direction;
   out_plan->wavefront_size = wavefront_size;
-  out_plan->flat_workgroup_size = flat_workgroup_size;
+  out_plan->flat_workgroup_size = shape.flat_workgroup_size;
   *out_selected = true;
   return iree_ok_status();
 }
@@ -1138,30 +1148,21 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
         context, op, IREE_SV("workgroup_scan.wavefront_size"));
   }
 
-  uint32_t flat_workgroup_size = 0;
-  if (!loom_amdgpu_required_flat_workgroup_size(
+  loom_amdgpu_workgroup_collective_shape_t shape = {0};
+  loom_amdgpu_workgroup_collective_shape_failure_t shape_failure =
+      LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_NONE;
+  if (!loom_amdgpu_collective_resolve_workgroup_shape(
           module, loom_target_low_legality_function(context), bundle,
-          &flat_workgroup_size) ||
-      flat_workgroup_size == 0) {
+          wavefront_size, unused_register_count, &shape, &shape_failure)) {
     return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("workgroup_scan.fixed_workgroup_size"));
+        context, op,
+        loom_amdgpu_workgroup_scan_shape_failure_key(shape_failure));
   }
-  const bool has_partial_tail = flat_workgroup_size > wavefront_size &&
-                                (flat_workgroup_size % wavefront_size) != 0;
-  const uint32_t wave_count =
-      (flat_workgroup_size + wavefront_size - 1) / wavefront_size;
-  if (flat_workgroup_size > wavefront_size && wave_count > wavefront_size) {
-    return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("workgroup_scan.wave_count"));
-  }
-  const uint64_t scratch_byte_length =
-      (uint64_t)wave_count * unused_register_count * 4u;
-  if (scratch_byte_length > UINT32_MAX) {
-    return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("workgroup_scan.scratch_byte_length"));
-  }
-  if (!loom_amdgpu_scan_mode_requires_identity(mode_rule) &&
-      flat_workgroup_size > wavefront_size) {
+  const bool is_multi_wave = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_MULTI_WAVE);
+  const bool has_partial_tail = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_PARTIAL_TAIL);
+  if (!loom_amdgpu_scan_mode_requires_identity(mode_rule) && is_multi_wave) {
     uint32_t unused_identity_bits = 0;
     if (!loom_amdgpu_collective_combine_identity_bits(kind,
                                                       &unused_identity_bits)) {
@@ -1190,7 +1191,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirements(
       context, op, requirements, IREE_ARRAYSIZE(requirements)));
-  if (flat_workgroup_size > wavefront_size) {
+  if (is_multi_wave) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirement(
         context, op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
         IREE_SV("descriptor.v_cmp_ult_u32")));

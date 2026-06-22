@@ -35,6 +35,39 @@ bool loom_amdgpu_collective_payload_is_integer(
 bool loom_amdgpu_collective_payload_is_float(
     loom_amdgpu_subgroup_payload_kind_t payload_kind);
 
+typedef uint32_t loom_amdgpu_workgroup_collective_shape_flags_t;
+
+enum loom_amdgpu_workgroup_collective_shape_flag_bits_e {
+  LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_MULTI_WAVE = 1u << 0,
+  LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_PARTIAL_TAIL = 1u << 1,
+};
+
+typedef enum loom_amdgpu_workgroup_collective_shape_failure_e {
+  LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_NONE = 0,
+  LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WORKGROUP_SIZE = 1,
+  LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_WAVE_COUNT = 2,
+  LOOM_AMDGPU_WORKGROUP_COLLECTIVE_SHAPE_FAILURE_SCRATCH_BYTE_LENGTH = 3,
+} loom_amdgpu_workgroup_collective_shape_failure_t;
+
+typedef struct loom_amdgpu_workgroup_collective_shape_t {
+  // Exact flattened workgroup size selected by launch configuration.
+  uint32_t flat_workgroup_size;
+  // Number of cross-wave partitions spanned by the workgroup.
+  uint32_t wave_count;
+  // Shape properties derived from the workgroup and partition sizes.
+  loom_amdgpu_workgroup_collective_shape_flags_t flags;
+} loom_amdgpu_workgroup_collective_shape_t;
+
+// Resolves the bounded cross-wave workgroup shape used by workgroup
+// collective selection and legality. Returns false with |out_failure| set when
+// source IR or target facts do not prove an encodable shape.
+bool loom_amdgpu_collective_resolve_workgroup_shape(
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_target_bundle_t* bundle, uint32_t partition_lane_count,
+    uint32_t register_count,
+    loom_amdgpu_workgroup_collective_shape_t* out_shape,
+    loom_amdgpu_workgroup_collective_shape_failure_t* out_failure);
+
 // Looks up or materializes a source payload value in low IR form.
 iree_status_t loom_amdgpu_collective_lookup_payload(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
