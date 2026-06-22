@@ -928,6 +928,12 @@ loom_low_allocation_coalescing_assign_concat_result_reservation(
     const loom_low_placement_relation_range_t* result_range,
     bool* out_assigned) {
   *out_assigned = false;
+  // Source-side reservation is only for scalar concat slices seen before the
+  // concat op. Wider sources should allocate normally and let the eventual
+  // concat result choose placement after transient source pressure has passed.
+  if (source_interval->unit_count != 1) {
+    return iree_ok_status();
+  }
   loom_low_allocation_class_capacity_t capacity = {0};
   IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_interval_capacity(
       context->target_constraints, result_interval, &capacity));
