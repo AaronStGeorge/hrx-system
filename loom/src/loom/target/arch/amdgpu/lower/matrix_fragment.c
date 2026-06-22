@@ -14,6 +14,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/vector/fragment.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
@@ -387,6 +388,29 @@ static bool loom_amdgpu_fragment_memory_role_uses_scalar_b16_packets(
          loom_amdgpu_fragment_memory_role_uses_packed_b16_elements(role_layout);
 }
 
+static bool loom_amdgpu_fragment_memory_requires_native_payload_storage(
+    loom_amdgpu_memory_operation_kind_t operation_kind,
+    const loom_amdgpu_matrix_fragment_role_layout_t* role_layout,
+    loom_amdgpu_fragment_memory_store_conversion_kind_t store_conversion_kind) {
+  return operation_kind == LOOM_AMDGPU_MEMORY_OPERATION_STORE &&
+         (loom_amdgpu_fragment_memory_role_uses_low_subword(role_layout) ||
+          store_conversion_kind ==
+              LOOM_AMDGPU_FRAGMENT_MEMORY_STORE_CONVERSION_EXTEND_F16_TO_F32);
+}
+
+static bool loom_amdgpu_fragment_memory_payload_has_native_storage(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t payload) {
+  if (fact_table == NULL || payload == LOOM_VALUE_ID_INVALID) {
+    return false;
+  }
+  loom_vector_fragment_fact_t fragment;
+  return loom_vector_fragment_fact_query_value_facts(
+             &fact_table->context,
+             loom_value_fact_table_lookup(fact_table, payload), &fragment) &&
+         iree_all_bits_set(fragment.flags,
+                           LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_NATIVE_STORAGE);
+}
+
 static bool loom_amdgpu_fragment_memory_payload_matches_role_storage(
     loom_type_t payload_type, loom_scalar_type_t expected_element_type,
     const loom_amdgpu_matrix_fragment_role_layout_t* role_layout) {
@@ -593,6 +617,7 @@ static bool loom_amdgpu_fragment_memory_target_layout(
           LOOM_AMDGPU_FRAGMENT_MEMORY_STORE_CONVERSION_NONE;
   loom_amdgpu_fragment_memory_element_match_t best_match =
       LOOM_AMDGPU_FRAGMENT_MEMORY_ELEMENT_MATCH_NONE;
+  bool rejected_payload_layout = false;
   bool rejected_store_conversion = false;
   for (iree_host_size_t i = 0; i < descriptor_count; ++i) {
     const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
@@ -613,9 +638,20 @@ static bool loom_amdgpu_fragment_memory_target_layout(
     }
     const loom_amdgpu_matrix_fragment_role_layout_t* role_layout =
         loom_amdgpu_matrix_fragment_role_layout(layout, role);
-    if (role_layout == NULL ||
-        !loom_amdgpu_fragment_memory_payload_matches(
+    if (role_layout == NULL) {
+      continue;
+    }
+    if (!loom_amdgpu_fragment_memory_payload_matches(
             payload_type, operation_kind, expected_element_type, role_layout)) {
+      loom_amdgpu_fragment_memory_store_conversion_kind_t
+          store_conversion_kind =
+              LOOM_AMDGPU_FRAGMENT_MEMORY_STORE_CONVERSION_NONE;
+      if (loom_amdgpu_fragment_memory_payload_element_match(
+              operation_kind, role, payload_type, view_type,
+              expected_element_type, &store_conversion_kind) !=
+          LOOM_AMDGPU_FRAGMENT_MEMORY_ELEMENT_MATCH_NONE) {
+        rejected_payload_layout = true;
+      }
       continue;
     }
     loom_amdgpu_fragment_memory_store_conversion_kind_t store_conversion_kind =
@@ -649,7 +685,9 @@ static bool loom_amdgpu_fragment_memory_target_layout(
   return loom_amdgpu_fragment_memory_reject(
       diagnostic, rejected_store_conversion
                       ? IREE_SV("fragment_memory.store_conversion")
-                      : IREE_SV("fragment_memory.target_layout"));
+                      : (rejected_payload_layout
+                             ? IREE_SV("fragment_memory.payload_layout")
+                             : IREE_SV("fragment_memory.target_layout")));
 }
 
 static bool loom_amdgpu_fragment_memory_view_matches(
@@ -1084,6 +1122,13 @@ static bool loom_amdgpu_fragment_memory_analyze(
           payload_type, operation_kind, expected_element_type, role_layout)) {
     return loom_amdgpu_fragment_memory_reject(
         diagnostic, IREE_SV("fragment_memory.payload"));
+  }
+  if (loom_amdgpu_fragment_memory_requires_native_payload_storage(
+          operation_kind, role_layout, store_conversion_kind) &&
+      !loom_amdgpu_fragment_memory_payload_has_native_storage(
+          environment->fact_table, source->payload)) {
+    return loom_amdgpu_fragment_memory_reject(
+        diagnostic, IREE_SV("fragment_memory.payload_storage"));
   }
 
   loom_vector_memory_access_t access = {0};
