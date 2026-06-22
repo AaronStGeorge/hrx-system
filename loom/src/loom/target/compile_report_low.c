@@ -1482,9 +1482,111 @@ typedef struct loom_target_compile_report_allocation_high_water_blockers_t {
   uint64_t active_fallback_storage_lease_units;
 } loom_target_compile_report_allocation_high_water_blockers_t;
 
+typedef struct loom_target_compile_report_allocation_lower_free_runs_t {
+  // Number of unoccupied physical units below the high-water assignment base.
+  uint64_t free_unit_count;
+  // Number of contiguous unoccupied-unit runs below the assignment base.
+  uint32_t free_run_count;
+  // Largest contiguous unoccupied-unit run below the assignment base.
+  uint32_t largest_free_run_unit_count;
+} loom_target_compile_report_allocation_lower_free_runs_t;
+
 static bool loom_target_compile_report_assignment_active_at(
     const loom_low_allocation_assignment_t* assignment, uint32_t point) {
   return assignment->start_point <= point && point < assignment->end_point;
+}
+
+static bool loom_target_compile_report_unit_inside_range(
+    uint32_t unit, uint32_t location_base, uint32_t location_count) {
+  return unit >= location_base &&
+         (uint64_t)unit < (uint64_t)location_base + location_count;
+}
+
+static bool loom_target_compile_report_unit_blocked_by_assignment(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit) {
+  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
+    if (i == high_water_assignment_index) {
+      continue;
+    }
+    const loom_low_allocation_assignment_t* assignment =
+        &allocation->assignments[i];
+    if (assignment->descriptor_reg_class_id !=
+            high_water_assignment->descriptor_reg_class_id ||
+        assignment->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        !loom_target_compile_report_assignment_active_at(assignment, point)) {
+      continue;
+    }
+    if (loom_target_compile_report_unit_inside_range(
+            unit, assignment->location_base, assignment->location_count)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_target_compile_report_unit_blocked_by_storage_lease(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit) {
+  for (iree_host_size_t i = 0; i < allocation->storage_lease_instance_count;
+       ++i) {
+    const loom_low_allocation_storage_lease_t* lease =
+        &allocation->storage_lease_instances[i];
+    if (lease->assignment_index == high_water_assignment_index ||
+        lease->descriptor_reg_class_id !=
+            high_water_assignment->descriptor_reg_class_id ||
+        lease->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        point < lease->start_point || point >= lease->end_point) {
+      continue;
+    }
+    if (loom_target_compile_report_unit_inside_range(unit, lease->location_base,
+                                                     lease->location_count)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_target_compile_report_unit_blocked_in_lower_window(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit) {
+  return loom_target_compile_report_unit_blocked_by_assignment(
+             allocation, high_water_assignment, high_water_assignment_index,
+             point, unit) ||
+         loom_target_compile_report_unit_blocked_by_storage_lease(
+             allocation, high_water_assignment, high_water_assignment_index,
+             point, unit);
+}
+
+static loom_target_compile_report_allocation_lower_free_runs_t
+loom_target_compile_report_allocation_lower_free_runs(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* high_water_assignment,
+    uint32_t high_water_assignment_index) {
+  loom_target_compile_report_allocation_lower_free_runs_t free_runs = {0};
+  const uint32_t point = high_water_assignment->start_point;
+  uint32_t current_free_run = 0;
+  for (uint32_t unit = 0; unit < high_water_assignment->location_base; ++unit) {
+    if (loom_target_compile_report_unit_blocked_in_lower_window(
+            allocation, high_water_assignment, high_water_assignment_index,
+            point, unit)) {
+      current_free_run = 0;
+      continue;
+    }
+    ++free_runs.free_unit_count;
+    if (current_free_run == 0) {
+      ++free_runs.free_run_count;
+    }
+    ++current_free_run;
+    free_runs.largest_free_run_unit_count =
+        iree_max(free_runs.largest_free_run_unit_count, current_free_run);
+  }
+  return free_runs;
 }
 
 static uint64_t loom_target_compile_report_units_below_high_water(
@@ -1684,6 +1786,9 @@ loom_target_compile_report_record_allocation_high_water_rows(
         loom_target_compile_report_allocation_high_water_blockers(
             allocation, assignment, entry->assignment_index,
             entry->high_water_units);
+    const loom_target_compile_report_allocation_lower_free_runs_t free_runs =
+        loom_target_compile_report_allocation_lower_free_runs(
+            allocation, assignment, entry->assignment_index);
     loom_target_compile_report_pressure_origin_info_t origin_info =
         loom_target_compile_report_pressure_origin_from_value(
             allocation->module, assignment->value_id);
@@ -1716,6 +1821,10 @@ loom_target_compile_report_record_allocation_high_water_rows(
         .location_base = assignment->location_base,
         .location_count = assignment->location_count,
         .high_water_units = entry->high_water_units,
+        .lower_free_unit_count = free_runs.free_unit_count,
+        .lower_free_run_count = free_runs.free_run_count,
+        .lower_largest_free_run_unit_count =
+            free_runs.largest_free_run_unit_count,
         .active_assignment_blocker_count = blockers.active_assignment_count,
         .active_assignment_blocker_units = blockers.active_assignment_units,
         .active_storage_lease_blocker_count =

@@ -1369,6 +1369,9 @@ loom_target_compile_report_format_allocation_high_water_rows(
           "] function=%.*s value=%.*s class=%.*s type=%.*s element=%.*s "
           "assignment=%u origin=%.*s origin_op=%.*s semantic=%.*s start=%u "
           "end=%u required_units=%u location=%.*s[%u:%u] high_water=%" PRIu64
+          " lower_free_units=%" PRIu64
+          " lower_free_runs=%u "
+          "lower_largest_free_run_units=%u"
           " active_assignment_blockers=%u "
           "active_assignment_blocker_units=%" PRIu64
           " active_storage_lease_blockers=%u "
@@ -1386,7 +1389,9 @@ loom_target_compile_report_format_allocation_high_water_rows(
           (int)semantic_tag.size, semantic_tag.data, row->start_point,
           row->end_point, row->required_unit_count, (int)location_kind.size,
           location_kind.data, row->location_base, row->location_count,
-          row->high_water_units, row->active_assignment_blocker_count,
+          row->high_water_units, row->lower_free_unit_count,
+          row->lower_free_run_count, row->lower_largest_free_run_unit_count,
+          row->active_assignment_blocker_count,
           row->active_assignment_blocker_units,
           row->active_storage_lease_blocker_count,
           row->active_storage_lease_blocker_units,
@@ -2943,6 +2948,14 @@ loom_target_compile_report_format_allocation_high_water_row_json(
       stream, &first_field, "location_count", row->location_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "high_water_units", row->high_water_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "lower_free_unit_count",
+      row->lower_free_unit_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "lower_free_run_count", row->lower_free_run_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "lower_largest_free_run_unit_count",
+      row->lower_largest_free_run_unit_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
       stream, &first_field, "active_assignment_blocker_count",
       row->active_assignment_blocker_count));

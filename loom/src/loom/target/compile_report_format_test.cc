@@ -219,6 +219,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.location_base=*/248,
               /*.location_count=*/4,
               /*.high_water_units=*/252,
+              /*.lower_free_unit_count=*/13,
+              /*.lower_free_run_count=*/3,
+              /*.lower_largest_free_run_unit_count=*/6,
               /*.active_assignment_blocker_count=*/47,
               /*.active_assignment_blocker_units=*/244,
               /*.active_storage_lease_blocker_count=*/3,
@@ -732,7 +735,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "origin_op=low.op<amdgpu.ds_load_b128> "
                         "semantic=memory.workgroup.load.u128 start=17 end=24 "
                         "required_units=4 location=physical_register[248:4] "
-                        "high_water=252 active_assignment_blockers=47 "
+                        "high_water=252 lower_free_units=13 "
+                        "lower_free_runs=3 lower_largest_free_run_units=6 "
+                        "active_assignment_blockers=47 "
                         "active_assignment_blocker_units=244 "
                         "active_storage_lease_blockers=3 "
                         "active_storage_lease_blocker_units=12 "
@@ -1170,6 +1175,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                 IREE_SV("\"location_kind\":\"physical_register\","
                         "\"location_base\":248,\"location_count\":4,"
                         "\"high_water_units\":252,"
+                        "\"lower_free_unit_count\":13,"
+                        "\"lower_free_run_count\":3,"
+                        "\"lower_largest_free_run_unit_count\":6,"
                         "\"active_assignment_blocker_count\":47,"
                         "\"active_assignment_blocker_units\":244,"
                         "\"active_storage_lease_blocker_count\":3,"

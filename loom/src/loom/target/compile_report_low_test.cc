@@ -814,6 +814,10 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   EXPECT_EQ(allocation_high_water_rows[0].location_base, 7u);
   EXPECT_EQ(allocation_high_water_rows[0].location_count, 2u);
   EXPECT_EQ(allocation_high_water_rows[0].high_water_units, 9u);
+  EXPECT_EQ(allocation_high_water_rows[0].lower_free_unit_count, 7u);
+  EXPECT_EQ(allocation_high_water_rows[0].lower_free_run_count, 1u);
+  EXPECT_EQ(allocation_high_water_rows[0].lower_largest_free_run_unit_count,
+            7u);
   EXPECT_EQ(allocation_high_water_rows[0].active_assignment_blocker_count, 0u);
   EXPECT_EQ(allocation_high_water_rows[0].active_assignment_blocker_units, 0u);
   EXPECT_EQ(allocation_high_water_rows[0].active_storage_lease_blocker_count,
