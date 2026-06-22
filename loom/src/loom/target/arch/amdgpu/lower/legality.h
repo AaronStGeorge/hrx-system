@@ -67,6 +67,14 @@ iree_status_t loom_amdgpu_low_legality_verify_direct_subgroup_width(
     uint32_t source_wavefront_size, uint32_t required_width,
     iree_string_view_t constraint_key);
 
+// Verifies that the active target bundle has a supported wavefront size and
+// that full-wave direct subgroup communication is available.
+iree_status_t loom_amdgpu_low_legality_verify_full_wave_direct_subgroup_width(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t wavefront_constraint_key,
+    iree_string_view_t direct_width_constraint_key,
+    uint32_t* out_wavefront_size);
+
 // Returns true when the target bundle belongs to an AMDGPU contract set.
 bool loom_amdgpu_low_legality_bundle_is_amdgpu(
     const loom_target_bundle_t* bundle);
