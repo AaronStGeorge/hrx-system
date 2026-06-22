@@ -1665,6 +1665,19 @@ low.func.def target(@gfx11_target) @gfx11_s_load_offset_only(%kernarg: reg<amdgp
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_s_load_offset_only_x8 waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_s_load_offset_only_x8(%kernarg: reg<amdgpu.sgpr x2>) {
+  %loaded = low.op<amdgpu.s_load_dwordx8_offset_only>(%kernarg) {offset = 32} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x8>
+  low.return
+}
+
+// ----
+  s_load_dwordx8 s[8:15], s[0:1] offset:32
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_s_load_offset_only_tied waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_s_load_offset_only_tied(%kernarg: reg<amdgpu.sgpr x2>) {
