@@ -162,6 +162,21 @@ static iree_status_t loom_amdgpu_occupancy_lookup_register_class(
       (int)register_class.size, register_class.data);
 }
 
+static bool loom_amdgpu_occupancy_assignment_contributes_register_resources(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* assignment) {
+  const uint16_t descriptor_reg_class_id = assignment->descriptor_reg_class_id;
+  if (descriptor_reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+      descriptor_reg_class_id >=
+          allocation->target.descriptor_set->reg_class_count) {
+    return true;
+  }
+  const loom_low_reg_class_t* reg_class =
+      &allocation->target.descriptor_set->reg_classes[descriptor_reg_class_id];
+  return !iree_any_bit_set(reg_class->flags,
+                           LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
+}
+
 iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_arena_allocator_t* arena,
@@ -256,6 +271,10 @@ static iree_status_t loom_amdgpu_occupancy_collect_allocations(
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
     if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
+      continue;
+    }
+    if (!loom_amdgpu_occupancy_assignment_contributes_register_resources(
+            allocation, assignment)) {
       continue;
     }
     uint32_t class_index = LOOM_AMDGPU_OCCUPANCY_CLASS_NONE;

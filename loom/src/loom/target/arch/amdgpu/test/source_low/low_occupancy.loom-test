@@ -12,6 +12,23 @@ low.func.def target(@gfx11_target) @gfx11_pressure(%value: reg<amdgpu.vgpr>) -> 
 
 // ====
 
+// RUN: emit amdgpu-occupancy-json @gfx11_scc_does_not_contribute
+
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_scc_does_not_contribute(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %cond = s_cmp_lt_i32 %lhs, %rhs
+  low.cond_br %cond, ^then, ^else : reg<amdgpu.scc>
+^then:
+  return %value
+^else:
+  return %value
+}
+
+// ----
+{"format":"loom.amdgpu.occupancy.v0","function":"gfx11_scc_does_not_contribute","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","processor":"gfx1100","wave_size":32,"max_waves_per_simd":16,"flat_workgroup_size":0,"waves_per_workgroup":0,"resident_waves_per_simd":16,"occupancy_percent":100,"limiting_resource":"max_waves","spill_count":0,"scratch_spill_bytes":0,"spill_store_count":0,"spill_reload_count":0,"register_classes":[{"register_class":"amdgpu.sgpr","allocated_units":2,"rounded_units":16,"pool_units":800,"allocation_granularity":16,"wave_limit":16,"next_cliff_units":49,"units_until_next_cliff":47,"spill_count":0,"spill_bytes":0,"spill_store_count":0,"spill_reload_count":0},{"register_class":"amdgpu.vgpr","allocated_units":1,"rounded_units":4,"pool_units":1024,"allocation_granularity":4,"wave_limit":16,"next_cliff_units":65,"units_until_next_cliff":64,"spill_count":0,"spill_bytes":0,"spill_store_count":0,"spill_reload_count":0}],"pressure_resources":[]}
+
+// ====
+
 // RUN: emit amdgpu-occupancy-json @gfx11_spill amdgpu.vgpr=2
 
 amdgpu.target<gfx1100> @gfx11_target
