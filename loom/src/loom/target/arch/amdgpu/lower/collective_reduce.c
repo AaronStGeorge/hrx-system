@@ -69,60 +69,121 @@ static bool loom_amdgpu_subgroup_cluster_size_is_supported(
          loom_amdgpu_u32_is_power_of_two((uint32_t)cluster_size);
 }
 
-static bool loom_amdgpu_subgroup_reduce_active_lane_count(
-    const loom_module_t* module, loom_func_like_t function,
-    const loom_target_bundle_t* bundle, uint32_t wavefront_size,
-    uint32_t* out_active_lane_count) {
-  *out_active_lane_count = 0;
-  uint32_t flat_workgroup_size = 0;
-  if (!loom_amdgpu_required_flat_workgroup_size(module, function, bundle,
-                                                &flat_workgroup_size) ||
-      flat_workgroup_size == 0) {
-    return false;
-  }
-  if (flat_workgroup_size <= wavefront_size) {
-    *out_active_lane_count = flat_workgroup_size;
-    return true;
-  }
-  if ((flat_workgroup_size % wavefront_size) != 0) {
-    return false;
-  }
-  *out_active_lane_count = wavefront_size;
-  return true;
-}
+typedef uint8_t loom_amdgpu_subgroup_reduce_shape_flags_t;
 
-static bool loom_amdgpu_subgroup_reduce_cluster_active_lane_count(
+enum loom_amdgpu_subgroup_reduce_shape_flag_bits_e {
+  LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_CLUSTERED = 1u << 0,
+};
+
+typedef enum loom_amdgpu_subgroup_reduce_shape_failure_e {
+  LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_NONE = 0,
+  LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_CLUSTER_STRIDE = 1,
+  LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_CLUSTER_SIZE = 2,
+  LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_CLUSTER_MULTIPLE = 3,
+  LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_WAVE_MULTIPLE = 4,
+} loom_amdgpu_subgroup_reduce_shape_failure_t;
+
+typedef struct loom_amdgpu_subgroup_reduce_shape_t {
+  // Semantic lanes participating in the selected subgroup reduce.
+  uint32_t active_lane_count;
+  // Shape properties derived from subgroup-reduce attributes and launch facts.
+  loom_amdgpu_subgroup_reduce_shape_flags_t flags;
+} loom_amdgpu_subgroup_reduce_shape_t;
+
+static bool loom_amdgpu_subgroup_reduce_resolve_shape(
     const loom_module_t* module, loom_func_like_t function,
     const loom_target_bundle_t* bundle, const loom_op_t* op,
-    uint32_t wavefront_size, uint32_t* out_active_lane_count) {
-  *out_active_lane_count = 0;
-  if (!loom_amdgpu_subgroup_reduce_has_cluster_size(op) ||
-      loom_amdgpu_subgroup_reduce_has_cluster_stride(op)) {
-    return false;
-  }
+    uint32_t wavefront_size, loom_amdgpu_subgroup_reduce_shape_t* out_shape,
+    loom_amdgpu_subgroup_reduce_shape_failure_t* out_failure) {
+  *out_shape = (loom_amdgpu_subgroup_reduce_shape_t){0};
+  *out_failure = LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_NONE;
 
-  const int64_t cluster_size = loom_kernel_subgroup_reduce_cluster_size(op);
-  if (!loom_amdgpu_subgroup_cluster_size_is_supported(cluster_size,
-                                                      wavefront_size)) {
-    return false;
+  const bool has_cluster_attrs =
+      loom_amdgpu_subgroup_reduce_has_cluster_attrs(op);
+  int64_t cluster_size = 0;
+  if (has_cluster_attrs) {
+    if (loom_amdgpu_subgroup_reduce_has_cluster_stride(op)) {
+      *out_failure = LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_CLUSTER_STRIDE;
+      return false;
+    }
+    if (!loom_amdgpu_subgroup_reduce_has_cluster_size(op)) {
+      *out_failure = LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_CLUSTER_SIZE;
+      return false;
+    }
+
+    cluster_size = loom_kernel_subgroup_reduce_cluster_size(op);
+    if (!loom_amdgpu_subgroup_cluster_size_is_supported(cluster_size,
+                                                        wavefront_size)) {
+      *out_failure = LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_CLUSTER_SIZE;
+      return false;
+    }
   }
 
   uint32_t flat_workgroup_size = 0;
   if (!loom_amdgpu_required_flat_workgroup_size(module, function, bundle,
                                                 &flat_workgroup_size) ||
       flat_workgroup_size == 0) {
+    *out_failure =
+        has_cluster_attrs
+            ? LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_CLUSTER_MULTIPLE
+            : LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_WAVE_MULTIPLE;
     return false;
   }
+
+  if (!has_cluster_attrs) {
+    if (flat_workgroup_size <= wavefront_size) {
+      *out_shape = (loom_amdgpu_subgroup_reduce_shape_t){
+          .active_lane_count = flat_workgroup_size,
+      };
+      return true;
+    }
+    if ((flat_workgroup_size % wavefront_size) != 0) {
+      *out_failure =
+          LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_WAVE_MULTIPLE;
+      return false;
+    }
+    *out_shape = (loom_amdgpu_subgroup_reduce_shape_t){
+        .active_lane_count = wavefront_size,
+    };
+    return true;
+  }
+
   if (flat_workgroup_size <= wavefront_size) {
     if ((flat_workgroup_size % (uint32_t)cluster_size) != 0) {
+      *out_failure =
+          LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_CLUSTER_MULTIPLE;
       return false;
     }
   } else if ((flat_workgroup_size % wavefront_size) != 0) {
+    *out_failure =
+        LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_WAVE_MULTIPLE;
     return false;
   }
 
-  *out_active_lane_count = (uint32_t)cluster_size;
+  *out_shape = (loom_amdgpu_subgroup_reduce_shape_t){
+      .active_lane_count = (uint32_t)cluster_size,
+      .flags = LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_CLUSTERED,
+  };
   return true;
+}
+
+static iree_string_view_t loom_amdgpu_subgroup_reduce_shape_failure_key(
+    loom_amdgpu_subgroup_reduce_shape_failure_t failure) {
+  switch (failure) {
+    case LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_CLUSTER_STRIDE:
+      return IREE_SV("subgroup_reduce.cluster_stride");
+    case LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_CLUSTER_SIZE:
+      return IREE_SV("subgroup_reduce.power_of_two_cluster_size");
+    case LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_CLUSTER_MULTIPLE:
+      return IREE_SV("subgroup_reduce.fixed_workgroup_cluster_multiple");
+    case LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_WORKGROUP_WAVE_MULTIPLE:
+      return IREE_SV("subgroup_reduce.fixed_workgroup_wave_multiple");
+    case LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_NONE:
+      break;
+  }
+  IREE_ASSERT_UNREACHABLE(
+      "AMDGPU subgroup reduce shape failure requires reason");
+  return IREE_SV("subgroup_reduce.fixed_workgroup_wave_multiple");
 }
 
 static bool loom_amdgpu_subgroup_reduce_dpp_row_is_applicable(
@@ -731,24 +792,18 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
   if (!wavefront_selected) {
     return iree_ok_status();
   }
-  uint32_t active_lane_count = 0;
-  const bool has_cluster_attrs =
-      loom_amdgpu_subgroup_reduce_has_cluster_attrs(source_op);
-  if (has_cluster_attrs) {
-    if (!loom_amdgpu_subgroup_reduce_cluster_active_lane_count(
-            module, loom_low_lower_context_source_function(context),
-            loom_low_lower_context_bundle(context), source_op, wavefront_size,
-            &active_lane_count)) {
-      return iree_ok_status();
-    }
-  } else {
-    if (!loom_amdgpu_subgroup_reduce_active_lane_count(
-            module, loom_low_lower_context_source_function(context),
-            loom_low_lower_context_bundle(context), wavefront_size,
-            &active_lane_count)) {
-      return iree_ok_status();
-    }
+  loom_amdgpu_subgroup_reduce_shape_t shape = {0};
+  loom_amdgpu_subgroup_reduce_shape_failure_t shape_failure =
+      LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_NONE;
+  if (!loom_amdgpu_subgroup_reduce_resolve_shape(
+          module, loom_low_lower_context_source_function(context),
+          loom_low_lower_context_bundle(context), source_op, wavefront_size,
+          &shape, &shape_failure)) {
+    return iree_ok_status();
   }
+  const uint32_t active_lane_count = shape.active_lane_count;
+  const bool is_clustered = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_CLUSTERED);
   bool direct_width_selected = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_select_direct_subgroup_width(
       context, wavefront_size, active_lane_count, &direct_width_selected));
@@ -764,7 +819,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
         loom_kernel_subgroup_reduce_result(source_op), &result_demand));
     if (!loom_amdgpu_subgroup_reduce_leader_lane_publication_is_supported(
             kind, payload_kind, register_count, wavefront_size,
-            active_lane_count, has_cluster_attrs, result_demand)) {
+            active_lane_count, is_clustered, result_demand)) {
       return iree_ok_status();
     }
     publication_kind = LOOM_AMDGPU_SUBGROUP_REDUCE_PUBLICATION_LEADER_LANE;
@@ -2172,48 +2227,19 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
     return loom_amdgpu_low_legality_reject(
         context, op, IREE_SV("subgroup_reduce.wavefront_size"));
   }
-  uint32_t active_lane_count = 0;
-  if (loom_amdgpu_subgroup_reduce_has_cluster_attrs(op)) {
-    if (loom_amdgpu_subgroup_reduce_has_cluster_stride(op)) {
-      return loom_amdgpu_low_legality_reject(
-          context, op, IREE_SV("subgroup_reduce.cluster_stride"));
-    }
-    const int64_t cluster_size = loom_kernel_subgroup_reduce_cluster_size(op);
-    if (!loom_amdgpu_subgroup_cluster_size_is_supported(cluster_size,
-                                                        wavefront_size)) {
-      return loom_amdgpu_low_legality_reject(
-          context, op, IREE_SV("subgroup_reduce.power_of_two_cluster_size"));
-    }
-    uint32_t flat_workgroup_size = 0;
-    if (!loom_amdgpu_required_flat_workgroup_size(
-            module, loom_target_low_legality_function(context), bundle,
-            &flat_workgroup_size) ||
-        flat_workgroup_size == 0) {
-      return loom_amdgpu_low_legality_reject(
-          context, op,
-          IREE_SV("subgroup_reduce.fixed_workgroup_cluster_multiple"));
-    }
-    if (flat_workgroup_size <= wavefront_size) {
-      if ((flat_workgroup_size % (uint32_t)cluster_size) != 0) {
-        return loom_amdgpu_low_legality_reject(
-            context, op,
-            IREE_SV("subgroup_reduce.fixed_workgroup_cluster_multiple"));
-      }
-    } else if ((flat_workgroup_size % wavefront_size) != 0) {
-      return loom_amdgpu_low_legality_reject(
-          context, op,
-          IREE_SV("subgroup_reduce.fixed_workgroup_wave_multiple"));
-    }
-    active_lane_count = (uint32_t)cluster_size;
-  } else {
-    if (!loom_amdgpu_subgroup_reduce_active_lane_count(
-            module, loom_target_low_legality_function(context), bundle,
-            wavefront_size, &active_lane_count)) {
-      return loom_amdgpu_low_legality_reject(
-          context, op,
-          IREE_SV("subgroup_reduce.fixed_workgroup_wave_multiple"));
-    }
+  loom_amdgpu_subgroup_reduce_shape_t shape = {0};
+  loom_amdgpu_subgroup_reduce_shape_failure_t shape_failure =
+      LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_FAILURE_NONE;
+  if (!loom_amdgpu_subgroup_reduce_resolve_shape(
+          module, loom_target_low_legality_function(context), bundle, op,
+          wavefront_size, &shape, &shape_failure)) {
+    return loom_amdgpu_low_legality_reject(
+        context, op,
+        loom_amdgpu_subgroup_reduce_shape_failure_key(shape_failure));
   }
+  const uint32_t active_lane_count = shape.active_lane_count;
+  const bool is_clustered = iree_all_bits_set(
+      shape.flags, LOOM_AMDGPU_SUBGROUP_REDUCE_SHAPE_CLUSTERED);
   bool direct_width_supported = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_supports_direct_subgroup_width(
       module, loom_target_low_legality_target_ref(context), wavefront_size,
@@ -2229,8 +2255,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
     leader_lane_publication_supported =
         loom_amdgpu_subgroup_reduce_leader_lane_publication_is_supported(
             kind, payload_kind, unused_register_count, wavefront_size,
-            active_lane_count,
-            loom_amdgpu_subgroup_reduce_has_cluster_attrs(op), result_demand);
+            active_lane_count, is_clustered, result_demand);
     if (!leader_lane_publication_supported) {
       return loom_amdgpu_low_legality_reject(
           context, op,
