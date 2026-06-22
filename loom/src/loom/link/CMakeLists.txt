@@ -39,9 +39,11 @@ loom_cc_library(
     loom::ir
     loom::ir::symbol_map
     loom::ops::config
+    loom::ops::func
     loom::ops::op_defs
     loom::rewrite::materialize
     loom::rewrite::remap
+    loom::util::walk
   PUBLIC
 )
 

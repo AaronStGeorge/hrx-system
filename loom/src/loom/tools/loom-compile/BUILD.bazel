@@ -125,6 +125,9 @@ loom_cc_binary(
 
 iree_execution_test_suite(
     name = "execution_test",
+    data = [
+        "rooted_template_provider.loom",
+    ],
     manifests = ["loom-compile.test.json"],
     tags = ["hostonly"],
     tools = {

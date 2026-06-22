@@ -118,6 +118,39 @@
       ]
     },
     {
+      "name": "rooted compile retains template provider",
+      "steps": [
+        {
+          "name": "compile-root",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{srcdir}/rooted_template_provider.loom",
+              "--root=@entry",
+              "--output={tmp}/rooted_template.vmfb",
+              "--compile-report=summary"
+            ]
+          },
+          "stderr": {
+            "contains": [
+              "\"artifact_kind\":\"vm-archive\"",
+              "\"status_code\":0",
+              "\"status\":\"OK\""
+            ],
+            "not_contains": [
+              "no_provider"
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/rooted_template.vmfb",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "dumps compile pipeline IR as JSONL",
       "steps": [
         {
