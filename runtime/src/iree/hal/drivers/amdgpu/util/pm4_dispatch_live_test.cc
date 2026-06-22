@@ -40,8 +40,9 @@ constexpr uint32_t kPm4BarrierValue = 0xC6600006u;
 constexpr uint32_t kPm4BarrierAdd = 0x330u;
 constexpr uint32_t kPm4PatchValue = 0xD7700007u;
 constexpr uint32_t kPm4PatchWrongValue = 0xE8800008u;
+constexpr uint32_t kPm4LdsValue = 0x40u;
 constexpr uint16_t kWorkgroupSize[3] = {64, 1, 1};
-constexpr uint32_t kDispatchGridSize[3] = {64, 1, 1};
+constexpr uint32_t kDispatchThreadCount[3] = {64, 1, 1};
 
 struct StoreKernargs {
   uint32_t* target;
@@ -61,11 +62,11 @@ struct PatchUserDataKernargs {
 };
 
 struct alignas(64) LiveMemory {
-  uint32_t outputs[4];
+  uint32_t outputs[5];
   uint32_t scratch[2];
   uint32_t completion;
   uint32_t reserved;
-  StoreKernargs store_kernargs[4];
+  StoreKernargs store_kernargs[5];
   ReadAddKernargs read_add_kernargs;
   PatchUserDataKernargs patch_user_data_kernargs;
 };
@@ -234,17 +235,15 @@ static iree_status_t LookupKernel(const iree_hal_amdgpu_libhsa_t* libhsa,
       &out_info->group_segment_size);
 }
 
-static void EmitDispatchDirect(uint32_t* target_dwords,
-                               uint32_t workgroup_count_x,
-                               uint32_t workgroup_count_y,
-                               uint32_t workgroup_count_z,
+static void EmitDispatchDirect(uint32_t* target_dwords, uint32_t thread_count_x,
+                               uint32_t thread_count_y, uint32_t thread_count_z,
                                uint32_t dispatch_initiator) {
   target_dwords[0] = iree_hal_amdgpu_pm4_make_compute_header(
       IREE_HAL_AMDGPU_PM4_HDR_IT_OPCODE_DISPATCH_DIRECT,
       IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT);
-  target_dwords[1] = workgroup_count_x;
-  target_dwords[2] = workgroup_count_y;
-  target_dwords[3] = workgroup_count_z;
+  target_dwords[1] = thread_count_x;
+  target_dwords[2] = thread_count_y;
+  target_dwords[3] = thread_count_z;
   target_dwords[4] = dispatch_initiator;
 }
 
@@ -367,8 +366,8 @@ static iree_status_t AppendPm4DispatchDirect(
         IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT,
         capacity - *inout_dword_count);
   }
-  EmitDispatchDirect(&dwords[*inout_dword_count], /*workgroup_count_x=*/1,
-                     /*workgroup_count_y=*/1, /*workgroup_count_z=*/1,
+  EmitDispatchDirect(&dwords[*inout_dword_count], kDispatchThreadCount[0],
+                     kDispatchThreadCount[1], kDispatchThreadCount[2],
                      launch_state.dispatch_initiator);
   *inout_dword_count += IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT;
   return iree_ok_status();
@@ -471,7 +470,7 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
                                                      code_object_reader));
   code_object_reader = {0};
 
-  KernelInfo kernels[4];
+  KernelInfo kernels[5];
   IREE_ASSERT_OK(LookupKernel(&libhsa, executable, gpu_agent,
                               "iree_hal_amdgpu_pm4_dispatch_test_store_a",
                               &kernels[0]));
@@ -484,11 +483,19 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   IREE_ASSERT_OK(LookupKernel(
       &libhsa, executable, gpu_agent,
       "iree_hal_amdgpu_pm4_dispatch_test_patch_user_data", &kernels[3]));
-  for (const KernelInfo& kernel : kernels) {
+  IREE_ASSERT_OK(LookupKernel(&libhsa, executable, gpu_agent,
+                              "iree_hal_amdgpu_pm4_dispatch_test_lds_sum",
+                              &kernels[4]));
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(kernels); ++i) {
+    const KernelInfo& kernel = kernels[i];
     EXPECT_LE(kernel.kernarg_size, sizeof(PatchUserDataKernargs));
     EXPECT_LE(kernel.kernarg_alignment, alignof(LiveMemory));
     EXPECT_EQ(kernel.private_segment_size, 0u);
-    EXPECT_EQ(kernel.group_segment_size, 0u);
+    if (i == 4) {
+      EXPECT_EQ(kernel.group_segment_size, 64u * sizeof(uint32_t));
+    } else {
+      EXPECT_EQ(kernel.group_segment_size, 0u);
+    }
   }
 
   hsa_amd_memory_pool_t host_memory_pool = {0};
@@ -535,7 +542,7 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
     uint16_t setup = 0;
     const uint16_t header = iree_hal_amdgpu_aql_emit_dispatch(
         &packet->dispatch, kernels[i].kernel_object, &memory->store_kernargs[i],
-        kWorkgroupSize, kDispatchGridSize, kernels[i].private_segment_size,
+        kWorkgroupSize, kDispatchThreadCount, kernels[i].private_segment_size,
         kernels[i].group_segment_size,
         iree_hal_amdgpu_aql_packet_control_barrier_system(),
         i == 1 ? completion_signal : iree_hsa_signal_null(), &setup);
@@ -550,8 +557,8 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   EXPECT_EQ(memory->outputs[0], kAqlValueA);
   EXPECT_EQ(memory->outputs[1], kAqlValueB + 0x100u);
 
-  iree_hal_amdgpu_pm4_dispatch_launch_state_t launch_states[4];
-  for (uint32_t i = 0; i < 4; ++i) {
+  iree_hal_amdgpu_pm4_dispatch_launch_state_t launch_states[5];
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(launch_states); ++i) {
     const iree_hal_amdgpu_kernel_descriptor_t* descriptor =
         reinterpret_cast<const iree_hal_amdgpu_kernel_descriptor_t*>(
             static_cast<uintptr_t>(kernels[i].kernel_object));
@@ -686,9 +693,8 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   pm4_dword_count += barrier_dword_count;
   ASSERT_LE(pm4_dword_count + IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT,
             IREE_ARRAYSIZE(pm4_dwords));
-  EmitDispatchDirect(&pm4_dwords[pm4_dword_count],
-                     /*workgroup_count_x=*/1, /*workgroup_count_y=*/1,
-                     /*workgroup_count_z=*/1,
+  EmitDispatchDirect(&pm4_dwords[pm4_dword_count], kDispatchThreadCount[0],
+                     kDispatchThreadCount[1], kDispatchThreadCount[2],
                      launch_states[1].dispatch_initiator);
   pm4_dword_count += IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT;
   IREE_ASSERT_OK(AppendPm4CompletionWrite(
@@ -762,6 +768,45 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   EXPECT_EQ(memory->outputs[3], 0u);
   iree_hal_amdgpu_pm4_program_deinitialize(&pm4_program);
   iree_hal_amdgpu_pm4_program_deinitialize(&target_pm4_program);
+
+  memset(memory, 0, sizeof(*memory));
+  pm4_dword_count = 0;
+  memory->store_kernargs[4] = {/*.target=*/&memory->outputs[4],
+                               /*.value=*/kPm4LdsValue};
+  IREE_ASSERT_OK(AppendPm4HostAcquire(agent_pm4_barrier_capabilities,
+                                      pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+                                      &pm4_dword_count));
+  IREE_ASSERT_OK(AppendPm4DispatchDirect(
+      launch_states[4], reinterpret_cast<uintptr_t>(&memory->store_kernargs[4]),
+      pm4_dwords, IREE_ARRAYSIZE(pm4_dwords), &pm4_dword_count));
+  IREE_ASSERT_OK(AppendPm4CompletionWrite(
+      agent_pm4_barrier_capabilities, pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+      &pm4_dword_count, &memory->completion, /*value=*/4));
+  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_program_initialize(
+      &libhsa, gpu_agent, pm4_memory_pool, pm4_dwords, pm4_dword_count,
+      &pm4_program));
+
+  iree_hsa_signal_store_screlease(IREE_LIBHSA(&libhsa), completion_signal, 1);
+  const uint64_t lds_pm4_packet_id =
+      iree_hal_amdgpu_aql_ring_reserve(&aql_ring, /*count=*/1);
+  pm4_packet = iree_hal_amdgpu_aql_ring_packet(&aql_ring, lds_pm4_packet_id);
+  memset(pm4_packet, 0, sizeof(*pm4_packet));
+  pm4_setup = 0;
+  const uint16_t lds_pm4_header = iree_hal_amdgpu_aql_emit_pm4_ib_dwords(
+      &pm4_packet->pm4_ib, pm4_program.dwords, pm4_program.dword_count,
+      iree_hal_amdgpu_aql_packet_control_barrier_system(), completion_signal,
+      &pm4_setup);
+  iree_hal_amdgpu_aql_ring_commit(pm4_packet, lds_pm4_header, pm4_setup);
+  iree_hal_amdgpu_aql_ring_doorbell(&aql_ring, lds_pm4_packet_id);
+  EXPECT_EQ(
+      iree_hsa_signal_wait_scacquire(
+          IREE_LIBHSA(&libhsa), completion_signal, HSA_SIGNAL_CONDITION_EQ,
+          /*compare_value=*/0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED),
+      0);
+  WaitForCompletionWord(&memory->completion, /*value=*/4);
+  EXPECT_EQ(memory->outputs[4], 64u * kPm4LdsValue + 2016u);
+  iree_hal_amdgpu_pm4_program_deinitialize(&pm4_program);
+
   EXPECT_EQ(queue_error.callback_count.load(std::memory_order_relaxed), 0u);
   EXPECT_EQ(queue_error.status.load(std::memory_order_relaxed),
             static_cast<uint32_t>(HSA_STATUS_SUCCESS));
