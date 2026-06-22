@@ -63,6 +63,37 @@ func.def @counted_loop_iv_proves_pair_load_extent(%buffer: buffer, %base: offset
 
 // ====
 
+func.def @static_vector_origin_proven_by_shifted_assume_relation(%buffer: buffer, %base: offset, %row: index, %column: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %stride = index.constant 1024 : index
+  %limit = index.constant 262137 : index
+  %row_offset = index.mul %row, %stride : index
+  %origin0 = index.add %row_offset, %column : index
+  %origin = index.assume %origin0 [range(%origin0, 0, 262137), lt(%origin0, %limit), mul(%origin0, 8)] : index
+  %view = buffer.view %buffer[%base] : buffer -> view<262144xf16, %layout>
+  %loaded = vector.load %view[%origin] : view<262144xf16, %layout> -> vector<8xf16>
+  test.use %loaded : vector<8xf16>
+  func.return
+}
+
+// ====
+
+func.def @static_vector_origin_rejects_insufficient_shifted_assume_relation(%buffer: buffer, %base: offset, %row: index, %column: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %stride = index.constant 1024 : index
+  %late_limit = index.constant 262138 : index
+  %row_offset = index.mul %row, %stride : index
+  %origin0 = index.add %row_offset, %column : index
+  %origin = index.assume %origin0 [range(%origin0, 0, 262137), lt(%origin0, %late_limit), mul(%origin0, 8)] : index
+  %view = buffer.view %buffer[%base] : buffer -> view<262144xf16, %layout>
+  // ERROR@+1: SUBRANGE/010 {op_name="vector.load", vector_extent="8", view_bound="262144", required_origin_upper_bound="262136", constraint_key="vector_footprint.full_vector_upper_bound"}
+  %loaded = vector.load %view[%origin] : view<262144xf16, %layout> -> vector<8xf16>
+  test.use %loaded : vector<8xf16>
+  func.return
+}
+
+// ====
+
 func.def @dynamic_unit_axis_proven_by_assume_relation(%buffer: buffer, %base: offset, %row: index, %n: index) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]x4xf32, %layout>
