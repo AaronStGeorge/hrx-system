@@ -1131,6 +1131,7 @@ static iree_status_t loom_amdgpu_wait_plan_wait_counter(
                             counter_id);
   }
   const uint32_t slot = loom_amdgpu_wait_counter_slot(counter_id);
+  const uint32_t counter_mask = loom_amdgpu_wait_counter_mask_from_slot(slot);
   const uint32_t outstanding_before = builder->outstanding_counts[slot];
   if (target_count > outstanding_before) {
     target_count = (uint16_t)outstanding_before;
@@ -1158,6 +1159,10 @@ static iree_status_t loom_amdgpu_wait_plan_wait_counter(
                                : LOOM_LOW_SCHEDULE_NODE_NONE,
           .outstanding_before = outstanding_before,
       }));
+  if (target_count == 0 && producer_node < builder->schedule->node_count) {
+    builder->node_states[producer_node].drained_after_production_counter_mask |=
+        counter_mask;
+  }
   if (target_count == 0) {
     ++builder->counter_epochs[slot];
     builder->completed_position_counts[slot] = 0;
