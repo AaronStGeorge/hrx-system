@@ -707,6 +707,15 @@ typedef struct loom_target_compile_report_allocation_high_water_row_t {
   uint32_t lower_free_run_count;
   // Largest contiguous unoccupied-unit run below |location_base|.
   uint32_t lower_largest_free_run_unit_count;
+  // Upper-bound free units below |location_base| when pressure-releasable
+  // storage leases are discounted.
+  uint64_t lower_pressure_releasable_free_unit_count;
+  // Upper-bound free runs below |location_base| when pressure-releasable
+  // storage leases are discounted.
+  uint32_t lower_pressure_releasable_free_run_count;
+  // Largest upper-bound free run below |location_base| when pressure-releasable
+  // storage leases are discounted.
+  uint32_t lower_pressure_releasable_largest_free_run_unit_count;
   // Number of other active assignments below |high_water_units|.
   uint32_t active_assignment_blocker_count;
   // Total units occupied by other active assignments below |high_water_units|.

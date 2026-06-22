@@ -1491,6 +1491,14 @@ typedef struct loom_target_compile_report_allocation_lower_free_runs_t {
   uint32_t largest_free_run_unit_count;
 } loom_target_compile_report_allocation_lower_free_runs_t;
 
+typedef enum loom_target_compile_report_storage_lease_occupancy_e {
+  // Treat active storage leases as occupied.
+  LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_ACTIVE = 0,
+  // Treat pressure-releasable storage leases as free.
+  LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_PRESSURE_RELEASE_UPPER_BOUND =
+      1,
+} loom_target_compile_report_storage_lease_occupancy_t;
+
 static bool loom_target_compile_report_assignment_active_at(
     const loom_low_allocation_assignment_t* assignment, uint32_t point) {
   return assignment->start_point <= point && point < assignment->end_point;
@@ -1500,6 +1508,18 @@ static bool loom_target_compile_report_unit_inside_range(
     uint32_t unit, uint32_t location_base, uint32_t location_count) {
   return unit >= location_base &&
          (uint64_t)unit < (uint64_t)location_base + location_count;
+}
+
+static bool loom_target_compile_report_storage_lease_is_pressure_releasable(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_storage_lease_t* lease) {
+  if (allocation->storage_leases.records == NULL ||
+      lease->lease_record_index >= allocation->storage_leases.record_count) {
+    return false;
+  }
+  return iree_all_bits_set(
+      allocation->storage_leases.records[lease->lease_record_index].flags,
+      LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE);
 }
 
 static bool loom_target_compile_report_unit_blocked_by_assignment(
@@ -1530,7 +1550,8 @@ static bool loom_target_compile_report_unit_blocked_by_assignment(
 static bool loom_target_compile_report_unit_blocked_by_storage_lease(
     const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_assignment_t* high_water_assignment,
-    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit) {
+    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit,
+    loom_target_compile_report_storage_lease_occupancy_t occupancy) {
   for (iree_host_size_t i = 0; i < allocation->storage_lease_instance_count;
        ++i) {
     const loom_low_allocation_storage_lease_t* lease =
@@ -1541,6 +1562,12 @@ static bool loom_target_compile_report_unit_blocked_by_storage_lease(
         lease->location_kind !=
             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
         point < lease->start_point || point >= lease->end_point) {
+      continue;
+    }
+    if (occupancy ==
+            LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_PRESSURE_RELEASE_UPPER_BOUND &&
+        loom_target_compile_report_storage_lease_is_pressure_releasable(
+            allocation, lease)) {
       continue;
     }
     if (loom_target_compile_report_unit_inside_range(unit, lease->location_base,
@@ -1554,27 +1581,29 @@ static bool loom_target_compile_report_unit_blocked_by_storage_lease(
 static bool loom_target_compile_report_unit_blocked_in_lower_window(
     const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_assignment_t* high_water_assignment,
-    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit) {
+    uint32_t high_water_assignment_index, uint32_t point, uint32_t unit,
+    loom_target_compile_report_storage_lease_occupancy_t occupancy) {
   return loom_target_compile_report_unit_blocked_by_assignment(
              allocation, high_water_assignment, high_water_assignment_index,
              point, unit) ||
          loom_target_compile_report_unit_blocked_by_storage_lease(
              allocation, high_water_assignment, high_water_assignment_index,
-             point, unit);
+             point, unit, occupancy);
 }
 
 static loom_target_compile_report_allocation_lower_free_runs_t
 loom_target_compile_report_allocation_lower_free_runs(
     const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_assignment_t* high_water_assignment,
-    uint32_t high_water_assignment_index) {
+    uint32_t high_water_assignment_index,
+    loom_target_compile_report_storage_lease_occupancy_t occupancy) {
   loom_target_compile_report_allocation_lower_free_runs_t free_runs = {0};
   const uint32_t point = high_water_assignment->start_point;
   uint32_t current_free_run = 0;
   for (uint32_t unit = 0; unit < high_water_assignment->location_base; ++unit) {
     if (loom_target_compile_report_unit_blocked_in_lower_window(
             allocation, high_water_assignment, high_water_assignment_index,
-            point, unit)) {
+            point, unit, occupancy)) {
       current_free_run = 0;
       continue;
     }
@@ -1788,7 +1817,13 @@ loom_target_compile_report_record_allocation_high_water_rows(
             entry->high_water_units);
     const loom_target_compile_report_allocation_lower_free_runs_t free_runs =
         loom_target_compile_report_allocation_lower_free_runs(
-            allocation, assignment, entry->assignment_index);
+            allocation, assignment, entry->assignment_index,
+            LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_ACTIVE);
+    const loom_target_compile_report_allocation_lower_free_runs_t
+        pressure_release_free_runs =
+            loom_target_compile_report_allocation_lower_free_runs(
+                allocation, assignment, entry->assignment_index,
+                LOOM_TARGET_COMPILE_REPORT_STORAGE_LEASE_OCCUPANCY_PRESSURE_RELEASE_UPPER_BOUND);
     loom_target_compile_report_pressure_origin_info_t origin_info =
         loom_target_compile_report_pressure_origin_from_value(
             allocation->module, assignment->value_id);
@@ -1825,6 +1860,12 @@ loom_target_compile_report_record_allocation_high_water_rows(
         .lower_free_run_count = free_runs.free_run_count,
         .lower_largest_free_run_unit_count =
             free_runs.largest_free_run_unit_count,
+        .lower_pressure_releasable_free_unit_count =
+            pressure_release_free_runs.free_unit_count,
+        .lower_pressure_releasable_free_run_count =
+            pressure_release_free_runs.free_run_count,
+        .lower_pressure_releasable_largest_free_run_unit_count =
+            pressure_release_free_runs.largest_free_run_unit_count,
         .active_assignment_blocker_count = blockers.active_assignment_count,
         .active_assignment_blocker_units = blockers.active_assignment_units,
         .active_storage_lease_blocker_count =

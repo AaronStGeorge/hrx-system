@@ -222,6 +222,10 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.lower_free_unit_count=*/13,
               /*.lower_free_run_count=*/3,
               /*.lower_largest_free_run_unit_count=*/6,
+              /*.lower_pressure_releasable_free_unit_count=*/21,
+              /*.lower_pressure_releasable_free_run_count=*/2,
+              /*.lower_pressure_releasable_largest_free_run_unit_count=*/
+              14,
               /*.active_assignment_blocker_count=*/47,
               /*.active_assignment_blocker_units=*/244,
               /*.active_storage_lease_blocker_count=*/3,
@@ -737,6 +741,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "required_units=4 location=physical_register[248:4] "
                         "high_water=252 lower_free_units=13 "
                         "lower_free_runs=3 lower_largest_free_run_units=6 "
+                        "lower_pressure_releasable_free_units=21 "
+                        "lower_pressure_releasable_free_runs=2 "
+                        "lower_pressure_releasable_largest_free_run_units=14 "
                         "active_assignment_blockers=47 "
                         "active_assignment_blocker_units=244 "
                         "active_storage_lease_blockers=3 "
@@ -1178,6 +1185,10 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "\"lower_free_unit_count\":13,"
                         "\"lower_free_run_count\":3,"
                         "\"lower_largest_free_run_unit_count\":6,"
+                        "\"lower_pressure_releasable_free_unit_count\":21,"
+                        "\"lower_pressure_releasable_free_run_count\":2,"
+                        "\"lower_pressure_releasable_largest_free_run_unit_"
+                        "count\":14,"
                         "\"active_assignment_blocker_count\":47,"
                         "\"active_assignment_blocker_units\":244,"
                         "\"active_storage_lease_blocker_count\":3,"
