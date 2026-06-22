@@ -131,6 +131,7 @@ static const loom_pass_option_enum_value_t kLowSourceToLowDiagnosticsValues[] =
         {.value = IREE_SVL("all")},
         {.value = IREE_SVL("memory")},
         {.value = IREE_SVL("none")},
+        {.value = IREE_SVL("operand-forms")},
 };
 
 static const loom_pass_option_enum_value_t kLowSourceToLowControlFlowValues[] =

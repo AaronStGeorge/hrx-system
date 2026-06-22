@@ -149,6 +149,11 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
             &loom_low_pass_capability_type);
   IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
       source_to_low, IREE_SV("max-errors=0")));
+  IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
+      source_to_low, IREE_SV("diagnostics=operand-forms")));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_descriptor_validate_options(
+                            source_to_low, IREE_SV("diagnostics=verbose")));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_pass_descriptor_validate_options(
                             source_to_low, IREE_SV("max-errors=-1")));

@@ -104,6 +104,12 @@ void loom_run_compile_report_capture_configure_compile_options(
   }
   compile_options->report = &capture->report;
   compile_options->report_capture = capture;
+  if (capture->options.detail_mode ==
+      LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+    compile_options->target_pipeline_options
+        .source_to_low_legality_diagnostic_flags |=
+        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM;
+  }
 }
 
 iree_status_t loom_run_compile_report_capture_record_diagnostic(

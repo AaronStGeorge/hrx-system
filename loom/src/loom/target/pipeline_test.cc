@@ -25,6 +25,8 @@ using ModulePtr = ::loom::testing::ModulePtr;
 typedef struct PipelineRunCounts {
   // Number of source-to-low pass runs.
   int source_to_low = 0;
+  // Diagnostics option on the source-to-low pass.
+  iree_string_view_t source_to_low_diagnostics = iree_string_view_empty();
   // Sanitizer reporting option on the source-to-low pass.
   iree_string_view_t source_to_low_sanitizer_reporting =
       iree_string_view_empty();
@@ -78,6 +80,9 @@ iree_status_t CountSanitizerRun(void* user_data, loom_op_t* op,
       count_context->module->strings.entries[loom_pass_run_key(op)];
   if (iree_string_view_equal(key, IREE_SV("source-to-low"))) {
     ++counts->source_to_low;
+    counts->source_to_low_diagnostics =
+        FindStringOption(count_context->module, loom_pass_run_options(op),
+                         IREE_SV("diagnostics"));
     counts->source_to_low_sanitizer_reporting =
         FindStringOption(count_context->module, loom_pass_run_options(op),
                          IREE_SV("sanitizer-reporting"));
@@ -167,8 +172,32 @@ TEST_F(TargetPipelineTest, ZeroChecksBuildsNoSanitizerPassSlots) {
 
   const PipelineRunCounts counts = CountPipelineRuns(module.get(), pipeline_op);
   EXPECT_EQ(counts.source_to_low, 1);
+  EXPECT_TRUE(iree_string_view_is_empty(counts.source_to_low_diagnostics));
   EXPECT_TRUE(
       iree_string_view_is_empty(counts.source_to_low_sanitizer_reporting));
+  EXPECT_EQ(counts.sanitizer_insert_assertions, 0);
+  EXPECT_EQ(counts.sanitizer_insert_race_observations, 0);
+  EXPECT_EQ(counts.sanitizer_materialize_assertions, 0);
+  EXPECT_EQ(counts.other_sanitizer_runs, 0);
+}
+
+TEST_F(TargetPipelineTest, OperandFormDiagnosticsBuildsSourceToLowOption) {
+  ModulePtr module = AllocateModule(IREE_SV("pipeline"));
+  const loom_target_pipeline_options_t options = {
+      /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/
+      LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM,
+  };
+
+  loom_op_t* pipeline_op = nullptr;
+  IREE_ASSERT_OK(loom_target_pipeline_build_to_prepared_low(
+      module.get(), IREE_SV("compile"), &options, &environment_,
+      loom_pass_environment_empty(), &pipeline_op));
+
+  const PipelineRunCounts counts = CountPipelineRuns(module.get(), pipeline_op);
+  EXPECT_EQ(counts.source_to_low, 1);
+  EXPECT_TRUE(iree_string_view_equal(counts.source_to_low_diagnostics,
+                                     IREE_SV("operand-forms")));
   EXPECT_EQ(counts.sanitizer_insert_assertions, 0);
   EXPECT_EQ(counts.sanitizer_insert_race_observations, 0);
   EXPECT_EQ(counts.sanitizer_materialize_assertions, 0);

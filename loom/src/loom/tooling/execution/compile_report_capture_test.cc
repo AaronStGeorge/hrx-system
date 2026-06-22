@@ -48,6 +48,10 @@ TEST(CompileReportCaptureTest, ConfiguresDetailedReportRequest) {
                                                             &compile_options);
   EXPECT_EQ(compile_options.report, &capture.report);
   EXPECT_EQ(compile_options.report_capture, &capture);
+  EXPECT_TRUE(
+      iree_all_bits_set(compile_options.target_pipeline_options
+                            .source_to_low_legality_diagnostic_flags,
+                        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM));
   EXPECT_TRUE(iree_all_bits_set(
       capture.report.requested_detail_flags,
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
@@ -59,6 +63,27 @@ TEST(CompileReportCaptureTest, ConfiguresDetailedReportRequest) {
           LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
           LOOM_TARGET_COMPILE_REPORT_DETAIL_MATH_LEGALIZATION_ROWS |
           LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS));
+
+  loom_run_compile_report_capture_deinitialize(&capture);
+}
+
+TEST(CompileReportCaptureTest, SummaryReportDoesNotRequestOperandDiagnostics) {
+  loom_run_compile_report_capture_options_t options = {};
+  loom_run_compile_report_capture_options_initialize(&options);
+  options.sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON;
+  options.detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
+
+  loom_run_compile_report_capture_t capture = {};
+  IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
+      &options, iree_allocator_system(), &capture));
+
+  loom_run_candidate_compile_options_t compile_options = {};
+  loom_run_candidate_compile_options_initialize(&compile_options);
+  loom_run_compile_report_capture_configure_compile_options(&capture,
+                                                            &compile_options);
+  EXPECT_EQ(compile_options.target_pipeline_options
+                .source_to_low_legality_diagnostic_flags,
+            0u);
 
   loom_run_compile_report_capture_deinitialize(&capture);
 }

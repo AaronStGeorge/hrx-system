@@ -46,8 +46,8 @@ static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
      IREE_SVL("Control-flow shape expected at the source-to-low boundary: cfg "
               "or structured-low.")},
     {IREE_SVL("diagnostics"),
-     IREE_SVL("Target-low legality diagnostics to emit: none, memory, or "
-              "all.")},
+     IREE_SVL("Target-low legality diagnostics to emit: none, memory, "
+              "operand-forms, or all.")},
     {IREE_SVL("max-errors"),
      IREE_SVL("Maximum number of source-to-low diagnostics to emit; zero "
               "means no limit.")},
@@ -129,14 +129,17 @@ static iree_status_t loom_low_source_to_low_parse_diagnostics(
   } else if (iree_string_view_equal(value, IREE_SV("memory"))) {
     context->state->legality_diagnostic_flags =
         LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS;
+  } else if (iree_string_view_equal(value, IREE_SV("operand-forms"))) {
+    context->state->legality_diagnostic_flags =
+        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM;
   } else if (iree_string_view_equal(value, IREE_SV("all"))) {
     context->state->legality_diagnostic_flags =
         LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL;
   } else {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "source-to-low option 'diagnostics' expected 'none', 'memory', or "
-        "'all', got '%.*s'",
+        "source-to-low option 'diagnostics' expected 'none', 'memory', "
+        "'operand-forms', or 'all', got '%.*s'",
         (int)value.size, value.data);
   }
   context->state->has_diagnostics_option = true;
