@@ -820,6 +820,18 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
             0u);
   EXPECT_EQ(allocation_high_water_rows[0].active_storage_lease_blocker_units,
             0u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].active_pressure_storage_lease_blocker_count,
+      0u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].active_pressure_storage_lease_blocker_units,
+      0u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].active_fallback_storage_lease_blocker_count,
+      0u);
+  EXPECT_EQ(
+      allocation_high_water_rows[0].active_fallback_storage_lease_blocker_units,
+      0u);
   loom_target_compile_report_deinitialize(&report);
 }
 

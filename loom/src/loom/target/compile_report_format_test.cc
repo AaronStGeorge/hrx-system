@@ -223,6 +223,10 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
               /*.active_assignment_blocker_units=*/244,
               /*.active_storage_lease_blocker_count=*/3,
               /*.active_storage_lease_blocker_units=*/12,
+              /*.active_pressure_storage_lease_blocker_count=*/2,
+              /*.active_pressure_storage_lease_blocker_units=*/8,
+              /*.active_fallback_storage_lease_blocker_count=*/1,
+              /*.active_fallback_storage_lease_blocker_units=*/4,
           },
       };
   const loom_target_compile_report_wait_plan_t wait_plan = {
@@ -430,7 +434,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   report.lowered_symbol = IREE_SVL("branchy");
   loom_target_compile_report_record_artifact_size(&report, 128);
   loom_target_compile_report_record_schedule(&report, 5, 5, 4, 2, 1, 1, 2, 96);
-  loom_target_compile_report_record_allocation(&report, 6, 1, 1, 2, 0);
+  loom_target_compile_report_record_allocation(&report, 6, 1, 1, 2, 0, 11, 9,
+                                               3);
   loom_target_compile_report_record_move_cause(
       &report, LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION,
       3, 3);
@@ -493,7 +498,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   entry_report.target_config_name = IREE_SVL("vm_o0");
   loom_target_compile_report_record_schedule(&entry_report, 5, 5, 4, 2, 1, 1, 2,
                                              96);
-  loom_target_compile_report_record_allocation(&entry_report, 6, 1, 1, 2, 0);
+  loom_target_compile_report_record_allocation(&entry_report, 6, 1, 1, 2, 0, 11,
+                                               9, 3);
   loom_target_compile_report_record_move_cause(
       &entry_report,
       LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION, 3, 3);
@@ -729,7 +735,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "high_water=252 active_assignment_blockers=47 "
                         "active_assignment_blocker_units=244 "
                         "active_storage_lease_blockers=3 "
-                        "active_storage_lease_blocker_units=12"),
+                        "active_storage_lease_blocker_units=12 "
+                        "active_pressure_storage_lease_blockers=2 "
+                        "active_pressure_storage_lease_blocker_units=8 "
+                        "active_fallback_storage_lease_blockers=1 "
+                        "active_fallback_storage_lease_blocker_units=4"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
@@ -763,6 +773,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("spill_plans=1 coalesced_copies=2 "
                                           "materialized_copies=0 "
+                                          "storage_leases=11 "
+                                          "storage_lease_instances=9 "
+                                          "storage_release_actions=3 "
                                           "move_kinds=3 move_packets=6 "
                                           "move_units=12"),
                                   0),
@@ -998,6 +1011,17 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           output, IREE_SV("\"static_instruction_mix\":{\"descriptor_count\":9"),
           0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"allocation\":{\"assignment_count\":6,"
+                                    "\"spill_count\":1,\"spill_plan_count\":1,"
+                                    "\"coalesced_copy_count\":2,"
+                                    "\"materialized_copy_count\":0,"
+                                    "\"storage_lease_count\":11,"
+                                    "\"storage_lease_instance_count\":9,"
+                                    "\"storage_release_action_count\":3}"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
   const iree_string_view_t split_memory_mix_fields = IREE_SV(
       "\"global_load_count\":1,\"global_store_count\":0,"
       "\"buffer_load_count\":1");
@@ -1149,7 +1173,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "\"active_assignment_blocker_count\":47,"
                         "\"active_assignment_blocker_units\":244,"
                         "\"active_storage_lease_blocker_count\":3,"
-                        "\"active_storage_lease_blocker_units\":12"),
+                        "\"active_storage_lease_blocker_units\":12,"
+                        "\"active_pressure_storage_lease_blocker_count\":2,"
+                        "\"active_pressure_storage_lease_blocker_units\":8,"
+                        "\"active_fallback_storage_lease_blocker_count\":1,"
+                        "\"active_fallback_storage_lease_blocker_units\":4"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(

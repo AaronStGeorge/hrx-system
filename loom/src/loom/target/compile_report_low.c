@@ -1470,6 +1470,16 @@ typedef struct loom_target_compile_report_allocation_high_water_blockers_t {
   uint32_t active_storage_lease_count;
   // Total units owned by active target storage-lease blockers.
   uint64_t active_storage_lease_units;
+  // Number of pressure-releasable storage-lease blockers below the high-water
+  // assignment.
+  uint32_t active_pressure_storage_lease_count;
+  // Total units owned by pressure-releasable storage-lease blockers.
+  uint64_t active_pressure_storage_lease_units;
+  // Number of fallback-release storage-lease blockers below the high-water
+  // assignment.
+  uint32_t active_fallback_storage_lease_count;
+  // Total units owned by fallback-release storage-lease blockers.
+  uint64_t active_fallback_storage_lease_units;
 } loom_target_compile_report_allocation_high_water_blockers_t;
 
 static bool loom_target_compile_report_assignment_active_at(
@@ -1545,6 +1555,19 @@ static void loom_target_compile_report_add_high_water_storage_lease_blockers(
     }
     ++blockers->active_storage_lease_count;
     blockers->active_storage_lease_units += blocker_units;
+    const bool pressure_releasable =
+        lease->lease_record_index < allocation->storage_leases.record_count &&
+        allocation->storage_leases.records != NULL &&
+        iree_all_bits_set(
+            allocation->storage_leases.records[lease->lease_record_index].flags,
+            LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_FOR_PRESSURE);
+    if (pressure_releasable) {
+      ++blockers->active_pressure_storage_lease_count;
+      blockers->active_pressure_storage_lease_units += blocker_units;
+    } else {
+      ++blockers->active_fallback_storage_lease_count;
+      blockers->active_fallback_storage_lease_units += blocker_units;
+    }
   }
 }
 
@@ -1699,6 +1722,14 @@ loom_target_compile_report_record_allocation_high_water_rows(
             blockers.active_storage_lease_count,
         .active_storage_lease_blocker_units =
             blockers.active_storage_lease_units,
+        .active_pressure_storage_lease_blocker_count =
+            blockers.active_pressure_storage_lease_count,
+        .active_pressure_storage_lease_blocker_units =
+            blockers.active_pressure_storage_lease_units,
+        .active_fallback_storage_lease_blocker_count =
+            blockers.active_fallback_storage_lease_count,
+        .active_fallback_storage_lease_blocker_units =
+            blockers.active_fallback_storage_lease_units,
     };
     status = loom_target_compile_report_record_allocation_high_water_row(report,
                                                                          &row);
@@ -1842,7 +1873,10 @@ static iree_status_t loom_target_compile_report_record_low_allocation_contents(
   loom_target_compile_report_record_allocation(
       report, allocation->assignment_count, allocation->spill_count,
       allocation->spill_plan_count, allocation->coalesced_copy_count,
-      allocation->materialized_copy_count);
+      allocation->materialized_copy_count,
+      allocation->storage_leases.record_count,
+      allocation->storage_lease_instance_count,
+      allocation->storage_release_action_count);
   iree_status_t status = loom_target_compile_report_record_pressure_rows(
       report, liveness, allocation->target.descriptor_set);
   if (iree_status_is_ok(status)) {

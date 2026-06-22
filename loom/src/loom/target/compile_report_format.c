@@ -481,11 +481,16 @@ static iree_status_t loom_target_compile_report_format_summary(
         builder,
         "COMPILE-REPORT: allocation assignments=%" PRIu64 " spills=%" PRIu64
         " spill_plans=%" PRIu64 " coalesced_copies=%" PRIu64
-        " materialized_copies=%" PRIu64 "\n",
+        " materialized_copies=%" PRIu64 " storage_leases=%" PRIu64
+        " storage_lease_instances=%" PRIu64 " storage_release_actions=%" PRIu64
+        "\n",
         report->allocation_assignment_count, report->allocation_spill_count,
         report->allocation_spill_plan_count,
         report->allocation_coalesced_copy_count,
-        report->allocation_materialized_copy_count));
+        report->allocation_materialized_copy_count,
+        report->allocation_storage_lease_count,
+        report->allocation_storage_lease_instance_count,
+        report->allocation_storage_release_action_count));
   }
 
   if (iree_any_bit_set(report->detail_flags,
@@ -729,7 +734,9 @@ static iree_status_t loom_target_compile_report_format_entry_rows(
           " pressure_summaries=%" PRIu64 " peak_live=%" PRIu64
           " assignments=%" PRIu64 " spills=%" PRIu64 " spill_plans=%" PRIu64
           " coalesced_copies=%" PRIu64 " materialized_copies=%" PRIu64
-          " move_kinds=%" PRIu64 " move_packets=%" PRIu64 " move_units=%" PRIu64
+          " storage_leases=%" PRIu64 " storage_lease_instances=%" PRIu64
+          " storage_release_actions=%" PRIu64 " move_kinds=%" PRIu64
+          " move_packets=%" PRIu64 " move_units=%" PRIu64
           " wait_actions=%" PRIu64 " wait_explicit=%" PRIu64
           " wait_planned=%" PRIu64 " wait_full_drains=%" PRIu64
           " wait_partial=%" PRIu64 " wait_max_outstanding=%" PRIu64
@@ -750,7 +757,10 @@ static iree_status_t loom_target_compile_report_format_entry_rows(
           row->allocation_assignment_count, row->allocation_spill_count,
           row->allocation_spill_plan_count,
           row->allocation_coalesced_copy_count,
-          row->allocation_materialized_copy_count, move_kind_count,
+          row->allocation_materialized_copy_count,
+          row->allocation_storage_lease_count,
+          row->allocation_storage_lease_instance_count,
+          row->allocation_storage_release_action_count, move_kind_count,
           move_packet_count, move_unit_count, wait_plan->action_count,
           wait_plan->explicit_action_count, wait_plan->planned_action_count,
           wait_plan->full_drain_count, wait_plan->partial_wait_count,
@@ -1362,7 +1372,11 @@ loom_target_compile_report_format_allocation_high_water_rows(
           " active_assignment_blockers=%u "
           "active_assignment_blocker_units=%" PRIu64
           " active_storage_lease_blockers=%u "
-          "active_storage_lease_blocker_units=%" PRIu64 "\n",
+          "active_storage_lease_blocker_units=%" PRIu64
+          " active_pressure_storage_lease_blockers=%u "
+          "active_pressure_storage_lease_blocker_units=%" PRIu64
+          " active_fallback_storage_lease_blockers=%u "
+          "active_fallback_storage_lease_blocker_units=%" PRIu64 "\n",
           row_index, (int)function_name.size, function_name.data,
           (int)value_name.size, value_name.data, (int)register_class.size,
           register_class.data, (int)type_kind_name.size, type_kind_name.data,
@@ -1375,7 +1389,11 @@ loom_target_compile_report_format_allocation_high_water_rows(
           row->high_water_units, row->active_assignment_blocker_count,
           row->active_assignment_blocker_units,
           row->active_storage_lease_blocker_count,
-          row->active_storage_lease_blocker_units));
+          row->active_storage_lease_blocker_units,
+          row->active_pressure_storage_lease_blocker_count,
+          row->active_pressure_storage_lease_blocker_units,
+          row->active_fallback_storage_lease_blocker_count,
+          row->active_fallback_storage_lease_blocker_units));
     }
   }
   return iree_ok_status();
@@ -1845,6 +1863,15 @@ static iree_status_t loom_target_compile_report_format_allocation_json(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "materialized_copy_count",
       report->allocation_materialized_copy_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "storage_lease_count",
+      report->allocation_storage_lease_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "storage_lease_instance_count",
+      report->allocation_storage_lease_instance_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "storage_release_action_count",
+      report->allocation_storage_release_action_count));
   return loom_output_stream_write_cstring(stream, "}");
 }
 
@@ -2245,6 +2272,15 @@ static iree_status_t loom_target_compile_report_format_entry_json(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "allocation_materialized_copy_count",
       row->allocation_materialized_copy_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "allocation_storage_lease_count",
+      row->allocation_storage_lease_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "allocation_storage_lease_instance_count",
+      row->allocation_storage_lease_instance_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "allocation_storage_release_action_count",
+      row->allocation_storage_release_action_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
       stream, &first_field, "move_causes"));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_format_move_cause_counts_json(
@@ -2919,6 +2955,18 @@ loom_target_compile_report_format_allocation_high_water_row_json(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
       stream, &first_field, "active_storage_lease_blocker_units",
       row->active_storage_lease_blocker_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "active_pressure_storage_lease_blocker_count",
+      row->active_pressure_storage_lease_blocker_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "active_pressure_storage_lease_blocker_units",
+      row->active_pressure_storage_lease_blocker_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "active_fallback_storage_lease_blocker_count",
+      row->active_fallback_storage_lease_blocker_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "active_fallback_storage_lease_blocker_units",
+      row->active_fallback_storage_lease_blocker_units));
   return loom_output_stream_write_cstring(stream, "}");
 }
 

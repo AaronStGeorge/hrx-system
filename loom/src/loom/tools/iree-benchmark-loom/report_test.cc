@@ -176,7 +176,9 @@ TEST(BenchmarkReportTest, WritesCanonicalCompileReportTree) {
   loom_target_compile_report_record_allocation(
       report, /*assignment_count=*/23, /*spill_count=*/2,
       /*spill_plan_count=*/1, /*coalesced_copy_count=*/8,
-      /*materialized_copy_count=*/3);
+      /*materialized_copy_count=*/3, /*storage_lease_count=*/11,
+      /*storage_lease_instance_count=*/9,
+      /*storage_release_action_count=*/4);
   loom_target_compile_report_record_emission(report, /*instruction_count=*/37,
                                              /*code_byte_count=*/148,
                                              /*code_storage_byte_count=*/160);
@@ -258,6 +260,10 @@ TEST(BenchmarkReportTest, WritesCanonicalCompileReportTree) {
   iree_string_view_t allocation =
       LookupObject(compile_report, IREE_SV("allocation"));
   ExpectObjectValueEquals(allocation, IREE_SV("spill_count"), IREE_SV("2"));
+  ExpectObjectValueEquals(allocation, IREE_SV("storage_lease_count"),
+                          IREE_SV("11"));
+  ExpectObjectValueEquals(allocation, IREE_SV("storage_release_action_count"),
+                          IREE_SV("4"));
   iree_string_view_t emission =
       LookupObject(compile_report, IREE_SV("emission"));
   ExpectObjectValueEquals(emission, IREE_SV("code_byte_count"), IREE_SV("148"));

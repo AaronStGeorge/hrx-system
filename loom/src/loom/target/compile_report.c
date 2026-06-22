@@ -340,13 +340,20 @@ void loom_target_compile_report_record_schedule(
 void loom_target_compile_report_record_allocation(
     loom_target_compile_report_t* report, uint64_t assignment_count,
     uint64_t spill_count, uint64_t spill_plan_count,
-    uint64_t coalesced_copy_count, uint64_t materialized_copy_count) {
+    uint64_t coalesced_copy_count, uint64_t materialized_copy_count,
+    uint64_t storage_lease_count, uint64_t storage_lease_instance_count,
+    uint64_t storage_release_action_count) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION;
   report->allocation_assignment_count = assignment_count;
   report->allocation_spill_count = spill_count;
   report->allocation_spill_plan_count = spill_plan_count;
   report->allocation_coalesced_copy_count = coalesced_copy_count;
   report->allocation_materialized_copy_count = materialized_copy_count;
+  report->allocation_storage_lease_count = storage_lease_count;
+  report->allocation_storage_lease_instance_count =
+      storage_lease_instance_count;
+  report->allocation_storage_release_action_count =
+      storage_release_action_count;
 }
 
 void loom_target_compile_report_record_move_cause(
@@ -629,6 +636,12 @@ static void loom_target_compile_report_merge_entry_summary(
         entry_report->allocation_coalesced_copy_count;
     report->allocation_materialized_copy_count =
         entry_report->allocation_materialized_copy_count;
+    report->allocation_storage_lease_count =
+        entry_report->allocation_storage_lease_count;
+    report->allocation_storage_lease_instance_count =
+        entry_report->allocation_storage_lease_instance_count;
+    report->allocation_storage_release_action_count =
+        entry_report->allocation_storage_release_action_count;
     report->emitted_instruction_count = entry_report->emitted_instruction_count;
     report->emitted_code_byte_count = entry_report->emitted_code_byte_count;
     report->emitted_code_storage_byte_count =
@@ -683,6 +696,12 @@ static void loom_target_compile_report_merge_entry_summary(
       entry_report->allocation_coalesced_copy_count;
   report->allocation_materialized_copy_count +=
       entry_report->allocation_materialized_copy_count;
+  report->allocation_storage_lease_count +=
+      entry_report->allocation_storage_lease_count;
+  report->allocation_storage_lease_instance_count +=
+      entry_report->allocation_storage_lease_instance_count;
+  report->allocation_storage_release_action_count +=
+      entry_report->allocation_storage_release_action_count;
   report->emitted_instruction_count += entry_report->emitted_instruction_count;
   report->emitted_code_byte_count += entry_report->emitted_code_byte_count;
   report->emitted_code_storage_byte_count +=
@@ -746,6 +765,12 @@ loom_target_compile_report_entry_from_report(
           entry_report->allocation_coalesced_copy_count,
       .allocation_materialized_copy_count =
           entry_report->allocation_materialized_copy_count,
+      .allocation_storage_lease_count =
+          entry_report->allocation_storage_lease_count,
+      .allocation_storage_lease_instance_count =
+          entry_report->allocation_storage_lease_instance_count,
+      .allocation_storage_release_action_count =
+          entry_report->allocation_storage_release_action_count,
       .emitted_instruction_count = entry_report->emitted_instruction_count,
       .emitted_code_byte_count = entry_report->emitted_code_byte_count,
       .emitted_code_storage_byte_count =

@@ -428,6 +428,12 @@ typedef struct loom_target_compile_report_entry_t {
   uint64_t allocation_coalesced_copy_count;
   // Number of low.copy ops that must remain materialized.
   uint64_t allocation_materialized_copy_count;
+  // Number of target storage-lease records.
+  uint64_t allocation_storage_lease_count;
+  // Number of assignment-backed target storage-lease instances.
+  uint64_t allocation_storage_lease_instance_count;
+  // Number of allocator-requested storage release actions.
+  uint64_t allocation_storage_release_action_count;
   // Number of target instructions or bytecode opcodes emitted.
   uint64_t emitted_instruction_count;
   // Number of semantic target code bytes before target-local padding.
@@ -703,6 +709,14 @@ typedef struct loom_target_compile_report_allocation_high_water_row_t {
   uint32_t active_storage_lease_blocker_count;
   // Total target storage-lease units below |high_water_units|.
   uint64_t active_storage_lease_blocker_units;
+  // Number of pressure-releasable storage leases below |high_water_units|.
+  uint32_t active_pressure_storage_lease_blocker_count;
+  // Total pressure-releasable storage-lease units below |high_water_units|.
+  uint64_t active_pressure_storage_lease_blocker_units;
+  // Number of fallback-release storage leases below |high_water_units|.
+  uint32_t active_fallback_storage_lease_blocker_count;
+  // Total fallback-release storage-lease units below |high_water_units|.
+  uint64_t active_fallback_storage_lease_blocker_units;
 } loom_target_compile_report_allocation_high_water_row_t;
 
 // One target wait-counter summary row copied into a compile report.
@@ -1028,6 +1042,12 @@ typedef struct loom_target_compile_report_t {
   uint64_t allocation_coalesced_copy_count;
   // Number of low.copy ops that must remain materialized.
   uint64_t allocation_materialized_copy_count;
+  // Number of target storage-lease records.
+  uint64_t allocation_storage_lease_count;
+  // Number of assignment-backed target storage-lease instances.
+  uint64_t allocation_storage_lease_instance_count;
+  // Number of allocator-requested storage release actions.
+  uint64_t allocation_storage_release_action_count;
   // Number of target instructions or bytecode opcodes emitted.
   uint64_t emitted_instruction_count;
   // Number of semantic target code bytes before target-local padding.
@@ -1160,7 +1180,9 @@ void loom_target_compile_report_record_schedule(
 void loom_target_compile_report_record_allocation(
     loom_target_compile_report_t* report, uint64_t assignment_count,
     uint64_t spill_count, uint64_t spill_plan_count,
-    uint64_t coalesced_copy_count, uint64_t materialized_copy_count);
+    uint64_t coalesced_copy_count, uint64_t materialized_copy_count,
+    uint64_t storage_lease_count, uint64_t storage_lease_instance_count,
+    uint64_t storage_release_action_count);
 
 // Records target move materialization attributed to one residual move cause.
 void loom_target_compile_report_record_move_cause(
