@@ -48,10 +48,9 @@ TEST(CompileReportCaptureTest, ConfiguresDetailedReportRequest) {
                                                             &compile_options);
   EXPECT_EQ(compile_options.report, &capture.report);
   EXPECT_EQ(compile_options.report_capture, &capture);
-  EXPECT_TRUE(
-      iree_all_bits_set(compile_options.target_pipeline_options
-                            .source_to_low_legality_diagnostic_flags,
-                        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM));
+  EXPECT_TRUE(iree_all_bits_set(compile_options.target_pipeline_options
+                                    .source_to_low_legality_diagnostic_flags,
+                                LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL));
   EXPECT_TRUE(iree_all_bits_set(
       capture.report.requested_detail_flags,
       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
@@ -67,7 +66,8 @@ TEST(CompileReportCaptureTest, ConfiguresDetailedReportRequest) {
   loom_run_compile_report_capture_deinitialize(&capture);
 }
 
-TEST(CompileReportCaptureTest, SummaryReportDoesNotRequestOperandDiagnostics) {
+TEST(CompileReportCaptureTest,
+     SummaryReportDoesNotRequestSourceLowDiagnostics) {
   loom_run_compile_report_capture_options_t options = {};
   loom_run_compile_report_capture_options_initialize(&options);
   options.sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON;

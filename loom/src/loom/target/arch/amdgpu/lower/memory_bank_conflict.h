@@ -27,6 +27,8 @@ typedef enum loom_amdgpu_memory_bank_conflict_kind_e {
   LOOM_AMDGPU_MEMORY_BANK_CONFLICT_KIND_PADDED_FREE = 2,
   // The selected access has a statically visible bank conflict risk.
   LOOM_AMDGPU_MEMORY_BANK_CONFLICT_KIND_RISK = 3,
+  // The selected access strides through sub-32-bit bank lanes.
+  LOOM_AMDGPU_MEMORY_BANK_CONFLICT_KIND_SUBWORD_RISK = 4,
 } loom_amdgpu_memory_bank_conflict_kind_t;
 
 typedef struct loom_amdgpu_memory_bank_geometry_t {

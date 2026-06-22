@@ -156,6 +156,45 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_conflict_risk_diagn
 
 amdgpu.target<gfx1100> @target
 
+kernel.def target(@target) @lds_f16_subword_stride_diagnostics() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %lane = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %input_view = buffer.view %input[%zero] : buffer -> view<128xf16, #dense>
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<128xf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<128xf16, #dense>
+  %loaded = vector.load %input_view[%lane] : view<128xf16, #dense> -> vector<2xf16>
+  // REMARK@+1: BACKEND/017 {operation_kind="store", packet_key="amdgpu.ds_write_b32", address_form="default", dynamic_term_kind="vaddr", fallback_reason="cross_wave_workgroup", dynamic_stride_bytes="2", bank_conflict_kind="subword-bank-conflict-risk"}
+  vector.store %loaded, %scratch_view[%lane] : vector<2xf16>, view<128xf16, #dense>
+  // REMARK@+1: BACKEND/017 {operation_kind="load", packet_key="amdgpu.ds_read_b32", address_form="default", dynamic_term_kind="vaddr", fallback_reason="cross_wave_workgroup", dynamic_stride_bytes="2", bank_conflict_kind="subword-bank-conflict-risk"}
+  %roundtrip = vector.load %scratch_view[%lane] : view<128xf16, #dense> -> vector<2xf16>
+  vector.store %roundtrip, %output_view[%lane] : vector<2xf16>, view<128xf16, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_f16_subword_stride_diagnostics() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %16 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %18 = v_lshlrev_b32_src0_inline %lane, 1
+  %loaded = global_load_b32_saddr %18, %input_view
+  ds_write_b32 %18, %loaded
+  %roundtrip = ds_read_b32 %18
+  global_store_b32_saddr %18, %roundtrip, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @buffer_view_i1_rejected(%input: buffer) {
   %zero = index.constant 0 : offset
   // ERROR@+1: AMDGPU/001 {field_name="result", required_storage="byte-addressable scalar elements"}
