@@ -163,6 +163,7 @@ loom_cc_library(
         ":descriptor_semantics",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:move_sequence",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low:packet_hazard_plan",
         "//loom/src/loom/codegen/low:packet_hazard_plan_json",
