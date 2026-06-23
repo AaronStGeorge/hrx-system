@@ -179,47 +179,9 @@ LOOM_AMDGPU_CMAKE_COMPILE_CTEST_REGEXES = tuple(
     bazel_pattern_to_ctest_regex(target)
     for target in LOOM_AMDGPU_BAZEL_COMPILE_TEST_TARGETS
 )
-AMDGPU_XFAILS = (
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/cts/..."),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:allocator_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:host_queue_command_buffer_test"),
-    bazel_xfail(
-        "//runtime/src/iree/hal/drivers/amdgpu:pm4_command_buffer_benchmark_test"
-    ),
-    ctest_xfail("^iree/hal/drivers/amdgpu/host_queue_pending_test$"),
-    ctest_xfail("^iree/hal/drivers/amdgpu/host_queue_staging_test$"),
-    ctest_xfail("^iree/hal/drivers/amdgpu/host_queue_submission_test$"),
-    ctest_xfail("^iree/hal/drivers/amdgpu/slab_provider_test$"),
-    ctest_xfail("^iree/hal/drivers/amdgpu/system_test$"),
-    ctest_xfail("^iree/hal/drivers/amdgpu/util/queue_benchmark_test$"),
-    ctest_xfail("^iree/hal/drivers/amdgpu/util/vmem_test$"),
-)
-AMDGPU_SANITIZERS_XFAILS = (
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/cts/..."),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:allocator_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:host_queue_command_buffer_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:host_queue_pending_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:host_queue_staging_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:host_queue_submission_test"),
-    bazel_xfail(
-        "//runtime/src/iree/hal/drivers/amdgpu:pm4_command_buffer_benchmark_test"
-    ),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:slab_provider_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/util:blit_benchmark_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/util:block_pool_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/util:pm4_emitter_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/util:pm4_program_test"),
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/util:queue_benchmark_test"),
-)
-AMDGPU_TSAN_XFAILS = (
-    bazel_xfail(
-        "//runtime/src/iree/hal/drivers/amdgpu:host_queue_command_buffer_profiling_test"
-    ),
-    # This live PM4 path intentionally loads ROCR and submits real GPU work.
-    # ThreadSanitizer cannot model ROCR's uninstrumented async worker threads,
-    # and reports races in ROCr runtime bookkeeping during HSA object setup.
-    bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/util:pm4_dispatch_live_test"),
-)
+AMDGPU_XFAILS = ()
+AMDGPU_SANITIZERS_XFAILS = ()
+AMDGPU_TSAN_XFAILS = ()
 AMDGPU_XFAIL_TARGETS = bazel_xfail_targets(AMDGPU_XFAILS)
 AMDGPU_CTEST_EXCLUDE_REGEX = ctest_exclude_regex(AMDGPU_XFAILS)
 AMDGPU_SANITIZERS_XFAIL_TARGETS = bazel_xfail_targets(AMDGPU_SANITIZERS_XFAILS)

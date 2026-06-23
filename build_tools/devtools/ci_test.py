@@ -16,6 +16,13 @@ from build_tools.devtools import ci, ci_config
 
 
 class CiTest(unittest.TestCase):
+    def ctest_exclude_regexes(self, step: ci.CiStep) -> list[str]:
+        return [
+            step.argv[index + 1]
+            for index, arg in enumerate(step.argv[:-1])
+            if arg == "-E"
+        ]
+
     def workflow_job_block(self, path: str, job_name: str) -> str:
         text = Path(path).read_text()
         match = re.search(
@@ -329,11 +336,11 @@ class CiTest(unittest.TestCase):
         )
         self.assertIn("//runtime/...", runtime_resource_test.argv)
         self.assertNotIn("//loom/...", runtime_resource_test.argv)
-        for target in ci_config.AMDGPU_XFAIL_TARGETS:
-            self.assertIn(target, runtime_resource_test.argv)
-        self.assertNotIn(
-            "-//runtime/src/iree/hal/drivers/amdgpu:system_test",
-            runtime_resource_test.argv,
+        self.assertFalse(
+            any(
+                arg.startswith("-//runtime/src/iree/hal/drivers/amdgpu")
+                for arg in runtime_resource_test.argv
+            )
         )
         self.assertFalse(
             any(step.name == "Test IREE AMDGPU Loom resources" for step in steps)
@@ -357,7 +364,7 @@ class CiTest(unittest.TestCase):
             runtime_resource_test.argv,
         )
 
-    def test_amdgpu_sanitizer_command_uses_amdgpu_sanitizer_xfails(self):
+    def test_amdgpu_sanitizer_command_has_no_amdgpu_xfails(self):
         args = ci.parse_arguments(
             [
                 "iree-bazel-amdgpu-sanitizers",
@@ -371,21 +378,13 @@ class CiTest(unittest.TestCase):
             step for step in steps if step.name.startswith("Test IREE")
         ]
 
-        for xfail_target in ci_config.AMDGPU_SANITIZERS_XFAIL_TARGETS:
-            self.assertTrue(
-                any(xfail_target in step.argv for step in sanitizer_test_steps)
+        self.assertFalse(
+            any(
+                arg.startswith("-//runtime/src/iree/hal/drivers/amdgpu")
+                for step in sanitizer_test_steps
+                for arg in step.argv
             )
-        tsan_test_steps = [
-            step for step in sanitizer_test_steps if "--config=tsan" in step.argv
-        ]
-        non_tsan_test_steps = [
-            step for step in sanitizer_test_steps if "--config=tsan" not in step.argv
-        ]
-        for xfail_target in ci_config.AMDGPU_TSAN_XFAIL_TARGETS:
-            self.assertTrue(any(xfail_target in step.argv for step in tsan_test_steps))
-            self.assertFalse(
-                any(xfail_target in step.argv for step in non_tsan_test_steps)
-            )
+        )
 
     def test_bazel_amdgpu_single_sanitizer_command_runs_one_configuration(self):
         args = ci.parse_arguments(
@@ -412,10 +411,9 @@ class CiTest(unittest.TestCase):
                 for line in command_lines
             )
         )
-        self.assertTrue(
+        self.assertFalse(
             any(
-                "-//runtime/src/iree/hal/drivers/amdgpu/util:pm4_dispatch_live_test"
-                in line
+                "-//runtime/src/iree/hal/drivers/amdgpu" in line
                 for line in command_lines
             )
         )
@@ -423,7 +421,7 @@ class CiTest(unittest.TestCase):
         self.assertFalse(any("--config=ubsan" in line for line in command_lines))
         self.assertFalse(any("--config=msan" in line for line in command_lines))
 
-    def test_bazel_amdgpu_asan_omits_tsan_specific_xfails(self):
+    def test_bazel_amdgpu_asan_has_no_amdgpu_xfails(self):
         args = ci.parse_arguments(
             [
                 "iree-bazel-amdgpu-asan",
@@ -436,8 +434,7 @@ class CiTest(unittest.TestCase):
 
         self.assertFalse(
             any(
-                "-//runtime/src/iree/hal/drivers/amdgpu/util:pm4_dispatch_live_test"
-                in line
+                "-//runtime/src/iree/hal/drivers/amdgpu" in line
                 for line in command_lines
             )
         )
@@ -607,6 +604,16 @@ class CiTest(unittest.TestCase):
                     r"command: iree-bazel-(amdgpu|vulkan)-sanitizers",
                 )
 
+    def test_core_gpu_workflow_has_no_amdgpu_test_exclusions(self):
+        block = self.workflow_job_block(
+            ".github/workflows/ci_core_linux.yml", "gpu_linux"
+        )
+
+        self.assertNotRegex(
+            block,
+            r"ctest_exclude_regex:.*(iree/hal/drivers/amdgpu|loom/target/arch/amdgpu)",
+        )
+
     def test_iree_workflows_do_not_trigger_on_libhrx_only_paths(self):
         for path in (
             ".github/workflows/ci_iree_bazel.yml",
@@ -659,34 +666,14 @@ class CiTest(unittest.TestCase):
             "^iree/hal/local/elf/elf_module_test$",
             ci_config.CPU_CTEST_EXCLUDE_REGEX,
         )
-        self.assertIn(
-            "^iree/hal/drivers/amdgpu/allocator_test$",
-            ci_config.AMDGPU_CTEST_EXCLUDE_REGEX,
-        )
-        self.assertIn(
-            "^iree/hal/drivers/amdgpu/system_test$",
-            ci_config.AMDGPU_CTEST_EXCLUDE_REGEX,
-        )
-        self.assertIn(
-            "^iree/hal/drivers/amdgpu/util/vmem_test$",
-            ci_config.AMDGPU_CTEST_EXCLUDE_REGEX,
-        )
-        self.assertIn(
-            "^iree/hal/drivers/amdgpu/util/block_pool_test$",
-            ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX,
-        )
-        self.assertIn(
-            "^iree/hal/drivers/amdgpu/util/pm4_program_test$",
-            ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX,
-        )
-        self.assertNotIn(
-            "^iree/hal/drivers/amdgpu/util/pm4_dispatch_live_test$",
-            ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX,
-        )
-        self.assertIn(
-            "^iree/hal/drivers/amdgpu/util/pm4_dispatch_live_test$",
-            ci_config.AMDGPU_TSAN_CTEST_EXCLUDE_REGEX,
-        )
+        self.assertEqual(ci_config.AMDGPU_XFAIL_TARGETS, ())
+        self.assertEqual(ci_config.AMDGPU_CTEST_EXCLUDE_REGEX, "")
+        self.assertEqual(ci_config.AMDGPU_SANITIZERS_XFAIL_TARGETS, ())
+        self.assertEqual(ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX, "")
+        self.assertEqual(ci_config.AMDGPU_TSAN_XFAIL_TARGETS, ())
+        self.assertEqual(ci_config.AMDGPU_TSAN_CTEST_EXCLUDE_REGEX, "")
+        self.assertEqual(ci_config.AMDGPU_TSAN_SANITIZERS_XFAIL_TARGETS, ())
+        self.assertEqual(ci_config.AMDGPU_TSAN_SANITIZERS_CTEST_EXCLUDE_REGEX, "")
         self.assertEqual(
             ci_config.bazel_pattern_to_ctest_regex("//loom/src/loom/codegen/low:test"),
             "^loom/codegen/low/test$",
@@ -892,18 +879,6 @@ class CiTest(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "^iree/hal/drivers/amdgpu/system_test$" in line
-                for line in command_lines
-            )
-        )
-        self.assertTrue(
-            any(
-                "^iree/hal/drivers/amdgpu/util/vmem_test$" in line
-                for line in command_lines
-            )
-        )
-        self.assertTrue(
-            any(
                 ci_config.AMDGPU_CTEST_RESOURCE_LABEL_REGEX in step.argv
                 for step in steps
             )
@@ -913,44 +888,58 @@ class CiTest(unittest.TestCase):
             for step in steps
             if step.name == "Test IREE CMake AMDGPU resource tests"
         )
+        package_test = next(
+            step
+            for step in steps
+            if step.name == "Test IREE CMake AMDGPU package tests"
+        )
+        self.assertEqual(self.ctest_exclude_regexes(package_test), [])
+        self.assertEqual(
+            self.ctest_exclude_regexes(resource_test),
+            [ci.combine_ctest_regex("^iree/hal/drivers/amdgpu/")],
+        )
         self.assertIn(ci_config.CTEST_MANUAL_LABEL_EXCLUDE_REGEX, resource_test.argv)
 
-    def test_cmake_amdgpu_tsan_uses_tsan_specific_xfails(self):
+    def test_cmake_amdgpu_tsan_has_no_amdgpu_xfails(self):
         args = ci.parse_arguments(["iree-cmake-amdgpu-tsan"])
 
-        command_lines = [step.command_line() for step in ci.steps_from_args(args)]
-
-        self.assertTrue(
-            any(
-                "^iree/hal/drivers/amdgpu/util/pm4_dispatch_live_test$" in line
-                for line in command_lines
-            )
+        steps = ci.steps_from_args(args)
+        package_test = next(
+            step
+            for step in steps
+            if step.name == "Test IREE CMake AMDGPU package tests with TSAN"
         )
-        self.assertTrue(
-            any(
-                "^iree/hal/drivers/amdgpu/host_queue_command_buffer_profiling_test$"
-                in line
-                for line in command_lines
-            )
+        resource_test = next(
+            step
+            for step in steps
+            if step.name == "Test IREE CMake AMDGPU resource tests with TSAN"
         )
 
-    def test_cmake_amdgpu_asan_omits_tsan_specific_xfails(self):
+        self.assertEqual(self.ctest_exclude_regexes(package_test), [])
+        self.assertEqual(
+            self.ctest_exclude_regexes(resource_test),
+            [ci.combine_ctest_regex("^iree/hal/drivers/amdgpu/")],
+        )
+
+    def test_cmake_amdgpu_asan_has_no_amdgpu_xfails(self):
         args = ci.parse_arguments(["iree-cmake-amdgpu-asan"])
 
-        command_lines = [step.command_line() for step in ci.steps_from_args(args)]
-
-        self.assertFalse(
-            any(
-                "^iree/hal/drivers/amdgpu/util/pm4_dispatch_live_test$" in line
-                for line in command_lines
-            )
+        steps = ci.steps_from_args(args)
+        package_test = next(
+            step
+            for step in steps
+            if step.name == "Test IREE CMake AMDGPU package tests with ASAN"
         )
-        self.assertFalse(
-            any(
-                "^iree/hal/drivers/amdgpu/host_queue_command_buffer_profiling_test$"
-                in line
-                for line in command_lines
-            )
+        resource_test = next(
+            step
+            for step in steps
+            if step.name == "Test IREE CMake AMDGPU resource tests with ASAN"
+        )
+
+        self.assertEqual(self.ctest_exclude_regexes(package_test), [])
+        self.assertEqual(
+            self.ctest_exclude_regexes(resource_test),
+            [ci.combine_ctest_regex("^iree/hal/drivers/amdgpu/")],
         )
 
     def test_cmake_amdgpu_msan_builds_driver_targets_without_test_deps(self):
