@@ -360,7 +360,7 @@ TEST_F(FeedbackChannelLiveTest, DeviceProducerSignalsHost) {
       HsaQueueErrorCallback, &queue_error, UINT32_MAX, UINT32_MAX, &queue));
   iree_hal_amdgpu_aql_ring_t aql_ring;
   iree_hal_amdgpu_aql_ring_initialize(
-      reinterpret_cast<iree_amd_queue_t*>(queue), &aql_ring);
+      &libhsa, reinterpret_cast<iree_amd_queue_t*>(queue), &aql_ring);
 
   hsa_signal_t completion_signal = iree_hsa_signal_null();
   IREE_ASSERT_OK(iree_hsa_amd_signal_create(
