@@ -145,6 +145,7 @@ struct NotificationRingTest : public ::testing::Test {
   // appropriate epoch signal value (INITIAL - N).
   void SimulateCompletions(iree_hal_amdgpu_notification_ring_t* ring,
                            uint64_t total_completed) {
+    iree_hal_amdgpu_notification_ring_publish_epoch(ring, total_completed);
     hsa_signal_value_t target_value =
         (hsa_signal_value_t)(IREE_HAL_AMDGPU_EPOCH_INITIAL_VALUE -
                              total_completed);
@@ -799,6 +800,7 @@ TEST_F(NotificationRingTest, FailAllRetireCallbackRunsBeforeSemaphoreFailure) {
   };
   uint64_t epoch = iree_hal_amdgpu_notification_ring_advance_epoch(ring.get());
   PushNotification(ring.get(), epoch, semaphore, 1);
+  iree_hal_amdgpu_notification_ring_publish_epoch(ring.get(), epoch);
 
   iree_status_t error_status =
       iree_make_status(IREE_STATUS_ABORTED, "forced queue failure");

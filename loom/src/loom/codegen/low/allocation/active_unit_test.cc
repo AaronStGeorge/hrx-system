@@ -73,12 +73,29 @@ TEST(LowAllocationActiveUnitTest, FindsAndRemovesIndexedConflicts) {
       assignments, IREE_ARRAYSIZE(assignments), &assignments[1],
       /*ignored_value_ids=*/nullptr,
       /*ignored_value_count=*/0));
+  uint32_t conflict_indices[2] = {};
+  uint16_t conflict_count = 0;
+  IREE_ASSERT_OK(loom_low_allocation_active_unit_index_collect_conflicts(
+      &index, &descriptor_set, unit_end_points, IREE_ARRAYSIZE(unit_end_points),
+      assignments, IREE_ARRAYSIZE(assignments), &assignments[1],
+      /*ignored_value_ids=*/nullptr,
+      /*ignored_value_count=*/0, conflict_indices,
+      IREE_ARRAYSIZE(conflict_indices), &conflict_count));
+  ASSERT_EQ(conflict_count, 1u);
+  EXPECT_EQ(conflict_indices[0], 0u);
 
   const loom_value_id_t ignored_value_ids[] = {1};
   EXPECT_FALSE(loom_low_allocation_active_unit_index_conflicts(
       &index, &descriptor_set, unit_end_points, IREE_ARRAYSIZE(unit_end_points),
       assignments, IREE_ARRAYSIZE(assignments), &assignments[1],
       ignored_value_ids, IREE_ARRAYSIZE(ignored_value_ids)));
+  conflict_count = 0;
+  IREE_ASSERT_OK(loom_low_allocation_active_unit_index_collect_conflicts(
+      &index, &descriptor_set, unit_end_points, IREE_ARRAYSIZE(unit_end_points),
+      assignments, IREE_ARRAYSIZE(assignments), &assignments[1],
+      ignored_value_ids, IREE_ARRAYSIZE(ignored_value_ids), conflict_indices,
+      IREE_ARRAYSIZE(conflict_indices), &conflict_count));
+  EXPECT_EQ(conflict_count, 0u);
 
   loom_low_allocation_active_unit_index_remove_assignment(
       &index, assignments, IREE_ARRAYSIZE(assignments), /*assignment_index=*/0);

@@ -76,6 +76,24 @@ enum iree_hal_device_feature_bits_t {
   IREE_HAL_DEVICE_FEATURE_SUPPORTS_PROFILING = 1u << 2,
 };
 
+// Runtime services requested when creating a HAL device.
+typedef uint64_t iree_hal_device_runtime_feature_flags_t;
+enum iree_hal_device_runtime_feature_flag_bits_e {
+  // No optional runtime services are requested.
+  IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE = 0ull,
+  // Device-originated feedback events may be emitted by executables.
+  IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK = 1ull << 0,
+  // Address sanitizer support may be required by executables.
+  IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN = 1ull << 1,
+  // Thread/race sanitizer support may be required by executables.
+  IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN = 1ull << 2,
+};
+
+#define IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAGS_KNOWN                                          \
+  ((iree_hal_device_runtime_feature_flags_t)(IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK | \
+                                             IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN |     \
+                                             IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN))
+
 // Describes an enumerated HAL device.
 typedef struct iree_hal_device_info_t {
   // Opaque handle used by drivers. Not valid across driver instances.
@@ -118,6 +136,9 @@ typedef struct iree_hal_device_create_params_t {
   // The sink is copied into the device and |event_sink.user_data| must outlive
   // the device.
   iree_hal_device_event_sink_t event_sink;
+
+  // Runtime services requested for executables loaded into the device.
+  iree_hal_device_runtime_feature_flags_t runtime_features;
 
 } iree_hal_device_create_params_t;
 

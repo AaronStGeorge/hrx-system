@@ -7,6 +7,7 @@
 // AMDGPU ASAN executable CTS coverage.
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -20,6 +21,13 @@ namespace iree::hal::cts {
 class AsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
  protected:
   void SetUp() override {
+    std::string host_incompatibility_reason;
+    if (!IsBackendHostCompatible(GetParam(), &host_incompatibility_reason)) {
+      GTEST_SKIP() << "Backend '" << GetParam().name
+                   << "' is not compatible with this host: "
+                   << host_incompatibility_reason;
+    }
+
     iree_status_t status = asan_device_.Initialize(GetParam(), "asan");
     if (iree_status_is_unavailable(status)) {
       iree_status_free(status);
@@ -38,7 +46,7 @@ class AsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
     executable_params.executable_format =
         iree_make_cstring_view(GetParam().executable_format);
     executable_params.executable_data = GetParam().executable_data(
-        iree_make_cstring_view("executable_test.bin"));
+        iree_make_cstring_view("asan_executable_test.bin"));
     status = iree_hal_executable_cache_prepare_executable(
         executable_cache_, &executable_params, executable_.out());
     if (iree_status_is_incompatible(status)) {

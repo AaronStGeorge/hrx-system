@@ -457,6 +457,8 @@ TEST(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
               /*.descriptor_set=*/&descriptor_set,
           },
           /*.memory_access_table=*/{},
+          /*.value_ids=*/{},
+          /*.value_count=*/{},
           /*.liveness=*/{},
           /*.blocks=*/schedule_blocks,
           /*.block_count=*/IREE_ARRAYSIZE(schedule_blocks),

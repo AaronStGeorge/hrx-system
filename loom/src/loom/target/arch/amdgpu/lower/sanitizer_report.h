@@ -113,6 +113,13 @@ typedef struct loom_amdgpu_sanitizer_access_report_failure_branch_t {
   loom_block_t* continuation_block;
 } loom_amdgpu_sanitizer_access_report_failure_branch_t;
 
+typedef struct loom_amdgpu_sanitizer_trap_island_t {
+  // Entry block for failed sanitizer sites in trap reporting mode.
+  loom_block_t* entry_block;
+  // No-return halt loop reached after the target trap notification.
+  loom_block_t* terminal_block;
+} loom_amdgpu_sanitizer_trap_island_t;
+
 // Emits the AMDGPU sanitizer access report payload into a reserved feedback
 // packet.
 //
@@ -221,18 +228,39 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
     loom_value_id_t failure_mask, loom_location_id_t location,
     loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
 
-// Splits the current hot block on an EXEC-width failure mask and traps failed
-// lanes directly.
+// Builds a shared no-return trap island for failed sanitizer sites.
+//
+// The island assumes the caller has already narrowed EXEC to the failing lanes.
+// It emits the fatal-trap notification sequence and then loops forever in a
+// halted block. Trap mode is intentionally shared across sanitizer families
+// because it has no report payload and no site-specific state after EXEC has
+// been narrowed.
+iree_status_t loom_amdgpu_build_sanitizer_trap_island(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_block_t* after_block, loom_location_id_t location,
+    loom_amdgpu_sanitizer_trap_island_t* out_island);
+
+// Terminates the current cold block with a branch into |island|.
+//
+// The current block must already be on the failure path with EXEC narrowed to
+// failing lanes. The shared island is no-return, so no values are passed and no
+// continuation is emitted from the island.
+iree_status_t loom_amdgpu_build_sanitizer_trap_branch(
+    loom_builder_t* builder, const loom_amdgpu_sanitizer_trap_island_t* island,
+    loom_location_id_t location);
+
+// Splits the current hot block on an EXEC-width failure mask and routes failed
+// lanes into |island|.
 //
 // This is the fatal trap sanitizer reporting mode. |failure_mask| must be an
 // SGPRx2 native lane mask where set bits identify lanes that failed the
 // assertion. The hot block only compares the mask against zero and
-// conditionally branches. The per-site cold block narrows EXEC to the failed
-// lanes, emits the target fatal-trap notification sequence, and branches to a
-// no-return halt loop without structured feedback. Leaves the builder
+// conditionally branches. The per-site cold block narrows EXEC to failed lanes
+// and branches into the shared no-return trap island. Leaves the builder
 // positioned at the continuation block for subsequent non-failing code.
-iree_status_t loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
+iree_status_t loom_amdgpu_build_sanitizer_trap_failure_mask_branch_to_island(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_trap_island_t* island,
     loom_value_id_t failure_mask, loom_location_id_t location,
     loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
 

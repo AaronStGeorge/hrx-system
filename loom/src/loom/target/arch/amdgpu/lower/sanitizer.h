@@ -33,6 +33,12 @@ typedef struct loom_amdgpu_sanitizer_access_plan_t {
   loom_amdgpu_sanitizer_access_kind_t report_access_kind;
   // Number of application bytes covered by the assertion.
   uint32_t access_size;
+  // Minimum byte alignment proven for each repeated access address.
+  uint32_t minimum_alignment;
+  // Number of regularly-strided sub-accesses covered by the assertion.
+  uint16_t static_repeat_count;
+  // Static byte stride between consecutive sub-access base addresses.
+  uint64_t static_repeat_byte_stride;
 } loom_amdgpu_sanitizer_access_plan_t;
 
 // Resolves the shared AMDGPU feedback configuration symbol used by sanitizer
@@ -49,18 +55,21 @@ iree_status_t loom_amdgpu_sanitizer_site_id_for_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_sanitizer_site_id_t* out_site_id);
 
-// Selects an AMDGPU shadow-check lowering for sanitizer.assert.access.
+// Selects an AMDGPU shadow-check lowering for sanitizer.assert.access or
+// sanitizer.assert.accesses.
 iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_sanitizer_access_plan_t* out_plan, bool* out_selected);
 
-// Verifies sanitizer.assert.access legality for AMDGPU target-low selection.
+// Verifies sanitizer.assert.access or sanitizer.assert.accesses legality for
+// AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_sanitizer_assert_access(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
-// Lowers sanitizer.assert.access to a hot shadow check and cold report CFG.
+// Lowers sanitizer.assert.access or sanitizer.assert.accesses to hot shadow
+// checks and cold report CFG.
 iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_access_plan_t* plan);

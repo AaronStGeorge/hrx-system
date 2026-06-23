@@ -273,6 +273,8 @@ static iree_status_t loom_low_allocation_search_collect_active_spill_victim_set(
   *out_blocked = false;
   const uint32_t interval_end =
       loom_low_allocation_live_range_interval_storage_end_point(interval);
+  const uint16_t conflict_assignment_capacity =
+      (uint16_t)context->active_set->count;
 
   const loom_low_allocation_assignment_t candidate = {
       .value_id = interval->value_id,
@@ -289,22 +291,63 @@ static iree_status_t loom_low_allocation_search_collect_active_spill_victim_set(
               context, interval->value_id),
   };
 
+  uint16_t conflict_assignment_count = 0;
+  const bool active_unit_index_enabled =
+      loom_low_allocation_active_unit_index_is_enabled(
+          &context->active_set->units);
+  if (active_unit_index_enabled) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_active_unit_index_collect_conflicts(
+            &context->active_set->units, context->descriptor_set,
+            context->unit_liveness->end_points,
+            context->unit_liveness->end_point_count,
+            context->assignment_map->assignments,
+            context->assignment_map->assignment_count, &candidate,
+            /*ignored_value_ids=*/NULL,
+            /*ignored_value_count=*/0, assignment_indices,
+            conflict_assignment_capacity, &conflict_assignment_count));
+  }
+  const bool scan_all = !active_unit_index_enabled;
+  const bool scan_unindexed =
+      !scan_all && loom_low_allocation_active_unit_index_unindexed_count(
+                       &context->active_set->units) != 0;
+  if (scan_all || scan_unindexed) {
+    for (iree_host_size_t i = 0; i < context->active_set->count; ++i) {
+      const uint32_t assignment_index =
+          context->active_set
+              ->assignment_indices[context->active_set->start + i];
+      IREE_ASSERT_LT(assignment_index,
+                     context->assignment_map->assignment_count);
+      if (scan_unindexed &&
+          loom_low_allocation_active_unit_index_contains_assignment(
+              &context->active_set->units, assignment_index)) {
+        continue;
+      }
+      const loom_low_allocation_assignment_t* assignment =
+          &context->assignment_map->assignments[assignment_index];
+      if (!loom_low_allocation_active_assignment_conflicts(
+              context->descriptor_set, context->unit_liveness->end_points,
+              context->unit_liveness->end_point_count, assignment, &candidate,
+              /*ignored_value_ids=*/NULL,
+              /*ignored_value_count=*/0)) {
+        continue;
+      }
+      if (conflict_assignment_count == conflict_assignment_capacity) {
+        return iree_make_status(
+            IREE_STATUS_RESOURCE_EXHAUSTED,
+            "active allocation conflict set exceeds capacity");
+      }
+      assignment_indices[conflict_assignment_count++] = assignment_index;
+    }
+  }
+
   uint16_t assignment_count = 0;
   uint32_t unit_count = 0;
   uint32_t latest_end_point = 0;
-  for (iree_host_size_t i = 0; i < context->active_set->count; ++i) {
-    const uint32_t assignment_index =
-        context->active_set->assignment_indices[context->active_set->start + i];
-    IREE_ASSERT_LT(assignment_index, context->assignment_map->assignment_count);
+  for (uint16_t i = 0; i < conflict_assignment_count; ++i) {
+    const uint32_t assignment_index = assignment_indices[i];
     const loom_low_allocation_assignment_t* assignment =
         &context->assignment_map->assignments[assignment_index];
-    if (!loom_low_allocation_active_assignment_conflicts(
-            context->descriptor_set, context->unit_liveness->end_points,
-            context->unit_liveness->end_point_count, assignment, &candidate,
-            /*ignored_value_ids=*/NULL,
-            /*ignored_value_count=*/0)) {
-      continue;
-    }
     bool can_spill = false;
     IREE_RETURN_IF_ERROR(loom_low_allocation_search_assignment_spill_capacity(
         context, assignment, &can_spill, NULL));

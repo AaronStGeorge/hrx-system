@@ -6,6 +6,13 @@ func.def @assert_access_roundtrip(%layout: encoding<layout>, %view: view<16x32xf
 
 // ====
 
+func.def @assert_accesses_roundtrip(%layout: encoding<layout>, %view: view<16x32xf32, %layout>, %row: index) {
+  sanitizer.assert.accesses<write> %view[%row, 0] {static_count = 4, static_extents = [1, 4], static_strides = [1, 0]} : view<16x32xf32, %layout>
+  func.return
+}
+
+// ====
+
 func.def @assert_value_roundtrip(%n: index, %m: index) -> (index, index) {
   %n_checked, %m_checked = sanitizer.assert.value %n, %m [range(%n, 0, 4096), lt(%n, %m)] : index, index
   func.return %n_checked, %m_checked : index, index

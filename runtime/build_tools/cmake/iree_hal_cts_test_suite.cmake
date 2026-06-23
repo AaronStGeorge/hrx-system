@@ -81,6 +81,7 @@ function(iree_hal_cts_test_suite)
 
   set(_COMMON_DEPS
     ${_RULE_BACKENDS_LIB}
+    iree::base::tooling::flags
     iree::hal::cts::util::registry
     iree::hal::cts::util::test_base
     iree::testing::gtest

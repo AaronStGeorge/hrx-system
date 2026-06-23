@@ -502,9 +502,9 @@ static uint32_t loom_ireevm_current_packet_program_point(
     const loom_ireevm_emit_state_t* state) {
   IREE_ASSERT(state->current_packet != NULL);
   IREE_ASSERT_LT(state->current_packet->node->block_index,
-                 state->schedule->liveness.block_count);
+                 state->allocation->liveness.block_count);
   const loom_liveness_block_info_t* block_info =
-      &state->schedule->liveness
+      &state->allocation->liveness
            .blocks[state->current_packet->node->block_index];
   return block_info->start_point +
          state->current_packet->node->scheduled_ordinal;

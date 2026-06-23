@@ -430,19 +430,11 @@ static iree_status_t loom_low_allocation_packet_move_find_temporary(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_packet_move_op_program_point(
-    const loom_low_allocation_packet_move_context_t* context,
-    const loom_op_t* op, uint32_t* out_program_point) {
-  return loom_low_allocation_live_range_ordered_op_program_point(
-      context->assignment_map.liveness, context->body, context->liveness_order,
-      op, out_program_point);
-}
-
 static iree_status_t
 loom_low_allocation_packet_move_plan_record_temporaries_for_op(
     const loom_low_allocation_packet_move_context_t* context,
     iree_arena_allocator_t* arena, const loom_op_t* op, uint32_t source_ordinal,
-    loom_low_allocation_packet_move_plan_t* plan) {
+    uint32_t program_point, loom_low_allocation_packet_move_plan_t* plan) {
   iree_host_size_t move_capacity = 0;
   IREE_RETURN_IF_ERROR(loom_low_allocation_packet_moves_for_op(
       context, op, /*moves=*/NULL, IREE_HOST_SIZE_MAX, &move_capacity));
@@ -455,10 +447,6 @@ loom_low_allocation_packet_move_plan_record_temporaries_for_op(
   iree_host_size_t move_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_allocation_packet_moves_for_op(
       context, op, moves, move_capacity, &move_count));
-
-  uint32_t program_point = UINT32_MAX;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_op_program_point(
-      context, op, &program_point));
   const iree_host_size_t temporary_start = plan->temporary_count;
 
   for (iree_host_size_t i = 0; i < move_count; ++i) {
@@ -521,15 +509,20 @@ loom_low_allocation_packet_move_plan_record_temporaries_for_region(
     const loom_low_allocation_packet_move_context_t* context,
     iree_arena_allocator_t* arena, const loom_region_t* region,
     uint32_t* inout_source_ordinal,
+    const loom_low_allocation_op_point_index_t* op_points,
     loom_low_allocation_packet_move_plan_t* plan) {
   const loom_block_t* block = NULL;
   loom_region_for_each_block(region, block) {
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
       if (loom_low_allocation_move_topology_op_has_packet_moves(op)) {
+        uint32_t program_point = UINT32_MAX;
+        IREE_RETURN_IF_ERROR(loom_low_allocation_op_point_index_lookup(
+            op_points, op, &program_point));
         IREE_RETURN_IF_ERROR(
             loom_low_allocation_packet_move_plan_record_temporaries_for_op(
-                context, arena, op, *inout_source_ordinal, plan));
+                context, arena, op, *inout_source_ordinal, program_point,
+                plan));
         if (context->target_constraints->error_count != 0) {
           return iree_ok_status();
         }
@@ -551,7 +544,8 @@ loom_low_allocation_packet_move_plan_record_temporaries_for_region(
         }
         IREE_RETURN_IF_ERROR(
             loom_low_allocation_packet_move_plan_record_temporaries_for_region(
-                context, arena, regions[i], inout_source_ordinal, plan));
+                context, arena, regions[i], inout_source_ordinal, op_points,
+                plan));
         if (context->target_constraints->error_count != 0) {
           return iree_ok_status();
         }
@@ -588,9 +582,13 @@ iree_status_t loom_low_allocation_packet_move_plan_build(
   memset(plan.temporaries, 0, temporary_capacity * sizeof(*plan.temporaries));
 
   uint32_t source_ordinal = 0;
+  loom_low_allocation_op_point_index_t op_points = {0};
+  IREE_RETURN_IF_ERROR(loom_low_allocation_op_point_index_initialize(
+      context->assignment_map.liveness, context->liveness_order, arena,
+      &op_points));
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_packet_move_plan_record_temporaries_for_region(
-          context, arena, context->body, &source_ordinal, &plan));
+          context, arena, context->body, &source_ordinal, &op_points, &plan));
   if (context->target_constraints->error_count != 0) {
     *out_plan = plan;
     return iree_ok_status();

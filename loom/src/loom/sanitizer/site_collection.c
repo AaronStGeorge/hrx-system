@@ -45,6 +45,7 @@ typedef struct loom_sanitizer_site_collect_state_t {
 
 static bool loom_sanitizer_site_op_isa(const loom_op_t* op) {
   return loom_sanitizer_assert_access_isa(op) ||
+         loom_sanitizer_assert_accesses_isa(op) ||
          loom_sanitizer_assert_value_isa(op) ||
          loom_sanitizer_assert_op_isa(op) ||
          loom_sanitizer_assert_layout_isa(op) ||

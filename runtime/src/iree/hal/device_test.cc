@@ -170,6 +170,7 @@ TEST(DeviceCreateParamsTest, DefaultParamsIncludeDiscardEventSink) {
   iree_hal_device_create_params_t params =
       iree_hal_device_create_params_default();
   EXPECT_TRUE(iree_hal_device_event_sink_is_valid(params.event_sink));
+  EXPECT_EQ(IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE, params.runtime_features);
 }
 
 TEST(DeviceCreateParamsTest, VerifyRejectsZeroedParams) {

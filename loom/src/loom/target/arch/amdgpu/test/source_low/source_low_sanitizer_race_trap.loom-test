@@ -148,7 +148,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_trap_terminates() 
 ^_bb5(%122: reg<amdgpu.sgpr>, %123: reg<amdgpu.vgpr x2>, %124: reg<amdgpu.vgpr>, %125: reg<amdgpu.vgpr>):
   %182 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
   %184 = s_cmp_eq_i32 %122, %66
-  low.cond_br %184, ^_bb6, ^_bb10 : reg<amdgpu.scc>
+  low.cond_br %184, ^_bb6, ^_bb11 : reg<amdgpu.scc>
 ^_bb6:
   %185 = v_lshlrev_b32_src0_inline %96, 2
   %186 = v_mov_b32_copy %23
@@ -190,25 +190,27 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @race_trap_terminates() 
   %226 = slice %225[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %227 = s_mov_b32 0
   %228 = concat(%226, %227) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %231 = concat(%227, %227) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %232 = s_cmp_lg_u64 %228, %231
-  low.cond_br %232, ^_bb8, ^_bb7 : reg<amdgpu.scc>
+  %237 = concat(%227, %227) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %238 = s_cmp_lg_u64 %228, %237
+  low.cond_br %238, ^_bb8, ^_bb7 : reg<amdgpu.scc>
 ^_bb7:
-  low.br ^_bb10
+  low.br ^_bb11
 ^_bb8:
-  %233, %234 = s_and_saveexec_b64 %228
-  s_trap {trapid = 2}
-  %235 = s_sendmsg_rtn_b32 {message = 128}
-  %236 = s_mov_b32 1023
-  %237 = s_and_b32 %235, %236
-  %238 = s_mov_b32 1024
-  %239 = s_or_b32 %237, %238
-  %240 = s_mov_b32_m0 %239
-  s_sendmsg %240 {message = 1}
+  %239, %240 = s_and_saveexec_b64 %228
   low.br ^_bb9
 ^_bb9:
-  s_sethalt {reason = 5}
-  low.br ^_bb9
+  s_trap {trapid = 2}
+  %229 = s_sendmsg_rtn_b32 {message = 128}
+  %230 = s_mov_b32 1023
+  %231 = s_and_b32 %229, %230
+  %232 = s_mov_b32 1024
+  %233 = s_or_b32 %231, %232
+  %234 = s_mov_b32_m0 %233
+  s_sendmsg %234 {message = 1}
+  low.br ^_bb10
 ^_bb10:
+  s_sethalt {reason = 5}
+  low.br ^_bb10
+^_bb11:
   return
 }

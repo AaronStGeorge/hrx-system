@@ -755,6 +755,7 @@ iree_cc_test(
     iree::hal::cts::util::registry
     iree::hal::cts::util::test_base
     iree::hal::drivers::amdgpu::cts::testdata_amdgpu
+    iree::hal::drivers::amdgpu::cts::tsan_executable_testdata_amdgpu
     iree::hal::drivers::amdgpu::util::packet
     iree::testing::gtest
     iree::testing::gtest_main

@@ -1201,9 +1201,11 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
     profiling_memory.event_host_write_publication =
         physical_device->cpu_visible_device_coarse_memory
             .host_write_publication;
-  } else if (physical_device->fine_block_pools.small.is_initialized) {
-    profiling_memory.event_memory_pool =
-        physical_device->fine_block_pools.small.memory_pool;
+  } else {
+    // Queue profiling event records are initialized and serialized by the CPU,
+    // so fallback storage must remain host-writable even when the GPU lacks
+    // CPU-visible device-coarse memory.
+    profiling_memory.event_memory_pool = host_memory_pools->fine_pool;
   }
   for (iree_host_size_t queue_ordinal = 0;
        queue_ordinal < physical_device->host_queue_capacity &&

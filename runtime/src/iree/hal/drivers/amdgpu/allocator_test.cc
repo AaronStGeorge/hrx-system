@@ -105,6 +105,19 @@ static iree_device_size_t OversizedAllocationSize(
   return tlsf_range_length + 1;
 }
 
+static const char* QueryHostIncompatibilityReason(
+    const iree_hal_amdgpu_logical_device_options_t* options) {
+  switch (iree_hal_amdgpu_logical_device_options_query_host_compatibility(
+      options)) {
+    case IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_COMPATIBLE:
+      return nullptr;
+    case IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_INCOMPATIBLE_HOST_TSAN_ASAN:
+      return "AMDGPU ASAN is not supported in host ThreadSanitizer builds";
+    default:
+      return "AMDGPU logical-device options are not compatible with this host";
+  }
+}
+
 class AllocatorTest : public ::testing::Test {
  protected:
   class HsaAllocation {
@@ -224,6 +237,9 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.asan.enabled = 1;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -304,6 +320,9 @@ TEST_F(AllocatorTest, AsanHostLocalShadowBackingMapsPinnedHostSlabs) {
   options.asan.shadow_backing = IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL;
   options.asan.shadow_slab_size = 2 * 1024 * 1024;
   options.asan.quarantine_size = 0;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -342,6 +361,9 @@ TEST_F(AllocatorTest,
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.asan.enabled = 1;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -376,6 +398,9 @@ TEST_F(
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.asan.enabled = 1;
   options.asan.quarantine_size = 0;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -408,6 +433,9 @@ TEST_F(AllocatorTest, AsanDiagnosticsExposeDefaultQuarantineRetention) {
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.asan.enabled = 1;
   options.default_pool.range_length = 4096;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -453,6 +481,9 @@ TEST_F(AllocatorTest, AsanDiagnosticsExposeZeroQuarantineRelease) {
   options.asan.enabled = 1;
   options.asan.quarantine_size = 0;
   options.default_pool.range_length = 4096;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -927,6 +958,9 @@ TEST_F(AllocatorTest, AsanDeviceAllocationImportPublishesShadow) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.asan.enabled = 1;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -1014,6 +1048,9 @@ TEST_F(AllocatorTest, AsanHostLocalDeviceVisibleAllocationPublishesShadow) {
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.asan.enabled = 1;
   options.asan.quarantine_size = 0;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -1092,6 +1129,9 @@ TEST_F(AllocatorTest, AsanPremappedShadowModeCoversUnpublishedAddresses) {
   options.asan.shadow_scale_shift = IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT;
   options.asan.shadow_size = (iree_device_size_t)1ull << 40;
   options.asan.quarantine_size = 0;
+  if (const char* reason = QueryHostIncompatibilityReason(&options)) {
+    GTEST_SKIP() << reason;
+  }
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(

@@ -134,6 +134,12 @@ enum loom_low_schedule_diagnostic_bits_e {
 };
 typedef uint32_t loom_low_schedule_diagnostic_flags_t;
 
+enum loom_low_schedule_flag_bits_e {
+  // Retains source-order liveness analysis in the returned schedule table.
+  LOOM_LOW_SCHEDULE_FLAG_RETAIN_LIVENESS = 1u << 0,
+};
+typedef uint32_t loom_low_schedule_flags_t;
+
 typedef enum loom_low_schedule_strategy_e {
   // Chooses the first ready node in source order.
   LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY = 0,
@@ -673,6 +679,8 @@ typedef struct loom_low_schedule_options_t {
   iree_diagnostic_emitter_t emitter;
   // Optional backend feedback diagnostics to emit after scheduling analysis.
   loom_low_schedule_diagnostic_flags_t diagnostic_flags;
+  // Schedule construction behavior flags.
+  loom_low_schedule_flags_t flags;
   // Candidate selection strategy used within each dependency-ready set.
   loom_low_schedule_strategy_t strategy;
 } loom_low_schedule_options_t;
@@ -688,7 +696,11 @@ typedef struct loom_low_schedule_table_t {
   loom_low_resolved_target_t target;
   // Borrowed source-derived memory summaries attached to scheduled nodes.
   loom_low_memory_access_table_t memory_access_table;
-  // Liveness analysis for the scheduled low function body.
+  // Function-local value IDs indexed by local value ordinal.
+  const loom_value_id_t* value_ids;
+  // Number of entries in |value_ids|.
+  loom_value_ordinal_t value_count;
+  // Optional liveness analysis retained for table consumers that request it.
   loom_liveness_analysis_t liveness;
   // Per-block schedule records in region block order.
   const loom_low_schedule_block_t* blocks;

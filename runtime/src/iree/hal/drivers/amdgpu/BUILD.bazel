@@ -599,6 +599,7 @@ iree_runtime_cc_test(
         "//runtime/src/iree/hal/cts/util:registry",
         "//runtime/src/iree/hal/cts/util:test_base",
         "//runtime/src/iree/hal/drivers/amdgpu/cts:testdata_amdgpu",
+        "//runtime/src/iree/hal/drivers/amdgpu/cts:tsan_executable_testdata_amdgpu",
         "//runtime/src/iree/hal/drivers/amdgpu/util:packet",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

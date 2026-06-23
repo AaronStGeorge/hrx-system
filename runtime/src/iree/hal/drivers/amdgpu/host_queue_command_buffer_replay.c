@@ -241,6 +241,8 @@ iree_hal_amdgpu_command_buffer_replay_submit_completion_packet(
       iree_hal_amdgpu_host_queue_publish_profile_host_writes(replay->queue);
     }
 
+    iree_hal_amdgpu_notification_ring_publish_epoch(
+        &replay->queue->notification_ring, submission_id);
     if (queue_device_event) {
       const uint64_t timestamp_packet_id =
           submission.first_packet_id + submission.packet_count - 1;

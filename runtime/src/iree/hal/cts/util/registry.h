@@ -71,6 +71,14 @@ using DeviceFactory = std::function<iree_status_t(
     const iree_hal_device_create_params_t* create_params,
     iree_hal_driver_t** out_driver, iree_hal_device_t** out_device)>;
 
+// Predicate reporting whether a backend configuration is compatible with the
+// host build before attempting device creation.
+//
+// Returning true does not imply hardware support or driver availability. It
+// only means the host process configuration does not rule the backend out
+// before the production device creation path gets to query hardware.
+using BackendHostCompatibilityFn = std::function<bool(std::string* out_reason)>;
+
 // Function that returns pre-compiled executable data for a given file name.
 // Used by dispatch tests to load backend-specific device code.
 // Returns an empty span if the file is not found.
@@ -159,11 +167,20 @@ struct BackendInfo {
   // should use this key so format parameterization does not multiply expensive
   // device state.
   std::string device_cache_key;
+  // Optional pre-device-creation host compatibility query.
+  BackendHostCompatibilityFn host_compatibility_fn;
 };
 
 // Returns the stable cache key for driver/device resources owned by |info|.
 inline const std::string& GetBackendDeviceCacheKey(const BackendInfo& info) {
   return info.device_cache_key.empty() ? info.name : info.device_cache_key;
+}
+
+// Returns true if |info| is compatible with this host build/configuration.
+inline bool IsBackendHostCompatible(const BackendInfo& info,
+                                    std::string* out_reason) {
+  if (!info.host_compatibility_fn) return true;
+  return info.host_compatibility_fn(out_reason);
 }
 
 // Returns human-readable test suffix from BackendInfo.

@@ -1154,7 +1154,7 @@ static iree_status_t loom_amdgpu_wait_plan_finish_node_classification(
 static iree_status_t loom_amdgpu_wait_plan_build_dependency_links(
     loom_amdgpu_wait_plan_builder_t* builder) {
   const loom_low_schedule_table_t* schedule = builder->schedule;
-  const iree_host_size_t value_count = schedule->liveness.value_count;
+  const iree_host_size_t value_count = schedule->value_count;
   uint32_t* producer_nodes = NULL;
   if (value_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(builder->arena, value_count,
@@ -1175,7 +1175,8 @@ static iree_status_t loom_amdgpu_wait_plan_build_dependency_links(
       if (result_ordinal >= value_count) {
         return iree_make_status(
             IREE_STATUS_OUT_OF_RANGE,
-            "AMDGPU wait dependency result ordinal exceeds liveness domain");
+            "AMDGPU wait dependency result ordinal exceeds schedule value "
+            "domain");
       }
       producer_nodes[result_ordinal] = node_index;
     }

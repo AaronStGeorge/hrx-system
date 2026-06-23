@@ -139,18 +139,19 @@ TEST_F(HostQueueCommandBufferTest,
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.preallocate_pools = 0;
-  options.tsan.enabled = 1;
   options.tsan.shadow_slot_count = 1;
 
   TestLogicalDevice test_device;
-  IREE_ASSERT_OK(
-      test_device.Initialize(&options, &libhsa_, &topology_, host_allocator_));
+  IREE_ASSERT_OK(test_device.InitializeWithRuntimeFeatures(
+      &options, &libhsa_, &topology_, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN,
+      host_allocator_));
 
   iree_hal_executable_cache_t* executable_cache = NULL;
   iree_hal_executable_t* executable = NULL;
-  IREE_ASSERT_OK(LoadCtsExecutable(
-      test_device.base_device(), iree_make_cstring_view("executable_test.bin"),
-      &executable_cache, &executable));
+  IREE_ASSERT_OK(
+      LoadCtsExecutable(test_device.base_device(),
+                        iree_make_cstring_view("tsan_executable_test.bin"),
+                        &executable_cache, &executable));
 
   Ref<iree_hal_buffer_t> input_buffer;
   IREE_ASSERT_OK(CreateHostVisibleDispatchBuffer(
@@ -721,7 +722,6 @@ TEST_F(HostQueueCommandBufferTest,
           executable, iree_hal_executable_function_from_index(0),
           IREE_HAL_QUEUE_AFFINITY_ANY, &descriptor));
   ASSERT_NE(descriptor, nullptr);
-  ASSERT_GT(descriptor->kernel_args.workgroup_size[0], 1u);
 
   Ref<iree_hal_buffer_t> output_buffer;
   IREE_ASSERT_OK(CreateHostVisibleDispatchBuffer(

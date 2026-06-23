@@ -18,10 +18,10 @@ extern "C" {
 // Schedules one target-low function body and writes an arena-owned table. The
 // caller must keep |module| semantically immutable and |arena| alive for as
 // long as |out_table| is used. This function performs descriptor target
-// resolution and liveness analysis. Diagnosed schedule failures are reported
-// through |options->emitter| and recorded in |out_table->error_count|; status
-// failures are reserved for infrastructure failures and no-emitter fail-loud
-// fallback paths.
+// resolution and optional liveness analysis. Diagnosed schedule failures are
+// reported through |options->emitter| and recorded in |out_table->error_count|;
+// status failures are reserved for infrastructure failures and no-emitter
+// fail-loud fallback paths.
 iree_status_t loom_low_schedule_function(
     loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_schedule_options_t* options, iree_arena_allocator_t* arena,

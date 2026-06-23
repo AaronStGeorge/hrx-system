@@ -607,24 +607,7 @@ static iree_status_t iree_hal_amdgpu_feedback_state_initialize_device(
         /*num_consumers=*/0, /*consumers=*/NULL, /*attributes=*/0,
         &out_device_state->stop_signal);
   }
-  if (iree_status_is_ok(status)) {
-    iree_thread_create_params_t thread_params;
-    memset(&thread_params, 0, sizeof(thread_params));
-    char thread_name[32] = {0};
-    snprintf(thread_name, IREE_ARRAYSIZE(thread_name), "amdgpu-d%u-feedback",
-             (unsigned)physical_device->device_ordinal);
-    thread_params.name = iree_make_cstring_view(thread_name);
-    iree_thread_affinity_set_group_any(physical_device->host_numa_node,
-                                       &thread_params.initial_affinity);
-    status = iree_thread_create(
-        iree_hal_amdgpu_feedback_state_service_thread_main, out_device_state,
-        thread_params, state->host_allocator,
-        &out_device_state->service_thread);
-  }
   if (!iree_status_is_ok(status)) {
-    iree_hal_amdgpu_feedback_state_request_device_stop(out_device_state);
-    iree_thread_release(out_device_state->service_thread);
-    out_device_state->service_thread = NULL;
     if (out_device_state->stop_signal.handle) {
       iree_hal_amdgpu_hsa_cleanup_assert_success(iree_hsa_signal_destroy_raw(
           state->libhsa, out_device_state->stop_signal));
@@ -634,6 +617,23 @@ static iree_status_t iree_hal_amdgpu_feedback_state_initialize_device(
     memset(out_device_state, 0, sizeof(*out_device_state));
   }
   return status;
+}
+
+static iree_status_t iree_hal_amdgpu_feedback_state_start_device_thread(
+    iree_hal_amdgpu_feedback_device_state_t* device_state,
+    iree_hal_amdgpu_physical_device_t* physical_device) {
+  iree_hal_amdgpu_feedback_state_t* state = device_state->parent;
+  iree_thread_create_params_t thread_params;
+  memset(&thread_params, 0, sizeof(thread_params));
+  char thread_name[32] = {0};
+  snprintf(thread_name, IREE_ARRAYSIZE(thread_name), "amdgpu-d%u-feedback",
+           (unsigned)physical_device->device_ordinal);
+  thread_params.name = iree_make_cstring_view(thread_name);
+  iree_thread_affinity_set_group_any(physical_device->host_numa_node,
+                                     &thread_params.initial_affinity);
+  return iree_thread_create(iree_hal_amdgpu_feedback_state_service_thread_main,
+                            device_state, thread_params, state->host_allocator,
+                            &device_state->service_thread);
 }
 
 iree_status_t iree_hal_amdgpu_feedback_state_initialize(
@@ -650,7 +650,10 @@ iree_status_t iree_hal_amdgpu_feedback_state_initialize(
   IREE_ASSERT_ARGUMENT(out_state);
   memset(out_state, 0, sizeof(*out_state));
 
-  if (!options->asan.enabled && !options->tsan.enabled) return iree_ok_status();
+  if (!options->feedback.enabled && !options->asan.enabled &&
+      !options->tsan.enabled) {
+    return iree_ok_status();
+  }
   if (IREE_UNLIKELY(physical_device_count == 0 || !physical_devices)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -687,10 +690,15 @@ iree_status_t iree_hal_amdgpu_feedback_state_initialize(
       ++out_state->device_state_count;
     }
   }
-
   if (iree_status_is_ok(status)) {
     out_state->is_enabled = true;
-  } else {
+    for (iree_host_size_t i = 0;
+         i < out_state->device_state_count && iree_status_is_ok(status); ++i) {
+      status = iree_hal_amdgpu_feedback_state_start_device_thread(
+          &out_state->device_states[i], physical_devices[i]);
+    }
+  }
+  if (!iree_status_is_ok(status)) {
     iree_hal_amdgpu_feedback_state_deinitialize(out_state);
   }
   return status;

@@ -9,7 +9,6 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_config_compatible_with",
     "loom_generated_cc_library",
     "loom_low_descriptor_data_archive",
 )
@@ -23,10 +22,6 @@ package(
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
-
-_AMDGPU_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/execute:amdgpu_hal",
-])
 
 _AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
 
@@ -308,56 +303,6 @@ loom_cc_test(
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "sanitizer_feedback_test",
-    srcs = ["sanitizer_feedback_test.cc"],
-    resource_group = "loom-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "iree-run-requirement=runtime.resource.amd_gpu",
-        "requires-gpu-amd",
-        "runtime-resource=amd-gpu",
-    ],
-    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
-    deps = [
-        "//loom/src/loom/codegen/low:builder",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/global",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/sanitizer",
-        "//loom/src/loom/sanitizer:options",
-        "//loom/src/loom/sanitizer:site_table",
-        "//loom/src/loom/target:registers",
-        "//loom/src/loom/target/arch/amdgpu:provider",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
-        "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
-        "//loom/src/loom/target/arch/amdgpu/lower",
-        "//loom/src/loom/target/arch/amdgpu/ops",
-        "//loom/src/loom/target/arch/amdgpu/planning:wait_packets",
-        "//loom/src/loom/target/arch/amdgpu/records:target_records",
-        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
-        "//loom/src/loom/testing:diagnostic_matchers",
-        "//loom/src/loom/testing:module_ptr",
-        "//loom/src/loom/tooling/execution/hal:invocation",
-        "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
-        "//runtime/src/iree/async",
-        "//runtime/src/iree/async/util:proactor_pool",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/base/threading",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/hal/drivers/amdgpu:buffer",
-        "//runtime/src/iree/hal/drivers/amdgpu/abi",
-        "//runtime/src/iree/hal/drivers/amdgpu/registration",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -77,6 +77,20 @@ bool loom_low_allocation_active_unit_index_conflicts(
     const loom_low_allocation_assignment_t* candidate,
     const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count);
 
+// Appends indexed active assignments that conflict with |candidate| to
+// |assignment_indices|. Duplicate range hits for the same assignment are
+// suppressed.
+iree_status_t loom_low_allocation_active_unit_index_collect_conflicts(
+    loom_low_allocation_active_unit_index_t* index,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
+    const loom_low_allocation_assignment_t* assignments,
+    iree_host_size_t assignment_count,
+    const loom_low_allocation_assignment_t* candidate,
+    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
+    uint32_t* assignment_indices, uint16_t assignment_capacity,
+    uint16_t* inout_assignment_count);
+
 // Inserts |assignment_index| into |index| when its units can be represented.
 // Register-like assignments that cannot fit are counted as unindexed.
 void loom_low_allocation_active_unit_index_insert_assignment(

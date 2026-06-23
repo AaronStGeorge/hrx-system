@@ -39,6 +39,14 @@ void loom_run_hal_testbench_context_set_device_event_sink(
   context->device_event_sink = device_event_sink;
 }
 
+void loom_run_hal_testbench_context_set_runtime_sanitizer_options(
+    loom_run_hal_testbench_context_t* context,
+    const loom_sanitizer_options_t* sanitizer_options) {
+  IREE_ASSERT(!context->runtime_initialized);
+  context->runtime_sanitizer_options = *sanitizer_options;
+  context->has_runtime_sanitizer_options = true;
+}
+
 void loom_run_hal_testbench_context_deinitialize(
     loom_run_hal_testbench_context_t* context) {
   if (context == NULL) {
@@ -125,8 +133,18 @@ iree_status_t loom_run_hal_testbench_context_ensure_runtime(
   loom_run_hal_runtime_options_initialize(
       context->artifact_provider->hal_driver_name, &runtime_options);
   runtime_options.event_sink = context->device_event_sink;
-  IREE_RETURN_IF_ERROR(loom_run_hal_runtime_initialize(
-      &runtime_options, context->host_allocator, &context->runtime));
+  loom_target_pipeline_options_t runtime_target_pipeline_options =
+      context->artifact_provider->default_pipeline_options;
+  if (context->has_runtime_sanitizer_options) {
+    runtime_target_pipeline_options.sanitizer =
+        context->runtime_sanitizer_options;
+  }
+  runtime_options.runtime_features |=
+      loom_run_hal_runtime_features_from_sanitizer_options(
+          &runtime_target_pipeline_options.sanitizer);
+  iree_status_t status = loom_run_hal_runtime_initialize(
+      &runtime_options, context->host_allocator, &context->runtime);
+  IREE_RETURN_IF_ERROR(status);
   context->runtime_initialized = true;
   return iree_ok_status();
 }

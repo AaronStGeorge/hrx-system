@@ -2926,6 +2926,43 @@ def _flat_load_u8_overlay(
     )
 
 
+def _flat_load_u64_overlay(
+    *,
+    mnemonic: str,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    offset_signed: bool,
+    implicit_flat_scratch: bool,
+    implicit_m0: bool = False,
+    allow_accumulator_results: bool = False,
+    fixed_saddr: AmdgpuFixedEncodingValue | None = None,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return _flat_load_overlay(
+        descriptor_key="amdgpu.flat_load_u64",
+        instruction_name="FLAT_LOAD_DWORDX2",
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        address_field_name=address_field_name,
+        data_field_name=data_field_name,
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        offset_signed=offset_signed,
+        width_bits=64,
+        units=2,
+        semantic_tag="memory.generic.load.u64",
+        data_format_name="FMT_NUM_B64",
+        implicit_flat_scratch=implicit_flat_scratch,
+        implicit_m0=implicit_m0,
+        allow_accumulator_results=allow_accumulator_results,
+        fixed_saddr=fixed_saddr,
+        cache_fields=cache_fields,
+    )
+
+
 def _scratch_load_overlay(
     *,
     descriptor_key: str,
@@ -3833,6 +3870,7 @@ __all__ = (
     "_buffer_store_vaddr_offset_overlay",
     "_flat_load_overlay",
     "_flat_load_u8_overlay",
+    "_flat_load_u64_overlay",
     "_global_b16_memory_overlays",
     "_global_byte_memory_overlays",
     "_global_load_b16_d16_overlay",

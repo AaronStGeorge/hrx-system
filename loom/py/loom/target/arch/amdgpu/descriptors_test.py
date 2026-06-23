@@ -1131,10 +1131,10 @@ def test_feedback_atomic64_descriptors_do_not_expand_source_atomic_candidates() 
     assert "amdgpu.global_atomic_cmpswap_b64_rtn_saddr" not in keys
 
 
-def test_flat_u8_load_descriptor_covers_execution_families() -> None:
+def test_flat_load_descriptors_cover_execution_families() -> None:
     for (
         overlays,
-        mnemonic,
+        u8_mnemonic,
         uses_flat_scratch,
         uses_m0,
         expected_saddr_fields,
@@ -1182,50 +1182,75 @@ def test_flat_u8_load_descriptor_covers_execution_families() -> None:
         ),
     ):
         descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
-        descriptor = descriptors["amdgpu.flat_load_u8"]
-        _assert_memory_width_overlay(
-            descriptor,
-            width_bits=8,
-            semantic_tag="memory.generic.load.u8.zero_extend",
-            mnemonic=mnemonic,
-            operand_units=1,
-            payload_field_name="dst",
-            effect_kind=EffectKind.READ,
-            memory_space=MemorySpace.GENERIC,
-            implicit_data_format="FMT_NUM_U8",
-            implicit_ignore_reason="modeled-by-generic-read-effect",
-        )
-        assert descriptor.schedule_class == _SCHEDULE_VMEM_LOAD
-        assert descriptor.asm_forms is not None
-        assert len(descriptor.asm_forms) == 1
-        asm_form = descriptor.asm_forms[0]
-        assert asm_form.mnemonic == mnemonic
-        assert asm_form.results == ("dst",)
-        expected_asm_operands = ("addr", "m0") if uses_m0 else ("addr",)
-        assert asm_form.operands == expected_asm_operands
-        assert (
-            tuple(immediate.field_name for immediate in asm_form.immediates)
-            == expected_asm_immediates
-        )
-        assert (
-            tuple(immediate.name for immediate in asm_form.immediates)
-            == expected_asm_immediates
-        )
-        assert (
-            any(
-                operand.operand_type == "OPR_FLAT_SCRATCH"
-                for operand in descriptor.implicit_operands
+        for (
+            descriptor_key,
+            width_bits,
+            semantic_tag,
+            mnemonic,
+            operand_units,
+            implicit_data_format,
+        ) in (
+            (
+                "amdgpu.flat_load_u8",
+                8,
+                "memory.generic.load.u8.zero_extend",
+                u8_mnemonic,
+                1,
+                "FMT_NUM_U8",
+            ),
+            (
+                "amdgpu.flat_load_u64",
+                64,
+                "memory.generic.load.u64",
+                "flat_load_dwordx2",
+                2,
+                "FMT_NUM_B64",
+            ),
+        ):
+            descriptor = descriptors[descriptor_key]
+            _assert_memory_width_overlay(
+                descriptor,
+                width_bits=width_bits,
+                semantic_tag=semantic_tag,
+                mnemonic=mnemonic,
+                operand_units=operand_units,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GENERIC,
+                implicit_data_format=implicit_data_format,
+                implicit_ignore_reason="modeled-by-generic-read-effect",
             )
-            == uses_flat_scratch
-        )
-        assert descriptor.fixed_encoding_fields == expected_saddr_fields
-        assert (
-            any(
-                operand.operand_type == "OPR_SDST_M0"
-                for operand in descriptor.implicit_operands
+            assert descriptor.schedule_class == _SCHEDULE_VMEM_LOAD
+            assert descriptor.asm_forms is not None
+            assert len(descriptor.asm_forms) == 1
+            asm_form = descriptor.asm_forms[0]
+            assert asm_form.mnemonic == mnemonic
+            assert asm_form.results == ("dst",)
+            expected_asm_operands = ("addr", "m0") if uses_m0 else ("addr",)
+            assert asm_form.operands == expected_asm_operands
+            assert (
+                tuple(immediate.field_name for immediate in asm_form.immediates)
+                == expected_asm_immediates
             )
-            == uses_m0
-        )
+            assert (
+                tuple(immediate.name for immediate in asm_form.immediates)
+                == expected_asm_immediates
+            )
+            assert (
+                any(
+                    operand.operand_type == "OPR_FLAT_SCRATCH"
+                    for operand in descriptor.implicit_operands
+                )
+                == uses_flat_scratch
+            )
+            assert descriptor.fixed_encoding_fields == expected_saddr_fields
+            assert (
+                any(
+                    operand.operand_type == "OPR_SDST_M0"
+                    for operand in descriptor.implicit_operands
+                )
+                == uses_m0
+            )
 
 
 def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:

@@ -335,6 +335,10 @@ low.func.def target(@test_target) @register_pressure(%a: reg<test.i32>, %b: reg<
   ASSERT_NE(pressure, nullptr);
   EXPECT_EQ(pressure->peak_live_units, 3u);
   EXPECT_EQ(pressure->peak_live_values, 3u);
+  const loom_block_t* entry =
+      loom_region_const_entry_block(loom_func_like_body(func));
+  EXPECT_EQ(pressure->peak_op, loom_block_const_op(entry, 1));
+  EXPECT_EQ(pressure->peak_point, 1u);
 }
 
 TEST_F(LivenessTest, PressureBudgetReportsHighUnrolledRegisterUse) {

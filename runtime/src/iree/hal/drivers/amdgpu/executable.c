@@ -1245,35 +1245,57 @@ static void iree_hal_amdgpu_executable_invalidate_host_kernel_objects(
   }
 }
 
+static iree_status_t
+iree_hal_amdgpu_executable_try_lookup_required_config_global(
+    iree_hal_amdgpu_global_table_t* global_table, const char* global_name,
+    iree_host_size_t expected_byte_length, bool capability_enabled,
+    const char* capability_name, const char* enable_hint, bool* out_found,
+    iree_hal_executable_global_t* out_global) {
+  *out_found = false;
+  *out_global = iree_hal_executable_global_invalid();
+
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_global_table_try_lookup(
+      global_table, iree_make_cstring_view(global_name), out_found,
+      out_global));
+  if (!*out_found) return iree_ok_status();
+
+  if (IREE_UNLIKELY(!capability_enabled)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU executable references runtime feature global `%s`, but %s is "
+        "not enabled on the logical device; %s",
+        global_name, capability_name, enable_hint);
+  }
+
+  iree_hal_executable_global_info_t info;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_global_table_info(global_table, *out_global, &info),
+      "querying AMDGPU runtime feature global info");
+  if (IREE_UNLIKELY(info.byte_length != expected_byte_length)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU runtime feature global `%s` has length %" PRIu64
+        " but the runtime ABI requires %" PRIhsz,
+        global_name, (uint64_t)info.byte_length, expected_byte_length);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t iree_hal_amdgpu_executable_publish_asan_config(
     iree_hal_amdgpu_executable_t* executable,
     iree_hal_amdgpu_executable_load_variant_t* load_variant,
     const iree_hal_amdgpu_asan_state_t* asan_state) {
-  if (!iree_hal_amdgpu_asan_state_is_enabled(asan_state)) {
-    return iree_ok_status();
-  }
-
   iree_hal_executable_global_t global = iree_hal_executable_global_invalid();
   bool found = false;
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_global_table_try_lookup(
-      &load_variant->global_table,
-      iree_make_cstring_view(IREE_HAL_AMDGPU_ASAN_CONFIG_GLOBAL_NAME), &found,
-      &global));
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_executable_try_lookup_required_config_global(
+          &load_variant->global_table, IREE_HAL_AMDGPU_ASAN_CONFIG_GLOBAL_NAME,
+          sizeof(iree_hal_amdgpu_asan_config_t),
+          iree_hal_amdgpu_asan_state_is_enabled(asan_state),
+          "AMDGPU ASAN shadow memory",
+          "enable HAL ASAN runtime support before loading this executable",
+          &found, &global));
   if (!found) return iree_ok_status();
-
-  iree_hal_executable_global_info_t info;
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_global_table_info(
-                           &load_variant->global_table, global, &info),
-                       "querying ASAN config global info");
-  if (IREE_UNLIKELY(info.byte_length !=
-                    sizeof(iree_hal_amdgpu_asan_config_t))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU ASAN config global `%s` has length %" PRIu64
-                            " but the runtime ABI requires %" PRIhsz,
-                            IREE_HAL_AMDGPU_ASAN_CONFIG_GLOBAL_NAME,
-                            (uint64_t)info.byte_length,
-                            sizeof(iree_hal_amdgpu_asan_config_t));
-  }
 
   iree_hal_amdgpu_asan_config_t config;
   iree_hal_amdgpu_asan_state_populate_config(asan_state, &config);
@@ -1317,31 +1339,17 @@ static iree_status_t iree_hal_amdgpu_executable_publish_tsan_config(
     iree_hal_amdgpu_executable_t* executable,
     iree_hal_amdgpu_executable_load_variant_t* load_variant,
     const iree_hal_amdgpu_tsan_state_t* tsan_state) {
-  if (!iree_hal_amdgpu_tsan_state_is_enabled(tsan_state)) {
-    return iree_ok_status();
-  }
-
   iree_hal_executable_global_t global = iree_hal_executable_global_invalid();
   bool found = false;
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_global_table_try_lookup(
-      &load_variant->global_table,
-      iree_make_cstring_view(IREE_HAL_AMDGPU_TSAN_CONFIG_GLOBAL_NAME), &found,
-      &global));
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_executable_try_lookup_required_config_global(
+          &load_variant->global_table, IREE_HAL_AMDGPU_TSAN_CONFIG_GLOBAL_NAME,
+          sizeof(iree_hal_amdgpu_tsan_config_t),
+          iree_hal_amdgpu_tsan_state_is_enabled(tsan_state),
+          "AMDGPU TSAN shadow memory",
+          "enable HAL TSAN runtime support before loading this executable",
+          &found, &global));
   if (!found) return iree_ok_status();
-
-  iree_hal_executable_global_info_t info;
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_global_table_info(
-                           &load_variant->global_table, global, &info),
-                       "querying TSAN config global info");
-  if (IREE_UNLIKELY(info.byte_length !=
-                    sizeof(iree_hal_amdgpu_tsan_config_t))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU TSAN config global `%s` has length %" PRIu64
-                            " but the runtime ABI requires %" PRIhsz,
-                            IREE_HAL_AMDGPU_TSAN_CONFIG_GLOBAL_NAME,
-                            (uint64_t)info.byte_length,
-                            sizeof(iree_hal_amdgpu_tsan_config_t));
-  }
 
   for (iree_host_size_t device_ordinal = 0;
        device_ordinal < executable->device_count; ++device_ordinal) {
@@ -1481,31 +1489,18 @@ static iree_status_t iree_hal_amdgpu_executable_publish_feedback_config(
     iree_hal_amdgpu_executable_t* executable,
     iree_hal_amdgpu_executable_load_variant_t* load_variant,
     const iree_hal_amdgpu_feedback_state_t* feedback_state) {
-  if (!iree_hal_amdgpu_feedback_state_is_enabled(feedback_state)) {
-    return iree_ok_status();
-  }
-
   iree_hal_executable_global_t global = iree_hal_executable_global_invalid();
   bool found = false;
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_global_table_try_lookup(
-      &load_variant->global_table,
-      iree_make_cstring_view(IREE_HAL_AMDGPU_FEEDBACK_CONFIG_GLOBAL_NAME),
-      &found, &global));
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_executable_try_lookup_required_config_global(
+          &load_variant->global_table,
+          IREE_HAL_AMDGPU_FEEDBACK_CONFIG_GLOBAL_NAME,
+          sizeof(iree_hal_amdgpu_feedback_config_t),
+          iree_hal_amdgpu_feedback_state_is_enabled(feedback_state),
+          "the AMDGPU feedback channel",
+          "enable HAL feedback runtime support before loading this executable",
+          &found, &global));
   if (!found) return iree_ok_status();
-
-  iree_hal_executable_global_info_t info;
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_global_table_info(
-                           &load_variant->global_table, global, &info),
-                       "querying feedback config global info");
-  if (IREE_UNLIKELY(info.byte_length !=
-                    sizeof(iree_hal_amdgpu_feedback_config_t))) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU feedback config global `%s` has length %" PRIu64
-        " but the runtime ABI requires %" PRIhsz,
-        IREE_HAL_AMDGPU_FEEDBACK_CONFIG_GLOBAL_NAME, (uint64_t)info.byte_length,
-        sizeof(iree_hal_amdgpu_feedback_config_t));
-  }
 
   for (iree_host_size_t device_ordinal = 0;
        device_ordinal < executable->device_count; ++device_ordinal) {
@@ -1993,15 +1988,15 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
        ++variant_ordinal) {
     iree_hal_amdgpu_executable_load_variant_t* load_variant =
         &executable->load_variants[variant_ordinal];
-    status = iree_hal_amdgpu_executable_publish_feedback_config(
-        executable, load_variant, feedback_state);
-    if (iree_status_is_ok(status)) {
-      status = iree_hal_amdgpu_executable_publish_asan_config(
-          executable, load_variant, asan_state);
-    }
+    status = iree_hal_amdgpu_executable_publish_asan_config(
+        executable, load_variant, asan_state);
     if (iree_status_is_ok(status)) {
       status = iree_hal_amdgpu_executable_publish_tsan_config(
           executable, load_variant, tsan_state);
+    }
+    if (iree_status_is_ok(status)) {
+      status = iree_hal_amdgpu_executable_publish_feedback_config(
+          executable, load_variant, feedback_state);
     }
   }
   if (iree_status_is_ok(status)) {

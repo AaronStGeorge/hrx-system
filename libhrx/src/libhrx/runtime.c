@@ -406,27 +406,27 @@ static const char* hrx_get_profile_file_path(void) {
   return (value && value[0]) ? value : NULL;
 }
 
-#define HRX_HAL_DEVICE_PARAMETER_CAPACITY 1
-
-typedef struct hrx_hal_device_parameters_t {
-  // Count of populated parameter pairs in |pairs|.
-  iree_host_size_t count;
-  // Inline storage for HAL device creation parameters.
-  iree_string_pair_t pairs[HRX_HAL_DEVICE_PARAMETER_CAPACITY];
-} hrx_hal_device_parameters_t;
-
-static iree_status_t hrx_hal_device_parameters_from_environment(
-    hrx_hal_device_parameters_t* out_parameters) {
-  memset(out_parameters, 0, sizeof(*out_parameters));
-
+static iree_status_t hrx_hal_runtime_features_from_environment(
+    iree_hal_device_runtime_feature_flags_t* out_runtime_features) {
+  *out_runtime_features = IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE;
   const char* sanitizer = getenv("HRX_HAL_SANITIZER");
   if (!sanitizer || !sanitizer[0]) return iree_ok_status();
-  if (strcmp(sanitizer, "asan") != 0) {
+
+  iree_hal_device_runtime_feature_flags_t runtime_features =
+      IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK;
+  if (strcmp(sanitizer, "asan") == 0) {
+    runtime_features |= IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN;
+  } else if (strcmp(sanitizer, "tsan") == 0) {
+    runtime_features |= IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN;
+  } else if (strcmp(sanitizer, "asan,tsan") == 0 ||
+             strcmp(sanitizer, "tsan,asan") == 0) {
+    runtime_features |= IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN |
+                        IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN;
+  } else {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unsupported HRX_HAL_SANITIZER '%s'", sanitizer);
   }
-  out_parameters->pairs[out_parameters->count++] =
-      iree_make_cstring_pair("hal.sanitizer", "asan");
+  *out_runtime_features = runtime_features;
   return iree_ok_status();
 }
 
@@ -761,8 +761,9 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
   int count =
       physical_count < HRX_MAX_DEVICES ? physical_count : HRX_MAX_DEVICES;
 
-  hrx_hal_device_parameters_t device_parameters;
-  iree_status = hrx_hal_device_parameters_from_environment(&device_parameters);
+  iree_hal_device_runtime_feature_flags_t runtime_features =
+      IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE;
+  iree_status = hrx_hal_runtime_features_from_environment(&runtime_features);
   if (!iree_status_is_ok(iree_status)) {
     iree_allocator_free(alloc, device_infos);
     iree_hal_driver_release(driver);
@@ -774,6 +775,7 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
       iree_hal_device_create_params_default();
   create_params.proactor_pool = g_shared.proactor_pool;
   create_params.event_sink = hrx_hal_device_event_sink();
+  create_params.runtime_features = runtime_features;
 
   iree_hal_profile_sink_t* profile_sink = NULL;
   const char* profile_file_path = hrx_get_profile_file_path();
@@ -796,8 +798,8 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
 
     iree_hal_device_t* hal_device = NULL;
     iree_status = iree_hal_driver_create_device_by_ordinal(
-        driver, info_index, device_parameters.count, device_parameters.pairs,
-        &create_params, alloc, &hal_device);
+        driver, info_index, /*param_count=*/0, /*params=*/NULL, &create_params,
+        alloc, &hal_device);
     hrx_debug_print_iree_status("create device by ordinal", iree_status);
     if (!iree_status_is_ok(iree_status)) {
       hrx_gpu_release_created_devices(created_count);

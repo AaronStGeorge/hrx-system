@@ -69,6 +69,20 @@ TEST(AmdgpuDriverOptionsTest, LogicalDeviceDefaultsDisableAsan) {
             IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE);
 }
 
+#if defined(IREE_SANITIZER_THREAD)
+TEST(AmdgpuDriverOptionsTest, HostTsanRejectsAsanBeforeLoadingHsa) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+
+  const iree_hal_amdgpu_logical_device_host_compatibility_t compatibility =
+      iree_hal_amdgpu_logical_device_options_query_host_compatibility(&options);
+  EXPECT_EQ(
+      compatibility,
+      IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_INCOMPATIBLE_HOST_TSAN_ASAN);
+}
+#endif  // IREE_SANITIZER_THREAD
+
 TEST(AmdgpuDriverOptionsTest, RejectsMissingSearchPathStorageBeforeLoadingHsa) {
   iree_hal_amdgpu_driver_options_t options;
   iree_hal_amdgpu_driver_options_initialize(&options);

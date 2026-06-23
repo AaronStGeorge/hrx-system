@@ -446,24 +446,28 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_mask_split(
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
+iree_status_t loom_amdgpu_build_sanitizer_trap_island(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t failure_mask, loom_location_id_t location,
-    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch) {
-  IREE_ASSERT_ARGUMENT(out_branch);
-  *out_branch = (loom_amdgpu_sanitizer_access_report_failure_branch_t){0};
-  loom_amdgpu_feedback_failure_branch_t feedback_branch = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_failure_mask_split(
-      builder, descriptor_set, failure_mask, location, &feedback_branch));
-  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {
-      .failure_block = feedback_branch.failure_block,
-      .continuation_block = feedback_branch.continuation_block,
-  };
+    loom_block_t* after_block, loom_location_id_t location,
+    loom_amdgpu_sanitizer_trap_island_t* out_island) {
+  IREE_ASSERT_ARGUMENT(out_island);
+  *out_island = (loom_amdgpu_sanitizer_trap_island_t){0};
+  if (after_block->parent_region == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU sanitizer trap island requires a low region block");
+  }
+
+  loom_amdgpu_sanitizer_trap_island_t island = {0};
+  IREE_RETURN_IF_ERROR(loom_region_insert_block(
+      builder->module, after_block->parent_region,
+      (uint16_t)(after_block->region_index + 1), &island.entry_block));
   loom_block_t* halt_loop_block = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_insert_block_after(
-      builder, branch.failure_block, &halt_loop_block));
+      builder, island.entry_block, &halt_loop_block));
+  island.terminal_block = halt_loop_block;
 
-  loom_builder_set_block(builder, branch.failure_block);
+  loom_builder_set_block(builder, island.entry_block);
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_control_packet_fatal_trap(
       builder, descriptor_set, location));
   loom_op_t* halt_branch_op = NULL;
@@ -479,6 +483,42 @@ iree_status_t loom_amdgpu_build_sanitizer_trap_failure_mask_branch(
   IREE_RETURN_IF_ERROR(loom_low_br_build(builder, halt_loop_block,
                                          /*args=*/NULL, /*args_count=*/0,
                                          location, &halt_loop_branch_op));
+
+  *out_island = island;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_trap_branch(
+    loom_builder_t* builder, const loom_amdgpu_sanitizer_trap_island_t* island,
+    loom_location_id_t location) {
+  if (builder->ip.before_op != NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU sanitizer trap branch must be built at "
+                            "the end of a low block");
+  }
+  loom_op_t* branch_op = NULL;
+  return loom_low_br_build(builder, island->entry_block, /*args=*/NULL,
+                           /*args_count=*/0, location, &branch_op);
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_trap_failure_mask_branch_to_island(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_trap_island_t* island,
+    loom_value_id_t failure_mask, loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch) {
+  IREE_ASSERT_ARGUMENT(out_branch);
+  *out_branch = (loom_amdgpu_sanitizer_access_report_failure_branch_t){0};
+  loom_amdgpu_feedback_failure_branch_t feedback_branch = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_failure_mask_split(
+      builder, descriptor_set, failure_mask, location, &feedback_branch));
+  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {
+      .failure_block = feedback_branch.failure_block,
+      .continuation_block = feedback_branch.continuation_block,
+  };
+
+  loom_builder_set_block(builder, branch.failure_block);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_build_sanitizer_trap_branch(builder, island, location));
 
   loom_builder_set_block(builder, branch.continuation_block);
   *out_branch = branch;

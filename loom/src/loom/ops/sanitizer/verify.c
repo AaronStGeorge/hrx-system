@@ -126,6 +126,106 @@ static iree_status_t loom_sanitizer_assert_access_verify_static_extents(
   return iree_ok_status();
 }
 
+static iree_status_t loom_sanitizer_emit_static_count_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    int64_t static_count) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("static_count")),
+      loom_param_i64(static_count),
+      loom_param_string(IREE_SV("positive count")),
+  };
+  return loom_sanitizer_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                             IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_emit_static_stride_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, int64_t stride) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("static_strides")),
+      loom_param_i64(stride),
+      loom_param_string(IREE_SV("non-negative stride")),
+  };
+  return loom_sanitizer_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                             IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_emit_static_stride_progress_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("static_strides")),
+      loom_param_i64(0),
+      loom_param_string(IREE_SV("non-zero stride for repeated accesses")),
+  };
+  return loom_sanitizer_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                             IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_sanitizer_assert_accesses_verify_static_shape(
+    const loom_op_t* op, iree_diagnostic_emitter_t emitter,
+    loom_type_t view_type, loom_attribute_t static_indices,
+    loom_attribute_t static_extents, loom_attribute_t static_strides,
+    int64_t static_count) {
+  if (!loom_type_is_view(view_type)) return iree_ok_status();
+  if (static_count <= 0) {
+    return loom_sanitizer_emit_static_count_constraint(emitter, op,
+                                                       static_count);
+  }
+
+  const uint8_t view_rank = loom_type_rank(view_type);
+  if (static_extents.kind != LOOM_ATTR_I64_ARRAY ||
+      static_extents.count != view_rank) {
+    return loom_sanitizer_emit_static_extent_count_mismatch(
+        emitter, op, IREE_SV("static_extents"), static_extents.count,
+        view_rank);
+  }
+  if (static_strides.kind != LOOM_ATTR_I64_ARRAY ||
+      static_strides.count != view_rank) {
+    return loom_sanitizer_emit_static_extent_count_mismatch(
+        emitter, op, IREE_SV("static_strides"), static_strides.count,
+        view_rank);
+  }
+
+  bool has_non_zero_stride = false;
+  for (uint16_t axis = 0; axis < view_rank; ++axis) {
+    const int64_t extent = static_extents.i64_array[axis];
+    if (extent <= 0) {
+      return loom_sanitizer_emit_static_extent_constraint(emitter, op, extent);
+    }
+    const int64_t stride = static_strides.i64_array[axis];
+    if (stride < 0) {
+      return loom_sanitizer_emit_static_stride_constraint(emitter, op, stride);
+    }
+    has_non_zero_stride = has_non_zero_stride || stride != 0;
+
+    if (static_indices.kind != LOOM_ATTR_I64_ARRAY ||
+        axis >= static_indices.count) {
+      continue;
+    }
+    const int64_t origin = static_indices.i64_array[axis];
+    if (origin == INT64_MIN || loom_type_dim_is_dynamic_at(view_type, axis)) {
+      continue;
+    }
+    int64_t final_offset = 0;
+    if (!iree_checked_mul_i64(static_count - 1, stride, &final_offset)) {
+      final_offset = INT64_MAX;
+    }
+    int64_t final_origin = 0;
+    if (!iree_checked_add_i64(origin, final_offset, &final_origin)) {
+      final_origin = INT64_MAX;
+    }
+    const int64_t bound = loom_type_dim_static_size_at(view_type, axis);
+    if (origin < 0 || final_origin < 0 || final_origin > bound ||
+        extent > bound - final_origin) {
+      return loom_sanitizer_emit_static_access_out_of_bounds(
+          emitter, op, axis, final_origin, extent, bound);
+    }
+  }
+  if (static_count > 1 && !has_non_zero_stride) {
+    return loom_sanitizer_emit_static_stride_progress_constraint(emitter, op);
+  }
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Predicate assertions
 //===----------------------------------------------------------------------===//
@@ -321,6 +421,22 @@ iree_status_t loom_sanitizer_assert_access_verify(
   return loom_sanitizer_assert_access_verify_static_extents(
       op, emitter, view_type, loom_sanitizer_assert_access_static_indices(op),
       loom_sanitizer_assert_access_static_extents(op));
+}
+
+iree_status_t loom_sanitizer_assert_accesses_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_sanitizer_assert_accesses_view(op));
+  IREE_RETURN_IF_ERROR(loom_view_verify_element_access(
+      module, op, emitter, IREE_SV("view"), view_type,
+      loom_sanitizer_assert_accesses_static_indices(op),
+      loom_sanitizer_assert_accesses_indices(op).count));
+  return loom_sanitizer_assert_accesses_verify_static_shape(
+      op, emitter, view_type, loom_sanitizer_assert_accesses_static_indices(op),
+      loom_sanitizer_assert_accesses_static_extents(op),
+      loom_sanitizer_assert_accesses_static_strides(op),
+      loom_sanitizer_assert_accesses_static_count(op));
 }
 
 iree_status_t loom_sanitizer_race_access_verify(

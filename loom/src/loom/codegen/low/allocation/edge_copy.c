@@ -215,17 +215,10 @@ loom_low_allocation_edge_copy_record_branch_payload_segments(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_edge_copy_op_program_point(
-    const loom_low_allocation_edge_copy_context_t* context, const loom_op_t* op,
-    uint32_t* out_program_point) {
-  return loom_low_allocation_live_range_ordered_op_program_point(
-      context->assignment_map.liveness, context->body, context->liveness_order,
-      op, out_program_point);
-}
-
 static iree_status_t loom_low_allocation_edge_copy_record_group(
     const loom_low_allocation_edge_copy_context_t* context,
     loom_low_allocation_edge_copy_plan_t* plan, const loom_op_t* op,
+    const loom_low_allocation_op_point_index_t* op_points,
     uint32_t source_ordinal) {
   loom_value_slice_t args = loom_low_br_args(op);
   if (args.count == 0) {
@@ -243,8 +236,8 @@ static iree_status_t loom_low_allocation_edge_copy_record_group(
                             "low.br edge-copy group exceeds u32 range");
   }
   uint32_t program_point = UINT32_MAX;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_op_program_point(
-      context, op, &program_point));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_op_point_index_lookup(op_points, op, &program_point));
   loom_low_allocation_edge_copy_group_t* group =
       &plan->groups[plan->group_count++];
   *group = (loom_low_allocation_edge_copy_group_t){
@@ -273,7 +266,8 @@ static iree_status_t loom_low_allocation_edge_copy_record_group(
 
 static iree_status_t loom_low_allocation_edge_copy_record_groups(
     const loom_low_allocation_edge_copy_context_t* context,
-    loom_low_allocation_edge_copy_plan_t* plan) {
+    loom_low_allocation_edge_copy_plan_t* plan,
+    const loom_low_allocation_op_point_index_t* op_points) {
   uint32_t source_ordinal = 0;
   loom_block_t* block = NULL;
   loom_region_for_each_block(context->body, block) {
@@ -284,7 +278,7 @@ static iree_status_t loom_low_allocation_edge_copy_record_groups(
         continue;
       }
       IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_record_group(
-          context, plan, op, source_ordinal));
+          context, plan, op, op_points, source_ordinal));
       ++source_ordinal;
     }
   }
@@ -788,8 +782,12 @@ iree_status_t loom_low_allocation_edge_copy_plan_build(
       arena, group_count, sizeof(*plan.groups), (void**)&plan.groups));
   memset(plan.groups, 0, group_count * sizeof(*plan.groups));
 
+  loom_low_allocation_op_point_index_t op_points = {0};
+  IREE_RETURN_IF_ERROR(loom_low_allocation_op_point_index_initialize(
+      context->assignment_map.liveness, context->liveness_order, arena,
+      &op_points));
   IREE_RETURN_IF_ERROR(
-      loom_low_allocation_edge_copy_record_groups(context, &plan));
+      loom_low_allocation_edge_copy_record_groups(context, &plan, &op_points));
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_edge_copy_record_temporaries(context, &plan, arena));
   *out_plan = plan;

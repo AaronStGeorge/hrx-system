@@ -32,13 +32,35 @@ endif()
 )
 
 iree_runtime_cc_library(
+    name = "backend_factories",
+    testonly = True,
+    srcs = ["backend_factories.cc"],
+    hdrs = ["backend_factories.h"],
+    deps = [
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/cts/util:registry",
+        "//runtime/src/iree/hal/drivers/amdgpu",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "backends",
     testonly = True,
     srcs = ["backends.cc"],
     deps = [
-        "//runtime/src/iree/hal",
+        ":backend_factories",
         "//runtime/src/iree/hal/cts/util:registry",
-        "//runtime/src/iree/hal/drivers/amdgpu/registration",
+    ],
+    alwayslink = True,
+)
+
+iree_runtime_cc_library(
+    name = "sanitizer_backends",
+    testonly = True,
+    srcs = ["sanitizer_backends.cc"],
+    deps = [
+        ":backend_factories",
+        "//runtime/src/iree/hal/cts/util:registry",
     ],
     alwayslink = True,
 )
@@ -67,12 +89,95 @@ iree_amdgpu_hal_cts_testdata(
 )
 
 iree_amdgpu_hal_cts_testdata(
+    name = "asan_executable_testdata_amdgpu",
+    srcs = [
+        "testdata/asan_executable_test.c",
+    ],
+    format_name = "amdgpu_asan_executable",
+    format_string = '"amdgcn-amd-amdhsa--{AMDGPU_TARGET}"',
+    identifier = "iree_cts_asan_executable_testdata_amdgpu",
+    internal_hdrs = [
+        "//runtime/src/iree/hal/drivers/amdgpu/abi:amdgpu_abi_bitcode_hdrs",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:bitcode_hdrs",
+    ],
+    tags = ["manual"],
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_amdgpu_hal_cts_testdata(
+    name = "asan_executable_enabled_testdata_amdgpu",
+    srcs = [
+        "testdata/asan_executable_test.c",
+    ],
+    backend_name = "amdgpu_asan",
+    format_name = "amdgpu_asan_executable",
+    format_string = '"amdgcn-amd-amdhsa--{AMDGPU_TARGET}"',
+    identifier = "iree_cts_asan_executable_enabled_testdata_amdgpu",
+    internal_hdrs = [
+        "//runtime/src/iree/hal/drivers/amdgpu/abi:amdgpu_abi_bitcode_hdrs",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:bitcode_hdrs",
+    ],
+    tags = ["manual"],
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_amdgpu_hal_cts_testdata(
+    name = "feedback_executable_testdata_amdgpu",
+    srcs = [
+        "testdata/feedback_executable_test.c",
+    ],
+    format_name = "amdgpu_feedback_executable",
+    format_string = '"amdgcn-amd-amdhsa--{AMDGPU_TARGET}"',
+    identifier = "iree_cts_feedback_executable_testdata_amdgpu",
+    internal_hdrs = [
+        "//runtime/src/iree/hal/drivers/amdgpu/abi:amdgpu_abi_bitcode_hdrs",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:bitcode_hdrs",
+    ],
+    tags = ["manual"],
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_amdgpu_hal_cts_testdata(
+    name = "tsan_executable_testdata_amdgpu",
+    srcs = [
+        "testdata/tsan_executable_test.c",
+    ],
+    format_name = "amdgpu_tsan_executable",
+    format_string = '"amdgcn-amd-amdhsa--{AMDGPU_TARGET}"',
+    identifier = "iree_cts_tsan_executable_testdata_amdgpu",
+    internal_hdrs = [
+        "//runtime/src/iree/hal/drivers/amdgpu/abi:amdgpu_abi_bitcode_hdrs",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:bitcode_hdrs",
+    ],
+    tags = ["manual"],
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_amdgpu_hal_cts_testdata(
+    name = "tsan_executable_enabled_testdata_amdgpu",
+    srcs = [
+        "testdata/tsan_executable_test.c",
+    ],
+    backend_name = "amdgpu_tsan",
+    format_name = "amdgpu_tsan_executable",
+    format_string = '"amdgcn-amd-amdhsa--{AMDGPU_TARGET}"',
+    identifier = "iree_cts_tsan_executable_enabled_testdata_amdgpu",
+    internal_hdrs = [
+        "//runtime/src/iree/hal/drivers/amdgpu/abi:amdgpu_abi_bitcode_hdrs",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:bitcode_hdrs",
+    ],
+    tags = ["manual"],
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_amdgpu_hal_cts_testdata(
     name = "asan_testdata_amdgpu",
     srcs = [
         "testdata/asan_allocation_test.c",
         "testdata/manual_asan_noop_test.c",
         "testdata/manual_asan_test.c",
     ],
+    backend_name = "amdgpu_asan",
     format_name = "amdgpu_asan",
     format_string = '"amdgcn-amd-amdhsa--{AMDGPU_TARGET}"',
     identifier = "iree_cts_asan_testdata_amdgpu",
@@ -103,11 +208,38 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "asan_executable_tests",
     srcs = ["//runtime/src/iree/hal/cts/util:test_main.cc"],
-    args = ["--amdgpu_asan=true"],
     deps = [
+        ":asan_executable_enabled_testdata_amdgpu",
         ":asan_executable_test",
+        ":sanitizer_backends",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/hal/cts/util:registry",
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/testing:gtest",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "sanitizer_executable_load_test",
+    testonly = True,
+    srcs = ["sanitizer_executable_load_test.cc"],
+    deps = [
+        "//runtime/src/iree/hal/cts/sanitizer:sanitizer_test_util",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/testing:gtest",
+    ],
+    alwayslink = True,
+)
+
+iree_runtime_cc_test(
+    name = "sanitizer_executable_load_tests",
+    srcs = ["//runtime/src/iree/hal/cts/util:test_main.cc"],
+    deps = [
+        ":asan_executable_testdata_amdgpu",
         ":backends",
-        ":testdata_amdgpu",
+        ":feedback_executable_testdata_amdgpu",
+        ":sanitizer_executable_load_test",
+        ":tsan_executable_testdata_amdgpu",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal/cts/util:registry",
         "//runtime/src/iree/hal/cts/util:test_base",
@@ -131,13 +263,9 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "tsan_executable_tests",
     srcs = ["//runtime/src/iree/hal/cts/util:test_main.cc"],
-    args = [
-        "--amdgpu_tsan=true",
-        "--amdgpu_tsan_report_policy=report-only",
-    ],
     deps = [
-        ":backends",
-        ":testdata_amdgpu",
+        ":sanitizer_backends",
+        ":tsan_executable_enabled_testdata_amdgpu",
         ":tsan_executable_test",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal/cts/util:registry",
@@ -163,10 +291,9 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "asan_allocation_tests",
     srcs = ["//runtime/src/iree/hal/cts/util:test_main.cc"],
-    args = ["--amdgpu_asan=true"],
     deps = [
         ":asan_testdata_amdgpu",
-        ":backends",
+        ":sanitizer_backends",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal/cts/sanitizer:asan_allocation_test",
         "//runtime/src/iree/hal/cts/util:registry",
@@ -178,11 +305,10 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "manual_asan_executable_tests",
     srcs = ["//runtime/src/iree/hal/cts/util:test_main.cc"],
-    args = ["--amdgpu_asan=true"],
     deps = [
         ":asan_testdata_amdgpu",
-        ":backends",
         ":manual_asan_executable_test",
+        ":sanitizer_backends",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal/cts/util:registry",
         "//runtime/src/iree/hal/cts/util:test_base",

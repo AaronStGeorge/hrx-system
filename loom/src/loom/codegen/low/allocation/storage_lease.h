@@ -17,6 +17,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/storage_lease.h"
 #include "loom/ir/ir.h"
+#include "loom/ir/local_value_domain.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,6 +53,8 @@ typedef struct loom_low_allocation_storage_lease_unit_index_t {
 typedef struct loom_low_allocation_storage_lease_state_t {
   // Borrowed storage-lease table being materialized.
   const loom_low_storage_lease_table_t* lease_table;
+  // Borrowed value domain used to map value IDs to allocation-local ordinals.
+  const loom_local_value_domain_t* value_domain;
   // Mutable assignment-backed storage-lease records being built.
   loom_low_allocation_storage_lease_t* instances;
   // Mutable allocator-requested storage release actions being built.
@@ -77,6 +80,7 @@ typedef struct loom_low_allocation_storage_lease_state_t {
 iree_status_t loom_low_allocation_storage_lease_state_initialize(
     const loom_low_storage_lease_table_t* lease_table,
     const loom_module_t* module, const loom_op_t* function_op,
+    const loom_local_value_domain_t* value_domain,
     const loom_liveness_analysis_t* liveness, iree_arena_allocator_t* arena,
     loom_low_allocation_storage_lease_state_t* out_state);
 
