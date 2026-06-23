@@ -49,6 +49,7 @@ hrx_cc_library(
         "../../../include",
         "../../libhrx",
     ],
+    textual_hdrs = ["//build_tools/amdgpu:elf_machine_map.inl"],
     deps = [
         "//libhrx/src/libhrx:hrx_static",
         "//runtime/src/iree/async",
@@ -69,6 +70,17 @@ hrx_cc_test(
     deps = [
         ":common",
         "//libhrx/src/libhrx:hrx_static",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+hrx_cc_test(
+    name = "fat_binary_test",
+    srcs = ["fat_binary_test.cc"],
+    deps = [
+        ":common",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

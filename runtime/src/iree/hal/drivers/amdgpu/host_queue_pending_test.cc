@@ -206,7 +206,7 @@ static void RunDefaultPoolServesHostLocalMappedAlloca(
       buffer, IREE_HAL_MAPPING_MODE_SCOPED, IREE_HAL_MEMORY_ACCESS_WRITE,
       /*byte_offset=*/0, /*byte_length=*/8, &mapping));
   memset(mapping.contents.data, 0, 8);
-  iree_hal_buffer_unmap_range(&mapping);
+  IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
 
   Ref<iree_hal_semaphore_t> dealloca_signal;
   IREE_ASSERT_OK(
@@ -362,7 +362,7 @@ static bool HostActionStateWasCalled(void* user_data) {
 }
 
 static void RecordHostAction(iree_hal_amdgpu_reclaim_entry_t* entry,
-                             void* user_data, iree_status_t status) {
+                             void* user_data, const iree_status_t status) {
   HostActionState* state = (HostActionState*)user_data;
   iree_atomic_store(&state->had_entry, entry ? 1 : 0,
                     iree_memory_order_release);
@@ -413,8 +413,8 @@ TEST_F(HostQueuePendingTest,
   IREE_ASSERT_OK(iree_hal_amdgpu_host_queue_enqueue_host_action(
       queue, wait_list,
       iree_hal_amdgpu_reclaim_action_t{
-          .fn = RecordHostAction,
-          .user_data = &action_state,
+          /*.fn=*/RecordHostAction,
+          /*.user_data=*/&action_state,
       },
       /*operation_resources=*/NULL, /*operation_resource_count=*/0));
 
@@ -523,8 +523,8 @@ TEST_F(HostQueuePendingTest, CapacityParkedHostActionRetriesAfterPostDrain) {
     status = iree_hal_amdgpu_host_queue_enqueue_host_action(
         queue, iree_hal_semaphore_list_empty(),
         iree_hal_amdgpu_reclaim_action_t{
-            .fn = RecordHostAction,
-            .user_data = &action_state,
+            /*.fn=*/RecordHostAction,
+            /*.user_data=*/&action_state,
         },
         /*operation_resources=*/NULL, /*operation_resource_count=*/0);
   }

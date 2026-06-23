@@ -213,6 +213,7 @@ iree_cc_library(
     iree::async::util::proactor_pool
     iree::base
     iree::hal
+    iree::hal::utils::device_spec_builder
     iree::hal::utils::files
   PUBLIC
 )

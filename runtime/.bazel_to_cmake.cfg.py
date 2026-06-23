@@ -111,7 +111,7 @@ class RuntimeBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
     def iree_generated_files(self, name, srcs, outs, args, output_args, tool, **kwargs):
         if tool != ":generate_vm_isa":
             raise NotImplementedError(f"iree_generated_files tool: {tool}")
-        cmd_parts = ["python3 $(rootpath generate_vm_isa.py)"]
+        cmd_parts = ["${Python3_EXECUTABLE} $(rootpath generate_vm_isa.py)"]
         cmd_parts.extend(arg.replace("$(location ", "$(rootpath ") for arg in args)
         for out in outs:
             cmd_parts.extend([output_args[out], f"$(execpath {out})"])
@@ -156,6 +156,14 @@ class RuntimeBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
     def iree_amdgpu_binary(self, **kwargs):
         kwargs = self._apply_runtime_cmake_policy(kwargs)
         self._iree_amdgpu_binary(**kwargs)
+
+    def iree_amdgpu_library(self, **kwargs):
+        kwargs = self._apply_runtime_cmake_policy(kwargs)
+        self._iree_amdgpu_library(**kwargs)
+
+    def iree_amdgpu_library_variants(self, **kwargs):
+        kwargs = self._apply_runtime_cmake_policy(kwargs)
+        self._iree_amdgpu_library_variants(**kwargs)
 
     def iree_amdgpu_binary_variants(self, **kwargs):
         kwargs = self._apply_runtime_cmake_policy(kwargs)

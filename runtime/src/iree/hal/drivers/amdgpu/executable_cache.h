@@ -10,9 +10,14 @@
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/amdgpu/profile_metadata.h"
+#include "iree/hal/drivers/amdgpu/queue_scope.h"
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
 
+typedef struct iree_hal_amdgpu_asan_state_t iree_hal_amdgpu_asan_state_t;
+typedef struct iree_hal_amdgpu_feedback_state_t
+    iree_hal_amdgpu_feedback_state_t;
 typedef struct iree_hal_amdgpu_topology_t iree_hal_amdgpu_topology_t;
+typedef struct iree_hal_amdgpu_tsan_state_t iree_hal_amdgpu_tsan_state_t;
 
 //===----------------------------------------------------------------------===//
 // iree_hal_amdgpu_executable_cache_t
@@ -26,11 +31,29 @@ typedef struct iree_hal_amdgpu_topology_t iree_hal_amdgpu_topology_t;
 // |libhsa| and |topology| are captured by-reference and must remain valid for
 // the lifetime of the cache.
 //
+// |asan_state| is captured by-reference and used to publish ASAN executable
+// globals during executable preparation.
+//
+// |feedback_state| is captured by-reference and used to publish feedback
+// executable globals during executable preparation.
+//
+// |tsan_state| is captured by-reference and used to publish TSAN executable
+// globals during executable preparation.
+//
+// |queue_scopes| is copied into the cache and forwarded to prepared
+// executables that need queue-scoped globals. The scopes describe immutable
+// queue identities and do not require per-dispatch updates.
+//
 // Exact code-object image bytes and loader load ranges are retained in profile
 // metadata for every prepared executable.
 iree_status_t iree_hal_amdgpu_executable_cache_create(
     iree_hal_device_t* device, const iree_hal_amdgpu_libhsa_t* libhsa,
     const iree_hal_amdgpu_topology_t* topology,
+    iree_hal_amdgpu_feedback_state_t* feedback_state,
+    iree_hal_amdgpu_asan_state_t* asan_state,
+    iree_hal_amdgpu_tsan_state_t* tsan_state,
+    iree_host_size_t queue_scope_count,
+    const iree_hal_amdgpu_queue_scope_t* queue_scopes,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_string_view_t identifier, iree_allocator_t host_allocator,
     iree_hal_executable_cache_t** out_executable_cache);

@@ -27,11 +27,14 @@ py_library(
         "fuzz.py",
         "help_text.py",
         "hooks.py",
+        "importers.py",
         "presubmit.py",
         "project_presubmit.py",
         "setup.py",
         "smoke_test_lib.py",
+        "source_lock.py",
     ],
+    deps = ["//build_tools/bazel:compile_commands_merge_lib"],
 )
 
 py_binary(
@@ -86,6 +89,7 @@ py_test(
     ],
     data = [
         "//:.github/scripts/check_vulkan_hardware_environment.sh",
+        "//:.github/workflows/ci_importers.yml",
         "//:.github/workflows/ci_iree_bazel.yml",
         "//:.github/workflows/ci_iree_cmake.yml",
     ],
@@ -109,10 +113,12 @@ py_test(
         "fuzz.py",
         "help_text.py",
         "hooks.py",
+        "importers.py",
         "presubmit.py",
         "setup.py",
     ],
     main = "cli_test.py",
+    deps = ["//build_tools/bazel:compile_commands_merge_lib"],
 )
 
 py_test(
@@ -156,6 +162,15 @@ py_test(
         "project_presubmit_test.py",
     ],
     main = "project_presubmit_test.py",
+)
+
+py_test(
+    name = "source_lock_test",
+    srcs = [
+        "source_lock.py",
+        "source_lock_test.py",
+    ],
+    main = "source_lock_test.py",
 )
 
 py_test(

@@ -32,10 +32,38 @@ static iree_status_t iree_hal_streaming_command_buffer_barrier(
       IREE_HAL_EXECUTION_BARRIER_FLAG_NONE, 1, &memory_barrier, 0, NULL);
 }
 
+static void iree_hal_streaming_buffer_set_context(
+    iree_hal_streaming_buffer_t* buffer, iree_hal_streaming_context_t* context,
+    iree_hal_streaming_buffer_context_ownership_t ownership) {
+  IREE_ASSERT_ARGUMENT(buffer);
+  IREE_ASSERT_ARGUMENT(context);
+  buffer->context = context;
+  buffer->context_ownership = ownership;
+  if (ownership == IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED) {
+    iree_hal_streaming_context_retain(context);
+  }
+}
+
+static void iree_hal_streaming_buffer_release_context(
+    iree_hal_streaming_buffer_t* buffer) {
+  IREE_ASSERT_ARGUMENT(buffer);
+  iree_hal_streaming_context_t* context = buffer->context;
+  iree_hal_streaming_buffer_context_ownership_t ownership =
+      buffer->context_ownership;
+  buffer->context = NULL;
+  buffer->context_ownership = IREE_HAL_STREAMING_BUFFER_CONTEXT_BORROWED;
+  if (ownership == IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED) {
+    IREE_ASSERT_ARGUMENT(context);
+    iree_hal_streaming_context_release(context);
+  }
+}
+
 // Wraps a HAL buffer in a stream buffer and caches information.
 static iree_status_t iree_hal_streaming_buffer_wrap(
     iree_hal_streaming_context_t* context, iree_hal_buffer_t* buffer,
-    int memory_type, iree_hal_streaming_buffer_t** out_wrapper) {
+    int memory_type, void* imported_host_ptr, hrx_mem_pool_t allocation_pool,
+    iree_hal_streaming_buffer_context_ownership_t context_ownership,
+    iree_hal_streaming_buffer_t** out_wrapper) {
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(buffer);
   IREE_ASSERT_ARGUMENT(out_wrapper);
@@ -46,6 +74,7 @@ static iree_status_t iree_hal_streaming_buffer_wrap(
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_allocator_malloc(context->host_allocator, sizeof(*wrapper),
                                 (void**)&wrapper));
+  memset(wrapper, 0, sizeof(*wrapper));
 
   // Create the pyre buffer that wraps the HAL buffer.
   hrx_buffer_t hrx_buf = NULL;
@@ -63,8 +92,11 @@ static iree_status_t iree_hal_streaming_buffer_wrap(
   // Initialize wrapper.
   wrapper->hrx_buf = hrx_buf;
   wrapper->buffer = hrx_buf->hal_buffer;
-  wrapper->context = context;
-  iree_hal_streaming_context_retain(context);
+  iree_hal_streaming_buffer_set_context(wrapper, context, context_ownership);
+  wrapper->allocation_pool = allocation_pool;
+  if (wrapper->allocation_pool) {
+    hrx_mem_pool_retain(wrapper->allocation_pool);
+  }
   wrapper->memory_type = memory_type;
   wrapper->host_register_flags = IREE_HAL_STREAMING_HOST_REGISTER_FLAG_DEFAULT;
   wrapper->ipc_handle = NULL;
@@ -113,12 +145,20 @@ static iree_status_t iree_hal_streaming_buffer_wrap(
       iree_status_ignore(host_status);
     }
   }
+  if (imported_host_ptr) {
+    wrapper->host_ptr = imported_host_ptr;
+    have_host_ptr = true;
+  }
 
   // We need at least a device pointer for the buffer table.
   // For remote HAL buffers the allocator may not support export_buffer;
   // generate a synthetic device pointer so the buffer table can still map
   // this wrapper.
-  if (!have_device_ptr) {
+  if (!have_device_ptr && imported_host_ptr) {
+    status = iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "registered host allocation did not export a device-visible pointer");
+  } else if (!have_device_ptr) {
     static atomic_uintptr_t g_next_synthetic = 0xDEAD000000000000ULL;
     iree_device_size_t buf_size = iree_hal_buffer_byte_length(buffer);
     iree_device_size_t aligned_size =
@@ -145,7 +185,8 @@ static iree_status_t iree_hal_streaming_buffer_wrap(
       wrapper->hrx_buf = NULL;
       wrapper->buffer = NULL;
     }
-    iree_hal_streaming_context_release(wrapper->context);
+    iree_hal_streaming_buffer_release_context(wrapper);
+    hrx_mem_pool_release(wrapper->allocation_pool);
     iree_allocator_free(context->host_allocator, wrapper);
   }
   IREE_TRACE_ZONE_END(z0);
@@ -163,9 +204,33 @@ static void iree_hal_streaming_buffer_free(
     buffer->hrx_buf = NULL;
     buffer->buffer = NULL;
   }
-  iree_hal_streaming_context_release(buffer->context);
+  hrx_mem_pool_release(buffer->allocation_pool);
+  buffer->allocation_pool = NULL;
+  iree_hal_streaming_buffer_release_context(buffer);
   iree_allocator_free(host_allocator, buffer);
   IREE_TRACE_ZONE_END(z0);
+}
+
+iree_status_t iree_hal_streaming_memory_wrap_buffer(
+    iree_hal_streaming_context_t* context, iree_hal_buffer_t* buffer,
+    iree_hal_streaming_buffer_context_ownership_t context_ownership,
+    iree_hal_streaming_buffer_t** out_buffer) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(buffer);
+  IREE_ASSERT_ARGUMENT(out_buffer);
+  *out_buffer = NULL;
+
+  return iree_hal_streaming_buffer_wrap(
+      context, buffer, (int)iree_hal_buffer_memory_type(buffer),
+      /*imported_host_ptr=*/NULL, /*allocation_pool=*/NULL, context_ownership,
+      out_buffer);
+}
+
+void iree_hal_streaming_memory_release_wrapped_buffer(
+    iree_hal_streaming_buffer_t* buffer) {
+  if (!buffer) return;
+  hrx_buffer_table_remove(&buffer->context->buffer_table, buffer->device_ptr);
+  iree_hal_streaming_buffer_free(buffer);
 }
 
 static void iree_hal_streaming_temporary_host_buffer_free(
@@ -181,45 +246,11 @@ void iree_hal_streaming_memory_release_pageable_staging(
   if (!context) return;
   if (context->pageable_h2d_staging_buffer) {
     iree_hal_streaming_buffer_t* buffer = context->pageable_h2d_staging_buffer;
-    hrx_buffer_table_remove(&context->buffer_table, buffer->device_ptr);
-    if (buffer->hrx_buf) {
-      hrx_buffer_release(buffer->hrx_buf);
-      buffer->hrx_buf = NULL;
-      buffer->buffer = NULL;
-    }
-    iree_allocator_free(context->host_allocator, buffer);
     context->pageable_h2d_staging_buffer = NULL;
     context->pageable_h2d_staging_size = 0;
+    hrx_buffer_table_remove(&context->buffer_table, buffer->device_ptr);
+    iree_hal_streaming_buffer_free(buffer);
   }
-}
-
-static iree_status_t iree_hal_streaming_context_ensure_pageable_h2d_staging(
-    iree_hal_streaming_context_t* context, iree_device_size_t size,
-    iree_hal_streaming_buffer_t** out_staging) {
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(out_staging);
-  *out_staging = NULL;
-
-  if (context->pageable_h2d_staging_buffer &&
-      context->pageable_h2d_staging_size >= size) {
-    *out_staging = context->pageable_h2d_staging_buffer;
-    return iree_ok_status();
-  }
-
-  if (context->pageable_h2d_staging_buffer) {
-    iree_hal_streaming_memory_release_pageable_staging(context);
-  }
-
-  iree_hal_streaming_buffer_t* staging = NULL;
-  IREE_RETURN_IF_ERROR(iree_hal_streaming_memory_allocate_host(
-      context, size, IREE_HAL_STREAMING_HOST_REGISTER_FLAG_DEFAULT, &staging));
-  // The context owns this cached buffer directly. Drop the wrapper's normal
-  // external retain to avoid a context -> staging -> context reference cycle.
-  iree_hal_streaming_context_release(context);
-  context->pageable_h2d_staging_buffer = staging;
-  context->pageable_h2d_staging_size = size;
-  *out_staging = staging;
-  return iree_ok_status();
 }
 
 iree_hal_streaming_deviceptr_t iree_hal_streaming_buffer_device_pointer(
@@ -294,7 +325,9 @@ iree_status_t iree_hal_streaming_memory_allocate_device(
   // Wrap in stream buffer.
   iree_hal_streaming_buffer_t* wrapper = NULL;
   iree_status_t status = iree_hal_streaming_buffer_wrap(
-      context, buffer, (int)memory_type, &wrapper);
+      context, buffer, (int)memory_type, /*imported_host_ptr=*/NULL,
+      /*allocation_pool=*/NULL, IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED,
+      &wrapper);
 
   // Release our reference (wrapper holds its own).
   iree_hal_buffer_release(buffer);
@@ -313,6 +346,56 @@ iree_status_t iree_hal_streaming_memory_allocate_device(
     }
   } else {
     iree_hal_streaming_buffer_free(wrapper);
+  }
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
+iree_status_t iree_hal_streaming_memory_allocate_device_from_pool(
+    iree_hal_streaming_context_t* context, hrx_mem_pool_t pool,
+    iree_device_size_t size, iree_hal_streaming_memory_flags_t flags,
+    iree_hal_streaming_buffer_t** out_buffer) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_buffer);
+  *out_buffer = NULL;
+  IREE_TRACE_ZONE_BEGIN(z0);
+
+  (void)flags;
+  iree_hal_buffer_params_t params = {
+      .usage = IREE_HAL_BUFFER_USAGE_DEFAULT,
+      .access = IREE_HAL_MEMORY_ACCESS_ALL,
+      .type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+      .queue_affinity = IREE_HAL_QUEUE_AFFINITY_ANY,
+      .min_alignment = 64,
+  };
+  hrx_buffer_params_t hrx_params = {
+      .type = (hrx_memory_type_t)params.type,
+      .access = (hrx_memory_access_t)params.access,
+      .usage = (hrx_buffer_usage_t)params.usage,
+      .queue_affinity = (hrx_queue_affinity_t)params.queue_affinity,
+  };
+
+  hrx_buffer_t hrx_buffer = NULL;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, HRX_CALL(hrx_mem_pool_allocate_buffer(pool, hrx_params, size,
+                                                &hrx_buffer)));
+
+  iree_hal_streaming_buffer_t* wrapper = NULL;
+  iree_status_t status = iree_hal_streaming_buffer_wrap(
+      context, hrx_buffer->hal_buffer, (int)params.type,
+      /*imported_host_ptr=*/NULL, pool,
+      IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED, &wrapper);
+  hrx_buffer_release(hrx_buffer);
+
+  if (iree_status_is_ok(status)) {
+    *out_buffer = wrapper;
+    if (context->device_entry) {
+      if (context->device_entry->free_memory >= size) {
+        context->device_entry->free_memory -= size;
+      } else {
+        context->device_entry->free_memory = 0;
+      }
+    }
   }
   IREE_TRACE_ZONE_END(z0);
   return status;
@@ -386,9 +469,10 @@ iree_status_t iree_hal_streaming_memory_free_device(
   return iree_ok_status();
 }
 
-iree_status_t iree_hal_streaming_memory_allocate_host(
+static iree_status_t iree_hal_streaming_memory_allocate_host_with_context_mode(
     iree_hal_streaming_context_t* context, iree_host_size_t size,
     iree_hal_streaming_host_register_flags_t flags,
+    iree_hal_streaming_buffer_context_ownership_t context_ownership,
     iree_hal_streaming_buffer_t** out_buffer) {
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(out_buffer);
@@ -413,7 +497,8 @@ iree_status_t iree_hal_streaming_memory_allocate_host(
 
   iree_hal_streaming_buffer_t* wrapper = NULL;
   iree_status_t status = iree_hal_streaming_buffer_wrap(
-      context, buffer, (int)memory_type, &wrapper);
+      context, buffer, (int)memory_type, /*imported_host_ptr=*/NULL,
+      /*allocation_pool=*/NULL, context_ownership, &wrapper);
   iree_hal_buffer_release(buffer);
 
   if (iree_status_is_ok(status) && wrapper->host_ptr == NULL) {
@@ -433,6 +518,43 @@ iree_status_t iree_hal_streaming_memory_allocate_host(
   }
   IREE_TRACE_ZONE_END(z0);
   return status;
+}
+
+iree_status_t iree_hal_streaming_memory_allocate_host(
+    iree_hal_streaming_context_t* context, iree_host_size_t size,
+    iree_hal_streaming_host_register_flags_t flags,
+    iree_hal_streaming_buffer_t** out_buffer) {
+  return iree_hal_streaming_memory_allocate_host_with_context_mode(
+      context, size, flags, IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED,
+      out_buffer);
+}
+
+static iree_status_t iree_hal_streaming_context_ensure_pageable_h2d_staging(
+    iree_hal_streaming_context_t* context, iree_device_size_t size,
+    iree_hal_streaming_buffer_t** out_staging) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_staging);
+  *out_staging = NULL;
+
+  if (context->pageable_h2d_staging_buffer &&
+      context->pageable_h2d_staging_size >= size) {
+    *out_staging = context->pageable_h2d_staging_buffer;
+    return iree_ok_status();
+  }
+
+  if (context->pageable_h2d_staging_buffer) {
+    iree_hal_streaming_memory_release_pageable_staging(context);
+  }
+
+  iree_hal_streaming_buffer_t* staging = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_streaming_memory_allocate_host_with_context_mode(
+          context, size, IREE_HAL_STREAMING_HOST_REGISTER_FLAG_DEFAULT,
+          IREE_HAL_STREAMING_BUFFER_CONTEXT_BORROWED, &staging));
+  context->pageable_h2d_staging_buffer = staging;
+  context->pageable_h2d_staging_size = size;
+  *out_staging = staging;
+  return iree_ok_status();
 }
 
 iree_status_t iree_hal_streaming_memory_free_host(
@@ -464,15 +586,8 @@ iree_status_t iree_hal_streaming_memory_free_host(
     wrapper->host_ptr = NULL;
   }
 
-  // Free wrapper — release hrx_buf (which handles HAL buffer + device refs).
-  iree_hal_streaming_context_t* ctx = wrapper->context;
-  if (wrapper->hrx_buf) {
-    hrx_buffer_release(wrapper->hrx_buf);
-    wrapper->hrx_buf = NULL;
-    wrapper->buffer = NULL;
-  }
-  iree_hal_streaming_context_release(ctx);
-  iree_allocator_free(context->host_allocator, wrapper);
+  // Free wrapper and release its context ownership edge.
+  iree_hal_streaming_buffer_free(wrapper);
 
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();
@@ -488,52 +603,36 @@ iree_status_t iree_hal_streaming_memory_register_host(
   *out_buffer = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  // For host registration, we simply track the existing host memory.
-  // We don't actually need to import it through HAL since we're just
-  // registering user-provided memory for use with the streaming layer.
-  iree_hal_streaming_buffer_t* wrapper = NULL;
+  iree_hal_buffer_params_t params = {
+      .usage = IREE_HAL_BUFFER_USAGE_DEFAULT,
+      .access = IREE_HAL_MEMORY_ACCESS_ALL,
+      .type =
+          IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE,
+      .queue_affinity = IREE_HAL_QUEUE_AFFINITY_ANY,
+  };
+  iree_hal_external_buffer_t external_buffer = {
+      .type = IREE_HAL_EXTERNAL_BUFFER_TYPE_HOST_ALLOCATION,
+      .flags = IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE,
+      .size = (iree_device_size_t)size,
+      .handle.host_allocation.ptr = ptr,
+  };
+  iree_hal_buffer_t* buffer = NULL;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, iree_allocator_malloc(context->host_allocator, sizeof(*wrapper),
-                                (void**)&wrapper));
+      z0, iree_hal_allocator_import_buffer(
+              context->device_allocator, params, &external_buffer,
+              iree_hal_buffer_release_callback_null(), &buffer));
 
-  // Create pyre buffer for registered host memory (no HAL buffer).
-  hrx_buffer_t hrx_buf = NULL;
-  hrx_device_t hrx_dev =
-      context->device_entry ? context->device_entry->hrx_device : NULL;
-  iree_status_t status = hrx_buffer_create_from_hal(
-      NULL, hrx_dev, HRX_MEMORY_TYPE_HOST_LOCAL, size, ptr, &hrx_buf);
-  if (!iree_status_is_ok(status)) {
-    iree_allocator_free(context->host_allocator, wrapper);
-    IREE_TRACE_ZONE_END(z0);
-    return status;
-  }
-
-  // Initialize wrapper for registered host memory.
-  memset(wrapper, 0, sizeof(*wrapper));
-  wrapper->hrx_buf = hrx_buf;
-  wrapper->buffer = NULL;
-  wrapper->context = context;
-  iree_hal_streaming_context_retain(context);
-  wrapper->memory_type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL;
-  wrapper->host_register_flags = flags;
-  wrapper->size = size;
-  wrapper->host_ptr = ptr;
-  wrapper->device_ptr = (iree_hal_streaming_deviceptr_t)ptr;
-  wrapper->read_mostly_hint = false;
-  wrapper->preferred_location = -2;
-  wrapper->last_prefetch_location = -2;
-
-  // Register in buffer table using host pointer as key.
-  status = HRX_CALL(hrx_buffer_table_insert(
-      &context->buffer_table, wrapper->device_ptr, wrapper->host_ptr,
-      wrapper->size, wrapper->hrx_buf, wrapper));
+  iree_hal_streaming_buffer_t* wrapper = NULL;
+  iree_status_t status = iree_hal_streaming_buffer_wrap(
+      context, buffer, (int)params.type, ptr, /*allocation_pool=*/NULL,
+      IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED, &wrapper);
+  iree_hal_buffer_release(buffer);
 
   if (iree_status_is_ok(status)) {
+    wrapper->host_register_flags = flags;
     *out_buffer = wrapper;
   } else {
-    hrx_buffer_release(hrx_buf);
-    iree_hal_streaming_context_release(context);
-    iree_allocator_free(context->host_allocator, wrapper);
+    iree_hal_streaming_buffer_free(wrapper);
   }
 
   IREE_TRACE_ZONE_END(z0);
@@ -584,9 +683,9 @@ iree_status_t iree_hal_streaming_memory_address_range(
     return status;
   }
 
-  // For registered host memory, the base is the registered pointer.
-  // For device memory, the base is the allocated device pointer.
-  if (wrapper->host_ptr) {
+  if (ptr >= wrapper->device_ptr && ptr - wrapper->device_ptr < wrapper->size) {
+    *out_base = wrapper->device_ptr;
+  } else if (wrapper->host_ptr) {
     *out_base = (iree_hal_streaming_deviceptr_t)wrapper->host_ptr;
   } else {
     *out_base = wrapper->device_ptr;

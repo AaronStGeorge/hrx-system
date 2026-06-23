@@ -18,9 +18,9 @@
 
 namespace iree::hal::amdgpu::test {
 
-static bool IsProfilingUnsupported(iree_status_t status) {
-  return iree_status_is_unimplemented(status) ||
-         iree_status_is_invalid_argument(status);
+static bool IsProfilingUnsupported(iree_status_code_t status_code) {
+  return status_code == IREE_STATUS_UNIMPLEMENTED ||
+         status_code == IREE_STATUS_INVALID_ARGUMENT;
 }
 
 static iree_status_t SubmitProfiledQueueFill(TestLogicalDevice* test_device) {
@@ -213,7 +213,7 @@ struct CommandBufferProfileSink {
   iree_status_code_t fail_begin_session_status_code = IREE_STATUS_OK;
 
   // Content type whose write callback should fail, or empty when disabled.
-  iree_string_view_t fail_write_content_type = {nullptr, 0};
+  iree_string_view_t fail_write_content_type = iree_string_view_empty();
 
   // Number of matching write callbacks that should fail.
   int fail_write_remaining = 0;
@@ -849,14 +849,16 @@ static uint32_t SumQueueEventOperationCounts(
   return operation_count;
 }
 
-static bool IsHardwareCounterProfilingUnavailable(iree_status_t status) {
-  return IsProfilingUnsupported(status) || iree_status_is_not_found(status) ||
-         iree_status_is_failed_precondition(status);
+static bool IsHardwareCounterProfilingUnavailable(
+    iree_status_code_t status_code) {
+  return IsProfilingUnsupported(status_code) ||
+         status_code == IREE_STATUS_NOT_FOUND ||
+         status_code == IREE_STATUS_FAILED_PRECONDITION;
 }
 
-static bool IsQueueDeviceProfilingUnavailable(iree_status_t status) {
-  return IsProfilingUnsupported(status) ||
-         iree_status_is_failed_precondition(status);
+static bool IsQueueDeviceProfilingUnavailable(iree_status_code_t status_code) {
+  return IsProfilingUnsupported(status_code) ||
+         status_code == IREE_STATUS_FAILED_PRECONDITION;
 }
 
 static iree_status_t BeginHardwareCounterProfiling(
@@ -875,6 +877,16 @@ static iree_status_t BeginHardwareCounterProfiling(
   profiling_options.sink = CommandBufferProfileSinkAsBase(sink);
   profiling_options.counter_set_count = 1;
   profiling_options.counter_sets = &counter_set;
+  return profiling->Begin(&profiling_options);
+}
+
+static iree_status_t BeginDefaultHardwareCounterProfiling(
+    DeviceProfilingScope* profiling, CommandBufferProfileSink* sink) {
+  iree_hal_device_profiling_options_t profiling_options = {0};
+  profiling_options.data_families =
+      IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS |
+      IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_SAMPLES;
+  profiling_options.sink = CommandBufferProfileSinkAsBase(sink);
   return profiling->Begin(&profiling_options);
 }
 
@@ -907,13 +919,21 @@ static iree_status_t BeginSqWavesCounterRangeProfiling(
   return profiling->Begin(&profiling_options);
 }
 
-static iree_status_t BeginSqWaveWidthProfiling(DeviceProfilingScope* profiling,
-                                               CommandBufferProfileSink* sink) {
+static iree_status_t BeginMultipleSqCounterProfiling(
+    DeviceProfilingScope* profiling, CommandBufferProfileSink* sink) {
   iree_string_view_t counter_names[] = {
       IREE_SV("SQ_WAVES"),
-      IREE_SV("SQ_WAVES_32"),
-      IREE_SV("SQ_WAVES_64"),
+      IREE_SV("SQ_INSTS_VALU"),
       IREE_SV("SQ_BUSY_CYCLES"),
+  };
+  return BeginHardwareCounterProfiling(
+      profiling, sink, IREE_ARRAYSIZE(counter_names), counter_names);
+}
+
+static iree_status_t BeginUnsupportedHardwareCounterProfiling(
+    DeviceProfilingScope* profiling, CommandBufferProfileSink* sink) {
+  iree_string_view_t counter_names[] = {
+      IREE_SV("NO_SUCH_COUNTER"),
   };
   return BeginHardwareCounterProfiling(
       profiling, sink, IREE_ARRAYSIZE(counter_names), counter_names);

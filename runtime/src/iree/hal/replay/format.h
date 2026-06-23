@@ -81,8 +81,6 @@ typedef uint32_t iree_hal_replay_operation_code_t;
 enum iree_hal_replay_operation_code_e {
   IREE_HAL_REPLAY_OPERATION_CODE_NONE = 0u,
   IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_TRIM = 1u,
-  IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_QUERY_I64 = 2u,
-  IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_QUERY_CAPABILITIES = 3u,
   IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_REFINE_TOPOLOGY_EDGE = 4u,
   IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_ASSIGN_TOPOLOGY_INFO = 5u,
   IREE_HAL_REPLAY_OPERATION_CODE_DEVICE_CREATE_CHANNEL = 6u,
@@ -379,8 +377,8 @@ typedef struct iree_hal_replay_executable_function_metadata_t {
   uint64_t flags;
   // Static or minimum workgroup size of the function.
   uint32_t workgroup_size[3];
-  // Total number of 32-bit constants expected by the function.
-  uint16_t constant_count;
+  // Total byte length of constants expected by the function.
+  uint32_t constant_byte_length;
   // Total number of buffer bindings expected by the function.
   uint16_t binding_count;
   // Number of parameter metadata records for this function.

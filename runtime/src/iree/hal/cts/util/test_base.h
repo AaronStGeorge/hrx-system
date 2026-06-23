@@ -210,6 +210,8 @@ class DeviceCreateContext {
   DeviceCreateContext& operator=(const DeviceCreateContext&) = delete;
 
   iree_status_t Initialize(iree_allocator_t host_allocator);
+  iree_status_t Initialize(iree_allocator_t host_allocator,
+                           iree_hal_device_event_sink_t event_sink);
   void Deinitialize();
 
   const iree_hal_device_create_params_t* params() const;
@@ -344,7 +346,7 @@ class CtsTestBase : public BaseType {
     // create/destroy devices per test (cloud runners have reliability issues
     // with device churn). CPU backends also benefit from avoiding redundant
     // creation overhead.
-    auto& cached = GetBackendCache()[backend.name];
+    auto& cached = GetBackendCache()[GetBackendDeviceCacheKey(backend)];
     if (!cached.device && !cached.unavailable) {
       iree_hal_driver_t* driver = nullptr;
       iree_hal_device_t* device = nullptr;

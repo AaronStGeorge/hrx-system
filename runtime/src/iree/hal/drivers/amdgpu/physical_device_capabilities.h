@@ -281,11 +281,6 @@ void iree_hal_amdgpu_select_memory_system_capabilities(
     const iree_hal_amdgpu_memory_system_capabilities_selection_t* selection,
     iree_hal_amdgpu_memory_system_capabilities_t* out_capabilities);
 
-// Returns HAL device capability flags implied by AMDGPU memory-system facts.
-iree_hal_device_capability_bits_t
-iree_hal_amdgpu_select_memory_system_device_capability_flags(
-    const iree_hal_amdgpu_memory_system_capabilities_t* capabilities);
-
 // Returns true when SVM ranges require explicit HSA access attributes before a
 // GPU can safely access them.
 bool iree_hal_amdgpu_memory_system_requires_svm_access_attributes(

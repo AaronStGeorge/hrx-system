@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/amdgpu:binary.bzl", "iree_amdgpu_library_variants")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 load(":device_bitcode_sources.bzl", "IREE_HAL_AMDGPU_DEVICE_BITCODE_SRCS")
@@ -19,10 +20,14 @@ DEVICE_HDRS = [
     "dispatch.h",
     "kernel_tables.h",
     "kernels.h",
+    "support/asan.h",
     "support/common.h",
+    "support/feedback.h",
     "support/kernel.h",
     "support/queue.h",
     "support/signal.h",
+    "support/tsan.h",
+    "tsan.h",
     "timestamp.h",
 ]
 
@@ -36,6 +41,19 @@ exports_files(["device_bitcode_sources.bzl"])
 filegroup(
     name = "bitcode_hdrs",
     srcs = DEVICE_HDRS,
+)
+
+# Replacement `asanrtl` bitcode archive for AMDGPU external-runtime ASAN.
+iree_amdgpu_library_variants(
+    name = "asanrtl",
+    srcs = ["asanrtl.c"],
+    internal_hdrs = [
+        "//runtime/src/iree/hal/drivers/amdgpu/abi:amdgpu_abi_bitcode_hdrs",
+        ":bitcode_hdrs",
+    ],
+    tags = ["manual"],
+    target = "amdgcn-amd-amdhsa",
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
 )
 
 #===------------------------------------------------------------------------===#
@@ -77,6 +95,17 @@ iree_runtime_cc_library(
     name = "timestamp",
     srcs = [
         "timestamp.c",
+    ],
+    deps = [
+        ":dispatch",
+        ":headers",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "tsan",
+    srcs = [
+        "tsan.c",
     ],
     deps = [
         ":dispatch",

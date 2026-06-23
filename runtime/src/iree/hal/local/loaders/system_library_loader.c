@@ -372,15 +372,35 @@ static iree_status_t iree_hal_system_executable_lookup_export_by_name(
       executable->library.v0, name, out_export_ordinal);
 }
 
-static iree_status_t iree_hal_system_executable_lookup_global_by_name(
+static iree_status_t iree_hal_system_executable_try_lookup_global_by_name(
     iree_hal_executable_t* base_executable, iree_string_view_t name,
-    iree_hal_queue_affinity_t queue_affinity, iree_hal_buffer_t** out_buffer) {
+    bool* out_found, iree_hal_executable_global_t* out_global) {
   (void)base_executable;
   (void)name;
+  *out_found = false;
+  *out_global = iree_hal_executable_global_invalid();
+  return iree_ok_status();
+}
+
+static iree_status_t iree_hal_system_executable_global_info(
+    iree_hal_executable_t* base_executable, iree_hal_executable_global_t global,
+    iree_hal_executable_global_info_t* out_info) {
+  (void)base_executable;
+  (void)global;
+  memset(out_info, 0, sizeof(*out_info));
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "invalid local system executable global");
+}
+
+static iree_status_t iree_hal_system_executable_global_buffer(
+    iree_hal_executable_t* base_executable, iree_hal_executable_global_t global,
+    iree_hal_queue_affinity_t queue_affinity, iree_hal_buffer_t** out_buffer) {
+  (void)base_executable;
+  (void)global;
   (void)queue_affinity;
   *out_buffer = NULL;
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "local executable global lookup not implemented");
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "invalid local system executable global");
 }
 
 static const iree_hal_local_executable_vtable_t
@@ -394,8 +414,10 @@ static const iree_hal_local_executable_vtable_t
                     iree_hal_system_executable_export_parameters,
                 .lookup_function_by_name =
                     iree_hal_system_executable_lookup_export_by_name,
-                .lookup_global_by_name =
-                    iree_hal_system_executable_lookup_global_by_name,
+                .try_lookup_global_by_name =
+                    iree_hal_system_executable_try_lookup_global_by_name,
+                .global_info = iree_hal_system_executable_global_info,
+                .global_buffer = iree_hal_system_executable_global_buffer,
             },
         .issue_call = iree_hal_system_executable_issue_call,
 };
@@ -486,6 +508,23 @@ static bool iree_hal_system_library_loader_query_support(
       iree_make_cstring_view("system-" IREE_PLATFORM_DYLIB_TYPE "-" IREE_ARCH));
 }
 
+static void iree_hal_system_library_loader_query_spec(
+    iree_hal_executable_loader_t* base_executable_loader,
+    iree_hal_device_executable_spec_t* out_executable_spec) {
+  static const iree_hal_executable_format_spec_t executable_formats[] = {
+      {
+          .format = IREE_SVL("system-" IREE_PLATFORM_DYLIB_TYPE "-" IREE_ARCH),
+          .caching_modes = IREE_HAL_EXECUTABLE_CACHING_MODE_NONE,
+          .flags = IREE_HAL_EXECUTABLE_FORMAT_SPEC_FLAG_NONE,
+      },
+  };
+  *out_executable_spec = (iree_hal_device_executable_spec_t){
+      .format_count = IREE_ARRAYSIZE(executable_formats),
+      .formats = executable_formats,
+      .flags = IREE_HAL_DEVICE_EXECUTABLE_SPEC_FLAG_NONE,
+  };
+}
+
 static iree_status_t iree_hal_system_library_loader_try_load(
     iree_hal_executable_loader_t* base_executable_loader,
     const iree_hal_executable_params_t* executable_params,
@@ -509,5 +548,6 @@ static const iree_hal_executable_loader_vtable_t
         .destroy = iree_hal_system_library_loader_destroy,
         .infer_format = iree_hal_system_library_loader_infer_format,
         .query_support = iree_hal_system_library_loader_query_support,
+        .query_spec = iree_hal_system_library_loader_query_spec,
         .try_load = iree_hal_system_library_loader_try_load,
 };

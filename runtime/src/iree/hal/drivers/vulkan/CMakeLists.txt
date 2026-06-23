@@ -25,6 +25,40 @@ endif()
 if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_library(
   NAME
+    device_spec
+  HDRS
+    "device_spec.h"
+  SRCS
+    "device_spec.c"
+  DEPS
+    ::api
+    iree::base
+    iree::hal
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_VULKAN)
+iree_cc_library(
+  NAME
+    device_spec_builder
+  HDRS
+    "device_spec_builder.h"
+  SRCS
+    "device_spec_builder.c"
+  DEPS
+    ::device_spec
+    ::headers
+    iree::base
+    iree::hal
+    iree::hal::utils::device_spec_builder
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_VULKAN)
+iree_cc_library(
+  NAME
     headers
   HDRS
     "api.h"
@@ -35,6 +69,7 @@ iree_cc_library(
     "executable.h"
     "physical_device.h"
     "physical_device_selection.h"
+    "queue_stats.h"
     "spirv.h"
   DEPS
     ::api
@@ -43,6 +78,26 @@ iree_cc_library(
     iree::hal::drivers::vulkan::util::libvulkan
     iree::third_party::vulkan_headers
   PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_VULKAN)
+iree_cc_test(
+  NAME
+    device_spec_test
+  SRCS
+    "device_spec_test.cc"
+  DEPS
+    ::device_spec
+    ::device_spec_builder
+    iree::base
+    iree::hal
+    iree::hal::utils::device_spec_builder
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::third_party::vulkan_headers
+  LABELS
+    "iree-build-requirement=runtime.hal.vulkan"
 )
 endif()
 
@@ -144,11 +199,6 @@ iree_cc_test(
     ::headers
     ::vulkan
     iree::base
-    iree::base::core_headers
-    iree::base::internal::flatcc::building
-    iree::hal
-    iree::hal::utils::executable_header
-    iree::schemas::vulkan_executable_def_c_fbs
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
@@ -224,6 +274,7 @@ iree_cc_library(
     "physical_device_selection.h"
     "queue.c"
     "queue.h"
+    "queue_stats.h"
     "semaphore.c"
     "semaphore.h"
     "slab_provider.c"
@@ -235,13 +286,13 @@ iree_cc_library(
     "syms.h"
   DEPS
     ::api
+    ::device_spec_builder
     iree::async
     iree::async::util::proactor_pool
     iree::base
     iree::base::core_headers
     iree::base::internal
     iree::base::internal::arena
-    iree::base::internal::flatcc::parsing
     iree::base::threading
     iree::base::threading::thread
     iree::hal
@@ -252,12 +303,8 @@ iree_cc_library(
     iree::hal::memory::slab_provider
     iree::hal::memory::tlsf_pool
     iree::hal::memory::tracing
-    iree::hal::utils::executable_debug_info
-    iree::hal::utils::executable_header
     iree::hal::utils::files
     iree::hal::utils::resource_set
-    iree::schemas::executable_debug_info_c_fbs
-    iree::schemas::vulkan_executable_def_c_fbs
     iree::third_party::vulkan_headers
   PUBLIC
 )

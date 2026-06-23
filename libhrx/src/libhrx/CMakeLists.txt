@@ -27,6 +27,7 @@ iree_cc_library(
     "buffer_table.c"
     "buffer_view.c"
     "device.c"
+    "event.c"
     "executable.c"
     "fence.c"
     "host_allocator.c"
@@ -51,6 +52,7 @@ iree_cc_library(
     iree::hal
     iree::hal::drivers::local_task::task_driver
     iree::hal::local::loaders::registration
+    iree::hal::memory::tlsf_pool
     iree::hal::utils::profile_file
     iree::hal::utils::resource_set
     iree::io::file_handle
@@ -103,23 +105,19 @@ set_target_properties(libhrx_src_libhrx_hrx PROPERTIES
   VERSION ${PROJECT_VERSION}
   SOVERSION 0
   EXPORT_NAME hrx
-  C_VISIBILITY_PRESET hidden
   POSITION_INDEPENDENT_CODE ON
-  LINK_FLAGS "-Wl,--version-script=${LIBHRX_SOURCE_DIR}/cmake/hrx_exports.lds"
 )
+if(NOT WIN32)
+  set_target_properties(libhrx_src_libhrx_hrx PROPERTIES
+    BUILD_RPATH "$ORIGIN"
+    INSTALL_RPATH "$ORIGIN"
+    C_VISIBILITY_PRESET hidden
+    LINK_FLAGS "-Wl,--version-script=${LIBHRX_SOURCE_DIR}/cmake/hrx_exports.lds"
+  )
+endif()
 set_property(TARGET libhrx_src_libhrx_hrx PROPERTY
   INTERFACE_LINK_LIBRARIES ""
 )
-include(CheckIPOSupported)
-check_ipo_supported(RESULT _hrx_ipo_supported OUTPUT _hrx_ipo_error)
-if(_hrx_ipo_supported)
-  set_target_properties(libhrx_src_libhrx_hrx PROPERTIES
-    INTERPROCEDURAL_OPTIMIZATION TRUE
-  )
-  message(STATUS "hrx-runtime: LTO enabled for libhrx.so")
-else()
-  message(WARNING "hrx-runtime: LTO not supported: ${_hrx_ipo_error}")
-endif()
 if(NOT TARGET hrx)
   add_custom_target(hrx DEPENDS libhrx_src_libhrx_hrx)
 endif()

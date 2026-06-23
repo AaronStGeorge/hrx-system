@@ -194,7 +194,7 @@ TEST(HostQueueSubmissionUnitTest, WritesPersistentPm4IbPacketBody) {
   const uint32_t ib_dword_count = 0x13579u;
   const iree_hal_amdgpu_aql_packet_control_t packet_control =
       iree_hal_amdgpu_aql_packet_control_barrier_system();
-  const iree_hsa_signal_t completion_signal = {.handle = 0x2468u};
+  const iree_hsa_signal_t completion_signal = {/*.handle=*/0x2468u};
 
   uint16_t setup = 0;
   const uint16_t header = iree_hal_amdgpu_host_queue_write_pm4_ib_packet_body(
@@ -217,7 +217,7 @@ TEST(HostQueueSubmissionUnitTest, WritesPersistentPm4IbPacketBody) {
 
 TEST(HostQueueSubmissionUnitTest, CommitsSignalBarrierPacket) {
   iree_hal_amdgpu_aql_packet_t packet = {};
-  const iree_hsa_signal_t signal = {.handle = 0x12345678u};
+  const iree_hsa_signal_t signal = {/*.handle=*/0x12345678u};
 
   iree_hal_amdgpu_host_queue_commit_signal_barrier(&packet, signal);
 
@@ -260,11 +260,17 @@ static void ExpectDispatchSubmissionPlan(
     const DispatchSubmissionPlanCase& plan_case) {
   iree_hal_amdgpu_wait_resolution_t resolution = {0};
   resolution.barrier_count = plan_case.barrier_count;
-  const iree_hal_semaphore_list_t empty_signal_list = {0};
+  const iree_hal_semaphore_list_t empty_signal_list =
+      iree_hal_semaphore_list_empty();
   iree_hal_amdgpu_profile_dispatch_event_reservation_t profile_events = {0};
   iree_hal_amdgpu_host_queue_profile_event_info_t profile_queue_event_info = {
-      .type = IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_DISPATCH,
-      .operation_count = 1,
+      /*.type=*/IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_DISPATCH,
+      /*.flags=*/{},
+      /*.submission_id=*/{},
+      /*.command_buffer_id=*/{},
+      /*.allocation_id=*/{},
+      /*.payload_length=*/{},
+      /*.operation_count=*/1,
   };
   iree_hal_amdgpu_host_queue_set_profile_flags(
       queue, plan_case.reserve_queue_device_event
@@ -358,10 +364,16 @@ static void ExpectPm4IbSubmissionPlan(
     const Pm4IbSubmissionPlanCase& plan_case) {
   iree_hal_amdgpu_wait_resolution_t resolution = {0};
   resolution.barrier_count = plan_case.barrier_count;
-  const iree_hal_semaphore_list_t empty_signal_list = {0};
+  const iree_hal_semaphore_list_t empty_signal_list =
+      iree_hal_semaphore_list_empty();
   iree_hal_amdgpu_host_queue_profile_event_info_t profile_queue_event_info = {
-      .type = IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_UPDATE,
-      .operation_count = 1,
+      /*.type=*/IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_UPDATE,
+      /*.flags=*/{},
+      /*.submission_id=*/{},
+      /*.command_buffer_id=*/{},
+      /*.allocation_id=*/{},
+      /*.payload_length=*/{},
+      /*.operation_count=*/1,
   };
   iree_hal_amdgpu_host_queue_set_profile_flags(
       queue, plan_case.reserve_queue_device_event

@@ -77,7 +77,8 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   CommandBufferProfileSinkInitialize(&sink);
   DeviceProfilingScope profiling(test_device.base_device());
   iree_status_t profiling_status = BeginSqWavesProfiling(&profiling, &sink);
-  if (IsHardwareCounterProfilingUnavailable(profiling_status)) {
+  if (IsHardwareCounterProfilingUnavailable(
+          iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "AMDGPU hardware counter profiling unavailable";
   }
@@ -91,6 +92,39 @@ TEST_F(HostQueueCommandBufferProfilingTest,
 }
 
 TEST_F(HostQueueCommandBufferProfilingTest,
+       DefaultHardwareCounterSelectionDoesNotFailWhenUnavailable) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(
+      test_device.Initialize(&options, &libhsa_, &topology_, host_allocator_));
+
+  CommandBufferProfileSink sink = {};
+  CommandBufferProfileSinkInitialize(&sink);
+  DeviceProfilingScope profiling(test_device.base_device());
+  IREE_ASSERT_OK(BeginDefaultHardwareCounterProfiling(&profiling, &sink));
+  IREE_ASSERT_OK(profiling.End());
+
+  EXPECT_EQ(1, sink.begin_count);
+  EXPECT_EQ(1, sink.end_count);
+}
+
+TEST_F(HostQueueCommandBufferProfilingTest,
+       ExplicitUnavailableHardwareCounterSelectionFails) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(
+      test_device.Initialize(&options, &libhsa_, &topology_, host_allocator_));
+
+  CommandBufferProfileSink sink = {};
+  CommandBufferProfileSinkInitialize(&sink);
+  DeviceProfilingScope profiling(test_device.base_device());
+  IREE_EXPECT_NOT_OK(
+      BeginUnsupportedHardwareCounterProfiling(&profiling, &sink));
+}
+
+TEST_F(HostQueueCommandBufferProfilingTest,
        MultipleHardwareCounterSelectionEmitsLayoutWhenAvailable) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
@@ -101,8 +135,10 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   CommandBufferProfileSink sink = {};
   CommandBufferProfileSinkInitialize(&sink);
   DeviceProfilingScope profiling(test_device.base_device());
-  iree_status_t profiling_status = BeginSqWaveWidthProfiling(&profiling, &sink);
-  if (IsHardwareCounterProfilingUnavailable(profiling_status)) {
+  iree_status_t profiling_status =
+      BeginMultipleSqCounterProfiling(&profiling, &sink);
+  if (IsHardwareCounterProfilingUnavailable(
+          iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "AMDGPU hardware counter profiling unavailable";
   }
@@ -114,16 +150,15 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   EXPECT_EQ(1, sink.counter_set_metadata_count);
   EXPECT_EQ(1, sink.counter_metadata_count);
   ASSERT_FALSE(sink.counter_set_records.empty());
-  ASSERT_EQ(sink.counter_set_records.size() * 4u, sink.counter_records.size());
+  ASSERT_EQ(sink.counter_set_records.size() * 3u, sink.counter_records.size());
   const iree_hal_profile_counter_unit_t expected_units[] = {
-      IREE_HAL_PROFILE_COUNTER_UNIT_COUNT,
       IREE_HAL_PROFILE_COUNTER_UNIT_COUNT,
       IREE_HAL_PROFILE_COUNTER_UNIT_COUNT,
       IREE_HAL_PROFILE_COUNTER_UNIT_CYCLES,
   };
   iree_host_size_t counter_record_index = 0;
   for (const auto& counter_set_record : sink.counter_set_records) {
-    ASSERT_EQ(4u, counter_set_record.counter_count);
+    ASSERT_EQ(3u, counter_set_record.counter_count);
     uint32_t sample_value_count = 0;
     for (uint32_t i = 0; i < counter_set_record.counter_count; ++i) {
       const auto& counter_record = sink.counter_records[counter_record_index++];
@@ -265,7 +300,7 @@ TEST_F(HostQueueCommandBufferProfilingTest,
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS |
                           IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS,
                       CommandBufferProfileSinkAsBase(&sink));
-  if (IsQueueDeviceProfilingUnavailable(profiling_status)) {
+  if (IsQueueDeviceProfilingUnavailable(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "queue-device profiling data family unsupported by backend";
   }
@@ -377,7 +412,7 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   iree_status_t profiling_status =
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS,
                       CommandBufferProfileSinkAsBase(&sink));
-  if (IsProfilingUnsupported(profiling_status)) {
+  if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "device profiling data family unsupported by backend";
   }
@@ -574,7 +609,7 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   iree_status_t status =
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS,
                       CommandBufferProfileSinkAsBase(&sink));
-  if (IsQueueDeviceProfilingUnavailable(status)) {
+  if (IsQueueDeviceProfilingUnavailable(iree_status_code(status))) {
     iree_status_free(status);
     GTEST_SKIP() << "queue-device profiling data family unsupported by backend";
   }
@@ -1044,7 +1079,7 @@ TEST_F(HostQueueCommandBufferProfilingTest,
                           IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS |
                           IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS,
                       CommandBufferProfileSinkAsBase(&sink));
-  if (IsQueueDeviceProfilingUnavailable(profiling_status)) {
+  if (IsQueueDeviceProfilingUnavailable(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "queue-device profiling data family unsupported by backend";
   }
@@ -1154,7 +1189,8 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   CommandBufferProfileSinkInitialize(&sink);
   DeviceProfilingScope profiling(test_device.base_device());
   iree_status_t profiling_status = BeginSqWavesProfiling(&profiling, &sink);
-  if (IsHardwareCounterProfilingUnavailable(profiling_status)) {
+  if (IsHardwareCounterProfilingUnavailable(
+          iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "AMDGPU hardware counter profiling unavailable";
   }
@@ -1244,7 +1280,8 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   DeviceProfilingScope profiling(test_device.base_device());
   iree_status_t profiling_status =
       BeginSqWavesCounterRangeProfiling(&profiling, &sink);
-  if (IsHardwareCounterProfilingUnavailable(profiling_status)) {
+  if (IsHardwareCounterProfilingUnavailable(
+          iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "AMDGPU hardware counter range profiling unavailable";
   }
@@ -1300,7 +1337,8 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   CommandBufferProfileSinkInitialize(&sink);
   DeviceProfilingScope profiling(test_device.base_device());
   iree_status_t profiling_status = BeginSqWavesProfiling(&profiling, &sink);
-  if (IsHardwareCounterProfilingUnavailable(profiling_status)) {
+  if (IsHardwareCounterProfilingUnavailable(
+          iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "AMDGPU hardware counter profiling unavailable";
   }
@@ -1438,8 +1476,7 @@ TEST_F(HostQueueCommandBufferProfilingTest,
                              "bin"),
       &executable_cache, &executable));
 
-  const uint64_t executable_id =
-      iree_hal_amdgpu_executable_profile_id(executable);
+  const uint64_t executable_id = iree_hal_amdgpu_executable_id(executable);
   EXPECT_TRUE(iree_hal_amdgpu_logical_device_should_profile_dispatch(
       test_device.logical_device(), executable_id, /*function_ordinal=*/0,
       /*command_buffer_id=*/0, /*command_index=*/0,
@@ -1508,7 +1545,7 @@ TEST_F(HostQueueCommandBufferProfilingTest,
   iree_status_t profiling_status =
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS,
                       CommandBufferProfileSinkAsBase(&sink));
-  if (IsQueueDeviceProfilingUnavailable(profiling_status)) {
+  if (IsQueueDeviceProfilingUnavailable(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "queue-device profiling data family unsupported by backend";
   }

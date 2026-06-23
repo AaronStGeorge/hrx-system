@@ -11,11 +11,17 @@
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/amdgpu/abi/kernel_args.h"
 #include "iree/hal/drivers/amdgpu/device/dispatch.h"
+#include "iree/hal/drivers/amdgpu/kernarg_layout.h"
 #include "iree/hal/drivers/amdgpu/profile_metadata.h"
+#include "iree/hal/drivers/amdgpu/queue_scope.h"
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
 #include "iree/hal/drivers/amdgpu/util/pm4_dispatch.h"
 
+typedef struct iree_hal_amdgpu_asan_state_t iree_hal_amdgpu_asan_state_t;
+typedef struct iree_hal_amdgpu_feedback_state_t
+    iree_hal_amdgpu_feedback_state_t;
 typedef struct iree_hal_amdgpu_topology_t iree_hal_amdgpu_topology_t;
+typedef struct iree_hal_amdgpu_tsan_state_t iree_hal_amdgpu_tsan_state_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,14 +60,6 @@ iree_status_t iree_hal_amdgpu_executable_format_supported(
 // iree_hal_amdgpu_executable_t
 //===----------------------------------------------------------------------===//
 
-// The maximum number of per-dispatch bindings allowed.
-// This is limited by the field size in iree_hal_amdgpu_device_kernel_args_t.
-#define IREE_HAL_AMDGPU_MAX_DISPATCH_BINDING_COUNT UINT16_MAX
-
-// The maximum number of per-dispatch constants allowed.
-// This is limited by the field size in iree_hal_amdgpu_device_kernel_args_t.
-#define IREE_HAL_AMDGPU_MAX_DISPATCH_CONSTANT_COUNT UINT16_MAX
-
 // Host-resident dispatch metadata precomputed for one executable export on one
 // physical device.
 //
@@ -72,12 +70,12 @@ iree_status_t iree_hal_amdgpu_executable_format_supported(
 typedef struct iree_hal_amdgpu_executable_dispatch_descriptor_t {
   // Device-specific kernel arguments with a valid kernel_object for dispatch.
   iree_hal_amdgpu_device_kernel_args_t kernel_args;
-  // HAL ABI kernarg layout derived from |kernel_args|.
-  iree_hal_amdgpu_device_dispatch_kernarg_layout_t hal_kernarg_layout;
+  // Native kernarg layout for normal metadata-described dispatches.
+  const iree_hal_amdgpu_kernarg_layout_t* kernarg_layout;
   // Custom direct-argument kernarg layout derived from |kernel_args|.
   iree_hal_amdgpu_device_dispatch_kernarg_layout_t custom_kernarg_layout;
-  // Queue kernarg-ring block count for HAL ABI dispatches.
-  uint32_t hal_kernarg_block_count;
+  // Queue kernarg-ring block count for normal metadata-described dispatches.
+  uint32_t kernarg_block_count;
   // Queue kernarg-ring block count for custom direct-argument dispatches.
   uint32_t custom_kernarg_block_count;
   // Maximum static workgroup count accepted for each dimension.
@@ -104,8 +102,6 @@ typedef struct iree_hal_amdgpu_executable_dispatch_descriptor_t {
 // Returns the canonical target-ID format string and total size of the
 // executable data.
 //
-// Wrapped AMDGPU flatbuffers infer the target ID from the embedded ELF image
-// instead of trusting the flatbuffer metadata target label.
 iree_status_t iree_hal_amdgpu_executable_infer_format(
     iree_const_byte_span_t executable_data,
     iree_host_size_t executable_format_capacity, char* executable_format,
@@ -119,6 +115,25 @@ iree_status_t iree_hal_amdgpu_executable_infer_format(
 // |libhsa| and |topology| are captured by-reference and must remain valid for
 // the lifetime of the cache.
 //
+// |executable_id| is a non-zero logical-device-local identifier assigned to
+// this executable before it is visible to profiling or device-originated
+// diagnostics.
+//
+// |asan_state| is captured by-reference for this load and used to publish ASAN
+// config globals when enabled. It may be NULL when ASAN is unavailable.
+//
+// |feedback_state| is captured by-reference for this load and used to publish
+// feedback config globals when enabled. It may be NULL when feedback is
+// unavailable.
+//
+// |tsan_state| is captured by-reference for this load and used to publish TSAN
+// config globals when enabled. It may be NULL when TSAN is unavailable.
+//
+// |queue_scopes| captures immutable queue identities for the owning logical
+// device. Executables with queue-scoped globals may load one HSA executable
+// variant per physical queue ordinal and publish per-queue config without
+// mutating state on each dispatch.
+//
 // Exact code-object image bytes and loader load ranges are retained in profile
 // metadata for offline trace/disassembly workflows. Executable trace profiling
 // may begin after executable preparation, so this cold-path metadata is always
@@ -127,12 +142,16 @@ iree_status_t iree_hal_amdgpu_executable_create(
     iree_hal_device_t* device, const iree_hal_amdgpu_libhsa_t* libhsa,
     const iree_hal_amdgpu_topology_t* topology,
     const iree_hal_executable_params_t* executable_params,
+    uint64_t executable_id, iree_hal_amdgpu_feedback_state_t* feedback_state,
+    iree_hal_amdgpu_asan_state_t* asan_state,
+    iree_hal_amdgpu_tsan_state_t* tsan_state,
+    iree_host_size_t queue_scope_count,
+    const iree_hal_amdgpu_queue_scope_t* queue_scopes,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_allocator_t host_allocator, iree_hal_executable_t** out_executable);
 
-// Returns the producer-local profile executable id assigned at creation.
-uint64_t iree_hal_amdgpu_executable_profile_id(
-    iree_hal_executable_t* executable);
+// Returns the logical-device-local executable id assigned at creation.
+uint64_t iree_hal_amdgpu_executable_id(iree_hal_executable_t* executable);
 
 // Returns metadata about an exported kernel function in host memory.
 // The returned pointers will remain valid for the lifetime of the executable.
@@ -168,6 +187,22 @@ iree_status_t iree_hal_amdgpu_executable_lookup_dispatch_descriptor_for_device(
     iree_hal_executable_function_t export_ordinal,
     iree_host_size_t device_ordinal,
     const iree_hal_amdgpu_executable_dispatch_descriptor_t** out_descriptor);
+
+// Returns host-resident dispatch metadata for an exported kernel function on a
+// queue.
+//
+// Queue-scoped executable variants require this lookup so the selected kernel
+// object and executable globals match the queue that will receive the dispatch.
+// Non-queue-scoped executables collapse this to the existing per-device lookup.
+iree_status_t iree_hal_amdgpu_executable_lookup_dispatch_descriptor_for_queue(
+    iree_hal_executable_t* executable,
+    iree_hal_executable_function_t export_ordinal,
+    iree_hal_queue_affinity_t queue_affinity,
+    const iree_hal_amdgpu_executable_dispatch_descriptor_t** out_descriptor);
+
+// Returns true when dispatches must select executable metadata by queue.
+bool iree_hal_amdgpu_executable_requires_queue_scope(
+    iree_hal_executable_t* executable);
 
 // Returns PM4 compute launch state for an exported kernel function on a
 // physical device.

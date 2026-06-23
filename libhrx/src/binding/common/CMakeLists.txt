@@ -64,6 +64,19 @@ iree_cc_test(
     libhrx_defs
 )
 
+iree_cc_test(
+  NAME
+    fat_binary_test
+  SRCS
+    "fat_binary_test.cc"
+  DEPS
+    ::common
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    libhrx_defs
+)
+
 iree_cc_binary_benchmark(
   NAME
     buffer_table_benchmark
@@ -82,7 +95,6 @@ iree_cc_binary_benchmark(
 
 set_target_properties(libhrx_src_binding_common_common PROPERTIES
   POSITION_INDEPENDENT_CODE ON
-  INTERPROCEDURAL_OPTIMIZATION TRUE
 )
 
 # CCOB fat binaries use zstd for compression (used by rocBLAS/hipBLAS and

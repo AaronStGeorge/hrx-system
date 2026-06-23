@@ -160,10 +160,10 @@ static iree_status_t QueueBenchmarkDiscardProfileSinkEndSession(
 
 static const iree_hal_profile_sink_vtable_t
     kQueueBenchmarkDiscardProfileSinkVtable = {
-        .destroy = QueueBenchmarkDiscardProfileSinkDestroy,
-        .begin_session = QueueBenchmarkDiscardProfileSinkBeginSession,
-        .write = QueueBenchmarkDiscardProfileSinkWrite,
-        .end_session = QueueBenchmarkDiscardProfileSinkEndSession,
+        /*.destroy=*/QueueBenchmarkDiscardProfileSinkDestroy,
+        /*.begin_session=*/QueueBenchmarkDiscardProfileSinkBeginSession,
+        /*.write=*/QueueBenchmarkDiscardProfileSinkWrite,
+        /*.end_session=*/QueueBenchmarkDiscardProfileSinkEndSession,
 };
 
 iree_status_t QueueBenchmarkDiscardProfileSinkCreate(
@@ -437,10 +437,10 @@ class QueueBenchmark : public benchmark::Fixture {
     auto* logical_device =
         reinterpret_cast<iree_hal_amdgpu_logical_device_t*>(device_);
     const iree_hal_amdgpu_queue_affinity_domain_t domain = {
-        .supported_affinity = logical_device->queue_affinity_mask,
-        .physical_device_count = logical_device->physical_device_count,
-        .queue_count_per_physical_device =
-            logical_device->system->topology.gpu_agent_queue_count,
+        /*.supported_affinity=*/logical_device->queue_affinity_mask,
+        /*.physical_device_count=*/logical_device->physical_device_count,
+        /*.queue_count_per_physical_device=*/
+        logical_device->system->topology.gpu_agent_queue_count,
     };
     iree_hal_amdgpu_queue_affinity_resolved_t resolved;
     IREE_RETURN_IF_ERROR(iree_hal_amdgpu_queue_affinity_resolve(
@@ -1594,7 +1594,7 @@ class QueueBenchmark : public benchmark::Fixture {
 
     const uint32_t workgroup_count[3] = {1, 1, 1};
     const uint32_t dynamic_workgroup_local_memory = 0;
-    const uint32_t kernarg_block_count = descriptor->hal_kernarg_block_count;
+    const uint32_t kernarg_block_count = descriptor->kernarg_block_count;
 
     iree_host_size_t kernarg_length = 0;
     if (IREE_UNLIKELY(!iree_host_size_checked_mul(
@@ -1611,12 +1611,29 @@ class QueueBenchmark : public benchmark::Fixture {
     std::memset(kernargs, 0, kernarg_length);
 
     const uint32_t constant_data[] = {3, 10};
-    iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
-        kernel_args, &descriptor->hal_kernarg_layout, binding_ptrs,
-        constant_data, kernargs);
-    iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
-        kernel_args, workgroup_count, dynamic_workgroup_local_memory,
-        &descriptor->hal_kernarg_layout, kernargs);
+    const iree_hal_amdgpu_kernarg_layout_t* kernarg_layout =
+        descriptor->kernarg_layout;
+    iree_hal_amdgpu_kernarg_layout_emplace_explicit_args(
+        kernarg_layout, binding_ptrs,
+        iree_make_const_byte_span(
+            reinterpret_cast<const uint8_t*>(constant_data),
+            sizeof(constant_data)),
+        kernargs);
+    if (iree_any_bit_set(kernarg_layout->flags,
+                         IREE_HAL_AMDGPU_KERNARG_LAYOUT_FLAG_IMPLICIT_ARGS)) {
+      auto* implicit_args =
+          reinterpret_cast<iree_amdgpu_kernel_implicit_args_t*>(
+              kernargs + kernarg_layout->implicit_args_byte_offset);
+      std::memset(implicit_args, 0, IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE);
+      implicit_args->block_count[0] = workgroup_count[0];
+      implicit_args->block_count[1] = workgroup_count[1];
+      implicit_args->block_count[2] = workgroup_count[2];
+      implicit_args->group_size[0] = kernel_args->workgroup_size[0];
+      implicit_args->group_size[1] = kernel_args->workgroup_size[1];
+      implicit_args->group_size[2] = kernel_args->workgroup_size[2];
+      implicit_args->grid_dims = 3;
+      implicit_args->dynamic_lds_size = dynamic_workgroup_local_memory;
+    }
     std::memset(&pre_resolved_dispatch_packet_template_, 0,
                 sizeof(pre_resolved_dispatch_packet_template_));
     iree_hal_amdgpu_device_dispatch_emplace_packet(
@@ -1976,8 +1993,8 @@ class QueueBenchmark : public benchmark::Fixture {
                     command;
         const uint64_t kernarg_bytes =
             (uint64_t)dispatch_command->kernarg_length_qwords * 8u;
-        if (dispatch_command->kernarg_strategy ==
-            IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_PREPUBLISHED) {
+        if (dispatch_command->kernarg_storage_mode ==
+            IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STORAGE_MODE_PREPUBLISHED) {
           ++prepublished_kernarg.dispatch_count;
           prepublished_kernarg.payload_bytes += kernarg_bytes;
           const uint64_t storage_end =

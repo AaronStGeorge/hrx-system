@@ -58,6 +58,7 @@ iree_cc_library(
     iree::hal::utils::collective_batch
     iree::hal::utils::deferred_command_buffer
     iree::hal::utils::deferred_work_queue
+    iree::hal::utils::device_spec_builder
     iree::hal::utils::executable_debug_info
     iree::hal::utils::executable_header
     iree::hal::utils::file_transfer

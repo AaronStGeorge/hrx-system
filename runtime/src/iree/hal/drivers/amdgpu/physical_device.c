@@ -40,6 +40,15 @@
 // Preferred priority for pooled allocations in the default pool set.
 #define IREE_HAL_AMDGPU_PHYSICAL_DEVICE_DEFAULT_POOL_PRIORITY_TLSF 10
 
+// Conservative maximum group-segment byte length supported by the AMDGPU
+// dispatch paths used here. HSA exposes executable group-segment requirements
+// but does not expose a portable per-agent LDS capacity property.
+#define IREE_HAL_AMDGPU_PHYSICAL_DEVICE_GROUP_SEGMENT_MAX_SIZE_DEFAULT \
+  (64 * 1024)
+static_assert(IREE_HAL_AMDGPU_PHYSICAL_DEVICE_GROUP_SEGMENT_MAX_SIZE_DEFAULT !=
+                  0,
+              "group segment max size default must be non-zero");
+
 typedef struct iree_hal_amdgpu_agent_first_isa_t {
   // Number of ISAs seen during iteration.
   uint32_t count;
@@ -372,6 +381,8 @@ iree_status_t iree_hal_amdgpu_physical_device_options_verify(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "default pool frontier_capacity must be non-zero");
   }
+  IREE_RETURN_IF_ERROR(
+      iree_hal_asan_pool_options_validate(&options->default_pool.asan));
   IREE_RETURN_IF_ERROR(
       iree_hal_amdgpu_staging_pool_options_verify(&options->file_staging));
 
@@ -723,7 +734,7 @@ iree_hal_amdgpu_physical_device_initialize_default_pool_resources(
     iree_async_proactor_t* proactor, iree_host_size_t device_ordinal,
     hsa_amd_memory_pool_t coarse_block_memory_pool,
     iree_hal_queue_affinity_t queue_affinity_mask,
-    iree_allocator_t host_allocator,
+    iree_hal_amdgpu_asan_state_t* asan_state, iree_allocator_t host_allocator,
     iree_hal_amdgpu_physical_device_t* out_physical_device) {
   iree_hal_amdgpu_libhsa_t* libhsa = &system->libhsa;
 
@@ -739,7 +750,14 @@ iree_hal_amdgpu_physical_device_initialize_default_pool_resources(
       iree_hal_amdgpu_slab_provider_query_memory_pool_properties(
           libhsa, coarse_block_memory_pool, &properties));
   const iree_hal_amdgpu_slab_provider_options_t default_slab_options = {
+      .flags =
+          iree_hal_asan_pool_options_is_enabled(&options->default_pool.asan)
+              ? IREE_HAL_AMDGPU_SLAB_PROVIDER_FLAG_ASAN_SHADOW |
+                    IREE_HAL_AMDGPU_SLAB_PROVIDER_FLAG_ASAN_VMM
+              : IREE_HAL_AMDGPU_SLAB_PROVIDER_FLAG_NONE,
       .memory_pool = coarse_block_memory_pool,
+      .vmem_memory_type = IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_DEFAULT,
+      .asan_state = asan_state,
       .memory_type = properties.memory_type,
       .supported_usage = properties.supported_usage,
   };
@@ -774,6 +792,7 @@ iree_hal_amdgpu_physical_device_initialize_default_pool_resources(
               .alignment = options->default_pool.alignment,
               .frontier_capacity = options->default_pool.frontier_capacity,
           },
+      .asan = options->default_pool.asan,
       .budget_limit = 0,
   };
 
@@ -796,7 +815,13 @@ iree_hal_amdgpu_physical_device_initialize_default_pool_resources(
                                              IREE_ARRAYSIZE(host_trace_name),
                                              "host-slab", device_ordinal);
   const iree_hal_amdgpu_slab_provider_options_t host_slab_options = {
+      .flags =
+          iree_hal_asan_pool_options_is_enabled(&options->default_pool.asan)
+              ? IREE_HAL_AMDGPU_SLAB_PROVIDER_FLAG_ASAN_SHADOW
+              : IREE_HAL_AMDGPU_SLAB_PROVIDER_FLAG_NONE,
       .memory_pool = out_physical_device->host_memory_pools.fine_pool,
+      .vmem_memory_type = IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_DEFAULT,
+      .asan_state = asan_state,
       .memory_type =
           IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE,
       .supported_usage =
@@ -851,6 +876,8 @@ iree_hal_amdgpu_physical_device_initialize_device_library_and_blit_context(
   IREE_RETURN_IF_ERROR(
       iree_hsa_agent_get_info(IREE_LIBHSA(libhsa), device_agent,
                               HSA_AGENT_INFO_WAVEFRONT_SIZE, &wavefront_size));
+  const uint32_t group_segment_max_size =
+      IREE_HAL_AMDGPU_PHYSICAL_DEVICE_GROUP_SEGMENT_MAX_SIZE_DEFAULT;
 
   // Validate launch metadata before passing it to the blit context. A broken
   // HSA bring-up that returns garbage here must fail loud with a clear message
@@ -870,6 +897,7 @@ iree_hal_amdgpu_physical_device_initialize_device_library_and_blit_context(
   }
   out_physical_device->compute_unit_count = compute_unit_count;
   out_physical_device->wavefront_size = wavefront_size;
+  out_physical_device->group_segment_max_size = group_segment_max_size;
   iree_hal_amdgpu_device_buffer_transfer_context_initialize(
       &out_physical_device->device_kernels, compute_unit_count, wavefront_size,
       &out_physical_device->buffer_transfer_context);
@@ -916,7 +944,8 @@ iree_status_t iree_hal_amdgpu_physical_device_initialize(
     const iree_hal_amdgpu_physical_device_options_t* options,
     iree_async_proactor_t* proactor, iree_host_size_t host_ordinal,
     const iree_hal_amdgpu_host_memory_pools_t* host_memory_pools,
-    iree_host_size_t device_ordinal, iree_allocator_t host_allocator,
+    iree_host_size_t device_ordinal, iree_hal_amdgpu_asan_state_t* asan_state,
+    iree_allocator_t host_allocator,
     iree_hal_amdgpu_physical_device_t* out_physical_device) {
   IREE_ASSERT_ARGUMENT(logical_device);
   IREE_ASSERT_ARGUMENT(system);
@@ -990,8 +1019,8 @@ iree_status_t iree_hal_amdgpu_physical_device_initialize(
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_physical_device_initialize_default_pool_resources(
         logical_device, system, options, proactor, device_ordinal,
-        coarse_block_memory_pool, queue_affinity_mask, host_allocator,
-        out_physical_device);
+        coarse_block_memory_pool, queue_affinity_mask, asan_state,
+        host_allocator, out_physical_device);
   }
 
   if (iree_status_is_ok(status)) {
@@ -1062,6 +1091,7 @@ static iree_status_t iree_hal_amdgpu_physical_device_create_pool_pair(
             oversized_pool_trace_name,
             IREE_ARRAYSIZE(oversized_pool_trace_name), oversized_pool_name,
             physical_device->device_ordinal),
+        .asan = pool_options.asan,
     };
     status = iree_hal_passthrough_pool_create(
         oversized_pool_options, slab_provider,
@@ -1130,6 +1160,7 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
     iree_async_frontier_tracker_t* frontier_tracker,
     iree_async_axis_t base_axis,
     iree_hal_amdgpu_epoch_signal_table_t* epoch_signal_table,
+    iree_hal_amdgpu_feedback_state_t* feedback_state,
     const iree_hal_amdgpu_host_memory_pools_t* host_memory_pools,
     iree_allocator_t host_allocator,
     iree_hal_amdgpu_physical_device_t* physical_device) {
@@ -1195,11 +1226,12 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
         libhsa, logical_device, proactor, physical_device->device_agent,
         &kernarg_ring_memory.descriptor, host_memory_pools->fine_pool,
         frontier_tracker, queue_axis, resolved.queue_affinity,
-        completion_thread_affinity, physical_device->wait_barrier_strategy,
+        logical_queue_ordinal, queue_ordinal, completion_thread_affinity,
+        physical_device->wait_barrier_strategy,
         physical_device->vendor_packet_capabilities,
         physical_device->pm4_timestamp_strategy, epoch_signal_table,
-        &physical_device->fine_host_block_pool, profiling_memory,
-        &physical_device->buffer_transfer_context,
+        feedback_state, &physical_device->fine_host_block_pool,
+        profiling_memory, &physical_device->buffer_transfer_context,
         &physical_device->default_pool_set, physical_device->default_pool,
         &physical_device->transient_buffer_pool,
         &physical_device->file_staging_pool, physical_device->device_ordinal,

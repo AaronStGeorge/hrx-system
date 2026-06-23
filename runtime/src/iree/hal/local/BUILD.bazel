@@ -18,6 +18,32 @@ package(
 )
 
 iree_runtime_cc_library(
+    name = "device_spec_builder",
+    srcs = ["device_spec_builder.c"],
+    hdrs = ["device_spec_builder.h"],
+    deps = [
+        ":executable_loader",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/memory:cpu_slab_provider",
+        "//runtime/src/iree/hal/utils:device_spec_builder",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "device_spec_builder_test",
+    srcs = ["device_spec_builder_test.cc"],
+    deps = [
+        ":device_spec_builder",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/local/loaders:static_library_loader",
+        "//runtime/src/iree/hal/memory:cpu_slab_provider",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "executable_environment",
     srcs = ["executable_environment.c"],
     hdrs = ["executable_environment.h"],

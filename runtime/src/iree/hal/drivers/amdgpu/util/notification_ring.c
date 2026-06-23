@@ -113,7 +113,7 @@ void iree_hal_amdgpu_reclaim_entry_release(
 }
 
 static inline void iree_hal_amdgpu_reclaim_entry_execute_pre_signal_action(
-    iree_hal_amdgpu_reclaim_entry_t* entry, iree_status_t status) {
+    iree_hal_amdgpu_reclaim_entry_t* entry, const iree_status_t status) {
   if (!entry->pre_signal_action.fn) return;
   iree_hal_amdgpu_reclaim_action_fn_t fn = entry->pre_signal_action.fn;
   void* user_data = entry->pre_signal_action.user_data;
@@ -580,7 +580,7 @@ iree_host_size_t iree_hal_amdgpu_notification_ring_drain_reclaim_positions(
     for (uint64_t epoch = previous_drained; epoch < current_epoch; ++epoch) {
       uint32_t reclaim_index = (uint32_t)(epoch & (ring->capacity - 1));
       retire_fn(&ring->reclaim_entries[reclaim_index], epoch + 1,
-                retire_user_data);
+                IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_NONE, retire_user_data);
     }
   }
 
@@ -695,12 +695,33 @@ iree_host_size_t iree_hal_amdgpu_notification_ring_drain(
 }
 
 iree_host_size_t iree_hal_amdgpu_notification_ring_fail_all_reclaim_positions(
-    iree_hal_amdgpu_notification_ring_t* ring, iree_status_t error_status,
+    iree_hal_amdgpu_notification_ring_t* ring, const iree_status_t error_status,
+    iree_hal_amdgpu_reclaim_retire_fn_t retire_fn, void* retire_user_data,
     iree_hal_amdgpu_reclaim_positions_t* out_reclaim_positions) {
   IREE_ASSERT_ARGUMENT(ring);
   IREE_ASSERT_ARGUMENT(out_reclaim_positions);
 
   memset(out_reclaim_positions, 0, sizeof(*out_reclaim_positions));
+
+  uint64_t last_drained = (uint64_t)iree_atomic_load(&ring->epoch.last_drained,
+                                                     iree_memory_order_relaxed);
+  const uint64_t next_submission = ring->epoch.next_submission;
+
+  // Execute failure retire hooks before making the failure user-visible or
+  // releasing retained resources. This preserves the same diagnostic lifetime
+  // window normal completion gets from drain_reclaim_positions.
+  for (uint64_t epoch = last_drained; epoch < next_submission; ++epoch) {
+    uint32_t reclaim_index = (uint32_t)(epoch & (ring->capacity - 1));
+    iree_hal_amdgpu_reclaim_entry_execute_pre_signal_action(
+        &ring->reclaim_entries[reclaim_index], error_status);
+  }
+  if (retire_fn) {
+    for (uint64_t epoch = last_drained; epoch < next_submission; ++epoch) {
+      uint32_t reclaim_index = (uint32_t)(epoch & (ring->capacity - 1));
+      retire_fn(&ring->reclaim_entries[reclaim_index], epoch + 1,
+                IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_FAILED, retire_user_data);
+    }
+  }
 
   iree_host_size_t failed_count = 0;
   uint64_t read = iree_hal_amdgpu_notification_ring_load_position(
@@ -730,10 +751,7 @@ iree_host_size_t iree_hal_amdgpu_notification_ring_fail_all_reclaim_positions(
   // Release retained resources for all epochs.
   uint64_t highest_kernarg_position = 0;
   uint64_t highest_queue_upload_position = 0;
-  uint64_t last_drained = (uint64_t)iree_atomic_load(&ring->epoch.last_drained,
-                                                     iree_memory_order_relaxed);
-  for (uint64_t epoch = last_drained; epoch < ring->epoch.next_submission;
-       ++epoch) {
+  for (uint64_t epoch = last_drained; epoch < next_submission; ++epoch) {
     uint32_t reclaim_index = (uint32_t)(epoch & (ring->capacity - 1));
     uint64_t kernarg_write_position =
         ring->reclaim_entries[reclaim_index].kernarg_write_position;
@@ -745,13 +763,10 @@ iree_host_size_t iree_hal_amdgpu_notification_ring_fail_all_reclaim_positions(
     if (queue_upload_write_position > highest_queue_upload_position) {
       highest_queue_upload_position = queue_upload_write_position;
     }
-    iree_hal_amdgpu_reclaim_entry_execute_pre_signal_action(
-        &ring->reclaim_entries[reclaim_index], error_status);
     iree_hal_amdgpu_reclaim_entry_release(&ring->reclaim_entries[reclaim_index],
                                           ring->block_pool);
   }
-  iree_atomic_store(&ring->epoch.last_drained,
-                    (int64_t)ring->epoch.next_submission,
+  iree_atomic_store(&ring->epoch.last_drained, (int64_t)next_submission,
                     iree_memory_order_release);
 
   iree_hal_amdgpu_notification_ring_store_position(&ring->read, read,
@@ -764,13 +779,14 @@ iree_host_size_t iree_hal_amdgpu_notification_ring_fail_all_reclaim_positions(
 }
 
 iree_host_size_t iree_hal_amdgpu_notification_ring_fail_all(
-    iree_hal_amdgpu_notification_ring_t* ring, iree_status_t error_status,
+    iree_hal_amdgpu_notification_ring_t* ring, const iree_status_t error_status,
     uint64_t* out_kernarg_reclaim_position) {
   IREE_ASSERT_ARGUMENT(out_kernarg_reclaim_position);
   iree_hal_amdgpu_reclaim_positions_t reclaim_positions = {0};
   iree_host_size_t failed_count =
       iree_hal_amdgpu_notification_ring_fail_all_reclaim_positions(
-          ring, error_status, &reclaim_positions);
+          ring, error_status, /*retire_fn=*/NULL, /*retire_user_data=*/NULL,
+          &reclaim_positions);
   *out_kernarg_reclaim_position = reclaim_positions.kernarg_write_position;
   return failed_count;
 }

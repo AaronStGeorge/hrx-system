@@ -156,6 +156,15 @@ bool iree_hal_executable_loader_query_support(
     iree_hal_executable_caching_mode_t caching_mode,
     iree_string_view_t executable_format);
 
+// Returns immutable executable facts owned by |executable_loader|.
+//
+// The returned record borrows storage from |executable_loader| and remains
+// valid until the loader is destroyed. Callers that need to store the facts
+// beyond the loader lifetime must copy them.
+void iree_hal_executable_loader_query_spec(
+    iree_hal_executable_loader_t* executable_loader,
+    iree_hal_device_executable_spec_t* out_executable_spec);
+
 // Returns true if any loader in the list can load executables of the given
 // |executable_format|. Note that loading may still fail if the executable uses
 // features not available on the current host or runtime.
@@ -200,6 +209,10 @@ typedef struct iree_hal_executable_loader_vtable_t {
       iree_hal_executable_loader_t* executable_loader,
       iree_hal_executable_caching_mode_t caching_mode,
       iree_string_view_t executable_format);
+
+  void(IREE_API_PTR* query_spec)(
+      iree_hal_executable_loader_t* executable_loader,
+      iree_hal_device_executable_spec_t* out_executable_spec);
 
   iree_status_t(IREE_API_PTR* try_load)(
       iree_hal_executable_loader_t* executable_loader,

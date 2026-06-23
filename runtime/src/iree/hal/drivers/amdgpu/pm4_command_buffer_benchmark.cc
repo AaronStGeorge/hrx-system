@@ -598,8 +598,8 @@ class Pm4CommandBufferBenchmark : public benchmark::Fixture {
                     command;
         const uint64_t kernarg_bytes =
             (uint64_t)dispatch_command->kernarg_length_qwords * 8u;
-        if (dispatch_command->kernarg_strategy ==
-            IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_PREPUBLISHED) {
+        if (dispatch_command->kernarg_storage_mode ==
+            IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STORAGE_MODE_PREPUBLISHED) {
           ++prepublished_kernarg.dispatch_count;
           prepublished_kernarg.payload_bytes += kernarg_bytes;
           const uint64_t storage_end =

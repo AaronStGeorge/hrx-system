@@ -369,10 +369,8 @@ iree_status_t iree_hal_streaming_device_retain_primary_context(
     if (!iree_status_is_ok(status)) {
       // Creation failed - decrement ref count back to 0.
       device->primary_context_ref_count--;
-      if (device->primary_context) {
-        iree_hal_streaming_context_release(device->primary_context);
-        device->primary_context = NULL;
-      }
+      iree_hal_streaming_context_release(device->primary_context);
+      device->primary_context = NULL;
       iree_slim_mutex_unlock(&device->primary_context_mutex);
       IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, status);
     }
@@ -428,14 +426,10 @@ iree_status_t iree_hal_streaming_device_release_primary_context(
     device->primary_context = NULL;
 
     // Also clear memory pools.
-    if (device->current_mem_pool) {
-      hrx_mem_pool_release(device->current_mem_pool);
-      device->current_mem_pool = NULL;
-    }
-    if (device->default_mem_pool) {
-      hrx_mem_pool_release(device->default_mem_pool);
-      device->default_mem_pool = NULL;
-    }
+    hrx_mem_pool_release(device->current_mem_pool);
+    device->current_mem_pool = NULL;
+    hrx_mem_pool_release(device->default_mem_pool);
+    device->default_mem_pool = NULL;
   }
 
   iree_slim_mutex_unlock(&device->primary_context_mutex);

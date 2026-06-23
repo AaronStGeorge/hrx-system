@@ -154,7 +154,7 @@ typedef struct iree_hal_amdgpu_reclaim_entry_t iree_hal_amdgpu_reclaim_entry_t;
 // callback execution.
 typedef void(IREE_API_PTR* iree_hal_amdgpu_reclaim_action_fn_t)(
     iree_hal_amdgpu_reclaim_entry_t* entry, void* user_data,
-    iree_status_t status);
+    const iree_status_t status);
 
 typedef struct iree_hal_amdgpu_reclaim_action_t {
   // Callback invoked with |user_data| when the epoch is retired or failed.
@@ -171,10 +171,23 @@ typedef struct iree_hal_amdgpu_reclaim_positions_t {
   uint64_t queue_upload_write_position;
 } iree_hal_amdgpu_reclaim_positions_t;
 
-// Optional callback invoked for one completed epoch after pre-signal actions
-// execute and before user-visible semaphore signals publish.
+typedef uint32_t iree_hal_amdgpu_reclaim_retire_flags_t;
+enum iree_hal_amdgpu_reclaim_retire_flag_bits_t {
+  IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_NONE = 0u,
+  // The epoch is being force-retired because the queue failed outstanding work.
+  IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_FAILED = 1u << 0,
+};
+
+// Optional callback invoked for one retired epoch after pre-signal actions
+// execute and before user-visible semaphore signals publish or fail.
+//
+// Normal completion passes IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_NONE. Queue
+// failure passes IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_FAILED before failing
+// waiters or releasing resources so borrowed executable/resource references are
+// still live for diagnostic drains.
 typedef void(IREE_API_PTR* iree_hal_amdgpu_reclaim_retire_fn_t)(
-    iree_hal_amdgpu_reclaim_entry_t* entry, uint64_t epoch, void* user_data);
+    iree_hal_amdgpu_reclaim_entry_t* entry, uint64_t epoch,
+    iree_hal_amdgpu_reclaim_retire_flags_t flags, void* user_data);
 
 // Per-epoch resource reclaim entry. Stores retained HAL resource pointers
 // that are released when the epoch completes (drain time). One entry per
@@ -416,8 +429,9 @@ void iree_hal_amdgpu_notification_ring_push_frontier_snapshot(
 // Stores the highest queue-owned ring positions across all retired epochs in
 // |out_reclaim_positions|. Positions are set to 0 if no epochs were retired.
 //
-// |retire_fn|, when provided, is called once per retired epoch before
-// user-visible semaphore publication. It must not publish user-visible
+// |retire_fn|, when provided, is called once per normally retired epoch before
+// user-visible semaphore publication with
+// IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_NONE. It must not publish user-visible
 // completion itself.
 //
 // Returns the number of entries drained.
@@ -430,8 +444,9 @@ iree_host_size_t iree_hal_amdgpu_notification_ring_drain_reclaim_positions(
 // Stores the highest kernarg_write_position across all retired epochs in
 // |out_kernarg_reclaim_position|. Set to 0 if no epochs were retired.
 //
-// |retire_fn|, when provided, is called once per retired epoch before
-// user-visible semaphore publication. It must not publish user-visible
+// |retire_fn|, when provided, is called once per normally retired epoch before
+// user-visible semaphore publication with
+// IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_NONE. It must not publish user-visible
 // completion itself.
 //
 // Returns the number of entries drained.
@@ -448,12 +463,18 @@ iree_host_size_t iree_hal_amdgpu_notification_ring_drain(
 //
 // |error_status| is borrowed, not consumed — the caller retains ownership.
 //
+// |retire_fn|, when provided, is called once per force-retired epoch before
+// user-visible semaphore failure with
+// IREE_HAL_AMDGPU_RECLAIM_RETIRE_FLAG_FAILED. It must not publish user-visible
+// completion or failure itself.
+//
 // Stores the highest queue-owned ring positions across all failed entries in
 // |out_reclaim_positions| (same semantics as drain_reclaim_positions).
 //
 // Returns the number of entries failed.
 iree_host_size_t iree_hal_amdgpu_notification_ring_fail_all_reclaim_positions(
-    iree_hal_amdgpu_notification_ring_t* ring, iree_status_t error_status,
+    iree_hal_amdgpu_notification_ring_t* ring, const iree_status_t error_status,
+    iree_hal_amdgpu_reclaim_retire_fn_t retire_fn, void* retire_user_data,
     iree_hal_amdgpu_reclaim_positions_t* out_reclaim_positions);
 
 // Stores the highest kernarg_write_position across all failed entries in
@@ -461,7 +482,7 @@ iree_host_size_t iree_hal_amdgpu_notification_ring_fail_all_reclaim_positions(
 //
 // Returns the number of entries failed.
 iree_host_size_t iree_hal_amdgpu_notification_ring_fail_all(
-    iree_hal_amdgpu_notification_ring_t* ring, iree_status_t error_status,
+    iree_hal_amdgpu_notification_ring_t* ring, const iree_status_t error_status,
     uint64_t* out_kernarg_reclaim_position);
 
 #ifdef __cplusplus

@@ -30,11 +30,13 @@ iree_status_t iree_hal_executable_import_provider_try_resolve(
       }
     }
     if (any_required) {
-      return iree_make_status(IREE_STATUS_UNAVAILABLE,
-                              "no import provider registered for resolving "
-                              "required executable imports");
+      IREE_RETURN_AND_END_ZONE(
+          z0, iree_make_status(IREE_STATUS_UNAVAILABLE,
+                               "no import provider registered for resolving "
+                               "required executable imports"));
     } else {
       // No required imports so a NULL provider is fine.
+      IREE_TRACE_ZONE_END(z0);
       return iree_ok_status();
     }
   }
@@ -89,6 +91,14 @@ bool iree_hal_executable_loader_query_support(
   IREE_ASSERT_ARGUMENT(executable_loader);
   return executable_loader->vtable->query_support(
       executable_loader, caching_mode, executable_format);
+}
+
+void iree_hal_executable_loader_query_spec(
+    iree_hal_executable_loader_t* executable_loader,
+    iree_hal_device_executable_spec_t* out_executable_spec) {
+  IREE_ASSERT_ARGUMENT(executable_loader);
+  IREE_ASSERT_ARGUMENT(out_executable_spec);
+  executable_loader->vtable->query_spec(executable_loader, out_executable_spec);
 }
 
 bool iree_hal_query_any_executable_loader_support(

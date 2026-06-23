@@ -8,6 +8,33 @@ include(CMakeParseArguments)
 include("${CMAKE_CURRENT_LIST_DIR}/binary.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/selectors.cmake")
 
+function(_iree_amdgpu_cts_target_deps out_var exact_target code_object_target)
+  iree_amdgpu_target_label_fragment(_TARGET_FRAGMENT "${exact_target}")
+  iree_amdgpu_target_label_fragment(
+    _CODE_OBJECT_TARGET_FRAGMENT
+    "${code_object_target}"
+  )
+  set(_TARGET_DEPS)
+  foreach(_DEP ${ARGN})
+    set(_TARGET_DEP "${_DEP}")
+    string(REPLACE "{AMDGPU_TARGET}" "${exact_target}"
+      _TARGET_DEP "${_TARGET_DEP}"
+    )
+    string(REPLACE "{AMDGPU_TARGET_FRAGMENT}" "${_TARGET_FRAGMENT}"
+      _TARGET_DEP "${_TARGET_DEP}"
+    )
+    string(REPLACE "{AMDGPU_CODE_OBJECT_TARGET}" "${code_object_target}"
+      _TARGET_DEP "${_TARGET_DEP}"
+    )
+    string(REPLACE
+      "{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}" "${_CODE_OBJECT_TARGET_FRAGMENT}"
+      _TARGET_DEP "${_TARGET_DEP}"
+    )
+    list(APPEND _TARGET_DEPS "${_TARGET_DEP}")
+  endforeach()
+  set(${out_var} "${_TARGET_DEPS}" PARENT_SCOPE)
+endfunction()
+
 # Builds and registers AMDGPU HAL CTS executable testdata.
 #
 # Parameters:
@@ -20,16 +47,22 @@ include("${CMAKE_CURRENT_LIST_DIR}/selectors.cmake")
 # BACKEND_NAME: CTS backend name. Defaults to "amdgpu".
 # SRCS: C sources. Each source basename maps to `<basename>.bin` in the CTS
 #       executable-data table of contents.
+# DEPS: Bitcode archives passed to each generated executable. Entries may use
+#       `{AMDGPU_TARGET}`, `{AMDGPU_TARGET_FRAGMENT}`,
+#       `{AMDGPU_CODE_OBJECT_TARGET}`, and
+#       `{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}` placeholders.
 # INTERNAL_HDRS: Headers that should invalidate device compilation.
 # COPTS: Additional flags to pass to clang.
 # LINKOPTS: Additional flags to pass to lld.
+# INTERNALIZE: Whether to internalize linked dependency symbols after lazy
+#              archive extraction. Defaults ON.
 # TESTONLY: Only build generated targets when tests are enabled.
 function(iree_amdgpu_hal_cts_testdata)
   cmake_parse_arguments(
     _RULE
     "TESTONLY"
-    "NAME;TARGET;FORMAT_NAME;FORMAT_STRING;IDENTIFIER;BACKEND_NAME"
-    "TARGETS;SRCS;INTERNAL_HDRS;COPTS;LINKOPTS"
+    "NAME;TARGET;FORMAT_NAME;FORMAT_STRING;IDENTIFIER;BACKEND_NAME;INTERNALIZE"
+    "TARGETS;SRCS;DEPS;INTERNAL_HDRS;COPTS;LINKOPTS"
     ${ARGN}
   )
 
@@ -65,11 +98,21 @@ function(iree_amdgpu_hal_cts_testdata)
   if(_RULE_TESTONLY)
     set(_TESTONLY_ARG TESTONLY)
   endif()
+  set(_INTERNALIZE_ARG)
+  if(DEFINED _RULE_INTERNALIZE)
+    set(_INTERNALIZE_ARG INTERNALIZE "${_RULE_INTERNALIZE}")
+  endif()
 
   set(_TARGET_LIBS)
   foreach(_EXACT_TARGET ${_EXACT_TARGETS})
     iree_amdgpu_target_label_fragment(_TARGET_FRAGMENT "${_EXACT_TARGET}")
     iree_amdgpu_target_code_object(_CODE_OBJECT_TARGET "${_EXACT_TARGET}")
+    _iree_amdgpu_cts_target_deps(
+      _TARGET_DEPS
+      "${_EXACT_TARGET}"
+      "${_CODE_OBJECT_TARGET}"
+      ${_RULE_DEPS}
+    )
     set(_TARGET_IDENTIFIER "${_RULE_IDENTIFIER}_${_TARGET_FRAGMENT}")
     set(_TARGET_SRCS)
     foreach(_SRC ${_RULE_SRCS})
@@ -87,12 +130,15 @@ function(iree_amdgpu_hal_cts_testdata)
           "${_CODE_OBJECT_TARGET}"
         SRCS
           "${_SRC}"
+        DEPS
+          ${_TARGET_DEPS}
         INTERNAL_HDRS
           ${_RULE_INTERNAL_HDRS}
         COPTS
           ${_RULE_COPTS}
         LINKOPTS
           ${_RULE_LINKOPTS}
+        ${_INTERNALIZE_ARG}
       )
       list(APPEND _TARGET_SRCS "${_BINARY_OUT}")
     endforeach()

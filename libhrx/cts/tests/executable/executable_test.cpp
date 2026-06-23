@@ -3,7 +3,6 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
-#include <cctype>
 #include <cstdint>
 #include <iterator>
 #include <string>
@@ -18,12 +17,21 @@ std::string gpu_architecture(hrx_device_t device) {
   std::array<char, 64> arch = {};
   REQUIRE_OK(hrx().device_get_property(device, HRX_DEVICE_PROPERTY_ARCHITECTURE,
                                        arch.data(), arch.size()));
-  std::string value(arch.data());
-  for (char c : value) {
-    REQUIRE((std::isalnum(static_cast<unsigned char>(c)) || c == '_'));
-  }
-  return value;
+  return std::string(arch.data());
 }
+
+std::string base_gpu_target(std::string arch) {
+  const size_t feature_pos = arch.find(':');
+  if (feature_pos != std::string::npos) {
+    arch.resize(feature_pos);
+  }
+  return arch;
+}
+
+struct HsacoImage {
+  const iree_file_toc_t* file = nullptr;
+  std::string executable_format;
+};
 
 const iree_file_toc_t* find_hsaco_for_target(const std::string& target) {
   char fragment[64] = {};
@@ -42,16 +50,19 @@ const iree_file_toc_t* find_hsaco_for_target(const std::string& target) {
   return nullptr;
 }
 
-const iree_file_toc_t* find_hsaco(const std::string& arch) {
+HsacoImage find_hsaco(const std::string& arch) {
   if (const iree_file_toc_t* file = find_hsaco_for_target(arch)) {
-    return file;
+    return HsacoImage{file, arch};
   }
   const char* code_object_target =
       iree_amdgpu_code_object_target_for_exact(arch.c_str());
   if (code_object_target && arch != code_object_target) {
-    return find_hsaco_for_target(code_object_target);
+    if (const iree_file_toc_t* file =
+            find_hsaco_for_target(code_object_target)) {
+      return HsacoImage{file, code_object_target};
+    }
   }
-  return nullptr;
+  return {};
 }
 
 }  // namespace
@@ -62,21 +73,22 @@ TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch") {
     return;
   }
 
-  std::string arch = gpu_architecture(device_);
+  std::string arch = base_gpu_target(gpu_architecture(device_));
   if (arch.empty() || arch == "unknown") {
     SUCCEED("Skipping native executable CTS: unknown GPU architecture");
     return;
   }
 
-  const iree_file_toc_t* hsaco = find_hsaco(arch);
-  if (!hsaco) {
+  HsacoImage hsaco = find_hsaco(arch);
+  if (!hsaco.file) {
     SUCCEED("Skipping native executable CTS: no build-time HSACO test asset");
     return;
   }
 
   hrx_executable_t executable = nullptr;
-  REQUIRE_OK(hrx().executable_load_data(device_, hsaco->data, hsaco->size,
-                                        nullptr, &executable));
+  REQUIRE_OK(
+      hrx().executable_load_data(device_, hsaco.file->data, hsaco.file->size,
+                                 hsaco.executable_format.c_str(), &executable));
   REQUIRE(executable != nullptr);
 
   hrx().executable_retain(executable);
@@ -102,7 +114,7 @@ TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch") {
       hrx().executable_export_info(executable, noop_ordinal, &noop_info));
   REQUIRE(noop_info.name != nullptr);
   REQUIRE(std::string(noop_info.name) == "hrx_noop");
-  REQUIRE(noop_info.constant_count == 0);
+  REQUIRE(noop_info.constant_byte_length == 0);
   REQUIRE(noop_info.binding_count == 0);
   REQUIRE(noop_info.workgroup_size[0] >= 1);
   REQUIRE(noop_info.workgroup_size[1] >= 1);
@@ -113,7 +125,7 @@ TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch") {
       hrx().executable_export_info(executable, store_ordinal, &store_info));
   REQUIRE(store_info.name != nullptr);
   REQUIRE(std::string(store_info.name) == "hrx_store_output");
-  REQUIRE(store_info.constant_count == 1);
+  REQUIRE(store_info.constant_byte_length == sizeof(uint32_t));
   REQUIRE(store_info.binding_count == 1);
   REQUIRE(store_info.workgroup_size[0] >= 1);
   REQUIRE(store_info.workgroup_size[1] >= 1);

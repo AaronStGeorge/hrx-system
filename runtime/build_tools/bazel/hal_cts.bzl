@@ -30,6 +30,7 @@ _EXECUTABLE_TEST_SUITES = [
     ("dispatch_tests", "//runtime/src/iree/hal/cts/command_buffer:all_dispatch_tests"),
     ("executable_tests", "//runtime/src/iree/hal/cts/core:all_executable_tests"),
     ("queue_dispatch_tests", "//runtime/src/iree/hal/cts/queue:queue_dispatch_test"),
+    ("sanitizer_tests", "//runtime/src/iree/hal/cts/sanitizer:all_tests"),
 ]
 
 _COMMON_DEPS = [

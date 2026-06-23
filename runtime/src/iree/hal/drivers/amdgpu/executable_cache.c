@@ -7,6 +7,7 @@
 #include "iree/hal/drivers/amdgpu/executable_cache.h"
 
 #include "iree/hal/drivers/amdgpu/executable.h"
+#include "iree/hal/drivers/amdgpu/logical_device.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 
 //===----------------------------------------------------------------------===//
@@ -24,6 +25,16 @@ typedef struct iree_hal_amdgpu_executable_cache_t {
   const iree_hal_amdgpu_libhsa_t* libhsa;
   // Borrowed topology describing the physical devices to load onto.
   const iree_hal_amdgpu_topology_t* topology;
+  // Borrowed logical-device feedback state used to publish globals.
+  iree_hal_amdgpu_feedback_state_t* feedback_state;
+  // Borrowed logical-device ASAN state used to publish executable globals.
+  iree_hal_amdgpu_asan_state_t* asan_state;
+  // Borrowed logical-device TSAN state used to publish executable globals.
+  iree_hal_amdgpu_tsan_state_t* tsan_state;
+  // Immutable logical-device queue scopes copied at cache creation.
+  iree_hal_amdgpu_queue_scope_t* queue_scopes;
+  // Number of entries in |queue_scopes|.
+  iree_host_size_t queue_scope_count;
   // Borrowed logical-device profiling metadata registry.
   iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata;
 } iree_hal_amdgpu_executable_cache_t;
@@ -40,6 +51,11 @@ iree_hal_amdgpu_executable_cache_cast(iree_hal_executable_cache_t* base_value) {
 iree_status_t iree_hal_amdgpu_executable_cache_create(
     iree_hal_device_t* device, const iree_hal_amdgpu_libhsa_t* libhsa,
     const iree_hal_amdgpu_topology_t* topology,
+    iree_hal_amdgpu_feedback_state_t* feedback_state,
+    iree_hal_amdgpu_asan_state_t* asan_state,
+    iree_hal_amdgpu_tsan_state_t* tsan_state,
+    iree_host_size_t queue_scope_count,
+    const iree_hal_amdgpu_queue_scope_t* queue_scopes,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_string_view_t identifier, iree_allocator_t host_allocator,
     iree_hal_executable_cache_t** out_executable_cache) {
@@ -55,18 +71,45 @@ iree_status_t iree_hal_amdgpu_executable_cache_create(
         z0, iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                              "topology must have at least one GPU device"));
   }
+  if (IREE_UNLIKELY(queue_scope_count != 0 && !queue_scopes)) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0,
+        iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                         "queue scopes are required when count is nonzero"));
+  }
 
   iree_hal_amdgpu_executable_cache_t* executable_cache = NULL;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_allocator_malloc(host_allocator, sizeof(*executable_cache),
                                 (void**)&executable_cache));
+  memset(executable_cache, 0, sizeof(*executable_cache));
   iree_hal_resource_initialize(&iree_hal_amdgpu_executable_cache_vtable,
                                &executable_cache->resource);
   executable_cache->host_allocator = host_allocator;
   executable_cache->device = device;
   executable_cache->libhsa = libhsa;
   executable_cache->topology = topology;
+  executable_cache->feedback_state = feedback_state;
+  executable_cache->asan_state = asan_state;
+  executable_cache->tsan_state = tsan_state;
   executable_cache->profile_metadata = profile_metadata;
+
+  iree_status_t status = iree_ok_status();
+  if (queue_scope_count != 0) {
+    status =
+        iree_allocator_malloc_array(host_allocator, queue_scope_count,
+                                    sizeof(executable_cache->queue_scopes[0]),
+                                    (void**)&executable_cache->queue_scopes);
+    if (iree_status_is_ok(status)) {
+      memcpy(executable_cache->queue_scopes, queue_scopes,
+             queue_scope_count * sizeof(executable_cache->queue_scopes[0]));
+      executable_cache->queue_scope_count = queue_scope_count;
+    }
+  }
+  if (!iree_status_is_ok(status)) {
+    iree_allocator_free(host_allocator, executable_cache);
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, status);
+  }
 
   *out_executable_cache = (iree_hal_executable_cache_t*)executable_cache;
   IREE_TRACE_ZONE_END(z0);
@@ -80,6 +123,7 @@ static void iree_hal_amdgpu_executable_cache_destroy(
   iree_allocator_t host_allocator = executable_cache->host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
 
+  iree_allocator_free(host_allocator, executable_cache->queue_scopes);
   iree_allocator_free(host_allocator, executable_cache);
 
   IREE_TRACE_ZONE_END(z0);
@@ -126,11 +170,16 @@ static iree_status_t iree_hal_amdgpu_executable_cache_prepare_executable(
     iree_hal_executable_t** out_executable) {
   iree_hal_amdgpu_executable_cache_t* executable_cache =
       iree_hal_amdgpu_executable_cache_cast(base_executable_cache);
+  uint64_t executable_id = 0;
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_allocate_executable_id(
+      executable_cache->device, &executable_id));
   return iree_hal_amdgpu_executable_create(
       executable_cache->device, executable_cache->libhsa,
-      executable_cache->topology, executable_params,
-      executable_cache->profile_metadata, executable_cache->host_allocator,
-      out_executable);
+      executable_cache->topology, executable_params, executable_id,
+      executable_cache->feedback_state, executable_cache->asan_state,
+      executable_cache->tsan_state, executable_cache->queue_scope_count,
+      executable_cache->queue_scopes, executable_cache->profile_metadata,
+      executable_cache->host_allocator, out_executable);
 }
 
 static const iree_hal_executable_cache_vtable_t

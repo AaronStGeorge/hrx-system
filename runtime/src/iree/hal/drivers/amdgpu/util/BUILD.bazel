@@ -59,6 +59,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base/internal:dynamic_library",
         "//runtime/src/iree/base/internal:path",
         "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//third_party:aqlprofile_sdk_headers",
         "//third_party:hsa_runtime_headers",
     ],
 )
@@ -134,6 +135,52 @@ iree_runtime_cc_test(
     ],
 )
 
+iree_runtime_cc_library(
+    name = "global_table",
+    srcs = ["global_table.c"],
+    hdrs = ["global_table.h"],
+    deps = [
+        ":libhsa",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu:buffer",
+        "//runtime/src/iree/hal/drivers/amdgpu:queue_affinity",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "global_table_test",
+    srcs = ["global_table_test.cc"],
+    deps = [
+        ":global_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu",
+        "//runtime/src/iree/hal/drivers/amdgpu:queue_affinity",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_benchmark(
+    name = "global_table_benchmark",
+    srcs = ["global_table_benchmark.cc"],
+    tags = [
+        "benchmark",
+    ],
+    deps = [
+        ":global_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu",
+        "//runtime/src/iree/hal/drivers/amdgpu:queue_affinity",
+        "//runtime/src/iree/testing:benchmark",
+        "//runtime/src/iree/testing:benchmark_main",
+    ],
+)
+
 iree_runtime_cc_fuzz(
     name = "hsaco_metadata_fuzz",
     srcs = ["hsaco_metadata_fuzz.cc"],
@@ -191,6 +238,7 @@ iree_runtime_cc_library(
     name = "code_object_target",
     srcs = ["code_object_target.c"],
     hdrs = ["code_object_target.h"],
+    textual_hdrs = ["//build_tools/amdgpu:elf_machine_map.inl"],
     deps = [
         ":target_id",
         "//runtime/src/iree/base",
@@ -296,6 +344,34 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "feedback_channel",
+    srcs = ["feedback_channel.c"],
+    hdrs = ["feedback_channel.h"],
+    deps = [
+        ":libhsa",
+        ":topology",
+        ":vmem",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:headers",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "shadow_map",
+    srcs = ["shadow_map.c"],
+    hdrs = ["shadow_map.h"],
+    deps = [
+        ":libhsa",
+        ":vmem",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/threading",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "block_pool",
     srcs = ["block_pool.c"],
     hdrs = ["block_pool.h"],
@@ -314,11 +390,22 @@ iree_runtime_cc_library(
     deps = [
         ":device_library_target",
         ":libhsa",
+        ":loaded_code_object",
         ":topology",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/hal/drivers/amdgpu/device:headers",
         "//runtime/src/iree/hal/drivers/amdgpu/device/binaries:toc",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "loaded_code_object",
+    srcs = ["loaded_code_object.c"],
+    hdrs = ["loaded_code_object.h"],
+    deps = [
+        ":libhsa",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -339,8 +426,11 @@ iree_runtime_cc_library(
         ":block_pool",
         ":device_library",
         ":device_library_target",
+        ":feedback_channel",
+        ":global_table",
         ":info",
         ":kfd",
+        ":loaded_code_object",
         ":packet",
         ":pm4_dispatch",
         ":pm4_program",
@@ -692,6 +782,66 @@ iree_runtime_cc_test(
         ":libhsa",
         ":topology",
         ":vmem",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "feedback_channel_test",
+    srcs = ["feedback_channel_test.cc"],
+    deps = [
+        ":feedback_channel",
+        ":libhsa",
+        ":topology",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:headers",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_amdgpu_binary_variants_embed_data(
+    name = "feedback_channel_test_kernels",
+    testonly = True,
+    srcs = ["feedback_channel_test_kernels.c"],
+    binary_name_prefix = "feedback_channel_test_kernels",
+    c_file_output = "feedback_channel_test_kernels.c.embed.c",
+    h_file_output = "feedback_channel_test_kernels.h",
+    identifier = "iree_hal_amdgpu_feedback_channel_test_kernels",
+    internal_hdrs = [
+        "//runtime/src/iree/hal/drivers/amdgpu/abi:amdgpu_abi_bitcode_hdrs",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:bitcode_hdrs",
+    ],
+    tags = ["manual"],
+    target = "amdgcn-amd-amdhsa",
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_runtime_cc_test(
+    name = "feedback_channel_live_test",
+    srcs = ["feedback_channel_live_test.cc"],
+    deps = [
+        ":feedback_channel",
+        ":feedback_channel_test_kernels",
+        ":libhsa",
+        ":packet",
+        ":queue_primitives",
+        ":target_id",
+        ":topology",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "shadow_map_test",
+    srcs = ["shadow_map_test.cc"],
+    deps = [
+        ":shadow_map",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
