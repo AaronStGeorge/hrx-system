@@ -87,6 +87,16 @@ static iree_hal_device_asan_spec_t QueryAsanSpec(iree_hal_device_t* device) {
   return sanitizer->asan;
 }
 
+static void EnableSmallAsanWindow(
+    iree_hal_amdgpu_logical_device_options_t* options) {
+  options->asan.enabled = 1;
+  options->asan.shadow_scale_shift =
+      IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT;
+  options->asan.shadow_size = (iree_device_size_t)1ull << 40;
+  options->asan.owned_application_size = (iree_device_size_t)1ull << 30;
+  options->asan.shadow_slab_size = (iree_device_size_t)2 * 1024 * 1024;
+}
+
 static iree_hal_amdgpu_shadow_map_slab_t* FindShadowMapSlab(
     iree_hal_amdgpu_shadow_map_t* shadow_map, uint64_t slab_index) {
   for (iree_host_size_t i = 0; i < shadow_map->slab_count; ++i) {
@@ -220,10 +230,10 @@ iree_hal_amdgpu_libhsa_t AllocatorTest::libhsa_;
 iree_hal_amdgpu_system_info_t AllocatorTest::system_info_;
 iree_hal_amdgpu_topology_t AllocatorTest::topology_;
 
-TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
+TEST_F(AllocatorTest, AsanStateReservesConfiguredShadowMapWhenEnabled) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -300,9 +310,8 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
 TEST_F(AllocatorTest, AsanHostLocalShadowBackingMapsPinnedHostSlabs) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
   options.asan.shadow_backing = IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL;
-  options.asan.shadow_slab_size = 2 * 1024 * 1024;
   options.asan.quarantine_size = 0;
 
   TestLogicalDevice test_device;
@@ -341,7 +350,7 @@ TEST_F(AllocatorTest,
        AsanDeviceLocalAllocationQuarantinesReleasedApplicationRange) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -374,7 +383,7 @@ TEST_F(
     AsanDeviceLocalAllocationReusesReleasedApplicationRangeWhenUnquarantined) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
   options.asan.quarantine_size = 0;
 
   TestLogicalDevice test_device;
@@ -406,7 +415,7 @@ TEST_F(
 TEST_F(AllocatorTest, AsanDiagnosticsExposeDefaultQuarantineRetention) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
   options.default_pool.range_length = 4096;
 
   TestLogicalDevice test_device;
@@ -450,7 +459,7 @@ TEST_F(AllocatorTest, AsanDiagnosticsExposeDefaultQuarantineRetention) {
 TEST_F(AllocatorTest, AsanDiagnosticsExposeZeroQuarantineRelease) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
   options.asan.quarantine_size = 0;
   options.default_pool.range_length = 4096;
 
@@ -926,7 +935,7 @@ TEST_F(AllocatorTest, DeviceAllocationImportWrapsHsaAllocation) {
 TEST_F(AllocatorTest, AsanDeviceAllocationImportPublishesShadow) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
 
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.InitializeWithOptions(
@@ -1012,7 +1021,7 @@ TEST_F(AllocatorTest, AsanDeviceAllocationImportPublishesShadow) {
 TEST_F(AllocatorTest, AsanHostLocalDeviceVisibleAllocationPublishesShadow) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
   options.asan.quarantine_size = 0;
 
   TestLogicalDevice test_device;
@@ -1087,10 +1096,9 @@ TEST_F(AllocatorTest, AsanHostLocalDeviceVisibleAllocationPublishesShadow) {
 TEST_F(AllocatorTest, AsanPremappedShadowModeCoversUnpublishedAddresses) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
-  options.asan.enabled = 1;
+  EnableSmallAsanWindow(&options);
   options.asan.shadow_mode = IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED;
-  options.asan.shadow_scale_shift = IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT;
-  options.asan.shadow_size = (iree_device_size_t)1ull << 40;
+  options.asan.shadow_slab_size = IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE;
   options.asan.quarantine_size = 0;
 
   TestLogicalDevice test_device;
