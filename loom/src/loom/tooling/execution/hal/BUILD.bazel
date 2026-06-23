@@ -38,6 +38,7 @@ loom_cc_library(
     srcs = ["runtime.c"],
     hdrs = ["runtime.h"],
     deps = [
+        "//loom/src/loom/sanitizer:options",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",

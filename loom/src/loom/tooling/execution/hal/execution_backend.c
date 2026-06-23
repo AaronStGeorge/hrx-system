@@ -124,6 +124,9 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
   loom_run_hal_runtime_options_t runtime_options;
   loom_run_hal_runtime_options_initialize(artifact_provider->hal_driver_name,
                                           &runtime_options);
+  runtime_options.runtime_features |=
+      loom_run_hal_runtime_features_from_sanitizer_options(
+          &request->compile_options->target_pipeline_options.sanitizer);
   iree_status_t status = loom_run_hal_runtime_initialize(
       &runtime_options, request->host_allocator, &runtime);
   if (iree_status_is_ok(status)) {

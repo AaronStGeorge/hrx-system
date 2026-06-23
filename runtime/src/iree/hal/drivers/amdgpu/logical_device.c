@@ -213,31 +213,33 @@ IREE_API_EXPORT iree_status_t iree_hal_amdgpu_logical_device_options_parse(
   for (iree_host_size_t i = 0; i < params.count && iree_status_is_ok(status);
        ++i) {
     const iree_string_pair_t* param = &params.pairs[i];
-    if (iree_string_view_equal(param->key, IREE_SV("hal.sanitizer"))) {
-      if (iree_string_view_equal(param->value, IREE_SV("asan"))) {
-        options->asan.enabled = 1;
-      } else if (iree_string_view_equal(param->value, IREE_SV("tsan"))) {
-        options->tsan.enabled = 1;
-      } else if (iree_string_view_equal(param->value, IREE_SV("none"))) {
-        options->asan.enabled = 0;
-        options->tsan.enabled = 0;
-      } else {
-        status = iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "unsupported AMDGPU logical device hal.sanitizer value '%.*s'",
-            (int)param->value.size, param->value.data);
-      }
-    } else {
-      status = iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU logical device options do not support key/value parameter "
-          "'%.*s'",
-          (int)param->key.size, param->key.data);
-    }
+    status = iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU logical device options do not support key/value parameter "
+        "'%.*s'",
+        (int)param->key.size, param->key.data);
   }
 
   IREE_TRACE_ZONE_END(z0);
   return status;
+}
+
+static void iree_hal_amdgpu_logical_device_options_apply_runtime_features(
+    iree_hal_amdgpu_logical_device_options_t* options,
+    iree_hal_device_runtime_feature_flags_t runtime_features) {
+  options->feedback.enabled |= iree_any_bit_set(
+      runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK);
+  options->asan.enabled |= iree_any_bit_set(
+      runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN);
+  options->tsan.enabled |= iree_any_bit_set(
+      runtime_features, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN);
+}
+
+static void iree_hal_amdgpu_logical_device_options_apply_create_params(
+    iree_hal_amdgpu_logical_device_options_t* options,
+    const iree_hal_device_create_params_t* create_params) {
+  iree_hal_amdgpu_logical_device_options_apply_runtime_features(
+      options, create_params->runtime_features);
 }
 
 iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
@@ -1906,6 +1908,10 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
       z0, iree_hal_device_create_params_verify(create_params),
       "verifying device creation parameters");
 
+  iree_hal_amdgpu_logical_device_options_t resolved_options = *options;
+  iree_hal_amdgpu_logical_device_options_apply_create_params(&resolved_options,
+                                                             create_params);
+
   // Verify the topology is valid for a logical device.
   // This may have already been performed by the caller but doing it here
   // ensures all code paths must verify prior to creating a device.
@@ -1916,12 +1922,13 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
   // Verify the parameters prior to creating resources.
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0,
-      iree_hal_amdgpu_logical_device_options_verify(options, libhsa, topology),
+      iree_hal_amdgpu_logical_device_options_verify(&resolved_options, libhsa,
+                                                    topology),
       "verifying logical device options");
 
   iree_hal_amdgpu_physical_device_options_t physical_device_options = {0};
   iree_hal_amdgpu_logical_device_translate_physical_options(
-      options, topology, &physical_device_options);
+      &resolved_options, topology, &physical_device_options);
 
   // Verify all GPU agents meet the required physical device options. Each
   // embedded physical device has the same layout because all physical devices
@@ -1942,15 +1949,15 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
               &logical_device));
   iree_status_t status =
       iree_hal_amdgpu_logical_device_initialize_host_resources(
-          logical_device, options, create_params, host_allocator);
-  logical_device->command_buffer_mode = options->command_buffer_mode;
+          logical_device, &resolved_options, create_params, host_allocator);
+  logical_device->command_buffer_mode = resolved_options.command_buffer_mode;
   logical_device->pm4_command_buffer_publication_mode =
-      options->pm4_command_buffer_publication_mode;
+      resolved_options.pm4_command_buffer_publication_mode;
   logical_device->suppress_device_fine_memory =
-      options->suppress_device_fine_memory;
+      resolved_options.suppress_device_fine_memory;
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_logical_device_initialize_system_and_allocator(
-        logical_device, options, libhsa, topology, host_allocator);
+        logical_device, &resolved_options, libhsa, topology, host_allocator);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_logical_device_initialize_physical_devices(
@@ -1962,29 +1969,30 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_feedback_state_initialize(
-        options, logical_device->system, logical_device->physical_device_count,
-        logical_device->physical_devices, (iree_hal_device_t*)logical_device,
-        logical_device->identifier, logical_device->event_sink,
+        &resolved_options, logical_device->system,
+        logical_device->physical_device_count, logical_device->physical_devices,
+        (iree_hal_device_t*)logical_device, logical_device->identifier,
+        logical_device->event_sink,
         iree_hal_amdgpu_logical_device_error_handler, logical_device,
         host_allocator, &logical_device->feedback);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_asan_state_initialize(
-        options, logical_device->system, logical_device->physical_device_count,
-        logical_device->physical_devices, host_allocator,
-        &logical_device->asan);
+        &resolved_options, logical_device->system,
+        logical_device->physical_device_count, logical_device->physical_devices,
+        host_allocator, &logical_device->asan);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_tsan_state_initialize(
-        options, logical_device->system, logical_device->physical_device_count,
-        logical_device->physical_devices, host_allocator,
-        &logical_device->tsan);
+        &resolved_options, logical_device->system,
+        logical_device->physical_device_count, logical_device->physical_devices,
+        host_allocator, &logical_device->tsan);
   }
 
   // If requested then warmup pools that we expect to grow on the first usage of
   // the backend. The first use may need more than the warmup provides here but
   // that's ok - users can warmup if they want.
-  if (iree_status_is_ok(status) && options->preallocate_pools) {
+  if (iree_status_is_ok(status) && resolved_options.preallocate_pools) {
     status = iree_hal_amdgpu_logical_device_warmup_host_pools(logical_device);
   }
 

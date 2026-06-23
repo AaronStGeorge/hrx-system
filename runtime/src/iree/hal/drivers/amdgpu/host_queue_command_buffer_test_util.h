@@ -45,9 +45,22 @@ class TestLogicalDevice {
       const iree_hal_amdgpu_libhsa_t* libhsa,
       const iree_hal_amdgpu_topology_t* topology,
       iree_allocator_t host_allocator) {
+    return InitializeWithRuntimeFeatures(
+        options, libhsa, topology, IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE,
+        host_allocator);
+  }
+
+  iree_status_t InitializeWithRuntimeFeatures(
+      const iree_hal_amdgpu_logical_device_options_t* options,
+      const iree_hal_amdgpu_libhsa_t* libhsa,
+      const iree_hal_amdgpu_topology_t* topology,
+      iree_hal_device_runtime_feature_flags_t runtime_features,
+      iree_allocator_t host_allocator) {
     IREE_RETURN_IF_ERROR(create_context_.Initialize(host_allocator));
+    iree_hal_device_create_params_t create_params = *create_context_.params();
+    create_params.runtime_features = runtime_features;
     IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_create(
-        IREE_SV("amdgpu"), options, libhsa, topology, create_context_.params(),
+        IREE_SV("amdgpu"), options, libhsa, topology, &create_params,
         host_allocator, &base_device_));
     return iree_hal_device_group_create_from_device(
         base_device_, create_context_.frontier_tracker(), host_allocator,

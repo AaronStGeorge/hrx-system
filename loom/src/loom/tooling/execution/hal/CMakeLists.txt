@@ -43,6 +43,7 @@ loom_cc_library(
     iree::base::threading
     iree::hal
     iree::tooling::device_util
+    loom::sanitizer::options
   PUBLIC
 )
 

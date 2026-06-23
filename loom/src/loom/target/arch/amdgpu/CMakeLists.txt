@@ -326,6 +326,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::base::threading
     iree::hal
+    iree::hal::drivers::amdgpu
     iree::hal::drivers::amdgpu::abi
     iree::hal::drivers::amdgpu::buffer
     iree::hal::drivers::amdgpu::registration

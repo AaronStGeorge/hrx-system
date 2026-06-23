@@ -42,10 +42,14 @@ typedef struct loom_run_hal_testbench_context_t {
   iree_allocator_t host_allocator;
   // Device event sink used when initializing |runtime|.
   iree_hal_device_event_sink_t device_event_sink;
+  // Sanitizer options used when deriving HAL runtime requirements.
+  loom_sanitizer_options_t runtime_sanitizer_options;
   // Selected HAL artifact provider for the active device.
   const loom_run_hal_artifact_provider_t* artifact_provider;
   // Shared HAL runtime used by actual invocations.
   loom_run_hal_runtime_t runtime;
+  // True when |runtime_sanitizer_options| has been set by the tool.
+  bool has_runtime_sanitizer_options;
   // True when |runtime| owns initialized HAL state.
   bool runtime_initialized;
 } loom_run_hal_testbench_context_t;
@@ -60,6 +64,11 @@ void loom_run_hal_testbench_context_initialize(
 void loom_run_hal_testbench_context_set_device_event_sink(
     loom_run_hal_testbench_context_t* context,
     iree_hal_device_event_sink_t device_event_sink);
+
+// Sets the structured sanitizer policy used by future HAL runtime creation.
+void loom_run_hal_testbench_context_set_runtime_sanitizer_options(
+    loom_run_hal_testbench_context_t* context,
+    const loom_sanitizer_options_t* sanitizer_options);
 
 // Releases HAL runtime resources owned by |context|.
 void loom_run_hal_testbench_context_deinitialize(

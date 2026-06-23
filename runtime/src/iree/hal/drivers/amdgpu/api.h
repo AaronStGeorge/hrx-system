@@ -240,6 +240,12 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
     uint32_t upload_capacity;
   } host_queues;
 
+  // Optional device-side feedback channel support.
+  struct {
+    // True to reserve feedback channel state for the logical device.
+    uint64_t enabled : 1;
+  } feedback;
+
   // Optional ASAN device-side checking support.
   struct {
     // True to reserve ASAN shadow state for the logical device.

@@ -21,6 +21,27 @@ void loom_run_hal_runtime_options_initialize(
   };
 }
 
+iree_hal_device_runtime_feature_flags_t
+loom_run_hal_runtime_features_from_sanitizer_options(
+    const loom_sanitizer_options_t* sanitizer_options) {
+  if (!loom_sanitizer_options_is_enabled(sanitizer_options)) {
+    return IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE;
+  }
+
+  iree_hal_device_runtime_feature_flags_t runtime_features =
+      sanitizer_options->reporting_mode == LOOM_SANITIZER_REPORTING_MODE_TRAP
+          ? IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_NONE
+          : IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK;
+  if (iree_any_bit_set(sanitizer_options->checks,
+                       LOOM_SANITIZER_CHECK_ACCESS)) {
+    runtime_features |= IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN;
+  }
+  if (iree_any_bit_set(sanitizer_options->checks, LOOM_SANITIZER_CHECK_RACE)) {
+    runtime_features |= IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN;
+  }
+  return runtime_features;
+}
+
 iree_status_t loom_run_hal_runtime_initialize(
     const loom_run_hal_runtime_options_t* options, iree_allocator_t allocator,
     loom_run_hal_runtime_t* out_runtime) {
@@ -41,6 +62,7 @@ iree_status_t loom_run_hal_runtime_initialize(
         iree_hal_device_create_params_default();
     create_params.proactor_pool = proactor_pool;
     create_params.event_sink = options->event_sink;
+    create_params.runtime_features = options->runtime_features;
     status = iree_hal_create_device_from_flags(
         iree_hal_available_driver_registry(), options->hal_driver_name,
         &create_params, allocator, &out_runtime->device);

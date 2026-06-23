@@ -38,7 +38,7 @@ class TsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
     executable_params.executable_format =
         iree_make_cstring_view(GetParam().executable_format);
     executable_params.executable_data = GetParam().executable_data(
-        iree_make_cstring_view("executable_test.bin"));
+        iree_make_cstring_view("tsan_executable_test.bin"));
     status = iree_hal_executable_cache_prepare_executable(
         executable_cache_, &executable_params, executable_.out());
     if (iree_status_is_incompatible(status)) {

@@ -650,7 +650,10 @@ iree_status_t iree_hal_amdgpu_feedback_state_initialize(
   IREE_ASSERT_ARGUMENT(out_state);
   memset(out_state, 0, sizeof(*out_state));
 
-  if (!options->asan.enabled && !options->tsan.enabled) return iree_ok_status();
+  if (!options->feedback.enabled && !options->asan.enabled &&
+      !options->tsan.enabled) {
+    return iree_ok_status();
+  }
   if (IREE_UNLIKELY(physical_device_count == 0 || !physical_devices)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,

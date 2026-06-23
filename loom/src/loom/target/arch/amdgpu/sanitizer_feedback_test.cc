@@ -589,6 +589,17 @@ class AmdgpuAsanHalRuntime {
 
   iree_status_t Initialize(iree_string_view_t sanitizer,
                            iree_hal_device_event_sink_t event_sink) {
+    iree_hal_device_runtime_feature_flags_t runtime_features =
+        IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_FEEDBACK;
+    if (iree_string_view_equal(sanitizer, IREE_SV("asan"))) {
+      runtime_features |= IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_ASAN;
+    } else if (iree_string_view_equal(sanitizer, IREE_SV("tsan"))) {
+      runtime_features |= IREE_HAL_DEVICE_RUNTIME_FEATURE_FLAG_TSAN;
+    } else {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported sanitizer test runtime");
+    }
+
     iree_async_proactor_pool_t* proactor_pool = nullptr;
     iree_async_frontier_tracker_t* frontier_tracker = nullptr;
 
@@ -621,14 +632,11 @@ class AmdgpuAsanHalRuntime {
         iree_hal_device_create_params_default();
     create_params.event_sink = event_sink;
     create_params.proactor_pool = proactor_pool;
-    iree_string_pair_t device_parameters[1] = {
-        iree_make_string_pair(IREE_SV("hal.sanitizer"), sanitizer),
-    };
+    create_params.runtime_features = runtime_features;
     if (iree_status_is_ok(status)) {
       status = iree_hal_driver_create_device_by_ordinal(
-          driver_, /*device_ordinal=*/0, IREE_ARRAYSIZE(device_parameters),
-          device_parameters, &create_params, iree_allocator_system(),
-          &runtime_.device);
+          driver_, /*device_ordinal=*/0, /*param_count=*/0, /*params=*/nullptr,
+          &create_params, iree_allocator_system(), &runtime_.device);
     }
     iree_async_proactor_pool_release(proactor_pool);
 
