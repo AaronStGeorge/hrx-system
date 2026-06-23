@@ -284,6 +284,21 @@ class CiTest(unittest.TestCase):
                 for line in command_lines
             )
         )
+        tsan_test_step = next(
+            step for step in steps if step.name == "Test IREE with TSAN"
+        )
+        tsan_test_env = [
+            arg for arg in tsan_test_step.argv if arg.startswith("--test_env=")
+        ]
+        self.assertEqual(len(tsan_test_env), 1)
+        self.assertTrue(
+            tsan_test_env[0].startswith("--test_env=TSAN_OPTIONS=suppressions=")
+        )
+        tsan_suppression_path = Path(
+            tsan_test_env[0].removeprefix("--test_env=TSAN_OPTIONS=suppressions=")
+        )
+        self.assertTrue(tsan_suppression_path.is_absolute())
+        self.assertTrue(tsan_suppression_path.is_file())
         self.assertTrue(
             any(
                 step.argv[:7]
@@ -464,6 +479,17 @@ class CiTest(unittest.TestCase):
                 + ci_config.RUNTIME_AMDGPU_RESOURCE_TAG
                 in line
                 for line in command_lines
+            )
+        )
+        tsan_resource_test = next(
+            step
+            for step in steps
+            if step.name == "Test IREE AMDGPU runtime resources and TSAN"
+        )
+        self.assertTrue(
+            any(
+                arg.startswith("--test_env=TSAN_OPTIONS=suppressions=")
+                for arg in tsan_resource_test.argv
             )
         )
         self.assertFalse(

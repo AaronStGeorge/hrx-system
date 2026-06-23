@@ -202,13 +202,13 @@ def bazel_test_step(
         options.append(f"--config={config}")
     if test_tag_filters:
         options.append("--test_tag_filters=" + ",".join(test_tag_filters))
-    for key, value in test_env:
+    for key, value in sanitizer_env(config) + test_env:
         options.append(f"--test_env={key}={value}")
     command = ["bazel", "test", *options]
     if any(target.startswith("-") for target in targets):
         command.append("--")
     command.extend(targets)
-    return CiStep(name, dev_command(*command), env=sanitizer_env(config))
+    return CiStep(name, dev_command(*command))
 
 
 def cmake_configure_step(
