@@ -11,6 +11,7 @@ import io
 import re
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from build_tools.devtools import ci, ci_config
 
@@ -90,7 +91,10 @@ class CiTest(unittest.TestCase):
         )
 
         output = io.StringIO()
-        with contextlib.redirect_stdout(output):
+        with (
+            mock.patch.dict(ci.os.environ, {}, clear=True),
+            contextlib.redirect_stdout(output),
+        ):
             self.assertEqual(
                 ci.run_steps(
                     ci.steps_from_args(args),
@@ -106,6 +110,57 @@ class CiTest(unittest.TestCase):
         self.assertIn("-DIREE_ROCM_DEPENDENCY_MODE=pinned", text)
         self.assertNotIn("IREE_ROCM_PATH", text)
         self.assertNotIn("/opt/rocm", text)
+
+    def test_amdgpu_bazel_tests_pin_libhsa_from_rocm_root(self):
+        args = ci.parse_arguments(
+            [
+                "iree-bazel-amdgpu",
+                "--target",
+                "//runtime/...",
+            ]
+        )
+
+        with mock.patch.dict(
+            ci.os.environ,
+            {"HRX_ROCM_ROOT": "/tmp/rocm-root"},
+            clear=True,
+        ):
+            steps = ci.steps_from_args(args)
+
+        runtime_resource_test = next(
+            step for step in steps if step.name == "Test IREE AMDGPU runtime resources"
+        )
+        self.assertIn(
+            "--test_env=IREE_HAL_AMDGPU_LIBHSA_PATH=/tmp/rocm-root/lib/libhsa-runtime64.so.1",
+            runtime_resource_test.argv,
+        )
+
+    def test_amdgpu_bazel_tests_use_explicit_libhsa_override(self):
+        args = ci.parse_arguments(
+            [
+                "iree-bazel-amdgpu",
+                "--target",
+                "//runtime/...",
+            ]
+        )
+
+        with mock.patch.dict(
+            ci.os.environ,
+            {
+                "HRX_ROCM_ROOT": "/tmp/rocm-root",
+                "IREE_HAL_AMDGPU_LIBHSA_PATH": "/tmp/custom/libhsa-runtime64.so.1",
+            },
+            clear=True,
+        ):
+            steps = ci.steps_from_args(args)
+
+        runtime_resource_test = next(
+            step for step in steps if step.name == "Test IREE AMDGPU runtime resources"
+        )
+        self.assertIn(
+            "--test_env=IREE_HAL_AMDGPU_LIBHSA_PATH=/tmp/custom/libhsa-runtime64.so.1",
+            runtime_resource_test.argv,
+        )
 
     def test_amdgpu_loom_target_scope_omits_resource_tests(self):
         args = ci.parse_arguments(

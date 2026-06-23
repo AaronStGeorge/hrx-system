@@ -41,5 +41,7 @@ export_env "CC" "${HRX_ROCM_ROOT}/lib/llvm/bin/clang"
 export_env "CXX" "${HRX_ROCM_ROOT}/lib/llvm/bin/clang++"
 export_env "CMAKE_PREFIX_PATH" \
   "${HRX_ROCM_ROOT}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}"
+export_env "IREE_HAL_AMDGPU_LIBHSA_PATH" \
+  "${HRX_ROCM_ROOT}/lib/libhsa-runtime64.so.1"
 export_env "LD_LIBRARY_PATH" \
   "${HRX_ROCM_ROOT}/lib:${HRX_ROCM_ROOT}/lib/rocm_sysdeps/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"

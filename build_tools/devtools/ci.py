@@ -129,6 +129,16 @@ def sanitizer_env(config: str | None) -> tuple[tuple[str, str], ...]:
     return (("TSAN_OPTIONS", f"suppressions={TSAN_SUPPRESSIONS_FILE}"),)
 
 
+def amdgpu_libhsa_test_env() -> tuple[tuple[str, str], ...]:
+    libhsa_path = os.environ.get("IREE_HAL_AMDGPU_LIBHSA_PATH")
+    if not libhsa_path:
+        rocm_root = os.environ.get("HRX_ROCM_ROOT")
+        if not rocm_root:
+            return ()
+        libhsa_path = str(Path(rocm_root) / "lib" / "libhsa-runtime64.so.1")
+    return (("IREE_HAL_AMDGPU_LIBHSA_PATH", libhsa_path),)
+
+
 def cmake_tests_enabled(sanitizer: str | None) -> bool:
     if sanitizer is None:
         return True
@@ -185,12 +195,15 @@ def bazel_test_step(
     targets: tuple[str, ...],
     config: str | None = None,
     test_tag_filters: tuple[str, ...] = (),
+    test_env: tuple[tuple[str, str], ...] = (),
 ) -> CiStep:
     options = []
     if config is not None:
         options.append(f"--config={config}")
     if test_tag_filters:
         options.append("--test_tag_filters=" + ",".join(test_tag_filters))
+    for key, value in test_env:
+        options.append(f"--test_env={key}={value}")
     command = ["bazel", "test", *options]
     if any(target.startswith("-") for target in targets):
         command.append("--")
@@ -349,6 +362,7 @@ def amdgpu_test_steps(
                 slice_targets,
                 config=config,
                 test_tag_filters=(resource_tag,),
+                test_env=amdgpu_libhsa_test_env(),
             )
         )
     return steps
