@@ -278,6 +278,11 @@ typedef struct iree_hal_amdgpu_notification_ring_t {
     // releasing reclaim entries; the submission path acquires this in reserve()
     // to avoid reusing a still-live reclaim slot for a zero-signal epoch.
     iree_atomic_int64_t last_drained;
+    // Last epoch whose host-owned notification/reclaim metadata is fully
+    // initialized. The submission path stores with release before publishing
+    // the completion-producing AQL packet; drain acquires this before reading
+    // per-epoch reclaim entries.
+    iree_atomic_int64_t last_published;
   } epoch;
 
   // Hot entry ring (32 bytes per entry, cache-friendly for drain scan).
@@ -359,6 +364,15 @@ hsa_signal_t iree_hal_amdgpu_notification_ring_epoch_signal(
 // fires once at least one completion has been observed.
 uint64_t iree_hal_amdgpu_notification_ring_advance_epoch(
     iree_hal_amdgpu_notification_ring_t* ring);
+
+// Publishes host-owned metadata for |epoch| to the completion drain.
+//
+// Must be called after the submission path has initialized the epoch's reclaim
+// entry and notification entries and before it commits any AQL packet that can
+// complete the epoch. This gives the host completion thread an explicit
+// acquire/release edge for metadata that is not otherwise visible to the GPU.
+void iree_hal_amdgpu_notification_ring_publish_epoch(
+    iree_hal_amdgpu_notification_ring_t* ring, uint64_t epoch);
 
 // Verifies that the ring has enough space for |entry_count| notification
 // entries and up to |frontier_snapshot_count| max-size frontier snapshots.

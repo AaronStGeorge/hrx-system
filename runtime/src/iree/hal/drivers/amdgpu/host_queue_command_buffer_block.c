@@ -722,6 +722,8 @@ static uint64_t iree_hal_amdgpu_host_queue_finish_command_buffer_block(
     iree_hal_amdgpu_host_queue_publish_profile_host_writes(queue);
   }
   iree_hal_amdgpu_host_queue_publish_submission_kernargs(queue, submission);
+  iree_hal_amdgpu_notification_ring_publish_epoch(&queue->notification_ring,
+                                                  submission_epoch);
   if (queue_device_event) {
     const uint64_t start_packet_id =
         submission->first_packet_id + resolution->barrier_count;

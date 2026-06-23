@@ -930,6 +930,8 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_indirect_dispatch(
     iree_hal_amdgpu_host_queue_publish_profile_host_writes(queue);
   }
   iree_hal_amdgpu_host_queue_publish_submission_kernargs(queue, &submission);
+  iree_hal_amdgpu_notification_ring_publish_epoch(&queue->notification_ring,
+                                                  submission_epoch);
   if (queue_device_event) {
     iree_hal_amdgpu_host_queue_commit_queue_device_start_packet(
         queue, resolution,
