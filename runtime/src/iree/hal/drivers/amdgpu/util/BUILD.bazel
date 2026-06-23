@@ -554,6 +554,19 @@ iree_runtime_cc_test(
 )
 
 iree_runtime_cc_test(
+    name = "aql_ring_test",
+    srcs = ["aql_ring_test.cc"],
+    deps = [
+        ":libhsa",
+        ":queue_primitives",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "queue_upload_ring_test",
     srcs = ["queue_upload_ring_test.cc"],
     deps = [
