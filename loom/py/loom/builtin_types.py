@@ -104,6 +104,7 @@ vector_type = TypeDef(
     name="vector",
     doc="Register lane-grid SSA value with static/dynamic lane dimensions.",
     ir_kind="vector",
+    fact_domain="loom_vector_fact_domain",
     params=[
         ShapeParam("dims"),
         ScalarParam("element_type"),
