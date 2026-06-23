@@ -90,7 +90,7 @@ jobs:
       ctest_exclude_regex: ${{ matrix.ctest_exclude_regex }}
       ctest_label_exclude_regex: "runtime-resource=|manual"
       cmake_options: |
-        -DIREE_HAL_AMDGPU_TARGETS=gfx942;gfx1151;gfx1201
+        -DIREE_HAL_AMDGPU_TARGETS=gfx942;gfx1100;gfx1201
       package: ${{ matrix.package }}
 
   gpu_linux:
@@ -104,6 +104,11 @@ jobs:
           - name: Linux / CMake / GPU gfx942
             chip: gfx942
             runner_label: linux-gfx942-1gpu-core42-ossci-rocm
+            ctest_exclude_regex: ""
+            experimental: false
+          - name: Linux / CMake / GPU gfx1100
+            chip: gfx1100
+            runner_label: linux-gfx110X-gpu-rocm
             ctest_exclude_regex: ""
             experimental: false
           - name: Linux / CMake / GPU gfx1201

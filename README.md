@@ -54,7 +54,7 @@ python dev.py cmake configure \
   -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=lld" \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DIREE_HAL_DRIVER_AMDGPU=ON \
-  -DIREE_HAL_AMDGPU_TARGETS='gfx942;gfx1151;gfx1201'
+  -DIREE_HAL_AMDGPU_TARGETS='gfx942;gfx1100;gfx1151;gfx1201'
 
 python dev.py cmake build
 cmake --install build/cmake --prefix build/hrx-install \
@@ -81,7 +81,7 @@ cmake -S . -B build/hrx-system -GNinja \
   -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=lld" \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DIREE_HAL_DRIVER_AMDGPU=ON \
-  -DIREE_HAL_AMDGPU_TARGETS='gfx942;gfx1151;gfx1201'
+  -DIREE_HAL_AMDGPU_TARGETS='gfx942;gfx1100;gfx1151;gfx1201'
 
 cmake --build build/hrx-system
 cmake --install build/hrx-system --prefix build/hrx-install \
