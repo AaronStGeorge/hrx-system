@@ -2034,14 +2034,21 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_failure_mask(
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_mask_binary(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B64, failure_mask,
       different_workitem, &failure_mask));
+  loom_value_id_t raw_failure_mask = LOOM_VALUE_ID_INVALID;
   if (conflict_kind == LOOM_VALUE_ID_INVALID) {
-    *out_failure_mask = failure_mask;
+    raw_failure_mask = failure_mask;
   } else {
     IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_mask_binary(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B64, failure_mask,
-        conflict_kind, out_failure_mask));
+        conflict_kind, &raw_failure_mask));
   }
-  return iree_ok_status();
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
+      loom_low_lower_context_bundle(context), &wavefront_size));
+  return loom_amdgpu_build_feedback_canonical_exec_mask(
+      loom_low_lower_context_builder(context),
+      loom_low_lower_context_descriptor_set(context), raw_failure_mask,
+      wavefront_size, source_op->location, out_failure_mask);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_race_build_report(
