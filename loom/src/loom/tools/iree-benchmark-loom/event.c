@@ -290,6 +290,32 @@ iree_status_t iree_benchmark_loom_event_sink_emit_failure(
             });
 }
 
+iree_status_t iree_benchmark_loom_event_sink_emit_planning_failure(
+    const iree_benchmark_loom_event_sink_t* sink,
+    const iree_benchmark_loom_run_identity_t* run, iree_string_view_t stage,
+    iree_string_view_t kind, iree_string_view_t message,
+    const loom_testbench_module_plan_t* testbench_plan,
+    const loom_testbench_issue_t* planning_issues,
+    iree_host_size_t planning_issue_count) {
+  IREE_ASSERT_ARGUMENT(run);
+  IREE_ASSERT_ARGUMENT(testbench_plan);
+  IREE_ASSERT_ARGUMENT(planning_issues);
+  return iree_benchmark_loom_event_sink_emit(
+      sink, &(iree_benchmark_loom_event_t){
+                .kind = IREE_BENCHMARK_LOOM_EVENT_FAILURE,
+                .failure =
+                    {
+                        .run = run,
+                        .stage = stage,
+                        .kind = kind,
+                        .message = message,
+                        .testbench_plan = testbench_plan,
+                        .planning_issues = planning_issues,
+                        .planning_issue_count = planning_issue_count,
+                    },
+            });
+}
+
 iree_status_t iree_benchmark_loom_event_sink_emit_benchmark_repetition(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
@@ -436,6 +462,8 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
           iree_benchmark_loom_append_failure_row(
               event->failure.run, event->failure.stage, event->failure.kind,
               event->failure.message, event->failure.diagnostics,
+              event->failure.testbench_plan, event->failure.planning_issues,
+              event->failure.planning_issue_count,
               iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
     case IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_REPETITION:
       return iree_benchmark_loom_jsonl_sink_end(

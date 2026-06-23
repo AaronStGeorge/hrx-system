@@ -720,9 +720,11 @@ static loomc_status_t loomc_module_serialize_bytecode_to_source(
   loomc_module_byte_buffer_stream_t* stream = NULL;
   loomc_status_t status =
       loomc_module_byte_buffer_stream_create(allocator, &stream);
+  iree_io_stream_t* base_stream = NULL;
   if (loomc_status_is_ok(status)) {
-    status = loomc_module_serialize_bytecode_to_stream(
-        internal_module, &stream->base, allocator);
+    base_stream = &stream->base;
+    status = loomc_module_serialize_bytecode_to_stream(internal_module,
+                                                       base_stream, allocator);
   }
 
   uint8_t* storage = NULL;
@@ -739,9 +741,7 @@ static loomc_status_t loomc_module_serialize_bytecode_to_source(
   if (!loomc_status_is_ok(status)) {
     loomc_allocator_free(allocator, storage);
   }
-  if (stream != NULL) {
-    iree_io_stream_release(&stream->base);
-  }
+  iree_io_stream_release(base_stream);
   return status;
 }
 
@@ -1250,8 +1250,6 @@ loomc_status_t loomc_module_serialize_to_path(
                                                          stream, allocator);
     }
   }
-  if (stream != NULL) {
-    iree_io_stream_release(stream);
-  }
+  iree_io_stream_release(stream);
   return status;
 }

@@ -195,6 +195,13 @@ iree_status_t iree_benchmark_loom_write_diagnostic_capture_fields_json(
     const iree_benchmark_loom_diagnostic_capture_t* diagnostics,
     loom_output_stream_t* stream, bool* first_field);
 
+// Writes testbench planning issue fields into an open JSON object.
+iree_status_t iree_benchmark_loom_write_planning_issue_fields_json(
+    const loom_testbench_module_plan_t* testbench_plan,
+    const loom_testbench_issue_t* planning_issues,
+    iree_host_size_t planning_issue_count, loom_output_stream_t* stream,
+    bool* first_field);
+
 // Returns the number of physical dispatches recorded in one measured HAL batch.
 iree_status_t iree_benchmark_loom_hal_physical_dispatches_per_batch(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
@@ -337,6 +344,9 @@ iree_status_t iree_benchmark_loom_append_failure_row(
     const iree_benchmark_loom_run_identity_t* run, iree_string_view_t stage,
     iree_string_view_t kind, iree_string_view_t message,
     const iree_benchmark_loom_diagnostic_capture_t* diagnostics,
+    const loom_testbench_module_plan_t* testbench_plan,
+    const loom_testbench_issue_t* planning_issues,
+    iree_host_size_t planning_issue_count,
     iree_string_builder_t* failure_output);
 
 // Appends the final summary row.

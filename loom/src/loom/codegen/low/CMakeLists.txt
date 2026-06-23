@@ -195,17 +195,33 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    storage_relation
+  HDRS
+    "storage_relation.h"
+  SRCS
+    "storage_relation.c"
+  DEPS
+    iree::base
+    loom::ir
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::registers
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     placement
   HDRS
     "placement.h"
   SRCS
     "placement.c"
   DEPS
+    ::storage_relation
     iree::base
     iree::base::internal::arena
     loom::analysis::liveness
     loom::ir
-    loom::ops::low
   PUBLIC
 )
 
@@ -568,6 +584,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir
     loom::ops::buffer
+    loom::ops::cfg
     loom::ops::encoding
     loom::ops::index
     loom::ops::kernel

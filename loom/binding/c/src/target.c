@@ -205,7 +205,7 @@ static loomc_status_t loomc_target_pass_environment_initialize(
   return loomc_ok_status();
 }
 
-static loomc_status_t loomc_target_selection_allocate(
+static loomc_status_t loomc_target_selection_create(
     loomc_allocator_t allocator,
     loomc_target_selection_t** out_target_selection) {
   *out_target_selection = NULL;
@@ -568,7 +568,7 @@ loomc_status_t loomc_target_selection_create_empty(
   }
   loomc_target_selection_t* target_selection = NULL;
   LOOMC_RETURN_IF_ERROR(
-      loomc_target_selection_allocate(allocator, &target_selection));
+      loomc_target_selection_create(allocator, &target_selection));
   target_selection->selection = loom_target_selection_empty();
   *out_target_selection = target_selection;
   return loomc_ok_status();
@@ -588,7 +588,7 @@ loomc_status_t loomc_target_selection_create_from_profile(
   }
   loomc_target_selection_t* target_selection = NULL;
   LOOMC_RETURN_IF_ERROR(
-      loomc_target_selection_allocate(allocator, &target_selection));
+      loomc_target_selection_create(allocator, &target_selection));
   target_selection->profile = profile;
   loomc_target_profile_retain(target_selection->profile);
   target_selection->selection = profile->selection;

@@ -690,14 +690,13 @@ enum loom_trait_bits_e {
   // terminators and externally-visible boundary ops.
   LOOM_TRAIT_POISON_BOUNDARY = 1u << 18,
   // Op refines facts or static type information while preserving a one-to-one
-  // SSA value identity between each operand and result. Source-to-target-low
-  // lowering binds each result to the lowered operand instead of asking a
-  // target policy to rediscover the identity op.
+  // SSA value identity between each operand and result. Lowering can bind each
+  // result to the lowered operand instead of rediscovering identity ops.
   LOOM_TRAIT_FACT_IDENTITY = 1u << 19,
   // Op attaches metadata or facts to operand 0 and produces one result that
   // aliases the same physical value. Extra operands are interpretation data
-  // and must not force target-low storage. Source-to-target-low lowering binds
-  // result 0 to lowered operand 0.
+  // and must not force storage materialization. Lowering can bind result 0 to
+  // lowered operand 0.
   LOOM_TRAIT_VALUE_ALIAS = 1u << 20,
   // Op must preserve the dynamic participant set of its original execution
   // site. Convergent ops may be memory-pure value transforms, but they cannot
@@ -705,6 +704,10 @@ enum loom_trait_bits_e {
   LOOM_TRAIT_CONVERGENT = 1u << 21,
   // Op fact inference defines target-independent result distribution facts.
   LOOM_TRAIT_DISTRIBUTION_TRANSFER = 1u << 22,
+  // Op creates storage relations between SSA values. Passes use this as a
+  // hot-path guard before asking a dialect-owned helper for exact source/result
+  // ranges.
+  LOOM_TRAIT_STORAGE_RELATION = 1u << 23,
 };
 typedef uint32_t loom_trait_flags_t;
 
@@ -780,8 +783,14 @@ static inline bool loom_traits_have_distribution_transfer(
   return (traits & LOOM_TRAIT_DISTRIBUTION_TRANSFER) != 0;
 }
 
+// Returns true when the op may create storage relations between SSA values.
+static inline bool loom_traits_have_storage_relation(
+    loom_trait_flags_t traits) {
+  return (traits & LOOM_TRAIT_STORAGE_RELATION) != 0;
+}
+
 // Returns true when result 0 aliases operand 0 and remaining operands carry
-// metadata or fact inputs that need not survive target-low lowering.
+// metadata or fact inputs that need not survive lowering.
 static inline bool loom_traits_are_value_alias(loom_trait_flags_t traits) {
   return (traits & LOOM_TRAIT_VALUE_ALIAS) != 0;
 }

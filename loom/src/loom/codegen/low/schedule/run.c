@@ -1138,11 +1138,11 @@ static bool loom_low_schedule_candidate_score_less(
   const int pressure_order =
       loom_low_schedule_compare_candidate_pressure(lhs, rhs);
   if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
-    if (lhs.effective_stall_cycles != rhs.effective_stall_cycles) {
-      return lhs.effective_stall_cycles < rhs.effective_stall_cycles;
-    }
     if (lhs.pressure_cliff_penalty != rhs.pressure_cliff_penalty) {
       return lhs.pressure_cliff_penalty < rhs.pressure_cliff_penalty;
+    }
+    if (lhs.effective_stall_cycles != rhs.effective_stall_cycles) {
+      return lhs.effective_stall_cycles < rhs.effective_stall_cycles;
     }
     if (lhs.hazard_stall_cycles != rhs.hazard_stall_cycles) {
       return lhs.hazard_stall_cycles < rhs.hazard_stall_cycles;

@@ -20,6 +20,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_tooling_config_set_t loom_tooling_config_set_t;
+
 typedef enum iree_benchmark_loom_sample_compilation_mode_e {
   // Compile once and pass each sample's parameter values dynamically.
   IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE = 0,
@@ -88,6 +90,12 @@ typedef struct iree_benchmark_loom_options_t {
   iree_string_view_t pipeline;
   // Sanitizer checks inserted by the target pipeline.
   loom_sanitizer_options_t sanitizer;
+  // Direct config bindings parsed from repeated --config=key=value flags.
+  iree_string_view_list_t config_assignments;
+  // Config object file paths parsed from repeated --config-file=path flags.
+  iree_string_view_list_t config_files;
+  // Materialized config set owned by the active benchmark run.
+  const loom_tooling_config_set_t* config_set;
   // Explicit result output path, or empty to use stdout or bundle defaults.
   iree_string_view_t output;
   // Selected result output format.

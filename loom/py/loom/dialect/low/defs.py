@@ -58,6 +58,7 @@ from loom.dsl import (
     PURE,
     REGISTER,
     STORAGE,
+    STORAGE_RELATION,
     SYMBOL_DEFINE,
     TERMINATOR,
     UNKNOWN_EFFECTS,
@@ -630,7 +631,7 @@ low_br = Op(
         )
     ],
     successors=[Successor("dest", doc="Destination low block.")],
-    traits=[TERMINATOR],
+    traits=[TERMINATOR, STORAGE_RELATION],
     verify="loom_low_br_verify",
     format=[
         BlockRef("dest"),
@@ -940,6 +941,7 @@ low_copy = Op(
     constraints=[
         SameRegisterClass("source", "result"),
     ],
+    traits=[STORAGE_RELATION],
     verify="loom_low_copy_verify",
     facts="loom_low_copy_facts",
     format=[
@@ -967,7 +969,7 @@ low_slice = Op(
     ],
     operands=[Operand("source", REGISTER)],
     results=[Result("result", REGISTER)],
-    traits=[PURE],
+    traits=[PURE, STORAGE_RELATION],
     constraints=[
         SameRegisterClass("source", "result"),
     ],
@@ -1002,6 +1004,7 @@ low_concat = Op(
     doc=("Compose one fresh register-range identity from ordered register subranges."),
     operands=[Operand("sources", REGISTER, variadic=True)],
     results=[Result("result", REGISTER, allocates=True)],
+    traits=[STORAGE_RELATION],
     constraints=[
         SameRegisterClass("sources", "result"),
         RegisterUnitsSumTo("sources", "result"),

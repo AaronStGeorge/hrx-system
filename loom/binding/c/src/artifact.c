@@ -118,8 +118,6 @@ loomc_status_t loomc_artifact_write_to_path(const loomc_artifact_t* artifact,
     status = loomc_status_from_iree(iree_io_stream_write(
         stream, artifact->contents.data_length, artifact->contents.data));
   }
-  if (stream != NULL) {
-    iree_io_stream_release(stream);
-  }
+  iree_io_stream_release(stream);
   return status;
 }

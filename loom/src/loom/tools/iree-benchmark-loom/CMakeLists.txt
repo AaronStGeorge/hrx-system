@@ -87,6 +87,7 @@ loom_cc_library(
     loom::target::artifact_manifest
     loom::tooling::cli::help
     loom::tooling::compile::pipeline
+    loom::tooling::config
     loom::tooling::context
     loom::tooling::execution::benchmark
     loom::tooling::execution::compile_options
@@ -102,6 +103,7 @@ loom_cc_library(
     loom::tooling::io::file
     loom::tooling::testbench
     loom::tooling::testbench::executor
+    loom::tooling::testbench::issue_report
     loom::tooling::testbench::reference
     loom::tooling::testbench::requirements
     loom::util::json
@@ -248,6 +250,7 @@ iree_execution_test_suite(
   TOOLS
     "iree-benchmark-loom=::iree-benchmark-loom"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/planning_issue_cases.loom"
     "testdata/duplicate_symbol.loom"
     "testdata/scalar_benchmarks.loom"
   LABELS

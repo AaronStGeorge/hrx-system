@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
@@ -33,6 +34,7 @@ class SourceMemoryPlanTest : public ::testing::Test {
     iree_arena_initialize(&block_pool_, &analysis_arena_);
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables);
@@ -117,6 +119,21 @@ class SourceMemoryPlanTest : public ::testing::Test {
         &builder_, loom_region_entry_block(loom_func_like_body(function_)),
         type, &value));
     return value;
+  }
+
+  loom_value_id_t BuildForwardedIndexBlockArg(loom_value_id_t source) {
+    loom_region_t* body = loom_func_like_body(function_);
+    loom_block_t* successor = nullptr;
+    IREE_CHECK_OK(loom_region_append_block(module_, body, &successor));
+    loom_value_id_t forwarded = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_define_block_arg(
+        &builder_, successor, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+        &forwarded));
+    loom_op_t* branch_op = nullptr;
+    IREE_CHECK_OK(loom_cfg_br_build(&builder_, successor, &source, 1,
+                                    LOOM_LOCATION_UNKNOWN, &branch_op));
+    loom_builder_initialize(module_, &module_->arena, successor, &builder_);
+    return forwarded;
   }
 
   loom_value_id_t BuildNoalias(loom_value_id_t buffer) {
@@ -710,6 +727,48 @@ TEST_F(SourceMemoryPlanTest, DynamicDenseLoadKeepsAssumedWorkitemSource) {
   EXPECT_EQ(plan.dynamic_terms[0].byte_shift, 2u);
   EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_lo, 0);
   EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_hi, 28);
+}
+
+TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesForwardedWorkitemIndex) {
+  loom_value_id_t buffer = DefineBufferArg();
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(8));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType1D(32, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  loom_op_t* workitem_op = nullptr;
+  IREE_ASSERT_OK(
+      loom_kernel_workitem_id_build(&builder_, LOOM_KERNEL_DIMENSION_X,
+                                    loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                    LOOM_LOCATION_UNKNOWN, &workitem_op));
+  const loom_value_id_t forwarded =
+      BuildForwardedIndexBlockArg(loom_kernel_workitem_id_result(workitem_op));
+  const loom_value_id_t dynamic_indices[] = {
+      forwarded,
+  };
+  int64_t static_indices[] = {INT64_MIN};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(
+      &builder_, 0, loom_buffer_view_result(view_op), dynamic_indices,
+      IREE_ARRAYSIZE(dynamic_indices), static_indices,
+      IREE_ARRAYSIZE(static_indices), 0, 0, VectorType1D(4),
+      LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  ASSERT_EQ(plan.dynamic_term_count, 1u);
+  EXPECT_EQ(plan.dynamic_terms[0].index, forwarded);
+  EXPECT_EQ(plan.dynamic_terms[0].source,
+            LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID);
+  EXPECT_EQ(plan.dynamic_terms[0].dimension, LOOM_KERNEL_DIMENSION_X);
+  EXPECT_EQ(plan.dynamic_terms[0].axis, 0u);
+  EXPECT_EQ(plan.dynamic_terms[0].byte_stride, 4);
 }
 
 TEST_F(SourceMemoryPlanTest, DynamicDenseLoadFactorsScaledWorkitemIndex) {

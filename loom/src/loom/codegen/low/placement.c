@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-#include "loom/ops/low/ops.h"
+#include "loom/codegen/low/storage_relation.h"
 
 typedef struct loom_low_placement_build_state_t {
   // Module containing the analyzed low region.
@@ -151,214 +151,118 @@ static void loom_low_placement_append_relation(
   ++state->appended_source_relation_count;
 }
 
-static void loom_low_placement_relation_unit_counts(
+static loom_low_placement_relation_kind_t
+loom_low_placement_kind_from_storage_relation(
+    loom_low_storage_relation_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_STORAGE_RELATION_SAME_STORAGE:
+      return LOOM_LOW_PLACEMENT_RELATION_SAME_STORAGE;
+    case LOOM_LOW_STORAGE_RELATION_SUBRANGE:
+      return LOOM_LOW_PLACEMENT_RELATION_SUBRANGE;
+    case LOOM_LOW_STORAGE_RELATION_CONTIGUOUS_PART:
+      return LOOM_LOW_PLACEMENT_RELATION_CONTIGUOUS_PART;
+    case LOOM_LOW_STORAGE_RELATION_UNKNOWN:
+      return LOOM_LOW_PLACEMENT_RELATION_UNKNOWN;
+  }
+  return LOOM_LOW_PLACEMENT_RELATION_UNKNOWN;
+}
+
+static loom_low_placement_cause_t
+loom_low_placement_cause_from_storage_relation(
+    loom_low_storage_relation_cause_t cause) {
+  switch (cause) {
+    case LOOM_LOW_STORAGE_RELATION_CAUSE_TIED_RESULT:
+      return LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT;
+    case LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_COPY:
+      return LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY;
+    case LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_SLICE:
+      return LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE;
+    case LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_CONCAT:
+      return LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT;
+    case LOOM_LOW_STORAGE_RELATION_CAUSE_LOW_BRANCH:
+      return LOOM_LOW_PLACEMENT_CAUSE_LOW_BRANCH;
+    case LOOM_LOW_STORAGE_RELATION_CAUSE_UNKNOWN:
+      return LOOM_LOW_PLACEMENT_CAUSE_UNKNOWN;
+  }
+  return LOOM_LOW_PLACEMENT_CAUSE_UNKNOWN;
+}
+
+static loom_low_placement_relation_flags_t
+loom_low_placement_flags_from_storage_relation(
+    loom_low_storage_relation_flags_t flags) {
+  loom_low_placement_relation_flags_t placement_flags = 0;
+  if (iree_any_bit_set(flags, LOOM_LOW_STORAGE_RELATION_FLAG_HARD)) {
+    placement_flags |= LOOM_LOW_PLACEMENT_RELATION_FLAG_HARD;
+  }
+  if (iree_any_bit_set(flags, LOOM_LOW_STORAGE_RELATION_FLAG_PREFERRED)) {
+    placement_flags |= LOOM_LOW_PLACEMENT_RELATION_FLAG_PREFERRED;
+  }
+  return placement_flags;
+}
+
+static void loom_low_placement_assert_storage_relation_units(
     const loom_low_placement_build_state_t* state,
-    loom_value_ordinal_t result_ordinal, loom_value_ordinal_t source_ordinal,
-    uint32_t* out_result_unit_count, uint32_t* out_source_unit_count) {
+    const loom_low_storage_relation_t* relation,
+    loom_value_ordinal_t result_ordinal, loom_value_ordinal_t source_ordinal) {
   const loom_liveness_interval_t* result_interval =
       loom_low_placement_interval_for_ordinal(state, result_ordinal);
   const loom_liveness_interval_t* source_interval =
       loom_low_placement_interval_for_ordinal(state, source_ordinal);
-  *out_result_unit_count = result_interval->unit_count;
-  *out_source_unit_count = source_interval->unit_count;
+  IREE_ASSERT(
+      relation->destination_unit_offset <= result_interval->unit_count &&
+          relation->unit_count <=
+              result_interval->unit_count - relation->destination_unit_offset,
+      "verified low storage destination range must fit liveness "
+      "units");
+  IREE_ASSERT(relation->source_unit_offset <= source_interval->unit_count &&
+                  relation->unit_count <= source_interval->unit_count -
+                                              relation->source_unit_offset,
+              "verified low storage source range must fit liveness units");
 }
 
-static iree_status_t loom_low_placement_append_same_storage_relation(
-    loom_low_placement_build_state_t* state, const loom_op_t* op,
-    loom_value_id_t result_value_id, loom_value_id_t source_value_id,
-    loom_low_placement_cause_t cause,
-    loom_low_placement_relation_flags_t flags) {
-  const loom_value_ordinal_t result_ordinal =
-      loom_low_placement_value_ordinal(state, result_value_id);
-  const loom_value_ordinal_t source_ordinal =
-      loom_low_placement_value_ordinal(state, source_value_id);
-  uint32_t result_unit_count = 0;
-  uint32_t source_unit_count = 0;
-  loom_low_placement_relation_unit_counts(state, result_ordinal, source_ordinal,
-                                          &result_unit_count,
-                                          &source_unit_count);
-  IREE_ASSERT_EQ(result_unit_count, source_unit_count,
-                 "verified same-storage placement relation must use matching "
-                 "unit counts");
-  const loom_low_placement_relation_t relation = {
-      .op = op,
-      .result_ordinal = result_ordinal,
-      .source_ordinal = source_ordinal,
-      .result_unit_offset = 0,
-      .source_unit_offset = 0,
-      .unit_count = result_unit_count,
-      .kind = LOOM_LOW_PLACEMENT_RELATION_SAME_STORAGE,
-      .cause = cause,
-      .flags = flags,
-  };
-  loom_low_placement_append_relation(state, &relation);
+static iree_status_t loom_low_placement_count_op_relations(
+    loom_low_placement_build_state_t* state, const loom_op_t* op) {
+  const uint16_t relation_count =
+      loom_low_storage_relation_count(state->module, op);
+  for (uint16_t i = 0; i < relation_count; ++i) {
+    loom_low_storage_relation_t relation = {0};
+    loom_low_storage_relation_get(state->module, op, i, &relation);
+    IREE_RETURN_IF_ERROR(loom_low_placement_count_relation(
+        state, relation.destination_value_id, relation.source_value_id));
+  }
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_placement_append_slice_relation(
+static iree_status_t loom_low_placement_append_op_relations(
     loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  const int64_t offset = loom_low_slice_offset(op);
-  IREE_ASSERT(offset >= 0 && offset <= UINT32_MAX,
-              "verified low.slice offset must fit in uint32_t");
-  const loom_value_ordinal_t result_ordinal =
-      loom_low_placement_value_ordinal(state, loom_low_slice_result(op));
-  const loom_value_ordinal_t source_ordinal =
-      loom_low_placement_value_ordinal(state, loom_low_slice_source(op));
-  uint32_t result_unit_count = 0;
-  uint32_t source_unit_count = 0;
-  loom_low_placement_relation_unit_counts(state, result_ordinal, source_ordinal,
-                                          &result_unit_count,
-                                          &source_unit_count);
-  const uint32_t source_offset = (uint32_t)offset;
-  IREE_ASSERT(source_offset <= source_unit_count &&
-                  result_unit_count <= source_unit_count - source_offset,
-              "verified low.slice range must fit source unit count");
-  const loom_low_placement_relation_t relation = {
-      .op = op,
-      .result_ordinal = result_ordinal,
-      .source_ordinal = source_ordinal,
-      .result_unit_offset = 0,
-      .source_unit_offset = source_offset,
-      .unit_count = result_unit_count,
-      .kind = LOOM_LOW_PLACEMENT_RELATION_SUBRANGE,
-      .cause = LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE,
-      .flags = LOOM_LOW_PLACEMENT_RELATION_FLAG_PREFERRED,
-  };
-  loom_low_placement_append_relation(state, &relation);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_placement_append_concat_relations(
-    loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  const loom_value_ordinal_t result_ordinal =
-      loom_low_placement_value_ordinal(state, loom_low_concat_result(op));
-  const loom_liveness_interval_t* result_interval =
-      loom_low_placement_interval_for_ordinal(state, result_ordinal);
-
-  uint32_t result_offset = 0;
-  loom_value_slice_t sources = loom_low_concat_sources(op);
-  for (uint16_t i = 0; i < sources.count; ++i) {
+  const uint16_t relation_count =
+      loom_low_storage_relation_count(state->module, op);
+  for (uint16_t i = 0; i < relation_count; ++i) {
+    loom_low_storage_relation_t storage_relation = {0};
+    loom_low_storage_relation_get(state->module, op, i, &storage_relation);
+    const loom_value_ordinal_t result_ordinal =
+        loom_low_placement_value_ordinal(state,
+                                         storage_relation.destination_value_id);
     const loom_value_ordinal_t source_ordinal =
-        loom_low_placement_value_ordinal(state, sources.values[i]);
-    const loom_liveness_interval_t* source_interval =
-        loom_low_placement_interval_for_ordinal(state, source_ordinal);
-    IREE_ASSERT(source_interval->unit_count <= UINT32_MAX - result_offset,
-                "verified low.concat range must fit uint32_t unit offsets");
-    const loom_low_placement_relation_t relation = {
-        .op = op,
+        loom_low_placement_value_ordinal(state,
+                                         storage_relation.source_value_id);
+    loom_low_placement_assert_storage_relation_units(
+        state, &storage_relation, result_ordinal, source_ordinal);
+    const loom_low_placement_relation_t placement_relation = {
+        .op = storage_relation.op,
         .result_ordinal = result_ordinal,
         .source_ordinal = source_ordinal,
-        .result_unit_offset = result_offset,
-        .source_unit_offset = 0,
-        .unit_count = source_interval->unit_count,
-        .kind = LOOM_LOW_PLACEMENT_RELATION_CONTIGUOUS_PART,
-        .cause = LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT,
-        .flags = LOOM_LOW_PLACEMENT_RELATION_FLAG_PREFERRED,
+        .result_unit_offset = storage_relation.destination_unit_offset,
+        .source_unit_offset = storage_relation.source_unit_offset,
+        .unit_count = storage_relation.unit_count,
+        .kind = loom_low_placement_kind_from_storage_relation(
+            storage_relation.kind),
+        .cause = loom_low_placement_cause_from_storage_relation(
+            storage_relation.cause),
+        .flags = loom_low_placement_flags_from_storage_relation(
+            storage_relation.flags),
     };
-    loom_low_placement_append_relation(state, &relation);
-    result_offset += source_interval->unit_count;
-  }
-  IREE_ASSERT_EQ(result_offset, result_interval->unit_count,
-                 "verified low.concat source units must cover the result");
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_placement_count_tied_results(
-    loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  const loom_value_id_t* results = loom_op_const_results(op);
-  const loom_value_id_t* operands = loom_op_const_operands(op);
-  const loom_tied_result_t* tied_results = loom_op_tied_results(op);
-  for (uint16_t i = 0; i < op->tied_result_count; ++i) {
-    const loom_tied_result_t tied = tied_results[i];
-    IREE_ASSERT(tied.result_index < op->result_count &&
-                    tied.operand_index < op->operand_count,
-                "verified tied result metadata must reference existing "
-                "fields");
-    IREE_RETURN_IF_ERROR(loom_low_placement_count_relation(
-        state, results[tied.result_index], operands[tied.operand_index]));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_placement_append_tied_results(
-    loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  const loom_value_id_t* results = loom_op_const_results(op);
-  const loom_value_id_t* operands = loom_op_const_operands(op);
-  const loom_tied_result_t* tied_results = loom_op_tied_results(op);
-  for (uint16_t i = 0; i < op->tied_result_count; ++i) {
-    const loom_tied_result_t tied = tied_results[i];
-    IREE_ASSERT(tied.result_index < op->result_count &&
-                    tied.operand_index < op->operand_count,
-                "verified tied result metadata must reference existing "
-                "fields");
-    IREE_ASSERT(!tied.has_type_change,
-                "low verification must reject type-changing tied results "
-                "before placement analysis");
-    IREE_RETURN_IF_ERROR(loom_low_placement_append_same_storage_relation(
-        state, op, results[tied.result_index], operands[tied.operand_index],
-        LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT,
-        LOOM_LOW_PLACEMENT_RELATION_FLAG_HARD));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_placement_count_structural_relations(
-    loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  if (loom_low_copy_isa(op)) {
-    return loom_low_placement_count_relation(state, loom_low_copy_result(op),
-                                             loom_low_copy_source(op));
-  }
-  if (loom_low_slice_isa(op)) {
-    return loom_low_placement_count_relation(state, loom_low_slice_result(op),
-                                             loom_low_slice_source(op));
-  }
-  if (loom_low_concat_isa(op)) {
-    const loom_value_id_t result = loom_low_concat_result(op);
-    loom_value_slice_t sources = loom_low_concat_sources(op);
-    for (uint16_t i = 0; i < sources.count; ++i) {
-      IREE_RETURN_IF_ERROR(
-          loom_low_placement_count_relation(state, result, sources.values[i]));
-    }
-    return iree_ok_status();
-  }
-  if (loom_low_br_isa(op)) {
-    const loom_block_t* dest = loom_low_br_dest(op);
-    loom_value_slice_t args = loom_low_br_args(op);
-    IREE_ASSERT_EQ(args.count, dest->arg_count,
-                   "verified low.br payload must match destination block");
-    for (uint16_t i = 0; i < args.count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_low_placement_count_relation(
-          state, dest->arg_ids[i], args.values[i]));
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_placement_append_structural_relations(
-    loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  if (loom_low_copy_isa(op)) {
-    return loom_low_placement_append_same_storage_relation(
-        state, op, loom_low_copy_result(op), loom_low_copy_source(op),
-        LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY,
-        LOOM_LOW_PLACEMENT_RELATION_FLAG_PREFERRED);
-  }
-  if (loom_low_slice_isa(op)) {
-    return loom_low_placement_append_slice_relation(state, op);
-  }
-  if (loom_low_concat_isa(op)) {
-    return loom_low_placement_append_concat_relations(state, op);
-  }
-  if (loom_low_br_isa(op)) {
-    const loom_block_t* dest = loom_low_br_dest(op);
-    loom_value_slice_t args = loom_low_br_args(op);
-    IREE_ASSERT_EQ(args.count, dest->arg_count,
-                   "verified low.br payload must match destination block");
-    for (uint16_t i = 0; i < args.count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_low_placement_append_same_storage_relation(
-          state, op, dest->arg_ids[i], args.values[i],
-          LOOM_LOW_PLACEMENT_CAUSE_LOW_BRANCH,
-          LOOM_LOW_PLACEMENT_RELATION_FLAG_PREFERRED));
-    }
+    loom_low_placement_append_relation(state, &placement_relation);
   }
   return iree_ok_status();
 }
@@ -394,18 +298,6 @@ static iree_status_t loom_low_placement_visit_ops(
     iree_status_t (*visit)(loom_low_placement_build_state_t* state,
                            const loom_op_t* op)) {
   return loom_low_placement_visit_region_ops(state, state->region, visit);
-}
-
-static iree_status_t loom_low_placement_count_op_relations(
-    loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  IREE_RETURN_IF_ERROR(loom_low_placement_count_tied_results(state, op));
-  return loom_low_placement_count_structural_relations(state, op);
-}
-
-static iree_status_t loom_low_placement_append_op_relations(
-    loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  IREE_RETURN_IF_ERROR(loom_low_placement_append_tied_results(state, op));
-  return loom_low_placement_append_structural_relations(state, op);
 }
 
 iree_status_t loom_low_placement_analyze_region(

@@ -202,13 +202,26 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "storage_relation",
+    srcs = ["storage_relation.c"],
+    hdrs = ["storage_relation.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "placement",
     srcs = ["placement.c"],
     hdrs = ["placement.h"],
     deps = [
+        ":storage_relation",
         "//loom/src/loom/analysis:liveness",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -520,6 +533,7 @@ loom_cc_test(
         ":source_memory_plan",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/kernel",

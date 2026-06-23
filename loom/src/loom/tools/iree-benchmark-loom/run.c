@@ -13,6 +13,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/ir/module.h"
 #include "loom/target/artifact_manifest.h"
+#include "loom/tooling/config/config.h"
 #include "loom/tooling/execution/compile_options.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/io/file.h"
@@ -70,6 +71,111 @@ static iree_status_t iree_benchmark_loom_artifact_manifest_options_initialize(
   return iree_ok_status();
 }
 
+static iree_status_t iree_benchmark_loom_append_config_assignments(
+    loom_tooling_config_set_t* config_set,
+    iree_string_view_list_t assignments) {
+  for (iree_host_size_t i = 0; i < assignments.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_assignment(
+        config_set, assignments.values[i]));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t iree_benchmark_loom_append_config_files(
+    loom_tooling_config_set_t* config_set, iree_string_view_list_t paths,
+    iree_allocator_t allocator) {
+  for (iree_host_size_t i = 0; i < paths.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_json_file(
+        config_set, paths.values[i], allocator));
+  }
+  return iree_ok_status();
+}
+
+static bool iree_benchmark_loom_compare_selects_benchmark(
+    iree_string_view_t compare, iree_string_view_t benchmark_name) {
+  iree_string_view_t remaining = iree_string_view_trim(compare);
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_split(remaining, ',', &token, &remaining);
+    token = iree_benchmark_loom_normalize_selection_name(token);
+    if (iree_string_view_equal(token, benchmark_name)) {
+      return true;
+    }
+    remaining = iree_string_view_trim(remaining);
+  }
+  return false;
+}
+
+static bool iree_benchmark_loom_selects_benchmark_for_planning(
+    const loom_testbench_module_plan_t* module_plan,
+    const iree_benchmark_loom_options_t* options,
+    const loom_testbench_benchmark_plan_t* benchmark_plan) {
+  if (!iree_string_view_is_empty(options->compare)) {
+    return iree_benchmark_loom_compare_selects_benchmark(options->compare,
+                                                         benchmark_plan->name);
+  }
+  if (!iree_benchmark_loom_benchmark_matches_selection(
+          benchmark_plan, options->selected_benchmark)) {
+    return false;
+  }
+  if (benchmark_plan->case_index >= module_plan->case_count) {
+    return true;
+  }
+  return iree_benchmark_loom_case_matches_selection(
+      &module_plan->cases[benchmark_plan->case_index], options->selected_case);
+}
+
+static iree_status_t iree_benchmark_loom_emit_planning_failure(
+    const iree_benchmark_loom_event_sink_t* event_sink,
+    const iree_benchmark_loom_run_identity_t* run,
+    const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_issue_t* issue,
+    iree_host_size_t* inout_failure_count) {
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_event_sink_emit_planning_failure(
+      event_sink, run, IREE_SV("plan"), IREE_SV("testbench_planning"),
+      IREE_SV("selected benchmark cannot be planned for execution"),
+      module_plan, issue, 1));
+  ++*inout_failure_count;
+  return iree_ok_status();
+}
+
+static iree_status_t iree_benchmark_loom_emit_selected_planning_issues(
+    const iree_benchmark_loom_event_sink_t* event_sink,
+    const iree_benchmark_loom_run_identity_t* run,
+    const loom_testbench_module_plan_t* module_plan,
+    const iree_benchmark_loom_options_t* options,
+    iree_host_size_t* inout_failure_count) {
+  for (iree_host_size_t benchmark_index = 0;
+       benchmark_index < module_plan->benchmark_count; ++benchmark_index) {
+    const loom_testbench_benchmark_plan_t* benchmark_plan =
+        &module_plan->benchmarks[benchmark_index];
+    if (!iree_benchmark_loom_selects_benchmark_for_planning(
+            module_plan, options, benchmark_plan)) {
+      continue;
+    }
+
+    for (iree_host_size_t i = 0; i < module_plan->issue_count; ++i) {
+      const loom_testbench_issue_t* issue = &module_plan->issues[i];
+      if (issue->benchmark_index == benchmark_index) {
+        IREE_RETURN_IF_ERROR(iree_benchmark_loom_emit_planning_failure(
+            event_sink, run, module_plan, issue, inout_failure_count));
+      }
+    }
+
+    if (benchmark_plan->case_index >= module_plan->case_count) {
+      continue;
+    }
+    const loom_testbench_case_plan_t* case_plan =
+        &module_plan->cases[benchmark_plan->case_index];
+    for (iree_host_size_t i = 0; i < case_plan->issue_count; ++i) {
+      IREE_RETURN_IF_ERROR(iree_benchmark_loom_emit_planning_failure(
+          event_sink, run, module_plan, &case_plan->issues[i],
+          inout_failure_count));
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t iree_benchmark_loom_run_file(
     const iree_benchmark_loom_file_run_options_t* options,
     iree_benchmark_loom_run_result_t* out_result) {
@@ -88,6 +194,9 @@ iree_status_t iree_benchmark_loom_run_file(
   const iree_benchmark_loom_options_t* benchmark_options =
       &normalized_benchmark_options;
   const iree_allocator_t allocator = options->host_allocator;
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(allocator, &config_set);
+  normalized_benchmark_options.config_set = &config_set;
   const iree_string_view_t input_path = options->input_path;
   const bool compare_requested =
       !iree_string_view_is_empty(benchmark_options->compare);
@@ -100,6 +209,7 @@ iree_status_t iree_benchmark_loom_run_file(
   iree_benchmark_loom_hal_context_t hal_context = {0};
   iree_benchmark_loom_hal_context_initialize(options->configuration, allocator,
                                              &hal_context);
+  hal_context.config_set = benchmark_options->config_set;
   iree_arena_allocator_t plan_arena;
   memset(&plan_arena, 0, sizeof(plan_arena));
   iree_arena_allocator_t execution_arena;
@@ -122,9 +232,17 @@ iree_status_t iree_benchmark_loom_run_file(
   int exit_code = 0;
 
   iree_status_t status = iree_ok_status();
+  status = iree_benchmark_loom_append_config_assignments(
+      &config_set, benchmark_options->config_assignments);
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_append_config_files(
+        &config_set, benchmark_options->config_files, allocator);
+  }
   loom_run_compile_report_capture_options_t compile_report_options = {0};
-  status = iree_benchmark_loom_compile_report_options_initialize(
-      benchmark_options, &compile_report_options);
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_compile_report_options_initialize(
+        benchmark_options, &compile_report_options);
+  }
   loom_run_candidate_artifact_manifest_options_t artifact_manifest_options = {
       0};
   if (iree_status_is_ok(status)) {
@@ -264,6 +382,12 @@ iree_status_t iree_benchmark_loom_run_file(
     if (iree_status_is_ok(status)) {
       planned_case_count = module_plan.case_count;
       planned_benchmark_count = module_plan.benchmark_count;
+      status = iree_benchmark_loom_emit_selected_planning_issues(
+          event_sink, &run_identity, &module_plan, benchmark_options,
+          &failure_count);
+      if (iree_status_is_ok(status) && failure_count != 0) {
+        exit_code = 1;
+      }
     }
     loom_testbench_case_execution_options_t execution_options = {0};
     loom_testbench_case_execution_options_initialize(&execution_options);
@@ -281,7 +405,7 @@ iree_status_t iree_benchmark_loom_run_file(
 
     iree_benchmark_loom_work_plan_t work_plan = {0};
     bool work_plan_initialized = false;
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) && failure_count == 0) {
       status = iree_benchmark_loom_work_plan_initialize(
           &module_plan, benchmark_options, allocator, &work_plan);
       if (iree_status_is_ok(status)) {
@@ -292,7 +416,7 @@ iree_status_t iree_benchmark_loom_run_file(
       }
     }
 
-    if (iree_status_is_ok(status) && compare_requested) {
+    if (iree_status_is_ok(status) && failure_count == 0 && compare_requested) {
       const iree_benchmark_loom_selected_benchmark_t* selections =
           work_plan.selected_benchmarks;
       const iree_host_size_t selection_count =
@@ -342,7 +466,8 @@ iree_status_t iree_benchmark_loom_run_file(
     }
 
     for (iree_host_size_t selection_index = 0;
-         iree_status_is_ok(status) && !compare_requested &&
+         iree_status_is_ok(status) && failure_count == 0 &&
+         !compare_requested &&
          selection_index < work_plan.selected_benchmark_count;
          ++selection_index) {
       const iree_benchmark_loom_selected_benchmark_t* selection =
@@ -357,11 +482,12 @@ iree_status_t iree_benchmark_loom_run_file(
             event_sink, &run_identity, &hal_context);
       }
     }
-    if (iree_status_is_ok(status) && benchmark_options->dry_run) {
+    if (iree_status_is_ok(status) && failure_count == 0 &&
+        benchmark_options->dry_run) {
       status = iree_benchmark_loom_event_sink_emit_work_plan(
           event_sink, &run_identity, module_plan.module, &work_plan);
     }
-    if (iree_status_is_ok(status) && !compare_requested &&
+    if (iree_status_is_ok(status) && failure_count == 0 && !compare_requested &&
         !benchmark_options->dry_run) {
       const iree_benchmark_loom_work_plan_execution_options_t
           work_execution_options = {
@@ -426,6 +552,7 @@ iree_status_t iree_benchmark_loom_run_file(
   iree_arena_deinitialize(&plan_arena);
   loom_run_module_deinitialize(&run_module);
   iree_benchmark_loom_hal_context_deinitialize(&hal_context);
+  loom_tooling_config_set_deinitialize(&config_set);
   iree_benchmark_loom_file_provider_deinitialize(&file_provider);
   iree_benchmark_loom_artifact_bundle_deinitialize(&artifact_bundle);
   iree_io_file_contents_free(contents);

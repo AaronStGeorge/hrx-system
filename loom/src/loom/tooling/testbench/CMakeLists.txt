@@ -27,6 +27,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    issue_report
+  HDRS
+    "issue_report.h"
+  SRCS
+    "issue_report.c"
+  DEPS
+    ::testbench
+    iree::base
+    loom::ir
+    loom::util::json
+    loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     value_materializer
   HDRS
     "value_materializer.h"

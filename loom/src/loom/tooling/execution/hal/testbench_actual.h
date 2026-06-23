@@ -33,6 +33,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_tooling_config_set_t loom_tooling_config_set_t;
+
 typedef struct loom_run_hal_testbench_context_t {
   // Linked artifact-provider registry selected by the tool binary.
   const loom_run_hal_artifact_provider_registry_t* artifact_provider_registry;
@@ -102,6 +104,8 @@ typedef struct loom_run_hal_testbench_actual_provider_options_t {
   iree_string_view_t pipeline;
   // Sanitizer checks inserted by the target pipeline.
   loom_sanitizer_options_t sanitizer;
+  // Config bindings materialized into the private compile copy.
+  const loom_tooling_config_set_t* config_set;
   // Module that owns |actual_invocation|.
   const loom_module_t* test_module;
   // Actual invocation selected from the owning check.case.
@@ -139,6 +143,8 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   iree_string_view_t pipeline;
   // Sanitizer checks inserted by the target pipeline.
   loom_sanitizer_options_t sanitizer;
+  // Config bindings materialized into the private compile copy.
+  const loom_tooling_config_set_t* config_set;
   // Module that owns |actual_invocation|.
   const loom_module_t* test_module;
   // Actual invocation selected from the owning check.case.
@@ -175,6 +181,8 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   iree_string_view_t compile_failure_stage;
   // Stable diagnostic category for |compile_rejected|.
   iree_string_view_t compile_failure_kind;
+  // Optional human-facing explanation for |compile_rejected|.
+  iree_string_view_t compile_failure_message;
   // Number of error diagnostics observed while compiling this candidate.
   iree_host_size_t diagnostic_error_count;
   // Number of warning diagnostics observed while compiling this candidate.
@@ -214,6 +222,8 @@ typedef struct loom_run_hal_testbench_actual_sequence_options_t {
   iree_string_view_t pipeline;
   // Sanitizer checks inserted by the target pipeline.
   loom_sanitizer_options_t sanitizer;
+  // Config bindings materialized into each private compile copy.
+  const loom_tooling_config_set_t* config_set;
   // Module that owns |case_plan|.
   const loom_module_t* test_module;
   // Case plan whose actual invocations are executed by the sequence.

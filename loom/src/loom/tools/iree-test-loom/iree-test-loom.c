@@ -29,29 +29,43 @@
   (IREE_TEST_LOOM_HAVE_AMDGPU || IREE_TEST_LOOM_HAVE_SPIRV)
 
 #if IREE_TEST_LOOM_HAVE_AMDGPU
+#include "loom/target/arch/amdgpu/provider.h"
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
-#include "loom/tooling/target/amdgpu/execution/provider.h"
 #include "loom/tooling/target/amdgpu/testbench_requirements.h"
 #endif  // IREE_TEST_LOOM_HAVE_AMDGPU
 #if IREE_TEST_LOOM_HAVE_IREE_VM
 #include "loom/tooling/execution/ireevm/provider.h"
 #endif  // IREE_TEST_LOOM_HAVE_IREE_VM
 #if IREE_TEST_LOOM_HAVE_SPIRV
+#include "loom/target/arch/spirv/provider.h"
 #include "loom/tooling/target/spirv/artifact_provider.h"
-#include "loom/tooling/target/spirv/execution/provider.h"
 #include "loom/tooling/target/spirv/testbench_requirements.h"
+#endif  // IREE_TEST_LOOM_HAVE_SPIRV
+
+#if IREE_TEST_LOOM_HAVE_AMDGPU
+static const loom_run_execution_provider_t kIreeTestLoomAmdgpuProvider = {
+    .name = IREE_SVL("amdgpu"),
+    .target_provider = &loom_amdgpu_target_provider,
+};
+#endif  // IREE_TEST_LOOM_HAVE_AMDGPU
+
+#if IREE_TEST_LOOM_HAVE_SPIRV
+static const loom_run_execution_provider_t kIreeTestLoomSpirvProvider = {
+    .name = IREE_SVL("spirv"),
+    .target_provider = &loom_spirv_target_provider,
+};
 #endif  // IREE_TEST_LOOM_HAVE_SPIRV
 
 #if IREE_TEST_LOOM_HAVE_ANY_PROVIDER
 static const loom_run_execution_provider_t* const kIreeTestLoomProviders[] = {
 #if IREE_TEST_LOOM_HAVE_AMDGPU
-    &loom_amdgpu_hal_execution_provider,
+    &kIreeTestLoomAmdgpuProvider,
 #endif  // IREE_TEST_LOOM_HAVE_AMDGPU
 #if IREE_TEST_LOOM_HAVE_IREE_VM
     &loom_ireevm_execution_provider,
 #endif  // IREE_TEST_LOOM_HAVE_IREE_VM
 #if IREE_TEST_LOOM_HAVE_SPIRV
-    &loom_spirv_vulkan_hal_execution_provider,
+    &kIreeTestLoomSpirvProvider,
 #endif  // IREE_TEST_LOOM_HAVE_SPIRV
 };
 #endif  // IREE_TEST_LOOM_HAVE_ANY_PROVIDER

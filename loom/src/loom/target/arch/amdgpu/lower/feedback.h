@@ -121,6 +121,16 @@ typedef struct loom_amdgpu_feedback_failure_branch_t {
   loom_block_t* continuation_block;
 } loom_amdgpu_feedback_failure_branch_t;
 
+// Canonicalizes an SGPRx2 native lane mask for EXEC-width packet consumers.
+//
+// Wave64 masks are already canonical. Wave32 compare producers define the low
+// half and may leave the high half unspecified, so this zero-extends the mask
+// before 64-bit scalar compares or EXEC-narrowing packets consume it.
+iree_status_t loom_amdgpu_build_feedback_canonical_exec_mask(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t mask, uint32_t wavefront_size, loom_location_id_t location,
+    loom_value_id_t* out_mask);
+
 typedef struct loom_amdgpu_feedback_reservation_attempt_t {
   // Monotonic reservation head value this attempt tried to claim.
   loom_value_id_t expected_head;
@@ -303,7 +313,9 @@ iree_status_t loom_amdgpu_build_feedback_failure_scc_split(
 // conditionally branches. The builder is left positioned in the per-site cold
 // failure block after EXEC has been narrowed to the failed lanes. The caller
 // must terminate that block and then move the builder to
-// |out_branch->continuation_block|.
+// |out_branch->continuation_block|. Producers whose high half may be
+// unspecified on wave32 must canonicalize with
+// loom_amdgpu_build_feedback_canonical_exec_mask first.
 iree_status_t loom_amdgpu_build_feedback_failure_mask_split(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t failure_mask, loom_location_id_t location,

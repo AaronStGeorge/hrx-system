@@ -524,6 +524,18 @@ static bool loom_low_target_legalize_topology_domain(
       *out_value_kind = IREE_SV("workitem.id");
       *out_axis = IREE_SV("z");
       return true;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKGROUP_X:
+      *out_value_kind = IREE_SV("workgroup.id");
+      *out_axis = IREE_SV("x");
+      return true;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKGROUP_Y:
+      *out_value_kind = IREE_SV("workgroup.id");
+      *out_axis = IREE_SV("y");
+      return true;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKGROUP_Z:
+      *out_value_kind = IREE_SV("workgroup.id");
+      *out_axis = IREE_SV("z");
+      return true;
     case LOOM_VALUE_FACT_TOPOLOGY_SUBGROUP_LANE:
       *out_value_kind = IREE_SV("subgroup.lane.id");
       *out_axis = IREE_SV("lane");

@@ -30,6 +30,19 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "issue_report",
+    srcs = ["issue_report.c"],
+    hdrs = ["issue_report.h"],
+    deps = [
+        ":testbench",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "value_materializer",
     srcs = ["value_materializer.c"],
     hdrs = ["value_materializer.h"],
