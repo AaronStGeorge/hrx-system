@@ -276,8 +276,8 @@ class SanitizerCachedBackendDevice {
 
   // Gets or creates a cached sanitizer backend device using |backend|.
   //
-  // |sanitizer_name| partitions the CTS device cache. The backend factory or
-  // test binary flags still own the actual device creation options.
+  // |sanitizer_name| partitions the CTS device cache. The backend factory owns
+  // the actual device creation options.
   iree_status_t Initialize(const BackendInfo& backend,
                            std::string_view sanitizer_name) {
     std::string cache_key = GetBackendDeviceCacheKey(backend);

@@ -7,6 +7,7 @@
 // AMDGPU TSAN executable CTS coverage.
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -20,6 +21,13 @@ namespace iree::hal::cts {
 class TsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
  protected:
   void SetUp() override {
+    std::string host_incompatibility_reason;
+    if (!IsBackendHostCompatible(GetParam(), &host_incompatibility_reason)) {
+      GTEST_SKIP() << "Backend '" << GetParam().name
+                   << "' is not compatible with this host: "
+                   << host_incompatibility_reason;
+    }
+
     iree_status_t status = tsan_device_.Initialize(GetParam(), "tsan");
     if (iree_status_is_unavailable(status)) {
       iree_status_free(status);

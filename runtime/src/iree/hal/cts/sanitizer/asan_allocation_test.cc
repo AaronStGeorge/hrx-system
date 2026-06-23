@@ -7,6 +7,7 @@
 // HAL ASAN allocation lifetime CTS coverage.
 
 #include <cstdint>
+#include <string>
 
 #include "iree/hal/cts/sanitizer/sanitizer_test_util.h"
 #include "iree/hal/cts/util/registry.h"
@@ -119,6 +120,13 @@ static iree_status_t ExportDeviceAddress(iree_hal_allocator_t* allocator,
 class AsanAllocationTest : public ::testing::TestWithParam<BackendInfo> {
  protected:
   void SetUp() override {
+    std::string host_incompatibility_reason;
+    if (!IsBackendHostCompatible(GetParam(), &host_incompatibility_reason)) {
+      GTEST_SKIP() << "Backend '" << GetParam().name
+                   << "' is not compatible with this host: "
+                   << host_incompatibility_reason;
+    }
+
     iree_status_t status = asan_device_.Initialize(GetParam(), "asan");
     if (iree_status_is_unavailable(status)) {
       iree_status_free(status);

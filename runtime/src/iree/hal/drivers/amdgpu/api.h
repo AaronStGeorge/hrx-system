@@ -110,6 +110,21 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
 // Default number of queue-local dispatch shadow slots.
 #define IREE_HAL_AMDGPU_TSAN_DEFAULT_SHADOW_SLOT_COUNT 16u
 
+// Host-build compatibility for an AMDGPU logical-device option set.
+typedef uint32_t iree_hal_amdgpu_logical_device_host_compatibility_t;
+enum iree_hal_amdgpu_logical_device_host_compatibility_e {
+  // The host build does not rule out this option set before device creation.
+  //
+  // This does not imply that the requested feature is supported by the
+  // selected hardware or runtime. Full support is established by the normal
+  // device creation and device-spec query paths.
+  IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_COMPATIBLE = 0,
+  // Host ThreadSanitizer reserves process virtual address space in a way that
+  // is incompatible with AMDGPU ASAN's production sparse address layout.
+  IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_INCOMPATIBLE_HOST_TSAN_ASAN =
+      1,
+};
+
 // Selects how AMDGPU ASAN reports affect the owning logical device.
 typedef enum iree_hal_amdgpu_asan_report_policy_e {
   // Emit ASAN reports through the device event sink and keep the logical device
@@ -330,6 +345,15 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
 // Initializes |out_options| to default values.
 IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
     iree_hal_amdgpu_logical_device_options_t* out_options);
+
+// Queries whether |options| are compatible with this host build configuration.
+//
+// This is not full option validation and does not query HSA. It exists so tests
+// and tools can skip known-impossible host/sanitizer combinations before
+// attempting device creation.
+IREE_API_EXPORT iree_hal_amdgpu_logical_device_host_compatibility_t
+iree_hal_amdgpu_logical_device_options_query_host_compatibility(
+    const iree_hal_amdgpu_logical_device_options_t* options);
 
 // Parses |params| and updates |options|. No AMDGPU logical-device string
 // parameters are currently supported; nonempty lists fail loudly instead of

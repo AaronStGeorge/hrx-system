@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include "iree/hal/cts/sanitizer/sanitizer_test_util.h"
 #include "iree/hal/drivers/amdgpu/buffer.h"
@@ -245,6 +246,13 @@ class ManualAsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
 };
 
 TEST_P(ManualAsanExecutableTest, ReportsCompatibleHooksThroughFeedback) {
+  std::string host_incompatibility_reason;
+  if (!IsBackendHostCompatible(GetParam(), &host_incompatibility_reason)) {
+    GTEST_SKIP() << "Backend '" << GetParam().name
+                 << "' is not compatible with this host: "
+                 << host_incompatibility_reason;
+  }
+
   SanitizerCachedBackendDevice asan_device;
   iree_status_t status = asan_device.Initialize(GetParam(), "asan");
   if (iree_status_is_unavailable(status)) {

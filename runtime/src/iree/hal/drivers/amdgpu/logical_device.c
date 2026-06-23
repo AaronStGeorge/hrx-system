@@ -202,6 +202,18 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
   out_options->preallocate_pools = 1;
 }
 
+IREE_API_EXPORT iree_hal_amdgpu_logical_device_host_compatibility_t
+iree_hal_amdgpu_logical_device_options_query_host_compatibility(
+    const iree_hal_amdgpu_logical_device_options_t* options) {
+  IREE_ASSERT_ARGUMENT(options);
+#if defined(IREE_SANITIZER_THREAD)
+  if (options->asan.enabled) {
+    return IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_INCOMPATIBLE_HOST_TSAN_ASAN;
+  }
+#endif  // IREE_SANITIZER_THREAD
+  return IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_COMPATIBLE;
+}
+
 IREE_API_EXPORT iree_status_t iree_hal_amdgpu_logical_device_options_parse(
     iree_hal_amdgpu_logical_device_options_t* options,
     iree_string_pair_list_t params) {
@@ -396,6 +408,13 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
           IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE,
           (uint64_t)options->asan.owned_application_size, (uint64_t)0,
           (uint64_t)application_coverage_size);
+    }
+    if (iree_hal_amdgpu_logical_device_options_query_host_compatibility(
+            options) ==
+        IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_INCOMPATIBLE_HOST_TSAN_ASAN) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "AMDGPU ASAN is not supported in host ThreadSanitizer builds");
     }
   }
   if (options->tsan.enabled) {
