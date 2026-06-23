@@ -1006,7 +1006,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_write_profile_queues(
 static iree_status_t
 iree_hal_amdgpu_logical_device_write_profile_clock_correlations(
     iree_hal_amdgpu_logical_device_t* logical_device,
-    iree_hal_profile_sink_t* sink, uint64_t session_id) {
+    iree_hal_profile_sink_t* sink, uint64_t session_id,
+    iree_hal_device_profiling_data_families_t data_families) {
   IREE_TRACE_ZONE_BEGIN(z0);
 
   const iree_host_size_t record_count = logical_device->physical_device_count;
@@ -1030,10 +1031,20 @@ iree_hal_amdgpu_logical_device_write_profile_clock_correlations(
                                 (void**)&records));
 
   iree_status_t status = iree_ok_status();
+  const bool has_queue_device_events = iree_any_bit_set(
+      data_families, IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS);
   for (iree_host_size_t i = 0; i < record_count && iree_status_is_ok(status);
        ++i) {
     status = iree_hal_amdgpu_logical_device_sample_profile_clock_correlation(
         logical_device, logical_device->physical_devices[i], &records[i]);
+    if (iree_status_is_ok(status) && has_queue_device_events) {
+      // Queue-device spans use PM4 COPY_DATA GPU-clock timestamps, while clock
+      // correlations use KFD clock-counter samples. Both are useful on their
+      // own, but the KFD sample is not guaranteed to strictly bound or align
+      // with PM4 event ticks closely enough for host timeline fitting.
+      records[i].flags |=
+          IREE_HAL_PROFILE_CLOCK_CORRELATION_FLAG_DEVICE_TICK_UNALIGNED;
+    }
   }
 
   if (iree_status_is_ok(status)) {
@@ -1077,7 +1088,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_write_profile_metadata(
   if (iree_hal_amdgpu_logical_device_profiling_needs_clock_correlations(
           data_families)) {
     return iree_hal_amdgpu_logical_device_write_profile_clock_correlations(
-        logical_device, sink, session_id);
+        logical_device, sink, session_id, data_families);
   }
   return iree_ok_status();
 }
@@ -3261,7 +3272,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_profiling_flush(
           options->data_families)) {
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_logical_device_write_profile_clock_correlations(
-            logical_device, sink, logical_device->profiling.session_id));
+            logical_device, sink, logical_device->profiling.session_id,
+            options->data_families));
   }
   return iree_hal_amdgpu_profile_device_metrics_session_sample_and_write(
       logical_device->profiling.device_metrics_session, sink,
@@ -3312,7 +3324,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_profiling_end(
       iree_hal_amdgpu_logical_device_profiling_needs_clock_correlations(
           data_families)) {
     status = iree_hal_amdgpu_logical_device_write_profile_clock_correlations(
-        logical_device, sink, session_id);
+        logical_device, sink, session_id, data_families);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_profile_device_metrics_session_sample_and_write(
