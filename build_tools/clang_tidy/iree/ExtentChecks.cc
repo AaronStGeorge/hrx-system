@@ -19,6 +19,7 @@
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Basic/Diagnostic.h"
+#include "clang/Basic/IdentifierTable.h"
 #include "clang/Lex/Lexer.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -161,6 +162,12 @@ const ExtentValueContract* ContractForValueType(QualType Qual) {
   return nullptr;
 }
 
+StringRef SimpleFunctionName(const FunctionDecl* Function) {
+  const IdentifierInfo* Identifier =
+      Function ? Function->getIdentifier() : nullptr;
+  return Identifier ? Identifier->getName() : StringRef();
+}
+
 const InitListExpr* SourceInitializerList(const Expr* Init) {
   const auto* List =
       dyn_cast_or_null<InitListExpr>(IgnoreExpressionNoise(Init));
@@ -200,7 +207,7 @@ bool IsAggregateZeroInitializer(const InitListExpr* Init, ASTContext& Context) {
 bool IsInsideOwnEmptyFunction(const VarDecl* Var,
                               const ExtentValueContract& Contract) {
   const auto* Function = dyn_cast_or_null<FunctionDecl>(Var->getDeclContext());
-  return Function && Function->getName() == Contract.EmptyFunction;
+  return SimpleFunctionName(Function) == Contract.EmptyFunction;
 }
 
 bool IsZeroIntegerConstant(const Expr* Expr) {
@@ -345,7 +352,7 @@ bool SameExtentBase(const ExtentMemberUse& Lhs, const ExtentMemberUse& Rhs) {
 }
 
 bool IsEmptyHelperFunction(const FunctionDecl* Function) {
-  return Function && Function->getName().ends_with("_is_empty");
+  return SimpleFunctionName(Function).ends_with("_is_empty");
 }
 
 }  // namespace
