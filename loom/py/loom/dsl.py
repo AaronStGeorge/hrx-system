@@ -895,17 +895,20 @@ REFINABLE_RESULT_TYPE_REFS = Trait("RefinableResultTypeRefs")
 # propagate as an ordinary SSA value.
 POISON_BOUNDARY = Trait("PoisonBoundary")
 # Op refines facts or static type information while preserving operand/result
-# value identity. Source-to-low lowering aliases each result to the lowered
-# operand at the same ordinal.
+# value identity. Lowering can alias each result to the lowered operand at the
+# same ordinal.
 FACT_IDENTITY = Trait("FactIdentity")
 # Op fact inference defines target-independent uniform/lane-varying distribution
 # for its result when enough input distribution facts are available. Targets may
 # use those distribution facts for placement instead of rediscovering the same
 # property from producer structure.
 DISTRIBUTION_TRANSFER = Trait("DistributionTransfer")
+# Op creates storage relations between SSA values. Passes use this as a hot-path
+# guard before asking dialect-owned helpers for exact relation rows.
+STORAGE_RELATION = Trait("StorageRelation")
 # Op attaches metadata or facts to operand 0 and produces one result that
 # aliases the same physical value. Extra operands are interpretation data and do
-# not force target-low storage.
+# not force storage materialization.
 VALUE_ALIAS = Trait("ValueAlias")
 
 

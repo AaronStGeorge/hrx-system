@@ -15,6 +15,7 @@
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/pipeline/pass_environment.h"
+#include "loom/codegen/low/storage_relation.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
@@ -621,13 +622,10 @@ static iree_status_t loom_low_select_operand_forms_consumption_query(
 }
 
 static iree_status_t
-loom_low_select_operand_form_operand_has_dynamic_use_after_consume(
+loom_low_select_operand_form_value_has_dynamic_use_after_consume(
     loom_low_select_operand_forms_state_t* state, const loom_op_t* consuming_op,
-    const loom_value_id_t* operands, iree_host_size_t operand_count,
-    uint16_t operand_index, bool* out_has_dynamic_use_after_consume) {
+    loom_value_id_t value_id, bool* out_has_dynamic_use_after_consume) {
   *out_has_dynamic_use_after_consume = false;
-  IREE_ASSERT(operand_index < operand_count);
-  const loom_value_id_t value_id = operands[operand_index];
   if (value_id == LOOM_VALUE_ID_INVALID ||
       value_id >= state->module->values.count) {
     return iree_ok_status();
@@ -638,6 +636,66 @@ loom_low_select_operand_form_operand_has_dynamic_use_after_consume(
   loom_consumption_use_t use = {0};
   return loom_consumption_find_use_after(query, consuming_op, value_id, &use,
                                          out_has_dynamic_use_after_consume);
+}
+
+static iree_status_t
+loom_low_select_operand_form_operand_has_dynamic_use_after_consume(
+    loom_low_select_operand_forms_state_t* state, const loom_op_t* consuming_op,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    uint16_t operand_index, bool* out_has_dynamic_use_after_consume) {
+  IREE_ASSERT(operand_index < operand_count);
+  return loom_low_select_operand_form_value_has_dynamic_use_after_consume(
+      state, consuming_op, operands[operand_index],
+      out_has_dynamic_use_after_consume);
+}
+
+static iree_status_t
+loom_low_select_operand_form_relation_source_has_dynamic_use_after_consume(
+    loom_low_select_operand_forms_state_t* state, const loom_op_t* consuming_op,
+    loom_value_id_t value_id, bool* out_has_dynamic_use_after_consume) {
+  *out_has_dynamic_use_after_consume = false;
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      value_id >= state->module->values.count) {
+    return iree_ok_status();
+  }
+  const loom_value_t* value = loom_module_value(state->module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return iree_ok_status();
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (defining_op == NULL) {
+    return iree_ok_status();
+  }
+  if (defining_op->tied_result_count == 0 &&
+      !loom_traits_have_storage_relation(defining_op->traits)) {
+    return iree_ok_status();
+  }
+
+  const uint16_t relation_count =
+      loom_low_storage_relation_count(state->module, defining_op);
+  for (uint16_t i = 0; i < relation_count; ++i) {
+    loom_low_storage_relation_t relation = {0};
+    loom_low_storage_relation_get(state->module, defining_op, i, &relation);
+    if (relation.destination_value_id != value_id ||
+        relation.source_value_id == value_id) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_select_operand_form_value_has_dynamic_use_after_consume(
+            state, consuming_op, relation.source_value_id,
+            out_has_dynamic_use_after_consume));
+    if (*out_has_dynamic_use_after_consume) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_select_operand_form_relation_source_has_dynamic_use_after_consume(
+            state, consuming_op, relation.source_value_id,
+            out_has_dynamic_use_after_consume));
+    if (*out_has_dynamic_use_after_consume) {
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_select_operand_form_can_rewrite_destructive(
@@ -700,6 +758,23 @@ static iree_status_t loom_low_select_operand_form_can_rewrite_destructive(
           .tied_value_id = operands[tied_packet_operand_index],
       };
       *out_reject_reason = IREE_SV("destructive_operand_reused_after_consume");
+      *out_can_rewrite = false;
+      return iree_ok_status();
+    }
+    bool has_dynamic_alias_source_use_after_consume = false;
+    IREE_RETURN_IF_ERROR(
+        loom_low_select_operand_form_relation_source_has_dynamic_use_after_consume(
+            state, op, operands[tied_packet_operand_index],
+            &has_dynamic_alias_source_use_after_consume));
+    if (has_dynamic_alias_source_use_after_consume) {
+      *out_info = (loom_low_select_operand_form_destructive_info_t){
+          .has_destructive_operand = true,
+          .tied_descriptor_operand_index = constraint->rhs_operand_index,
+          .tied_source_packet_operand_index = source_packet_operand_index,
+          .tied_value_id = operands[tied_packet_operand_index],
+      };
+      *out_reject_reason =
+          IREE_SV("destructive_operand_alias_reused_after_consume");
       *out_can_rewrite = false;
       return iree_ok_status();
     }

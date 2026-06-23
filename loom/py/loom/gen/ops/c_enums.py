@@ -120,6 +120,7 @@ TRAIT_MAP: dict[str, str] = {
     "PoisonBoundary": "LOOM_TRAIT_POISON_BOUNDARY",
     "FactIdentity": "LOOM_TRAIT_FACT_IDENTITY",
     "DistributionTransfer": "LOOM_TRAIT_DISTRIBUTION_TRANSFER",
+    "StorageRelation": "LOOM_TRAIT_STORAGE_RELATION",
     "ValueAlias": "LOOM_TRAIT_VALUE_ALIAS",
 }
 

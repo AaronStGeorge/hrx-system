@@ -72,6 +72,7 @@ loom_cc_library(
     loom::codegen::low::diagnostics
     loom::codegen::low::function
     loom::codegen::low::pipeline::pass_environment
+    loom::codegen::low::storage_relation
     loom::codegen::low::target_binding
     loom::error::error_defs
     loom::ir
