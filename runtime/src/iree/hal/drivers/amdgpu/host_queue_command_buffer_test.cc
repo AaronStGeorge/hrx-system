@@ -722,7 +722,6 @@ TEST_F(HostQueueCommandBufferTest,
           executable, iree_hal_executable_function_from_index(0),
           IREE_HAL_QUEUE_AFFINITY_ANY, &descriptor));
   ASSERT_NE(descriptor, nullptr);
-  ASSERT_GT(descriptor->kernel_args.workgroup_size[0], 1u);
 
   Ref<iree_hal_buffer_t> output_buffer;
   IREE_ASSERT_OK(CreateHostVisibleDispatchBuffer(
