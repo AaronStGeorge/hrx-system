@@ -152,95 +152,46 @@ static void loom_low_source_memory_access_finalize_alignment(
   plan->minimum_alignment = alignment == 0 ? 1 : alignment;
 }
 
-static loom_value_id_t loom_low_source_memory_access_identity_source_value(
-    const loom_module_t* module, loom_value_id_t value_id) {
-  while (value_id < module->values.count) {
-    const loom_value_t* value = loom_module_value(module, value_id);
-    if (loom_value_is_block_arg(value)) {
-      return value_id;
-    }
-    const loom_op_t* defining_op = loom_value_def_op(value);
-    if (!defining_op || !loom_index_assume_isa(defining_op)) {
-      return value_id;
-    }
-    const uint16_t result_index = loom_value_def_index(value);
-    if (result_index >= defining_op->operand_count) {
-      return value_id;
-    }
-    const loom_value_id_t source_value_id =
-        loom_op_const_operands(defining_op)[result_index];
-    if (source_value_id == value_id) {
-      return value_id;
-    }
-    value_id = source_value_id;
-  }
-  return value_id;
-}
-
-static bool loom_low_source_memory_access_value_as_workitem_id(
-    const loom_module_t* module, loom_value_id_t value_id,
-    loom_kernel_dimension_t* out_dimension) {
-  *out_dimension = LOOM_KERNEL_DIMENSION_COUNT_;
-  value_id =
-      loom_low_source_memory_access_identity_source_value(module, value_id);
-  if (value_id >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) {
-    return false;
-  }
-  const loom_op_t* defining_op = loom_value_def_op(value);
-  if (!defining_op || !loom_kernel_workitem_id_isa(defining_op)) {
-    return false;
-  }
-  const loom_kernel_dimension_t dimension =
-      loom_kernel_workitem_id_dimension(defining_op);
-  if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_) {
-    return false;
-  }
-  *out_dimension = dimension;
-  return true;
-}
-
-static bool loom_low_source_memory_access_value_as_workgroup_id(
-    const loom_module_t* module, loom_value_id_t value_id,
-    loom_kernel_dimension_t* out_dimension) {
-  *out_dimension = LOOM_KERNEL_DIMENSION_COUNT_;
-  value_id =
-      loom_low_source_memory_access_identity_source_value(module, value_id);
-  if (value_id >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) {
-    return false;
-  }
-  const loom_op_t* defining_op = loom_value_def_op(value);
-  if (!defining_op || !loom_kernel_workgroup_id_isa(defining_op)) {
-    return false;
-  }
-  const loom_kernel_dimension_t dimension =
-      loom_kernel_workgroup_id_dimension(defining_op);
-  if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_) {
-    return false;
-  }
-  *out_dimension = dimension;
-  return true;
-}
-
 static void loom_low_source_memory_access_dynamic_index_source(
-    const loom_module_t* module, loom_value_id_t index,
+    const loom_value_fact_table_t* fact_table, loom_value_id_t index,
     loom_low_source_memory_dynamic_index_source_t* out_source,
     loom_kernel_dimension_t* out_dimension) {
   *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE;
   *out_dimension = LOOM_KERNEL_DIMENSION_COUNT_;
-  if (loom_low_source_memory_access_value_as_workitem_id(module, index,
-                                                         out_dimension)) {
-    *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID;
-  } else if (loom_low_source_memory_access_value_as_workgroup_id(
-                 module, index, out_dimension)) {
-    *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
+  if (!fact_table || index == LOOM_VALUE_ID_INVALID ||
+      !loom_value_fact_table_has_entry(fact_table, index)) {
+    return;
+  }
+  const uint32_t topology_flags =
+      loom_value_fact_table_lookup(fact_table, index).flags &
+      LOOM_VALUE_FACT_TOPOLOGY_DOMAIN_MASK;
+  switch (topology_flags) {
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_X:
+      *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID;
+      *out_dimension = LOOM_KERNEL_DIMENSION_X;
+      return;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Y:
+      *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID;
+      *out_dimension = LOOM_KERNEL_DIMENSION_Y;
+      return;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKITEM_Z:
+      *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID;
+      *out_dimension = LOOM_KERNEL_DIMENSION_Z;
+      return;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKGROUP_X:
+      *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
+      *out_dimension = LOOM_KERNEL_DIMENSION_X;
+      return;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKGROUP_Y:
+      *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
+      *out_dimension = LOOM_KERNEL_DIMENSION_Y;
+      return;
+    case LOOM_VALUE_FACT_TOPOLOGY_WORKGROUP_Z:
+      *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
+      *out_dimension = LOOM_KERNEL_DIMENSION_Z;
+      return;
+    default:
+      return;
   }
 }
 
@@ -852,7 +803,7 @@ static bool loom_low_source_memory_access_affine_index_terms_from_value(
 
 static bool
 loom_low_source_memory_access_affine_terms_have_mixed_coordinate_sources(
-    const loom_module_t* module,
+    const loom_value_fact_table_t* fact_table,
     const loom_low_source_memory_affine_index_term_t* terms,
     uint8_t term_count) {
   bool has_workgroup = false;
@@ -861,8 +812,8 @@ loom_low_source_memory_access_affine_terms_have_mixed_coordinate_sources(
     loom_low_source_memory_dynamic_index_source_t source =
         LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE;
     loom_kernel_dimension_t dimension = LOOM_KERNEL_DIMENSION_COUNT_;
-    loom_low_source_memory_access_dynamic_index_source(module, terms[i].index,
-                                                       &source, &dimension);
+    loom_low_source_memory_access_dynamic_index_source(
+        fact_table, terms[i].index, &source, &dimension);
     has_workgroup |=
         source == LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
     has_workitem |=
@@ -1214,7 +1165,7 @@ static bool loom_low_source_memory_access_add_dynamic_view_base_byte_offset(
       .byte_shift = LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE,
   };
   loom_low_source_memory_access_dynamic_index_source(
-      module, dynamic_index, &term.source, &term.dimension);
+      fact_table, dynamic_index, &term.source, &term.dimension);
   (void)loom_low_source_memory_access_power_of_two_shift(byte_stride,
                                                          &term.byte_shift);
   loom_low_source_memory_dynamic_term_compute_scaled_byte_facts(
@@ -1574,7 +1525,7 @@ static bool loom_low_source_memory_access_plan_from_components(
             &affine_index_offset) &&
         affine_term_count > 1 &&
         loom_low_source_memory_access_affine_terms_have_mixed_coordinate_sources(
-            module, affine_terms, affine_term_count) &&
+            fact_table, affine_terms, affine_term_count) &&
         loom_low_source_memory_access_can_extract_static_index_offset(
             affine_index_offset);
     int64_t affine_static_byte_offset = static_byte_offset;
@@ -1617,7 +1568,7 @@ static bool loom_low_source_memory_access_plan_from_components(
             .stride_value_count = stride_value_count,
         };
         loom_low_source_memory_access_dynamic_index_source(
-            module, affine_term->index, &term.source, &term.dimension);
+            fact_table, affine_term->index, &term.source, &term.dimension);
         for (uint8_t stride_ordinal = 0; stride_ordinal < stride_value_count;
              ++stride_ordinal) {
           term.stride_values[stride_ordinal] = stride_values[stride_ordinal];
@@ -1657,7 +1608,7 @@ static bool loom_low_source_memory_access_plan_from_components(
         .stride_value_count = stride_value_count,
     };
     loom_low_source_memory_access_dynamic_index_source(
-        module, dynamic_index, &term.source, &term.dimension);
+        fact_table, dynamic_index, &term.source, &term.dimension);
     for (uint8_t stride_ordinal = 0; stride_ordinal < stride_value_count;
          ++stride_ordinal) {
       term.stride_values[stride_ordinal] = stride_values[stride_ordinal];

@@ -584,6 +584,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir
     loom::ops::buffer
+    loom::ops::cfg
     loom::ops::encoding
     loom::ops::index
     loom::ops::kernel

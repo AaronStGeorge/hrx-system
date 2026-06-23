@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Target-low source memory access planning.
+// Source memory access planning.
 //
 // This layer owns the target-independent half of vector memory lowering:
 // decomposing a typed view/vector access plus value facts into a compact source
