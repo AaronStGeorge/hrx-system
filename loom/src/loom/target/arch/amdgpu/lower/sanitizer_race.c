@@ -296,7 +296,7 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_global_load(
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_offset_attr(
       builder, 0, &attrs[attr_count++]));
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_append_load_attrs_scoped(
-      builder, descriptor_set, LOOM_CACHE_SCOPE_DEVICE, attrs,
+      builder, descriptor_set, LOOM_CACHE_SCOPE_SYSTEM, attrs,
       IREE_ARRAYSIZE(attrs), &attr_count));
   loom_amdgpu_filter_descriptor_optional_attrs(builder, descriptor_set,
                                                descriptor, /*required_count=*/1,
@@ -319,7 +319,7 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_global_load(
   if (iree_any_bit_set(flags, LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_ACQUIRE)) {
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_system_memory_build_acquire_ordering_scoped(
-            builder, descriptor_set, LOOM_CACHE_SCOPE_DEVICE, location));
+            builder, descriptor_set, LOOM_CACHE_SCOPE_SYSTEM, location));
   }
   *out_value = value;
   return iree_ok_status();
@@ -370,14 +370,14 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_global_swap_u64_acq_rel(
   iree_host_size_t attr_count = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_system_memory_append_return_atomic_attrs_scoped(
-          builder, descriptor_set, LOOM_CACHE_SCOPE_DEVICE, attrs,
+          builder, descriptor_set, LOOM_CACHE_SCOPE_SYSTEM, attrs,
           IREE_ARRAYSIZE(attrs), &attr_count));
   loom_amdgpu_filter_descriptor_optional_attrs(builder, descriptor_set,
                                                descriptor, /*required_count=*/0,
                                                attrs, &attr_count);
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_release_ordering_scoped(
-      builder, descriptor_set, LOOM_CACHE_SCOPE_DEVICE, location));
+      builder, descriptor_set, LOOM_CACHE_SCOPE_SYSTEM, location));
 
   loom_value_id_t operands[4] = {byte_offset, desired_vgpr, base_address,
                                  LOOM_VALUE_ID_INVALID};
@@ -398,7 +398,7 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_global_swap_u64_acq_rel(
   const loom_value_id_t observed =
       loom_value_slice_get(loom_low_op_results(op), 0);
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_acquire_ordering_scoped(
-      builder, descriptor_set, LOOM_CACHE_SCOPE_DEVICE, location));
+      builder, descriptor_set, LOOM_CACHE_SCOPE_SYSTEM, location));
   *out_observed_value = observed;
   return iree_ok_status();
 }
@@ -421,7 +421,7 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_global_atomic_add(
   iree_host_size_t attr_count = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_system_memory_append_no_return_atomic_attrs_scoped(
-          builder, descriptor_set, LOOM_CACHE_SCOPE_DEVICE, attrs,
+          builder, descriptor_set, LOOM_CACHE_SCOPE_SYSTEM, attrs,
           IREE_ARRAYSIZE(attrs), &attr_count));
   loom_amdgpu_filter_descriptor_optional_attrs(builder, descriptor_set,
                                                descriptor, /*required_count=*/0,
@@ -440,7 +440,7 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_global_atomic_add(
       /*result_count=*/0, /*tied_results=*/NULL, /*tied_result_count=*/0,
       location, &op));
   return loom_amdgpu_system_memory_build_release_ordering_scoped(
-      builder, descriptor_set, LOOM_CACHE_SCOPE_DEVICE, location);
+      builder, descriptor_set, LOOM_CACHE_SCOPE_SYSTEM, location);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_race_build_config_values(

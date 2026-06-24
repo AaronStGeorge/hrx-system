@@ -6,11 +6,10 @@
 
 // Target-low helpers for AMDGPU global memory operations.
 //
-// Runtime producer paths such as feedback packets, host signals, host calls,
-// and future device-side queue producers all need the same system-scope memory
-// policy. Device-owned runtime structures such as sanitizer shadow state use
-// the same target-specific encoding machinery at narrower scopes. This file
-// owns those cache attrs and explicit ordering packets.
+// Runtime producer paths such as feedback packets, host signals, sanitizer
+// state, host calls, and future device-side queue producers all need the same
+// target-specific memory policy. This file owns those cache attrs and explicit
+// ordering packets.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_SYSTEM_MEMORY_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_SYSTEM_MEMORY_H_
