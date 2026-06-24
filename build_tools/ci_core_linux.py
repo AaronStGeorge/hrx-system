@@ -65,6 +65,9 @@ ARTIFACT_SETS = {
     },
 }
 
+ROCM_ARTIFACT_VARIANTS = ("release", "asan", "host-asan", "tsan")
+ROCM_ARTIFACT_VARIANT_LOG_KEY = "logs/compiler-runtime/ROCR-Runtime_configure.log"
+
 PACKAGE_NAMES = [
     "hrx-public-linux-x86_64",
     "hrx-public-deps-linux-x86_64",
@@ -498,7 +501,53 @@ def select_available(
     return selected, missing
 
 
-def discover_latest_run_id(s3, release_type: str, artifact_set: str) -> str:
+def read_s3_text(s3, bucket: str, key: str) -> str:
+    response = s3.get_object(Bucket=bucket, Key=key)
+    body = response.get("Body")
+    if body is None:
+        raise RuntimeError(f"S3 object has no body: s3://{bucket}/{key}")
+    return body.read().decode(errors="replace")
+
+
+def rocm_artifact_variant_from_configure_log(text: str) -> str:
+    if "Override ASAN GPU_TARGETS" in text or "SANITIZER = ASAN" in text:
+        return "asan"
+    if "Override TSAN GPU_TARGETS" in text or "SANITIZER = TSAN" in text:
+        return "tsan"
+    if "HOST_ASAN enabled" in text or "SANITIZER = HOST_ASAN" in text:
+        return "host-asan"
+    return "release"
+
+
+def rocm_artifact_variant(
+    s3, bucket: str, prefix: str, available: list[S3Object]
+) -> str:
+    key = prefix + ROCM_ARTIFACT_VARIANT_LOG_KEY
+    if not any(obj.key == key for obj in available):
+        return "release"
+    return rocm_artifact_variant_from_configure_log(read_s3_text(s3, bucket, key))
+
+
+def validate_rocm_artifact_variant(
+    s3,
+    bucket: str,
+    prefix: str,
+    available: list[S3Object],
+    expected_variant: str,
+) -> None:
+    actual_variant = rocm_artifact_variant(s3, bucket, prefix, available)
+    if actual_variant == expected_variant:
+        return
+    raise RuntimeError(
+        f"ROCm artifact prefix s3://{bucket}/{prefix} has variant "
+        f"{actual_variant!r}, but {expected_variant!r} was requested. Set "
+        "HRX_ROCM_ARTIFACT_VARIANT or choose a matching --run-id."
+    )
+
+
+def discover_latest_run_id(
+    s3, release_type: str, artifact_set: str, artifact_variant: str
+) -> str:
     bucket = release_bucket(release_type, "artifacts")
     paginator = s3.get_paginator("list_objects_v2")
     candidates: list[int] = []
@@ -511,22 +560,25 @@ def discover_latest_run_id(s3, release_type: str, artifact_set: str) -> str:
         prefix = f"{run_id}-{PLATFORM}/"
         available = list_prefix(s3, bucket, prefix)
         _, missing = select_available(available, prefix, wanted_artifacts(artifact_set))
-        if not missing:
+        if (
+            not missing
+            and rocm_artifact_variant(s3, bucket, prefix, available) == artifact_variant
+        ):
             return str(run_id)
     raise RuntimeError(
-        f"Could not discover a {release_type} Linux run with artifact set "
-        f"{artifact_set!r}. Pass --run-id explicitly."
+        f"Could not discover a {release_type} Linux {artifact_variant} run "
+        f"with artifact set {artifact_set!r}. Pass --run-id explicitly."
     )
 
 
 def download_one(s3, bucket: str, obj: S3Object, cache_dir: Path) -> Path:
-    dest = cache_dir / Path(obj.key).name
+    dest = s3_cache_path(cache_dir, bucket, obj.key)
     if dest.exists() and dest.stat().st_size == obj.size:
-        log(f"  == Cached {dest.name}")
+        log(f"  == Cached {obj.key}")
         return dest
     log(f"  ++ Downloading {obj.key}")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    tmp = dest.with_name(f"{dest.name}.{os.getpid()}.tmp")
     s3.download_file(bucket, obj.key, str(tmp))
     tmp.replace(dest)
     return dest
@@ -558,12 +610,20 @@ def verify_checksum(archive_path: Path, checksum_path: Path | None) -> None:
         )
 
 
+def s3_cache_path(cache_dir: Path, bucket: str, key: str) -> Path:
+    relpath = PurePosixPath(key)
+    if relpath.is_absolute() or ".." in relpath.parts:
+        raise RuntimeError(f"Unsafe S3 key: {key}")
+    return cache_dir / bucket / relpath
+
+
 def write_rocm_manifest(
     path: Path,
     *,
     release_type: str,
     run_id: str,
     bucket: str,
+    artifact_variant: str,
     artifact_set: str,
     artifacts: list[S3Object],
 ) -> None:
@@ -573,6 +633,7 @@ def write_rocm_manifest(
         "run_id": run_id,
         "platform": PLATFORM,
         "bucket": bucket,
+        "artifact_variant": artifact_variant,
         "artifact_set": artifact_set,
         "artifacts": [obj.__dict__ for obj in artifacts],
     }
@@ -584,8 +645,13 @@ def fetch_rocm(args: argparse.Namespace) -> None:
     s3 = create_s3_client()
     run_id = args.run_id
     if args.latest:
-        run_id = discover_latest_run_id(s3, args.release_type, args.artifact_set)
-        log(f"Resolved latest {args.release_type} Linux run id: {run_id}")
+        run_id = discover_latest_run_id(
+            s3, args.release_type, args.artifact_set, args.artifact_variant
+        )
+        log(
+            f"Resolved latest {args.release_type} Linux "
+            f"{args.artifact_variant} run id: {run_id}"
+        )
     if not run_id:
         raise RuntimeError("Pass --run-id or --latest")
 
@@ -594,6 +660,7 @@ def fetch_rocm(args: argparse.Namespace) -> None:
     available = list_prefix(s3, bucket, prefix)
     if not available:
         raise RuntimeError(f"No artifacts found at s3://{bucket}/{prefix}")
+    validate_rocm_artifact_variant(s3, bucket, prefix, available, args.artifact_variant)
 
     selected, missing = select_available(
         available, prefix, wanted_artifacts(args.artifact_set)
@@ -631,6 +698,7 @@ def fetch_rocm(args: argparse.Namespace) -> None:
         release_type=args.release_type,
         run_id=run_id,
         bucket=bucket,
+        artifact_variant=args.artifact_variant,
         artifact_set=args.artifact_set,
         artifacts=selected,
     )
@@ -1281,6 +1349,7 @@ def run_all(args: argparse.Namespace) -> None:
         run_id=args.run_id,
         latest=not bool(args.run_id),
         artifact_set=args.artifact_set,
+        artifact_variant=args.artifact_variant,
         rocm_root=args.rocm_root,
         download_cache_dir=args.download_cache_dir,
         download_concurrency=args.download_concurrency,
@@ -1304,6 +1373,11 @@ def add_shared_args(parser: argparse.ArgumentParser) -> None:
         "--artifact-set",
         default=env_default("HRX_ARTIFACT_SET", "core"),
         choices=sorted(ARTIFACT_SETS),
+    )
+    parser.add_argument(
+        "--artifact-variant",
+        default=env_default("HRX_ROCM_ARTIFACT_VARIANT", "release"),
+        choices=ROCM_ARTIFACT_VARIANTS,
     )
     parser.add_argument(
         "--rocm-root",
@@ -1481,6 +1555,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_id=args.run_id,
                 latest=not bool(args.run_id),
                 artifact_set=args.artifact_set,
+                artifact_variant=args.artifact_variant,
                 rocm_root=args.rocm_root,
                 download_cache_dir=args.download_cache_dir,
                 download_concurrency=args.download_concurrency,
