@@ -159,9 +159,11 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_setup_dispatch(
     iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT queue_state,
     uint64_t tsan_generation_epoch, uint32_t dispatch_header_setup,
     uint32_t packet_delta, uint32_t generation_delta, uint32_t shadow_slot) {
-  if ((setup_flags &
+  const bool patch_indirect_parameters =
+      (setup_flags &
        IREE_HAL_AMDGPU_DEVICE_TSAN_DISPATCH_SETUP_FLAG_INDIRECT_PARAMETERS) !=
-      0) {
+      0;
+  if (patch_indirect_parameters) {
     dispatch_packet->grid_size[0] =
         workgroup_count[0] * dispatch_packet->workgroup_size[0];
     dispatch_packet->grid_size[1] =
@@ -192,10 +194,12 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_setup_dispatch(
       IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_ASSIGNED,
       iree_amdgpu_memory_order_release, iree_amdgpu_memory_scope_device);
 
-  iree_amdgpu_scoped_atomic_store(
-      (iree_amdgpu_scoped_atomic_uint32_t*)dispatch_packet,
-      dispatch_header_setup, iree_amdgpu_memory_order_release,
-      iree_amdgpu_memory_scope_system);
+  if (patch_indirect_parameters) {
+    iree_amdgpu_scoped_atomic_store(
+        (iree_amdgpu_scoped_atomic_uint32_t*)dispatch_packet,
+        dispatch_header_setup, iree_amdgpu_memory_order_release,
+        iree_amdgpu_memory_scope_system);
+  }
 }
 
 #endif  // IREE_AMDGPU_TARGET_DEVICE

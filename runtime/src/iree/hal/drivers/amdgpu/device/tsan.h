@@ -30,7 +30,8 @@ typedef struct iree_hal_amdgpu_device_tsan_dispatch_setup_args_t {
   uint32_t reserved0;
   // Device pointer to a uint32_t[3] workgroup-count parameter buffer.
   const uint32_t* workgroup_count;
-  // Device pointer to the target dispatch packet to patch and publish.
+  // Device pointer to the target dispatch packet when patching indirect
+  // parameters; otherwise unused.
   iree_hsa_kernel_dispatch_packet_t* dispatch_packet;
   // Optional device pointer to the dispatch's implicit args suffix.
   iree_amdgpu_kernel_implicit_args_t* implicit_args;
@@ -38,7 +39,7 @@ typedef struct iree_hal_amdgpu_device_tsan_dispatch_setup_args_t {
   iree_hal_amdgpu_tsan_queue_state_t* tsan_queue_state;
   // Base generation value used when publishing TSAN dispatch state.
   uint64_t tsan_generation_epoch;
-  // Final 32-bit header/setup word to publish with a release store.
+  // Final 32-bit header/setup word used when patching indirect parameters.
   uint32_t dispatch_header_setup;
   // Distance from the setup packet to the target dispatch packet.
   uint32_t packet_delta;
@@ -85,7 +86,8 @@ void iree_hal_amdgpu_device_tsan_emplace_queue_initialize(
 // |setup_flags| includes INDIRECT_PARAMETERS, it also reads |workgroup_count|
 // on device and updates the target packet's grid-size fields and optional
 // implicit args before atomically publishing |dispatch_header|/|dispatch_setup|
-// to the target packet.
+// to the target packet. Without INDIRECT_PARAMETERS the host commits the target
+// packet header and orders it after the setup dispatch with AQL barriers.
 void iree_hal_amdgpu_device_tsan_emplace_dispatch_setup(
     const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
         setup_kernel_args,

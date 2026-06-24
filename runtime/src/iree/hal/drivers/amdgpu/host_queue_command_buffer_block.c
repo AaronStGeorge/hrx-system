@@ -622,8 +622,9 @@ iree_hal_amdgpu_host_queue_write_command_buffer_tsan_setups(
             IREE_HAL_AMDGPU_HOST_QUEUE_COMMAND_BUFFER_PACKET_FLAG_EXECUTION_BARRIER));
     packet_setups[setup_packet_index] = setup_packet->dispatch.setup;
 
-    packet_headers[target_packet_index] = IREE_HSA_PACKET_TYPE_INVALID;
-    packet_setups[target_packet_index] = 0;
+    packet_headers[target_packet_index] =
+        (uint16_t)(target_header | (1u << IREE_HSA_PACKET_HEADER_BARRIER));
+    packet_setups[target_packet_index] = target_setup;
   }
   return iree_ok_status();
 }

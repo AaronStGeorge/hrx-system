@@ -949,7 +949,8 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_dispatch_packets(
         iree_hal_amdgpu_aql_packet_control_barrier(IREE_HSA_FENCE_SCOPE_AGENT,
                                                    IREE_HSA_FENCE_SCOPE_AGENT));
   }
-  if (!needs_pre_dispatch_packet) {
+  if (!needs_pre_dispatch_packet ||
+      (plan->needs_tsan_assignment && !plan->uses_indirect_parameters)) {
     iree_hal_amdgpu_aql_ring_commit(dispatch_packet, dispatch_header,
                                     dispatch_setup);
   }
