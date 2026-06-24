@@ -44,6 +44,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_tsan_state_initialize(
   iree_hal_amdgpu_wait_resolution_t resolution = {0};
   iree_hal_amdgpu_host_queue_kernel_submission_t submission;
   bool ready = false;
+  uint64_t submission_epoch = 0;
   iree_slim_mutex_lock(&queue->locks.submission_mutex);
   iree_status_t status = iree_hal_amdgpu_host_queue_try_begin_kernel_submission(
       queue, &resolution, iree_hal_semaphore_list_empty(),
@@ -78,12 +79,11 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_tsan_state_initialize(
 
     iree_hal_amdgpu_host_queue_emit_kernel_submission_prefix(queue, &resolution,
                                                              &submission);
-    const uint64_t submission_epoch =
-        iree_hal_amdgpu_host_queue_finish_kernel_submission(
-            queue, &resolution, iree_hal_semaphore_list_empty(),
-            /*operation_resources=*/NULL, /*operation_resource_count=*/0,
-            /*inout_resource_set=*/NULL,
-            IREE_HAL_AMDGPU_HOST_QUEUE_SUBMISSION_FLAG_NONE, &submission);
+    submission_epoch = iree_hal_amdgpu_host_queue_finish_kernel_submission(
+        queue, &resolution, iree_hal_semaphore_list_empty(),
+        /*operation_resources=*/NULL, /*operation_resource_count=*/0,
+        /*inout_resource_set=*/NULL,
+        IREE_HAL_AMDGPU_HOST_QUEUE_SUBMISSION_FLAG_NONE, &submission);
     iree_hal_amdgpu_host_queue_publish_submission_kernargs(queue, &submission);
     iree_hal_amdgpu_notification_ring_publish_epoch(&queue->notification_ring,
                                                     submission_epoch);
@@ -92,6 +92,10 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_tsan_state_initialize(
                                       submission.first_packet_id);
   }
   iree_slim_mutex_unlock(&queue->locks.submission_mutex);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_host_queue_wait_for_setup_epoch(queue,
+                                                             submission_epoch);
+  }
 
   IREE_TRACE_ZONE_END(z0);
   return status;
