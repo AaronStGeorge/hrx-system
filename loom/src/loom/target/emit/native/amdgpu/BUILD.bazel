@@ -523,8 +523,10 @@ loom_cc_test(
     name = "hsaco_hsa_test",
     srcs = ["hsaco_hsa_test.cc"],
     tags = [
+        "iree-run-requirement=runtime.resource.amd_gpu",
         "nodocker",
         "requires-gpu-amd",
+        "runtime-resource=amd-gpu",
     ],
     deps = [
         ":kernel_hsaco",
