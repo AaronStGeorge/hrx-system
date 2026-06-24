@@ -30,7 +30,7 @@ typedef struct iree_hal_amdgpu_device_tsan_dispatch_setup_args_t {
   uint32_t reserved0;
   // Device pointer to a uint32_t[3] workgroup-count parameter buffer.
   const uint32_t* workgroup_count;
-  // Device pointer to the AQL dispatch packet to publish after setup.
+  // Device pointer to the target dispatch packet to patch and publish.
   iree_hsa_kernel_dispatch_packet_t* dispatch_packet;
   // Optional device pointer to the dispatch's implicit args suffix.
   iree_amdgpu_kernel_implicit_args_t* implicit_args;

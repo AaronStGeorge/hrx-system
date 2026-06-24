@@ -106,15 +106,10 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_assign(
   const iree_hal_amdgpu_tsan_assignment_record_t* IREE_AMDGPU_RESTRICT records =
       (const iree_hal_amdgpu_tsan_assignment_record_t*)(const void*)(plan + 1);
   const iree_hal_amdgpu_tsan_assignment_record_t record = records[record_index];
-  const uint64_t assignment_packet_address =
-      (uint64_t)(uintptr_t)iree_amdgcn_dispatch_ptr();
-  const uint64_t packet_offset =
-      assignment_packet_address - queue_state->aql_ring_base;
-  const uint32_t assignment_slot =
-      (uint32_t)((packet_offset / sizeof(iree_hsa_kernel_dispatch_packet_t)) &
-                 queue_state->aql_ring_mask);
+  const uint64_t assignment_dispatch_id = iree_amdgcn_dispatch_id();
   const uint32_t target_slot =
-      (assignment_slot + record.packet_delta) & queue_state->aql_ring_mask;
+      (uint32_t)((assignment_dispatch_id + record.packet_delta) &
+                 queue_state->aql_ring_mask);
 
   iree_hal_amdgpu_tsan_dispatch_state_t* IREE_AMDGPU_RESTRICT dispatch_states =
       (iree_hal_amdgpu_tsan_dispatch_state_t*)(uintptr_t)
@@ -181,15 +176,9 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_setup_dispatch(
     }
   }
 
-  const uint64_t setup_packet_address =
-      (uint64_t)(uintptr_t)iree_amdgcn_dispatch_ptr();
-  const uint64_t packet_offset =
-      setup_packet_address - queue_state->aql_ring_base;
-  const uint32_t setup_slot =
-      (uint32_t)((packet_offset / sizeof(iree_hsa_kernel_dispatch_packet_t)) &
-                 queue_state->aql_ring_mask);
-  const uint32_t target_slot =
-      (setup_slot + packet_delta) & queue_state->aql_ring_mask;
+  const uint64_t setup_dispatch_id = iree_amdgcn_dispatch_id();
+  const uint32_t target_slot = (uint32_t)((setup_dispatch_id + packet_delta) &
+                                          queue_state->aql_ring_mask);
 
   iree_hal_amdgpu_tsan_dispatch_state_t* IREE_AMDGPU_RESTRICT dispatch_states =
       (iree_hal_amdgpu_tsan_dispatch_state_t*)(uintptr_t)

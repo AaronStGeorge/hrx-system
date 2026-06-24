@@ -38,6 +38,10 @@ iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
 iree_status_t loom_amdgpu_lookup_current_dispatch_ptr(
     loom_low_lower_context_t* context, loom_value_id_t* out_low_value_id);
 
+// Looks up the current dispatch packet ID live-in.
+iree_status_t loom_amdgpu_lookup_current_dispatch_id(
+    loom_low_lower_context_t* context, loom_value_id_t* out_low_value_id);
+
 // Looks up the current workgroup id live-in for |dimension|.
 iree_status_t loom_amdgpu_lookup_current_workgroup_id(
     loom_low_lower_context_t* context, loom_kernel_dimension_t dimension,

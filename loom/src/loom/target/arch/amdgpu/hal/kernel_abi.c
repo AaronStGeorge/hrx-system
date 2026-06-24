@@ -21,7 +21,7 @@
 
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT 3u
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_FIXED_VALUE_COUNT \
-  (4u + 2u * LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT)
+  (5u + 2u * LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT)
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_RESOURCE_COUNT \
   (UINT32_MAX / LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE)
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_ARG_MAX_UNIT_COUNT 2u
@@ -33,6 +33,8 @@ static iree_string_view_t loom_amdgpu_hal_kernel_abi_source_name(
       return IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE);
     case LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_PTR:
       return IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE);
+    case LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_ID:
+      return IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_ID_SOURCE);
     case LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_X:
       return IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE);
     case LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Y:
@@ -63,6 +65,8 @@ loom_amdgpu_hal_kernel_abi_source_kind_from_stable_id(uint64_t source_id) {
       return LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_KERNARG_SEGMENT_PTR;
     case LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE_ID:
       return LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_PTR;
+    case LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_ID_SOURCE_ID:
+      return LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_ID;
     case LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE_ID:
       return LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_X;
     case LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Y_SOURCE_ID:
@@ -186,6 +190,12 @@ bool loom_amdgpu_hal_kernel_abi_is_dispatch_ptr_live_in(
     const loom_module_t* module, loom_value_id_t value_id) {
   return loom_amdgpu_hal_kernel_abi_is_live_in_source_kind(
       module, value_id, LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_PTR);
+}
+
+bool loom_amdgpu_hal_kernel_abi_is_dispatch_id_live_in(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  return loom_amdgpu_hal_kernel_abi_is_live_in_source_kind(
+      module, value_id, LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_ID);
 }
 
 bool loom_amdgpu_hal_kernel_abi_is_workgroup_id_x_live_in(
@@ -1290,6 +1300,7 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
 
   const loom_op_t* kernarg_ptr_op = NULL;
   const loom_op_t* dispatch_ptr_op = NULL;
+  const loom_op_t* dispatch_id_op = NULL;
   const loom_op_t*
       workgroup_id_ops[LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT] =
           {
@@ -1339,6 +1350,20 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
             result));
       }
       dispatch_ptr_op = live_in_op;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_live_in_type(
+          module, register_type_resolver, live_in_op,
+          LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 2, source_name, max_errors,
+          emitter, result));
+      continue;
+    }
+
+    if (source_kind == LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_ID) {
+      if (dispatch_id_op != NULL) {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_emit_live_in_duplicate(
+            live_in_op, dispatch_id_op, source_name, max_errors, emitter,
+            result));
+      }
+      dispatch_id_op = live_in_op;
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_live_in_type(
           module, register_type_resolver, live_in_op,
           LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 2, source_name, max_errors,
@@ -2170,6 +2195,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
   iree_host_size_t local_fixed_value_count = 0;
   loom_value_id_t kernarg_ptr = LOOM_VALUE_ID_INVALID;
   loom_value_id_t dispatch_ptr = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t dispatch_id = LOOM_VALUE_ID_INVALID;
   loom_value_id_t
       workgroup_ids[LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT] = {
           LOOM_VALUE_ID_INVALID,
@@ -2213,6 +2239,17 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
             "dispatch pointer live-ins");
       }
       dispatch_ptr = loom_low_live_in_result(op);
+      continue;
+    }
+
+    if (source_kind == LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_ID) {
+      if (dispatch_id != LOOM_VALUE_ID_INVALID) {
+        return iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "AMDGPU HAL kernel ABI fixed-value collection reached duplicate "
+            "dispatch ID live-ins");
+      }
+      dispatch_id = loom_low_live_in_result(op);
       continue;
     }
 
@@ -2294,6 +2331,16 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
     local_fixed_values[local_fixed_value_count++] =
         (loom_low_allocation_fixed_value_t){
             .value_id = kernarg_ptr,
+            .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            .location_base = user_sgpr_base,
+            .location_count = 2,
+        };
+    user_sgpr_base += 2;
+  }
+  if (dispatch_id != LOOM_VALUE_ID_INVALID) {
+    local_fixed_values[local_fixed_value_count++] =
+        (loom_low_allocation_fixed_value_t){
+            .value_id = dispatch_id,
             .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
             .location_base = user_sgpr_base,
             .location_count = 2,

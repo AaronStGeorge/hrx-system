@@ -121,11 +121,9 @@ enum iree_hal_amdgpu_tsan_dispatch_state_flag_bits_t {
 
 // Runtime-published TSAN configuration read by instrumented device code.
 //
-// Queue-scoped executable variants publish queue-specific AQL ring coordinates
-// so device code can derive a queue-local dispatch slot from its implicit
-// dispatch packet pointer without host per-dispatch mutation. When
-// |queue_aql_base| is zero, instrumentation must conservatively use dispatch
-// slot zero.
+// Queue-scoped executable variants publish queue-specific packet geometry so
+// device code can derive a queue-local dispatch slot from its HSA dispatch ID
+// without host per-dispatch mutation.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   // Size of this record in bytes for forward-compatible parsing.
   uint32_t record_length;
@@ -147,9 +145,9 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   uint32_t workgroup_capacity;
   // Bytes in each shadow entry.
   uint32_t shadow_entry_size;
-  // Device-visible base of the owning queue AQL ring, or 0 for slot zero.
+  // Host-observed base of the owning queue AQL ring, or 0 when unavailable.
   uint64_t queue_aql_base;
-  // Power-of-two AQL packet slot mask used with |queue_aql_base|.
+  // Power-of-two AQL packet slot mask used with the HSA dispatch ID.
   uint64_t queue_aql_slot_mask;
   // Device-visible iree_hal_amdgpu_tsan_queue_state_t pointer, or zero.
   uint64_t queue_state_base;
@@ -198,7 +196,7 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_queue_state_t {
   uint32_t dispatch_state_count;
   // Number of queue-local dispatch shadow slots available.
   uint32_t shadow_slot_count;
-  // Device-visible base address of the HSA AQL packet ring.
+  // Host-observed base address of the HSA AQL packet ring.
   uint64_t aql_ring_base;
   // Power-of-two packet-ring slot mask.
   uint64_t aql_ring_mask;
@@ -328,10 +326,10 @@ IREE_AMDGPU_STATIC_ASSERT(
 
 // Static assignment data for one TSAN-instrumented payload dispatch.
 //
-// The assignment dispatch derives the target AQL dispatch packet by adding
-// |packet_delta| packets to its own dispatch packet pointer and wrapping
-// through the queue AQL ring mask. This avoids storing replay-specific packet
-// pointers in the immutable plan.
+// The assignment dispatch derives the target queue slot by adding
+// |packet_delta| to its own HSA dispatch ID and wrapping through the queue AQL
+// ring mask. This keeps immutable plans independent of host-observed AQL packet
+// addresses.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_assignment_record_t {
   // Target dispatch packet delta from the assignment packet, in AQL packets.
   uint32_t packet_delta;
