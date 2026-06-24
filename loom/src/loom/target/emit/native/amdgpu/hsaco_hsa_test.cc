@@ -943,21 +943,48 @@ iree_status_t EmitB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_RETURN_IF_ERROR(PrepareTargetProcessorForLowHsaco(target, &processor));
 
-  std::string source = "low.kernel.def target(@gfx_target) @loom_kernel() asm<";
-  source.append(processor->descriptor_set.key.data,
-                processor->descriptor_set.key.size);
-  source +=
-      "> {\n"
+  std::string source =
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
-      "  %byte_offset = v_lshlrev_b32_src0_inline %tid, 4\n"
+      "  %byte_offset = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%tid) "
+      "{imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
       "  %source = low.resource<hal_binding> {index = 0, source_type "
       "= hal.buffer} : reg<amdgpu.sgpr x2>\n"
       "  %target = low.resource<hal_binding> {index = 1, source_type "
-      "= hal.buffer} : reg<amdgpu.sgpr x2>\n"
-      "  %loaded = global_load_b128_saddr %byte_offset, %source\n"
-      "  global_store_b128_saddr %byte_offset, %loaded, %target\n"
-      "  return\n"
+      "= hal.buffer} : reg<amdgpu.sgpr x2>\n";
+  switch (processor->descriptor_set.ordinal) {
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3:
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4:
+      source +=
+          "  %m0 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : "
+          "reg<amdgpu.m0>\n"
+          "  %loaded = low.op<amdgpu.global_load_b128_saddr>(%byte_offset, "
+          "%source, %m0) : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, "
+          "reg<amdgpu.m0>) -> reg<amdgpu.vgpr x4>\n"
+          "  low.op<amdgpu.global_store_b128_saddr>(%byte_offset, %loaded, "
+          "%target, %m0) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, "
+          "reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)\n";
+      break;
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3:
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3_5:
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4:
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X:
+      source +=
+          "  %loaded = low.op<amdgpu.global_load_b128_saddr>(%byte_offset, "
+          "%source) : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> "
+          "reg<amdgpu.vgpr x4>\n"
+          "  low.op<amdgpu.global_store_b128_saddr>(%byte_offset, %loaded, "
+          "%target) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, "
+          "reg<amdgpu.sgpr x2>)\n";
+      break;
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "AMDGPU B128 smoke kernel does not know the "
+                              "descriptor-set operand shape");
+  }
+  source +=
+      "  low.return\n"
       "}\n";
   TestArena arena;
   LowKernelEmitter emitter;
