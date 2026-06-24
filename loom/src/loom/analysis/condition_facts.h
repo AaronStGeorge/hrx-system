@@ -85,6 +85,16 @@ bool loom_condition_facts_query(const loom_module_t* module,
                                 bool assumed_truth,
                                 loom_condition_fact_set_t* out_facts);
 
+// Appends facts implied by assuming |condition_value| evaluates to
+// |assumed_truth| into |inout_facts|. This has the same derivation semantics as
+// loom_condition_facts_query but preserves existing relations so callers can
+// compose multiple edge conditions.
+bool loom_condition_facts_query_into(const loom_module_t* module,
+                                     const loom_value_fact_table_t* fact_table,
+                                     loom_value_id_t condition_value,
+                                     bool assumed_truth,
+                                     loom_condition_fact_set_t* inout_facts);
+
 // Applies a single integer relation to scalar range facts for |value_id| when
 // the relation can be reduced to value-vs-constant form. Value-to-value
 // relations remain useful to symbolic consumers even when this returns false.
@@ -108,6 +118,30 @@ bool loom_condition_fact_set_apply_to_value_facts(
     const loom_condition_fact_set_t* facts,
     const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
     loom_value_facts_t* inout_facts);
+
+// Returns true when two integer relation operands identify the same value or
+// constant.
+bool loom_condition_integer_operands_equal(
+    loom_condition_integer_operand_t left,
+    loom_condition_integer_operand_t right);
+
+// Returns true when |known| can answer whether |queried| is true. If the
+// relations share operands but imply the opposite result, |out_result| is set
+// to false.
+bool loom_condition_integer_relation_implies(
+    const loom_condition_integer_relation_t* known,
+    const loom_condition_integer_relation_t* queried, bool* out_result);
+
+// Returns true when each relation implies the other.
+bool loom_condition_integer_relations_equivalent(
+    const loom_condition_integer_relation_t* left,
+    const loom_condition_integer_relation_t* right);
+
+// Computes the strongest common relation preserved by both |left| and |right|.
+bool loom_condition_integer_relation_meet(
+    const loom_condition_integer_relation_t* left,
+    const loom_condition_integer_relation_t* right,
+    loom_condition_integer_relation_t* out_relation);
 
 // Attempts to prove that |condition_value| is exact after applying edge-local
 // |facts| to the values it depends on. Unsupported condition forms are valid

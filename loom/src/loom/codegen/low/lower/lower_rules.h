@@ -27,6 +27,7 @@ extern "C" {
 
 typedef struct loom_low_lower_rule_match_context_t
     loom_low_lower_rule_match_context_t;
+typedef struct loom_symbolic_expr_context_t loom_symbolic_expr_context_t;
 
 typedef uint16_t loom_low_lower_descriptor_ref_t;
 
@@ -180,6 +181,9 @@ struct loom_low_lower_rule_match_context_t {
   loom_low_lower_rule_match_descriptor_ref_callback_t descriptor_ref;
   // Optional dense source value facts used by fact-backed guard rows.
   const loom_value_fact_table_t* fact_table;
+  // Optional symbolic proof context used as a cold fallback for fact-backed
+  // guard rows whose scalar intervals are inconclusive.
+  loom_symbolic_expr_context_t* symbolic_expr_context;
   // Match behavior flags.
   loom_low_lower_rule_match_flags_t flags;
 };
@@ -266,6 +270,10 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTR = 24,
   // Emits literal_i64 minus two i64 source attributes.
   LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTRS = 25,
+  // Emits selected source-memory static byte offset divided by literal_i64.
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET_QUOTIENT = 26,
+  // Emits selected source-memory static byte offset modulo literal_i64.
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET_REMAINDER = 27,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -290,8 +298,9 @@ typedef struct loom_low_lower_attr_copy_t {
   uint16_t value_ref_index;
   // Dynamic source-memory term ordinal consumed by SOURCE_MEMORY rows.
   uint8_t dynamic_term_index;
-  // Literal value emitted by I64_LITERAL rows or byte offset used by
-  // I64_ARRAY_LANE_BYTE rows.
+  // Literal value emitted by I64_LITERAL rows, byte offset used by
+  // I64_ARRAY_LANE_BYTE rows, or divisor used by SOURCE_MEMORY quotient and
+  // remainder rows.
   int64_t literal_i64;
 } loom_low_lower_attr_copy_t;
 static_assert(sizeof(loom_low_lower_attr_copy_t) == 48,
@@ -438,6 +447,8 @@ typedef struct loom_low_lower_source_memory_t {
   uint16_t diagnostic_index;
   // Descriptor ref used to materialize i64 constants for dynamic byte offsets.
   loom_low_lower_descriptor_ref_t byte_offset_const_i64_descriptor_ref;
+  // Immediate field populated when materializing an i64 constant.
+  iree_string_view_t byte_offset_const_i64_immediate;
   // Descriptor ref used to materialize i64 additions for dynamic byte offsets.
   loom_low_lower_descriptor_ref_t byte_offset_add_i64_descriptor_ref;
   // Descriptor ref used to materialize i64 multiplies for dynamic byte offsets.
