@@ -14,28 +14,30 @@
 extern "C" {
 #endif  // __cplusplus
 
-// Populates a builtin dispatch packet and kernargs that assigns queue-local
-// TSAN dispatch state for a command-buffer block.
+// Populates a builtin dispatch packet and kernargs that initializes queue-local
+// TSAN state before user work can consume it.
 //
 // |dispatch_packet| and |kernarg_ptr| must point to reserved queue storage.
 // The caller owns packet header commit and barrier placement.
-void iree_hal_amdgpu_device_tsan_emplace_assignment(
+void iree_hal_amdgpu_device_tsan_emplace_queue_initialize(
     const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
-        assignment_kernel_args,
-    const iree_hal_amdgpu_tsan_assignment_plan_t* IREE_AMDGPU_RESTRICT plan,
-    iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT queue_state,
-    uint32_t assignment_record_count, uint64_t generation_epoch,
+        queue_initialize_kernel_args,
+    const iree_hal_amdgpu_tsan_queue_initialize_args_t* IREE_AMDGPU_RESTRICT
+        queue_initialize_args,
     iree_hsa_kernel_dispatch_packet_t* IREE_AMDGPU_RESTRICT dispatch_packet,
     void* IREE_AMDGPU_RESTRICT kernarg_ptr);
 
 #if defined(IREE_AMDGPU_TARGET_DEVICE)
 
-// Device builtin that publishes queue-local TSAN dispatch state for all
-// instrumented dispatch packets in a command-buffer block.
-IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_assign(
-    const iree_hal_amdgpu_tsan_assignment_plan_t* IREE_AMDGPU_RESTRICT plan,
+// Device builtin that initializes queue-local TSAN state.
+IREE_AMDGPU_ATTRIBUTE_KERNEL void
+iree_hal_amdgpu_device_tsan_initialize_queue_state(
     iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT queue_state,
-    uint64_t generation_epoch);
+    uint8_t* IREE_AMDGPU_RESTRICT shadow_base, uint64_t shadow_size,
+    uint32_t clear_workgroup_size, uint32_t reserved0,
+    uint64_t clear_byte_stride,
+    const iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT
+        queue_state_template);
 
 #endif  // IREE_AMDGPU_TARGET_DEVICE
 

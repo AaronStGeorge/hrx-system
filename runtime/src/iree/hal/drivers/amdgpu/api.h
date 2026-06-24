@@ -135,10 +135,11 @@ typedef enum iree_hal_amdgpu_asan_report_policy_e {
   IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE = 1,
 } iree_hal_amdgpu_asan_report_policy_t;
 
-// Selects how AMDGPU TSAN reports affect the owning logical device.
+// Selects how AMDGPU TSAN reports affect the owning logical device. TSAN
+// reports always stop the offending kernel path after the report is emitted.
 typedef enum iree_hal_amdgpu_tsan_report_policy_e {
-  // Emit TSAN reports through the device event sink and keep the logical device
-  // usable for subsequent work.
+  // Emit TSAN reports through the device event sink and keep the logical
+  // device usable for subsequent work.
   IREE_HAL_AMDGPU_TSAN_REPORT_POLICY_REPORT_ONLY = 0,
   // Emit TSAN reports through the device event sink and then fail the logical
   // device so queue users observe the violation as device loss.
@@ -309,7 +310,9 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
     // Maximum workgroup ordinals represented by one dispatch shadow.
     uint32_t workgroup_capacity;
 
-    // Number of queue-local dispatch shadow slots available.
+    // Number of queue-local dispatch shadow slots available. Command-buffer
+    // recording may insert execution barriers when a TSAN-instrumented span
+    // would otherwise exceed this window.
     uint32_t shadow_slot_count;
   } tsan;
 

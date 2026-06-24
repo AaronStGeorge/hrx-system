@@ -10,6 +10,7 @@
 #include "iree/base/api.h"
 #include "iree/hal/drivers/amdgpu/abi/tsan.h"
 #include "iree/hal/drivers/amdgpu/api.h"
+#include "iree/hal/drivers/amdgpu/queue_scope.h"
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
 
 typedef struct iree_hal_amdgpu_physical_device_t
@@ -24,16 +25,20 @@ extern "C" {
 // iree_hal_amdgpu_tsan_state_t
 //===----------------------------------------------------------------------===//
 
-// Per-physical-device TSAN shadow state.
+// Memory policy used for TSAN state dereferenced by device code.
+typedef struct iree_hal_amdgpu_tsan_memory_policy_t {
+  // HSA memory pool used for TSAN state and shadow storage.
+  hsa_amd_memory_pool_t memory_pool;
+  // Agents granted explicit access to TSAN storage.
+  const hsa_agent_t* access_agents;
+  // Number of entries in |access_agents|.
+  iree_host_size_t access_agent_count;
+} iree_hal_amdgpu_tsan_memory_policy_t;
+
+// Per-physical-device TSAN layout state.
 typedef struct iree_hal_amdgpu_tsan_device_state_t {
-  // Physical device ordinal associated with this shadow state.
+  // Physical device ordinal associated with this TSAN layout.
   iree_host_size_t physical_device_ordinal;
-
-  // Host-accessible device-visible shadow allocation.
-  void* shadow_base;
-
-  // Shadow allocation byte length.
-  iree_device_size_t shadow_size;
 
   // Device-visible config published into executable globals.
   iree_hal_amdgpu_tsan_config_t config;
@@ -53,7 +58,7 @@ typedef struct iree_hal_amdgpu_tsan_state_t {
   // Number of entries in |device_states|.
   iree_host_size_t device_state_count;
 
-  // Per-physical-device TSAN shadow allocations.
+  // Per-physical-device TSAN layout records.
   iree_hal_amdgpu_tsan_device_state_t* device_states;
 } iree_hal_amdgpu_tsan_state_t;
 
@@ -73,7 +78,9 @@ void iree_hal_amdgpu_tsan_state_deinitialize(
 // Initializes queue-owned TSAN state after host queues have been assigned.
 //
 // When TSAN is disabled this returns OK without modifying queues. On failure,
-// queue TSAN state initialized by the call is released before returning.
+// queue TSAN state initialized by the call remains attached to the owning queue
+// and is released by normal queue teardown after in-flight initialization work
+// drains.
 iree_status_t iree_hal_amdgpu_tsan_state_assign_queues(
     iree_hal_amdgpu_tsan_state_t* state, iree_host_size_t physical_device_count,
     iree_hal_amdgpu_physical_device_t* const* physical_devices);
@@ -94,14 +101,12 @@ iree_status_t iree_hal_amdgpu_tsan_state_populate_config(
 
 // Populates |out_config| with queue-specific TSAN configuration.
 //
-// |queue_aql_base| and |queue_aql_slot_mask| describe the owning queue's AQL
-// ring so device code can derive a queue-local dispatch slot from its implicit
-// dispatch packet pointer without host per-dispatch publication.
-// |queue_state_base| is zero when queue-owned TSAN state was not allocated.
+// |queue_scope| describes the owning queue's AQL ring and queue-owned TSAN
+// state. The scope is host-owned metadata; this function never reads device
+// memory.
 iree_status_t iree_hal_amdgpu_tsan_state_populate_queue_config(
     const iree_hal_amdgpu_tsan_state_t* state,
-    iree_host_size_t physical_device_ordinal, uint64_t queue_aql_base,
-    uint64_t queue_aql_slot_mask, uint64_t queue_state_base,
+    const iree_hal_amdgpu_queue_scope_t* queue_scope,
     iree_hal_amdgpu_tsan_config_t* out_config);
 
 #ifdef __cplusplus

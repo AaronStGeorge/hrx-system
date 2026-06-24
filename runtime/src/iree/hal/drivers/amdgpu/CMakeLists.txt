@@ -372,6 +372,7 @@ iree_cc_library(
     "profile_events.h"
     "profile_metadata.h"
     "profile_traces.h"
+    "queue_scope.h"
     "semaphore.h"
     "slab_provider.h"
     "system.h"

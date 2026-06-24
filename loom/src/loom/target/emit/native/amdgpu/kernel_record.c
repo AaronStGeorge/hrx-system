@@ -253,7 +253,7 @@ static iree_status_t loom_amdgpu_kernel_record_collect_segment_usage(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_kernel_record_validate_hidden_ptr_assignment(
+static iree_status_t loom_amdgpu_kernel_record_validate_hidden_sgpr_pair(
     const loom_low_allocation_assignment_t* assignment,
     iree_string_view_t label, uint32_t expected_location_base) {
   if (assignment->location_kind !=
@@ -280,6 +280,7 @@ static iree_status_t loom_amdgpu_kernel_record_collect_hidden_user_sgprs(
 
   const loom_low_allocation_assignment_t* dispatch_ptr_assignment = NULL;
   const loom_low_allocation_assignment_t* kernarg_ptr_assignment = NULL;
+  const loom_low_allocation_assignment_t* dispatch_id_assignment = NULL;
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
@@ -307,6 +308,14 @@ static iree_status_t loom_amdgpu_kernel_record_collect_hidden_user_sgprs(
         }
         kernarg_ptr_assignment = assignment;
         break;
+      case LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_ID:
+        if (dispatch_id_assignment != NULL) {
+          return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
+                                  "AMDGPU kernel emission found duplicate "
+                                  "dispatch ID live-ins");
+        }
+        dispatch_id_assignment = assignment;
+        break;
       default:
         break;
     }
@@ -322,21 +331,24 @@ static iree_status_t loom_amdgpu_kernel_record_collect_hidden_user_sgprs(
   uint32_t user_sgpr_count = 0;
   loom_amdgpu_kernel_descriptor_flags_t descriptor_flags = 0;
   if (dispatch_ptr_assignment != NULL) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_kernel_record_validate_hidden_ptr_assignment(
-            dispatch_ptr_assignment, IREE_SV("dispatch pointer"),
-            user_sgpr_count));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_hidden_sgpr_pair(
+        dispatch_ptr_assignment, IREE_SV("dispatch pointer"), user_sgpr_count));
     user_sgpr_count += LOOM_AMDGPU_KERNEL_RECORD_HIDDEN_PTR_USER_SGPR_COUNT;
     descriptor_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_PTR;
   }
   if (kernarg_ptr_assignment != NULL) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_kernel_record_validate_hidden_ptr_assignment(
-            kernarg_ptr_assignment, IREE_SV("kernarg segment pointer"),
-            user_sgpr_count));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_hidden_sgpr_pair(
+        kernarg_ptr_assignment, IREE_SV("kernarg segment pointer"),
+        user_sgpr_count));
     user_sgpr_count += LOOM_AMDGPU_KERNEL_RECORD_HIDDEN_PTR_USER_SGPR_COUNT;
     descriptor_flags |=
         LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
+  }
+  if (dispatch_id_assignment != NULL) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_hidden_sgpr_pair(
+        dispatch_id_assignment, IREE_SV("dispatch ID"), user_sgpr_count));
+    user_sgpr_count += LOOM_AMDGPU_KERNEL_RECORD_HIDDEN_PTR_USER_SGPR_COUNT;
+    descriptor_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_ID;
   }
 
   *out_hidden_user_sgprs = (loom_amdgpu_kernel_record_hidden_user_sgprs_t){

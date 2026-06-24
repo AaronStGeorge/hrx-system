@@ -451,6 +451,12 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "AMDGPU TSAN shadow slot count must be non-zero");
     }
+    if (!iree_device_size_is_power_of_two(options->tsan.shadow_slot_count)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU TSAN shadow slot count %u must be a "
+                              "power of two",
+                              options->tsan.shadow_slot_count);
+    }
     if (options->tsan.workgroup_local_memory_size != 0) {
       const uint64_t granule_size = 1ull << options->tsan.memory_granule_shift;
       const uint64_t workgroup_entry_count =

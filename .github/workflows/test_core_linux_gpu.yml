@@ -14,7 +14,7 @@ on:
         default: Linux / CMake / GPU gfx942
       runner_label:
         type: string
-        default: linux-gfx942-1gpu-core42-ossci-rocm
+        required: true
       artifact_run_id:
         type: string
         default: ""
@@ -48,7 +48,7 @@ on:
       runner_label:
         type: string
         description: "GitHub Actions runner label."
-        default: linux-gfx942-1gpu-core42-ossci-rocm
+        required: true
       device:
         type: string
         description: "libhrx CTS device spec."
@@ -85,7 +85,11 @@ permissions:
 jobs:
   test_core_linux_gpu:
     name: ${{ inputs.name || 'Linux / CMake / GPU gfx942' }}
-    runs-on: ${{ inputs.runner_label || 'linux-gfx942-1gpu-core42-ossci-rocm' }}
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - "${{ inputs.runner_label }}"
     timeout-minutes: 20
     env:
       HRX_OUTPUT_DIR: ${{ github.workspace }}/build/linux-gpu

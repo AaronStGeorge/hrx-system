@@ -79,6 +79,10 @@ using DeviceFactory = std::function<iree_status_t(
 // before the production device creation path gets to query hardware.
 using BackendHostCompatibilityFn = std::function<bool(std::string* out_reason)>;
 
+// Function called during CTS process teardown before cached backend resources
+// are released.
+using CleanupFn = std::function<void()>;
+
 // Function that returns pre-compiled executable data for a given file name.
 // Used by dispatch tests to load backend-specific device code.
 // Returns an empty span if the file is not found.
@@ -253,6 +257,10 @@ class CtsRegistry {
   // Register a backend configuration. Called by backend factory files.
   static void RegisterBackend(BackendConfig config);
 
+  // Register a process-level cleanup hook. Called by helpers that own cached
+  // resources outside of the common backend cache.
+  static void RegisterCleanup(CleanupFn cleanup);
+
   // Register an executable format for an already-registered (or
   // not-yet-registered) backend. Formats are stored in a pending list and
   // merged into their backends at InstantiateAll() time, so static init
@@ -278,6 +286,9 @@ class CtsRegistry {
 
   // Instantiate specific suite for specific backend (for debugging).
   static void Instantiate(const char* suite_name, const char* backend_name);
+
+  // Runs registered cleanup hooks exactly once.
+  static void RunCleanups();
 
   //===--------------------------------------------------------------------===//
   // Introspection (for tooling, test listing)

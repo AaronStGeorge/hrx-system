@@ -41,30 +41,26 @@ enum loom_amdgpu_tsan_config_layout_e {
   LOOM_AMDGPU_TSAN_CONFIG_WORKGROUP_CAPACITY_OFFSET = 48u,
   // Offset of the TSAN shadow entry byte size.
   LOOM_AMDGPU_TSAN_CONFIG_SHADOW_ENTRY_SIZE_OFFSET = 52u,
-  // Offset of the queue AQL ring base pointer.
+  // Offset of the host-observed queue AQL ring base pointer.
   LOOM_AMDGPU_TSAN_CONFIG_QUEUE_AQL_BASE_OFFSET = 56u,
-  // Offset of the queue AQL ring slot mask.
+  // Offset of the host packet ID queue AQL ring slot mask.
   LOOM_AMDGPU_TSAN_CONFIG_QUEUE_AQL_SLOT_MASK_OFFSET = 64u,
   // Offset of the queue-local TSAN state pointer.
   LOOM_AMDGPU_TSAN_CONFIG_QUEUE_STATE_BASE_OFFSET = 72u,
   // Offset of the queue-local shadow slot count.
   LOOM_AMDGPU_TSAN_CONFIG_SHADOW_SLOT_COUNT_OFFSET = 80u,
-  // Offset of the queue-local dispatch-state table pointer.
-  LOOM_AMDGPU_TSAN_CONFIG_DISPATCH_STATE_BASE_OFFSET = 88u,
 };
 
 enum loom_amdgpu_tsan_config_flag_bits_e {
   // TSAN checking is enabled for the owning runtime.
   LOOM_AMDGPU_TSAN_CONFIG_FLAG_ENABLED = 1u << 0,
-  // Queue-local dispatch state is available.
+  // Queue-local TSAN state is available.
   LOOM_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_STATE = 1u << 1,
 };
 
 enum loom_amdgpu_tsan_queue_state_layout_e {
   // Total byte length of one queue-local TSAN state record.
   LOOM_AMDGPU_TSAN_QUEUE_STATE_BYTE_LENGTH = 112u,
-  // Offset of the queue dispatch-state table pointer.
-  LOOM_AMDGPU_TSAN_QUEUE_STATE_DISPATCH_STATE_BASE_OFFSET = 48u,
   // Offset of the queue shadow allocation base pointer.
   LOOM_AMDGPU_TSAN_QUEUE_STATE_SHADOW_BASE_OFFSET = 56u,
   // Offset of the queue shadow allocation byte length.
@@ -81,28 +77,13 @@ enum loom_amdgpu_tsan_queue_state_layout_e {
   LOOM_AMDGPU_TSAN_QUEUE_STATE_MEMORY_GRANULE_SHIFT_OFFSET = 96u,
 };
 
-enum loom_amdgpu_tsan_dispatch_state_layout_e {
-  // Total byte length of one queue-local dispatch state record.
-  LOOM_AMDGPU_TSAN_DISPATCH_STATE_BYTE_LENGTH = 16u,
-  // Offset of the dispatch replay generation.
-  LOOM_AMDGPU_TSAN_DISPATCH_STATE_GENERATION_OFFSET = 0u,
-  // Offset of the queue-local shadow slot assigned to the dispatch.
-  LOOM_AMDGPU_TSAN_DISPATCH_STATE_SHADOW_SLOT_OFFSET = 8u,
-  // Offset of the dispatch state flags bitfield.
-  LOOM_AMDGPU_TSAN_DISPATCH_STATE_FLAGS_OFFSET = 12u,
-};
-
-enum loom_amdgpu_tsan_dispatch_state_flag_bits_e {
-  // The queue assignment dispatch has published this dispatch state.
-  LOOM_AMDGPU_TSAN_DISPATCH_STATE_FLAG_ASSIGNED = 1u << 0,
-};
-
 enum loom_amdgpu_tsan_shadow_layout_e {
   // Byte length of each TSAN local-memory shadow entry.
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_BYTE_LENGTH = 8u,
   // Per-workgroup shadow header byte length.
   LOOM_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_BYTE_LENGTH = 8u,
-  // Offset of the per-workgroup barrier epoch inside the shadow header.
+  // Offset of the low 32-bit per-workgroup barrier epoch inside the shadow
+  // header. The upper 32 bits of the 8-byte header are reserved.
   LOOM_AMDGPU_TSAN_WORKGROUP_SHADOW_EPOCH_OFFSET = 0u,
   // Bit offset of the encoded prior access kind in a shadow entry.
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_ACCESS_KIND_SHIFT = 0u,

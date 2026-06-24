@@ -107,9 +107,9 @@ IREE_FLAG(
 IREE_FLAG(bool, amdgpu_tsan, false,
           "Enables AMDGPU TSAN runtime state and config global publication.");
 IREE_FLAG(string, amdgpu_tsan_report_policy, "fail-device",
-          "AMDGPU TSAN report policy: 'report-only' emits device events and "
-          "keeps the logical device usable; 'fail-device' emits device events "
-          "and then fails the logical device.");
+          "AMDGPU TSAN report policy: all policies emit device events and "
+          "stop the offending kernel path; 'report-only' keeps the logical "
+          "device usable, while 'fail-device' then fails the logical device.");
 IREE_FLAG(
     int32_t, amdgpu_tsan_workgroup_local_memory_size,
     IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_LOCAL_MEMORY_SIZE,

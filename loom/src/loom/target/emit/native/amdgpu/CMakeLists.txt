@@ -662,8 +662,10 @@ loom_cc_test(
     loom::target::arch::amdgpu::target_info
     loom::target::low_descriptor_registry
   LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
     "nodocker"
     "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
 )

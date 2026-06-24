@@ -465,8 +465,8 @@ bool iree_hal_amdgpu_memory_system_requires_svm_access_attributes(
 
 iree_hal_amdgpu_aql_prepublished_kernarg_storage_t
 iree_hal_amdgpu_select_prepublished_kernarg_storage(
-    hsa_amd_memory_pool_t fine_block_memory_pool) {
-  if (!fine_block_memory_pool.handle) {
+    hsa_amd_memory_pool_t fine_block_memory_pool, bool direct_host_access) {
+  if (!fine_block_memory_pool.handle || !direct_host_access) {
     return iree_hal_amdgpu_aql_prepublished_kernarg_storage_disabled();
   }
   return iree_hal_amdgpu_aql_prepublished_kernarg_storage_device_fine_host_coherent();

@@ -30,7 +30,6 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void export0(uint64_t* lhs, uint64_t* rhs,
     lhs[9] = iree_tsan_config.queue_aql_slot_mask;
     lhs[10] = iree_tsan_config.queue_state_base;
     lhs[11] = iree_tsan_config.shadow_slot_count;
-    lhs[12] = iree_tsan_config.dispatch_state_base;
   } else if (c0 == 0x4644424Bu && c1 == 0x43464721u) {
     lhs[0] = iree_feedback_config.record_length;
     lhs[1] = iree_feedback_config.flags;

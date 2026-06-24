@@ -53,7 +53,7 @@ iree_hal_amdgpu_host_queue_require_profiling_event_memory_pool(
   if (queue->profiling.memory.event_memory_pool.handle) return iree_ok_status();
   return iree_make_status(
       IREE_STATUS_UNAVAILABLE,
-      "AMDGPU profiling requires host-readable device-visible event memory");
+      "AMDGPU profiling requires CPU-writable device-visible event memory");
 }
 
 void iree_hal_amdgpu_host_queue_publish_profile_host_writes(
@@ -61,17 +61,8 @@ void iree_hal_amdgpu_host_queue_publish_profile_host_writes(
   // CPU-visible device-coarse memory is not coherent until host writes are
   // pushed through HDP. This only publishes CPU-authored event metadata; GPU
   // timestamp writes become CPU-visible through the packet release scopes.
-  const iree_hal_amdgpu_kernarg_ring_publication_t publication =
-      queue->profiling.memory.event_host_write_publication;
-  if (publication.mode == IREE_HAL_AMDGPU_KERNARG_RING_PUBLICATION_MODE_NONE) {
-    return;
-  }
-  IREE_ASSERT(publication.mode ==
-              IREE_HAL_AMDGPU_KERNARG_RING_PUBLICATION_MODE_HDP_FLUSH);
-  IREE_ASSERT(publication.hdp_mem_flush_control);
-  iree_hal_amdgpu_kernarg_ring_host_write_fence();
-  *publication.hdp_mem_flush_control = 1u;
-  (void)*publication.hdp_mem_flush_control;
+  iree_hal_amdgpu_kernarg_ring_publication_publish_host_writes(
+      queue->profiling.memory.event_host_write_publication);
 }
 
 static iree_status_t

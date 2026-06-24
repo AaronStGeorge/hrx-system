@@ -426,8 +426,12 @@ static iree_status_t iree_hal_amdgpu_allocator_query_device_pointer_range(
         "device allocation");
   }
 
+  const iree_hal_amdgpu_physical_device_t* owner_device =
+      allocator->logical_device->physical_devices[owner_ordinal];
+  const bool direct_host_access =
+      owner_device && owner_device->memory_system.svm.direct_host_access;
   iree_hal_memory_type_t actual_memory_type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
-  if (fine_grained) {
+  if (fine_grained && direct_host_access) {
     actual_memory_type |=
         IREE_HAL_MEMORY_TYPE_HOST_VISIBLE | IREE_HAL_MEMORY_TYPE_HOST_COHERENT;
   }
@@ -501,6 +505,11 @@ static bool iree_hal_amdgpu_allocator_resolve_placement(
   const bool prefers_device_local =
       iree_any_bit_set(requested_type, IREE_HAL_MEMORY_TYPE_OPTIMAL) &&
       iree_any_bit_set(required_type, IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE);
+  const iree_hal_amdgpu_physical_device_t* physical_device =
+      allocator->logical_device->physical_devices[device_ordinal];
+  const bool device_fine_direct_host_access =
+      allocator->memory_pools.device_fine[device_ordinal].memory_pool.handle &&
+      physical_device && physical_device->memory_system.svm.direct_host_access;
 
   const iree_hal_amdgpu_allocator_memory_pool_t* memory_pool = NULL;
   iree_hal_memory_type_t memory_type = 0;
@@ -515,21 +524,28 @@ static bool iree_hal_amdgpu_allocator_resolve_placement(
   if (requires_host_local) {
     if (requires_device_local) return false;
     memory_pool = &allocator->memory_pools.host_fine[device_ordinal];
-    memory_type =
-        IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
-  } else if (requires_host_access &&
-             (requires_device_local ||
-              (prefers_device_local &&
-               allocator->memory_pools.device_fine[device_ordinal]
-                   .memory_pool.handle))) {
+    memory_type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL |
+                  IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
+                  IREE_HAL_MEMORY_TYPE_HOST_COHERENT |
+                  IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
+  } else if (requires_host_access && requires_device_local) {
+    if (!device_fine_direct_host_access) return false;
+    memory_pool = &allocator->memory_pools.device_fine[device_ordinal];
+    memory_type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL |
+                  IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
+                  IREE_HAL_MEMORY_TYPE_HOST_COHERENT;
+  } else if (requires_host_access && prefers_device_local &&
+             device_fine_direct_host_access) {
     memory_pool = &allocator->memory_pools.device_fine[device_ordinal];
     memory_type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL |
                   IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
                   IREE_HAL_MEMORY_TYPE_HOST_COHERENT;
   } else if (requires_host_access) {
     memory_pool = &allocator->memory_pools.host_fine[device_ordinal];
-    memory_type =
-        IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
+    memory_type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL |
+                  IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
+                  IREE_HAL_MEMORY_TYPE_HOST_COHERENT |
+                  IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
   } else {
     memory_pool = &allocator->memory_pools.device_coarse[device_ordinal];
     memory_type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
@@ -762,6 +778,8 @@ static iree_status_t iree_hal_amdgpu_allocator_query_memory_heaps(
   if (host_fine_available) {
     available_heaps[heap_count++] = (iree_hal_allocator_memory_heap_t){
         .type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL |
+                IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
+                IREE_HAL_MEMORY_TYPE_HOST_COHERENT |
                 IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE,
         .allowed_usage = mappable_usage,
         .max_allocation_size = host_fine_max_allocation_size,

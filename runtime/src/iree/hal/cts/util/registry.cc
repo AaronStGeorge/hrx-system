@@ -18,16 +18,27 @@ namespace {
 // Protected by a mutex for thread-safe static initialization.
 // Executable format registered before its backend (or separately from it).
 struct PendingFormat {
+  // Backend name the executable format should attach to.
   std::string backend_name;
+  // Executable format waiting for backend registration.
   ExecutableFormat format;
 };
 
 struct RegistryData {
+  // Protects all mutable registry state.
   std::mutex mutex;
+  // True after test suites have been instantiated.
   bool instantiated = false;
+  // True after process-level cleanup hooks have run.
+  bool cleanups_run = false;
+  // Registered CTS test suites.
   std::vector<TestSuiteInfo> test_suites;
+  // Registered CTS backend configurations.
   std::vector<BackendConfig> backends;
+  // Executable formats waiting for matching backend registration.
   std::vector<PendingFormat> pending_formats;
+  // Process-level cleanup hooks registered by CTS helper libraries.
+  std::vector<CleanupFn> cleanups;
 };
 
 RegistryData& GetRegistryData() {
@@ -51,6 +62,12 @@ void CtsRegistry::RegisterBackend(BackendConfig config) {
   auto& data = GetRegistryData();
   std::lock_guard<std::mutex> lock(data.mutex);
   data.backends.push_back(std::move(config));
+}
+
+void CtsRegistry::RegisterCleanup(CleanupFn cleanup) {
+  auto& data = GetRegistryData();
+  std::lock_guard<std::mutex> lock(data.mutex);
+  data.cleanups.push_back(std::move(cleanup));
 }
 
 void CtsRegistry::RegisterExecutableFormat(const char* backend_name,
@@ -206,6 +223,21 @@ void CtsRegistry::Instantiate(const char* suite_name,
 
   suite->accumulator(*backend);
   suite->finalizer(suite->file, suite->line);
+}
+
+void CtsRegistry::RunCleanups() {
+  std::vector<CleanupFn> cleanups;
+  {
+    auto& data = GetRegistryData();
+    std::lock_guard<std::mutex> lock(data.mutex);
+    if (data.cleanups_run) return;
+    data.cleanups_run = true;
+    cleanups = std::move(data.cleanups);
+    data.cleanups.clear();
+  }
+  for (auto it = cleanups.rbegin(); it != cleanups.rend(); ++it) {
+    (*it)();
+  }
 }
 
 //===----------------------------------------------------------------------===//

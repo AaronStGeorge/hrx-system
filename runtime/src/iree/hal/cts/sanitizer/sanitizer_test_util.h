@@ -257,6 +257,21 @@ GetSanitizerBackendCache() {
   return cache;
 }
 
+inline void CleanupSanitizerBackendCache() {
+  for (auto& [name, resources] : GetSanitizerBackendCache()) {
+    resources.Reset();
+  }
+  GetSanitizerBackendCache().clear();
+}
+
+inline void RegisterSanitizerBackendCacheCleanup() {
+  static const bool registered = [] {
+    CtsRegistry::RegisterCleanup(CleanupSanitizerBackendCache);
+    return true;
+  }();
+  (void)registered;
+}
+
 // Returns true if |status_code| means the CTS backend cannot run on this host.
 inline bool SanitizerStatusCodeIsBackendUnavailable(
     iree_status_code_t status_code) {
@@ -280,6 +295,8 @@ class SanitizerCachedBackendDevice {
   // the actual device creation options.
   iree_status_t Initialize(const BackendInfo& backend,
                            std::string_view sanitizer_name) {
+    RegisterSanitizerBackendCacheCleanup();
+
     std::string cache_key = GetBackendDeviceCacheKey(backend);
     cache_key.append(":");
     cache_key.append(sanitizer_name.data(), sanitizer_name.size());

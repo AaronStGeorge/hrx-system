@@ -32,6 +32,10 @@ CI_HAL_DRIVER_DEFINES = (
     ("vulkan", "IREE_HAL_DRIVER_VULKAN"),
 )
 ROCM_PINNED_DEPENDENCY_MODE_OPTION = "-DIREE_ROCM_DEPENDENCY_MODE=pinned"
+AMDGPU_DEVICE_BINARY_SOURCE_OPTIONS = (
+    "-DIREE_HAL_AMDGPU_DEVICE_BINARY_BUILD_MODE=source",
+    "-DIREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm",
+)
 BAZEL_COMMANDS = {
     "iree-bazel-cpu": ("cpu", None),
     "iree-bazel-cpu-asan": ("cpu", "asan"),
@@ -139,6 +143,16 @@ def amdgpu_libhsa_test_env() -> tuple[tuple[str, str], ...]:
     return (("IREE_HAL_AMDGPU_LIBHSA_PATH", libhsa_path),)
 
 
+def cmake_amdgpu_device_binary_options() -> tuple[str, ...]:
+    rocm_root = os.environ.get("HRX_ROCM_ROOT")
+    rocm_path_option = (
+        (f"-DIREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH={rocm_root}",)
+        if rocm_root
+        else ()
+    )
+    return AMDGPU_DEVICE_BINARY_SOURCE_OPTIONS + rocm_path_option
+
+
 def cmake_tests_enabled(sanitizer: str | None) -> bool:
     if sanitizer is None:
         return True
@@ -237,6 +251,7 @@ def cmake_configure_step(
     if "amdgpu" in enabled_driver_set:
         command.append(ROCM_PINNED_DEPENDENCY_MODE_OPTION)
         command.append(f"-DIREE_HAL_AMDGPU_TARGETS={ci_config.AMDGPU_TARGET_SELECTOR}")
+        command.extend(cmake_amdgpu_device_binary_options())
     if sanitizer is not None:
         command.append("-DIREE_ENABLE_ASSERTIONS=ON")
         command.extend(CMAKE_SANITIZER_OPTIONS[sanitizer])

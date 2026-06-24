@@ -248,6 +248,7 @@ inline std::map<std::string, CachedBackendResources>& GetBackendCache() {
 class CtsBackendCacheEnvironment : public ::testing::Environment {
  public:
   void TearDown() override {
+    CtsRegistry::RunCleanups();
     for (auto& [name, resources] : GetBackendCache()) {
       iree_hal_allocator_release(resources.allocator);
       iree_hal_device_release(resources.device);

@@ -54,6 +54,13 @@ extern "C" {
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE_ID \
   UINT64_C(0x36D73B4B3758D0B2)
 
+// Stable low.live_in source spelling for the AMDGPU dispatch packet ID.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_ID_SOURCE "amdgpu.dispatch_id"
+
+// Stable low.live_in source ID for the AMDGPU dispatch packet ID.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_ID_SOURCE_ID \
+  UINT64_C(0x186DBCDA81EDC8D5)
+
 // Stable low.live_in source spelling for workgroup_id.x in the first system
 // SGPR after enabled user SGPRs.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE "amdgpu.workgroup_id.x"
@@ -130,15 +137,16 @@ typedef enum loom_amdgpu_hal_kernel_abi_source_kind_e {
   LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN = 0,
   LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_KERNARG_SEGMENT_PTR = 1,
   LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_PTR = 2,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_X = 3,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Y = 4,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Z = 5,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_X = 6,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_Y = 7,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_Z = 8,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_PACKED_XY = 9,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_PACKED_XYZ = 10,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_M0 = 11,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_ID = 3,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_X = 4,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Y = 5,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Z = 6,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_X = 7,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_Y = 8,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_Z = 9,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_PACKED_XY = 10,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_PACKED_XYZ = 11,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_M0 = 12,
 } loom_amdgpu_hal_kernel_abi_source_kind_t;
 
 typedef struct loom_amdgpu_hal_kernarg_resource_t {
@@ -270,6 +278,10 @@ bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
 
 // Returns true if |value_id| is defined by the dispatch packet pointer live-in.
 bool loom_amdgpu_hal_kernel_abi_is_dispatch_ptr_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
+// Returns true if |value_id| is defined by the dispatch packet ID live-in.
+bool loom_amdgpu_hal_kernel_abi_is_dispatch_id_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
 
 // Returns true if |value_id| is defined by the workgroup_id.x live-in.

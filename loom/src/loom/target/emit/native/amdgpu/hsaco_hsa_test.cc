@@ -8,6 +8,7 @@
 
 #include <cinttypes>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -54,6 +55,55 @@ constexpr char kAsanConfigGlobalName[] = "iree_asan_config";
 constexpr uint32_t kAsanConfigByteLength = 96;
 constexpr char kFeedbackConfigGlobalName[] = "iree_feedback_config";
 constexpr uint32_t kFeedbackConfigByteLength = 64;
+
+iree_status_t PrintLowVerifyDiagnostic(
+    void* user_data, const loom_diagnostic_emission_t* emission) {
+  (void)user_data;
+  fprintf(stderr, "low verifier diagnostic: %s: %s\n",
+          emission->error ? emission->error->error_id : "<unknown>",
+          emission->error ? emission->error->summary : "<unknown>");
+  for (iree_host_size_t i = 0; i < emission->param_count; ++i) {
+    const loom_diagnostic_param_t* param = &emission->params[i];
+    const char* name = emission->error && i < emission->error->param_count
+                           ? emission->error->param_defs[i].name
+                           : "<param>";
+    switch (param->kind) {
+      case LOOM_PARAM_STRING:
+        fprintf(stderr, "  %s = %.*s\n", name, (int)param->string.size,
+                param->string.data ? param->string.data : "");
+        break;
+      case LOOM_PARAM_I64:
+        fprintf(stderr, "  %s = %" PRId64 "\n", name, param->i64);
+        break;
+      case LOOM_PARAM_U32:
+        fprintf(stderr, "  %s = %" PRIu32 "\n", name, param->u32);
+        break;
+      case LOOM_PARAM_U64:
+        fprintf(stderr, "  %s = %" PRIu64 "\n", name, param->u64);
+        break;
+      case LOOM_PARAM_BOOL:
+        fprintf(stderr, "  %s = %s\n", name, param->boolean ? "true" : "false");
+        break;
+      case LOOM_PARAM_TYPE:
+        fprintf(stderr, "  %s = <type>\n", name);
+        break;
+      case LOOM_PARAM_STRING_LIST:
+        fprintf(stderr, "  %s = [", name);
+        for (iree_host_size_t j = 0; j < param->string_list.count; ++j) {
+          if (j != 0) fprintf(stderr, ", ");
+          const iree_string_view_t value = param->string_list.values[j];
+          fprintf(stderr, "%.*s", (int)value.size,
+                  value.data ? value.data : "");
+        }
+        fprintf(stderr, "]\n");
+        break;
+      default:
+        fprintf(stderr, "  %s = <unknown>\n", name);
+        break;
+    }
+  }
+  return iree_ok_status();
+}
 
 void RegisterDialect(loom_context_t* context, uint8_t dialect_id,
                      DialectVtablesFn dialect_vtables_fn) {
@@ -728,7 +778,11 @@ class LowKernelEmitter {
     loom_low_verify_options_t verify_options = {
         /*.descriptor_registry=*/&target_registry_.registry,
         /*.target_selection=*/{},
-        /*.emitter=*/{},
+        /*.emitter=*/
+        {
+            /*.fn=*/PrintLowVerifyDiagnostic,
+            /*.user_data=*/nullptr,
+        },
         /*.provider_list=*/{},
         /*.max_errors=*/20,
     };
@@ -824,12 +878,6 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
     const loom_amdgpu_processor_info_t** out_processor) {
   IREE_ASSERT_ARGUMENT(out_processor);
   *out_processor = nullptr;
-  if (!target.feature_suffix.empty()) {
-    return iree_make_status(
-        IREE_STATUS_UNAVAILABLE,
-        "AMDGPU HSACO target-feature suffixes are not supported yet: %s",
-        target.feature_suffix.c_str());
-  }
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
       iree_make_string_view(target.processor.data(), target.processor.size()),
@@ -899,20 +947,43 @@ iree_status_t EmitB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
-      "  %scale = low.const<amdgpu.v_mov_b32> {imm32 = 16} : "
-      "reg<amdgpu.vgpr>\n"
-      "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %scale) : "
-      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+      "  %byte_offset = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%tid) "
+      "{imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
       "  %source = low.resource<hal_binding> {index = 0, source_type "
       "= hal.buffer} : reg<amdgpu.sgpr x2>\n"
       "  %target = low.resource<hal_binding> {index = 1, source_type "
-      "= hal.buffer} : reg<amdgpu.sgpr x2>\n"
-      "  %loaded = low.op<amdgpu.global_load_b128_saddr>(%byte_offset, "
-      "%source) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> "
-      "reg<amdgpu.vgpr x4>\n"
-      "  low.op<amdgpu.global_store_b128_saddr>(%byte_offset, %loaded, "
-      "%target) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, "
-      "reg<amdgpu.sgpr x2>)\n"
+      "= hal.buffer} : reg<amdgpu.sgpr x2>\n";
+  switch (processor->descriptor_set.ordinal) {
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3:
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4:
+      source +=
+          "  %m0 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : "
+          "reg<amdgpu.m0>\n"
+          "  %loaded = low.op<amdgpu.global_load_b128_saddr>(%byte_offset, "
+          "%source, %m0) : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, "
+          "reg<amdgpu.m0>) -> reg<amdgpu.vgpr x4>\n"
+          "  low.op<amdgpu.global_store_b128_saddr>(%byte_offset, %loaded, "
+          "%target, %m0) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, "
+          "reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)\n";
+      break;
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3:
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3_5:
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4:
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X:
+      source +=
+          "  %loaded = low.op<amdgpu.global_load_b128_saddr>(%byte_offset, "
+          "%source) : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> "
+          "reg<amdgpu.vgpr x4>\n"
+          "  low.op<amdgpu.global_store_b128_saddr>(%byte_offset, %loaded, "
+          "%target) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, "
+          "reg<amdgpu.sgpr x2>)\n";
+      break;
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "AMDGPU B128 smoke kernel does not know the "
+                              "descriptor-set operand shape");
+  }
+  source +=
       "  low.return\n"
       "}\n";
   TestArena arena;

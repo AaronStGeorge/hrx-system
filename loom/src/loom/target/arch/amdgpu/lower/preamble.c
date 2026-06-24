@@ -686,9 +686,26 @@ static iree_status_t loom_amdgpu_lookup_dispatch_ptr_live_in(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_lookup_dispatch_id_live_in(
+    loom_low_lower_context_t* context, loom_value_id_t* out_value_id) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_live_in_by_source(
+      context, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_ID_SOURCE),
+      out_value_id));
+  if (*out_value_id == LOOM_VALUE_ID_INVALID) {
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU dispatch ID live-in");
+    IREE_BUILTIN_UNREACHABLE();
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_lookup_current_dispatch_ptr(
     loom_low_lower_context_t* context, loom_value_id_t* out_low_value_id) {
   return loom_amdgpu_lookup_dispatch_ptr_live_in(context, out_low_value_id);
+}
+
+iree_status_t loom_amdgpu_lookup_current_dispatch_id(
+    loom_low_lower_context_t* context, loom_value_id_t* out_low_value_id) {
+  return loom_amdgpu_lookup_dispatch_id_live_in(context, out_low_value_id);
 }
 
 iree_status_t loom_amdgpu_lookup_current_workgroup_id(
@@ -788,6 +805,26 @@ static iree_status_t loom_amdgpu_emit_dispatch_ptr_live_in(
   loom_string_id_t source_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_intern(
       context, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE),
+      &source_id));
+  loom_op_t* live_in_op = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_live_in_build(loom_low_lower_context_builder(context), source_id,
+                             loom_make_named_attr_slice(NULL, 0), sgprx2_type,
+                             source_op->location, &live_in_op));
+  *out_low_value_id = loom_low_live_in_result(live_in_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_emit_dispatch_id_live_in(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t* out_low_value_id) {
+  *out_low_value_id = LOOM_VALUE_ID_INVALID;
+  loom_type_t sgprx2_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_make_sgpr_range_type(context, 2, &sgprx2_type));
+  loom_string_id_t source_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_intern(
+      context, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_ID_SOURCE),
       &source_id));
   loom_op_t* live_in_op = NULL;
   IREE_RETURN_IF_ERROR(
@@ -926,6 +963,7 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
   const loom_op_t* first_workitem_id_ops[LOOM_KERNEL_DIMENSION_COUNT_] = {0};
   const loom_op_t* first_workgroup_id_ops[LOOM_KERNEL_DIMENSION_COUNT_] = {0};
   const loom_op_t* first_dispatch_ptr_op = NULL;
+  const loom_op_t* first_dispatch_id_op = NULL;
   const iree_host_size_t plan_count =
       loom_low_lower_context_selected_plan_count(context);
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
@@ -992,6 +1030,9 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
         if (first_dispatch_ptr_op == NULL) {
           first_dispatch_ptr_op = source_op;
         }
+        if (first_dispatch_id_op == NULL) {
+          first_dispatch_id_op = source_op;
+        }
         for (uint32_t j = 0; j < LOOM_KERNEL_DIMENSION_COUNT_; ++j) {
           if (first_workitem_id_ops[j] == NULL) {
             first_workitem_id_ops[j] = source_op;
@@ -1005,6 +1046,9 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
       case LOOM_OP_SANITIZER_RACE_SYNC: {
         if (first_dispatch_ptr_op == NULL) {
           first_dispatch_ptr_op = source_op;
+        }
+        if (first_dispatch_id_op == NULL) {
+          first_dispatch_id_op = source_op;
         }
         for (uint32_t j = 0; j < LOOM_KERNEL_DIMENSION_COUNT_; ++j) {
           if (first_workitem_id_ops[j] == NULL) {
@@ -1067,6 +1111,11 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
     loom_value_id_t unused_low_dispatch_ptr = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_dispatch_ptr_live_in(
         context, first_dispatch_ptr_op, &unused_low_dispatch_ptr));
+  }
+  if (first_dispatch_id_op != NULL) {
+    loom_value_id_t unused_low_dispatch_id = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_dispatch_id_live_in(
+        context, first_dispatch_id_op, &unused_low_dispatch_id));
   }
 
   loom_value_id_t packed_workitem_id = LOOM_VALUE_ID_INVALID;

@@ -21,14 +21,8 @@
 // ABI version for |iree_hal_amdgpu_tsan_report_t|.
 #define IREE_HAL_AMDGPU_TSAN_REPORT_ABI_VERSION_0 0u
 
-// ABI version for |iree_hal_amdgpu_tsan_assignment_plan_t|.
-#define IREE_HAL_AMDGPU_TSAN_ASSIGNMENT_PLAN_ABI_VERSION_0 0u
-
 // ABI version for |iree_hal_amdgpu_tsan_queue_state_t|.
 #define IREE_HAL_AMDGPU_TSAN_QUEUE_STATE_ABI_VERSION_0 0u
-
-// ABI version for |iree_hal_amdgpu_tsan_dispatch_state_t|.
-#define IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_ABI_VERSION_0 0u
 
 // Bitfield specifying properties of the TSAN configuration.
 typedef uint32_t iree_hal_amdgpu_tsan_config_flags_t;
@@ -93,39 +87,17 @@ enum iree_hal_amdgpu_tsan_report_flag_bits_t {
   IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR = 1u << 3,
 };
 
-// Bitfield specifying properties of a TSAN assignment plan.
-typedef uint16_t iree_hal_amdgpu_tsan_assignment_plan_flags_t;
-enum iree_hal_amdgpu_tsan_assignment_plan_flag_bits_t {
-  IREE_HAL_AMDGPU_TSAN_ASSIGNMENT_PLAN_FLAG_NONE = 0u,
-};
-
-// Bitfield specifying properties of a TSAN assignment record.
-typedef uint16_t iree_hal_amdgpu_tsan_assignment_record_flags_t;
-enum iree_hal_amdgpu_tsan_assignment_record_flag_bits_t {
-  IREE_HAL_AMDGPU_TSAN_ASSIGNMENT_RECORD_FLAG_NONE = 0u,
-};
-
 // Bitfield specifying properties of queue-owned TSAN state.
 typedef uint32_t iree_hal_amdgpu_tsan_queue_state_flags_t;
 enum iree_hal_amdgpu_tsan_queue_state_flag_bits_t {
   IREE_HAL_AMDGPU_TSAN_QUEUE_STATE_FLAG_NONE = 0u,
 };
 
-// Bitfield specifying properties of a queue-local dispatch state slot.
-typedef uint32_t iree_hal_amdgpu_tsan_dispatch_state_flags_t;
-enum iree_hal_amdgpu_tsan_dispatch_state_flag_bits_t {
-  IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_NONE = 0u,
-  // The slot was assigned by the queue prefix assignment dispatch.
-  IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_ASSIGNED = 1u << 0,
-};
-
 // Runtime-published TSAN configuration read by instrumented device code.
 //
-// Queue-scoped executable variants publish queue-specific AQL ring coordinates
-// so device code can derive a queue-local dispatch slot from its implicit
-// dispatch packet pointer without host per-dispatch mutation. When
-// |queue_aql_base| is zero, instrumentation must conservatively use dispatch
-// slot zero.
+// Queue-scoped executable variants publish queue-specific shadow storage so
+// device code can derive a queue-local dispatch slot from the dispatch ID
+// without host per-dispatch mutation.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   // Size of this record in bytes for forward-compatible parsing.
   uint32_t record_length;
@@ -147,9 +119,10 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   uint32_t workgroup_capacity;
   // Bytes in each shadow entry.
   uint32_t shadow_entry_size;
-  // Device-visible base of the owning queue AQL ring, or 0 for slot zero.
+  // Host-observed base of the owning queue AQL ring, or 0 when unavailable.
+  // This is metadata, not a device-addressing contract.
   uint64_t queue_aql_base;
-  // Power-of-two AQL packet slot mask used with |queue_aql_base|.
+  // Power-of-two AQL packet slot mask for host packet IDs.
   uint64_t queue_aql_slot_mask;
   // Device-visible iree_hal_amdgpu_tsan_queue_state_t pointer, or zero.
   uint64_t queue_state_base;
@@ -157,8 +130,8 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   uint32_t shadow_slot_count;
   // Reserved for future TSAN runtime state. Must be zero.
   uint32_t reserved0;
-  // Fast-path device-visible base of dispatch-state entries, or zero.
-  uint64_t dispatch_state_base;
+  // Reserved for future TSAN runtime state. Must be zero.
+  uint64_t reserved1;
 } iree_hal_amdgpu_tsan_config_t;
 IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_config_t) == 96,
                           "TSAN config size is part of the device ABI");
@@ -169,18 +142,14 @@ IREE_AMDGPU_STATIC_ASSERT(
     IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_config_t, queue_state_base) == 72,
     "TSAN config queue state fields must follow the queue AQL fields");
 IREE_AMDGPU_STATIC_ASSERT(
-    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_config_t, dispatch_state_base) ==
-        88,
-    "TSAN config dispatch state base must be in the tail slot");
+    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_config_t, reserved1) == 88,
+    "TSAN config reserved tail must keep the fixed layout");
 
-// Queue-owned TSAN state read by assignment dispatches and instrumented
-// kernels.
+// Queue-owned TSAN state read by instrumented kernels.
 //
 // One state record exists for each logical AMDGPU host queue when queue-scoped
-// TSAN support is enabled. The record owns the stable queue geometry and points
-// at the mutable dispatch-state table indexed by AQL packet slot. Assignment
-// dispatches publish per-payload dispatch state into that table before the
-// payload packets become visible to the hardware scheduler.
+// TSAN support is enabled. The record owns the stable queue shadow geometry
+// used by payload kernels.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_queue_state_t {
   // Size of this record in bytes for forward-compatible parsing.
   uint32_t record_length;
@@ -194,16 +163,17 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_queue_state_t {
   uint32_t physical_device_ordinal;
   // Queue ordinal relative to |physical_device_ordinal|.
   uint32_t physical_queue_ordinal;
-  // Number of entries in the dispatch-state table.
-  uint32_t dispatch_state_count;
+  // Reserved for future queue state. Must be zero.
+  uint32_t reserved0;
   // Number of queue-local dispatch shadow slots available.
   uint32_t shadow_slot_count;
-  // Device-visible base address of the HSA AQL packet ring.
+  // Host-observed base address of the HSA AQL packet ring. This is metadata,
+  // not a device-addressing contract.
   uint64_t aql_ring_base;
-  // Power-of-two packet-ring slot mask.
+  // Power-of-two packet-ring slot mask for host packet IDs.
   uint64_t aql_ring_mask;
-  // Device-visible base of iree_hal_amdgpu_tsan_dispatch_state_t entries.
-  uint64_t dispatch_state_base;
+  // Reserved for future queue state. Must be zero.
+  uint64_t reserved1;
   // Device-visible base of this queue's shadow allocation.
   uint64_t shadow_base;
   // Total bytes in this queue's shadow allocation.
@@ -219,9 +189,9 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_queue_state_t {
   // Log2 application memory bytes represented by one shadow entry.
   uint32_t memory_granule_shift;
   // Reserved for future queue state. Must be zero.
-  uint32_t reserved0;
+  uint32_t reserved2;
   // Reserved for future queue state. Must be zero.
-  uint64_t reserved1;
+  uint64_t reserved3;
 } iree_hal_amdgpu_tsan_queue_state_t;
 IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_queue_state_t) == 112,
                           "TSAN queue state size is part of the device ABI");
@@ -231,23 +201,7 @@ IREE_AMDGPU_STATIC_ASSERT(
     "TSAN queue state AQL fields must follow the fixed header");
 IREE_AMDGPU_STATIC_ASSERT(
     IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_queue_state_t, shadow_base) == 56,
-    "TSAN queue state shadow fields must follow dispatch-state fields");
-
-// Queue-local dispatch TSAN state indexed by an AQL packet slot.
-//
-// Assignment dispatches update the state for each following TSAN-instrumented
-// payload dispatch in the same command-buffer block. Instrumented kernels read
-// their own slot to select the queue-local shadow slot and replay generation.
-typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_dispatch_state_t {
-  // Replay generation assigned to the dispatch using this AQL slot.
-  uint64_t generation;
-  // Queue-local shadow slot assigned to the dispatch using this AQL slot.
-  uint32_t shadow_slot;
-  // Flags from iree_hal_amdgpu_tsan_dispatch_state_flag_bits_t.
-  iree_hal_amdgpu_tsan_dispatch_state_flags_t flags;
-} iree_hal_amdgpu_tsan_dispatch_state_t;
-IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_dispatch_state_t) == 16,
-                          "TSAN dispatch state size is part of the device ABI");
+    "TSAN queue state shadow fields must follow AQL geometry fields");
 
 // TSAN shadow entry bit layout used for workgroup-local memory race detection.
 enum iree_hal_amdgpu_tsan_shadow_entry_layout_t {
@@ -255,7 +209,8 @@ enum iree_hal_amdgpu_tsan_shadow_entry_layout_t {
   IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_BYTE_LENGTH = 8u,
   // Per-workgroup shadow header byte length.
   IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_BYTE_LENGTH = 8u,
-  // Offset of the per-workgroup barrier epoch inside the shadow header.
+  // Offset of the low 32-bit per-workgroup barrier epoch inside the shadow
+  // header. The upper 32 bits of the 8-byte header are reserved.
   IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_EPOCH_OFFSET = 0u,
   // Bit offset of the encoded prior access kind in a shadow entry.
   IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_ACCESS_KIND_SHIFT = 0u,
@@ -294,84 +249,39 @@ enum iree_hal_amdgpu_tsan_shadow_access_kind_bits_t {
   IREE_HAL_AMDGPU_TSAN_SHADOW_ACCESS_KIND_ATOMIC = 4u,
 };
 
-// Device-readable assignment plan for one TSAN-instrumented command-buffer
-// block.
+// Kernargs for the queue-local TSAN state initialization dispatch.
 //
-// The host materializes this once while finalizing a command buffer. A block
-// prefix assignment dispatch reads the plan at replay time and publishes
-// queue-local TSAN state for the payload dispatch packets described by the
-// following records. The plan is immutable after command-buffer finalization;
-// replay supplies only queue-specific state and a dynamic generation epoch.
-typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_assignment_plan_t {
-  // Size of this header in bytes for forward-compatible parsing.
-  uint32_t record_length;
-  // ABI version of this plan header layout.
-  uint32_t abi_version;
-  // Number of assignment records following this header.
-  uint32_t record_count;
-  // Maximum simultaneously live local-memory shadow slots needed by the block.
-  uint32_t max_live_shadow_slots;
-  // Static addend folded into the dynamic replay generation epoch.
-  uint32_t generation_base;
-  // Flags from iree_hal_amdgpu_tsan_assignment_plan_flag_bits_t.
-  iree_hal_amdgpu_tsan_assignment_plan_flags_t flags;
-  // Reserved for future plan metadata. Must be zero.
-  uint16_t reserved0;
-} iree_hal_amdgpu_tsan_assignment_plan_t;
+// Queue creation submits one initializer dispatch before user work can enter
+// the AQL ring. The dispatch clears shadow storage, then publishes the
+// immutable queue header from |queue_state_template|. Host code keeps an
+// identical mirror for cold executable-global publication and never reads this
+// device allocation back.
+typedef struct IREE_AMDGPU_ALIGNAS(8)
+    iree_hal_amdgpu_tsan_queue_initialize_args_t {
+  // Device pointer to the queue-owned TSAN state header.
+  iree_hal_amdgpu_tsan_queue_state_t* queue_state;
+  // Device pointer to queue-local shadow storage.
+  void* shadow_base;
+  // Byte length of |shadow_base|.
+  uint64_t shadow_size;
+  // Workgroup size used by the shadow clear dispatch.
+  uint32_t clear_workgroup_size;
+  // Reserved for future queue initialization state. Must be zero.
+  uint32_t reserved0;
+  // Total workitems launched by the shadow clear dispatch.
+  uint64_t clear_byte_stride;
+  // Device pointer to the queue header template in this kernarg record.
+  const iree_hal_amdgpu_tsan_queue_state_t* queue_state_template;
+  // Header value written to |queue_state| after mutable storage is cleared.
+  iree_hal_amdgpu_tsan_queue_state_t queue_state_template_value;
+} iree_hal_amdgpu_tsan_queue_initialize_args_t;
 IREE_AMDGPU_STATIC_ASSERT(
-    sizeof(iree_hal_amdgpu_tsan_assignment_plan_t) == 24,
-    "TSAN assignment plan size is part of the device ABI");
+    sizeof(iree_hal_amdgpu_tsan_queue_initialize_args_t) == 160,
+    "TSAN queue initialize args size is part of the device ABI");
 IREE_AMDGPU_STATIC_ASSERT(
-    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_assignment_plan_t,
-                         generation_base) == 16,
-    "TSAN assignment plan generation fields must follow the fixed header");
-
-// Static assignment data for one TSAN-instrumented payload dispatch.
-//
-// The assignment dispatch derives the target AQL dispatch packet by adding
-// |packet_delta| packets to its own dispatch packet pointer and wrapping
-// through the queue AQL ring mask. This avoids storing replay-specific packet
-// pointers in the immutable plan.
-typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_assignment_record_t {
-  // Target dispatch packet delta from the assignment packet, in AQL packets.
-  uint32_t packet_delta;
-  // Static addend folded into the effective replay generation.
-  uint32_t generation_delta;
-  // Logical shadow slot assigned to the target dispatch within the block span.
-  uint32_t shadow_slot;
-  // Flags from iree_hal_amdgpu_tsan_assignment_record_flag_bits_t.
-  iree_hal_amdgpu_tsan_assignment_record_flags_t flags;
-  // Reserved for future record metadata. Must be zero.
-  uint16_t reserved0;
-} iree_hal_amdgpu_tsan_assignment_record_t;
-IREE_AMDGPU_STATIC_ASSERT(
-    sizeof(iree_hal_amdgpu_tsan_assignment_record_t) == 16,
-    "TSAN assignment record size is part of the device ABI");
-IREE_AMDGPU_STATIC_ASSERT(
-    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_assignment_record_t,
-                         shadow_slot) == 8,
-    "TSAN assignment record slot fields must follow generation fields");
-
-// Kernargs for the block-prefix TSAN assignment dispatch.
-//
-// These are the only per-replay values required by the memoized command-buffer
-// assignment path. |queue_state_ptr| is intentionally opaque to this header so
-// queue state can evolve independently from the immutable plan layout.
-typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_assignment_args_t {
-  // Device pointer to iree_hal_amdgpu_tsan_assignment_plan_t.
-  uint64_t plan_ptr;
-  // Device pointer to queue-owned TSAN state.
-  uint64_t queue_state_ptr;
-  // Replay-varying generation epoch.
-  uint64_t generation_epoch;
-} iree_hal_amdgpu_tsan_assignment_args_t;
-IREE_AMDGPU_STATIC_ASSERT(
-    sizeof(iree_hal_amdgpu_tsan_assignment_args_t) == 24,
-    "TSAN assignment args size is part of the device ABI");
-IREE_AMDGPU_STATIC_ASSERT(
-    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_assignment_args_t,
-                         generation_epoch) == 16,
-    "TSAN assignment args epoch must follow device pointers");
+    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_queue_initialize_args_t,
+                         queue_state_template_value) == 48,
+    "TSAN queue initialize args template follows clear geometry fields");
 
 // TSAN diagnostic payload carried by feedback packets of kind TSAN.
 //

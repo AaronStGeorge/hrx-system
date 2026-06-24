@@ -981,10 +981,9 @@ TEST(AmdgpuHsacoTest, WritesGfx942CodeObjectTargetFlags) {
   ASSERT_GE(bytes.size(), 64u);
   EXPECT_EQ((uint8_t)bytes[7], LOOM_NATIVE_ELF_OS_ABI_AMDGPU_HSA);
   EXPECT_EQ((uint8_t)bytes[8], LOOM_NATIVE_ELF_ABI_VERSION_AMDGPU_HSA_V6);
-  EXPECT_EQ(LoadLeU32(bytes, 48),
-            LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX942 |
-                LOOM_NATIVE_ELF_AMDGPU_FLAG_FEATURE_XNACK_ANY_V4 |
-                LOOM_NATIVE_ELF_AMDGPU_FLAG_FEATURE_SRAMECC_ANY_V4);
+  EXPECT_EQ(LoadLeU32(bytes, 48), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX942 |
+                                      LOOM_AMDGPU_ELF_FEATURE_XNACK_ANY_V4 |
+                                      LOOM_AMDGPU_ELF_FEATURE_SRAMECC_ANY_V4);
 }
 
 TEST(AmdgpuHsacoTest, RejectsMismatchedProcessor) {
@@ -1009,7 +1008,7 @@ TEST(AmdgpuHsacoTest, RejectsMismatchedProcessor) {
       loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
 }
 
-TEST(AmdgpuHsacoTest, RejectsTargetFeatureSuffixesUntilFlagsAreEncoded) {
+TEST(AmdgpuHsacoTest, WritesTargetFeatureSuffixCodeObjectFlags) {
   const uint8_t text[] = {0x00, 0x00, 0x81, 0xbf};
   const loom_amdgpu_hsaco_kernel_t kernel = {
       /*.metadata=*/
@@ -1026,9 +1025,14 @@ TEST(AmdgpuHsacoTest, RejectsTargetFeatureSuffixesUntilFlagsAreEncoded) {
 
   StreamPtr stream = CreateStream();
   TestArena arena;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_FAILED_PRECONDITION,
+  IREE_ASSERT_OK(
       loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
+  const std::string bytes = StreamBytes(stream.get());
+
+  ASSERT_GE(bytes.size(), 64u);
+  EXPECT_EQ(LoadLeU32(bytes, 48), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1100 |
+                                      LOOM_AMDGPU_ELF_FEATURE_SRAMECC_ON_V4 |
+                                      LOOM_AMDGPU_ELF_FEATURE_XNACK_OFF_V4);
 }
 
 }  // namespace

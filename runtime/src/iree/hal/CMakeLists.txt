@@ -160,6 +160,17 @@ iree_cc_test(
 
 iree_cc_test(
   NAME
+    queue_test
+  SRCS
+    "queue_test.cc"
+  DEPS
+    ::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+iree_cc_test(
+  NAME
     pool_test
   SRCS
     "pool_test.cc"

@@ -13,7 +13,6 @@
 #include "iree/hal/drivers/amdgpu/aql_command_buffer.h"
 #include "iree/hal/drivers/amdgpu/buffer.h"
 #include "iree/hal/drivers/amdgpu/device/timestamp.h"
-#include "iree/hal/drivers/amdgpu/device/tsan.h"
 #include "iree/hal/drivers/amdgpu/host_queue_command_buffer_packet.h"
 #include "iree/hal/drivers/amdgpu/host_queue_command_buffer_profile.h"
 #include "iree/hal/drivers/amdgpu/host_queue_command_buffer_scratch.h"
@@ -180,142 +179,6 @@ iree_hal_amdgpu_host_queue_prepare_command_buffer_packet_metadata(
   // reporting success; avoid pre-zeroing this hot submission span.
   *out_packet_headers = packet_headers;
   *out_packet_setups = packet_setups;
-  return iree_ok_status();
-}
-
-static iree_status_t
-iree_hal_amdgpu_host_queue_command_buffer_tsan_assignment_plan_length(
-    const iree_hal_amdgpu_tsan_assignment_plan_t* plan,
-    iree_host_size_t* out_plan_length) {
-  *out_plan_length = 0;
-  if (IREE_UNLIKELY(!plan)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "TSAN command-buffer block has no materialized assignment plan");
-  }
-  if (IREE_UNLIKELY(plan->record_length !=
-                    sizeof(iree_hal_amdgpu_tsan_assignment_plan_t))) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "TSAN command-buffer assignment plan length %u does not match runtime "
-        "layout %" PRIhsz,
-        plan->record_length, sizeof(iree_hal_amdgpu_tsan_assignment_plan_t));
-  }
-  return IREE_STRUCT_LAYOUT(
-      plan->record_length, out_plan_length,
-      IREE_STRUCT_FIELD(plan->record_count,
-                        iree_hal_amdgpu_tsan_assignment_record_t, NULL));
-}
-
-static iree_status_t
-iree_hal_amdgpu_host_queue_adjust_command_buffer_tsan_assignment_plan(
-    const iree_hal_amdgpu_tsan_assignment_plan_t* source_plan,
-    iree_hal_amdgpu_aql_block_processor_profile_dispatch_list_t
-        profile_dispatches,
-    uint32_t pre_dispatch_profile_packet_count,
-    uint32_t total_profile_packet_count, iree_host_size_t target_plan_length,
-    iree_hal_amdgpu_tsan_assignment_plan_t* target_plan) {
-  iree_host_size_t source_plan_length = 0;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_amdgpu_host_queue_command_buffer_tsan_assignment_plan_length(
-          source_plan, &source_plan_length));
-  if (IREE_UNLIKELY(source_plan_length > target_plan_length)) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "adjusted TSAN command-buffer assignment plan length %" PRIhsz
-        " exceeds reserved length %" PRIhsz,
-        source_plan_length, target_plan_length);
-  }
-
-  memcpy(target_plan, source_plan, source_plan_length);
-  const iree_hal_amdgpu_tsan_assignment_record_t* source_records =
-      (const iree_hal_amdgpu_tsan_assignment_record_t*)(const void*)(source_plan +
-                                                                     1);
-  iree_hal_amdgpu_tsan_assignment_record_t* target_records =
-      (iree_hal_amdgpu_tsan_assignment_record_t*)(target_plan + 1);
-  if (IREE_UNLIKELY(profile_dispatches.count != 0 &&
-                    !profile_dispatches.values)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "profile dispatch list count %" PRIu32
-                            " has no storage",
-                            profile_dispatches.count);
-  }
-
-  uint32_t profile_dispatch_ordinal = 0;
-  uint32_t accumulated_profile_packet_count = 0;
-  for (uint32_t record_ordinal = 0; record_ordinal < source_plan->record_count;
-       ++record_ordinal) {
-    iree_hal_amdgpu_tsan_assignment_record_t adjusted_record =
-        source_records[record_ordinal];
-    if (IREE_UNLIKELY(adjusted_record.packet_delta == 0)) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "TSAN command-buffer assignment record %" PRIu32
-                              " has invalid zero packet delta",
-                              record_ordinal);
-    }
-
-    const uint32_t recorded_dispatch_ordinal =
-        adjusted_record.packet_delta - 1u;
-    while (profile_dispatch_ordinal < profile_dispatches.count &&
-           profile_dispatches.values[profile_dispatch_ordinal].summary &&
-           profile_dispatches.values[profile_dispatch_ordinal]
-                   .summary->packets.dispatch_ordinal <
-               recorded_dispatch_ordinal) {
-      if (IREE_UNLIKELY(total_profile_packet_count >
-                        UINT32_MAX - accumulated_profile_packet_count)) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "adjusted TSAN command-buffer profile packet count exceeds "
-            "uint32_t storage");
-      }
-      accumulated_profile_packet_count += total_profile_packet_count;
-      ++profile_dispatch_ordinal;
-    }
-
-    if (IREE_UNLIKELY(recorded_dispatch_ordinal >
-                      UINT32_MAX - accumulated_profile_packet_count)) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "adjusted TSAN command-buffer assignment record %" PRIu32
-          " packet ordinal exceeds uint32_t storage",
-          record_ordinal);
-    }
-    uint32_t replay_dispatch_ordinal =
-        recorded_dispatch_ordinal + accumulated_profile_packet_count;
-    if (profile_dispatch_ordinal < profile_dispatches.count) {
-      const iree_hal_amdgpu_aql_command_buffer_dispatch_summary_t*
-          profile_summary =
-              profile_dispatches.values[profile_dispatch_ordinal].summary;
-      if (IREE_UNLIKELY(!profile_summary)) {
-        return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                                "profile dispatch %" PRIu32
-                                " has no retained dispatch summary",
-                                profile_dispatch_ordinal);
-      }
-      if (profile_summary->packets.dispatch_ordinal ==
-          recorded_dispatch_ordinal) {
-        if (IREE_UNLIKELY(pre_dispatch_profile_packet_count >
-                          UINT32_MAX - replay_dispatch_ordinal)) {
-          return iree_make_status(
-              IREE_STATUS_OUT_OF_RANGE,
-              "adjusted TSAN command-buffer assignment record %" PRIu32
-              " packet ordinal exceeds uint32_t storage",
-              record_ordinal);
-        }
-        replay_dispatch_ordinal += pre_dispatch_profile_packet_count;
-      }
-    }
-    if (IREE_UNLIKELY(replay_dispatch_ordinal == UINT32_MAX)) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "adjusted TSAN command-buffer assignment record %" PRIu32
-          " packet delta exceeds uint32_t storage",
-          record_ordinal);
-    }
-    adjusted_record.packet_delta = replay_dispatch_ordinal + 1u;
-    adjusted_record.generation_delta = replay_dispatch_ordinal;
-    target_records[record_ordinal] = adjusted_record;
-  }
   return iree_ok_status();
 }
 
@@ -535,46 +398,6 @@ static iree_status_t iree_hal_amdgpu_host_queue_write_command_buffer_block(
       iree_hal_amdgpu_aql_block_processor_profile_invoke(&processor, &result);
   iree_hal_amdgpu_aql_block_processor_profile_deinitialize(&processor);
   return status;
-}
-
-static iree_status_t
-iree_hal_amdgpu_host_queue_write_command_buffer_tsan_assignment(
-    iree_hal_amdgpu_host_queue_t* queue,
-    const iree_hal_amdgpu_wait_resolution_t* resolution,
-    const iree_hal_semaphore_list_t signal_semaphore_list,
-    const iree_hal_amdgpu_tsan_assignment_plan_t* assignment_plan,
-    uint32_t assignment_record_count, uint64_t assignment_packet_id,
-    uint32_t packet_index_base, iree_hal_amdgpu_kernarg_block_t* kernarg_blocks,
-    uint16_t* packet_headers, uint16_t* packet_setups) {
-  if (IREE_UNLIKELY(!assignment_plan)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "TSAN command-buffer block has no materialized assignment plan");
-  }
-  if (IREE_UNLIKELY(!queue->tsan.queue_state)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "TSAN command-buffer replay requires queue-owned TSAN state");
-  }
-
-  iree_hal_amdgpu_aql_packet_t* packet =
-      iree_hal_amdgpu_aql_ring_packet(&queue->aql_ring, assignment_packet_id);
-  iree_hal_amdgpu_device_tsan_emplace_assignment(
-      &queue->transfer_context->kernels->iree_hal_amdgpu_device_tsan_assign,
-      assignment_plan, queue->tsan.queue_state, assignment_record_count,
-      /*generation_epoch=*/assignment_packet_id, &packet->dispatch,
-      kernarg_blocks[0].data);
-  const iree_hsa_fence_scope_t kernarg_acquire_scope =
-      iree_hal_amdgpu_host_queue_kernarg_acquire_scope(
-          queue, IREE_HSA_FENCE_SCOPE_NONE);
-  packet_headers[0] = iree_hal_amdgpu_aql_make_header(
-      IREE_HSA_PACKET_TYPE_KERNEL_DISPATCH,
-      iree_hal_amdgpu_host_queue_command_buffer_packet_control(
-          queue, resolution, signal_semaphore_list, packet_index_base,
-          kernarg_acquire_scope,
-          IREE_HAL_AMDGPU_HOST_QUEUE_COMMAND_BUFFER_PACKET_FLAG_EXECUTION_BARRIER));
-  packet_setups[0] = packet->dispatch.setup;
-  return iree_ok_status();
 }
 
 typedef uint32_t
@@ -893,21 +716,11 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
   }
 
   uint32_t recorded_packet_count = 0;
-  const uint32_t tsan_assignment_packet_count =
-      iree_hal_amdgpu_command_buffer_block_has_tsan_assignment(block) ? 1u : 0u;
   uint32_t emitted_packet_count = 0;
   if (iree_status_is_ok(status)) {
     recorded_packet_count =
         block->aql_packet_count + extra_profile_packet_count;
-    if (IREE_UNLIKELY(recorded_packet_count >
-                      UINT32_MAX - tsan_assignment_packet_count)) {
-      status = iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "sanitized command-buffer block packet count overflow");
-    } else {
-      emitted_packet_count =
-          tsan_assignment_packet_count + recorded_packet_count;
-    }
+    emitted_packet_count = recorded_packet_count;
   }
   if (iree_status_is_ok(status) &&
       iree_hal_amdgpu_host_queue_should_profile_queue_device_events(queue)) {
@@ -956,8 +769,6 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
 
   uint32_t payload_packet_count = 0;
   uint32_t profile_harvest_kernarg_block_count = 0;
-  uint32_t tsan_assignment_kernarg_block_count = 0;
-  bool adjust_tsan_assignment_plan = false;
   if (iree_status_is_ok(status)) {
     payload_packet_count = emitted_packet_count + profile_harvest_packet_count +
                            profile_queue_device_packet_count +
@@ -969,63 +780,6 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
                       profile_events.event_count),
                   sizeof(iree_hal_amdgpu_kernarg_block_t))
             : 0u;
-    tsan_assignment_kernarg_block_count =
-        tsan_assignment_packet_count != 0
-            ? (uint32_t)iree_host_size_ceil_div(
-                  sizeof(iree_hal_amdgpu_tsan_assignment_args_t),
-                  sizeof(iree_hal_amdgpu_kernarg_block_t))
-            : 0u;
-    adjust_tsan_assignment_plan =
-        tsan_assignment_packet_count != 0 && extra_profile_packet_count != 0;
-  }
-
-  iree_host_size_t tsan_adjusted_plan_length = 0;
-  uint32_t tsan_adjusted_plan_kernarg_block_count = 0;
-  const iree_hal_amdgpu_tsan_assignment_plan_t* tsan_assignment_host_plan =
-      NULL;
-  if (iree_status_is_ok(status) && tsan_assignment_packet_count != 0) {
-    tsan_assignment_host_plan =
-        iree_hal_amdgpu_aql_command_buffer_tsan_assignment_host_plan(
-            command_buffer, block);
-    if (IREE_UNLIKELY(!tsan_assignment_host_plan)) {
-      status = iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "TSAN command-buffer block has no host assignment plan");
-    }
-  }
-
-  if (iree_status_is_ok(status) && adjust_tsan_assignment_plan) {
-    status =
-        iree_hal_amdgpu_host_queue_command_buffer_tsan_assignment_plan_length(
-            tsan_assignment_host_plan, &tsan_adjusted_plan_length);
-    if (iree_status_is_ok(status)) {
-      const iree_host_size_t tsan_adjusted_plan_kernarg_blocks =
-          iree_host_size_ceil_div(tsan_adjusted_plan_length,
-                                  sizeof(iree_hal_amdgpu_kernarg_block_t));
-      if (IREE_UNLIKELY(tsan_adjusted_plan_kernarg_blocks > UINT32_MAX)) {
-        status = iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "adjusted TSAN command-buffer assignment plan requires %" PRIhsz
-            " kernarg blocks",
-            tsan_adjusted_plan_kernarg_blocks);
-      } else {
-        tsan_adjusted_plan_kernarg_block_count =
-            (uint32_t)tsan_adjusted_plan_kernarg_blocks;
-      }
-    }
-  }
-
-  uint32_t tsan_prefix_kernarg_block_count = 0;
-  if (iree_status_is_ok(status)) {
-    if (IREE_UNLIKELY(tsan_assignment_kernarg_block_count >
-                      UINT32_MAX - tsan_adjusted_plan_kernarg_block_count)) {
-      status = iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "TSAN command-buffer prefix kernarg block count overflow");
-    } else {
-      tsan_prefix_kernarg_block_count = tsan_assignment_kernarg_block_count +
-                                        tsan_adjusted_plan_kernarg_block_count;
-    }
   }
 
   const uint64_t* block_binding_ptrs = binding_ptrs;
@@ -1052,9 +806,8 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
     status = iree_hal_amdgpu_host_queue_try_begin_kernel_submission(
         queue, resolution, signal_semaphore_list, operation_resource_count,
         payload_packet_count,
-        tsan_prefix_kernarg_block_count + kernarg_block_count +
-            profile_harvest_kernarg_block_count,
-        out_ready, &submission);
+        kernarg_block_count + profile_harvest_kernarg_block_count, out_ready,
+        &submission);
   }
   if (iree_status_is_ok(status) && *out_ready) {
     submission_begun = true;
@@ -1085,59 +838,8 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
               &queue->transfer_context->kernels
                    ->iree_hal_amdgpu_device_timestamp_harvest_dispatch_records,
               profile_events.event_count, &profile_harvest_packet->dispatch,
-              submission.kernargs
-                  .blocks[tsan_prefix_kernarg_block_count + kernarg_block_count]
-                  .data);
+              submission.kernargs.blocks[kernarg_block_count].data);
       profile_harvest_setup = profile_harvest_packet->dispatch.setup;
-    }
-    const iree_hal_amdgpu_tsan_assignment_plan_t* tsan_assignment_plan = NULL;
-    if (iree_status_is_ok(status) && tsan_assignment_packet_count != 0) {
-      if (adjust_tsan_assignment_plan) {
-        const uint32_t trace_start_packet_count =
-            iree_hal_amdgpu_host_queue_profile_trace_start_packet_count(
-                queue, profile_events);
-        if (IREE_UNLIKELY(
-                profile_events.event_count == 0 ||
-                extra_profile_packet_count % profile_events.event_count != 0 ||
-                trace_start_packet_count % profile_events.event_count != 0)) {
-          status = iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "profiled TSAN command-buffer replay has inconsistent profile "
-              "packet accounting");
-        } else {
-          const uint32_t trace_start_packets_per_dispatch =
-              trace_start_packet_count / profile_events.event_count;
-          if (IREE_UNLIKELY(profile_counter_set_count >
-                            UINT32_MAX - trace_start_packets_per_dispatch)) {
-            status = iree_make_status(
-                IREE_STATUS_OUT_OF_RANGE,
-                "profiled TSAN command-buffer pre-dispatch packet count "
-                "overflow");
-          }
-          iree_hal_amdgpu_tsan_assignment_plan_t* adjusted_plan =
-              (iree_hal_amdgpu_tsan_assignment_plan_t*)submission.kernargs
-                  .blocks[tsan_assignment_kernarg_block_count]
-                  .data;
-          if (iree_status_is_ok(status)) {
-            status =
-                iree_hal_amdgpu_host_queue_adjust_command_buffer_tsan_assignment_plan(
-                    tsan_assignment_host_plan, profile_dispatches,
-                    profile_counter_set_count +
-                        trace_start_packets_per_dispatch,
-                    extra_profile_packet_count / profile_events.event_count,
-                    tsan_adjusted_plan_kernarg_block_count *
-                        sizeof(iree_hal_amdgpu_kernarg_block_t),
-                    adjusted_plan);
-          }
-          if (iree_status_is_ok(status)) {
-            tsan_assignment_plan = adjusted_plan;
-          }
-        }
-      } else {
-        tsan_assignment_plan =
-            iree_hal_amdgpu_aql_command_buffer_tsan_assignment_plan(
-                command_buffer, block);
-      }
     }
     uint16_t* packet_headers = NULL;
     uint16_t* packet_setups = NULL;
@@ -1147,30 +849,16 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
               queue, emitted_packet_count, &scratch_arena, &packet_headers,
               &packet_setups);
     }
-    if (iree_status_is_ok(status) && tsan_assignment_packet_count != 0) {
-      status = iree_hal_amdgpu_host_queue_write_command_buffer_tsan_assignment(
-          queue, resolution, signal_semaphore_list, tsan_assignment_plan,
-          tsan_assignment_host_plan->record_count, first_payload_packet_id,
-          profile_queue_device_prefix_packet_count, submission.kernargs.blocks,
-          packet_headers, packet_setups);
-    }
     iree_hal_amdgpu_kernarg_block_t* recorded_kernarg_blocks =
-        submission.kernargs.blocks
-            ? submission.kernargs.blocks + tsan_prefix_kernarg_block_count
-            : NULL;
+        submission.kernargs.blocks;
     if (iree_status_is_ok(status)) {
       status = iree_hal_amdgpu_host_queue_write_command_buffer_block(
           queue, resolution, signal_semaphore_list, command_buffer,
-          binding_table, block, block_binding_ptrs,
-          first_payload_packet_id + tsan_assignment_packet_count,
-          profile_queue_device_prefix_packet_count +
-              tsan_assignment_packet_count,
-          recorded_kernarg_blocks,
-          packet_headers + tsan_assignment_packet_count,
-          packet_setups + tsan_assignment_packet_count, profile_events,
-          recorded_packet_count, profile_counter_set_count,
-          profile_trace_packet_count, profile_harvest_sources,
-          profile_dispatches);
+          binding_table, block, block_binding_ptrs, first_payload_packet_id,
+          profile_queue_device_prefix_packet_count, recorded_kernarg_blocks,
+          packet_headers, packet_setups, profile_events, recorded_packet_count,
+          profile_counter_set_count, profile_trace_packet_count,
+          profile_harvest_sources, profile_dispatches);
     }
     if (iree_status_is_ok(status)) {
       iree_hal_amdgpu_host_queue_command_buffer_profile_submission_t
