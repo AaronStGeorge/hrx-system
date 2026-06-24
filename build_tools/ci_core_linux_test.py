@@ -95,6 +95,16 @@ class CiCoreLinuxTest(unittest.TestCase):
                 "release",
             )
 
+    def test_amdgpu_device_binary_source_options_pin_rocm_root(self):
+        self.assertEqual(
+            ci_core_linux.amdgpu_device_binary_source_options(Path("/tmp/rocm-root")),
+            [
+                "IREE_HAL_AMDGPU_DEVICE_BINARY_BUILD_MODE=source",
+                "IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm",
+                "IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH=/tmp/rocm-root",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

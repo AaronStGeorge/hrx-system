@@ -434,28 +434,6 @@ class CiTest(unittest.TestCase):
             runtime_resource_test.argv,
         )
 
-    def test_amdgpu_sanitizer_command_has_no_amdgpu_xfails(self):
-        args = ci.parse_arguments(
-            [
-                "iree-bazel-amdgpu-sanitizers",
-                "--target",
-                "//runtime/...",
-            ]
-        )
-
-        steps = ci.steps_from_args(args)
-        sanitizer_test_steps = [
-            step for step in steps if step.name.startswith("Test IREE")
-        ]
-
-        self.assertFalse(
-            any(
-                arg.startswith("-//runtime/src/iree/hal/drivers/amdgpu")
-                for step in sanitizer_test_steps
-                for arg in step.argv
-            )
-        )
-
     def test_bazel_amdgpu_single_sanitizer_command_runs_one_configuration(self):
         args = ci.parse_arguments(
             [
@@ -501,24 +479,6 @@ class CiTest(unittest.TestCase):
         self.assertFalse(any("--config=asan" in line for line in command_lines))
         self.assertFalse(any("--config=ubsan" in line for line in command_lines))
         self.assertFalse(any("--config=msan" in line for line in command_lines))
-
-    def test_bazel_amdgpu_asan_has_no_amdgpu_xfails(self):
-        args = ci.parse_arguments(
-            [
-                "iree-bazel-amdgpu-asan",
-                "--target",
-                "//runtime/...",
-            ]
-        )
-
-        command_lines = [step.command_line() for step in ci.steps_from_args(args)]
-
-        self.assertFalse(
-            any(
-                "-//runtime/src/iree/hal/drivers/amdgpu" in line
-                for line in command_lines
-            )
-        )
 
     def test_vulkan_command_builds_and_runs_vulkan_package_tests(self):
         args = ci.parse_arguments(
@@ -685,14 +645,27 @@ class CiTest(unittest.TestCase):
                     r"command: iree-bazel-(amdgpu|vulkan)-sanitizers",
                 )
 
-    def test_core_gpu_workflow_has_no_amdgpu_test_exclusions(self):
+    def test_core_gpu_workflow_routes_gpu_labels_to_linux_runners(self):
         block = self.workflow_job_block(
             ".github/workflows/ci_core_linux.yml", "gpu_linux"
         )
+        self.assertIn("runner_label: linux-gfx942-1gpu-core42-ossci-rocm", block)
+        self.assertIn("runner_label: gpu_navi4x", block)
 
-        self.assertNotRegex(
-            block,
-            r"ctest_exclude_regex:.*(iree/hal/drivers/amdgpu|loom/target/arch/amdgpu)",
+        reusable_workflow = Path(
+            ".github/workflows/test_core_linux_gpu.yml"
+        ).read_text()
+        self.assertRegex(
+            reusable_workflow,
+            r"runner_label:\n\s+type: string\n\s+required: true",
+        )
+        reusable_block = self.workflow_job_block(
+            ".github/workflows/test_core_linux_gpu.yml", "test_core_linux_gpu"
+        )
+        self.assertRegex(
+            reusable_block,
+            r"runs-on:\n\s+- self-hosted\n\s+- Linux\n\s+- X64\n"
+            r"\s+- \"\$\{\{ inputs\.runner_label \}\}\"",
         )
 
     def test_iree_workflows_do_not_trigger_on_libhrx_only_paths(self):
@@ -941,6 +914,18 @@ class CiTest(unittest.TestCase):
                 for line in command_lines
             )
         )
+        self.assertTrue(
+            any(
+                "-DIREE_HAL_AMDGPU_DEVICE_BINARY_BUILD_MODE=source" in line
+                for line in command_lines
+            )
+        )
+        self.assertTrue(
+            any(
+                "-DIREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm" in line
+                for line in command_lines
+            )
+        )
         build_steps = [step for step in steps if step.name.startswith("Build IREE")]
         for target in ci_config.AMDGPU_CMAKE_DRIVER_TARGETS:
             self.assertTrue(any(target in step.argv for step in build_steps))
@@ -981,46 +966,20 @@ class CiTest(unittest.TestCase):
         )
         self.assertIn(ci_config.CTEST_MANUAL_LABEL_EXCLUDE_REGEX, resource_test.argv)
 
-    def test_cmake_amdgpu_tsan_has_no_amdgpu_xfails(self):
-        args = ci.parse_arguments(["iree-cmake-amdgpu-tsan"])
+    def test_cmake_amdgpu_device_binary_source_build_uses_fetched_rocm_root(self):
+        args = ci.parse_arguments(["iree-cmake-amdgpu"])
 
-        steps = ci.steps_from_args(args)
-        package_test = next(
-            step
-            for step in steps
-            if step.name == "Test IREE CMake AMDGPU package tests with TSAN"
-        )
-        resource_test = next(
-            step
-            for step in steps
-            if step.name == "Test IREE CMake AMDGPU resource tests with TSAN"
-        )
+        with mock.patch.dict(
+            ci.os.environ,
+            {"HRX_ROCM_ROOT": "/tmp/rocm-root"},
+            clear=True,
+        ):
+            steps = ci.steps_from_args(args)
 
-        self.assertEqual(self.ctest_exclude_regexes(package_test), [])
-        self.assertEqual(
-            self.ctest_exclude_regexes(resource_test),
-            [ci.combine_ctest_regex("^iree/hal/drivers/amdgpu/")],
-        )
-
-    def test_cmake_amdgpu_asan_has_no_amdgpu_xfails(self):
-        args = ci.parse_arguments(["iree-cmake-amdgpu-asan"])
-
-        steps = ci.steps_from_args(args)
-        package_test = next(
-            step
-            for step in steps
-            if step.name == "Test IREE CMake AMDGPU package tests with ASAN"
-        )
-        resource_test = next(
-            step
-            for step in steps
-            if step.name == "Test IREE CMake AMDGPU resource tests with ASAN"
-        )
-
-        self.assertEqual(self.ctest_exclude_regexes(package_test), [])
-        self.assertEqual(
-            self.ctest_exclude_regexes(resource_test),
-            [ci.combine_ctest_regex("^iree/hal/drivers/amdgpu/")],
+        configure_step = next(step for step in steps if step.name == "Configure CMake")
+        self.assertIn(
+            "-DIREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH=/tmp/rocm-root",
+            configure_step.argv,
         )
 
     def test_cmake_amdgpu_msan_builds_driver_targets_without_test_deps(self):

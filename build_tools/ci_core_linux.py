@@ -764,6 +764,14 @@ def sanitizer_configure_options(sanitizer: str) -> list[str]:
     ]
 
 
+def amdgpu_device_binary_source_options(rocm_root: Path) -> list[str]:
+    return [
+        "IREE_HAL_AMDGPU_DEVICE_BINARY_BUILD_MODE=source",
+        "IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm",
+        f"IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH={rocm_root}",
+    ]
+
+
 def add_sanitizer_runtime_env(
     env: dict[str, str], *, sanitizer: str, rocm_root: Path
 ) -> dict[str, str]:
@@ -837,6 +845,8 @@ def build_core(args: argparse.Namespace) -> None:
         sanitizer_debug_options(args.sanitizer, assertions=args.assertions)
     )
     cmake_defines.extend(sanitizer_configure_options(args.sanitizer))
+    if args.amdgpu:
+        cmake_defines.extend(amdgpu_device_binary_source_options(rocm_root))
     cmake_defines.extend(cmake_options_from_env())
     cmake_defines.extend(args.cmake_option)
 

@@ -12,4 +12,5 @@ exports_files([
     ".github/workflows/ci_importers.yml",
     ".github/workflows/ci_iree_bazel.yml",
     ".github/workflows/ci_iree_cmake.yml",
+    ".github/workflows/test_core_linux_gpu.yml",
 ])
