@@ -824,12 +824,6 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
     const loom_amdgpu_processor_info_t** out_processor) {
   IREE_ASSERT_ARGUMENT(out_processor);
   *out_processor = nullptr;
-  if (!target.feature_suffix.empty()) {
-    return iree_make_status(
-        IREE_STATUS_UNAVAILABLE,
-        "AMDGPU HSACO target-feature suffixes are not supported yet: %s",
-        target.feature_suffix.c_str());
-  }
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
       iree_make_string_view(target.processor.data(), target.processor.size()),

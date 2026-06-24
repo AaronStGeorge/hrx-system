@@ -52,10 +52,6 @@
 
 #define LOOM_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_USER_SGPR_COUNT 2u
 
-#define LOOM_AMDGPU_ELF_FEATURE_XNACK_V4 UINT32_C(0x300)
-#define LOOM_AMDGPU_ELF_FEATURE_XNACK_ANY_V4 UINT32_C(0x100)
-#define LOOM_AMDGPU_ELF_FEATURE_XNACK_ON_V4 UINT32_C(0x300)
-
 static const loom_amdgpu_kernel_descriptor_flags_t
     kAmdgpuKernelDescriptorKnownFlags =
         LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER |
@@ -200,7 +196,7 @@ static uint32_t loom_amdgpu_kernel_descriptor_implied_user_sgpr_count(
 static bool loom_amdgpu_kernel_descriptor_is_xnack_on_or_any(
     const loom_amdgpu_processor_info_t* target) {
   const uint32_t xnack_selection =
-      target->elf.feature_flags & LOOM_AMDGPU_ELF_FEATURE_XNACK_V4;
+      target->elf.feature_flags & LOOM_AMDGPU_ELF_FEATURE_XNACK_MASK_V4;
   return xnack_selection == LOOM_AMDGPU_ELF_FEATURE_XNACK_ANY_V4 ||
          xnack_selection == LOOM_AMDGPU_ELF_FEATURE_XNACK_ON_V4;
 }

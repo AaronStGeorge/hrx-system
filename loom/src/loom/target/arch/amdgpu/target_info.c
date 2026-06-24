@@ -171,6 +171,51 @@ static iree_status_t loom_amdgpu_target_info_validate_target_id_chars(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_target_info_parse_target_feature(
+    iree_string_view_t feature,
+    loom_amdgpu_target_feature_selection_t* inout_sramecc,
+    loom_amdgpu_target_feature_selection_t* inout_xnack) {
+  if (feature.size < 2) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU AMDHSA target feature suffix is empty");
+  }
+
+  const char selector = feature.data[feature.size - 1];
+  loom_amdgpu_target_feature_selection_t selection =
+      LOOM_AMDGPU_TARGET_FEATURE_DEFAULT;
+  if (selector == '+') {
+    selection = LOOM_AMDGPU_TARGET_FEATURE_ON;
+  } else if (selector == '-') {
+    selection = LOOM_AMDGPU_TARGET_FEATURE_OFF;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU AMDHSA target feature suffix missing +/-: %.*s",
+        (int)feature.size, feature.data);
+  }
+
+  const iree_string_view_t name = iree_string_view_remove_suffix(feature, 1);
+  loom_amdgpu_target_feature_selection_t* feature_selection = NULL;
+  if (iree_string_view_equal(name, IREE_SV("sramecc"))) {
+    feature_selection = inout_sramecc;
+  } else if (iree_string_view_equal(name, IREE_SV("xnack"))) {
+    feature_selection = inout_xnack;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "unsupported AMDGPU AMDHSA target feature suffix: %.*s",
+        (int)feature.size, feature.data);
+  }
+  if (*feature_selection != LOOM_AMDGPU_TARGET_FEATURE_DEFAULT) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "duplicate AMDGPU AMDHSA target feature suffix: %.*s", (int)name.size,
+        name.data);
+  }
+  *feature_selection = selection;
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_target_info_parse_amdhsa_target_id(
     iree_string_view_t target_id,
     loom_amdgpu_amdhsa_target_id_t* out_target_id) {
@@ -204,13 +249,72 @@ iree_status_t loom_amdgpu_target_info_parse_amdhsa_target_id(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU AMDHSA target id '%.*s' has an empty feature suffix",
         (int)target_id.size, target_id.data);
+  } else if (target_id.data[target_id.size - 1] == ':') {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU AMDHSA target id '%.*s' has an empty feature suffix",
+        (int)target_id.size, target_id.data);
   }
   const loom_amdgpu_processor_info_t* processor = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_info_lookup_processor(processor_name, &processor));
+  loom_amdgpu_target_feature_selection_t sramecc =
+      LOOM_AMDGPU_TARGET_FEATURE_DEFAULT;
+  loom_amdgpu_target_feature_selection_t xnack =
+      LOOM_AMDGPU_TARGET_FEATURE_DEFAULT;
+  iree_string_view_t remaining_features = feature_suffix;
+  while (!iree_string_view_is_empty(remaining_features)) {
+    iree_string_view_t feature = iree_string_view_empty();
+    iree_string_view_t next_features = iree_string_view_empty();
+    if (iree_string_view_split(remaining_features, ':', &feature,
+                               &next_features) == -1) {
+      feature = remaining_features;
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_parse_target_feature(
+        feature, &sramecc, &xnack));
+    remaining_features = next_features;
+  }
   *out_target_id = (loom_amdgpu_amdhsa_target_id_t){
       .processor = processor,
       .feature_suffix = feature_suffix,
+      .sramecc = sramecc,
+      .xnack = xnack,
   };
+  return iree_ok_status();
+}
+
+static void loom_amdgpu_target_info_apply_feature_selection(
+    loom_amdgpu_target_feature_selection_t selection, uint32_t feature_mask,
+    uint32_t off_value, uint32_t on_value, uint32_t* inout_feature_flags) {
+  if (selection == LOOM_AMDGPU_TARGET_FEATURE_DEFAULT) return;
+  *inout_feature_flags &= ~feature_mask;
+  if (selection == LOOM_AMDGPU_TARGET_FEATURE_ON) {
+    *inout_feature_flags |= on_value;
+  } else {
+    *inout_feature_flags |= off_value;
+  }
+}
+
+iree_status_t loom_amdgpu_target_info_amdhsa_target_id_elf_flags(
+    const loom_amdgpu_amdhsa_target_id_t* target_id, uint32_t* out_elf_flags) {
+  IREE_ASSERT_ARGUMENT(out_elf_flags);
+  *out_elf_flags = 0;
+  const loom_amdgpu_processor_info_t* processor = target_id->processor;
+  if (processor->elf.machine_flags == 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU processor '%.*s' has no ELF e_flags mapping",
+        (int)processor->name.size, processor->name.data);
+  }
+  uint32_t feature_flags = processor->elf.feature_flags;
+  loom_amdgpu_target_info_apply_feature_selection(
+      target_id->sramecc, LOOM_AMDGPU_ELF_FEATURE_SRAMECC_MASK_V4,
+      LOOM_AMDGPU_ELF_FEATURE_SRAMECC_OFF_V4,
+      LOOM_AMDGPU_ELF_FEATURE_SRAMECC_ON_V4, &feature_flags);
+  loom_amdgpu_target_info_apply_feature_selection(
+      target_id->xnack, LOOM_AMDGPU_ELF_FEATURE_XNACK_MASK_V4,
+      LOOM_AMDGPU_ELF_FEATURE_XNACK_OFF_V4, LOOM_AMDGPU_ELF_FEATURE_XNACK_ON_V4,
+      &feature_flags);
+  *out_elf_flags = processor->elf.machine_flags | feature_flags;
   return iree_ok_status();
 }

@@ -38,6 +38,44 @@ extern "C" {
 // properties used for HAL binding resources.
 #define LOOM_AMDGPU_HAL_BUFFER_RESOURCE_FLAGS UINT32_C(0x31027000)
 
+typedef enum loom_amdgpu_elf_feature_flag_bits_e {
+  // Mask selecting the AMDHSA code-object v4+ XNACK feature state.
+  LOOM_AMDGPU_ELF_FEATURE_XNACK_MASK_V4 = UINT32_C(0x300),
+  // AMDHSA code-object v4+ XNACK feature state is unsupported.
+  LOOM_AMDGPU_ELF_FEATURE_XNACK_UNSUPPORTED_V4 = UINT32_C(0x000),
+  // AMDHSA code-object v4+ XNACK feature state accepts any agent setting.
+  LOOM_AMDGPU_ELF_FEATURE_XNACK_ANY_V4 = UINT32_C(0x100),
+  // AMDHSA code-object v4+ XNACK feature state requires XNACK disabled.
+  LOOM_AMDGPU_ELF_FEATURE_XNACK_OFF_V4 = UINT32_C(0x200),
+  // AMDHSA code-object v4+ XNACK feature state requires XNACK enabled.
+  LOOM_AMDGPU_ELF_FEATURE_XNACK_ON_V4 = UINT32_C(0x300),
+  // Mask selecting the AMDHSA code-object v4+ SRAM ECC feature state.
+  LOOM_AMDGPU_ELF_FEATURE_SRAMECC_MASK_V4 = UINT32_C(0xc00),
+  // AMDHSA code-object v4+ SRAM ECC feature state is unsupported.
+  LOOM_AMDGPU_ELF_FEATURE_SRAMECC_UNSUPPORTED_V4 = UINT32_C(0x000),
+  // AMDHSA code-object v4+ SRAM ECC feature state accepts any agent setting.
+  LOOM_AMDGPU_ELF_FEATURE_SRAMECC_ANY_V4 = UINT32_C(0x400),
+  // AMDHSA code-object v4+ SRAM ECC feature state requires SRAM ECC disabled.
+  LOOM_AMDGPU_ELF_FEATURE_SRAMECC_OFF_V4 = UINT32_C(0x800),
+  // AMDHSA code-object v4+ SRAM ECC feature state requires SRAM ECC enabled.
+  LOOM_AMDGPU_ELF_FEATURE_SRAMECC_ON_V4 = UINT32_C(0xc00),
+} loom_amdgpu_elf_feature_flag_bits_t;
+
+// Bitset of AMDGPU ELF EF_AMDGPU_FEATURE_* values.
+typedef uint32_t loom_amdgpu_elf_feature_flags_t;
+
+// Target feature selector parsed from an AMDHSA target-id suffix.
+typedef uint8_t loom_amdgpu_target_feature_selection_t;
+
+enum loom_amdgpu_target_feature_selection_e {
+  // Feature inherits the processor's default code-object policy.
+  LOOM_AMDGPU_TARGET_FEATURE_DEFAULT = 0,
+  // Feature is explicitly disabled, such as `xnack-`.
+  LOOM_AMDGPU_TARGET_FEATURE_OFF = 1,
+  // Feature is explicitly enabled, such as `sramecc+`.
+  LOOM_AMDGPU_TARGET_FEATURE_ON = 2,
+};
+
 typedef enum loom_amdgpu_kernel_descriptor_profile_e {
   // No kernel descriptor writer is implemented for this processor yet.
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = 0,
@@ -268,6 +306,10 @@ typedef struct loom_amdgpu_amdhsa_target_id_t {
   const loom_amdgpu_processor_info_t* processor;
   // Target-id feature suffix after ':', or empty when no suffix is present.
   iree_string_view_t feature_suffix;
+  // SRAM ECC feature selection parsed from the target-id suffix.
+  loom_amdgpu_target_feature_selection_t sramecc;
+  // XNACK feature selection parsed from the target-id suffix.
+  loom_amdgpu_target_feature_selection_t xnack;
 } loom_amdgpu_amdhsa_target_id_t;
 
 // Returns the support flag for |wavefront_size|, or zero when unsupported.
@@ -364,6 +406,10 @@ iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
 iree_status_t loom_amdgpu_target_info_parse_amdhsa_target_id(
     iree_string_view_t target_id,
     loom_amdgpu_amdhsa_target_id_t* out_target_id);
+
+// Resolves the AMDGPU ELF e_flags implied by |target_id|.
+iree_status_t loom_amdgpu_target_info_amdhsa_target_id_elf_flags(
+    const loom_amdgpu_amdhsa_target_id_t* target_id, uint32_t* out_elf_flags);
 
 #ifdef __cplusplus
 }  // extern "C"
