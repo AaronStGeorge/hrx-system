@@ -1403,7 +1403,6 @@ static iree_status_t iree_hal_amdgpu_executable_publish_tsan_config(
                          "populating TSAN config for physical device %" PRIhsz
                          " queue ordinal %" PRIhsz,
                          device_ordinal, load_variant->physical_queue_ordinal);
-
     iree_hal_queue_affinity_t queue_affinity = 0;
     IREE_RETURN_IF_ERROR(iree_hal_amdgpu_queue_affinity_for_physical_device(
         executable->queue_affinity_domain, device_ordinal, &queue_affinity));

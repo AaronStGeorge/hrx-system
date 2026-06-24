@@ -100,8 +100,6 @@ typedef uint8_t iree_hal_amdgpu_command_buffer_binding_kind_t;
 // Block flags reserved for optional block metadata.
 typedef enum iree_hal_amdgpu_command_buffer_block_flag_bits_e {
   IREE_HAL_AMDGPU_COMMAND_BUFFER_BLOCK_FLAG_NONE = 0u,
-  // Block begins with a TSAN assignment dispatch before recorded commands.
-  IREE_HAL_AMDGPU_COMMAND_BUFFER_BLOCK_FLAG_TSAN_ASSIGNMENT = 1u << 0,
 } iree_hal_amdgpu_command_buffer_block_flag_bits_t;
 // Compact block flag storage.
 typedef uint8_t iree_hal_amdgpu_command_buffer_block_flags_t;
@@ -157,13 +155,6 @@ typedef struct IREE_AMDGPU_ALIGNAS(8)
 IREE_AMDGPU_STATIC_ASSERT(
     sizeof(iree_hal_amdgpu_command_buffer_block_header_t) == 64,
     "command-buffer block header must stay cache-line sized");
-
-// Returns true when |block| has a block-prefix TSAN assignment dispatch.
-static inline bool iree_hal_amdgpu_command_buffer_block_has_tsan_assignment(
-    const iree_hal_amdgpu_command_buffer_block_header_t* block) {
-  return (block->flags &
-          IREE_HAL_AMDGPU_COMMAND_BUFFER_BLOCK_FLAG_TSAN_ASSIGNMENT) != 0;
-}
 
 // Header common to every command record.
 typedef struct IREE_AMDGPU_ALIGNAS(8)

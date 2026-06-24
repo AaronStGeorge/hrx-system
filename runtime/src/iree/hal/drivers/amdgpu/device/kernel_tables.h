@@ -75,11 +75,8 @@ IREE_HAL_AMDGPU_DEVICE_KERNEL(
 // TSAN helpers (tsan.h)
 //===----------------------------------------------------------------------===//
 
-IREE_HAL_AMDGPU_DEVICE_KERNEL(iree_hal_amdgpu_device_tsan_assign, 32, 1, 1)
 IREE_HAL_AMDGPU_DEVICE_KERNEL(
     iree_hal_amdgpu_device_tsan_initialize_queue_state, 32, 1, 1)
-IREE_HAL_AMDGPU_DEVICE_KERNEL(iree_hal_amdgpu_device_tsan_setup_dispatch, 1, 1,
-                              1)
 
 //===----------------------------------------------------------------------===//
 // Timestamp helpers (timestamp.h)

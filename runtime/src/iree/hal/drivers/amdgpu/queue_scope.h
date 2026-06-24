@@ -18,9 +18,8 @@ extern "C" {
 //
 // Executable-load paths use this cold-path metadata to publish queue-specific
 // globals without adding per-dispatch host bookkeeping. Queue-local device code
-// uses the HSA dispatch ID and |aql_ring_mask| to locate per-packet state;
-// |aql_ring_base| is retained for consumers that need the host-observed ring
-// coordinate.
+// uses |aql_ring_base| and |aql_ring_mask| to derive a shadow slot from the
+// active AQL dispatch packet.
 typedef struct iree_hal_amdgpu_queue_scope_t {
   // One-bit HAL queue affinity selecting this queue.
   iree_hal_queue_affinity_t queue_affinity;
@@ -44,8 +43,6 @@ typedef struct iree_hal_amdgpu_queue_scope_t {
   struct {
     // Device-visible iree_hal_amdgpu_tsan_queue_state_t pointer, or zero.
     uint64_t queue_state_base;
-    // Device-visible base of queue-local dispatch-state entries, or zero.
-    uint64_t dispatch_state_base;
     // Device-visible base of queue-local shadow storage, or zero.
     uint64_t shadow_base;
     // Byte length of |shadow_base|.

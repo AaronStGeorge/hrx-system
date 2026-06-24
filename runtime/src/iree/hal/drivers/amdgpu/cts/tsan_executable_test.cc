@@ -119,10 +119,9 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
   EXPECT_NE(config.queue_aql_base, 0u);
   EXPECT_NE(config.queue_aql_slot_mask, 0u);
   EXPECT_NE(config.queue_state_base, 0u);
-  EXPECT_NE(config.dispatch_state_base, 0u);
 
   Ref<iree_hal_buffer_t> output_buffer;
-  IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(allocator(), 13 * sizeof(uint64_t),
+  IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(allocator(), 12 * sizeof(uint64_t),
                                              output_buffer.out()));
   Ref<iree_hal_buffer_t> fallback_buffer;
   IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(allocator(), sizeof(uint64_t),
@@ -156,7 +155,7 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
   std::vector<uint64_t> output_data;
   IREE_ASSERT_OK(SanitizerReadBufferData(device(), allocator(), output_buffer,
                                          &output_data));
-  ASSERT_EQ(output_data.size(), 13u);
+  ASSERT_EQ(output_data.size(), 12u);
   EXPECT_EQ(output_data[0], config.record_length);
   EXPECT_EQ(output_data[1], config.flags);
   EXPECT_EQ(output_data[2], config.shadow_base);
@@ -169,7 +168,6 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
   EXPECT_EQ(output_data[9], config.queue_aql_slot_mask);
   EXPECT_EQ(output_data[10], config.queue_state_base);
   EXPECT_EQ(output_data[11], config.shadow_slot_count);
-  EXPECT_EQ(output_data[12], config.dispatch_state_base);
 }
 
 TEST_P(TsanExecutableTest, EnablesFeedbackConfigGlobal) {

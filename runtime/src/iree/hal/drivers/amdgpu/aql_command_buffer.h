@@ -105,13 +105,6 @@ iree_hal_amdgpu_aql_command_buffer_dispatch_summaries(
     const iree_hal_amdgpu_command_buffer_block_header_t* block,
     uint32_t* out_count);
 
-// Returns the host-readable TSAN assignment plan for |block|, or NULL when the
-// block has no TSAN assignment prefix.
-const iree_hal_amdgpu_tsan_assignment_plan_t*
-iree_hal_amdgpu_aql_command_buffer_tsan_assignment_host_plan(
-    iree_hal_command_buffer_t* command_buffer,
-    const iree_hal_amdgpu_command_buffer_block_header_t* block);
-
 // Returns a direct buffer recorded in the command-buffer static binding table.
 iree_hal_buffer_t* iree_hal_amdgpu_aql_command_buffer_static_buffer(
     iree_hal_command_buffer_t* command_buffer, uint32_t ordinal);

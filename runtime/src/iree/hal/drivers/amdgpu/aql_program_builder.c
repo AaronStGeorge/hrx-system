@@ -315,12 +315,6 @@ static iree_status_t iree_hal_amdgpu_aql_program_builder_split_block(
   uint8_t carried_acquire_scope =
       carried_flags ? builder->current_block.pending_barrier_acquire_scope
                     : IREE_HSA_FENCE_SCOPE_NONE;
-  if (iree_hal_amdgpu_command_buffer_block_has_tsan_assignment(
-          builder->current_block.header)) {
-    carried_flags |=
-        IREE_HAL_AMDGPU_AQL_PROGRAM_BUILDER_FLAG_HAS_PENDING_EXECUTION_BARRIER;
-    carried_acquire_scope = IREE_HSA_FENCE_SCOPE_NONE;
-  }
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_aql_program_builder_append_terminator(
       builder, IREE_HAL_AMDGPU_COMMAND_BUFFER_OPCODE_BRANCH,
       builder->block_count));

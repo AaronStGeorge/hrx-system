@@ -213,29 +213,8 @@ TEST_F(HostQueueCommandBufferTest,
   ASSERT_EQ(program->block_count, 1u);
   const iree_hal_amdgpu_command_buffer_block_header_t* block =
       program->first_block;
-  EXPECT_TRUE(iree_hal_amdgpu_command_buffer_block_has_tsan_assignment(block));
   EXPECT_EQ(block->dispatch_count, 2u);
   EXPECT_EQ(block->aql_packet_count, 2u);
-
-  const iree_hal_amdgpu_tsan_assignment_plan_t* host_plan =
-      iree_hal_amdgpu_aql_command_buffer_tsan_assignment_host_plan(
-          command_buffer, block);
-  ASSERT_NE(host_plan, nullptr);
-  EXPECT_EQ(host_plan->record_length, sizeof(*host_plan));
-  EXPECT_EQ(host_plan->abi_version,
-            IREE_HAL_AMDGPU_TSAN_ASSIGNMENT_PLAN_ABI_VERSION_0);
-  EXPECT_EQ(host_plan->record_count, 2u);
-  EXPECT_EQ(host_plan->max_live_shadow_slots, 1u);
-
-  const iree_hal_amdgpu_tsan_assignment_record_t* records =
-      (const iree_hal_amdgpu_tsan_assignment_record_t*)(const void*)(host_plan +
-                                                                     1);
-  EXPECT_EQ(records[0].packet_delta, 1u);
-  EXPECT_EQ(records[0].generation_delta, 0u);
-  EXPECT_EQ(records[0].shadow_slot, 0u);
-  EXPECT_EQ(records[1].packet_delta, 2u);
-  EXPECT_EQ(records[1].generation_delta, 1u);
-  EXPECT_EQ(records[1].shadow_slot, 0u);
 
   const iree_hal_amdgpu_command_buffer_command_header_t* command =
       iree_hal_amdgpu_command_buffer_block_commands_const(block);

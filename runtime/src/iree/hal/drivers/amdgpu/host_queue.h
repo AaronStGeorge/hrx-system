@@ -215,9 +215,6 @@ typedef struct iree_hal_amdgpu_host_queue_t {
     iree_hal_amdgpu_tsan_queue_state_t host_state;
     // Device-visible queue state header inside |allocation_base|.
     IREE_AMDGPU_DEVICE_PTR iree_hal_amdgpu_tsan_queue_state_t* queue_state;
-    // Per-AQL-slot dispatch states inside |allocation_base|.
-    IREE_AMDGPU_DEVICE_PTR iree_hal_amdgpu_tsan_dispatch_state_t*
-        dispatch_states;
     // Queue-local dispatch shadow storage inside |allocation_base|.
     IREE_AMDGPU_DEVICE_PTR void* shadow_base;
     // Byte length of |shadow_base|.

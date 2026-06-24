@@ -11,7 +11,6 @@
 #include "iree/hal/drivers/amdgpu/buffer.h"
 #include "iree/hal/drivers/amdgpu/device/dispatch.h"
 #include "iree/hal/drivers/amdgpu/device/timestamp.h"
-#include "iree/hal/drivers/amdgpu/device/tsan.h"
 #include "iree/hal/drivers/amdgpu/executable.h"
 #include "iree/hal/drivers/amdgpu/host_queue_policy.h"
 #include "iree/hal/drivers/amdgpu/host_queue_profile.h"
@@ -38,8 +37,6 @@ typedef struct iree_hal_amdgpu_host_queue_dispatch_plan_t {
   iree_host_size_t operation_resource_count;
   // True when workgroup counts are read from a device buffer before dispatch.
   bool uses_indirect_parameters;
-  // True when queue-local TSAN state must be assigned before dispatch.
-  bool needs_tsan_assignment;
 } iree_hal_amdgpu_host_queue_dispatch_plan_t;
 
 static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_flags(
@@ -360,8 +357,6 @@ static iree_status_t iree_hal_amdgpu_host_queue_prepare_dispatch_plan(
       out_plan->descriptor, out_plan->kernel_args, config, flags));
   out_plan->uses_indirect_parameters =
       iree_hal_dispatch_uses_indirect_parameters(flags);
-  out_plan->needs_tsan_assignment =
-      iree_hal_amdgpu_executable_requires_queue_scope(executable);
 
   return iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
       queue, out_plan->descriptor, constants, bindings, flags,
@@ -579,20 +574,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_dispatch_packets(
     bool uses_custom_direct_arguments,
     iree_hal_amdgpu_host_queue_submission_flags_t submission_flags,
     bool* out_ready) {
-  const bool needs_pre_dispatch_packet =
-      plan->uses_indirect_parameters || plan->needs_tsan_assignment;
-
-  if (IREE_UNLIKELY(plan->needs_tsan_assignment && !queue->tsan.queue_state)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "TSAN queue_dispatch requires queue-owned TSAN state");
-  }
-  if (IREE_UNLIKELY(plan->needs_tsan_assignment &&
-                    queue->tsan.host_state.shadow_slot_count == 0)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "TSAN queue_dispatch requires at least one queue shadow slot");
-  }
+  const bool needs_pre_dispatch_packet = plan->uses_indirect_parameters;
 
   uint64_t executable_id = 0;
   bool should_profile_dispatch = false;
@@ -793,40 +775,13 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_dispatch_packets(
   uint16_t pre_dispatch_header = 0;
   uint16_t pre_dispatch_setup = 0;
   if (needs_pre_dispatch_packet) {
-    const uint32_t packet_delta =
-        (uint32_t)(dispatch_packet_id - pre_dispatch_packet_id);
-    const uint32_t generation_delta = packet_delta - 1u;
-    if (plan->needs_tsan_assignment) {
-      uint32_t shadow_slot = 0;
-      const uint32_t target_slot =
-          (uint32_t)(dispatch_packet_id & queue->tsan.host_state.aql_ring_mask);
-      shadow_slot = target_slot % queue->tsan.host_state.shadow_slot_count;
-      iree_hal_amdgpu_device_tsan_dispatch_setup_flags_t tsan_setup_flags =
-          IREE_HAL_AMDGPU_DEVICE_TSAN_DISPATCH_SETUP_FLAG_NONE;
-      if (plan->uses_indirect_parameters) {
-        tsan_setup_flags |=
-            IREE_HAL_AMDGPU_DEVICE_TSAN_DISPATCH_SETUP_FLAG_INDIRECT_PARAMETERS;
-      }
-      iree_hal_amdgpu_device_tsan_emplace_dispatch_setup(
-          &queue->transfer_context->kernels
-               ->iree_hal_amdgpu_device_tsan_setup_dispatch,
-          tsan_setup_flags,
-          plan->uses_indirect_parameters
-              ? (const uint32_t*)(uintptr_t)workgroup_count_ptr
-              : NULL,
-          &dispatch_packet->dispatch, dispatch_header, dispatch_setup,
-          implicit_args, queue->tsan.queue_state, pre_dispatch_packet_id,
-          packet_delta, generation_delta, shadow_slot,
-          &pre_dispatch_packet->dispatch, pre_dispatch_kernarg_data);
-    } else {
-      iree_hal_amdgpu_device_dispatch_emplace_indirect_params_patch(
-          &queue->transfer_context->kernels
-               ->iree_hal_amdgpu_device_dispatch_patch_indirect_params,
-          (const uint32_t*)(uintptr_t)workgroup_count_ptr,
-          &dispatch_packet->dispatch, dispatch_header, dispatch_setup,
-          implicit_args, &pre_dispatch_packet->dispatch,
-          pre_dispatch_kernarg_data);
-    }
+    iree_hal_amdgpu_device_dispatch_emplace_indirect_params_patch(
+        &queue->transfer_context->kernels
+             ->iree_hal_amdgpu_device_dispatch_patch_indirect_params,
+        (const uint32_t*)(uintptr_t)workgroup_count_ptr,
+        &dispatch_packet->dispatch, dispatch_header, dispatch_setup,
+        implicit_args, &pre_dispatch_packet->dispatch,
+        pre_dispatch_kernarg_data);
     pre_dispatch_setup = pre_dispatch_packet->dispatch.setup;
     pre_dispatch_header = iree_hal_amdgpu_aql_make_header(
         IREE_HSA_PACKET_TYPE_KERNEL_DISPATCH,
@@ -949,8 +904,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_dispatch_packets(
         iree_hal_amdgpu_aql_packet_control_barrier(IREE_HSA_FENCE_SCOPE_AGENT,
                                                    IREE_HSA_FENCE_SCOPE_AGENT));
   }
-  if (!needs_pre_dispatch_packet ||
-      (plan->needs_tsan_assignment && !plan->uses_indirect_parameters)) {
+  if (!needs_pre_dispatch_packet) {
     iree_hal_amdgpu_aql_ring_commit(dispatch_packet, dispatch_header,
                                     dispatch_setup);
   }
