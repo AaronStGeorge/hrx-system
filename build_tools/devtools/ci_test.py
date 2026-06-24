@@ -626,7 +626,7 @@ class CiTest(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 block = self.workflow_job_block(path, job_name)
-                self.assertIn("runs-on: gpu_navi4x", block)
+                self.assertIn("runs-on: [self-hosted, Linux, X64, gpu_navi4x]", block)
                 self.assertIn(
                     "bash .github/scripts/check_vulkan_hardware_environment.sh",
                     block,
