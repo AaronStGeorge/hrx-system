@@ -105,13 +105,6 @@ iree_hal_amdgpu_aql_command_buffer_dispatch_summaries(
     const iree_hal_amdgpu_command_buffer_block_header_t* block,
     uint32_t* out_count);
 
-// Returns the device-visible TSAN assignment plan for |block|, or NULL when
-// the block has no TSAN assignment prefix.
-const iree_hal_amdgpu_tsan_assignment_plan_t*
-iree_hal_amdgpu_aql_command_buffer_tsan_assignment_plan(
-    iree_hal_command_buffer_t* command_buffer,
-    const iree_hal_amdgpu_command_buffer_block_header_t* block);
-
 // Returns the host-readable TSAN assignment plan for |block|, or NULL when the
 // block has no TSAN assignment prefix.
 const iree_hal_amdgpu_tsan_assignment_plan_t*

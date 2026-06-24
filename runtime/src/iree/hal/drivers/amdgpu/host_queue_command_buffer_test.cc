@@ -221,9 +221,6 @@ TEST_F(HostQueueCommandBufferTest,
       iree_hal_amdgpu_aql_command_buffer_tsan_assignment_host_plan(
           command_buffer, block);
   ASSERT_NE(host_plan, nullptr);
-  EXPECT_NE(iree_hal_amdgpu_aql_command_buffer_tsan_assignment_plan(
-                command_buffer, block),
-            nullptr);
   EXPECT_EQ(host_plan->record_length, sizeof(*host_plan));
   EXPECT_EQ(host_plan->abi_version,
             IREE_HAL_AMDGPU_TSAN_ASSIGNMENT_PLAN_ABI_VERSION_0);

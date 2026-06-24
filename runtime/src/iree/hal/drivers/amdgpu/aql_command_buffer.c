@@ -90,7 +90,7 @@ typedef struct iree_hal_amdgpu_aql_command_buffer_rodata_segment_t {
 typedef struct iree_hal_amdgpu_aql_command_buffer_tsan_assignment_record_t {
   // Next assignment record in command order.
   struct iree_hal_amdgpu_aql_command_buffer_tsan_assignment_record_t* next;
-  // Device ABI record copied into the materialized assignment plan.
+  // Device ABI record copied into the finalized host assignment plan.
   iree_hal_amdgpu_tsan_assignment_record_t record;
 } iree_hal_amdgpu_aql_command_buffer_tsan_assignment_record_t;
 
@@ -114,8 +114,6 @@ typedef struct iree_hal_amdgpu_aql_command_buffer_tsan_assignment_block_t {
   uint32_t max_live_shadow_slot_count;
   // Host plan bytes allocated from |recording_arena| during finalization.
   iree_hal_amdgpu_tsan_assignment_plan_t* host_plan;
-  // Device-visible plan pointer inside |tsan_assignments.materialized.buffer|.
-  const iree_hal_amdgpu_tsan_assignment_plan_t* device_plan;
   // Byte length of |host_plan|.
   uint32_t plan_length;
 } iree_hal_amdgpu_aql_command_buffer_tsan_assignment_block_t;
@@ -253,15 +251,6 @@ typedef struct iree_hal_amdgpu_aql_command_buffer_t {
       // Current recording block with a TSAN assignment plan.
       iree_hal_amdgpu_aql_command_buffer_tsan_assignment_block_t* current;
     } block;
-    // Materialized device-visible TSAN assignment plans.
-    struct {
-      // Retained buffer containing all finalized assignment plans.
-      iree_hal_buffer_t* buffer;
-      // Device pointer to the first byte of |buffer|.
-      uint8_t* device_base;
-      // Allocated byte length of |buffer|.
-      iree_device_size_t byte_length;
-    } materialized;
     // Number of queue-local shadow slots available to one live block span.
     uint32_t shadow_slot_count;
     // Total retained assignment records across all blocks.
@@ -342,12 +331,8 @@ static void iree_hal_amdgpu_aql_command_buffer_reset_resources(
   command_buffer->dispatch_summaries.block.first = NULL;
   command_buffer->dispatch_summaries.block.current = NULL;
   command_buffer->dispatch_summaries.count = 0;
-  iree_hal_buffer_release(command_buffer->tsan_assignments.materialized.buffer);
   command_buffer->tsan_assignments.block.first = NULL;
   command_buffer->tsan_assignments.block.current = NULL;
-  command_buffer->tsan_assignments.materialized.buffer = NULL;
-  command_buffer->tsan_assignments.materialized.device_base = NULL;
-  command_buffer->tsan_assignments.materialized.byte_length = 0;
   command_buffer->tsan_assignments.record_count = 0;
 }
 
@@ -805,8 +790,7 @@ static iree_status_t
 iree_hal_amdgpu_aql_command_buffer_finalize_tsan_assignment_host_plan(
     iree_hal_amdgpu_aql_command_buffer_t* command_buffer,
     iree_hal_amdgpu_aql_command_buffer_tsan_assignment_block_t*
-        assignment_block,
-    iree_host_size_t* inout_payload_length) {
+        assignment_block) {
   iree_host_size_t plan_length = 0;
   IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
       sizeof(iree_hal_amdgpu_tsan_assignment_plan_t), &plan_length,
@@ -845,118 +829,26 @@ iree_hal_amdgpu_aql_command_buffer_finalize_tsan_assignment_host_plan(
     target_records[record_ordinal++] = record->record;
   }
 
-  iree_host_size_t aligned_payload_length = 0;
-  if (IREE_UNLIKELY(!iree_host_size_checked_align(
-          *inout_payload_length,
-          IREE_AMDGPU_ALIGNOF(iree_hal_amdgpu_tsan_assignment_plan_t),
-          &aligned_payload_length))) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "TSAN command-buffer assignment plan offset overflow");
-  }
-  if (IREE_UNLIKELY(!iree_host_size_checked_add(
-          aligned_payload_length, plan_length, inout_payload_length))) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "TSAN command-buffer assignment plan storage overflow");
-  }
   assignment_block->host_plan = plan;
   assignment_block->plan_length = (uint32_t)plan_length;
   return iree_ok_status();
 }
 
 static iree_status_t
-iree_hal_amdgpu_aql_command_buffer_materialize_tsan_assignment_plans(
+iree_hal_amdgpu_aql_command_buffer_finalize_tsan_assignment_plans(
     iree_hal_amdgpu_aql_command_buffer_t* command_buffer) {
   if (command_buffer->tsan_assignments.record_count == 0) {
     return iree_ok_status();
   }
 
-  iree_host_size_t payload_length = 0;
   for (iree_hal_amdgpu_aql_command_buffer_tsan_assignment_block_t* block =
            command_buffer->tsan_assignments.block.first;
        block; block = block->next) {
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_aql_command_buffer_finalize_tsan_assignment_host_plan(
-            command_buffer, block, &payload_length));
+            command_buffer, block));
   }
-  if (IREE_UNLIKELY(payload_length > (iree_host_size_t)IREE_DEVICE_SIZE_MAX)) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "TSAN command-buffer assignment storage length %" PRIhsz
-        " exceeds device size max %" PRIdsz,
-        payload_length, IREE_DEVICE_SIZE_MAX);
-  }
-
-  IREE_TRACE_ZONE_BEGIN(z0);
-  IREE_TRACE_ZONE_APPEND_VALUE_I64(z0, payload_length);
-  IREE_TRACE_ZONE_APPEND_VALUE_I64(
-      z0, command_buffer->tsan_assignments.record_count);
-
-  const iree_hal_buffer_params_t params = {
-      .type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL |
-              IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE |
-              IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
-              IREE_HAL_MEMORY_TYPE_HOST_COHERENT,
-      .access = IREE_HAL_MEMORY_ACCESS_ALL,
-      .usage = IREE_HAL_BUFFER_USAGE_DISPATCH_UNIFORM_READ |
-               IREE_HAL_BUFFER_USAGE_MAPPING,
-      .queue_affinity = command_buffer->base.queue_affinity,
-  };
-  iree_hal_buffer_t* plan_buffer = NULL;
-  iree_status_t status = iree_hal_allocator_allocate_buffer(
-      command_buffer->device_allocator, params,
-      (iree_device_size_t)payload_length, &plan_buffer);
-  uint8_t* device_base = NULL;
-  if (iree_status_is_ok(status)) {
-    device_base = (uint8_t*)iree_hal_amdgpu_buffer_device_pointer(plan_buffer);
-    if (IREE_UNLIKELY(!device_base)) {
-      status = iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "TSAN command-buffer assignment buffer must be backed by an AMDGPU "
-          "allocation");
-    }
-  }
-
-  iree_hal_buffer_mapping_t mapping;
-  memset(&mapping, 0, sizeof(mapping));
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_buffer_map_range(
-        plan_buffer, IREE_HAL_MAPPING_MODE_SCOPED,
-        IREE_HAL_MEMORY_ACCESS_DISCARD_WRITE, /*byte_offset=*/0,
-        (iree_device_size_t)payload_length, &mapping);
-  }
-  if (iree_status_is_ok(status)) {
-    uint8_t* host_base = mapping.contents.data;
-    memset(host_base, 0, payload_length);
-    iree_host_size_t payload_offset = 0;
-    for (iree_hal_amdgpu_aql_command_buffer_tsan_assignment_block_t* block =
-             command_buffer->tsan_assignments.block.first;
-         block; block = block->next) {
-      payload_offset = iree_host_align(
-          payload_offset,
-          IREE_AMDGPU_ALIGNOF(iree_hal_amdgpu_tsan_assignment_plan_t));
-      memcpy(host_base + payload_offset, block->host_plan, block->plan_length);
-      block->device_plan =
-          (const iree_hal_amdgpu_tsan_assignment_plan_t*)(const void*)(device_base +
-                                                                       payload_offset);
-      payload_offset += block->plan_length;
-    }
-  }
-  if (mapping.buffer) {
-    status = iree_status_join(status, iree_hal_buffer_unmap_range(&mapping));
-  }
-  if (iree_status_is_ok(status)) {
-    command_buffer->tsan_assignments.materialized.buffer = plan_buffer;
-    command_buffer->tsan_assignments.materialized.device_base = device_base;
-    command_buffer->tsan_assignments.materialized.byte_length =
-        (iree_device_size_t)payload_length;
-  } else {
-    iree_hal_buffer_release(plan_buffer);
-  }
-
-  IREE_TRACE_ZONE_END(z0);
-  return status;
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1154,28 +1046,6 @@ iree_hal_amdgpu_aql_command_buffer_dispatch_summaries(
 }
 
 const iree_hal_amdgpu_tsan_assignment_plan_t*
-iree_hal_amdgpu_aql_command_buffer_tsan_assignment_plan(
-    iree_hal_command_buffer_t* base_command_buffer,
-    const iree_hal_amdgpu_command_buffer_block_header_t* block) {
-  iree_hal_amdgpu_aql_command_buffer_t* command_buffer =
-      iree_hal_amdgpu_aql_command_buffer_cast(base_command_buffer);
-  if (!iree_hal_amdgpu_command_buffer_block_has_tsan_assignment(block)) {
-    return NULL;
-  }
-  for (const iree_hal_amdgpu_aql_command_buffer_tsan_assignment_block_t*
-           assignment_block = command_buffer->tsan_assignments.block.first;
-       assignment_block; assignment_block = assignment_block->next) {
-    if (assignment_block->header == block) {
-      return assignment_block->device_plan;
-    }
-    if (assignment_block->header->block_ordinal > block->block_ordinal) {
-      break;
-    }
-  }
-  return NULL;
-}
-
-const iree_hal_amdgpu_tsan_assignment_plan_t*
 iree_hal_amdgpu_aql_command_buffer_tsan_assignment_host_plan(
     iree_hal_command_buffer_t* base_command_buffer,
     const iree_hal_amdgpu_command_buffer_block_header_t* block) {
@@ -1289,9 +1159,8 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_end(
   iree_status_t status = iree_hal_amdgpu_aql_program_builder_end(
       &command_buffer->builder, &command_buffer->program);
   if (iree_status_is_ok(status)) {
-    status =
-        iree_hal_amdgpu_aql_command_buffer_materialize_tsan_assignment_plans(
-            command_buffer);
+    status = iree_hal_amdgpu_aql_command_buffer_finalize_tsan_assignment_plans(
+        command_buffer);
   }
   if (iree_status_is_ok(status)) {
     status =

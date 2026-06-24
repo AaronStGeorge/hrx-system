@@ -295,11 +295,12 @@ enum iree_hal_amdgpu_tsan_shadow_access_kind_bits_t {
 // Device-readable assignment plan for one TSAN-instrumented command-buffer
 // block.
 //
-// The host materializes this once while finalizing a command buffer. A block
-// prefix assignment dispatch reads the plan at replay time and publishes
-// queue-local TSAN state for the payload dispatch packets described by the
-// following records. The plan is immutable after command-buffer finalization;
-// replay supplies only queue-specific state and a dynamic generation epoch.
+// The host records this once while finalizing a command buffer and stages it
+// through queue-published kernarg storage for each replay. A block prefix
+// assignment dispatch reads the staged plan and publishes queue-local TSAN
+// state for the payload dispatch packets described by the following records.
+// The plan contents are immutable after command-buffer finalization; replay
+// supplies only queue-specific state and a dynamic generation epoch.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_assignment_plan_t {
   // Size of this header in bytes for forward-compatible parsing.
   uint32_t record_length;

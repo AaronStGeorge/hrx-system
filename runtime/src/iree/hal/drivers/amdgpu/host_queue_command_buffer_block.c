@@ -191,7 +191,7 @@ iree_hal_amdgpu_host_queue_command_buffer_tsan_assignment_plan_length(
   if (IREE_UNLIKELY(!plan)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "TSAN command-buffer block has no materialized assignment plan");
+        "TSAN command-buffer block has no host assignment plan");
   }
   if (IREE_UNLIKELY(plan->record_length !=
                     sizeof(iree_hal_amdgpu_tsan_assignment_plan_t))) {
@@ -549,7 +549,7 @@ iree_hal_amdgpu_host_queue_write_command_buffer_tsan_assignment(
   if (IREE_UNLIKELY(!assignment_plan)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "TSAN command-buffer block has no materialized assignment plan");
+        "TSAN command-buffer block has no staged assignment plan");
   }
   if (IREE_UNLIKELY(!queue->tsan.queue_state)) {
     return iree_make_status(
@@ -979,8 +979,8 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
         tsan_assignment_packet_count != 0 && extra_profile_packet_count != 0;
   }
 
-  iree_host_size_t tsan_adjusted_plan_length = 0;
-  uint32_t tsan_adjusted_plan_kernarg_block_count = 0;
+  iree_host_size_t tsan_assignment_plan_length = 0;
+  uint32_t tsan_assignment_plan_kernarg_block_count = 0;
   const iree_hal_amdgpu_tsan_assignment_plan_t* tsan_assignment_host_plan =
       NULL;
   if (iree_status_is_ok(status) && tsan_assignment_packet_count != 0) {
@@ -994,23 +994,23 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
     }
   }
 
-  if (iree_status_is_ok(status) && adjust_tsan_assignment_plan) {
+  if (iree_status_is_ok(status) && tsan_assignment_packet_count != 0) {
     status =
         iree_hal_amdgpu_host_queue_command_buffer_tsan_assignment_plan_length(
-            tsan_assignment_host_plan, &tsan_adjusted_plan_length);
+            tsan_assignment_host_plan, &tsan_assignment_plan_length);
     if (iree_status_is_ok(status)) {
-      const iree_host_size_t tsan_adjusted_plan_kernarg_blocks =
-          iree_host_size_ceil_div(tsan_adjusted_plan_length,
+      const iree_host_size_t tsan_assignment_plan_kernarg_blocks =
+          iree_host_size_ceil_div(tsan_assignment_plan_length,
                                   sizeof(iree_hal_amdgpu_kernarg_block_t));
-      if (IREE_UNLIKELY(tsan_adjusted_plan_kernarg_blocks > UINT32_MAX)) {
+      if (IREE_UNLIKELY(tsan_assignment_plan_kernarg_blocks > UINT32_MAX)) {
         status = iree_make_status(
             IREE_STATUS_OUT_OF_RANGE,
-            "adjusted TSAN command-buffer assignment plan requires %" PRIhsz
+            "TSAN command-buffer assignment plan requires %" PRIhsz
             " kernarg blocks",
-            tsan_adjusted_plan_kernarg_blocks);
+            tsan_assignment_plan_kernarg_blocks);
       } else {
-        tsan_adjusted_plan_kernarg_block_count =
-            (uint32_t)tsan_adjusted_plan_kernarg_blocks;
+        tsan_assignment_plan_kernarg_block_count =
+            (uint32_t)tsan_assignment_plan_kernarg_blocks;
       }
     }
   }
@@ -1018,13 +1018,14 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
   uint32_t tsan_prefix_kernarg_block_count = 0;
   if (iree_status_is_ok(status)) {
     if (IREE_UNLIKELY(tsan_assignment_kernarg_block_count >
-                      UINT32_MAX - tsan_adjusted_plan_kernarg_block_count)) {
+                      UINT32_MAX - tsan_assignment_plan_kernarg_block_count)) {
       status = iree_make_status(
           IREE_STATUS_OUT_OF_RANGE,
           "TSAN command-buffer prefix kernarg block count overflow");
     } else {
-      tsan_prefix_kernarg_block_count = tsan_assignment_kernarg_block_count +
-                                        tsan_adjusted_plan_kernarg_block_count;
+      tsan_prefix_kernarg_block_count =
+          tsan_assignment_kernarg_block_count +
+          tsan_assignment_plan_kernarg_block_count;
     }
   }
 
@@ -1092,6 +1093,13 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
     }
     const iree_hal_amdgpu_tsan_assignment_plan_t* tsan_assignment_plan = NULL;
     if (iree_status_is_ok(status) && tsan_assignment_packet_count != 0) {
+      iree_hal_amdgpu_tsan_assignment_plan_t* staged_plan =
+          (iree_hal_amdgpu_tsan_assignment_plan_t*)submission.kernargs
+              .blocks[tsan_assignment_kernarg_block_count]
+              .data;
+      const iree_host_size_t staged_plan_length =
+          tsan_assignment_plan_kernarg_block_count *
+          sizeof(iree_hal_amdgpu_kernarg_block_t);
       if (adjust_tsan_assignment_plan) {
         const uint32_t trace_start_packet_count =
             iree_hal_amdgpu_host_queue_profile_trace_start_packet_count(
@@ -1114,10 +1122,6 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
                 "profiled TSAN command-buffer pre-dispatch packet count "
                 "overflow");
           }
-          iree_hal_amdgpu_tsan_assignment_plan_t* adjusted_plan =
-              (iree_hal_amdgpu_tsan_assignment_plan_t*)submission.kernargs
-                  .blocks[tsan_assignment_kernarg_block_count]
-                  .data;
           if (iree_status_is_ok(status)) {
             status =
                 iree_hal_amdgpu_host_queue_adjust_command_buffer_tsan_assignment_plan(
@@ -1125,18 +1129,16 @@ iree_status_t iree_hal_amdgpu_host_queue_submit_command_buffer_block(
                     profile_counter_set_count +
                         trace_start_packets_per_dispatch,
                     extra_profile_packet_count / profile_events.event_count,
-                    tsan_adjusted_plan_kernarg_block_count *
-                        sizeof(iree_hal_amdgpu_kernarg_block_t),
-                    adjusted_plan);
+                    staged_plan_length, staged_plan);
           }
           if (iree_status_is_ok(status)) {
-            tsan_assignment_plan = adjusted_plan;
+            tsan_assignment_plan = staged_plan;
           }
         }
       } else {
-        tsan_assignment_plan =
-            iree_hal_amdgpu_aql_command_buffer_tsan_assignment_plan(
-                command_buffer, block);
+        memcpy(staged_plan, tsan_assignment_host_plan,
+               tsan_assignment_plan_length);
+        tsan_assignment_plan = staged_plan;
       }
     }
     uint16_t* packet_headers = NULL;
