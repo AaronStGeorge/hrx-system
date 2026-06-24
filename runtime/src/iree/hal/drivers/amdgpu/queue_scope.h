@@ -39,8 +39,29 @@ typedef struct iree_hal_amdgpu_queue_scope_t {
   // Power-of-two packet-ring slot mask.
   uint64_t aql_ring_mask;
 
-  // Device-visible iree_hal_amdgpu_tsan_queue_state_t pointer, or zero.
-  uint64_t tsan_queue_state_base;
+  // Queue-owned TSAN state facts used for executable-global publication.
+  struct {
+    // Device-visible iree_hal_amdgpu_tsan_queue_state_t pointer, or zero.
+    uint64_t queue_state_base;
+    // Device-visible base of queue-local dispatch-state entries, or zero.
+    uint64_t dispatch_state_base;
+    // Device-visible base of queue-local shadow storage, or zero.
+    uint64_t shadow_base;
+    // Byte length of |shadow_base|.
+    uint64_t shadow_size;
+    // Bytes reserved for one dispatch shadow slot.
+    uint64_t dispatch_shadow_stride;
+    // Bytes reserved for one workgroup inside a dispatch shadow slot.
+    uint64_t workgroup_shadow_stride;
+    // Maximum workgroup ordinals represented by one dispatch shadow slot.
+    uint32_t workgroup_capacity;
+    // Bytes in each shadow entry.
+    uint32_t shadow_entry_size;
+    // Log2 application memory bytes represented by one shadow entry.
+    uint32_t memory_granule_shift;
+    // Number of queue-local dispatch shadow slots available.
+    uint32_t shadow_slot_count;
+  } tsan;
 } iree_hal_amdgpu_queue_scope_t;
 
 #ifdef __cplusplus

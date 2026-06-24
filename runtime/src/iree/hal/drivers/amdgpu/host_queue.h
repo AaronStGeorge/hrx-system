@@ -53,6 +53,8 @@ typedef struct iree_hal_amdgpu_profile_trace_slot_t
 typedef struct iree_hal_amdgpu_feedback_state_t
     iree_hal_amdgpu_feedback_state_t;
 typedef struct iree_hal_amdgpu_staging_pool_t iree_hal_amdgpu_staging_pool_t;
+typedef struct iree_hal_amdgpu_tsan_memory_policy_t
+    iree_hal_amdgpu_tsan_memory_policy_t;
 typedef struct iree_hal_amdgpu_transient_buffer_pool_t
     iree_hal_amdgpu_transient_buffer_pool_t;
 typedef struct iree_async_frontier_tracker_t iree_async_frontier_tracker_t;
@@ -206,15 +208,18 @@ typedef struct iree_hal_amdgpu_host_queue_t {
   // Queue-owned TSAN state used by instrumented command buffers.
   struct {
     // Base pointer returned by HSA for the combined TSAN allocation.
-    void* allocation_base;
+    IREE_AMDGPU_DEVICE_PTR void* allocation_base;
     // Total byte length of |allocation_base|.
     iree_device_size_t allocation_size;
+    // Host-owned mirror of the device queue state header.
+    iree_hal_amdgpu_tsan_queue_state_t host_state;
     // Device-visible queue state header inside |allocation_base|.
-    iree_hal_amdgpu_tsan_queue_state_t* queue_state;
+    IREE_AMDGPU_DEVICE_PTR iree_hal_amdgpu_tsan_queue_state_t* queue_state;
     // Per-AQL-slot dispatch states inside |allocation_base|.
-    iree_hal_amdgpu_tsan_dispatch_state_t* dispatch_states;
+    IREE_AMDGPU_DEVICE_PTR iree_hal_amdgpu_tsan_dispatch_state_t*
+        dispatch_states;
     // Queue-local dispatch shadow storage inside |allocation_base|.
-    void* shadow_base;
+    IREE_AMDGPU_DEVICE_PTR void* shadow_base;
     // Byte length of |shadow_base|.
     iree_device_size_t shadow_size;
   } tsan;
@@ -686,9 +691,9 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
 // This is called after queue creation when logical TSAN is enabled. The queue
 // owns the HSA allocation and releases it during queue deinitialization.
 iree_status_t iree_hal_amdgpu_host_queue_initialize_tsan_state(
-    iree_hal_amdgpu_host_queue_t* queue, hsa_agent_t gpu_agent,
-    hsa_amd_memory_pool_t memory_pool, iree_host_size_t queue_ordinal,
-    iree_host_size_t physical_queue_ordinal,
+    iree_hal_amdgpu_host_queue_t* queue,
+    const iree_hal_amdgpu_tsan_memory_policy_t* memory_policy,
+    iree_host_size_t queue_ordinal, iree_host_size_t physical_queue_ordinal,
     iree_device_size_t workgroup_shadow_stride,
     iree_device_size_t dispatch_shadow_stride, uint32_t workgroup_capacity,
     uint32_t shadow_entry_size, uint32_t memory_granule_shift,

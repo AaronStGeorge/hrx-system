@@ -31,6 +31,69 @@ void iree_hal_amdgpu_device_tsan_emplace_assignment(
       /*dynamic_workgroup_local_memory=*/0, dispatch_packet, kernarg_ptr);
 }
 
+void iree_hal_amdgpu_device_tsan_emplace_queue_initialize(
+    const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
+        queue_initialize_kernel_args,
+    const iree_hal_amdgpu_tsan_queue_initialize_args_t* IREE_AMDGPU_RESTRICT
+        queue_initialize_args,
+    iree_hsa_kernel_dispatch_packet_t* IREE_AMDGPU_RESTRICT dispatch_packet,
+    void* IREE_AMDGPU_RESTRICT kernarg_ptr) {
+  iree_hal_amdgpu_tsan_queue_initialize_args_t* IREE_AMDGPU_RESTRICT kernargs =
+      (iree_hal_amdgpu_tsan_queue_initialize_args_t*)kernarg_ptr;
+  *kernargs = *queue_initialize_args;
+  kernargs->queue_state_template = &kernargs->queue_state_template_value;
+
+  const uint64_t clear_size = queue_initialize_args->dispatch_state_length +
+                              queue_initialize_args->shadow_size;
+  const uint32_t workgroup_size =
+      queue_initialize_kernel_args->workgroup_size[0];
+  const uint64_t max_workgroup_count = UINT32_MAX / workgroup_size;
+  const uint64_t required_workgroup_count =
+      IREE_AMDGPU_CEIL_DIV(clear_size, workgroup_size);
+  const uint32_t workgroup_count[3] = {
+      (uint32_t)IREE_AMDGPU_MAX(
+          1ull, IREE_AMDGPU_MIN(required_workgroup_count, max_workgroup_count)),
+      1, 1};
+  iree_hal_amdgpu_device_dispatch_emplace_packet(
+      queue_initialize_kernel_args, workgroup_count,
+      /*dynamic_workgroup_local_memory=*/0, dispatch_packet, kernarg_ptr);
+}
+
+void iree_hal_amdgpu_device_tsan_emplace_dispatch_setup(
+    const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
+        setup_kernel_args,
+    iree_hal_amdgpu_device_tsan_dispatch_setup_flags_t setup_flags,
+    const uint32_t* IREE_AMDGPU_RESTRICT workgroup_count,
+    iree_hsa_kernel_dispatch_packet_t* IREE_AMDGPU_RESTRICT dispatch_packet,
+    uint16_t dispatch_header, uint16_t dispatch_setup,
+    iree_amdgpu_kernel_implicit_args_t* IREE_AMDGPU_RESTRICT implicit_args,
+    iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT queue_state,
+    uint64_t tsan_generation_epoch, uint32_t packet_delta,
+    uint32_t generation_delta, uint32_t shadow_slot,
+    iree_hsa_kernel_dispatch_packet_t* IREE_AMDGPU_RESTRICT setup_packet,
+    void* IREE_AMDGPU_RESTRICT kernarg_ptr) {
+  iree_hal_amdgpu_device_tsan_dispatch_setup_args_t* IREE_AMDGPU_RESTRICT
+      kernargs =
+          (iree_hal_amdgpu_device_tsan_dispatch_setup_args_t*)kernarg_ptr;
+  kernargs->flags = setup_flags;
+  kernargs->reserved0 = 0;
+  kernargs->workgroup_count = workgroup_count;
+  kernargs->dispatch_packet = dispatch_packet;
+  kernargs->implicit_args = implicit_args;
+  kernargs->tsan_queue_state = queue_state;
+  kernargs->tsan_generation_epoch = tsan_generation_epoch;
+  kernargs->dispatch_header_setup =
+      (uint32_t)dispatch_header | ((uint32_t)dispatch_setup << 16);
+  kernargs->packet_delta = packet_delta;
+  kernargs->generation_delta = generation_delta;
+  kernargs->shadow_slot = shadow_slot;
+
+  const uint32_t workgroup_count_1d[3] = {1, 1, 1};
+  iree_hal_amdgpu_device_dispatch_emplace_packet(
+      setup_kernel_args, workgroup_count_1d,
+      /*dynamic_workgroup_local_memory=*/0, setup_packet, kernarg_ptr);
+}
+
 #if defined(IREE_AMDGPU_TARGET_DEVICE)
 
 IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_assign(
@@ -65,6 +128,85 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_assign(
       (iree_amdgpu_scoped_atomic_uint32_t*)&dispatch_state->flags,
       IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_ASSIGNED,
       iree_amdgpu_memory_order_release, iree_amdgpu_memory_scope_system);
+}
+
+IREE_AMDGPU_ATTRIBUTE_KERNEL void
+iree_hal_amdgpu_device_tsan_initialize_queue_state(
+    iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT queue_state,
+    iree_hal_amdgpu_tsan_dispatch_state_t* IREE_AMDGPU_RESTRICT dispatch_states,
+    uint8_t* IREE_AMDGPU_RESTRICT shadow_base, uint64_t dispatch_state_length,
+    uint64_t shadow_size,
+    const iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT
+        queue_state_template) {
+  const uint64_t byte_index = iree_hal_amdgpu_device_global_linear_id_1d();
+  const iree_hsa_kernel_dispatch_packet_t* dispatch_ptr =
+      iree_amdgcn_dispatch_ptr();
+  const uint64_t byte_stride = dispatch_ptr->grid_size[0];
+
+  uint8_t* IREE_AMDGPU_RESTRICT dispatch_bytes = (uint8_t*)dispatch_states;
+  for (uint64_t i = byte_index; i < dispatch_state_length; i += byte_stride) {
+    dispatch_bytes[i] = 0;
+  }
+  for (uint64_t i = byte_index; i < shadow_size; i += byte_stride) {
+    shadow_base[i] = 0;
+  }
+
+  if (byte_index == 0) {
+    *queue_state = *queue_state_template;
+  }
+}
+
+IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_setup_dispatch(
+    iree_hal_amdgpu_device_tsan_dispatch_setup_flags_t setup_flags,
+    const uint32_t* IREE_AMDGPU_RESTRICT workgroup_count,
+    iree_hsa_kernel_dispatch_packet_t* IREE_AMDGPU_RESTRICT dispatch_packet,
+    iree_amdgpu_kernel_implicit_args_t* IREE_AMDGPU_RESTRICT implicit_args,
+    iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT queue_state,
+    uint64_t tsan_generation_epoch, uint32_t dispatch_header_setup,
+    uint32_t packet_delta, uint32_t generation_delta, uint32_t shadow_slot) {
+  if ((setup_flags &
+       IREE_HAL_AMDGPU_DEVICE_TSAN_DISPATCH_SETUP_FLAG_INDIRECT_PARAMETERS) !=
+      0) {
+    dispatch_packet->grid_size[0] =
+        workgroup_count[0] * dispatch_packet->workgroup_size[0];
+    dispatch_packet->grid_size[1] =
+        workgroup_count[1] * dispatch_packet->workgroup_size[1];
+    dispatch_packet->grid_size[2] =
+        workgroup_count[2] * dispatch_packet->workgroup_size[2];
+
+    if (implicit_args) {
+      implicit_args->block_count[0] = workgroup_count[0];
+      implicit_args->block_count[1] = workgroup_count[1];
+      implicit_args->block_count[2] = workgroup_count[2];
+    }
+  }
+
+  const uint64_t setup_packet_address =
+      (uint64_t)(uintptr_t)iree_amdgcn_dispatch_ptr();
+  const uint64_t packet_offset =
+      setup_packet_address - queue_state->aql_ring_base;
+  const uint32_t setup_slot =
+      (uint32_t)((packet_offset / sizeof(iree_hsa_kernel_dispatch_packet_t)) &
+                 queue_state->aql_ring_mask);
+  const uint32_t target_slot =
+      (setup_slot + packet_delta) & queue_state->aql_ring_mask;
+
+  iree_hal_amdgpu_tsan_dispatch_state_t* IREE_AMDGPU_RESTRICT dispatch_states =
+      (iree_hal_amdgpu_tsan_dispatch_state_t*)(uintptr_t)
+          queue_state->dispatch_state_base;
+  iree_hal_amdgpu_tsan_dispatch_state_t* IREE_AMDGPU_RESTRICT dispatch_state =
+      &dispatch_states[target_slot];
+  dispatch_state->generation = tsan_generation_epoch + generation_delta;
+  dispatch_state->shadow_slot = shadow_slot;
+  iree_amdgpu_scoped_atomic_store(
+      (iree_amdgpu_scoped_atomic_uint32_t*)&dispatch_state->flags,
+      IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_ASSIGNED,
+      iree_amdgpu_memory_order_release, iree_amdgpu_memory_scope_system);
+
+  iree_amdgpu_scoped_atomic_store(
+      (iree_amdgpu_scoped_atomic_uint32_t*)dispatch_packet,
+      dispatch_header_setup, iree_amdgpu_memory_order_release,
+      iree_amdgpu_memory_scope_system);
 }
 
 #endif  // IREE_AMDGPU_TARGET_DEVICE

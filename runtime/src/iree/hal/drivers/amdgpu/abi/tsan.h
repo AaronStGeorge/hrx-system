@@ -115,7 +115,7 @@ enum iree_hal_amdgpu_tsan_queue_state_flag_bits_t {
 typedef uint32_t iree_hal_amdgpu_tsan_dispatch_state_flags_t;
 enum iree_hal_amdgpu_tsan_dispatch_state_flag_bits_t {
   IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_NONE = 0u,
-  // The slot was assigned by the queue prefix assignment dispatch.
+  // The slot was assigned by TSAN queue setup.
   IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_ASSIGNED = 1u << 0,
 };
 
@@ -372,6 +372,38 @@ IREE_AMDGPU_STATIC_ASSERT(
     IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_assignment_args_t,
                          generation_epoch) == 16,
     "TSAN assignment args epoch must follow device pointers");
+
+// Kernargs for the queue-local TSAN state initialization dispatch.
+//
+// Queue creation submits one initializer dispatch before user work can enter
+// the AQL ring. The dispatch clears mutable per-packet and shadow storage, then
+// publishes the immutable queue header from |queue_state_template|. Host code
+// keeps an identical mirror for cold executable-global publication and never
+// reads this device allocation back.
+typedef struct IREE_AMDGPU_ALIGNAS(8)
+    iree_hal_amdgpu_tsan_queue_initialize_args_t {
+  // Device pointer to the queue-owned TSAN state header.
+  iree_hal_amdgpu_tsan_queue_state_t* queue_state;
+  // Device pointer to queue-local dispatch-state entries.
+  iree_hal_amdgpu_tsan_dispatch_state_t* dispatch_states;
+  // Device pointer to queue-local shadow storage.
+  void* shadow_base;
+  // Byte length of |dispatch_states|.
+  uint64_t dispatch_state_length;
+  // Byte length of |shadow_base|.
+  uint64_t shadow_size;
+  // Device pointer to the queue header template in this kernarg record.
+  const iree_hal_amdgpu_tsan_queue_state_t* queue_state_template;
+  // Header value written to |queue_state| after mutable storage is cleared.
+  iree_hal_amdgpu_tsan_queue_state_t queue_state_template_value;
+} iree_hal_amdgpu_tsan_queue_initialize_args_t;
+IREE_AMDGPU_STATIC_ASSERT(
+    sizeof(iree_hal_amdgpu_tsan_queue_initialize_args_t) == 160,
+    "TSAN queue initialize args size is part of the device ABI");
+IREE_AMDGPU_STATIC_ASSERT(
+    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_queue_initialize_args_t,
+                         queue_state_template_value) == 48,
+    "TSAN queue initialize args template follows pointer/size fields");
 
 // TSAN diagnostic payload carried by feedback packets of kind TSAN.
 //
