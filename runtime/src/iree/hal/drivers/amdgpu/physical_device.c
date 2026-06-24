@@ -981,11 +981,6 @@ iree_status_t iree_hal_amdgpu_physical_device_initialize(
         &coarse_block_memory_pool, &fine_block_memory_pool);
   }
   if (iree_status_is_ok(status)) {
-    out_physical_device->prepublished_kernarg_storage =
-        iree_hal_amdgpu_select_prepublished_kernarg_storage(
-            fine_block_memory_pool);
-  }
-  if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_physical_device_preallocate_host_pool(
         options, out_physical_device);
   }
@@ -1055,6 +1050,12 @@ iree_status_t iree_hal_amdgpu_physical_device_initialize(
             libhsa, &system->info, device_agent, fine_block_memory_pool,
             &out_physical_device->cpu_visible_device_coarse_memory,
             &out_physical_device->memory_system);
+  }
+  if (iree_status_is_ok(status)) {
+    out_physical_device->prepublished_kernarg_storage =
+        iree_hal_amdgpu_select_prepublished_kernarg_storage(
+            fine_block_memory_pool,
+            out_physical_device->memory_system.svm.direct_host_access);
   }
 
   if (!iree_status_is_ok(status)) {
@@ -1189,7 +1190,9 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
   }
   // Event records are serialized by the CPU after the GPU writes timestamp
   // fields. Prefer CPU-visible device-coarse memory when available so devices
-  // without fine-grained memory can still profile.
+  // without fine-grained memory can still profile. Otherwise fall back to
+  // shared host-fine memory, which remains CPU-writable and device-visible on
+  // platforms where fine device memory is not directly host-accessible.
   if (iree_hal_amdgpu_cpu_visible_device_coarse_memory_is_available(
           &physical_device->cpu_visible_device_coarse_memory)) {
     profiling_memory.event_memory_pool =
@@ -1202,10 +1205,9 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
         physical_device->cpu_visible_device_coarse_memory
             .host_write_publication;
   } else {
-    // Queue profiling event records are initialized and serialized by the CPU,
-    // so fallback storage must remain host-writable even when the GPU lacks
-    // CPU-visible device-coarse memory.
     profiling_memory.event_memory_pool = host_memory_pools->fine_pool;
+    profiling_memory.event_access_agents = &physical_device->device_agent;
+    profiling_memory.event_access_agent_count = 1;
   }
   for (iree_host_size_t queue_ordinal = 0;
        queue_ordinal < physical_device->host_queue_capacity &&

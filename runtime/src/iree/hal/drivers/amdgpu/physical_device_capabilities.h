@@ -290,7 +290,7 @@ bool iree_hal_amdgpu_memory_system_requires_svm_access_attributes(
 // pools.
 iree_hal_amdgpu_aql_prepublished_kernarg_storage_t
 iree_hal_amdgpu_select_prepublished_kernarg_storage(
-    hsa_amd_memory_pool_t fine_block_memory_pool);
+    hsa_amd_memory_pool_t fine_block_memory_pool, bool direct_host_access);
 
 // Selects AMD vendor AQL packet and PM4 packet-family capabilities from the
 // parsed gfx IP version.
