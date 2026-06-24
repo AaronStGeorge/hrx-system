@@ -102,7 +102,8 @@ enum loom_amdgpu_tsan_shadow_layout_e {
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_BYTE_LENGTH = 8u,
   // Per-workgroup shadow header byte length.
   LOOM_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_BYTE_LENGTH = 8u,
-  // Offset of the per-workgroup barrier epoch inside the shadow header.
+  // Offset of the low 32-bit per-workgroup barrier epoch inside the shadow
+  // header. The upper 32 bits of the 8-byte header are reserved.
   LOOM_AMDGPU_TSAN_WORKGROUP_SHADOW_EPOCH_OFFSET = 0u,
   // Bit offset of the encoded prior access kind in a shadow entry.
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_ACCESS_KIND_SHIFT = 0u,

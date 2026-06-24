@@ -403,21 +403,19 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_global_swap_u64_acq_rel(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_sanitizer_race_build_global_atomic_add_u64(
+static iree_status_t loom_amdgpu_sanitizer_race_build_global_atomic_add(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t register_count,
     loom_value_id_t base_address, loom_value_id_t byte_offset,
     loom_value_id_t value, loom_location_id_t location) {
   const loom_low_descriptor_t* descriptor = NULL;
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
-      builder, descriptor_set,
-      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR, &descriptor,
-      &opcode_id));
+      builder, descriptor_set, descriptor_ref, &descriptor, &opcode_id));
 
   loom_value_id_t value_vgpr = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
-      builder, descriptor_set, value, /*expected_unit_count=*/2, location,
-      &value_vgpr));
+      builder, descriptor_set, value, register_count, location, &value_vgpr));
 
   loom_named_attr_t attrs[2] = {0};
   iree_host_size_t attr_count = 0;
@@ -1007,7 +1005,6 @@ static bool loom_amdgpu_sanitizer_race_required_descriptors_present(
   const loom_amdgpu_descriptor_ref_t required_refs[] = {
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32_SADDR,
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR,
-      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR,
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_SWAP_U64_RTN_SADDR,
       LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
       LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32,
@@ -1055,7 +1052,12 @@ static bool loom_amdgpu_sanitizer_race_required_descriptors_present(
       return false;
     }
   }
-  return true;
+  return loom_amdgpu_descriptor_set_has_ref(
+             descriptor_set,
+             LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U32_SADDR) ||
+         loom_amdgpu_descriptor_set_has_ref(
+             descriptor_set,
+             LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_race_vgpr_u64_constant(
@@ -2372,12 +2374,27 @@ iree_status_t loom_amdgpu_lower_sanitizer_race_sync(
   loom_value_id_t saved_exec = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_exec_narrow_and_save(
       builder, descriptor_set, leader_mask, source_op->location, &saved_exec));
-  loom_value_id_t one = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_vgpr_u64_constant(
-      context, source_op, 1, &one));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_atomic_add_u64(
-      builder, descriptor_set, config.shadow_base, epoch_offset, one,
-      source_op->location));
+  if (loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set,
+          LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U32_SADDR)) {
+    loom_value_id_t one = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_vgpr_u32_constant(
+        context, source_op, 1, &one));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_atomic_add(
+        builder, descriptor_set,
+        LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U32_SADDR,
+        /*register_count=*/1, config.shadow_base, epoch_offset, one,
+        source_op->location));
+  } else {
+    loom_value_id_t one = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_vgpr_u64_constant(
+        context, source_op, 1, &one));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_global_atomic_add(
+        builder, descriptor_set,
+        LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR,
+        /*register_count=*/2, config.shadow_base, epoch_offset, one,
+        source_op->location));
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_build_exec_restore(
       builder, descriptor_set, saved_exec, source_op->location));
   IREE_RETURN_IF_ERROR(loom_amdgpu_lower_workgroup_barrier_plan(
