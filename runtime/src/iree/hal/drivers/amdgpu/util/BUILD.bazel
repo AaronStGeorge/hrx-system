@@ -200,6 +200,16 @@ iree_runtime_cc_library(
     deps = ["//runtime/src/iree/base/internal"],
 )
 
+iree_runtime_cc_test(
+    name = "affinity_test",
+    srcs = ["affinity_test.cc"],
+    deps = [
+        ":affinity",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 iree_runtime_cc_library(
     name = "packet",
     hdrs = [
