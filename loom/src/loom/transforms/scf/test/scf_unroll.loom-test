@@ -625,6 +625,98 @@ func.def @partial_factor_divisible_trip_count_omits_tail_guard() {
 
 // ====
 
+func.def @partial_factor_dynamic_tail_guard(%end: index) {
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 2 : index
+  scf.for %i = [%start to %end step %step] unroll(%factor) {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+func.def @partial_factor_dynamic_tail_guard(%end: index) {
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %factor = index.constant 2 : index
+  %5 = index.constant 2 : index
+  scf.for %i = [%start to %end step %5] {
+    test.use %i : index
+    %7 = index.constant 1 : index
+    %i_1 = index.add %i, %7 : index
+    %9 = index.cmp slt, %i_1, %end : index
+    scf.if %9 {
+      test.use %i_1 : index
+    }
+  }
+  func.return
+}
+
+// ====
+
+func.def @partial_factor_dynamic_tail_guard_step_two(%end: index) {
+  %start = index.constant 0 : index
+  %step = index.constant 2 : index
+  %factor = index.constant 2 : index
+  scf.for %i = [%start to %end step %step] unroll(%factor) {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+func.def @partial_factor_dynamic_tail_guard_step_two(%end: index) {
+  %start = index.constant 0 : index
+  %step = index.constant 2 : index
+  %factor = index.constant 2 : index
+  %5 = index.constant 4 : index
+  scf.for %i = [%start to %end step %5] {
+    test.use %i : index
+    %7 = index.constant 2 : index
+    %i_2 = index.add %i, %7 : index
+    %9 = index.cmp slt, %i_2, %end : index
+    scf.if %9 {
+      test.use %i_2 : index
+    }
+  }
+  func.return
+}
+
+// ====
+
+func.def @partial_factor_dynamic_lower_static_tail_guard(%lane0: index) {
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %end = index.constant 192 : index
+  %step = index.constant 64 : index
+  %factor = index.constant 2 : index
+  scf.for %column = [%lane to %end step %step] unroll(%factor) {
+    test.use %column : index
+  }
+  func.return
+}
+
+// ----
+func.def @partial_factor_dynamic_lower_static_tail_guard(%lane0: index) {
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %end = index.constant 192 : index
+  %step = index.constant 64 : index
+  %factor = index.constant 2 : index
+  %6 = index.constant 128 : index
+  scf.for %column = [%lane to %end step %6] {
+    test.use %column : index
+    %8 = index.constant 64 : index
+    %column_64 = index.add %column, %8 : index
+    %10 = index.cmp slt, %column_64, %end : index
+    scf.if %10 {
+      test.use %column_64 : index
+    }
+  }
+  func.return
+}
+
+// ====
+
 func.def @interleaved_partial_factor_divisible_trip_count() {
   %start = index.constant 0 : index
   %end = index.constant 4 : index
@@ -707,16 +799,104 @@ func.def @interleaved_partial_factor_dynamic_tail_loop(%end: index) {
   %6 = index.constant 0 : index
   %7 = index.sub %end, %start : index
   %8 = index.max %7, %6 : index
-  %9 = index.div %8, %factor : index
-  %10 = index.mul %9, %5 : index
-  %11 = index.add %start, %10 : index
-  scf.for %i = [%start to %11 step %5] {
-    %13 = index.constant 1 : index
-    %i_1 = index.add %i, %13 : index
+  %9 = index.constant 2 : index
+  %10 = index.div %8, %9 : index
+  %11 = index.mul %10, %5 : index
+  %12 = index.add %start, %11 : index
+  scf.for %i = [%start to %12 step %5] {
+    %14 = index.constant 1 : index
+    %i_1 = index.add %i, %14 : index
     test.use %i : index
     test.use %i_1 : index
   }
-  scf.for %i = [%11 to %end step %step] {
+  scf.for %i = [%12 to %end step %step] {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ====
+
+config.def @runtime.unroll_factor = 2 : index
+
+func.def @interleaved_partial_config_factor_dynamic_tail_loop(%end: index) {
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %factor = config.get @runtime.unroll_factor : index
+  scf.for %i = [%start to %end step %step] unroll(%factor) schedule(interleaved) {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+config.def @runtime.unroll_factor = 2 : index
+
+func.def @interleaved_partial_config_factor_dynamic_tail_loop(%end: index) {
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %factor = config.get @runtime.unroll_factor : index
+  %6 = index.constant 2 : index
+  %7 = index.constant 0 : index
+  %8 = index.sub %end, %start : index
+  %9 = index.max %8, %7 : index
+  %10 = index.constant 2 : index
+  %11 = index.div %9, %10 : index
+  %12 = index.mul %11, %6 : index
+  %13 = index.add %start, %12 : index
+  scf.for %i = [%start to %13 step %6] {
+    %15 = index.constant 1 : index
+    %i_1 = index.add %i, %15 : index
+    test.use %i : index
+    test.use %i_1 : index
+  }
+  scf.for %i = [%13 to %end step %step] {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ====
+
+config.def @runtime.unroll_step = 2 : index
+
+func.def @interleaved_partial_config_step_dynamic_tail_loop(%end: index) {
+  %start = index.constant 0 : index
+  %step = config.get @runtime.unroll_step : index
+  %factor = index.constant 2 : index
+  scf.for %i = [%start to %end step %step] unroll(%factor) schedule(interleaved) {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+config.def @runtime.unroll_step = 2 : index
+
+func.def @interleaved_partial_config_step_dynamic_tail_loop(%end: index) {
+  %start = index.constant 0 : index
+  %step = config.get @runtime.unroll_step : index
+  %factor = index.constant 2 : index
+  %6 = index.constant 4 : index
+  %7 = index.constant 0 : index
+  %8 = index.sub %end, %start : index
+  %9 = index.max %8, %7 : index
+  %10 = index.constant 1 : index
+  %11 = index.add %9, %10 : index
+  %12 = index.constant 2 : index
+  %13 = index.div %11, %12 : index
+  %14 = index.constant 2 : index
+  %15 = index.div %13, %14 : index
+  %16 = index.mul %15, %6 : index
+  %17 = index.add %start, %16 : index
+  scf.for %i = [%start to %17 step %6] {
+    %19 = index.constant 2 : index
+    %i_2 = index.add %i, %19 : index
+    test.use %i : index
+    test.use %i_2 : index
+  }
+  %21 = index.constant 2 : index
+  scf.for %i = [%17 to %end step %21] {
     test.use %i : index
   }
   func.return
@@ -745,17 +925,20 @@ func.def @interleaved_partial_factor_dynamic_tail_step_two(%end: index) {
   %8 = index.max %7, %6 : index
   %9 = index.constant 1 : index
   %10 = index.add %8, %9 : index
-  %11 = index.div %10, %step : index
-  %12 = index.div %11, %factor : index
-  %13 = index.mul %12, %5 : index
-  %14 = index.add %start, %13 : index
-  scf.for %i = [%start to %14 step %5] {
-    %16 = index.constant 2 : index
-    %i_2 = index.add %i, %16 : index
+  %11 = index.constant 2 : index
+  %12 = index.div %10, %11 : index
+  %13 = index.constant 2 : index
+  %14 = index.div %12, %13 : index
+  %15 = index.mul %14, %5 : index
+  %16 = index.add %start, %15 : index
+  scf.for %i = [%start to %16 step %5] {
+    %18 = index.constant 2 : index
+    %i_2 = index.add %i, %18 : index
     test.use %i : index
     test.use %i_2 : index
   }
-  scf.for %i = [%14 to %end step %step] {
+  %20 = index.constant 2 : index
+  scf.for %i = [%16 to %end step %20] {
     test.use %i : index
   }
   func.return
@@ -986,6 +1169,37 @@ func.def @bare_unroll_dynamic_lower_static_trip_count(%slot0: index) {
   %5 = index.constant 8 : index
   %i_8 = index.add %slot, %5 : index
   test.use %i_8 : index
+  func.return
+}
+
+// ====
+
+config.def @runtime.sequence_width = 128 : index
+config.def @runtime.workgroup_size = 64 : index
+
+func.def @bare_unroll_config_specialized_sequence_width(%lane0: index) {
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %sequence_width = config.get @runtime.sequence_width : index
+  %workgroup_size = config.get @runtime.workgroup_size : index
+  scf.for %column = [%lane to %sequence_width step %workgroup_size] unroll {
+    test.use %column : index
+  }
+  func.return
+}
+
+// ----
+config.def @runtime.sequence_width = 128 : index
+
+config.def @runtime.workgroup_size = 64 : index
+
+func.def @bare_unroll_config_specialized_sequence_width(%lane0: index) {
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %sequence_width = config.get @runtime.sequence_width : index
+  %workgroup_size = config.get @runtime.workgroup_size : index
+  test.use %lane : index
+  %7 = index.constant 64 : index
+  %column_64 = index.add %lane, %7 : index
+  test.use %column_64 : index
   func.return
 }
 
