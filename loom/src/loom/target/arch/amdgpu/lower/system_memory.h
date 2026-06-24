@@ -4,12 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Target-low helpers for AMDGPU host-visible system memory operations.
+// Target-low helpers for AMDGPU global memory operations.
 //
 // Runtime producer paths such as feedback packets, host signals, host calls,
 // and future device-side queue producers all need the same system-scope memory
-// policy. This file owns the cache attrs and explicit ordering packets that
-// make those producer/consumer contracts visible outside the dispatch.
+// policy. Device-owned runtime structures such as sanitizer shadow state use
+// the same target-specific encoding machinery at narrower scopes. This file
+// owns those cache attrs and explicit ordering packets.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_SYSTEM_MEMORY_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_SYSTEM_MEMORY_H_
@@ -21,6 +22,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
+#include "loom/ops/cache.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 #ifdef __cplusplus
@@ -67,11 +69,23 @@ iree_status_t loom_amdgpu_system_memory_append_load_attrs(
     loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
     iree_host_size_t* inout_attr_count);
 
+// Appends attrs for a load at |scope|.
+iree_status_t loom_amdgpu_system_memory_append_load_attrs_scoped(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_cache_scope_t scope, loom_named_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* inout_attr_count);
+
 // Appends attrs for a system-release store that publishes host-visible data.
 iree_status_t loom_amdgpu_system_memory_append_release_store_attrs(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
     iree_host_size_t* inout_attr_count);
+
+// Appends attrs for a release store at |scope|.
+iree_status_t loom_amdgpu_system_memory_append_release_store_attrs_scoped(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_cache_scope_t scope, loom_named_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* inout_attr_count);
 
 // Appends attrs for a system-scope no-return atomic update.
 iree_status_t loom_amdgpu_system_memory_append_no_return_atomic_attrs(
@@ -79,17 +93,35 @@ iree_status_t loom_amdgpu_system_memory_append_no_return_atomic_attrs(
     loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
     iree_host_size_t* inout_attr_count);
 
+// Appends attrs for a no-return atomic update at |scope|.
+iree_status_t loom_amdgpu_system_memory_append_no_return_atomic_attrs_scoped(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_cache_scope_t scope, loom_named_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* inout_attr_count);
+
 // Appends attrs for a system-scope returning atomic update.
 iree_status_t loom_amdgpu_system_memory_append_return_atomic_attrs(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
     iree_host_size_t* inout_attr_count);
 
+// Appends attrs for a returning atomic update at |scope|.
+iree_status_t loom_amdgpu_system_memory_append_return_atomic_attrs_scoped(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_cache_scope_t scope, loom_named_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* inout_attr_count);
+
 // Emits explicit target-low packets that release prior global writes before a
 // following system-scope publication operation.
 iree_status_t loom_amdgpu_system_memory_build_release_ordering(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_location_id_t location);
+
+// Emits explicit target-low packets that release prior global writes at
+// |scope|.
+iree_status_t loom_amdgpu_system_memory_build_release_ordering_scoped(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_cache_scope_t scope, loom_location_id_t location);
 
 // Emits explicit target-low packets that wait for prior vector-memory loads to
 // complete without performing an acquire cache operation.
@@ -102,6 +134,12 @@ iree_status_t loom_amdgpu_system_memory_build_load_wait(
 iree_status_t loom_amdgpu_system_memory_build_acquire_ordering(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_location_id_t location);
+
+// Emits explicit target-low packets that make later global reads observe data
+// published by a preceding acquire load or returning atomic at |scope|.
+iree_status_t loom_amdgpu_system_memory_build_acquire_ordering_scoped(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_cache_scope_t scope, loom_location_id_t location);
 
 // Emits target-low IR that loads a uniform 32-bit value from host-visible
 // system memory.

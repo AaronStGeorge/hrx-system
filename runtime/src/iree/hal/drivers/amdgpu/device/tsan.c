@@ -127,7 +127,7 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_assign(
   iree_amdgpu_scoped_atomic_store(
       (iree_amdgpu_scoped_atomic_uint32_t*)&dispatch_state->flags,
       IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_ASSIGNED,
-      iree_amdgpu_memory_order_release, iree_amdgpu_memory_scope_system);
+      iree_amdgpu_memory_order_release, iree_amdgpu_memory_scope_device);
 }
 
 IREE_AMDGPU_ATTRIBUTE_KERNEL void
@@ -201,7 +201,7 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void iree_hal_amdgpu_device_tsan_setup_dispatch(
   iree_amdgpu_scoped_atomic_store(
       (iree_amdgpu_scoped_atomic_uint32_t*)&dispatch_state->flags,
       IREE_HAL_AMDGPU_TSAN_DISPATCH_STATE_FLAG_ASSIGNED,
-      iree_amdgpu_memory_order_release, iree_amdgpu_memory_scope_system);
+      iree_amdgpu_memory_order_release, iree_amdgpu_memory_scope_device);
 
   iree_amdgpu_scoped_atomic_store(
       (iree_amdgpu_scoped_atomic_uint32_t*)dispatch_packet,
