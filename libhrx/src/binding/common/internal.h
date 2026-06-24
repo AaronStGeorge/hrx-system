@@ -210,6 +210,9 @@ struct iree_hal_streaming_context_t {
   // initialization).
   iree_hal_streaming_stream_t* default_stream;
 
+  // Next non-zero stream identifier assigned under |stream_list_mutex|.
+  unsigned long long next_stream_id;
+
   // Peer access list.
   iree_hal_streaming_context_t** peer_contexts;
   iree_host_size_t peer_count;
@@ -222,6 +225,9 @@ struct iree_hal_streaming_context_t {
   // Guarded by |mutex| and released during context destruction.
   iree_hal_streaming_buffer_t* pageable_h2d_staging_buffer;
   iree_device_size_t pageable_h2d_staging_size;
+
+  // Number of streams in this context with capture state other than NONE.
+  iree_atomic_int32_t capture_stream_count;
 
   // Context resource limits.
   iree_hal_streaming_limits_t limits;
@@ -256,6 +262,24 @@ struct iree_hal_streaming_context_t {
   // the driver API with explicit module management this is bypassed.
   iree_hal_streaming_context_symbol_map_t symbol_map;
 };
+
+static inline bool iree_hal_streaming_context_has_capture_streams(
+    const iree_hal_streaming_context_t* context) {
+  return iree_atomic_load(&context->capture_stream_count,
+                          iree_memory_order_acquire) > 0;
+}
+
+static inline void iree_hal_streaming_context_enter_capture(
+    iree_hal_streaming_context_t* context) {
+  iree_atomic_fetch_add(&context->capture_stream_count, 1,
+                        iree_memory_order_acq_rel);
+}
+
+static inline void iree_hal_streaming_context_leave_capture(
+    iree_hal_streaming_context_t* context) {
+  iree_atomic_fetch_sub(&context->capture_stream_count, 1,
+                        iree_memory_order_acq_rel);
+}
 
 //===----------------------------------------------------------------------===//
 // Device types
@@ -417,6 +441,8 @@ typedef struct iree_hal_streaming_stream_t {
   // Stream properties.
   iree_hal_streaming_stream_flags_t flags;
   int priority;
+  // Stable HIP stream identifier, unique within this context.
+  unsigned long long stream_id;
 
   // Command buffer for batching operations.
   iree_hal_command_buffer_t* command_buffer;
@@ -441,7 +467,11 @@ typedef struct iree_hal_streaming_stream_t {
   iree_hal_streaming_capture_status_t capture_status;
   iree_hal_streaming_capture_mode_t capture_mode;
   iree_hal_streaming_graph_t* capture_graph;
+  // True when |capture_graph| is retained by this stream and must be released.
+  bool capture_graph_owned;
   unsigned long long capture_id;
+  // Host thread that began this capture sequence.
+  uintptr_t capture_owner_thread_id;
   iree_hal_streaming_graph_node_t** capture_dependencies;
   iree_host_size_t capture_dependency_count;
   iree_host_size_t capture_dependency_capacity;
@@ -452,6 +482,24 @@ typedef struct iree_hal_streaming_stream_t {
   // Host allocator.
   iree_allocator_t host_allocator;
 } iree_hal_streaming_stream_t;
+
+// Updates capture status while keeping the owning context's capture-stream
+// count in sync. Callers serialize access to the stream capture fields.
+static inline void iree_hal_streaming_stream_set_capture_status(
+    iree_hal_streaming_stream_t* stream,
+    iree_hal_streaming_capture_status_t new_status) {
+  const iree_hal_streaming_capture_status_t old_status = stream->capture_status;
+  if (old_status == new_status) return;
+  if (old_status == IREE_HAL_STREAMING_CAPTURE_STATUS_NONE &&
+      new_status != IREE_HAL_STREAMING_CAPTURE_STATUS_NONE) {
+    iree_hal_streaming_context_enter_capture(stream->context);
+  }
+  stream->capture_status = new_status;
+  if (old_status != IREE_HAL_STREAMING_CAPTURE_STATUS_NONE &&
+      new_status == IREE_HAL_STREAMING_CAPTURE_STATUS_NONE) {
+    iree_hal_streaming_context_leave_capture(stream->context);
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Module types
@@ -469,7 +517,8 @@ typedef enum iree_hal_streaming_symbol_type_e {
 typedef struct iree_hal_streaming_parameter_copy_op_t {
   // Size in bytes of the copy operation.
   uint16_t size;
-  uint16_t reserved;
+  // Destination offset in the native direct-argument kernarg buffer, in bytes.
+  uint16_t direct_dst_offset;
   // Source offset in parameters buffer, in bytes.
   uint16_t src_offset;
   // Source binding ordinal (for parameter arrays);
@@ -511,9 +560,10 @@ typedef union iree_hal_streaming_parameter_op_t {
 typedef struct iree_hal_streaming_parameter_info_t {
   // Total size, in bytes, of the final parameter pack.
   uint16_t buffer_size;
-  // Total size of constants, in bytes. Includes raw buffer pointers.
-  // May include padding/alignment.
+  // Total size of the HAL dispatch constants stream, in bytes.
   uint16_t constant_bytes;
+  // Total size of the native direct-argument kernarg prefix, in bytes.
+  uint16_t direct_arg_bytes;
   // Total number of HAL bindings in the parameters (and resolve ops).
   uint16_t binding_count;
   // Total number of parameter copy operations to perform during unpacking.
@@ -628,6 +678,15 @@ typedef struct iree_hal_streaming_event_t {
   // Platform-specific IPC handle, if the event is IPC enabled.
   void* ipc_handle;
 
+  // Captured graph associated with this event's last captured record.
+  iree_hal_streaming_graph_t* capture_graph;
+  // Captured dependency frontier stored by the last captured record.
+  iree_hal_streaming_graph_node_t** capture_dependencies;
+  // Number of entries in |capture_dependencies| currently valid.
+  iree_host_size_t capture_dependency_count;
+  // Allocated capacity of |capture_dependencies|.
+  iree_host_size_t capture_dependency_capacity;
+
   // Host allocator.
   iree_allocator_t host_allocator;
 } iree_hal_streaming_event_t;
@@ -716,8 +775,9 @@ typedef struct iree_hal_streaming_buffer_ref_t {
 
 static inline iree_hal_buffer_ref_t iree_hal_streaming_convert_buffer_ref(
     iree_hal_streaming_buffer_ref_t ref) {
-  return iree_hal_make_buffer_ref(ref.buffer->buffer, ref.offset,
-                                  IREE_HAL_WHOLE_BUFFER);
+  const iree_device_size_t length =
+      ref.offset < ref.buffer->size ? ref.buffer->size - ref.offset : 0;
+  return iree_hal_make_buffer_ref(ref.buffer->buffer, ref.offset, length);
 }
 
 static inline iree_hal_buffer_ref_t iree_hal_streaming_convert_range_buffer_ref(
@@ -770,8 +830,15 @@ enum iree_hal_streaming_graph_node_type_e {
       3 | IREE_HAL_STREAMING_GRAPH_NODE_TYPE_RECORDABLE,
   IREE_HAL_STREAMING_GRAPH_NODE_TYPE_HOST_CALL = 4,
   IREE_HAL_STREAMING_GRAPH_NODE_TYPE_GRAPH = 5,
+  IREE_HAL_STREAMING_GRAPH_NODE_TYPE_EVENT_WAIT = 6,
+  IREE_HAL_STREAMING_GRAPH_NODE_TYPE_EVENT_RECORD = 7,
 };
 typedef uint8_t iree_hal_streaming_graph_node_type_t;
+
+typedef enum iree_hal_streaming_graph_node_flag_bits_e {
+  // Node is an internal implementation detail and is hidden from HIP queries.
+  IREE_HAL_STREAMING_GRAPH_NODE_FLAG_HIDDEN = 1u << 0,
+} iree_hal_streaming_graph_node_flag_bits_t;
 
 // Returns true if the node type can be recorded into a command buffer.
 // Nodes without this bit set will be queue operations.
@@ -810,6 +877,16 @@ typedef struct iree_hal_streaming_graph_host_call_node_attrs_t {
   void* user_data;
 } iree_hal_streaming_graph_host_call_node_attrs_t;
 
+typedef struct iree_hal_streaming_graph_child_graph_node_attrs_t {
+  // Child graph template owned by this node while the parent graph is alive.
+  iree_hal_streaming_graph_t* graph;
+} iree_hal_streaming_graph_child_graph_node_attrs_t;
+
+typedef struct iree_hal_streaming_graph_event_node_attrs_t {
+  // Event retained by an event record or wait graph node.
+  iree_hal_streaming_event_t* event;
+} iree_hal_streaming_graph_event_node_attrs_t;
+
 // Graph node structure.
 // Memory layout:
 // [iree_hal_streaming_graph_node_t]
@@ -821,8 +898,12 @@ typedef struct iree_hal_streaming_graph_node_t {
   iree_hal_streaming_graph_t* graph;
   // Type of the node indicating which attribute data is valid.
   iree_hal_streaming_graph_node_type_t type;
+  // Flags controlling graph node visibility and behavior.
+  uint32_t flags;
   // Dense index used by graph analysis while the node is active.
   uint32_t node_index;
+  // Stable source node index used to find original nodes in cloned graphs.
+  uint32_t clone_source_node_index;
   // Number of embedded dependency pointers in |dependencies|.
   uint32_t dependency_count;
 
@@ -832,6 +913,8 @@ typedef struct iree_hal_streaming_graph_node_t {
     iree_hal_streaming_graph_memcpy_node_attrs_t memcpy;
     iree_hal_streaming_graph_memset_node_attrs_t memset;
     iree_hal_streaming_graph_host_call_node_attrs_t host;
+    iree_hal_streaming_graph_child_graph_node_attrs_t child_graph;
+    iree_hal_streaming_graph_event_node_attrs_t event;
   } attrs;
 
   // Variable-length array of dependencies follows the struct.
@@ -1019,6 +1102,9 @@ iree_hal_streaming_context_flags_t iree_hal_streaming_context_flags(
 // Synchronization: none (thread-local access).
 iree_hal_streaming_context_t* iree_hal_streaming_context_current(void);
 
+// Synchronization: none (thread-local access).
+uintptr_t iree_hal_streaming_current_thread_token(void);
+
 // Synchronization: none (thread-local modification).
 void iree_hal_streaming_context_set_current(
     iree_hal_streaming_context_t* context);
@@ -1082,6 +1168,12 @@ iree_status_t iree_hal_streaming_context_wait_idle(
 // Synchronization: all streams (blocks until all streams idle).
 // This flushes and waits for all streams on the device.
 iree_status_t iree_hal_streaming_context_synchronize(
+    iree_hal_streaming_context_t* context);
+
+// Synchronizes streams that participate in legacy default stream ordering.
+// Non-blocking streams are excluded. The legacy default stream itself is always
+// synchronized.
+iree_status_t iree_hal_streaming_context_synchronize_legacy_default(
     iree_hal_streaming_context_t* context);
 
 // Wait for all already-submitted work on all streams to complete.
@@ -1162,6 +1254,11 @@ void iree_hal_streaming_stream_release(iree_hal_streaming_stream_t* stream);
 // Begins command buffer recording.
 // Synchronization: none (begins recording).
 iree_status_t iree_hal_streaming_stream_begin(
+    iree_hal_streaming_stream_t* stream);
+
+// Ensures a stream command buffer is recording while the caller holds
+// stream->mutex. Use this when appending commands under the stream lock.
+iree_status_t iree_hal_streaming_stream_begin_locked(
     iree_hal_streaming_stream_t* stream);
 
 // Flushes pending commands.
@@ -1462,6 +1559,10 @@ iree_status_t iree_hal_streaming_graph_create(
     iree_hal_streaming_graph_flags_t flags, iree_allocator_t host_allocator,
     iree_hal_streaming_graph_t** out_graph);
 
+iree_status_t iree_hal_streaming_graph_clone(
+    iree_hal_streaming_graph_t* source_graph,
+    iree_hal_streaming_graph_t** out_graph);
+
 // Synchronization: none (reference counting).
 void iree_hal_streaming_graph_retain(iree_hal_streaming_graph_t* graph);
 void iree_hal_streaming_graph_release(iree_hal_streaming_graph_t* graph);
@@ -1506,6 +1607,20 @@ iree_status_t iree_hal_streaming_graph_add_host_call_node(
     iree_host_size_t dependency_count, void (*fn)(void*), void* user_data,
     iree_hal_streaming_graph_node_t** out_node);
 
+iree_status_t iree_hal_streaming_graph_add_event_node(
+    iree_hal_streaming_graph_t* graph,
+    iree_hal_streaming_graph_node_t** dependencies,
+    iree_host_size_t dependency_count,
+    iree_hal_streaming_graph_node_type_t type,
+    iree_hal_streaming_event_t* event,
+    iree_hal_streaming_graph_node_t** out_node);
+
+iree_status_t iree_hal_streaming_graph_add_child_graph_node(
+    iree_hal_streaming_graph_t* graph,
+    iree_hal_streaming_graph_node_t** dependencies,
+    iree_host_size_t dependency_count, iree_hal_streaming_graph_t* child_graph,
+    iree_hal_streaming_graph_node_t** out_node);
+
 iree_status_t iree_hal_streaming_graph_destroy_node(
     iree_hal_streaming_graph_node_t* node);
 
@@ -1538,6 +1653,11 @@ iree_status_t iree_hal_streaming_begin_capture(
     iree_hal_streaming_stream_t* stream,
     iree_hal_streaming_capture_mode_t mode);
 
+iree_status_t iree_hal_streaming_begin_capture_to_graph(
+    iree_hal_streaming_stream_t* stream, iree_hal_streaming_graph_t* graph,
+    iree_hal_streaming_graph_node_t** dependencies,
+    iree_host_size_t dependency_count, iree_hal_streaming_capture_mode_t mode);
+
 // Synchronization: none (ends capture mode, creates graph).
 iree_status_t iree_hal_streaming_end_capture(
     iree_hal_streaming_stream_t* stream,
@@ -1559,6 +1679,9 @@ iree_status_t iree_hal_streaming_update_capture_dependencies(
     iree_hal_streaming_graph_node_t** dependencies,
     iree_host_size_t dependency_count,
     iree_hal_streaming_capture_dependencies_mode_t mode);
+
+iree_status_t iree_hal_streaming_capture_set_last_node(
+    iree_hal_streaming_stream_t* stream, iree_hal_streaming_graph_node_t* node);
 
 //===----------------------------------------------------------------------===//
 // Symbol registry

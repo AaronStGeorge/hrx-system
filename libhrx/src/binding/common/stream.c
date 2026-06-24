@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #include "common/internal.h"
@@ -200,6 +201,7 @@ iree_status_t iree_hal_streaming_stream_create(
   stream->context = context;
   stream->flags = flags;
   stream->priority = priority;
+  stream->stream_id = 0;
   stream->command_buffer = NULL;
   stream->pending_launch_count = 0;
   stream->timeline_semaphore = NULL;
@@ -214,7 +216,9 @@ iree_status_t iree_hal_streaming_stream_create(
   stream->capture_status = IREE_HAL_STREAMING_CAPTURE_STATUS_NONE;
   stream->capture_mode = IREE_HAL_STREAMING_CAPTURE_MODE_GLOBAL;
   stream->capture_graph = NULL;
+  stream->capture_graph_owned = false;
   stream->capture_id = 0;
+  stream->capture_owner_thread_id = 0;
   stream->capture_dependencies = NULL;
   stream->capture_dependency_count = 0;
   stream->capture_dependency_capacity = 0;
@@ -245,18 +249,14 @@ static void iree_hal_streaming_stream_destroy(
     iree_hal_streaming_stream_t* stream) {
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  // Capture and clear context pointer to prevent re-entry during unregister.
   iree_hal_streaming_context_t* context = stream->context;
-  stream->context = NULL;
-
-  // Synchronize stream before cleanup to ensure all operations complete.
-  // This is important to avoid leaking resources from pending operations.
-  iree_status_ignore(iree_hal_streaming_stream_synchronize(stream));
-
-  // Unregister from context before cleanup.
-  // Note: We already cleared stream->context, so if unregister tries to
-  // release and that triggers another destroy, it will be a no-op.
   if (context) {
+    iree_status_ignore(iree_hal_streaming_stream_synchronize(stream));
+    if (stream->capture_status != IREE_HAL_STREAMING_CAPTURE_STATUS_NONE) {
+      iree_hal_streaming_stream_set_capture_status(
+          stream, IREE_HAL_STREAMING_CAPTURE_STATUS_NONE);
+    }
+    stream->context = NULL;
     iree_hal_streaming_context_unregister_stream(context, stream);
   }
 
@@ -270,6 +270,11 @@ static void iree_hal_streaming_stream_destroy(
 
   // Release command buffer.
   iree_hal_command_buffer_release(stream->command_buffer);
+
+  if (stream->capture_graph_owned) {
+    iree_hal_streaming_graph_release(stream->capture_graph);
+  }
+  iree_allocator_free(stream->host_allocator, stream->capture_dependencies);
 
   // Release timeline semaphore.
   iree_hal_semaphore_release(stream->timeline_semaphore);
@@ -296,18 +301,15 @@ void iree_hal_streaming_stream_release(iree_hal_streaming_stream_t* stream) {
   }
 }
 
-iree_status_t iree_hal_streaming_stream_begin(
+iree_status_t iree_hal_streaming_stream_begin_locked(
     iree_hal_streaming_stream_t* stream) {
   IREE_ASSERT_ARGUMENT(stream);
-  IREE_TRACE_ZONE_BEGIN(z0);
-  iree_slim_mutex_lock(&stream->mutex);
-
-  iree_status_t status = iree_ok_status();
 
   // Create command buffer if not already created.
   // Note that we set UNRETAINED as we ensure the resources we have to track are
   // retained at the graph exec level and CUDA/HIP don't make any statements
   // about resource lifetime.
+  iree_status_t status = iree_ok_status();
   if (!stream->command_buffer) {
     status = iree_hal_command_buffer_create(
         stream->context->device,
@@ -315,16 +317,19 @@ iree_status_t iree_hal_streaming_stream_begin(
             IREE_HAL_COMMAND_BUFFER_MODE_UNRETAINED,
         IREE_HAL_COMMAND_CATEGORY_ANY, stream->queue_affinity,
         /*binding_capacity=*/0, &stream->command_buffer);
-    if (!iree_status_is_ok(status)) {
-      iree_slim_mutex_unlock(&stream->mutex);
-      IREE_TRACE_ZONE_END(z0);
-      return status;
-    }
+    if (!iree_status_is_ok(status)) return status;
+    status = iree_hal_command_buffer_begin(stream->command_buffer);
   }
 
-  // Begin recording.
-  status = iree_hal_command_buffer_begin(stream->command_buffer);
+  return status;
+}
 
+iree_status_t iree_hal_streaming_stream_begin(
+    iree_hal_streaming_stream_t* stream) {
+  IREE_ASSERT_ARGUMENT(stream);
+  IREE_TRACE_ZONE_BEGIN(z0);
+  iree_slim_mutex_lock(&stream->mutex);
+  iree_status_t status = iree_hal_streaming_stream_begin_locked(stream);
   iree_slim_mutex_unlock(&stream->mutex);
   IREE_TRACE_ZONE_END(z0);
   return status;
@@ -534,13 +539,58 @@ iree_status_t iree_hal_streaming_stream_wait_event(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   // Check if we're capturing to a graph.
-  if (stream->capture_status == IREE_HAL_STREAMING_CAPTURE_STATUS_ACTIVE) {
-    // Event wait during graph capture is not yet implemented.
-    // TODO(#graph-capture): Add wait node to graph.
+  if (event->capture_graph) {
+    bool adopt_capture_graph = false;
+    iree_slim_mutex_lock(&stream->mutex);
+    if (stream->capture_status == IREE_HAL_STREAMING_CAPTURE_STATUS_NONE) {
+      adopt_capture_graph = true;
+    } else if (stream->capture_graph != event->capture_graph) {
+      iree_slim_mutex_unlock(&stream->mutex);
+      IREE_TRACE_ZONE_END(z0);
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "event wait crosses different active capture graphs");
+    }
+    iree_slim_mutex_unlock(&stream->mutex);
+
+    if (adopt_capture_graph) {
+      IREE_RETURN_AND_END_ZONE_IF_ERROR(
+          z0, iree_hal_streaming_stream_flush(stream));
+
+      iree_slim_mutex_lock(&stream->mutex);
+      if (stream->capture_status == IREE_HAL_STREAMING_CAPTURE_STATUS_NONE) {
+        stream->capture_graph = event->capture_graph;
+        stream->capture_graph_owned = true;
+        if (event->recording_stream) {
+          stream->capture_mode = event->recording_stream->capture_mode;
+          stream->capture_id = event->recording_stream->capture_id;
+          stream->capture_owner_thread_id =
+              event->recording_stream->capture_owner_thread_id;
+        } else {
+          stream->capture_mode = IREE_HAL_STREAMING_CAPTURE_MODE_GLOBAL;
+          stream->capture_id = stream->capture_id + 1;
+          stream->capture_owner_thread_id = 0;
+        }
+        iree_hal_streaming_graph_retain(stream->capture_graph);
+        iree_hal_streaming_stream_set_capture_status(
+            stream, IREE_HAL_STREAMING_CAPTURE_STATUS_ACTIVE);
+      } else if (stream->capture_graph != event->capture_graph) {
+        iree_slim_mutex_unlock(&stream->mutex);
+        IREE_TRACE_ZONE_END(z0);
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "event wait crosses different active capture graphs");
+      }
+      iree_slim_mutex_unlock(&stream->mutex);
+    }
+
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_hal_streaming_update_capture_dependencies(
+                stream, event->capture_dependencies,
+                event->capture_dependency_count,
+                IREE_HAL_STREAMING_CAPTURE_DEPENDENCIES_ADD));
     IREE_TRACE_ZONE_END(z0);
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "event wait during graph capture not yet implemented");
+    return iree_ok_status();
   }
 
   // Flush the stream to ensure all prior operations are submitted.
@@ -608,9 +658,9 @@ iree_status_t iree_hal_streaming_unpack_parameters(
   }
 
   // Resolve bindings, if any.
-  // For native kernels with NULL or external device pointers, we can't use
-  // IREE's binding mechanism. In that case, the caller should use
-  // CUSTOM_DIRECT_ARGUMENTS to pass the raw parameter buffer directly.
+  // A NULL HIP kernel pointer is a valid literal kernarg for optional buffers.
+  // Represent it as a zeroed direct binding; the AMDGPU direct queue path
+  // materializes that as a zero pointer in the final kernarg block.
   iree_hal_buffer_ref_t* bindings =
       (iree_hal_buffer_ref_t*)out_bindings->values;
   for (uint32_t i = 0; i < parameters->binding_count; ++i, ++op) {
@@ -620,12 +670,9 @@ iree_status_t iree_hal_streaming_unpack_parameters(
     // (at only the cost of a cache miss) get the total buffer size and then
     // subtract the offset to get the remaining size.
 
-    // Handle NULL device pointers - some kernels pass NULL for optional
-    // buffers. Return NOT_FOUND to signal that this kernel needs raw argument
-    // passing.
     if (!device_ptr) {
-      return iree_make_status(IREE_STATUS_NOT_FOUND,
-                              "binding %u has NULL device pointer", i);
+      bindings[resolve_op.dst_ordinal] = (iree_hal_buffer_ref_t){0};
+      continue;
     }
 
     iree_hal_streaming_buffer_ref_t stream_ref;
@@ -636,8 +683,8 @@ iree_status_t iree_hal_streaming_unpack_parameters(
     if (!iree_status_is_ok(lookup_status)) {
       return lookup_status;
     }
-    bindings[resolve_op.dst_ordinal] = iree_hal_make_buffer_ref(
-        stream_ref.buffer->buffer, stream_ref.offset, IREE_HAL_WHOLE_BUFFER);
+    bindings[resolve_op.dst_ordinal] =
+        iree_hal_streaming_convert_buffer_ref(stream_ref);
   }
 
   return iree_ok_status();
@@ -676,9 +723,9 @@ iree_status_t iree_hal_streaming_unpack_parameter_list(
 
   // Resolve bindings, if any.
   // For bindings, each parameter in the list is a pointer to a device pointer.
-  // For native kernels with NULL or external device pointers, we can't use
-  // IREE's binding mechanism. In that case, the caller should use
-  // CUSTOM_DIRECT_ARGUMENTS to pass the raw parameter buffer directly.
+  // A NULL HIP kernel pointer is a valid literal kernarg for optional buffers.
+  // Represent it as a zeroed direct binding; the AMDGPU direct queue path
+  // materializes that as a zero pointer in the final kernarg block.
   iree_hal_buffer_ref_t* bindings =
       (iree_hal_buffer_ref_t*)out_bindings->values;
   for (uint32_t i = 0; i < parameters->binding_count; ++i, ++op) {
@@ -691,12 +738,9 @@ iree_status_t iree_hal_streaming_unpack_parameter_list(
     // (at only the cost of a cache miss) get the total buffer size and then
     // subtract the offset to get the remaining size.
 
-    // Handle NULL device pointers - some kernels pass NULL for optional
-    // buffers. Return NOT_FOUND to signal that this kernel needs raw argument
-    // passing.
     if (!device_ptr) {
-      return iree_make_status(IREE_STATUS_NOT_FOUND,
-                              "binding %u has NULL device pointer", i);
+      bindings[resolve_op.dst_ordinal] = (iree_hal_buffer_ref_t){0};
+      continue;
     }
 
     iree_hal_streaming_buffer_ref_t stream_ref;
@@ -707,8 +751,8 @@ iree_status_t iree_hal_streaming_unpack_parameter_list(
     if (!iree_status_is_ok(lookup_status)) {
       return lookup_status;
     }
-    bindings[resolve_op.dst_ordinal] = iree_hal_make_buffer_ref(
-        stream_ref.buffer->buffer, stream_ref.offset, IREE_HAL_WHOLE_BUFFER);
+    bindings[resolve_op.dst_ordinal] =
+        iree_hal_streaming_convert_buffer_ref(stream_ref);
   }
 
   return iree_ok_status();
@@ -729,7 +773,8 @@ iree_status_t iree_hal_streaming_launch_kernel(
   uint64_t timing_params_ns = 0;
   uint64_t timing_dispatch_ns = 0;
   uint64_t timing_barrier_ns = 0;
-  const bool use_direct_queue_dispatch = hrx_direct_queue_dispatch_enabled();
+  const bool direct_queue_dispatch_requested =
+      hrx_direct_queue_dispatch_enabled();
 
   // Verify the symbol is a function.
   if (symbol->type != IREE_HAL_STREAMING_SYMBOL_TYPE_FUNCTION) {
@@ -759,12 +804,13 @@ iree_status_t iree_hal_streaming_launch_kernel(
   // Check if we're capturing to a graph.
   if (stream->capture_status == IREE_HAL_STREAMING_CAPTURE_STATUS_ACTIVE) {
     // Add kernel node to the graph instead of recording to command buffer.
+    iree_hal_streaming_graph_node_t* node = NULL;
     IREE_RETURN_AND_END_ZONE_IF_ERROR(
         z0, iree_hal_streaming_graph_add_kernel_node(
                 stream->capture_graph, stream->capture_dependencies,
-                stream->capture_dependency_count, symbol, params, NULL));
-    // Clear dependencies after adding the node.
-    stream->capture_dependency_count = 0;
+                stream->capture_dependency_count, symbol, params, &node));
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_hal_streaming_capture_set_last_node(stream, node));
     IREE_TRACE_ZONE_END(z0);
     return iree_ok_status();
   }
@@ -773,23 +819,13 @@ iree_status_t iree_hal_streaming_launch_kernel(
   // Direct dispatches use the stream timeline wait/signal chain below; command
   // buffer dispatches continue recording into the current stream command
   // buffer.
-  if (use_direct_queue_dispatch && stream->command_buffer) {
+  if (direct_queue_dispatch_requested && stream->command_buffer) {
     uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
     iree_status_t flush_status = iree_hal_streaming_stream_flush(stream);
     if (timing_enabled) {
       timing_begin_ns += hrx_launch_timing_now_ns() - timing_step_ns;
     }
     IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, flush_status);
-  }
-
-  // Ensure command buffer is recording for the existing batched path.
-  if (!use_direct_queue_dispatch && !stream->command_buffer) {
-    uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
-    iree_status_t begin_status = iree_hal_streaming_stream_begin(stream);
-    if (timing_enabled) {
-      timing_begin_ns += hrx_launch_timing_now_ns() - timing_step_ns;
-    }
-    IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, begin_status);
   }
 
   // Stack allocate arrays based on cached sizes.
@@ -872,11 +908,14 @@ iree_status_t iree_hal_streaming_launch_kernel(
             &symbol->parameters;
         void** args_array = (void**)params->buffer;
 
-        // Build packed buffer from args array using the ops.
-        // Stack-allocate the buffer (using constant_bytes as size).
-        constants = iree_alloca(params_info->constant_bytes);
-        memset(constants, 0, params_info->constant_bytes);
-        constants_size = params_info->constant_bytes;
+        // Build a native direct-argument buffer from the args array. This is
+        // only for fallback cases where pointers cannot be represented as HAL
+        // bindings.
+        constants_size = params_info->direct_arg_bytes
+                             ? params_info->direct_arg_bytes
+                             : params_info->constant_bytes;
+        constants = iree_alloca(constants_size);
+        memset(constants, 0, constants_size);
 
         // Process all copy operations (constants/scalars).
         const iree_hal_streaming_parameter_op_t* op = &params_info->ops[0];
@@ -884,7 +923,7 @@ iree_status_t iree_hal_streaming_launch_kernel(
           const iree_hal_streaming_parameter_copy_op_t copy_op = op->copy;
           // Dereference the arg pointer to get the value.
           void* param_ptr = args_array[copy_op.src_ordinal];
-          memcpy((uint8_t*)constants + copy_op.dst_offset, param_ptr,
+          memcpy((uint8_t*)constants + copy_op.direct_dst_offset, param_ptr,
                  copy_op.size);
         }
 
@@ -939,6 +978,27 @@ iree_status_t iree_hal_streaming_launch_kernel(
     timing_params_ns += hrx_launch_timing_now_ns() - timing_params_start_ns;
   }
 
+  bool dispatch_directly = direct_queue_dispatch_requested;
+  if (!dispatch_directly) {
+    for (iree_host_size_t i = 0; i < binding_list.count; ++i) {
+      const iree_hal_buffer_ref_t* binding = &binding_list.values[i];
+      if (!binding->buffer && binding->reserved == 0 &&
+          binding->buffer_slot == 0 && binding->offset == 0 &&
+          binding->length == 0) {
+        dispatch_directly = true;
+        break;
+      }
+    }
+    if (dispatch_directly && stream->command_buffer) {
+      uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
+      iree_status_t flush_status = iree_hal_streaming_stream_flush(stream);
+      if (timing_enabled) {
+        timing_begin_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+      }
+      IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, flush_status);
+    }
+  }
+
   // Create IREE dispatch config.
   const iree_hal_dispatch_config_t config = {
       .workgroup_size =
@@ -956,88 +1016,20 @@ iree_status_t iree_hal_streaming_launch_kernel(
       .dynamic_workgroup_local_memory = params->shared_memory_bytes,
   };
 
-  // Ensure constants_size is 4-byte aligned as required by HAL.
-  constants_size = (constants_size + 3) & ~(size_t)3;
-
-  // --- Resolve pointer-valued constants to overlay bindings ---
-  // The constants buffer may contain device pointers passed as raw values
-  // (e.g., embedded in struct-typed copy parameters like CatArrInputTensor).
-  // For the remote HAL, these are synthetic addresses (0xDEAD...) that the
-  // remote device cannot use. We scan the constants for known buffer table
-  // entries and convert them to HAL buffer bindings. The dispatch handler
-  // overlays the resolved device pointers on top of the constants in the
-  // kernarg buffer.
-  //
-  // When the kernel also has regular bindings (binding_count > 0), we must
-  // convert those to overlay format too: write their device pointer values
-  // into the constants at their ABI offsets so the scan can find them.
-  if (constants && constants_size >= sizeof(void*)) {
-    // If we have regular bindings, convert them to overlay format by writing
-    // the device pointer values into the constants buffer at their ABI
-    // offsets. This allows the overlay scan below to find them alongside
-    // any pointers embedded in copy data.
-    if (binding_list.count > 0 && !use_raw_arguments && !is_pre_packed) {
-      bool is_args_array =
-          (params->flags & IREE_HAL_STREAMING_DISPATCH_FLAG_ARGS_ARRAY) != 0;
-      const iree_hal_streaming_parameter_op_t* op =
-          &symbol->parameters.ops[symbol->parameters.copy_count];
-      for (uint32_t i = 0; i < symbol->parameters.binding_count; ++i, ++op) {
-        const iree_hal_streaming_parameter_resolve_op_t resolve_op =
-            op->resolve;
-        void* device_ptr;
-        if (is_args_array) {
-          void** args_array = (void**)params->buffer;
-          device_ptr = *(void**)args_array[resolve_op.src_ordinal];
-        } else {
-          const uint8_t* parameter_buffer = (const uint8_t*)params->buffer;
-          device_ptr = *(void**)(parameter_buffer + resolve_op.src_offset);
-        }
-        if (device_ptr &&
-            resolve_op.dst_offset + sizeof(void*) <= constants_size) {
-          memcpy((uint8_t*)constants + resolve_op.dst_offset, &device_ptr,
-                 sizeof(void*));
-        }
-      }
-      binding_list.count = 0;
-    }
-
-    // NOTE: earlier drafts of this code tried to extract device pointers
-    // from the constants buffer and hand them to the HAL as separate
-    // bindings with a |buffer_slot = byte_offset| overlay trick. The
-    // AMDGPU aql_command_buffer / host_queue_dispatch backends do not
-    // implement that overlay: for CUSTOM_DIRECT_ARGUMENTS they just
-    // memcpy |constants| into the kernarg block and ignore |bindings|
-    // entirely. Zeroing the pointer in the constants buffer therefore
-    // caused the GPU to dereference NULL and page-fault.
-    //
-    // Pyre's hipMalloc returns the real GPU virtual address of the
-    // allocation (sub-allocated from a contiguous pool), so whatever
-    // pointers PyTorch writes into the HIP launch parameter buffer are
-    // already valid device addresses. We just let the constants flow
-    // through unmodified; the HAL copies them into kernargs verbatim and
-    // the kernel dereferences them directly.
-    //
-    // We still walk the buffer once below purely to run the lookup as
-    // validation (so that invalid device pointers are surfaced in debug
-    // logs), but we do not mutate the constants or build overlay
-    // bindings.
-    (void)iree_hal_streaming_memory_lookup;
-  }
-
-  // After the overlay scan, all bindings are in overlay format (buffer_slot
-  // encodes the constant byte offset). Always use CUSTOM_DIRECT_ARGUMENTS
-  // so the server overlays resolved device pointers into the constants.
-  //
-  // For pre-packed buffers (HIP_LAUNCH_PARAM_BUFFER format used by
-  // hipBLAS/hipBLASLt) we rely on the same CUSTOM_DIRECT_ARGUMENTS path: the
-  // AMDGPU HAL simply memcpys |constants| into the kernarg block and ignores
-  // any binding list, which is exactly what pre-packed callers want.
+  // Use the metadata-described constants+bindings path whenever possible. The
+  // AMDGPU backend uses HSACO metadata on that path to synthesize HIP/OpenCL
+  // hidden kernargs such as group size and block count. CUSTOM_DIRECT_ARGUMENTS
+  // is reserved for callers that supply or require native kernarg bytes.
   iree_hal_dispatch_flags_t flags =
-      IREE_HAL_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS;
+      (use_raw_arguments || is_pre_packed)
+          ? IREE_HAL_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS
+          : IREE_HAL_DISPATCH_FLAG_NONE;
 
   uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
   iree_status_t status = iree_ok_status();
-  if (use_direct_queue_dispatch) {
+  bool should_flush = false;
+  iree_slim_mutex_lock(&stream->mutex);
+  if (dispatch_directly) {
     uint64_t wait_value = stream->pending_value;
     uint64_t signal_value = wait_value + 1;
     const iree_hal_semaphore_list_t wait_semaphores = {
@@ -1065,63 +1057,72 @@ iree_status_t iree_hal_streaming_launch_kernel(
       stream->submitted_value = signal_value;
     }
   } else {
-    status = iree_hal_command_buffer_dispatch(
-        stream->command_buffer, symbol->executable,
-        iree_hal_executable_function_from_index(symbol->export_ordinal), config,
-        iree_make_const_byte_span(constants, constants_size), binding_list,
-        flags);
+    uint64_t timing_begin_step_ns =
+        timing_enabled ? hrx_launch_timing_now_ns() : 0;
+    status = iree_hal_streaming_stream_begin_locked(stream);
+    if (timing_enabled) {
+      timing_begin_ns += hrx_launch_timing_now_ns() - timing_begin_step_ns;
+    }
+    if (iree_status_is_ok(status)) {
+      status = iree_hal_command_buffer_dispatch(
+          stream->command_buffer, symbol->executable,
+          iree_hal_executable_function_from_index(symbol->export_ordinal),
+          config, iree_make_const_byte_span(constants, constants_size),
+          binding_list, flags);
+    }
+
+    // Insert an execution + memory barrier after each dispatch to enforce
+    // serial ordering within the command buffer, emulating HIP stream
+    // semantics. This allows batching multiple dispatches per CB submission
+    // while maintaining correctness. Inter-CB ordering is handled by timeline
+    // semaphore chaining in iree_hal_streaming_stream_flush.
+    //
+    // The memory barrier with non-host (DISPATCH/TRANSFER) access scopes is
+    // important: under the AMDGPU HAL backend it resolves to an AGENT-scoped
+    // AQL release+acquire fence between this dispatch and the next, which
+    // flushes the GPU L1/L2 caches so the next dispatch sees this dispatch's
+    // writes. A bare execution barrier with no memory_barriers (count=0)
+    // resolves to NONE/NONE scopes after upstream IREE commit 48af1651a1
+    // ("Preserve command-buffer barrier scopes") and lets later dispatches
+    // launch with stale cache state, producing garbage output (e.g. NaN
+    // logits in GPT-2 forward).
+    if (iree_status_is_ok(status) && !hrx_disable_dispatch_barrier_enabled()) {
+      static const iree_hal_memory_barrier_t memory_barrier = {
+          .source_scope = IREE_HAL_ACCESS_SCOPE_DISPATCH_READ |
+                          IREE_HAL_ACCESS_SCOPE_DISPATCH_WRITE |
+                          IREE_HAL_ACCESS_SCOPE_TRANSFER_READ |
+                          IREE_HAL_ACCESS_SCOPE_TRANSFER_WRITE,
+          .target_scope = IREE_HAL_ACCESS_SCOPE_DISPATCH_READ |
+                          IREE_HAL_ACCESS_SCOPE_DISPATCH_WRITE |
+                          IREE_HAL_ACCESS_SCOPE_TRANSFER_READ |
+                          IREE_HAL_ACCESS_SCOPE_TRANSFER_WRITE,
+      };
+      uint64_t timing_barrier_step_ns =
+          timing_enabled ? hrx_launch_timing_now_ns() : 0;
+      status = iree_hal_command_buffer_execution_barrier(
+          stream->command_buffer,
+          IREE_HAL_EXECUTION_STAGE_DISPATCH | IREE_HAL_EXECUTION_STAGE_TRANSFER,
+          IREE_HAL_EXECUTION_STAGE_DISPATCH | IREE_HAL_EXECUTION_STAGE_TRANSFER,
+          IREE_HAL_EXECUTION_BARRIER_FLAG_NONE, 1, &memory_barrier, 0, NULL);
+      if (timing_enabled) {
+        timing_barrier_ns +=
+            hrx_launch_timing_now_ns() - timing_barrier_step_ns;
+      }
+    }
+
+    if (iree_status_is_ok(status)) {
+      ++stream->pending_launch_count;
+      const int flush_interval = hrx_flush_interval();
+      should_flush = hrx_flush_each_launch_enabled() ||
+                     (flush_interval > 0 &&
+                      stream->pending_launch_count >= (uint32_t)flush_interval);
+    }
   }
+  iree_slim_mutex_unlock(&stream->mutex);
   if (timing_enabled) {
     timing_dispatch_ns += hrx_launch_timing_now_ns() - timing_step_ns;
   }
-
-  // Insert an execution + memory barrier after each dispatch to enforce
-  // serial ordering within the command buffer, emulating HIP stream
-  // semantics. This allows batching multiple dispatches per CB submission
-  // while maintaining correctness. Inter-CB ordering is handled by timeline
-  // semaphore chaining in iree_hal_streaming_stream_flush.
-  //
-  // The memory barrier with non-host (DISPATCH/TRANSFER) access scopes is
-  // important: under the AMDGPU HAL backend it resolves to an AGENT-scoped
-  // AQL release+acquire fence between this dispatch and the next, which
-  // flushes the GPU L1/L2 caches so the next dispatch sees this dispatch's
-  // writes. A bare execution barrier with no memory_barriers (count=0)
-  // resolves to NONE/NONE scopes after upstream IREE commit 48af1651a1
-  // ("Preserve command-buffer barrier scopes") and lets later dispatches
-  // launch with stale cache state, producing garbage output (e.g. NaN
-  // logits in GPT-2 forward).
-  if (!use_direct_queue_dispatch && iree_status_is_ok(status) &&
-      !hrx_disable_dispatch_barrier_enabled()) {
-    static const iree_hal_memory_barrier_t memory_barrier = {
-        .source_scope = IREE_HAL_ACCESS_SCOPE_DISPATCH_READ |
-                        IREE_HAL_ACCESS_SCOPE_DISPATCH_WRITE |
-                        IREE_HAL_ACCESS_SCOPE_TRANSFER_READ |
-                        IREE_HAL_ACCESS_SCOPE_TRANSFER_WRITE,
-        .target_scope = IREE_HAL_ACCESS_SCOPE_DISPATCH_READ |
-                        IREE_HAL_ACCESS_SCOPE_DISPATCH_WRITE |
-                        IREE_HAL_ACCESS_SCOPE_TRANSFER_READ |
-                        IREE_HAL_ACCESS_SCOPE_TRANSFER_WRITE,
-    };
-    timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
-    status = iree_hal_command_buffer_execution_barrier(
-        stream->command_buffer,
-        IREE_HAL_EXECUTION_STAGE_DISPATCH | IREE_HAL_EXECUTION_STAGE_TRANSFER,
-        IREE_HAL_EXECUTION_STAGE_DISPATCH | IREE_HAL_EXECUTION_STAGE_TRANSFER,
-        IREE_HAL_EXECUTION_BARRIER_FLAG_NONE, 1, &memory_barrier, 0, NULL);
-    if (timing_enabled) {
-      timing_barrier_ns += hrx_launch_timing_now_ns() - timing_step_ns;
-    }
-  }
-
-  if (!use_direct_queue_dispatch && iree_status_is_ok(status)) {
-    ++stream->pending_launch_count;
-  }
-
-  const int flush_interval = hrx_flush_interval();
-  if (!use_direct_queue_dispatch && iree_status_is_ok(status) &&
-      (hrx_flush_each_launch_enabled() ||
-       (flush_interval > 0 &&
-        stream->pending_launch_count >= (uint32_t)flush_interval))) {
+  if (!dispatch_directly && iree_status_is_ok(status) && should_flush) {
     status = iree_hal_streaming_stream_flush(stream);
   }
 
@@ -1164,12 +1165,13 @@ iree_status_t iree_hal_streaming_launch_host_function(
   // Check if we're capturing to a graph.
   if (stream->capture_status == IREE_HAL_STREAMING_CAPTURE_STATUS_ACTIVE) {
     // Add host call node to the graph instead of executing immediately.
+    iree_hal_streaming_graph_node_t* node = NULL;
     IREE_RETURN_AND_END_ZONE_IF_ERROR(
         z0, iree_hal_streaming_graph_add_host_call_node(
                 stream->capture_graph, stream->capture_dependencies,
-                stream->capture_dependency_count, fn, user_data, NULL));
-    // Clear dependencies after adding the node.
-    stream->capture_dependency_count = 0;
+                stream->capture_dependency_count, fn, user_data, &node));
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_hal_streaming_capture_set_last_node(stream, node));
     IREE_TRACE_ZONE_END(z0);
     return iree_ok_status();
   }

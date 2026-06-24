@@ -4,7 +4,10 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_shared_library")
+load(
+    "//libhrx/build_tools/bazel:cc.bzl",
+    "hrx_cc_shared_library",
+)
 
 package(
     default_visibility = ["//visibility:public"],
@@ -37,6 +40,7 @@ hrx_cc_shared_library(
     deps = [
         "//libhrx/src/binding/common",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal",
     ],
 )

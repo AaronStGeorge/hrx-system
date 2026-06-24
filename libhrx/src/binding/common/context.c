@@ -15,6 +15,7 @@
 // Thread-local current context.
 static iree_thread_local iree_hal_streaming_context_t*
     iree_hal_streaming_current_context = NULL;
+static iree_thread_local int iree_hal_streaming_thread_token_storage;
 
 typedef struct iree_hal_streaming_context_stack_t {
   iree_hal_streaming_context_t** contexts;
@@ -60,12 +61,16 @@ iree_status_t iree_hal_streaming_context_create(
   context->executable_cache = NULL;
   context->flags = flags;
   context->default_stream = NULL;
+  context->next_stream_id = 1;
   context->peer_contexts = NULL;
   context->peer_count = 0;
   context->peer_capacity = 0;
+  memset(&context->symbol_map, 0, sizeof(context->symbol_map));
   memset(&context->buffer_table, 0, sizeof(context->buffer_table));
   context->pageable_h2d_staging_buffer = NULL;
   context->pageable_h2d_staging_size = 0;
+  iree_atomic_store(&context->capture_stream_count, 0,
+                    iree_memory_order_relaxed);
   context->host_allocator = host_allocator;
   iree_slim_mutex_initialize(&context->mutex);
 
@@ -118,10 +123,16 @@ iree_status_t iree_hal_streaming_context_create(
 
   // Allocate stream tracking array.
   if (iree_status_is_ok(status)) {
-    status = iree_allocator_malloc(
-        host_allocator,
-        sizeof(iree_hal_streaming_stream_t*) * context->stream_capacity,
-        (void**)&context->streams);
+    iree_host_size_t stream_array_size = 0;
+    if (IREE_UNLIKELY(!iree_host_size_checked_mul(context->stream_capacity,
+                                                  sizeof(context->streams[0]),
+                                                  &stream_array_size))) {
+      status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "stream list capacity overflow");
+    } else {
+      status = iree_allocator_malloc(host_allocator, stream_array_size,
+                                     (void**)&context->streams);
+    }
   }
 
   // Create default stream.
@@ -157,13 +168,9 @@ static void iree_hal_streaming_context_destroy(
     iree_allocator_free(context->host_allocator, context->peer_contexts);
   }
 
-  // Synchronize all streams before cleanup to ensure all operations complete.
-  // This is particularly important for the default stream which may have
-  // pending command buffers with allocated arena blocks.
-  if (context->default_stream) {
-    iree_status_ignore(
-        iree_hal_streaming_stream_synchronize(context->default_stream));
-  }
+  // Synchronize all streams before detaching them from the context; pending
+  // command buffers require the context/device to flush correctly.
+  iree_status_ignore(iree_hal_streaming_context_synchronize(context));
 
   iree_hal_streaming_memory_release_pageable_staging(context);
 
@@ -183,8 +190,7 @@ static void iree_hal_streaming_context_destroy(
   // This releases the list's references, which may trigger stream destruction.
   while (context->stream_count > 0) {
     iree_hal_streaming_stream_t* stream = context->streams[0];
-    // Clear context pointer to prevent unregister from being called again
-    // during stream destruction.
+    // Detach surviving user-owned streams from the context being destroyed.
     stream->context = NULL;
     // Remove from list (swap with last).
     context->streams[0] = context->streams[context->stream_count - 1];
@@ -238,6 +244,10 @@ iree_hal_streaming_context_flags_t iree_hal_streaming_context_flags(
 iree_hal_streaming_context_t* iree_hal_streaming_context_current(void) {
   iree_hal_streaming_context_t* context = iree_hal_streaming_current_context;
   return context;
+}
+
+uintptr_t iree_hal_streaming_current_thread_token(void) {
+  return (uintptr_t)&iree_hal_streaming_thread_token_storage;
 }
 
 void iree_hal_streaming_context_set_current(
@@ -582,13 +592,32 @@ iree_status_t iree_hal_streaming_context_register_stream(
 
   // Grow array if needed (double capacity).
   if (context->stream_count >= context->stream_capacity) {
-    iree_host_size_t new_capacity = context->stream_capacity * 2;
-    status = iree_allocator_realloc(
-        context->host_allocator,
-        sizeof(iree_hal_streaming_stream_t*) * new_capacity,
-        (void**)&context->streams);
+    iree_host_size_t new_capacity = 0;
+    iree_host_size_t allocation_size = 0;
+    if (IREE_UNLIKELY(!iree_host_size_checked_mul(context->stream_capacity, 2,
+                                                  &new_capacity) ||
+                      !iree_host_size_checked_mul(new_capacity,
+                                                  sizeof(context->streams[0]),
+                                                  &allocation_size))) {
+      status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "stream list capacity overflow");
+    } else {
+      status = iree_allocator_realloc(context->host_allocator, allocation_size,
+                                      (void**)&context->streams);
+    }
     if (iree_status_is_ok(status)) {
       context->stream_capacity = new_capacity;
+    }
+  }
+
+  if (iree_status_is_ok(status)) {
+    if (context->next_stream_id == 0 || context->next_stream_id > UINT32_MAX) {
+      status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "stream identifier space exhausted");
+    } else {
+      const unsigned long long device_id =
+          ((unsigned long long)context->device_ordinal + 1ull) << 32;
+      stream->stream_id = device_id | context->next_stream_id++;
     }
   }
 
@@ -625,9 +654,9 @@ void iree_hal_streaming_context_unregister_stream(
 
   iree_slim_mutex_unlock(&context->stream_list_mutex);
 
-  // Release the list's reference to the stream.
-  // This is safe because stream->context was cleared before calling unregister,
-  // so if this release triggers destroy, it won't try to unregister again.
+  // Release the list's reference after unlinking. The caller holds another
+  // reference while requesting unregister, so the stream cannot be destroyed
+  // out from under this operation.
   if (found) {
     iree_hal_streaming_stream_release(stream);
   }
@@ -635,30 +664,69 @@ void iree_hal_streaming_context_unregister_stream(
   IREE_TRACE_ZONE_END(z0);
 }
 
-iree_status_t iree_hal_streaming_context_wait_idle(
-    iree_hal_streaming_context_t* context, iree_timeout_t timeout) {
+// Takes a retained snapshot of the current stream list so callers can wait or
+// synchronize without holding the list mutex across potentially blocking work.
+static iree_status_t iree_hal_streaming_context_snapshot_streams(
+    iree_hal_streaming_context_t* context,
+    iree_hal_streaming_stream_t*** out_streams, iree_host_size_t* out_count) {
   IREE_ASSERT_ARGUMENT(context);
-  IREE_TRACE_ZONE_BEGIN(z0);
+  IREE_ASSERT_ARGUMENT(out_streams);
+  IREE_ASSERT_ARGUMENT(out_count);
+  *out_streams = NULL;
+  *out_count = 0;
 
-  // Make temporary retained copy of streams to avoid use-after-free if another
-  // thread comes in and tries to delete the stream.
   iree_slim_mutex_lock(&context->stream_list_mutex);
   const iree_host_size_t count = context->stream_count;
-  iree_hal_streaming_stream_t** temp_streams = NULL;
+  iree_hal_streaming_stream_t** streams = NULL;
   iree_status_t status = iree_ok_status();
   if (count > 0) {
-    status = iree_allocator_malloc(context->host_allocator,
-                                   sizeof(temp_streams[0]) * count,
-                                   (void**)&temp_streams);
+    iree_host_size_t streams_size = 0;
+    if (IREE_UNLIKELY(!iree_host_size_checked_mul(count, sizeof(streams[0]),
+                                                  &streams_size))) {
+      status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "stream snapshot size overflow");
+    } else {
+      status = iree_allocator_malloc(context->host_allocator, streams_size,
+                                     (void**)&streams);
+    }
     if (iree_status_is_ok(status)) {
       for (iree_host_size_t i = 0; i < count; ++i) {
-        temp_streams[i] = context->streams[i];
-        iree_hal_streaming_stream_retain(temp_streams[i]);
+        streams[i] = context->streams[i];
+        if (streams[i]) {
+          iree_hal_streaming_stream_retain(streams[i]);
+        }
       }
     }
   }
   iree_slim_mutex_unlock(&context->stream_list_mutex);
 
+  if (iree_status_is_ok(status)) {
+    *out_streams = streams;
+    *out_count = count;
+  }
+  return status;
+}
+
+static void iree_hal_streaming_context_release_stream_snapshot(
+    iree_hal_streaming_context_t* context,
+    iree_hal_streaming_stream_t** streams, iree_host_size_t count) {
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    iree_hal_streaming_stream_release(streams[i]);
+  }
+  if (streams) {
+    iree_allocator_free(context->host_allocator, streams);
+  }
+}
+
+iree_status_t iree_hal_streaming_context_wait_idle(
+    iree_hal_streaming_context_t* context, iree_timeout_t timeout) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_TRACE_ZONE_BEGIN(z0);
+
+  iree_hal_streaming_stream_t** temp_streams = NULL;
+  iree_host_size_t count = 0;
+  iree_status_t status = iree_hal_streaming_context_snapshot_streams(
+      context, &temp_streams, &count);
   if (!iree_status_is_ok(status)) {
     IREE_TRACE_ZONE_END(z0);
     return status;
@@ -669,72 +737,51 @@ iree_status_t iree_hal_streaming_context_wait_idle(
     status = iree_hal_streaming_stream_synchronize(temp_streams[i]);
   }
 
-  // Release temporary references.
-  for (iree_host_size_t i = 0; i < count; ++i) {
-    iree_hal_streaming_stream_release(temp_streams[i]);
-  }
-
-  if (temp_streams) {
-    iree_allocator_free(context->host_allocator, temp_streams);
-  }
+  iree_hal_streaming_context_release_stream_snapshot(context, temp_streams,
+                                                     count);
 
   IREE_TRACE_ZONE_END(z0);
   return status;
 }
 
-iree_status_t iree_hal_streaming_context_synchronize(
-    iree_hal_streaming_context_t* context) {
+static iree_status_t iree_hal_streaming_context_synchronize_streams(
+    iree_hal_streaming_context_t* context, bool include_non_blocking_streams) {
   IREE_ASSERT_ARGUMENT(context);
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  // Synchronize all registered streams.
-  // Per CUDA/HIP semantics, hipDeviceSynchronize waits for all streams.
-  // Make a copy of stream pointers and retain them to avoid use-after-free
-  // if another thread destroys a stream while we're synchronizing.
-  iree_slim_mutex_lock(&context->stream_list_mutex);
-  const iree_host_size_t count = context->stream_count;
   iree_hal_streaming_stream_t** streams_copy = NULL;
-  iree_status_t status = iree_ok_status();
-  if (count > 0) {
-    status = iree_allocator_malloc(context->host_allocator,
-                                   sizeof(streams_copy[0]) * count,
-                                   (void**)&streams_copy);
-    if (iree_status_is_ok(status)) {
-      for (iree_host_size_t i = 0; i < count; ++i) {
-        streams_copy[i] = context->streams[i];
-        if (streams_copy[i]) {
-          iree_hal_streaming_stream_retain(streams_copy[i]);
-        }
-      }
-    }
-  }
-  iree_slim_mutex_unlock(&context->stream_list_mutex);
-
+  iree_host_size_t count = 0;
+  iree_status_t status = iree_hal_streaming_context_snapshot_streams(
+      context, &streams_copy, &count);
   if (!iree_status_is_ok(status)) {
     IREE_TRACE_ZONE_END(z0);
     return status;
   }
 
-  // Synchronize all streams (now safe since we hold references).
+  // Synchronize streams from the retained snapshot. Legacy default stream
+  // ordering excludes non-blocking streams, while device/context-wide
+  // synchronization includes them.
   for (iree_host_size_t i = 0; i < count; ++i) {
-    if (streams_copy[i]) {
-      if (iree_status_is_ok(status)) {
-        status = iree_hal_streaming_stream_synchronize(streams_copy[i]);
-      }
-      iree_hal_streaming_stream_release(streams_copy[i]);
+    if (!iree_status_is_ok(status)) break;
+    iree_hal_streaming_stream_t* stream = streams_copy[i];
+    if (!stream) continue;
+    if (!include_non_blocking_streams &&
+        (stream->flags & IREE_HAL_STREAMING_STREAM_FLAG_NON_BLOCKING)) {
+      continue;
     }
+    status = iree_hal_streaming_stream_synchronize(stream);
   }
 
-  if (streams_copy) {
-    iree_allocator_free(context->host_allocator, streams_copy);
-  }
+  iree_hal_streaming_context_release_stream_snapshot(context, streams_copy,
+                                                     count);
 
   if (!iree_status_is_ok(status)) {
     IREE_TRACE_ZONE_END(z0);
     return status;
   }
 
-  // Also synchronize the default stream (which may not be in the streams list).
+  // Also synchronize the default stream, which may not be in the streams list.
+  // The legacy default stream always participates in its own ordering.
   if (context->default_stream) {
     IREE_RETURN_AND_END_ZONE_IF_ERROR(
         z0, iree_hal_streaming_stream_synchronize(context->default_stream));
@@ -744,33 +791,27 @@ iree_status_t iree_hal_streaming_context_synchronize(
   return iree_ok_status();
 }
 
+iree_status_t iree_hal_streaming_context_synchronize(
+    iree_hal_streaming_context_t* context) {
+  return iree_hal_streaming_context_synchronize_streams(
+      context, /*include_non_blocking_streams=*/true);
+}
+
+iree_status_t iree_hal_streaming_context_synchronize_legacy_default(
+    iree_hal_streaming_context_t* context) {
+  return iree_hal_streaming_context_synchronize_streams(
+      context, /*include_non_blocking_streams=*/false);
+}
+
 iree_status_t iree_hal_streaming_context_wait_all_submitted(
     iree_hal_streaming_context_t* context) {
   IREE_ASSERT_ARGUMENT(context);
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  // Wait for all already-submitted work on all streams WITHOUT flushing.
-  // This is safe to call from any thread and won't interfere with other
-  // threads' in-progress recordings.
-  iree_slim_mutex_lock(&context->stream_list_mutex);
-  const iree_host_size_t count = context->stream_count;
   iree_hal_streaming_stream_t** streams_copy = NULL;
-  iree_status_t status = iree_ok_status();
-  if (count > 0) {
-    status = iree_allocator_malloc(context->host_allocator,
-                                   sizeof(streams_copy[0]) * count,
-                                   (void**)&streams_copy);
-    if (iree_status_is_ok(status)) {
-      for (iree_host_size_t i = 0; i < count; ++i) {
-        streams_copy[i] = context->streams[i];
-        if (streams_copy[i]) {
-          iree_hal_streaming_stream_retain(streams_copy[i]);
-        }
-      }
-    }
-  }
-  iree_slim_mutex_unlock(&context->stream_list_mutex);
-
+  iree_host_size_t count = 0;
+  iree_status_t status = iree_hal_streaming_context_snapshot_streams(
+      context, &streams_copy, &count);
   if (!iree_status_is_ok(status)) {
     IREE_TRACE_ZONE_END(z0);
     return status;
@@ -782,13 +823,11 @@ iree_status_t iree_hal_streaming_context_wait_all_submitted(
       if (iree_status_is_ok(status)) {
         status = iree_hal_streaming_stream_wait_submitted(streams_copy[i]);
       }
-      iree_hal_streaming_stream_release(streams_copy[i]);
     }
   }
 
-  if (streams_copy) {
-    iree_allocator_free(context->host_allocator, streams_copy);
-  }
+  iree_hal_streaming_context_release_stream_snapshot(context, streams_copy,
+                                                     count);
 
   if (!iree_status_is_ok(status)) {
     IREE_TRACE_ZONE_END(z0);
