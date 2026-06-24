@@ -34,6 +34,8 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void
 iree_hal_amdgpu_device_tsan_initialize_queue_state(
     iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT queue_state,
     uint8_t* IREE_AMDGPU_RESTRICT shadow_base, uint64_t shadow_size,
+    uint32_t clear_workgroup_size, uint32_t reserved0,
+    uint64_t clear_byte_stride,
     const iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT
         queue_state_template);
 

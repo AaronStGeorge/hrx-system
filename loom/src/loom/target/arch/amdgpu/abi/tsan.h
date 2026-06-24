@@ -24,11 +24,6 @@ extern "C" {
 
 #define LOOM_AMDGPU_TSAN_CONFIG_GLOBAL_NAME "iree_tsan_config"
 
-enum loom_amdgpu_tsan_aql_layout_e {
-  // Log2 byte length of an AQL packet slot.
-  LOOM_AMDGPU_TSAN_AQL_PACKET_BYTE_SHIFT = 6u,
-};
-
 enum loom_amdgpu_tsan_config_layout_e {
   // Total byte length of the TSAN runtime config record.
   LOOM_AMDGPU_TSAN_CONFIG_BYTE_LENGTH = 96u,
@@ -46,9 +41,9 @@ enum loom_amdgpu_tsan_config_layout_e {
   LOOM_AMDGPU_TSAN_CONFIG_WORKGROUP_CAPACITY_OFFSET = 48u,
   // Offset of the TSAN shadow entry byte size.
   LOOM_AMDGPU_TSAN_CONFIG_SHADOW_ENTRY_SIZE_OFFSET = 52u,
-  // Offset of the queue AQL ring base pointer.
+  // Offset of the host-observed queue AQL ring base pointer.
   LOOM_AMDGPU_TSAN_CONFIG_QUEUE_AQL_BASE_OFFSET = 56u,
-  // Offset of the queue AQL ring slot mask.
+  // Offset of the host packet ID queue AQL ring slot mask.
   LOOM_AMDGPU_TSAN_CONFIG_QUEUE_AQL_SLOT_MASK_OFFSET = 64u,
   // Offset of the queue-local TSAN state pointer.
   LOOM_AMDGPU_TSAN_CONFIG_QUEUE_STATE_BASE_OFFSET = 72u,

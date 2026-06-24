@@ -17,9 +17,7 @@ extern "C" {
 // Immutable identity for one logical AMDGPU host queue.
 //
 // Executable-load paths use this cold-path metadata to publish queue-specific
-// globals without adding per-dispatch host bookkeeping. Queue-local device code
-// uses |aql_ring_base| and |aql_ring_mask| to derive a shadow slot from the
-// active AQL dispatch packet.
+// globals without adding per-dispatch host bookkeeping.
 typedef struct iree_hal_amdgpu_queue_scope_t {
   // One-bit HAL queue affinity selecting this queue.
   iree_hal_queue_affinity_t queue_affinity;
@@ -33,10 +31,11 @@ typedef struct iree_hal_amdgpu_queue_scope_t {
   // Queue ordinal relative to |physical_device_ordinal|.
   iree_host_size_t physical_queue_ordinal;
 
-  // Host-observed base address of the HSA AQL packet ring.
+  // Host-observed base address of the HSA AQL packet ring. This is metadata,
+  // not a device-addressing contract.
   uint64_t aql_ring_base;
 
-  // Power-of-two packet-ring slot mask.
+  // Power-of-two packet-ring slot mask for host packet IDs.
   uint64_t aql_ring_mask;
 
   // Queue-owned TSAN state facts used for executable-global publication.

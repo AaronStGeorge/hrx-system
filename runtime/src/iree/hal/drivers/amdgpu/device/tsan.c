@@ -30,6 +30,9 @@ void iree_hal_amdgpu_device_tsan_emplace_queue_initialize(
       (uint32_t)IREE_AMDGPU_MAX(
           1ull, IREE_AMDGPU_MIN(required_workgroup_count, max_workgroup_count)),
       1, 1};
+  kernargs->clear_workgroup_size = workgroup_size;
+  kernargs->reserved0 = 0;
+  kernargs->clear_byte_stride = (uint64_t)workgroup_count[0] * workgroup_size;
   iree_hal_amdgpu_device_dispatch_emplace_packet(
       queue_initialize_kernel_args, workgroup_count,
       /*dynamic_workgroup_local_memory=*/0, dispatch_packet, kernarg_ptr);
@@ -41,14 +44,16 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void
 iree_hal_amdgpu_device_tsan_initialize_queue_state(
     iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT queue_state,
     uint8_t* IREE_AMDGPU_RESTRICT shadow_base, uint64_t shadow_size,
+    uint32_t clear_workgroup_size, uint32_t reserved0,
+    uint64_t clear_byte_stride,
     const iree_hal_amdgpu_tsan_queue_state_t* IREE_AMDGPU_RESTRICT
         queue_state_template) {
-  const uint64_t byte_index = iree_hal_amdgpu_device_global_linear_id_1d();
-  const iree_hsa_kernel_dispatch_packet_t* dispatch_ptr =
-      iree_amdgcn_dispatch_ptr();
-  const uint64_t byte_stride = dispatch_ptr->grid_size[0];
+  (void)reserved0;
+  const uint64_t byte_index =
+      (uint64_t)iree_hal_amdgpu_device_group_id_x() * clear_workgroup_size +
+      iree_hal_amdgpu_device_local_id_x();
 
-  for (uint64_t i = byte_index; i < shadow_size; i += byte_stride) {
+  for (uint64_t i = byte_index; i < shadow_size; i += clear_byte_stride) {
     shadow_base[i] = 0;
   }
 

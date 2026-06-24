@@ -24,11 +24,6 @@
 // ABI version for |iree_hal_amdgpu_tsan_queue_state_t|.
 #define IREE_HAL_AMDGPU_TSAN_QUEUE_STATE_ABI_VERSION_0 0u
 
-enum iree_hal_amdgpu_tsan_aql_layout_t {
-  // Log2 byte length of an AQL packet slot.
-  IREE_HAL_AMDGPU_TSAN_AQL_PACKET_BYTE_SHIFT = 6u,
-};
-
 // Bitfield specifying properties of the TSAN configuration.
 typedef uint32_t iree_hal_amdgpu_tsan_config_flags_t;
 enum iree_hal_amdgpu_tsan_config_flag_bits_t {
@@ -100,9 +95,9 @@ enum iree_hal_amdgpu_tsan_queue_state_flag_bits_t {
 
 // Runtime-published TSAN configuration read by instrumented device code.
 //
-// Queue-scoped executable variants publish queue-specific packet geometry so
-// device code can derive a queue-local dispatch slot from the active AQL packet
-// pointer without host per-dispatch mutation.
+// Queue-scoped executable variants publish queue-specific shadow storage so
+// device code can derive a queue-local dispatch slot from the dispatch ID
+// without host per-dispatch mutation.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   // Size of this record in bytes for forward-compatible parsing.
   uint32_t record_length;
@@ -125,8 +120,9 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_config_t {
   // Bytes in each shadow entry.
   uint32_t shadow_entry_size;
   // Host-observed base of the owning queue AQL ring, or 0 when unavailable.
+  // This is metadata, not a device-addressing contract.
   uint64_t queue_aql_base;
-  // Power-of-two AQL packet slot mask used with the active AQL packet pointer.
+  // Power-of-two AQL packet slot mask for host packet IDs.
   uint64_t queue_aql_slot_mask;
   // Device-visible iree_hal_amdgpu_tsan_queue_state_t pointer, or zero.
   uint64_t queue_state_base;
@@ -152,9 +148,8 @@ IREE_AMDGPU_STATIC_ASSERT(
 // Queue-owned TSAN state read by instrumented kernels.
 //
 // One state record exists for each logical AMDGPU host queue when queue-scoped
-// TSAN support is enabled. The record owns the stable AQL and shadow geometry
-// needed by payload kernels to derive queue-local shadow slots from their
-// active AQL packet pointer.
+// TSAN support is enabled. The record owns the stable queue shadow geometry
+// used by payload kernels.
 typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_queue_state_t {
   // Size of this record in bytes for forward-compatible parsing.
   uint32_t record_length;
@@ -172,9 +167,10 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_queue_state_t {
   uint32_t reserved0;
   // Number of queue-local dispatch shadow slots available.
   uint32_t shadow_slot_count;
-  // Host-observed base address of the HSA AQL packet ring.
+  // Host-observed base address of the HSA AQL packet ring. This is metadata,
+  // not a device-addressing contract.
   uint64_t aql_ring_base;
-  // Power-of-two packet-ring slot mask.
+  // Power-of-two packet-ring slot mask for host packet IDs.
   uint64_t aql_ring_mask;
   // Reserved for future queue state. Must be zero.
   uint64_t reserved1;
@@ -268,18 +264,24 @@ typedef struct IREE_AMDGPU_ALIGNAS(8)
   void* shadow_base;
   // Byte length of |shadow_base|.
   uint64_t shadow_size;
+  // Workgroup size used by the shadow clear dispatch.
+  uint32_t clear_workgroup_size;
+  // Reserved for future queue initialization state. Must be zero.
+  uint32_t reserved0;
+  // Total workitems launched by the shadow clear dispatch.
+  uint64_t clear_byte_stride;
   // Device pointer to the queue header template in this kernarg record.
   const iree_hal_amdgpu_tsan_queue_state_t* queue_state_template;
   // Header value written to |queue_state| after mutable storage is cleared.
   iree_hal_amdgpu_tsan_queue_state_t queue_state_template_value;
 } iree_hal_amdgpu_tsan_queue_initialize_args_t;
 IREE_AMDGPU_STATIC_ASSERT(
-    sizeof(iree_hal_amdgpu_tsan_queue_initialize_args_t) == 144,
+    sizeof(iree_hal_amdgpu_tsan_queue_initialize_args_t) == 160,
     "TSAN queue initialize args size is part of the device ABI");
 IREE_AMDGPU_STATIC_ASSERT(
     IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_tsan_queue_initialize_args_t,
-                         queue_state_template_value) == 32,
-    "TSAN queue initialize args template follows pointer/size fields");
+                         queue_state_template_value) == 48,
+    "TSAN queue initialize args template follows clear geometry fields");
 
 // TSAN diagnostic payload carried by feedback packets of kind TSAN.
 //
