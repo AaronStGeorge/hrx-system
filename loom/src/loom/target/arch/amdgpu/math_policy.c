@@ -202,6 +202,8 @@ static const loom_target_math_policy_registry_entry_t
          /*.policy=*/&kAmdgpuMathPolicy},
         {/*.contract_set_key=*/IREE_SVL("amdgpu.rdna3.core"),
          /*.policy=*/&kAmdgpuMathPolicy},
+        {/*.contract_set_key=*/IREE_SVL("amdgpu.rdna3_5.core"),
+         /*.policy=*/&kAmdgpuMathPolicy},
         {/*.contract_set_key=*/IREE_SVL("amdgpu.rdna4.core"),
          /*.policy=*/&kAmdgpuMathPolicy},
         {/*.contract_set_key=*/IREE_SVL("amdgpu.rdna4.gfx125x.core"),
