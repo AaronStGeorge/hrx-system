@@ -788,7 +788,34 @@ static iree_status_t iree_hal_amdgpu_executable_calculate_kernarg_block_count(
       layout->total_kernarg_size, out_kernarg_block_count);
 }
 
+static iree_status_t
+iree_hal_amdgpu_executable_query_kernel_descriptor_host_ptr(
+    const iree_hal_amdgpu_libhsa_t* libhsa, uint64_t kernel_object,
+    const iree_hal_amdgpu_kernel_descriptor_t** out_descriptor) {
+  *out_descriptor = NULL;
+  if (kernel_object == 0) return iree_ok_status();
+
+  const void* host_ptr = NULL;
+  const hsa_status_t hsa_status =
+      libhsa->amd_loader.hsa_ven_amd_loader_query_host_address(
+          (void*)(uintptr_t)kernel_object, &host_ptr);
+  if (hsa_status != HSA_STATUS_SUCCESS) {
+    return iree_status_from_hsa_status(__FILE__, __LINE__, hsa_status,
+                                       "hsa_ven_amd_loader_query_host_address",
+                                       "querying kernel object host address");
+  }
+  if (IREE_UNLIKELY(!host_ptr)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU kernel object host address translation returned NULL");
+  }
+
+  *out_descriptor = (const iree_hal_amdgpu_kernel_descriptor_t*)host_ptr;
+  return iree_ok_status();
+}
+
 static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
+    const iree_hal_amdgpu_libhsa_t* libhsa,
     iree_hal_amdgpu_gfxip_version_t gfxip_version,
     const iree_hal_amdgpu_device_kernel_args_t* kernel_args,
     const iree_hal_amdgpu_kernarg_layout_t* kernarg_layout,
@@ -860,14 +887,16 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
   out_descriptor->max_dynamic_workgroup_local_memory =
       UINT32_MAX - kernel_args->group_segment_size;
 
-  // HSA reports the kernel object as the process-addressable AMDHSA descriptor
-  // address. The descriptor also acts as the base for the signed entry offset.
+  // HSA reports the kernel object as the dispatch handle, but CPU-side
+  // descriptor reads must go through the AMD loader host-address translation.
   const uint64_t kernel_object = kernel_args->kernel_object;
   if (IREE_UNLIKELY(kernel_object == 0)) {
     return iree_ok_status();
   }
-  const iree_hal_amdgpu_kernel_descriptor_t* amdhsa_descriptor =
-      (const iree_hal_amdgpu_kernel_descriptor_t*)(uintptr_t)kernel_object;
+  const iree_hal_amdgpu_kernel_descriptor_t* amdhsa_descriptor = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_executable_query_kernel_descriptor_host_ptr(
+          libhsa, kernel_object, &amdhsa_descriptor));
   out_descriptor->pm4_group_segment_fixed_size =
       amdhsa_descriptor->group_segment_fixed_size;
   out_descriptor->pm4_launch_state_valid =
@@ -1578,9 +1607,9 @@ iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
     }
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
-            gfxip_version, &executable->host_kernel_args[kernel_ordinal],
-            kernarg_layout, custom_explicit_kernarg_size,
-            custom_implicit_args_offset,
+            executable->libhsa, gfxip_version,
+            &executable->host_kernel_args[kernel_ordinal], kernarg_layout,
+            custom_explicit_kernarg_size, custom_implicit_args_offset,
             &executable->host_dispatch_descriptors[descriptor_ordinal]),
         "initializing dispatch descriptor for device %" PRIhsz
         " export %" PRIhsz,
