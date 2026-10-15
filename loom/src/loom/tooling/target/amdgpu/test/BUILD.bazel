@@ -322,7 +322,10 @@ loom_test(
     name = "ubsan_test",
     srcs = ["//loom/src/loom/test/corpus/sanitizer:assertion_reporting.loom"],
     # Authored assertions must provision feedback without insertion options.
-    execution_profiles = [AMDGPU_HARDWARE_PROFILE],
+    execution_profiles = [
+        AMDGPU_HARDWARE_PROFILE,
+        RDNA_HARDWARE_PROFILE,
+    ],
 )
 
 loom_test(
