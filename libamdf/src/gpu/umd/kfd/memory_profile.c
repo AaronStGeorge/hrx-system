@@ -36,7 +36,7 @@ static amdf_status_t amdf_gpu_kfd_sdma_describe_site(
   return AMDF_STATUS_OK;
 }
 
-// Coherent GTT and registered pages follow the engine's no-GCR transfer path.
+// GTT and registered pages follow the engine's no-GCR transfer path.
 // This does not imply that compute accesses bypass their own data caches.
 static amdf_status_t amdf_gpu_kfd_sdma_system_describe_site(
     const amdf_memory_site_query_t* query,
@@ -47,8 +47,8 @@ static amdf_status_t amdf_gpu_kfd_sdma_system_describe_site(
                                                           out_description);
   }
   // A remote LOCAL projection retains consumer policy but cannot inherit
-  // the owned SYSTEM backing's host-coherent construction contract.
-  if ((query->flags & AMDF_MEMORY_FLAG_HOST_COHERENT) == 0) {
+  // the owned SYSTEM backing's SDMA path.
+  if ((query->flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) != 0) {
     return amdf_gpu_umd_memory_describe_site(query, out_description);
   }
   return amdf_gpu_kfd_sdma_describe_site(query, out_description);
@@ -101,6 +101,12 @@ static bool amdf_gpu_kfd_query_group_access(
     return false;
   }
   if (backing->memory_class == AMDF_MEMORY_CLASS_SYSTEM) {
+    // The shared KFD allocation fixes the GPU cache policy for every consumer.
+    // A coherent projection cannot be added to cached backing, or vice versa.
+    if (((backing->guaranteed_flags ^ candidate->guaranteed_flags) &
+         AMDF_MEMORY_FLAG_HOST_COHERENT) != 0) {
+      return false;
+    }
     *out_profile = *candidate;
     return true;
   }
@@ -214,18 +220,27 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
       .supported_access =
           AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
   };
-  uint32_t ordinal = 0;
-  if (memory_profile_ordinal == ordinal++) {
+  // Prefer cached GTT for ordinary payloads. Coherent control memory is a
+  // separate construction contract: GMC11 maps it UC, bypassing GPU reuse.
+  const bool coherent_system = memory_profile_ordinal == 1;
+  uint32_t ordinal = 2;
+  if (memory_profile_ordinal < ordinal) {
     profile.memory_class = AMDF_MEMORY_CLASS_SYSTEM;
     profile.roles = AMDF_MEMORY_PROFILE_ROLE_CREATE |
                     AMDF_MEMORY_PROFILE_ROLE_EXPORT |
                     AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
-    profile.guaranteed_flags =
-        AMDF_MEMORY_FLAG_HOST_VISIBLE | AMDF_MEMORY_FLAG_SHAREABLE |
-        AMDF_MEMORY_FLAG_HOST_COHERENT | AMDF_MEMORY_FLAG_DEVICE_ADDRESS;
-    profile.supported_flags =
-        profile.guaranteed_flags | AMDF_MEMORY_FLAG_QUEUE_STORAGE |
-        AMDF_MEMORY_FLAG_MAPPING_SOURCE | AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
+    profile.guaranteed_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE |
+                               AMDF_MEMORY_FLAG_SHAREABLE |
+                               AMDF_MEMORY_FLAG_DEVICE_ADDRESS;
+    if (coherent_system) {
+      profile.guaranteed_flags |= AMDF_MEMORY_FLAG_HOST_COHERENT;
+    }
+    profile.supported_flags = profile.guaranteed_flags |
+                              AMDF_MEMORY_FLAG_MAPPING_SOURCE |
+                              AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
+    if (coherent_system) {
+      profile.supported_flags |= AMDF_MEMORY_FLAG_QUEUE_STORAGE;
+    }
     profile.guaranteed_device_access = AMDF_MEMORY_ACCESS_READ;
     profile.supported_device_access = AMDF_MEMORY_ACCESS_READ |
                                       AMDF_MEMORY_ACCESS_WRITE |
@@ -255,8 +270,9 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     // supply the independent AtomicOps requirement for either mapping.
     // Wait comparisons remain an independent queue capability.
     const amdf_gpu_kfd_ip_version_t* gc = &topology->gc_ip;
-    if (gc->exact && (gc->major == 11 || (gc->major == 12 && gc->minor == 0 &&
-                                          gc->revision <= 1))) {
+    if (coherent_system && gc->exact &&
+        (gc->major == 11 ||
+         (gc->major == 12 && gc->minor == 0 && gc->revision <= 1))) {
       if (topology->host_atomics.supports_32) {
         profile.atomic_operations_32 =
             AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
@@ -319,8 +335,8 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
   if (profile.memory_class == AMDF_MEMORY_CLASS_SYSTEM &&
       (amdf_gpu_kfd_supports_legacy_sdma_visibility(topology) ||
        amdf_gpu_kfd_supports_gfx1151_system_visibility(topology))) {
-    // Both GTT and USERPTR use KFD's COHERENT mapping flags. Physical page
-    // ownership does not change the selected SDMA engine's cache protocol.
+    // Physical page ownership and compute PTE cache policy do not change the
+    // selected SDMA engine's cache protocol. CPU transitions remain separate.
     profile.visibility.describe_site = amdf_gpu_kfd_sdma_system_describe_site;
   }
   *out_profile = profile;

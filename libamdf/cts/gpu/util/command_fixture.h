@@ -52,7 +52,8 @@ class GpuCommandTest : public GpuDeviceFixture {
                                  bool* out_matches) override;
   void TearDown() override;
   void CreateMemory(amdf_memory_access_t access, uint64_t byte_length,
-                    GpuMemory** out_memory);
+                    GpuMemory** out_memory,
+                    amdf_memory_flags_t flags = AMDF_MEMORY_FLAG_HOST_COHERENT);
   // Uses the exact profile and access inputs already queried by the caller.
   void CreateMemory(amdf_memory_scope_t* scope,
                     const amdf_memory_create_info_t& create_info,

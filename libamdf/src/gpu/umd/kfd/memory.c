@@ -80,7 +80,9 @@ static void amdf_gpu_kfd_memory_plan(
       plan->native_flags |= KFD_IOC_ALLOC_MEM_FLAGS_PUBLIC;
     }
   } else {
-    plan->native_flags |= KFD_IOC_ALLOC_MEM_FLAGS_COHERENT;
+    if ((plan->flags & AMDF_MEMORY_FLAG_HOST_COHERENT) != 0) {
+      plan->native_flags |= KFD_IOC_ALLOC_MEM_FLAGS_COHERENT;
+    }
     if ((profile->roles & AMDF_MEMORY_PROFILE_ROLE_REGISTER) != 0) {
       const uintptr_t pointer = (uintptr_t)create_info->registered_host_pointer;
       plan->host_byte_offset = pointer & (device->page_size - 1);
@@ -206,8 +208,10 @@ static amdf_memory_host_description_t amdf_gpu_umd_memory_describe_host(
     amdf_memory_flags_t flags) {
   (void)external_memory_type;
   const amdf_gpu_umd_device_t* device = data;
-  const bool write_back = (flags & AMDF_MEMORY_FLAG_HOST_COHERENT) != 0;
   const bool device_local = (flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) != 0;
+  // GTT and caller-owned pages have ordinary CPU mappings independently of
+  // the GPU PTE cache policy. Only local VRAM uses a WC aperture.
+  const bool write_back = !device_local;
   const uint32_t line_size = write_back ? device->cache_line_size : 0;
   amdf_cache_transition_t flush = {0};
   if (write_back) {
@@ -219,13 +223,6 @@ static amdf_memory_host_description_t amdf_gpu_umd_memory_describe_host(
         .host_fence_before = AMDF_HOST_CACHE_FENCE_X86_MFENCE,
         .host_fence_after = AMDF_HOST_CACHE_FENCE_X86_MFENCE,
         .range_granularity = line_size,
-    };
-  } else if (!device_local) {
-    flush = (amdf_cache_transition_t){
-        .kind = AMDF_CACHE_TRANSITION_KIND_GLOBAL,
-        .executor = AMDF_CACHE_TRANSITION_EXECUTOR_HOST_DIRECT,
-        .host_operation = AMDF_HOST_CACHE_OPERATION_FLUSH,
-        .host_fence_after = AMDF_HOST_CACHE_FENCE_X86_MFENCE,
     };
   } else if (device->hdp != NULL) {
     flush = (amdf_cache_transition_t){
@@ -446,7 +443,7 @@ amdf_status_t amdf_gpu_umd_host_mapping_cache_control(
     amdf_gpu_umd_host_mapping_t* mapping, amdf_host_cache_operation_t operation,
     uint64_t memory_byte_offset, uint64_t byte_length) {
   const amdf_gpu_umd_memory_t* memory = (amdf_gpu_umd_memory_t*)mapping;
-  if ((memory->flags & AMDF_MEMORY_FLAG_HOST_COHERENT) != 0) {
+  if ((memory->flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) == 0) {
     // GPU snooping does not make this backing coherent with other consumers.
     // Explicit CPU operations cover the requested bytes even on coherent GTT.
     amdf_linux_host_cache_transfer(
@@ -455,8 +452,7 @@ amdf_status_t amdf_gpu_umd_host_mapping_cache_control(
   } else if (byte_length != 0) {
     // WC VRAM views first drain host stores into the device aperture.
     _mm_mfence();
-    if (operation == AMDF_HOST_CACHE_OPERATION_FLUSH &&
-        (memory->flags & AMDF_MEMORY_FLAG_DEVICE_LOCAL) != 0) {
+    if (operation == AMDF_HOST_CACHE_OPERATION_FLUSH) {
       return amdf_gpu_kfd_hdp_publish_host_writes(memory->device->hdp);
     }
   }
