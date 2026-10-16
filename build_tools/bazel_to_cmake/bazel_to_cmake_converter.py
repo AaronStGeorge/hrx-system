@@ -1233,6 +1233,11 @@ class BuildFileFunctions(object):
             "iree_generated_files requires an explicit CMake projection"
         )
 
+    def objc_library(self, tags=None, **kwargs):
+        if self._should_skip_target(tags=tags):
+            return
+        raise NotImplementedError("objc_library requires an explicit CMake projection")
+
     def iree_msvc_masm_library(self, **kwargs):
         # CMakeLists.txt owns its equivalent custom ml.exe/ml64.exe invocation.
         pass

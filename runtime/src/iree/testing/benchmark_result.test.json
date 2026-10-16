@@ -10,6 +10,24 @@
       "stdout": {"contains": ["BM_Success"], "not_contains": ["ERROR OCCURRED"]}
     },
     {
+      "name": "invalid CPU latency policy fails before running benchmarks",
+      "run": {
+        "tool": "benchmark",
+        "args": ["--benchmark_filter=BM_Success", "--benchmark_min_time=1x", "--benchmark_cpu_latency_us=-2"]
+      },
+      "exit": 1,
+      "stderr": {"contains": ["--benchmark_cpu_latency_us must be -1 or nonnegative"]},
+      "stdout": {"not_contains": ["BM_Success"]}
+    },
+    {
+      "name": "CPU latency policy is recorded in JSON results",
+      "run": {
+        "tool": "benchmark",
+        "args": ["--benchmark_filter=BM_Success", "--benchmark_min_time=1x", "--benchmark_cpu_latency_us=-1", "--benchmark_format=json"]
+      },
+      "stdout": {"contains": ["\"cpu_latency_us\": \"default\"", "\"low_latency\": \"false\"", "BM_Success"]}
+    },
+    {
       "name": "reported C++ error",
       "run": {
         "tool": "benchmark",

@@ -19,6 +19,9 @@ if(IREE_TARGET_HAS_THREADS AND IREE_BUILD_BENCHMARKS)
     DEPS
       iree::third_party::google_benchmark
       iree::base
+      iree::base::internal
+      iree::base::threading::latency
+      iree::base::tooling::flags
     PUBLIC
   )
 else()

@@ -280,6 +280,10 @@ void iree_benchmark_initialize(int* argc, char** argv);
 // Runs all registered benchmarks specified by the command line flags.
 // Must be called after iree_benchmark_initialize and zero or more benchmarks
 // have been registered with iree_benchmark_register.
+// --benchmark_low_latency requests native latency-sensitive power management
+// across the run. --benchmark_cpu_latency_us optionally requests a numeric CPU
+// idle latency limit on supported platforms and implies low-latency mode. Both
+// the selected mode and requested limit are recorded in the result context.
 // Returns false if no benchmarks matched or a reported run failed. A run
 // skipped without an error is successful. The disabled benchmark backend
 // returns true without running anything.

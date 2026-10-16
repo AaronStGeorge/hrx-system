@@ -16,7 +16,22 @@
 #include "benchmark/benchmark.h"
 #include "iree/base/api.h"
 #include "iree/base/internal/debugging.h"
+#include "iree/base/threading/latency.h"
+#include "iree/base/tooling/flags.h"
 #include "iree/testing/benchmark.h"
+
+IREE_FLAG(bool, benchmark_low_latency, false,
+          "Request native latency-sensitive power management for the entire "
+          "benchmark run. May increase power consumption; Linux's native "
+          "policy requests zero CPU idle latency. Use "
+          "--benchmark_cpu_latency_us to relax that limit on Linux.");
+IREE_FLAG(
+    int32_t, benchmark_cpu_latency_us, -1,
+    "Maximum CPU idle-state exit latency in microseconds during the "
+    "benchmark run; a nonnegative value implies --benchmark_low_latency. "
+    "-1 uses native policy when low-latency mode is enabled. A numeric "
+    "limit requires Linux and access to /dev/cpu_dma_latency. Acquisition "
+    "failures fail the run.");
 
 //===----------------------------------------------------------------------===//
 // Benchmarking tools
@@ -265,7 +280,35 @@ class BenchmarkResultReporter final : public benchmark::BenchmarkReporter {
 }  // namespace
 
 bool iree_benchmark_run_specified(void) {
+  if (FLAG_benchmark_cpu_latency_us < -1) {
+    fprintf(stderr, "--benchmark_cpu_latency_us must be -1 or nonnegative\n");
+    return false;
+  }
+  iree_latency_scope_t latency_scope = {};
+  const bool low_latency =
+      FLAG_benchmark_low_latency || FLAG_benchmark_cpu_latency_us >= 0;
+  if (low_latency) {
+    auto options = iree_latency_scope_options_default();
+    options.maximum_cpu_idle_latency_us = FLAG_benchmark_cpu_latency_us;
+    iree_status_t status = iree_latency_scope_begin(options, &latency_scope);
+    if (!iree_status_is_ok(status)) {
+      iree_status_fprint(stderr, status);
+      iree_status_free(status);
+      return false;
+    }
+  }
+  benchmark::AddCustomContext("low_latency", low_latency ? "true" : "false");
+  benchmark::AddCustomContext(
+      "cpu_latency_us", FLAG_benchmark_cpu_latency_us < 0
+                            ? "default"
+                            : std::to_string(FLAG_benchmark_cpu_latency_us));
   BenchmarkResultReporter reporter;
   const size_t matched_count = benchmark::RunSpecifiedBenchmarks(&reporter);
+  iree_status_t status = iree_latency_scope_end(&latency_scope);
+  if (!iree_status_is_ok(status)) {
+    iree_status_fprint(stderr, status);
+    iree_status_free(status);
+    return false;
+  }
   return matched_count != 0 && reporter.succeeded();
 }
