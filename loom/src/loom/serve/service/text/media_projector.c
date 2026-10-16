@@ -178,6 +178,7 @@ typedef enum loom_serve_text_media_phase_e {
   MEDIA_PREPARING,
   MEDIA_PREPARED,
   MEDIA_BATCHING,
+  MEDIA_SPECIALIZING,
   MEDIA_WAITING,
   MEDIA_RUNNING,
   MEDIA_FAILED,
@@ -259,6 +260,7 @@ iree_status_t loom_serve_text_media_projector_allocate(
   loom_serve_text_readiness_initialize(executor, proactor,
                                        &projector->readiness);
   loom_serve_text_readiness_set_observer(&projector->readiness, observer);
+  loom_serve_finite_model_set_observer(model, observer);
   *out_projector = projector;
   return iree_ok_status();
 }
@@ -494,6 +496,7 @@ bool loom_serve_text_media_projector_is_pending(
     const loom_serve_text_media_projector_t* projector) {
   return projector && (projector->phase == MEDIA_PREPARING ||
                        projector->phase == MEDIA_BATCHING ||
+                       projector->phase == MEDIA_SPECIALIZING ||
                        projector->phase == MEDIA_RUNNING);
 }
 
@@ -502,6 +505,7 @@ void loom_serve_text_media_projector_set_observer(
     loom_serve_wake_callback_t observer) {
   if (projector) {
     loom_serve_text_readiness_set_observer(&projector->readiness, observer);
+    loom_serve_finite_model_set_observer(projector->model, observer);
   }
 }
 
@@ -511,8 +515,8 @@ const char* loom_serve_text_media_projector_phase(
     return NULL;
   }
   static const char* const phases[] = {
-      "image_gather", "image_prepare", "image_prepared", "image_batch",
-      "image_wait",   "image_execute", "image_failed",
+      "image_gather",     "image_prepare", "image_prepared", "image_batch",
+      "image_specialize", "image_wait",    "image_execute",  "image_failed",
   };
   return phases[projector->phase];
 }
@@ -578,7 +582,7 @@ iree_status_t loom_serve_text_media_projector_advance(
           projector->cohort_count, projector->cohort, status);
       loom_serve_text_media_projector_complete(projector);
     } else {
-      projector->phase = MEDIA_WAITING;
+      projector->phase = MEDIA_SPECIALIZING;
     }
   } else if (projector->phase == MEDIA_RUNNING) {
     if (!loom_serve_text_readiness_take_device(&projector->readiness,
@@ -595,7 +599,31 @@ iree_status_t loom_serve_text_media_projector_advance(
     projector->phase = MEDIA_FAILED;
     return status;
   }
-  if (projector->phase == MEDIA_WAITING) {
+  if (projector->phase == MEDIA_SPECIALIZING) {
+    bool live = false;
+    for (iree_host_size_t i = 0; i < projector->cohort_count; ++i) {
+      live |= projector->cohort[i]->request != NULL;
+    }
+    const bool cancel = stopping || !live;
+    bool complete = false;
+    status = loom_serve_finite_model_advance_batch(projector->model, cancel,
+                                                   &complete);
+    if (!iree_status_is_ok(status)) {
+      loom_serve_finite_model_release_batch(projector->model);
+      status = loom_serve_text_media_projector_reject(
+          projector->cohort_count, projector->cohort, status);
+      loom_serve_text_media_projector_complete(projector);
+    } else if (complete) {
+      if (cancel) {
+        loom_serve_finite_model_release_batch(projector->model);
+        loom_serve_text_media_projector_complete(projector);
+      } else {
+        projector->phase = MEDIA_WAITING;
+      }
+      *out_progress = true;
+    }
+  }
+  if (iree_status_is_ok(status) && projector->phase == MEDIA_WAITING) {
     bool live = false;
     for (iree_host_size_t i = 0; i < projector->cohort_count; ++i) {
       live |= projector->cohort[i]->request != NULL;
@@ -608,11 +636,8 @@ iree_status_t loom_serve_text_media_projector_advance(
       *out_progress = true;
     } else {
       loom_serve_residency_admission_t admission;
-      status = loom_serve_finite_model_bind_batch(projector->model);
-      if (iree_status_is_ok(status)) {
-        status = loom_serve_residency_try_admit(
-            loom_serve_finite_model_residency(projector->model), &admission);
-      }
+      status = loom_serve_residency_try_admit(
+          loom_serve_finite_model_residency(projector->model), &admission);
       if (iree_status_is_ok(status) &&
           admission == LOOM_SERVE_RESIDENCY_ADMISSION_ACQUIRED) {
         status = loom_serve_text_media_projector_submit(projector);
@@ -658,6 +683,8 @@ void loom_serve_text_media_projector_free(
   if (!projector) {
     return;
   }
+  loom_serve_finite_model_set_observer(projector->model,
+                                       (loom_serve_wake_callback_t){0});
   for (iree_host_size_t i = 0; i < projector->count; ++i) {
     loom_serve_text_media_job_release(&projector->jobs[i]);
   }

@@ -114,6 +114,26 @@ static iree_status_t loom_serve_model_configuration_options(
   return iree_ok_status();
 }
 
+static iree_status_t loom_serve_model_configuration_specialization_cache(
+    iree_string_view_t value, loom_serve_variant_cache_options_t* cache) {
+  *cache = (loom_serve_variant_cache_options_t){.capacity = 16,
+                                                .max_bytes = 16 * 1024 * 1024};
+  if (!value.data) {
+    return iree_ok_status();
+  }
+  loom_serve_model_configuration_field_t fields[] = {
+      {"capacity", IREE_JSON_VALUE_TYPE_NUMBER},
+      {"max_bytes", IREE_JSON_VALUE_TYPE_NUMBER}};
+  loom_serve_model_configuration_fields_t context = {IREE_ARRAYSIZE(fields),
+                                                     fields};
+  IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
+      value, loom_serve_model_configuration_field_visit, &context));
+  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_size(
+      &fields[0], 0, INT32_MAX, &cache->capacity));
+  return loom_serve_model_configuration_size(&fields[1], 0, IREE_HOST_SIZE_MAX,
+                                             &cache->max_bytes);
+}
+
 static iree_status_t loom_serve_model_configuration_component(
     iree_string_view_t value,
     loom_serve_finite_component_configuration_t* component,
@@ -122,7 +142,8 @@ static iree_status_t loom_serve_model_configuration_component(
       {"prepare", IREE_JSON_VALUE_TYPE_STRING},
       {"control", IREE_JSON_VALUE_TYPE_STRING},
       {"assets", IREE_JSON_VALUE_TYPE_STRING},
-      {"options", IREE_JSON_VALUE_TYPE_OBJECT}};
+      {"options", IREE_JSON_VALUE_TYPE_OBJECT},
+      {"specialization_cache", IREE_JSON_VALUE_TYPE_OBJECT}};
   loom_serve_model_configuration_fields_t context = {IREE_ARRAYSIZE(fields),
                                                      fields};
   IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
@@ -133,8 +154,10 @@ static iree_status_t loom_serve_model_configuration_component(
       &fields[1], host_allocator, &component->control));
   IREE_RETURN_IF_ERROR(loom_serve_model_configuration_string(
       &fields[2], host_allocator, &component->assets));
-  return loom_serve_model_configuration_options(&fields[3], host_allocator,
-                                                &component->options);
+  IREE_RETURN_IF_ERROR(loom_serve_model_configuration_options(
+      &fields[3], host_allocator, &component->options));
+  return loom_serve_model_configuration_specialization_cache(
+      fields[4].value, &component->specialization_cache);
 }
 
 static iree_status_t loom_serve_model_configuration_source_count(
@@ -186,6 +209,7 @@ typedef enum loom_serve_model_definition_field_e {
   DEFINITION_PREFIX_CACHE_CAPACITY,
   DEFINITION_COMMAND_QUANTUM,
   DEFINITION_VARIANT_CAPACITY,
+  DEFINITION_SPECIALIZATION_CACHE,
   DEFINITION_IMAGE,
 } loom_serve_model_definition_field_t;
 
@@ -358,7 +382,11 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
                     (1u << LOOM_SERVE_MODEL_KIND_EMBEDDING) |
                     (1u << LOOM_SERVE_MODEL_KIND_DECISION)},
       [DEFINITION_IMAGE] = {"image", IREE_JSON_VALUE_TYPE_OBJECT,
-                            .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)}};
+                            .kinds = (1u << LOOM_SERVE_MODEL_KIND_TEXT)},
+      [DEFINITION_SPECIALIZATION_CACHE] = {
+          "specialization_cache", IREE_JSON_VALUE_TYPE_OBJECT,
+          .kinds = (1u << LOOM_SERVE_MODEL_KIND_EMBEDDING) |
+                   (1u << LOOM_SERVE_MODEL_KIND_DECISION)}};
   loom_serve_model_configuration_fields_t context = {IREE_ARRAYSIZE(fields),
                                                      fields};
   IREE_RETURN_IF_ERROR(iree_json_enumerate_object_typed(
@@ -431,6 +459,12 @@ static iree_status_t loom_serve_model_configuration_definition_parse(
   if (model->kind == LOOM_SERVE_MODEL_KIND_IMAGE) {
     return loom_serve_model_configuration_image(fields, &model->image,
                                                 host_allocator);
+  }
+  if (model->kind == LOOM_SERVE_MODEL_KIND_EMBEDDING ||
+      model->kind == LOOM_SERVE_MODEL_KIND_DECISION) {
+    IREE_RETURN_IF_ERROR(loom_serve_model_configuration_specialization_cache(
+        fields[DEFINITION_SPECIALIZATION_CACHE].value,
+        &model->specialization_cache));
   }
   return loom_serve_model_configuration_string(&fields[DEFINITION_ASSETS],
                                                host_allocator, &model->assets);

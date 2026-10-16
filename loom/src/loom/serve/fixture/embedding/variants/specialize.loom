@@ -1,0 +1,60 @@
+func.decl @prepare_batch_base(%state: buffer, %tags: buffer, %ranges: buffer, %packed: buffer) -> (i32, buffer, buffer)
+
+func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
+
+func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
+
+global.rodata.def @request_root = bytes("656d626564")
+
+global.rodata.def @request_units = bytes("666978747572652e756e697473")
+
+// Repack the same ragged cohort at its actual token/row extent. The requested
+// executable specializes launch dimensions and command workspace together.
+func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %packed: buffer) -> (i32, buffer, buffer) {
+  %old_stage, %old_payload, %plan = func.call @prepare_batch_base(%state, %tags, %ranges, %packed) : (buffer, buffer, buffer, buffer) -> (i32, buffer, buffer)
+  %origin = index.constant 0 : offset
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : offset
+  %c16 = index.constant 16 : offset
+  %c20 = index.constant 20 : offset
+  %c0_i64 = scalar.constant 0 : i64
+  %header = buffer.view %old_payload[%origin] : buffer -> view<4xi32>
+  %rows32 = view.load %header[0] : view<4xi32> -> i32
+  %rows64 = scalar.extui %rows32 : i32 to i64
+  %bounded_rows = scalar.assume %rows64 [range(%rows64, 1, 256)] : i64
+  %rows = index.cast %bounded_rows : i64 to index
+  %records = buffer.view %old_payload[%c16] : buffer -> view<[%rows]x4xi32>
+  %tokens64 = scf.for %i = [%c0 to %rows step %c1](%sum = %c0_i64 : i64) -> (i64) {
+    %length32 = view.load %records[%i, 1] : view<[%rows]x4xi32> -> i32
+    %length = scalar.extui %length32 : i32 to i64
+    %next = scalar.addi %sum, %length : i64
+    scf.yield %next : i64
+  }
+  %units64 = scalar.addi %tokens64, %rows64 : i64
+  %bounded_units = scalar.assume %units64 [range(%units64, 1, 256)] : i64
+  %units = index.cast %bounded_units : i64 to index
+  %bounded_tokens = scalar.assume %tokens64 [range(%tokens64, 1, 256)] : i64
+  %tokens = index.cast %bounded_tokens : i64 to index
+  %state_view = buffer.view %state[%origin] : buffer -> view<1xi64>
+  %old_units64 = view.load %state_view[0] : view<1xi64> -> i64
+  %bounded_old_units = scalar.assume %old_units64 [range(%old_units64, 1, 256)] : i64
+  %old_units = index.cast %bounded_old_units : i64 to index
+  %old_metadata = index.scale %old_units, %c16 : index, offset -> offset
+  %old_tokens = index.add %c16, %old_metadata : offset
+  %metadata_bytes = index.scale %rows, %c16 : index, offset -> offset
+  %header_bytes = index.add %c16, %metadata_bytes : offset
+  %new_metadata = index.scale %units, %c16 : index, offset -> offset
+  %new_tokens = index.add %c16, %new_metadata : offset
+  %token_bytes = index.scale %tokens, %c4 : index, offset -> offset
+  %body_bytes = index.scale %units, %c20 : index, offset -> offset
+  %payload_bytes = index.add %c16, %body_bytes : offset
+  %payload = buffer.alloca<private> align(16) %payload_bytes : buffer
+  buffer.copy %old_payload[%origin], %payload[%origin], %header_bytes
+  buffer.copy %old_payload[%old_tokens], %payload[%new_tokens], %token_bytes
+  %root = global.load @request_root : buffer
+  %key = global.load @request_units : buffer
+  %stage = func.call @stage(%root, %units64) : (buffer, i64) -> (i32)
+  func.call @config_i64(%stage, %key, %units64) : (i32, buffer, i64)
+  func.return %stage, %payload, %plan : i32, buffer, buffer
+}

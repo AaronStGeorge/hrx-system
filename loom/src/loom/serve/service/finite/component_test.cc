@@ -204,7 +204,10 @@ class FiniteComponentTest : public ::testing::Test {
     const iree_host_size_t rows = 1;
     IREE_ASSERT_OK(
         loom_serve_finite_model_prepare_batch(model, 1, &prepared, &rows));
-    IREE_ASSERT_OK(loom_serve_finite_model_bind_batch(model));
+    bool code_ready = false;
+    IREE_ASSERT_OK(
+        loom_serve_finite_model_advance_batch(model, false, &code_ready));
+    ASSERT_TRUE(code_ready);
     iree_vm_buffer_release(prepared.bytes);
     iree_vm_buffer_release(input);
     loom_serve_residency_admission_t admission;

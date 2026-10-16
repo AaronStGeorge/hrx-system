@@ -1,11 +1,13 @@
 target.decl @fixture_target
 
+config.decl @fixture.projector_rows : %value: index where [range(%value, 1, 64)]
+
 kernel.decl @project() launch(%input: buffer, %output: buffer)
 
 kernel.def target(@fixture_target) @project_bias() {
-  %c64 = index.constant 64 : index
+  %rows = config.get @fixture.projector_rows : index
   %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c64, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  kernel.launch.config workgroups(%rows, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch(%bias: view<1xi32>, %input: buffer, %output: buffer) {
   %row = kernel.workgroup.id<x> : index
   %origin = index.constant 0 : offset

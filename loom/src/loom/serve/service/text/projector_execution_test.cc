@@ -28,9 +28,17 @@ class PixelProjectorExecutionTest : public SourceTextServiceTest {
         .sources = projector_document_.value().sources,
         .asset_directory = IREE_SV("."),
         .options = IREE_SV("{}"),
+        .specialization_cache = {2, 1024 * 1024},
     };
     IREE_ASSERT_OK(loom_serve_finite_model_allocate(
         device_, &options, host_allocator_, &projector_));
+    loom_serve_finite_model_set_observer(
+        projector_, {[](void* data) {
+                       iree_notification_post(
+                           static_cast<iree_notification_t*>(data),
+                           IREE_ALL_WAITERS);
+                     },
+                     loom_serve_http_server_notification(server_)});
   }
 
   void TearDown() override {
@@ -57,6 +65,23 @@ class PixelProjectorExecutionTest : public SourceTextServiceTest {
     int32_t bits;
     std::memcpy(&bits, &value, sizeof(bits));
     return bits + image_row;
+  }
+
+  void ResolveCode() {
+    auto* notification = loom_serve_http_server_notification(server_);
+    bool complete = false;
+    while (!complete) {
+      const auto ticket = iree_notification_prepare_wait(notification);
+      auto status =
+          loom_serve_finite_model_advance_batch(projector_, false, &complete);
+      if (complete || !iree_status_is_ok(status)) {
+        iree_notification_cancel_wait(notification);
+        IREE_ASSERT_OK(status);
+      } else {
+        iree_notification_commit_wait(notification, ticket, IREE_DURATION_ZERO,
+                                      IREE_TIME_INFINITE_FUTURE);
+      }
+    }
   }
 
   // Source ownership outlives asynchronous finite model work.
@@ -114,7 +139,7 @@ TEST_F(PixelProjectorExecutionTest, RgbAndRgbaCohortConditionsRetainedText) {
   const iree_host_size_t expected_rows[] = {3, 2};
   IREE_ASSERT_OK(loom_serve_finite_model_prepare_batch(
       projector_, prepared_.size(), prepared_.data(), expected_rows));
-  IREE_ASSERT_OK(loom_serve_finite_model_bind_batch(projector_));
+  ASSERT_NO_FATAL_FAILURE(ResolveCode());
   loom_serve_residency_admission_t admission;
   IREE_ASSERT_OK(loom_serve_residency_try_admit(
       loom_serve_finite_model_residency(projector_), &admission));

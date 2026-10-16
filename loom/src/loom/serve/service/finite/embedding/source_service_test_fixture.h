@@ -40,7 +40,8 @@ struct loom_serve_test_embedding_model_lifecycle_t {
   static void Release(iree_task_process_t* process);
 
   iree_status_t Run(loom_serve_device_t* device,
-                    const loom_serve_finite_model_options_t& options);
+                    const loom_serve_finite_model_options_t& options,
+                    iree_allocator_t host_allocator = iree_allocator_system());
 
   iree_status_t Retire(loom_serve_device_t* device);
 

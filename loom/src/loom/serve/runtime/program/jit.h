@@ -71,6 +71,9 @@ typedef struct loom_serve_jit_cache_storage_t {
   iree_host_size_t count;
   // Requested host bytes for keys, entry records, and the lookup array.
   iree_host_size_t host_bytes;
+  // Lookup capacity included in host_bytes; retained as catalog infrastructure
+  // independently of individual native entries.
+  iree_host_size_t index_bytes;
   // Artifact bytes supplied to the loader, counted once per cached executable.
   iree_host_size_t code_bytes;
 } loom_serve_jit_cache_storage_t;

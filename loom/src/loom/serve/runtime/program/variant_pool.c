@@ -11,7 +11,7 @@
 struct loom_serve_variant_entry_t {
   // Pool owning this stable entry through all producer and consumer borrows.
   loom_serve_variant_pool_t* pool;
-  // Next cached entry in creation order, manipulated only by the owner.
+  // Next cached entry in owner-selected traversal order.
   struct loom_serve_variant_entry_t* next;
   // Previous cached entry, allowing eviction without another identity search.
   struct loom_serve_variant_entry_t* previous;
@@ -46,7 +46,7 @@ struct loom_serve_variant_pool_t {
   iree_slim_mutex_t mutex;
   // Nonblocking owner scheduling target, protected by mutex.
   loom_serve_wake_callback_t observer;
-  // First retained entry in the creation-ordered cache.
+  // First retained entry in owner-selected traversal order.
   loom_serve_variant_entry_t* head;
   // Last cached entry; appending never moves existing producer payloads.
   loom_serve_variant_entry_t* tail;
@@ -168,6 +168,28 @@ loom_serve_variant_entry_t* loom_serve_variant_pool_first(
 loom_serve_variant_entry_t* loom_serve_variant_entry_next(
     const loom_serve_variant_entry_t* entry) {
   return entry->next;
+}
+
+void loom_serve_variant_entry_touch(loom_serve_variant_entry_t* entry) {
+  loom_serve_variant_pool_t* pool = entry->pool;
+  if (pool->tail == entry) {
+    return;
+  }
+  if (entry->previous) {
+    entry->previous->next = entry->next;
+  } else {
+    pool->head = entry->next;
+  }
+  entry->next->previous = entry->previous;
+  entry->previous = pool->tail;
+  entry->next = NULL;
+  pool->tail->next = entry;
+  pool->tail = entry;
+}
+
+iree_status_t loom_serve_variant_entry_status(
+    const loom_serve_variant_entry_t* entry) {
+  return iree_status_clone(entry->completion.status);
 }
 
 bool loom_serve_variant_pool_pending(const loom_serve_variant_pool_t* pool) {

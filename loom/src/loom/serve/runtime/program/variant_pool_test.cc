@@ -117,6 +117,8 @@ TEST_F(VariantPoolTest, CapacityIncludesProducersAndRetainedFailures) {
   ASSERT_TRUE(loom_serve_variant_pool_snapshot(pool_, failed_id, &snapshot));
   EXPECT_EQ(snapshot.phase, LOOM_SERVE_VARIANT_FAILED);
   EXPECT_EQ(snapshot.code, IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_serve_variant_entry_status(entries[0]));
   EXPECT_EQ(std::string(snapshot.message.data, snapshot.message.size),
             "bad program");
   EXPECT_EQ(snapshot.compilation->diagnostics[0].line, 23u);
@@ -253,6 +255,28 @@ TEST_F(VariantPoolTest, OwnerTraversalAndEvictionPreserveStableEntries) {
   EXPECT_EQ(disposed_, 4u);
   EXPECT_EQ(loom_serve_variant_pool_first(pool_), nullptr);
   EXPECT_EQ(loom_serve_variant_pool_count(pool_), 0u);
+}
+
+TEST_F(VariantPoolTest, OwnerRecencyDoesNotChangeIdentityOrBorrows) {
+  loom_serve_variant_entry_t* entries[2] = {};
+  for (auto& entry : entries) {
+    IREE_ASSERT_OK(loom_serve_variant_pool_begin(pool_, original_id_, &entry));
+    loom_serve_variant_entry_complete(entry, iree_ok_status(), nullptr,
+                                      nullptr);
+  }
+  ASSERT_TRUE(loom_serve_variant_pool_collect(pool_));
+  loom_serve_variant_entry_retain(entries[0]);
+  const auto before = loom_serve_variant_entry_snapshot(entries[0]);
+  loom_serve_variant_entry_touch(entries[0]);
+  loom_serve_variant_entry_touch(entries[0]);
+  EXPECT_EQ(loom_serve_variant_entry_next(original_), entries[1]);
+  EXPECT_EQ(loom_serve_variant_entry_next(entries[1]), entries[0]);
+  EXPECT_EQ(loom_serve_variant_entry_next(entries[0]), nullptr);
+  const auto after = loom_serve_variant_entry_snapshot(entries[0]);
+  EXPECT_EQ(before.id, after.id);
+  EXPECT_EQ(before.users, after.users);
+  IREE_EXPECT_OK(loom_serve_variant_entry_status(entries[0]));
+  loom_serve_variant_entry_release(entries[0]);
 }
 
 }  // namespace

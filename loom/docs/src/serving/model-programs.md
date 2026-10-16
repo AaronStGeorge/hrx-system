@@ -160,6 +160,21 @@ cohort from compatible waiting requests. It does not wait for hypothetical
 arrivals. Batch preparation receives stable request-order ranges over concatenated
 prepared bytes, selects a declared stage and maps physical output back to requests.
 
+Finite `prepare_batch` can also declare stages with the `prepare` capability.
+It uses the same `stage`, `dispatch`, `config`, `config_i64`, and
+`workspace_limit` imports as cold preparation. Returned ordinals follow the
+cold stages and are valid for that invocation. This lets a package specialize
+an actual image geometry or cohort extent without enumerating a size catalog
+at registration. Checkpoint domains remain the cold program's responsibility;
+request stages must preserve their layout and cannot declare new parameters.
+
+The server reuses an exact declaration set within its selected source generation
+or compiles it asynchronously before parameter admission. Other models keep
+running on the shared workers. Cancellation joins accepted compilation before
+releasing its source and invocation, and cached choices are bounded by the
+deployment's [`specialization_cache`](model-documents.md). Neither specialization
+nor image-to-text composition requires downloading hidden features to the host.
+
 The result plan describes physical output bytes separately from the live result
 prefix, then each request's rows and each row's offset/width. Results retain
 their device storage independently of the producing model. Device consumers

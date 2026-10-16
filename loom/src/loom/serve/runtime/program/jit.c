@@ -360,7 +360,8 @@ loom_serve_jit_cache_storage_t loom_serve_jit_cache_storage(
     const loom_serve_jit_t* jit) {
   loom_serve_jit_cache_storage_t storage = {
       .count = jit->natives.count,
-      .host_bytes = jit->natives.capacity * sizeof(*jit->natives.values)};
+      .host_bytes = jit->natives.capacity * sizeof(*jit->natives.values),
+      .index_bytes = jit->natives.capacity * sizeof(*jit->natives.values)};
   for (iree_host_size_t i = 0; i < jit->natives.count; ++i) {
     const loom_serve_jit_native_t* native = jit->natives.values[i];
     const loom_serve_jit_executable_t* executable = native->executable;

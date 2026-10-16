@@ -39,6 +39,8 @@ typedef struct loom_serve_finite_executable_options_t {
   iree_hal_command_buffer_mode_t command_mode;
   // Borrowed runner, initially bound to stages and outliving this owner.
   iree_vm_module_t* runner;
+  // Bounds reusable request products without restricting one active request.
+  loom_serve_variant_cache_options_t cache;
 } loom_serve_finite_executable_options_t;
 
 iree_status_t loom_serve_finite_executables_allocate(
@@ -60,11 +62,26 @@ loom_serve_execution_update_t loom_serve_finite_executables_update(
 void loom_serve_finite_executables_capture(
     loom_serve_finite_executables_t* executables);
 
-// Owner-only publication of the captured table before parameter admission.
-// Workspace reservation may fail. Later management selection cannot change this
-// batch's code. Repeated calls for the same table do no work.
-iree_status_t loom_serve_finite_executables_bind(
-    loom_serve_finite_executables_t* executables);
+// Transfers source declarations after CPU preparation, including NULL for a
+// cold-table invocation. Serialized with owner advance and selection.
+void loom_serve_finite_executables_declare(
+    loom_serve_finite_executables_t* executables,
+    loom_serve_preparation_t* preparation);
+
+// Installs a nonblocking owner wake before accepting compilations. Detachment
+// follows terminal advance of every accepted request compilation.
+void loom_serve_finite_executables_set_observer(
+    loom_serve_finite_executables_t* executables,
+    loom_serve_wake_callback_t observer);
+
+// Resolves request declarations and binds the captured table before parameter
+// admission. A miss submits compilation without waiting; completion schedules
+// another owner turn. Cancellation skips unstarted work but joins accepted
+// producers. Terminal failure retains the batch until release. No checkpoint
+// residency or device work is acquired here.
+iree_status_t loom_serve_finite_executables_advance(
+    loom_serve_finite_executables_t* executables, bool cancel,
+    bool* out_complete);
 
 // Releases an unsubmitted or fully retired batch; no compiler/device wait.
 void loom_serve_finite_executables_release(
