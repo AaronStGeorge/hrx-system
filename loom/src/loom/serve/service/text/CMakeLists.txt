@@ -141,6 +141,8 @@ loom_cc_library(
     "source_cache_test.cc"
   DEPS
     ::source_service_fixture
+    iree::base::internal::arena
+    iree::vm::test_support
     loom::serve::media::image_codec
     loom::serve::media::image_codecs
   TESTONLY
@@ -861,6 +863,7 @@ loom_cc_library(
     iree::async
     iree::async::util::proactor_pool
     iree::base
+    iree::base::internal::arena
     iree::base::threading
     iree::tokenizer
     iree::vm

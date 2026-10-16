@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/async/util/proactor_pool.h"
+#include "iree/base/internal/arena.h"
 #include "iree/base/threading/mutex.h"
 #include "loom/serve/media/image_codec.h"
 #include "loom/serve/runtime/device/device.h"
@@ -1354,6 +1355,10 @@ static iree_status_t loom_serve_text_process_output(void* user_data) {
       z0,
       loom_serve_telemetry_stream_identity(service->telemetry.stream).ordinal);
   IREE_TRACE_ZONE_APPEND_VALUE_I64(z0, service->epoch.start.serial);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(loom_serve_host_block_pool(loom_serve_device_host(
+                            loom_serve_text_model_device(service->model))),
+                        &arena);
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0;
        i < service->epoch.count && iree_status_is_ok(status); ++i) {
@@ -1363,9 +1368,11 @@ static iree_status_t loom_serve_text_process_output(void* user_data) {
           &service->sessions[service->epoch.spans[i].row_index];
       status = loom_serve_text_response_tokens(
           session, service->name, output->output_count, output->tokens,
-          &service->scratch, &service->tool_calls);
+          &service->scratch, &service->tool_calls,
+          iree_arena_allocator(&arena));
     }
   }
+  iree_arena_deinitialize(&arena);
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

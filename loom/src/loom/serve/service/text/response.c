@@ -42,9 +42,10 @@ iree_status_t loom_serve_text_response_error(iree_status_t failure,
 iree_status_t loom_serve_text_response_tokens(
     loom_serve_text_session_t* session, iree_string_view_t name,
     iree_host_size_t count, const int32_t* tokens,
-    iree_string_builder_t* scratch, iree_string_builder_t* tool_calls) {
+    iree_string_builder_t* scratch, iree_string_builder_t* tool_calls,
+    iree_allocator_t scratch_allocator) {
   iree_status_t status = loom_serve_text_session_append_tokens(
-      session, name, count, tokens, scratch, tool_calls);
+      session, name, count, tokens, scratch, tool_calls, scratch_allocator);
   if (!iree_status_is_ok(status)) {
     // Device work completed, but translation cannot establish a client history.
     // Streamed headers are already published; JSON headers are not. Keep the

@@ -33,11 +33,13 @@ iree_status_t loom_serve_text_response_reject(
 // Translates selected tokens into the session packet. Translation failures
 // produce a terminal JSON/SSE error and retain diagnostics for owner
 // publication; transport and row retirement remain with the service. Scratch is
-// exclusively borrowed for this finite CPU operation.
+// exclusively borrowed for this finite CPU operation. scratch_allocator may
+// be a batch arena; no allocation from it survives this call.
 iree_status_t loom_serve_text_response_tokens(
     loom_serve_text_session_t* session, iree_string_view_t name,
     iree_host_size_t count, const int32_t* tokens,
-    iree_string_builder_t* scratch, iree_string_builder_t* tool_calls);
+    iree_string_builder_t* scratch, iree_string_builder_t* tool_calls,
+    iree_allocator_t scratch_allocator);
 
 #ifdef __cplusplus
 }  // extern "C"
