@@ -44,14 +44,19 @@ class GpuProgramAtomicTest : public QueueFixture,
               kernels::program_atomic::kWorkgroupSize);
     ASSERT_EQ(kernel_->private_segment_byte_length, 0u);
     ASSERT_EQ(kernel_->group_segment_byte_length, 0u);
+    // Live control cells need queue-storage policy, not just host coherence.
+    // Arguments are immutable during execution and retain payload policy.
     ASSERT_NO_FATAL_FAILURE(this->CreateMemory(
-        AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &control_));
+        AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &control_,
+        AMDF_MEMORY_FLAG_HOST_COHERENT | AMDF_MEMORY_FLAG_QUEUE_STORAGE));
     ASSERT_NO_FATAL_FAILURE(this->CreateMemory(
         AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
         (sizeof(Record) * (kProducerCount + 2) + 4095) & ~UINT64_C(4095),
-        &records_));
-    ASSERT_NO_FATAL_FAILURE(
-        this->CreateMemory(AMDF_MEMORY_ACCESS_READ, 4096, &arguments_));
+        &records_,
+        AMDF_MEMORY_FLAG_HOST_COHERENT | AMDF_MEMORY_FLAG_QUEUE_STORAGE));
+    ASSERT_NO_FATAL_FAILURE(this->CreateMemory(AMDF_MEMORY_ACCESS_READ, 4096,
+                                               &arguments_,
+                                               AMDF_MEMORY_FLAG_HOST_COHERENT));
     ASSERT_EQ(control_->info.memory_class, AMDF_MEMORY_CLASS_SYSTEM);
     ASSERT_NE(control_->access_info.flags & AMDF_MEMORY_FLAG_HOST_COHERENT, 0u);
     ASSERT_NE(records_->access_info.flags & AMDF_MEMORY_FLAG_HOST_COHERENT, 0u);

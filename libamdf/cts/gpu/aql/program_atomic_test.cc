@@ -15,7 +15,8 @@ TEST_P(AqlProgramAtomicTest,
        ContendedShaderUpdatesReachTheHostBeforeCompletion) {
   GpuMemory* completion = nullptr;
   ASSERT_NO_FATAL_FAILURE(CreateMemory(
-      AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &completion));
+      AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &completion,
+      AMDF_MEMORY_FLAG_HOST_COHERENT | AMDF_MEMORY_FLAG_QUEUE_STORAGE));
   auto& signal = *static_cast<aql::Signal*>(completion->host.pointer);
   signal = aql::UserSignal();
   GpuUserQueue* queue = nullptr;
