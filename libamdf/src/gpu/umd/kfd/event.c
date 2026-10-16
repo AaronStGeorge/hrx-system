@@ -71,8 +71,8 @@ amdf_status_t amdf_gpu_umd_event_signal(amdf_gpu_umd_event_t* event) {
   return result == 0 ? AMDF_STATUS_OK : amdf_linux_error(errno);
 }
 
-// KFD treats millisecond values above INT32_MAX as infinite. Cap finite waits
-// and preserve the caller's absolute deadline across native timeout chunks.
+// KFD clamps finite millisecond values to INT32_MAX. Split longer waits into
+// native chunks while preserving the caller's absolute deadline.
 static uint32_t amdf_gpu_kfd_event_timeout_milliseconds(uint64_t nanoseconds) {
   if (nanoseconds == AMDF_TIMEOUT_INFINITE) {
     return UINT32_MAX;
