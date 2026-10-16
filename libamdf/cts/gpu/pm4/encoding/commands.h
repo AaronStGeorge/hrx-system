@@ -75,6 +75,11 @@ class Pm4CommandWriter {
   // backing and writes a known 32-bit value at bottom-of-pipe. The confirmed
   // TC/L2 write has no interrupt, scalar-store or CP-DMA completion request.
   void ReleaseSystem32(uint64_t target_address, uint32_t value);
+  // Releases to SYSTEM, writes the event mailbox DWORD, then generates an
+  // interrupt with the event's context. The caller supplies already-qualified
+  // native producer operands and retains the event through this packet's tail.
+  void ReleaseSystemInterrupt32(uint64_t target_address, uint32_t value,
+                                uint32_t interrupt_context);
   // Samples the GPU clock at bottom-of-pipe with a confirmed TC/L2 write.
   // This cacheless release requires an explicit visibility/ownership join.
   void ReleaseGpuClock64(uint64_t target_address);

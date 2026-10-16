@@ -132,8 +132,8 @@ typedef struct amdf_api_t {
   /// Destroys a materialized device after its dependent resources are released.
   ///
   /// The caller must have exclusive access. Returns
-  /// `AMDF_STATUS_CODE_BUSY` without native mutation while a queue or context
-  /// remains live. Memory lifetimes are caller preconditions:
+  /// `AMDF_STATUS_CODE_BUSY` without native mutation while a queue, queue
+  /// mapping, event, or context borrows it. Memory lifetimes are preconditions:
   /// dependent memory must already be destroyed, and libamdf neither retains
   /// the device through memory nor tracks memory to diagnose premature device
   /// destruction. Violating that precondition is undefined behavior.

@@ -288,6 +288,32 @@ iree_cc_test(
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND IREE_ARCH STREQUAL "x86_64" AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_test(
+  NAME
+    event_test
+  SRCS
+    "event_test.cc"
+  LINKOPTS
+    "-Wl,--wrap=ioctl"
+    "-Wl,--wrap=amdf_gpu_kfd_instance_create_event"
+  DEPS
+    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>
+    ::device_state
+    ::event
+    ::instance
+    amdf::headers
+    iree::third_party::google_test
+    iree::third_party::google_test_main
+    libamdf::src::allocator
+    libamdf::src::gpu::umd::event
+    libamdf::src::platform::linux::file
+  LABELS
+    "iree-build-requirement=libamdf"
+    "iree-build-requirement=libamdf.gpu"
+)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND IREE_ARCH STREQUAL "x86_64" AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
 iree_cc_library(
   NAME
     doorbell
@@ -645,12 +671,32 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND IREE_ARCH STREQUAL "x86_64" AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
 iree_cc_library(
   NAME
+    event
+  SRCS
+    "event.c"
+  DEPS
+    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>
+    ::device_state
+    ::instance
+    amdf::headers
+    libamdf::src::allocator
+    libamdf::src::gpu::umd::event
+    libamdf::src::platform::linux::file
+    libamdf::src::wait
+  PUBLIC
+)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND IREE_ARCH STREQUAL "x86_64" AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_library(
+  NAME
     kfd
   DEPS
     ::buffer
     ::clock
     ::device
     ::endpoint_profile
+    ::event
     ::instance
     ::kernel_queue
     ::memory
