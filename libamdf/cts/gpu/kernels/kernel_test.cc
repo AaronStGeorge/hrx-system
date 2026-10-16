@@ -36,6 +36,8 @@
 #include "libamdf/cts/gpu/kernels/private_roundtrip.h"
 #include "libamdf/cts/gpu/kernels/private_roundtrip_kernels.h"
 #include "libamdf/cts/gpu/kernels/product_test.h"
+#include "libamdf/cts/gpu/kernels/program_atomic.h"
+#include "libamdf/cts/gpu/kernels/program_atomic_kernels.h"
 #include "libamdf/cts/gpu/kernels/shader_event.h"
 #include "libamdf/cts/gpu/kernels/shader_event_kernels.h"
 #include "libamdf/cts/gpu/kernels/transform.h"
@@ -45,6 +47,20 @@
 namespace {
 
 using kernels::testing::CheckArgumentLayout;
+
+TEST(KernelTest, ProgramAtomicProductsPreserveTheCallerContract) {
+  namespace protocol = kernels::program_atomic;
+  for (const auto& kernel : protocol::kKernels.variants) {
+    SCOPED_TRACE(kernel.target);
+    CheckArgumentLayout(
+        kernel, protocol::kArgumentByteOffsets, protocol::kArgumentByteLengths,
+        protocol::kArgumentValueKinds, sizeof(protocol::Arguments),
+        alignof(protocol::Arguments));
+    EXPECT_EQ(kernel.workgroup_size(), protocol::kWorkgroupSize);
+    EXPECT_EQ(kernel.group_segment_byte_length, 0u);
+    EXPECT_EQ(kernel.private_segment_byte_length, 0u);
+  }
+}
 
 void CheckKernargAndWorkgroupInputs(const kernels::Kernel& kernel) {
   // The caller supplies the kernarg pointer in two user SGPRs. The compiler may

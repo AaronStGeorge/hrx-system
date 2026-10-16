@@ -115,6 +115,7 @@ iree_cc_library(
     "lds_test.cc"
     "pattern_fill_test.cc"
     "private_test.cc"
+    "program_atomic_test.cc"
     "publication_test.cc"
     "resource_test.cc"
     "scope_test.cc"
@@ -148,6 +149,7 @@ iree_cc_library(
     libamdf::cts::gpu::kernels::transform_alternate_kernels
     libamdf::cts::gpu::kernels::transform_kernels
     libamdf::cts::gpu::pm4::encoding::memory_commands
+    libamdf::cts::gpu::util::program_atomic_fixture
     libamdf::cts::gpu::util::shader_event_fixture
   TESTONLY
   ALWAYSLINK

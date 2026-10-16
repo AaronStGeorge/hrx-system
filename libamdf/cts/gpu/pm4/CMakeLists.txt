@@ -107,6 +107,7 @@ iree_cc_library(
     "lds_test.cc"
     "mapping_test.cc"
     "observation_stream_test.cc"
+    "program_atomic_test.cc"
     "queued_mapping_test.cc"
     "resource_test.cc"
     "retirement_test.cc"
@@ -130,6 +131,7 @@ iree_cc_library(
     libamdf::cts::gpu::kernels::transform_kernels
     libamdf::cts::gpu::pm4::encoding::commands
     libamdf::cts::gpu::util::command_fixture
+    libamdf::cts::gpu::util::program_atomic_fixture
     libamdf::cts::gpu::util::shader_event_fixture
     libamdf::cts::gpu::util::sparse_mapping_layout
     libamdf::cts::util::wait

@@ -110,4 +110,23 @@ iree_cc_library(
 )
 endif()
 
+if(IREE_ARCH STREQUAL "x86_64" AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_library(
+  NAME
+    program_atomic_fixture
+  HDRS
+    "program_atomic_fixture.h"
+  DEPS
+    ::memory
+    ::user_queue
+    amdf::headers
+    iree::third_party::google_test
+    libamdf::cts::gpu::kernels::program_atomic
+    libamdf::cts::gpu::kernels::program_atomic_kernels
+    libamdf::cts::util::wait
+  TESTONLY
+  PUBLIC
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
