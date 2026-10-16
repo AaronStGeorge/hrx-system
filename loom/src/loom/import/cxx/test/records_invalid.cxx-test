@@ -5,6 +5,12 @@ union Value { unsigned integer; float real; };
 Value entry(Value value) { return value; }
 
 // ====
+// Aggregate defaults can observe only the completed initialization prefix.
+// ERROR@+1: LOWERING/059 "member is read before its initialization is complete"
+struct Value { unsigned first = second; unsigned second = 9u; };
+Value entry() { return Value{}; }
+
+// ====
 // Base subobjects need an explicit source-object contract.
 struct Base { unsigned base; };
 struct Value : Base { unsigned member; };
@@ -58,15 +64,3 @@ unsigned entry(Value value) { return __builtin_bit_cast(unsigned, value); }
 struct Value { unsigned member; };
 // ERROR@+1: LOWERING/059 "unsupported C++ type: ::Value"
 [[loom::kernel]] void entry(Value value, unsigned* output) { output[0]=value.member; }
-
-// ====
-// Default construction has distinct object zero-initialization rules.
-struct Value { unsigned first=1, second=2; };
-// ERROR@+1: LOWERING/059 "default record construction requires source object initialization semantics"
-Value entry() { return Value(); }
-
-// ====
-// Member-dependent defaults need an object-under-construction binding.
-// ERROR@+1: LOWERING/059 "member-dependent initialization requires source object initialization semantics"
-struct Value { unsigned first=1, second=first+2; };
-Value entry() { return Value{}; }

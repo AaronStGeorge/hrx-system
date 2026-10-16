@@ -281,10 +281,12 @@ class Types {
   const ArrayPartition* array(const cxx::Type* input, cxx::AST* owner);
   // Direct lookup of a member slice retained by its owning record's admission.
   const MemberPartition& member(cxx::FieldSymbol* field, cxx::AST* owner);
-  // Admits a resolved constructor only when the source partition represents
-  // a trivial copy or move. A null constructor requires no lifecycle action.
-  void admit_copy(cxx::FunctionSymbol* constructor, const cxx::Type* type,
-                  cxx::AST* owner);
+  // Admits a resolved constructor when the source partition represents a
+  // trivial copy or move, or when an admitted record supplies the default
+  // member-initialization plan. A null constructor requires no lifecycle
+  // action.
+  void admit_construction(cxx::FunctionSymbol* constructor,
+                          const cxx::Type* type, cxx::AST* owner);
   // Admits mutation of the source object before projection removes qualifiers.
   // A const pointer binding is immutable; a pointer to const has an immutable
   // pointee but the binding itself may still change.

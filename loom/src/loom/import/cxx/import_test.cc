@@ -208,6 +208,26 @@ TEST_F(ImportTest, ViewFacadePreservesItsObjectContractAcrossDataModels) {
   EXPECT_EQ(diagnostic_count_, 0);
 }
 
+TEST_F(ImportTest, RuntimeDefaultMembersPreserveSourceDataModels) {
+  const auto source = IREE_SV(
+      "struct Result { long value; long next = value + 1; };\n"
+      "Result entry(long value) { return Result{value}; }\n");
+  for (auto data_model : {LOOM_CXX_DATA_MODEL_LP64, LOOM_CXX_DATA_MODEL_LLP64,
+                          LOOM_CXX_DATA_MODEL_ILP32}) {
+    SCOPED_TRACE(static_cast<int>(data_model));
+    options_.data_model = data_model;
+    IREE_ASSERT_OK(Import(source));
+    ASSERT_NE(module_, nullptr);
+    auto text = Print();
+    auto type = data_model == LOOM_CXX_DATA_MODEL_LP64 ? "i64" : "i32";
+    auto signature = std::string("func.def public @entry(%value: ") + type +
+                     ") -> (" + type + ", " + type + ")";
+    EXPECT_NE(text.find(signature), std::string::npos);
+    EXPECT_NE(text.find("scalar.addi %value"), std::string::npos);
+  }
+  EXPECT_EQ(diagnostic_count_, 0);
+}
+
 TEST_F(ImportTest, HeaderProviderUsesNormalIncludeSearch) {
   const auto overrides =
       std::filesystem::path("/overrides/").make_preferred().string();

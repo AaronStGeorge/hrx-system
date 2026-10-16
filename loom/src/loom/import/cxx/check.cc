@@ -1300,7 +1300,7 @@ class CheckBody {
     }
     if (auto* cast = cxx::ast_cast<cxx::ImplicitCastExpressionAST>(source)) {
       if (cast->conversionFunction) {
-        types_.admit_copy(cast->conversionFunction, cast->type, source);
+        types_.admit_construction(cast->conversionFunction, cast->type, source);
       }
       if (types_.unqualified(cast->expression->type) ==
           types_.unqualified(cast->type)) {
@@ -1339,7 +1339,8 @@ class CheckBody {
              "check locals require initialized automatic non-volatile const "
              "values");
       }
-      types_.admit_copy(variable->constructor(), variable->type(), declarator);
+      types_.admit_construction(variable->constructor(), variable->type(),
+                                declarator);
       auto value = expression(declarator->initializer);
       values_[variable] = value;
       name(value, variable);
