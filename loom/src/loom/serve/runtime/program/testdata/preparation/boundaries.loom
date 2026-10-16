@@ -138,6 +138,26 @@ func.def public @no_stages() {
   func.return
 }
 
+func.def public @request_stages(%tag: i64) -> (i32, i32) {
+  %root = global.load @root : buffer
+  %key = global.load @key : buffer
+  %command = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
+  %direct = func.call @dispatch(%root, %tag) : (buffer, i64) -> (i32)
+  func.call @config_i64(%command, %key, %tag) : (i32, buffer, i64)
+  func.call @config_i64(%direct, %key, %tag) : (i32, buffer, i64)
+  %workspace = scalar.constant 4096 : i64
+  func.call @workspace_limit(%command, %workspace) : (i32, i64)
+  func.return %command, %direct : i32, i32
+}
+
+func.def public @configure_cold_stage() {
+  %root = global.load @root : buffer
+  %tag = scalar.constant 0 : i64
+  %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
+  func.call @missing_stage() : ()
+  func.return
+}
+
 // Crosses multiple growth boundaries on each independently owned array.
 // The key buffer is reused; every declaration must own its copied spelling.
 func.def public @large_catalog() {
