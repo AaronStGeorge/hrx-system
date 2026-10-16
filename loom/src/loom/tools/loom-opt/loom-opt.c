@@ -427,7 +427,7 @@ static iree_status_t loom_opt_append_shell_quoted(
 }
 
 static iree_status_t loom_opt_append_reproducer_run_line(
-    iree_string_builder_t* builder, bool use_synthetic_pipeline) {
+    iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, "// RUN: loom-opt --verify=%s", FLAG_verify ? "true" : "false"));
   iree_string_view_t pass_report =
@@ -440,10 +440,7 @@ static iree_status_t loom_opt_append_reproducer_run_line(
 
   iree_string_view_t pipeline_symbol =
       iree_string_view_trim(iree_make_cstring_view(FLAG_pipeline));
-  if (use_synthetic_pipeline) {
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-        builder, " --pipeline='@__command_line'"));
-  } else if (!iree_string_view_is_empty(pipeline_symbol)) {
+  if (!iree_string_view_is_empty(pipeline_symbol)) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(builder, " --pipeline="));
     IREE_RETURN_IF_ERROR(
@@ -458,144 +455,6 @@ static iree_status_t loom_opt_append_reproducer_run_line(
     }
   }
   return iree_string_builder_append_cstring(builder, " %s\n");
-}
-
-static bool loom_opt_pass_key_is_printable(iree_string_view_t key) {
-  if (key.size == 0) {
-    return false;
-  }
-  char first = key.data[0];
-  bool valid_start = (first >= 'a' && first <= 'z') ||
-                     (first >= 'A' && first <= 'Z') || first == '_' ||
-                     first == '$';
-  if (!valid_start) {
-    return false;
-  }
-  for (iree_host_size_t i = 1; i < key.size; ++i) {
-    char c = key.data[i];
-    bool valid = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                 (c >= '0' && c <= '9') || c == '_' || c == '$' || c == '-' ||
-                 c == '.';
-    if (!valid) {
-      return false;
-    }
-  }
-  return true;
-}
-
-static iree_status_t loom_opt_append_reproducer_pass_run(
-    iree_string_builder_t* builder, iree_string_view_t indent,
-    const loom_pass_pipeline_entry_spec_t* spec) {
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(builder, indent));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(builder, "pass.run<"));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(builder, spec->name));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ">"));
-  if (!iree_string_view_is_empty(spec->options)) {
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, " {"));
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_string(builder, spec->options));
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "}"));
-  }
-  return iree_string_builder_append_cstring(builder, "\n");
-}
-
-static iree_status_t loom_opt_reproducer_function_group_open(
-    iree_string_builder_t* builder, bool* in_function_group) {
-  if (*in_function_group) {
-    return iree_ok_status();
-  }
-  *in_function_group = true;
-  return iree_string_builder_append_cstring(builder,
-                                            "  pass.for<func> pipeline {\n");
-}
-
-static iree_status_t loom_opt_reproducer_function_group_close(
-    iree_string_builder_t* builder, bool* in_function_group) {
-  if (!*in_function_group) {
-    return iree_ok_status();
-  }
-  *in_function_group = false;
-  return iree_string_builder_append_cstring(builder, "    pass.yield\n  }\n");
-}
-
-static iree_status_t loom_opt_build_reproducer_synthetic_pipeline(
-    iree_string_builder_t* builder, const loom_pass_registry_t* registry,
-    bool* out_use_synthetic_pipeline, iree_allocator_t allocator) {
-  *out_use_synthetic_pipeline = false;
-  iree_string_view_t pipeline_symbol =
-      iree_string_view_trim(iree_make_cstring_view(FLAG_pipeline));
-  iree_flag_string_list_t passes = FLAG_pass_list();
-  if (!iree_string_view_is_empty(pipeline_symbol) || passes.count == 0) {
-    return iree_ok_status();
-  }
-
-  iree_string_builder_t pipeline_builder;
-  iree_string_builder_initialize(allocator, &pipeline_builder);
-  iree_status_t status = iree_string_builder_append_cstring(
-      &pipeline_builder, "pass.pipeline<module> @__command_line {\n");
-
-  iree_string_builder_t pass_list_builder;
-  iree_string_builder_initialize(allocator, &pass_list_builder);
-  if (iree_status_is_ok(status)) {
-    status = loom_opt_join_pass_list(passes, &pass_list_builder);
-  }
-
-  iree_string_view_t remaining = iree_string_builder_view(&pass_list_builder);
-  bool in_function_group = false;
-  while (iree_status_is_ok(status)) {
-    loom_pass_pipeline_entry_spec_t spec = {0};
-    bool has_entry = false;
-    status = loom_pass_pipeline_consume_entry(&remaining, &spec, &has_entry);
-    if (!iree_status_is_ok(status) || !has_entry) {
-      break;
-    }
-    if (!loom_opt_pass_key_is_printable(spec.name)) {
-      iree_string_builder_reset(&pipeline_builder);
-      status = iree_ok_status();
-      break;
-    }
-
-    const loom_pass_descriptor_t* descriptor =
-        loom_pass_registry_lookup(registry, spec.name);
-    const loom_pass_info_t* info = descriptor ? descriptor->info() : NULL;
-    if (info && info->kind == LOOM_PASS_FUNCTION) {
-      status = loom_opt_reproducer_function_group_open(&pipeline_builder,
-                                                       &in_function_group);
-      if (iree_status_is_ok(status)) {
-        status = loom_opt_append_reproducer_pass_run(&pipeline_builder,
-                                                     IREE_SV("    "), &spec);
-      }
-    } else {
-      status = loom_opt_reproducer_function_group_close(&pipeline_builder,
-                                                        &in_function_group);
-      if (iree_status_is_ok(status)) {
-        status = loom_opt_append_reproducer_pass_run(&pipeline_builder,
-                                                     IREE_SV("  "), &spec);
-      }
-    }
-  }
-
-  status = iree_status_join(status, loom_opt_reproducer_function_group_close(
-                                        &pipeline_builder, &in_function_group));
-  if (iree_status_is_ok(status) &&
-      iree_string_builder_size(&pipeline_builder)) {
-    status = iree_string_builder_append_cstring(&pipeline_builder,
-                                                "  pass.yield\n}\n");
-  }
-  if (iree_status_is_ok(status) &&
-      iree_string_builder_size(&pipeline_builder)) {
-    status = iree_string_builder_append_string(
-        builder, iree_string_builder_view(&pipeline_builder));
-  }
-  if (iree_status_is_ok(status) &&
-      iree_string_builder_size(&pipeline_builder)) {
-    *out_use_synthetic_pipeline = true;
-  }
-
-  iree_string_builder_deinitialize(&pass_list_builder);
-  iree_string_builder_deinitialize(&pipeline_builder);
-  return status;
 }
 
 static iree_status_t loom_opt_format_pass_selection_json(
@@ -736,27 +595,11 @@ static iree_status_t loom_opt_write_pass_reproducer(
         &builder, registry, failure_status_code, allocator);
   }
 
-  iree_string_builder_t synthetic_pipeline_builder;
-  iree_string_builder_initialize(allocator, &synthetic_pipeline_builder);
-  bool use_synthetic_pipeline = false;
   if (iree_status_is_ok(status)) {
-    status = loom_opt_build_reproducer_synthetic_pipeline(
-        &synthetic_pipeline_builder, registry, &use_synthetic_pipeline,
-        allocator);
-  }
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_opt_append_reproducer_run_line(&builder, use_synthetic_pipeline);
+    status = loom_opt_append_reproducer_run_line(&builder);
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(&builder, "\n");
-  }
-  if (iree_status_is_ok(status) && use_synthetic_pipeline) {
-    status = iree_string_builder_append_string(
-        &builder, iree_string_builder_view(&synthetic_pipeline_builder));
-    if (iree_status_is_ok(status)) {
-      status = iree_string_builder_append_cstring(&builder, "\n");
-    }
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_string(&builder, source);
@@ -769,7 +612,6 @@ static iree_status_t loom_opt_write_pass_reproducer(
     status = loom_tooling_write_output_file(
         path, iree_string_builder_view(&builder), allocator);
   }
-  iree_string_builder_deinitialize(&synthetic_pipeline_builder);
   iree_string_builder_deinitialize(&builder);
   if (!iree_status_is_ok(status)) {
     return status;

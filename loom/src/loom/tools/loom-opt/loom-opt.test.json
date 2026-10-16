@@ -497,6 +497,114 @@
           ]
         }
       ]
+    },
+    {
+      "name": "replays invalid flat pass options",
+      "steps": [
+        {
+          "run": {
+            "tool": "loom-opt",
+            "args": [
+              "--pass=canonicalize{max-iterations=no}",
+              "--pass-reproducer={tmp}/failure.loom"
+            ]
+          },
+          "stdin": {
+            "text": "func.def @identity(%value: i32) -> (i32) {\n  func.return %value : i32\n}\n"
+          },
+          "exit": 1,
+          "stdout": {
+            "empty": true
+          },
+          "files": [
+            {
+              "path": "{tmp}/failure.loom",
+              "contains": [
+                "// RUN: loom-opt --verify=true --pass='canonicalize{max-iterations=no}' %s"
+              ],
+              "not_contains": [
+                "pass.run<",
+                "@__command_line"
+              ]
+            }
+          ]
+        },
+        {
+          "run": {
+            "tool": "loom-opt",
+            "args": [
+              "--pass=canonicalize{max-iterations=no}",
+              "{tmp}/failure.loom"
+            ]
+          },
+          "exit": 1,
+          "stdout": {
+            "empty": true
+          },
+          "stderr": {
+            "contains": [
+              "option 'max-iterations' expected a uint32 value"
+            ],
+            "not_contains": [
+              "PARSE/"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "replays malformed flat pass syntax",
+      "steps": [
+        {
+          "run": {
+            "tool": "loom-opt",
+            "args": [
+              "--pass=dce{",
+              "--pass-reproducer={tmp}/failure.loom"
+            ]
+          },
+          "stdin": {
+            "text": "func.def @identity(%value: i32) -> (i32) {\n  func.return %value : i32\n}\n"
+          },
+          "exit": 1,
+          "stdout": {
+            "empty": true
+          },
+          "files": [
+            {
+              "path": "{tmp}/failure.loom",
+              "contains": [
+                "// RUN: loom-opt --verify=true --pass='dce{' %s"
+              ],
+              "not_contains": [
+                "pass.run<",
+                "@__command_line"
+              ]
+            }
+          ]
+        },
+        {
+          "run": {
+            "tool": "loom-opt",
+            "args": [
+              "--pass=dce{",
+              "{tmp}/failure.loom"
+            ]
+          },
+          "exit": 1,
+          "stdout": {
+            "empty": true
+          },
+          "stderr": {
+            "contains": [
+              "unterminated pass option dictionary"
+            ],
+            "not_contains": [
+              "PARSE/"
+            ]
+          }
+        }
+      ]
     }
   ]
 }
