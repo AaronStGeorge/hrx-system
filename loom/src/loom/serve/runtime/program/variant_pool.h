@@ -85,7 +85,20 @@ void loom_serve_variant_pool_set_observer(loom_serve_variant_pool_t* pool,
 
 iree_host_size_t loom_serve_variant_pool_count(
     const loom_serve_variant_pool_t* pool);
+// Requested bytes for pool and entry metadata, excluding consumer payloads.
+iree_host_size_t loom_serve_variant_pool_storage_size(
+    const loom_serve_variant_pool_t* pool);
 bool loom_serve_variant_pool_pending(const loom_serve_variant_pool_t* pool);
+
+// Owner-only linear traversal in creation order. Entries are borrowed until
+// removal. Save next before discarding the current entry; consumer payloads
+// remain unavailable until the entry's snapshot reports READY.
+loom_serve_variant_entry_t* loom_serve_variant_pool_first(
+    const loom_serve_variant_pool_t* pool);
+loom_serve_variant_entry_t* loom_serve_variant_entry_next(
+    const loom_serve_variant_entry_t* entry);
+loom_serve_variant_snapshot_t loom_serve_variant_entry_snapshot(
+    const loom_serve_variant_entry_t* entry);
 
 // Reserves one construction against a ready same-pool base. The modality owns
 // input capture, compilation and validation of its resource contract. Success
@@ -129,6 +142,11 @@ void* loom_serve_variant_entry_value(const loom_serve_variant_entry_t* entry);
 // LRU/default policy or ID recycling after removal.
 iree_status_t loom_serve_variant_pool_remove(loom_serve_variant_pool_t* pool,
                                              loom_serve_variant_id_t id);
+
+// Infallible owner eviction after observing a terminal entry with no consumer
+// borrows. Does not search by identity, allocate, or wait. External removal
+// requests use pool_remove to validate identity and lifetime.
+void loom_serve_variant_entry_discard(loom_serve_variant_entry_t* entry);
 
 // Visits stable owner-thread observations in creation order. False means the
 // requested identity/index is absent, not a construction error.

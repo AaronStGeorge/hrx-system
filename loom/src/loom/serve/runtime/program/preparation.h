@@ -135,6 +135,17 @@ void loom_serve_preparation_free(loom_serve_preparation_t* preparation);
 iree_host_size_t loom_serve_preparation_stage_count(
     const loom_serve_preparation_t* preparation);
 
+// Requested owned bytes, including spare array capacity and copied strings.
+// NULL has no storage. This query does not traverse declarations.
+iree_host_size_t loom_serve_preparation_storage_size(
+    const loom_serve_preparation_t* preparation);
+
+// Exact ordered declaration identity, including configuration spelling,
+// workspace policy, and checkpoint domains. Capture ordinal offsets are not
+// part of identity. NULL compares equal only to NULL.
+bool loom_serve_preparation_equal(const loom_serve_preparation_t* lhs,
+                                  const loom_serve_preparation_t* rhs);
+
 // Borrows an immutable declaration; |index| is below stage_count.
 const loom_serve_preparation_stage_t* loom_serve_preparation_stage(
     const loom_serve_preparation_t* preparation, iree_host_size_t index);

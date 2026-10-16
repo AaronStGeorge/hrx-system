@@ -311,6 +311,32 @@ TEST_F(PreparationCaptureTest, EmptyCaptureNeedsNoDeclarationStorage) {
   IREE_ASSERT_OK(Invoke(IREE_SV("no_stages")));
   preparation = loom_serve_preparation_module_take(module);
   EXPECT_EQ(preparation, nullptr);
+  EXPECT_EQ(loom_serve_preparation_storage_size(preparation), 0u);
+  EXPECT_TRUE(loom_serve_preparation_equal(preparation, nullptr));
+}
+
+TEST_F(PreparationCaptureTest, IdentityAndStorageBelongToOwnedDeclarations) {
+  for (int64_t tag : {99, 99, 100}) {
+    iree_vm_variant_t arguments[] = {iree_vm_variant_from_i64(tag)};
+    iree_vm_variant_t results[2] = {};
+    loom_serve_preparation_module_begin(module, preparation ? 17 : 3, 0);
+    IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
+                          iree_vm_variant_span_from_array(arguments),
+                          iree_vm_variant_span_from_array(results)));
+    second = loom_serve_preparation_module_take(module);
+    EXPECT_FALSE(loom_serve_preparation_equal(second, nullptr));
+    if (!preparation) {
+      preparation = second;
+      second = nullptr;
+      continue;
+    }
+    EXPECT_EQ(loom_serve_preparation_equal(preparation, second), tag == 99);
+    EXPECT_EQ(loom_serve_preparation_storage_size(second),
+              loom_serve_preparation_storage_size(preparation) +
+                  (tag == 100 ? 2 : 0));
+    loom_serve_preparation_free(second);
+    second = nullptr;
+  }
 }
 
 TEST_F(PreparationCaptureTest, CapabilityCannotEscapeItsInvocation) {

@@ -91,6 +91,12 @@ iree_status_t loom_serve_module_bind_stages(iree_vm_module_t* module,
                                             iree_host_size_t stage_count,
                                             const loom_serve_stage_t* stages);
 
+// Releases the copied stage table and every retained code reference at the
+// same owner boundary as bind_stages, without allocation or a device wait.
+// Submitted work retains its resources independently. Source execution rejects
+// every stage until the owner binds a new table; VM declarations remain linked.
+void loom_serve_module_clear_stages(iree_vm_module_t* module);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
