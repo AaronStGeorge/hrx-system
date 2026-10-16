@@ -253,14 +253,17 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     // GMC11 maps coherent pinned GTT as UC. GC12.0 CP atomics bypass GL2
     // through MALL even when that GTT mapping is NC. Native CPU route widths
     // supply the independent AtomicOps requirement for either mapping.
+    // Wait comparisons remain an independent queue capability.
     const amdf_gpu_kfd_ip_version_t* gc = &topology->gc_ip;
     if (gc->exact && (gc->major == 11 || (gc->major == 12 && gc->minor == 0 &&
                                           gc->revision <= 1))) {
       if (topology->host_atomics.supports_32) {
-        profile.atomic_operations_32 = AMDF_ATOMIC_OPERATION_STORE;
+        profile.atomic_operations_32 =
+            AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
       }
       if (topology->host_atomics.supports_64) {
-        profile.atomic_operations_64 = AMDF_ATOMIC_OPERATION_STORE;
+        profile.atomic_operations_64 =
+            AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
       }
     }
     profile.visibility.describe_site =

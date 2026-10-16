@@ -859,15 +859,17 @@ TEST(LinuxGpuMemoryProfileTest, Gfx1151GroupUsesBackingAndConsumerFacts) {
             system.visibility.describe_site);
 }
 
-TEST(LinuxGpuMemoryProfileTest, SystemStoresPreserveIndependentSdmaPolicy) {
+TEST(LinuxGpuMemoryProfileTest, SystemSignalsPreserveIndependentSdmaPolicy) {
   auto device = MakeGfx1151Device();
   device.topology.host_atomics = {true, true};
   amdf_gpu_endpoint_profile_t endpoint = {};
   ASSERT_NO_FATAL_FAILURE(InitializeQueueFamilies(&device, &endpoint));
   ASSERT_EQ(endpoint.queue_family_count, 3u);
   const auto profile = QueryProfile(&device, 0);
-  EXPECT_EQ(profile.atomic_operations_32, AMDF_ATOMIC_OPERATION_STORE);
-  EXPECT_EQ(profile.atomic_operations_64, AMDF_ATOMIC_OPERATION_STORE);
+  EXPECT_EQ(profile.atomic_operations_32,
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+  EXPECT_EQ(profile.atomic_operations_64,
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
   amdf_memory_site_query_t query = {
       .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
       .flags = profile.guaranteed_flags,
@@ -914,7 +916,7 @@ TEST(LinuxGpuMemoryProfileTest, SystemStoresPreserveIndependentSdmaPolicy) {
   EXPECT_EQ(description.atomic_reach.scope_64, AMDF_ATOMIC_SCOPE_NONE);
 }
 
-TEST(LinuxGpuMemoryProfileTest, SystemStoresDoNotRequireSdma) {
+TEST(LinuxGpuMemoryProfileTest, SystemSignalsDoNotRequireSdma) {
   auto device = MakeGfx1151Device();
   device.topology.host_atomics = {true, true};
   device.topology.sdma = {};
@@ -922,8 +924,10 @@ TEST(LinuxGpuMemoryProfileTest, SystemStoresDoNotRequireSdma) {
   ASSERT_NO_FATAL_FAILURE(InitializeQueueFamilies(&device, &endpoint));
   ASSERT_EQ(endpoint.queue_family_count, 2u);
   const auto profile = QueryProfile(&device, 0);
-  EXPECT_EQ(profile.atomic_operations_32, AMDF_ATOMIC_OPERATION_STORE);
-  EXPECT_EQ(profile.atomic_operations_64, AMDF_ATOMIC_OPERATION_STORE);
+  EXPECT_EQ(profile.atomic_operations_32,
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+  EXPECT_EQ(profile.atomic_operations_64,
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
   const amdf_memory_site_query_t query = {
       .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
       .flags = profile.guaranteed_flags,
@@ -939,7 +943,7 @@ TEST(LinuxGpuMemoryProfileTest, SystemStoresDoNotRequireSdma) {
   ExpectSiteUnsupported(profile, kTransferFamily);
 }
 
-TEST(LinuxGpuMemoryProfileTest, SystemGroupStoresRemainConsumerSpecific) {
+TEST(LinuxGpuMemoryProfileTest, SystemGroupSignalsRemainConsumerSpecific) {
   auto qualified = MakeGfx1151Device();
   qualified.topology.host_atomics = {true, true};
   auto unqualified = MakeGfx1151Device();
@@ -953,8 +957,10 @@ TEST(LinuxGpuMemoryProfileTest, SystemGroupStoresRemainConsumerSpecific) {
   EXPECT_EQ(projected.atomic_operations_64, 0u);
   ASSERT_TRUE(unqualified_profile.construction.query_access(
       &unqualified_profile, &qualified_profile, &projected));
-  EXPECT_EQ(projected.atomic_operations_32, AMDF_ATOMIC_OPERATION_STORE);
-  EXPECT_EQ(projected.atomic_operations_64, AMDF_ATOMIC_OPERATION_STORE);
+  EXPECT_EQ(projected.atomic_operations_32,
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
+  EXPECT_EQ(projected.atomic_operations_64,
+            (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE));
 
   unqualified.topology.memory_features = AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY;
   const auto local = QueryProfile(&unqualified, 1);
@@ -1161,12 +1167,12 @@ TEST(LinuxGpuMemoryProfileTest, LegacySdmaExcludesHostAperture) {
   }
 }
 
-TEST(LinuxGpuMemoryProfileTest, SystemStoresRequireNativeMappingAndCpuRoutes) {
+TEST(LinuxGpuMemoryProfileTest, SystemSignalsRequireNativeMappingAndCpuRoutes) {
   const struct {
     // Native GC identity, independent of the compiler target spelling.
     amdf_gpu_kfd_ip_version_t gc;
-    // Whether owned coherent SYSTEM backing supports the CP STORE path.
-    bool supports_store;
+    // Whether owned coherent SYSTEM backing supports CP stores and wait loads.
+    bool supports_signals;
   } cases[] = {
       {{.major = 9, .minor = 4, .revision = 3, .exact = true}, false},
       {{.major = 11, .minor = 0, .revision = 0, .exact = true}, true},
@@ -1201,15 +1207,17 @@ TEST(LinuxGpuMemoryProfileTest, SystemStoresRequireNativeMappingAndCpuRoutes) {
       for (uint32_t ordinal = 0; ordinal < 3; ++ordinal) {
         SCOPED_TRACE(ordinal);
         const auto profile = QueryProfile(&device, ordinal);
-        const bool native_mapping = ordinal == 0 && test_case.supports_store;
-        EXPECT_EQ(profile.atomic_operations_32,
-                  native_mapping && (widths & 1) != 0
-                      ? AMDF_ATOMIC_OPERATION_STORE
-                      : 0u);
-        EXPECT_EQ(profile.atomic_operations_64,
-                  native_mapping && (widths & 2) != 0
-                      ? AMDF_ATOMIC_OPERATION_STORE
-                      : 0u);
+        const bool native_mapping = ordinal == 0 && test_case.supports_signals;
+        EXPECT_EQ(
+            profile.atomic_operations_32,
+            native_mapping && (widths & 1) != 0
+                ? (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE)
+                : 0u);
+        EXPECT_EQ(
+            profile.atomic_operations_64,
+            native_mapping && (widths & 2) != 0
+                ? (AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE)
+                : 0u);
       }
     }
   }

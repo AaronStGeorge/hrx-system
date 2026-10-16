@@ -130,14 +130,17 @@ amdf_status_t amdf_gpu_wddm_query_memory_profile(
                               AMDF_MEMORY_FLAG_MAPPING_SOURCE;
     if (capabilities->cache_coherent_memory_supported) {
       profile.supported_flags |= AMDF_MEMORY_FLAG_HOST_COHERENT;
-      // GFX11 fine-grained SYSTEM mappings forward integer exchange to the
-      // fabric. Integrated processors have an internal CPU route; discrete
-      // processors additionally require native platform AtomicOps support.
+      // GFX11 fine-grained SYSTEM mappings support native atomic stores and
+      // wait loads. Integrated processors have an internal CPU route;
+      // discrete processors additionally require native platform AtomicOps
+      // support. Wait comparisons remain an independent queue capability.
       if (properties->gfx_ip_major == 11 &&
           (properties->is_discrete == 0 ||
            properties->supports_platform_atomics != 0)) {
-        profile.atomic_operations_32 = AMDF_ATOMIC_OPERATION_STORE;
-        profile.atomic_operations_64 = AMDF_ATOMIC_OPERATION_STORE;
+        profile.atomic_operations_32 =
+            AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
+        profile.atomic_operations_64 =
+            AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE;
       }
     }
     profile.visibility.describe_site =
