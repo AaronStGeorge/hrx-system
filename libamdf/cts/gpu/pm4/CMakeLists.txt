@@ -108,6 +108,7 @@ iree_cc_library(
     "observation_stream_test.cc"
     "queued_mapping_test.cc"
     "resource_test.cc"
+    "retirement_test.cc"
     "timestamp_test.cc"
     "wait_test.cc"
     "write_test.cc"
