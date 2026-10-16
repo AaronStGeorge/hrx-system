@@ -39,7 +39,7 @@ loomc_status_t loomc_module_get_interop_view(
 
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_result_create(
-      LOOMC_RESULT_STATE_SUCCEEDED,
+      LOOMC_STATUS_OK,
       loomc_context_source_retention(loomc_module_context(module)), allocator,
       &result));
   loomc_target_environment_t* target_environment =

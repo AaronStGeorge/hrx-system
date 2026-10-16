@@ -1088,7 +1088,7 @@ TEST(CompileTest, EmissionNotesUseTheirOwnModuleAndCountOnlyResolvedOmissions) {
         .related_op_count = IREE_ARRAYSIZE(related),
     };
     loomc_result_t* captured = nullptr;
-    LOOMC_ASSERT_OK(loomc_result_create(LOOMC_RESULT_STATE_FAILED,
+    LOOMC_ASSERT_OK(loomc_result_create(LOOMC_STATUS_FAILED_PRECONDITION,
                                         LOOMC_SOURCE_RETENTION_EXACT,
                                         loomc_allocator_system(), &captured));
     result.reset(captured);

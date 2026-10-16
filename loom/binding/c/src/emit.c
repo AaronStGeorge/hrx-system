@@ -50,7 +50,8 @@ static loomc_status_t loomc_emit_result_fail_message(
       .message = message,
   };
   LOOMC_RETURN_IF_ERROR(loomc_result_add_diagnostic(result, &diagnostic));
-  return loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+  loomc_result_set_status_code(result, LOOMC_STATUS_FAILED_PRECONDITION);
+  return loomc_ok_status();
 }
 
 static loomc_status_t loomc_emit_result_fail_cstring(loomc_result_t* result,
@@ -933,7 +934,7 @@ loomc_status_t loomc_emit_transaction_emit(
     }
     status = loomc_status_from_iree(emit_status);
     if (loomc_status_is_ok(status) && !target_emitted) {
-      status = loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+      loomc_result_set_status_code(result, LOOMC_STATUS_FAILED_PRECONDITION);
     }
   }
   if (!loomc_status_is_ok(status) &&
@@ -1031,7 +1032,7 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
 
   loomc_result_t* result = NULL;
   loomc_status_t status = loomc_result_create(
-      LOOMC_RESULT_STATE_SUCCEEDED,
+      LOOMC_STATUS_OK,
       loomc_context_source_retention(loomc_module_context(module)), allocator,
       &result);
   loomc_emit_transaction_t transaction = {0};

@@ -89,12 +89,14 @@ loomc_status_t loomc_pass_program_run_into_result(
           result, /*source=*/NULL, LOOMC_DIAGNOSTIC_SEVERITY_ERROR,
           loomc_make_cstring_view("PASS_PROGRAM/EXECUTION"), status);
     } else {
+      loomc_result_set_status_code(result, loomc_status_code(status));
       loomc_status_free(status);
       status = loomc_ok_status();
     }
   }
-  if (loomc_status_is_ok(status) && run_result.error_count != 0) {
-    status = loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+  if (loomc_status_is_ok(status) && loomc_result_succeeded(result) &&
+      run_result.error_count != 0) {
+    loomc_result_set_status_code(result, LOOMC_STATUS_FAILED_PRECONDITION);
   }
   loomc_module_invalidate_target_verification(module);
   return status;
@@ -146,8 +148,8 @@ loomc_status_t loomc_pass_program_run(const loomc_pass_program_t* pass_program,
   LOOMC_RETURN_IF_ERROR(loomc_pass_run_options_resolve(options, &option_chain));
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_result_create(
-      LOOMC_RESULT_STATE_SUCCEEDED, loomc_context_source_retention(context),
-      allocator, &result));
+      LOOMC_STATUS_OK, loomc_context_source_retention(context), allocator,
+      &result));
   loomc_status_t status = loomc_module_admit(
       module, loomc_context_target_environment(context), result);
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {

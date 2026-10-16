@@ -18,11 +18,34 @@ using loomc::testing::HandlePtr;
 using ResultPtr = HandlePtr<loomc_result_t, loomc_result_release>;
 using SourcePtr = HandlePtr<loomc_source_t, loomc_source_release>;
 
+TEST(DiagnosticTest, StatusNormalizationPreservesCodeAfterStatusRelease) {
+  for (auto code :
+       {LOOMC_STATUS_NOT_FOUND, LOOMC_STATUS_INVALID_ARGUMENT,
+        LOOMC_STATUS_FAILED_PRECONDITION, LOOMC_STATUS_INCOMPATIBLE}) {
+    loomc_result_t* result = nullptr;
+    LOOMC_ASSERT_OK(loomc_result_create(LOOMC_STATUS_OK,
+                                        LOOMC_SOURCE_RETENTION_EXACT,
+                                        loomc_allocator_system(), &result));
+    ResultPtr owner(result);
+    LOOMC_ASSERT_OK(loomc_result_fail_status_diagnostic_consume(
+        result, nullptr, LOOMC_DIAGNOSTIC_SEVERITY_ERROR,
+        loomc_make_cstring_view("TEST/DOMAIN"),
+        loomc_status_allocate(code, __FILE__, __LINE__,
+                              loomc_make_cstring_view("domain failure"))));
+    EXPECT_EQ(loomc_result_status_code(result), code);
+    EXPECT_EQ(loomc_result_state(result), LOOMC_RESULT_STATE_FAILED);
+    ASSERT_EQ(loomc_result_diagnostic_count(result), 1u);
+    EXPECT_TRUE(
+        loomc_string_view_equal(loomc_result_diagnostic_at(result, 0)->message,
+                                loomc_make_cstring_view("domain failure")));
+  }
+}
+
 ResultPtr Capture(
     const loom_source_range_t& range, const loomc_source_t* source = nullptr,
     loomc_source_retention_t source_retention = LOOMC_SOURCE_RETENTION_EXACT) {
   loomc_result_t* result = nullptr;
-  LOOMC_EXPECT_OK(loomc_result_create(LOOMC_RESULT_STATE_FAILED,
+  LOOMC_EXPECT_OK(loomc_result_create(LOOMC_STATUS_FAILED_PRECONDITION,
                                       source_retention,
                                       loomc_allocator_system(), &result));
   loom_diagnostic_param_t param = loom_param_string(IREE_SV("x"));
@@ -192,7 +215,7 @@ TEST(DiagnosticTest, RetainsCanonicalFormatting) {
   diagnostic.source_location = range;
 
   loomc_result_t* raw_result = nullptr;
-  LOOMC_ASSERT_OK(loomc_result_create(LOOMC_RESULT_STATE_FAILED,
+  LOOMC_ASSERT_OK(loomc_result_create(LOOMC_STATUS_FAILED_PRECONDITION,
                                       LOOMC_SOURCE_RETENTION_EXACT,
                                       loomc_allocator_system(), &raw_result));
   ResultPtr result(raw_result);
@@ -276,7 +299,7 @@ TEST(DiagnosticTest, RelatedLocationsOwnLabelsAndShareOnlyMatchingSnapshots) {
     diagnostic.related_location_count = IREE_ARRAYSIZE(related);
     diagnostic.related_location_omitted_count = 3;
     loomc_result_t* raw_result = nullptr;
-    LOOMC_ASSERT_OK(loomc_result_create(LOOMC_RESULT_STATE_FAILED,
+    LOOMC_ASSERT_OK(loomc_result_create(LOOMC_STATUS_FAILED_PRECONDITION,
                                         LOOMC_SOURCE_RETENTION_EXACT,
                                         loomc_allocator_system(), &raw_result));
     ResultPtr result(raw_result);
@@ -391,7 +414,7 @@ TEST(DiagnosticTest,
   DiagnosticAllocator baseline;
   loomc_result_t* baseline_result = nullptr;
   LOOMC_ASSERT_OK(loomc_result_create(
-      LOOMC_RESULT_STATE_FAILED, LOOMC_SOURCE_RETENTION_EXACT,
+      LOOMC_STATUS_FAILED_PRECONDITION, LOOMC_SOURCE_RETENTION_EXACT,
       loomc_allocator_t{&baseline, DiagnosticAllocator::Control},
       &baseline_result));
   ResultPtr baseline_owner(baseline_result);
@@ -406,7 +429,7 @@ TEST(DiagnosticTest,
     DiagnosticAllocator failing;
     loomc_result_t* result = nullptr;
     auto allocator = loomc_allocator_t{&failing, DiagnosticAllocator::Control};
-    LOOMC_ASSERT_OK(loomc_result_create(LOOMC_RESULT_STATE_FAILED,
+    LOOMC_ASSERT_OK(loomc_result_create(LOOMC_STATUS_FAILED_PRECONDITION,
                                         LOOMC_SOURCE_RETENTION_EXACT, allocator,
                                         &result));
     ResultPtr owner(result);

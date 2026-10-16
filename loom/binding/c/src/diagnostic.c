@@ -372,7 +372,7 @@ loomc_status_t loomc_result_verify_loom_module(
   LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(
       loom_verify_module(module, &verify_options, &verify_result)));
   if (verify_result.error_count != 0) {
-    return loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+    loomc_result_set_status_code(result, LOOMC_STATUS_FAILED_PRECONDITION);
   }
   return loomc_ok_status();
 }
@@ -422,7 +422,8 @@ loomc_status_t loomc_result_fail_status_diagnostic(
     loomc_status_t status) {
   LOOMC_RETURN_IF_ERROR(loomc_result_add_status_diagnostic(
       result, source, severity, code, status));
-  return loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+  loomc_result_set_status_code(result, loomc_status_code(status));
+  return loomc_ok_status();
 }
 
 loomc_status_t loomc_result_fail_status_diagnostic_consume(
