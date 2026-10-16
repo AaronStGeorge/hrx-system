@@ -101,6 +101,7 @@ loom_cc_library(
     ::source_service_fixture
     iree::testing::gtest
     iree::testing::temp_file
+    loom::serve::runtime::program::package
     loom::serve::service::finite::result
     loom::serve::testing::model
     loom::serve::testing::package

@@ -17,6 +17,7 @@
 
 #include "iree/testing/status_matchers.h"
 #include "iree/testing/temp_file.h"
+#include "loom/serve/runtime/program/package.h"
 #include "loom/serve/service/finite/embedding/protocol.h"
 #include "loom/serve/service/finite/embedding/source_service_test_fixture.h"
 #include "loom/serve/service/finite/result.h"
@@ -365,7 +366,7 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
     ReleaseInputs();
   }
 
-  void Submit(std::initializer_list<const char*> bodies, size_t ordinal) {
+  void Prepare(std::initializer_list<const char*> bodies) {
     requests_.resize(bodies.size());
     prepared_.resize(bodies.size());
     std::vector<iree_host_size_t> rows(bodies.size());
@@ -380,6 +381,10 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
     }
     IREE_ASSERT_OK(loom_serve_finite_model_prepare_batch(
         model_, prepared_.size(), prepared_.data(), rows.data()));
+  }
+
+  void SubmitPrepared(size_t ordinal) {
+    IREE_ASSERT_OK(loom_serve_finite_model_bind_batch(model_));
     loom_serve_residency_admission_t admission;
     IREE_ASSERT_OK(loom_serve_residency_try_admit(
         loom_serve_finite_model_residency(model_), &admission));
@@ -388,6 +393,11 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
     IREE_ASSERT_OK(
         loom_serve_finite_model_submit(model_, &results_[ordinal], &frontier));
     EXPECT_EQ(frontier.values[1], 0u);
+  }
+
+  void Submit(std::initializer_list<const char*> bodies, size_t ordinal) {
+    ASSERT_NO_FATAL_FAILURE(Prepare(bodies));
+    ASSERT_NO_FATAL_FAILURE(SubmitPrepared(ordinal));
   }
 
   void Complete(size_t ordinal) {
@@ -427,6 +437,141 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
   // Only the final consumer output crosses to the host for the oracle.
   std::array<float, 14> output_ = {};
 };
+
+class GenerationSelectionTest : public DeviceResultTest,
+                                public ::testing::WithParamInterface<bool> {
+ protected:
+  void SetUp() override {
+    DeviceResultTest::SetUp();
+    if (GetParam()) {
+      ASSERT_NO_FATAL_FAILURE(UseDirectPackage());
+    }
+    update_ = loom_serve_finite_model_execution_update(model_);
+  }
+
+  void TearDown() override {
+    if (candidate_) {
+      update_.dispose(candidate_);
+    }
+    loom_serve_package_release(package_);
+    IREE_EXPECT_OK(status_);
+    DeviceResultTest::TearDown();
+  }
+
+  void CompileReplacement() {
+    const std::string stage = GetParam()
+                                  ? (SourceServiceDirectStageSource()[0]
+                                         ? SourceServiceDirectStageSource()
+                                         : directory_ + "/variants/direct.loom")
+                                  : directory_ + "/embed.loom";
+    const std::string paths[] = {directory_ + "/config.loom", stage};
+    std::string contents[2];
+    for (size_t i = 0; i < 2; ++i) {
+      std::ifstream input(paths[i]);
+      ASSERT_TRUE(input.good());
+      contents[i].assign(std::istreambuf_iterator<char>(input), {});
+    }
+    const std::string original = "scalar.constant 1 : i32";
+    const size_t position = contents[1].find(original);
+    ASSERT_NE(position, std::string::npos);
+    contents[1].replace(position, original.size(), "scalar.constant 2 : i32");
+    const loom_serve_package_file_t files[] = {
+        {IREE_SV("model/config.loom"),
+         iree_make_const_byte_span(contents[0].data(), contents[0].size())},
+        {IREE_SV("model/stage.loom"),
+         iree_make_const_byte_span(contents[1].data(), contents[1].size())}};
+    IREE_ASSERT_OK(loom_serve_package_create(IREE_SV("model/model.json"),
+                                             IREE_ARRAYSIZE(files), files,
+                                             host_allocator_, &package_));
+    const iree_string_view_t providers[] = {IREE_SV("config.loom"),
+                                            IREE_SV("stage.loom")};
+    const loom_serve_sources_t sources = {
+        .count = IREE_ARRAYSIZE(providers),
+        .values = providers,
+        .package = package_,
+    };
+    IREE_ASSERT_OK(update_.compile(
+        update_.self, &sources,
+        [](void* self, iree_status_t status, void* value,
+           const loom_serve_compilation_report_t* report) {
+          auto* test = static_cast<GenerationSelectionTest*>(self);
+          std::lock_guard<std::mutex> lock(test->mutex_);
+          test->candidate_ = value;
+          test->status_ = status;
+          test->ready_ = true;
+          test->condition_.notify_one();
+        },
+        this));
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [&] { return ready_; });
+    IREE_ASSERT_OK(std::exchange(status_, iree_ok_status()));
+    loom_serve_package_release(std::exchange(package_, nullptr));
+  }
+
+  // Public model replacement capability, valid through candidate disposal.
+  loom_serve_execution_update_t update_ = {};
+  // Terminal compiler payload, independently retained by model selections.
+  void* candidate_ = nullptr;
+  // Provider package retired immediately after compilation finishes.
+  loom_serve_package_t* package_ = nullptr;
+  // Joins the real asynchronous compiler's final callback with the outer test.
+  std::mutex mutex_;
+  // Outer-thread notification; no serving worker waits for compilation.
+  std::condition_variable condition_;
+  // Callback has relinquished all borrowed inputs.
+  bool ready_ = false;
+  // Owned compiler outcome, consumed after callback publication.
+  iree_status_t status_ = iree_ok_status();
+};
+
+TEST_P(GenerationSelectionTest,
+       PreparedBatchPinsCodeAcrossSelectionAndRemoval) {
+  ASSERT_NO_FATAL_FAILURE(CompileReplacement());
+  ASSERT_NO_FATAL_FAILURE(Prepare({R"({"model":"fixture","input":"a"})"}));
+  IREE_ASSERT_OK(update_.select(update_.self, candidate_));
+  ASSERT_NO_FATAL_FAILURE(SubmitPrepared(0));
+  ASSERT_NO_FATAL_FAILURE(Complete(0));
+
+  ASSERT_NO_FATAL_FAILURE(Prepare({R"({"model":"fixture","input":"a"})"}));
+  IREE_ASSERT_OK(update_.select(update_.self, nullptr));
+  update_.dispose(std::exchange(candidate_, nullptr));
+  ASSERT_NO_FATAL_FAILURE(SubmitPrepared(1));
+  ASSERT_NO_FATAL_FAILURE(Complete(1));
+
+  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+  for (size_t i = 0; i < results_.size(); ++i) {
+    auto ready = loom_serve_finite_result_ready(results_[i]);
+    IREE_ASSERT_OK(loom_serve_execution_barrier(
+        consumer_, {2, ready.semaphores, ready.values}));
+    const auto row = loom_serve_finite_result_row(results_[i], 0, 0);
+    ASSERT_EQ(row.length, 4 * sizeof(float));
+    const iree_hal_transfer_operation_t download = {
+        .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+        .download =
+            {
+                .source_buffer = row.buffer,
+                .source_offset = row.offset,
+                .target = output_.data() + i * 4,
+                .length = row.length,
+            },
+    };
+    uint64_t value = 0;
+    IREE_ASSERT_OK(
+        loom_serve_execution_transfer(consumer_, 1, &download, &value));
+  }
+  IREE_ASSERT_OK(loom_serve_execution_drain(consumer_));
+  const float expected[] = {1, 1, 1, 1, 2, 1, 2, 1};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(expected); ++i) {
+    EXPECT_EQ(output_[i], expected[i]);
+  }
+  StartRouter();
+  EXPECT_NE(Read(Send(R"({"model":"fixture","input":"a"})"))
+                .find(R"("embedding":[1,1,1,1])"),
+            std::string::npos);
+}
+
+INSTANTIATE_TEST_SUITE_P(CommandAndDirect, GenerationSelectionTest,
+                         ::testing::Values(false, true));
 
 TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   interface_.set_observer(interface_.self, {});

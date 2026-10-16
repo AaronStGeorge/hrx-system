@@ -24,7 +24,8 @@ extern "C" {
 typedef struct loom_serve_finite_model_t loom_serve_finite_model_t;
 
 // Replaces command/direct execution over the same prepared parameters and VM
-// packet contract. Selection runs only outside CPU/device invocation borrows.
+// packet contract. A prepared batch retains the generation it captured;
+// selection at an owner boundary affects subsequent batches only.
 loom_serve_execution_update_t loom_serve_finite_model_execution_update(
     loom_serve_finite_model_t* model);
 
@@ -186,6 +187,12 @@ iree_status_t loom_serve_finite_model_prepare_batch(
     loom_serve_finite_model_t* model, iree_host_size_t count,
     const loom_serve_finite_prepared_t* requests,
     const iree_host_size_t* expected_rows);
+
+// Owner-only publication of the prepared batch's captured code table before
+// residency admission. Reserves reflected workspace without waiting or
+// submitting device work. Repeated calls while admission waits are inexpensive.
+iree_status_t loom_serve_finite_model_bind_batch(
+    loom_serve_finite_model_t* model);
 
 // Scheduler-only submission after residency_try_acquire succeeds. Acquires
 // input/output roots from the shared queue pool, uploads and invokes source,
