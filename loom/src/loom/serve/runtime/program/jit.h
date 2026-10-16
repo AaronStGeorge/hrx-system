@@ -62,6 +62,29 @@ void loom_serve_jit_retain(loom_serve_jit_t* jit);
 // callback may release a separately retained caller reference.
 void loom_serve_jit_release(loom_serve_jit_t* jit);
 
+// Retained exact-input reuse in one immutable source/target generation. These
+// counters exclude the fixed compiler/source index, compiler workspaces,
+// stages, command recordings, and driver-private allocations made while loading
+// code.
+typedef struct loom_serve_jit_cache_storage_t {
+  // Loaded native inputs still indexed for exact reuse.
+  iree_host_size_t count;
+  // Requested host bytes for keys, entry records, and the lookup array.
+  iree_host_size_t host_bytes;
+  // Artifact bytes supplied to the loader, counted once per cached executable.
+  iree_host_size_t code_bytes;
+} loom_serve_jit_cache_storage_t;
+
+// Owner-only operations after all accepted compilations have completed.
+// Trimming removes only entries unused by compiled stages; surviving stages
+// keep exact native reuse. Recorded commands retain their HAL executables
+// independently, so a cache owner releases those consumers before interpreting
+// released bytes as a storage saving. Neither operation allocates, compiles, or
+// waits.
+loom_serve_jit_cache_storage_t loom_serve_jit_cache_storage(
+    const loom_serve_jit_t* jit);
+void loom_serve_jit_trim(loom_serve_jit_t* jit);
+
 // Borrowed evidence accumulator for VM/parameter preparation while no stage
 // compilations are outstanding. Compiler tasks merge before their completions.
 loom_serve_compilation_report_t* loom_serve_jit_report(loom_serve_jit_t* jit);
@@ -121,6 +144,10 @@ iree_status_t loom_serve_jit_compile(loom_serve_jit_t* jit,
                                      const loomc_config_options_t* config,
                                      loom_serve_jit_stage_t** out_stage);
 void loom_serve_jit_stage_free(loom_serve_jit_stage_t* stage);
+// Requested host bytes owned by this stage, excluding its shared native code
+// and any independently recorded command. Does not inspect a source catalog.
+iree_host_size_t loom_serve_jit_stage_storage_size(
+    const loom_serve_jit_stage_t* stage);
 const loom_cmd_program_t* loom_serve_jit_stage_program(
     const loom_serve_jit_stage_t* stage);
 
