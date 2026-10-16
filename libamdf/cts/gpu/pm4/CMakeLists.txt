@@ -110,6 +110,7 @@ iree_cc_library(
     "queued_mapping_test.cc"
     "resource_test.cc"
     "retirement_test.cc"
+    "shader_event_test.cc"
     "timestamp_test.cc"
     "wait_test.cc"
     "write_test.cc"
@@ -123,10 +124,13 @@ iree_cc_library(
     libamdf::cts::gpu::kernels::byte_copy_unaligned_kernels
     libamdf::cts::gpu::kernels::lds_exchange
     libamdf::cts::gpu::kernels::lds_exchange_kernels
+    libamdf::cts::gpu::kernels::shader_event
+    libamdf::cts::gpu::kernels::shader_event_kernels
     libamdf::cts::gpu::kernels::transform
     libamdf::cts::gpu::kernels::transform_kernels
     libamdf::cts::gpu::pm4::encoding::commands
     libamdf::cts::gpu::util::command_fixture
+    libamdf::cts::gpu::util::shader_event_fixture
     libamdf::cts::gpu::util::sparse_mapping_layout
     libamdf::cts::util::wait
     ${_pm4_cases_platform_deps}

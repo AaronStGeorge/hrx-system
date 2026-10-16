@@ -39,6 +39,18 @@ allocation addresses directly. The caller checks the required wave32,
 kernarg-pointer, group-X and local-X initial-register contract, with no
 private or group storage. [PM4 dispatch contract](../../../../docs/reference/amd/gpu/pm4/dispatch.md)
 
+[shader_event/kernel.loom](shader_event/kernel.loom) runs one finite workitem
+that writes a payload, release-publishes its generation, writes the native
+event mailbox, and issues a shader interrupt after draining stores. Its native
+mailbox trigger and interrupt context are separate arguments. Target-selected
+instruction fragments cover the physical compiler catalog without requiring
+other architectures in a restricted compiler. The [PM4](../pm4/shader_event_test.cc)
+and [AQL](../aql/shader_event_test.cc) cases observe eight shader-only wakes and
+exact guarded records before checking execution retirement. PM4 publishes its
+completion tail only after the observation; AQL uses a completion signal with
+no event mailbox and no packet release fence. Neither case signals the event
+from the host or substitutes a command-processor interrupt.
+
 [file_exchange.loom](file_exchange.loom) owns an initially empty Linux io_uring
 SQ/CQ for one finite invocation. It reads a response-selected file block,
 transforms its words, writes another block, and reloads that block into a

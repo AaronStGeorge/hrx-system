@@ -94,4 +94,20 @@ iree_cc_library(
 )
 endif()
 
+if(IREE_ARCH STREQUAL "x86_64" AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
+iree_cc_library(
+  NAME
+    shader_event_fixture
+  HDRS
+    "shader_event_fixture.h"
+  DEPS
+    ::user_queue
+    amdf::headers
+    iree::third_party::google_test
+    libamdf::cts::util::wait
+  TESTONLY
+  PUBLIC
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
