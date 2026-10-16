@@ -130,9 +130,13 @@ iree_cc_library(
     "file_transfer.c"
   DEPS
     ::buffer
+    ::memory_backend
+    ::memory_transition
+    amdf::headers
     iree::async
     iree::base
     iree::hal
+    iree::hal::drivers::amd::status
     iree::hal::utils::files
   PUBLIC
 )
@@ -271,6 +275,7 @@ iree_cc_library(
     memory_backend
   HDRS
     "memory_backend.h"
+    "virtual_buffer.h"
   SRCS
     "memory_backend.c"
     "virtual_buffer.c"
@@ -282,6 +287,7 @@ iree_cc_library(
     amdf::headers
     iree::base
     iree::base::internal
+    iree::base::threading
     iree::hal
     iree::hal::drivers::amd::status
     iree::hal::memory::passthrough_pool
