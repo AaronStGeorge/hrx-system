@@ -11,6 +11,7 @@
 
 #include "iree/base/threading/latency.h"
 
+#include <algorithm>
 #include <thread>
 
 #include "iree/testing/gtest.h"
@@ -38,14 +39,10 @@ class LatencyTest : public ::testing::Test {
   void Begin(int32_t maximum_latency_us, iree_latency_scope_t* scope) {
     auto options = iree_latency_scope_options_default();
     options.maximum_cpu_idle_latency_us = maximum_latency_us;
-    iree::Status status = iree_latency_scope_begin(options, scope);
-    if (iree_status_is_not_found(status.get()) ||
-        iree_status_is_permission_denied(status.get()) ||
-        iree_status_is_unimplemented(status.get())) {
+    if (!iree_latency_scope_begin(options, scope)) {
       EXPECT_EQ(0u, scope->handle);
-      GTEST_SKIP() << status.ToString();
+      GTEST_SKIP() << "Requested latency-sensitive power policy is unavailable";
     }
-    IREE_ASSERT_OK(status);
   }
 
   // First independently owned native request, released even on test failure.
@@ -61,8 +58,7 @@ TEST_F(LatencyTest, InactiveScope) {
 }
 
 TEST_F(LatencyTest, InvalidLatency) {
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        iree_latency_scope_begin({-2}, &first_));
+  EXPECT_FALSE(iree_latency_scope_begin({-2}, &first_));
   EXPECT_EQ(0u, first_.handle);
 }
 
@@ -83,7 +79,7 @@ TEST_F(LatencyTest, OverlappingActivities) {
   if (IsSkipped() || HasFatalFailure()) {
     return;
   }
-  IREE_ASSERT_OK(
+  ASSERT_TRUE(
       iree_latency_scope_begin(iree_latency_scope_options_default(), &second_));
   IREE_EXPECT_OK(iree_latency_scope_end(&first_));
   EXPECT_NE(0u, second_.handle);
@@ -92,9 +88,8 @@ TEST_F(LatencyTest, OverlappingActivities) {
 
 #if defined(IREE_PLATFORM_WINDOWS) || defined(IREE_PLATFORM_MACOS)
 
-TEST_F(LatencyTest, NumericIdleLimitsAreExplicitlyUnsupported) {
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        iree_latency_scope_begin({5}, &first_));
+TEST_F(LatencyTest, NumericIdleLimitsAreUnavailable) {
+  EXPECT_FALSE(iree_latency_scope_begin({5}, &first_));
   EXPECT_EQ(0u, first_.handle);
 }
 
@@ -123,7 +118,7 @@ TEST_F(LatencyTest, KernelAggregatesIndependentScopes) {
     return;
   }
   EXPECT_LE(ReadEffectiveLatency(), 30);
-  IREE_ASSERT_OK(iree_latency_scope_begin({5}, &second_));
+  ASSERT_TRUE(iree_latency_scope_begin({5}, &second_));
   EXPECT_LE(ReadEffectiveLatency(), 5);
 
   const int first_descriptor = static_cast<int>(first_.handle - 1);
@@ -148,6 +143,21 @@ TEST_F(LatencyTest, ZeroLatency) {
     return;
   }
   EXPECT_EQ(0, ReadEffectiveLatency());
+}
+
+TEST_F(LatencyTest, DefaultRequestsFiveMicroseconds) {
+  // Establish native access before inspecting the system's current request.
+  Begin(30, &first_);
+  if (IsSkipped() || HasFatalFailure()) {
+    return;
+  }
+  IREE_ASSERT_OK(iree_latency_scope_end(&first_));
+  const int32_t before = ReadEffectiveLatency();
+  ASSERT_TRUE(
+      iree_latency_scope_begin(iree_latency_scope_options_default(), &first_));
+  EXPECT_EQ(std::min(before, 5), ReadEffectiveLatency());
+  IREE_ASSERT_OK(iree_latency_scope_end(&first_));
+  EXPECT_EQ(before, ReadEffectiveLatency());
 }
 
 #endif  // IREE_PLATFORM_LINUX || IREE_PLATFORM_ANDROID
@@ -195,8 +205,8 @@ TEST_P(WindowsLatencyTest, LastScopeRestoresPriorPolicy) {
                                     &before, sizeof(before)));
 
   const auto options = iree_latency_scope_options_default();
-  IREE_ASSERT_OK(iree_latency_scope_begin(options, &first_));
-  IREE_ASSERT_OK(iree_latency_scope_begin(options, &second_));
+  ASSERT_TRUE(iree_latency_scope_begin(options, &first_));
+  ASSERT_TRUE(iree_latency_scope_begin(options, &second_));
   IREE_ASSERT_OK(iree_latency_scope_end(&first_));
 
   PROCESS_POWER_THROTTLING_STATE during = {

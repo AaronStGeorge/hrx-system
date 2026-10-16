@@ -28,21 +28,15 @@ static struct {
   PROCESS_POWER_THROTTLING_STATE saved_policy;
 } iree_latency_process_state = {SRWLOCK_INIT, 0, {0}};
 
-iree_status_t iree_latency_scope_begin(iree_latency_scope_options_t options,
-                                       iree_latency_scope_t* out_scope) {
+bool iree_latency_scope_begin(iree_latency_scope_options_t options,
+                              iree_latency_scope_t* out_scope) {
   IREE_ASSERT_ARGUMENT(out_scope);
   out_scope->handle = 0;
-  if (options.maximum_cpu_idle_latency_us < -1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "CPU idle latency limit must be -1 or nonnegative");
-  }
-  if (options.maximum_cpu_idle_latency_us >= 0) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "Windows HighQoS does not accept a numeric CPU "
-                            "idle latency limit");
+  if (options.maximum_cpu_idle_latency_us != -1) {
+    return false;
   }
   IREE_TRACE_ZONE_BEGIN(z0);
-  DWORD error = ERROR_SUCCESS;
+  bool applied = true;
   AcquireSRWLockExclusive(&iree_latency_process_state.mutex);
   if (iree_latency_process_state.scope_count == 0) {
     PROCESS_POWER_THROTTLING_STATE policy = {
@@ -50,28 +44,23 @@ iree_status_t iree_latency_scope_begin(iree_latency_scope_options_t options,
     };
     if (!GetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
                                &policy, sizeof(policy))) {
-      error = GetLastError();
+      applied = false;
     } else {
       iree_latency_process_state.saved_policy = policy;
       policy.ControlMask |= PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
       policy.StateMask &= ~PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
-      if (!SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
-                                 &policy, sizeof(policy))) {
-        error = GetLastError();
-      }
+      applied =
+          SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
+                                &policy, sizeof(policy)) != 0;
     }
   }
-  if (error == ERROR_SUCCESS) {
+  if (applied) {
     ++iree_latency_process_state.scope_count;
     out_scope->handle = 1;
   }
   ReleaseSRWLockExclusive(&iree_latency_process_state.mutex);
   IREE_TRACE_ZONE_END(z0);
-  return error == ERROR_SUCCESS
-             ? iree_ok_status()
-             : iree_make_status(iree_status_code_from_win32_error(error),
-                                "requesting process HighQoS failed (%lu)",
-                                error);
+  return applied;
 }
 
 iree_status_t iree_latency_scope_end(iree_latency_scope_t* scope) {

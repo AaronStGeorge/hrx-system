@@ -34,6 +34,7 @@ else()
       "benchmark_nop.c"
     DEPS
       iree::base
+      iree::base::tooling::flags
     PUBLIC
   )
 endif()
@@ -45,7 +46,6 @@ iree_cc_library(
     "benchmark_main.c"
   DEPS
     ::benchmark
-    iree::base::tooling::flags
   TESTONLY
   PUBLIC
 )

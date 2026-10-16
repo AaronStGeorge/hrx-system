@@ -8,18 +8,12 @@
 
 #import <Foundation/Foundation.h>
 
-iree_status_t iree_latency_scope_begin(iree_latency_scope_options_t options,
-                                       iree_latency_scope_t* out_scope) {
+bool iree_latency_scope_begin(iree_latency_scope_options_t options,
+                              iree_latency_scope_t* out_scope) {
   IREE_ASSERT_ARGUMENT(out_scope);
   out_scope->handle = 0;
-  if (options.maximum_cpu_idle_latency_us < -1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "CPU idle latency limit must be -1 or nonnegative");
-  }
-  if (options.maximum_cpu_idle_latency_us >= 0) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "macOS activities do not accept a numeric CPU "
-                            "idle latency limit");
+  if (options.maximum_cpu_idle_latency_us != -1) {
+    return false;
   }
   IREE_TRACE_ZONE_BEGIN(z0);
   @autoreleasepool {
@@ -30,10 +24,7 @@ iree_status_t iree_latency_scope_begin(iree_latency_scope_options_t options,
     out_scope->handle = (uintptr_t)[activity retain];
   }
   IREE_TRACE_ZONE_END(z0);
-  if (!out_scope->handle) {
-    return iree_make_status(IREE_STATUS_UNAVAILABLE, "requesting latency-critical activity failed");
-  }
-  return iree_ok_status();
+  return out_scope->handle != 0;
 }
 
 iree_status_t iree_latency_scope_end(iree_latency_scope_t* scope) {

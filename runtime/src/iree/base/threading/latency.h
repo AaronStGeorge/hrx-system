@@ -39,8 +39,9 @@ static inline iree_latency_scope_options_t iree_latency_scope_options_default(
 //
 // Independent scopes may overlap and end in any order. Native policies differ:
 // - Linux: a system-wide CPU idle-state latency request. Native policy requests
-//   zero microseconds; options can relax that limit. The kernel uses the lowest
-//   request across all processes. This does not set CPU or device clocks.
+//   five microseconds; options can tighten or relax that limit. The kernel uses
+//   the lowest request across all processes. This does not set CPU or device
+//   clocks.
 // - Windows: process-wide HighQoS, favoring performance in processor power
 //   management and core selection. The first scope saves the execution-speed
 //   throttling policy; the last restores it. While scopes are active, changes
@@ -59,14 +60,16 @@ typedef struct iree_latency_scope_t {
   uintptr_t handle;
 } iree_latency_scope_t;
 
-// Begins a latency-sensitive activity using |options|.
+// Attempts to begin a latency-sensitive activity using |options|.
 // |out_scope| must not already own a request and is inactive on failure.
 //
 // Linux requires permission to open /dev/cpu_dma_latency. The request uses a
 // close-on-exec descriptor; forked children inherit it until close or exec.
-// Permission and availability errors are returned to the caller. Unsupported
-// policies return UNIMPLEMENTED. Success means the OS accepted the request.
-IREE_API_EXPORT iree_status_t iree_latency_scope_begin(
+// Returns true if the OS accepted the request. Invalid options, unsupported
+// policies, insufficient permissions, or unavailable native resources return
+// false without constructing an error status. The request is an optional hint;
+// callers must support running without it.
+IREE_API_EXPORT bool iree_latency_scope_begin(
     iree_latency_scope_options_t options, iree_latency_scope_t* out_scope);
 
 // Ends the request owned by |scope| and makes it inactive.

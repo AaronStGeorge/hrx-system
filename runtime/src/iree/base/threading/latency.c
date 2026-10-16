@@ -14,29 +14,25 @@
 #include <unistd.h>
 #endif  // IREE_PLATFORM_LINUX || IREE_PLATFORM_ANDROID
 
-iree_status_t iree_latency_scope_begin(iree_latency_scope_options_t options,
-                                       iree_latency_scope_t* out_scope) {
+bool iree_latency_scope_begin(iree_latency_scope_options_t options,
+                              iree_latency_scope_t* out_scope) {
   IREE_ASSERT_ARGUMENT(out_scope);
   out_scope->handle = 0;
   if (options.maximum_cpu_idle_latency_us < -1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "CPU idle latency limit must be -1 or nonnegative");
+    return false;
   }
   IREE_TRACE_ZONE_BEGIN(z0);
 #if defined(IREE_PLATFORM_LINUX) || defined(IREE_PLATFORM_ANDROID)
   const int32_t maximum_latency_us = options.maximum_cpu_idle_latency_us < 0
-                                         ? 0
+                                         ? 5
                                          : options.maximum_cpu_idle_latency_us;
   int descriptor;
   do {
     descriptor = open("/dev/cpu_dma_latency", O_WRONLY | O_CLOEXEC);
   } while (descriptor < 0 && errno == EINTR);
   if (descriptor < 0) {
-    const int error = errno;
     IREE_TRACE_ZONE_END(z0);
-    return iree_make_status(iree_status_code_from_errno(error),
-                            "opening /dev/cpu_dma_latency failed (errno %d)",
-                            error);
+    return false;
   }
 
   // The kernel consumes one complete s32 request. A short write cannot be
@@ -46,21 +42,16 @@ iree_status_t iree_latency_scope_begin(iree_latency_scope_options_t options,
     length = write(descriptor, &maximum_latency_us, sizeof(maximum_latency_us));
   } while (length < 0 && errno == EINTR);
   if (length != sizeof(maximum_latency_us)) {
-    const int error = length < 0 ? errno : EIO;
     close(descriptor);
     IREE_TRACE_ZONE_END(z0);
-    return iree_make_status(iree_status_code_from_errno(error),
-                            "setting CPU latency limit failed (errno %d)",
-                            error);
+    return false;
   }
   out_scope->handle = (uintptr_t)descriptor + 1;
   IREE_TRACE_ZONE_END(z0);
-  return iree_ok_status();
+  return true;
 #else
   IREE_TRACE_ZONE_END(z0);
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "latency-sensitive activities are not supported on "
-                          "this platform");
+  return false;
 #endif  // IREE_PLATFORM_LINUX || IREE_PLATFORM_ANDROID
 }
 
