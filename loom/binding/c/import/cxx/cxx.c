@@ -338,7 +338,7 @@ static iree_status_t loomc_cxx_capture_diagnostic(
   }
   return iree_status_from_loomc(
       loomc_result_add_loom_diagnostic(invocation->result, NULL, &mapped,
-                                       /*type_printer=*/NULL));
+                                       /*text_print_options=*/NULL));
 }
 
 static iree_status_t loomc_cxx_capture_source(void* user_data,

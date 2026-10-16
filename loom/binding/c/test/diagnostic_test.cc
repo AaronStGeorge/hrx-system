@@ -57,8 +57,9 @@ ResultPtr Capture(
   diagnostic.params = &param;
   diagnostic.param_count = 1;
   diagnostic.source_location = range;
-  LOOMC_EXPECT_OK(loomc_result_add_loom_diagnostic(result, source, &diagnostic,
-                                                   /*type_printer=*/nullptr));
+  LOOMC_EXPECT_OK(
+      loomc_result_add_loom_diagnostic(result, source, &diagnostic,
+                                       /*text_print_options=*/nullptr));
   return ResultPtr(result);
 }
 
@@ -220,7 +221,7 @@ TEST(DiagnosticTest, RetainsCanonicalFormatting) {
                                       loomc_allocator_system(), &raw_result));
   ResultPtr result(raw_result);
   LOOMC_ASSERT_OK(loomc_result_add_loom_diagnostic(
-      result.get(), source.get(), &diagnostic, /*type_printer=*/nullptr));
+      result.get(), source.get(), &diagnostic, /*text_print_options=*/nullptr));
   source.reset();
 
   const auto* stored = loomc_result_diagnostic_at(result.get(), 0);
@@ -303,8 +304,9 @@ TEST(DiagnosticTest, RelatedLocationsOwnLabelsAndShareOnlyMatchingSnapshots) {
                                         LOOMC_SOURCE_RETENTION_EXACT,
                                         loomc_allocator_system(), &raw_result));
     ResultPtr result(raw_result);
-    LOOMC_ASSERT_OK(loomc_result_add_loom_diagnostic(
-        result.get(), input.get(), &diagnostic, /*type_printer=*/nullptr));
+    LOOMC_ASSERT_OK(
+        loomc_result_add_loom_diagnostic(result.get(), input.get(), &diagnostic,
+                                         /*text_print_options=*/nullptr));
     input.reset();
     filename.assign("released");
     text.assign("released");
@@ -420,7 +422,7 @@ TEST(DiagnosticTest,
   ResultPtr baseline_owner(baseline_result);
   baseline.allocation_count = 0;
   LOOMC_ASSERT_OK(loomc_result_add_loom_diagnostic(
-      baseline_result, nullptr, &diagnostic, /*type_printer=*/nullptr));
+      baseline_result, nullptr, &diagnostic, /*text_print_options=*/nullptr));
   const size_t allocation_count = baseline.allocation_count;
   baseline_owner.reset();
   EXPECT_EQ(baseline.live_count, 0u);
@@ -438,11 +440,11 @@ TEST(DiagnosticTest,
     LOOMC_EXPECT_STATUS_IS(
         LOOMC_STATUS_RESOURCE_EXHAUSTED,
         loomc_result_add_loom_diagnostic(result, nullptr, &diagnostic,
-                                         /*type_printer=*/nullptr));
+                                         /*text_print_options=*/nullptr));
     EXPECT_EQ(loomc_result_diagnostic_count(result), 0u);
     failing.failure_at = LOOMC_HOST_SIZE_MAX;
     LOOMC_ASSERT_OK(loomc_result_add_loom_diagnostic(
-        result, nullptr, &diagnostic, /*type_printer=*/nullptr));
+        result, nullptr, &diagnostic, /*text_print_options=*/nullptr));
     ASSERT_EQ(loomc_result_diagnostic_count(result), 1u);
     EXPECT_EQ(loomc_result_diagnostic_at(result, 0)->related_location_count,
               2u);

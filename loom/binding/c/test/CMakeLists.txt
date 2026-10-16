@@ -255,6 +255,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
+    loom::binding::c::test::testdata::diagnostic_types
 )
 
 loom_cc_test(

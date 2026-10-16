@@ -396,6 +396,7 @@ void loom_verify_emit_diagnostic(loom_verify_state_t* state,
   diagnostic.params = emission->params;
   diagnostic.param_count = emission->param_count;
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
+  diagnostic.module = emission->module ? emission->module : state->module;
   diagnostic.origin.provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE;
   diagnostic.source_location.provenance =
       LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE;
@@ -419,8 +420,7 @@ void loom_verify_emit_diagnostic(loom_verify_state_t* state,
       &diagnostic.highlight_omitted_count);
   loom_highlight_range_t highlights[LOOM_VERIFY_MAX_HIGHLIGHTS];
 
-  const loom_module_t* module =
-      emission->module ? emission->module : state->module;
+  const loom_module_t* module = diagnostic.module;
   bool resolved = loom_verify_resolve_location(state, module, emission->op,
                                                &diagnostic.source_location);
   if (resolved) {

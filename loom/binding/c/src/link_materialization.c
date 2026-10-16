@@ -26,7 +26,7 @@ static iree_status_t loomc_link_materialization_capture_diagnostic(
       (loomc_link_materialization_state_t*)user_data;
   return iree_status_from_loomc(loomc_result_add_loom_diagnostic(
       state->diagnostics.result, state->diagnostics.source, diagnostic,
-      /*type_printer=*/NULL));
+      /*text_print_options=*/NULL));
 }
 
 static loom_diagnostic_sink_t loomc_link_materialization_diagnostic_sink(

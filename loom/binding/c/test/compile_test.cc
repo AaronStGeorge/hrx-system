@@ -1095,12 +1095,12 @@ TEST(CompileTest, EmissionNotesUseTheirOwnModuleAndCountOnlyResolvedOmissions) {
     LOOMC_ASSERT_OK(loomc_result_add_loom_diagnostic_emission(
         result.get(), active_module, (loom_source_resolver_t){0},
         LOOM_EMITTER_VERIFIER, &emission,
-        /*type_printer=*/nullptr));
+        /*text_print_options=*/nullptr));
     emission.op = nullptr;
     LOOMC_ASSERT_OK(loomc_result_add_loom_diagnostic_emission(
         result.get(), active_module, (loom_source_resolver_t){0},
         LOOM_EMITTER_VERIFIER, &emission,
-        /*type_printer=*/nullptr));
+        /*text_print_options=*/nullptr));
   }
   const auto* diagnostic = loomc_result_diagnostic_at(result.get(), 0);
   ASSERT_NE(diagnostic, nullptr);

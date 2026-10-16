@@ -932,8 +932,8 @@ loomc_status_t loomc_compile_artifact(
         options ? options->emit_options : NULL, result, &emit_transaction);
   }
   if (loomc_status_is_ok(status)) {
-    loomc_emit_transaction_set_diagnostic_context(
-        &emit_transaction, internal_module, target_environment);
+    loomc_emit_transaction_set_diagnostic_environment(&emit_transaction,
+                                                      target_environment);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status = loomc_module_admit(module, target_environment, result);
@@ -1056,8 +1056,6 @@ loomc_status_t loomc_compile_artifact(
     status = loomc_status_join(status, source_status);
     loomc_module_adopt_loom_module_replacement(module, internal_module,
                                                LOOMC_MODULE_INPUT_UNVERIFIED);
-    loomc_emit_transaction_set_diagnostic_context(
-        &emit_transaction, internal_module, target_environment);
     if (!loomc_status_is_ok(status)) {
       status = loomc_compile_fail_result_from_status(
           result, loomc_make_cstring_view("COMPILE/MATERIALIZE"), status);

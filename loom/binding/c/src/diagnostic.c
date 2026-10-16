@@ -50,39 +50,25 @@ static iree_status_t loomc_diagnostic_format_type(
 }
 
 static loomc_status_t loomc_render_loom_diagnostic_message(
-    const loom_diagnostic_t* diagnostic,
-    const loomc_diagnostic_type_printer_t* type_printer,
+    const loom_diagnostic_t* diagnostic, loom_type_formatter_t type_formatter,
     iree_string_builder_t* builder) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
-  const loom_type_formatter_t formatter =
-      loomc_diagnostic_type_printer_formatter(type_printer);
   return loomc_status_from_iree(loom_diagnostic_render_message(
-      diagnostic->error, diagnostic->params, diagnostic->param_count, formatter,
-      &stream));
+      diagnostic->error, diagnostic->params, diagnostic->param_count,
+      type_formatter, &stream));
 }
 
 static loomc_status_t loomc_format_loom_diagnostic(
-    const loom_diagnostic_t* diagnostic,
-    const loomc_diagnostic_type_printer_t* type_printer,
+    const loom_diagnostic_t* diagnostic, loom_type_formatter_t type_formatter,
     iree_string_builder_t* builder) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   const loom_diagnostic_format_options_t options = {
-      .type_formatter = loomc_diagnostic_type_printer_formatter(type_printer),
+      .type_formatter = type_formatter,
   };
   return loomc_status_from_iree(
       loom_diagnostic_format_with_options(diagnostic, &options, &stream));
-}
-
-void loomc_diagnostic_type_printer_initialize(
-    const loom_module_t* module,
-    const loom_text_print_options_t* text_print_options,
-    loomc_diagnostic_type_printer_t* out_printer) {
-  *out_printer = (loomc_diagnostic_type_printer_t){
-      .module = module,
-      .text_print_options = text_print_options,
-  };
 }
 
 loom_type_formatter_t loomc_diagnostic_type_printer_formatter(
@@ -157,7 +143,7 @@ static loomc_source_range_t loomc_source_range_from_loom(
 loomc_status_t loomc_result_add_loom_diagnostic(
     loomc_result_t* result, const loomc_source_t* source,
     const loom_diagnostic_t* diagnostic,
-    const loomc_diagnostic_type_printer_t* type_printer) {
+    const loom_text_print_options_t* text_print_options) {
   if (result == NULL || diagnostic == NULL || diagnostic->error == NULL) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "result and diagnostic must not be NULL");
@@ -174,6 +160,13 @@ loomc_status_t loomc_result_add_loom_diagnostic(
   iree_string_builder_initialize(allocator, &formatted_builder);
   iree_string_builder_t parameter_values_builder;
   iree_string_builder_initialize(allocator, &parameter_values_builder);
+  const loomc_diagnostic_type_printer_t type_printer = {
+      .module = diagnostic->module,
+      .text_print_options = text_print_options,
+  };
+  const loom_type_formatter_t type_formatter =
+      loomc_diagnostic_type_printer_formatter(diagnostic->module ? &type_printer
+                                                                 : NULL);
 
   loom_source_range_t primary_range = diagnostic->source_location;
   loomc_source_format_t primary_format = LOOMC_SOURCE_FORMAT_UNKNOWN;
@@ -196,11 +189,11 @@ loomc_status_t loomc_result_add_loom_diagnostic(
   loomc_status_t status =
       loomc_format_loom_diagnostic_code(diagnostic, &code_builder);
   if (loomc_status_is_ok(status)) {
-    status = loomc_render_loom_diagnostic_message(diagnostic, type_printer,
+    status = loomc_render_loom_diagnostic_message(diagnostic, type_formatter,
                                                   &message_builder);
   }
   if (loomc_status_is_ok(status)) {
-    status = loomc_format_loom_diagnostic(diagnostic, type_printer,
+    status = loomc_format_loom_diagnostic(diagnostic, type_formatter,
                                           &formatted_builder);
   }
   if (loomc_status_is_ok(status) && diagnostic->params &&
@@ -213,8 +206,6 @@ loomc_status_t loomc_result_add_loom_diagnostic(
   loom_output_stream_t parameter_values_stream;
   loom_output_stream_for_builder(&parameter_values_builder,
                                  &parameter_values_stream);
-  const loom_type_formatter_t type_formatter =
-      loomc_diagnostic_type_printer_formatter(type_printer);
   for (iree_host_size_t i = 0;
        loomc_status_is_ok(status) && i < parameter_count; ++i) {
     parameters[i].name = loomc_make_cstring_view(
@@ -310,14 +301,14 @@ loomc_status_t loomc_result_add_loom_diagnostic_emission(
     loomc_result_t* result, const loom_module_t* module,
     loom_source_resolver_t source_resolver, loom_emitter_t emitter,
     const loom_diagnostic_emission_t* emission,
-    const loomc_diagnostic_type_printer_t* type_printer) {
+    const loom_text_print_options_t* text_print_options) {
   loom_diagnostic_t diagnostic;
   loom_diagnostic_related_location_t
       related_locations[LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS];
   loom_source_resolve_diagnostic(module, source_resolver, emitter, emission,
                                  related_locations, &diagnostic);
   return loomc_result_add_loom_diagnostic(result, NULL, &diagnostic,
-                                          type_printer);
+                                          text_print_options);
 }
 
 void loomc_diagnostic_capture_initialize(
@@ -331,9 +322,8 @@ void loomc_diagnostic_capture_initialize(
       .module = module,
       .source_resolver = source_resolver,
       .emitter = emitter,
+      .text_print_options = text_print_options,
   };
-  loomc_diagnostic_type_printer_initialize(module, text_print_options,
-                                           &out_capture->type_printer);
 }
 
 iree_status_t loomc_diagnostic_capture(void* user_data,
@@ -341,7 +331,7 @@ iree_status_t loomc_diagnostic_capture(void* user_data,
   const loomc_diagnostic_capture_t* capture = user_data;
   return iree_status_from_loomc(loomc_result_add_loom_diagnostic(
       capture->result, capture->source, diagnostic,
-      capture->module ? &capture->type_printer : NULL));
+      capture->text_print_options));
 }
 
 iree_status_t loomc_diagnostic_capture_emission(
@@ -349,7 +339,7 @@ iree_status_t loomc_diagnostic_capture_emission(
   const loomc_diagnostic_capture_t* capture = user_data;
   return iree_status_from_loomc(loomc_result_add_loom_diagnostic_emission(
       capture->result, capture->module, capture->source_resolver,
-      capture->emitter, emission, &capture->type_printer));
+      capture->emitter, emission, capture->text_print_options));
 }
 
 loomc_status_t loomc_result_verify_loom_module(
