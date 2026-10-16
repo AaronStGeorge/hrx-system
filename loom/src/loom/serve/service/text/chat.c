@@ -1663,10 +1663,8 @@ typedef struct loom_serve_text_chat_completion_tools_t {
   iree_host_size_t count;
   // Standard tool-call array destination.
   iree_string_builder_t* output;
-  // Canonical model-format call fragments.
-  iree_string_builder_t rendered;
-  // Decoded argument JSON for the current call.
-  iree_string_builder_t arguments;
+  // Exclusively borrowed formatting storage, reused across completions.
+  loom_serve_text_chat_scratch_t* scratch;
 } loom_serve_text_chat_completion_tools_t;
 
 static iree_status_t loom_serve_text_chat_completion_tool(
@@ -1694,13 +1692,13 @@ static iree_status_t loom_serve_text_chat_completion_tool(
       call[1].value, IREE_ARRAYSIZE(function), function, 0));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&function[0]));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_required(&function[1]));
-  iree_string_builder_reset(&tools->arguments);
-  IREE_RETURN_IF_ERROR(loom_serve_text_chat_append_decoded(&tools->arguments,
-                                                           function[1].value));
+  iree_string_builder_reset(&tools->scratch->arguments);
+  IREE_RETURN_IF_ERROR(loom_serve_text_chat_append_decoded(
+      &tools->scratch->arguments, function[1].value));
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_function_render(
       tools->policy, function[0].value,
-      iree_string_builder_view(&tools->arguments), index, &tools->rendered,
-      tools->scratch_allocator));
+      iree_string_builder_view(&tools->scratch->arguments), index,
+      &tools->scratch->rendered, tools->scratch_allocator));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(tools->output, "%s{",
                                                          index ? "," : ""));
   if (iree_any_bit_set(tools->flags, LOOM_SERVE_TEXT_CHAT_FLAG_STREAM)) {
@@ -1726,12 +1724,30 @@ static iree_status_t loom_serve_text_chat_completion_tool(
   return iree_ok_status();
 }
 
+void loom_serve_text_chat_scratch_initialize(
+    iree_allocator_t host_allocator,
+    loom_serve_text_chat_scratch_t* out_scratch) {
+  iree_string_builder_initialize(host_allocator, &out_scratch->parsed);
+  iree_string_builder_initialize(host_allocator, &out_scratch->rendered);
+  iree_string_builder_initialize(host_allocator, &out_scratch->arguments);
+}
+
+void loom_serve_text_chat_scratch_deinitialize(
+    loom_serve_text_chat_scratch_t* scratch) {
+  iree_string_builder_deinitialize(&scratch->arguments);
+  iree_string_builder_deinitialize(&scratch->rendered);
+  iree_string_builder_deinitialize(&scratch->parsed);
+}
+
 iree_status_t loom_serve_text_chat_complete(
     loom_serve_text_chat_t* chat, iree_string_view_t response,
     uint64_t request_id, iree_string_builder_t* tool_calls,
-    iree_allocator_t scratch_allocator,
+    loom_serve_text_chat_scratch_t* scratch, iree_allocator_t scratch_allocator,
     loom_serve_text_chat_completion_t* completion) {
   loom_serve_text_chat_completion_t result = {0};
+  iree_string_builder_reset(&scratch->parsed);
+  iree_string_builder_reset(&scratch->rendered);
+  iree_string_builder_reset(&scratch->arguments);
   loom_serve_text_chat_output_t output;
   do {
     IREE_RETURN_IF_ERROR(loom_serve_text_chat_output_next(
@@ -1741,26 +1757,23 @@ iree_status_t loom_serve_text_chat_complete(
   const iree_string_view_t inputs[] = {
       chat->tool_schemas, iree_string_view_substr(response, chat->output.cursor,
                                                   IREE_HOST_SIZE_MAX)};
-  iree_string_builder_t parsed;
-  iree_string_builder_initialize(tool_calls->allocator, &parsed);
   loom_serve_text_chat_completion_tools_t tools = {
       .scratch_allocator = scratch_allocator,
       .policy = chat->policy,
       .request_id = request_id,
       .flags = chat->flags,
-      .output = tool_calls};
-  iree_string_builder_initialize(tool_calls->allocator, &tools.rendered);
-  iree_string_builder_initialize(tool_calls->allocator, &tools.arguments);
+      .output = tool_calls,
+      .scratch = scratch};
   iree_status_t status = loom_serve_text_chat_render(
       chat->policy, chat->policy->parse_tools, IREE_ARRAYSIZE(inputs), inputs,
-      0, NULL, &parsed, scratch_allocator, NULL);
+      0, NULL, &scratch->parsed, scratch_allocator, NULL);
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(tool_calls, "[");
   }
   if (iree_status_is_ok(status)) {
     status = iree_json_enumerate_array_typed(
-        iree_string_builder_view(&parsed), loom_serve_text_chat_completion_tool,
-        &tools);
+        iree_string_builder_view(&scratch->parsed),
+        loom_serve_text_chat_completion_tool, &tools);
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(tool_calls, "]");
@@ -1768,16 +1781,13 @@ iree_status_t loom_serve_text_chat_complete(
   if (iree_status_is_ok(status)) {
     result.tool_count = tools.count;
     status = loom_serve_text_chat_checkpoint(
-        chat, response, iree_string_builder_view(&tools.rendered),
+        chat, response, iree_string_builder_view(&scratch->rendered),
         chat->host_allocator, &result);
   }
   if (iree_status_is_ok(status)) {
     status = loom_serve_text_chat_media_identity_initialize(
         chat, chat->host_allocator, &result.media);
   }
-  iree_string_builder_deinitialize(&tools.arguments);
-  iree_string_builder_deinitialize(&tools.rendered);
-  iree_string_builder_deinitialize(&parsed);
   if (iree_status_is_ok(status)) {
     loom_serve_text_chat_completion_deinitialize(completion);
     *completion = result;

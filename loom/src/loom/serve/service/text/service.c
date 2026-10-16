@@ -156,6 +156,8 @@ struct loom_serve_text_service_t {
   iree_string_builder_t scratch;
   // Shared typed tool-call serialization scratch used at generation end.
   iree_string_builder_t tool_calls;
+  // Completion parser/formatter backing reused by all serialized output jobs.
+  loom_serve_text_chat_scratch_t completion_scratch;
   // Fixed retained rows sharing one model, command set and execution timeline.
   loom_serve_text_session_t sessions[LOOM_SERVE_TEXT_ROW_CAPACITY];
 };
@@ -1368,7 +1370,7 @@ static iree_status_t loom_serve_text_process_output(void* user_data) {
           &service->sessions[service->epoch.spans[i].row_index];
       status = loom_serve_text_response_tokens(
           session, service->name, output->output_count, output->tokens,
-          &service->scratch, &service->tool_calls,
+          &service->scratch, &service->tool_calls, &service->completion_scratch,
           iree_arena_allocator(&arena));
     }
   }
@@ -1597,6 +1599,7 @@ void loom_serve_text_service_free(loom_serve_text_service_t* service,
   }
   loom_serve_text_readiness_deinitialize(&service->readiness);
   iree_string_builder_deinitialize(&service->tool_calls);
+  loom_serve_text_chat_scratch_deinitialize(&service->completion_scratch);
   iree_string_builder_deinitialize(&service->scratch);
   iree_allocator_free(host_allocator, service->pending.storage);
   loom_serve_text_checkpoint_registry_deinitialize(&service->checkpoints);
@@ -1679,6 +1682,8 @@ iree_status_t loom_serve_text_service_allocate(
                                        &service->readiness);
   iree_string_builder_initialize(host_allocator, &service->scratch);
   iree_string_builder_initialize(host_allocator, &service->tool_calls);
+  loom_serve_text_chat_scratch_initialize(host_allocator,
+                                          &service->completion_scratch);
   iree_status_t status = loom_serve_text_service_initialize(service, stream);
   if (iree_status_is_ok(status)) {
     status = loom_serve_execution_reconfiguration_allocate(

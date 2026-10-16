@@ -176,6 +176,7 @@ static iree_status_t loom_serve_text_complete(
     loom_serve_text_session_t* session,
     const loom_serve_text_chat_response_t* response,
     iree_string_builder_t* scratch, iree_string_builder_t* tool_calls,
+    loom_serve_text_chat_scratch_t* completion_scratch,
     iree_allocator_t scratch_allocator) {
   char text[8192];
   iree_host_size_t length = 0;
@@ -192,8 +193,8 @@ static iree_status_t loom_serve_text_complete(
   iree_string_builder_reset(tool_calls);
   IREE_RETURN_IF_ERROR(loom_serve_text_chat_complete(
       &session->request.chat, iree_string_builder_view(&session->response),
-      session->lifetime.serial, tool_calls, scratch_allocator,
-      &session->completion));
+      session->lifetime.serial, tool_calls, completion_scratch,
+      scratch_allocator, &session->completion));
   const iree_host_size_t tool_count = session->completion.tool_count;
   session->request.finish_reason = tool_count ? "tool_calls"
                                    : loom_serve_text_row_is_eos(session->row)
@@ -249,6 +250,7 @@ iree_status_t loom_serve_text_session_append_tokens(
     loom_serve_text_session_t* session, iree_string_view_t model_name,
     iree_host_size_t count, const int32_t* tokens,
     iree_string_builder_t* scratch, iree_string_builder_t* tool_calls,
+    loom_serve_text_chat_scratch_t* completion_scratch,
     iree_allocator_t scratch_allocator) {
   if (!session->request.output_count) {
     session->request.first_token_time = iree_time_now();
@@ -282,7 +284,7 @@ iree_status_t loom_serve_text_session_append_tokens(
         session->request.output_count == session->request.chat.max_tokens;
     if (complete) {
       status = loom_serve_text_complete(session, &response, scratch, tool_calls,
-                                        scratch_allocator);
+                                        completion_scratch, scratch_allocator);
     } else if (iree_any_bit_set(response.flags,
                                 LOOM_SERVE_TEXT_CHAT_FLAG_STREAM)) {
       status = loom_serve_text_emit_output(

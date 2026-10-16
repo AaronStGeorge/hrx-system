@@ -71,12 +71,14 @@ TEST_F(SourceTextServiceTest,
   iree_arena_initialize(loom_serve_host_block_pool(host_), &arena);
   iree_string_builder_t tools;
   iree_string_builder_initialize(host_allocator_, &tools);
+  loom_serve_text_chat_scratch_t scratch;
+  loom_serve_text_chat_scratch_initialize(host_allocator_, &scratch);
   loom_serve_text_chat_completion_t completion = {};
   // The fixture returns the prompt itself for an empty response. That source
   // alias must keep owned storage, not retain a temporary argument wrapper.
-  IREE_ASSERT_OK(
-      loom_serve_text_chat_complete(&chat, iree_string_view_empty(), 1, &tools,
-                                    iree_arena_allocator(&arena), &completion));
+  IREE_ASSERT_OK(loom_serve_text_chat_complete(
+      &chat, iree_string_view_empty(), 1, &tools, &scratch,
+      iree_arena_allocator(&arena), &completion));
   loom_serve_text_chat_deinitialize(&chat);
   iree_arena_reset(&arena);
   void* overwritten = nullptr;
@@ -85,6 +87,87 @@ TEST_F(SourceTextServiceTest,
   EXPECT_TRUE(iree_string_view_equal(completion.transcript, IREE_SV("abx")));
   EXPECT_TRUE(completion.reusable);
   loom_serve_text_chat_completion_deinitialize(&completion);
+  loom_serve_text_chat_scratch_deinitialize(&scratch);
+  iree_string_builder_deinitialize(&tools);
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(SourceTextServiceTest, OutputScratchFailureLeavesParserUnadvanced) {
+  const auto* policy = loom_serve_text_model_chat_policy(model_);
+  const std::string body = Request(Message("user", "a"), 4);
+  loom_serve_text_chat_t chat = {};
+  IREE_ASSERT_OK(loom_serve_text_chat_initialize(
+      policy, policy->name, iree_make_cstring_view(body.c_str()), 1, 4,
+      host_allocator_, &chat));
+  iree::vm::testing::CountingAllocator allocator(1);
+  iree_arena_block_pool_t pool;
+  iree_arena_block_pool_initialize(64 * 1024, allocator.allocator(), &pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&pool, &arena);
+  loom_serve_text_chat_output_t output;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_serve_text_chat_output_next(&chat, IREE_SV("b"),
+                                       LOOM_SERVE_TEXT_CHAT_OUTPUT_STREAMING,
+                                       iree_arena_allocator(&arena), &output));
+  EXPECT_EQ(chat.output.cursor, 0u);
+  EXPECT_EQ(iree_string_builder_size(&chat.output.content), 0u);
+  EXPECT_FALSE(output.advanced);
+  iree_arena_reset(&arena);
+  IREE_ASSERT_OK(loom_serve_text_chat_output_next(
+      &chat, IREE_SV("b"), LOOM_SERVE_TEXT_CHAT_OUTPUT_STREAMING,
+      iree_arena_allocator(&arena), &output));
+  EXPECT_TRUE(output.advanced);
+  EXPECT_TRUE(iree_string_view_equal(output.text, IREE_SV("b")));
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&pool);
+  loom_serve_text_chat_deinitialize(&chat);
+}
+
+TEST_F(SourceTextServiceTest, CompletionFormattingReusesCapacityAcrossRows) {
+  const auto* policy = loom_serve_text_model_chat_policy(model_);
+  const std::string body = Request(Message("user", "a"), 4);
+  iree::vm::testing::CountingAllocator allocator;
+  loom_serve_text_chat_scratch_t scratch;
+  loom_serve_text_chat_scratch_initialize(allocator.allocator(), &scratch);
+  iree_string_builder_t tools;
+  iree_string_builder_initialize(allocator.allocator(), &tools);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(loom_serve_host_block_pool(host_), &arena);
+  iree_host_size_t warm_allocations = 0;
+  for (size_t row = 0; row < 8; ++row) {
+    loom_serve_text_chat_t chat = {};
+    IREE_ASSERT_OK(loom_serve_text_chat_initialize(
+        policy, policy->name, iree_make_cstring_view(body.c_str()), row + 1, 4,
+        host_allocator_, &chat));
+    // Prior-row formatting must not leak into the next row, even when its
+    // source parser returns no calls and never touches these builders itself.
+    IREE_ASSERT_OK(iree_string_builder_append_cstring(&scratch.arguments,
+                                                      "prior arguments"));
+    IREE_ASSERT_OK(iree_string_builder_append_cstring(&scratch.rendered,
+                                                      "prior tool calls"));
+    iree_string_builder_reset(&tools);
+    loom_serve_text_chat_completion_t completion = {};
+    IREE_ASSERT_OK(loom_serve_text_chat_complete(
+        &chat, IREE_SV("b"), row + 1, &tools, &scratch,
+        iree_arena_allocator(&arena), &completion));
+    if (row == 0) {
+      warm_allocations = allocator.allocation_count();
+    }
+    EXPECT_EQ(allocator.allocation_count(), warm_allocations);
+    EXPECT_EQ(allocator.free_count(), 0u);
+    EXPECT_TRUE(iree_string_view_equal(iree_string_builder_view(&tools),
+                                       IREE_SV("[]")));
+    EXPECT_TRUE(iree_string_view_equal(
+        iree_string_builder_view(&scratch.parsed), IREE_SV("[]")));
+    EXPECT_EQ(iree_string_builder_size(&scratch.rendered), 0u);
+    EXPECT_EQ(iree_string_builder_size(&scratch.arguments), 0u);
+    loom_serve_text_chat_deinitialize(&chat);
+    iree_arena_reset(&arena);
+    EXPECT_TRUE(iree_string_view_equal(completion.transcript, IREE_SV("ab")));
+    loom_serve_text_chat_completion_deinitialize(&completion);
+  }
+  loom_serve_text_chat_scratch_deinitialize(&scratch);
   iree_string_builder_deinitialize(&tools);
   iree_arena_deinitialize(&arena);
 }
@@ -106,8 +189,11 @@ TEST_F(SourceTextServiceTest,
       host_allocator_, &next));
   iree_string_builder_t tools;
   iree_string_builder_initialize(host_allocator_, &tools);
+  loom_serve_text_chat_scratch_t completion_scratch;
+  loom_serve_text_chat_scratch_initialize(host_allocator_, &completion_scratch);
   loom_serve_text_chat_completion_t completion = {};
   IREE_ASSERT_OK(loom_serve_text_chat_complete(&first, IREE_SV("b"), 1, &tools,
+                                               &completion_scratch,
                                                host_allocator_, &completion));
   const loom_serve_text_input_prefix_t prefix = {
       .completion = &completion,
@@ -158,6 +244,7 @@ TEST_F(SourceTextServiceTest,
   loom_serve_text_chat_deinitialize(&next);
   loom_serve_text_chat_deinitialize(&first);
   iree_string_builder_deinitialize(&tools);
+  loom_serve_text_chat_scratch_deinitialize(&completion_scratch);
 }
 
 TEST_F(RegisteredSourceTextServiceTest,
@@ -570,8 +657,11 @@ TEST_F(SourceTextServiceTest, RetainedHistoryRequiresExactOrderedMedia) {
 
   iree_string_builder_t tools;
   iree_string_builder_initialize(host_allocator_, &tools);
+  loom_serve_text_chat_scratch_t completion_scratch;
+  loom_serve_text_chat_scratch_initialize(host_allocator_, &completion_scratch);
   loom_serve_text_chat_completion_t completion = {};
   IREE_ASSERT_OK(loom_serve_text_chat_complete(&first, IREE_SV("b"), 10, &tools,
+                                               &completion_scratch,
                                                host_allocator_, &completion));
   loom_serve_text_chat_completion_t retained = {};
   loom_serve_text_chat_completion_retain(&completion, &retained);
@@ -607,6 +697,7 @@ TEST_F(SourceTextServiceTest, RetainedHistoryRequiresExactOrderedMedia) {
   loom_serve_text_input_deinitialize(&input, host_allocator_);
   loom_serve_text_chat_completion_deinitialize(&retained);
   iree_string_builder_deinitialize(&tools);
+  loom_serve_text_chat_scratch_deinitialize(&completion_scratch);
   loom_serve_text_chat_deinitialize(&different_placement);
   loom_serve_text_chat_deinitialize(&different_detail);
   loom_serve_text_chat_deinitialize(&different_image);

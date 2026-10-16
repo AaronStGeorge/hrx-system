@@ -291,6 +291,25 @@ bool loom_serve_text_chat_completion_is_prefix(
     const loom_serve_text_chat_completion_t* completion,
     const loom_serve_text_chat_t* chat);
 
+// Reusable completion formatting buffers, exclusively borrowed for one call.
+// A service shares one instance across its rows. No views into this storage
+// escape into completed histories; only capacity survives between calls.
+typedef struct loom_serve_text_chat_scratch_t {
+  // Standard function records returned by the source parser.
+  iree_string_builder_t parsed;
+  // Canonical model-format tool fragments used to construct retained history.
+  iree_string_builder_t rendered;
+  // Decoded JSON arguments of the current generated function call.
+  iree_string_builder_t arguments;
+} loom_serve_text_chat_scratch_t;
+
+// Initializes empty builders; backing grows lazily and is reused by completion.
+void loom_serve_text_chat_scratch_initialize(
+    iree_allocator_t host_allocator,
+    loom_serve_text_chat_scratch_t* out_scratch);
+void loom_serve_text_chat_scratch_deinitialize(
+    loom_serve_text_chat_scratch_t* scratch);
+
 // Invokes source parsing of the generated suffix into typed function calls.
 // Returns the source-owned canonical completed transcript and appends an OpenAI
 // tool_calls array to tool_calls. IDs are stable across both output forms;
@@ -304,10 +323,11 @@ bool loom_serve_text_chat_completion_is_prefix(
 // history; it does not replace original generated tokens in device state.
 // scratch_allocator owns call-local argument wrappers only. Retained history
 // uses the request's host allocator, independent of temporary formatting work.
+// scratch is reset on entry and may be reused immediately after return.
 iree_status_t loom_serve_text_chat_complete(
     loom_serve_text_chat_t* chat, iree_string_view_t response,
     uint64_t request_id, iree_string_builder_t* tool_calls,
-    iree_allocator_t scratch_allocator,
+    loom_serve_text_chat_scratch_t* scratch, iree_allocator_t scratch_allocator,
     loom_serve_text_chat_completion_t* completion);
 
 // Borrowed wire metadata copied from a session at each publication. Identity

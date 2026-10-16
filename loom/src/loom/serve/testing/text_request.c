@@ -264,6 +264,8 @@ static iree_status_t loom_serve_text_request_check_run(
   }
   iree_string_builder_t tool_calls;
   iree_string_builder_initialize(host_allocator, &tool_calls);
+  loom_serve_text_chat_scratch_t scratch;
+  loom_serve_text_chat_scratch_initialize(host_allocator, &scratch);
   loom_serve_text_chat_completion_t completion = {0};
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(64 * 1024, host_allocator, &block_pool);
@@ -289,7 +291,7 @@ static iree_status_t loom_serve_text_request_check_run(
   if (iree_status_is_ok(status) && response) {
     status = loom_serve_text_chat_complete(
         &chat, loom_serve_text_request_check_file_text(response), 1,
-        &tool_calls, iree_arena_allocator(&arena), &completion);
+        &tool_calls, &scratch, iree_arena_allocator(&arena), &completion);
   }
   iree_arena_deinitialize(&arena);
   iree_arena_block_pool_deinitialize(&block_pool);
@@ -299,6 +301,7 @@ static iree_status_t loom_serve_text_request_check_run(
         response ? &completion : NULL, iree_string_builder_view(&tool_calls));
   }
   loom_serve_text_chat_completion_deinitialize(&completion);
+  loom_serve_text_chat_scratch_deinitialize(&scratch);
   iree_string_builder_deinitialize(&tool_calls);
   iree_io_file_contents_free(response);
   iree_allocator_free(host_allocator, tokens);
