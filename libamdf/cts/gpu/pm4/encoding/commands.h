@@ -177,6 +177,9 @@ class Pm4CommandWriter {
   // Samples the GPU clock at the command processor using confirmed COPY_DATA.
   // This is not shader completion, cache release, or a host-correlated time.
   void CopyGpuClock64(uint64_t target_address);
+  // Emits one type-3 NOP of at least two words, including its header. A primary
+  // ring producer uses this to fill the tail before wrapping a complete packet.
+  void Noop(size_t word_count);
   // Emits a complete NOP so this stream plus a following terminal packet is
   // eight-DWORD aligned. The caller emits exactly trailing_word_count words
   // afterward; zero pads the current stream normally.
@@ -189,9 +192,6 @@ class Pm4CommandWriter {
   // Writes a known ordinary compute register interval relative to SH space.
   void SetComputeRegisters(uint32_t first_register, const uint32_t* values,
                            size_t value_count);
-  // Emits one type-3 NOP of at least two words, including its header.
-  void Noop(size_t word_count);
-
   // Caller-owned command storage, large enough for the known test sequence.
   uint32_t* words_;
   // Borrowed immutable encoding facts selected before stream construction.

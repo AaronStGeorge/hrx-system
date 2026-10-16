@@ -236,6 +236,13 @@ typedef struct amdf_gpu_device_info_t {
 /// reused; command completion requires a separate fence.
 /// Each publication ends on an eight-dword boundary, padded with type-3 NOP
 /// packets when necessary; packets never straddle ring wrap.
+/// A confirmed completion written by a primary-ring RELEASE_MEM also proves
+/// consumption of the command prefix through that release packet. A producer
+/// retaining that exact position may reclaim this prefix without waiting for
+/// the native read-index writeback. It must still leave one dword free relative
+/// to the proven consumed prefix. Later notification packets and padding are
+/// not covered by the earlier marker. Reclaiming referenced code, arguments or
+/// payloads additionally requires their own execution and visibility join.
 /// Kernel publication accepts an immutable dword-aligned first-level IB.
 /// A USER primary ring can call a first-level IB and resume after it. KERNEL
 /// submits that IB directly; placing the ring's call inside a KERNEL buffer
