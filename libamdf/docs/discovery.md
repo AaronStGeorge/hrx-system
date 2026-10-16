@@ -45,6 +45,38 @@ XDNA context's instruction aperture, are obtained from that explicitly created
 owner. Discovering a physical memory location does not implicitly create the
 device required to allocate there.
 
+## Host CPU locality
+
+An opened endpoint can supply a CPU NUMA node for placing submission,
+completion, or memory-service workers. The optional output extension uses
+the same cached query as identity:
+
+```c
+amdf_endpoint_host_locality_t locality = {
+    .type = AMDF_STRUCTURE_TYPE_ENDPOINT_HOST_LOCALITY,
+    .structure_size = sizeof(locality),
+};
+amdf_endpoint_info_t info = {
+    .type = AMDF_STRUCTURE_TYPE_ENDPOINT_INFO,
+    .structure_size = sizeof(info),
+    .next = &locality,
+};
+amdf_status_t status = api->endpoint_query_info(endpoint, &info);
+```
+
+After success, `locality.numa_node` identifies the endpoint's OS attachment
+node if it contained online host CPUs when the endpoint was opened.
+`UINT32_MAX` means that no such CPU node was established. Node zero is valid.
+The query preserves the caller's headers and extension storage and performs
+no allocation, system call, or device activation.
+
+This CPU node is distinct from an accelerator's memory domains, KFD topology
+indices, and Windows processor groups. A memory-only attachment node yields
+unknown CPU locality. The snapshot does not track later CPU hotplug or changes
+to process affinity. The runtime combines this hint with its allowed CPU sets
+and explicit application placement policy; libamdf creates no worker and
+changes no affinity.
+
 ## Matching other native APIs
 
 `endpoint_query_info` also returns a typed `native_identity` captured during
