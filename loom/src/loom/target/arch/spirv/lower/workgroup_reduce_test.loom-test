@@ -243,15 +243,15 @@ kernel.def @later_payload_capability() {
 
 // RUN: emit spirv-low target=spirv:vulkan1.3+bda+subgroup32+reductions+hal features=BFLOAT16_TYPE_KHR
 
-kernel.def @unsupported_native_type() {
+kernel.def @bfloat_preservation_requires_provider() {
   %unit = index.constant 1 : index
   %width = index.constant 3 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
 } launch(%output: buffer, %value: bf16) {
   %base = index.constant 0 : offset
   %destination = buffer.view %output[%base] : buffer -> view<1xbf16>
-  // ERROR@+1: TARGET/033 {field_name="values", actual_type="bf16"}
-  %sum = kernel.workgroup.reduce<addf> %value : bf16
+  // ERROR@+1: TARGET/003 {subject_role="flags", subject_name="math", constraint_key="has_none.preserve"}
+  %sum = kernel.workgroup.reduce<addf, preserve> %value : bf16
   view.store %sum, %destination[0] : bf16, view<1xbf16>
   kernel.return
 }
