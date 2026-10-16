@@ -13,6 +13,7 @@
 #include <cxx/symbols.h>
 #include <cxx/types.h>
 
+#include <cstring>
 #include <utility>
 
 #include "loom/import/cxx/source/error.h"
@@ -73,6 +74,26 @@ void for_each_default_initializer(cxx::TranslationUnit& unit,
 }
 
 }  // namespace
+
+loom_string_id_t Initialization::zero_name(loom_scalar_type_t scalar_type) {
+  IREE_ASSERT(loom_scalar_type_is_valid(scalar_type));
+  auto& name_id = zero_name_ids_[scalar_type];
+  if (name_id != LOOM_STRING_ID_INVALID) {
+    return name_id;
+  }
+  static constexpr char kPrefix[] = "zero$";
+  char storage[32];
+  const char* scalar_name = loom_scalar_type_name(scalar_type);
+  const iree_host_size_t prefix_length = sizeof(kPrefix) - 1;
+  const iree_host_size_t scalar_length = std::strlen(scalar_name);
+  IREE_ASSERT(prefix_length + scalar_length <= sizeof(storage));
+  std::memcpy(storage, kPrefix, prefix_length);
+  std::memcpy(storage + prefix_length, scalar_name, scalar_length);
+  check(loom_builder_intern_string(
+      &builder_, iree_make_string_view(storage, prefix_length + scalar_length),
+      &name_id));
+  return name_id;
+}
 
 Value Initialization::value(const cxx::Type* type,
                             cxx::ExpressionAST* initializer,
@@ -154,7 +175,10 @@ Value Initialization::zero(const cxx::Type* type, cxx::AST* owner) {
   check(loom_scalar_constant_build(
       &builder_, types_.is_float(type) ? loom_attr_f64(0.0) : loom_attr_i64(0),
       output, locations_.get(owner), &op));
-  return loom_op_results(op)[0];
+  loom_value_id_t result = loom_op_results(op)[0];
+  check(loom_module_set_value_name(builder_.module, result,
+                                   zero_name(loom_type_element_type(output))));
+  return result;
 }
 
 Value Initialization::finish_value_receiver(const RecordPartition& record,

@@ -10,6 +10,7 @@
 #include <cxx/ast_fwd.h>
 #include <cxx/symbols_fwd.h>
 
+#include <array>
 #include <optional>
 
 #include "loom/import/cxx/value/objects.h"
@@ -70,7 +71,9 @@ class Initialization {
         arena_(arena),
         locations_(locations),
         builder_(builder),
-        evaluation_(evaluation) {}
+        evaluation_(evaluation) {
+    zero_name_ids_.fill(LOOM_STRING_ID_INVALID);
+  }
 
   // Builds one source value from its complete normalized initializer. The
   // selected constructor is retained separately on declarations and implicit
@@ -95,6 +98,7 @@ class Initialization {
                       cxx::VariableSymbol* implicit_element,
                       cxx::FunctionSymbol* constructor, cxx::AST* owner,
                       std::optional<Value> retained);
+  loom_string_id_t zero_name(loom_scalar_type_t scalar_type);
   Value zero(const cxx::Type* type, cxx::AST* owner);
   Value default_record(const RecordPartition& record,
                        cxx::FunctionSymbol* constructor, bool zero_initialize,
@@ -129,6 +133,8 @@ class Initialization {
   loom_builder_t& builder_;
   // Borrowed evaluator outlives all initializer traversal.
   Evaluation& evaluation_;
+  // Lazily interned compiler names distinguish simultaneous scalar zero types.
+  std::array<loom_string_id_t, LOOM_SCALAR_TYPE_COUNT_> zero_name_ids_;
 };
 
 }  // namespace loom::cxx_import
