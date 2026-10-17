@@ -1835,12 +1835,9 @@ static iree_status_t iree_hal_amdgpu_host_queue_enqueue_alloca(
 
   // Always ask the pool to surface waitable death-frontier candidates so the
   // queue can distinguish true pool pressure from an internal dependency.
-  // Disallow growth while submission_mutex is held; growable pools report that
-  // as a cold retry instead of calling into their slab provider on the
-  // serialized queue path.
+  // Pool acquisition begins only after submission_mutex is released.
   const iree_hal_pool_reserve_flags_t reserve_flags =
-      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER |
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH;
+      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER;
 
   iree_hal_amdgpu_host_queue_op_submission_t submission = {0};
   iree_hal_amdgpu_pending_op_t* memory_wait_op = NULL;

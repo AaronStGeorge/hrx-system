@@ -264,6 +264,8 @@ iree_cc_library(
     "allocator.h"
     "api.h"
   SRCS
+    "allocation_queue.c"
+    "allocation_queue.h"
     "allocator.c"
     "allocator.h"
     "aql_atomic.c"

@@ -12,6 +12,7 @@
 #include "iree/async/notification.h"
 #include "iree/hal/drivers/amdgpu/abi/signal.h"
 #include "iree/hal/drivers/amdgpu/access_policy.h"
+#include "iree/hal/drivers/amdgpu/allocation_queue.h"
 #include "iree/hal/drivers/amdgpu/hostcall_provider.h"
 #include "iree/hal/drivers/amdgpu/pm4_command_buffer.h"
 #include "iree/hal/drivers/amdgpu/system.h"
@@ -666,6 +667,8 @@ static iree_status_t iree_hal_amdgpu_physical_device_initialize_memory_services(
     iree_thread_affinity_set_group_any(out_physical_device->host_numa_node,
                                        &affinity);
   }
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_allocation_queue_create(
+      affinity, host_allocator, &out_physical_device->allocation_queue));
   IREE_RETURN_IF_ERROR(iree_hal_memory_maintenance_thread_create(
       affinity, host_allocator, &out_physical_device->memory_maintenance));
 
@@ -1382,6 +1385,9 @@ void iree_hal_amdgpu_physical_device_deinitialize(
   iree_hal_amdgpu_host_signal_pool_deinitialize(
       &physical_device->host_signal_pool);
 
+  iree_hal_amdgpu_allocation_queue_close(physical_device->allocation_queue);
+  iree_hal_amdgpu_allocation_queue_release(physical_device->allocation_queue);
+  physical_device->allocation_queue = NULL;
   iree_async_notification_release(physical_device->memory_notification);
   iree_hal_memory_maintenance_release(physical_device->memory_maintenance);
 

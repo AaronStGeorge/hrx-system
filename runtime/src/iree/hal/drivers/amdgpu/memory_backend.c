@@ -433,6 +433,7 @@ static iree_status_t iree_hal_amdgpu_slab_pool_query_memory(
   plan->libhsa = backend->libhsa;
   plan->physical_ordinal = physical_device->device_ordinal;
   plan->buffer_pool = &physical_device->materialized_buffer_pool;
+  plan->provider_options.allocation_queue = physical_device->allocation_queue;
   plan->progress.notification = physical_device->memory_notification;
   plan->progress.maintenance = physical_device->memory_maintenance;
   plan->progress.epoch_query = backend->epoch_query;

@@ -198,6 +198,8 @@ iree_runtime_cc_library(
 iree_runtime_cc_library(
     name = "amdgpu",
     srcs = [
+        "allocation_queue.c",
+        "allocation_queue.h",
         "allocator.c",
         "allocator.h",
         "aql_atomic.c",

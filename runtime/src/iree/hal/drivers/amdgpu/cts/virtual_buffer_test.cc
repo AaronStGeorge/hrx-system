@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <array>
+#include <future>
 
 #include "iree/hal/cts/util/test_base.h"
+#include "iree/hal/pool_wait.h"
 
 namespace iree::hal::cts {
 namespace {
@@ -313,9 +315,33 @@ TEST_P(AmdgpuVirtualBufferTest, PartialBatchFailureCanDetachEveryTarget) {
     target.reset();
   }
   source.reset();
-  iree_hal_pool_stats_t stats;
-  iree_hal_pool_query_stats(pool, &stats);
-  EXPECT_EQ(stats.bytes_committed, 0u);
+  // Final view release returns logical ownership immediately. Capacity is
+  // published only after the native allocation worker has freed the handle.
+  iree_hal_pool_wait_t* capacity = nullptr;
+  IREE_ASSERT_OK(
+      iree_hal_pool_wait_allocate(pool, iree_allocator_system(), &capacity));
+  iree_status_t status = iree_ok_status();
+  while (iree_status_is_ok(status)) {
+    iree_hal_pool_wait_prepare(capacity);
+    iree_hal_pool_stats_t stats;
+    iree_hal_pool_query_stats(pool, &stats);
+    if (stats.bytes_committed == 0) {
+      iree_hal_pool_wait_abort(capacity);
+      break;
+    }
+    std::promise<iree_status_code_t> completed;
+    auto future = completed.get_future();
+    iree_hal_pool_wait_commit(
+        capacity, iree_infinite_timeout(),
+        {[](void* user_data, iree_status_t status) {
+           static_cast<std::promise<iree_status_code_t>*>(user_data)->set_value(
+               iree_status_consume_code(status));
+         },
+         &completed});
+    status = iree_status_from_code(future.get());
+  }
+  iree_hal_pool_wait_free(capacity);
+  IREE_EXPECT_OK(status);
 }
 
 TEST_P(AmdgpuVirtualBufferTest, NativeCapabilitiesRejectUnrepresentableScopes) {

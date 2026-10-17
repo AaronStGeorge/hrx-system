@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 
+#include "iree/hal/drivers/amdgpu/allocation_queue.h"
 #include "iree/hal/drivers/amdgpu/allocator.h"
 #include "iree/hal/drivers/amdgpu/asan_state.h"
 #include "iree/hal/drivers/amdgpu/atomic_memory.h"
@@ -19,6 +20,9 @@
 typedef struct iree_hal_amdgpu_slab_provider_t {
   // Base slab-provider interface header.
   iree_hal_slab_provider_t base;
+
+  // Retained native allocation owner; NULL only for an explicit inline source.
+  iree_hal_amdgpu_allocation_queue_t* allocation_queue;
 
   // Borrowed HAL device used when wrapping slabs as AMDGPU buffers.
   iree_hal_device_t* device;
@@ -570,6 +574,8 @@ iree_status_t iree_hal_amdgpu_slab_provider_create(
   memset(provider, 0, sizeof(*provider));
   iree_hal_slab_provider_initialize(&iree_hal_amdgpu_slab_provider_vtable,
                                     host_allocator, &provider->base);
+  provider->allocation_queue = options.allocation_queue;
+  iree_hal_amdgpu_allocation_queue_retain(provider->allocation_queue);
   provider->device = device;
   provider->import_allocator = import_allocator;
   provider->libhsa = libhsa;
@@ -669,6 +675,7 @@ static void iree_hal_amdgpu_slab_provider_destroy(
   iree_allocator_t host_allocator = provider->base.host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_memory_trace_deinitialize(&provider->trace);
+  iree_hal_amdgpu_allocation_queue_release(provider->allocation_queue);
   iree_allocator_free(host_allocator, provider);
   IREE_TRACE_ZONE_END(z0);
 }
@@ -1101,7 +1108,7 @@ static void iree_hal_amdgpu_slab_provider_query_properties(
   *out_properties = provider->properties;
 }
 
-static void iree_hal_amdgpu_slab_provider_acquire_slabs(
+static void iree_hal_amdgpu_slab_provider_acquire_slabs_native(
     iree_hal_slab_provider_t* provider,
     iree_hal_slab_acquire_request_t* request) {
   iree_hal_amdgpu_slab_provider_t* native =
@@ -1137,11 +1144,57 @@ static void iree_hal_amdgpu_slab_provider_acquire_slabs(
   request->completion.fn(request->completion.user_data, status);
 }
 
-static void iree_hal_amdgpu_slab_provider_release_slabs(
+static void iree_hal_amdgpu_slab_provider_release_slabs_native(
     iree_hal_slab_provider_t* provider,
     iree_hal_slab_release_request_t* request) {
   iree_hal_slab_provider_release_slabs_inline(
       provider, request, iree_hal_amdgpu_slab_provider_release_slab);
+}
+
+void iree_hal_amdgpu_slab_provider_execute(
+    iree_hal_slab_operation_t* operation) {
+  switch (operation->type) {
+    case IREE_HAL_SLAB_OPERATION_ACQUIRE:
+      iree_hal_amdgpu_slab_provider_acquire_slabs_native(
+          operation->provider, (iree_hal_slab_acquire_request_t*)operation);
+      break;
+    case IREE_HAL_SLAB_OPERATION_RELEASE:
+      iree_hal_amdgpu_slab_provider_release_slabs_native(
+          operation->provider, (iree_hal_slab_release_request_t*)operation);
+      break;
+  }
+}
+
+static void iree_hal_amdgpu_slab_provider_acquire_slabs(
+    iree_hal_slab_provider_t* base, iree_hal_slab_acquire_request_t* request) {
+  iree_hal_amdgpu_slab_provider_t* provider =
+      iree_hal_amdgpu_slab_provider_cast(base);
+  if (provider->allocation_queue) {
+    iree_hal_amdgpu_allocation_queue_enqueue(provider->allocation_queue,
+                                             &request->operation);
+  } else {
+    iree_hal_amdgpu_slab_provider_execute(&request->operation);
+  }
+}
+
+static void iree_hal_amdgpu_slab_provider_release_slabs(
+    iree_hal_slab_provider_t* base, iree_hal_slab_release_request_t* request) {
+  iree_hal_amdgpu_slab_provider_t* provider =
+      iree_hal_amdgpu_slab_provider_cast(base);
+  // Borrowed imports must detach before final public view release returns.
+  bool imported = false;
+  for (iree_host_size_t i = 0; i < request->count; ++i) {
+    const iree_hal_amdgpu_slab_handle_t* handle =
+        (const iree_hal_amdgpu_slab_handle_t*)(uintptr_t)request->slabs[i]
+            .provider_handle;
+    imported |= handle && handle->imported_buffer;
+  }
+  if (provider->allocation_queue && !imported) {
+    iree_hal_amdgpu_allocation_queue_enqueue(provider->allocation_queue,
+                                             &request->operation);
+  } else {
+    iree_hal_amdgpu_slab_provider_execute(&request->operation);
+  }
 }
 
 static const iree_hal_slab_provider_vtable_t
