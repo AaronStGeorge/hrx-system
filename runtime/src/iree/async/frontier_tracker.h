@@ -223,7 +223,8 @@ uint8_t iree_async_frontier_tracker_machine_index(
 // succeeds; the others return ALREADY_EXISTS and consume no additional entry.
 //
 // |semaphore| is a borrowed bridge pointer. The registering participant must
-// retire the axis before destroying the borrowed semaphore.
+// retire the axis before destroying the borrowed semaphore. The tracker owns
+// bridge signaling; other producers must not independently signal it.
 iree_status_t iree_async_frontier_tracker_register_axis(
     iree_async_frontier_tracker_t* tracker, iree_async_axis_t axis,
     iree_async_semaphore_t* semaphore);
@@ -270,7 +271,9 @@ iree_status_t iree_async_frontier_tracker_query(
 //
 // If the axis has an associated semaphore, the semaphore is also signaled
 // to |epoch| (bridging frontier advancement to the proactor's semaphore wait
-// infrastructure).
+// infrastructure). Concurrent or reentrant advances may coalesce bridge
+// signals: the caller currently publishing to the bridge drains the latest
+// epoch while other callers continue without waiting for that publication.
 //
 // Returns the number of waiters that were dispatched.
 iree_host_size_t iree_async_frontier_tracker_advance(

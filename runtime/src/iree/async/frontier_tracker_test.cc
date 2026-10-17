@@ -916,6 +916,187 @@ TEST(SemaphoreBridgingTest, AdvanceWithoutSemaphore) {
   // No crash; that's the test.
 }
 
+// A real async semaphore with a controllable native publication boundary.
+// The tracker remains unmodified; the gate models a driver signal in flight.
+struct BridgeSemaphore {
+  // Embedded semaphore with the normal timeline and timepoint implementation.
+  iree_async_semaphore_t base;
+  // Progress owner retained through semaphore teardown.
+  iree_async_proactor_t* proactor = nullptr;
+  // Whether native publication of epoch one waits for the explicit gate.
+  bool hold_first_signal = false;
+  // Epoch whose native publication reports a real platform failure, or zero.
+  uint64_t failure_epoch = 0;
+  // Whether epoch one's signal has reached the native publication boundary.
+  std::atomic<bool> first_signal_entered{false};
+  // Explicit gate releasing the held native publication.
+  std::atomic<bool> allow_first_signal{false};
+  // Value actually published to the simulated native primitive.
+  std::atomic<uint64_t> native_epoch{0};
+  // Number of calls entering the native signal method.
+  std::atomic<int> signal_count{0};
+  // Number of signal methods currently executing, including callback dispatch.
+  std::atomic<int> active_signals{0};
+  // Inline causal storage used by the actual async semaphore helpers.
+  alignas(16) uint8_t frontier_storage[sizeof(iree_async_frontier_t) +
+                                       sizeof(iree_async_frontier_entry_t)];
+
+  BridgeSemaphore() {
+    IREE_CHECK_OK(iree_async_proactor_create_platform(
+        iree_async_proactor_options_default(), iree_allocator_system(),
+        &proactor));
+    iree_async_semaphore_initialize(&vtable, proactor, 0,
+                                    offsetof(BridgeSemaphore, frontier_storage),
+                                    1, &base);
+  }
+
+  ~BridgeSemaphore() {
+    iree_async_semaphore_deinitialize(&base);
+    iree_async_proactor_release(proactor);
+  }
+
+  static iree_status_t Signal(iree_async_semaphore_t* base, uint64_t value,
+                              const iree_async_frontier_t* frontier) {
+    auto* self = reinterpret_cast<BridgeSemaphore*>(base);
+    EXPECT_EQ(self->active_signals.fetch_add(1), 0);
+    self->signal_count.fetch_add(1);
+    iree_status_t status =
+        iree_async_semaphore_advance_timeline(base, value, frontier);
+    if (iree_status_is_ok(status)) {
+      if (value == 1 && self->hold_first_signal) {
+        self->first_signal_entered.store(true, std::memory_order_release);
+        while (!self->allow_first_signal.load(std::memory_order_acquire)) {
+          std::this_thread::yield();
+        }
+      }
+      if (value == self->failure_epoch) {
+        status = iree_status_from_code(IREE_STATUS_UNAVAILABLE);
+      } else {
+        self->native_epoch.store(value, std::memory_order_release);
+        iree_async_semaphore_dispatch_timepoints(base, value);
+      }
+    }
+    self->active_signals.fetch_sub(1);
+    return status;
+  }
+
+  // Dependency vtable preserves strict semaphore signaling and real callbacks.
+  inline static const iree_async_semaphore_vtable_t vtable = {
+      .destroy =
+          [](iree_async_semaphore_t*) {
+            ADD_FAILURE() << "borrowed stack semaphore lost its owner";
+          },
+      .query =
+          [](iree_async_semaphore_t* base) {
+            return static_cast<uint64_t>(iree_atomic_load(
+                &base->timeline_value, iree_memory_order_acquire));
+          },
+      .signal = Signal,
+      .on_fail = nullptr,
+  };
+};
+
+TEST(SemaphoreBridgingTest, ConcurrentAdvancePreservesNativePublicationOrder) {
+  BridgeSemaphore semaphore;
+  semaphore.hold_first_signal = true;
+  TrackerFixture fixture;
+  fixture.AddAxis(Axis(0), &semaphore.base);
+  CallbackState completion;
+  iree_async_semaphore_timepoint_t timepoint = {
+      .callback =
+          [](void* user_data, iree_async_semaphore_timepoint_t*,
+             iree_status_t status) { TrackingCallback(user_data, status); },
+      .user_data = &completion,
+  };
+  IREE_ASSERT_OK(
+      iree_async_semaphore_acquire_timepoint(&semaphore.base, 2, &timepoint));
+  std::thread first([&] {
+    iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 1);
+  });
+  while (!semaphore.first_signal_entered.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  // This call must return while the other caller's native signal is held.
+  iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 2);
+  EXPECT_EQ(semaphore.signal_count.load(), 1);
+  EXPECT_EQ(semaphore.native_epoch.load(), 0u);
+  EXPECT_EQ(completion.call_count, 0);
+  semaphore.allow_first_signal.store(true, std::memory_order_release);
+  first.join();
+  EXPECT_EQ(semaphore.signal_count.load(), 2);
+  EXPECT_EQ(semaphore.native_epoch.load(), 2u);
+  EXPECT_EQ(completion.call_count, 1);
+  EXPECT_EQ(completion.last_status_code, IREE_STATUS_OK);
+}
+
+TEST(SemaphoreBridgingTest, SignalCallbackAdvancesSameAxisWithoutReentry) {
+  BridgeSemaphore semaphore;
+  TrackerFixture fixture;
+  fixture.AddAxis(Axis(0), &semaphore.base);
+  iree_async_semaphore_timepoint_t timepoint = {
+      .callback =
+          [](void* user_data, iree_async_semaphore_timepoint_t*,
+             iree_status_t status) {
+            IREE_EXPECT_OK(status);
+            iree_async_frontier_tracker_advance(
+                static_cast<iree_async_frontier_tracker_t*>(user_data), Axis(0),
+                3);
+          },
+      .user_data = fixture.tracker(),
+  };
+  IREE_ASSERT_OK(
+      iree_async_semaphore_acquire_timepoint(&semaphore.base, 1, &timepoint));
+  iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 1);
+  EXPECT_EQ(semaphore.signal_count.load(), 2);
+  EXPECT_EQ(semaphore.native_epoch.load(), 3u);
+}
+
+TEST(SemaphoreBridgingTest, ConcurrentProgressDrainsLatestBridgeValue) {
+  BridgeSemaphore semaphore;
+  TrackerFixture fixture;
+  fixture.AddAxis(Axis(0), &semaphore.base);
+  constexpr int kThreadCount = 8;
+  constexpr int kAdvancesPerThread = 1000;
+  std::atomic<uint64_t> next_epoch{1};
+  std::array<std::thread, kThreadCount> advancing;
+  for (auto& thread : advancing) {
+    thread = std::thread([&] {
+      for (int i = 0; i < kAdvancesPerThread; ++i) {
+        const uint64_t epoch =
+            next_epoch.fetch_add(1, std::memory_order_relaxed);
+        iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), epoch);
+      }
+    });
+  }
+  for (auto& thread : advancing) {
+    thread.join();
+  }
+  EXPECT_EQ(semaphore.native_epoch.load(), kThreadCount * kAdvancesPerThread);
+  EXPECT_EQ(iree_atomic_load(&semaphore.base.failure_status,
+                             iree_memory_order_acquire),
+            0);
+}
+
+TEST(SemaphoreBridgingTest, NativeSignalFailureReachesWaiters) {
+  BridgeSemaphore semaphore;
+  semaphore.failure_epoch = 1;
+  TrackerFixture fixture;
+  fixture.AddAxis(Axis(0), &semaphore.base);
+  CallbackState completion;
+  iree_async_semaphore_timepoint_t timepoint = {
+      .callback =
+          [](void* user_data, iree_async_semaphore_timepoint_t*,
+             iree_status_t status) { TrackingCallback(user_data, status); },
+      .user_data = &completion,
+  };
+  IREE_ASSERT_OK(
+      iree_async_semaphore_acquire_timepoint(&semaphore.base, 1, &timepoint));
+  iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 1);
+  EXPECT_EQ(semaphore.native_epoch.load(), 0u);
+  EXPECT_EQ(completion.call_count, 1);
+  EXPECT_EQ(completion.last_status_code, IREE_STATUS_UNAVAILABLE);
+}
+
 TEST(SemaphoreBridgingTest, FailureCallbackRegistersAxisAndRetiresBridge) {
   iree_async_proactor_t* proactor = nullptr;
   IREE_ASSERT_OK(

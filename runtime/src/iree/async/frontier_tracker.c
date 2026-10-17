@@ -53,6 +53,9 @@ typedef struct iree_alignas(64) iree_async_axis_table_entry_t {
   // Readers acquire this flag before accessing the entry. Never cleared.
   iree_atomic_int32_t occupied;
 
+  // Nonzero while one caller publishes coalesced progress to the bridge.
+  iree_atomic_int32_t bridge_owned;
+
   // The full 64-bit axis identifier.
   iree_async_axis_t axis;
 
@@ -763,6 +766,40 @@ IREE_API_EXPORT iree_status_t iree_async_frontier_tracker_query(
 // Tracker operations
 //===----------------------------------------------------------------------===//
 
+// Native timeline publication must stay ordered even when callers advance the
+// same axis concurrently or a bridge callback advances it reentrantly. One
+// caller drains the latest requested epoch; other callers continue without
+// waiting for that caller or moving their work to another execution context.
+static void iree_async_frontier_tracker_publish_bridge(
+    iree_async_axis_table_entry_t* entry) {
+  if (iree_atomic_exchange(&entry->bridge_owned, 1,
+                           iree_memory_order_seq_cst)) {
+    return;
+  }
+  for (;;) {
+    const uint64_t epoch = (uint64_t)iree_atomic_load(
+        &entry->current_epoch, iree_memory_order_seq_cst);
+    // Another owner may have published this target before ownership returned
+    // to us. Strict native signal methods cannot receive duplicate values.
+    if (iree_async_semaphore_query(entry->semaphore) < epoch) {
+      iree_status_t status =
+          iree_async_semaphore_signal(entry->semaphore, epoch, NULL);
+      if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+        iree_async_semaphore_fail(entry->semaphore, status);
+      }
+    }
+    iree_atomic_store(&entry->bridge_owned, 0, iree_memory_order_seq_cst);
+    // Either a concurrent advancer claims the released ownership, or this
+    // read observes its request and we claim another publication turn.
+    if ((uint64_t)iree_atomic_load(&entry->current_epoch,
+                                   iree_memory_order_seq_cst) <= epoch ||
+        iree_atomic_exchange(&entry->bridge_owned, 1,
+                             iree_memory_order_seq_cst)) {
+      return;
+    }
+  }
+}
+
 iree_host_size_t iree_async_frontier_tracker_advance(
     iree_async_frontier_tracker_t* tracker, iree_async_axis_t axis,
     uint64_t epoch) {
@@ -788,14 +825,7 @@ iree_host_size_t iree_async_frontier_tracker_advance(
 
   // Phase 2: Signal semaphore if present.
   if (entry->semaphore != NULL) {
-    // Each timeline value must be signaled exactly once. If the signal fails
-    // (e.g. semaphore already past this epoch), it indicates a structural
-    // error. Fail the semaphore so waiters get a proper diagnostic.
-    iree_status_t signal_status =
-        iree_async_semaphore_signal(entry->semaphore, epoch, NULL);
-    if (IREE_UNLIKELY(!iree_status_is_ok(signal_status))) {
-      iree_async_semaphore_fail(entry->semaphore, signal_status);
-    }
+    iree_async_frontier_tracker_publish_bridge(entry);
   }
 
   // The minimum belongs to this axis: unrelated waits and later epochs do not
