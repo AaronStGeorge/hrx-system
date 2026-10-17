@@ -16,6 +16,8 @@ cc_library(
             "public/client/*.h",
             "public/client/*.hpp",
             "public/client/*.cpp",
+            "public/client/windows/*.h",
+            "public/client/windows/*.cpp",
             "public/common/*.h",
             "public/common/*.hpp",
             "public/common/*.cpp",
