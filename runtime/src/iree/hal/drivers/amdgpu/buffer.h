@@ -146,6 +146,12 @@ iree_status_t iree_hal_amdgpu_buffer_create_pooled(
     iree_hal_amdgpu_buffer_pool_t* pool, iree_allocator_t host_allocator,
     iree_hal_buffer_t** out_buffer);
 
+// Records direct native ownership in Tracy until this buffer releases it.
+// Only direct allocator buffers use this stream: imported storage and pool
+// wrappers have independent owners. Native release must finish before this
+// buffer's release callback returns.
+void iree_hal_amdgpu_buffer_trace_allocation(iree_hal_buffer_t* buffer);
+
 // Tags |buffer| with a profiling allocation id.
 //
 // Only direct synchronous allocator buffers should be tagged. Pool/materialized
