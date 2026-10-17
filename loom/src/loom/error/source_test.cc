@@ -170,8 +170,8 @@ class SourceResolverTest : public ::testing::Test {
     iree_arena_block_pool_deinitialize(&pool);
   }
   loom_location_id_t FileLocation(iree_string_view_t filename,
-                                  uint16_t start_line, uint16_t start_column,
-                                  uint16_t end_line, uint16_t end_column) {
+                                  uint32_t start_line, uint32_t start_column,
+                                  uint32_t end_line, uint32_t end_column) {
     loom_source_id_t source_id;
     IREE_CHECK_OK(loom_module_register_source(module, filename, &source_id));
     loom_location_id_t location;
@@ -261,15 +261,16 @@ TEST_F(SourceResolverTest,
 }
 
 TEST_F(SourceResolverTest, MissingSnapshotsRetainRecordedCoordinates) {
-  auto location = FileLocation(IREE_SV("kernel.cxx"), 3, 15, 3, 34);
+  auto location =
+      FileLocation(IREE_SV("kernel.cxx"), 70003, 80015, 90003, 100034);
   loom_source_range_t range = {};
   EXPECT_FALSE(loom_source_resolve({}, module, LOOM_LOCATION_UNKNOWN, &range));
   ASSERT_TRUE(loom_source_resolve({}, module, location, &range));
   EXPECT_TRUE(iree_string_view_equal(range.filename, IREE_SV("kernel.cxx")));
-  EXPECT_EQ(range.start_line, 3u);
-  EXPECT_EQ(range.start_column, 15u);
-  EXPECT_EQ(range.end_line, 3u);
-  EXPECT_EQ(range.end_column, 34u);
+  EXPECT_EQ(range.start_line, 70003u);
+  EXPECT_EQ(range.start_column, 80015u);
+  EXPECT_EQ(range.end_line, 90003u);
+  EXPECT_EQ(range.end_column, 100034u);
   EXPECT_EQ(range.provenance, LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
   EXPECT_EQ(range.source.size, 0u);
   EXPECT_EQ(range.start, 0u);
@@ -278,7 +279,7 @@ TEST_F(SourceResolverTest, MissingSnapshotsRetainRecordedCoordinates) {
   loom_source_table_resolver_t table = {module, nullptr, 0};
   const loom_source_resolver_t resolver = {loom_source_table_resolve, &table};
   ASSERT_TRUE(loom_source_resolve(resolver, module, location, &range));
-  EXPECT_EQ(range.start_column, 15u);
+  EXPECT_EQ(range.start_column, 80015u);
   EXPECT_EQ(range.provenance, LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
   // A present snapshot with incompatible coordinates cannot supply spelling.
   const loom_source_entry_t source = {0, IREE_SV("short"),
@@ -286,7 +287,7 @@ TEST_F(SourceResolverTest, MissingSnapshotsRetainRecordedCoordinates) {
   table.entries = &source;
   table.count = 1;
   ASSERT_TRUE(loom_source_resolve(resolver, module, location, &range));
-  EXPECT_EQ(range.end_column, 34u);
+  EXPECT_EQ(range.end_column, 100034u);
   EXPECT_EQ(range.source.size, 0u);
   EXPECT_EQ(range.provenance, LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
 }

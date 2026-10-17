@@ -51,6 +51,9 @@ extern "C" {
 // stripped, all ops point to ID 0 and the location table is empty.
 typedef uint32_t loom_location_id_t;
 #define LOOM_LOCATION_UNKNOWN ((loom_location_id_t)0)
+// Largest representable location ID. This is a valid ID; zero is the only
+// reserved value.
+#define LOOM_LOCATION_ID_MAX ((loom_location_id_t)UINT32_MAX)
 
 // Index into the module's source table.
 //
@@ -63,6 +66,8 @@ typedef uint16_t loom_source_id_t;
 
 // Integer tag identifying a compact tagged location payload.
 typedef uint16_t loom_location_tag_t;
+// Largest valid location tag.
+#define LOOM_LOCATION_TAG_MAX ((loom_location_tag_t)UINT16_MAX)
 
 // Built-in tagged location payload tags. Values >= LOOM_LOCATION_TAG_USER_BASE
 // are reserved for embedders and user-defined tooling.
@@ -143,6 +148,12 @@ enum loom_location_field_kind_e {
 
 // Largest number of field spans retained by one file location.
 #define LOOM_LOCATION_FIELD_SPAN_COUNT_MAX ((uint16_t)UINT16_MAX)
+
+// Largest number of children retained by one fused location.
+#define LOOM_LOCATION_FUSED_CHILD_COUNT_MAX ((uint32_t)UINT32_MAX)
+
+// Largest opaque or tagged payload retained by one location.
+#define LOOM_LOCATION_DATA_LENGTH_MAX ((uint32_t)UINT32_MAX)
 
 // Physical representation used by a file location's field-span payload.
 typedef uint8_t loom_location_field_span_format_t;
@@ -347,7 +358,7 @@ static_assert((1u << LOOM_LOCATION_SEGMENT_SHIFT) ==
               "location segment capacity must match its index shift");
 static_assert((uint64_t)LOOM_LOCATION_SEGMENT_CAPACITY *
                       LOOM_SEGMENTED_STORAGE_MAX_SEGMENT_COUNT >=
-                  (uint64_t)UINT32_MAX + 1,
+                  (uint64_t)LOOM_LOCATION_ID_MAX + 1,
               "location storage must cover the full location ID domain");
 
 // Fixed-size arena-owned location rows; appending never moves earlier rows.

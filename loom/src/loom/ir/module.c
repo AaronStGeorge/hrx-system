@@ -1595,13 +1595,13 @@ iree_status_t loom_module_add_location(loom_module_t* module,
                                        loom_location_entry_t entry,
                                        loom_location_id_t* out_location_id) {
   // Location IDs are 32-bit and ID 0 is reserved for LOOM_LOCATION_UNKNOWN.
-  // IDs 1 through UINT32_MAX are representable, so once count advances past
-  // UINT32_MAX the next cast would wrap to 0 and forge the null sentinel.
-  if (module->locations.count > UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "location table full (%" PRIhsz
-                            " entries, max id %u)",
-                            module->locations.count, (unsigned)UINT32_MAX);
+  // IDs 1 through LOOM_LOCATION_ID_MAX are representable, so once count
+  // advances past it the next cast would wrap to the null sentinel.
+  if (module->locations.count > LOOM_LOCATION_ID_MAX) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "location table full (%" PRIhsz " entries, max id %u)",
+        module->locations.count, (unsigned)LOOM_LOCATION_ID_MAX);
   }
 
   loom_location_id_t id = (loom_location_id_t)module->locations.count;
