@@ -6,6 +6,7 @@
 
 #include "loom/serve/runtime/program/compilation.h"
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -27,6 +28,84 @@ std::string Format(const loom_serve_compilation_report_t& report) {
 }
 
 TEST(CompilationTest, EmptyReportHasNoOutput) { EXPECT_EQ(Format({}), ""); }
+
+TEST(CompilationTest, CleanDiagnosticSnapshotAllocatesNothing) {
+  const loom_serve_compilation_report_t source = {
+      .commands = 1,
+      .kernels = 2,
+      .entries = 3,
+      .duration_ns = 4,
+  };
+  loom_serve_compilation_diagnostics_t* diagnostics = nullptr;
+  IREE_ASSERT_OK(loom_serve_compilation_diagnostics_clone(
+      &source, iree_allocator_null(), &diagnostics));
+  EXPECT_EQ(diagnostics, nullptr);
+  EXPECT_EQ(loom_serve_compilation_diagnostics_storage_size(diagnostics), 0u);
+  auto report = source;
+  loom_serve_compilation_diagnostics_merge(diagnostics, &report);
+  EXPECT_EQ(Format(report), Format(source));
+}
+
+TEST(CompilationTest, DiagnosticSnapshotOwnsOnlyEmittedRecords) {
+  for (size_t count = 1; count <= 8; ++count) {
+    SCOPED_TRACE(count);
+    loom_serve_compilation_report_t source = {};
+    const size_t emitted_count = count == 8 ? count + 2 : count;
+    source.severities[LOOMC_DIAGNOSTIC_SEVERITY_WARNING] = emitted_count;
+    source.diagnostic_count = count;
+    for (size_t i = 0; i < count; ++i) {
+      source.diagnostics[i] = {
+          .severity = LOOMC_DIAGNOSTIC_SEVERITY_WARNING,
+          .line = static_cast<uint32_t>(i + 1),
+          .source_length = 10,
+          .code_length = 4,
+          .message_length = 7,
+          .source = "input.loom",
+          .code = "TEST",
+          .message = "warning",
+      };
+    }
+    // Job counters are not cached evidence and must not be replayed on hits.
+    source.kernels = 5;
+    source.duration_ns = 123;
+    loom_serve_compilation_diagnostics_t* diagnostics = nullptr;
+    IREE_ASSERT_OK(loom_serve_compilation_diagnostics_clone(
+        &source, iree_allocator_system(), &diagnostics));
+    ASSERT_NE(diagnostics, nullptr);
+    EXPECT_EQ(diagnostics->count, count);
+    EXPECT_EQ(loom_serve_compilation_diagnostics_storage_size(diagnostics),
+              sizeof(*diagnostics) + count * sizeof(*diagnostics->values));
+    source = {};
+    loom_serve_compilation_report_t report = {};
+    // Repeated hits keep all severity counts and only the bounded prefix.
+    loom_serve_compilation_diagnostics_merge(diagnostics, &report);
+    loom_serve_compilation_diagnostics_merge(diagnostics, &report);
+    iree_allocator_free(iree_allocator_system(), diagnostics);
+    EXPECT_EQ(report.severities[LOOMC_DIAGNOSTIC_SEVERITY_WARNING],
+              2 * emitted_count);
+    EXPECT_EQ(report.diagnostic_count, std::min(2 * count, size_t{8}));
+    EXPECT_EQ(report.kernels, 0u);
+    EXPECT_EQ(report.duration_ns, 0u);
+    for (size_t i = 0; i < report.diagnostic_count; ++i) {
+      EXPECT_EQ(report.diagnostics[i].line, i % count + 1);
+      EXPECT_STREQ(report.diagnostics[i].source, "input.loom");
+      EXPECT_STREQ(report.diagnostics[i].code, "TEST");
+      EXPECT_STREQ(report.diagnostics[i].message, "warning");
+    }
+  }
+}
+
+TEST(CompilationTest, DiagnosticSnapshotPropagatesAllocationFailure) {
+  const loom_serve_compilation_report_t source = {
+      .severities = {0, 0, 1},
+      .diagnostic_count = 1,
+      .diagnostics = {{.severity = LOOMC_DIAGNOSTIC_SEVERITY_ERROR}},
+  };
+  loom_serve_compilation_diagnostics_t* diagnostics = nullptr;
+  IREE_EXPECT_NOT_OK(loom_serve_compilation_diagnostics_clone(
+      &source, iree_allocator_null(), &diagnostics));
+  EXPECT_EQ(diagnostics, nullptr);
+}
 
 TEST(CompilationTest, DirectStageWorkHasNoCommandProduct) {
   EXPECT_EQ(Format({
