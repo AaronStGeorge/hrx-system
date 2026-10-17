@@ -962,10 +962,10 @@ static void iree_hal_passthrough_pool_rollback_reservation(
   iree_allocator_free(pool->host_allocator, reservation_state);
 }
 
-// Cold native growth transaction. All pointers are borrowed until the owner
-// call joins; output publication and rollback remain all-or-none.
+// Native growth transaction. All pointers are borrowed until the owner call
+// joins; output publication and rollback remain all-or-none.
 typedef struct iree_hal_passthrough_pool_acquire_call_t {
-  // Native pool whose placement-local owner executes the transaction.
+  // Borrowed native pool whose provider supplies the storage.
   iree_hal_passthrough_pool_t* pool;
   // Number of requests and output slots.
   iree_host_size_t request_count;
@@ -975,8 +975,6 @@ typedef struct iree_hal_passthrough_pool_acquire_call_t {
   iree_hal_pool_reservation_t* out_reservations;
   // Exact reuse information assigned with the reservations.
   iree_hal_pool_acquire_info_t* out_infos;
-  // Aggregate acquisition outcome assigned only on success.
-  iree_hal_pool_acquire_result_t* out_result;
   // Owned native or host allocation failure returned to the caller.
   iree_status_t status;
 } iree_hal_passthrough_pool_acquire_call_t;
@@ -1022,7 +1020,6 @@ static void iree_hal_passthrough_pool_acquire_on_owner(void* user_data) {
       call->out_reservations[i] = elements[i].reservation;
       call->out_infos[i] = elements[i].info;
     }
-    *call->out_result = IREE_HAL_POOL_ACQUIRE_OK_FRESH;
   }
 
   if (elements_allocated) {
@@ -1035,10 +1032,11 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservations(
     iree_hal_pool_t* base_pool, iree_host_size_t request_count,
     const iree_hal_pool_reservation_request_t* requests,
     const iree_async_frontier_t* requester_frontier,
-    iree_hal_pool_reserve_flags_t flags,
     iree_hal_pool_reservation_t* out_reservations,
     iree_hal_pool_acquire_info_t* out_infos,
-    iree_hal_pool_acquire_result_t* out_result) {
+    iree_hal_pool_acquire_callback_t completion,
+    iree_hal_pool_reserve_flags_t flags) {
+  (void)requester_frontier;
   iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)base_pool;
   if (!pool->owned_enabled) {
     return iree_make_status(
@@ -1064,7 +1062,8 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservations(
           .flags = IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED,
       };
     }
-    *out_result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
+    completion.fn(completion.user_data, iree_ok_status(),
+                  IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
     return iree_ok_status();
   }
 
@@ -1074,10 +1073,13 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservations(
       .requests = requests,
       .out_reservations = out_reservations,
       .out_infos = out_infos,
-      .out_result = out_result,
   };
   iree_hal_memory_maintenance_call(
       pool->maintenance, iree_hal_passthrough_pool_acquire_on_owner, &call);
+  if (iree_status_is_ok(call.status)) {
+    completion.fn(completion.user_data, iree_ok_status(),
+                  IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  }
   return call.status;
 }
 

@@ -382,13 +382,13 @@ static iree_status_t iree_hal_amd_xdna_operation_execute_alloca(
   }
 
   iree_hal_pool_wait_prepare(wait->capacity_wait);
-  iree_status_t status = iree_hal_pool_acquire_reservations(
+  iree_status_t status = iree_hal_pool_acquire_reservations_sync(
       operation->alloca.pool, operation->alloca.request_count,
       operation->alloca.requests,
       iree_hal_amd_xdna_frontier_state_as_frontier(&operation->frontier),
-      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
       operation->alloca.reservations, operation->alloca.acquire_infos,
-      &operation->alloca.acquire_result);
+      &operation->alloca.acquire_result,
+      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER);
   if (!iree_status_is_ok(status)) {
     iree_hal_pool_wait_abort(wait->capacity_wait);
     return status;

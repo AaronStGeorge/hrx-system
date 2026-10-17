@@ -339,12 +339,12 @@ iree_status_t iree_hal_amdgpu_host_queue_acquire_alloca_transaction(
   const iree_async_frontier_t* requester_frontier =
       iree_hal_amdgpu_host_queue_pool_requester_frontier(
           queue, resolution, &requester_frontier_storage);
-  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations(
+  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations_sync(
       allocation_pool, transaction->request_count, transaction->requests,
       iree_hal_pool_requires_asan_advice(allocation_pool) ? NULL
                                                           : requester_frontier,
-      reserve_flags, transaction->reservations, transaction->acquire_infos,
-      &transaction->acquire_result));
+      transaction->reservations, transaction->acquire_infos,
+      &transaction->acquire_result, reserve_flags));
 
   transaction->reservations_held =
       transaction->acquire_result == IREE_HAL_POOL_ACQUIRE_OK ||

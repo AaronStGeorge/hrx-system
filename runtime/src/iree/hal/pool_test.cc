@@ -119,9 +119,9 @@ class PoolFrontierWaitTest : public ::testing::Test {
   void AcquireFresh(iree_hal_pool_reservation_t* reservation) {
     iree_hal_pool_acquire_info_t info = {};
     iree_hal_pool_acquire_result_t result;
-    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-        pool_, 1, &request_, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-        reservation, &info, &result));
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        pool_, 1, &request_, nullptr, reservation, &info, &result,
+        IREE_HAL_POOL_RESERVE_FLAG_NONE));
     ASSERT_TRUE(result == IREE_HAL_POOL_ACQUIRE_OK ||
                 result == IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   }
@@ -145,10 +145,9 @@ class PoolFrontierWaitTest : public ::testing::Test {
     iree_hal_pool_reservation_t reservation;
     iree_hal_pool_acquire_info_t info = {};
     iree_hal_pool_acquire_result_t result;
-    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-        pool_, 1, &request_, nullptr,
-        IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER, &reservation, &info,
-        &result));
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        pool_, 1, &request_, nullptr, &reservation, &info, &result,
+        IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
     ASSERT_TRUE(result == IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT ||
                 result == IREE_HAL_POOL_ACQUIRE_OK ||
                 result == IREE_HAL_POOL_ACQUIRE_OK_FRESH);
@@ -215,6 +214,81 @@ class PoolFrontierWaitTest : public ::testing::Test {
   // Owned materialized buffer released before its pool.
   iree_hal_buffer_t* buffer_ = nullptr;
 };
+
+TEST_F(PoolFrontierWaitTest, ReadyCompletionCanReturnReservationInline) {
+  struct Completion {
+    // Pool borrowed while the submitter and callback access the reservation.
+    iree_hal_pool_t* pool;
+    // Output published before the callback runs.
+    iree_hal_pool_reservation_t reservation;
+    // Submission thread, which must execute this ready completion.
+    std::thread::id submitter;
+    // Terminal callbacks observed before submission returns.
+    int count;
+  } completion = {.pool = pool_, .submitter = std::this_thread::get_id()};
+  iree_hal_pool_acquire_info_t info;
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      pool_, 1, &request_, nullptr, &completion.reservation, &info,
+      {
+          .fn =
+              [](void* user_data, iree_status_t status,
+                 iree_hal_pool_acquire_result_t result) {
+                auto* completion = static_cast<Completion*>(user_data);
+                ++completion->count;
+                IREE_EXPECT_OK(status);
+                EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+                EXPECT_EQ(std::this_thread::get_id(), completion->submitter);
+                // Reentry proves acquisition drops every metadata lock before
+                // handing ownership to the caller's completion.
+                iree_hal_pool_release_reservations(
+                    completion->pool, 1, &completion->reservation, nullptr);
+              },
+          .user_data = &completion,
+      },
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  EXPECT_EQ(completion.count, 1);
+  EXPECT_EQ(Stats().reservation_count, 0u);
+  IREE_ASSERT_OK(Allocate(iree_immediate_timeout(), &buffer_));
+  ExpectUsableBuffer();
+}
+
+TEST_F(PoolFrontierWaitTest, CapacityCompletionAndRejectedCaptureAreDistinct) {
+  iree_hal_pool_reservation_t occupied;
+  ASSERT_NO_FATAL_FAILURE(AcquireFresh(&occupied));
+  iree_hal_pool_reservation_t reservation;
+  memset(&reservation, 0xA5, sizeof(reservation));
+  const auto original = reservation;
+  iree_hal_pool_acquire_info_t info;
+  int completion_count = 0;
+  const iree_hal_pool_acquire_callback_t completion = {
+      .fn =
+          [](void* user_data, iree_status_t status,
+             iree_hal_pool_acquire_result_t result) {
+            ++*static_cast<int*>(user_data);
+            IREE_EXPECT_OK(status);
+            EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
+          },
+      .user_data = &completion_count,
+  };
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      pool_, 1, &request_, nullptr, &reservation, &info, completion,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  EXPECT_EQ(completion_count, 1);
+  EXPECT_EQ(info.result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
+  EXPECT_EQ(memcmp(&reservation, &original, sizeof(reservation)), 0);
+
+  const auto invalid_request = iree_hal_make_pool_reservation_request(0, 0);
+  const auto original_info = info;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      iree_hal_pool_acquire_reservations(pool_, 1, &invalid_request, nullptr,
+                                         &reservation, &info, completion,
+                                         IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  EXPECT_EQ(completion_count, 1);
+  EXPECT_EQ(memcmp(&reservation, &original, sizeof(reservation)), 0);
+  EXPECT_EQ(memcmp(&info, &original_info, sizeof(info)), 0);
+  iree_hal_pool_release_reservations(pool_, 1, &occupied, nullptr);
+}
 
 TEST_F(PoolFrontierWaitTest, AlreadyCompletedFrontierMaterializesInline) {
   ASSERT_NO_FATAL_FAILURE(SeedPending(axis_, 1));

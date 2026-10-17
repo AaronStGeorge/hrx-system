@@ -519,6 +519,16 @@ IREE_API_EXPORT void iree_hal_pool_retain(iree_hal_pool_t* pool);
 // Releases the given |pool| from the caller.
 IREE_API_EXPORT void iree_hal_pool_release(iree_hal_pool_t* pool);
 
+// Completion of one accepted reservation transaction. Takes ownership of
+// |status|. |result| is meaningful only when |status| is OK.
+typedef struct iree_hal_pool_acquire_callback_t {
+  // Terminal callback, invoked exactly once for an accepted transaction.
+  void(IREE_API_PTR* fn)(void* user_data, iree_status_t status,
+                         iree_hal_pool_acquire_result_t result);
+  // Borrowed caller state, live through submission and terminal callback.
+  void* user_data;
+} iree_hal_pool_acquire_callback_t;
+
 // Acquires an all-or-none transaction of reservations for future allocations.
 //
 // Each returned reservation may be larger than its requested allocation size
@@ -537,7 +547,7 @@ IREE_API_EXPORT void iree_hal_pool_release(iree_hal_pool_t* pool);
 // IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER before a pool may return
 // IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT.
 //
-// On success (iree_ok_status()), |out_result| describes the whole transaction:
+// On successful completion, the result describes the whole transaction:
 //   OK: all reservations succeeded and at least one recycled range was used.
 //   OK_FRESH: all reservations succeeded from previously unused ranges.
 //   OK_NEEDS_WAIT: all reservations succeeded and at least one requires a
@@ -556,24 +566,45 @@ IREE_API_EXPORT void iree_hal_pool_release(iree_hal_pool_t* pool);
 // reuse_frontier even though this requester needs no extra wait. Frontier
 // storage is borrowed and remains immutable until its reservation is released.
 //
-// On EXHAUSTED or OVER_BUDGET, every information record and |out_result| are
-// assigned while the reservation outputs remain untouched. One or more
-// information records identify the requests that could not be satisfied with
+// On EXHAUSTED or OVER_BUDGET, every information record is assigned while the
+// reservation outputs remain untouched. One or more information records
+// identify the requests that could not be satisfied with
 // the transaction result and any associated flags; requests not committed or
 // not examined use IREE_HAL_POOL_ACQUIRE_NONE. On an error status all outputs
 // are untouched.
 //
-// Returns an error status (with backtrace) only for infrastructure failures:
-// invalid arguments (size 0, non-power-of-two alignment), internal
-// corruption, or slab provider errors. These are exceptional.
+// Status reports invalid requests, metadata allocation failures, and native
+// provider failures. Ordinary capacity pressure is an acquisition result.
+//
+// OK accepts exactly one |completion|, which may run inline before this call
+// returns or later in the provider's execution
+// context. A non-OK return rejects capture: completion is not invoked, outputs
+// are unchanged, and no caller storage is retained.
+//
+// The caller keeps the pool, requests, requester frontier, output arrays, and
+// callback state alive until both submission and completion finish accessing
+// them. Completion does not establish that prior uses of recycled storage have
+// retired; successful output reuse frontiers carry that separate obligation.
 IREE_API_EXPORT iree_status_t iree_hal_pool_acquire_reservations(
     iree_hal_pool_t* pool, iree_host_size_t request_count,
     const iree_hal_pool_reservation_request_t* requests,
     const iree_async_frontier_t* requester_frontier,
-    iree_hal_pool_reserve_flags_t flags,
     iree_hal_pool_reservation_t* out_reservations,
     iree_hal_pool_acquire_info_t* out_infos,
-    iree_hal_pool_acquire_result_t* out_result);
+    iree_hal_pool_acquire_callback_t completion,
+    iree_hal_pool_reserve_flags_t flags);
+
+// Joins acquisition completion on the calling thread. This is for explicitly
+// blocking allocation callers; queue scheduling uses the completion form.
+// Joins native preparation only, never outstanding uses of recycled storage.
+IREE_API_EXPORT iree_status_t iree_hal_pool_acquire_reservations_sync(
+    iree_hal_pool_t* pool, iree_host_size_t request_count,
+    const iree_hal_pool_reservation_request_t* requests,
+    const iree_async_frontier_t* requester_frontier,
+    iree_hal_pool_reservation_t* out_reservations,
+    iree_hal_pool_acquire_info_t* out_infos,
+    iree_hal_pool_acquire_result_t* out_result,
+    iree_hal_pool_reserve_flags_t flags);
 
 // Releases a transaction of reservations back to the pool's free list.
 //
@@ -819,10 +850,10 @@ typedef struct iree_hal_pool_vtable_t {
       iree_hal_pool_t* pool, iree_host_size_t request_count,
       const iree_hal_pool_reservation_request_t* requests,
       const iree_async_frontier_t* requester_frontier,
-      iree_hal_pool_reserve_flags_t flags,
       iree_hal_pool_reservation_t* out_reservations,
       iree_hal_pool_acquire_info_t* out_infos,
-      iree_hal_pool_acquire_result_t* out_result);
+      iree_hal_pool_acquire_callback_t completion,
+      iree_hal_pool_reserve_flags_t flags);
 
   // Releases a reservation transaction to the concrete pool implementation.
   void(IREE_API_PTR* release_reservations)(

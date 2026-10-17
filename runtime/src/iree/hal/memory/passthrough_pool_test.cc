@@ -347,9 +347,9 @@ static iree_status_t AcquireOneReservation(
     iree_hal_pool_acquire_result_t* out_result) {
   const iree_hal_pool_reservation_request_t request =
       MakeReservationRequest(allocation_size, min_alignment);
-  return iree_hal_pool_acquire_reservations(
-      pool, 1, &request, requester_frontier, flags, out_reservation, out_info,
-      out_result);
+  return iree_hal_pool_acquire_reservations_sync(
+      pool, 1, &request, requester_frontier, out_reservation, out_info,
+      out_result, flags);
 }
 
 static void ReleaseOneReservation(
@@ -466,11 +466,11 @@ TEST(PassthroughPool, NoGrowthDefersWholeTransactionBeforeAllocating) {
     const size_t allocation_count = allocations.allocation_count;
     const uint32_t token = iree_async_notification_begin_observe(notification);
     iree_hal_pool_acquire_result_t result = IREE_HAL_POOL_ACQUIRE_NONE;
-    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-        pool, request_count, requests, /*requester_frontier=*/nullptr,
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        pool, request_count, requests,
+        /*requester_frontier=*/nullptr, reservations, infos, &result,
         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH |
-            IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
-        reservations, infos, &result));
+            IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
     EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
     EXPECT_EQ(allocations.allocation_count, allocation_count);
     EXPECT_EQ(memcmp(reservations, original_reservations, sizeof(reservations)),
@@ -484,9 +484,10 @@ TEST(PassthroughPool, NoGrowthDefersWholeTransactionBeforeAllocating) {
     }
 
     // The queue's explicit cold retry allocates and produces usable buffers.
-    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-        pool, request_count, requests, /*requester_frontier=*/nullptr,
-        IREE_HAL_POOL_RESERVE_FLAG_NONE, reservations, infos, &result));
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        pool, request_count, requests,
+        /*requester_frontier=*/nullptr, reservations, infos, &result,
+        IREE_HAL_POOL_RESERVE_FLAG_NONE));
     ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
     EXPECT_GT(allocations.allocation_count, allocation_count);
     EXPECT_NE(allocations.last_allocation_thread, std::this_thread::get_id());
@@ -616,9 +617,9 @@ TEST_F(PassthroughPoolTest, ReservationTransactionValidatesBeforeAcquiring) {
         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH}) {
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_INVALID_ARGUMENT,
-        iree_hal_pool_acquire_reservations(
+        iree_hal_pool_acquire_reservations_sync(
             pool_, IREE_ARRAYSIZE(requests), requests,
-            /*requester_frontier=*/NULL, flags, reservations, infos, &result));
+            /*requester_frontier=*/NULL, reservations, infos, &result, flags));
   }
 
   EXPECT_EQ(memcmp(reservations, original_reservations, sizeof(reservations)),
@@ -643,10 +644,10 @@ TEST_F(PassthroughPoolTest,
   iree_hal_pool_reservation_t reservations[3];
   iree_hal_pool_acquire_info_t infos[3];
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool_, IREE_ARRAYSIZE(requests), requests,
-      /*requester_frontier=*/NULL, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-      reservations, infos, &result));
+      /*requester_frontier=*/NULL, reservations, infos, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
 
   iree_hal_buffer_t* buffers[3];
@@ -690,10 +691,10 @@ TEST(PassthroughPool, FailedMaterializationTransactionRetainsEveryReservation) {
   iree_hal_pool_reservation_t reservations[3];
   iree_hal_pool_acquire_info_t infos[3];
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool, IREE_ARRAYSIZE(requests), requests,
-      /*requester_frontier=*/NULL, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-      reservations, infos, &result));
+      /*requester_frontier=*/NULL, reservations, infos, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
 
   iree_hal_buffer_t* buffers[3];
   memset(buffers, 0xA5, sizeof(buffers));
@@ -891,9 +892,9 @@ TEST_F(PassthroughPoolTest, ReturnedTokenAndViewsBothPrecedeRetirement) {
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      pool_, 1, &request, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-      &reservation, &info, &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      pool_, 1, &request, nullptr, &reservation, &info, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   iree_hal_buffer_t* buffer = nullptr;
   IREE_ASSERT_OK(MaterializeOneReservation(
       pool_, &reservation, IREE_HAL_POOL_MATERIALIZE_FLAG_NONE, &buffer));
@@ -1007,9 +1008,9 @@ TEST_F(PassthroughPoolTest, MaintenanceDrainDoesNotJoinPendingRetirement) {
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      pool, 1, &request, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservation,
-      &info, &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      pool, 1, &request, nullptr, &reservation, &info, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   iree_hal_buffer_t* buffer = nullptr;
   IREE_ASSERT_OK(MaterializeOneReservation(
       pool, &reservation, IREE_HAL_POOL_MATERIALIZE_FLAG_NONE, &buffer));

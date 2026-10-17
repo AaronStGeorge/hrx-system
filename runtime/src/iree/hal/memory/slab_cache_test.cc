@@ -168,8 +168,8 @@ class SlabCacheTest : public ::testing::Test {
                         iree_hal_pool_acquire_result_t* result) {
     const iree_hal_pool_reservation_request_t request =
         iree_hal_make_pool_reservation_request(length, kMinAlignment);
-    return iree_hal_pool_acquire_reservations(pool, 1, &request, requester,
-                                              flags, reservation, info, result);
+    return iree_hal_pool_acquire_reservations_sync(
+        pool, 1, &request, requester, reservation, info, result, flags);
   }
 
   iree_status_t CheckBytes(iree_hal_pool_t* pool,
@@ -332,9 +332,9 @@ TEST_F(SlabCacheTest, PendingReturnPreservesExactHistoryAndPrefersReady) {
   std::array<iree_hal_pool_reservation_t, 2> reservations;
   std::array<iree_hal_pool_acquire_info_t, 2> infos;
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      cache_, 2, requests.data(), nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-      reservations.data(), infos.data(), &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      cache_, 2, requests.data(), nullptr, reservations.data(), infos.data(),
+      &result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
   iree_hal_pool_release_reservations(cache_, 1, &reservations[0], nullptr);
   iree_async_single_frontier_t frontier = {.entry_count = 1};
   frontier.entries[0] = {Axis(0), 7};
@@ -386,10 +386,9 @@ TEST_F(SlabCacheTest, FailedBatchRestoresIdleCapacityWithoutNotification) {
   std::array<iree_hal_pool_acquire_info_t, 2> infos;
   const uint32_t token =
       iree_async_notification_begin_observe(iree_hal_pool_notification(cache_));
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      cache_, 2, requests.data(), nullptr,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH, reservations.data(),
-      infos.data(), &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      cache_, 2, requests.data(), nullptr, reservations.data(), infos.data(),
+      &result, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
   EXPECT_EQ(memcmp(reservations.data(), original.data(), sizeof(reservations)),
             0);
@@ -443,9 +442,9 @@ TEST_F(SlabCacheTest, OversizedAndAlignmentBypassUseSameParent) {
     iree_hal_pool_reservation_t reservation;
     iree_hal_pool_acquire_info_t info;
     iree_hal_pool_acquire_result_t result;
-    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-        cache_, 1, &aligned_request, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-        &reservation, &info, &result));
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        cache_, 1, &aligned_request, nullptr, &reservation, &info, &result,
+        IREE_HAL_POOL_RESERVE_FLAG_NONE));
     uintptr_t address = 0;
     IREE_ASSERT_OK(CheckBytes(cache_, reservation, 0x2A, &address));
     EXPECT_EQ(address % aligned_request.min_alignment, 0u);
@@ -737,9 +736,9 @@ TEST_F(SlabCacheTest, InvalidOwningMaterializationKeepsEveryReservation) {
   std::array<iree_hal_pool_reservation_t, 2> reservations;
   std::array<iree_hal_pool_acquire_info_t, 2> infos;
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      cache_, 2, requests.data(), nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-      reservations.data(), infos.data(), &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      cache_, 2, requests.data(), nullptr, reservations.data(), infos.data(),
+      &result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
   // One invalid member rejects the complete ownership-transfer transaction.
   requests[1].allocation_size = reservations[1].byte_length + 1;
   std::array<iree_hal_buffer_t*, 2> buffers = {};

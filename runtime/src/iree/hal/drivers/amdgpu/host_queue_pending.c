@@ -713,13 +713,13 @@ static iree_status_t iree_hal_amdgpu_pending_op_grow_alloca_pool(
   transaction->reservations_held = false;
   transaction->backing_buffers_held = false;
   iree_async_frontier_initialize(transaction->wait_frontier, 0);
-  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations(
+  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations_sync(
       op->alloca_op.pool, transaction->request_count, transaction->requests,
       iree_hal_pool_requires_asan_advice(op->alloca_op.pool)
           ? NULL
           : requester_frontier,
-      reserve_flags, transaction->reservations, transaction->acquire_infos,
-      &transaction->acquire_result));
+      transaction->reservations, transaction->acquire_infos,
+      &transaction->acquire_result, reserve_flags));
   transaction->reservations_held =
       transaction->acquire_result == IREE_HAL_POOL_ACQUIRE_OK ||
       transaction->acquire_result == IREE_HAL_POOL_ACQUIRE_OK_FRESH ||

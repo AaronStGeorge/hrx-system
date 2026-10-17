@@ -242,10 +242,10 @@ static iree_status_t iree_hal_heap_pool_acquire_reservations(
     iree_hal_pool_t* base_pool, iree_host_size_t request_count,
     const iree_hal_pool_reservation_request_t* requests,
     const iree_async_frontier_t* requester_frontier,
-    iree_hal_pool_reserve_flags_t flags,
     iree_hal_pool_reservation_t* out_reservations,
     iree_hal_pool_acquire_info_t* out_infos,
-    iree_hal_pool_acquire_result_t* out_result) {
+    iree_hal_pool_acquire_callback_t completion,
+    iree_hal_pool_reserve_flags_t flags) {
   (void)requester_frontier;
   iree_hal_heap_pool_t* pool = (iree_hal_heap_pool_t*)base_pool;
   for (iree_host_size_t i = 0; i < request_count; ++i) {
@@ -260,7 +260,8 @@ static iree_status_t iree_hal_heap_pool_acquire_reservations(
           .result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED,
       };
     }
-    *out_result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
+    completion.fn(completion.user_data, iree_ok_status(),
+                  IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
     return iree_ok_status();
   }
 
@@ -308,7 +309,6 @@ static iree_status_t iree_hal_heap_pool_acquire_reservations(
                             iree_memory_order_relaxed);
       iree_atomic_fetch_add(&pool->reserve_count, 1, iree_memory_order_relaxed);
     }
-    *out_result = IREE_HAL_POOL_ACQUIRE_OK_FRESH;
   } else {
     for (iree_host_size_t i = 0; i < acquired_count; ++i) {
       iree_hal_heap_pool_discard_unpublished_reservation(pool, states[i]);
@@ -316,6 +316,10 @@ static iree_status_t iree_hal_heap_pool_acquire_reservations(
   }
   if (states_allocated) {
     iree_allocator_free(pool->host_allocator, states);
+  }
+  if (iree_status_is_ok(status)) {
+    completion.fn(completion.user_data, iree_ok_status(),
+                  IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   }
   return status;
 }

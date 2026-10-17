@@ -906,10 +906,10 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
     iree_hal_pool_t* base_pool, iree_host_size_t request_count,
     const iree_hal_pool_reservation_request_t* requests,
     const iree_async_frontier_t* requester_frontier,
-    iree_hal_pool_reserve_flags_t flags,
     iree_hal_pool_reservation_t* out_reservations,
     iree_hal_pool_acquire_info_t* out_infos,
-    iree_hal_pool_acquire_result_t* out_result) {
+    iree_hal_pool_acquire_callback_t completion,
+    iree_hal_pool_reserve_flags_t flags) {
   iree_hal_fixed_block_pool_t* pool = (iree_hal_fixed_block_pool_t*)base_pool;
   iree_hal_fixed_block_pool_acquire_element_t
       inline_elements[IREE_HAL_FIXED_BLOCK_POOL_INLINE_TRANSACTION_CAPACITY];
@@ -941,7 +941,8 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
           .flags = IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED,
       };
     }
-    *out_result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
+    completion.fn(completion.user_data, iree_ok_status(),
+                  IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
     return iree_ok_status();
   }
 
@@ -1066,7 +1067,6 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
         }
       }
     }
-    *out_result = result;
   }
   iree_slim_mutex_lock(&pool->acquisition_mutex);
   for (iree_host_size_t i = 0; i < request_count; ++i) {
@@ -1082,6 +1082,9 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
   iree_slim_mutex_unlock(&pool->acquisition_mutex);
   iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
   iree_allocator_free(pool->host_allocator, storage);
+  if (iree_status_is_ok(status)) {
+    completion.fn(completion.user_data, iree_ok_status(), result);
+  }
   return status;
 }
 

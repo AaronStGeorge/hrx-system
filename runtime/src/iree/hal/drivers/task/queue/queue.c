@@ -1871,11 +1871,12 @@ static iree_status_t iree_hal_task_queue_drain_alloca_submit_reservations(
 static iree_status_t iree_hal_task_queue_drain_alloca_acquire(
     iree_hal_task_queue_op_t* operation,
     iree_hal_pool_acquire_result_t* out_acquire_result) {
-  iree_status_t status = iree_hal_pool_acquire_reservations(
+  iree_status_t status = iree_hal_pool_acquire_reservations_sync(
       operation->alloca.pool, operation->alloca.request_count,
-      operation->alloca.requests, /*requester_frontier=*/NULL,
-      operation->alloca.reserve_flags, operation->alloca.reservations,
-      operation->alloca.acquire_infos, out_acquire_result);
+      operation->alloca.requests,
+      /*requester_frontier=*/NULL, operation->alloca.reservations,
+      operation->alloca.acquire_infos, out_acquire_result,
+      operation->alloca.reserve_flags);
   if (iree_status_is_ok(status)) {
     operation->alloca.reservations_held =
         *out_acquire_result == IREE_HAL_POOL_ACQUIRE_OK ||

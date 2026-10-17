@@ -453,9 +453,9 @@ static iree_status_t AcquireOneReservation(
     iree_hal_pool_acquire_result_t* out_result) {
   const iree_hal_pool_reservation_request_t request =
       MakeReservationRequest(allocation_size, min_alignment);
-  return iree_hal_pool_acquire_reservations(
-      pool, 1, &request, requester_frontier, flags, out_reservation, out_info,
-      out_result);
+  return iree_hal_pool_acquire_reservations_sync(
+      pool, 1, &request, requester_frontier, out_reservation, out_info,
+      out_result, flags);
 }
 
 static void ReleaseOneReservation(
@@ -630,10 +630,10 @@ TEST_F(FiniteTLSFPoolTest, ReservationTransactionIsAllOrNoneWithoutGrowth) {
   memcpy(original_reservations, failed_reservations,
          sizeof(original_reservations));
   iree_hal_pool_acquire_info_t failed_infos[2];
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool_, IREE_ARRAYSIZE(requests), requests,
-      /*requester_frontier=*/NULL, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
-      failed_reservations, failed_infos, &result));
+      /*requester_frontier=*/NULL, failed_reservations, failed_infos, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
 
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
   EXPECT_EQ(memcmp(failed_reservations, original_reservations,
@@ -652,10 +652,10 @@ TEST_F(FiniteTLSFPoolTest, ReservationTransactionIsAllOrNoneWithoutGrowth) {
 
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      pool_, 1, requests, /*requester_frontier=*/NULL,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH, &reservation, &info,
-      &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      pool_, 1, requests,
+      /*requester_frontier=*/NULL, &reservation, &info, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
   EXPECT_NE(reservation.block_handle, 0u);
   iree_hal_pool_release_reservations(pool_, 1, &reservation,
                                      /*death_frontier=*/NULL);
@@ -669,10 +669,10 @@ TEST_F(TLSFPoolTest, MaterializationTransactionTransfersAllReservations) {
   iree_hal_pool_reservation_t reservations[2];
   iree_hal_pool_acquire_info_t infos[2];
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool_, IREE_ARRAYSIZE(requests), requests,
-      /*requester_frontier=*/NULL, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-      reservations, infos, &result));
+      /*requester_frontier=*/NULL, reservations, infos, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
 
   iree_hal_buffer_t* buffers[2];
   IREE_ASSERT_OK(iree_hal_pool_materialize_reservations(
@@ -1754,9 +1754,9 @@ TEST(TLSFPool, MixedDedicatedBatchKeepsAdviceAtExecutionBoundaries) {
   iree_hal_pool_reservation_t reservations[3];
   iree_hal_pool_acquire_info_t infos[3];
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      pool, 3, requests, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE, reservations,
-      infos, &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      pool, 3, requests, nullptr, reservations, infos, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   auto* provider = (iree_hal_test_opaque_slab_provider_t*)slab_provider;
   EXPECT_EQ(
@@ -1872,9 +1872,9 @@ TEST(TLSFPool, FailedBatchDoesNotApplyNativeAdvice) {
   iree_hal_pool_reservation_t reservations[2];
   iree_hal_pool_acquire_info_t infos[2];
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      pool, 2, requests, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE, reservations,
-      infos, &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      pool, 2, requests, nullptr, reservations, infos, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OVER_BUDGET);
   const auto* provider =
       reinterpret_cast<iree_hal_test_opaque_slab_provider_t*>(slab_provider);

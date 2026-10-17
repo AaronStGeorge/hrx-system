@@ -5371,11 +5371,11 @@ static iree_status_t iree_hal_vulkan_queue_acquire_alloca_reservations(
     iree_hal_vulkan_queue_pending_submission_t* submission,
     const iree_async_frontier_t* requester_frontier,
     iree_hal_pool_acquire_result_t* out_acquire_result) {
-  iree_status_t status = iree_hal_pool_acquire_reservations(
+  iree_status_t status = iree_hal_pool_acquire_reservations_sync(
       submission->alloca.pool, submission->alloca.request_count,
       submission->alloca.requests, requester_frontier,
-      submission->alloca.reserve_flags, submission->alloca.reservations,
-      submission->alloca.acquire_infos, out_acquire_result);
+      submission->alloca.reservations, submission->alloca.acquire_infos,
+      out_acquire_result, submission->alloca.reserve_flags);
   if (!iree_status_is_ok(status)) {
     return status;
   }

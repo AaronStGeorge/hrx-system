@@ -601,9 +601,9 @@ static iree_status_t iree_hal_tlsf_pool_prepare_slab(
         .min_alignment = iree_min(pool->slab_options.alignment,
                                   pool->capabilities.max_allocation_alignment),
     };
-    status = iree_hal_pool_acquire_reservations(
-        pool->backing_pool, 1, &request, requester_frontier, flags,
-        &slab->reservation, &info, out_result);
+    status = iree_hal_pool_acquire_reservations_sync(
+        pool->backing_pool, 1, &request, requester_frontier, &slab->reservation,
+        &info, out_result, flags);
     if (iree_status_is_ok(status) &&
         (*out_result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED ||
          *out_result == IREE_HAL_POOL_ACQUIRE_OVER_BUDGET)) {
@@ -1538,10 +1538,10 @@ static iree_status_t iree_hal_tlsf_pool_acquire_reservations(
     iree_hal_pool_t* base_pool, iree_host_size_t request_count,
     const iree_hal_pool_reservation_request_t* requests,
     const iree_async_frontier_t* requester_frontier,
-    iree_hal_pool_reserve_flags_t flags,
     iree_hal_pool_reservation_t* out_reservations,
     iree_hal_pool_acquire_info_t* out_infos,
-    iree_hal_pool_acquire_result_t* out_result) {
+    iree_hal_pool_acquire_callback_t completion,
+    iree_hal_pool_reserve_flags_t flags) {
   iree_hal_tlsf_pool_t* pool = (iree_hal_tlsf_pool_t*)base_pool;
 
   iree_hal_tlsf_pool_acquire_element_t
@@ -1564,7 +1564,8 @@ static iree_status_t iree_hal_tlsf_pool_acquire_reservations(
           .flags = IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED,
       };
     }
-    *out_result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
+    completion.fn(completion.user_data, iree_ok_status(),
+                  IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
     return iree_ok_status();
   }
   iree_hal_tlsf_pool_acquire_element_t* elements = inline_elements;
@@ -1823,10 +1824,12 @@ static iree_status_t iree_hal_tlsf_pool_acquire_reservations(
         out_reservations[i] = elements[i].reservation;
       }
     }
-    *out_result = transaction_result;
   }
   if (elements_allocated) {
     iree_allocator_free(pool->host_allocator, elements);
+  }
+  if (iree_status_is_ok(status)) {
+    completion.fn(completion.user_data, iree_ok_status(), transaction_result);
   }
   return status;
 }

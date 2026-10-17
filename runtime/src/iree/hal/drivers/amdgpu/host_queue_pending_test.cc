@@ -420,10 +420,10 @@ static iree_status_t SeedWaitableFixedBlockReservation(
   const iree_hal_pool_reservation_request_t request =
       iree_hal_make_pool_reservation_request(allocation_size,
                                              /*min_alignment=*/1);
-  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations(
-      pool, 1, &request, /*requester_frontier=*/NULL,
-      IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservation, &acquire_info,
-      &acquire_result));
+  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations_sync(
+      pool, 1, &request,
+      /*requester_frontier=*/NULL, &reservation, &acquire_info, &acquire_result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   if (acquire_result != IREE_HAL_POOL_ACQUIRE_OK &&
       acquire_result != IREE_HAL_POOL_ACQUIRE_OK_FRESH) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -1015,10 +1015,9 @@ TEST_F(HostQueuePendingTest, CancelColdAllocaPreservesInheritedFrontier) {
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      pool, 1, &request, nullptr,
-      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER, &reservation, &info,
-      &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      pool, 1, &request, nullptr, &reservation, &info, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
   ASSERT_EQ(info.reuse_frontier->entry_count, 1u);
   EXPECT_EQ(info.reuse_frontier->entries[0].axis, queue->axis);

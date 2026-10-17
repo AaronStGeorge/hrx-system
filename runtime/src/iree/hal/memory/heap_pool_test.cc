@@ -90,10 +90,10 @@ TEST(HeapPoolTest, NoGrowthDefersWithoutAllocating) {
   iree_hal_pool_reservation_t reservation = {};
   iree_hal_pool_acquire_info_t info = {};
   iree_hal_pool_acquire_result_t result = IREE_HAL_POOL_ACQUIRE_NONE;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      pool, 1, &request, /*requester_frontier=*/nullptr,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH, &reservation, &info,
-      &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      pool, 1, &request,
+      /*requester_frontier=*/nullptr, &reservation, &info, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
   EXPECT_EQ(info.result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
   EXPECT_EQ(info.flags, IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED);
@@ -120,9 +120,10 @@ TEST(HeapPoolTest, BorrowedMaterializationRetainsBackingAfterReservation) {
   iree_hal_pool_reservation_t reservation = {};
   iree_hal_pool_acquire_info_t info = {};
   iree_hal_pool_acquire_result_t result = IREE_HAL_POOL_ACQUIRE_NONE;
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
-      pool, 1, &request, /*requester_frontier=*/nullptr,
-      IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservation, &info, &result));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      pool, 1, &request,
+      /*requester_frontier=*/nullptr, &reservation, &info, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
 
   iree_hal_buffer_t* buffer = nullptr;

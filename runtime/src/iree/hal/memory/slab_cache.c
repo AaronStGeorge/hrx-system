@@ -233,9 +233,9 @@ static void iree_hal_slab_cache_prepare(void* user_data) {
   entry->cacheable =
       iree_hal_slab_cache_request_is_cacheable(cache, &call->request);
   iree_hal_pool_acquire_info_t info = {0};
-  call->status = iree_hal_pool_acquire_reservations(
-      cache->backing_pool, 1, &call->request, call->requester, call->flags,
-      &entry->reservation, &info, &call->result);
+  call->status = iree_hal_pool_acquire_reservations_sync(
+      cache->backing_pool, 1, &call->request, call->requester,
+      &entry->reservation, &info, &call->result, call->flags);
   const bool acquired = iree_status_is_ok(call->status) &&
                         (call->result == IREE_HAL_POOL_ACQUIRE_OK ||
                          call->result == IREE_HAL_POOL_ACQUIRE_OK_FRESH ||
@@ -652,10 +652,11 @@ static iree_hal_pool_acquire_info_t iree_hal_slab_cache_acquire_info(
 static iree_status_t iree_hal_slab_cache_acquire_reservations(
     iree_hal_pool_t* base_pool, iree_host_size_t request_count,
     const iree_hal_pool_reservation_request_t* requests,
-    const iree_async_frontier_t* requester, iree_hal_pool_reserve_flags_t flags,
+    const iree_async_frontier_t* requester,
     iree_hal_pool_reservation_t* out_reservations,
     iree_hal_pool_acquire_info_t* out_infos,
-    iree_hal_pool_acquire_result_t* out_result) {
+    iree_hal_pool_acquire_callback_t completion,
+    iree_hal_pool_reserve_flags_t flags) {
   iree_hal_slab_cache_t* cache = (iree_hal_slab_cache_t*)base_pool;
   for (iree_host_size_t i = 0; i < request_count; ++i) {
     IREE_RETURN_IF_ERROR(
@@ -679,9 +680,10 @@ static iree_status_t iree_hal_slab_cache_acquire_reservations(
           .flags = IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED,
       };
     }
-    *out_result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
     iree_atomic_fetch_add(&cache->counters.exhausted, 1,
                           iree_memory_order_relaxed);
+    completion.fn(completion.user_data, iree_ok_status(),
+                  IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
     return iree_ok_status();
   }
   iree_hal_slab_cache_acquire_element_t* elements = inline_elements;
@@ -815,7 +817,6 @@ static iree_status_t iree_hal_slab_cache_acquire_reservations(
         iree_hal_memory_trace_alloc(&cache->trace, entry, entry->range.length);
       }
     }
-    *out_result = result;
   }
   if (!committed) {
     bool restored_capacity = false;
@@ -844,6 +845,9 @@ static iree_status_t iree_hal_slab_cache_acquire_reservations(
   }
   if (elements != inline_elements) {
     iree_allocator_free(cache->host_allocator, elements);
+  }
+  if (iree_status_is_ok(status)) {
+    completion.fn(completion.user_data, iree_ok_status(), result);
   }
   return status;
 }

@@ -86,9 +86,9 @@ iree_status_t iree_hal_fixed_block_pool_slab_acquire(
   *out_slab = NULL;
   iree_hal_pool_reservation_t reservation = {0};
   iree_hal_pool_acquire_info_t info = {0};
-  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations(
-      backing_pool, 1, request, requester, flags, &reservation, &info,
-      out_result));
+  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations_sync(
+      backing_pool, 1, request, requester, &reservation, &info, out_result,
+      flags));
   if (*out_result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED ||
       *out_result == IREE_HAL_POOL_ACQUIRE_OVER_BUDGET) {
     return iree_ok_status();

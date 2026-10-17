@@ -98,9 +98,9 @@ iree_status_t iree_hal_tlsf_pool_dedicated_acquire(
   iree_hal_tlsf_pool_dedicated_backing_t* backing =
       iree_hal_tlsf_pool_dedicated_backing(node, layout);
   iree_hal_pool_acquire_info_t info = {0};
-  iree_status_t status = iree_hal_pool_acquire_reservations(
-      backing_pool, 1, backing_request, requester, flags, &backing->reservation,
-      &info, out_result);
+  iree_status_t status = iree_hal_pool_acquire_reservations_sync(
+      backing_pool, 1, backing_request, requester, &backing->reservation, &info,
+      out_result, flags);
   if (iree_status_is_ok(status) &&
       (*out_result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED ||
        *out_result == IREE_HAL_POOL_ACQUIRE_OVER_BUDGET)) {
