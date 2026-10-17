@@ -34,3 +34,33 @@ low.func.def target<x86.scalar.core>(@target) abi(object_function) abi_layout({s
   %population_index = popcnt.gpr64 %input_index
   return %leading16, %trailing16, %population16, %leading32, %trailing32, %population32, %leading64, %trailing64, %population64, %leading_index, %trailing_index, %population_index
 }
+
+// ====
+
+x86.target<scalar> @target {features = [bmi, popcnt, lzcnt]}
+
+func.def target(@target) @native_i16_consumers(%input: i16) -> (i16, i1, i32, i32) {
+  %leading = scalar.ctlzi %input : i16
+  %trailing = scalar.cttzi %input : i16
+  %population = scalar.ctpopi %input : i16
+  %bias = scalar.constant -32768 : i16
+  %biased = scalar.addi %leading, %bias : i16
+  %ordered = scalar.cmpi ule, %population, %trailing : i16
+  %signed = scalar.extsi %biased : i16 to i32
+  %unsigned = scalar.extui %biased : i16 to i32
+  func.return %biased, %ordered, %signed, %unsigned : i16, i1, i32, i32
+}
+
+// ----
+low.func.def target<x86.scalar.core>(@target) abi(object_function) abi_layout({signature = (i16) -> (i16, i1, i32, i32)}) @native_i16_consumers(%input: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.gpr32>, reg<x86.gpr32>, reg<x86.gpr32>) asm {
+  %leading = lzcnt.gpr16 %input
+  %trailing = tzcnt.gpr16 %input
+  %population = popcnt.gpr16 %input
+  %26 = movzx.u16.gpr32 %leading
+  %27 = copy %26 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %biased = add.imm.gpr32 %27 {imm32 = 32768}
+  %ordered = cmp.gpr16 %population, %trailing, "ule"
+  %signed = movsx.i16.gpr32 %biased
+  %unsigned = movzx.u16.gpr32 %biased
+  return %biased, %ordered, %signed, %unsigned
+}
