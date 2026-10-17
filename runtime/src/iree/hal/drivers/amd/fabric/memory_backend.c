@@ -638,6 +638,18 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_emit_plan(
     }
   }
   plan->provider_options = (iree_hal_amd_fabric_slab_provider_options_t){
+      .trace_domain =
+          profile && profile->memory_class == AMDF_MEMORY_CLASS_SYSTEM
+              ? (native_placement.kind == AMDF_MEMORY_PLACEMENT_KIND_HOST_NUMA
+                     ? "libamdf-numa"
+                     : "libamdf-system")
+              : owner->native.trace_device_domain,
+      .trace_ordinal =
+          profile && profile->memory_class == AMDF_MEMORY_CLASS_SYSTEM
+              ? (native_placement.kind == AMDF_MEMORY_PLACEMENT_KIND_HOST_NUMA
+                     ? native_placement.node
+                     : UINT32_MAX)
+              : owner->native.trace_device_ordinal,
       .access_devices = access_devices,
       .memory =
           {

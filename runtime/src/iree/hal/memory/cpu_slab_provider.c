@@ -6,6 +6,8 @@
 
 #include "iree/hal/memory/cpu_slab_provider.h"
 
+#include "iree/hal/memory/tracing.h"
+
 #if defined(IREE_PLATFORM_LINUX)
 #include <sys/mman.h>
 #endif  // IREE_PLATFORM_LINUX
@@ -13,6 +15,8 @@
 typedef struct iree_hal_cpu_slab_provider_t {
   // Base provider header for vtable dispatch and ref counting.
   iree_hal_slab_provider_t base;
+  // Process-owned system backing, without a native NUMA placement guarantee.
+  iree_hal_memory_trace_t trace;
 
   // Minimum absolute byte alignment of every slab allocation.
   iree_host_size_t allocation_alignment;
@@ -42,8 +46,14 @@ iree_status_t iree_hal_cpu_slab_provider_create(
                                     host_allocator, &provider->base);
   provider->allocation_alignment =
       iree_max(min_alignment, IREE_HAL_HEAP_BUFFER_ALIGNMENT);
-  *out_provider = &provider->base;
-  return iree_ok_status();
+  iree_status_t status = iree_hal_memory_trace_initialize(
+      iree_string_view_empty(), "hal-system", &provider->trace);
+  if (iree_status_is_ok(status)) {
+    *out_provider = &provider->base;
+  } else {
+    iree_hal_slab_provider_release(&provider->base);
+  }
+  return status;
 }
 
 static void iree_hal_cpu_slab_provider_destroy(
@@ -69,6 +79,7 @@ static iree_status_t iree_hal_cpu_slab_provider_acquire_slab(
       provider->base.host_allocator, min_length,
       iree_max(min_alignment, provider->allocation_alignment),
       /*offset=*/0, &ptr));
+  iree_hal_memory_trace_alloc(&provider->trace, ptr, min_length);
   out_slab->base_ptr = (uint8_t*)ptr;
   out_slab->length = min_length;
   out_slab->provider_handle = 0;
@@ -153,6 +164,7 @@ static void iree_hal_cpu_slab_provider_release_slab(
   iree_hal_cpu_slab_provider_t* provider =
       (iree_hal_cpu_slab_provider_t*)base_provider;
   if (slab->provider_handle != IREE_HAL_CPU_SLAB_PROVIDER_IMPORTED_HANDLE) {
+    iree_hal_memory_trace_free(&provider->trace, slab->base_ptr);
     iree_allocator_free_aligned(provider->base.host_allocator, slab->base_ptr);
   }
 }

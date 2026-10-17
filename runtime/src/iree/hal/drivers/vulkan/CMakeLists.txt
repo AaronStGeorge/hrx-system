@@ -80,6 +80,7 @@ iree_cc_library(
     iree::base
     iree::hal
     iree::hal::drivers::vulkan::util::libvulkan
+    iree::hal::memory::tracing
     iree::third_party::vulkan_headers
   PUBLIC
 )

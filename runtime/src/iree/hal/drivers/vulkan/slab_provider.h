@@ -72,8 +72,7 @@ typedef struct iree_hal_vulkan_slab_provider_options_t {
 iree_status_t iree_hal_vulkan_slab_provider_create(
     iree_hal_vulkan_allocator_t* allocator,
     iree_hal_vulkan_slab_provider_options_t options,
-    iree_string_view_t trace_name, iree_allocator_t host_allocator,
-    iree_hal_slab_provider_t** out_provider);
+    iree_allocator_t host_allocator, iree_hal_slab_provider_t** out_provider);
 
 // Executes a ready batch on the owning native allocation queue. No dependency
 // wait or application work enters this boundary; completion may release the

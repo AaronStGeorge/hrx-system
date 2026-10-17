@@ -104,6 +104,9 @@ typedef struct iree_hal_amdgpu_slab_provider_t {
 } iree_hal_amdgpu_slab_provider_t;
 
 typedef struct iree_hal_amdgpu_slab_handle_t {
+  // Physical ledger retained through sanitizer quarantine and native release.
+  iree_hal_memory_trace_t trace;
+
   // HSA allocation byte length used when releasing the slab.
   iree_device_size_t allocation_size;
 
@@ -243,6 +246,7 @@ static void iree_hal_amdgpu_slab_provider_finalize_vmem_handle(
                                            slab_handle->base_ptr,
                                            slab_handle->allocation_size));
   }
+  iree_hal_memory_trace_free(&slab_handle->trace, slab_handle);
   iree_allocator_free(slab_handle->host_allocator, slab_handle);
 
   IREE_TRACE_ZONE_END(z0);
@@ -259,6 +263,7 @@ static void iree_hal_amdgpu_slab_provider_finalize_hsa_allocation(
         iree_hsa_amd_memory_pool_free_raw(slab_handle->libhsa,
                                           slab_handle->base_ptr));
   }
+  iree_hal_memory_trace_free(&slab_handle->trace, slab_handle);
   iree_allocator_free(slab_handle->host_allocator, slab_handle);
 
   IREE_TRACE_ZONE_END(z0);
@@ -769,7 +774,9 @@ static iree_status_t iree_hal_amdgpu_slab_provider_acquire_slab(
             ? IREE_HAL_HOST_CACHEABILITY_WRITE_BACK
             : IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
     out_slab->allocation_alignment = provider->allocation_alignment;
-    iree_hal_memory_trace_alloc(&provider->trace, base_ptr, allocation_size);
+    slab_handle->trace = provider->trace;
+    iree_hal_memory_trace_alloc(&slab_handle->trace, slab_handle,
+                                allocation_size);
     iree_atomic_fetch_add(&provider->total_acquired, 1,
                           iree_memory_order_relaxed);
     iree_hal_amdgpu_slab_provider_record_memory_event(
@@ -865,8 +872,6 @@ static iree_status_t iree_hal_amdgpu_slab_provider_import_slab(
       out_import->slab.physical_backing_id = storage->physical_backing_id;
       out_import->slab.allocation_alignment =
           out_import->properties.allocation_alignment;
-      iree_hal_memory_trace_alloc(&provider->trace, out_import->slab.base_ptr,
-                                  out_import->slab.length);
       iree_atomic_fetch_add(&provider->total_acquired, 1,
                             iree_memory_order_relaxed);
     }
@@ -911,7 +916,6 @@ static void iree_hal_amdgpu_slab_provider_release_slab(
     iree_hal_amdgpu_slab_handle_t* slab_handle =
         (iree_hal_amdgpu_slab_handle_t*)(uintptr_t)slab->provider_handle;
     if (slab_handle->imported_buffer) {
-      iree_hal_memory_trace_free(&provider->trace, slab->base_ptr);
       iree_hal_buffer_release(slab_handle->imported_buffer);
       iree_allocator_free(provider->base.host_allocator, slab_handle);
       iree_atomic_fetch_add(&provider->total_released, 1,
@@ -922,7 +926,6 @@ static void iree_hal_amdgpu_slab_provider_release_slab(
     iree_hal_amdgpu_slab_provider_record_memory_event(
         provider, IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_SLAB_RELEASE, slab_handle,
         slab->base_ptr);
-    iree_hal_memory_trace_free(&provider->trace, slab->base_ptr);
     if (iree_hal_amdgpu_slab_provider_uses_asan_shadow(provider) &&
         iree_atomic_load(&slab_handle->has_asan_advice,
                          iree_memory_order_relaxed)) {

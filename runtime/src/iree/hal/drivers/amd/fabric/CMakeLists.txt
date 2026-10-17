@@ -140,6 +140,7 @@ iree_cc_library(
     iree::hal
     iree::hal::drivers::amd::status
     iree::hal::memory::slab_provider
+    iree::hal::memory::tracing
   PUBLIC
 )
 endif()

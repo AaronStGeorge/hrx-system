@@ -8,6 +8,7 @@
 
 #include "iree/base/internal/math.h"
 #include "iree/hal/drivers/amd/status.h"
+#include "iree/hal/memory/tracing.h"
 
 typedef struct iree_hal_amd_fabric_slab_provider_t {
   // Base slab-provider interface header.
@@ -24,6 +25,8 @@ typedef struct iree_hal_amd_fabric_slab_provider_t {
   iree_hal_amd_fabric_slab_provider_options_t options;
   // Immutable HAL capabilities of all slabs.
   iree_hal_slab_provider_properties_t properties;
+  // Physical backing ledger shared across providers in this domain.
+  iree_hal_memory_trace_t trace;
   // Whether slabs need one shared prepared source descriptor.
   bool has_mapping_source;
   // Cumulative successful slab acquisitions.
@@ -167,8 +170,16 @@ iree_status_t iree_hal_amd_fabric_slab_provider_create(
           owned ? options->memory.profile.allocation.maximum_alignment : 1,
       .maintenance_alignment = options->maintenance_alignment,
   };
-  *out_provider = &provider->base;
-  return iree_ok_status();
+  iree_status_t status = iree_hal_memory_trace_initialize_domain(
+      options->trace_domain ? options->trace_domain : "libamdf",
+      options->trace_domain ? options->trace_ordinal : UINT32_MAX,
+      &provider->trace);
+  if (iree_status_is_ok(status)) {
+    *out_provider = &provider->base;
+  } else {
+    iree_hal_slab_provider_release(&provider->base);
+  }
+  return status;
 }
 
 static void iree_hal_amd_fabric_slab_provider_destroy(
@@ -301,6 +312,9 @@ static iree_status_t iree_hal_amd_fabric_slab_provider_acquire_slab(
   }
   if (iree_status_is_ok(status)) {
     iree_hal_amd_fabric_slab_initialize(handle, min_length, out_slab);
+    iree_hal_memory_trace_alloc(
+        &provider->trace, handle,
+        handle->memory.info.native_allocation_byte_length);
     iree_atomic_fetch_add(&provider->total_acquired, 1,
                           iree_memory_order_relaxed);
   } else {
@@ -426,6 +440,9 @@ static void iree_hal_amd_fabric_slab_provider_release_slab(
   }
   iree_hal_amd_fabric_memory_deinitialize(provider->api, provider->event_sink,
                                           &handle->memory);
+  if (!handle->imported) {
+    iree_hal_memory_trace_free(&provider->trace, handle);
+  }
   iree_allocator_free(provider->base.host_allocator, handle);
   iree_atomic_fetch_add(&provider->total_released, 1,
                         iree_memory_order_relaxed);

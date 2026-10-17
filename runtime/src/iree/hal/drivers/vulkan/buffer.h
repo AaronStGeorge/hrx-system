@@ -11,6 +11,7 @@
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/vulkan/api.h"
 #include "iree/hal/drivers/vulkan/util/libvulkan.h"
+#include "iree/hal/memory/tracing.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,6 +86,8 @@ void iree_hal_vulkan_buffer_initialize_bindings(
 // offset zero into a HOST_VISIBLE memory type, or NULL for Vulkan-owned
 // storage. Noncoherent imports prepare their maintenance mapping here; file
 // transfers never map or import lazily.
+// |allocation_trace| charges the complete native payload once. Imports pass
+// NULL because the caller already owns their physical storage.
 iree_status_t iree_hal_vulkan_buffer_create(
     const iree_hal_vulkan_device_syms_t* syms, VkDevice logical_device,
     iree_hal_buffer_placement_t placement, iree_hal_memory_type_t memory_type,
@@ -96,6 +99,7 @@ iree_status_t iree_hal_vulkan_buffer_create(
     VkDeviceSize device_memory_size, VkBuffer handle,
     VkDeviceSize handle_length, VkDeviceSize handle_offset,
     VkDeviceAddress device_address, void* imported_host_pointer,
+    const iree_hal_memory_trace_t* allocation_trace,
     iree_hal_buffer_release_callback_t release_callback,
     iree_allocator_t host_allocator, iree_hal_buffer_t** out_buffer);
 

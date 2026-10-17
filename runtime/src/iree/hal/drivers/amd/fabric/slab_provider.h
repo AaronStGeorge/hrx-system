@@ -40,6 +40,10 @@ typedef struct iree_hal_amd_fabric_import_route_t {
 
 // Cold native construction contract copied into one slab provider.
 typedef struct iree_hal_amd_fabric_slab_provider_options_t {
+  // Static physical domain prefix, independent of logical pool names.
+  const char* trace_domain;
+  // Native domain ordinal, or UINT32_MAX for unspecified system placement.
+  uint32_t trace_ordinal;
   // Qualified construction policy; the provider copies the access array.
   iree_hal_amd_fabric_memory_options_t memory;
   // HAL owners parallel to memory.accesses, retained through native cleanup.

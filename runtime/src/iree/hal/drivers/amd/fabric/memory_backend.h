@@ -65,6 +65,11 @@ typedef struct iree_hal_amd_fabric_memory_storage_t {
 // The device group dominates all owners. Sharing an API and instance identifies
 // one construction domain independently of its available storage scopes.
 typedef struct iree_hal_amd_fabric_memory_backend_options_t {
+  // Static allocation-domain prefix for endpoint-local physical storage,
+  // such as "libamdf-rdna", "libamdf-cdna", or "libamdf-xdna".
+  const char* trace_device_domain;
+  // Physical endpoint ordinal within that family, independent of HAL groups.
+  uint32_t trace_device_ordinal;
   // Negotiated core API table, independent of any execution extension.
   const amdf_api_t* api;
   // Native instance owning the already-created device and address domains.

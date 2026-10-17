@@ -212,6 +212,7 @@ iree_runtime_cc_library(
     hdrs = ["cpu_slab_provider.h"],
     deps = [
         ":slab_provider",
+        ":tracing",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:memory",
         "//runtime/src/iree/base/internal:shm",

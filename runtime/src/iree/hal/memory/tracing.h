@@ -53,6 +53,9 @@ static inline void iree_hal_memory_trace_deinitialize(
   (void)trace;
 }
 
+// |ptr| identifies a live allocation within this stream. Physical providers may
+// use their native ownership record when the payload has no virtual address.
+// Logical mappings and imported aliases do not create new physical charges.
 static inline void iree_hal_memory_trace_alloc(
     const iree_hal_memory_trace_t* trace, void* ptr,
     iree_device_size_t byte_length) {

@@ -22,10 +22,6 @@
 // iree_hal_vulkan_allocator_t
 //===----------------------------------------------------------------------===//
 
-#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
-static const char* IREE_HAL_VULKAN_ALLOCATOR_ID = "iree-hal-vulkan-unpooled";
-#endif  // IREE_TRACING_FEATURE_ALLOCATION_TRACKING
-
 typedef struct iree_hal_vulkan_allocator_memory_placement_t {
   // Vulkan memory type index selected for the allocation.
   uint32_t memory_type_index;
@@ -80,6 +76,9 @@ struct iree_hal_vulkan_allocator_t {
 
   // Physical-device memory properties captured during logical-device creation.
   VkPhysicalDeviceMemoryProperties2 memory_properties2;
+
+  // Shared physical ledgers indexed by native heap, not memory type.
+  iree_hal_memory_trace_t heap_traces[VK_MAX_MEMORY_HEAPS];
 
   // HAL features enabled on the logical device.
   iree_hal_vulkan_features_t enabled_features;
@@ -210,9 +209,24 @@ iree_status_t iree_hal_vulkan_allocator_create(
          queue_family_count * sizeof(queue_families[0]));
   allocator->sparse_binding_queue = sparse_binding_queue;
 
-  *out_allocator = (iree_hal_allocator_t*)allocator;
+  iree_status_t status = iree_ok_status();
+  for (uint32_t i = 0; i < physical_device->memory_properties2.memoryProperties
+                               .memoryHeapCount &&
+                       iree_status_is_ok(status);
+       ++i) {
+    char domain[64];
+    iree_snprintf(domain, sizeof(domain), "vulkan-%u-heap",
+                  physical_device->ordinal);
+    status = iree_hal_memory_trace_initialize_domain(
+        domain, i, &allocator->heap_traces[i]);
+  }
+  if (iree_status_is_ok(status)) {
+    *out_allocator = (iree_hal_allocator_t*)allocator;
+  } else {
+    iree_hal_allocator_release((iree_hal_allocator_t*)allocator);
+  }
   IREE_TRACE_ZONE_END(z0);
-  return iree_ok_status();
+  return status;
 }
 
 static void iree_hal_vulkan_allocator_destroy(
@@ -1037,10 +1051,12 @@ iree_hal_vulkan_allocator_allocate_direct_buffer_with_memory_type_bits(
   }
 
   iree_hal_buffer_t* buffer = NULL;
-#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
-  VkBuffer trace_handle = VK_NULL_HANDLE;
-#endif  // IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
   if (iree_status_is_ok(status)) {
+    const iree_hal_memory_trace_t* allocation_trace =
+        &allocator
+             ->heap_traces[allocator->memory_properties2.memoryProperties
+                               .memoryTypes[memory_placement.memory_type_index]
+                               .heapIndex];
     const iree_hal_buffer_placement_t buffer_placement = {
         .device = allocator->parent_device,
         .queue_family_affinity = compat_params.queue_family_affinity,
@@ -1057,11 +1073,8 @@ iree_hal_vulkan_allocator_allocate_direct_buffer_with_memory_type_bits(
           max_allocation_size,
           iree_hal_vulkan_allocator_memory_allocate_flags(allocator,
                                                           compat_params.usage),
-          allocator->host_allocator, &buffer);
+          allocation_trace, allocator->host_allocator, &buffer);
       if (iree_status_is_ok(status)) {
-#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
-        trace_handle = handle;
-#endif  // IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
         handle = VK_NULL_HANDLE;
       }
     } else {
@@ -1075,13 +1088,10 @@ iree_hal_vulkan_allocator_allocate_direct_buffer_with_memory_type_bits(
           device_memory, /*device_memory_offset=*/handle_offset,
           memory_requirements.size, handle, (VkDeviceSize)allocation_size,
           handle_offset, device_address,
-          /*imported_host_pointer=*/NULL,
+          /*imported_host_pointer=*/NULL, allocation_trace,
           iree_hal_buffer_release_callback_null(), allocator->host_allocator,
           &buffer);
       if (iree_status_is_ok(status)) {
-#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
-        trace_handle = handle;
-#endif  // IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
         device_memory = VK_NULL_HANDLE;
         handle = VK_NULL_HANDLE;
       }
@@ -1089,8 +1099,6 @@ iree_hal_vulkan_allocator_allocate_direct_buffer_with_memory_type_bits(
   }
 
   if (iree_status_is_ok(status)) {
-    IREE_TRACE_ALLOC_NAMED(IREE_HAL_VULKAN_ALLOCATOR_ID, (void*)trace_handle,
-                           (iree_host_size_t)allocation_size);
     *out_buffer = buffer;
   } else {
     iree_hal_buffer_release(buffer);
@@ -1372,9 +1380,6 @@ iree_hal_vulkan_allocator_import_buffer_with_memory_type_bits(
   }
 
   iree_hal_buffer_t* buffer = NULL;
-#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
-  VkBuffer trace_handle = VK_NULL_HANDLE;
-#endif  // IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
   if (iree_status_is_ok(status)) {
     const iree_hal_buffer_placement_t placement = {
         .device = allocator->parent_device,
@@ -1396,20 +1401,15 @@ iree_hal_vulkan_allocator_import_buffer_with_memory_type_bits(
         handle, (VkDeviceSize)allocation_size, /*handle_offset=*/0,
         iree_hal_vulkan_allocator_query_device_address(
             allocator, compat_params.usage, handle),
-        external_buffer->payload.host_pointer, release_callback,
-        allocator->host_allocator, &buffer);
+        external_buffer->payload.host_pointer, /*allocation_trace=*/NULL,
+        release_callback, allocator->host_allocator, &buffer);
     if (iree_status_is_ok(status)) {
-#if IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
-      trace_handle = handle;
-#endif  // IREE_TRACING_FEATURES & IREE_TRACING_FEATURE_ALLOCATION_TRACKING
       device_memory = VK_NULL_HANDLE;
       handle = VK_NULL_HANDLE;
     }
   }
 
   if (iree_status_is_ok(status)) {
-    IREE_TRACE_ALLOC_NAMED(IREE_HAL_VULKAN_ALLOCATOR_ID, (void*)trace_handle,
-                           (iree_host_size_t)allocation_size);
     *out_buffer = buffer;
   } else {
     iree_hal_buffer_release(buffer);

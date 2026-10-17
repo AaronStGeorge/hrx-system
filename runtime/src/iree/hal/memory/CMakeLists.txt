@@ -233,6 +233,7 @@ iree_cc_library(
     "shared_slab_provider.c"
   DEPS
     ::slab_provider
+    ::tracing
     iree::base
     iree::base::internal::memory
     iree::base::internal::shm

@@ -236,6 +236,8 @@ iree_status_t iree_hal_amd_xdna_device_create(
         .minimum_access = context->data_source.capabilities.guaranteed_access,
     };
     const iree_hal_amd_fabric_memory_backend_options_t memory_options = {
+        .trace_device_domain = "libamdf-xdna",
+        .trace_device_ordinal = context->device_ordinal,
         .api = context->api,
         .instance = context->fabric->instance,
         .device = context->device,

@@ -11,14 +11,10 @@
 #include "iree/base/internal/atomics.h"
 #include "iree/hal/drivers/vulkan/allocation_queue.h"
 #include "iree/hal/drivers/vulkan/buffer.h"
-#include "iree/hal/memory/tracing.h"
 
 //===----------------------------------------------------------------------===//
 // iree_hal_vulkan_slab_provider_t
 //===----------------------------------------------------------------------===//
-
-static const char* IREE_HAL_VULKAN_SLAB_PROVIDER_TRACE_ID =
-    "iree-hal-vulkan-slab-provider";
 
 typedef struct iree_hal_vulkan_slab_provider_t {
   // Base slab provider for vtable dispatch and reference counting.
@@ -59,9 +55,6 @@ typedef struct iree_hal_vulkan_slab_provider_t {
 
   // Physical-device nonCoherentAtomSize used for mapped-memory ranges.
   VkDeviceSize non_coherent_atom_size;
-
-  // Named-memory trace stream for whole-slab backing allocations.
-  iree_hal_memory_trace_t trace;
 
   // Cumulative slabs acquired from Vulkan.
   iree_atomic_int64_t total_acquired;
@@ -104,8 +97,7 @@ static void iree_hal_vulkan_slab_provider_populate_properties(
 iree_status_t iree_hal_vulkan_slab_provider_create(
     iree_hal_vulkan_allocator_t* allocator,
     iree_hal_vulkan_slab_provider_options_t options,
-    iree_string_view_t trace_name, iree_allocator_t host_allocator,
-    iree_hal_slab_provider_t** out_provider) {
+    iree_allocator_t host_allocator, iree_hal_slab_provider_t** out_provider) {
   IREE_ASSERT_ARGUMENT(allocator);
   IREE_ASSERT_ARGUMENT(options.parent_device);
   IREE_ASSERT_ARGUMENT(options.syms);
@@ -162,16 +154,9 @@ iree_status_t iree_hal_vulkan_slab_provider_create(
   provider->total_acquired = IREE_ATOMIC_VAR_INIT(0);
   provider->total_released = IREE_ATOMIC_VAR_INIT(0);
 
-  iree_status_t status = iree_hal_memory_trace_initialize(
-      trace_name, IREE_HAL_VULKAN_SLAB_PROVIDER_TRACE_ID, &provider->trace);
-  if (iree_status_is_ok(status)) {
-    *out_provider = &provider->base;
-  } else {
-    iree_hal_slab_provider_release(&provider->base);
-  }
-
+  *out_provider = &provider->base;
   IREE_TRACE_ZONE_END(z0);
-  return status;
+  return iree_ok_status();
 }
 
 static void iree_hal_vulkan_slab_provider_destroy(
@@ -180,7 +165,6 @@ static void iree_hal_vulkan_slab_provider_destroy(
       iree_hal_vulkan_slab_provider_cast(base_provider);
   iree_allocator_t host_allocator = provider->base.host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
-  iree_hal_memory_trace_deinitialize(&provider->trace);
   iree_hal_vulkan_allocation_queue_release(provider->allocation_queue);
   iree_allocator_free(host_allocator, provider);
   IREE_TRACE_ZONE_END(z0);
@@ -259,8 +243,6 @@ static iree_status_t iree_hal_vulkan_slab_provider_acquire_slab(
             ? IREE_HAL_HOST_CACHEABILITY_WRITE_BACK
             : IREE_HAL_HOST_CACHEABILITY_UNKNOWN;
     out_slab->allocation_alignment = iree_max(alignment, native_alignment);
-    iree_hal_memory_trace_alloc(&provider->trace, out_slab->base_ptr,
-                                out_slab->length);
     iree_atomic_fetch_add(&provider->total_acquired, 1,
                           iree_memory_order_relaxed);
   } else {
@@ -318,8 +300,6 @@ static iree_status_t iree_hal_vulkan_slab_provider_import_slab(
     out_import->slab.physical_backing_id = storage->physical_backing_id;
     out_import->slab.allocation_alignment =
         out_import->properties.allocation_alignment;
-    iree_hal_memory_trace_alloc(&provider->trace, out_import->slab.base_ptr,
-                                out_import->slab.length);
     iree_atomic_fetch_add(&provider->total_acquired, 1,
                           iree_memory_order_relaxed);
   } else {
@@ -357,7 +337,6 @@ static void iree_hal_vulkan_slab_provider_release_slab(
       iree_hal_vulkan_slab_provider_cast(base_provider);
   IREE_TRACE_ZONE_BEGIN(z0);
   if (slab->provider_handle) {
-    iree_hal_memory_trace_free(&provider->trace, slab->base_ptr);
     iree_hal_buffer_t* buffer =
         (iree_hal_buffer_t*)(uintptr_t)slab->provider_handle;
     iree_hal_buffer_release(buffer);

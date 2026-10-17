@@ -7,10 +7,13 @@
 #include "iree/base/internal/memory.h"
 #include "iree/base/internal/shm.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
+#include "iree/hal/memory/tracing.h"
 
 typedef struct iree_hal_shared_slab_provider_t {
   // Reference-counted native source.
   iree_hal_slab_provider_t base;
+  // Process-owned system backing, without a native NUMA placement guarantee.
+  iree_hal_memory_trace_t trace;
 } iree_hal_shared_slab_provider_t;
 
 typedef struct iree_hal_shared_slab_t {
@@ -72,6 +75,7 @@ static iree_status_t iree_hal_shared_slab_provider_acquire(
     slab->bindings[1].mapping_source.descriptor = &slab->mapping;
     slab->bindings[1].mapping_source.granularity = (uint32_t)page_size;
     slab->bindings[1].mapping_source.offset = prefix;
+    iree_hal_memory_trace_alloc(&provider->trace, slab, slab->mapping.size);
     *out_slab = (iree_hal_slab_t){
         .base_ptr = pointer,
         .length = slab->mapping.size - prefix,
@@ -96,6 +100,7 @@ static void iree_hal_shared_slab_provider_release(
   iree_hal_shared_slab_t* storage =
       (iree_hal_shared_slab_t*)(uintptr_t)slab->provider_handle;
   iree_shm_close(&storage->mapping);
+  iree_hal_memory_trace_free(&provider->trace, storage);
   iree_allocator_free(provider->base.host_allocator, storage);
 }
 
@@ -206,6 +211,12 @@ iree_status_t iree_hal_shared_slab_provider_create(
                                              (void**)&provider));
   iree_hal_slab_provider_initialize(&iree_hal_shared_slab_provider_vtable,
                                     host_allocator, &provider->base);
-  *out_provider = &provider->base;
-  return iree_ok_status();
+  iree_status_t status = iree_hal_memory_trace_initialize(
+      iree_string_view_empty(), "hal-system", &provider->trace);
+  if (iree_status_is_ok(status)) {
+    *out_provider = &provider->base;
+  } else {
+    iree_hal_slab_provider_release(&provider->base);
+  }
+  return status;
 }

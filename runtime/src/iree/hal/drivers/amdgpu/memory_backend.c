@@ -55,6 +55,8 @@ typedef struct iree_hal_amdgpu_slab_pool_plan_t {
   } imports;
   // Borrowed until synchronous creation copies the diagnostic name.
   iree_string_view_t trace_name;
+  // Physical HSA domain name, copied by the native provider at construction.
+  char physical_trace_name[64];
   // Unique native agents selected for this source, copied by the provider.
   hsa_agent_t agents[];
 } iree_hal_amdgpu_slab_pool_plan_t;
@@ -75,7 +77,8 @@ static iree_status_t iree_hal_amdgpu_slab_pool_plan_create(
   iree_hal_slab_provider_t* provider = NULL;
   iree_status_t status = iree_hal_amdgpu_slab_provider_create(
       plan->device, plan->allocator, plan->libhsa, plan->provider_options,
-      plan->physical_ordinal, plan->buffer_pool, plan->trace_name,
+      plan->physical_ordinal, plan->buffer_pool,
+      iree_make_cstring_view(plan->physical_trace_name),
       iree_hal_device_host_allocator(plan->device), &provider);
   if (iree_status_is_ok(status)) {
     const iree_hal_passthrough_pool_options_t options = {
@@ -430,6 +433,19 @@ static iree_status_t iree_hal_amdgpu_slab_pool_query_memory(
   plan->allocator = backend->allocator;
   plan->libhsa = backend->libhsa;
   plan->physical_ordinal = physical_device->device_ordinal;
+  if (location == HSA_AMD_MEMORY_POOL_LOCATION_CPU &&
+      physical_device->host_numa_node == UINT32_MAX) {
+    iree_snprintf(plan->physical_trace_name, sizeof(plan->physical_trace_name),
+                  "amdgpu-system");
+  } else {
+    iree_snprintf(plan->physical_trace_name, sizeof(plan->physical_trace_name),
+                  location == HSA_AMD_MEMORY_POOL_LOCATION_CPU
+                      ? "amdgpu-numa-%u"
+                      : "amdgpu-gpu-%u",
+                  location == HSA_AMD_MEMORY_POOL_LOCATION_CPU
+                      ? physical_device->host_numa_node
+                      : (uint32_t)physical_device->device_ordinal);
+  }
   plan->buffer_pool = &physical_device->materialized_buffer_pool;
   plan->provider_options.allocation_queue = physical_device->allocation_queue;
   plan->progress.notification = physical_device->memory_notification;
