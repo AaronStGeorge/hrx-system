@@ -216,14 +216,16 @@ typedef struct iree_hal_slab_acquire_request_t {
 
 // Infallible submission using storage secured during acquisition. The caller
 // establishes actual retirement and releases every native view before submit.
-// The descriptor and slab array remain stable through submission/completion.
+// The descriptor and slab array remain allocated through completion. Submission
+// consumes their contents; providers may compact the pending native work in
+// place.
 typedef struct iree_hal_slab_release_request_t {
   // Backend linkage initialized by the provider entry point.
   iree_hal_slab_operation_t operation;
-  // Number of slabs returned in this batch.
+  // Number of slabs returned; providers may reduce it as entries are consumed.
   iree_host_size_t count;
-  // Stable native descriptors borrowed until release completion.
-  const iree_hal_slab_t* slabs;
+  // Mutable native descriptors consumed by the provider through completion.
+  iree_hal_slab_t* slabs;
   // Exactly one terminal completion after all native release attempts.
   iree_hal_slab_release_callback_t completion;
 } iree_hal_slab_release_request_t;

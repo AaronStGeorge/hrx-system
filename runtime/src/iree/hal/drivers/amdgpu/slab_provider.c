@@ -1182,14 +1182,26 @@ static void iree_hal_amdgpu_slab_provider_release_slabs(
   iree_hal_amdgpu_slab_provider_t* provider =
       iree_hal_amdgpu_slab_provider_cast(base);
   // Borrowed imports must detach before final public view release returns.
-  bool imported = false;
+  iree_host_size_t owned_count = 0;
   for (iree_host_size_t i = 0; i < request->count; ++i) {
     const iree_hal_amdgpu_slab_handle_t* handle =
         (const iree_hal_amdgpu_slab_handle_t*)(uintptr_t)request->slabs[i]
             .provider_handle;
-    imported |= handle && handle->imported_buffer;
+    if (handle && handle->imported_buffer) {
+      iree_hal_amdgpu_slab_provider_release_slab(base, &request->slabs[i]);
+    } else {
+      if (owned_count != i) {
+        request->slabs[owned_count] = request->slabs[i];
+      }
+      ++owned_count;
+    }
   }
-  if (provider->allocation_queue && !imported) {
+  request->count = owned_count;
+  if (!owned_count) {
+    request->completion.fn(request->completion.user_data);
+    return;
+  }
+  if (provider->allocation_queue) {
     iree_hal_amdgpu_allocation_queue_enqueue(provider->allocation_queue,
                                              &request->operation);
   } else {

@@ -532,16 +532,25 @@ static void iree_hal_amd_fabric_slab_provider_release_slabs(
     iree_hal_slab_provider_t* base, iree_hal_slab_release_request_t* request) {
   // Explicit imports can borrow caller-owned payloads without any release
   // callback. Their last buffer release is therefore the native detach
-  // boundary; enqueueing it would silently extend the caller's obligation.
+  // boundary. Only owned native frees remain on the allocation queue.
+  iree_host_size_t owned_count = 0;
   for (iree_host_size_t i = 0; i < request->count; ++i) {
     const iree_hal_amd_fabric_slab_handle_t* handle =
         (const iree_hal_amd_fabric_slab_handle_t*)(uintptr_t)request->slabs[i]
             .provider_handle;
     if (handle && handle->imported) {
-      iree_hal_slab_provider_release_slabs_inline(
-          base, request, iree_hal_amd_fabric_slab_provider_release_slab);
-      return;
+      iree_hal_amd_fabric_slab_provider_release_slab(base, &request->slabs[i]);
+    } else {
+      if (owned_count != i) {
+        request->slabs[owned_count] = request->slabs[i];
+      }
+      ++owned_count;
     }
+  }
+  request->count = owned_count;
+  if (!owned_count) {
+    request->completion.fn(request->completion.user_data);
+    return;
   }
   iree_hal_amd_fabric_slab_provider_t* provider =
       iree_hal_amd_fabric_slab_provider_cast(base);

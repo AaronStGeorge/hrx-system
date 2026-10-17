@@ -494,14 +494,24 @@ static void iree_hal_vulkan_slab_provider_release_slabs(
     iree_hal_slab_release_request_t* request) {
   // Explicit imported storage may have no release callback. Final view release
   // remains the synchronous native detach boundary for its borrowed payload.
+  iree_host_size_t owned_count = 0;
   for (iree_host_size_t i = 0; i < request->count; ++i) {
     const iree_hal_buffer_t* buffer =
         (const iree_hal_buffer_t*)(uintptr_t)request->slabs[i].provider_handle;
     if (buffer && iree_hal_vulkan_buffer_native(buffer)->host_allocation) {
-      iree_hal_slab_provider_release_slabs_inline(
-          base_provider, request, iree_hal_vulkan_slab_provider_release_slab);
-      return;
+      iree_hal_vulkan_slab_provider_release_slab(base_provider,
+                                                 &request->slabs[i]);
+    } else {
+      if (owned_count != i) {
+        request->slabs[owned_count] = request->slabs[i];
+      }
+      ++owned_count;
     }
+  }
+  request->count = owned_count;
+  if (!owned_count) {
+    request->completion.fn(request->completion.user_data);
+    return;
   }
   iree_hal_vulkan_slab_provider_t* provider =
       iree_hal_vulkan_slab_provider_cast(base_provider);

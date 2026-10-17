@@ -153,9 +153,10 @@ void iree_hal_slab_provider_release_slab_sync(
   iree_hal_slab_provider_sync_t call = {0};
   iree_slim_mutex_initialize(&call.mutex);
   iree_notification_initialize(&call.notification);
+  iree_hal_slab_t consumed_slab = *slab;
   iree_hal_slab_release_request_t request = {
       .count = 1,
-      .slabs = slab,
+      .slabs = &consumed_slab,
       .completion = {iree_hal_slab_provider_sync_released, &call},
   };
   iree_hal_slab_provider_release_slabs(provider, &request);
