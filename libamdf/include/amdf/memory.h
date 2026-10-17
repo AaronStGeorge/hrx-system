@@ -65,6 +65,7 @@ enum amdf_memory_flag_bits_e {
   /// The allocation can hold directly published user-mode queue state.
   AMDF_MEMORY_FLAG_QUEUE_STORAGE = UINT64_C(1) << 3,
   /// Host and device access requires no explicit host cache transition.
+  /// Device cache transitions and atomic access are separate capabilities.
   AMDF_MEMORY_FLAG_HOST_COHERENT = UINT64_C(1) << 4,
   /// A stable device address is established before creation returns.
   AMDF_MEMORY_FLAG_DEVICE_ADDRESS = UINT64_C(1) << 5,

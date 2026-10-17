@@ -93,7 +93,8 @@ TEST(LinuxGpuMemoryProfileTest,
         device.topology.memory_features = AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY;
       }
       const auto profile = QueryProfile(
-          &device, 2 + uint32_t{local_memory} +
+          &device, AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_COUNT +
+                       uint32_t{local_memory} +
                        uint32_t{lifetime == AMDF_NATIVE_LIFETIME_PROCESS});
       EXPECT_EQ(profile.roles, AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT);
       EXPECT_EQ(profile.guaranteed_flags, AMDF_MEMORY_FLAG_MAPPING_SOURCE);
@@ -116,7 +117,7 @@ TEST(LinuxGpuMemoryProfileTest,
   }
 }
 
-TEST(LinuxGpuMemoryProfileTest, CachedPayloadSeparatesHostViewsAndControl) {
+TEST(LinuxGpuMemoryProfileTest, CachedPayloadAndControlBothSnoopHostCaches) {
   amdf_gpu_umd_device_t device = {
       .native_lifetime = AMDF_NATIVE_LIFETIME_INSTANCE,
       .page_size = 4096,
@@ -126,19 +127,22 @@ TEST(LinuxGpuMemoryProfileTest, CachedPayloadSeparatesHostViewsAndControl) {
   device.topology.virtual_address.end = UINT64_C(1) << 48;
   device.topology.gc_ip = {.major = 11, .exact = true};
   device.topology.host_atomics = {true, true};
-  const auto cached = QueryProfile(&device, 0);
-  const auto coherent = QueryProfile(&device, 1);
+  const auto cached =
+      QueryProfile(&device, AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_CACHED);
+  const auto control =
+      QueryProfile(&device, AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_CONTROL);
   EXPECT_EQ(cached.memory_class, AMDF_MEMORY_CLASS_SYSTEM);
-  EXPECT_EQ(cached.roles, coherent.roles);
-  EXPECT_EQ(cached.guaranteed_flags,
-            coherent.guaranteed_flags & ~AMDF_MEMORY_FLAG_HOST_COHERENT);
+  EXPECT_EQ(cached.roles, control.roles);
+  EXPECT_NE(cached.guaranteed_flags & AMDF_MEMORY_FLAG_HOST_COHERENT, 0u);
+  EXPECT_EQ(cached.guaranteed_flags, control.guaranteed_flags);
   EXPECT_EQ(cached.supported_flags,
-            coherent.supported_flags & ~(AMDF_MEMORY_FLAG_HOST_COHERENT |
-                                         AMDF_MEMORY_FLAG_QUEUE_STORAGE));
+            control.supported_flags & ~AMDF_MEMORY_FLAG_QUEUE_STORAGE);
   EXPECT_EQ(cached.atomic_operations_32, 0u);
   EXPECT_EQ(cached.atomic_operations_64, 0u);
-  EXPECT_NE(coherent.atomic_operations_32, 0u);
-  EXPECT_NE(coherent.atomic_operations_64, 0u);
+  EXPECT_NE(control.atomic_operations_32, 0u);
+  EXPECT_NE(control.atomic_operations_64, 0u);
+  // Available host operations still serve other noncoherent consumers. Exact
+  // pair queries elide them for this GPU's snooped access.
   const auto host = cached.visibility.describe_host(cached.visibility.data, 0,
                                                     cached.guaranteed_flags);
   EXPECT_EQ(host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
@@ -150,8 +154,8 @@ TEST(LinuxGpuMemoryProfileTest, CachedPayloadSeparatesHostViewsAndControl) {
   EXPECT_EQ(host.invalidate.host_instruction,
             AMDF_HOST_CACHE_INSTRUCTION_X86_CLFLUSH);
 
-  for (const auto& backing : {cached, coherent}) {
-    for (const auto& consumer : {cached, coherent}) {
+  for (const auto& backing : {cached, control}) {
+    for (const auto& consumer : {cached, control}) {
       auto projected = cached;
       const auto original = projected;
       const bool compatible = backing.ordinal == consumer.ordinal;

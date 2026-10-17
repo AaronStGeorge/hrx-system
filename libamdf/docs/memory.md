@@ -859,6 +859,14 @@ need flushing before XDNA reads them. An explicit cache-control request performs
 the advertised operation even when one device is host-coherent. A CPU view has
 no device reset epoch; reset validity belongs to each device's access.
 
+`HOST_COHERENT` describes that access's relationship to host caches; it does
+not select a GPU cache policy or establish atomic access. Linux KFD exposes
+separate cached-payload and queue-control profiles that both snoop CPU caches.
+Ordinary payloads retain GPU caching. Live queue or control storage requests
+`QUEUE_STORAGE` explicitly, and atomic participants separately check the
+operation and reach capabilities. Exact pair queries still describe the
+device-side acquire and release operations required by either profile.
+
 CPU-visible GPU LOCAL backing is write-combined and has an additional device
 aperture boundary. When the provider owns a qualified HDP register mapping, a
 host-to-GPU pair reports a GLOBAL `HOST_API` flush. The caller writes the

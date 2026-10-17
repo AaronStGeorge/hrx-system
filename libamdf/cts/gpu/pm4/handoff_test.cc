@@ -413,6 +413,8 @@ TEST_P(Pm4SystemHandoffTest, ShaderHandoffAcrossQueues) {
 INSTANTIATE_TEST_SUITE_P(
     PayloadPolicy, Pm4SystemHandoffTest,
     ::testing::Values(amdf_memory_flags_t{0},
-                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT}));
+                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT},
+                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT |
+                                          AMDF_MEMORY_FLAG_QUEUE_STORAGE}));
 
 }  // namespace

@@ -83,7 +83,10 @@ static void amdf_gpu_kfd_memory_plan(
       plan->native_flags |= KFD_IOC_ALLOC_MEM_FLAGS_PUBLIC;
     }
   } else {
-    if ((plan->flags & AMDF_MEMORY_FLAG_HOST_COHERENT) != 0) {
+    // CPU snooping does not require uncached GPU payload access. Only control
+    // and registered profiles request KFD's coherent GPU mapping policy.
+    if (profile->ordinal == AMDF_GPU_KFD_MEMORY_PROFILE_SYSTEM_CONTROL ||
+        (profile->roles & AMDF_MEMORY_PROFILE_ROLE_REGISTER) != 0) {
       plan->native_flags |= KFD_IOC_ALLOC_MEM_FLAGS_COHERENT;
     }
     if ((profile->roles & AMDF_MEMORY_PROFILE_ROLE_REGISTER) != 0) {

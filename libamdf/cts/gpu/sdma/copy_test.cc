@@ -180,7 +180,9 @@ TEST_P(SdmaPayloadCopyTest, ByteTailsAndPageCrossingsPreserveSurroundingBytes) {
 INSTANTIATE_TEST_SUITE_P(
     PayloadPolicy, SdmaPayloadCopyTest,
     ::testing::Values(amdf_memory_flags_t{0},
-                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT}));
+                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT},
+                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT |
+                                          AMDF_MEMORY_FLAG_QUEUE_STORAGE}));
 
 class SdmaDependencyTest : public SdmaCopyTest {};
 

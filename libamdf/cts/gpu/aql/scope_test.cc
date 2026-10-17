@@ -286,6 +286,8 @@ TEST_P(AqlSystemPayloadTest,
 INSTANTIATE_TEST_SUITE_P(
     PayloadPolicy, AqlSystemPayloadTest,
     ::testing::Values(amdf_memory_flags_t{0},
-                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT}));
+                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT},
+                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT |
+                                          AMDF_MEMORY_FLAG_QUEUE_STORAGE}));
 
 }  // namespace
