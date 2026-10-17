@@ -262,6 +262,11 @@ class JitCacheTest : public JitTest {
     // not a full empty diagnostic report for every cached kernel.
     EXPECT_LT(initial.host_bytes,
               initial.count * sizeof(loom_serve_compilation_report_t));
+    if (direct_dispatch) {
+      // One small linked kernel, including its key and ownership records,
+      // fits in 3 KiB without doubling the key for a trailing root name.
+      EXPECT_LT(initial.host_bytes, 3u * 1024u);
+    }
     EXPECT_GT(initial.code_bytes, 0u);
     EXPECT_GT(loom_serve_jit_stage_storage_size(stages_[0]), 0u);
     loom_serve_jit_trim(jit_);

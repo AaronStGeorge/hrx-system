@@ -69,7 +69,7 @@ void loom_serve_jit_release(loom_serve_jit_t* jit);
 typedef struct loom_serve_jit_cache_storage_t {
   // Loaded native inputs still indexed for exact reuse.
   iree_host_size_t count;
-  // Requested host bytes for keys, entry records, and the lookup array.
+  // Requested host bytes for keys, entries, diagnostics, and the lookup array.
   iree_host_size_t host_bytes;
   // Lookup capacity included in host_bytes; retained as catalog infrastructure
   // independently of individual native entries.

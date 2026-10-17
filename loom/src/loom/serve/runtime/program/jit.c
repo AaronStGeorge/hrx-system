@@ -535,6 +535,8 @@ struct loom_serve_jit_request_t {
 
 // Keys are process-local byte strings, not serialized cache artifacts. Each
 // field carries its length so different source/root partitions cannot alias.
+// Append source bytes last: a small metadata suffix could otherwise double
+// the string builder's large backing allocation immediately before retention.
 static iree_status_t loom_serve_jit_key_append(iree_string_builder_t* key,
                                                const void* data,
                                                iree_host_size_t length) {
@@ -555,8 +557,6 @@ static iree_status_t loom_serve_jit_request_key(loomc_request_t* request,
   IREE_RETURN_IF_ERROR(
       loom_serve_jit_key_append(key, &descriptor, sizeof(descriptor)));
   IREE_RETURN_IF_ERROR(loom_serve_jit_key_append(key, &format, sizeof(format)));
-  IREE_RETURN_IF_ERROR(
-      loom_serve_jit_key_append(key, bytes.data, bytes.data_length));
   IREE_RETURN_IF_ERROR(loom_serve_jit_key_append(key, &count, sizeof(count)));
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
@@ -568,6 +568,9 @@ static iree_status_t loom_serve_jit_request_key(loomc_request_t* request,
       status = loom_serve_jit_key_append(key, &root.symbol_ordinal,
                                          sizeof(root.symbol_ordinal));
     }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_jit_key_append(key, bytes.data, bytes.data_length);
   }
   return status;
 }
@@ -1328,10 +1331,10 @@ static iree_status_t loom_serve_jit_compile_dispatch(
     const loomc_byte_span_t bytes = loomc_source_contents(source);
     status = loom_serve_jit_key_append(&key, &descriptor, sizeof(descriptor));
     if (iree_status_is_ok(status)) {
-      status = loom_serve_jit_key_append(&key, bytes.data, bytes.data_length);
+      status = loom_serve_jit_key_append(&key, root.data, root.size);
     }
     if (iree_status_is_ok(status)) {
-      status = loom_serve_jit_key_append(&key, root.data, root.size);
+      status = loom_serve_jit_key_append(&key, bytes.data, bytes.data_length);
     }
   }
   loom_serve_jit_request_t* node = NULL;
