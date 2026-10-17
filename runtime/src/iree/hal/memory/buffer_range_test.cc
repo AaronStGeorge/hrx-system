@@ -210,7 +210,6 @@ TEST_P(BufferRangeTest, InheritsExactHistoryThroughSplitsAndRollback) {
       child, 1, &request, nullptr, &reservation, &info, &result,
       IREE_HAL_POOL_RESERVE_FLAG_NONE));
   EXPECT_EQ(IREE_HAL_POOL_ACQUIRE_EXHAUSTED, result);
-  EXPECT_EQ(0u, info.flags & IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED);
 
   // Both the first range and the untouched remainder inherit the source axes.
   std::array<iree_hal_pool_reservation_t, 2> held;

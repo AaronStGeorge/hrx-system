@@ -156,18 +156,6 @@ enum iree_hal_pool_reserve_flag_bits_e {
   // this flag. Such calls should receive only immediately-usable reservations
   // or transient EXHAUSTED/OVER_BUDGET results from well-behaved pools.
   IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER = 1u << 0,
-
-  // Prevents acquiring additional backing storage or allocating host metadata
-  // during this reservation attempt. This includes temporary transaction
-  // staging, even for a pool whose backing capacity is fixed. Pools that need
-  // such preparation return IREE_HAL_POOL_ACQUIRE_EXHAUSTED with
-  // IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED. The caller may retry with this
-  // flag cleared on its allocation path.
-  //
-  // Queue implementations use this inside critical sections so unbounded
-  // host and platform memory allocation is routed through an explicit cold
-  // path.
-  IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH = 1u << 1,
 };
 
 // Generic metadata flags returned by a pool reservation acquisition.
@@ -180,10 +168,6 @@ enum iree_hal_pool_acquire_flag_bits_e {
   // intentionally disabled for safety. Queue implementations should treat this
   // as a conservative dependency edge, not proof of precise happens-before.
   IREE_HAL_POOL_ACQUIRE_FLAG_WAIT_FRONTIER_TAINTED = 1u << 0,
-
-  // The pool did not make a reservation because the caller prohibited growth
-  // and the request requires additional backing storage or host metadata.
-  IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED = 1u << 1,
 };
 
 // Generic metadata returned by a pool reservation acquisition.

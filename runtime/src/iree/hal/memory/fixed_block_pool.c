@@ -950,8 +950,6 @@ typedef struct iree_hal_fixed_block_pool_acquire_t {
   iree_host_size_t unavailable_index;
   // True when this object owns its trailing element/frontier storage.
   bool allocated;
-  // Whether a no-growth caller was refused before asking the parent.
-  bool growth_required;
   // Prefix capacity was withheld across an unlocked parent preparation.
   bool exposed_prefix;
   // New slabs pinned against trim until this transaction finishes.
@@ -1043,9 +1041,6 @@ static void iree_hal_fixed_block_pool_acquire_finish(
       acquire->call.infos[acquire->unavailable_index] =
           (iree_hal_pool_acquire_info_t){
               .result = acquire->result,
-              .flags = acquire->growth_required
-                           ? IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED
-                           : IREE_HAL_POOL_ACQUIRE_FLAG_NONE,
           };
     }
   }
@@ -1154,12 +1149,8 @@ static void iree_hal_fixed_block_pool_acquire_progress(
             acquire->frontiers +
                 acquire->acquired_count * acquire->frontier_stride,
             elements);
-    if (selected_count < remaining &&
-        (!pool->backing_pool ||
-         iree_any_bit_set(acquire->call.flags,
-                          IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH))) {
+    if (selected_count < remaining && !pool->backing_pool) {
       acquire->result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
-      acquire->growth_required = pool->backing_pool != NULL;
       acquire->unavailable_index = acquire->acquired_count + selected_count;
       break;
     }
@@ -1233,25 +1224,6 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
       request_count > IREE_ARRAYSIZE(inline_elements) ||
       pool->geometry.frontier_capacity >
           IREE_HAL_FIXED_BLOCK_POOL_INLINE_FRONTIER_CAPACITY;
-  if (needs_storage &&
-      iree_any_bit_set(flags, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH)) {
-    for (iree_host_size_t i = 0; i < request_count; ++i) {
-      iree_hal_asan_allocation_layout_t layout;
-      IREE_RETURN_IF_ERROR(
-          iree_hal_fixed_block_pool_validate_reservation_request(
-              pool, &requests[i], &layout));
-    }
-    iree_atomic_fetch_add(&pool->exhausted_count, 1, iree_memory_order_relaxed);
-    for (iree_host_size_t i = 0; i < request_count; ++i) {
-      out_infos[i] = (iree_hal_pool_acquire_info_t){
-          .result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED,
-          .flags = IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED,
-      };
-    }
-    completion.fn(completion.user_data, iree_ok_status(),
-                  IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-    return iree_ok_status();
-  }
   iree_hal_fixed_block_pool_acquire_t inline_acquire = {
       .pool = pool,
       .call =

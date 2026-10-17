@@ -816,7 +816,7 @@ TEST_F(NativePassthroughPoolTest,
   EXPECT_EQ(destruction_count_, 1u);
 }
 
-TEST(PassthroughPool, NoGrowthDefersWholeTransactionBeforeAllocating) {
+TEST(PassthroughPool, ScalarAndBatchAcquisitionCompleteOnInlineProvider) {
   CountingAllocator allocations;
   iree_hal_slab_provider_t* provider = nullptr;
   IREE_ASSERT_OK(iree_hal_cpu_slab_provider_create(
@@ -833,39 +833,18 @@ TEST(PassthroughPool, NoGrowthDefersWholeTransactionBeforeAllocating) {
   for (iree_host_size_t request_count : {1u, 9u}) {
     iree_hal_pool_reservation_request_t requests[9];
     iree_hal_pool_reservation_t reservations[9];
-    memset(reservations, 0xA5, sizeof(reservations));
-    iree_hal_pool_reservation_t original_reservations[9];
-    memcpy(original_reservations, reservations, sizeof(reservations));
     iree_hal_pool_acquire_info_t infos[9];
     memset(infos, 0x5A, sizeof(infos));
     for (iree_host_size_t i = 0; i < request_count; ++i) {
       requests[i] = MakeReservationRequest(128 + i * 16, 16);
     }
     const size_t allocation_count = allocations.allocation_count;
-    const uint32_t token = iree_async_notification_begin_observe(notification);
     iree_hal_pool_acquire_result_t result = IREE_HAL_POOL_ACQUIRE_NONE;
-    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
-        pool, request_count, requests,
-        /*requester_frontier=*/nullptr, reservations, infos, &result,
-        IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH |
-            IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
-    EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-    EXPECT_EQ(allocations.allocation_count, allocation_count);
-    EXPECT_EQ(memcmp(reservations, original_reservations, sizeof(reservations)),
-              0);
-    EXPECT_EQ(iree_async_notification_query_epoch(notification), token);
-    iree_async_notification_end_observe(notification);
-    for (iree_host_size_t i = 0; i < request_count; ++i) {
-      EXPECT_EQ(infos[i].result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-      EXPECT_EQ(infos[i].flags, IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED);
-      EXPECT_EQ(infos[i].reuse_frontier, nullptr);
-    }
-
     // The inline provider allocates directly and produces usable buffers.
     IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
         pool, request_count, requests,
         /*requester_frontier=*/nullptr, reservations, infos, &result,
-        IREE_HAL_POOL_RESERVE_FLAG_NONE));
+        IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
     ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
     EXPECT_GT(allocations.allocation_count, allocation_count);
     EXPECT_EQ(allocations.last_allocation_thread, std::this_thread::get_id());
@@ -888,7 +867,7 @@ TEST(PassthroughPool, NoGrowthDefersWholeTransactionBeforeAllocating) {
   }
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(pool, &stats);
-  EXPECT_EQ(stats.exhausted_count, 2u);
+  EXPECT_EQ(stats.exhausted_count, 0u);
   EXPECT_EQ(stats.reservation_count, 0u);
   EXPECT_EQ(stats.bytes_committed, 0u);
   iree_hal_pool_release(pool);
@@ -912,7 +891,7 @@ TEST_F(PassthroughPoolTest, ReservationTransactionValidatesBeforeAcquiring) {
   iree_hal_pool_acquire_result_t result = IREE_HAL_POOL_ACQUIRE_OVER_BUDGET;
   for (iree_hal_pool_reserve_flags_t flags :
        {IREE_HAL_POOL_RESERVE_FLAG_NONE,
-        IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH}) {
+        IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER}) {
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_INVALID_ARGUMENT,
         iree_hal_pool_acquire_reservations_sync(

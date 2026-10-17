@@ -255,9 +255,8 @@ TEST_P(PoolCompositionTest, UntouchedRangesAndReturnsPreserveHistory) {
   ASSERT_NE(info.reuse_frontier, nullptr);
   EXPECT_EQ(iree_async_frontier_compare(info.reuse_frontier, history),
             IREE_ASYNC_FRONTIER_EQUAL);
-  IREE_ASSERT_OK(Acquire(child, 256, nullptr,
-                         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH, &held[1],
-                         &info, &result));
+  IREE_ASSERT_OK(Acquire(child, 256, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
+                         &held[1], &info, &result));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
   IREE_ASSERT_OK(Acquire(child, 256, nullptr,
                          IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
@@ -704,9 +703,7 @@ TEST_P(FixedBlockPoolCompositionTest,
   // reusable with their exact prerequisite. Neither becomes tainted or fresh.
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       child, requests.size(), requests.data(), nullptr, reservations.data(),
-      infos.data(), &result,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH |
-          IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
+      infos.data(), &result, IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
   uint32_t seen = 0;
   for (const auto& info : infos) {

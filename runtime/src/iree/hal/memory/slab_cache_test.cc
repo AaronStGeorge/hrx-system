@@ -279,8 +279,7 @@ TEST_F(DeferredSlabCacheTest, PendingPrefixSurvivesDeferredGrowth) {
   iree_hal_pool_reservation_t independent;
   iree_hal_pool_acquire_info_t info;
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(Acquire(cache_, 4096, nullptr,
-                         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
+  IREE_ASSERT_OK(Acquire(cache_, 4096, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
                          &independent, &info, &result));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   uintptr_t address = 0;
@@ -340,8 +339,7 @@ TEST_F(DeferredSlabCacheTest, FailureRestoresExactPrefixAndNotifies) {
       iree_hal_pool_notification(cache_), token, iree_immediate_timeout()));
   iree_async_notification_end_observe(iree_hal_pool_notification(cache_));
   iree_hal_pool_acquire_result_t result;
-  IREE_ASSERT_OK(Acquire(cache_, 4096, history,
-                         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
+  IREE_ASSERT_OK(Acquire(cache_, 4096, history, IREE_HAL_POOL_RESERVE_FLAG_NONE,
                          &reservations[0], &infos[0], &result));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
   EXPECT_EQ(reservations[0].block_handle, initial.block_handle);
@@ -520,8 +518,7 @@ TEST_F(SlabCacheTest, PendingReturnPreservesExactHistoryAndPrefersReady) {
   iree_hal_pool_release_reservations(cache_, 1, &reservations[1], history);
   iree_hal_pool_reservation_t ready;
   iree_hal_pool_acquire_info_t info;
-  const auto flags = IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH |
-                     IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER;
+  const auto flags = IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER;
   IREE_ASSERT_OK(Acquire(cache_, 4096, nullptr, flags, &ready, &info, &result));
   EXPECT_EQ(ready.block_handle, reservations[0].block_handle);
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
@@ -566,8 +563,7 @@ TEST_F(SlabCacheTest, ReuseCombinesRequesterAndPhysicalCompletion) {
   iree_hal_pool_reservation_t reservation;
   IREE_ASSERT_OK(Acquire(
       cache_, 4096, iree_async_fixed_frontier_as_const_frontier(&requester),
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH, &reservation, &info,
-      &result));
+      IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservation, &info, &result));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
   EXPECT_EQ(reservation.block_handle, original.block_handle);
   EXPECT_EQ(iree_async_frontier_compare(info.reuse_frontier, frontier),
@@ -576,7 +572,7 @@ TEST_F(SlabCacheTest, ReuseCombinesRequesterAndPhysicalCompletion) {
   iree_async_frontier_tracker_advance(tracker_, Axis(1), 11);
 }
 
-TEST_F(SlabCacheTest, FailedBatchRestoresIdleCapacityWithoutNotification) {
+TEST_F(SlabCacheTest, ParentFailureRestoresIdleCapacityAndNotifies) {
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
   iree_hal_pool_acquire_result_t result;
@@ -592,20 +588,18 @@ TEST_F(SlabCacheTest, FailedBatchRestoresIdleCapacityWithoutNotification) {
   std::array<iree_hal_pool_acquire_info_t, 2> infos;
   const uint32_t token =
       iree_async_notification_begin_observe(iree_hal_pool_notification(cache_));
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
-      cache_, 2, requests.data(), nullptr, reservations.data(), infos.data(),
-      &result, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
-  EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
+  native_allocator_.FailNext();
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      iree_hal_pool_acquire_reservations_sync(
+          cache_, 2, requests.data(), nullptr, reservations.data(),
+          infos.data(), &result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
   EXPECT_EQ(memcmp(reservations.data(), original.data(), sizeof(reservations)),
             0);
-  EXPECT_EQ(infos[0].result, IREE_HAL_POOL_ACQUIRE_NONE);
-  EXPECT_EQ(infos[1].flags, IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED);
-  EXPECT_EQ(
-      iree_async_notification_query_epoch(iree_hal_pool_notification(cache_)),
-      token);
+  EXPECT_TRUE(iree_async_notification_wait_for_token(
+      iree_hal_pool_notification(cache_), token, iree_immediate_timeout()));
   iree_async_notification_end_observe(iree_hal_pool_notification(cache_));
-  IREE_ASSERT_OK(Acquire(cache_, 4096, nullptr,
-                         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
+  IREE_ASSERT_OK(Acquire(cache_, 4096, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
                          &reservation, &info, &result));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   iree_hal_pool_release_reservations(cache_, 1, &reservation, nullptr);
@@ -704,8 +698,7 @@ TEST_F(SlabCacheTest, ChildReturnPreservesUntouchedAlignmentTailHistory) {
       iree_async_fixed_frontier_as_const_frontier(&later));
   iree_hal_pool_trim(child, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
   IREE_ASSERT_OK(Acquire(cache_, 4097, nullptr,
-                         IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER |
-                             IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
+                         IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
                          &reservation, &info, &result));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
   ASSERT_NE(info.reuse_frontier, nullptr);
@@ -728,8 +721,7 @@ TEST_F(SlabCacheTest, HotReuseAndTrimDoNotWaitForNativePreparation) {
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
   iree_hal_pool_acquire_result_t result;
-  IREE_EXPECT_OK(Acquire(cache_, 256, nullptr,
-                         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
+  IREE_EXPECT_OK(Acquire(cache_, 256, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
                          &reservation, &info, &result));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   uintptr_t address = 0;

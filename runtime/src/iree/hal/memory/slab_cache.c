@@ -645,8 +645,6 @@ typedef struct iree_hal_slab_cache_acquire_t {
   bool allocated;
   // Whether the prefix was withheld across an unlocked parent preparation.
   bool exposed_prefix;
-  // Whether a no-growth request was refused before asking the parent.
-  bool growth_required;
   // Whether the next progression step consumes a completed parent result.
   bool has_parent_result;
   // Stable request and output storage for the current parent miss.
@@ -773,9 +771,6 @@ static void iree_hal_slab_cache_acquire_finish(
       acquire->call.infos[acquire->unavailable_index] =
           (iree_hal_pool_acquire_info_t){
               .result = acquire->result,
-              .flags = acquire->growth_required
-                           ? IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED
-                           : IREE_HAL_POOL_ACQUIRE_FLAG_NONE,
           };
     }
   }
@@ -850,21 +845,6 @@ static void iree_hal_slab_cache_acquire_progress(
                                                        acquire->call.frontier);
       ++acquire->acquired_count;
     }
-    if (acquire->acquired_count < acquire->call.count &&
-        iree_any_bit_set(acquire->call.flags,
-                         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH)) {
-      acquire->unavailable_index = acquire->acquired_count;
-      acquire->growth_required = true;
-      acquire->result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
-      // This attempt never exposed temporary scarcity outside the lock.
-      for (iree_host_size_t i = 0; i < acquire->acquired_count; ++i) {
-        iree_hal_slab_cache_insert_idle(cache, acquire->elements[i].entry);
-        acquire->elements[i].entry = NULL;
-      }
-      acquire->acquired_count = 0;
-      iree_slim_mutex_unlock(&cache->mutex);
-      break;
-    }
     iree_slim_mutex_unlock(&cache->mutex);
     if (acquire->acquired_count == acquire->call.count) {
       break;
@@ -932,20 +912,6 @@ static iree_status_t iree_hal_slab_cache_acquire_reservations(
   }
   iree_hal_slab_cache_acquire_element_t inline_elements[8];
   const bool needs_storage = request_count > IREE_ARRAYSIZE(inline_elements);
-  if (needs_storage &&
-      iree_any_bit_set(flags, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH)) {
-    for (iree_host_size_t i = 0; i < request_count; ++i) {
-      out_infos[i] = (iree_hal_pool_acquire_info_t){
-          .result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED,
-          .flags = IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED,
-      };
-    }
-    iree_atomic_fetch_add(&cache->counters.exhausted, 1,
-                          iree_memory_order_relaxed);
-    completion.fn(completion.user_data, iree_ok_status(),
-                  IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-    return iree_ok_status();
-  }
   iree_hal_slab_cache_acquire_t inline_acquire = {
       .cache = cache,
       .call =

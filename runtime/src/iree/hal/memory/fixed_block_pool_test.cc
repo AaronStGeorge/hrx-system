@@ -531,7 +531,7 @@ TEST_F(DeferredFixedBlockPoolTest, RetainsReadyAndPendingBlocksAcrossGrowth) {
   iree_hal_pool_acquire_result_t independent_result;
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool_, 1, requests.data(), nullptr, &independent, &independent_info,
-      &independent_result, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
+      &independent_result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
   ASSERT_EQ(independent_result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   iree_hal_pool_release_reservations(pool_, 1, &independent, nullptr);
 
@@ -605,7 +605,7 @@ TEST_F(DeferredFixedBlockPoolTest, FailureRestoresPrefixAndExactHistory) {
   iree_hal_pool_acquire_result_t result;
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool_, 3, requests.data(), history, reservations, infos, &result,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
   for (size_t i = 0; i < 3; ++i) {
     ASSERT_NE(infos[i].reuse_frontier, nullptr);
@@ -655,7 +655,7 @@ class CountingAllocator {
   size_t allocation_calls_ = 0;
 };
 
-TEST(FixedBlockPool, GrowableProbesAndBudgetAdmissionDoNotAllocate) {
+TEST(FixedBlockPool, CachedAcquisitionAndBudgetAdmissionDoNotAllocate) {
   CountingAllocator allocator;
   iree_hal_slab_provider_t* provider = nullptr;
   IREE_ASSERT_OK(
@@ -679,18 +679,14 @@ TEST(FixedBlockPool, GrowableProbesAndBudgetAdmissionDoNotAllocate) {
   iree_hal_pool_acquire_result_t result;
   const size_t initial_calls = allocator.allocation_calls();
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
-      pool, 1, requests, nullptr, reservations, infos, &result,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
-  EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-  EXPECT_EQ(infos[0].flags, IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED);
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool, 3, requests, nullptr, reservations, infos, &result,
       IREE_HAL_POOL_RESERVE_FLAG_NONE));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OVER_BUDGET);
   EXPECT_EQ(allocator.allocation_calls(), initial_calls);
 
   // Cold preparation acquires one source range. Its live first block keeps
-  // that range available for an allocation-free probe of the second block.
+  // that range available for an allocation-free acquisition of the second
+  // block.
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool, 1, requests, nullptr, reservations, infos, &result,
       IREE_HAL_POOL_RESERVE_FLAG_NONE));
@@ -699,7 +695,7 @@ TEST(FixedBlockPool, GrowableProbesAndBudgetAdmissionDoNotAllocate) {
   EXPECT_GT(prepared_calls, initial_calls);
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool, 1, requests, nullptr, &reservations[1], infos, &result,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   EXPECT_EQ(allocator.allocation_calls(), prepared_calls);
   iree_hal_pool_release_reservations(pool, 2, reservations, nullptr);
@@ -713,7 +709,7 @@ TEST(FixedBlockPool, GrowableProbesAndBudgetAdmissionDoNotAllocate) {
   iree_hal_slab_provider_release(provider);
 }
 
-TEST(FixedBlockPool, NoGrowthDefersLargeBatchStaging) {
+TEST(FixedBlockPool, LargeBatchStagesOnceAndPreservesContents) {
   CountingAllocator allocator;
   iree_hal_slab_provider_t* provider = nullptr;
   IREE_ASSERT_OK(iree_hal_cpu_slab_provider_create(
@@ -735,33 +731,18 @@ TEST(FixedBlockPool, NoGrowthDefersLargeBatchStaging) {
     request = MakeReservationRequest(256, 16);
   }
   iree_hal_pool_reservation_t reservations[kCount];
-  memset(reservations, 0xA5, sizeof(reservations));
-  iree_hal_pool_reservation_t originals[kCount];
-  memcpy(originals, reservations, sizeof(originals));
   iree_hal_pool_acquire_info_t infos[kCount];
   iree_hal_pool_acquire_result_t result;
   const size_t allocation_calls = allocator.allocation_calls();
-  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
-      pool, kCount, requests, nullptr, reservations, infos, &result,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
-  EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-  EXPECT_EQ(allocator.allocation_calls(), allocation_calls);
-  EXPECT_EQ(memcmp(reservations, originals, sizeof(originals)), 0);
-  for (const auto& info : infos) {
-    EXPECT_EQ(info.result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-    EXPECT_EQ(info.flags, IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED);
-    EXPECT_EQ(info.reuse_frontier, nullptr);
-  }
-
   // An inline-sized batch uses the same backing with no preparation.
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool, 1, requests, nullptr, reservations, infos, &result,
-      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   EXPECT_EQ(allocator.allocation_calls(), allocation_calls);
   iree_hal_pool_release_reservations(pool, 1, reservations, nullptr);
 
-  // The ordinary cold retry stages and acquires the complete batch.
+  // The larger batch stages and acquires the complete transaction.
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool, kCount, requests, nullptr, reservations, infos, &result,
       IREE_HAL_POOL_RESERVE_FLAG_NONE));
@@ -823,16 +804,9 @@ TEST(FixedBlockPool, SixQueueHistorySurvivesInlineAndColdStaging) {
     const size_t allocation_calls = allocator.allocation_calls();
     IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
         pool, 2, requests, death, reservations, infos, &result,
-        IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
-    EXPECT_EQ(allocator.allocation_calls(), allocation_calls);
-    if (capacity == 16) {
-      EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-      EXPECT_EQ(infos[0].flags, IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED);
-      IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
-          pool, 2, requests, death, reservations, infos, &result,
-          IREE_HAL_POOL_RESERVE_FLAG_NONE));
-      EXPECT_EQ(allocator.allocation_calls(), allocation_calls + 1);
-    }
+        IREE_HAL_POOL_RESERVE_FLAG_NONE));
+    EXPECT_EQ(allocator.allocation_calls(),
+              allocation_calls + (capacity == 16 ? 1 : 0));
     ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
     for (iree_host_size_t i = 0; i < 2; ++i) {
       ASSERT_NE(infos[i].reuse_frontier, nullptr);
@@ -985,9 +959,7 @@ TEST_F(FixedBlockPoolTest, BatchChecksEachAvailableFrontierOnce) {
 
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool_, kRequestCount, requests.data(), nullptr, reservations.data(),
-      infos.data(), &result,
-      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER |
-          IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
+      infos.data(), &result, IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
   EXPECT_EQ(query_count, kBlockCount);
   for (iree_host_size_t i = 0; i < kRequestCount; ++i) {

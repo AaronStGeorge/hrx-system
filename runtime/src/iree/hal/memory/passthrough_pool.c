@@ -100,9 +100,6 @@ typedef struct iree_hal_passthrough_pool_state_t {
 
   // Total reservations returned by release transactions.
   iree_atomic_int64_t release_count;
-
-  // Reservation transactions deferred because backing growth was prohibited.
-  iree_atomic_int64_t exhausted_count;
 } iree_hal_passthrough_pool_state_t;
 
 // Public metadata is reclaimed at final pool release independently of native
@@ -990,6 +987,7 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservations(
     iree_hal_pool_acquire_callback_t completion,
     iree_hal_pool_reserve_flags_t flags) {
   (void)requester_frontier;
+  (void)flags;
   iree_hal_passthrough_pool_state_t* pool =
       iree_hal_passthrough_pool_state(base_pool);
   if (!pool->owned_enabled) {
@@ -1005,18 +1003,6 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservations(
       &pool->failure_status, iree_memory_order_acquire);
   if (!iree_status_is_ok(failure)) {
     return iree_status_clone(failure);
-  }
-  if (iree_any_bit_set(flags, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH)) {
-    iree_atomic_fetch_add(&pool->exhausted_count, 1, iree_memory_order_relaxed);
-    for (iree_host_size_t i = 0; i < request_count; ++i) {
-      out_infos[i] = (iree_hal_pool_acquire_info_t){
-          .result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED,
-          .flags = IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED,
-      };
-    }
-    completion.fn(completion.user_data, iree_ok_status(),
-                  IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
-    return iree_ok_status();
   }
 
   iree_host_size_t total_size = 0;
@@ -1319,8 +1305,7 @@ static void iree_hal_passthrough_pool_query_stats(
   out_stats->reuse_count = 0;
   out_stats->reuse_miss_count = 0;
   out_stats->fresh_count = out_stats->reserve_count;
-  out_stats->exhausted_count = (uint64_t)iree_atomic_load(
-      &pool->exhausted_count, iree_memory_order_relaxed);
+  out_stats->exhausted_count = 0;
   out_stats->over_budget_count = 0;
   out_stats->wait_count = 0;
 }

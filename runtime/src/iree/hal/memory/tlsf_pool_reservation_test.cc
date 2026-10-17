@@ -198,7 +198,7 @@ TEST_F(TLSFPoolReservationTest, DedicatedMetadataDoesNotAllocateOffsetTables) {
 }
 
 TEST_F(TLSFPoolReservationTest,
-       NoGrowthAndBudgetRefuseBeforeNativeAcquisition) {
+       InvalidGeometryAndBudgetRefuseBeforeNativeAcquisition) {
   iree_hal_pool_t* pool = nullptr;
   IREE_ASSERT_OK(Create(cache_, 8192, allocator_, &pool));
   const auto invalid_requests = {Request(0), Request(128, 3),
@@ -213,19 +213,6 @@ TEST_F(TLSFPoolReservationTest,
                           iree_hal_pool_acquire_reservations_sync(
                               pool, 1, &request, nullptr, &reservation, &info,
                               &result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
-    EXPECT_EQ(reservation.block_handle, 0u);
-  }
-  for (const auto request :
-       {Request(8192), Request(128, 256), Request(128, 512), Request(8193)}) {
-    iree_hal_pool_reservation_t reservation = {};
-    iree_hal_pool_acquire_info_t info;
-    iree_hal_pool_acquire_result_t result;
-    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
-        pool, 1, &request, nullptr, &reservation, &info, &result,
-        IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH));
-    EXPECT_EQ(result, request.allocation_size > 8192
-                          ? IREE_HAL_POOL_ACQUIRE_OVER_BUDGET
-                          : IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
     EXPECT_EQ(reservation.block_handle, 0u);
   }
   const auto request = Request(8193);
