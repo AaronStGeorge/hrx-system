@@ -68,9 +68,10 @@ iree_status_t iree_hal_task_queue_submit_map(
     status = iree_hal_task_queue_submit_op_begin(
         queue, IREE_HAL_TASK_QUEUE_OP_MAP, &signals, &operation);
     if (iree_status_is_ok(status)) {
-      status =
-          iree_arena_allocate(&operation->arena, sizeof(*operation->mapping),
-                              (void**)&operation->mapping);
+      status = iree_arena_allocate_aligned(
+          &operation->arena, sizeof(*operation->mapping),
+          iree_alignof(iree_hal_task_queue_mapping_t),
+          (void**)&operation->mapping);
       if (iree_status_is_ok(status)) {
         iree_hal_task_queue_mapping_t* mapping = operation->mapping;
         mapping->operation = operation;

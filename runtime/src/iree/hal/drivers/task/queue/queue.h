@@ -631,7 +631,7 @@ struct iree_hal_task_queue_t {
   // For COMMANDS operations, this process fills a recording item and pushes
   // it to compute_pending (delegating actual execution to the compute
   // process below). For all other operation types, this process handles
-  // them inline, except mappings delegated to the cold memory executor.
+  // them inline, except mappings scheduled as finite processes on the executor.
   //
   // The process participates in the process scope: scope_begin at
   // initialization, scope_end in the release callback. This ensures

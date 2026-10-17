@@ -130,7 +130,7 @@ static void iree_hal_task_allocation_queue_destroy(
   iree_async_proactor_pool_entry_release(queue->progress_entry);
   iree_notification_deinitialize(&queue->notification);
   iree_slim_mutex_deinitialize(&queue->mutex);
-  iree_allocator_free(queue->host_allocator, queue);
+  iree_allocator_free_aligned(queue->host_allocator, queue);
   iree_task_executor_release(executor);
 }
 
@@ -146,8 +146,10 @@ iree_status_t iree_hal_task_allocation_queue_create(
     iree_hal_task_allocation_queue_t** out_queue) {
   *out_queue = NULL;
   iree_hal_task_allocation_queue_t* queue = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc(host_allocator, sizeof(*queue), (void**)&queue));
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
+      host_allocator, sizeof(*queue),
+      iree_alignof(iree_hal_task_allocation_queue_t), /*offset=*/0,
+      (void**)&queue));
   iree_hal_resource_initialize(&iree_hal_task_allocation_queue_vtable,
                                &queue->resource);
   queue->host_allocator = host_allocator;
