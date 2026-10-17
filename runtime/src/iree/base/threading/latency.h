@@ -43,9 +43,10 @@ static inline iree_latency_scope_options_t iree_latency_scope_options_default(
 //   the lowest request across all processes. This does not set CPU or device
 //   clocks.
 // - Windows: process-wide HighQoS, favoring performance in processor power
-//   management and core selection. The first scope saves the execution-speed
-//   throttling policy; the last restores it. While scopes are active, changes
-//   to that process policy must go through this API.
+//   management and core selection. Scopes in independently embedded runtime
+//   copies share ownership of this policy. The first scope saves the
+//   execution-speed throttling policy; the last restores it. While scopes are
+//   active, changes to that process policy must go through this API.
 // - macOS: a latency-critical NSProcessInfo activity that suppresses App Nap
 //   and requests precise timer and I/O behavior. System and display sleep
 //   policy is unchanged.

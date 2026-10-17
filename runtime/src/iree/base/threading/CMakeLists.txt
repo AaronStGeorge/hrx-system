@@ -83,6 +83,52 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+iree_cc_library(
+  NAME
+    latency_test_library.dll
+  SRCS
+    "latency_test_library.c"
+  DEPS
+    ::latency
+    iree::base
+  TESTONLY
+  SHARED
+)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+iree_c_embed_data(
+  NAME
+    latency_test_library
+  SRCS
+    "$<TARGET_FILE:iree::base::threading::latency_test_library.dll>"
+  C_FILE_OUTPUT
+    "latency_test_library_embed.c"
+  H_FILE_OUTPUT
+    "latency_test_library_embed.h"
+  TESTONLY
+  FLATTEN
+  PUBLIC
+)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+iree_cc_test(
+  NAME
+    latency_win32_test
+  SRCS
+    "latency_win32_test.cc"
+  DEPS
+    ::latency
+    ::latency_test_library
+    iree::base
+    iree::base::internal::dynamic_library
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
 iree_cc_test(
   NAME
     futex_test
