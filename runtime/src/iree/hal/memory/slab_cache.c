@@ -20,7 +20,7 @@ IREE_ASYNC_FIXED_FRONTIER_TYPE(iree_hal_slab_cache_frontier_t, UINT8_MAX);
 typedef struct iree_hal_slab_cache_t iree_hal_slab_cache_t;
 
 typedef struct iree_hal_slab_cache_entry_t {
-  // Intrusive idle or pending-return link, protected by the cache mutex.
+  // Intrusive idle link or exclusively owned detached-return link.
   struct iree_hal_slab_cache_entry_t* next;
   // Borrowed cache owning the explicit reservation epoch.
   iree_hal_slab_cache_t* cache;
@@ -41,7 +41,7 @@ typedef struct iree_hal_slab_cache_entry_t {
 typedef struct iree_hal_slab_cache_t {
   // Ordinary reservation/materialization interface.
   iree_hal_pool_t base;
-  // Retained source of storage and captured progress services.
+  // Retained source of storage.
   iree_hal_pool_t* backing_pool;
   // Allocator for cold entry and transaction metadata.
   iree_allocator_t host_allocator;
@@ -51,16 +51,13 @@ typedef struct iree_hal_slab_cache_t {
   iree_hal_pool_capabilities_t capabilities;
   // Stable logical allocation trace identity.
   iree_hal_memory_trace_t trace;
-  // Protects only lists, retention policy and maintenance admission.
+  // Protects only lists, retention policy, and refill admission.
   iree_slim_mutex_t mutex;
   // Entries available for ordered reuse.
   iree_hal_slab_cache_entry_t* idle_head;
-  // Detached entries waiting for cold return to the backing pool.
-  iree_hal_slab_cache_entry_t* return_head;
   // Number of idle entries, including pending prerequisites.
   uint32_t idle_count;
-  // Backing still retained by live/private/idle entries, excluding queued
-  // returns.
+  // Backing still retained by live/private/idle entries, excluding returns.
   iree_device_size_t retained_bytes;
   // Requested number of immediately ready idle entries.
   uint32_t target_count;
@@ -72,19 +69,6 @@ typedef struct iree_hal_slab_cache_t {
   bool refill_requested;
   // Whether the embedded maintenance entry is queued or executing.
   bool maintenance_pending;
-  // Ordered second sweep catches returns already queued by child allocators.
-  struct {
-    // Dedicated entry ordered after child maintenance, even during refill.
-    iree_hal_memory_maintenance_entry_t entry;
-    // Whether the second sweep is queued or executing.
-    bool pending;
-    // Trim generation observed when this entry was last enqueued.
-    uint64_t generation;
-    // Strongest trim requested while the entry is pending.
-    iree_hal_pool_trim_flags_t flags;
-    // Smallest retained-byte floor requested by the pending trims.
-    iree_device_size_t min_bytes_to_keep;
-  } trim;
   // Set during caller-quiescent destruction.
   bool shutting_down;
   // First unconsumed asynchronous refill failure, owned under the mutex.
@@ -204,8 +188,19 @@ static void iree_hal_slab_cache_destroy_entry(
   iree_allocator_free(cache->host_allocator, entry);
 }
 
-// Cold preparation always runs on the captured owner. The requested epoch is
-// held privately until transaction commit or exact-history rollback.
+// Detached entries belong to this caller. Propagate exact histories through
+// parent pools without holding a child lock or waiting for native allocation.
+static void iree_hal_slab_cache_return_entries(
+    iree_hal_slab_cache_t* cache, iree_hal_slab_cache_entry_t* entries) {
+  while (entries) {
+    iree_hal_slab_cache_entry_t* entry = entries;
+    entries = entry->next;
+    iree_hal_slab_cache_destroy_entry(cache, entry);
+  }
+}
+
+// Preparation holds the requested epoch privately until transaction commit or
+// exact-history rollback. Parent acquisition determines native execution.
 typedef struct iree_hal_slab_cache_prepare_t {
   // Cache borrowing all other fields for this joined call.
   iree_hal_slab_cache_t* cache;
@@ -302,8 +297,8 @@ static void iree_hal_slab_cache_prepare(void* user_data) {
   }
 }
 
-// Reclamation relinquishes retained capacity immediately. Parent return and
-// physical retirement remain cold work and do not inflate this policy's floor.
+// Detachment relinquishes retained capacity immediately. Neither parent return
+// nor physical retirement inflates this policy's retained-byte floor.
 static void iree_hal_slab_cache_drop_retention(
     iree_hal_slab_cache_t* cache, iree_hal_slab_cache_entry_t* entry) {
   cache->retained_bytes -= entry->reservation.byte_length;
@@ -351,16 +346,17 @@ static bool iree_hal_slab_cache_schedule(iree_hal_slab_cache_t* cache) {
   if (cache->maintenance_pending) {
     return false;
   }
-  if (!cache->return_head && !cache->refill_requested) {
+  if (!cache->refill_requested) {
     return false;
   }
   cache->maintenance_pending = true;
   return true;
 }
 
-static void iree_hal_slab_cache_trim_idle(
+static iree_hal_slab_cache_entry_t* iree_hal_slab_cache_trim_idle(
     iree_hal_slab_cache_t* cache, iree_hal_pool_trim_flags_t flags,
     iree_device_size_t min_bytes_to_keep) {
+  iree_hal_slab_cache_entry_t* returns = NULL;
   const uint32_t target = iree_any_bit_set(flags, IREE_HAL_POOL_TRIM_FLAG_ALL)
                               ? 0
                               : cache->target_count;
@@ -373,40 +369,14 @@ static void iree_hal_slab_cache_trim_idle(
         length <= committed - min_bytes_to_keep) {
       iree_hal_slab_cache_remove_idle(cache, link);
       iree_hal_slab_cache_drop_retention(cache, entry);
-      entry->next = cache->return_head;
-      cache->return_head = entry;
+      entry->next = returns;
+      returns = entry;
       committed -= length;
     } else {
       link = &entry->next;
     }
   }
-}
-
-// An entry queued before a later trim may precede that trim's child returns.
-// Requeue once at the current generation to put the sweep after those returns.
-static void iree_hal_slab_cache_trim_on_owner(
-    iree_hal_memory_maintenance_entry_t* work) {
-  iree_hal_slab_cache_t* cache =
-      (iree_hal_slab_cache_t*)((uint8_t*)work -
-                               offsetof(iree_hal_slab_cache_t, trim.entry));
-  iree_slim_mutex_lock(&cache->mutex);
-  if (cache->trim.generation != cache->generation) {
-    cache->trim.generation = cache->generation;
-    iree_slim_mutex_unlock(&cache->mutex);
-    iree_hal_memory_maintenance_enqueue(cache->base.maintenance, work);
-    return;
-  }
-  cache->refill_requested = false;
-  iree_hal_slab_cache_trim_idle(cache, cache->trim.flags,
-                                cache->trim.min_bytes_to_keep);
-  const bool schedule = iree_hal_slab_cache_schedule(cache);
-  cache->trim.pending = false;
-  iree_notification_post(&cache->maintenance_notification, IREE_ALL_WAITERS);
-  iree_slim_mutex_unlock(&cache->mutex);
-  if (schedule) {
-    iree_hal_memory_maintenance_enqueue(cache->base.maintenance,
-                                        &cache->maintenance_entry);
-  }
+  return returns;
 }
 
 static void iree_hal_slab_cache_maintain(
@@ -416,17 +386,11 @@ static void iree_hal_slab_cache_maintain(
                                                          maintenance_entry));
   while (true) {
     iree_slim_mutex_lock(&cache->mutex);
-    iree_hal_slab_cache_entry_t* entry = cache->return_head;
     const uint64_t generation = cache->generation;
-    bool refill = false;
-    if (entry) {
-      cache->return_head = entry->next;
-    } else if (cache->refill_requested && !cache->shutting_down &&
-               iree_status_is_ok(cache->pending_error) &&
-               cache->idle_count < cache->max_count &&
-               iree_hal_slab_cache_ready_count(cache) < cache->target_count) {
-      refill = true;
-    } else {
+    if (!cache->refill_requested || cache->shutting_down ||
+        !iree_status_is_ok(cache->pending_error) ||
+        cache->idle_count >= cache->max_count ||
+        iree_hal_slab_cache_ready_count(cache) >= cache->target_count) {
       cache->refill_requested = false;
       cache->maintenance_pending = false;
       iree_notification_post(&cache->maintenance_notification,
@@ -435,53 +399,47 @@ static void iree_hal_slab_cache_maintain(
       return;
     }
     iree_slim_mutex_unlock(&cache->mutex);
-    if (entry) {
-      iree_hal_slab_cache_destroy_entry(cache, entry);
-      continue;
+    iree_hal_slab_cache_prepare_t call = {
+        .cache = cache,
+        .request = cache->slab,
+        .flags = IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
+    };
+    iree_hal_slab_cache_prepare(&call);
+    bool published = false;
+    iree_slim_mutex_lock(&cache->mutex);
+    if (generation == cache->generation && !cache->shutting_down &&
+        call.entry && cache->idle_count < cache->max_count &&
+        iree_hal_slab_cache_ready_count(cache) < cache->target_count) {
+      call.entry->return_time = iree_time_now();
+      iree_hal_slab_cache_insert_idle(cache, call.entry);
+      call.entry = NULL;
+      published = true;
     }
-    if (refill) {
-      iree_hal_slab_cache_prepare_t call = {
-          .cache = cache,
-          .request = cache->slab,
-          .flags = IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
-      };
-      iree_hal_slab_cache_prepare(&call);
-      bool published = false;
-      iree_slim_mutex_lock(&cache->mutex);
-      if (generation == cache->generation && !cache->shutting_down &&
-          call.entry && cache->idle_count < cache->max_count &&
-          iree_hal_slab_cache_ready_count(cache) < cache->target_count) {
-        call.entry->return_time = iree_time_now();
-        iree_hal_slab_cache_insert_idle(cache, call.entry);
-        call.entry = NULL;
-        published = true;
+    if (!iree_status_is_ok(call.status)) {
+      if (iree_status_is_ok(cache->pending_error)) {
+        cache->pending_error = call.status;
+        call.status = iree_ok_status();
       }
-      if (!iree_status_is_ok(call.status)) {
-        if (iree_status_is_ok(cache->pending_error)) {
-          cache->pending_error = call.status;
-          call.status = iree_ok_status();
-        }
-        published = true;
-      }
-      if (!call.entry && !published && generation == cache->generation) {
-        // Transient parent exhaustion is not a progress event. A later caller
-        // retry, target update or release can request another refill.
-        cache->refill_requested = false;
-      }
-      if (call.entry) {
-        iree_hal_slab_cache_drop_retention(cache, call.entry);
-      }
-      iree_slim_mutex_unlock(&cache->mutex);
-      // The first pending diagnostic owns the failure; any later duplicate is
-      // disposed outside the metadata lock.
-      iree_status_free(call.status);
-      if (call.entry) {
-        iree_hal_slab_cache_destroy_entry(cache, call.entry);
-      }
-      if (published) {
-        iree_async_notification_signal_if_observed(cache->base.notification,
-                                                   INT32_MAX);
-      }
+      published = true;
+    }
+    if (!call.entry && !published && generation == cache->generation) {
+      // Transient parent exhaustion is not a progress event. A later caller
+      // retry, target update or release can request another refill.
+      cache->refill_requested = false;
+    }
+    if (call.entry) {
+      iree_hal_slab_cache_drop_retention(cache, call.entry);
+    }
+    iree_slim_mutex_unlock(&cache->mutex);
+    // The first pending diagnostic owns the failure; any later duplicate is
+    // disposed outside the metadata lock.
+    iree_status_free(call.status);
+    if (call.entry) {
+      iree_hal_slab_cache_destroy_entry(cache, call.entry);
+    }
+    if (published) {
+      iree_async_notification_signal_if_observed(cache->base.notification,
+                                                 INT32_MAX);
     }
   }
 }
@@ -489,7 +447,7 @@ static void iree_hal_slab_cache_maintain(
 static bool iree_hal_slab_cache_maintenance_is_complete(void* user_data) {
   iree_hal_slab_cache_t* cache = user_data;
   iree_slim_mutex_lock(&cache->mutex);
-  const bool complete = !cache->maintenance_pending && !cache->trim.pending;
+  const bool complete = !cache->maintenance_pending;
   iree_slim_mutex_unlock(&cache->mutex);
   return complete;
 }
@@ -501,19 +459,10 @@ static void iree_hal_slab_cache_destroy(iree_hal_pool_t* base_pool) {
   iree_slim_mutex_lock(&cache->mutex);
   cache->shutting_down = true;
   cache->refill_requested = false;
-  while (cache->idle_head) {
-    iree_hal_slab_cache_entry_t* entry = cache->idle_head;
-    iree_hal_slab_cache_remove_idle(cache, &cache->idle_head);
-    iree_hal_slab_cache_drop_retention(cache, entry);
-    entry->next = cache->return_head;
-    cache->return_head = entry;
-  }
-  const bool schedule = iree_hal_slab_cache_schedule(cache);
+  iree_hal_slab_cache_entry_t* returns =
+      iree_hal_slab_cache_trim_idle(cache, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
   iree_slim_mutex_unlock(&cache->mutex);
-  if (schedule) {
-    iree_hal_memory_maintenance_enqueue(cache->base.maintenance,
-                                        &cache->maintenance_entry);
-  }
+  iree_hal_slab_cache_return_entries(cache, returns);
   iree_notification_await(&cache->maintenance_notification,
                           iree_hal_slab_cache_maintenance_is_complete, cache,
                           iree_infinite_timeout());
@@ -575,7 +524,6 @@ iree_status_t iree_hal_slab_cache_create(
   cache->target_count = options->target_count;
   cache->max_count = options->max_count;
   cache->maintenance_entry.fn = iree_hal_slab_cache_maintain;
-  cache->trim.entry.fn = iree_hal_slab_cache_trim_on_owner;
   iree_slim_mutex_initialize(&cache->mutex);
   iree_notification_initialize(&cache->maintenance_notification);
   iree_hal_pool_query_capabilities(backing_pool, &cache->capabilities);
@@ -663,8 +611,8 @@ static iree_hal_slab_cache_entry_t* iree_hal_slab_cache_take_entry(
   return entry;
 }
 
-// A queued child return may have populated the cache while this miss waited
-// for the captured owner. Recheck there before acquiring native backing.
+// A concurrent return may have populated the cache after selection. Recheck
+// before asking the parent; only the native provider decides where growth runs.
 static void iree_hal_slab_cache_prepare_acquisition(void* user_data) {
   iree_hal_slab_cache_prepare_t* call = user_data;
   iree_hal_slab_cache_t* cache = call->cache;
@@ -836,9 +784,7 @@ static iree_status_t iree_hal_slab_cache_acquire_reservations(
           .requester = requester,
           .flags = flags,
       };
-      iree_hal_memory_maintenance_call(cache->base.maintenance,
-                                       iree_hal_slab_cache_prepare_acquisition,
-                                       &call);
+      iree_hal_slab_cache_prepare_acquisition(&call);
       status = call.status;
       elements[selected].prepared = call.entry;
       elements[selected].prepared_from_idle = call.from_idle;
@@ -873,6 +819,7 @@ static iree_status_t iree_hal_slab_cache_acquire_reservations(
   }
   if (!committed) {
     bool restored_capacity = false;
+    iree_hal_slab_cache_entry_t* returns = NULL;
     iree_slim_mutex_lock(&cache->mutex);
     for (iree_host_size_t i = 0; i < request_count; ++i) {
       iree_hal_slab_cache_entry_t* entry = elements[i].prepared;
@@ -883,17 +830,13 @@ static iree_status_t iree_hal_slab_cache_acquire_reservations(
           restored_capacity = true;
         } else {
           iree_hal_slab_cache_drop_retention(cache, entry);
-          entry->next = cache->return_head;
-          cache->return_head = entry;
+          entry->next = returns;
+          returns = entry;
         }
       }
     }
-    const bool schedule = iree_hal_slab_cache_schedule(cache);
     iree_slim_mutex_unlock(&cache->mutex);
-    if (schedule) {
-      iree_hal_memory_maintenance_enqueue(cache->base.maintenance,
-                                          &cache->maintenance_entry);
-    }
+    iree_hal_slab_cache_return_entries(cache, returns);
     if (restored_capacity) {
       iree_async_notification_signal_if_observed(cache->base.notification,
                                                  INT32_MAX);
@@ -910,6 +853,7 @@ static void iree_hal_slab_cache_release_reservations(
     const iree_hal_pool_reservation_t* reservations,
     const iree_async_frontier_t* death_frontier) {
   iree_hal_slab_cache_t* cache = (iree_hal_slab_cache_t*)base_pool;
+  iree_hal_slab_cache_entry_t* returns = NULL;
   // Copy and trace while the caller still owns each token. Publication below
   // only swaps prepared links and updates counters under the metadata lock.
   for (iree_host_size_t i = 0; i < count; ++i) {
@@ -939,8 +883,8 @@ static void iree_hal_slab_cache_release_reservations(
       iree_hal_slab_cache_insert_idle(cache, entry);
     } else {
       iree_hal_slab_cache_drop_retention(cache, entry);
-      entry->next = cache->return_head;
-      cache->return_head = entry;
+      entry->next = returns;
+      returns = entry;
     }
   }
   iree_atomic_fetch_sub(&cache->counters.reservations, (int32_t)count,
@@ -950,6 +894,7 @@ static void iree_hal_slab_cache_release_reservations(
   cache->refill_requested = cache->target_count != 0;
   const bool schedule = iree_hal_slab_cache_schedule(cache);
   iree_slim_mutex_unlock(&cache->mutex);
+  iree_hal_slab_cache_return_entries(cache, returns);
   if (schedule) {
     iree_hal_memory_maintenance_enqueue(cache->base.maintenance,
                                         &cache->maintenance_entry);
@@ -1138,28 +1083,10 @@ static void iree_hal_slab_cache_trim(iree_hal_pool_t* base_pool,
   iree_slim_mutex_lock(&cache->mutex);
   ++cache->generation;
   cache->refill_requested = false;
-  iree_hal_slab_cache_trim_idle(cache, flags, min_bytes_to_keep);
-  const bool schedule = iree_hal_slab_cache_schedule(cache);
-  const bool schedule_trim = !cache->trim.pending;
-  if (schedule_trim) {
-    cache->trim.pending = true;
-    cache->trim.generation = cache->generation;
-    cache->trim.flags = flags;
-    cache->trim.min_bytes_to_keep = min_bytes_to_keep;
-  } else {
-    cache->trim.flags |= flags;
-    cache->trim.min_bytes_to_keep =
-        iree_min(cache->trim.min_bytes_to_keep, min_bytes_to_keep);
-  }
+  iree_hal_slab_cache_entry_t* returns =
+      iree_hal_slab_cache_trim_idle(cache, flags, min_bytes_to_keep);
   iree_slim_mutex_unlock(&cache->mutex);
-  if (schedule) {
-    iree_hal_memory_maintenance_enqueue(cache->base.maintenance,
-                                        &cache->maintenance_entry);
-  }
-  if (schedule_trim) {
-    iree_hal_memory_maintenance_enqueue(cache->base.maintenance,
-                                        &cache->trim.entry);
-  }
+  iree_hal_slab_cache_return_entries(cache, returns);
 }
 
 static const iree_hal_pool_vtable_t iree_hal_slab_cache_vtable = {

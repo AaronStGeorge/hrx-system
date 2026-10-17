@@ -36,20 +36,21 @@ void iree_hal_slab_cache_options_initialize(
 
 // Retains |backing_pool| once and captures its native maintenance owner.
 // Entries own ordinary reservations, prepared views and exact reuse history.
-// Hot hits and returns neither allocate metadata nor call the backing pool.
-// Growth-enabled misses join cold preparation on the captured owner, without
-// waiting for another allocation to release capacity. No-growth misses report
+// Hot hits and retained returns allocate no metadata. Eviction and trim return
+// detached entries directly to the backing pool outside the cache lock.
+// Growth-enabled misses ask the backing pool directly; a ready parent hit does
+// not depend on native allocation progress. No-growth misses report
 // EXHAUSTED/GROWTH_REQUIRED. Refill errors propagate on the next acquisition.
 //
 // Prefault touches only actually retired storage. A pending parent prerequisite
 // is preserved without touching its bytes; ordinary reservation eligibility
 // still permits an ordered borrower to accept that range with a dependency.
 // The cache and its backing pool must outlive all reservations and views.
-// Trim also schedules an ordered sweep after previously queued child returns;
-// it never joins native preparation on the caller. Committed-byte statistics
-// exclude detached returns even while their native retirement is pending.
-// Final destruction joins this cache's maintenance and runs outside the
-// captured executor after the caller has retired its execution.
+// Trim applies its retention policy immediately and invalidates any refill
+// started before it. It never joins native preparation on the caller.
+// Committed-byte statistics exclude detached returns even while their native
+// retirement is pending. Final destruction joins this cache's refill and runs
+// outside the captured executor after the caller has retired its execution.
 iree_status_t iree_hal_slab_cache_create(
     iree_hal_pool_t* backing_pool, const iree_hal_slab_cache_options_t* options,
     iree_allocator_t host_allocator, iree_hal_pool_t** out_pool);

@@ -512,14 +512,13 @@ TEST_F(TLSFPoolConcurrencyTest, NativeRetirementDoesNotBlockOtherSlabs) {
   IREE_ASSERT_OK(Acquire(512, &held));
   iree_hal_pool_reservation_t unused;
   IREE_ASSERT_OK(Acquire(4096, &unused));
-  iree_hal_pool_release_reservations(pool_, 1, &unused, nullptr);
   native_allocator_.Arm(IREE_ALLOCATOR_COMMAND_FREE);
-  std::thread trimming(
-      [&] { iree_hal_pool_trim(pool_, IREE_HAL_POOL_TRIM_FLAG_ALL, 0); });
+  std::thread releasing(
+      [&] { iree_hal_pool_release_reservations(pool_, 1, &unused, nullptr); });
   native_allocator_.AwaitEntry();
   CheckExistingCapacity(3584);
   native_allocator_.Resume();
-  trimming.join();
+  releasing.join();
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(pool_, &stats);
   EXPECT_EQ(stats.slab_count, 1u);

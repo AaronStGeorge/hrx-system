@@ -11,6 +11,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 #include "iree/async/frontier_tracker.h"
@@ -549,8 +550,9 @@ TEST_F(SlabCacheTest, HotReuseAndTrimDoNotWaitForNativePreparation) {
   EXPECT_EQ(stats.ready_count, 2u);
 }
 
-class SlabCacheChildReturnTest : public SlabCacheTest,
-                                 public ::testing::WithParamInterface<bool> {
+class SlabCacheChildReturnTest
+    : public SlabCacheTest,
+      public ::testing::WithParamInterface<std::tuple<bool, bool>> {
  protected:
   void SetUp() override {
     SlabCacheTest::SetUp();
@@ -566,8 +568,18 @@ class SlabCacheChildReturnTest : public SlabCacheTest,
   }
 
   iree_status_t CreateAllocatingChild(iree_hal_pool_t** out_pool) {
-    if (!GetParam()) {
-      return CreateChild(cache_, 4096, out_pool);
+    iree_hal_pool_t* parent = cache_;
+    if (std::get<1>(GetParam())) {
+      iree_hal_slab_cache_options_t options;
+      iree_hal_slab_cache_options_initialize(&options);
+      options.slab = iree_hal_make_pool_reservation_request(4096, 4096);
+      options.max_count = 0;
+      IREE_RETURN_IF_ERROR(
+          iree_hal_slab_cache_create(cache_, &options, allocator_, &parent));
+      children_.push_back(parent);
+    }
+    if (!std::get<0>(GetParam())) {
+      return CreateChild(parent, 4096, out_pool);
     }
     iree_hal_fixed_block_pool_options_t options = {
         .block_size = 4096,
@@ -575,7 +587,7 @@ class SlabCacheChildReturnTest : public SlabCacheTest,
         .frontier_capacity = 2,
     };
     iree_status_t status = iree_hal_fixed_block_pool_create(
-        cache_, &options, allocator_, out_pool);
+        parent, &options, allocator_, out_pool);
     if (iree_status_is_ok(status)) {
       children_.push_back(*out_pool);
     }
@@ -647,9 +659,10 @@ TEST_P(SlabCacheChildReturnTest,
 }
 
 INSTANTIATE_TEST_SUITE_P(TLSFAndFixedBlock, SlabCacheChildReturnTest,
-                         ::testing::Bool());
+                         ::testing::Combine(::testing::Bool(),
+                                            ::testing::Bool()));
 
-TEST_F(SlabCacheTest, TrimIncludesQueuedChildReturnsDuringNativePreparation) {
+TEST_F(SlabCacheTest, TrimReturnsCapacityDuringNativePreparation) {
   iree_hal_pool_t* children[2];
   iree_hal_pool_reservation_t reservations[2];
   iree_hal_pool_acquire_info_t info;
@@ -666,29 +679,34 @@ TEST_F(SlabCacheTest, TrimIncludesQueuedChildReturnsDuringNativePreparation) {
   IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
   native_allocator_.AwaitEntry();
 
-  // Both returns precede their respective trim, but the second return follows
-  // the first trim's queued sweep. Neither trim may join the paused owner.
+  // Child returns are visible to each trim immediately. Neither trim may join
+  // the paused allocation or defer applying its retention policy behind it.
   iree_hal_pool_release_reservations(children[0], 1, &reservations[0], nullptr);
   // A child trim floor does not turn the child into an idle retention cache.
   iree_hal_pool_trim(children[0], IREE_HAL_POOL_TRIM_FLAG_ALL, 4096);
   iree_hal_pool_trim(cache_, IREE_HAL_POOL_TRIM_FLAG_EXCESS, 4096);
+  iree_hal_slab_cache_stats_t cache_stats;
+  IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &cache_stats));
+  EXPECT_EQ(cache_stats.ready_count, 1u);
+  iree_hal_pool_stats_t stats;
+  iree_hal_pool_query_stats(cache_, &stats);
+  EXPECT_EQ(stats.bytes_committed, 8192u);
   iree_hal_pool_release_reservations(children[1], 1, &reservations[1], nullptr);
   iree_hal_pool_trim(cache_, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
-  native_allocator_.Resume();
-  // The first sweep moves behind the second generation's child return.
-  // Draining joins that requeued sweep and all resulting parent returns.
-  Drain();
-  iree_hal_slab_cache_stats_t cache_stats;
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &cache_stats));
   EXPECT_EQ(cache_stats.ready_count, 0u);
   EXPECT_EQ(cache_stats.pending_count, 0u);
-  iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(cache_, &stats);
   EXPECT_EQ(stats.bytes_committed, 0u);
   for (auto* child : children) {
     iree_hal_pool_query_stats(child, &stats);
     EXPECT_EQ(stats.slab_count, 0u);
   }
+  native_allocator_.Resume();
+  Drain();
+  // The in-flight refill started before trimming and cannot republish capacity.
+  iree_hal_pool_query_stats(cache_, &stats);
+  EXPECT_EQ(stats.bytes_committed, 0u);
 }
 
 TEST_F(SlabCacheTest, AsyncPreparationFailurePropagatesAndCanBeRetried) {
