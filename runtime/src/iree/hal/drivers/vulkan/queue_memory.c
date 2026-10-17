@@ -254,12 +254,13 @@ static void iree_hal_vulkan_memory_record_failure(
 
 // Inline completion and cancellation request another iteration of the current
 // pump; they never recursively execute a continuation or free its capture.
+// Each caller owns an operation reference through the entire pump, including
+// terminal publication that releases the accepted-list reference.
 static void iree_hal_vulkan_memory_resume(
     iree_hal_vulkan_memory_operation_t* operation);
 
 static void iree_hal_vulkan_memory_schedule(
     iree_hal_vulkan_memory_operation_t* operation) {
-  iree_hal_resource_retain(operation);
   if (iree_atomic_fetch_add(&operation->run_count, 1,
                             iree_memory_order_acq_rel) == 0) {
     do {
@@ -267,7 +268,6 @@ static void iree_hal_vulkan_memory_schedule(
     } while (iree_atomic_fetch_sub(&operation->run_count, 1,
                                    iree_memory_order_acq_rel) != 1);
   }
-  iree_hal_resource_release(operation);
 }
 
 static void iree_hal_vulkan_memory_ready(void* user_data,
@@ -858,7 +858,7 @@ iree_status_t iree_hal_vulkan_queue_memory_alloca(
     iree_hal_queue_t* base_queue, iree_hal_semaphore_list_t waits,
     iree_hal_semaphore_list_t signals, iree_hal_pool_t* pool,
     iree_host_size_t count, const iree_hal_pool_reservation_request_t* requests,
-    iree_hal_buffer_t** out_buffers) {
+    iree_hal_buffer_t** IREE_RESTRICT out_buffers) {
   iree_hal_vulkan_queue_t* queue = (iree_hal_vulkan_queue_t*)base_queue;
   iree_hal_vulkan_memory_operation_t* operation = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_vulkan_memory_operation_create(
