@@ -48,7 +48,10 @@ typedef enum loom_x86_target_features_e {
   LOOM_X86_TARGET_FEATURES_AVXNECONVERT = 8,
   LOOM_X86_TARGET_FEATURES_F16C = 9,
   LOOM_X86_TARGET_FEATURES_BMI2 = 10,
-  LOOM_X86_TARGET_FEATURES_COUNT_ = 11,
+  LOOM_X86_TARGET_FEATURES_BMI = 11,
+  LOOM_X86_TARGET_FEATURES_POPCNT = 12,
+  LOOM_X86_TARGET_FEATURES_LZCNT = 13,
+  LOOM_X86_TARGET_FEATURES_COUNT_ = 14,
 } loom_x86_target_features_t;
 
 // LOOM_OP_X86_TARGET: x86 target-family record. The selector chooses an authored CPU row; optional attrs structurally override common target fields.
