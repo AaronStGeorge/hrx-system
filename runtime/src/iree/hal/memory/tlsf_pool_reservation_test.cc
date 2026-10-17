@@ -13,7 +13,6 @@
 #include "iree/async/proactor_platform.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/fixed_block_pool.h"
-#include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/slab_cache.h"
 #include "iree/hal/memory/tlsf_pool.h"
@@ -33,13 +32,10 @@ class TLSFPoolReservationTest : public ::testing::Test {
         iree_async_frontier_tracker_options_default(), allocator_, &tracker_));
     IREE_ASSERT_OK(
         iree_async_frontier_tracker_register_axis(tracker_, Axis(), nullptr));
-    IREE_ASSERT_OK(iree_hal_memory_maintenance_thread_create({}, allocator_,
-                                                             &maintenance_));
     IREE_ASSERT_OK(
         iree_hal_cpu_slab_provider_create(256, allocator_, &provider_));
-    IREE_ASSERT_OK(
-        iree_hal_passthrough_pool_create({}, provider_, notification_, tracker_,
-                                         maintenance_, allocator_, &native_));
+    IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
+        {}, provider_, notification_, tracker_, allocator_, &native_));
     iree_hal_slab_cache_options_t options = {
         .slab = Request(4096, 16),
         .max_count = 4,
@@ -55,7 +51,6 @@ class TLSFPoolReservationTest : public ::testing::Test {
     iree_hal_pool_release(cache_);
     iree_hal_pool_release(native_);
     iree_hal_slab_provider_release(provider_);
-    iree_hal_memory_maintenance_release(maintenance_);
     iree_async_frontier_tracker_release(tracker_);
     iree_async_notification_release(notification_);
     iree_async_proactor_release(proactor_);
@@ -85,17 +80,6 @@ class TLSFPoolReservationTest : public ::testing::Test {
     return status;
   }
 
-  void Drain() {
-    iree_hal_memory_maintenance_call(
-        maintenance_,
-        [](void* user_data) {
-          auto* owner = static_cast<iree_hal_memory_maintenance_t*>(user_data);
-          while (iree_hal_memory_maintenance_run_one(owner)) {
-          }
-        },
-        maintenance_);
-  }
-
   void CheckBytes(iree_hal_buffer_t* buffer, uint8_t pattern,
                   iree_device_size_t alignment) {
     iree_hal_buffer_mapping_t mapping;
@@ -122,8 +106,6 @@ class TLSFPoolReservationTest : public ::testing::Test {
   iree_async_notification_t* notification_ = nullptr;
   // Exact completion state for the fixture's production queue axis.
   iree_async_frontier_tracker_t* tracker_ = nullptr;
-  // Captured cold memory executor.
-  iree_hal_memory_maintenance_t* maintenance_ = nullptr;
   // Aligned real host storage provider.
   iree_hal_slab_provider_t* provider_ = nullptr;
   // Ordinary native leaf retained until all prepared views return.
@@ -166,7 +148,6 @@ TEST_F(TLSFPoolReservationTest, MixedSmallLargeAndAlignedBatchUsesOneSource) {
   for (auto* buffer : buffers) {
     iree_hal_buffer_release(buffer);
   }
-  Drain();
   iree_hal_pool_query_stats(pool, &stats);
   EXPECT_EQ(stats.bytes_reserved, 0u);
   EXPECT_EQ(stats.bytes_committed, 0u);
@@ -353,7 +334,6 @@ TEST_F(TLSFPoolReservationTest,
   iree_async_single_frontier_initialize(&next_use, next_axis, 7);
   iree_hal_pool_release_reservations(
       pool, 1, &reservation, iree_async_single_frontier_as_frontier(&next_use));
-  Drain();
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       parent, 1, &parent_request, nullptr, &reservation, &info, &result,
       IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
@@ -388,7 +368,6 @@ TEST_F(TLSFPoolReservationTest, ConcurrentDedicatedReturnAndRegularGrowth) {
   for (auto& thread : threads) {
     thread.join();
   }
-  Drain();
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(pool, &stats);
   EXPECT_EQ(stats.reservation_count, 0u);

@@ -54,7 +54,6 @@ iree_runtime_cc_test(
         ":buffer_range",
         ":cpu_slab_provider",
         ":fixed_block_pool",
-        ":maintenance_thread",
         ":passthrough_pool",
         ":tlsf_pool",
         "//runtime/src/iree/async",
@@ -191,7 +190,6 @@ iree_runtime_cc_test(
     deps = [
         ":cpu_slab_provider",
         ":fixed_block_pool",
-        ":maintenance_thread",
         ":passthrough_pool",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async:platform",
@@ -243,45 +241,10 @@ iree_runtime_cc_test(
 )
 
 iree_runtime_cc_library(
-    name = "maintenance",
-    srcs = ["maintenance.c"],
-    hdrs = ["maintenance.h"],
-    deps = [
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/threading",
-        "//runtime/src/iree/hal",
-    ],
-)
-
-iree_runtime_cc_test(
-    name = "maintenance_test",
-    srcs = ["maintenance_test.cc"],
-    deps = [
-        ":maintenance",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-iree_runtime_cc_library(
-    name = "maintenance_thread",
-    srcs = ["maintenance_thread.c"],
-    hdrs = ["maintenance_thread.h"],
-    deps = [
-        ":maintenance",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/threading",
-        "//runtime/src/iree/base/threading:thread",
-    ],
-)
-
-iree_runtime_cc_library(
     name = "passthrough_pool",
     srcs = ["passthrough_pool.c"],
     hdrs = ["passthrough_pool.h"],
     deps = [
-        ":maintenance",
         ":slab_provider",
         ":tracing",
         "//runtime/src/iree/async",
@@ -327,8 +290,6 @@ iree_runtime_cc_test(
     deps = [
         ":cpu_slab_provider",
         ":fixed_block_pool",
-        ":maintenance",
-        ":maintenance_thread",
         ":passthrough_pool",
         ":slab_cache",
         ":tlsf_pool",
@@ -465,7 +426,6 @@ iree_runtime_cc_test(
     deps = [
         ":cpu_slab_provider",
         ":fixed_block_pool",
-        ":maintenance_thread",
         ":passthrough_pool",
         ":slab_cache",
         ":tlsf_pool",
@@ -484,7 +444,6 @@ iree_runtime_cc_test(
     deps = [
         ":cpu_slab_provider",
         ":fixed_block_pool",
-        ":maintenance_thread",
         ":passthrough_pool",
         ":slab_cache",
         ":tlsf_pool",
@@ -502,7 +461,6 @@ iree_runtime_cc_test(
     srcs = ["tlsf_pool_concurrency_test.cc"],
     deps = [
         ":cpu_slab_provider",
-        ":maintenance_thread",
         ":passthrough_pool",
         ":tlsf_pool",
         "//runtime/src/iree/async",
@@ -521,8 +479,6 @@ iree_runtime_cc_test(
     deps = [
         ":cpu_slab_provider",
         ":fixed_block_pool",
-        ":maintenance",
-        ":maintenance_thread",
         ":passthrough_pool",
         ":slab_cache",
         ":tlsf",

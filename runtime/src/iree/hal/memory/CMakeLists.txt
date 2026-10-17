@@ -50,7 +50,6 @@ iree_cc_test(
     ::buffer_range
     ::cpu_slab_provider
     ::fixed_block_pool
-    ::maintenance_thread
     ::passthrough_pool
     ::tlsf_pool
     iree::async
@@ -212,7 +211,6 @@ iree_cc_test(
   DEPS
     ::cpu_slab_provider
     ::fixed_block_pool
-    ::maintenance_thread
     ::passthrough_pool
     iree::async
     iree::async::platform
@@ -269,54 +267,12 @@ iree_cc_test(
 
 iree_cc_library(
   NAME
-    maintenance
-  HDRS
-    "maintenance.h"
-  SRCS
-    "maintenance.c"
-  DEPS
-    iree::base
-    iree::base::threading
-    iree::hal
-  PUBLIC
-)
-
-iree_cc_test(
-  NAME
-    maintenance_test
-  SRCS
-    "maintenance_test.cc"
-  DEPS
-    ::maintenance
-    iree::base
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-iree_cc_library(
-  NAME
-    maintenance_thread
-  HDRS
-    "maintenance_thread.h"
-  SRCS
-    "maintenance_thread.c"
-  DEPS
-    ::maintenance
-    iree::base
-    iree::base::threading
-    iree::base::threading::thread
-  PUBLIC
-)
-
-iree_cc_library(
-  NAME
     passthrough_pool
   HDRS
     "passthrough_pool.h"
   SRCS
     "passthrough_pool.c"
   DEPS
-    ::maintenance
     ::slab_provider
     ::tracing
     iree::async
@@ -368,8 +324,6 @@ iree_cc_test(
   DEPS
     ::cpu_slab_provider
     ::fixed_block_pool
-    ::maintenance
-    ::maintenance_thread
     ::passthrough_pool
     ::slab_cache
     ::tlsf_pool
@@ -528,7 +482,6 @@ iree_cc_test(
   DEPS
     ::cpu_slab_provider
     ::fixed_block_pool
-    ::maintenance_thread
     ::passthrough_pool
     ::slab_cache
     ::tlsf_pool
@@ -548,7 +501,6 @@ iree_cc_test(
   DEPS
     ::cpu_slab_provider
     ::fixed_block_pool
-    ::maintenance_thread
     ::passthrough_pool
     ::slab_cache
     ::tlsf_pool
@@ -567,7 +519,6 @@ iree_cc_test(
     "tlsf_pool_concurrency_test.cc"
   DEPS
     ::cpu_slab_provider
-    ::maintenance_thread
     ::passthrough_pool
     ::tlsf_pool
     iree::async
@@ -587,8 +538,6 @@ iree_cc_test(
   DEPS
     ::cpu_slab_provider
     ::fixed_block_pool
-    ::maintenance
-    ::maintenance_thread
     ::passthrough_pool
     ::slab_cache
     ::tlsf

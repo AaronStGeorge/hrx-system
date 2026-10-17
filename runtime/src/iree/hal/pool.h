@@ -941,10 +941,6 @@ struct iree_hal_pool_t {
   // Its owning device group must outlive the pool and its operations.
   iree_async_frontier_tracker_t* frontier_tracker;
 
-  // Borrowed placement-local owner captured from native storage or the
-  // retained backing pool. NULL for sources without cold preparation support.
-  iree_hal_memory_maintenance_t* maintenance;
-
   // Captured optional completion probe inherited by child allocators. Its
   // borrowed context belongs to the same sealed device group as the tracker.
   iree_hal_pool_epoch_query_t epoch_query;

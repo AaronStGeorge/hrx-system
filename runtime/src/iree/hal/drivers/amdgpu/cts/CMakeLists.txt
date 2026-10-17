@@ -388,12 +388,12 @@ iree_cc_test(
   DEPS
     ::backends
     ::testdata_amdgpu
+    iree::hal::cts::util::pool_test_util
     iree::hal::cts::util::profile_test_util
     iree::hal::cts::util::test_base
     iree::hal::cts::util::test_main
     iree::hal::drivers::task::registration
     iree::hal::memory::fixed_block_pool
-    iree::hal::memory::maintenance
     iree::hal::memory::slab_cache
     iree::hal::memory::tlsf_pool
   LABELS
@@ -418,7 +418,6 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::hal::cts::util::test_main
     iree::hal::memory::fixed_block_pool
-    iree::hal::memory::maintenance
     iree::hal::memory::slab_cache
     iree::hal::memory::tlsf_pool
   LABELS

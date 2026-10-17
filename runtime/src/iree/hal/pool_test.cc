@@ -17,7 +17,6 @@
 #include "iree/hal/api.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/fixed_block_pool.h"
-#include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -82,11 +81,9 @@ class PoolFrontierWaitTest : public ::testing::Test {
         .blocks_per_slab = 1,
         .frontier_capacity = 2,
     };
-    IREE_ASSERT_OK(iree_hal_memory_maintenance_thread_create(
-        {}, iree_allocator_system(), &maintenance_));
     IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-        {}, provider_, notification_, tracker_, maintenance_,
-        iree_allocator_system(), &backing_pool_));
+        {}, provider_, notification_, tracker_, iree_allocator_system(),
+        &backing_pool_));
     iree_hal_pool_reservation_request_t backing_request;
     IREE_ASSERT_OK(iree_hal_fixed_block_pool_query_backing_request(
         backing_pool_, &options, &backing_request));
@@ -110,7 +107,6 @@ class PoolFrontierWaitTest : public ::testing::Test {
     iree_hal_buffer_release(buffer_);
     iree_hal_pool_release(pool_);
     iree_hal_pool_release(backing_pool_);
-    iree_hal_memory_maintenance_release(maintenance_);
     iree_hal_slab_provider_release(provider_);
     iree_async_notification_release(notification_);
     iree_async_frontier_tracker_release(tracker_);
@@ -203,8 +199,6 @@ class PoolFrontierWaitTest : public ::testing::Test {
   iree_async_notification_t* notification_ = nullptr;
   // Actual host-memory backing provider.
   iree_hal_slab_provider_t* provider_ = nullptr;
-  // Captured owner of native memory operations.
-  iree_hal_memory_maintenance_t* maintenance_ = nullptr;
   // Native owner of the finite arena.
   iree_hal_pool_t* backing_pool_ = nullptr;
   // One-block pool with a borrowed reference to tracker_.

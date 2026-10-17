@@ -18,48 +18,12 @@
 #include "iree/hal/api.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/fixed_block_pool.h"
-#include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/slab_cache.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
 namespace {
-
-static iree_hal_memory_maintenance_t* test_maintenance() {
-  static iree_hal_memory_maintenance_t* maintenance = nullptr;
-  if (!maintenance) {
-    IREE_CHECK_OK(iree_hal_memory_maintenance_thread_create(
-        {}, iree_allocator_system(), &maintenance));
-    atexit([] {
-      iree_hal_memory_maintenance_release(maintenance);
-      maintenance = nullptr;
-    });
-  }
-  return maintenance;
-}
-
-// An ordered observation point for tests of asynchronous native retirement.
-// Pool trim itself never waits for work on a shared maintenance executor.
-static void WaitForMaintenance() {
-  struct Barrier : iree_hal_memory_maintenance_entry_t {
-    // Protects completion and the callback's final notification access.
-    std::mutex mutex;
-    // Wakes the observing test after preceding native work finishes.
-    std::condition_variable condition;
-    // Set by the maintenance callback under mutex.
-    bool complete = false;
-  } barrier;
-  barrier.fn = [](iree_hal_memory_maintenance_entry_t* entry) {
-    auto* barrier = static_cast<Barrier*>(entry);
-    std::lock_guard<std::mutex> lock(barrier->mutex);
-    barrier->complete = true;
-    barrier->condition.notify_all();
-  };
-  iree_hal_memory_maintenance_enqueue(test_maintenance(), &barrier);
-  std::unique_lock<std::mutex> lock(barrier.mutex);
-  barrier.condition.wait(lock, [&] { return barrier.complete; });
-}
 
 static iree_status_t CreateNativePool(iree_hal_slab_provider_t* provider,
                                       iree_async_notification_t* notification,
@@ -70,8 +34,8 @@ static iree_status_t CreateNativePool(iree_hal_slab_provider_t* provider,
       .epoch_query = epoch_query,
   };
   return iree_hal_passthrough_pool_create(options, provider, notification,
-                                          tracker, test_maintenance(),
-                                          iree_allocator_system(), out_pool);
+                                          tracker, iree_allocator_system(),
+                                          out_pool);
 }
 
 // Uses the production native leaf with its provider's allocator for retirement
@@ -823,29 +787,23 @@ TEST_F(TLSFPoolTest, TrimRetainsByteThresholdForIdleSlabs) {
 
   ReleaseOneReservation(pool_, &first_reservation, NULL);
   ReleaseOneReservation(pool_, &second_reservation, NULL);
-
-  WaitForMaintenance();
   iree_hal_pool_stats_t stats;
   iree_hal_pool_trim(cache, IREE_HAL_POOL_TRIM_FLAG_ALL, 16384);
-  WaitForMaintenance();
   iree_hal_pool_query_stats(cache, &stats);
   EXPECT_EQ(stats.slab_count, 2u);
   EXPECT_EQ(stats.bytes_committed, 8192u);
 
   iree_hal_pool_trim(cache, IREE_HAL_POOL_TRIM_FLAG_ALL, 4097);
-  WaitForMaintenance();
   iree_hal_pool_query_stats(cache, &stats);
   EXPECT_EQ(stats.slab_count, 2u);
   EXPECT_EQ(stats.bytes_committed, 8192u);
 
   iree_hal_pool_trim(cache, IREE_HAL_POOL_TRIM_FLAG_ALL, 4096);
-  WaitForMaintenance();
   iree_hal_pool_query_stats(cache, &stats);
   EXPECT_EQ(stats.slab_count, 1u);
   EXPECT_EQ(stats.bytes_committed, 4096u);
 
   iree_hal_pool_trim(cache, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
-  WaitForMaintenance();
   iree_hal_pool_query_stats(cache, &stats);
   EXPECT_EQ(stats.slab_count, 0u);
   EXPECT_EQ(stats.bytes_committed, 0u);
@@ -903,7 +861,6 @@ TEST(TLSFPool, TrimReturnsPendingHistoryToNativeOwner) {
   EXPECT_EQ(stats.reservation_count, 0u);
   EXPECT_EQ(stats.bytes_committed, 4096u);
   iree_async_frontier_tracker_advance(tracker, TestQueueAxis(0), 42);
-  WaitForMaintenance();
   iree_hal_pool_query_stats(backing_pool, &stats);
   EXPECT_EQ(stats.bytes_committed, 0u);
   iree_hal_pool_release(backing_pool);
@@ -1220,13 +1177,10 @@ TEST(TLSFPool, ReserveSkipsStaleHeadAndReturnsFreshLaterBlock) {
   EXPECT_EQ(left_stale.offset, 0u);
   EXPECT_EQ(right_fresh.offset, 512u);
 
-  // Publish the stale block last so it becomes the bin head regardless of
-  // whether asynchronous maintenance drains the two releases together.
+  // Publish the stale block last so it becomes the bin head.
   ReleaseOneReservation(pool, &right_fresh, NULL);
-  WaitForMaintenance();
   MAKE_FRONTIER(death, 1, E(TestQueueAxis(0), 20));
   ReleaseOneReservation(pool, &left_stale, death);
-  WaitForMaintenance();
 
   MAKE_FRONTIER(requester, 1, E(TestQueueAxis(0), 10));
   iree_hal_pool_reservation_t reservation;

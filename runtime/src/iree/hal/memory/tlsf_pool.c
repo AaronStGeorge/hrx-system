@@ -906,9 +906,6 @@ static iree_status_t iree_hal_tlsf_pool_create_impl(
   pool->source_range = source_range;
   iree_hal_buffer_retain(source_range.buffer);
   pool->base.epoch_query = epoch_query;
-  pool->base.maintenance = backing_pool
-                               ? backing_pool->maintenance
-                               : source_range.memory.backing->maintenance;
   pool->budget_limit = options.budget_limit;
   pool->slab_options = tlsf_options;
   pool->reservation_layout =

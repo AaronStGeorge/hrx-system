@@ -77,6 +77,7 @@ iree_cc_test(
     ::executable_testdata
     iree::async
     iree::hal
+    iree::hal::cts::util::pool_test_util
     iree::hal::cts::util::registry
     iree::hal::cts::util::test_base
     iree::hal::cts::util::test_main

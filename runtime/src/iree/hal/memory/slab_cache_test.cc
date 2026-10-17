@@ -19,7 +19,6 @@
 #include "iree/async/proactor_platform.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/fixed_block_pool.h"
-#include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/tlsf_pool.h"
 #include "iree/hal/testing/deferred_pool.h"
@@ -97,13 +96,10 @@ class SlabCacheTest : public ::testing::Test {
       IREE_ASSERT_OK(iree_async_frontier_tracker_register_axis(
           tracker_, Axis(i), nullptr));
     }
-    IREE_ASSERT_OK(iree_hal_memory_maintenance_thread_create({}, allocator_,
-                                                             &maintenance_));
     IREE_ASSERT_OK(iree_hal_cpu_slab_provider_create(
         256, native_allocator_.allocator(), &provider_));
-    IREE_ASSERT_OK(
-        iree_hal_passthrough_pool_create({}, provider_, notification_, tracker_,
-                                         maintenance_, allocator_, &native_));
+    IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
+        {}, provider_, notification_, tracker_, allocator_, &native_));
     IREE_ASSERT_OK(CreateCache(native_, 4096, 0, 4, &cache_));
   }
 
@@ -114,7 +110,6 @@ class SlabCacheTest : public ::testing::Test {
     iree_hal_pool_release(cache_);
     iree_hal_pool_release(native_);
     iree_hal_slab_provider_release(provider_);
-    iree_hal_memory_maintenance_release(maintenance_);
     iree_async_frontier_tracker_release(tracker_);
     iree_async_notification_release(notification_);
     iree_async_proactor_release(proactor_);
@@ -148,17 +143,6 @@ class SlabCacheTest : public ::testing::Test {
       children_.push_back(*out_pool);
     }
     return status;
-  }
-
-  void Drain() {
-    iree_hal_memory_maintenance_call(
-        maintenance_,
-        [](void* user_data) {
-          auto* owner = static_cast<iree_hal_memory_maintenance_t*>(user_data);
-          while (iree_hal_memory_maintenance_run_one(owner)) {
-          }
-        },
-        maintenance_);
   }
 
   iree_status_t Acquire(iree_hal_pool_t* pool, iree_device_size_t length,
@@ -216,8 +200,6 @@ class SlabCacheTest : public ::testing::Test {
   iree_async_notification_t* notification_ = nullptr;
   // Two explicit causal axes used by reuse tests.
   iree_async_frontier_tracker_t* tracker_ = nullptr;
-  // Placement-local native owner shared by all pools.
-  iree_hal_memory_maintenance_t* maintenance_ = nullptr;
   // Real CPU native storage implementation.
   iree_hal_slab_provider_t* provider_ = nullptr;
   // Leaf reservation owner.
@@ -376,7 +358,6 @@ TEST_F(DeferredSlabCacheTest, RefillOwnsCacheUntilItsCallbackFinishes) {
   iree_hal_pool_release(cache_);
   cache_ = nullptr;
   parent_->CompleteOne();
-  Drain();
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(native_, &stats);
   EXPECT_EQ(stats.reserve_count, 1u);
@@ -632,25 +613,20 @@ TEST_F(SlabCacheTest, FailedBatchRestoresIdleCapacityWithoutNotification) {
 
 TEST_F(SlabCacheTest, ExplicitPrefillAndTrimRetainPolicyAndByteFloor) {
   IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 2));
-  Drain();
   iree_hal_slab_cache_stats_t stats;
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
   EXPECT_EQ(stats.ready_count, 2u);
   iree_hal_pool_trim(cache_, IREE_HAL_POOL_TRIM_FLAG_EXCESS, 0);
-  Drain();
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
   EXPECT_EQ(stats.ready_count, 2u);
   iree_hal_pool_trim(cache_, IREE_HAL_POOL_TRIM_FLAG_ALL, 4096);
-  Drain();
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
   EXPECT_EQ(stats.ready_count, 1u);
   iree_hal_pool_trim(cache_, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
-  Drain();
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
   EXPECT_EQ(stats.ready_count, 0u);
   // ALL is one-shot; the configured target still applies on the next trigger.
   IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 2));
-  Drain();
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
   EXPECT_EQ(stats.ready_count, 2u);
   IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 0));
@@ -675,7 +651,6 @@ TEST_F(SlabCacheTest, OversizedAndAlignmentBypassUseSameParent) {
     EXPECT_EQ(address % aligned_request.min_alignment, 0u);
     iree_hal_pool_release_reservations(cache_, 1, &reservation, nullptr);
   }
-  Drain();
   iree_hal_slab_cache_stats_t stats;
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
   EXPECT_EQ(stats.ready_count, 0u);
@@ -728,7 +703,6 @@ TEST_F(SlabCacheTest, ChildReturnPreservesUntouchedAlignmentTailHistory) {
       child, 1, &reservation,
       iree_async_fixed_frontier_as_const_frontier(&later));
   iree_hal_pool_trim(child, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
-  Drain();
   IREE_ASSERT_OK(Acquire(cache_, 4097, nullptr,
                          IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER |
                              IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
@@ -747,7 +721,6 @@ TEST_F(SlabCacheTest, ChildReturnPreservesUntouchedAlignmentTailHistory) {
 
 TEST_F(SlabCacheTest, HotReuseAndTrimDoNotWaitForNativePreparation) {
   IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
-  Drain();
   native_allocator_.BlockNext();
   std::thread refill(
       [&] { IREE_EXPECT_OK(iree_hal_slab_cache_set_target(cache_, 2)); });
@@ -765,13 +738,11 @@ TEST_F(SlabCacheTest, HotReuseAndTrimDoNotWaitForNativePreparation) {
   iree_hal_pool_trim(cache_, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
   native_allocator_.Resume();
   refill.join();
-  Drain();
   iree_hal_slab_cache_stats_t stats;
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
   EXPECT_EQ(stats.ready_count, 0u);
   // Preparation admitted before ALL cannot repopulate the cache afterward.
   IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 2));
-  Drain();
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
   EXPECT_EQ(stats.ready_count, 2u);
 }
@@ -840,7 +811,6 @@ TEST_P(SlabCacheChildReturnTest,
       &old_view));
   uintptr_t original_address = 0;
   IREE_ASSERT_OK(CheckBytes(first, reservation, 0x49, &original_address));
-  Drain();
 
   // Hold a real CPU-provider allocation at its allocator boundary. Logical
   // return and peer reuse must finish before that dependency is released.
@@ -883,7 +853,6 @@ TEST_P(SlabCacheChildReturnTest,
   iree_hal_pool_release_reservations(second, 1, &reservation, nullptr);
   native_allocator_.Resume();
   refill.join();
-  Drain();
 }
 
 INSTANTIATE_TEST_SUITE_P(TLSFAndFixedBlock, SlabCacheChildReturnTest,
@@ -902,7 +871,6 @@ TEST_F(SlabCacheTest, TrimReturnsCapacityDuringNativePreparation) {
                            &info, &result));
     ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   }
-  Drain();
   native_allocator_.BlockNext();
   std::thread refill(
       [&] { IREE_EXPECT_OK(iree_hal_slab_cache_set_target(cache_, 1)); });
@@ -933,7 +901,6 @@ TEST_F(SlabCacheTest, TrimReturnsCapacityDuringNativePreparation) {
   }
   native_allocator_.Resume();
   refill.join();
-  Drain();
   // The in-flight refill started before trimming and cannot republish capacity.
   iree_hal_pool_query_stats(cache_, &stats);
   EXPECT_EQ(stats.bytes_committed, 0u);
@@ -942,7 +909,6 @@ TEST_F(SlabCacheTest, TrimReturnsCapacityDuringNativePreparation) {
 TEST_F(SlabCacheTest, AsyncPreparationFailurePropagatesAndCanBeRetried) {
   native_allocator_.FailNext();
   IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
-  Drain();
   iree_hal_pool_reservation_t reservation;
   memset(&reservation, 0xA5, sizeof(reservation));
   const auto original = reservation;
@@ -1018,7 +984,6 @@ TEST_F(SlabCacheTest, ConcurrentOwningAllocationsAndReturns) {
   for (auto& thread : threads) {
     thread.join();
   }
-  Drain();
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(cache_, &stats);
   EXPECT_EQ(stats.reservation_count, 0u);
@@ -1043,7 +1008,6 @@ TEST_F(SlabCacheTest, RefillDoesNotTouchBackingBytes) {
       backing, 16, 1024, &options, allocator_, &interior));
   iree_hal_pool_t* cache = nullptr;
   IREE_ASSERT_OK(CreateCache(interior, 1024, 1, 1, &cache));
-  Drain();
   iree_hal_slab_cache_stats_t stats;
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache, &stats));
   EXPECT_EQ(stats.ready_count, 1u);

@@ -413,7 +413,6 @@ void iree_hal_slab_buffer_backing_initialize(
     const iree_hal_slab_provider_properties_t* properties,
     iree_async_notification_t* notification,
     iree_async_frontier_tracker_t* tracker,
-    iree_hal_memory_maintenance_t* maintenance,
     iree_hal_slab_buffer_backing_t* out_backing);
 
 //===----------------------------------------------------------------------===//

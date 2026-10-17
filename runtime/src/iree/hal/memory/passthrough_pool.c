@@ -9,6 +9,7 @@
 #include "iree/async/frontier_tracker.h"
 #include "iree/async/notification.h"
 #include "iree/base/internal/math.h"
+#include "iree/base/threading/mutex.h"
 #include "iree/hal/memory/tracing.h"
 
 enum { IREE_HAL_PASSTHROUGH_POOL_INLINE_TRANSACTION_CAPACITY = 8 };
@@ -36,9 +37,6 @@ typedef enum iree_hal_passthrough_pool_retirement_state_e {
 typedef struct iree_hal_passthrough_pool_state_t {
   // Exact usage grant used to qualify explicit native imports.
   iree_hal_buffer_usage_t allowed_usage;
-
-  // Borrowed native advice context used only while live views exist.
-  iree_hal_memory_maintenance_t* maintenance;
 
   // Capacity publication owner retained through the final native completion.
   iree_async_notification_t* notification;
@@ -504,8 +502,7 @@ iree_status_t iree_hal_passthrough_pool_create(
     iree_hal_slab_provider_t* slab_provider,
     iree_async_notification_t* notification,
     iree_async_frontier_tracker_t* frontier_tracker,
-    iree_hal_memory_maintenance_t* maintenance, iree_allocator_t host_allocator,
-    iree_hal_pool_t** out_pool) {
+    iree_allocator_t host_allocator, iree_hal_pool_t** out_pool) {
   IREE_ASSERT_ARGUMENT(slab_provider);
   IREE_ASSERT_ARGUMENT(notification);
   IREE_ASSERT_ARGUMENT(out_pool);
@@ -549,8 +546,6 @@ iree_status_t iree_hal_passthrough_pool_create(
   public_pool->base.epoch_query = options.epoch_query;
   public_pool->base.asan_enabled =
       iree_hal_asan_pool_options_is_enabled(&options.asan);
-  public_pool->base.maintenance = maintenance;
-  pool->maintenance = maintenance;
   pool->asan_options = options.asan;
   pool->owned_enabled = options.owned_mode == IREE_HAL_SLAB_POOL_OWNED_ENABLED;
   pool->import_class_count = options.imports.class_count;
@@ -762,7 +757,7 @@ static iree_status_t iree_hal_passthrough_pool_import_buffer(
     allocation->slab = imported_slab.slab;
     iree_hal_slab_buffer_backing_initialize(
         pool->slab_provider, &allocation->slab, &imported_slab.properties,
-        pool->notification, pool->frontier_tracker, pool->maintenance,
+        pool->notification, pool->frontier_tracker,
         &allocation->buffer_backing);
     const iree_hal_buffer_release_callback_t release_callback = {
         .fn = iree_hal_passthrough_pool_imported_buffer_release,
@@ -949,7 +944,7 @@ static void iree_hal_passthrough_pool_acquire_join(
         &state->allocation;
     iree_hal_slab_buffer_backing_initialize(
         pool->slab_provider, &allocation->slab, &pool->slab_properties,
-        pool->notification, pool->frontier_tracker, pool->maintenance,
+        pool->notification, pool->frontier_tracker,
         &allocation->buffer_backing);
     iree_atomic_store(&state->reference_count, 1, iree_memory_order_relaxed);
     iree_hal_passthrough_pool_link_allocation(pool, allocation);

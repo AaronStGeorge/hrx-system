@@ -35,8 +35,6 @@ typedef struct iree_hal_amdgpu_slab_pool_plan_t {
   struct {
     // Native owner's capacity notification.
     iree_async_notification_t* notification;
-    // Independent allocation and retirement owner.
-    iree_hal_memory_maintenance_t* maintenance;
     // Sealed group's completion probe.
     iree_hal_pool_epoch_query_t epoch_query;
     // Sealed group's shared completion tracker.
@@ -94,7 +92,7 @@ static iree_status_t iree_hal_amdgpu_slab_pool_plan_create(
     };
     status = iree_hal_passthrough_pool_create(
         options, provider, plan->progress.notification, plan->progress.tracker,
-        plan->progress.maintenance, host_allocator, out_pool);
+        host_allocator, out_pool);
   }
   iree_hal_slab_provider_release(provider);
   return status;
@@ -435,7 +433,6 @@ static iree_status_t iree_hal_amdgpu_slab_pool_query_memory(
   plan->buffer_pool = &physical_device->materialized_buffer_pool;
   plan->provider_options.allocation_queue = physical_device->allocation_queue;
   plan->progress.notification = physical_device->memory_notification;
-  plan->progress.maintenance = physical_device->memory_maintenance;
   plan->progress.epoch_query = backend->epoch_query;
   plan->progress.tracker =
       iree_hal_device_topology_info(backend->device)->frontier.tracker;

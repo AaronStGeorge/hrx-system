@@ -454,8 +454,6 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::util::topology
     iree::hal::drivers::amdgpu::util::vmem
     iree::hal::memory::asan_pool
-    iree::hal::memory::maintenance
-    iree::hal::memory::maintenance_thread
     iree::hal::memory::passthrough_pool
     iree::hal::memory::slab_cache
     iree::hal::memory::slab_provider
@@ -706,11 +704,11 @@ iree_cc_test(
     ::headers
     iree::base
     iree::hal
+    iree::hal::cts::util::pool_test_util
     iree::hal::cts::util::test_base
     iree::hal::drivers::amdgpu::util::info
     iree::hal::drivers::amdgpu::util::topology
     iree::hal::drivers::amdgpu::util::vmem
-    iree::hal::memory::maintenance
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS

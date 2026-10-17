@@ -340,8 +340,7 @@ class PassthroughPoolTest : public ::testing::Test {
         iree_async_frontier_tracker_options_default(), allocator_, &tracker_));
     iree_hal_passthrough_pool_options_t options = {};
     IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-        options, slab_provider_, notification_, tracker_, nullptr, allocator_,
-        &pool_));
+        options, slab_provider_, notification_, tracker_, allocator_, &pool_));
   }
 
   void TearDown() override {
@@ -503,9 +502,9 @@ class NativePassthroughPoolTest : public ::testing::Test {
     IREE_ASSERT_OK(iree_async_frontier_tracker_create(
         iree_async_frontier_tracker_options_default(), iree_allocator_system(),
         &tracker_));
-    IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-        {}, provider_, notification_, tracker_, nullptr,
-        allocations_.allocator(), &pool_));
+    IREE_ASSERT_OK(
+        iree_hal_passthrough_pool_create({}, provider_, notification_, tracker_,
+                                         allocations_.allocator(), &pool_));
   }
   void TearDown() override {
     iree_hal_pool_release(pool_);
@@ -605,9 +604,9 @@ TEST_F(NativePassthroughPoolTest,
   iree_hal_pool_release(pool_);
   pool_ = nullptr;
   CountingAllocator public_allocator;
-  IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-      {}, provider_, notification_, tracker_, nullptr,
-      public_allocator.allocator(), &pool_));
+  IREE_ASSERT_OK(
+      iree_hal_passthrough_pool_create({}, provider_, notification_, tracker_,
+                                       public_allocator.allocator(), &pool_));
   native_->deferred.release = true;
   iree_hal_buffer_t* buffer = nullptr;
   IREE_ASSERT_OK(
@@ -637,10 +636,10 @@ TEST_F(NativePassthroughPoolTest,
   CountingAllocator public_allocator;
   allocations_.fail_at = allocations_.allocation_count + 1;
   iree_hal_pool_t* pool = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
-                        iree_hal_passthrough_pool_create(
-                            {}, provider_, notification_, tracker_, nullptr,
-                            public_allocator.allocator(), &pool));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      iree_hal_passthrough_pool_create({}, provider_, notification_, tracker_,
+                                       public_allocator.allocator(), &pool));
   EXPECT_EQ(pool, nullptr);
   EXPECT_EQ(public_allocator.live_count, 0u);
 }
@@ -827,7 +826,7 @@ TEST(PassthroughPool, NoGrowthDefersWholeTransactionBeforeAllocating) {
       test_proactor(), IREE_ASYNC_NOTIFICATION_FLAG_NONE, &notification));
   iree_hal_pool_t* pool = nullptr;
   IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-      {}, provider, notification, test_frontier_tracker(), nullptr,
+      {}, provider, notification, test_frontier_tracker(),
       allocations.allocator(), &pool));
 
   // Exercise scalar and batched native geometry through the same interface.
@@ -978,8 +977,8 @@ TEST(PassthroughPool, FailedMaterializationTransactionRetainsEveryReservation) {
   iree_hal_passthrough_pool_options_t options = {};
   iree_hal_pool_t* pool = NULL;
   IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-      options, slab_provider, notification, test_frontier_tracker(), nullptr,
-      allocator, &pool));
+      options, slab_provider, notification, test_frontier_tracker(), allocator,
+      &pool));
 
   const iree_hal_pool_reservation_request_t requests[3] = {
       MakeReservationRequest(64, 16),
@@ -1031,7 +1030,7 @@ TEST_F(PassthroughPoolTest, ReserveRejectsUnsupportedAlignment) {
       iree_hal_test_opaque_slab_provider_create(allocator_, &provider));
   iree_hal_pool_release(pool_);
   IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-      {}, provider, notification_, tracker_, nullptr, allocator_, &pool_));
+      {}, provider, notification_, tracker_, allocator_, &pool_));
   iree_hal_slab_provider_release(provider);
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t reserve_info;
@@ -1287,7 +1286,7 @@ TEST_F(PassthroughPoolTest, TrimDoesNotJoinPendingRetirement) {
       reinterpret_cast<iree_hal_test_opaque_slab_provider_t*>(slab_provider);
   iree_hal_pool_t* pool = nullptr;
   IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-      {}, slab_provider, notification_, tracker_, nullptr, allocator_, &pool));
+      {}, slab_provider, notification_, tracker_, allocator_, &pool));
   iree_async_single_frontier_t frontier = {.entry_count = 1};
   frontier.entries[0] = {iree_async_axis_make_queue(1, 0, 0, 0, 0), 1};
   IREE_ASSERT_OK(iree_async_frontier_tracker_register_axis(
@@ -1361,8 +1360,7 @@ TEST_F(PassthroughPoolTest, FrontierDispatchRacesFinalPoolRelease) {
     pool_ = nullptr;
     completer.join();
     IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-        {}, slab_provider_, notification_, tracker_, nullptr, allocator_,
-        &pool_));
+        {}, slab_provider_, notification_, tracker_, allocator_, &pool_));
   }
 }
 
@@ -1399,8 +1397,7 @@ TEST_F(PassthroughPoolTest, FailedFrontierDispatchRacesFinalPoolRelease) {
     pool_ = nullptr;
     completer.join();
     IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-        {}, slab_provider_, notification_, tracker_, nullptr, allocator_,
-        &pool_));
+        {}, slab_provider_, notification_, tracker_, allocator_, &pool_));
   }
 }
 
@@ -1416,8 +1413,8 @@ TEST(PassthroughPool, UsesProviderHooks) {
   iree_hal_pool_t* pool = NULL;
   iree_hal_passthrough_pool_options_t options = {};
   IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-      options, slab_provider, notification, test_frontier_tracker(), nullptr,
-      allocator, &pool));
+      options, slab_provider, notification, test_frontier_tracker(), allocator,
+      &pool));
 
   iree_hal_pool_capabilities_t capabilities;
   iree_hal_pool_query_capabilities(pool, &capabilities);
@@ -1488,11 +1485,10 @@ TEST(PassthroughPool, CreateRejectsASANWhenProviderCannotAdviseRanges) {
   iree_hal_passthrough_pool_options_t options = {.asan = ShadowOptions()};
 
   iree_hal_pool_t* pool = NULL;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_FAILED_PRECONDITION,
-      iree_hal_passthrough_pool_create(options, slab_provider, notification,
-                                       test_frontier_tracker(), nullptr,
-                                       allocator, &pool));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        iree_hal_passthrough_pool_create(
+                            options, slab_provider, notification,
+                            test_frontier_tracker(), allocator, &pool));
   EXPECT_EQ(pool, nullptr);
 
   iree_async_notification_release(notification);
@@ -1512,8 +1508,8 @@ TEST(PassthroughPool, ASANAdvisesBackingRangeAndExposesUserRange) {
 
   iree_hal_pool_t* pool = NULL;
   IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-      options, slab_provider, notification, test_frontier_tracker(), nullptr,
-      allocator, &pool));
+      options, slab_provider, notification, test_frontier_tracker(), allocator,
+      &pool));
 
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t reserve_info;

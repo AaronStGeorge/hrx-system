@@ -386,7 +386,6 @@ void iree_hal_slab_buffer_backing_initialize(
     const iree_hal_slab_provider_properties_t* properties,
     iree_async_notification_t* notification,
     iree_async_frontier_tracker_t* tracker,
-    iree_hal_memory_maintenance_t* maintenance,
     iree_hal_slab_buffer_backing_t* out_backing) {
   out_backing->provider = provider;
   out_backing->slab = slab;
@@ -399,7 +398,6 @@ void iree_hal_slab_buffer_backing_initialize(
   out_backing->facts = (iree_hal_buffer_backing_facts_t){
       .notification = notification,
       .tracker = tracker,
-      .maintenance = maintenance,
       .advice = &out_backing->advice,
       .maintenance_range = slab->maintenance_range,
       .host_cacheability = slab->host_cacheability,

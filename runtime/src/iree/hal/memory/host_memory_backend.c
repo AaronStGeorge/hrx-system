@@ -65,8 +65,8 @@ static iree_status_t iree_hal_host_slab_pool_plan_create(
       options,
       plan->mapping_source ? plan->backend->mapping_provider
                            : plan->backend->slab_provider,
-      plan->backend->notification, plan->frontier_tracker,
-      /*maintenance=*/NULL, host_allocator, out_pool);
+      plan->backend->notification, plan->frontier_tracker, host_allocator,
+      out_pool);
 }
 
 static const iree_hal_slab_pool_plan_vtable_t

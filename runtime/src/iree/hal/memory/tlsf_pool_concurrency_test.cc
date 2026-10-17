@@ -16,7 +16,6 @@
 #include "iree/async/proactor_platform.h"
 #include "iree/hal/api.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
-#include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/tlsf_pool.h"
 #include "iree/hal/testing/deferred_pool.h"
@@ -150,13 +149,11 @@ class TLSFPoolConcurrencyTest : public ::testing::Test {
         tracker_, iree_async_axis_make_queue(1, 0, 0, 0, 0), nullptr));
     IREE_ASSERT_OK(iree_hal_cpu_slab_provider_create(
         /*min_alignment=*/0, native_allocator_.allocator(), &provider_));
-    IREE_ASSERT_OK(iree_hal_memory_maintenance_thread_create(
-        {}, iree_allocator_system(), &maintenance_));
     iree_hal_passthrough_pool_options_t backing_options = {
         .epoch_query = {QueryEpoch, this},
     };
     IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-        backing_options, provider_, notification_, tracker_, maintenance_,
+        backing_options, provider_, notification_, tracker_,
         iree_allocator_system(), &backing_pool_));
     iree_hal_tlsf_pool_options_t options = {};
     options.tlsf_options.range_length = 4096;
@@ -171,7 +168,6 @@ class TLSFPoolConcurrencyTest : public ::testing::Test {
     EXPECT_EQ(metadata_allocator_.live_allocations(), 0u);
     iree_hal_buffer_release(finite_backing_);
     iree_hal_pool_release(backing_pool_);
-    iree_hal_memory_maintenance_release(maintenance_);
     iree_hal_slab_provider_release(provider_);
     EXPECT_EQ(native_allocator_.live_allocations(), 0u);
     iree_async_notification_release(notification_);
@@ -182,27 +178,6 @@ class TLSFPoolConcurrencyTest : public ::testing::Test {
   virtual iree_status_t CreatePool(iree_hal_tlsf_pool_options_t options) {
     return iree_hal_tlsf_pool_create(backing_pool_, &options,
                                      metadata_allocator_.allocator(), &pool_);
-  }
-
-  // Observe native retirement after its asynchronous parent-token return.
-  void WaitForMaintenance() {
-    struct Barrier : iree_hal_memory_maintenance_entry_t {
-      // Protects completion and the callback's final notification access.
-      std::mutex mutex;
-      // Wakes the observer after preceding entries have finished.
-      std::condition_variable condition;
-      // Published under mutex by the maintenance worker.
-      bool complete = false;
-    } barrier;
-    barrier.fn = [](iree_hal_memory_maintenance_entry_t* entry) {
-      auto* barrier = static_cast<Barrier*>(entry);
-      std::lock_guard<std::mutex> lock(barrier->mutex);
-      barrier->complete = true;
-      barrier->condition.notify_all();
-    };
-    iree_hal_memory_maintenance_enqueue(maintenance_, &barrier);
-    std::unique_lock<std::mutex> lock(barrier.mutex);
-    barrier.condition.wait(lock, [&] { return barrier.complete; });
   }
 
   iree_status_t Acquire(iree_device_size_t length,
@@ -334,8 +309,6 @@ class TLSFPoolConcurrencyTest : public ::testing::Test {
   iree_async_frontier_tracker_t* tracker_ = nullptr;
   // Native backing pool shared by the TLSF policies created by this fixture.
   iree_hal_pool_t* backing_pool_ = nullptr;
-  // Independent owner of native retirement, joined during teardown.
-  iree_hal_memory_maintenance_t* maintenance_ = nullptr;
   // Native CPU source using the gated allocator.
   iree_hal_slab_provider_t* provider_ = nullptr;
   // TLSF subject under test, with counted system-allocated host metadata.
@@ -650,7 +623,6 @@ TEST_F(TLSFPoolConcurrencyTest, ReusesCapacityReturnedDuringNativePreparation) {
   EXPECT_EQ(stats.bytes_committed, 4096u);
   // The unused prepared range never entered TLSF's inventory. Both its backing
   // and retirement metadata are returned; only the original slab remains.
-  WaitForMaintenance();
   EXPECT_EQ(native_allocator_.live_allocations(), live_allocations);
   if (reservation.block_handle) {
     iree_hal_pool_release_reservations(pool_, 1, &reservation, nullptr);
@@ -757,7 +729,6 @@ TEST_F(TLSFPoolConcurrencyTest, TrimPreservesSlabNeededByMetadataPreparation) {
   iree_hal_pool_query_stats(pool_, &stats);
   EXPECT_EQ(stats.slab_count, 1u);
   EXPECT_EQ(stats.bytes_committed, 4096u);
-  WaitForMaintenance();
   EXPECT_EQ(native_allocator_.live_allocations(), live_allocations);
   metadata_allocator_.Resume();
   growing.join();
@@ -768,7 +739,6 @@ TEST_F(TLSFPoolConcurrencyTest, TrimPreservesSlabNeededByMetadataPreparation) {
   if (reservation.block_handle) {
     iree_hal_pool_release_reservations(pool_, 1, &reservation, nullptr);
   }
-  WaitForMaintenance();
   iree_hal_pool_query_stats(pool_, &stats);
   EXPECT_EQ(stats.slab_count, 0u);
 }
@@ -1014,7 +984,6 @@ TEST_F(TLSFPoolConcurrencyTest, TrimPreservesLiveSlabsDuringAutomaticReturn) {
     iree_hal_pool_release_reservations(pool_, 1, &reservations[i], nullptr);
   }
   iree_hal_pool_trim(pool_, IREE_HAL_POOL_TRIM_FLAG_EXCESS, 0);
-  WaitForMaintenance();
   iree_hal_pool_query_stats(pool_, &stats);
   EXPECT_EQ(stats.slab_count, 0u);
   EXPECT_EQ(stats.bytes_committed, 0u);
@@ -1116,7 +1085,6 @@ TEST_F(TLSFPoolConcurrencyTest, GrowthBeforeBudgetFailureReturnsUnusedBacking) {
     EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OVER_BUDGET);
     EXPECT_TRUE(iree_async_notification_wait_for_token(
         iree_hal_pool_notification(pool_), token, iree_immediate_timeout()));
-    WaitForMaintenance();
     iree_async_notification_end_observe(iree_hal_pool_notification(pool_));
   }
   iree_hal_pool_stats_t stats;

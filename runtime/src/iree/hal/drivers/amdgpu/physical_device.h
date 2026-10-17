@@ -265,8 +265,6 @@ typedef struct iree_hal_amdgpu_physical_device_t {
 
   // Shared capacity notification for caller-created native pools.
   iree_async_notification_t* memory_notification;
-  // Shared cold memory worker independent of execution queue failure/lifetime.
-  iree_hal_memory_maintenance_t* memory_maintenance;
   // ASAN allocation-shaping policy inherited by caller-created native pools.
   iree_hal_asan_pool_options_t asan_pool_options;
 

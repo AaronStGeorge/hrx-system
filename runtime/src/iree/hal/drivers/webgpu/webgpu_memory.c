@@ -352,7 +352,7 @@ static iree_status_t iree_hal_webgpu_slab_pool_plan_create(
     };
     status = iree_hal_passthrough_pool_create(
         options, provider, plan->backend->notification, plan->frontier_tracker,
-        plan->backend->maintenance, host_allocator, out_pool);
+        host_allocator, out_pool);
   }
   iree_hal_slab_provider_release(provider);
   return status;

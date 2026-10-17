@@ -65,7 +65,6 @@ IREE_API_EXPORT iree_status_t iree_hal_pool_initialize(
   };
   out_pool->host_allocator = host_allocator;
   out_pool->frontier_tracker = frontier_tracker;
-  out_pool->maintenance = NULL;
   out_pool->epoch_query = iree_hal_pool_epoch_query_null();
   out_pool->asan_enabled = false;
   out_pool->allocation_interceptor =

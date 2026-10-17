@@ -892,7 +892,7 @@ class TaskQueueNativeAllocationTest : public TaskQueueAllocaTest {
       };
       status = iree_hal_passthrough_pool_create(
           options, provider, backing_pool_->notification,
-          backing_pool_->frontier_tracker, nullptr, iree_allocator_system(),
+          backing_pool_->frontier_tracker, iree_allocator_system(),
           &native_pool_);
     }
     iree_hal_slab_provider_release(provider);
@@ -1127,8 +1127,7 @@ class TaskQueueNativeRetirementTest : public TaskQueueAllocaTest {
     };
     iree_status_t status = iree_hal_passthrough_pool_create(
         options, provider, backing_pool_->notification,
-        backing_pool_->frontier_tracker, nullptr, iree_allocator_system(),
-        &pool_);
+        backing_pool_->frontier_tracker, iree_allocator_system(), &pool_);
     iree_hal_slab_provider_release(provider);
     IREE_ASSERT_OK(status);
     notification_ = iree_hal_pool_notification(pool_);

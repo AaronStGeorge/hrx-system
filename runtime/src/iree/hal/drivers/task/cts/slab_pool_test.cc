@@ -11,6 +11,7 @@
 #include <thread>
 
 #include "iree/async/notification.h"
+#include "iree/hal/cts/util/pool_test_util.h"
 #include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/memory/fixed_block_pool.h"
 #include "iree/hal/memory/slab_cache.h"
@@ -145,26 +146,6 @@ class TaskSlabPoolTest : public CtsTestBase<> {
   iree_status_t Wait(iree_hal_semaphore_list_t semaphores) {
     return iree_hal_semaphore_list_wait(semaphores, iree_infinite_timeout(),
                                         IREE_ASYNC_WAIT_FLAG_NONE);
-  }
-
-  // Physical capacity changes after asynchronous native release. Observe the
-  // public capacity notification rather than imposing an execution context.
-  void WaitCommittedBytes(iree_hal_pool_t* pool, iree_device_size_t expected) {
-    auto* notification = iree_hal_pool_notification(pool);
-    for (;;) {
-      const uint32_t token =
-          iree_async_notification_begin_observe(notification);
-      iree_hal_pool_stats_t stats;
-      iree_hal_pool_query_stats(pool, &stats);
-      if (stats.bytes_committed == expected) {
-        iree_async_notification_end_observe(notification);
-        return;
-      }
-      const bool signaled = iree_async_notification_wait_for_token(
-          notification, token, iree_infinite_timeout());
-      iree_async_notification_end_observe(notification);
-      ASSERT_TRUE(signaled);
-    }
   }
 
   // Separate device progress services kept alive until their group retires.
@@ -1432,7 +1413,7 @@ TEST_P(TaskSlabPoolTest, BatchedMappingOrdersOldAndNewUsersAcrossReservations) {
   backing.reset();
   output.reset();
   iree_hal_pool_stats_t stats;
-  ASSERT_NO_FATAL_FAILURE(WaitCommittedBytes(source, 0));
+  ASSERT_TRUE(WaitPoolCommittedBytes(source, 0));
   iree_hal_pool_query_stats(source, &stats);
   EXPECT_EQ(stats.bytes_committed, 0u);
 }
@@ -1672,7 +1653,7 @@ TEST_P(TaskSlabPoolTest, QueueMappingSourcesRecycleThroughSharedSlabCache) {
   EXPECT_EQ(cache_stats.ready_count, 1u);
 
   iree_hal_pool_trim(cache, IREE_HAL_POOL_TRIM_FLAG_EXCESS, 0);
-  ASSERT_NO_FATAL_FAILURE(WaitCommittedBytes(source, 0));
+  ASSERT_TRUE(WaitPoolCommittedBytes(source, 0));
   iree_hal_pool_query_stats(source, &stats);
   EXPECT_EQ(stats.bytes_committed, 0u);
   EXPECT_EQ(stats.release_count, 1u);

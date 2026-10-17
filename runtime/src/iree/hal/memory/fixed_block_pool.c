@@ -607,8 +607,6 @@ static iree_status_t iree_hal_fixed_block_pool_create_impl(
     IREE_TRACE_ZONE_END(z0);
     return status;
   }
-  pool->base.maintenance = backing_pool ? backing_pool->maintenance
-                                        : range->memory.backing->maintenance;
   pool->base.epoch_query =
       backing_pool ? backing_pool->epoch_query
                    : (iree_hal_pool_epoch_query_t){

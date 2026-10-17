@@ -15,7 +15,6 @@
 #include "iree/async/proactor_platform.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/fixed_block_pool.h"
-#include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/tlsf_pool.h"
 #include "iree/testing/gtest.h"
@@ -43,12 +42,9 @@ class BufferRangeTest : public ::testing::TestWithParam<bool> {
         .blocks_per_slab = 1,
         .frontier_capacity = 2,
     };
-    IREE_ASSERT_OK(iree_hal_memory_maintenance_thread_create({}, allocator_,
-                                                             &maintenance_));
     iree_hal_pool_t* native_pool = nullptr;
     IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-        {}, provider_, notification_, tracker_, maintenance_, allocator_,
-        &native_pool));
+        {}, provider_, notification_, tracker_, allocator_, &native_pool));
     pools_.push_back(native_pool);
     iree_hal_pool_reservation_request_t backing_request;
     IREE_ASSERT_OK(iree_hal_fixed_block_pool_query_backing_request(
@@ -75,7 +71,6 @@ class BufferRangeTest : public ::testing::TestWithParam<bool> {
     for (auto i = pools_.rbegin(); i != pools_.rend(); ++i) {
       iree_hal_pool_release(*i);
     }
-    iree_hal_memory_maintenance_release(maintenance_);
     iree_hal_slab_provider_release(provider_);
     iree_async_frontier_tracker_release(tracker_);
     iree_async_notification_release(notification_);
@@ -129,7 +124,6 @@ class BufferRangeTest : public ::testing::TestWithParam<bool> {
     maintenance_storage_.fill(0x11);
     maintenance_backing_.notification = notification_;
     maintenance_backing_.tracker = tracker_;
-    maintenance_backing_.maintenance = maintenance_;
     maintenance_backing_.allocation_alignment = 64;
     maintenance_backing_.maintenance_alignment = 256;
     const iree_hal_buffer_placement_t placement = {
@@ -153,8 +147,6 @@ class BufferRangeTest : public ::testing::TestWithParam<bool> {
   iree_async_notification_t* notification_ = nullptr;
   // Completion tracker with two registered production queue axes.
   iree_async_frontier_tracker_t* tracker_ = nullptr;
-  // Captured owner for native allocation and retirement.
-  iree_hal_memory_maintenance_t* maintenance_ = nullptr;
   // Native CPU storage provider.
   iree_hal_slab_provider_t* provider_ = nullptr;
   // One native block used as the source for each test.

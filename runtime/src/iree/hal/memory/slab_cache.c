@@ -506,7 +506,6 @@ iree_status_t iree_hal_slab_cache_create(
     iree_allocator_free(host_allocator, cache);
     return status;
   }
-  cache->base.maintenance = backing_pool->maintenance;
   cache->base.epoch_query = backing_pool->epoch_query;
   cache->backing_pool = backing_pool;
   iree_hal_pool_retain(backing_pool);

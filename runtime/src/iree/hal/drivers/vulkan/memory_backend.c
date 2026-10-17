@@ -78,7 +78,7 @@ static iree_status_t iree_hal_vulkan_slab_pool_plan_create(
     };
     status = iree_hal_passthrough_pool_create(
         options, provider, plan->progress.notification, plan->progress.tracker,
-        /*maintenance=*/NULL, host_allocator, out_pool);
+        host_allocator, out_pool);
   }
   iree_hal_slab_provider_release(provider);
   return status;

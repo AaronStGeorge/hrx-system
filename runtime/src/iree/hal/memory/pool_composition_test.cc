@@ -14,7 +14,6 @@
 #include "iree/async/proactor_platform.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/fixed_block_pool.h"
-#include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/slab_cache.h"
 #include "iree/hal/memory/tlsf_pool.h"
@@ -39,13 +38,10 @@ class PoolCompositionTest : public ::testing::TestWithParam<
       IREE_ASSERT_OK(iree_async_frontier_tracker_register_axis(
           tracker_, Axis(i), nullptr));
     }
-    IREE_ASSERT_OK(iree_hal_memory_maintenance_thread_create({}, allocator_,
-                                                             &maintenance_));
     IREE_ASSERT_OK(
         iree_hal_cpu_slab_provider_create(0, allocator_, &provider_));
     IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
-        {}, provider_, notification_, tracker_, maintenance_, allocator_,
-        &native_pool_));
+        {}, provider_, notification_, tracker_, allocator_, &native_pool_));
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
         native_pool_,
         iree_hal_make_pool_reservation_request(4096, kMinAlignment),
@@ -59,7 +55,6 @@ class PoolCompositionTest : public ::testing::TestWithParam<
     iree_hal_buffer_release(backing_);
     iree_hal_pool_release(native_pool_);
     iree_hal_slab_provider_release(provider_);
-    iree_hal_memory_maintenance_release(maintenance_);
     iree_async_frontier_tracker_release(tracker_);
     iree_async_notification_release(notification_);
     iree_async_proactor_release(proactor_);
@@ -120,17 +115,6 @@ class PoolCompositionTest : public ::testing::TestWithParam<
       pools_.push_back(*out_pool);
     }
     return status;
-  }
-
-  void WaitForMaintenance() {
-    iree_hal_memory_maintenance_call(
-        maintenance_,
-        [](void* user_data) {
-          auto* owner = static_cast<iree_hal_memory_maintenance_t*>(user_data);
-          while (iree_hal_memory_maintenance_run_one(owner)) {
-          }
-        },
-        maintenance_);
   }
 
   static iree_hal_pool_stats_t Stats(iree_hal_pool_t* pool) {
@@ -198,8 +182,6 @@ class PoolCompositionTest : public ::testing::TestWithParam<
   iree_async_notification_t* notification_ = nullptr;
   // Shared tracker with two exact queue axes.
   iree_async_frontier_tracker_t* tracker_ = nullptr;
-  // Independent cold owner of native retirement.
-  iree_hal_memory_maintenance_t* maintenance_ = nullptr;
   // Production CPU backing provider.
   iree_hal_slab_provider_t* provider_ = nullptr;
   // Production native leaf whose allocation count establishes physical reuse.
@@ -489,7 +471,6 @@ TEST_P(PoolCompositionTest, BatchGrowthRollsBackAndReturnsWholeRanges) {
   EXPECT_EQ(memcmp(reservations.data(), unchanged.data(), sizeof(reservations)),
             0);
   EXPECT_EQ(Stats(child).reservation_count, 0u);
-  WaitForMaintenance();
   EXPECT_EQ(Stats(child).bytes_committed, 0u);
   EXPECT_EQ(Stats(source).reservation_count, 0u);
 
@@ -520,7 +501,6 @@ TEST_P(PoolCompositionTest, BatchGrowthRollsBackAndReturnsWholeRanges) {
   }
   iree_hal_pool_release_reservations(child, buffers.size(), reservations.data(),
                                      nullptr);
-  WaitForMaintenance();
   EXPECT_EQ(Stats(child).bytes_committed, 0u);
   EXPECT_EQ(Stats(source).reservation_count, 0u);
   EXPECT_EQ(Stats(native_pool_).reserve_count, 1u);
@@ -555,7 +535,6 @@ TEST_P(PoolCompositionTest, ConcurrentGrowthAndReturnPreserveLiveBytes) {
   for (auto& thread : threads) {
     thread.join();
   }
-  WaitForMaintenance();
   EXPECT_EQ(Stats(child).reservation_count, 0u);
   EXPECT_EQ(Stats(child).bytes_committed, 0u);
   EXPECT_EQ(Stats(source).reservation_count, 0u);
@@ -683,7 +662,6 @@ TEST_P(FixedBlockPoolCompositionTest,
   iree_hal_pool_release_reservations(
       child, reservations.size(), reservations.data(),
       iree_async_single_frontier_as_const_frontier(&next));
-  WaitForMaintenance();
   EXPECT_EQ(Stats(child).bytes_committed, 0u);
   IREE_ASSERT_OK(Acquire(cache, 1024, nullptr,
                          IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER, &seed,
@@ -720,7 +698,6 @@ TEST_P(FixedBlockPoolCompositionTest,
         child, 1, &reservations[i],
         iree_async_single_frontier_as_const_frontier(&frontier));
   }
-  WaitForMaintenance();
   EXPECT_EQ(Stats(child).bytes_committed, 512u);
   EXPECT_EQ(Stats(source).reservation_count, 1u);
   // The union is wider than one entry, but both constituent blocks remain
@@ -744,7 +721,6 @@ TEST_P(FixedBlockPoolCompositionTest,
   EXPECT_EQ(seen, 3u);
   iree_hal_pool_release_reservations(child, reservations.size(),
                                      reservations.data(), nullptr);
-  WaitForMaintenance();
   EXPECT_EQ(Stats(child).bytes_committed, 0u);
   EXPECT_EQ(Stats(source).reservation_count, 0u);
 }

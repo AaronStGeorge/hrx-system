@@ -8,7 +8,6 @@
 #define IREE_HAL_MEMORY_PASSTHROUGH_POOL_H_
 
 #include "iree/base/api.h"
-#include "iree/hal/memory/maintenance.h"
 #include "iree/hal/memory/slab_provider.h"
 #include "iree/hal/pool.h"
 #include "iree/hal/slab_pool.h"
@@ -68,17 +67,15 @@ typedef struct iree_hal_passthrough_pool_options_t {
 // provider's native owner and allocator must remain valid through that final
 // provider release; neither depends on the public pool's allocator.
 //
-// |maintenance| is borrowed only as backing advice context. It does not select
-// execution for acquisition, release, or import. |host_allocator| owns public
-// pool metadata. Native retirement records and source transactions use the
-// provider's allocator, whose lifetime covers their terminal completion.
+// |host_allocator| owns public pool metadata. Native retirement records and
+// source transactions use the provider's allocator, whose lifetime covers their
+// terminal completion.
 iree_status_t iree_hal_passthrough_pool_create(
     iree_hal_passthrough_pool_options_t options,
     iree_hal_slab_provider_t* slab_provider,
     iree_async_notification_t* notification,
     iree_async_frontier_tracker_t* frontier_tracker,
-    iree_hal_memory_maintenance_t* maintenance, iree_allocator_t host_allocator,
-    iree_hal_pool_t** out_pool);
+    iree_allocator_t host_allocator, iree_hal_pool_t** out_pool);
 
 #ifdef __cplusplus
 }  // extern "C"

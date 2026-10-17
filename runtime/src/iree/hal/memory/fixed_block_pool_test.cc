@@ -17,7 +17,6 @@
 #include "iree/async/proactor_platform.h"
 #include "iree/hal/api.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
-#include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/testing/deferred_pool.h"
 #include "iree/testing/gtest.h"
@@ -337,27 +336,6 @@ static iree_status_t MaterializeOneReservation(
                                                 flags, out_buffer);
 }
 
-static iree_hal_memory_maintenance_t* test_maintenance() {
-  static iree_hal_memory_maintenance_t* owner = nullptr;
-  if (!owner) {
-    IREE_CHECK_OK(iree_hal_memory_maintenance_thread_create(
-        {}, iree_allocator_system(), &owner));
-    atexit([] { iree_hal_memory_maintenance_release(owner); });
-  }
-  return owner;
-}
-
-static void WaitForMaintenance() {
-  iree_hal_memory_maintenance_call(
-      test_maintenance(),
-      [](void* user_data) {
-        auto* owner = static_cast<iree_hal_memory_maintenance_t*>(user_data);
-        while (iree_hal_memory_maintenance_run_one(owner)) {
-        }
-      },
-      test_maintenance());
-}
-
 static iree_status_t CreateFinitePool(
     iree_hal_fixed_block_pool_options_t options,
     iree_hal_slab_provider_t* provider, iree_async_notification_t* notification,
@@ -367,8 +345,7 @@ static iree_status_t CreateFinitePool(
   *out_pool = nullptr;
   iree_hal_pool_t* backing_pool = nullptr;
   IREE_RETURN_IF_ERROR(iree_hal_passthrough_pool_create(
-      {}, provider, notification, tracker, test_maintenance(), allocator,
-      &backing_pool));
+      {}, provider, notification, tracker, allocator, &backing_pool));
   iree_hal_pool_reservation_request_t request;
   iree_status_t status = iree_hal_fixed_block_pool_query_backing_request(
       backing_pool, &options, &request);
@@ -399,8 +376,7 @@ static iree_status_t CreateGrowingPool(
   iree_hal_passthrough_pool_options_t source_options = {.epoch_query = query};
   iree_hal_pool_t* source = nullptr;
   IREE_RETURN_IF_ERROR(iree_hal_passthrough_pool_create(
-      source_options, provider, notification, tracker, test_maintenance(),
-      allocator, &source));
+      source_options, provider, notification, tracker, allocator, &source));
   iree_status_t status =
       iree_hal_fixed_block_pool_create(source, &options, allocator, out_pool);
   iree_hal_pool_release(source);
@@ -476,8 +452,7 @@ class DeferredFixedBlockPoolTest : public FixedBlockPoolTest {
     IREE_RETURN_IF_ERROR(status);
     iree_hal_pool_t* source = nullptr;
     IREE_RETURN_IF_ERROR(iree_hal_passthrough_pool_create(
-        {}, slab_provider_, notification_, tracker_, test_maintenance(),
-        allocator_, &source));
+        {}, slab_provider_, notification_, tracker_, allocator_, &source));
     status = DeferredBackingPool::Create(source, &parent_);
     iree_hal_pool_release(source);
     if (iree_status_is_ok(status)) {
@@ -728,7 +703,6 @@ TEST(FixedBlockPool, GrowableProbesAndBudgetAdmissionDoNotAllocate) {
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   EXPECT_EQ(allocator.allocation_calls(), prepared_calls);
   iree_hal_pool_release_reservations(pool, 2, reservations, nullptr);
-  WaitForMaintenance();
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(pool, &stats);
   EXPECT_EQ(stats.bytes_committed, 0u);
@@ -1512,7 +1486,6 @@ TEST(FixedBlockPool, UsesProviderHooks) {
     iree_hal_pool_trim(pool, trim_flags[i], /*min_bytes_to_keep=*/0);
     EXPECT_EQ(provider->trim_count, i);
     iree_hal_pool_trim(backing_pool, trim_flags[i], 0);
-    WaitForMaintenance();
     EXPECT_EQ(provider->trim_count, i + 1);
     EXPECT_EQ(provider->last_trim_flags, trim_flags[i]);
     iree_hal_pool_stats_t stats;

@@ -597,7 +597,6 @@ iree_status_t iree_hal_replay_recorder_create_slab_pool(
         native_pool->frontier_tracker, host_allocator, &pool->base);
   }
   if (iree_status_is_ok(status)) {
-    pool->base.maintenance = native_pool->maintenance;
     pool->base.epoch_query = native_pool->epoch_query;
     pool->base.asan_enabled = native_pool->asan_enabled;
     pool->base.allocation_interceptor =
