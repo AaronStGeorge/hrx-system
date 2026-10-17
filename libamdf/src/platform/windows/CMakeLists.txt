@@ -71,6 +71,19 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND AMDF_BUILD)
 iree_cc_library(
   NAME
+    host_export
+  SRCS
+    "host_export.c"
+  DEPS
+    amdf::headers
+    libamdf::src::platform::host_export
+  PUBLIC
+)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND AMDF_BUILD)
+iree_cc_library(
+  NAME
     host_memory
   SRCS
     "host_memory.c"

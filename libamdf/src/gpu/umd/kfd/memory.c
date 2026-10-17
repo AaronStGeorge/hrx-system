@@ -19,6 +19,7 @@
 #include "libamdf/src/gpu/umd/kfd/device.h"
 #include "libamdf/src/gpu/umd/kfd/hdp.h"
 #include "libamdf/src/gpu/umd/kfd/memory_profile.h"
+#include "libamdf/src/gpu/umd/memory_reservation.h"
 #include "libamdf/src/platform/linux/dma_buf.h"
 #include "libamdf/src/platform/linux/file.h"
 #include "libamdf/src/platform/linux/host_cache.h"
@@ -29,6 +30,8 @@ struct amdf_gpu_umd_memory_t {
   amdf_gpu_umd_device_t* device;
   // Native allocation and CPU/GPU mapping, including partial preparation.
   amdf_gpu_kfd_buffer_t* buffer;
+  // Optional ordinary address, using the same exact-permission alias protocol.
+  amdf_gpu_umd_memory_reservation_t* default_reservation;
   // Page-covered native backing length in bytes.
   size_t byte_length;
   // Canonical DMA-BUF identity for shareable owned GTT.
@@ -103,6 +106,18 @@ static void amdf_gpu_kfd_memory_plan(
 }
 
 amdf_status_t amdf_gpu_umd_memory_destroy(amdf_gpu_umd_memory_t* memory) {
+  if (memory->default_reservation != NULL) {
+    amdf_gpu_umd_memory_reservation_t* reservation =
+        memory->default_reservation;
+    memory->default_reservation = NULL;
+    // Reservation destruction consumes metadata on both success and failure.
+    // A failed clear retains source/residency ownership and physical backing.
+    const amdf_status_t status =
+        amdf_gpu_umd_memory_reservation_destroy(reservation);
+    if (!amdf_status_is_ok(status)) {
+      return status;
+    }
+  }
   const amdf_status_t source_status =
       amdf_linux_file_close(&memory->host_mapping_source);
   if (!amdf_status_is_ok(source_status)) {
@@ -271,13 +286,79 @@ amdf_status_t amdf_gpu_umd_memory_prepare_import(
     const amdf_external_memory_t* external_memory,
     amdf_gpu_umd_memory_t** memory_state,
     amdf_gpu_umd_memory_result_t* out_result) {
-  (void)device;
-  (void)profile;
-  (void)import_info;
-  (void)external_memory;
-  (void)memory_state;
-  (void)out_result;
-  return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+  // Native profile admission restricts this to fresh owned-page exports. A
+  // repeated foreign import can share a non-refcounted GEM handle and fence.
+  amdf_assert(import_info->origin ==
+              AMDF_MEMORY_NATIVE_IMPORT_ORIGIN_CONSTRUCTION);
+  amdf_gpu_umd_memory_t* memory = NULL;
+  amdf_status_t status = amdf_calloc(
+      device->host_allocator, sizeof(*memory) + sizeof(memory->sources[0]),
+      amdf_alignof(amdf_gpu_umd_memory_t), (void**)&memory);
+  if (!amdf_status_is_ok(status)) {
+    return status;
+  }
+  memory->device = device;
+  memory->host_mapping_source = -1;
+  memory->byte_length = (size_t)external_memory->byte_length;
+  memory->physical_backing_id = external_memory->physical_backing_id;
+  memory->flags = profile->guaranteed_flags | import_info->required_flags;
+  *memory_state = memory;
+  status = amdf_gpu_kfd_buffer_prepare_import(
+      device, (int)external_memory->payload.file_descriptor,
+      memory->byte_length, &memory->buffer);
+  if (amdf_status_is_ok(status)) {
+    struct drm_prime_handle import = {
+        .fd = (int)external_memory->payload.file_descriptor,
+    };
+    if (ioctl(device->render_descriptor, DRM_IOCTL_PRIME_FD_TO_HANDLE,
+              &import) != 0) {
+      status = amdf_linux_error(errno);
+    } else {
+      memory->sources[0].descriptor = device->render_descriptor;
+      memory->sources[0].handle = import.handle;
+      memory->source_count = 1;
+    }
+  }
+  uint64_t address = 0;
+  const uint64_t alignment = import_info->minimum_alignment > device->page_size
+                                 ? import_info->minimum_alignment
+                                 : device->page_size;
+  if (amdf_status_is_ok(status) &&
+      (memory->flags & AMDF_MEMORY_FLAG_DEVICE_ADDRESS) != 0) {
+    status = amdf_gpu_umd_memory_reservation_create(
+        device->host_allocator, 1, &device, memory->byte_length, alignment,
+        &memory->default_reservation);
+    if (amdf_status_is_ok(status)) {
+      const amdf_gpu_umd_mapping_update_t update = {
+          .byte_length = memory->byte_length,
+          .memory = memory,
+          .access = import_info->device_access,
+      };
+      bool mutation_started = false;
+      status = amdf_gpu_umd_memory_reservation_update(
+          memory->default_reservation, 0, 1, &update, &mutation_started);
+    }
+    if (amdf_status_is_ok(status)) {
+      uint32_t owner;
+      uint64_t granularity;
+      amdf_memory_access_t required_access;
+      amdf_gpu_umd_memory_reservation_query_access(
+          memory->default_reservation, 0, &address, &owner, &granularity,
+          &required_access);
+    }
+  }
+  if (amdf_status_is_ok(status)) {
+    *out_result = (amdf_gpu_umd_memory_result_t){
+        .flags = memory->flags,
+        .byte_length = memory->byte_length,
+        .alignment = alignment,
+        .native_allocation_byte_length = memory->byte_length,
+        .native_allocation_granularity = device->page_size,
+        .physical_backing_id = memory->physical_backing_id,
+        .device_address = address,
+    };
+  }
+  return status;
 }
 
 amdf_status_t amdf_gpu_umd_memory_export(

@@ -10,6 +10,11 @@
 #include "amdf/amdf.h"
 #include "libamdf/src/memory_pair.h"
 
+// Construction-only import of a fresh export of platform-owned pages. This
+// native consumer role is never a public backing profile or foreign import
+// capability: every attachment receives an independently closeable transport.
+#define AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT (UINT32_C(1) << 31)
+
 // Properties of physical backing, independent of a consumer's access.
 #define AMDF_MEMORY_BACKING_FLAGS                                      \
   (AMDF_MEMORY_FLAG_HOST_VISIBLE | AMDF_MEMORY_FLAG_DEVICE_LOCAL |     \

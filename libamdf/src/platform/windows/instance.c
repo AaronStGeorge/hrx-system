@@ -52,6 +52,12 @@ uint64_t amdf_platform_instance_host_allocation_granularity(
   return info.dwAllocationGranularity;
 }
 
+const amdf_platform_host_export_t* amdf_platform_instance_host_export(
+    const amdf_platform_instance_t* instance) {
+  (void)instance;
+  return NULL;
+}
+
 void amdf_platform_instance_unlock_native(amdf_platform_instance_t* instance) {
   ReleaseSRWLockExclusive(&instance->native_lock);
 }

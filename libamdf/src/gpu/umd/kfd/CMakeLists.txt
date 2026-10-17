@@ -441,10 +441,12 @@ iree_cc_test(
   LINKOPTS
     "-Wl,--wrap=ioctl"
   DEPS
+    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_drm_uapi>
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>
     ::buffer
     ::device_state
     ::memory
+    ::memory_reservation
     amdf::headers
     iree::third_party::google_test
     iree::third_party::google_test_main
@@ -494,6 +496,7 @@ iree_cc_library(
     amdf::headers
     libamdf::src::allocator
     libamdf::src::gpu::umd::memory
+    libamdf::src::gpu::umd::memory_reservation
     libamdf::src::platform::linux::dma_buf
     libamdf::src::platform::linux::file
     libamdf::src::platform::linux::host_cache
@@ -512,6 +515,7 @@ iree_cc_test(
     ::device_state
     ::memory
     ::memory_profile
+    ::memory_reservation
     amdf::headers
     iree::third_party::google_test
     iree::third_party::google_test_main

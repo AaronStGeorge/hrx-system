@@ -358,14 +358,31 @@ static amdf_status_t amdf_memory_prepare(
       registration.registered_host_cacheability =
           AMDF_HOST_CACHEABILITY_WRITE_BACK;
     }
+    const amdf_platform_host_export_t* service =
+        plan->shared_external_type != 0
+            ? amdf_platform_instance_host_export(
+                  amdf_memory_scope_instance(plan->scope)->platform)
+            : NULL;
     for (uint32_t i = 0; amdf_status_is_ok(status) && i < plan->access_count;
          ++i) {
       if (plan->native_owner_ordinals[i] != i) {
         continue;
       }
       amdf_memory_info_t native_info = {0};
-      status = amdf_memory_prepare_access(memory, i, plan, &registration,
-                                          &native_info);
+      if (service != NULL) {
+        amdf_external_memory_t exported = {0};
+        status = amdf_host_memory_export(memory, service, i == 0, &exported);
+        if (amdf_status_is_ok(status)) {
+          status = amdf_memory_prepare_import_access(
+              memory, i, plan, create_info->accesses,
+              AMDF_MEMORY_NATIVE_IMPORT_ORIGIN_CONSTRUCTION, 0,
+              create_info->minimum_alignment, &exported, &native_info);
+        }
+        amdf_external_memory_release(&exported);
+      } else {
+        status = amdf_memory_prepare_access(memory, i, plan, &registration,
+                                            &native_info);
+      }
       if (amdf_status_is_ok(status) &&
           native_info.alignment < memory->info.alignment) {
         memory->info.alignment = native_info.alignment;

@@ -51,6 +51,14 @@ amdf_cc_library(
 )
 
 amdf_cc_library(
+    name = "host_export",
+    srcs = ["host_export.c"],
+    target_compatible_with = WINDOWS_COMPATIBILITY,
+    visibility = ["//libamdf/src/platform:__pkg__"],
+    deps = ["//libamdf/src/platform:host_export"],
+)
+
+amdf_cc_library(
     name = "host_memory",
     srcs = ["host_memory.c"],
     target_compatible_with = WINDOWS_COMPATIBILITY,

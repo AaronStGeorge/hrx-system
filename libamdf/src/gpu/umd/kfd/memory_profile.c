@@ -312,7 +312,7 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
       profile.visibility.describe_site = amdf_gpu_kfd_sdma_local_describe_site;
     }
   } else if (native_lifetime == AMDF_NATIVE_LIFETIME_PROCESS &&
-             memory_profile_ordinal == ordinal) {
+             memory_profile_ordinal == ordinal++) {
     profile.memory_class = AMDF_MEMORY_CLASS_SYSTEM;
     profile.roles =
         AMDF_MEMORY_PROFILE_ROLE_REGISTER | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP;
@@ -329,6 +329,30 @@ amdf_status_t amdf_gpu_kfd_query_memory_profile(
     profile.device_address.minimum_alignment = 1;
     profile.registration = registration;
     profile.host_mapping = host_mapping;
+  } else if (memory_profile_ordinal == ordinal &&
+             topology->sdma.engine_count != 0) {
+    // Owned host pools provide a fresh DMA-BUF for each attachment. Public
+    // foreign import cannot promise independent PRIME/KFD teardown ownership.
+    profile.memory_class = AMDF_MEMORY_CLASS_SYSTEM;
+    profile.roles = AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT;
+    profile.construction.query_access = NULL;
+    profile.guaranteed_flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE;
+    profile.supported_flags =
+        profile.guaranteed_flags | AMDF_MEMORY_FLAG_DEVICE_ADDRESS;
+    profile.supported_device_access = AMDF_MEMORY_ACCESS_READ |
+                                      AMDF_MEMORY_ACCESS_WRITE |
+                                      AMDF_MEMORY_ACCESS_EXECUTE;
+    profile.device_address = page_address;
+    profile.import = allocation;
+    profile.import.byte_length_granularity = page_size;
+    profile.external_memory_support_count = 1;
+    profile.external_memory_support[0] = (amdf_external_memory_support_t){
+        .type = AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD,
+        .flags = AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_IMPORT,
+        .byte_length_alignment = page_size,
+    };
+    profile.visibility.describe_site =
+        amdf_gpu_umd_memory_describe_system_store_site;
   } else {
     return amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE);
   }

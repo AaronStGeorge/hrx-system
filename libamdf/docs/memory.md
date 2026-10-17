@@ -957,11 +957,66 @@ not establish this property. A reservation view does not inherit eligibility
 from a source that happened to be bound there.
 
 Owned Windows system allocations and platform-owned host allocations establish
-the property from their native page construction. Borrowing a registered
-pointer or importing an arbitrary external handle cannot establish the same
+the property from their native page construction. Linux can attach GPUs to
+platform-owned, length-sealed pages through the optional udmabuf service. The
+original ordinary CPU mapping remains the file buffer; GPU reservations project
+those same pages into independently selected device addresses. Borrowing a
+registered pointer or importing an arbitrary external handle cannot establish the same
 fact from its address or cacheability. A caller with independent knowledge of
 its registered pages can use the native file API, but the generic registration
 contract does not advertise that additional guarantee.
+
+#### Pool construction and availability
+
+A pool that only uses explicit GPU aliases requests a mapping source without
+an implicit device address. The full consumer array participates in profile
+selection before allocation:
+
+```c
+const amdf_memory_device_access_t access = {
+    .device = gpu,
+    .requirements = {
+        .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+        .flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+    },
+};
+const amdf_memory_flags_t flags =
+    AMDF_MEMORY_FLAG_HOST_VISIBLE | AMDF_MEMORY_FLAG_HOST_FILE_IO;
+// Enumerate SYSTEM profiles with this exact access, select a CREATE profile
+// supporting flags, and check its availability before choosing slab geometry.
+// profile and capabilities have their usual structure headers initialized.
+status = api->memory_scope_query_device_profile(
+    system_scope, ordinal, 1, &access, &profile, &capabilities);
+if (!amdf_status_is_ok(status)) return status;
+if (!amdf_status_is_ok(profile.availability)) return profile.availability;
+const amdf_memory_create_info_t create = {
+    .type = AMDF_STRUCTURE_TYPE_MEMORY_CREATE_INFO,
+    .structure_size = sizeof(create),
+    .memory_profile_ordinal = ordinal,
+    .access_count = 1,
+    .required_flags = flags,
+    .byte_length = slab_byte_length,
+    .minimum_alignment = profile.allocation.minimum_alignment,
+    .accesses = &access,
+};
+status = api->memory_create(system_scope, &create, &pool);
+```
+
+The slab length satisfies the profile's granularity and maximum length. Adding
+`AMDF_MEMORY_FLAG_DEVICE_ADDRESS` to an access also constructs its default
+address with the requested permissions. Explicit reservations retain the same
+mapping and final-reader requirements as other sources.
+
+Each independent Linux attachment receives a fresh DMA-BUF export of the same
+owned pages. Its KFD residency and GEM alias source have independent native
+lifetimes, including when logical consumers share a native driver connection.
+The exports have separate implicit-fence state: explicit queue dependencies and
+the caller's final-reader ordering establish cross-consumer synchronization.
+Public foreign KFD imports are unsupported; this construction path does not
+make arbitrary external DMA-BUF ownership safe to duplicate. Allocation and
+attachment happen once per slab, with no export, import, or allocation per I/O.
+
+#### File and device visibility
 
 A FILE_IO pair site uses `value.host.mapping`, as a HOST site does. It describes
 OS-managed access to that file buffer: a file read produces memory, and a file
@@ -1012,6 +1067,38 @@ need for an application staging copy when the selected native file operation
 can use the returned host view. Queue-side visibility does not supply a fence
 inside an already-running shader; resident-program handoffs need a separate
 program-side protocol.
+
+#### Deployment requirements
+
+| Platform | Native requirements | Resource admission |
+| --- | --- | --- |
+| Linux KFD | Kernel udmabuf support (`CONFIG_UDMABUF`), a loaded service, read/write access to `/dev/udmabuf`, readable `/sys/module/udmabuf/parameters/size_limit_mb`, and the ordinary KFD/render-node access. The AMDGPU driver must accept these exports and the selected exact GPU alias contract. | The profile intersects the export size limit with all consumer limits. Backing pages remain pinned for the allocation lifetime; each attachment also consumes native import and page-table resources. File-buffer registration has its own admission, including the process's locked-memory limit for registered io_uring buffers. |
+| Windows WDDM | The native GPU provider's owned system-page allocation and mapping services. No udmabuf service is involved. | Native allocation and page-lock admission can fail independently of file creation. Buffered/unbuffered file alignment and transfer constraints come from the file API. |
+
+Optional Linux exporter discovery runs once at instance creation. A profile
+query returns its cached `availability`, including native missing-service or
+permission errors, without issuing another system call. An unavailable file
+profile leaves ordinary GPU allocation profiles usable. Allocation remains
+authoritative if resource admission or policy changes after discovery; failure
+leaves the caller's output unchanged. A new instance discovers newly installed
+or newly permitted services. The library does not load modules, change device
+permissions, or raise resource limits.
+
+The upstream udmabuf `size_limit_mb` parameter defaults to 64 MiB **per export**,
+not per process or pool. Callers use `maximum_byte_length`, rather than that
+default, to size slabs and grow a pool through independent allocations. Kernel
+version alone cannot establish driver, permission, or capacity admission.
+The [native exporter implementation](https://github.com/torvalds/linux/blob/8d3ae59288f1e7d58d76558a6ee96d533bc5019f/drivers/dma-buf/udmabuf.c)
+defines its sealing, size, and page-pin requirements.
+
+File-buffer eligibility is independent of direct-I/O eligibility. The caller
+queries the actual file's memory, offset, and length alignments and checks
+completion results. Filesystems may still buffer transfers: for example,
+[Btrfs checksummed writes](https://btrfs.readthedocs.io/en/stable/Checksumming.html)
+use buffered I/O for `O_DIRECT` writes on kernels starting with 6.14. On Windows,
+[unbuffered I/O](https://learn.microsoft.com/en-us/windows/win32/fileio/file-buffering)
+imposes sector and memory alignment requirements. Neither behavior changes the
+pool's memory ownership or the need to retire native I/O before reuse.
 
 ## Atomic operations and participant reach
 

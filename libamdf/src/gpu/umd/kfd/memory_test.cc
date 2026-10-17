@@ -77,6 +77,45 @@ TEST(LinuxGpuMemoryProfileTest, InstanceLifetimeExposesOwnedSystemMemory) {
   EXPECT_EQ(unavailable.ordinal, UINT32_MAX);
 }
 
+TEST(LinuxGpuMemoryProfileTest,
+     OwnedHostImportsDoNotAdvertiseForeignOwnership) {
+  for (auto lifetime :
+       {AMDF_NATIVE_LIFETIME_PROCESS, AMDF_NATIVE_LIFETIME_INSTANCE}) {
+    for (bool local_memory : {false, true}) {
+      amdf_gpu_umd_device_t device = {
+          .native_lifetime = lifetime,
+          .page_size = 4096,
+      };
+      device.topology.virtual_address.begin = UINT64_C(0x10000);
+      device.topology.virtual_address.end = UINT64_C(1) << 48;
+      device.topology.sdma.engine_count = 1;
+      if (local_memory) {
+        device.topology.memory_features = AMDF_GPU_DEVICE_FEATURE_LOCAL_MEMORY;
+      }
+      const auto profile = QueryProfile(
+          &device, 2 + uint32_t{local_memory} +
+                       uint32_t{lifetime == AMDF_NATIVE_LIFETIME_PROCESS});
+      EXPECT_EQ(profile.roles, AMDF_MEMORY_NATIVE_PROFILE_ROLE_HOST_IMPORT);
+      EXPECT_EQ(profile.guaranteed_flags, AMDF_MEMORY_FLAG_MAPPING_SOURCE);
+      EXPECT_EQ(profile.supported_flags, AMDF_MEMORY_FLAG_MAPPING_SOURCE |
+                                             AMDF_MEMORY_FLAG_DEVICE_ADDRESS);
+      EXPECT_EQ(profile.guaranteed_device_access, 0u);
+      EXPECT_EQ(profile.supported_device_access,
+                AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE |
+                    AMDF_MEMORY_ACCESS_EXECUTE);
+      EXPECT_EQ(profile.import.byte_length_granularity, 4096u);
+      EXPECT_EQ(profile.external_memory_support_count, 1u);
+      EXPECT_EQ(profile.external_memory_support[0].type,
+                AMDF_EXTERNAL_MEMORY_TYPE_DMA_BUF_FD);
+      EXPECT_EQ(profile.external_memory_support[0].flags,
+                AMDF_EXTERNAL_MEMORY_SUPPORT_FLAG_IMPORT);
+      EXPECT_EQ(profile.atomic_operations_32, 0u);
+      EXPECT_EQ(profile.atomic_operations_64, 0u);
+      EXPECT_EQ(profile.construction.query_access, nullptr);
+    }
+  }
+}
+
 TEST(LinuxGpuMemoryProfileTest, CachedPayloadSeparatesHostViewsAndControl) {
   amdf_gpu_umd_device_t device = {
       .native_lifetime = AMDF_NATIVE_LIFETIME_INSTANCE,
