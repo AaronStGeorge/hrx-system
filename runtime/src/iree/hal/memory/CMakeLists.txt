@@ -395,6 +395,7 @@ iree_cc_library(
     ::asan_pool
     iree::base
     iree::base::internal
+    iree::base::threading
     iree::hal
   PUBLIC
 )

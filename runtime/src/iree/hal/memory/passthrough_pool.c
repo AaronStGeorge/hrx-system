@@ -252,7 +252,7 @@ static void iree_hal_passthrough_pool_retire_allocation(
                                                           maintenance_entry));
   iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)state->pool;
   const iree_allocator_t host_allocator = pool->host_allocator;
-  iree_hal_slab_provider_release_slab(pool->slab_provider, &state->slab);
+  iree_hal_slab_provider_release_slab_sync(pool->slab_provider, &state->slab);
   iree_hal_external_storage_release(&state->external_storage);
   const iree_device_size_t charged_length = state->charged_length;
   iree_hal_passthrough_pool_unlink_allocation(pool, state);
@@ -639,7 +639,7 @@ typedef struct iree_hal_passthrough_pool_import_rollback_call_t {
 static void iree_hal_passthrough_pool_import_rollback_on_owner(
     void* user_data) {
   iree_hal_passthrough_pool_import_rollback_call_t* call = user_data;
-  iree_hal_slab_provider_release_slab(call->provider, &call->slab);
+  iree_hal_slab_provider_release_slab_sync(call->provider, &call->slab);
 }
 
 static void iree_hal_passthrough_pool_imported_buffer_release(
@@ -855,14 +855,14 @@ static iree_status_t iree_hal_passthrough_pool_acquire_one_reservation(
   iree_hal_slab_t slab;
   const iree_device_size_t backing_alignment =
       iree_max(alignment, asan_layout.backing_offset_alignment);
-  IREE_RETURN_IF_ERROR(iree_hal_slab_provider_acquire_slab(
+  IREE_RETURN_IF_ERROR(iree_hal_slab_provider_acquire_slab_sync(
       pool->slab_provider, backing_length, backing_alignment, &slab));
   if (iree_hal_asan_pool_options_is_enabled(&pool->asan_options) &&
       slab.length != asan_layout.backing_length) {
     iree_status_t status =
         iree_hal_asan_extend_allocation_layout(slab.length, &asan_layout);
     if (!iree_status_is_ok(status)) {
-      iree_hal_slab_provider_release_slab(pool->slab_provider, &slab);
+      iree_hal_slab_provider_release_slab_sync(pool->slab_provider, &slab);
       return status;
     }
   }
@@ -872,7 +872,7 @@ static iree_status_t iree_hal_passthrough_pool_acquire_one_reservation(
       iree_allocator_malloc(pool->host_allocator, sizeof(*reservation_state),
                             (void**)&reservation_state);
   if (!iree_status_is_ok(status)) {
-    iree_hal_slab_provider_release_slab(pool->slab_provider, &slab);
+    iree_hal_slab_provider_release_slab_sync(pool->slab_provider, &slab);
     return status;
   }
   memset(reservation_state, 0, sizeof(*reservation_state));
@@ -955,8 +955,8 @@ static void iree_hal_passthrough_pool_rollback_reservation(
                         (int64_t)reservation_state->allocation.charged_length,
                         iree_memory_order_relaxed);
   iree_atomic_fetch_add(&pool->reserve_count, -1, iree_memory_order_relaxed);
-  iree_hal_slab_provider_release_slab(pool->slab_provider,
-                                      &reservation_state->allocation.slab);
+  iree_hal_slab_provider_release_slab_sync(pool->slab_provider,
+                                           &reservation_state->allocation.slab);
   iree_hal_passthrough_pool_unlink_allocation(pool,
                                               &reservation_state->allocation);
   iree_allocator_free(pool->host_allocator, reservation_state);

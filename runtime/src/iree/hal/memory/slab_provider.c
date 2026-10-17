@@ -6,6 +6,9 @@
 
 #include "iree/hal/memory/slab_provider.h"
 
+#include "iree/base/threading/mutex.h"
+#include "iree/base/threading/notification.h"
+
 void iree_hal_slab_provider_initialize(
     const iree_hal_slab_provider_vtable_t* vtable,
     iree_hal_slab_provider_t* provider) {
@@ -26,11 +29,140 @@ void iree_hal_slab_provider_release(iree_hal_slab_provider_t* provider) {
   }
 }
 
-iree_status_t iree_hal_slab_provider_acquire_slab(
+void iree_hal_slab_provider_acquire_slabs(
+    iree_hal_slab_provider_t* provider,
+    iree_hal_slab_acquire_request_t* request) {
+  request->operation = (iree_hal_slab_operation_t){
+      .provider = provider,
+      .type = IREE_HAL_SLAB_OPERATION_ACQUIRE,
+  };
+  provider->vtable->acquire_slabs(provider, request);
+}
+
+void iree_hal_slab_provider_release_slabs(
+    iree_hal_slab_provider_t* provider,
+    iree_hal_slab_release_request_t* request) {
+  request->operation = (iree_hal_slab_operation_t){
+      .provider = provider,
+      .type = IREE_HAL_SLAB_OPERATION_RELEASE,
+  };
+  provider->vtable->release_slabs(provider, request);
+}
+
+void iree_hal_slab_provider_acquire_slabs_inline(
+    iree_hal_slab_provider_t* provider,
+    iree_hal_slab_acquire_request_t* request,
+    iree_status_t (*acquire_slab)(iree_hal_slab_provider_t* provider,
+                                  iree_device_size_t min_length,
+                                  iree_device_size_t min_alignment,
+                                  iree_hal_slab_t* out_slab),
+    void (*release_slab)(iree_hal_slab_provider_t* provider,
+                         const iree_hal_slab_t* slab)) {
+  memset(request->slabs, 0, request->count * sizeof(*request->slabs));
+  iree_status_t status = iree_ok_status();
+  iree_host_size_t acquired_count = 0;
+  while (acquired_count < request->count && iree_status_is_ok(status)) {
+    status =
+        acquire_slab(provider, request->requests[acquired_count].min_length,
+                     request->requests[acquired_count].min_alignment,
+                     &request->slabs[acquired_count]);
+    if (iree_status_is_ok(status)) {
+      ++acquired_count;
+    }
+  }
+  if (!iree_status_is_ok(status)) {
+    for (iree_host_size_t i = 0; i < acquired_count; ++i) {
+      release_slab(provider, &request->slabs[i]);
+    }
+    memset(request->slabs, 0, request->count * sizeof(*request->slabs));
+  }
+  request->completion.fn(request->completion.user_data, status);
+}
+
+void iree_hal_slab_provider_release_slabs_inline(
+    iree_hal_slab_provider_t* provider,
+    iree_hal_slab_release_request_t* request,
+    void (*release_slab)(iree_hal_slab_provider_t* provider,
+                         const iree_hal_slab_t* slab)) {
+  for (iree_host_size_t i = 0; i < request->count; ++i) {
+    release_slab(provider, &request->slabs[i]);
+  }
+  request->completion.fn(request->completion.user_data);
+}
+
+// The mutex joins the callback's final notification access before stack
+// storage can disappear. Only explicit synchronous conveniences use this.
+typedef struct iree_hal_slab_provider_sync_t {
+  // Protects terminal publication and the notification's last access.
+  iree_slim_mutex_t mutex;
+  // Wakes the synchronous caller after completion.
+  iree_notification_t notification;
+  // True after the callback has published the terminal result.
+  bool complete;
+  // Owned acquisition failure, transferred to the caller.
+  iree_status_t status;
+} iree_hal_slab_provider_sync_t;
+
+static void iree_hal_slab_provider_sync_acquired(void* user_data,
+                                                 iree_status_t status) {
+  iree_hal_slab_provider_sync_t* call = user_data;
+  iree_slim_mutex_lock(&call->mutex);
+  call->status = status;
+  call->complete = true;
+  iree_notification_post(&call->notification, IREE_ALL_WAITERS);
+  iree_slim_mutex_unlock(&call->mutex);
+}
+
+static void iree_hal_slab_provider_sync_released(void* user_data) {
+  iree_hal_slab_provider_sync_acquired(user_data, iree_ok_status());
+}
+
+static bool iree_hal_slab_provider_sync_is_complete(void* user_data) {
+  iree_hal_slab_provider_sync_t* call = user_data;
+  iree_slim_mutex_lock(&call->mutex);
+  const bool complete = call->complete;
+  iree_slim_mutex_unlock(&call->mutex);
+  return complete;
+}
+
+iree_status_t iree_hal_slab_provider_acquire_slab_sync(
     iree_hal_slab_provider_t* provider, iree_device_size_t min_length,
     iree_device_size_t min_alignment, iree_hal_slab_t* out_slab) {
-  return provider->vtable->acquire_slab(provider, min_length, min_alignment,
-                                        out_slab);
+  iree_hal_slab_provider_sync_t call = {0};
+  iree_slim_mutex_initialize(&call.mutex);
+  iree_notification_initialize(&call.notification);
+  const iree_hal_slab_request_t geometry = {min_length, min_alignment};
+  iree_hal_slab_acquire_request_t request = {
+      .count = 1,
+      .requests = &geometry,
+      .slabs = out_slab,
+      .completion = {iree_hal_slab_provider_sync_acquired, &call},
+  };
+  iree_hal_slab_provider_acquire_slabs(provider, &request);
+  iree_notification_await(&call.notification,
+                          iree_hal_slab_provider_sync_is_complete, &call,
+                          iree_infinite_timeout());
+  iree_notification_deinitialize(&call.notification);
+  iree_slim_mutex_deinitialize(&call.mutex);
+  return call.status;
+}
+
+void iree_hal_slab_provider_release_slab_sync(
+    iree_hal_slab_provider_t* provider, const iree_hal_slab_t* slab) {
+  iree_hal_slab_provider_sync_t call = {0};
+  iree_slim_mutex_initialize(&call.mutex);
+  iree_notification_initialize(&call.notification);
+  iree_hal_slab_release_request_t request = {
+      .count = 1,
+      .slabs = slab,
+      .completion = {iree_hal_slab_provider_sync_released, &call},
+  };
+  iree_hal_slab_provider_release_slabs(provider, &request);
+  iree_notification_await(&call.notification,
+                          iree_hal_slab_provider_sync_is_complete, &call,
+                          iree_infinite_timeout());
+  iree_notification_deinitialize(&call.notification);
+  iree_slim_mutex_deinitialize(&call.mutex);
 }
 
 iree_hal_external_storage_t iree_hal_slab_provider_registration_view(
@@ -79,11 +211,6 @@ bool iree_hal_slab_provider_query_import_requirements(
   return provider->vtable->query_import_requirements &&
          provider->vtable->query_import_requirements(provider, storage_class,
                                                      out_requirements);
-}
-
-void iree_hal_slab_provider_release_slab(iree_hal_slab_provider_t* provider,
-                                         const iree_hal_slab_t* slab) {
-  provider->vtable->release_slab(provider, slab);
 }
 
 iree_status_t iree_hal_slab_provider_wrap_buffer(

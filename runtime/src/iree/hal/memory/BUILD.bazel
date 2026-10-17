@@ -352,6 +352,7 @@ iree_runtime_cc_library(
         ":asan_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal",
     ],
 )

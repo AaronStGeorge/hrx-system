@@ -1026,11 +1026,26 @@ static void iree_hal_amdgpu_slab_provider_query_properties(
   *out_properties = provider->properties;
 }
 
+static void iree_hal_amdgpu_slab_provider_acquire_slabs(
+    iree_hal_slab_provider_t* provider,
+    iree_hal_slab_acquire_request_t* request) {
+  iree_hal_slab_provider_acquire_slabs_inline(
+      provider, request, iree_hal_amdgpu_slab_provider_acquire_slab,
+      iree_hal_amdgpu_slab_provider_release_slab);
+}
+
+static void iree_hal_amdgpu_slab_provider_release_slabs(
+    iree_hal_slab_provider_t* provider,
+    iree_hal_slab_release_request_t* request) {
+  iree_hal_slab_provider_release_slabs_inline(
+      provider, request, iree_hal_amdgpu_slab_provider_release_slab);
+}
+
 static const iree_hal_slab_provider_vtable_t
     iree_hal_amdgpu_slab_provider_vtable = {
         .destroy = iree_hal_amdgpu_slab_provider_destroy,
-        .acquire_slab = iree_hal_amdgpu_slab_provider_acquire_slab,
-        .release_slab = iree_hal_amdgpu_slab_provider_release_slab,
+        .acquire_slabs = iree_hal_amdgpu_slab_provider_acquire_slabs,
+        .release_slabs = iree_hal_amdgpu_slab_provider_release_slabs,
         .wrap_buffer = iree_hal_amdgpu_slab_provider_wrap_buffer,
         .validate_asan_options =
             iree_hal_amdgpu_slab_provider_validate_asan_options,

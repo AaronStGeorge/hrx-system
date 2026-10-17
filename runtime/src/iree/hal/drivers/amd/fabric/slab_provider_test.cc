@@ -394,7 +394,7 @@ TEST_F(SlabProviderTest, PublishesRangedBindingsAndCacheControl) {
   EXPECT_EQ(properties.maintenance_alignment, 64u);
 
   iree_hal_slab_t slab = {};
-  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab(
+  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
       provider_, 100, /*min_alignment=*/256, &slab));
   EXPECT_EQ(slab.length, 100u);
   ASSERT_NE(slab.base_ptr, nullptr);
@@ -454,7 +454,7 @@ TEST_F(SlabProviderTest, PublishesRangedBindingsAndCacheControl) {
   iree_hal_buffer_release(buffer);
   EXPECT_EQ(release_count, 1);
   EXPECT_EQ(native_.destroy_count, 0);
-  iree_hal_slab_provider_release_slab(provider_, &slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &slab);
   EXPECT_EQ(native_.unmap_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
 
@@ -468,13 +468,13 @@ TEST_F(SlabProviderTest, PublishesRangedBindingsAndCacheControl) {
 TEST_F(SlabProviderTest, NativeDestroyFailureLeaksWithoutAborting) {
   native_.fail_memory_destroy = true;
   iree_hal_slab_t slab = {};
-  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab(
+  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
       provider_, 64, /*min_alignment=*/1, &slab));
   ASSERT_EQ(native_.created_lengths.size(), 1u);
   EXPECT_EQ(native_.created_lengths[0], 64u);
   ASSERT_EQ(native_.created_alignments.size(), 1u);
   EXPECT_EQ(native_.created_alignments[0], 64u);
-  iree_hal_slab_provider_release_slab(provider_, &slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &slab);
   EXPECT_EQ(native_.unmap_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
 }
@@ -482,7 +482,8 @@ TEST_F(SlabProviderTest, NativeDestroyFailureLeaksWithoutAborting) {
 TEST_F(SlabProviderTest, DeviceOnlyBackingHasNoHostMappingOrSlot) {
   CreateProvider(0);
   iree_hal_slab_t slab = {};
-  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab(provider_, 64, 64, &slab));
+  IREE_ASSERT_OK(
+      iree_hal_slab_provider_acquire_slab_sync(provider_, 64, 64, &slab));
   EXPECT_EQ(slab.base_ptr, nullptr);
   EXPECT_EQ(native_.map_count, 0);
   iree_hal_buffer_t* buffer = nullptr;
@@ -501,7 +502,7 @@ TEST_F(SlabProviderTest, DeviceOnlyBackingHasNoHostMappingOrSlot) {
                 .device_address,
             UINT64_C(0x110000) + 64 + 8);
   iree_hal_buffer_release(buffer);
-  iree_hal_slab_provider_release_slab(provider_, &slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &slab);
   EXPECT_EQ(native_.unmap_count, 0);
   EXPECT_EQ(native_.destroy_count, 1);
 }
@@ -511,7 +512,7 @@ TEST_F(SlabProviderTest, FailedBindingReleasesMappingAndBacking) {
   iree_hal_slab_t slab = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_RESOURCE_EXHAUSTED,
-      iree_hal_slab_provider_acquire_slab(provider_, 64, 64, &slab));
+      iree_hal_slab_provider_acquire_slab_sync(provider_, 64, 64, &slab));
   EXPECT_EQ(slab.provider_handle, 0u);
   EXPECT_EQ(native_.map_count, 1);
   EXPECT_EQ(native_.unmap_count, 1);
@@ -568,7 +569,7 @@ TEST_F(SlabProviderTest, RegisteredStorageUsesOnlyAuthorizedEnvelope) {
   EXPECT_EQ(native_.destroy_count, 0);
   iree_hal_buffer_release(subspan);
   iree_hal_buffer_release(buffer);
-  iree_hal_slab_provider_release_slab(provider_, &imported.slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab);
   EXPECT_EQ(native_.unmap_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
   bytes[88] = 123;
@@ -629,7 +630,7 @@ TEST_F(SlabProviderTest, FailedRegistrationPublicationPreservesCallerStorage) {
   native_.fail_second_address = false;
   IREE_ASSERT_OK(
       iree_hal_slab_provider_import_slab(provider_, &storage, &imported));
-  iree_hal_slab_provider_release_slab(provider_, &imported.slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab);
   EXPECT_EQ(release_count, 0);
   iree_hal_external_storage_release(&storage);
   EXPECT_EQ(release_count, 1);
@@ -725,7 +726,7 @@ TEST_P(NativeTransportTest, TransactionalImportAndIndependentExport) {
   ASSERT_NE(exported.release, nullptr);
   iree_hal_buffer_release(subspan);
   iree_hal_buffer_release(buffer);
-  iree_hal_slab_provider_release_slab(provider_, &imported.slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab);
   EXPECT_EQ(native_.destroy_count, 2);
   EXPECT_EQ(native_.export_count, 1);
   EXPECT_EQ(native_.release_export_count, 0);
