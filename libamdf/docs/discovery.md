@@ -10,7 +10,7 @@ Linux and Windows use the same public contracts.
 | Boundary | Result | Native cost and ownership |
 | --- | --- | --- |
 | `amdf_query_api`, `query_extension` | Immutable versioned tables for the services compiled into the library. | No allocation, system call, discovery, dependent-library loading or device activation. Tables remain valid for the library lifetime. |
-| `instance_create` | Explicit lifetime root and native lifetime policy. | Host bookkeeping; shared driver connections are acquired when their devices are explicitly created. |
+| `instance_create` | Explicit lifetime root and native lifetime policy. | Host bookkeeping and optional host-memory service discovery; shared GPU/XDNA driver connections are acquired when their devices are explicitly created. |
 | `endpoint_enumerate`, `endpoint_open` | Selectable AMD endpoints and cached passive metadata. | Bounded discovery and metadata queries, including OS metadata handles where needed. No execution device, VM, workload context, paging queue or device allocation. |
 | Family `device_create` | The selected live device and its achieved capabilities. | Native interface qualification and device-specific execution or memory state. Shared driver connections belong to the instance. |
 | Memory, context and queue creation | Resources requested by the workload. | Explicit native allocation, mapping, residency and scheduling-context setup at their owning boundaries. |
