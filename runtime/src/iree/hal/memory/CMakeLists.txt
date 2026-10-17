@@ -512,6 +512,26 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
+iree_cc_binary_benchmark(
+  NAME
+    pool_composition_benchmark
+  SRCS
+    "pool_composition_benchmark.cc"
+  DEPS
+    ::cpu_slab_provider
+    ::fixed_block_pool
+    ::passthrough_pool
+    ::slab_cache
+    ::tlsf_pool
+    iree::async
+    iree::async::platform
+    iree::base
+    iree::hal
+    iree::testing::benchmark_main
+    iree::third_party::google_benchmark
+  TESTONLY
+)
+
 iree_cc_test(
   NAME
     tlsf_pool_concurrency_test
