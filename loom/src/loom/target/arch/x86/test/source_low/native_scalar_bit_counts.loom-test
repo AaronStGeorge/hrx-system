@@ -64,3 +64,46 @@ low.func.def target<x86.scalar.core>(@target) abi(object_function) abi_layout({s
   %unsigned = movzx.u16.gpr32 %biased
   return %biased, %ordered, %signed, %unsigned
 }
+
+// ====
+
+x86.target<scalar> @target {features = [-bmi, -popcnt, -lzcnt]}
+
+func.def target(@target) @portable_i16_counts(%input: i16) -> (i16, i16, i16) {
+  %leading = scalar.ctlzi %input : i16
+  %trailing = scalar.cttzi %input : i16
+  %population = scalar.ctpopi %input : i16
+  func.return %leading, %trailing, %population : i16, i16, i16
+}
+
+// ----
+low.func.def target<x86.scalar.core>(@target) abi(object_function) abi_layout({signature = (i16) -> (i16, i16, i16)}) @portable_i16_counts(%input: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.gpr32>, reg<x86.gpr32>) asm {
+  %26 = movzx.u16.gpr32 %input
+  %27 = bsr.gpr32 %26
+  %28 = xor.imm.gpr32 %27 {imm32 = 31}
+  %29 = mov.imm32 32
+  %30 = cmp.select.imm.gpr32.gpr32 %26, %29, %28, 0, "eq"
+  %31 = copy %30 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %leading = add.imm.gpr32 %31 {imm32 = -16}
+  %33 = copy %26 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %34 = or.imm.gpr32 %33 {imm32 = 65536}
+  %35 = bsf.gpr32 %34
+  %trailing = cmp.select.imm.gpr32.gpr32 %34, %29, %35, 0, "eq"
+  %38 = copy %26 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %39 = shr.imm.gpr32 %38 {shift = 1}
+  %40 = and.imm.gpr32 %39 {imm32 = 1431655765}
+  %41 = copy %26 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %42 = sub.gpr32 %41, %40
+  %43 = copy %42 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %44 = and.imm.gpr32 %43 {imm32 = 858993459}
+  %45 = shr.imm.gpr32 %42 {shift = 2}
+  %46 = and.imm.gpr32 %45 {imm32 = 858993459}
+  %47 = add.gpr32 %44, %46
+  %48 = copy %47 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %49 = shr.imm.gpr32 %48 {shift = 4}
+  %50 = add.gpr32 %47, %49
+  %51 = and.imm.gpr32 %50 {imm32 = 252645135}
+  %52 = imul.imm.gpr32 %51 {imm32 = 16843009}
+  %population = shr.imm.gpr32 %52 {shift = 24}
+  return %leading, %trailing, %population
+}

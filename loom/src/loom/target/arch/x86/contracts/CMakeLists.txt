@@ -78,6 +78,7 @@ loom_target_contract_cc_libraries(
   CONTRACT_DEPS
     loom::target::contract
   LOWER_RULE_DEPS
+    ::instruction_strings
     loom::codegen::low::lower
     loom::ops::buffer
     loom::ops::cfg

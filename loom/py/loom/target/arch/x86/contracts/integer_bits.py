@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import bitwise as scalar
@@ -273,24 +274,39 @@ def scalar_integer_bit_count_rules(
     descriptor_lookup: Callable[[str], Descriptor],
 ) -> tuple[DescriptorRule, ...]:
     """Returns native and baseline recipes for scalar and index count ops."""
+    native_cases = tuple(
+        DirectDescriptorCase(
+            index_op if type_pattern == _INDEX else scalar_op,
+            descriptor_lookup(f"x86.scalar.{operation}.gpr{bit_count}"),
+            type_pattern,
+            semantic_tag=f"integer.bit_count.{semantic}.i{bit_count}",
+            priority=1,
+        )
+        for type_pattern, bit_count in (
+            (_I16, 16),
+            (_I32, 32),
+            (_I64, 64),
+            (_INDEX, 64),
+        )
+        for operation, semantic, scalar_op, index_op in _NATIVE_COUNT_OPERATIONS
+    )
     native_rules = unary_descriptor_rules(
-        tuple(
-            DirectDescriptorCase(
-                index_op if type_pattern == _INDEX else scalar_op,
-                descriptor_lookup(f"x86.scalar.{operation}.gpr{bit_count}"),
-                type_pattern,
-                semantic_tag=f"integer.bit_count.{semantic}.i{bit_count}",
-                priority=1,
-            )
-            for type_pattern, bit_count in (
-                (_I16, 16),
-                (_I32, 32),
-                (_I64, 64),
-                (_INDEX, 64),
-            )
-            for operation, semantic, scalar_op, index_op in _NATIVE_COUNT_OPERATIONS
-        ),
+        native_cases,
         form=DescriptorEmitForm.OP,
+    )
+    # Native counts are optional realizations. Guarding the primary descriptor
+    # lets target legalization use the shared width legalization when its ISA
+    # feature is unavailable; unguarded primaries deliberately survive target
+    # queries so source-to-Low can diagnose a missing required feature.
+    native_rules = tuple(
+        replace(
+            rule,
+            guards=(
+                *rule.guards,
+                Guard.descriptor_available(case.descriptor),
+            ),
+        )
+        for case, rule in zip(native_cases, native_rules, strict=True)
     )
     fallback_rules = tuple(
         _bit_count_rule(source_op, type_pattern, bit_count, descriptor_lookup)

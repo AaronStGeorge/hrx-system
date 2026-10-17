@@ -114,6 +114,14 @@ def test_scalar_and_index_bit_count_rules_cover_native_and_fallback_families() -
     native = {
         (rule.source_op, _result_type(rule)) for rule in rules if rule.priority == 1
     }
+    for rule in rules:
+        if rule.priority != 1:
+            continue
+        assert tuple(
+            guard.descriptor
+            for guard in rule.guards
+            if guard.kind is GuardKind.DESCRIPTOR_AVAILABLE
+        ) == (rule.descriptor,)
     expected_native = {
         (source_op, type_pattern)
         for type_pattern, source_ops in (
