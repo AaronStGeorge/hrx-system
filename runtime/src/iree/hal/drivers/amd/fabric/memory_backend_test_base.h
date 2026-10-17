@@ -773,9 +773,10 @@ class MemoryBackendTest : public ::testing::Test {
     ASSERT_NE(host_node_id_, IREE_NUMA_NODE_ANY);
     iree_thread_affinity_t affinity;
     iree_thread_affinity_set_group_any(host_node_id_, &affinity);
+    std::vector<iree_thread_affinity_t> affinities(cpu_worker_count_, affinity);
     iree_task_topology_t topology;
     IREE_ASSERT_OK(iree_task_topology_initialize_from_thread_affinities(
-        1, &affinity, &topology));
+        affinities.size(), affinities.data(), &topology));
     iree_task_executor_options_t executor_options;
     iree_task_executor_options_initialize(&executor_options);
     iree_status_t status = iree_task_executor_create(
@@ -939,6 +940,9 @@ class MemoryBackendTest : public ::testing::Test {
   std::array<const iree_hal_queue_family_t*, 2> families_ = {};
   // Real CPU participant, ordered before native devices in the group.
   iree_hal_device_t* cpu_device_ = nullptr;
+  // Existing CPU workers available for native mapping and independent
+  // execution.
+  iree_host_size_t cpu_worker_count_ = 1;
   // Real physical node shared by the CPU participant's queue workers.
   uint32_t host_node_id_ = IREE_NUMA_NODE_ANY;
   // Existing CPU worker, allocator and proactor services.

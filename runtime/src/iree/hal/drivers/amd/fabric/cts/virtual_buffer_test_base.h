@@ -213,7 +213,7 @@ class FabricVirtualBufferTest
         .families = &family_,
     };
     iree_hal_amd_fabric_memory_backend_initialize(
-        device_, &memory_options, host->notification, host->maintenance,
+        device_, &memory_options, host->notification, /*maintenance=*/nullptr,
         host->epoch_query, &backend_);
     iree_hal_device_group_builder_t builder;
     iree_hal_device_group_builder_initialize(&builder,

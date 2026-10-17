@@ -224,9 +224,11 @@ static void iree_hal_passthrough_pool_release_body(
   }
   iree_allocator_t host_allocator = pool->host_allocator;
   iree_hal_memory_trace_deinitialize(&pool->trace);
-  iree_hal_slab_provider_release(pool->slab_provider);
   iree_async_frontier_tracker_release(pool->base.frontier_tracker);
   iree_hal_pool_deinitialize(&pool->base);
+  // The concrete provider may own the native progress context borrowed by
+  // notifications. Release those views before their native lifetime owner.
+  iree_hal_slab_provider_release(pool->slab_provider);
   iree_status_free((iree_status_t)iree_atomic_load(&pool->failure_status,
                                                    iree_memory_order_relaxed));
   iree_slim_mutex_deinitialize(&pool->retirement_mutex);
@@ -277,6 +279,10 @@ static void iree_hal_passthrough_pool_release_completed(void* user_data) {
   }
   iree_hal_passthrough_pool_unlink_allocation(pool, state);
   iree_allocator_free(pool->host_allocator, state);
+  // Physical capacity becomes available only after the native free returns.
+  // Budget observers must recheck then, not just at logical reservation return.
+  iree_async_notification_signal_if_observed(pool->base.notification,
+                                             IREE_ALL_WAITERS);
   iree_hal_passthrough_pool_release_body(pool);
 }
 

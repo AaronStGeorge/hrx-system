@@ -712,8 +712,7 @@ static void iree_hal_task_queue_op_release_resources(
 // Discards an operation that could not be captured for submission. Signal
 // semaphores are released without modification because no queue work became
 // visible to the caller.
-static void iree_hal_task_queue_op_discard(
-    iree_hal_task_queue_op_t* operation) {
+void iree_hal_task_queue_op_discard(iree_hal_task_queue_op_t* operation) {
   iree_hal_task_queue_debug_record_destroy(operation->queue, operation,
                                            IREE_STATUS_CANCELLED);
   iree_hal_task_queue_alloca_cleanup(operation);
@@ -2842,7 +2841,6 @@ static iree_status_t iree_hal_task_queue_process_drain(
       status = iree_hal_task_queue_drain_host_call(queue, operation);
       break;
     case IREE_HAL_TASK_QUEUE_OP_MAP:
-      iree_hal_task_queue_profile_start_host_execution(operation);
       iree_hal_task_queue_issue_map(operation);
       break;
     case IREE_HAL_TASK_QUEUE_OP_ALLOCA:
@@ -2998,7 +2996,6 @@ iree_status_t iree_hal_task_queue_initialize(
   out_queue->executor = params->executor;
   iree_task_executor_retain(out_queue->executor);
   out_queue->proactor = params->proactor;
-  out_queue->memory_maintenance = params->memory_maintenance;
   iree_atomic_store(&out_queue->epoch, 0, iree_memory_order_relaxed);
   iree_atomic_store(&out_queue->shutdown_phase,
                     IREE_HAL_TASK_QUEUE_SHUTDOWN_PHASE_RUNNING,

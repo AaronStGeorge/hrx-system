@@ -38,7 +38,6 @@ iree_cc_library(
     iree::hal::drivers::task::executable
     iree::hal::drivers::task::profile
     iree::hal::drivers::task::transient_buffer
-    iree::hal::memory::maintenance
     iree::hal::utils::files
     iree::hal::utils::resource_set
     iree::task
@@ -84,6 +83,7 @@ iree_cc_test(
     iree::hal
     iree::hal::cts::util::pool_test_util
     iree::hal::cts::util::test_base
+    iree::hal::drivers::task::allocation_queue
     iree::hal::drivers::task::device
     iree::hal::memory::cpu_slab_provider
     iree::hal::memory::fixed_block_pool

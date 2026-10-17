@@ -12,7 +12,7 @@
 // wake_budget == 1 control process pops operations and handles them by type:
 // barriers, host calls, and allocations are handled inline; command buffers are
 // filled into recording items and pushed to the compute process's pending list.
-// Mapping batches transfer to the device's existing cold memory executor.
+// Mapping batches run as finite processes on the existing executor workers.
 //
 // The wake_budget > 1 compute process drains recording items cooperatively
 // across all workers via the block processor. It occupies a single compute slot
@@ -39,7 +39,6 @@
 #include "iree/hal/drivers/task/command/block_processor.h"
 #include "iree/hal/drivers/task/profile.h"
 #include "iree/hal/drivers/task/queue/memory_barrier.h"
-#include "iree/hal/memory/maintenance.h"
 #include "iree/task/executor.h"
 #include "iree/task/process.h"
 #include "iree/task/scope.h"
@@ -109,7 +108,7 @@ enum iree_hal_task_queue_op_flag_bits_e {
   IREE_HAL_TASK_QUEUE_OP_FLAG_BEFORE_DEFAULT = 1u << 5,
   // Conservative publication of the one-shot operation's written operands.
   IREE_HAL_TASK_QUEUE_OP_FLAG_AFTER_DEFAULT = 1u << 6,
-  // Successful file I/O returned from the proactor for worker maintenance.
+  // Successful file I/O returned from the proactor for cache operations.
   IREE_HAL_TASK_QUEUE_OP_FLAG_COMPLETING_IO = 1u << 7,
 };
 
@@ -209,13 +208,8 @@ struct iree_hal_task_queue_op_t {
       // Flags controlling callback ordering and completion.
       iree_hal_host_call_flags_t flags;
     } host_call;
-    // Captured native mapping batch executed by the existing memory worker.
-    struct {
-      // Entry owned by the maintenance queue until its callback begins.
-      iree_hal_memory_maintenance_entry_t entry;
-      // Prepared callback whose resource is retained by the operation.
-      iree_hal_host_call_t call;
-    } mapping;
+    // Arena-owned native mapping process, independent of the control process.
+    struct iree_hal_task_queue_mapping_t* mapping;
     struct {
       // Borrowed pool used for the complete allocation transaction.
       iree_hal_pool_t* pool;
@@ -505,9 +499,6 @@ typedef struct iree_hal_task_queue_create_params_t {
   // Local or explicitly unplaced proactor borrowed from the device's pool.
   iree_async_proactor_t* proactor;
 
-  // Device-owned cold memory executor, borrowed for the queue lifetime.
-  iree_hal_memory_maintenance_t* memory_maintenance;
-
   // Aggregate transfer payload length selecting direct or recorded execution.
   iree_device_size_t inline_transfer_threshold;
 
@@ -566,10 +557,6 @@ struct iree_hal_task_queue_t {
   // unplaced service; dynamic queues reuse their executor's selected service.
   // Valid as long as the device (which retains the proactor pool) is alive.
   iree_async_proactor_t* proactor;
-
-  // Device-owned cold memory executor shared by provisioned and dynamic queues.
-  // Queue operation quiescence precedes the device's final owner release.
-  iree_hal_memory_maintenance_t* memory_maintenance;
 
   // Shared frontier tracker for cross-device causal ordering.
   // Borrowed from the device after topology assignment.
@@ -781,7 +768,7 @@ iree_status_t iree_hal_task_queue_submit_map(
     const iree_hal_memory_mapping_t* mappings,
     iree_hal_queue_map_flags_t flags);
 
-// Transfers a ready mapping operation to the existing cold memory owner.
+// Schedules a ready native mapping process on the existing executor.
 // The operation may complete and free itself before this call returns.
 void iree_hal_task_queue_issue_map(iree_hal_task_queue_op_t* operation);
 
@@ -805,6 +792,9 @@ iree_status_t iree_hal_task_queue_make_shutdown_status(void);
 
 // Transfers one ready operation to the existing queue process.
 void iree_hal_task_queue_schedule_ready(iree_hal_task_queue_op_t* operation);
+
+// Discards rejected capture without publishing signals. Consumes the operation.
+void iree_hal_task_queue_op_discard(iree_hal_task_queue_op_t* operation);
 
 // Retires an operation and fails its signals on error, without advancing the
 // queue frontier. Consumes the operation and status.
