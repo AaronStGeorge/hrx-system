@@ -385,6 +385,9 @@ class HttpRouterTest : public ::testing::TestWithParam<int> {
     iree_task_topology_initialize_from_group_count(GetParam(), &topology);
     iree_task_executor_options_t executor_options;
     iree_task_executor_options_initialize(&executor_options);
+    // Match the serving host's worker stack budget for tokenizer and other
+    // application CPU work.
+    executor_options.worker_stack_size = 2 * 1024 * 1024;
     iree_status_t status = iree_task_executor_create(
         executor_options, &topology, iree_allocator_system(), &executor_);
     iree_task_topology_deinitialize(&topology);

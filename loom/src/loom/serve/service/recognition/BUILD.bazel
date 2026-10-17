@@ -266,7 +266,7 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/execution",
         "//loom/src/loom/serve/runtime/host",
         "//loom/src/loom/serve/runtime/parameter:residency",
-        "//loom/src/loom/serve/testing:maintenance_gate",
+        "//loom/src/loom/serve/testing:native_allocator",
         "//loom/src/loom/serve/testing:service_application",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",

@@ -285,7 +285,8 @@ loom_cc_library(
     "elastic_storage_test.cc"
   DEPS
     ::source_service_fixture
-    loom::serve::testing::maintenance_gate
+    loom::serve::testing::native_allocator
+    loom::serve::testing::service_application
   TESTONLY
   ALWAYSLINK
   PUBLIC

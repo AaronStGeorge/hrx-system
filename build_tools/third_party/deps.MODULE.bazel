@@ -79,6 +79,8 @@ http_archive(
     build_file = "//build_tools/third_party/tracy_client:tracy_client.BUILD.bazel",
     patch_args = ["-p1"],
     patches = [
+        "//build_tools/third_party/tracy_client:allocator_initialization.patch",
+        "//build_tools/third_party/tracy_client:windows_diagnostics.patch",
         "//build_tools/third_party/tracy_client:worker_signal_mask.patch",
         "//build_tools/third_party/tracy_client:instruction_symbols.patch",
     ],

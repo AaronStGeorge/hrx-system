@@ -35,8 +35,10 @@ struct loom_serve_execution_t {
   loom_serve_execution_timeline_t feedback;
   // Protects timeline reservation through queue acceptance, never device waits.
   iree_slim_mutex_t mutex;
-  // Raw allocation/pool captures, transferable to the shared workspace owner.
+  // Transient allocation/pool captures governing workspace activity.
   loom_serve_workspace_scope_t* scope;
+  // Persistent allocation/pool captures, independent of workspace activity.
+  loom_serve_workspace_scope_t* storage_scope;
   // Model-visible views captured by execution and host payload transfers.
   loom_serve_retirement_t consumers;
 };
@@ -50,6 +52,7 @@ void loom_serve_execution_retain(loom_serve_execution_t* execution) {
 void loom_serve_execution_release(loom_serve_execution_t* execution) {
   if (execution && iree_atomic_ref_count_dec(&execution->ref_count) == 1) {
     loom_serve_retirement_deinitialize(&execution->consumers);
+    loom_serve_workspace_scope_retire(execution->storage_scope);
     loom_serve_workspace_scope_retire(execution->scope);
     loom_serve_workspace_release(execution->workspace);
     iree_slim_mutex_deinitialize(&execution->mutex);
@@ -119,6 +122,48 @@ iree_status_t loom_serve_execution_alloca(
   return status;
 }
 
+iree_status_t loom_serve_execution_alloca_from_pool(
+    loom_serve_execution_t* execution, iree_hal_pool_t* pool,
+    iree_host_size_t count, const iree_hal_pool_reservation_request_t* requests,
+    iree_hal_buffer_t** out_buffers) {
+  memset(out_buffers, 0, count * sizeof(*out_buffers));
+  iree_slim_mutex_lock(&execution->mutex);
+  if (execution->work.submitted_value == IREE_HAL_SEMAPHORE_MAX_VALUE) {
+    iree_slim_mutex_unlock(&execution->mutex);
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "execution timeline is exhausted");
+  }
+  uint64_t next_value = execution->work.submitted_value + 1;
+  iree_status_t status = iree_ok_status();
+  if (!execution->storage_scope) {
+    status = loom_serve_workspace_scope_allocate(execution->workspace,
+                                                 /*tracks_workspace=*/false,
+                                                 &execution->storage_scope);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_serve_workspace_scope_reserve(execution->storage_scope, count);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_queue_alloca(
+        execution->dispatch_queue,
+        (iree_hal_semaphore_list_t){1, &execution->work.semaphore,
+                                    &execution->work.submitted_value},
+        (iree_hal_semaphore_list_t){1, &execution->work.semaphore, &next_value},
+        pool, count, requests, out_buffers);
+  }
+  if (iree_status_is_ok(status)) {
+    execution->work.submitted_value = next_value;
+    for (iree_host_size_t i = 0; i < count; ++i) {
+      iree_hal_pool_retain(pool);
+      loom_serve_workspace_scope_capture(execution->storage_scope, pool,
+                                         out_buffers[i]);
+    }
+  }
+  iree_slim_mutex_unlock(&execution->mutex);
+  return status;
+}
+
 iree_status_t loom_serve_execution_dealloca(loom_serve_execution_t* execution,
                                             iree_hal_buffer_t* buffer,
                                             uint64_t* out_value) {
@@ -171,8 +216,8 @@ iree_status_t loom_serve_execution_create(
   iree_hal_queue_retain(dispatch_queue);
   execution->transfer_queue = transfer_queue;
   iree_hal_queue_retain(transfer_queue);
-  iree_status_t status =
-      loom_serve_workspace_scope_allocate(workspace, &execution->scope);
+  iree_status_t status = loom_serve_workspace_scope_allocate(
+      workspace, /*tracks_workspace=*/true, &execution->scope);
   if (iree_status_is_ok(status)) {
     status = iree_hal_semaphore_create(
         device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,

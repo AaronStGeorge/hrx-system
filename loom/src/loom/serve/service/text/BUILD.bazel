@@ -256,7 +256,8 @@ loom_cc_library(
     visibility = ["//loom/src/loom/serve:implementation"],
     deps = [
         ":source_service_fixture",
-        "//loom/src/loom/serve/testing:maintenance_gate",
+        "//loom/src/loom/serve/testing:native_allocator",
+        "//loom/src/loom/serve/testing:service_application",
     ],
     alwayslink = True,
 )

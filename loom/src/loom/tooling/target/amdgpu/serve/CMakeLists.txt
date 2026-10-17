@@ -962,7 +962,6 @@ loom_cc_test(
     iree::base
     iree::base::tooling::flags
     iree::hal
-    iree::hal::memory::maintenance
     iree::task
     iree::testing::gtest
     iree::testing::gtest_main
@@ -977,7 +976,7 @@ loom_cc_test(
     loom::serve::runtime::storage::memory
     loom::serve::testing::compiler
     loom::serve::testing::device
-    loom::serve::testing::maintenance_gate
+    loom::serve::testing::native_allocator
   ARGS
     "--weight_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/stages.loom}}"
   LABELS
@@ -1007,7 +1006,7 @@ loom_cc_test(
     loom::serve::runtime::execution
     loom::serve::runtime::storage::memory
     loom::serve::testing::device
-    loom::serve::testing::maintenance_gate
+    loom::serve::testing::native_allocator
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
     "notsan"
@@ -1037,7 +1036,7 @@ loom_cc_test(
     loom::serve::runtime::storage::memory
     loom::serve::runtime::storage::relocation
     loom::serve::testing::device
-    loom::serve::testing::maintenance_gate
+    loom::serve::testing::native_allocator
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
     "notsan"
