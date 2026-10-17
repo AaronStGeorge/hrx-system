@@ -19,7 +19,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/serve/service/recognition/model.h"
 #include "loom/serve/service/recognition/service.h"
-#include "loom/serve/testing/maintenance_gate.h"
+#include "loom/serve/testing/native_allocator.h"
 #include "loom/serve/testing/service_application.h"
 
 IREE_FLAG(string, model_source, "", "Recognition fixture bootstrap source.");
@@ -448,7 +448,7 @@ TEST_F(SourceRecognitionServiceTest, ShutdownCollectsAcceptedOriginalMembers) {
   EXPECT_EQ(submitted_, 1u);
 }
 
-TEST_F(SourceRecognitionServiceTest, CloseRetainsRowThroughPhysicalRelease) {
+TEST_F(SourceRecognitionServiceTest, CloseReturnsRowBeforeNativeCapacity) {
   if (!FLAG_test_elastic) {
     GTEST_SKIP() << "Requires asynchronous elastic backing";
   }
@@ -457,35 +457,35 @@ TEST_F(SourceRecognitionServiceTest, CloseRetainsRowThroughPhysicalRelease) {
   ASSERT_NO_FATAL_FAILURE(Write(stream, {1}, 1));
   ASSERT_NO_FATAL_FAILURE(Settle());
 
-  loom_serve::testing::MaintenanceGate gate(
-      loom_serve_device_storage_pool(device_)->maintenance);
+  loom_serve::testing::ScopedNativeHold gate(device_,
+                                             IREE_ALLOCATOR_COMMAND_FREE);
   loom_serve_recognition_stream_close(stream);
   bool progress = false;
   IREE_ASSERT_OK(loom_serve_recognition_service_advance(service_, false, false,
                                                         &progress));
   EXPECT_TRUE(progress);
-  ASSERT_TRUE(loom_serve_recognition_service_is_pending(service_));
-  EXPECT_EQ(pending_releases_, 1u);
-  EXPECT_EQ(released_[0], 0u);
+  gate.WaitEntered();
+  ASSERT_NO_FATAL_FAILURE(AdvanceUntil([&] { return released_[0] == 1; }));
+  EXPECT_GT(
+      loom_serve_memory_pool_statistics(loom_serve_device_memory_pool(device_))
+          .releasing_bytes,
+      0u);
 
   loom_serve_recognition_stream_t* peer = nullptr;
   ASSERT_NO_FATAL_FAILURE(Open(&peer));
-  EXPECT_NE(peer, stream);
+  EXPECT_EQ(peer, stream);
+  const auto previous_offers = offers_[0].load();
   ASSERT_NO_FATAL_FAILURE(Write(peer, {2}, 1));
   loom_serve_recognition_stream_finish(peer);
   IREE_ASSERT_OK(loom_serve_recognition_service_advance(service_, false, false,
                                                         &progress));
-  EXPECT_FALSE(progress);
-  EXPECT_EQ(offers_[1].load(), 0u);
-  EXPECT_EQ(released_[0], 0u);
+  EXPECT_EQ(offers_[0].load(), previous_offers);
+  EXPECT_EQ(released_[0], 1u);
 
   gate.Release();
   ASSERT_NO_FATAL_FAILURE(AdvanceUntil([&] { return Consume(peer); }));
   ASSERT_NO_FATAL_FAILURE(CheckFinal(peer, "C"));
   EXPECT_EQ(released_[0], 1u);
-  loom_serve_recognition_stream_t* replacement = nullptr;
-  ASSERT_NO_FATAL_FAILURE(Open(&replacement));
-  EXPECT_EQ(replacement, stream);
 }
 
 TEST_F(SourceRecognitionServiceTest,

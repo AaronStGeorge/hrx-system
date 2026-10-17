@@ -119,6 +119,40 @@ iree_status_t loom_serve_execution_alloca(
   return status;
 }
 
+iree_status_t loom_serve_execution_alloca_from_pool(
+    loom_serve_execution_t* execution, iree_hal_pool_t* pool,
+    iree_host_size_t count, const iree_hal_pool_reservation_request_t* requests,
+    iree_hal_buffer_t** out_buffers) {
+  memset(out_buffers, 0, count * sizeof(*out_buffers));
+  iree_slim_mutex_lock(&execution->mutex);
+  if (execution->work.submitted_value == IREE_HAL_SEMAPHORE_MAX_VALUE) {
+    iree_slim_mutex_unlock(&execution->mutex);
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "execution timeline is exhausted");
+  }
+  uint64_t next_value = execution->work.submitted_value + 1;
+  iree_status_t status =
+      loom_serve_workspace_scope_reserve(execution->scope, count);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_queue_alloca(
+        execution->dispatch_queue,
+        (iree_hal_semaphore_list_t){1, &execution->work.semaphore,
+                                    &execution->work.submitted_value},
+        (iree_hal_semaphore_list_t){1, &execution->work.semaphore, &next_value},
+        pool, count, requests, out_buffers);
+  }
+  if (iree_status_is_ok(status)) {
+    execution->work.submitted_value = next_value;
+    for (iree_host_size_t i = 0; i < count; ++i) {
+      iree_hal_pool_retain(pool);
+      loom_serve_workspace_scope_capture(execution->scope, pool,
+                                         out_buffers[i]);
+    }
+  }
+  iree_slim_mutex_unlock(&execution->mutex);
+  return status;
+}
+
 iree_status_t loom_serve_execution_dealloca(loom_serve_execution_t* execution,
                                             iree_hal_buffer_t* buffer,
                                             uint64_t* out_value) {

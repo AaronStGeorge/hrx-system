@@ -27,8 +27,8 @@
 #include "loom/serve/service/speech/service.h"
 #include "loom/serve/telemetry/latency.h"
 #include "loom/serve/testing/http_harness.h"
-#include "loom/serve/testing/maintenance_gate.h"
 #include "loom/serve/testing/model.h"
+#include "loom/serve/testing/native_allocator.h"
 #include "loom/serve/testing/package.h"
 #include "loom/serve/testing/service_application.h"
 #include "loom/serve/testing/stalled_http_client.h"
@@ -473,8 +473,7 @@ TEST_P(SourceSpeechServiceTest,
   IREE_ASSERT_OK(prepared);
   const auto hold_native = [&]() {
     return FLAG_test_elastic
-               ? std::make_unique<loom_serve::testing::MaintenanceGate>(
-                     loom_serve_device_storage_pool(device)->maintenance)
+               ? std::make_unique<loom_serve::testing::ScopedNativeHold>(device)
                : nullptr;
   };
   loom_serve_execution_frontier_t frontier;
@@ -677,6 +676,8 @@ TEST_P(SourceSpeechServiceTest, CohortsPreserveIndependentResidentProgress) {
   }
   EXPECT_EQ(largest_cohort, 4u);
   if (FLAG_test_elastic) {
+    IREE_ASSERT_OK(
+        loom_serve_memory_pool_await(loom_serve_device_memory_pool(device)));
     const auto idle = loom_serve_device_memory_statistics(device).retained;
     // Releasing an individual row cannot trim slabs shared by live neighbors.
     // The last release reclaims input/history; reusable conditioning survives.

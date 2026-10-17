@@ -63,6 +63,11 @@ iree_status_t loom_serve_workspace_scope_allocate(
     loom_serve_workspace_t* workspace,
     loom_serve_workspace_scope_t** out_scope);
 
+// Secures capture slots before submitting an allocation batch. The caller may
+// then capture roots from any caller-selected pool without allocating metadata.
+iree_status_t loom_serve_workspace_scope_reserve(
+    loom_serve_workspace_scope_t* scope, iree_host_size_t count);
+
 // Makes room for one capture and returns a retained current pool. Queue alloca
 // follows. On queue rejection, the caller releases the pool; on acceptance,
 // capture transfers that pool reference and retains the returned allocation.
@@ -87,11 +92,11 @@ iree_hal_pool_stats_t loom_serve_workspace_statistics(
     loom_serve_workspace_t* workspace);
 
 // Returns idle backing and retired pool generations without waiting on device
-// work. Native freeing runs asynchronously on HAL's maintenance owner. Live
-// roots and their source pools remain protected. Returns the bytes still
-// retained by the logical pools after trim for budgeting further reclamation.
-// This excludes detached child slabs awaiting return to their backing cache;
-// workspace statistics may still count those until the queued sweep runs.
+// work. Logical returns propagate directly through the backing cache; native
+// freeing follows the source driver's allocation mechanism. Live roots and
+// their source pools remain protected. Returns the bytes still retained by the
+// logical pools after trim for budgeting further reclamation. Detached native
+// returns are excluded from workspace accounting.
 iree_device_size_t loom_serve_workspace_trim(loom_serve_workspace_t* workspace);
 
 // Schedules cached backing trim after all captured allocations have retired

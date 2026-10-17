@@ -78,6 +78,16 @@ iree_status_t loom_serve_execution_alloca(
     const iree_hal_pool_reservation_request_t* request,
     iree_hal_buffer_t** out_buffer);
 
+// Enqueues a batch from caller-selected persistent storage on the work
+// timeline. The caller owns each returned buffer. The shared workspace captures
+// the raw roots and their source pool through final queue/buffer retirement,
+// including early failed readiness. Subsequent domain work observes backing
+// readiness. Model-specific retirement tracking wraps these buffers separately.
+iree_status_t loom_serve_execution_alloca_from_pool(
+    loom_serve_execution_t* execution, iree_hal_pool_t* pool,
+    iree_host_size_t count, const iree_hal_pool_reservation_request_t* requests,
+    iree_hal_buffer_t** out_buffers);
+
 // Enqueues release after all preceding accepted work. Caller ownership is not
 // consumed. A synchronous rejection leaves the allocation live until its final
 // queue/caller release; it does not tear down shared queues or pools.

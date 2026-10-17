@@ -323,7 +323,7 @@ loom_cc_library(
     loom::serve::runtime::execution
     loom::serve::runtime::host
     loom::serve::runtime::parameter::residency
-    loom::serve::testing::maintenance_gate
+    loom::serve::testing::native_allocator
     loom::serve::testing::service_application
   TESTONLY
   ALWAYSLINK

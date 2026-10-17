@@ -161,7 +161,7 @@ struct loom_serve_speech_model_t {
 
 // Releases model-owned consumers, not borrowed upload/feedback payloads or the
 // storage protection those consumers still require. Partial loads use this same
-// sequence, with no submitted queue work to retire.
+// sequence and may still own accepted backing allocations.
 static void loom_serve_speech_model_release_consumers(
     loom_serve_speech_model_t* model) {
   loom_serve_program_free(model->control.program);
@@ -184,8 +184,10 @@ static void loom_serve_speech_model_release_consumers(
 void loom_serve_speech_model_retire(loom_serve_speech_model_t* model,
                                     void (*wake)(void* user_data),
                                     void* user_data) {
-  loom_serve_execution_set_retirement_observer(model->execution, wake,
-                                               user_data);
+  if (model->execution) {
+    loom_serve_execution_set_retirement_observer(model->execution, wake,
+                                                 user_data);
+  }
   for (iree_host_size_t i = 0; i < model->weights.count; ++i) {
     loom_serve_weights_set_retirement_observer(model->weights.plans[i], wake,
                                                user_data);
@@ -791,7 +793,7 @@ struct loom_serve_speech_load_t {
   iree_status_t task_status;
   // Tokenizer construction overlaps control/native compilation and indexing.
   loom_serve_tokenizer_load_t* tokenizer_load;
-  // Terminal model outcome retained until tokenizer work also retires.
+  // Terminal outcome retained until tokenizer and backing ownership retire.
   iree_status_t terminal_status;
   // Completion publication shared with workers; owner consumes under mutex.
   struct {
@@ -1009,6 +1011,16 @@ iree_status_t loom_serve_speech_load_advance(
                                       &model->tokenizer)) {
     load->terminal_status = status;
     return iree_ok_status();
+  }
+  if (!iree_status_is_ok(status)) {
+    // Binding may already have queued backing allocation. Failure of a later
+    // preparation step does not retire that accepted ownership.
+    loom_serve_speech_model_retire(model, load->event.wake,
+                                   load->event.user_data);
+    if (!loom_serve_speech_model_is_retired(model)) {
+      load->terminal_status = status;
+      return iree_ok_status();
+    }
   }
   *out_complete = load->phase == SPEECH_LOAD_COMPLETE;
   return status;

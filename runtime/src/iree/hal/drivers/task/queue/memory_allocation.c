@@ -350,8 +350,9 @@ static iree_status_t iree_hal_task_queue_drain_alloca_acquired(
       iree_hal_pool_wait_prepare(wait->capacity_wait);
       wait->kind = IREE_HAL_TASK_QUEUE_ALLOCA_MEMORY_WAIT_CAPACITY_PREPARED;
       return iree_hal_task_queue_drain_alloca_acquire(operation);
+    default:
+      IREE_CHECK_UNREACHABLE("pool acquisition must produce a terminal result");
   }
-  IREE_ASSERT_UNREACHABLE("pool acquisition must produce a terminal result");
 }
 
 static void iree_hal_task_queue_alloca_acquire_completed(

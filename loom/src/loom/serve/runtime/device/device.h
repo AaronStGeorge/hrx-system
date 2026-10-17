@@ -104,7 +104,7 @@ loom_serve_device_memory_statistics_t loom_serve_device_memory_statistics(
 // An unreachable target is not an error; statistics expose the reached extent.
 // Consumers pin parameter groups through retirement; only those already
 // retired are eligible. Does not wait for live workspace or destroy queues.
-// Detached workspace slabs awaiting return to their cache do not reduce the
+// Detached native returns do not reduce the
 // parameter budget, though statistics may still report those bytes until the
 // cache's queued sweep runs.
 // Platform unmap/free failures propagate to the owner.
