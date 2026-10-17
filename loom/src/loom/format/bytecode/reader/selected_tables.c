@@ -612,18 +612,18 @@ static iree_status_t loom_bytecode_selected_table_finish_type(
 static iree_status_t loom_bytecode_selected_table_read_location_coordinate(
     loom_bytecode_selected_table_materializer_t* materializer,
     loom_bytecode_reader_cursor_t* cursor, uint32_t source_ordinal,
-    iree_string_view_t field_name, uint16_t* out_value) {
+    iree_string_view_t field_name, uint32_t* out_value) {
   const uint64_t offset = loom_bytecode_reader_cursor_absolute_position(cursor);
   uint64_t value = 0;
   IREE_RETURN_IF_ERROR(
       loom_bytecode_reader_read_uvarint(materializer->decoder, cursor, &value));
-  if (value > UINT16_MAX) {
+  if (value > LOOM_LOCATION_COORDINATE_MAX) {
     return loom_bytecode_reader_emit_invalid_field(
         materializer->decoder, IREE_SV("LOCATIONS"), IREE_SV("location"),
         source_ordinal, field_name, offset,
-        IREE_SV("file_location_coordinate_exceeds_runtime_field_width"));
+        IREE_SV("file_location_coordinate_exceeds_supported_range"));
   }
-  *out_value = (uint16_t)value;
+  *out_value = (uint32_t)value;
   return iree_ok_status();
 }
 

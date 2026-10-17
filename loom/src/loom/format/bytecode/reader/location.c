@@ -103,23 +103,23 @@ loom_bytecode_location_decode_entry(
             validator->decoder, IREE_SV("SOURCES"), source_id,
             validator->module_view->sources.count, source_offset);
       }
-      uint16_t coordinates[4];
+      uint32_t coordinates[4];
       for (int field = 0; field < 4; ++field) {
         const uint64_t coordinate_offset =
             loom_bytecode_reader_cursor_absolute_position(&table->cursor);
         uint64_t value = 0;
         IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
             validator->decoder, &table->cursor, &value));
-        if (value > UINT16_MAX) {
+        if (value > LOOM_LOCATION_COORDINATE_MAX) {
           const iree_string_view_t field_names[] = {
               IREE_SV("start_line"), IREE_SV("start_col"), IREE_SV("end_line"),
               IREE_SV("end_col")};
           return loom_bytecode_reader_emit_invalid_field(
               validator->decoder, IREE_SV("LOCATIONS"), IREE_SV("location"),
               index, field_names[field], coordinate_offset,
-              IREE_SV("file_location_coordinate_exceeds_runtime_field_width"));
+              IREE_SV("file_location_coordinate_exceeds_supported_range"));
         }
-        coordinates[field] = (uint16_t)value;
+        coordinates[field] = (uint32_t)value;
       }
       entry.file.source_id = (loom_source_id_t)source_id;
       entry.file.start_line = coordinates[0];

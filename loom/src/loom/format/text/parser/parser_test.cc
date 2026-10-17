@@ -390,8 +390,8 @@ TEST_F(ParserTest, ParsedOpScratchFrameRejectsStorageOverflow) {
                                      (loom_tied_result_t){0}));
 
   loom_parsed_op_reset(scratch);
-  scratch->field_span_count = UINT16_MAX;
-  scratch->field_span_capacity = UINT16_MAX;
+  scratch->field_span_count = LOOM_LOCATION_FIELD_SPAN_COUNT_MAX;
+  scratch->field_span_capacity = LOOM_LOCATION_FIELD_SPAN_COUNT_MAX;
   loom_token_t token = loom_token_none();
   token.kind = LOOM_TOKEN_BARE_IDENT;
   IREE_EXPECT_STATUS_IS(

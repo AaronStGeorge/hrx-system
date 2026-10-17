@@ -348,8 +348,10 @@ iree_status_t loom_parsed_op_add_field_span(
       start_token.kind == LOOM_TOKEN_EOF) {
     return iree_ok_status();
   }
-  if (start_token.line > UINT16_MAX || start_token.column > UINT16_MAX ||
-      end_line > UINT16_MAX || end_column > UINT16_MAX) {
+  if (start_token.line > LOOM_LOCATION_COMPACT_COORDINATE_MAX ||
+      start_token.column > LOOM_LOCATION_COMPACT_COORDINATE_MAX ||
+      end_line > LOOM_LOCATION_COMPACT_COORDINATE_MAX ||
+      end_column > LOOM_LOCATION_COMPACT_COORDINATE_MAX) {
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
         "parsed op field span source location exceeds storage limit");
@@ -359,12 +361,13 @@ iree_status_t loom_parsed_op_add_field_span(
     IREE_RETURN_IF_ERROR(loom_parser_grow_bounded_array(
         arena, parsed->field_span_count,
         (iree_host_size_t)parsed->field_span_count + 1,
-        sizeof(loom_location_field_span_t), UINT16_MAX, "parsed op field span",
-        &capacity, (void**)&parsed->field_spans));
+        sizeof(loom_location_compact_field_span_t),
+        LOOM_LOCATION_FIELD_SPAN_COUNT_MAX, "parsed op field span", &capacity,
+        (void**)&parsed->field_spans));
     parsed->field_span_capacity = (uint16_t)capacity;
   }
   parsed->field_spans[parsed->field_span_count++] =
-      (loom_location_field_span_t){
+      (loom_location_compact_field_span_t){
           .kind = kind,
           .index = index,
           .start_line = (uint16_t)start_token.line,

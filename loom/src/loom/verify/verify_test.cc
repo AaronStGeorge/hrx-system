@@ -1896,7 +1896,9 @@ TEST_F(VerifyTest, DuplicateTiedResultIndexDetected) {
       },
   };
   IREE_ASSERT_OK(loom_module_attach_location_field_spans(
-      module_, location, field_spans, IREE_ARRAYSIZE(field_spans)));
+      module_, location,
+      loom_location_field_span_array_wide(field_spans,
+                                          IREE_ARRAYSIZE(field_spans))));
 
   loom_type_t result_types[] = {f32_type, f32_type};
   loom_tied_result_t tied_results[] = {

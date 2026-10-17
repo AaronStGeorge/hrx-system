@@ -585,14 +585,13 @@ iree_status_t loom_module_add_location(loom_module_t* module,
 // Attaches parser-captured field spans to a file location entry.
 //
 // |location_id| must reference an existing LOOM_LOCATION_FILE entry owned by
-// |module|. |field_spans| are copied into module-owned arena storage, so the
-// caller may pass parser scratch storage. Returns INVALID_ARGUMENT if the
-// location is not a file range, the location ID is out of range, or spans were
-// already attached to that location.
+// |module|. |field_spans.data| is copied into module-owned arena storage, so
+// the caller may pass parser scratch storage. Returns INVALID_ARGUMENT if the
+// location is not a file range, the location ID is out of range, the physical
+// span array is malformed, or spans were already attached to that location.
 iree_status_t loom_module_attach_location_field_spans(
     loom_module_t* module, loom_location_id_t location_id,
-    const loom_location_field_span_t* field_spans,
-    iree_host_size_t field_span_count);
+    loom_location_field_span_array_t field_spans);
 
 // Looks up a symbol by name. Returns the symbol index (0-based) or
 // LOOM_SYMBOL_ID_INVALID if not found. O(n) linear scan — suitable

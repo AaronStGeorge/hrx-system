@@ -94,7 +94,7 @@ struct loom_parsed_op_t {
   loom_attribute_t* attributes;
   loom_region_t** regions;
   loom_tied_result_t* tied_results;
-  loom_location_field_span_t* field_spans;
+  loom_location_compact_field_span_t* field_spans;
   uint16_t* operand_segment_counts;
 
   uint16_t operand_count;
@@ -131,7 +131,7 @@ struct loom_parsed_op_t {
   loom_attribute_t inline_attributes[LOOM_PARSED_OP_INLINE_ATTRS];
   loom_region_t* inline_regions[LOOM_PARSED_OP_INLINE_REGIONS];
   loom_tied_result_t inline_tied_results[LOOM_PARSED_OP_INLINE_TIED];
-  loom_location_field_span_t
+  loom_location_compact_field_span_t
       inline_field_spans[LOOM_PARSED_OP_INLINE_FIELD_SPANS];
   uint16_t
       inline_operand_segment_counts[LOOM_PARSED_OP_INLINE_OPERAND_SEGMENTS];
