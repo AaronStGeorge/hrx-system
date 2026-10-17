@@ -495,6 +495,56 @@ TEST_F(MemoryTest, DeviceTrimPreservesLiveWorkspaceAndMutableState) {
   }
 }
 
+TEST_F(MemoryTest, NativeAllocationPublicationDoesNotDoubleChargeAdmission) {
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, kSlabSize, 256,
+                                                    &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, 2 * kSlabSize, 256,
+                                                    &statistics[1], &second));
+  std::array<loom_serve_memory_operation_t*, 2> operations = {};
+  {
+    // The source pool frees its acquisition capture after accounting native
+    // backing and before publishing completion to the queue. Hold that real
+    // allocator boundary while the owner admits an independent commitment.
+    loom_serve::testing::ScopedNativeHold gate(native,
+                                               IREE_ALLOCATOR_COMMAND_FREE);
+    const loom_serve_memory_range_t first_range = {first, 0, kSlabSize};
+    bool admitted = false;
+    IREE_ASSERT_OK(loom_serve_memory_pool_commit_async(
+        pool, 1, &first_range, nullptr, 0, &admitted, &operations[0]));
+    ASSERT_TRUE(admitted);
+    gate.WaitEntered();
+    EXPECT_FALSE(loom_serve_memory_operation_is_complete(operations[0]));
+    const auto pending = loom_serve_memory_pool_statistics(pool);
+    EXPECT_EQ(pending.peak_bytes, kSlabSize);
+    EXPECT_EQ(pending.pending_bytes, kSlabSize);
+    EXPECT_EQ(pending.committed_bytes, 0u);
+    EXPECT_EQ(pending.releasing_bytes, 0u);
+    loom_serve_memory_admission_t admission;
+    IREE_ASSERT_OK(
+        loom_serve_memory_pool_prepare(pool, 2 * kSlabSize, &admission));
+    EXPECT_EQ(admission, LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE);
+    const loom_serve_memory_range_t second_range = {second, 0, 2 * kSlabSize};
+    IREE_EXPECT_OK(loom_serve_memory_pool_commit_async(
+        pool, 1, &second_range, nullptr, 0, &admitted, &operations[1]));
+    EXPECT_TRUE(admitted);
+    EXPECT_NE(operations[1], nullptr);
+    EXPECT_EQ(loom_serve_memory_pool_statistics(pool).pending_bytes,
+              3 * kSlabSize);
+  }
+  for (auto* operation : operations) {
+    loom_serve_memory_operation_await(operation);
+    IREE_EXPECT_OK(loom_serve_memory_operation_query_status(operation));
+    loom_serve_memory_operation_free(operation);
+  }
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  const auto completed = loom_serve_memory_pool_statistics(pool);
+  EXPECT_EQ(completed.pending_bytes, 0u);
+  EXPECT_EQ(completed.committed_bytes, 3 * kSlabSize);
+  EXPECT_EQ(completed.releasing_bytes, 0u);
+  RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
+  RoundTrip(loom_serve_virtual_buffer_handle(second), kSlabSize, 0x87654321);
+}
+
 TEST_F(MemoryTest, PendingCommitChargesBudgetAndLeavesPublishedStorageUsable) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, 3 * kSlabSize, 256,
                                                     &statistics[0], &first));

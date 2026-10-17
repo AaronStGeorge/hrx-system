@@ -32,6 +32,8 @@ struct loom_serve_memory_pool_t {
   iree_notification_t capacity_notification;
   // A committed capacity observation owns its callback storage.
   bool capacity_pending;
+  // The owner withdrew an observation after its returned backing retired.
+  bool capacity_withdrawn;
   // Callback-owned failure transferred to the serialized owner on collection.
   iree_status_t capacity_status;
   // The capacity source failed and cannot admit another observation.
@@ -46,6 +48,8 @@ struct loom_serve_memory_pool_t {
   loom_serve_memory_statistics_t statistics;
   // Pending mapping bytes whose allocation completion is already published.
   uint64_t acquired_pending_bytes;
+  // Upper bound on returned backing still charged until native disposal.
+  uint64_t retiring_bytes;
   // Owner-only list of queue operations awaiting result publication.
   loom_serve_memory_operation_t* operations;
   // Owner wake copied into operations and capacity observations.
@@ -114,7 +118,7 @@ struct loom_serve_memory_operation_t {
   iree_atomic_int32_t pending;
   // Allocation completion published once; immutable after becoming true.
   iree_atomic_int32_t acquired;
-  // The serialized owner has transferred acquired bytes out of pending credit.
+  // The serialized owner has included this allocation in known-live backing.
   bool acquired_accounted;
   // Allocation/map or unmap/deallocation completion, respectively.
   loom_serve_memory_stage_t stages[2];
@@ -170,8 +174,13 @@ static void loom_serve_memory_capacity_completed(void* user_data,
                                                  iree_status_t status) {
   loom_serve_memory_pool_t* pool = user_data;
   iree_slim_mutex_lock(&pool->capacity_mutex);
-  pool->capacity_status = status;
+  if (pool->capacity_withdrawn && iree_status_is_cancelled(status)) {
+    iree_status_ignore(status);
+    status = iree_ok_status();
+  }
+  pool->capacity_status = iree_status_join(pool->capacity_status, status);
   pool->capacity_pending = false;
+  pool->capacity_withdrawn = false;
   iree_notification_post(&pool->capacity_notification, IREE_ALL_WAITERS);
   if (pool->observer.wake) {
     pool->observer.wake(pool->observer.user_data);
@@ -187,19 +196,29 @@ static bool loom_serve_memory_capacity_is_idle(void* user_data) {
   return idle;
 }
 
-// The native source can retain payload after the last logical view returns.
-// Pending commitments remain charged until the owner publishes their result.
-static uint64_t loom_serve_memory_pool_physical_bytes(
+// Native allocation becomes visible before its queue completion. Only known
+// returns can consume retirement credit; newly allocated pending bytes cannot
+// create it. In-flight returns may already have freed their native payload and
+// therefore do not establish a lower bound on still-owned native bytes.
+static uint64_t loom_serve_memory_pool_observe_retirement(
     loom_serve_memory_pool_t* pool) {
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(pool->storage_pool, &stats);
-  return iree_max(pool->statistics.committed_bytes, stats.bytes_committed);
+  const uint64_t retained_bytes = pool->statistics.committed_bytes -
+                                  pool->statistics.releasing_bytes +
+                                  pool->acquired_pending_bytes;
+  const uint64_t retiring_bytes = stats.bytes_committed > retained_bytes
+                                      ? stats.bytes_committed - retained_bytes
+                                      : 0;
+  pool->retiring_bytes = iree_min(pool->retiring_bytes, retiring_bytes);
+  return stats.bytes_committed;
 }
 
 static uint64_t loom_serve_memory_pool_charged_bytes(
     loom_serve_memory_pool_t* pool) {
-  return loom_serve_memory_pool_physical_bytes(pool) +
-         pool->statistics.pending_bytes - pool->acquired_pending_bytes;
+  loom_serve_memory_pool_observe_retirement(pool);
+  return pool->statistics.committed_bytes + pool->statistics.pending_bytes +
+         pool->retiring_bytes;
 }
 
 // Arms a one-shot capacity wake only while native retirement can make progress.
@@ -210,11 +229,21 @@ static bool loom_serve_memory_pool_observe_capacity(
     return false;
   }
   if (!loom_serve_memory_capacity_is_idle(pool)) {
-    return true;
+    loom_serve_memory_pool_observe_retirement(pool);
+    if (!pool->retiring_bytes) {
+      // Pending acquisitions can obscure a concurrent native return. Once
+      // their ownership is published, withdraw any obsolete capacity wait;
+      // there may be no further native free to signal it.
+      iree_slim_mutex_lock(&pool->capacity_mutex);
+      pool->capacity_withdrawn = pool->capacity_pending;
+      iree_slim_mutex_unlock(&pool->capacity_mutex);
+      iree_hal_pool_wait_cancel(pool->capacity_wait);
+    }
+    return !loom_serve_memory_capacity_is_idle(pool);
   }
   iree_hal_pool_wait_prepare(pool->capacity_wait);
-  if (loom_serve_memory_pool_physical_bytes(pool) <=
-      pool->statistics.committed_bytes + pool->acquired_pending_bytes) {
+  loom_serve_memory_pool_observe_retirement(pool);
+  if (!pool->retiring_bytes) {
     iree_hal_pool_wait_abort(pool->capacity_wait);
     return false;
   }
@@ -313,11 +342,8 @@ loom_serve_memory_statistics_t loom_serve_memory_pool_statistics(
     loom_serve_memory_pool_t* pool) {
   loom_serve_memory_pool_collect(pool);
   loom_serve_memory_statistics_t statistics = pool->statistics;
-  const uint64_t physical = loom_serve_memory_pool_physical_bytes(pool);
-  const uint64_t retiring =
-      physical > statistics.committed_bytes + pool->acquired_pending_bytes
-          ? physical - statistics.committed_bytes - pool->acquired_pending_bytes
-          : 0;
+  const uint64_t physical = loom_serve_memory_pool_observe_retirement(pool);
+  const uint64_t retiring = pool->retiring_bytes;
   statistics.committed_bytes += retiring;
   statistics.releasing_bytes += retiring;
   statistics.released_bytes -= iree_min(statistics.released_bytes, retiring);
@@ -486,6 +512,7 @@ static void loom_serve_memory_slab_publish(
   if (slab->physical && !result->physical) {
     pool->statistics.committed_bytes -= pool->slab_size;
     pool->statistics.released_bytes += pool->slab_size;
+    pool->retiring_bytes += pool->slab_size;
     buffer->statistics->committed_bytes -= pool->slab_size;
     buffer->statistics->released_bytes += pool->slab_size;
   } else if (!slab->physical && result->physical) {
@@ -534,6 +561,12 @@ static void loom_serve_memory_pool_collect(loom_serve_memory_pool_t* pool) {
         edit->buffer->statistics->releasing_bytes -= pool->slab_size;
       } else {
         edit->buffer->statistics->pending_bytes -= pool->slab_size;
+        if (!edit->result.physical) {
+          // Failed acquisition can leave native disposal behind its buffer
+          // return. Transfer the pending charge until native counts prove it
+          // has retired, including the case where no backing was allocated.
+          pool->retiring_bytes += pool->slab_size;
+        }
       }
     }
     if (operation->releasing) {
