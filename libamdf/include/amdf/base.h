@@ -100,8 +100,11 @@ typedef uint32_t amdf_abi_version_t;
 /// Explicit placement of host-owned backing with qualified device accesses.
 #define AMDF_ABI_VERSION_10 ((amdf_abi_version_t)10)
 
+/// Native file-buffer views, optional memory routes, and I/O visibility sites.
+#define AMDF_ABI_VERSION_11 ((amdf_abi_version_t)11)
+
 /// The most recent ABI version described by this header.
-#define AMDF_ABI_VERSION_LATEST AMDF_ABI_VERSION_10
+#define AMDF_ABI_VERSION_LATEST AMDF_ABI_VERSION_11
 
 /// The unmangled symbol used to acquire the immutable API table.
 #define AMDF_QUERY_API_SYMBOL "amdf_query_api"

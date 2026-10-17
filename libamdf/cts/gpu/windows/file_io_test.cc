@@ -172,6 +172,9 @@ class GpuFileIoTest
                      amdf_memory_flags_t flags = AMDF_MEMORY_FLAG_HOST_COHERENT,
                      amdf_memory_access_t required_access = 0) {
     const bool registered = backing == Backing::kRegistered;
+    const amdf_memory_flags_t backing_flags =
+        AMDF_MEMORY_FLAG_HOST_VISIBLE |
+        (registered ? 0 : AMDF_MEMORY_FLAG_HOST_FILE_IO);
     const amdf_memory_device_access_t access = {
         .device = device_,
         .requirements =
@@ -186,7 +189,7 @@ class GpuFileIoTest
         AMDF_MEMORY_PROFILE_ROLE_HOST_MAP |
             (registered ? AMDF_MEMORY_PROFILE_ROLE_REGISTER
                         : AMDF_MEMORY_PROFILE_ROLE_CREATE),
-        AMDF_MEMORY_FLAG_HOST_VISIBLE, access.requirements);
+        backing_flags, access.requirements);
     ASSERT_NE(ordinal, AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN);
     amdf_memory_profile_t profile = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE,
@@ -199,6 +202,9 @@ class GpuFileIoTest
     ASSERT_EQ(QueryMemoryProfile(system_scope_, ordinal, access.requirements,
                                  &profile, &capabilities),
               AMDF_STATUS_OK);
+    ASSERT_EQ(profile.availability, AMDF_STATUS_OK);
+    ASSERT_EQ(profile.host_mapping.features & AMDF_HOST_MAPPING_FEATURE_FILE_IO,
+              registered ? 0u : AMDF_HOST_MAPPING_FEATURE_FILE_IO);
     const auto& geometry =
         registered ? profile.registration : profile.allocation;
     alignment = std::max(alignment, geometry.minimum_alignment);
@@ -219,7 +225,7 @@ class GpuFileIoTest
         .structure_size = sizeof(creation),
         .memory_profile_ordinal = ordinal,
         .access_count = 1,
-        .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
+        .required_flags = backing_flags,
         .byte_length = byte_length,
         .minimum_alignment = alignment,
         .accesses = &access,
@@ -232,6 +238,7 @@ class GpuFileIoTest
       creation.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
     }
     ASSERT_NO_FATAL_FAILURE(CreateMemory(system_scope_, creation, out_memory));
+    ASSERT_EQ((*out_memory)->host.features, profile.host_mapping.features);
     ASSERT_EQ(reinterpret_cast<uintptr_t>((*out_memory)->host.pointer) %
                   buffer_alignment_,
               0u);
@@ -596,6 +603,64 @@ TEST_P(GpuFilePoolTest,
   ASSERT_NE(pool->access_info.flags & AMDF_MEMORY_FLAG_MAPPING_SOURCE, 0u);
   ASSERT_NE(projection.address, pool->device_address);
   RecordProperty("payload_is_host_coherent", 0);
+  // A caller-owned pointer does not communicate its page provenance. This
+  // fixture knows its registered pages came from VirtualAlloc; only the owned
+  // construction can establish the portable file-view contract itself.
+  auto file_site = pool->HostSite();
+  file_site.kind = AMDF_MEMORY_SITE_KIND_FILE_IO;
+  auto gpu_site = pool->DeviceSite(family_.ordinal);
+  amdf_memory_profile_pair_query_t pair_query = {
+      .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE_PAIR_QUERY,
+      .structure_size = sizeof(pair_query),
+      .memory_profile_ordinal = pool->creation.memory_profile_ordinal,
+      .access_count = pool->creation.access_count,
+      .required_flags = pool->creation.required_flags,
+      .accesses = pool->creation.accesses,
+      .registered_host_cacheability =
+          pool->creation.registered_host_cacheability,
+  };
+  pair_query.producer.kind = AMDF_MEMORY_SITE_KIND_FILE_IO;
+  pair_query.producer.value.host_access =
+      AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
+  pair_query.consumer.kind = AMDF_MEMORY_SITE_KIND_DEVICE;
+  pair_query.consumer.value.device = {0, family_.ordinal};
+  for (uint32_t direction = 0; direction < 2; ++direction) {
+    SCOPED_TRACE(direction);
+    amdf_memory_pair_info_t prospective = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_PAIR_INFO,
+        .structure_size = sizeof(prospective),
+    };
+    auto concrete = prospective;
+    const auto expected_status =
+        backing == Backing::kAllocated
+            ? AMDF_STATUS_OK
+            : amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+    ASSERT_EQ(api_->memory_scope_query_pair_info(system_scope_, &pair_query,
+                                                 &prospective),
+              expected_status);
+    ASSERT_EQ(api_->memory_query_pair_info(&file_site, &gpu_site, &concrete),
+              expected_status);
+    if (backing == Backing::kAllocated) {
+      ASSERT_NE(concrete.flags & AMDF_MEMORY_PAIR_FLAG_SHARED_BACKING_REACHABLE,
+                0u);
+      EXPECT_EQ(concrete.flags, prospective.flags);
+      EXPECT_EQ(concrete.atomic_reach.scope_32, AMDF_ATOMIC_SCOPE_NONE);
+      EXPECT_EQ(concrete.atomic_reach.scope_64, AMDF_ATOMIC_SCOPE_NONE);
+      for (const auto* pair : {&prospective, &concrete}) {
+        const auto& file = direction == 0 ? pair->release : pair->acquire;
+        EXPECT_EQ(file.kind, AMDF_CACHE_TRANSITION_KIND_NONE);
+        EXPECT_EQ(file.executor, AMDF_CACHE_TRANSITION_EXECUTOR_NONE);
+        const auto& gpu = direction == 0 ? pair->acquire : pair->release;
+        EXPECT_EQ(gpu.kind, AMDF_CACHE_TRANSITION_KIND_GLOBAL);
+        EXPECT_EQ(gpu.executor, AMDF_CACHE_TRANSITION_EXECUTOR_QUEUE);
+        EXPECT_EQ(gpu.operation, direction == 0
+                                     ? AMDF_CACHE_OPERATION_ACQUIRE_FROM_SYSTEM
+                                     : AMDF_CACHE_OPERATION_RELEASE_TO_SYSTEM);
+      }
+    }
+    std::swap(pair_query.producer, pair_query.consumer);
+    std::swap(file_site, gpu_site);
+  }
   ASSERT_NO_FATAL_FAILURE(
       CreateMemory(AMDF_MEMORY_ACCESS_READ, 4096, &arguments));
   const uint64_t code_length =

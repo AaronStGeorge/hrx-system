@@ -222,6 +222,7 @@ amdf_status_t amdf_host_memory_prepare(
         .memory_class = AMDF_MEMORY_CLASS_SYSTEM,
         .access_count = memory->info.access_count,
         .flags = AMDF_MEMORY_FLAG_HOST_VISIBLE |
+                 (registration ? 0 : AMDF_MEMORY_FLAG_HOST_FILE_IO) |
                  (mapping_source ? AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE : 0),
         .byte_length = create_info->byte_length,
         .alignment = registration ? address & (~address + 1) : granularity,

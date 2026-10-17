@@ -109,6 +109,14 @@ one jointly supported request, in caller order. The query returns complete
 records without reserving resources or guaranteeing allocation success. An
 empty consumer array describes CPU-only storage and requires no accelerator.
 
+Each profile also reports `availability`, the cached status of its native
+prerequisites. An optional provider can be absent or inaccessible while the
+profile query itself succeeds with complete capability metadata. Callers
+retain that native status when explaining why a required route is unavailable,
+or continue selecting among other profiles when their policy permits it.
+An OK availability value reserves no capacity and does not make construction
+infallible. Construction reports changes in permissions, limits, and resources.
+
 ### Required host placement
 
 An allocating profile can advertise explicit physical placement in
@@ -937,6 +945,73 @@ dependencies establish completed use, rather than publishing writes from the
 previous reader. Reversing a visibility pair query does not establish them,
 even when both sites permit reads and writes. Native access-ownership protocols
 remain separate requirements of the selected memory transport.
+
+### Native file buffers
+
+`AMDF_MEMORY_FLAG_HOST_FILE_IO` requires backing whose ordinary `memory_map`
+view is eligible for native file I/O, including operations that pin the buffer's
+pages. Selection uses that requirement together with the GPU access, mapping
+source, alignment, and size requirements. The actual view reports
+`AMDF_HOST_MAPPING_FEATURE_FILE_IO`; host visibility or coherence alone does
+not establish this property. A reservation view does not inherit eligibility
+from a source that happened to be bound there.
+
+Owned Windows system allocations and platform-owned host allocations establish
+the property from their native page construction. Borrowing a registered
+pointer or importing an arbitrary external handle cannot establish the same
+fact from its address or cacheability. A caller with independent knowledge of
+its registered pages can use the native file API, but the generic registration
+contract does not advertise that additional guarantee.
+
+A FILE_IO pair site uses `value.host.mapping`, as a HOST site does. It describes
+OS-managed access to that file buffer: a file read produces memory, and a file
+write consumes memory. The pair retains the device's queue acquire or release,
+while the file side needs no extra CPU cache operation after successful native
+I/O completion. FILE_IO does not describe a raw NVMe controller or an RDMA
+registration. Those mechanisms require their own device-access contract.
+
+For example, after selecting and creating a file-capable pool, the caller
+queries both directions once:
+
+```c
+amdf_memory_site_t file_site = {
+    .type = AMDF_STRUCTURE_TYPE_MEMORY_SITE,
+    .structure_size = sizeof(file_site),
+    .kind = AMDF_MEMORY_SITE_KIND_FILE_IO,
+    .value.host = {.mapping = pool_mapping},
+};
+// gpu_site names this backing's exact access and queue family.
+status = api->memory_query_pair_info(&file_site, &gpu_site, &onload);
+// Handle status before using onload or proceeding to the next query.
+status = api->memory_query_pair_info(&gpu_site, &file_site, &offload);
+```
+
+The equivalent prospective query uses the same profile, backing requirements,
+consumer array, FILE_IO host permissions, and device queue family. This lets a
+pool select its visibility policy before creating slabs. The runtime sequence
+for each slot is:
+
+1. Submit the file read into its stable ordinary host view and collect native
+   completion, including the actual transferred length.
+2. Execute the reported queue acquire before consuming the slot. Execute the
+   reported queue release after GPU production and establish GPU completion.
+3. Submit the file write from that same view and collect its terminal result.
+4. Reuse the slot only after every I/O request and final reader has retired.
+
+Different slots can advance independently when their access ranges and cache
+transition boundaries permit it. Cancellation still requires collecting the
+terminal result before recycling request storage or its buffer. CPU inspection
+or modification uses the separate HOST pair and mapping-cache contract; file
+eligibility does not remove CPU visibility operations.
+
+The caller owns file handles, transfer alignment, asynchronous requests,
+completion, slot scheduling, and persistence. A completed write is not a
+durability guarantee. The backing property does not promise storage-to-VRAM
+DMA or eliminate copies inside a filesystem or storage stack. It removes the
+need for an application staging copy when the selected native file operation
+can use the returned host view. Queue-side visibility does not supply a fence
+inside an already-running shader; resident-program handoffs need a separate
+program-side protocol.
 
 ## Atomic operations and participant reach
 

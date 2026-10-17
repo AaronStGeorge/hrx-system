@@ -325,6 +325,9 @@ static amdf_memory_native_profile_t amdf_memory_host_profile(
     profile.roles |= AMDF_MEMORY_PROFILE_ROLE_CREATE |
                      AMDF_MEMORY_PROFILE_ROLE_MAPPING_SOURCE;
     profile.supported_flags |= AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
+    profile.guaranteed_flags |= AMDF_MEMORY_FLAG_HOST_FILE_IO;
+    profile.supported_flags |= AMDF_MEMORY_FLAG_HOST_FILE_IO;
+    profile.host_mapping.features = AMDF_HOST_MAPPING_FEATURE_FILE_IO;
     profile.allocation = (amdf_memory_construction_capabilities_t){
         .maximum_byte_length = maximum_byte_length,
         .byte_length_granularity = 1,
@@ -359,6 +362,7 @@ static void amdf_memory_scope_set_backing_profile(
       .roles = native->roles,
       .guaranteed_flags = native->guaranteed_flags & AMDF_MEMORY_BACKING_FLAGS,
       .supported_flags = native->supported_flags & AMDF_MEMORY_BACKING_FLAGS,
+      .availability = native->availability,
       .allocation = native->allocation,
       .registration = native->registration,
       .import = native->import,
@@ -550,6 +554,9 @@ static bool amdf_memory_scope_merge_profile(amdf_memory_profile_roles_t role,
     }
   }
   for (uint32_t i = 0; i < plan->access_count; ++i) {
+    if (amdf_status_is_ok(profile->availability)) {
+      profile->availability = plan->native_profiles[i].availability;
+    }
     if (i == plan->backing_access_ordinal) {
       continue;
     }
@@ -917,7 +924,8 @@ static amdf_status_t amdf_memory_profile_validate_site(
                ? AMDF_STATUS_OK
                : amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE);
   }
-  if (site->kind != AMDF_MEMORY_SITE_KIND_HOST ||
+  if ((site->kind != AMDF_MEMORY_SITE_KIND_HOST &&
+       site->kind != AMDF_MEMORY_SITE_KIND_FILE_IO) ||
       site->value.host_access == 0 ||
       (site->value.host_access &
        ~(AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE)) != 0) {
@@ -927,6 +935,11 @@ static amdf_status_t amdf_memory_profile_validate_site(
       (plan->profile.roles & AMDF_MEMORY_PROFILE_ROLE_HOST_MAP) == 0 ||
       (site->value.host_access &
        ~plan->profile.host_mapping.supported_access) != 0) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
+  }
+  if (site->kind == AMDF_MEMORY_SITE_KIND_FILE_IO &&
+      (plan->profile.host_mapping.features &
+       AMDF_HOST_MAPPING_FEATURE_FILE_IO) == 0) {
     return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
   }
   return AMDF_STATUS_OK;
@@ -975,10 +988,15 @@ static amdf_status_t amdf_memory_profile_describe_site(
     return native->visibility.describe_site(&local_query, out_description);
   }
 
+  if (site->kind == AMDF_MEMORY_SITE_KIND_FILE_IO) {
+    *out_description = amdf_memory_describe_file_site(site->value.host_access);
+    return AMDF_STATUS_OK;
+  }
+
   amdf_memory_host_description_t host;
   if (plan->access_count == 0 ||
       (plan->backing_access_ordinal == plan->access_count &&
-       peer->kind == AMDF_MEMORY_SITE_KIND_HOST)) {
+       peer->kind != AMDF_MEMORY_SITE_KIND_DEVICE)) {
     // Host-only access has no device visibility edge and no native exporter.
     // REGISTER admission has already established ordinary write-back pages.
     host = (amdf_memory_host_description_t){
@@ -1003,7 +1021,7 @@ static amdf_status_t amdf_memory_profile_describe_site(
         native->visibility.data, query->external_memory_type,
         amdf_memory_profile_access_flags(plan, query, ordinal));
   }
-  const bool coherent = peer->kind == AMDF_MEMORY_SITE_KIND_HOST ||
+  const bool coherent = peer->kind != AMDF_MEMORY_SITE_KIND_DEVICE ||
                         (amdf_memory_profile_access_flags(
                              plan, query, peer->value.device.access_ordinal) &
                          AMDF_MEMORY_FLAG_HOST_COHERENT) != 0;
@@ -1061,7 +1079,9 @@ amdf_status_t AMDF_CALL amdf_memory_scope_query_pair_info(
   if (!amdf_status_is_ok(status)) {
     return status;
   }
-  if ((query->required_flags & ~plan.profile.supported_flags) != 0) {
+  status = plan.profile.availability;
+  if (amdf_status_is_ok(status) &&
+      (query->required_flags & ~plan.profile.supported_flags) != 0) {
     status = amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
   }
   if (amdf_status_is_ok(status)) {
@@ -1079,7 +1099,7 @@ amdf_status_t AMDF_CALL amdf_memory_scope_query_pair_info(
   // Match concrete pair ordering: the device supplies any SYSTEM fact before
   // the host view is described, while composition retains the query direction.
   const bool consumer_first =
-      query->producer.kind == AMDF_MEMORY_SITE_KIND_HOST;
+      query->producer.kind != AMDF_MEMORY_SITE_KIND_DEVICE;
   const amdf_memory_profile_site_t* first_site =
       consumer_first ? &query->consumer : &query->producer;
   const amdf_memory_profile_site_t* second_site =
