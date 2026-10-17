@@ -9,7 +9,9 @@
 iree_status_t iree_hal_fixed_block_pool_slab_allocate(
     const iree_hal_pool_buffer_range_t* range,
     const iree_hal_fixed_block_pool_geometry_t* geometry,
-    const iree_hal_asan_pool_options_t* asan, iree_allocator_t host_allocator,
+    const iree_hal_asan_pool_options_t* asan,
+    const iree_async_frontier_t* initial_frontier,
+    iree_allocator_t host_allocator,
     iree_hal_fixed_block_pool_slab_t** out_slab) {
   *out_slab = NULL;
   const iree_device_size_t block_count =
@@ -56,15 +58,15 @@ iree_status_t iree_hal_fixed_block_pool_slab_allocate(
       .block_size = geometry->backing_block_size,
       .block_count = slab->block_count,
       .frontier_capacity = geometry->frontier_capacity,
-      .initial_frontier = range->memory.reuse_frontier,
+      .initial_frontier = initial_frontier,
   };
   iree_status_t status = iree_hal_memory_fixed_block_allocator_allocate(
       allocator_options, host_allocator, &slab->allocator);
   if (iree_status_is_ok(status)) {
-    if (range->memory.reuse_frontier) {
-      memcpy(slab->return_frontier, range->memory.reuse_frontier,
+    if (initial_frontier) {
+      memcpy(slab->return_frontier, initial_frontier,
              sizeof(iree_async_frontier_t) +
-                 range->memory.reuse_frontier->entry_count *
+                 initial_frontier->entry_count *
                      sizeof(iree_async_frontier_entry_t));
     }
     *out_slab = slab;
@@ -80,6 +82,7 @@ iree_status_t iree_hal_fixed_block_pool_slab_prepare(
     const iree_hal_fixed_block_pool_geometry_t* geometry,
     const iree_hal_asan_pool_options_t* asan,
     iree_hal_pool_reservation_t reservation, iree_hal_pool_acquire_info_t info,
+    const iree_async_frontier_t* initial_frontier,
     iree_allocator_t host_allocator,
     iree_hal_fixed_block_pool_slab_t* reusable_slab,
     iree_hal_fixed_block_pool_slab_t** out_slab) {
@@ -96,29 +99,21 @@ iree_status_t iree_hal_fixed_block_pool_slab_prepare(
     slab = NULL;
   }
   if (iree_status_is_ok(status) && slab) {
-    if (info.reuse_frontier &&
-        info.reuse_frontier->entry_count > geometry->frontier_capacity) {
-      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "initial frontier exceeds allocator capacity");
-      iree_hal_fixed_block_pool_slab_free(slab, NULL, host_allocator);
-      slab = NULL;
+    iree_hal_memory_fixed_block_allocator_reset(slab->allocator,
+                                                initial_frontier);
+    slab->range = range;
+    range.buffer = NULL;
+    if (initial_frontier) {
+      memcpy(
+          slab->return_frontier, initial_frontier,
+          sizeof(*initial_frontier) + initial_frontier->entry_count *
+                                          sizeof(initial_frontier->entries[0]));
     } else {
-      iree_hal_memory_fixed_block_allocator_reset(slab->allocator,
-                                                  info.reuse_frontier);
-      slab->range = range;
-      range.buffer = NULL;
-      if (info.reuse_frontier) {
-        memcpy(slab->return_frontier, info.reuse_frontier,
-               sizeof(*info.reuse_frontier) +
-                   info.reuse_frontier->entry_count *
-                       sizeof(info.reuse_frontier->entries[0]));
-      } else {
-        iree_async_frontier_initialize(slab->return_frontier, 0);
-      }
+      iree_async_frontier_initialize(slab->return_frontier, 0);
     }
   } else if (iree_status_is_ok(status)) {
-    status = iree_hal_fixed_block_pool_slab_allocate(&range, geometry, asan,
-                                                     host_allocator, &slab);
+    status = iree_hal_fixed_block_pool_slab_allocate(
+        &range, geometry, asan, initial_frontier, host_allocator, &slab);
   }
   if (iree_status_is_ok(status)) {
     slab->reservation = reservation;
@@ -134,9 +129,11 @@ iree_status_t iree_hal_fixed_block_pool_slab_prepare(
 
 bool iree_hal_fixed_block_pool_slab_merge_return(
     iree_hal_fixed_block_pool_slab_t* slab,
-    const iree_hal_fixed_block_pool_geometry_t* geometry) {
+    const iree_hal_fixed_block_pool_geometry_t* geometry,
+    iree_hal_pool_history_t* history) {
   if (!iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
           slab->allocator, geometry->frontier_capacity,
+          history->timeline ? iree_hal_pool_history_collapse : NULL, history,
           slab->return_frontier)) {
     return false;
   }
@@ -144,9 +141,15 @@ bool iree_hal_fixed_block_pool_slab_merge_return(
       slab->block_count * geometry->backing_block_size;
   if (managed_length != slab->reservation.byte_length &&
       slab->range.memory.reuse_frontier) {
-    return iree_async_frontier_merge(slab->return_frontier,
-                                     geometry->frontier_capacity,
+    if (!iree_async_frontier_merge(slab->return_frontier,
+                                   geometry->frontier_capacity,
+                                   slab->range.memory.reuse_frontier)) {
+      if (!history->timeline) {
+        return false;
+      }
+      iree_hal_pool_history_collapse(history, slab->return_frontier,
                                      slab->range.memory.reuse_frontier);
+    }
   }
   return true;
 }

@@ -198,14 +198,31 @@ TEST_P(BufferRangeTest, InheritsExactHistoryThroughSplitsAndRollback) {
                 history, iree_hal_buffer_memory_view(source).reuse_frontier));
 
   iree_hal_pool_t* child = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
-                        CreateChild(source, 128, 1024, 1, &child));
-  EXPECT_EQ(nullptr, child);
-  IREE_ASSERT_OK(CreateChild(source, 128, 1024, 2, &child));
   const iree_hal_pool_reservation_request_t request =
       iree_hal_make_pool_reservation_request(256, min_alignment_);
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
+  IREE_ASSERT_OK(CreateChild(source, 128, 1024, 1, &child));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      child, 1, &request, nullptr, &reservation, &info, &result,
+      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
+  ASSERT_EQ(info.reuse_frontier->entry_count, 1u);
+  iree_async_single_frontier_t compact;
+  iree_async_single_frontier_initialize(&compact,
+                                        info.reuse_frontier->entries[0].axis,
+                                        info.reuse_frontier->entries[0].epoch);
+  iree_hal_pool_release_reservations(child, 1, &reservation,
+                                     info.reuse_frontier);
+  iree_hal_pool_release(child);
+  pools_.pop_back();
+  bool satisfied = true;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      tracker_, iree_async_single_frontier_as_const_frontier(&compact),
+      &satisfied));
+  EXPECT_FALSE(satisfied);
+
+  IREE_ASSERT_OK(CreateChild(source, 128, 1024, 2, &child));
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       child, 1, &request, nullptr, &reservation, &info, &result,
       IREE_HAL_POOL_RESERVE_FLAG_NONE));
@@ -248,6 +265,10 @@ TEST_P(BufferRangeTest, InheritsExactHistoryThroughSplitsAndRollback) {
   iree_hal_pool_release_reservations(child, 1, &reservation, history);
   iree_async_frontier_tracker_advance(tracker_, Axis(0), 7);
   iree_async_frontier_tracker_advance(tracker_, Axis(1), 11);
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      tracker_, iree_async_single_frontier_as_const_frontier(&compact),
+      &satisfied));
+  EXPECT_TRUE(satisfied);
   IREE_ASSERT_OK(Allocate(child, 256, &pending));
   uint32_t value = 0x12345678;
   IREE_ASSERT_OK(iree_hal_buffer_map_write(pending, 0, &value, sizeof(value)));

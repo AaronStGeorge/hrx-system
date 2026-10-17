@@ -85,6 +85,7 @@ iree_status_t iree_hal_tlsf_pool_dedicated_prepare(
     const iree_hal_asan_allocation_layout_t* asan_layout,
     const iree_hal_tlsf_pool_reservation_layout_t* layout,
     iree_hal_pool_reservation_t reservation, iree_hal_pool_acquire_info_t info,
+    const iree_async_frontier_t* initial_frontier,
     iree_allocator_t host_allocator,
     iree_hal_tlsf_pool_release_node_t** out_node) {
   *out_node = NULL;
@@ -101,17 +102,10 @@ iree_status_t iree_hal_tlsf_pool_dedicated_prepare(
   iree_hal_tlsf_pool_dedicated_backing_t* backing =
       iree_hal_tlsf_pool_dedicated_backing(node, layout);
   backing->reservation = reservation;
-  if (info.reuse_frontier &&
-      info.reuse_frontier->entry_count > layout->frontier.capacity) {
-    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "backing history exceeds TLSF frontier capacity");
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_pool_buffer_range_prepare(
-        backing_pool, backing_request, &backing->reservation,
-        backing_request->min_alignment, asan, &backing->range);
-    backing->range.memory.reuse_frontier = info.reuse_frontier;
-  }
+  status = iree_hal_pool_buffer_range_prepare(
+      backing_pool, backing_request, &backing->reservation,
+      backing_request->min_alignment, asan, &backing->range);
+  backing->range.memory.reuse_frontier = info.reuse_frontier;
   if (iree_status_is_ok(status) &&
       iree_hal_asan_pool_options_is_enabled(asan)) {
     node->asan_layout = *asan_layout;
@@ -126,9 +120,9 @@ iree_status_t iree_hal_tlsf_pool_dedicated_prepare(
     node->charged_length = backing->range.length;
     iree_async_frontier_t* frontier =
         iree_hal_tlsf_pool_reservation_frontier(node, layout->frontier.offset);
-    if (info.reuse_frontier) {
-      memcpy(frontier, info.reuse_frontier,
-             sizeof(*frontier) + info.reuse_frontier->entry_count *
+    if (initial_frontier) {
+      memcpy(frontier, initial_frontier,
+             sizeof(*frontier) + initial_frontier->entry_count *
                                      sizeof(iree_async_frontier_entry_t));
     } else {
       iree_async_frontier_initialize(frontier, 0);

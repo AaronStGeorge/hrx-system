@@ -237,7 +237,9 @@ void iree_hal_memory_fixed_block_allocator_reset(
 
 bool iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
     const iree_hal_memory_fixed_block_allocator_t* pool, uint8_t capacity,
-    iree_async_frontier_t* out_frontier) {
+    void (*overflow)(void* user_data, iree_async_frontier_t* target,
+                     const iree_async_frontier_t* source),
+    void* user_data, iree_async_frontier_t* out_frontier) {
   IREE_ASSERT(iree_atomic_load(&pool->allocation_count,
                                iree_memory_order_relaxed) == 0);
   iree_async_frontier_initialize(out_frontier, 0);
@@ -257,15 +259,26 @@ bool iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
           iree_hal_memory_fixed_block_allocator_block_at(pool, block_index);
       const iree_async_frontier_t* frontier =
           iree_hal_memory_fixed_block_allocator_block_frontier_at(pool, block);
-      if (block->flags ||
-          !iree_async_frontier_merge(out_frontier, capacity, frontier)) {
+      if (block->flags) {
         return false;
+      }
+      if (!iree_async_frontier_merge(out_frontier, capacity, frontier)) {
+        if (!overflow) {
+          return false;
+        }
+        overflow(user_data, out_frontier, frontier);
       }
     }
   }
-  return !has_untouched_blocks ||
-         iree_async_frontier_merge(out_frontier, capacity,
-                                   pool->initial_frontier);
+  if (has_untouched_blocks &&
+      !iree_async_frontier_merge(out_frontier, capacity,
+                                 pool->initial_frontier)) {
+    if (!overflow) {
+      return false;
+    }
+    overflow(user_data, out_frontier, pool->initial_frontier);
+  }
+  return true;
 }
 
 bool iree_hal_memory_fixed_block_allocator_query_candidate(

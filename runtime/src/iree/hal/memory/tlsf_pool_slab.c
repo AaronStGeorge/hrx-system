@@ -16,7 +16,9 @@ iree_status_t iree_hal_tlsf_pool_slab_initialize_range(
       iree_allocator_malloc(host_allocator, sizeof(*slab), (void**)&slab));
   slab->range = range;
   options.range_length = range.length;
-  options.initial_frontier = range.memory.reuse_frontier;
+  if (!options.initial_frontier) {
+    options.initial_frontier = range.memory.reuse_frontier;
+  }
   iree_status_t status =
       iree_hal_memory_tlsf_initialize(options, host_allocator, &slab->tlsf);
   if (iree_status_is_ok(status)) {
@@ -36,6 +38,8 @@ iree_status_t iree_hal_tlsf_pool_slab_prepare(
     iree_hal_tlsf_pool_slab_t* reusable_slab,
     iree_hal_tlsf_pool_slab_t** out_slab) {
   iree_hal_pool_buffer_range_t range = {0};
+  const iree_async_frontier_t* initial_frontier =
+      options.initial_frontier ? options.initial_frontier : info.reuse_frontier;
   iree_status_t status =
       iree_hal_pool_buffer_range_prepare(backing_pool, request, &reservation,
                                          request->min_alignment, asan, &range);
@@ -47,16 +51,8 @@ iree_status_t iree_hal_tlsf_pool_slab_prepare(
     slab = NULL;
   }
   if (iree_status_is_ok(status) && slab) {
-    if (info.reuse_frontier &&
-        info.reuse_frontier->entry_count > slab->tlsf.frontier_capacity) {
-      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "initial frontier exceeds allocator capacity");
-      iree_hal_tlsf_pool_slab_release(NULL, slab, host_allocator);
-      slab = NULL;
-    } else {
-      iree_hal_memory_tlsf_reset(&slab->tlsf, info.reuse_frontier);
-      slab->range = range;
-    }
+    iree_hal_memory_tlsf_reset(&slab->tlsf, initial_frontier);
+    slab->range = range;
   } else if (iree_status_is_ok(status)) {
     status = iree_hal_tlsf_pool_slab_initialize_range(range, options,
                                                       host_allocator, &slab);

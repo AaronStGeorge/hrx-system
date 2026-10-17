@@ -149,6 +149,7 @@ iree_cc_library(
   DEPS
     ::buffer_range
     ::fixed_block_allocator
+    ::pool_history
     iree::async
     iree::base
     iree::base::internal
@@ -167,6 +168,7 @@ iree_cc_library(
     ::buffer_range
     ::fixed_block_allocator
     ::fixed_block_pool_slab
+    ::pool_history
     ::tracing
     iree::async
     iree::base
@@ -415,6 +417,20 @@ iree_cc_library(
 
 iree_cc_library(
   NAME
+    pool_history
+  HDRS
+    "pool_history.h"
+  SRCS
+    "pool_history.c"
+  DEPS
+    iree::async
+    iree::base
+    iree::base::threading
+  PUBLIC
+)
+
+iree_cc_library(
+  NAME
     tlsf_pool
   HDRS
     "tlsf_pool.h"
@@ -422,6 +438,7 @@ iree_cc_library(
     "tlsf_pool.c"
   DEPS
     ::buffer_range
+    ::pool_history
     ::tlsf
     ::tlsf_pool_reservation
     ::tlsf_pool_slab

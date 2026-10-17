@@ -869,7 +869,7 @@ TEST(TLSFPool, TrimReturnsPendingHistoryToNativeOwner) {
   iree_async_frontier_tracker_release(tracker);
 }
 
-TEST(TLSFPool, TrimRetainsSlabWithTaintedDeathFrontier) {
+TEST(TLSFPool, TrimReturnsSlabWithCollapsedDeathFrontier) {
   iree_allocator_t allocator = iree_allocator_system();
   iree_hal_slab_provider_t* slab_provider = NULL;
   IREE_ASSERT_OK(iree_hal_cpu_slab_provider_create(/*min_alignment=*/0,
@@ -912,8 +912,8 @@ TEST(TLSFPool, TrimRetainsSlabWithTaintedDeathFrontier) {
 
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(pool, &stats);
-  EXPECT_EQ(stats.slab_count, 1u);
-  EXPECT_EQ(stats.bytes_committed, 4096u);
+  EXPECT_EQ(stats.slab_count, 0u);
+  EXPECT_EQ(stats.bytes_committed, 0u);
   EXPECT_EQ(query.query_count, 0u);
 
   iree_hal_pool_release(pool);
@@ -1279,7 +1279,7 @@ TEST(TLSFPool, ReserveGrowsInsteadOfWaitingForStaleBlock) {
   iree_hal_slab_provider_release(slab_provider);
 }
 
-TEST(TLSFPool, ReserveRejectedTaintRemainsRejected) {
+TEST(TLSFPool, PendingOverflowReturnDoesNotPreventFreshGrowth) {
   iree_allocator_t allocator = iree_allocator_system();
   iree_hal_slab_provider_t* slab_provider = NULL;
   IREE_ASSERT_OK(iree_hal_cpu_slab_provider_create(/*min_alignment=*/0,
@@ -1327,8 +1327,9 @@ TEST(TLSFPool, ReserveRejectedTaintRemainsRejected) {
 
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(pool, &stats);
-  // Each growth retry rechecks that the original tainted range stays unusable.
-  EXPECT_EQ(stats.reuse_miss_count, 4u);
+  // Pending backing belongs to the native leaf and adds no rejected local
+  // candidates to this otherwise empty suballocator.
+  EXPECT_EQ(stats.reuse_miss_count, 0u);
   EXPECT_EQ(stats.exhausted_count, 0u);
   EXPECT_EQ(stats.wait_count, 0u);
 

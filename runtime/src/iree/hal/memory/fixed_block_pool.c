@@ -39,6 +39,9 @@ typedef struct iree_hal_fixed_block_pool_t {
   // Exact source request, constructed once and reused for cold growth.
   iree_hal_pool_reservation_request_t backing_request;
 
+  // Overflow captures secured on growth and independent of backing lifetime.
+  iree_hal_pool_history_t history;
+
   // Serializes candidate snapshots and complete batch claims. All native work,
   // allocation and eligibility queries remain outside this mutex.
   iree_slim_mutex_t acquisition_mutex;
@@ -414,7 +417,8 @@ static void iree_hal_fixed_block_pool_return_unused_slabs(
       continue;
     }
 
-    if (iree_hal_fixed_block_pool_slab_merge_return(slab, &pool->geometry)) {
+    if (iree_hal_fixed_block_pool_slab_merge_return(slab, &pool->geometry,
+                                                    &pool->history)) {
       iree_atomic_fetch_sub(&pool->bytes_committed, slab->range.length,
                             iree_memory_order_relaxed);
       iree_atomic_fetch_sub(
@@ -422,6 +426,8 @@ static void iree_hal_fixed_block_pool_return_unused_slabs(
           slab->block_count * pool->geometry.backing_block_size,
           iree_memory_order_relaxed);
       iree_atomic_fetch_sub(&pool->slab_count, 1, iree_memory_order_relaxed);
+      slab->history_owned = false;
+      iree_hal_pool_history_retire_backing(&pool->history);
       if (retain_metadata) {
         iree_hal_fixed_block_pool_slab_release_backing(slab,
                                                        pool->backing_pool);
@@ -650,15 +656,30 @@ static iree_status_t iree_hal_fixed_block_pool_create_impl(
   pool->budget_limit = options->budget_limit;
   iree_slim_mutex_initialize(&pool->acquisition_mutex);
   iree_slim_mutex_initialize(&pool->publication.mutex);
-  status = iree_hal_memory_trace_initialize_pool(
-      options->trace_name, IREE_HAL_FIXED_BLOCK_POOL_TRACE_ID, host_allocator,
-      &pool->trace);
+  status = iree_hal_pool_history_initialize(
+      pool->base.frontier_tracker, geometry.frontier_capacity, &pool->history);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_memory_trace_initialize_pool(
+        options->trace_name, IREE_HAL_FIXED_BLOCK_POOL_TRACE_ID, host_allocator,
+        &pool->trace);
+  }
   if (iree_status_is_ok(status) && range) {
-    iree_hal_fixed_block_pool_slab_t* slab = NULL;
-    status = iree_hal_fixed_block_pool_slab_allocate(
-        range, &geometry, &options->asan, host_allocator, &slab);
+    iree_async_single_frontier_t compact_storage;
+    const iree_async_frontier_t* initial_frontier = NULL;
+    status = iree_hal_pool_history_prepare_backing(
+        &pool->history, range->memory.reuse_frontier, &compact_storage,
+        &initial_frontier);
     if (iree_status_is_ok(status)) {
-      iree_hal_fixed_block_pool_publish_slab(pool, slab);
+      iree_hal_fixed_block_pool_slab_t* slab = NULL;
+      status = iree_hal_fixed_block_pool_slab_allocate(
+          range, &geometry, &options->asan, initial_frontier, host_allocator,
+          &slab);
+      if (iree_status_is_ok(status)) {
+        slab->history_owned = true;
+        iree_hal_fixed_block_pool_publish_slab(pool, slab);
+      } else {
+        iree_hal_pool_history_retire_backing(&pool->history);
+      }
     }
   }
   if (iree_status_is_ok(status)) {
@@ -713,10 +734,14 @@ static void iree_hal_fixed_block_pool_destroy(iree_hal_pool_t* base_pool) {
     IREE_ASSERT(
         iree_atomic_load(&slab->live_count, iree_memory_order_relaxed) == 0,
         "pool destruction requires returned reservations");
-    if (pool->backing_pool &&
-        !iree_hal_fixed_block_pool_slab_merge_return(slab, &pool->geometry)) {
+    if (pool->backing_pool && !iree_hal_fixed_block_pool_slab_merge_return(
+                                  slab, &pool->geometry, &pool->history)) {
       // Destruction of unrepresentable history requires caller quiescence.
       iree_async_frontier_initialize(slab->return_frontier, 0);
+    }
+    if (slab->history_owned) {
+      slab->history_owned = false;
+      iree_hal_pool_history_retire_backing(&pool->history);
     }
     iree_hal_fixed_block_pool_slab_free(slab, pool->backing_pool,
                                         pool->host_allocator);
@@ -727,6 +752,7 @@ static void iree_hal_fixed_block_pool_destroy(iree_hal_pool_t* base_pool) {
                                         pool->host_allocator);
   }
   iree_allocator_free(pool->host_allocator, pool->reusable.acquire);
+  iree_hal_pool_history_deinitialize(&pool->history);
   iree_hal_memory_trace_deinitialize(&pool->trace);
   iree_hal_pool_release(pool->backing_pool);
   iree_hal_pool_deinitialize(base_pool);
@@ -1053,6 +1079,9 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_promote(
 static void iree_hal_fixed_block_pool_acquire_finish(
     iree_hal_fixed_block_pool_acquire_t* acquire) {
   iree_hal_fixed_block_pool_t* pool = acquire->pool;
+  if (iree_status_is_ok(acquire->status)) {
+    acquire->status = iree_hal_pool_history_seal_acquire(&pool->history);
+  }
   const bool committed = iree_status_is_ok(acquire->status) &&
                          acquire->acquired_count == acquire->call.count;
   if (iree_status_is_ok(acquire->status)) {
@@ -1160,6 +1189,17 @@ static void iree_hal_fixed_block_pool_acquire_progress(
           acquire->result == IREE_HAL_POOL_ACQUIRE_OVER_BUDGET) {
         break;
       }
+      iree_async_single_frontier_t compact_storage;
+      const iree_async_frontier_t* initial_frontier = NULL;
+      acquire->status = iree_hal_pool_history_prepare_backing(
+          &pool->history, acquire->parent.info.reuse_frontier, &compact_storage,
+          &initial_frontier);
+      if (!iree_status_is_ok(acquire->status)) {
+        iree_hal_pool_release_reservations(pool->backing_pool, 1,
+                                           &acquire->parent.reservation,
+                                           acquire->parent.info.reuse_frontier);
+        break;
+      }
       iree_hal_fixed_block_pool_slab_t* slab = NULL;
       iree_slim_mutex_lock(&pool->acquisition_mutex);
       iree_hal_fixed_block_pool_slab_t* reusable_slab = pool->reusable.slab;
@@ -1168,10 +1208,13 @@ static void iree_hal_fixed_block_pool_acquire_progress(
       acquire->status = iree_hal_fixed_block_pool_slab_prepare(
           pool->backing_pool, &pool->backing_request, &pool->geometry,
           &pool->asan_options, acquire->parent.reservation,
-          acquire->parent.info, pool->host_allocator, reusable_slab, &slab);
+          acquire->parent.info, initial_frontier, pool->host_allocator,
+          reusable_slab, &slab);
       if (!iree_status_is_ok(acquire->status)) {
+        iree_hal_pool_history_retire_backing(&pool->history);
         break;
       }
+      slab->history_owned = true;
       slab->pins = 1;
       slab->preparation_next = acquire->preparations;
       acquire->preparations = slab;
@@ -1331,6 +1374,16 @@ static void iree_hal_fixed_block_pool_release_one_reservation(
   iree_hal_fixed_block_pool_slab_t* slab = block->slab;
   const uint32_t block_index = (uint32_t)(block - slab->blocks);
   iree_hal_memory_trace_free(&pool->trace, block);
+  iree_async_single_frontier_t compact_storage;
+  if (death_frontier &&
+      death_frontier->entry_count > pool->geometry.frontier_capacity &&
+      pool->history.timeline) {
+    iree_async_frontier_t* compact =
+        iree_async_single_frontier_as_frontier(&compact_storage);
+    iree_async_frontier_initialize(compact, 0);
+    iree_hal_pool_history_collapse(&pool->history, compact, death_frontier);
+    death_frontier = compact;
+  }
   iree_hal_memory_fixed_block_allocator_release(slab->allocator, block_index,
                                                 death_frontier);
   // The raw bitmap is reusable now; the live count keeps this final slab
@@ -1631,6 +1684,7 @@ static void iree_hal_fixed_block_pool_trim(
                                         pool->host_allocator);
   }
   iree_allocator_free(pool->host_allocator, reusable_acquire);
+  iree_hal_pool_history_trim(&pool->history);
   (void)flags;
 }
 

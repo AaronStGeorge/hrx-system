@@ -32,6 +32,9 @@ typedef struct iree_hal_tlsf_pool_slab_t {
   // attempt.
   uint32_t preparation_count;
 
+  // One presecured history credit, returned with this backing ownership.
+  bool history_owned;
+
   // Offset allocator for the address range backed by |slab|.
   iree_hal_memory_tlsf_t tlsf;
 

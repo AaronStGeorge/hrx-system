@@ -1302,7 +1302,7 @@ TEST_F(FixedBlockPoolTest, ReserveCanReturnStaleBlockWhenWaitAllowed) {
   ReleaseOneReservation(pool_, &reservation, reserve_info.reuse_frontier);
 }
 
-TEST(FixedBlockPool, ReserveRejectedTaintRemainsRejected) {
+TEST(FixedBlockPool, CollapsedHistoryRequiresItsPublishedProof) {
   iree_allocator_t allocator = iree_allocator_system();
   iree_hal_slab_provider_t* slab_provider = NULL;
   IREE_ASSERT_OK(iree_hal_cpu_slab_provider_create(/*min_alignment=*/0,
@@ -1349,6 +1349,18 @@ TEST(FixedBlockPool, ReserveRejectedTaintRemainsRejected) {
   iree_hal_pool_query_stats(pool, &stats);
   EXPECT_EQ(stats.reuse_miss_count, 2u);
   EXPECT_EQ(stats.exhausted_count, 2u);
+
+  IREE_ASSERT_OK(AcquireOneReservation(
+      pool, 64, 16, requester, IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
+      &reservation, &reserve_info, &result));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
+  ASSERT_NE(reserve_info.reuse_frontier, nullptr);
+  EXPECT_EQ(reserve_info.reuse_frontier->entry_count, 1u);
+  bool satisfied = true;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      test_frontier_tracker(), reserve_info.reuse_frontier, &satisfied));
+  EXPECT_FALSE(satisfied);
+  ReleaseOneReservation(pool, &reservation, reserve_info.reuse_frontier);
 
   iree_hal_pool_release(pool);
   iree_hal_pool_release(backing_pool);

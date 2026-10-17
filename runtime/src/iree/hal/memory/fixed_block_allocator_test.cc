@@ -98,10 +98,10 @@ TEST(FixedBlockAllocator, RebindingPreservesExactChangedAndUntouchedHistory) {
                                                   returned);
     if (block_count > 1) {
       EXPECT_FALSE(iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
-          pool, 1, merged));
+          pool, 1, nullptr, nullptr, merged));
     }
     ASSERT_TRUE(iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
-        pool, 2, merged));
+        pool, 2, nullptr, nullptr, merged));
     EXPECT_EQ(iree_async_frontier_compare(
                   merged, block_count == 1 ? returned : combined),
               IREE_ASYNC_FRONTIER_EQUAL);
@@ -114,7 +114,7 @@ TEST(FixedBlockAllocator, RebindingPreservesExactChangedAndUntouchedHistory) {
         IREE_ASYNC_FRONTIER_EQUAL);
     iree_hal_memory_fixed_block_allocator_restore(pool, allocation.block_index);
     ASSERT_TRUE(iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
-        pool, 2, merged));
+        pool, 2, nullptr, nullptr, merged));
     EXPECT_EQ(iree_async_frontier_compare(merged, replacement),
               IREE_ASYNC_FRONTIER_EQUAL);
 
@@ -129,7 +129,7 @@ TEST(FixedBlockAllocator, RebindingPreservesExactChangedAndUntouchedHistory) {
                                                     nullptr);
     }
     ASSERT_TRUE(iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
-        pool, 2, merged));
+        pool, 2, nullptr, nullptr, merged));
     EXPECT_EQ(merged->entry_count, 0);
     iree_hal_memory_fixed_block_allocator_free(pool);
   }

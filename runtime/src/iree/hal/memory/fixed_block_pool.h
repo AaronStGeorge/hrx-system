@@ -29,9 +29,9 @@ typedef struct iree_hal_fixed_block_pool_options_t {
   // derives its complete block count from the supplied range.
   uint32_t blocks_per_slab;
 
-  // Maximum exact history width per block and whole-range return. Zero selects
-  // the fixed-block allocator default. Wider return histories retain backing
-  // for individual block reuse instead of discarding its prerequisites.
+  // Inline history width per block and whole-range return. Zero selects the
+  // fixed-block allocator default. Wider histories collapse to a pool timeline
+  // point covering every original prerequisite before backing is returned.
   uint32_t frontier_capacity;
 
   // Required absolute block alignment; zero selects source requirements.

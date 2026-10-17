@@ -82,6 +82,7 @@ iree_status_t iree_hal_tlsf_pool_dedicated_prepare(
     const iree_hal_asan_allocation_layout_t* asan_layout,
     const iree_hal_tlsf_pool_reservation_layout_t* layout,
     iree_hal_pool_reservation_t reservation, iree_hal_pool_acquire_info_t info,
+    const iree_async_frontier_t* initial_frontier,
     iree_allocator_t host_allocator,
     iree_hal_tlsf_pool_release_node_t** out_node);
 

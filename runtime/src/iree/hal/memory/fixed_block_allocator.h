@@ -321,10 +321,14 @@ void iree_hal_memory_fixed_block_allocator_reset(
 // Merges the exact histories of a completely free allocator. Reads only blocks
 // returned in the current generation and includes untouched history once.
 // False leaves a partial output; every source history remains unchanged.
+// An optional overflow handler replaces the accumulated history with a compact
+// proof covering both inputs. It must use presecured storage and cannot fail.
 // Requires the same quiescent ownership as reset().
 bool iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
     const iree_hal_memory_fixed_block_allocator_t* pool, uint8_t capacity,
-    iree_async_frontier_t* out_frontier);
+    void (*overflow)(void* user_data, iree_async_frontier_t* target,
+                     const iree_async_frontier_t* source),
+    void* user_data, iree_async_frontier_t* out_frontier);
 
 // Finds the first available block at or after |start_block_index| without
 // claiming it. Returns false when no candidate remains. The returned frontier

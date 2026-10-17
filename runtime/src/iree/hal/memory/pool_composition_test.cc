@@ -70,8 +70,10 @@ class PoolCompositionTest : public ::testing::TestWithParam<
         iree_async_proactor_options_default(), allocator_, &proactor_));
     IREE_ASSERT_OK(iree_async_notification_create(
         proactor_, IREE_ASYNC_NOTIFICATION_FLAG_NONE, &notification_));
+    auto tracker_options = iree_async_frontier_tracker_options_default();
+    tracker_options.axis_table_capacity = 260;
     IREE_ASSERT_OK(iree_async_frontier_tracker_create(
-        iree_async_frontier_tracker_options_default(), allocator_, &tracker_));
+        tracker_options, progress_metadata_.allocator(), &tracker_));
     for (uint8_t i = 0; i < 2; ++i) {
       IREE_ASSERT_OK(iree_async_frontier_tracker_register_axis(
           tracker_, Axis(i), nullptr));
@@ -97,6 +99,7 @@ class PoolCompositionTest : public ::testing::TestWithParam<
     iree_async_notification_release(notification_);
     iree_async_proactor_release(proactor_);
     EXPECT_EQ(metadata_.live, 0);
+    EXPECT_EQ(progress_metadata_.live, 0);
   }
 
   static iree_async_axis_t Axis(uint8_t index) {
@@ -221,6 +224,8 @@ class PoolCompositionTest : public ::testing::TestWithParam<
   iree_allocator_t allocator_ = iree_allocator_system();
   // Optional accounting and allocation failures for child metadata only.
   MetadataAllocator metadata_;
+  // Tracker-owned dependency captures outlive the originating child metadata.
+  MetadataAllocator progress_metadata_;
   // Progress owner retained for the fixture's notifications.
   iree_async_proactor_t* proactor_ = nullptr;
   // Capacity notification captured by the native leaf.
@@ -493,7 +498,7 @@ TEST_P(PoolCompositionTest, UntouchedRangesAndReturnsPreserveHistory) {
   iree_hal_pool_trim(child, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
 }
 
-TEST_P(PoolCompositionTest, FailedHistoryAdoptionReturnsParentReservation) {
+TEST_P(PoolCompositionTest, WideInheritedHistorySurvivesChildDestruction) {
   iree_hal_pool_t* source = nullptr;
   IREE_ASSERT_OK(CreateSource(0, 4096, 4096, &source));
   alignas(iree_async_frontier_entry_t)
@@ -512,21 +517,209 @@ TEST_P(PoolCompositionTest, FailedHistoryAdoptionReturnsParentReservation) {
   iree_hal_pool_release_reservations(source, 1, &seed, history);
   iree_hal_pool_t* child = nullptr;
   IREE_ASSERT_OK(CreateChild(source, 4096, 1, &child));
-  iree_hal_pool_reservation_t unchanged;
-  memset(&unchanged, 0xA5, sizeof(unchanged));
-  auto reservation = unchanged;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_OUT_OF_RANGE,
-      Acquire(child, 256, history, IREE_HAL_POOL_RESERVE_FLAG_NONE,
-              &reservation, &info, &result));
-  EXPECT_EQ(memcmp(&reservation, &unchanged, sizeof(reservation)), 0);
+  iree_hal_pool_reservation_t reservation;
+  IREE_ASSERT_OK(Acquire(child, 256, nullptr,
+                         IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
+                         &reservation, &info, &result));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
+  ASSERT_NE(info.reuse_frontier, nullptr);
+  EXPECT_EQ(info.reuse_frontier->entry_count, 1u);
+  iree_hal_pool_release_reservations(child, 1, &reservation,
+                                     info.reuse_frontier);
+  EXPECT_EQ(Stats(child).bytes_committed, 0u);
+  iree_hal_pool_release(child);
+  pools_.pop_back();
   IREE_ASSERT_OK(Acquire(source, 4096, nullptr,
                          IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER, &seed,
                          &info, &result));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
-  EXPECT_EQ(iree_async_frontier_compare(info.reuse_frontier, history),
-            IREE_ASYNC_FRONTIER_EQUAL);
+  bool satisfied = true;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      tracker_, info.reuse_frontier, &satisfied));
+  EXPECT_FALSE(satisfied);
+  iree_async_frontier_tracker_advance(tracker_, Axis(0), 7);
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      tracker_, info.reuse_frontier, &satisfied));
+  EXPECT_FALSE(satisfied);
+  iree_async_frontier_tracker_advance(tracker_, Axis(1), 11);
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      tracker_, info.reuse_frontier, &satisfied));
+  EXPECT_TRUE(satisfied);
   iree_hal_pool_release_reservations(source, 1, &seed, info.reuse_frontier);
+}
+
+TEST_P(PoolCompositionTest, FailedOverflowAcquisitionPreservesImmutableProofs) {
+  IREE_ASSERT_OK(
+      iree_async_frontier_tracker_register_axis(tracker_, Axis(2), nullptr));
+  iree_hal_pool_t* source = nullptr;
+  IREE_ASSERT_OK(CreateSource(0, 4096, 4096, &source));
+  iree_hal_pool_t* child = nullptr;
+  IREE_ASSERT_OK(CreateChild(source, 4096, 1, &child, 2048));
+  std::array<iree_hal_pool_reservation_t, 2> reservations;
+  iree_hal_pool_acquire_info_t info;
+  iree_hal_pool_acquire_result_t result;
+  for (auto& reservation : reservations) {
+    IREE_ASSERT_OK(Acquire(child, 2048, nullptr,
+                           IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservation, &info,
+                           &result));
+    ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  }
+  alignas(iree_async_frontier_entry_t)
+      uint8_t storage[sizeof(iree_async_frontier_t) +
+                      2 * sizeof(iree_async_frontier_entry_t)];
+  auto* history = reinterpret_cast<iree_async_frontier_t*>(storage);
+  iree_async_frontier_initialize(history, 2);
+  history->entries[0] = {Axis(0), 7};
+  history->entries[1] = {Axis(1), 11};
+  iree_hal_pool_release_reservations(child, 1, &reservations[0], history);
+
+  // Acquiring a partial backing must secure its next infallible return before
+  // exposing the current proof. Failed preparation leaves the block reusable.
+  iree_hal_pool_reservation_t unchanged;
+  memset(&unchanged, 0xA5, sizeof(unchanged));
+  reservations[0] = unchanged;
+  progress_metadata_.fail = true;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        Acquire(child, 2048, nullptr,
+                                IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
+                                &reservations[0], &info, &result));
+  progress_metadata_.fail = false;
+  EXPECT_EQ(memcmp(&reservations[0], &unchanged, sizeof(unchanged)), 0);
+  EXPECT_EQ(Stats(child).reservation_count, 1u);
+  IREE_ASSERT_OK(Acquire(child, 2048, nullptr,
+                         IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
+                         &reservations[0], &info, &result));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
+  ASSERT_EQ(info.reuse_frontier->entry_count, 1u);
+  iree_async_single_frontier_t first;
+  iree_async_single_frontier_initialize(&first,
+                                        info.reuse_frontier->entries[0].axis,
+                                        info.reuse_frontier->entries[0].epoch);
+
+  // A later use includes the first proof but cannot add its dependency to
+  // that already published point, even while the original uses are pending.
+  history->entries[0] = {Axis(2), 13};
+  history->entries[1] = info.reuse_frontier->entries[0];
+  iree_hal_pool_release_reservations(child, 1, &reservations[0], history);
+  IREE_ASSERT_OK(Acquire(child, 2048, nullptr,
+                         IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
+                         &reservations[0], &info, &result));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
+  iree_async_frontier_tracker_advance(tracker_, Axis(0), 7);
+  iree_async_frontier_tracker_advance(tracker_, Axis(1), 11);
+  bool satisfied = false;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      tracker_, iree_async_single_frontier_as_const_frontier(&first),
+      &satisfied));
+  EXPECT_TRUE(satisfied);
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      tracker_, info.reuse_frontier, &satisfied));
+  EXPECT_FALSE(satisfied);
+  iree_async_frontier_tracker_advance(tracker_, Axis(2), 13);
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+      tracker_, info.reuse_frontier, &satisfied));
+  EXPECT_TRUE(satisfied);
+  iree_hal_pool_release_reservations(child, reservations.size(),
+                                     reservations.data(), nullptr);
+  EXPECT_EQ(Stats(child).bytes_committed, 0u);
+}
+
+TEST_P(PoolCompositionTest,
+       OverflowReturnSurvivesChildDestructionAndReusesExactBytes) {
+  for (uint32_t i = 2; i < 256; ++i) {
+    IREE_ASSERT_OK(iree_async_frontier_tracker_register_axis(
+        tracker_, Axis(static_cast<uint8_t>(i)), nullptr));
+  }
+  uint64_t epoch = 0;
+  for (uint32_t axis_count : {9u, 256u}) {
+    SCOPED_TRACE(axis_count);
+    ++epoch;
+    iree_hal_pool_t* source = nullptr;
+    IREE_ASSERT_OK(CreateSource(0, 4096, 4096, &source));
+    const uint8_t capacity = axis_count == 9 ? 8 : 1;
+    iree_hal_pool_t* child = nullptr;
+    IREE_ASSERT_OK(CreateChild(source, 4096, capacity, &child, 2048,
+                               metadata_.allocator()));
+    std::array<iree_hal_pool_reservation_t, 2> reservations;
+    iree_hal_pool_acquire_info_t info;
+    iree_hal_pool_acquire_result_t result;
+    std::vector<uint8_t> expected(4096);
+    for (uint32_t i = 0; i < 2; ++i) {
+      IREE_ASSERT_OK(Acquire(child, 2048, nullptr,
+                             IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservations[i],
+                             &info, &result));
+      ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+      uintptr_t address;
+      IREE_ASSERT_OK(
+          CheckBytes(child, reservations[i], i ? 0xA5 : 0x5A, &address));
+      memset(expected.data() + i * 2048, i ? 0xA5 : 0x5A, 2048);
+    }
+    alignas(iree_async_frontier_entry_t)
+        uint8_t storage[sizeof(iree_async_frontier_t) +
+                        255 * sizeof(iree_async_frontier_entry_t)];
+    auto* first = reinterpret_cast<iree_async_frontier_t*>(storage);
+    iree_async_frontier_initialize(first, static_cast<uint8_t>(axis_count - 1));
+    for (uint32_t i = 0; i < axis_count - 1; ++i) {
+      first->entries[i] = {Axis(static_cast<uint8_t>(i)), epoch};
+    }
+    iree_async_single_frontier_t last;
+    iree_async_single_frontier_initialize(
+        &last, Axis(static_cast<uint8_t>(axis_count - 1)), epoch);
+    const auto child_allocations = metadata_.allocations.load();
+    const auto progress_allocations = progress_metadata_.allocations.load();
+    metadata_.fail = true;
+    progress_metadata_.fail = true;
+    iree_hal_pool_release_reservations(child, 1, &reservations[0], first);
+    iree_hal_pool_release_reservations(
+        child, 1, &reservations[1],
+        iree_async_single_frontier_as_const_frontier(&last));
+    EXPECT_EQ(Stats(child).bytes_committed, 0u);
+    iree_hal_pool_release(child);
+    pools_.pop_back();
+    EXPECT_EQ(metadata_.live, 0);
+    EXPECT_EQ(metadata_.allocations, child_allocations);
+    EXPECT_EQ(progress_metadata_.allocations, progress_allocations);
+    progress_metadata_.fail = false;
+    metadata_.fail = false;
+
+    iree_hal_pool_t* sibling = nullptr;
+    IREE_ASSERT_OK(CreateChild(source, 4096, capacity, &sibling, 4096));
+    iree_hal_pool_reservation_t reused;
+    IREE_ASSERT_OK(Acquire(sibling, 4096, nullptr,
+                           IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER,
+                           &reused, &info, &result));
+    ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
+    ASSERT_NE(info.reuse_frontier, nullptr);
+    EXPECT_EQ(info.reuse_frontier->entry_count, 1u);
+    bool satisfied = true;
+    for (uint32_t i = 0; i < axis_count - 1; ++i) {
+      iree_async_frontier_tracker_advance(tracker_,
+                                          Axis(static_cast<uint8_t>(i)), epoch);
+    }
+    IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+        tracker_, info.reuse_frontier, &satisfied));
+    EXPECT_FALSE(satisfied);
+    iree_async_frontier_tracker_advance(
+        tracker_, Axis(static_cast<uint8_t>(axis_count - 1)), epoch);
+    IREE_ASSERT_OK(iree_async_frontier_tracker_query(
+        tracker_, info.reuse_frontier, &satisfied));
+    EXPECT_TRUE(satisfied);
+    const auto request = iree_hal_make_pool_reservation_request(4096, 16);
+    iree_hal_buffer_t* view = nullptr;
+    IREE_ASSERT_OK(iree_hal_pool_materialize_reservations(
+        sibling, 1, &request, &reused, IREE_HAL_POOL_MATERIALIZE_FLAG_NONE,
+        &view));
+    std::vector<uint8_t> actual(4096);
+    IREE_ASSERT_OK(
+        iree_hal_buffer_map_read(view, 0, actual.data(), actual.size()));
+    EXPECT_EQ(actual, expected);
+    iree_hal_buffer_release(view);
+    iree_hal_pool_release_reservations(sibling, 1, &reused, nullptr);
+    iree_hal_pool_release(sibling);
+    pools_.pop_back();
+    iree_hal_pool_release(source);
+    pools_.pop_back();
+  }
 }
 
 TEST_P(PoolCompositionTest, ExhaustedParentLeavesOutputsUntouched) {
@@ -883,15 +1076,15 @@ TEST_P(FixedBlockPoolCompositionTest,
 }
 
 TEST_P(FixedBlockPoolCompositionTest,
-       WideUnionRetainsIndividualBlockHistories) {
+       LiveBackingRetainsIndividualBlockHistories) {
   iree_hal_pool_t* source = nullptr;
-  IREE_ASSERT_OK(CreateSource(0, 512, 512, &source));
+  IREE_ASSERT_OK(CreateSource(0, 768, 768, &source));
   iree_hal_pool_t* child = nullptr;
-  IREE_ASSERT_OK(CreateChild(source, 512, 1, &child));
-  std::array<iree_hal_pool_reservation_request_t, 2> requests;
+  IREE_ASSERT_OK(CreateChild(source, 768, 1, &child));
+  std::array<iree_hal_pool_reservation_request_t, 3> requests;
   requests.fill(iree_hal_make_pool_reservation_request(256, kMinAlignment));
-  std::array<iree_hal_pool_reservation_t, 2> reservations;
-  std::array<iree_hal_pool_acquire_info_t, 2> infos;
+  std::array<iree_hal_pool_reservation_t, 3> reservations;
+  std::array<iree_hal_pool_acquire_info_t, 3> infos;
   iree_hal_pool_acquire_result_t result;
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       child, requests.size(), requests.data(), nullptr, reservations.data(),
@@ -904,16 +1097,17 @@ TEST_P(FixedBlockPoolCompositionTest,
         child, 1, &reservations[i],
         iree_async_single_frontier_as_const_frontier(&frontier));
   }
-  EXPECT_EQ(Stats(child).bytes_committed, 512u);
+  EXPECT_EQ(Stats(child).bytes_committed, 768u);
   EXPECT_EQ(Stats(source).reservation_count, 1u);
-  // The union is wider than one entry, but both constituent blocks remain
-  // reusable with their exact prerequisite. Neither becomes tainted or fresh.
+  // The third block keeps this backing live. The two free blocks retain their
+  // individual histories until a whole-backing return requires their union.
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
-      child, requests.size(), requests.data(), nullptr, reservations.data(),
-      infos.data(), &result, IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
+      child, 2, requests.data(), nullptr, reservations.data(), infos.data(),
+      &result, IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
   uint32_t seen = 0;
-  for (const auto& info : infos) {
+  for (size_t i = 0; i < 2; ++i) {
+    const auto& info = infos[i];
     ASSERT_EQ(info.reuse_frontier->entry_count, 1);
     const auto entry = info.reuse_frontier->entries[0];
     const uint8_t index = entry.axis == Axis(0) ? 0 : 1;
