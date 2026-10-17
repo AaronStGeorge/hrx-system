@@ -582,6 +582,19 @@ iree_status_t loom_module_add_location(loom_module_t* module,
                                        loom_location_entry_t entry,
                                        loom_location_id_t* out_location_id);
 
+// Attaches compact parser-captured field spans to a file location entry.
+//
+// |location_id| must reference an existing LOOM_LOCATION_FILE entry owned by
+// |module|, and |field_spans| must contain |field_span_count| nonzero entries.
+// The spans are copied into module-owned arena storage, so the caller may pass
+// parser scratch storage. This compiler-internal fixed-representation entry
+// point consumes parser-established invariants and keeps compact text parsing
+// free of physical-format dispatch.
+iree_status_t loom_module_attach_location_compact_field_spans(
+    loom_module_t* module, loom_location_id_t location_id,
+    const loom_location_compact_field_span_t* field_spans,
+    uint16_t field_span_count);
+
 // Attaches parser-captured field spans to a file location entry.
 //
 // |location_id| must reference an existing LOOM_LOCATION_FILE entry owned by

@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/format/text/parser/context.h"
+#include "loom/ir/module.h"
 
 //===----------------------------------------------------------------------===//
 // Op accumulator
@@ -33,7 +34,6 @@ void loom_parsed_op_initialize(loom_parsed_op_t* parsed) {
   parsed->tied_result_capacity = LOOM_PARSED_OP_INLINE_TIED;
   parsed->compact_field_spans = parsed->inline_field_spans;
   parsed->compact_field_span_capacity = LOOM_PARSED_OP_INLINE_FIELD_SPANS;
-  parsed->field_span_format = LOOM_LOCATION_FIELD_SPAN_FORMAT_COMPACT;
   parsed->operand_segment_counts = parsed->inline_operand_segment_counts;
   parsed->operand_segment_capacity = LOOM_PARSED_OP_INLINE_OPERAND_SEGMENTS;
 }
@@ -44,7 +44,7 @@ void loom_parsed_op_reset(loom_parsed_op_t* parsed) {
   parsed->result_count = 0;
   parsed->tied_result_count = 0;
   parsed->field_span_count = 0;
-  parsed->field_span_format = LOOM_LOCATION_FIELD_SPAN_FORMAT_COMPACT;
+  parsed->field_span_coordinate_overflow_mask = 0;
   parsed->attribute_count = 0;
   parsed->region_count = 0;
   parsed->operand_segment_count = 0;
@@ -342,32 +342,25 @@ iree_status_t loom_parsed_op_add_tied_result(loom_parsed_op_t* parsed,
   return iree_ok_status();
 }
 
-iree_status_t loom_parsed_op_add_field_span(
+// Promotes compact spans once and owns all subsequent wide appends. Keeping
+// this exceptional state machine out of line preserves the parser's compact
+// append as a small common path.
+IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_parsed_op_add_wide_field_span(
     loom_parsed_op_t* parsed, iree_arena_allocator_t* arena,
     loom_location_field_kind_t kind, uint16_t index, loom_token_t start_token,
     uint32_t end_line, uint32_t end_column) {
-  if (start_token.kind == LOOM_TOKEN_NONE ||
-      start_token.kind == LOOM_TOKEN_EOF) {
-    return iree_ok_status();
+  const bool is_promoting = parsed->field_span_coordinate_overflow_mask == 0;
+  if (parsed->field_span_count >= parsed->wide_field_span_capacity) {
+    iree_host_size_t capacity = parsed->wide_field_span_capacity;
+    IREE_RETURN_IF_ERROR(loom_parser_grow_bounded_array(
+        arena, is_promoting ? 0 : parsed->field_span_count,
+        (iree_host_size_t)parsed->field_span_count + 1,
+        sizeof(loom_location_field_span_t), LOOM_LOCATION_FIELD_SPAN_COUNT_MAX,
+        "parsed op wide field span", &capacity,
+        (void**)&parsed->wide_field_spans));
+    parsed->wide_field_span_capacity = (uint16_t)capacity;
   }
-  const bool fits_compact =
-      start_token.line <= LOOM_LOCATION_COMPACT_COORDINATE_MAX &&
-      start_token.column <= LOOM_LOCATION_COMPACT_COORDINATE_MAX &&
-      end_line <= LOOM_LOCATION_COMPACT_COORDINATE_MAX &&
-      end_column <= LOOM_LOCATION_COMPACT_COORDINATE_MAX;
-  if (parsed->field_span_format == LOOM_LOCATION_FIELD_SPAN_FORMAT_COMPACT &&
-      !fits_compact) {
-    const iree_host_size_t minimum_capacity =
-        (iree_host_size_t)parsed->field_span_count + 1;
-    if (minimum_capacity > parsed->wide_field_span_capacity) {
-      iree_host_size_t capacity = parsed->wide_field_span_capacity;
-      IREE_RETURN_IF_ERROR(loom_parser_grow_bounded_array(
-          arena, /*existing_count=*/0, minimum_capacity,
-          sizeof(loom_location_field_span_t),
-          LOOM_LOCATION_FIELD_SPAN_COUNT_MAX, "parsed op wide field span",
-          &capacity, (void**)&parsed->wide_field_spans));
-      parsed->wide_field_span_capacity = (uint16_t)capacity;
-    }
+  if (is_promoting) {
     for (uint16_t i = 0; i < parsed->field_span_count; ++i) {
       const loom_location_compact_field_span_t span =
           parsed->compact_field_spans[i];
@@ -380,41 +373,8 @@ iree_status_t loom_parsed_op_add_field_span(
           .end_col = span.end_col,
       };
     }
-    parsed->field_span_format = LOOM_LOCATION_FIELD_SPAN_FORMAT_WIDE;
-  }
-
-  if (parsed->field_span_format == LOOM_LOCATION_FIELD_SPAN_FORMAT_COMPACT) {
-    if (parsed->field_span_count >= parsed->compact_field_span_capacity) {
-      iree_host_size_t capacity = parsed->compact_field_span_capacity;
-      IREE_RETURN_IF_ERROR(loom_parser_grow_bounded_array(
-          arena, parsed->field_span_count,
-          (iree_host_size_t)parsed->field_span_count + 1,
-          sizeof(loom_location_compact_field_span_t),
-          LOOM_LOCATION_FIELD_SPAN_COUNT_MAX, "parsed op field span", &capacity,
-          (void**)&parsed->compact_field_spans));
-      parsed->compact_field_span_capacity = (uint16_t)capacity;
-    }
-    parsed->compact_field_spans[parsed->field_span_count++] =
-        (loom_location_compact_field_span_t){
-            .kind = kind,
-            .index = index,
-            .start_line = (uint16_t)start_token.line,
-            .start_col = (uint16_t)start_token.column,
-            .end_line = (uint16_t)end_line,
-            .end_col = (uint16_t)end_column,
-        };
-    return iree_ok_status();
-  }
-
-  if (parsed->field_span_count >= parsed->wide_field_span_capacity) {
-    iree_host_size_t capacity = parsed->wide_field_span_capacity;
-    IREE_RETURN_IF_ERROR(loom_parser_grow_bounded_array(
-        arena, parsed->field_span_count,
-        (iree_host_size_t)parsed->field_span_count + 1,
-        sizeof(loom_location_field_span_t), LOOM_LOCATION_FIELD_SPAN_COUNT_MAX,
-        "parsed op wide field span", &capacity,
-        (void**)&parsed->wide_field_spans));
-    parsed->wide_field_span_capacity = (uint16_t)capacity;
+    parsed->field_span_coordinate_overflow_mask =
+        LOOM_PARSED_OP_WIDE_FIELD_SPAN_MASK;
   }
   parsed->wide_field_spans[parsed->field_span_count++] =
       (loom_location_field_span_t){
@@ -428,19 +388,73 @@ iree_status_t loom_parsed_op_add_field_span(
   return iree_ok_status();
 }
 
+iree_status_t loom_parsed_op_add_field_span(
+    loom_parsed_op_t* parsed, iree_arena_allocator_t* arena,
+    loom_location_field_kind_t kind, uint16_t index, loom_token_t start_token,
+    uint32_t end_line, uint32_t end_column) {
+  if (start_token.kind == LOOM_TOKEN_NONE ||
+      start_token.kind == LOOM_TOKEN_EOF) {
+    return iree_ok_status();
+  }
+  const uint32_t coordinate_mask = start_token.line | start_token.column |
+                                   end_line | end_column |
+                                   parsed->field_span_coordinate_overflow_mask;
+  if (IREE_UNLIKELY(coordinate_mask > LOOM_LOCATION_COMPACT_COORDINATE_MAX)) {
+    return loom_parsed_op_add_wide_field_span(
+        parsed, arena, kind, index, start_token, end_line, end_column);
+  }
+
+  if (parsed->field_span_count >= parsed->compact_field_span_capacity) {
+    iree_host_size_t capacity = parsed->compact_field_span_capacity;
+    IREE_RETURN_IF_ERROR(loom_parser_grow_bounded_array(
+        arena, parsed->field_span_count,
+        (iree_host_size_t)parsed->field_span_count + 1,
+        sizeof(loom_location_compact_field_span_t),
+        LOOM_LOCATION_FIELD_SPAN_COUNT_MAX, "parsed op field span", &capacity,
+        (void**)&parsed->compact_field_spans));
+    parsed->compact_field_span_capacity = (uint16_t)capacity;
+  }
+  parsed->compact_field_spans[parsed->field_span_count++] =
+      (loom_location_compact_field_span_t){
+          .kind = kind,
+          .index = index,
+          .start_line = (uint16_t)start_token.line,
+          .start_col = (uint16_t)start_token.column,
+          .end_line = (uint16_t)end_line,
+          .end_col = (uint16_t)end_column,
+      };
+  return iree_ok_status();
+}
+
 loom_location_field_span_array_t loom_parsed_op_field_span_array(
     const loom_parsed_op_t* parsed) {
   if (parsed->field_span_count == 0) {
     return loom_location_field_span_array_empty();
   }
-  if (parsed->field_span_format == LOOM_LOCATION_FIELD_SPAN_FORMAT_COMPACT) {
+  if (parsed->field_span_coordinate_overflow_mask == 0) {
     return loom_location_field_span_array_compact(parsed->compact_field_spans,
                                                   parsed->field_span_count);
   }
-  IREE_ASSERT(parsed->field_span_format ==
-              LOOM_LOCATION_FIELD_SPAN_FORMAT_WIDE);
+  IREE_ASSERT(parsed->field_span_coordinate_overflow_mask ==
+              LOOM_PARSED_OP_WIDE_FIELD_SPAN_MASK);
   return loom_location_field_span_array_wide(parsed->wide_field_spans,
                                              parsed->field_span_count);
+}
+
+iree_status_t loom_parsed_op_attach_field_spans(
+    const loom_parsed_op_t* parsed, loom_module_t* module,
+    loom_location_id_t location_id) {
+  if (parsed->field_span_coordinate_overflow_mask == 0) {
+    return loom_module_attach_location_compact_field_spans(
+        module, location_id, parsed->compact_field_spans,
+        parsed->field_span_count);
+  }
+  IREE_ASSERT(parsed->field_span_coordinate_overflow_mask ==
+              LOOM_PARSED_OP_WIDE_FIELD_SPAN_MASK);
+  return loom_module_attach_location_field_spans(
+      module, location_id,
+      loom_location_field_span_array_wide(parsed->wide_field_spans,
+                                          parsed->field_span_count));
 }
 
 static iree_status_t loom_parser_add_pending_arg(

@@ -625,9 +625,8 @@ static iree_status_t loom_parse_low_asm_packet_location(
   if (*out_location == fallback_location &&
       fallback_location != LOOM_LOCATION_UNKNOWN &&
       parsed_spans->field_span_count > 0) {
-    IREE_RETURN_IF_ERROR(loom_module_attach_location_field_spans(
-        parser->module, fallback_location,
-        loom_parsed_op_field_span_array(parsed_spans)));
+    IREE_RETURN_IF_ERROR(loom_parsed_op_attach_field_spans(
+        parsed_spans, parser->module, fallback_location));
   }
   return iree_ok_status();
 }

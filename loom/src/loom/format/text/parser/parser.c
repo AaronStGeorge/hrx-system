@@ -692,9 +692,8 @@ static iree_status_t loom_parse_op_into(
   if (location == fallback_location &&
       fallback_location != LOOM_LOCATION_UNKNOWN &&
       parsed->field_span_count > 0) {
-    IREE_RETURN_IF_ERROR(loom_module_attach_location_field_spans(
-        parser->module, fallback_location,
-        loom_parsed_op_field_span_array(parsed)));
+    IREE_RETURN_IF_ERROR(loom_parsed_op_attach_field_spans(
+        parsed, parser->module, fallback_location));
   }
 
   // Finalize the op.

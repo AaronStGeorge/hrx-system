@@ -423,25 +423,34 @@ TEST_F(ParserTest, ParsedOpScratchFramePromotesAndReusesWideSpans) {
   IREE_ASSERT_OK(loom_parsed_op_add_field_span(
       scratch, &parser.parser_arena, LOOM_LOCATION_FIELD_OPERAND, 0, token,
       /*end_line=*/4, /*end_column=*/9));
-  token.line = 70000;
+  token.line = 4;
   token.column = 80000;
   IREE_ASSERT_OK(loom_parsed_op_add_field_span(
       scratch, &parser.parser_arena, LOOM_LOCATION_FIELD_ATTRIBUTE, 2, token,
-      /*end_line=*/90000, /*end_column=*/100000));
+      /*end_line=*/4, /*end_column=*/100000));
+  token.line = 5;
+  token.column = 1;
+  IREE_ASSERT_OK(loom_parsed_op_add_field_span(
+      scratch, &parser.parser_arena, LOOM_LOCATION_FIELD_RESULT, 3, token,
+      /*end_line=*/5, /*end_column=*/7));
 
   const auto wide_spans = loom_parsed_op_field_span_array(scratch);
   ASSERT_EQ(wide_spans.format, LOOM_LOCATION_FIELD_SPAN_FORMAT_WIDE);
-  ASSERT_EQ(wide_spans.count, 2u);
+  ASSERT_EQ(wide_spans.count, 3u);
   const auto* spans =
       static_cast<const loom_location_field_span_t*>(wide_spans.data);
   EXPECT_EQ(spans[0].start_line, 4u);
   EXPECT_EQ(spans[0].end_col, 9u);
   EXPECT_EQ(spans[1].kind, LOOM_LOCATION_FIELD_ATTRIBUTE);
   EXPECT_EQ(spans[1].index, 2u);
-  EXPECT_EQ(spans[1].start_line, 70000u);
+  EXPECT_EQ(spans[1].start_line, 4u);
   EXPECT_EQ(spans[1].start_col, 80000u);
-  EXPECT_EQ(spans[1].end_line, 90000u);
+  EXPECT_EQ(spans[1].end_line, 4u);
   EXPECT_EQ(spans[1].end_col, 100000u);
+  EXPECT_EQ(spans[2].start_line, 5u);
+  EXPECT_EQ(spans[2].start_col, 1u);
+  EXPECT_EQ(spans[2].end_line, 5u);
+  EXPECT_EQ(spans[2].end_col, 7u);
 
   auto* wide_storage = scratch->wide_field_spans;
   const iree_host_size_t allocation_size =

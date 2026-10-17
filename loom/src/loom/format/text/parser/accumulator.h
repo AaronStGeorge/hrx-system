@@ -81,6 +81,14 @@ typedef struct loom_parser_symbol_origins_t {
 #define LOOM_PARSED_OP_INLINE_FIELD_SPANS 16
 #define LOOM_PARSED_OP_INLINE_OPERAND_SEGMENTS 8
 
+// Synthetic coordinate bit forcing an already-promoted op through the wide
+// field-span append path.
+#define LOOM_PARSED_OP_WIDE_FIELD_SPAN_MASK \
+  (LOOM_LOCATION_COMPACT_COORDINATE_MAX + 1u)
+static_assert(LOOM_PARSED_OP_WIDE_FIELD_SPAN_MASK >
+                  LOOM_LOCATION_COMPACT_COORDINATE_MAX,
+              "wide field-span mask must overflow compact coordinates");
+
 // Accumulates parsed fields during format walk. Pointers start aimed at the
 // inline arrays and redirect to parser_arena spill storage on growth.
 struct loom_parsed_op_t {
@@ -113,8 +121,9 @@ struct loom_parsed_op_t {
   uint16_t compact_field_span_capacity;
   // Number of wide spans available in |wide_field_spans|.
   uint16_t wide_field_span_capacity;
-  // Physical field-span representation active for the current op.
-  loom_location_field_span_format_t field_span_format;
+  // Zero for compact storage or LOOM_PARSED_OP_WIDE_FIELD_SPAN_MASK after
+  // promotion, forcing the common coordinate mask through the wide path.
+  uint32_t field_span_coordinate_overflow_mask;
   // Effective traits resolved with a representation-scoped identity.
   loom_trait_flags_t effective_traits;
   // Intrinsic write-space bound resolved with a Low descriptor's traits.
@@ -193,6 +202,10 @@ iree_status_t loom_parsed_op_add_field_span(
 // Returns the physical field-span array accumulated for the current op.
 loom_location_field_span_array_t loom_parsed_op_field_span_array(
     const loom_parsed_op_t* parsed);
+// Copies the current nonempty field-span payload into |module|.
+iree_status_t loom_parsed_op_attach_field_spans(const loom_parsed_op_t* parsed,
+                                                loom_module_t* module,
+                                                loom_location_id_t location_id);
 iree_status_t loom_parse_format_add_field_span(loom_parser_t* parser,
                                                loom_parsed_op_t* parsed,
                                                loom_location_field_kind_t kind,

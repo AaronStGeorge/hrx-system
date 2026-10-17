@@ -1623,9 +1623,10 @@ iree_status_t loom_module_add_location(loom_module_t* module,
   return iree_ok_status();
 }
 
-iree_status_t loom_module_attach_location_field_spans(
+static iree_status_t loom_module_attach_location_field_span_data(
     loom_module_t* module, loom_location_id_t location_id,
-    loom_location_field_span_array_t field_spans) {
+    loom_location_field_span_format_t format, const void* data, uint16_t count,
+    iree_host_size_t data_length) {
   if (location_id == LOOM_LOCATION_UNKNOWN ||
       (iree_host_size_t)location_id >= module->locations.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1648,6 +1649,31 @@ iree_status_t loom_module_attach_location_field_spans(
                             "location %u already has field spans attached",
                             location_id);
   }
+  void* copied_spans = NULL;
+  if (data_length > 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate(&module->arena, data_length, &copied_spans));
+    memcpy(copied_spans, data, data_length);
+  }
+  entry->file.field_span_count = count;
+  entry->file.field_span_format = format;
+  entry->file.field_span_data = copied_spans;
+  return iree_ok_status();
+}
+
+iree_status_t loom_module_attach_location_compact_field_spans(
+    loom_module_t* module, loom_location_id_t location_id,
+    const loom_location_compact_field_span_t* field_spans,
+    uint16_t field_span_count) {
+  return loom_module_attach_location_field_span_data(
+      module, location_id, LOOM_LOCATION_FIELD_SPAN_FORMAT_COMPACT, field_spans,
+      field_span_count,
+      field_span_count * sizeof(loom_location_compact_field_span_t));
+}
+
+iree_status_t loom_module_attach_location_field_spans(
+    loom_module_t* module, loom_location_id_t location_id,
+    loom_location_field_span_array_t field_spans) {
   if (field_spans.count > LOOM_LOCATION_FIELD_SPAN_COUNT_MAX) {
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -1669,18 +1695,11 @@ iree_status_t loom_module_attach_location_field_spans(
                             "compact or wide payload");
   }
 
-  void* copied_spans = NULL;
-  if (field_spans.count > 0) {
-    const iree_host_size_t data_length = loom_location_field_span_data_length(
-        field_spans.format, field_spans.count);
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate(&module->arena, data_length, &copied_spans));
-    memcpy(copied_spans, field_spans.data, data_length);
-  }
-  entry->file.field_span_count = (uint16_t)field_spans.count;
-  entry->file.field_span_format = field_spans.format;
-  entry->file.field_span_data = copied_spans;
-  return iree_ok_status();
+  return loom_module_attach_location_field_span_data(
+      module, location_id, field_spans.format, field_spans.data,
+      (uint16_t)field_spans.count,
+      loom_location_field_span_data_length(field_spans.format,
+                                           field_spans.count));
 }
 
 //===----------------------------------------------------------------------===//
