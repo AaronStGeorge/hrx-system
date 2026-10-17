@@ -257,27 +257,30 @@ TEST_P(TsanExecutableTest, ReportsTsanPacketThroughFeedback) {
   EXPECT_EQ(report.flags,
             IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR |
                 IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR);
-  EXPECT_EQ(report.memory_space, IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP);
-  EXPECT_EQ(report.current_access_kind, IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE);
-  EXPECT_EQ(report.prior_access_kind, IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ);
-  EXPECT_EQ(report.access_length, 4u);
-  EXPECT_EQ(report.current_site_id, 0x5453414E00000002ull);
-  EXPECT_EQ(report.prior_site_id, 0x5453414E00000001ull);
-  EXPECT_EQ(report.memory_address, 0x20u);
-  EXPECT_EQ(report.shadow_address, 0xABC0u);
-  EXPECT_EQ(report.shadow_value, 0x12345678u);
-  EXPECT_EQ(report.current_workgroup_id[0], 0u);
-  EXPECT_EQ(report.current_workgroup_id[1], 0u);
-  EXPECT_EQ(report.current_workgroup_id[2], 0u);
-  EXPECT_EQ(report.current_workitem_id[0], 5u);
-  EXPECT_EQ(report.current_workitem_id[1], 0u);
-  EXPECT_EQ(report.current_workitem_id[2], 0u);
-  EXPECT_EQ(report.prior_workgroup_id[0], 0u);
-  EXPECT_EQ(report.prior_workgroup_id[1], 0u);
-  EXPECT_EQ(report.prior_workgroup_id[2], 0u);
-  EXPECT_EQ(report.prior_workitem_id[0], 3u);
-  EXPECT_EQ(report.prior_workitem_id[1], 0u);
-  EXPECT_EQ(report.prior_workitem_id[2], 0u);
+  const auto& data_race = report.detail.data_race;
+  EXPECT_EQ(data_race.memory_space,
+            IREE_HAL_DEVICE_TSAN_MEMORY_SPACE_WORKGROUP);
+  EXPECT_EQ(data_race.current_access_kind,
+            IREE_HAL_DEVICE_TSAN_ACCESS_KIND_WRITE);
+  EXPECT_EQ(data_race.prior_access_kind, IREE_HAL_DEVICE_TSAN_ACCESS_KIND_READ);
+  EXPECT_EQ(data_race.access_length, 4u);
+  EXPECT_EQ(data_race.current_site_id, 0x5453414E00000002ull);
+  EXPECT_EQ(data_race.prior_site_id, 0x5453414E00000001ull);
+  EXPECT_EQ(data_race.memory_address, 0x20u);
+  EXPECT_EQ(data_race.shadow_address, 0xABC0u);
+  EXPECT_EQ(data_race.shadow_value, 0x12345678u);
+  EXPECT_EQ(data_race.current_workgroup_id[0], 0u);
+  EXPECT_EQ(data_race.current_workgroup_id[1], 0u);
+  EXPECT_EQ(data_race.current_workgroup_id[2], 0u);
+  EXPECT_EQ(data_race.current_workitem_id[0], 5u);
+  EXPECT_EQ(data_race.current_workitem_id[1], 0u);
+  EXPECT_EQ(data_race.current_workitem_id[2], 0u);
+  EXPECT_EQ(data_race.prior_workgroup_id[0], 0u);
+  EXPECT_EQ(data_race.prior_workgroup_id[1], 0u);
+  EXPECT_EQ(data_race.prior_workgroup_id[2], 0u);
+  EXPECT_EQ(data_race.prior_workitem_id[0], 3u);
+  EXPECT_EQ(data_race.prior_workitem_id[1], 0u);
+  EXPECT_EQ(data_race.prior_workitem_id[2], 0u);
 
   iree_hal_device_event_source_t source = recorder()->last_source();
   EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));

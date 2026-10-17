@@ -42,6 +42,9 @@ enum iree_hal_amdgpu_tsan_check_kind_bits_t {
   // Conflicting accesses to the same memory location were observed without
   // intervening synchronization.
   IREE_HAL_AMDGPU_TSAN_CHECK_KIND_DATA_RACE = 1u,
+  // The dispatch requires more workgroup shadow bytes than the queue arena
+  // provides.
+  IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY = 2u,
 };
 
 // TSAN memory space containing the observed address.
@@ -283,20 +286,8 @@ IREE_AMDGPU_STATIC_ASSERT(
                          queue_state_template_value) == 48,
     "TSAN queue initialize args template follows clear geometry fields");
 
-// TSAN diagnostic payload carried by feedback packets of kind TSAN.
-//
-// The generic feedback packet header carries common source attribution used by
-// all feedback packet kinds. This payload carries the TSAN-specific current and
-// prior access attribution needed to explain the conflict.
-typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_report_t {
-  // Size of this record in bytes for forward-compatible parsing.
-  uint32_t record_length;
-  // ABI version of this record layout.
-  uint32_t abi_version;
-  // Check kind that triggered the report.
-  iree_hal_amdgpu_tsan_check_kind_t check_kind;
-  // Flags describing optional report fields.
-  iree_hal_amdgpu_tsan_report_flags_t flags;
+// TSAN data-race report details.
+typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_data_race_report_t {
   // Memory space containing |memory_address|.
   iree_hal_amdgpu_tsan_memory_space_t memory_space;
   // Access kind performed by the reporting workitem.
@@ -323,6 +314,61 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_report_t {
   uint32_t prior_workgroup_id[3];
   // Workitem id that produced the prior access.
   uint32_t prior_workitem_id[3];
+} iree_hal_amdgpu_tsan_data_race_report_t;
+IREE_AMDGPU_STATIC_ASSERT(
+    sizeof(iree_hal_amdgpu_tsan_data_race_report_t) == 104,
+    "TSAN data-race report size is part of the device ABI");
+
+// TSAN queue-shadow capacity report details.
+typedef struct IREE_AMDGPU_ALIGNAS(8)
+    iree_hal_amdgpu_tsan_shadow_capacity_report_t {
+  // Total bytes available in the queue shadow arena.
+  uint64_t shadow_size;
+  // Exclusive byte end required by the first workgroup outside the arena.
+  uint64_t required_shadow_end;
+  // Bytes required by each workgroup for this dispatch.
+  uint64_t workgroup_shadow_stride;
+  // Flattened ordinal of the first workgroup outside the arena.
+  uint64_t workgroup_ordinal;
+  // Final group-segment byte size carried by the dispatch packet.
+  uint32_t workgroup_local_memory_size;
+  // Log2 application memory bytes represented by one shadow entry.
+  uint32_t memory_granule_shift;
+  // Bytes in each shadow entry.
+  uint32_t shadow_entry_size;
+  // Reserved for future capacity report fields. Must be zero.
+  uint32_t reserved0;
+  // Workgroup id that observed the capacity failure.
+  uint32_t current_workgroup_id[3];
+  // Workitem id that produced the report.
+  uint32_t current_workitem_id[3];
+  // Reserved for future capacity report fields. Must be zero.
+  uint64_t reserved1[4];
+} iree_hal_amdgpu_tsan_shadow_capacity_report_t;
+IREE_AMDGPU_STATIC_ASSERT(
+    sizeof(iree_hal_amdgpu_tsan_shadow_capacity_report_t) == 104,
+    "TSAN shadow-capacity report size is part of the device ABI");
+
+// TSAN diagnostic payload carried by feedback packets of kind TSAN.
+//
+// The generic feedback packet header carries common source attribution used by
+// all feedback packet kinds. |check_kind| selects exactly one detail variant.
+typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_report_t {
+  // Size of this record in bytes for forward-compatible parsing.
+  uint32_t record_length;
+  // ABI version of this record layout.
+  uint32_t abi_version;
+  // Check kind selecting the active detail variant.
+  iree_hal_amdgpu_tsan_check_kind_t check_kind;
+  // Flags describing optional report fields.
+  iree_hal_amdgpu_tsan_report_flags_t flags;
+  // Check-specific report details.
+  union {
+    // Details for IREE_HAL_AMDGPU_TSAN_CHECK_KIND_DATA_RACE.
+    iree_hal_amdgpu_tsan_data_race_report_t data_race;
+    // Details for IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY.
+    iree_hal_amdgpu_tsan_shadow_capacity_report_t shadow_capacity;
+  } detail;
 } iree_hal_amdgpu_tsan_report_t;
 IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_report_t) == 120,
                           "TSAN report payload size is part of the ABI");

@@ -25,6 +25,8 @@ TEST(AmdgpuTsanAbiTest, ConfigConstantsMatchHalTsanAbi) {
             offsetof(iree_hal_amdgpu_tsan_config_t, memory_granule_shift));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_SHADOW_BASE_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_config_t, shadow_base));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_SHADOW_SIZE_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_config_t, shadow_size));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_DISPATCH_SHADOW_STRIDE_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_config_t, dispatch_shadow_stride));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_WORKGROUP_SHADOW_STRIDE_OFFSET,
@@ -147,52 +149,115 @@ TEST(AmdgpuTsanAbiTest, ReportConstantsMatchHalTsanAbi) {
             offsetof(iree_hal_amdgpu_tsan_report_t, check_kind));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_FLAGS_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_report_t, flags));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_MEMORY_SPACE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, memory_space));
+  EXPECT_EQ(
+      LOOM_AMDGPU_TSAN_REPORT_MEMORY_SPACE_OFFSET,
+      offsetof(iree_hal_amdgpu_tsan_report_t, detail.data_race.memory_space));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CURRENT_ACCESS_KIND_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, current_access_kind));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.current_access_kind));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_PRIOR_ACCESS_KIND_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, prior_access_kind));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_ACCESS_SIZE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, access_size));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.prior_access_kind));
+  EXPECT_EQ(
+      LOOM_AMDGPU_TSAN_REPORT_ACCESS_SIZE_OFFSET,
+      offsetof(iree_hal_amdgpu_tsan_report_t, detail.data_race.access_size));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CURRENT_SITE_ID_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, current_site_id));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_PRIOR_SITE_ID_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, prior_site_id));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_MEMORY_ADDRESS_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, memory_address));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_SHADOW_ADDRESS_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, shadow_address));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_SHADOW_VALUE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, shadow_value));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.current_site_id));
+  EXPECT_EQ(
+      LOOM_AMDGPU_TSAN_REPORT_PRIOR_SITE_ID_OFFSET,
+      offsetof(iree_hal_amdgpu_tsan_report_t, detail.data_race.prior_site_id));
+  EXPECT_EQ(
+      LOOM_AMDGPU_TSAN_REPORT_MEMORY_ADDRESS_OFFSET,
+      offsetof(iree_hal_amdgpu_tsan_report_t, detail.data_race.memory_address));
+  EXPECT_EQ(
+      LOOM_AMDGPU_TSAN_REPORT_SHADOW_ADDRESS_OFFSET,
+      offsetof(iree_hal_amdgpu_tsan_report_t, detail.data_race.shadow_address));
+  EXPECT_EQ(
+      LOOM_AMDGPU_TSAN_REPORT_SHADOW_VALUE_OFFSET,
+      offsetof(iree_hal_amdgpu_tsan_report_t, detail.data_race.shadow_value));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKGROUP_ID_X_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, current_workgroup_id[0]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.current_workgroup_id[0]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKGROUP_ID_Y_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, current_workgroup_id[1]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.current_workgroup_id[1]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKGROUP_ID_Z_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, current_workgroup_id[2]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.current_workgroup_id[2]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKITEM_ID_X_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, current_workitem_id[0]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.current_workitem_id[0]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKITEM_ID_Y_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, current_workitem_id[1]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.current_workitem_id[1]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CURRENT_WORKITEM_ID_Z_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, current_workitem_id[2]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.current_workitem_id[2]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_X_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, prior_workgroup_id[0]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.prior_workgroup_id[0]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_Y_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, prior_workgroup_id[1]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.prior_workgroup_id[1]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKGROUP_ID_Z_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, prior_workgroup_id[2]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.prior_workgroup_id[2]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_X_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, prior_workitem_id[0]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.prior_workitem_id[0]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_Y_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, prior_workitem_id[1]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.prior_workitem_id[1]));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_Z_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_report_t, prior_workitem_id[2]));
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.data_race.prior_workitem_id[2]));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_SIZE_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.shadow_size));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_REQUIRED_SHADOW_END_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.required_shadow_end));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_SHADOW_STRIDE_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.workgroup_shadow_stride));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ORDINAL_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.workgroup_ordinal));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_LOCAL_MEMORY_SIZE_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.workgroup_local_memory_size));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_MEMORY_GRANULE_SHIFT_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.memory_granule_shift));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_ENTRY_SIZE_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.shadow_entry_size));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_X_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.current_workgroup_id[0]));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_Y_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.current_workgroup_id[1]));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_Z_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.current_workgroup_id[2]));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_X_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.current_workitem_id[0]));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_Y_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.current_workitem_id[1]));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_Z_OFFSET,
+            offsetof(iree_hal_amdgpu_tsan_report_t,
+                     detail.shadow_capacity.current_workitem_id[2]));
   EXPECT_EQ(static_cast<uint32_t>(LOOM_AMDGPU_TSAN_CHECK_KIND_UNKNOWN),
             static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_CHECK_KIND_UNKNOWN));
   EXPECT_EQ(static_cast<uint32_t>(LOOM_AMDGPU_TSAN_CHECK_KIND_DATA_RACE),
             static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_CHECK_KIND_DATA_RACE));
+  EXPECT_EQ(
+      static_cast<uint32_t>(LOOM_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY),
+      static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY));
   EXPECT_EQ(static_cast<uint32_t>(LOOM_AMDGPU_TSAN_MEMORY_SPACE_UNKNOWN),
             static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_UNKNOWN));
   EXPECT_EQ(static_cast<uint32_t>(LOOM_AMDGPU_TSAN_MEMORY_SPACE_GLOBAL),

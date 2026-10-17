@@ -879,6 +879,8 @@ typedef struct iree_hal_amdgpu_executable_t {
   iree_hal_amdgpu_executable_load_variant_t* load_variants;
   // True when dispatch metadata must be selected by queue.
   bool requires_queue_scope;
+  // True when the executable contains Loom TSAN instrumentation.
+  bool uses_tsan;
   // Number of entries in |queue_scopes|.
   iree_host_size_t queue_scope_count;
   // Immutable queue identities captured from the owning logical device.
@@ -1941,6 +1943,7 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
         &global);
     if (iree_status_is_ok(status) && found) {
       executable->requires_queue_scope = true;
+      executable->uses_tsan = true;
       if (IREE_UNLIKELY(executable->queue_scope_count == 0)) {
         status = iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
@@ -2420,6 +2423,13 @@ bool iree_hal_amdgpu_executable_requires_queue_scope(
   const iree_hal_amdgpu_executable_t* executable =
       iree_hal_amdgpu_executable_const_cast(base_executable);
   return executable->requires_queue_scope;
+}
+
+bool iree_hal_amdgpu_executable_uses_tsan(
+    iree_hal_executable_t* base_executable) {
+  const iree_hal_amdgpu_executable_t* executable =
+      iree_hal_amdgpu_executable_const_cast(base_executable);
+  return executable->uses_tsan;
 }
 
 iree_status_t

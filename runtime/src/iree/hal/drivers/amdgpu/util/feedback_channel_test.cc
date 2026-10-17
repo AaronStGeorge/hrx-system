@@ -233,30 +233,30 @@ TEST_F(FeedbackChannelTest, HostTsanProducerDrain) {
             IREE_HAL_AMDGPU_TSAN_REPORT_ABI_VERSION_0);
   EXPECT_EQ(state.report.check_kind, IREE_HAL_AMDGPU_TSAN_CHECK_KIND_DATA_RACE);
   EXPECT_EQ(state.report.flags, IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_NONE);
-  EXPECT_EQ(state.report.memory_space,
+  const auto& data_race = state.report.detail.data_race;
+  EXPECT_EQ(data_race.memory_space,
             IREE_HAL_AMDGPU_TSAN_MEMORY_SPACE_WORKGROUP);
-  EXPECT_EQ(state.report.current_access_kind,
+  EXPECT_EQ(data_race.current_access_kind,
             IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_WRITE);
-  EXPECT_EQ(state.report.prior_access_kind,
-            IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_READ);
-  EXPECT_EQ(state.report.access_size, 4u);
-  EXPECT_EQ(state.report.current_site_id, 17u);
-  EXPECT_EQ(state.report.prior_site_id, 11u);
-  EXPECT_EQ(state.report.memory_address, 0x20u);
-  EXPECT_EQ(state.report.shadow_address, 0xABC0u);
-  EXPECT_EQ(state.report.shadow_value, 0x12345678u);
-  EXPECT_EQ(state.report.current_workgroup_id[0], 2u);
-  EXPECT_EQ(state.report.current_workgroup_id[1], 3u);
-  EXPECT_EQ(state.report.current_workgroup_id[2], 4u);
-  EXPECT_EQ(state.report.current_workitem_id[0], 5u);
-  EXPECT_EQ(state.report.current_workitem_id[1], 6u);
-  EXPECT_EQ(state.report.current_workitem_id[2], 7u);
-  EXPECT_EQ(state.report.prior_workgroup_id[0], 8u);
-  EXPECT_EQ(state.report.prior_workgroup_id[1], 9u);
-  EXPECT_EQ(state.report.prior_workgroup_id[2], 10u);
-  EXPECT_EQ(state.report.prior_workitem_id[0], 11u);
-  EXPECT_EQ(state.report.prior_workitem_id[1], 12u);
-  EXPECT_EQ(state.report.prior_workitem_id[2], 13u);
+  EXPECT_EQ(data_race.prior_access_kind, IREE_HAL_AMDGPU_TSAN_ACCESS_KIND_READ);
+  EXPECT_EQ(data_race.access_size, 4u);
+  EXPECT_EQ(data_race.current_site_id, 17u);
+  EXPECT_EQ(data_race.prior_site_id, 11u);
+  EXPECT_EQ(data_race.memory_address, 0x20u);
+  EXPECT_EQ(data_race.shadow_address, 0xABC0u);
+  EXPECT_EQ(data_race.shadow_value, 0x12345678u);
+  EXPECT_EQ(data_race.current_workgroup_id[0], 2u);
+  EXPECT_EQ(data_race.current_workgroup_id[1], 3u);
+  EXPECT_EQ(data_race.current_workgroup_id[2], 4u);
+  EXPECT_EQ(data_race.current_workitem_id[0], 5u);
+  EXPECT_EQ(data_race.current_workitem_id[1], 6u);
+  EXPECT_EQ(data_race.current_workitem_id[2], 7u);
+  EXPECT_EQ(data_race.prior_workgroup_id[0], 8u);
+  EXPECT_EQ(data_race.prior_workgroup_id[1], 9u);
+  EXPECT_EQ(data_race.prior_workgroup_id[2], 10u);
+  EXPECT_EQ(data_race.prior_workitem_id[0], 11u);
+  EXPECT_EQ(data_race.prior_workitem_id[1], 12u);
+  EXPECT_EQ(data_race.prior_workitem_id[2], 13u);
   EXPECT_EQ(channel_.control->read_tail, channel_.control->reservation_head);
 }
 

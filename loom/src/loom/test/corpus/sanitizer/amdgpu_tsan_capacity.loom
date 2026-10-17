@@ -1,0 +1,86 @@
+kernel.def @tsan_shadow_capacity_8(%workgroups_x: index, %workgroups_y: index, %workgroups_z: index) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%workgroups_x, %workgroups_y, %workgroups_z) workgroup_size(%unit, %unit, %unit) : index
+} launch() {
+  %base = index.constant 0 : offset
+  %bytes = index.constant 8 : offset
+  %value = scalar.constant 1 : i64
+  %scratch = buffer.alloca<workgroup> align(8) %bytes : buffer
+  %view = buffer.view %scratch[%base] : buffer -> view<1xi64>
+  view.store %value, %view[0] : i64, view<1xi64>
+  kernel.return
+}
+
+kernel.def @tsan_shadow_capacity_16(%workgroups_x: index, %workgroups_y: index, %workgroups_z: index) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%workgroups_x, %workgroups_y, %workgroups_z) workgroup_size(%unit, %unit, %unit) : index
+} launch() {
+  %base = index.constant 0 : offset
+  %bytes = index.constant 16 : offset
+  %value = scalar.constant 1 : i64
+  %scratch = buffer.alloca<workgroup> align(8) %bytes : buffer
+  %view = buffer.view %scratch[%base] : buffer -> view<2xi64>
+  view.store %value, %view[0] : i64, view<2xi64>
+  kernel.return
+}
+
+kernel.def @tsan_shadow_capacity_multiwave() {
+  %unit = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%threads, %unit, %unit) : index
+} launch(%output: buffer) {
+  %base = index.constant 0 : offset
+  %scratch_bytes = index.constant 512 : offset
+  %output_value = scalar.constant 1 : i32
+  %scratch_value = scalar.constant 1 : i64
+  %lane = kernel.workitem.id<x> : index
+  %global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %global[%base] : buffer -> view<64xi32>
+  view.store %output_value, %output_view[%lane] : i32, view<64xi32>
+  %scratch = buffer.alloca<workgroup> align(8) %scratch_bytes : buffer
+  %scratch_view = buffer.view %scratch[%base] : buffer -> view<64xi64>
+  view.store %scratch_value, %scratch_view[%lane] : i64, view<64xi64>
+  kernel.return
+}
+
+check.case @tsan_shadow_capacity_exact_boundary_and_reuse {
+  %x = check.literal value(4) : index
+  %y = check.literal value(2) : index
+  %z = check.literal value(2) : index
+  kernel.launch @tsan_shadow_capacity_8[%x, %y, %z]() : [index, index, index]()
+  kernel.launch @tsan_shadow_capacity_8[%x, %y, %z]() : [index, index, index]()
+  check.return
+}
+
+check.case @tsan_shadow_capacity_first_excess_workgroup {
+  %x = check.literal value(17) : index
+  %unit = check.literal value(1) : index
+  kernel.launch @tsan_shadow_capacity_8[%x, %unit, %unit]() : [index, index, index]()
+  check.expect.event<device> {count = 1, severity = "error", tsan = {check = "shadow_capacity"}, type = "tsan_report"}
+  check.return
+}
+
+check.case @tsan_shadow_capacity_larger_record_last_fitting_count {
+  %x = check.literal value(8) : index
+  %unit = check.literal value(1) : index
+  kernel.launch @tsan_shadow_capacity_16[%x, %unit, %unit]() : [index, index, index]()
+  check.return
+}
+
+check.case @tsan_shadow_capacity_larger_record_3d_excess {
+  %x = check.literal value(3) : index
+  %y = check.literal value(3) : index
+  %unit = check.literal value(1) : index
+  kernel.launch @tsan_shadow_capacity_16[%x, %y, %unit]() : [index, index, index]()
+  check.expect.event<device> {count = 1, severity = "error", tsan = {check = "shadow_capacity"}, type = "tsan_report"}
+  check.return
+}
+
+check.case @tsan_shadow_capacity_first_excess_workgroup_terminates_all_waves {
+  %output = check.generate.fill value(0) : tensor<64xi32>
+  kernel.launch @tsan_shadow_capacity_multiwave(%output) : (tensor<64xi32>)
+  %expected = check.generate.fill value(0) : tensor<64xi32>
+  check.expect.equal actual(%output) expected(%expected) : tensor<64xi32>
+  check.expect.event<device> {count = 1, severity = "error", tsan = {check = "shadow_capacity"}, type = "tsan_report"}
+  check.return
+}
