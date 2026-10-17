@@ -381,8 +381,31 @@ deployment measurements retain normal idle/wake policy. The
 defines that distinction. Report the build identity, power policy, repetition
 spread and raw results with any comparison.
 
-The resource-tagged smoke target exercises the same cases without collecting
-performance evidence:
+`XdnaQueueMemoryBenchmark/` measures `queue_alloca` → recorded execution →
+`queue_dealloca` for one transient output, with resident inputs and a reusable
+recording with an indirect output binding. `Cached*` returns and reacquires
+backing through an explicit one-entry slab cache. `Fresh*` retains no idle
+backing and exercises native allocation on the memory worker. `CapacityWait*` first occupies the
+pool's one-output budget, submits the dependent chain, and then releases the
+held reservation through `queue_dealloca`; that extra release is timed, while
+preparing the held reservation is not. This measures recovery after capacity
+returns, with no artificial delay or polling loop.
+
+All six rows reuse a single semaphore across iterations. `SubmitOnly` excludes
+the terminal completion wait; `EndToEnd` includes it. Each iteration is one
+complete output lifetime, with numerical checks before and after measurement.
+`native_slabs_per_iteration` counts actual backing-pool acquisitions, including
+the pressure setup, so cached reuse and native growth remain distinguishable.
+The rows use 128 fixed iterations and stay outside the ordinary smoke filter:
+
+```sh
+bazel-bin/runtime/src/iree/hal/drivers/amd/xdna/cts/queue_benchmark \
+  --benchmark_filter=XdnaQueueMemoryBenchmark/ --benchmark_repetitions=5 \
+  --benchmark_out=xdna-memory.json --benchmark_out_format=json
+```
+
+The resource-tagged smoke target exercises four representative dispatch and
+profiling cases without collecting performance evidence:
 
 ```sh
 iree-bazel-test --config=asan \
