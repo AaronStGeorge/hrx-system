@@ -258,6 +258,10 @@ class JitCacheTest : public JitTest {
     const auto initial = loom_serve_jit_cache_storage(jit_);
     EXPECT_EQ(initial.count, direct_dispatch ? 1u : 8u);
     EXPECT_GT(initial.host_bytes, 0u);
+    // These clean, small programs retain source keys and native ownership,
+    // not a full empty diagnostic report for every cached kernel.
+    EXPECT_LT(initial.host_bytes,
+              initial.count * sizeof(loom_serve_compilation_report_t));
     EXPECT_GT(initial.code_bytes, 0u);
     EXPECT_GT(loom_serve_jit_stage_storage_size(stages_[0]), 0u);
     loom_serve_jit_trim(jit_);
@@ -339,6 +343,44 @@ class JitCacheTest : public JitTest {
     EXPECT_EQ(loom_serve_jit_cache_storage(jit_).count, initial.count);
   }
 
+  void CheckFailedDiagnostics(bool direct_dispatch) {
+    const loomc_config_options_t config = {
+        nullptr, 0, {}, LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED};
+    for (size_t attempt = 0; attempt < 2; ++attempt) {
+      SCOPED_TRACE(attempt);
+      compilation_ = {};
+      loom_serve_test_compilation_t job;
+      job.jit = jit_;
+      job.direct_dispatch = direct_dispatch;
+      job.root = direct_dispatch ? IREE_SV("requires_host")
+                                 : IREE_SV("invalid_native");
+      job.config = &config;
+      job.Start(
+          loom_serve_host_executor(loom_serve_device_host(device_owner_)));
+      IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                            job.Await(&stages_[0]));
+      ASSERT_EQ(stages_[0], nullptr);
+      EXPECT_GT(compilation_.severities[LOOMC_DIAGNOSTIC_SEVERITY_ERROR], 0u);
+      ASSERT_GT(compilation_.diagnostic_count, 0u);
+      EXPECT_GT(compilation_.diagnostics[0].message_length, 0u);
+      // Failed native evidence survives task retirement, but failed inputs
+      // are not cached. Successful siblings remain available to the retry.
+      EXPECT_EQ(compilation_.kernels, direct_dispatch || attempt ? 1u : 9u);
+      EXPECT_EQ(compilation_.reused_kernels,
+                !direct_dispatch && attempt ? 8u : 0u);
+      EXPECT_EQ(loom_serve_jit_cache_storage(jit_).count,
+                direct_dispatch ? 0u : 8u);
+    }
+    const auto diagnostic = compilation_.diagnostics[0];
+    loom_serve_jit_release(jit_);
+    jit_ = nullptr;
+    EXPECT_EQ(compilation_.diagnostics[0].message_length,
+              diagnostic.message_length);
+    EXPECT_EQ(std::string(compilation_.diagnostics[0].message,
+                          sizeof(diagnostic.message)),
+              std::string(diagnostic.message, sizeof(diagnostic.message)));
+  }
+
  private:
   // Compiled-stage borrows are separate from recorded command consumers.
   std::array<loom_serve_jit_stage_t*, 2> stages_ = {};
@@ -350,6 +392,14 @@ TEST_P(JitCacheTest, CommandStagesPreserveSharedNativeReuseDuringEviction) {
 
 TEST_P(JitCacheTest, DirectStagesPreserveSharedNativeReuseDuringEviction) {
   CheckPruning(true);
+}
+
+TEST_P(JitCacheTest, FailedCommandNativesRetainDiagnosticsWithoutCaching) {
+  CheckFailedDiagnostics(false);
+}
+
+TEST_P(JitCacheTest, FailedDirectNativesRetainDiagnosticsWithoutCaching) {
+  CheckFailedDiagnostics(true);
 }
 
 INSTANTIATE_TEST_SUITE_P(SharedWorkers, JitCacheTest, ::testing::Values(1, 4));

@@ -85,18 +85,67 @@ iree_status_t loom_serve_compilation_result(
   return status;
 }
 
+static void loom_serve_compilation_merge_diagnostics(
+    loom_serve_compilation_report_t* report, const uint64_t severities[3],
+    iree_host_size_t diagnostic_count,
+    const loom_serve_compilation_diagnostic_t* diagnostics) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(report->severities); ++i) {
+    report->severities[i] += severities[i];
+  }
+  const iree_host_size_t count =
+      iree_min(diagnostic_count,
+               IREE_ARRAYSIZE(report->diagnostics) - report->diagnostic_count);
+  memcpy(report->diagnostics + report->diagnostic_count, diagnostics,
+         count * sizeof(*diagnostics));
+  report->diagnostic_count += count;
+}
+
+iree_status_t loom_serve_compilation_diagnostics_clone(
+    const loom_serve_compilation_report_t* report,
+    iree_allocator_t host_allocator,
+    loom_serve_compilation_diagnostics_t** out_diagnostics) {
+  static_assert(IREE_ARRAYSIZE(report->diagnostics) <= UINT8_MAX,
+                "retained diagnostic count must fit in one byte");
+  *out_diagnostics = NULL;
+  if (!report->diagnostic_count) {
+    return iree_ok_status();
+  }
+  loom_serve_compilation_diagnostics_t* diagnostics = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_struct_array(
+      host_allocator, sizeof(*diagnostics), report->diagnostic_count,
+      sizeof(*diagnostics->values), (void**)&diagnostics));
+  memcpy(diagnostics->severities, report->severities,
+         sizeof(diagnostics->severities));
+  diagnostics->count = (uint8_t)report->diagnostic_count;
+  memcpy(diagnostics->values, report->diagnostics,
+         report->diagnostic_count * sizeof(*diagnostics->values));
+  *out_diagnostics = diagnostics;
+  return iree_ok_status();
+}
+
+iree_host_size_t loom_serve_compilation_diagnostics_storage_size(
+    const loom_serve_compilation_diagnostics_t* diagnostics) {
+  return diagnostics ? sizeof(*diagnostics) +
+                           diagnostics->count * sizeof(*diagnostics->values)
+                     : 0;
+}
+
+void loom_serve_compilation_diagnostics_merge(
+    const loom_serve_compilation_diagnostics_t* diagnostics,
+    loom_serve_compilation_report_t* report) {
+  if (diagnostics) {
+    loom_serve_compilation_merge_diagnostics(report, diagnostics->severities,
+                                             diagnostics->count,
+                                             diagnostics->values);
+  }
+}
+
 void loom_serve_compilation_merge(
     loom_serve_compilation_report_t* report,
     const loom_serve_compilation_report_t* source) {
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(report->severities); ++i) {
-    report->severities[i] += source->severities[i];
-  }
-  const iree_host_size_t count =
-      iree_min(source->diagnostic_count,
-               IREE_ARRAYSIZE(report->diagnostics) - report->diagnostic_count);
-  memcpy(report->diagnostics + report->diagnostic_count, source->diagnostics,
-         count * sizeof(*source->diagnostics));
-  report->diagnostic_count += count;
+  loom_serve_compilation_merge_diagnostics(report, source->severities,
+                                           source->diagnostic_count,
+                                           source->diagnostics);
   report->commands += source->commands;
   report->kernels += source->kernels;
   report->reused_kernels += source->reused_kernels;

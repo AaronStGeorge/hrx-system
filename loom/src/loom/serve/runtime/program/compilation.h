@@ -70,6 +70,34 @@ typedef struct loom_serve_compilation_report_t {
   uint64_t duration_ns;
 } loom_serve_compilation_report_t;
 
+// Independently owned evidence retained with a cached compilation result.
+// Clean compilations use NULL instead of reserving diagnostic capacity. Work
+// counters belong to the submitting job and are not part of this snapshot.
+typedef struct loom_serve_compilation_diagnostics_t {
+  // All emitted diagnostics indexed by loomc_diagnostic_severity_t.
+  uint64_t severities[3];
+  // Number of copied records, bounded by the source report's capacity.
+  uint8_t count;
+  // Exact copied prefix, with strings independent of compiler storage.
+  loom_serve_compilation_diagnostic_t values[];
+} loom_serve_compilation_diagnostics_t;
+
+// Copies only emitted diagnostic evidence. Returns NULL for a clean report.
+// The caller owns the returned allocation and frees it with host_allocator.
+iree_status_t loom_serve_compilation_diagnostics_clone(
+    const loom_serve_compilation_report_t* report,
+    iree_allocator_t host_allocator,
+    loom_serve_compilation_diagnostics_t** out_diagnostics);
+
+// Requested host bytes for a snapshot, or zero when diagnostics is NULL.
+iree_host_size_t loom_serve_compilation_diagnostics_storage_size(
+    const loom_serve_compilation_diagnostics_t* diagnostics);
+
+// Adds retained evidence to a live report without changing its work counters.
+void loom_serve_compilation_diagnostics_merge(
+    const loom_serve_compilation_diagnostics_t* diagnostics,
+    loom_serve_compilation_report_t* report);
+
 // Consumes result on success or failure. Copies bounded diagnostics before
 // releasing compiler storage; failure also carries a primary source diagnostic
 // in the returned status, independently of any observation consumer.
