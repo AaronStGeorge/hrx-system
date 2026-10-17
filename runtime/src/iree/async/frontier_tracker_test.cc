@@ -256,6 +256,40 @@ TEST(DeinitializeTest, PendingWaitersCancelled) {
   EXPECT_EQ(state.last_status_code, IREE_STATUS_CANCELLED);
 }
 
+TEST(DeinitializeTest, AllWaitersDetachedBeforeCallbacks) {
+  iree_async_frontier_tracker_t* tracker = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_create(
+      iree_async_frontier_tracker_options_default(), iree_allocator_system(),
+      &tracker));
+  IREE_ASSERT_OK(
+      iree_async_frontier_tracker_register_axis(tracker, Axis(0), nullptr));
+  MAKE_FRONTIER(frontier, 1, E(Axis(0), 1));
+  struct CallbackData {
+    // Tracker whose terminal dispatch has acquired every registration.
+    iree_async_frontier_tracker_t* tracker;
+    // Caller-owned registrations retained until destruction returns.
+    std::array<iree_async_frontier_waiter_t, 3> waiters;
+    // Number of cancelled callbacks received.
+    int callback_count;
+  } data = {tracker, {}, 0};
+  for (auto& waiter : data.waiters) {
+    IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+        tracker, frontier,
+        [](void* user_data, iree_status_t status) {
+          auto* data = static_cast<CallbackData*>(user_data);
+          IREE_EXPECT_STATUS_IS(IREE_STATUS_CANCELLED, status);
+          ++data->callback_count;
+          for (auto& waiter : data->waiters) {
+            EXPECT_FALSE(iree_async_frontier_tracker_cancel_wait(data->tracker,
+                                                                 &waiter));
+          }
+        },
+        &data, &waiter));
+  }
+  iree_async_frontier_tracker_release(tracker);
+  EXPECT_EQ(data.callback_count, data.waiters.size());
+}
+
 //===----------------------------------------------------------------------===//
 // Section 2: Advance (basic, no waiters)
 //===----------------------------------------------------------------------===//
@@ -499,6 +533,163 @@ TEST(AdvanceWaitTest, MultipleWaitersDifferentFrontiers) {
   EXPECT_EQ(state2.call_count, 1);
 }
 
+TEST(AdvanceWaitTest, EpochOrderWithDuplicateTargetsAndCancellation) {
+  constexpr int kWaiterCount = 257;
+  constexpr int kEpochCount = 64;
+  struct PendingWait {
+    // Caller-owned wait registration.
+    iree_async_frontier_waiter_t waiter;
+    // Observed callback result.
+    CallbackState state;
+    // Immutable single-axis target, retained through cancellation or dispatch.
+    alignas(16) uint8_t storage[sizeof(iree_async_frontier_t) +
+                                sizeof(iree_async_frontier_entry_t)];
+  };
+  for (int order = 0; order < 3; ++order) {
+    SCOPED_TRACE(order);
+    std::array<PendingWait, kWaiterCount> pending;
+    TrackerFixture fixture;
+    fixture.AddAxis(Axis(0));
+    for (int i = 0; i < kWaiterCount; ++i) {
+      // Ascending, descending, and permuted insertion cover different
+      // registration orders while repeated target epochs share one axis.
+      const int index = order == 0   ? i
+                        : order == 1 ? kWaiterCount - 1 - i
+                                     : (i * 73) % kWaiterCount;
+      auto& wait = pending[index];
+      auto* frontier = BuildFrontier(wait.storage, sizeof(wait.storage),
+                                     {E(Axis(0), 1 + index % kEpochCount)});
+      IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+          fixture.tracker(), frontier, TrackingCallback, &wait.state,
+          &wait.waiter));
+    }
+    // Cancel in an independent permutation, including both ends and interior
+    // targets. The remaining callbacks must still fire at their exact epoch.
+    for (int i = 0; i < kWaiterCount; ++i) {
+      const int index = (i * 97) % kWaiterCount;
+      if (index % 3 == 0) {
+        EXPECT_TRUE(iree_async_frontier_tracker_cancel_wait(
+            fixture.tracker(), &pending[index].waiter));
+      }
+    }
+    for (int epoch = 1; epoch <= kEpochCount; ++epoch) {
+      int expected_dispatches = 0;
+      for (int i = 0; i < kWaiterCount; ++i) {
+        expected_dispatches += i % 3 != 0 && 1 + i % kEpochCount == epoch;
+      }
+      EXPECT_EQ(iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0),
+                                                    epoch),
+                expected_dispatches);
+      for (int i = 0; i < kWaiterCount; ++i) {
+        EXPECT_EQ(pending[i].state.call_count,
+                  i % 3 != 0 && 1 + i % kEpochCount <= epoch);
+      }
+    }
+    for (auto& wait : pending) {
+      EXPECT_FALSE(iree_async_frontier_tracker_cancel_wait(fixture.tracker(),
+                                                           &wait.waiter));
+    }
+  }
+}
+
+TEST(AdvanceWaitTest, FullWidthFrontierSkipsCompletedGaps) {
+  TrackerFixture fixture(UINT8_MAX);
+  FRONTIER_ALLOC(frontier, UINT8_MAX);
+  iree_async_frontier_initialize(frontier, UINT8_MAX);
+  for (int i = 0; i < UINT8_MAX; ++i) {
+    fixture.AddAxis(Axis(i));
+    frontier->entries[i] = E(Axis(i), 1);
+    if (i % 2 != 0) {
+      iree_async_frontier_tracker_advance(fixture.tracker(), Axis(i), 1);
+    }
+  }
+  iree_async_frontier_waiter_t waiter;
+  CallbackState state;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+      fixture.tracker(), frontier, TrackingCallback, &state, &waiter));
+  for (int i = 0; i < UINT8_MAX; i += 2) {
+    EXPECT_EQ(
+        iree_async_frontier_tracker_advance(fixture.tracker(), Axis(i), 1),
+        i == UINT8_MAX - 1 ? 1u : 0u);
+  }
+  EXPECT_EQ(state.call_count, 1);
+}
+
+TEST(AdvanceWaitTest, SameEpochWaitersKeepIndependentSuffixes) {
+  constexpr int kWaiterCount = 16;
+  struct PendingWait {
+    // Registration retained through cancellation or dispatch.
+    iree_async_frontier_waiter_t waiter;
+    // Observed callback count and terminal status.
+    CallbackState state;
+    // Common first dependency followed by this waiter's distinct dependency.
+    alignas(16) uint8_t storage[sizeof(iree_async_frontier_t) +
+                                2 * sizeof(iree_async_frontier_entry_t)];
+  };
+  std::array<PendingWait, kWaiterCount> pending;
+  TrackerFixture fixture(kWaiterCount + 1);
+  fixture.AddAxis(Axis(0));
+  for (int i = 0; i < kWaiterCount; ++i) {
+    fixture.AddAxis(Axis(i + 1));
+    auto& wait = pending[i];
+    auto* frontier = BuildFrontier(wait.storage, sizeof(wait.storage),
+                                   {E(Axis(0), 1), E(Axis(i + 1), i + 1)});
+    IREE_ASSERT_OK(iree_async_frontier_tracker_wait(fixture.tracker(), frontier,
+                                                    TrackingCallback,
+                                                    &wait.state, &wait.waiter));
+  }
+  EXPECT_EQ(iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 1),
+            0u);
+  for (int i = 0; i < kWaiterCount; ++i) {
+    if (i % 2 == 0) {
+      EXPECT_TRUE(iree_async_frontier_tracker_cancel_wait(fixture.tracker(),
+                                                          &pending[i].waiter));
+    }
+    EXPECT_EQ(iree_async_frontier_tracker_advance(fixture.tracker(),
+                                                  Axis(i + 1), i + 1),
+              i % 2 == 0 ? 0u : 1u);
+    EXPECT_EQ(pending[i].state.call_count, i % 2 == 0 ? 0 : 1);
+  }
+}
+
+TEST(AdvanceWaitTest, CallbackRearmsSameStorage) {
+  TrackerFixture fixture;
+  fixture.AddAxis(Axis(0));
+  MAKE_FRONTIER(frontier, 1, E(Axis(0), 1));
+  struct RearmingWait {
+    // Tracker accepting each callback's next dependency.
+    iree_async_frontier_tracker_t* tracker;
+    // Storage reusable after the previous wait has dispatched.
+    iree_async_frontier_waiter_t waiter;
+    // Single-axis frontier edited only after callback ownership returns.
+    iree_async_frontier_t* frontier;
+    // Final target after which no further wait is registered.
+    uint64_t final_epoch;
+    // Number of completed epochs.
+    uint64_t callback_count;
+
+    static void Callback(void* user_data, iree_status_t status) {
+      IREE_EXPECT_OK(status);
+      auto* self = static_cast<RearmingWait*>(user_data);
+      ++self->callback_count;
+      if (self->callback_count < self->final_epoch) {
+        ++self->frontier->entries[0].epoch;
+        IREE_EXPECT_OK(iree_async_frontier_tracker_wait(
+            self->tracker, self->frontier, Callback, self, &self->waiter));
+      }
+    }
+  } wait = {fixture.tracker(), {}, frontier, 1000, 0};
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(fixture.tracker(), frontier,
+                                                  RearmingWait::Callback, &wait,
+                                                  &wait.waiter));
+  for (uint64_t epoch = 1; epoch <= wait.final_epoch; ++epoch) {
+    EXPECT_EQ(
+        iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), epoch),
+        1u);
+    EXPECT_EQ(wait.callback_count, epoch);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Section 5: Cancel
 //===----------------------------------------------------------------------===//
@@ -640,6 +831,27 @@ TEST(FailAxisTest, FailOneAxisOfMulti) {
 
   EXPECT_EQ(state.call_count, 1);
   EXPECT_EQ(state.last_status_code, IREE_STATUS_INTERNAL);
+}
+
+TEST(FailAxisTest, CompletedPrefixFailureCancelsPendingSuffix) {
+  TrackerFixture fixture;
+  fixture.AddAxis(Axis(0));
+  fixture.AddAxis(Axis(1));
+  MAKE_FRONTIER(frontier, 2, E(Axis(0), 1), E(Axis(1), 1));
+  iree_async_frontier_waiter_t waiter;
+  CallbackState state;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+      fixture.tracker(), frontier, TrackingCallback, &state, &waiter));
+  EXPECT_EQ(iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 1),
+            0u);
+  iree_async_frontier_tracker_fail_axis(
+      fixture.tracker(), Axis(0), iree_status_from_code(IREE_STATUS_ABORTED));
+  EXPECT_EQ(state.call_count, 1);
+  EXPECT_EQ(state.last_status_code, IREE_STATUS_ABORTED);
+  EXPECT_EQ(iree_async_frontier_tracker_advance(fixture.tracker(), Axis(1), 1),
+            0u);
+  EXPECT_FALSE(
+      iree_async_frontier_tracker_cancel_wait(fixture.tracker(), &waiter));
 }
 
 TEST(FailAxisTest, FailUnknownAxis) {
@@ -969,6 +1181,51 @@ TEST(ConcurrencyTest, WaitPublicationRacingAdvanceDispatchesExactlyOnce) {
         iree_async_frontier_tracker_cancel_wait(fixture.tracker(), &waiter));
   }
   advancing.join();
+}
+
+TEST(ConcurrencyTest, ConcurrentAxesAndCancellationResolveExactlyOnce) {
+  TrackerFixture fixture;
+  fixture.AddAxis(Axis(0));
+  fixture.AddAxis(Axis(1));
+  constexpr int kRoundCount = 5000;
+  std::atomic<int> prepared_round{0};
+  std::array<std::atomic<int>, 2> completed_round{};
+  std::array<std::thread, 2> advancing;
+  for (int axis = 0; axis < 2; ++axis) {
+    advancing[axis] = std::thread([&, axis] {
+      for (int round = 1; round <= kRoundCount; ++round) {
+        while (prepared_round.load(std::memory_order_acquire) != round) {
+          std::this_thread::yield();
+        }
+        iree_async_frontier_tracker_advance(fixture.tracker(), Axis(axis),
+                                            round);
+        completed_round[axis].store(round, std::memory_order_release);
+      }
+    });
+  }
+  for (int round = 1; round <= kRoundCount; ++round) {
+    MAKE_FRONTIER(frontier, 2, E(Axis(0), round), E(Axis(1), round));
+    iree_async_frontier_waiter_t waiter;
+    CallbackState state;
+    IREE_EXPECT_OK(iree_async_frontier_tracker_wait(
+        fixture.tracker(), frontier, TrackingCallback, &state, &waiter));
+    prepared_round.store(round, std::memory_order_release);
+    const bool cancelled =
+        round % 2 != 0 &&
+        iree_async_frontier_tracker_cancel_wait(fixture.tracker(), &waiter);
+    for (int axis = 0; axis < 2; ++axis) {
+      while (completed_round[axis].load(std::memory_order_acquire) != round) {
+        std::this_thread::yield();
+      }
+    }
+    EXPECT_EQ(state.call_count, cancelled ? 0 : 1) << "round " << round;
+    EXPECT_EQ(state.last_status_code, IREE_STATUS_OK);
+    EXPECT_FALSE(
+        iree_async_frontier_tracker_cancel_wait(fixture.tracker(), &waiter));
+  }
+  for (auto& thread : advancing) {
+    thread.join();
+  }
 }
 
 //===----------------------------------------------------------------------===//

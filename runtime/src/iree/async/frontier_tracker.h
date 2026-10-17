@@ -27,8 +27,8 @@ typedef struct iree_async_frontier_tracker_t iree_async_frontier_tracker_t;
 typedef void (*iree_async_frontier_waiter_fn_t)(void* user_data,
                                                 iree_status_t status);
 
-// Caller-owned storage for a pending frontier wait. Linked into the tracker's
-// waiter list while active. The caller must not modify or free this storage
+// Caller-owned storage for a pending frontier wait. Indexed by the next pending
+// axis and epoch while active. The caller must not modify or free this storage
 // until the callback fires.
 //
 // Usage:
@@ -36,11 +36,13 @@ typedef void (*iree_async_frontier_waiter_fn_t)(void* user_data,
 //   iree_async_frontier_tracker_wait(tracker, &frontier, on_ready, ctx,
 //   &waiter);
 //   // ... waiter is now pending. callback fires when frontier is satisfied.
-//   // After callback fires (or after cancel returns), waiter storage is yours
-//   again.
+//   // After callback fires (or cancel returns true), storage is yours again.
 typedef struct iree_async_frontier_waiter_t {
-  // Intrusive linked list (tracker-internal).
+  // Next pending waiter, or next detached callback awaiting dispatch.
   struct iree_async_frontier_waiter_t* next;
+
+  // Previous pending waiter, used for constant-time removal on terminal paths.
+  struct iree_async_frontier_waiter_t* previous;
 
   // The frontier being waited on. Must remain valid while the waiter is
   // pending. The tracker reads entries during advance() to check satisfaction.
@@ -56,6 +58,26 @@ typedef struct iree_async_frontier_waiter_t {
   // callback after the waiter has been unlinked from the tracker list.
   // Only valid between unlinking and callback invocation.
   iree_status_t dispatch_status;
+
+  // Tracker-owned ordered index for this waiter's next pending dependency.
+  struct {
+    // Smaller pending epoch, or previous peer for a duplicate epoch.
+    struct iree_async_frontier_waiter_t* left;
+    // Larger pending epoch, or next peer for a duplicate epoch.
+    struct iree_async_frontier_waiter_t* right;
+    // Parent in the axis's intrusive tree, or NULL at its root.
+    struct iree_async_frontier_waiter_t* parent;
+    // First same-epoch peer of a tree representative, or NULL.
+    struct iree_async_frontier_waiter_t* peers;
+    // Cached target epoch, avoiding frontier indirection during tree updates.
+    uint64_t epoch;
+    // Stable tracker table slot owning this index entry.
+    uint32_t axis_slot;
+    // Frontier entry currently pending; earlier entries have completed.
+    uint8_t frontier_ordinal;
+    // Tree height, UINT8_MAX for a same-epoch peer, or zero when not pending.
+    uint8_t height;
+  } index;
 } iree_async_frontier_waiter_t;
 
 //===----------------------------------------------------------------------===//
@@ -75,7 +97,7 @@ typedef struct iree_async_frontier_waiter_t {
 //     → participant timeline signals epoch N
 //     → Semaphore timepoint fires
 //     → iree_async_frontier_tracker_advance(tracker, axis, N)
-//     → Tracker checks all pending waiters
+//     → Tracker visits waits whose next axis/epoch became ready
 //     → Waiters whose frontiers are now fully satisfied get their callbacks
 //     → Callbacks submit dependent operations to their scheduler
 //
@@ -101,10 +123,12 @@ typedef struct iree_async_frontier_waiter_t {
 //                  already-dispatched callback must use their own completion
 //                  marker.
 //
-// The internal waiters list is protected by a slim mutex. The advance() hot
-// path does an atomic epoch compare first and only takes the lock if waiters
-// might be satisfied (avoiding lock contention in the common case where axes
-// advance without pending waiters).
+// Waiter indexes are protected by a slim mutex. The advance() hot path updates
+// its axis and checks that axis's earliest pending epoch before taking the
+// lock. Unrelated waits and later epochs require no traversal or locking. Each
+// wait is indexed on its first unresolved entry; satisfied prefixes are not
+// revisited. Terminal failure handling visits the full pending set so failure
+// of any referenced axis is reported even while a different axis is pending.
 //
 // ## Lifecycle
 //
@@ -274,9 +298,10 @@ iree_status_t iree_async_frontier_tracker_wait(
 
 // Cancels a pending wait.
 //
-// Returns true if |waiter| was found in the pending list and removed, meaning
-// the callback will not fire. Returns false if |waiter| was not found, meaning
-// the callback has already been dispatched and may still be executing.
+// |waiter| must have been successfully registered with this tracker. Returns
+// true if it was pending and removed, meaning the callback will not fire.
+// Returns false after cancellation or dispatch; a dispatched callback may
+// still be executing. Caller-owned storage must remain valid through this call.
 bool iree_async_frontier_tracker_cancel_wait(
     iree_async_frontier_tracker_t* tracker,
     iree_async_frontier_waiter_t* waiter);
