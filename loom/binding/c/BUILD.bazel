@@ -100,6 +100,7 @@ LOOMC_TARGET_X86_PUBLIC_HDRS = [
 
 LOOMC_TARGET_CONFIGURED_PUBLIC_HDRS = [
     "include/loomc/target/configured.h",
+    "include/loomc/target/configured_ir.h",
 ]
 
 LOOMC_TARGET_CMD_PUBLIC_HDRS = [
@@ -327,6 +328,7 @@ loom_cc_library(
         ":loomc",
         "//loom/src/loom/error:source",
         "//loom/src/loom/ir",
+        "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:report",
         "//loom/src/loom/target:pipeline",
         "//loom/src/loom/target:provider",

@@ -211,6 +211,7 @@ loom_cc_library(
     ::loomc
     loom::error::source
     loom::ir
+    loom::pass::registry
     loom::pass::report
     loom::target::pipeline
     loom::target::provider

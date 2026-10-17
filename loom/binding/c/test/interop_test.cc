@@ -177,7 +177,7 @@ iree_status_t RejectModule(loom_pass_t* pass, loom_module_t* module) {
   return iree_status_from_code(IREE_STATUS_OUT_OF_RANGE);
 }
 
-ContextPtr CreateReportingContext() {
+TargetEnvironmentPtr CreateReportingEnvironment() {
   static const loom_pass_descriptor_t descriptors[] = {
       {
           .key = IREE_SVL("test.observe"),
@@ -217,8 +217,53 @@ ContextPtr CreateReportingContext() {
   loomc_target_environment_t* environment = nullptr;
   LOOMC_EXPECT_OK(loomc_target_environment_create_from_provider_set(
       &provider_set, loomc_allocator_system(), &environment));
-  TargetEnvironmentPtr environment_ptr(environment);
-  return CreateTargetContext(environment);
+  return TargetEnvironmentPtr(environment);
+}
+
+ContextPtr CreateReportingContext() {
+  auto environment = CreateReportingEnvironment();
+  return CreateTargetContext(environment.get());
+}
+
+TEST(InteropTest, PassRegistryDescribesBuiltinsAndTargetPasses) {
+  auto environment = CreateReportingEnvironment();
+  loom_pass_registry_storage_t storage = {};
+  LOOMC_ASSERT_OK(loomc_target_environment_get_native_pass_registry(
+      environment.get(), &storage));
+  const auto* registry = loom_pass_registry_storage_registry(&storage);
+  const auto* canonicalize =
+      loom_pass_registry_lookup(registry, IREE_SV("canonicalize"));
+  ASSERT_NE(canonicalize, nullptr);
+  EXPECT_TRUE(loom_pass_descriptor_is_available(canonicalize));
+  ASSERT_EQ(canonicalize->option_schema_count, 1);
+  EXPECT_EQ(canonicalize->option_schema[0].kind,
+            LOOM_PASS_OPTION_SCHEMA_UINT32);
+  EXPECT_EQ(canonicalize->option_schema[0].minimum_uint32, 1u);
+  const auto* observer =
+      loom_pass_registry_lookup(registry, IREE_SV("test.observe"));
+  ASSERT_NE(observer, nullptr);
+  EXPECT_EQ(observer->info()->kind, LOOM_PASS_MODULE);
+
+  auto context = CreateTargetContext(environment.get());
+  auto program = PrepareText(context.get(), "canonicalize,test.observe");
+  EXPECT_NE(program.get(), nullptr);
+
+  loom_pass_registry_storage_t builtins = {};
+  LOOMC_ASSERT_OK(
+      loomc_target_environment_get_native_pass_registry(nullptr, &builtins));
+  const auto* builtin_registry = loom_pass_registry_storage_registry(&builtins);
+  EXPECT_NE(loom_pass_registry_lookup(builtin_registry, IREE_SV("dce")),
+            nullptr);
+  EXPECT_EQ(
+      loom_pass_registry_lookup(builtin_registry, IREE_SV("test.observe")),
+      nullptr);
+  EXPECT_EQ(registry->descriptor_count, builtin_registry->descriptor_count + 2);
+}
+
+TEST(InteropTest, PassRegistryRequiresOutputStorage) {
+  LOOMC_EXPECT_STATUS_IS(
+      LOOMC_STATUS_INVALID_ARGUMENT,
+      loomc_target_environment_get_native_pass_registry(nullptr, nullptr));
 }
 
 TEST(InteropTest, ProjectsVerifiedModuleAndOwnedSources) {

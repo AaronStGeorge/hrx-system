@@ -17,11 +17,8 @@
 #include "loom/config/text.h"
 #include "loom/config/text_binding.h"
 #include "loom/ir/module.h"
-#include "loom/pass/builtin_registry.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/report.h"
-#include "loom/target/configured/provider_set.h"
-#include "loom/target/provider.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/cli/loomc_diagnostic_json.h"
 #include "loom/tooling/cli/loomc_result.h"
@@ -33,6 +30,7 @@
 #include "loom/util/stream.h"
 #include "loomc/interop.h"
 #include "loomc/iree.h"
+#include "loomc/target/configured_ir.h"
 
 IREE_FLAG(string, to, "text", "Output format: text, bc, or bytecode.");
 IREE_FLAG(string, output, "-",
@@ -857,7 +855,6 @@ int main(int argc, char** argv) {
   loomc_pass_program_t* pass_program = NULL;
   loom_config_text_binding_set_t config_set;
   loom_config_text_binding_set_initialize(allocator, &config_set);
-  const loom_target_environment_t* target_environment = NULL;
   loom_pass_registry_storage_t pass_registry_storage = {0};
   const loom_pass_registry_t* pass_registry =
       loom_pass_registry_storage_registry(&pass_registry_storage);
@@ -879,15 +876,12 @@ int main(int argc, char** argv) {
   // needs every configured architecture provider, including portable cmd.core.
   // The configured compiler package contains only artifact-capable providers.
   iree_status_t status =
-      iree_status_from_loomc(loomc_target_environment_create_from_provider_set(
-          loom_configured_target_provider_set(), loom_allocator,
-          &public_target_environment));
+      iree_status_from_loomc(loomc_target_environment_create_configured_ir(
+          loom_allocator, &public_target_environment));
   if (iree_status_is_ok(status)) {
-    target_environment =
-        loomc_target_environment_get_interop_view(public_target_environment);
-    status = loom_pass_registry_storage_initialize_with_builtins(
-        loom_target_environment_pass_registry(target_environment),
-        &pass_registry_storage);
+    status = iree_status_from_loomc(
+        loomc_target_environment_get_native_pass_registry(
+            public_target_environment, &pass_registry_storage));
   }
   if (iree_status_is_ok(status)) {
     status = loom_opt_parse_pass_report_mode(
