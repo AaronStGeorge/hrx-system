@@ -54,6 +54,7 @@ loom_cc_library(
     "include/loomc/link_index.h"
     "include/loomc/loomc.h"
     "include/loomc/module.h"
+    "include/loomc/module_config.h"
     "include/loomc/pass.h"
     "include/loomc/pass_trace.h"
     "include/loomc/product.h"
@@ -102,6 +103,7 @@ loom_cc_library(
     "src/link_materialization.c"
     "src/module.c"
     "src/module_bytecode.c"
+    "src/module_config.c"
     "src/module_function.c"
     "src/module_global.c"
     "src/module_source.c"
@@ -134,6 +136,7 @@ loom_cc_library(
     loom::codegen::pass_environment
     loom::compile::request
     loom::config::application
+    loom::config::schema
     loom::config::text
     loom::config::text_binding
     loom::error::diagnostic
@@ -211,6 +214,7 @@ loom_cc_library(
     ::loomc
     loom::error::source
     loom::ir
+    loom::pass::registry
     loom::pass::report
     loom::target::pipeline
     loom::target::provider
@@ -243,6 +247,7 @@ loom_cc_library(
     "include/loomc/link_index.h"
     "include/loomc/loomc.h"
     "include/loomc/module.h"
+    "include/loomc/module_config.h"
     "include/loomc/pass.h"
     "include/loomc/pass_trace.h"
     "include/loomc/product.h"

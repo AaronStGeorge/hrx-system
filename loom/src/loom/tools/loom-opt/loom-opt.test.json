@@ -305,6 +305,37 @@
       }
     },
     {
+      "name": "reports configuration failures through JSON diagnostics",
+      "run": {
+        "tool": "loom-opt",
+        "args": ["--config=answer=17", "--diagnostic-format=json"]
+      },
+      "stdin": {
+        "text": "config.decl @answer : %value: index where [multiple_of(%value, 16)]\n"
+      },
+      "exit": 1,
+      "stdout": {"empty": true},
+      "stderr": {
+        "contains": [
+          {"regex": "^\\{\"severity\":\"error\".*\"diagnostic_code\":\"CONFIG/INVALID\".*\\}$"}
+        ],
+        "not_contains": ["stack:"]
+      }
+    },
+    {
+      "name": "configuration admits input when explicit verification is disabled",
+      "run": {
+        "tool": "loom-opt",
+        "args": ["--verify=false", "--config=answer=16"]
+      },
+      "stdin": {
+        "text": "config.decl @answer : index\nfunc.def @invalid() -> (i32) { func.return }\n"
+      },
+      "exit": 1,
+      "stdout": {"empty": true},
+      "stderr": {"contains": ["yield has 0 operands, expected 1"]}
+    },
+    {
       "name": "rejects duplicate config binding",
       "run": {
         "tool": "loom-opt",

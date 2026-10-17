@@ -9,6 +9,7 @@
 
 #include "loom/error/source.h"
 #include "loom/ir/module.h"
+#include "loom/pass/registry.h"
 #include "loom/pass/report.h"
 #include "loom/target/pipeline.h"
 #include "loom/target/provider.h"
@@ -86,6 +87,27 @@ LOOMC_API_EXPORT loomc_status_t
 loomc_target_environment_create_from_provider_set(
     const loom_target_provider_set_t* provider_set, loomc_allocator_t allocator,
     loomc_target_environment_t** out_target_environment);
+
+/// Composes builtin and target pass descriptors for exact-version inspection.
+///
+/// This is the same registry used to prepare pass programs. It lets clients
+/// present pass names, descriptions, and option schemas without linking the
+/// builtin pass implementations. No context or heap allocation is required.
+///
+/// @param target_environment Environment supplying target-specific passes.
+/// May be `NULL` to inspect builtin passes alone.
+/// @param out_storage Caller-owned storage receiving the composed registry.
+/// @return OK on success; non-OK if the provider registries cannot be composed.
+///
+/// @lifetime
+/// The storage must remain at a stable address while its registry is used.
+/// Descriptors borrow from the target providers; retain the environment until
+/// inspection is complete. The registry has the exact-version native contract
+/// of this header, including native callback types, and is not a stable ABI.
+LOOMC_API_EXPORT loomc_status_t
+loomc_target_environment_get_native_pass_registry(
+    const loomc_target_environment_t* target_environment,
+    loom_pass_registry_storage_t* out_storage);
 
 /// Creates a public pass program from a native source-Low pipeline builder.
 ///
