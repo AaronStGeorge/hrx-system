@@ -30,6 +30,7 @@ class MediaServiceTest : public SourceTextServiceTest {
         .sources = projector_document_.value().sources,
         .asset_directory = IREE_SV("."),
         .options = ProjectorOptions(),
+        .specialization_cache = {2, 1024 * 1024},
     };
     const loom_serve_wake_callback_t observer = {
         [](void* data) {
@@ -264,8 +265,12 @@ TEST_F(MediaServiceTest, LateCodecErrorRejectsOneRequestWithoutLosingPeers) {
   EXPECT_EQ(interface_.telemetry.counters->failed, 0u);
 }
 
-TEST_F(MediaServiceTest,
-       StopJoinsAcceptedCodecBorrowBeforeReleasingHttpBodies) {
+class CancelledMediaServiceTest
+    : public MediaServiceTest,
+      public ::testing::WithParamInterface<const char*> {};
+
+TEST_P(CancelledMediaServiceTest,
+       StopJoinsAcceptedWorkBeforeReleasingHttpBodies) {
   if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {
     return;
   }
@@ -275,7 +280,7 @@ TEST_F(MediaServiceTest,
       ImageMessage("x", "image/x-portable-arbitrarymap", kAlphaPam, "low", "a"),
       4));
   ASSERT_NO_FATAL_FAILURE(AcceptTogether({first, second}));
-  ASSERT_NO_FATAL_FAILURE(AtImagePhase("image_prepare", [&] {
+  ASSERT_NO_FATAL_FAILURE(AtImagePhase(GetParam(), [&] {
     bool progress = false;
     IREE_ASSERT_OK(interface_.advance(
         interface_.self, LOOM_SERVE_HTTP_SERVICE_FLAG_STOPPING, &progress));
@@ -290,6 +295,10 @@ TEST_F(MediaServiceTest,
   EXPECT_TRUE(Read(second, true).empty());
   EXPECT_EQ(interface_.telemetry.counters->cancelled, 2u);
 }
+
+INSTANTIATE_TEST_SUITE_P(CodecAndCompiler, CancelledMediaServiceTest,
+                         ::testing::Values("image_prepare",
+                                           "image_specialize"));
 
 TEST_F(MediaServiceTest, CancelledMiddlePeerPreservesPreparedCohortOrdinals) {
   if (!loom_serve_media_image_codec(LOOM_SERVE_MEDIA_IMAGE_FORMAT_PAM)) {

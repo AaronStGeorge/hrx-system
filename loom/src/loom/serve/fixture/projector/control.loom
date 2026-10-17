@@ -2,6 +2,14 @@ func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
 
 func.decl import("runner") @execute_2(%stage: i32, %input: hal.buffer, %output: hal.buffer) -> (i64)
 
+func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
+
+func.decl import("prepare") @dispatch(%root: buffer, %tag: i64) -> (i32)
+
+func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
+
+global.rodata.def @rows_key = bytes("666978747572652e70726f6a6563746f725f726f7773")
+
 global.rodata.def @invalid = bytes("70726f6a6563746f72206669787475726520726571756972657320312e2e3634206665617475726520726f7773")
 
 func.def @check(%condition: i1) {
@@ -122,7 +130,21 @@ func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %
     %next = index.add %begin, %count : index
     scf.yield %next : index
   }
-  func.return %c0_i32, %payload, %plan : i32, buffer, buffer
+  // Specialize one executable for the whole cohort, preserving the checkpoint
+  // contract established by cold preparation. State owns the numerical root.
+  %stage_tags = buffer.view %tags[%origin] : buffer -> view<1xi64>
+  %kind = view.load %stage_tags[0] : view<1xi64> -> i64
+  %command = scalar.cmpi ne, %kind, %c0_i64 : i64
+  %stage = scf.if %command -> (i32) {
+    %value = func.call @stage(%state, %rows64) : (buffer, i64) -> (i32)
+    scf.yield %value : i32
+  } else {
+    %value = func.call @dispatch(%state, %rows64) : (buffer, i64) -> (i32)
+    scf.yield %value : i32
+  }
+  %key = global.load @rows_key : buffer
+  func.call @config_i64(%stage, %key, %rows64) : (i32, buffer, i64)
+  func.return %stage, %payload, %plan : i32, buffer, buffer
 }
 
 func.def public @run(%stage: i32, %input: hal.buffer, %output: hal.buffer) {

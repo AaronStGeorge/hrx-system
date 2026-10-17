@@ -49,13 +49,15 @@ typedef enum loom_serve_finite_phase_e {
   FINITE_IDLE = 0,
   FINITE_PREPARING,
   FINITE_BATCHING,
+  FINITE_SPECIALIZING,
   FINITE_WAITING,
   FINITE_RUNNING,
   FINITE_ENCODING,
 } loom_serve_finite_phase_t;
 
-static const char finite_phases[][16] = {"idle",    "preparing", "batching",
-                                         "waiting", "running",   "encoding"};
+static const char finite_phases[][16] = {
+    "idle",    "preparing", "batching", "specializing",
+    "waiting", "running",   "encoding"};
 
 struct loom_serve_finite_service_t {
   // Allocator owning the queue, jobs and encoded results.
@@ -653,7 +655,7 @@ static iree_status_t loom_serve_finite_collect(
       loom_serve_finite_select(service);
     }
   } else if (service->phase == FINITE_BATCHING) {
-    service->phase = FINITE_WAITING;
+    service->phase = FINITE_SPECIALIZING;
   } else if (service->phase == FINITE_RUNNING) {
     loom_serve_finite_complete_execution(service);
   } else {
@@ -690,6 +692,29 @@ static iree_status_t loom_serve_finite_advance(
       iree_status_is_ok(status) &&
           (service->phase == FINITE_IDLE || service->phase == FINITE_WAITING),
       service->stopping || !iree_status_is_ok(status));
+  if (iree_status_is_ok(status) && service->phase == FINITE_SPECIALIZING) {
+    bool has_peer = false;
+    for (iree_host_size_t i = 0; i < service->cohort_count; ++i) {
+      has_peer |= service->cohort[i]->connection != NULL;
+    }
+    const bool cancel = service->stopping || !has_peer;
+    bool complete = false;
+    status = loom_serve_finite_model_advance_batch(service->model, cancel,
+                                                   &complete);
+    if (!iree_status_is_ok(status)) {
+      loom_serve_finite_model_release_batch(service->model);
+      loom_serve_finite_error(service, 0, status);
+      loom_serve_finite_finish(service, status);
+    } else if (complete) {
+      if (cancel) {
+        loom_serve_finite_model_release_batch(service->model);
+        loom_serve_finite_finish(service, iree_ok_status());
+      } else {
+        service->phase = FINITE_WAITING;
+      }
+      *out_progress = true;
+    }
+  }
   if (iree_status_is_ok(status) && service->phase == FINITE_WAITING) {
     bool has_peer = false;
     for (iree_host_size_t i = 0; i < service->cohort_count; ++i) {
@@ -830,6 +855,7 @@ static void loom_serve_finite_set_observer(
   service->event.observer = observer;
   iree_slim_mutex_unlock(&service->event.mutex);
   loom_serve_timer_set_observer(&service->timer, observer);
+  loom_serve_finite_model_set_observer(service->model, observer);
   loom_serve_execution_reconfiguration_set_observer(service->reconfiguration,
                                                     observer);
 }
@@ -868,6 +894,8 @@ void loom_serve_finite_service_free(loom_serve_finite_service_t* service) {
     return;
   }
   IREE_ASSERT(!loom_serve_finite_is_pending(service));
+  loom_serve_finite_model_set_observer(service->model,
+                                       (loom_serve_wake_callback_t){0});
   service->stopping = true;
   loom_serve_finite_cancel_peers(service);
   if (service->phase == FINITE_WAITING) {

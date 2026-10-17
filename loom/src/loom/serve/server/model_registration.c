@@ -208,7 +208,8 @@ static iree_status_t loom_serve_finite_registration_create(
   const loom_serve_finite_model_options_t model_options = {
       .sources = configuration->sources,
       .asset_directory = configuration->assets,
-      .options = configuration->options};
+      .options = configuration->options,
+      .specialization_cache = configuration->specialization_cache};
   iree_status_t status = loom_serve_finite_load_allocate(
       registration->device, &model_options, observer.wake, observer.user_data,
       host_allocator, &registration->load);
@@ -978,7 +979,8 @@ static iree_status_t loom_serve_text_registration_create(
     loom_serve_finite_model_options_t image_options = {
         .sources = configuration->sources,
         .asset_directory = text->image.assets,
-        .options = text->image.options};
+        .options = text->image.options,
+        .specialization_cache = text->image.specialization_cache};
     image_options.sources.prepare = text->image.prepare;
     image_options.sources.control = text->image.control;
     status = loom_serve_finite_component_allocate(

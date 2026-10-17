@@ -11,8 +11,10 @@
 struct loom_serve_variant_entry_t {
   // Pool owning this stable entry through all producer and consumer borrows.
   loom_serve_variant_pool_t* pool;
-  // Next cached entry in creation order, manipulated only by the owner.
+  // Next cached entry in owner-selected traversal order.
   struct loom_serve_variant_entry_t* next;
+  // Previous cached entry, allowing eviction without another identity search.
+  struct loom_serve_variant_entry_t* previous;
   // Process-lifetime identity, independent of a reused allocation address.
   loom_serve_variant_id_t id;
   // Construction provenance retained even if that cached base is later removed.
@@ -44,7 +46,7 @@ struct loom_serve_variant_pool_t {
   iree_slim_mutex_t mutex;
   // Nonblocking owner scheduling target, protected by mutex.
   loom_serve_wake_callback_t observer;
-  // First retained entry in the creation-ordered cache.
+  // First retained entry in owner-selected traversal order.
   loom_serve_variant_entry_t* head;
   // Last cached entry; appending never moves existing producer payloads.
   loom_serve_variant_entry_t* tail;
@@ -78,6 +80,7 @@ static iree_status_t loom_serve_variant_pool_append(
                                              sizeof(*entry), (void**)&entry));
   entry->pool = pool;
   entry->base = base;
+  entry->previous = pool->tail;
   entry->id = iree_atomic_fetch_add(&loom_serve_variant_next_id, 1,
                                     iree_memory_order_relaxed);
   if (pool->tail) {
@@ -150,6 +153,43 @@ void loom_serve_variant_pool_set_observer(loom_serve_variant_pool_t* pool,
 iree_host_size_t loom_serve_variant_pool_count(
     const loom_serve_variant_pool_t* pool) {
   return pool->count;
+}
+
+iree_host_size_t loom_serve_variant_pool_storage_size(
+    const loom_serve_variant_pool_t* pool) {
+  return sizeof(*pool) + pool->count * sizeof(*pool->head);
+}
+
+loom_serve_variant_entry_t* loom_serve_variant_pool_first(
+    const loom_serve_variant_pool_t* pool) {
+  return pool->head;
+}
+
+loom_serve_variant_entry_t* loom_serve_variant_entry_next(
+    const loom_serve_variant_entry_t* entry) {
+  return entry->next;
+}
+
+void loom_serve_variant_entry_touch(loom_serve_variant_entry_t* entry) {
+  loom_serve_variant_pool_t* pool = entry->pool;
+  if (pool->tail == entry) {
+    return;
+  }
+  if (entry->previous) {
+    entry->previous->next = entry->next;
+  } else {
+    pool->head = entry->next;
+  }
+  entry->next->previous = entry->previous;
+  entry->previous = pool->tail;
+  entry->next = NULL;
+  pool->tail->next = entry;
+  pool->tail = entry;
+}
+
+iree_status_t loom_serve_variant_entry_status(
+    const loom_serve_variant_entry_t* entry) {
+  return iree_status_clone(entry->completion.status);
 }
 
 bool loom_serve_variant_pool_pending(const loom_serve_variant_pool_t* pool) {
@@ -262,12 +302,7 @@ void* loom_serve_variant_entry_value(const loom_serve_variant_entry_t* entry) {
 
 iree_status_t loom_serve_variant_pool_remove(loom_serve_variant_pool_t* pool,
                                              loom_serve_variant_id_t id) {
-  loom_serve_variant_entry_t* previous = NULL;
-  loom_serve_variant_entry_t* entry = pool->head;
-  while (entry && entry->id != id) {
-    previous = entry;
-    entry = entry->next;
-  }
+  loom_serve_variant_entry_t* entry = loom_serve_variant_pool_find(pool, id);
   if (!entry) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "variant does not belong to this model pool");
@@ -276,22 +311,30 @@ iree_status_t loom_serve_variant_pool_remove(loom_serve_variant_pool_t* pool,
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "variant still owns a producer or consumer");
   }
-  if (previous) {
-    previous->next = entry->next;
+  loom_serve_variant_entry_discard(entry);
+  return iree_ok_status();
+}
+
+void loom_serve_variant_entry_discard(loom_serve_variant_entry_t* entry) {
+  loom_serve_variant_pool_t* pool = entry->pool;
+  IREE_ASSERT(!entry->users && entry->phase != LOOM_SERVE_VARIANT_COMPILING);
+  if (entry->previous) {
+    entry->previous->next = entry->next;
   } else {
     pool->head = entry->next;
   }
-  if (pool->tail == entry) {
-    pool->tail = previous;
+  if (entry->next) {
+    entry->next->previous = entry->previous;
+  } else {
+    pool->tail = entry->previous;
   }
   --pool->count;
   pool->dispose(entry->completion.value);
   iree_status_free(entry->completion.status);
   iree_allocator_free(pool->host_allocator, entry);
-  return iree_ok_status();
 }
 
-static loom_serve_variant_snapshot_t loom_serve_variant_entry_snapshot(
+loom_serve_variant_snapshot_t loom_serve_variant_entry_snapshot(
     const loom_serve_variant_entry_t* entry) {
   const bool terminal = entry->phase != LOOM_SERVE_VARIANT_COMPILING;
   return (loom_serve_variant_snapshot_t){

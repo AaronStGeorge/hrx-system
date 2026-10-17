@@ -363,6 +363,7 @@ loom_cc_test(
     data = ["testdata/preparation/boundaries.loom"],
     deps = [
         ":preparation",
+        ":program",
         "//loom/binding/c:loomc",
         "//loom/binding/c/target/vm",
         "//runtime/src/iree/base",

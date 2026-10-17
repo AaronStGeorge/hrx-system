@@ -108,9 +108,10 @@ void loom_serve_test_embedding_model_lifecycle_t::Release(
 
 iree_status_t loom_serve_test_embedding_model_lifecycle_t::Run(
     loom_serve_device_t* device,
-    const loom_serve_finite_model_options_t& options) {
+    const loom_serve_finite_model_options_t& options,
+    iree_allocator_t host_allocator) {
   IREE_RETURN_IF_ERROR(loom_serve_finite_load_allocate(
-      device, &options, Wake, this, iree_allocator_system(), &load));
+      device, &options, Wake, this, host_allocator, &load));
   return RunOwner(device);
 }
 

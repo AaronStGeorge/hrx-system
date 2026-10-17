@@ -116,6 +116,20 @@ TEST_P(JitModuleTest, RebindingChangesWorkspaceWithoutRelinkingVm) {
   IREE_ASSERT_OK(
       loom_serve_execution_transfer(execution_, 1, &upload, &completion));
   for (size_t i = 0; i < 2; ++i) {
+    loom_serve_module_clear_stages(native_);
+    iree_vm_variant_t empty_arguments[] = {
+        iree_hal_buffer_variant_from_ptr_borrowed(&types_, buffer_)};
+    iree_vm_variant_t empty_results[1] = {};
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_OUT_OF_RANGE,
+        iree_vm_invoke(invocation_, step_,
+                       iree_vm_variant_span_from_array(empty_arguments),
+                       iree_vm_variant_span_from_array(empty_results)));
+    iree_vm_variant_span_reset(
+        iree_vm_variant_span_from_array(empty_arguments));
+    iree_vm_variant_span_reset(iree_vm_variant_span_from_array(empty_results));
+    const loom_serve_stage_t restored = {commands_[i], 1, transients_[i]};
+    IREE_ASSERT_OK(loom_serve_module_bind_stages(native_, 1, &restored));
     const loom_serve_stage_t wrong_arity = {commands_[i], 2, transients_[i]};
     IREE_EXPECT_STATUS_IS(
         IREE_STATUS_INVALID_ARGUMENT,

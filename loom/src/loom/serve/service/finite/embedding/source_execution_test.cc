@@ -8,15 +8,18 @@
 #include <unistd.h>
 
 #include <array>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "iree/testing/status_matchers.h"
 #include "iree/testing/temp_file.h"
+#include "loom/serve/runtime/program/package.h"
 #include "loom/serve/service/finite/embedding/protocol.h"
 #include "loom/serve/service/finite/embedding/source_service_test_fixture.h"
 #include "loom/serve/service/finite/result.h"
@@ -365,7 +368,7 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
     ReleaseInputs();
   }
 
-  void Submit(std::initializer_list<const char*> bodies, size_t ordinal) {
+  void Prepare(std::initializer_list<const char*> bodies) {
     requests_.resize(bodies.size());
     prepared_.resize(bodies.size());
     std::vector<iree_host_size_t> rows(bodies.size());
@@ -380,6 +383,13 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
     }
     IREE_ASSERT_OK(loom_serve_finite_model_prepare_batch(
         model_, prepared_.size(), prepared_.data(), rows.data()));
+  }
+
+  void SubmitPrepared(size_t ordinal) {
+    bool code_ready = false;
+    IREE_ASSERT_OK(
+        loom_serve_finite_model_advance_batch(model_, false, &code_ready));
+    ASSERT_TRUE(code_ready);
     loom_serve_residency_admission_t admission;
     IREE_ASSERT_OK(loom_serve_residency_try_admit(
         loom_serve_finite_model_residency(model_), &admission));
@@ -387,7 +397,12 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
     loom_serve_execution_frontier_t frontier;
     IREE_ASSERT_OK(
         loom_serve_finite_model_submit(model_, &results_[ordinal], &frontier));
-    EXPECT_EQ(frontier.values[1], 0u);
+    EXPECT_EQ(frontier.values[1], transfer_value_);
+  }
+
+  void Submit(std::initializer_list<const char*> bodies, size_t ordinal) {
+    ASSERT_NO_FATAL_FAILURE(Prepare(bodies));
+    ASSERT_NO_FATAL_FAILURE(SubmitPrepared(ordinal));
   }
 
   void Complete(size_t ordinal) {
@@ -426,7 +441,516 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
   std::vector<loom_serve_finite_prepared_t> prepared_;
   // Only the final consumer output crosses to the host for the oracle.
   std::array<float, 14> output_ = {};
+  // Explicit result downloads advance the producer's separate transfer queue.
+  uint64_t transfer_value_ = 0;
 };
+
+class GenerationSelectionTest : public DeviceResultTest,
+                                public ::testing::WithParamInterface<bool> {
+ protected:
+  void SetUp() override {
+    DeviceResultTest::SetUp();
+    if (GetParam()) {
+      ASSERT_NO_FATAL_FAILURE(UseDirectPackage());
+    }
+    update_ = loom_serve_finite_model_execution_update(model_);
+  }
+
+  void TearDown() override {
+    if (candidate_) {
+      update_.dispose(candidate_);
+    }
+    loom_serve_package_release(package_);
+    IREE_EXPECT_OK(status_);
+    DeviceResultTest::TearDown();
+  }
+
+  void CompileReplacement() {
+    const std::string stage = GetParam()
+                                  ? (SourceServiceDirectStageSource()[0]
+                                         ? SourceServiceDirectStageSource()
+                                         : directory_ + "/variants/direct.loom")
+                                  : directory_ + "/embed.loom";
+    const std::string paths[] = {directory_ + "/config.loom", stage};
+    std::string contents[2];
+    for (size_t i = 0; i < 2; ++i) {
+      std::ifstream input(paths[i]);
+      ASSERT_TRUE(input.good());
+      contents[i].assign(std::istreambuf_iterator<char>(input), {});
+    }
+    const std::string original = "scalar.constant 1 : i32";
+    const size_t position = contents[1].find(original);
+    ASSERT_NE(position, std::string::npos);
+    contents[1].replace(position, original.size(), "scalar.constant 2 : i32");
+    const loom_serve_package_file_t files[] = {
+        {IREE_SV("model/config.loom"),
+         iree_make_const_byte_span(contents[0].data(), contents[0].size())},
+        {IREE_SV("model/stage.loom"),
+         iree_make_const_byte_span(contents[1].data(), contents[1].size())}};
+    IREE_ASSERT_OK(loom_serve_package_create(IREE_SV("model/model.json"),
+                                             IREE_ARRAYSIZE(files), files,
+                                             host_allocator_, &package_));
+    const iree_string_view_t providers[] = {IREE_SV("config.loom"),
+                                            IREE_SV("stage.loom")};
+    const loom_serve_sources_t sources = {
+        .count = IREE_ARRAYSIZE(providers),
+        .values = providers,
+        .package = package_,
+    };
+    IREE_ASSERT_OK(update_.compile(
+        update_.self, &sources,
+        [](void* self, iree_status_t status, void* value,
+           const loom_serve_compilation_report_t* report) {
+          auto* test = static_cast<GenerationSelectionTest*>(self);
+          std::lock_guard<std::mutex> lock(test->mutex_);
+          test->candidate_ = value;
+          test->status_ = status;
+          test->ready_ = true;
+          test->condition_.notify_one();
+        },
+        this));
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [&] { return ready_; });
+    IREE_ASSERT_OK(std::exchange(status_, iree_ok_status()));
+    loom_serve_package_release(std::exchange(package_, nullptr));
+  }
+
+  // Public model replacement capability, valid through candidate disposal.
+  loom_serve_execution_update_t update_ = {};
+  // Terminal compiler payload, independently retained by model selections.
+  void* candidate_ = nullptr;
+  // Provider package retired immediately after compilation finishes.
+  loom_serve_package_t* package_ = nullptr;
+  // Joins the real asynchronous compiler's final callback with the outer test.
+  std::mutex mutex_;
+  // Outer-thread notification; no serving worker waits for compilation.
+  std::condition_variable condition_;
+  // Callback has relinquished all borrowed inputs.
+  bool ready_ = false;
+  // Owned compiler outcome, consumed after callback publication.
+  iree_status_t status_ = iree_ok_status();
+};
+
+TEST_P(GenerationSelectionTest,
+       PreparedBatchPinsCodeAcrossSelectionAndRemoval) {
+  ASSERT_NO_FATAL_FAILURE(CompileReplacement());
+  ASSERT_NO_FATAL_FAILURE(Prepare({R"({"model":"fixture","input":"a"})"}));
+  IREE_ASSERT_OK(update_.select(update_.self, candidate_));
+  ASSERT_NO_FATAL_FAILURE(SubmitPrepared(0));
+  ASSERT_NO_FATAL_FAILURE(Complete(0));
+
+  ASSERT_NO_FATAL_FAILURE(Prepare({R"({"model":"fixture","input":"a"})"}));
+  IREE_ASSERT_OK(update_.select(update_.self, nullptr));
+  update_.dispose(std::exchange(candidate_, nullptr));
+  ASSERT_NO_FATAL_FAILURE(SubmitPrepared(1));
+  ASSERT_NO_FATAL_FAILURE(Complete(1));
+
+  IREE_ASSERT_OK(loom_serve_device_create_execution(device_, &consumer_));
+  for (size_t i = 0; i < results_.size(); ++i) {
+    auto ready = loom_serve_finite_result_ready(results_[i]);
+    IREE_ASSERT_OK(loom_serve_execution_barrier(
+        consumer_, {2, ready.semaphores, ready.values}));
+    const auto row = loom_serve_finite_result_row(results_[i], 0, 0);
+    ASSERT_EQ(row.length, 4 * sizeof(float));
+    const iree_hal_transfer_operation_t download = {
+        .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+        .download =
+            {
+                .source_buffer = row.buffer,
+                .source_offset = row.offset,
+                .target = output_.data() + i * 4,
+                .length = row.length,
+            },
+    };
+    uint64_t value = 0;
+    IREE_ASSERT_OK(
+        loom_serve_execution_transfer(consumer_, 1, &download, &value));
+  }
+  IREE_ASSERT_OK(loom_serve_execution_drain(consumer_));
+  const float expected[] = {1, 1, 1, 1, 2, 1, 2, 1};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(expected); ++i) {
+    EXPECT_EQ(output_[i], expected[i]);
+  }
+  StartRouter();
+  EXPECT_NE(Read(Send(R"({"model":"fixture","input":"a"})"))
+                .find(R"("embedding":[1,1,1,1])"),
+            std::string::npos);
+}
+
+INSTANTIATE_TEST_SUITE_P(CommandAndDirect, GenerationSelectionTest,
+                         ::testing::Values(false, true));
+
+class RequestChoiceTest : public GenerationSelectionTest {
+ protected:
+  void SetUp() override {
+    DeviceResultTest::SetUp();
+    if (HasFatalFailure()) {
+      return;
+    }
+    if (SourceServiceDirectStageSource()[0] && !GetParam()) {
+      GTEST_SKIP() << "This target provides resident direct stages only.";
+    }
+    ASSERT_NO_FATAL_FAILURE(Load({2, 16 * 1024 * 1024}));
+  }
+
+  void TearDown() override {
+    ReleaseCompiler();
+    if (batch_active_) {
+      IREE_EXPECT_OK(Resolve(true));
+      loom_serve_finite_model_release_batch(model_);
+      ReleaseInputs();
+    }
+    loom_serve_package_release(package_);
+    GenerationSelectionTest::TearDown();
+  }
+
+  void Load(loom_serve_variant_cache_options_t cache,
+            bool reject_two_units = false,
+            std::array<uint32_t, 2> capacity_factors = {20, 16}) {
+    interface_.set_observer(interface_.self, {});
+    loom_serve_finite_service_free(std::exchange(service_, nullptr));
+    IREE_ASSERT_OK(
+        loom_serve_finite_model_free(std::exchange(model_, nullptr)));
+    const std::string stage = GetParam()
+                                  ? (SourceServiceDirectStageSource()[0]
+                                         ? SourceServiceDirectStageSource()
+                                         : directory_ + "/variants/direct.loom")
+                                  : directory_ + "/embed.loom";
+    const std::string paths[] = {
+        directory_ + "/config.loom",  stage,
+        directory_ + "/control.loom", directory_ + "/variants/specialize.loom",
+        directory_ + "/prepare.loom", directory_ + "/tokenizer.json"};
+    const iree_string_view_t names[] = {
+        IREE_SV("model/config.loom"),       IREE_SV("model/stage.loom"),
+        IREE_SV("model/control_base.loom"), IREE_SV("model/control.loom"),
+        IREE_SV("model/prepare.loom"),      IREE_SV("model/tokenizer.json")};
+    std::string contents[IREE_ARRAYSIZE(paths)];
+    loom_serve_package_file_t files[IREE_ARRAYSIZE(paths)] = {};
+    for (size_t i = 0; i < IREE_ARRAYSIZE(paths); ++i) {
+      std::ifstream input(paths[i]);
+      ASSERT_TRUE(input.good()) << paths[i];
+      contents[i].assign(std::istreambuf_iterator<char>(input), {});
+    }
+    // Only cold admission capacities change. Packet preparation, row plans,
+    // stage configuration, and actual command workspace remain identical.
+    const std::array<uint32_t, 2> default_factors = {20, 16};
+    for (size_t i = 0; i < capacity_factors.size(); ++i) {
+      const std::string original =
+          "scalar.constant " + std::to_string(default_factors[i]) + " : i64";
+      const auto offset = contents[4].find(original);
+      ASSERT_NE(offset, std::string::npos);
+      contents[4].replace(
+          offset, original.size(),
+          "scalar.constant " + std::to_string(capacity_factors[i]) + " : i64");
+    }
+    const auto position = contents[2].find("@prepare_batch(");
+    ASSERT_NE(position, std::string::npos);
+    contents[2].replace(position, 15, "@prepare_batch_base(");
+    if (reject_two_units) {
+      const std::string binding =
+          "  func.call @config_i64(%stage, %key, %units64)";
+      const auto offset = contents[3].find(binding);
+      ASSERT_NE(offset, std::string::npos);
+      contents[3].replace(offset, binding.size(), R"(
+  %c2_i64 = scalar.constant 2 : i64
+  %bad = scalar.cmpi eq, %units64, %c2_i64 : i64
+  %compile_units = scf.if %bad -> (i64) {
+    scf.yield %c0_i64 : i64
+  } else {
+    scf.yield %units64 : i64
+  }
+  func.call @config_i64(%stage, %key, %compile_units))");
+    }
+    if (GetParam()) {
+      for (size_t i : {3u, 4u}) {
+        size_t offset = 0;
+        while ((offset = contents[i].find("@stage(", offset)) !=
+               std::string::npos) {
+          contents[i].replace(offset, 7, "@dispatch(");
+          offset += 10;
+        }
+        const std::string root = "bytes(\"656d626564\")";
+        offset = contents[i].find(root);
+        ASSERT_NE(offset, std::string::npos);
+        contents[i].replace(offset, root.size(),
+                            "bytes(\"7265736964656e745f656d626564\")");
+      }
+    }
+    for (size_t i = 0; i < IREE_ARRAYSIZE(paths); ++i) {
+      files[i] = {names[i], iree_make_const_byte_span(contents[i].data(),
+                                                      contents[i].size())};
+    }
+    IREE_ASSERT_OK(loom_serve_package_create(IREE_SV("model/model.json"),
+                                             IREE_ARRAYSIZE(files), files,
+                                             host_allocator_, &package_));
+    const iree_string_view_t providers[] = {IREE_SV("config.loom"),
+                                            IREE_SV("stage.loom"),
+                                            IREE_SV("control_base.loom")};
+    const loom_serve_finite_model_options_t options = {
+        .sources =
+            {
+                .prepare = IREE_SV("prepare.loom"),
+                .control = IREE_SV("control.loom"),
+                .count = IREE_ARRAYSIZE(providers),
+                .values = providers,
+                .package = package_,
+            },
+        .asset_directory = IREE_SV("."),
+        .options = IREE_SV("{\"batch_units\":64}"),
+        .specialization_cache = cache,
+    };
+    loom_serve_test_embedding_model_lifecycle_t load;
+    IREE_ASSERT_OK(load.Run(device_, options, {this, Allocate}));
+    model_ = load.model;
+    transfer_value_ = 0;
+    update_ = loom_serve_finite_model_execution_update(model_);
+    loom_serve_package_release(std::exchange(package_, nullptr));
+    ASSERT_NO_FATAL_FAILURE(CreateService(0));
+    loom_serve_finite_model_set_observer(model_, {Wake, this});
+  }
+
+  static iree_status_t Allocate(void* self, iree_allocator_command_t command,
+                                const void* parameters, void** pointer) {
+    auto* test = static_cast<RequestChoiceTest*>(self);
+    if (command != IREE_ALLOCATOR_COMMAND_FREE &&
+        std::this_thread::get_id() != test->owner_) {
+      ++test->worker_allocations_;
+      std::unique_lock<std::mutex> lock(test->mutex_);
+      if (test->holding_) {
+        test->entered_ = true;
+        test->condition_.notify_all();
+        test->condition_.wait(lock, [&] { return !test->holding_; });
+      }
+    }
+    const auto allocator = iree_allocator_system();
+    return allocator.ctl(allocator.self, command, parameters, pointer);
+  }
+
+  static void Wake(void* self) {
+    auto* test = static_cast<RequestChoiceTest*>(self);
+    std::lock_guard<std::mutex> lock(test->mutex_);
+    ++test->wakes_;
+    test->condition_.notify_all();
+  }
+
+  void PrepareChoice(const char* body) {
+    ASSERT_NO_FATAL_FAILURE(Prepare({body}));
+    batch_active_ = true;
+  }
+
+  iree_status_t Resolve(bool cancel = false) {
+    bool complete = false;
+    while (!complete) {
+      const auto previous = wakes_.load();
+      IREE_RETURN_IF_ERROR(
+          loom_serve_finite_model_advance_batch(model_, cancel, &complete));
+      if (!complete) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condition_.wait(lock, [&] { return wakes_.load() != previous; });
+      }
+    }
+    return iree_ok_status();
+  }
+
+  void RunChoice(const char* body, bool reuse,
+                 std::initializer_list<float> expected) {
+    const auto before = worker_allocations_.load();
+    ASSERT_NO_FATAL_FAILURE(PrepareChoice(body));
+    IREE_ASSERT_OK(Resolve());
+    EXPECT_EQ(worker_allocations_.load() == before, reuse);
+    ASSERT_NO_FATAL_FAILURE(CheckChoice(expected));
+  }
+
+  void CheckChoice(std::initializer_list<float> expected) {
+    ASSERT_NO_FATAL_FAILURE(SubmitPrepared(0));
+    loom_serve_finite_snapshot_t* snapshot = nullptr;
+    loom_serve_execution_frontier_t ready;
+    IREE_ASSERT_OK(
+        loom_serve_finite_result_download(results_[0], &snapshot, &ready));
+    transfer_value_ = ready.values[1];
+    for (size_t i = 0; i < IREE_ARRAYSIZE(ready.semaphores); ++i) {
+      IREE_EXPECT_OK(iree_hal_semaphore_wait(
+          ready.semaphores[i], ready.values[i], iree_infinite_timeout(),
+          IREE_ASYNC_WAIT_FLAG_NONE));
+    }
+    const auto row = loom_serve_finite_snapshot_row(snapshot, 0, 0);
+    EXPECT_EQ(row.data_length, expected.size() * sizeof(float));
+    if (row.data_length == expected.size() * sizeof(float)) {
+      size_t i = 0;
+      for (float value : expected) {
+        float actual = 0;
+        memcpy(&actual, row.data + i++ * sizeof(float), sizeof(actual));
+        EXPECT_EQ(actual, value);
+      }
+    }
+    loom_serve_finite_snapshot_release(snapshot);
+    ASSERT_NO_FATAL_FAILURE(Complete(0));
+    batch_active_ = false;
+    loom_serve_finite_result_release(std::exchange(results_[0], nullptr));
+  }
+
+  void ReleaseCompiler() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    holding_ = false;
+    condition_.notify_all();
+  }
+
+  // Outer test thread drives serialized preparation/admission, not compilation.
+  const std::thread::id owner_ = std::this_thread::get_id();
+  // Actual asynchronous compiler allocations, used to distinguish reuse/misses.
+  std::atomic<size_t> worker_allocations_ = 0;
+  // Compiler completion wakes, joined outside the serving worker pool.
+  std::atomic<uint64_t> wakes_ = 0;
+  // Publication and a deliberate allocation-boundary dependency gate.
+  std::mutex mutex_;
+  // Notifies compiler entry, dependency release, and terminal publication.
+  std::condition_variable condition_;
+  // Compiler allocations are held only during explicit cancellation coverage.
+  bool holding_ = false;
+  // A real compiler worker has reached the held allocation boundary.
+  bool entered_ = false;
+  // Preparation succeeded; teardown must collect/release this invocation.
+  bool batch_active_ = false;
+  // Temporary input package, released before the first request specialization.
+  loom_serve_package_t* package_ = nullptr;
+};
+
+TEST_P(RequestChoiceTest, ShapeReuseAndLruEvictionSurviveProviderRetirement) {
+  ASSERT_NO_FATAL_FAILURE(
+      RunChoice(R"({"model":"fixture","input":"a"})", false, {1, 1, 1, 1}));
+  ASSERT_NO_FATAL_FAILURE(
+      RunChoice(R"({"model":"fixture","input":"bbb"})", false, {6, 3, 2, 1}));
+  ASSERT_NO_FATAL_FAILURE(
+      RunChoice(R"({"model":"fixture","input":"a"})", true, {1, 1, 1, 1}));
+  ASSERT_NO_FATAL_FAILURE(
+      RunChoice(R"({"model":"fixture","input":"ab"})", false, {3, 2, 1, 1}));
+  ASSERT_NO_FATAL_FAILURE(
+      RunChoice(R"({"model":"fixture","input":"a"})", true, {1, 1, 1, 1}));
+  ASSERT_NO_FATAL_FAILURE(
+      RunChoice(R"({"model":"fixture","input":"bbb"})", false, {6, 3, 2, 1}));
+  StartRouter();
+  const auto response =
+      Read(Send(R"({"model":"fixture","input":["a","bbb"]})"));
+  EXPECT_NE(response.find(R"("embedding":[1,1,1,2])"), std::string::npos);
+  EXPECT_NE(response.find(R"("embedding":[6,3,2,2])"), std::string::npos);
+}
+
+TEST_P(RequestChoiceTest, OversizeChoiceRunsWithoutBecomingIdleCacheStorage) {
+  ASSERT_NO_FATAL_FAILURE(Load({2, 1}));
+  for (size_t i = 0; i < 2; ++i) {
+    ASSERT_NO_FATAL_FAILURE(
+        RunChoice(R"({"model":"fixture","input":"a"})", false, {1, 1, 1, 1}));
+  }
+}
+
+TEST_P(RequestChoiceTest, AdmissionCeilingsDoNotSizeWorkspaceBacking) {
+  constexpr uint32_t kCapacityFactor = 2048;
+  constexpr uint64_t kCapacityBytes = 64 * kCapacityFactor;
+  const auto run = [&] {
+    ASSERT_NO_FATAL_FAILURE(
+        RunChoice(R"({"model":"fixture","input":"a"})", false, {1, 1, 1, 1}));
+    const auto workspace =
+        loom_serve_device_memory_statistics(device_).workspace;
+    EXPECT_GT(workspace.bytes_committed, 0u);
+    EXPECT_LT(workspace.bytes_committed, kCapacityBytes);
+  };
+  ASSERT_NO_FATAL_FAILURE(run());
+  // Enlarge each independent admission ceiling without changing the work.
+  ASSERT_NO_FATAL_FAILURE(
+      Load({2, 16 * 1024 * 1024}, false, {kCapacityFactor, 16}));
+  ASSERT_NO_FATAL_FAILURE(run());
+  ASSERT_NO_FATAL_FAILURE(
+      Load({2, 16 * 1024 * 1024}, false, {20, kCapacityFactor}));
+  ASSERT_NO_FATAL_FAILURE(run());
+  // Actual cohort growth still acquires its required backing on demand.
+  ASSERT_NO_FATAL_FAILURE(PrepareChoice(
+      R"({"model":"fixture","input":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]})"));
+  IREE_ASSERT_OK(Resolve());
+  ASSERT_NO_FATAL_FAILURE(CheckChoice({31, 31, 1, 2}));
+  EXPECT_LT(
+      loom_serve_device_memory_statistics(device_).workspace.bytes_committed,
+      kCapacityBytes);
+}
+
+TEST_P(RequestChoiceTest, CancellationCollectsAcceptedCompilerBeforeRelease) {
+  ASSERT_NO_FATAL_FAILURE(PrepareChoice(R"({"model":"fixture","input":"a"})"));
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    holding_ = true;
+  }
+  bool complete = false;
+  IREE_ASSERT_OK(
+      loom_serve_finite_model_advance_batch(model_, false, &complete));
+  EXPECT_FALSE(complete);
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [&] { return entered_; });
+  }
+  IREE_ASSERT_OK(
+      loom_serve_finite_model_advance_batch(model_, true, &complete));
+  EXPECT_FALSE(complete);
+  ReleaseCompiler();
+  IREE_ASSERT_OK(Resolve(true));
+  loom_serve_finite_model_release_batch(model_);
+  ReleaseInputs();
+  batch_active_ = false;
+  ASSERT_NO_FATAL_FAILURE(
+      RunChoice(R"({"model":"fixture","input":"a"})", true, {1, 1, 1, 1}));
+}
+
+TEST_P(RequestChoiceTest, CapturedGenerationSurvivesReplacementAndRemoval) {
+  ASSERT_NO_FATAL_FAILURE(CompileReplacement());
+  ASSERT_NO_FATAL_FAILURE(PrepareChoice(R"({"model":"fixture","input":"a"})"));
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    holding_ = true;
+  }
+  bool complete = false;
+  IREE_ASSERT_OK(
+      loom_serve_finite_model_advance_batch(model_, false, &complete));
+  EXPECT_FALSE(complete);
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [&] { return entered_; });
+  }
+  IREE_ASSERT_OK(update_.select(update_.self, candidate_));
+  ReleaseCompiler();
+  IREE_ASSERT_OK(Resolve());
+  ASSERT_NO_FATAL_FAILURE(CheckChoice({1, 1, 1, 1}));
+
+  ASSERT_NO_FATAL_FAILURE(PrepareChoice(R"({"model":"fixture","input":"a"})"));
+  IREE_ASSERT_OK(update_.select(update_.self, nullptr));
+  update_.dispose(std::exchange(candidate_, nullptr));
+  IREE_ASSERT_OK(Resolve());
+  ASSERT_NO_FATAL_FAILURE(CheckChoice({2, 1, 2, 1}));
+  ASSERT_NO_FATAL_FAILURE(
+      RunChoice(R"({"model":"fixture","input":"a"})", true, {1, 1, 1, 1}));
+}
+
+TEST_P(RequestChoiceTest, FailedCompilationReleasesChoiceAndKeepsSourceIndex) {
+  ASSERT_NO_FATAL_FAILURE(Load({2, 16 * 1024 * 1024}, true));
+  for (size_t i = 0; i < 2; ++i) {
+    ASSERT_NO_FATAL_FAILURE(
+        PrepareChoice(R"({"model":"fixture","input":"a"})"));
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Resolve());
+    loom_serve_finite_model_release_batch(model_);
+    ReleaseInputs();
+    batch_active_ = false;
+    ASSERT_NO_FATAL_FAILURE(RunChoice(R"({"model":"fixture","input":"bbb"})",
+                                      i != 0, {6, 3, 2, 1}));
+  }
+}
+
+TEST_P(RequestChoiceTest, ZeroCapacityRunsWithoutIdleRetention) {
+  ASSERT_NO_FATAL_FAILURE(Load({0, 16 * 1024 * 1024}));
+  for (size_t i = 0; i < 2; ++i) {
+    ASSERT_NO_FATAL_FAILURE(
+        RunChoice(R"({"model":"fixture","input":"a"})", false, {1, 1, 1, 1}));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(CommandAndDirect, RequestChoiceTest,
+                         ::testing::Values(false, true));
 
 TEST_F(DeviceResultTest, RaggedCohortsComposeBeforeProducerRetirement) {
   interface_.set_observer(interface_.self, {});

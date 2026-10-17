@@ -27,6 +27,16 @@ typedef enum loom_serve_variant_phase_e {
 typedef struct loom_serve_variant_entry_t loom_serve_variant_entry_t;
 typedef struct loom_serve_variant_pool_t loom_serve_variant_pool_t;
 
+// Idle reuse policy owned by the consumer. One active construction/execution
+// may exceed these limits and retire instead of entering the reusable cache.
+typedef struct loom_serve_variant_cache_options_t {
+  // Maximum idle executable choices; zero disables idle retention.
+  iree_host_size_t capacity;
+  // Maximum retained payload/entry/key/artifact bytes. Fixed source catalogs,
+  // index capacity, compiler scratch, and driver-private storage are separate.
+  iree_host_size_t max_bytes;
+} loom_serve_variant_cache_options_t;
+
 // Runs on the serialized owner after every producer and consumer has retired.
 // The payload owns its compiled objects and resource references. NULL is valid
 // for a base choice whose executable ownership remains with the model.
@@ -85,7 +95,29 @@ void loom_serve_variant_pool_set_observer(loom_serve_variant_pool_t* pool,
 
 iree_host_size_t loom_serve_variant_pool_count(
     const loom_serve_variant_pool_t* pool);
+// Requested bytes for pool and entry metadata, excluding consumer payloads.
+iree_host_size_t loom_serve_variant_pool_storage_size(
+    const loom_serve_variant_pool_t* pool);
 bool loom_serve_variant_pool_pending(const loom_serve_variant_pool_t* pool);
+
+// Owner-only linear traversal in cache order. Entries are borrowed until
+// removal. Save next before discarding the current entry; consumer payloads
+// remain unavailable until the entry's snapshot reports READY.
+loom_serve_variant_entry_t* loom_serve_variant_pool_first(
+    const loom_serve_variant_pool_t* pool);
+loom_serve_variant_entry_t* loom_serve_variant_entry_next(
+    const loom_serve_variant_entry_t* entry);
+loom_serve_variant_snapshot_t loom_serve_variant_entry_snapshot(
+    const loom_serve_variant_entry_t* entry);
+
+// Moves a ready entry to the end of traversal order for owner-selected LRU.
+// Management pools that never touch entries retain creation order.
+void loom_serve_variant_entry_touch(loom_serve_variant_entry_t* entry);
+
+// Clones the collected terminal construction status for a request consumer.
+// READY yields OK; the caller consumes the returned status.
+iree_status_t loom_serve_variant_entry_status(
+    const loom_serve_variant_entry_t* entry);
 
 // Reserves one construction against a ready same-pool base. The modality owns
 // input capture, compilation and validation of its resource contract. Success
@@ -130,7 +162,12 @@ void* loom_serve_variant_entry_value(const loom_serve_variant_entry_t* entry);
 iree_status_t loom_serve_variant_pool_remove(loom_serve_variant_pool_t* pool,
                                              loom_serve_variant_id_t id);
 
-// Visits stable owner-thread observations in creation order. False means the
+// Infallible owner eviction after observing a terminal entry with no consumer
+// borrows. Does not search by identity, allocate, or wait. External removal
+// requests use pool_remove to validate identity and lifetime.
+void loom_serve_variant_entry_discard(loom_serve_variant_entry_t* entry);
+
+// Visits stable owner-thread observations in cache order. False means the
 // requested identity/index is absent, not a construction error.
 bool loom_serve_variant_pool_snapshot(
     const loom_serve_variant_pool_t* pool, loom_serve_variant_id_t id,

@@ -84,5 +84,5 @@ func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64
   %output_capacity = scalar.constant 1024 : i64
   %empty = global.load @empty : buffer
   %name = global.load @name : buffer
-  func.return %units, %input_capacity, %output_capacity, %output_capacity, %empty, %name, %empty : i64, i64, i64, i64, buffer, buffer, buffer
+  func.return %units, %input_capacity, %output_capacity, %output_capacity, %empty, %name, %root : i64, i64, i64, i64, buffer, buffer, buffer
 }

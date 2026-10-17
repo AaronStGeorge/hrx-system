@@ -43,21 +43,26 @@ typedef struct loom_serve_module_t {
 static const iree_vm_module_signature_type_t loom_serve_module_result = {
     IREE_VM_SCALAR_TYPE_I64, 0};
 
+void loom_serve_module_clear_stages(iree_vm_module_t* base) {
+  loom_serve_module_t* module = (loom_serve_module_t*)base;
+  for (iree_host_size_t i = 0; i < module->stage_count; ++i) {
+    iree_hal_command_buffer_release(module->stages[i].command_buffer);
+    loom_serve_dispatch_release(module->stages[i].dispatch);
+  }
+  iree_allocator_free(module->host_allocator, module->stages);
+  module->stages = NULL;
+  module->stage_count = 0;
+}
+
 static void loom_serve_module_destroy(iree_vm_module_t* base) {
   loom_serve_module_t* module = (loom_serve_module_t*)base;
-  if (module->stages) {
-    for (iree_host_size_t i = 0; i < module->stage_count; ++i) {
-      iree_hal_command_buffer_release(module->stages[i].command_buffer);
-      loom_serve_dispatch_release(module->stages[i].dispatch);
-    }
-  }
+  loom_serve_module_clear_stages(base);
   loom_serve_execution_release(module->execution);
   iree_allocator_free(module->host_allocator, module->arguments);
   iree_allocator_free(module->host_allocator, module->callables);
   iree_allocator_free(module->host_allocator, module->exports);
   iree_allocator_free(module->host_allocator, module->names);
   iree_allocator_free(module->host_allocator, module->feedback);
-  iree_allocator_free(module->host_allocator, module->stages);
   iree_allocator_free(module->host_allocator, module);
 }
 
@@ -263,11 +268,7 @@ iree_status_t loom_serve_module_bind_stages(iree_vm_module_t* base,
       iree_hal_command_buffer_retain(stages[i].command_buffer);
       loom_serve_dispatch_retain(stages[i].dispatch);
     }
-    for (iree_host_size_t i = 0; i < module->stage_count; ++i) {
-      iree_hal_command_buffer_release(module->stages[i].command_buffer);
-      loom_serve_dispatch_release(module->stages[i].dispatch);
-    }
-    iree_allocator_free(module->host_allocator, module->stages);
+    loom_serve_module_clear_stages(base);
     module->stages = replacement;
     module->stage_count = stage_count;
   } else {

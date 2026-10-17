@@ -24,7 +24,8 @@ extern "C" {
 typedef struct loom_serve_finite_model_t loom_serve_finite_model_t;
 
 // Replaces command/direct execution over the same prepared parameters and VM
-// packet contract. Selection runs only outside CPU/device invocation borrows.
+// packet contract. A prepared batch retains the generation it captured;
+// selection at an owner boundary affects subsequent batches only.
 loom_serve_execution_update_t loom_serve_finite_model_execution_update(
     loom_serve_finite_model_t* model);
 
@@ -39,6 +40,8 @@ typedef struct loom_serve_finite_model_options_t {
   iree_string_view_t asset_directory;
   // Source-owned JSON object configuring capacity and model policy.
   iree_string_view_t options;
+  // Bounded idle reuse of source-declared request executables.
+  loom_serve_variant_cache_options_t specialization_cache;
 } loom_serve_finite_model_options_t;
 
 // Owner-driven preparation. Private CPU/JIT work runs on the shared host;
@@ -97,6 +100,9 @@ iree_status_t loom_serve_finite_load_free(loom_serve_finite_load_t* load);
 //   run(stage: i32, input, output: hal.buffer)
 // Cold prepare imports declare command or direct-dispatch stages and their
 // configuration. Command stages can also declare checkpoint parameter domains.
+// prepare_batch may use the same stage/config imports to declare request
+// executables, with ordinals following the cold table. These reuse the cold
+// checkpoint placement; request code cannot declare new parameter domains.
 // Tokenizer asset is relative to asset_root; empty omits tokenization support.
 // State is immutable across requests. Positive units bound cohort work/storage;
 // equal tags permit batching. Ranges contain [offset, length] i64 pairs into
@@ -186,6 +192,19 @@ iree_status_t loom_serve_finite_model_prepare_batch(
     loom_serve_finite_model_t* model, iree_host_size_t count,
     const loom_serve_finite_prepared_t* requests,
     const iree_host_size_t* expected_rows);
+
+// Observer used by request compilation only, installed before advance_batch.
+// Detachment follows terminal advance of every accepted compilation.
+void loom_serve_finite_model_set_observer(loom_serve_finite_model_t* model,
+                                          loom_serve_wake_callback_t observer);
+
+// Resolves and binds the prepared batch's captured executable choice before
+// parameter admission. A cache miss compiles asynchronously and wakes the
+// owner. Call again until complete, including after cancellation. A terminal
+// result permits release_batch; success without cancellation permits
+// admission/submit. No worker/device wait or checkpoint admission occurs here.
+iree_status_t loom_serve_finite_model_advance_batch(
+    loom_serve_finite_model_t* model, bool cancel, bool* out_complete);
 
 // Scheduler-only submission after residency_try_acquire succeeds. Acquires
 // input/output roots from the shared queue pool, uploads and invokes source,

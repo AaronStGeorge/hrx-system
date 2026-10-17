@@ -11,6 +11,8 @@
 #include "iree/base/tooling/flags.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/vm/sync.h"
+#include "loom/serve/runtime/program/program.h"
 #include "loomc/iree.h"
 #include "loomc/target/vm.h"
 
@@ -212,6 +214,177 @@ TEST_F(PreparationTest, EmbeddedNulCannotTruncateDeclarationStrings) {
             &compilation, host_allocator, &preparation));
     EXPECT_EQ(preparation, nullptr);
   }
+}
+
+class PreparationCaptureTest : public PreparationTest {
+ protected:
+  void SetUp() override {
+    PreparationTest::SetUp();
+    IREE_ASSERT_OK(loom_serve_preparation_module_create(
+        environment, host_allocator, &module));
+    const iree_string_view_t roots[] = {
+        IREE_SV("request_stages"), IREE_SV("configure_cold_stage"),
+        IREE_SV("conflicting_parameter_policy"), IREE_SV("no_stages")};
+    IREE_ASSERT_OK(loom_serve_program_allocate(
+        target_environment, environment, &sources,
+        iree_make_cstring_view(FLAG_boundary_source), IREE_ARRAYSIZE(roots),
+        roots, (iree_vm_module_span_t){&module, 1}, &compilation,
+        host_allocator, &program));
+  }
+
+  void TearDown() override {
+    loom_serve_preparation_free(second);
+    loom_serve_program_free(program);
+    iree_vm_module_release(module);
+    PreparationTest::TearDown();
+  }
+
+  iree_status_t Invoke(iree_string_view_t entry,
+                       iree_vm_variant_span_t arguments = {},
+                       iree_vm_variant_span_t results = {}) {
+    iree_vm_function_t function = {};
+    IREE_RETURN_IF_ERROR(
+        iree_vm_process_lookup_function(loom_serve_program_process(program),
+                                        IREE_SV("model"), entry, &function));
+    return iree_vm_invoke(loom_serve_program_invocation(program), function,
+                          arguments, results);
+  }
+
+  // A single linked source program serves multiple independent captures.
+  loom_serve_program_t* program = nullptr;
+  // Persistent capability retained independently of the linked program.
+  iree_vm_module_t* module = nullptr;
+  // Second capture kept live beside the first to prove independent ownership.
+  loom_serve_preparation_t* second = nullptr;
+};
+
+TEST_F(PreparationCaptureTest, RequestDeclarationsOwnValuesAcrossInvocations) {
+  iree_vm_variant_t arguments[] = {iree_vm_variant_from_i64(11)};
+  iree_vm_variant_t results[2] = {};
+  loom_serve_preparation_module_begin(module, 3, 0);
+  IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
+                        iree_vm_variant_span_from_array(arguments),
+                        iree_vm_variant_span_from_array(results)));
+  preparation = loom_serve_preparation_module_take(module);
+  int32_t command = 0, dispatch = 0;
+  IREE_ASSERT_OK(iree_vm_i32_from_variant(results[0], &command));
+  IREE_ASSERT_OK(iree_vm_i32_from_variant(results[1], &dispatch));
+  EXPECT_EQ(command, 3);
+  EXPECT_EQ(dispatch, 4);
+
+  arguments[0] = iree_vm_variant_from_i64(22);
+  loom_serve_preparation_module_begin(module, 7, 0);
+  IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
+                        iree_vm_variant_span_from_array(arguments),
+                        iree_vm_variant_span_from_array(results)));
+  second = loom_serve_preparation_module_take(module);
+  IREE_ASSERT_OK(iree_vm_i32_from_variant(results[0], &command));
+  IREE_ASSERT_OK(iree_vm_i32_from_variant(results[1], &dispatch));
+  EXPECT_EQ(command, 7);
+  EXPECT_EQ(dispatch, 8);
+
+  loom_serve_program_free(program);
+  program = nullptr;
+  iree_vm_module_release(module);
+  module = nullptr;
+  const loom_serve_preparation_t* captures[] = {preparation, second};
+  for (size_t i = 0; i < IREE_ARRAYSIZE(captures); ++i) {
+    ASSERT_EQ(loom_serve_preparation_stage_count(captures[i]), 2u);
+    for (size_t j = 0; j < 2; ++j) {
+      const auto* stage = loom_serve_preparation_stage(captures[i], j);
+      EXPECT_EQ(stage->kind, j ? LOOM_SERVE_PREPARATION_STAGE_DISPATCH
+                               : LOOM_SERVE_PREPARATION_STAGE_COMMAND);
+      EXPECT_EQ(stage->tag, i ? 22 : 11);
+      EXPECT_EQ(stage->workspace_limit_bytes, j ? 0u : 4096u);
+      ASSERT_EQ(stage->config.binding_count, 1u);
+      const auto& binding = stage->config.bindings[0];
+      EXPECT_EQ(std::string(binding.key.data, binding.key.size),
+                "feature.enabled");
+      EXPECT_EQ(std::string(binding.value.data, binding.value.size),
+                i ? "22" : "11");
+    }
+  }
+}
+
+TEST_F(PreparationCaptureTest, EmptyCaptureNeedsNoDeclarationStorage) {
+  loom_serve_preparation_module_begin(module, 4, 0);
+  IREE_ASSERT_OK(Invoke(IREE_SV("no_stages")));
+  preparation = loom_serve_preparation_module_take(module);
+  EXPECT_EQ(preparation, nullptr);
+  EXPECT_EQ(loom_serve_preparation_storage_size(preparation), 0u);
+  EXPECT_TRUE(loom_serve_preparation_equal(preparation, nullptr));
+}
+
+TEST_F(PreparationCaptureTest, IdentityAndStorageBelongToOwnedDeclarations) {
+  for (int64_t tag : {99, 99, 100}) {
+    iree_vm_variant_t arguments[] = {iree_vm_variant_from_i64(tag)};
+    iree_vm_variant_t results[2] = {};
+    loom_serve_preparation_module_begin(module, preparation ? 17 : 3, 0);
+    IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
+                          iree_vm_variant_span_from_array(arguments),
+                          iree_vm_variant_span_from_array(results)));
+    second = loom_serve_preparation_module_take(module);
+    EXPECT_FALSE(loom_serve_preparation_equal(second, nullptr));
+    if (!preparation) {
+      preparation = second;
+      second = nullptr;
+      continue;
+    }
+    EXPECT_EQ(loom_serve_preparation_equal(preparation, second), tag == 99);
+    EXPECT_EQ(loom_serve_preparation_storage_size(second),
+              loom_serve_preparation_storage_size(preparation) +
+                  (tag == 100 ? 2 : 0));
+    loom_serve_preparation_free(second);
+    second = nullptr;
+  }
+}
+
+TEST_F(PreparationCaptureTest, CapabilityCannotEscapeItsInvocation) {
+  iree_vm_variant_t arguments[] = {iree_vm_variant_from_i64(11)};
+  iree_vm_variant_t results[2] = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        Invoke(IREE_SV("request_stages"),
+                               iree_vm_variant_span_from_array(arguments),
+                               iree_vm_variant_span_from_array(results)));
+  arguments[0] = iree_vm_variant_from_i64(11);
+  loom_serve_preparation_module_begin(module, 0, 0);
+  IREE_ASSERT_OK(Invoke(IREE_SV("request_stages"),
+                        iree_vm_variant_span_from_array(arguments),
+                        iree_vm_variant_span_from_array(results)));
+  preparation = loom_serve_preparation_module_take(module);
+  arguments[0] = iree_vm_variant_from_i64(11);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        Invoke(IREE_SV("request_stages"),
+                               iree_vm_variant_span_from_array(arguments),
+                               iree_vm_variant_span_from_array(results)));
+}
+
+TEST_F(PreparationCaptureTest, RequestCannotReplaceCheckpointDeclarations) {
+  loom_serve_preparation_module_begin(module, 4, 0);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Invoke(IREE_SV("conflicting_parameter_policy")));
+  preparation = loom_serve_preparation_module_take(module);
+  ASSERT_EQ(loom_serve_preparation_stage_count(preparation), 1u);
+  EXPECT_EQ(loom_serve_preparation_stage(preparation, 0)->parameter_count, 0u);
+}
+
+TEST_F(PreparationCaptureTest, RequestCannotConfigureColdStage) {
+  loom_serve_preparation_module_begin(module, 4, 0);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        Invoke(IREE_SV("configure_cold_stage")));
+  preparation = loom_serve_preparation_module_take(module);
+  ASSERT_EQ(loom_serve_preparation_stage_count(preparation), 1u);
+  EXPECT_EQ(loom_serve_preparation_stage(preparation, 0)->config.binding_count,
+            0u);
+}
+
+TEST_F(PreparationCaptureTest, RequestOrdinalsCannotOverflow) {
+  loom_serve_preparation_module_begin(module, INT32_MAX, 0);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Invoke(IREE_SV("configure_cold_stage")));
+  preparation = loom_serve_preparation_module_take(module);
+  ASSERT_NE(preparation, nullptr);
+  EXPECT_EQ(loom_serve_preparation_stage_count(preparation), 0u);
 }
 
 }  // namespace

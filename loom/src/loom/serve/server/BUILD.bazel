@@ -175,6 +175,7 @@ loom_cc_library(
     hdrs = ["configuration.h"],
     deps = [
         "//loom/src/loom/serve/runtime/program:sources",
+        "//loom/src/loom/serve/runtime/program:variant_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:json",
         "//runtime/src/iree/base/internal:path",

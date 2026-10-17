@@ -18,11 +18,11 @@
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/json.h"
 #include "loom/serve/runtime/program/module.h"
-#include "loom/serve/runtime/program/parameter_layout.h"
 #include "loom/serve/runtime/program/preparation.h"
 #include "loom/serve/runtime/program/program.h"
 #include "loom/serve/runtime/program/stage_set.h"
 #include "loom/serve/runtime/program/tokenizer_load.h"
+#include "loom/serve/service/finite/executables.h"
 #include "loomc/iree.h"
 
 typedef struct loom_serve_finite_model_stage_t {
@@ -68,6 +68,10 @@ struct loom_serve_finite_model_t {
   loom_serve_jit_t* jit;
   // Owned source declarations, independent of the bootstrap VM and arguments.
   loom_serve_preparation_t* preparation;
+  // Code generations and batch captures, independent of checkpoint residency.
+  loom_serve_finite_executables_t* executables;
+  // Idle request-code policy captured independently of source-owned options.
+  loom_serve_variant_cache_options_t specialization_cache;
   // Cold retained shapes sharing one parameter and issue-time buffer bank.
   struct {
     // Number of owned slots, including partially initialized slots on failure.
@@ -76,8 +80,6 @@ struct loom_serve_finite_model_t {
     loom_serve_finite_model_stage_t* values;
     // Original runner descriptors used to restore the registration's code.
     loom_serve_stage_t* bindings;
-    // Recording policy shared by original and replacement commands.
-    iree_hal_command_buffer_mode_t command_mode;
   } stages;
   // Shared source control and its native submission capabilities.
   struct {
@@ -93,6 +95,8 @@ struct loom_serve_finite_model_t {
     loom_serve_program_t* program;
     // Retained runner module whose execution table can change independently.
     iree_vm_module_t* runner;
+    // Scoped request declaration capability, retained beside the runner.
+    iree_vm_module_t* preparation;
     // Opaque source-owned state, retained across serialized requests.
     iree_vm_buffer_t* state;
     // Cold-resolved request preparation function.
@@ -120,9 +124,13 @@ struct loom_serve_finite_model_t {
 // sequence, with no submitted queue work to retire.
 static void loom_serve_finite_model_release_consumers(
     loom_serve_finite_model_t* model) {
+  loom_serve_finite_executables_free(model->executables);
+  model->executables = NULL;
   loom_serve_program_free(model->control.program);
   model->control.program = NULL;
   iree_vm_module_release(model->control.runner);
+  iree_vm_module_release(model->control.preparation);
+  model->control.preparation = NULL;
   model->control.runner = NULL;
   for (uint32_t i = 0; i < model->stages.count; ++i) {
     iree_hal_command_buffer_release(model->stages.values[i].command);
@@ -429,7 +437,7 @@ static iree_status_t loom_serve_finite_create_control(
       .binding_capacity = 2,
       .stages = {model->stages.count, stages},
   };
-  iree_vm_module_t* native_modules[3] = {0};
+  iree_vm_module_t* native_modules[4] = {0};
   iree_vm_buffer_t* read_only_tags = NULL;
   iree_status_t status = iree_vm_buffer_subspan(
       model->control.tags, 0, tags.data_length, IREE_VM_BUFFER_ACCESS_FLAG_READ,
@@ -456,13 +464,20 @@ static iree_status_t loom_serve_finite_create_control(
                                            host_allocator, &native_modules[2]);
   }
   if (iree_status_is_ok(status)) {
+    status = loom_serve_preparation_module_create(
+        model->control.environment, host_allocator, &native_modules[3]);
+    model->control.preparation = native_modules[3];
+    iree_vm_module_retain(model->control.preparation);
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_serve_program_link(module,
-                                     (iree_vm_module_span_t){native_modules, 3},
+                                     (iree_vm_module_span_t){native_modules, 4},
                                      host_allocator, &model->control.program);
   }
   iree_vm_module_release(native_modules[0]);
   iree_vm_module_release(native_modules[1]);
   iree_vm_module_release(native_modules[2]);
+  iree_vm_module_release(native_modules[3]);
   IREE_RETURN_IF_ERROR(status);
   const iree_vm_signature_type_t buffer = {
       .kind = IREE_VM_SIGNATURE_TYPE_KIND_REF,
@@ -541,7 +556,6 @@ static iree_status_t loom_serve_finite_model_link(
     loom_serve_finite_model_t* model, iree_vm_module_t* module,
     iree_hal_command_buffer_mode_t command_mode) {
   const iree_allocator_t host_allocator = model->host_allocator;
-  model->stages.command_mode = command_mode;
   iree_hal_queue_t* dispatch = loom_serve_device_dispatch_queue(model->owner);
   IREE_RETURN_IF_ERROR(loom_serve_residency_allocate(
       loom_serve_device_residency_cache(model->owner), model->execution,
@@ -555,153 +569,24 @@ static iree_status_t loom_serve_finite_model_link(
           model->weights.values, &stage->command));
     }
   }
-  // Register maximum cohort geometry and packet alignment without committing
-  // any backing. The control module separately registers reflected workspace.
-  IREE_RETURN_IF_ERROR(loom_serve_execution_reserve_workspace(
-      model->execution, iree_max(model->input_capacity, model->output_capacity),
-      LOOM_SERVE_FINITE_BUFFER_ALIGNMENT));
-  return loom_serve_finite_create_control(model, module);
-}
-
-// A candidate owns only execution resources; all parameter plans and the VM
-// remain with the model. Runner binding retains selected resources separately.
-typedef struct loom_serve_finite_variant_t {
-  // Allocator owning this candidate and its recorded descriptors.
-  iree_allocator_t host_allocator;
-  // Compiled roots and diagnostics, including partially failed construction.
-  loom_serve_stage_set_t* stages;
-  // Owned command references; direct-dispatch references borrow stages.
-  loom_serve_stage_t* bindings;
-} loom_serve_finite_variant_t;
-
-typedef struct loom_serve_finite_variant_job_t {
-  // Borrowed immutable original model resources through completion.
-  loom_serve_finite_model_t* model;
-  // Owned candidate transferred on terminal publication, including failure.
-  loom_serve_finite_variant_t* variant;
-  // Terminal producer completion after recording releases the model borrow.
-  loom_serve_variant_completion_fn_t completion;
-  // Borrowed producer notification state.
-  void* user_data;
-} loom_serve_finite_variant_job_t;
-
-static void loom_serve_finite_variant_free(void* value) {
-  loom_serve_finite_variant_t* variant = value;
-  if (!variant) {
-    return;
-  }
-  for (iree_host_size_t i = 0; variant->bindings && i < variant->stages->count;
-       ++i) {
-    iree_hal_command_buffer_release(variant->bindings[i].command_buffer);
-  }
-  loom_serve_stage_set_free(variant->stages);
-  iree_allocator_free(variant->host_allocator, variant->bindings);
-  iree_allocator_free(variant->host_allocator, variant);
-}
-
-static iree_status_t loom_serve_finite_variant_record(
-    loom_serve_finite_variant_job_t* job) {
-  const loom_serve_finite_model_t* model = job->model;
-  loom_serve_finite_variant_t* variant = job->variant;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-      variant->host_allocator, variant->stages->count,
-      sizeof(*variant->bindings), (void**)&variant->bindings));
-  iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0;
-       i < variant->stages->count && iree_status_is_ok(status); ++i) {
-    loom_serve_jit_stage_t* compiled = variant->stages->values[i];
-    const loom_cmd_program_t* program = loom_serve_jit_stage_program(compiled);
-    if (program) {
-      const bool has_workspace =
-          program->requirements.transient.required_byte_length != 0;
-      if (program->requirements.rebindable_binding_count != 2 + has_workspace ||
-          (has_workspace &&
-           program->requirements.transient.binding_index != 2) ||
-          program->requirements.launch_counts.binding_index != UINT32_MAX) {
-        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                  "replacement changes finite stage bindings");
-      } else {
-        status = loom_serve_parameter_layout_check(
-            loom_serve_jit_stage_program(model->stages.values[i].compiled),
-            program);
-      }
-      if (iree_status_is_ok(status)) {
-        status = loom_serve_jit_stage_record(
-            compiled,
-            iree_hal_queue_family(
-                loom_serve_device_dispatch_queue(model->owner)),
-            model->stages.command_mode, NULL, model->weights.values,
-            &variant->bindings[i].command_buffer);
-        variant->bindings[i].transient = program->requirements.transient;
-      }
-    } else {
-      variant->bindings[i].dispatch = loom_serve_jit_stage_dispatch(compiled);
-      if (loom_serve_dispatch_binding_count(variant->bindings[i].dispatch) !=
-          2) {
-        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                  "replacement changes direct stage bindings");
-      }
-    }
-    variant->bindings[i].binding_count = 2;
-  }
-  return status;
-}
-
-static void loom_serve_finite_variant_compiled(void* user_data,
-                                               iree_status_t status,
-                                               loom_serve_stage_set_t* stages) {
-  loom_serve_finite_variant_job_t* job = user_data;
-  loom_serve_finite_variant_t* variant = job->variant;
-  variant->stages = stages;
-  if (iree_status_is_ok(status)) {
-    status = loom_serve_finite_variant_record(job);
-  }
-  const loom_serve_variant_completion_fn_t completion = job->completion;
-  void* completion_data = job->user_data;
-  iree_allocator_free(variant->host_allocator, job);
-  completion(completion_data, status, variant, &stages->compilation);
-}
-
-static iree_status_t loom_serve_finite_variant_compile(
-    void* self, const loom_serve_sources_t* sources,
-    loom_serve_variant_completion_fn_t completion, void* user_data) {
-  loom_serve_finite_model_t* model = self;
-  loom_serve_finite_variant_t* variant = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      model->host_allocator, sizeof(*variant), (void**)&variant));
-  variant->host_allocator = model->host_allocator;
-  loom_serve_finite_variant_job_t* job = NULL;
-  iree_status_t status =
-      iree_allocator_malloc(model->host_allocator, sizeof(*job), (void**)&job);
-  if (iree_status_is_ok(status)) {
-    *job = (loom_serve_finite_variant_job_t){model, variant, completion,
-                                             user_data};
-    status = loom_serve_stage_set_compile_async(
-        model->owner, model->preparation, sources,
-        loom_serve_finite_variant_compiled, job, model->host_allocator);
-  }
-  if (!iree_status_is_ok(status)) {
-    iree_allocator_free(model->host_allocator, job);
-    loom_serve_finite_variant_free(variant);
-  }
-  return status;
-}
-
-static iree_status_t loom_serve_finite_variant_select(void* self, void* value) {
-  loom_serve_finite_model_t* model = self;
-  const loom_serve_finite_variant_t* variant = value;
-  return loom_serve_module_bind_stages(
-      model->control.runner, model->stages.count,
-      variant ? variant->bindings : model->stages.bindings);
+  IREE_RETURN_IF_ERROR(loom_serve_finite_create_control(model, module));
+  const loom_serve_finite_executable_options_t options = {
+      .device = model->owner,
+      .jit = model->jit,
+      .preparation = model->preparation,
+      .layout = loom_serve_jit_stage_program(model->stages.values[0].compiled),
+      .stages = model->stages.bindings,
+      .parameters = model->weights.values,
+      .command_mode = command_mode,
+      .runner = model->control.runner,
+      .cache = model->specialization_cache};
+  return loom_serve_finite_executables_allocate(&options, host_allocator,
+                                                &model->executables);
 }
 
 loom_serve_execution_update_t loom_serve_finite_model_execution_update(
     loom_serve_finite_model_t* model) {
-  return (loom_serve_execution_update_t){
-      .self = model,
-      .compile = loom_serve_finite_variant_compile,
-      .select = loom_serve_finite_variant_select,
-      .dispose = loom_serve_finite_variant_free};
+  return loom_serve_finite_executables_update(model->executables);
 }
 
 typedef enum loom_serve_finite_load_phase_e {
@@ -766,6 +651,7 @@ static void loom_serve_finite_load_complete(void* user_data,
 static iree_status_t loom_serve_finite_load_prepare(
     loom_serve_finite_load_t* load) {
   loom_serve_finite_model_t* model = load->model;
+  model->specialization_cache = load->options.specialization_cache;
   const iree_allocator_t host_allocator = model->host_allocator;
   IREE_RETURN_IF_ERROR(
       loom_serve_finite_prepare(model, &load->options, load->event.wake,
@@ -1078,6 +964,7 @@ iree_status_t loom_serve_finite_model_prepare_request(
 }
 
 void loom_serve_finite_model_release_batch(loom_serve_finite_model_t* model) {
+  loom_serve_finite_executables_release(model->executables);
   iree_vm_buffer_release(model->invocation.payload);
   loom_serve_finite_result_release(model->invocation.result);
   memset(&model->invocation, 0, sizeof(model->invocation));
@@ -1100,6 +987,9 @@ iree_status_t loom_serve_finite_model_prepare_batch(
   iree_vm_buffer_t* packed = NULL;
   IREE_RETURN_IF_ERROR(
       iree_vm_buffer_create(count * 16, 8, model->host_allocator, &ranges));
+  loom_serve_finite_executables_capture(model->executables);
+  loom_serve_preparation_module_begin(model->control.preparation,
+                                      model->stages.count, 0);
   iree_status_t status =
       iree_vm_buffer_create(length, 8, model->host_allocator, &packed);
   iree_byte_span_t records = iree_byte_span_empty();
@@ -1139,11 +1029,17 @@ iree_status_t loom_serve_finite_model_prepare_batch(
                        iree_vm_variant_span_from_array(results));
   }
   int32_t stage = 0;
+  loom_serve_preparation_t* declarations =
+      loom_serve_preparation_module_take(model->control.preparation);
+  const iree_host_size_t stage_count =
+      model->stages.count +
+      (declarations ? loom_serve_preparation_stage_count(declarations) : 0);
+  loom_serve_finite_executables_declare(model->executables, declarations);
   if (iree_status_is_ok(status)) {
     status = iree_vm_i32_from_variant(results[0], &stage);
   }
   if (iree_status_is_ok(status) &&
-      (stage < 0 || (uint32_t)stage >= model->stages.count)) {
+      (stage < 0 || (uint32_t)stage >= stage_count)) {
     status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "source selected an undeclared command");
   }
@@ -1177,6 +1073,17 @@ iree_status_t loom_serve_finite_model_prepare_batch(
   return status;
 }
 
+void loom_serve_finite_model_set_observer(loom_serve_finite_model_t* model,
+                                          loom_serve_wake_callback_t observer) {
+  loom_serve_finite_executables_set_observer(model->executables, observer);
+}
+
+iree_status_t loom_serve_finite_model_advance_batch(
+    loom_serve_finite_model_t* model, bool cancel, bool* out_complete) {
+  return loom_serve_finite_executables_advance(model->executables, cancel,
+                                               out_complete);
+}
+
 iree_status_t loom_serve_finite_model_submit(
     loom_serve_finite_model_t* model, loom_serve_finite_result_t** out_result,
     loom_serve_execution_frontier_t* out_frontier) {
@@ -1187,13 +1094,18 @@ iree_status_t loom_serve_finite_model_submit(
       model->invocation.payload, 0,
       iree_vm_buffer_length(model->invocation.payload), &input));
   loom_serve_execution_t* execution = model->execution;
+  const iree_host_size_t output_length =
+      loom_serve_finite_result_output_length(model->invocation.result);
+  // Admission ceilings bound source plans, not physical slab geometry. Register
+  // only this cohort's extents before allocating either buffer; command-private
+  // workspace is registered separately from its reflected requirements.
+  IREE_RETURN_IF_ERROR(loom_serve_execution_reserve_workspace(
+      execution, iree_max(input.data_length, output_length),
+      LOOM_SERVE_FINITE_BUFFER_ALIGNMENT));
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; i < 2 && iree_status_is_ok(status); ++i) {
-    const iree_host_size_t length =
-        i ? loom_serve_finite_result_output_length(model->invocation.result)
-          : input.data_length;
     const iree_hal_pool_reservation_request_t request = {
-        .allocation_size = length,
+        .allocation_size = i ? output_length : input.data_length,
         .min_alignment = LOOM_SERVE_FINITE_BUFFER_ALIGNMENT,
     };
     status =

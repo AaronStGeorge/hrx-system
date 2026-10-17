@@ -462,6 +462,7 @@ loom_cc_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/testdata/preparation/boundaries.loom"
   DEPS
     ::preparation
+    ::program
     iree::base
     iree::base::tooling::flags
     iree::testing::gtest

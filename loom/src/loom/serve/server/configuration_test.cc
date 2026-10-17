@@ -446,6 +446,48 @@ TEST_F(ConfigurationTest, VariantCapacityAppliesToEveryService) {
   }
 }
 
+TEST_F(ConfigurationTest, SpecializationCacheBoundsReuseNotRequestGeometry) {
+  for (const char* kind : {"embedding", "decision"}) {
+    IREE_ASSERT_OK(Parse(Document(kind, R"(,"assets":".")")));
+    EXPECT_EQ(model_.specialization_cache.capacity, 16u);
+    EXPECT_EQ(model_.specialization_cache.max_bytes, 16u * 1024 * 1024);
+    IREE_ASSERT_OK(Parse(Document(
+        kind,
+        R"(,"assets":".","specialization_cache":{"capacity":2,"max_bytes":1048576})")));
+    EXPECT_EQ(model_.specialization_cache.capacity, 2u);
+    EXPECT_EQ(model_.specialization_cache.max_bytes, 1048576u);
+  }
+  IREE_ASSERT_OK(
+      Parse(Text(R"(,"image":{"prepare":"p","control":"c","assets":"."})")));
+  EXPECT_EQ(model_.text.image.specialization_cache.capacity, 16u);
+  EXPECT_EQ(model_.text.image.specialization_cache.max_bytes,
+            16u * 1024 * 1024);
+  IREE_ASSERT_OK(Parse(Text(
+      R"(,"image":{"prepare":"p","control":"c","assets":".","specialization_cache":{"capacity":0,"max_bytes":0}})")));
+  EXPECT_EQ(model_.text.image.specialization_cache.capacity, 0u);
+  EXPECT_EQ(model_.text.image.specialization_cache.max_bytes, 0u);
+}
+
+TEST_F(ConfigurationTest, SpecializationCacheRejectsInvalidPolicy) {
+  for (const char* value :
+       {"null", "[]", R"({"capacity":-1})", R"({"capacity":2147483648})",
+        R"({"capacity":1,"capacity":2})", R"({"max_bytes":-1})",
+        R"({"max_bytes":"1"})", R"({"other":1})"}) {
+    const std::string field = std::string(",\"specialization_cache\":") + value;
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        Parse(Document("embedding", R"(,"assets":".")" + field)));
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        Parse(Text(R"(,"image":{"prepare":"p","control":"c","assets":".")" +
+                   field + "}")));
+  }
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse(Text(R"(,"specialization_cache":{})")));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse(Image(R"(,"specialization_cache":{})")));
+}
+
 TEST_F(ConfigurationTest, NativeCapacitiesAreNotOneModelShape) {
   for (unsigned depth = 0; depth <= 7; ++depth) {
     IREE_ASSERT_OK(

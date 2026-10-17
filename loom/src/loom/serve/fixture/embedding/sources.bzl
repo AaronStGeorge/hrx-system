@@ -19,6 +19,7 @@ VARIANT_FILES = [
     "variants/direct.loom",
     "variants/fused.loom",
     "variants/policy.loom",
+    "variants/specialize.loom",
     "variants/weights.loom",
 ]
 

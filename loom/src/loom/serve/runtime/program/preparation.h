@@ -39,13 +39,13 @@ bool loom_serve_preparation_parameter_equal(
     const loom_serve_preparation_parameter_t* lhs,
     const loom_serve_preparation_parameter_t* rhs);
 
-// Compiler product selected by the model's cold source program.
+// Compiler product selected by the model's source program.
 typedef enum loom_serve_preparation_stage_kind_e {
   LOOM_SERVE_PREPARATION_STAGE_COMMAND = 0,
   LOOM_SERVE_PREPARATION_STAGE_DISPATCH = 1,
 } loom_serve_preparation_stage_kind_t;
 
-// Immutable stage declaration produced by a model's cold source program.
+// Immutable stage declaration produced by a model's source program.
 typedef struct loom_serve_preparation_stage_t {
   // Exported command or kernel root in the model source catalog.
   iree_string_view_t root;
@@ -63,8 +63,35 @@ typedef struct loom_serve_preparation_stage_t {
   const loom_serve_preparation_parameter_t* parameters;
 } loom_serve_preparation_stage_t;
 
-// Cold declarations with no device or VM ownership after construction.
+// Declarations with no device or VM ownership after construction.
 typedef struct loom_serve_preparation_t loom_serve_preparation_t;
+
+// Creates the source-facing "prepare" declaration capability. The caller
+// serializes begin/take with VM invocation and retains the module while linked.
+// No declaration storage is allocated until source code declares a stage.
+iree_status_t loom_serve_preparation_module_create(
+    iree_vm_environment_t* environment, iree_allocator_t host_allocator,
+    iree_vm_module_t** out_module);
+
+enum loom_serve_preparation_flag_bits_e {
+  // Allows checkpoint declarations during cold model construction. Request
+  // choices reuse the already prepared checkpoint placement instead.
+  LOOM_SERVE_PREPARATION_FLAG_PARAMETERS = 1u << 0,
+};
+typedef uint32_t loom_serve_preparation_flags_t;
+
+// Begins one declaration capture. The previous capture has been taken. Stage
+// ordinals start at first_stage, preserving a caller's existing cold table.
+// first_stage is at most INT32_MAX. Calls to prepare outside a capture fail.
+void loom_serve_preparation_module_begin(iree_vm_module_t* module,
+                                         uint32_t first_stage,
+                                         loom_serve_preparation_flags_t flags);
+
+// Ends the capture and transfers its declarations, including partial results
+// after source failure. Returns NULL if no declaration was made. The caller
+// frees or retains the result independently of the module and VM lifetime.
+loom_serve_preparation_t* loom_serve_preparation_module_take(
+    iree_vm_module_t* module);
 
 // Invokes |entry| from |source_path| in |sources| once with borrowed
 // |arguments|. The source imports runner-private "prepare" capabilities:
@@ -107,6 +134,17 @@ void loom_serve_preparation_free(loom_serve_preparation_t* preparation);
 
 iree_host_size_t loom_serve_preparation_stage_count(
     const loom_serve_preparation_t* preparation);
+
+// Requested owned bytes, including spare array capacity and copied strings.
+// NULL has no storage. This query does not traverse declarations.
+iree_host_size_t loom_serve_preparation_storage_size(
+    const loom_serve_preparation_t* preparation);
+
+// Exact ordered declaration identity, including configuration spelling,
+// workspace policy, and checkpoint domains. Capture ordinal offsets are not
+// part of identity. NULL compares equal only to NULL.
+bool loom_serve_preparation_equal(const loom_serve_preparation_t* lhs,
+                                  const loom_serve_preparation_t* rhs);
 
 // Borrows an immutable declaration; |index| is below stage_count.
 const loom_serve_preparation_stage_t* loom_serve_preparation_stage(

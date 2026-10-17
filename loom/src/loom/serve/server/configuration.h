@@ -8,6 +8,7 @@
 #define LOOM_SERVE_SERVER_CONFIGURATION_H_
 
 #include "loom/serve/runtime/program/sources.h"
+#include "loom/serve/runtime/program/variant_pool.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,8 @@ typedef struct loom_serve_finite_component_configuration_t {
   iree_string_view_t assets;
   // Owned source-defined JSON object; omission becomes an empty object.
   iree_string_view_t options;
+  // Idle request-code reuse, independent of checkpoint residency capacity.
+  loom_serve_variant_cache_options_t specialization_cache;
 } loom_serve_finite_component_configuration_t;
 
 typedef struct loom_serve_text_configuration_t {
@@ -111,6 +114,8 @@ typedef struct loom_serve_model_configuration_t {
   // Retained execution choices, including original/pending/failed attempts.
   // Zero disables reconfiguration independently of modality admission.
   iree_host_size_t variant_capacity;
+  // Idle source-selected request executables for finite vector deployments.
+  loom_serve_variant_cache_options_t specialization_cache;
   // Register metadata without preparing the model until admission opens.
   bool start_drained;
   // Only the member selected by kind is initialized and owned.

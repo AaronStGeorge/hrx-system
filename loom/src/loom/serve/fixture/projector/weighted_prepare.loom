@@ -15,7 +15,7 @@ global.rodata.def @name = bytes("77656967687465642d70726f6a6563746f72")
 // The pixel protocol is unchanged; a real checkpoint conditions every row.
 func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64, i64, buffer, buffer, buffer) {
   %binding = scalar.constant 0 : i32
-  %tag = scalar.constant 0 : i64
+  %tag = scalar.constant 1 : i64
   %root = global.load @root : buffer
   %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
   %checkpoint = global.load @checkpoint : buffer
@@ -26,5 +26,5 @@ func.def public @prepare(%directory: buffer, %options: buffer) -> (i64, i64, i64
   %output_capacity = scalar.constant 1024 : i64
   %empty = global.load @empty : buffer
   %name = global.load @name : buffer
-  func.return %units, %input_capacity, %output_capacity, %output_capacity, %empty, %name, %empty : i64, i64, i64, i64, buffer, buffer, buffer
+  func.return %units, %input_capacity, %output_capacity, %output_capacity, %empty, %name, %root : i64, i64, i64, i64, buffer, buffer, buffer
 }

@@ -55,9 +55,11 @@ void loom_serve_execution_set_retirement_observer(
     void* user_data);
 bool loom_serve_execution_is_retired(loom_serve_execution_t* execution);
 
-// Cold registration of a command's private workspace requirement. Grows the
+// Registers an actual allocation requirement before submitting work. Grows the
 // shared pool's slab geometry without draining any domain or committing device
-// memory. Existing roots retain their original pool through queue retirement.
+// memory; later allocations back that full geometry. Use reflected command
+// workspace or prepared input/output extents, not admission ceilings. Existing
+// roots retain their original pool through queue retirement.
 iree_status_t loom_serve_execution_reserve_workspace(
     loom_serve_execution_t* execution, iree_device_size_t length,
     iree_device_size_t alignment);

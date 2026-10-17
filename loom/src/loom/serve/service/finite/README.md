@@ -70,6 +70,30 @@ prepared bytes in stable request order. It receives stage tags from cold
 declarations, so stage selection stays in source. A denied residency
 admission retains the prepared cohort without repeating source preparation.
 
+During `prepare_batch`, the same `prepare` capability can declare additional
+command/direct stages and bind their configuration or workspace limit. Its
+ordinals start after the immutable cold declarations and live for this invocation.
+Request preparation cannot declare parameters or modify cold declarations.
+Compiled commands retain the original fixed parameter layout; both stage kinds
+preserve the two input/output roots.
+
+The finite owner captures the selected source generation with the batch. It
+resolves exact declaration matches or asynchronously compiles misses before
+parameter admission. Both the finite HTTP scheduler and embedded text projector
+use this owner. Source-package uploads can retire after indexing; every choice
+shares its generation's immutable source index and checkpoint residency.
+Cancellation collects accepted compilation before releasing its borrowed inputs.
+
+`specialization_cache` limits idle choices by count and retained payload bytes.
+Zero disables idle retention, not specialization. One active choice can exceed
+the idle budget and retire afterward. LRU eviction first releases any runner
+table borrowing the victim, then its portable stages, and finally unreferenced
+native keys/code. Code shared by another retained stage survives. Accounting
+includes requested declaration/table storage and native artifact bytes, not
+fixed source/index capacity, compiler scratch, or driver-private allocations.
+Management source selection affects future batches without changing a captured
+or executing batch.
+
 ## Compact results and physical storage
 
 The result plan contains little-endian i64 records:
