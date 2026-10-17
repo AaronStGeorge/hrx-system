@@ -935,7 +935,8 @@ iree_status_t loom_serve_weights_await(loom_serve_weights_t* weights) {
       iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE);
   loom_serve_retirement_await(&weights->activation.retirement);
   loom_serve_memory_operation_await(weights->activation.backing);
-  return status;
+  return iree_status_join(status, loom_serve_memory_operation_query_status(
+                                      weights->activation.backing));
 }
 
 iree_status_t loom_serve_weights_deactivate(loom_serve_weights_t* weights,
@@ -947,10 +948,12 @@ iree_status_t loom_serve_weights_deactivate(loom_serve_weights_t* weights,
   }
   if (weights->deactivation) {
     if (loom_serve_memory_operation_is_complete(weights->deactivation)) {
+      iree_status_t status =
+          loom_serve_memory_operation_query_status(weights->deactivation);
       loom_serve_memory_operation_free(weights->deactivation);
       weights->deactivation = NULL;
       *out_complete = true;
-      return loom_serve_memory_pool_query_status(weights->pool);
+      return status;
     }
     return iree_ok_status();
   }

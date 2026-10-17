@@ -60,10 +60,11 @@ loom_serve_memory_statistics_t loom_serve_memory_pool_statistics(
 // This is the configured budget, not currently available backing.
 uint64_t loom_serve_memory_pool_limit(const loom_serve_memory_pool_t* pool);
 
-// Clones the first failure from native work or reclamation, or returns OK. Such
-// a failure may have partially changed another owner's backing; it is not
-// scoped to the caller requesting capacity. The serialized owner stops new
-// work and drains all consumers before cleanup. Querying does not clear it.
+// Clones a shared capacity-observation or reclamation failure, or returns OK.
+// Those failures apply to the shared domain; the serialized owner stops new
+// work and drains consumers before cleanup. Individual allocation, mapping,
+// and readiness errors remain on their operation and affected buffers.
+// Querying does not clear the shared failure.
 iree_status_t loom_serve_memory_pool_query_status(
     loom_serve_memory_pool_t* pool);
 
@@ -80,8 +81,8 @@ bool loom_serve_memory_pool_is_pending(loom_serve_memory_pool_t* pool);
 
 // Outer-thread join of accepted native operations, not device work or logical
 // reclamation that still needs its model scheduler. Never called by task
-// owners. Publishes final accounting and returns the pool's terminal native
-// failure.
+// owners. Publishes final accounting and returns any shared capacity or
+// reclamation failure. Each operation retains its own result.
 iree_status_t loom_serve_memory_pool_await(loom_serve_memory_pool_t* pool);
 
 // Cold pressure policy, independent of logical storage geometry. The callback
@@ -206,16 +207,22 @@ void loom_serve_memory_operation_set_observer(
 
 // Publishes completed native results and accounting on the serialized owner.
 // True joins captured queue ownership, independently of caller readiness. NULL
-// is complete. A failed operation is reported by pool_query_status and
+// is complete. A failed operation is reported by operation_query_status and
 // readiness.
 bool loom_serve_memory_operation_is_complete(
     loom_serve_memory_operation_t* operation);
 
 // Cold outer-thread join, never used by scheduler tasks or completion
 // callbacks. Publishes the same results as is_complete; failure remains on
-// pool/readiness.
+// operation/readiness.
 void loom_serve_memory_operation_await(
     loom_serve_memory_operation_t* operation);
+
+// Clones the result after is_complete or await has joined publication. NULL
+// reports OK. Failed native edits invalidate only their affected reservations;
+// a failed caller readiness signal does not invalidate successful mappings.
+iree_status_t loom_serve_memory_operation_query_status(
+    const loom_serve_memory_operation_t* operation);
 
 // Releases a completed operation. Caller-owned reservations may then be trimmed
 // or destroyed. NULL is accepted; this never waits for native work.

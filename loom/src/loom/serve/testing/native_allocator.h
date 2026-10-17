@@ -74,6 +74,13 @@ class NativeAllocator {
     std::unique_lock<std::mutex> lock(mutex_);
     condition_.wait(lock, [&] { return entered_; });
   }
+  void FailNextAllocation(iree_allocator_command_t command,
+                          bool native_only = false) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    failure_.armed = true;
+    failure_.command = command;
+    failure_.native_only = native_only;
+  }
   void Release() {
     std::unique_lock<std::mutex> lock(mutex_);
     armed_ = false;
@@ -90,6 +97,7 @@ class NativeAllocator {
     const bool had_pointer = (command == IREE_ALLOCATOR_COMMAND_REALLOC ||
                               command == IREE_ALLOCATOR_COMMAND_FREE) &&
                              *inout_pointer != nullptr;
+    bool fail_allocation = false;
     {
       std::unique_lock<std::mutex> lock(self->mutex_);
       ++self->active_calls_;
@@ -102,9 +110,14 @@ class NativeAllocator {
         }
         self->observing_ = false;
       }
-      if (self->armed_ && command == self->command_ &&
-          std::find(self->native_.begin(), self->native_.end(), thread) !=
-              self->native_.end()) {
+      const bool native = std::find(self->native_.begin(), self->native_.end(),
+                                    thread) != self->native_.end();
+      if (self->failure_.armed && command == self->failure_.command &&
+          (!self->failure_.native_only || native)) {
+        self->failure_.armed = false;
+        fail_allocation = true;
+      }
+      if (self->armed_ && command == self->command_ && native) {
         self->armed_ = false;
         self->entered_ = true;
         self->condition_.notify_all();
@@ -113,8 +126,10 @@ class NativeAllocator {
         self->condition_.notify_all();
       }
     }
-    iree_status_t status = self->allocator_.ctl(self->allocator_.self, command,
-                                                params, inout_pointer);
+    iree_status_t status =
+        fail_allocation ? iree_status_from_code(IREE_STATUS_RESOURCE_EXHAUSTED)
+                        : self->allocator_.ctl(self->allocator_.self, command,
+                                               params, inout_pointer);
     {
       std::lock_guard<std::mutex> lock(self->mutex_);
       if (iree_status_is_ok(status)) {
@@ -150,6 +165,15 @@ class NativeAllocator {
   bool observing_ = false;
   // A matching native dependency is still being selected.
   bool armed_ = false;
+  // One selected allocator dependency reports allocation failure.
+  struct {
+    // A matching allocator call has not consumed the failure yet.
+    bool armed = false;
+    // Allocation kind to fail without invoking the underlying allocator.
+    iree_allocator_command_t command = IREE_ALLOCATOR_COMMAND_CALLOC;
+    // Restricts matching to previously observed native allocation workers.
+    bool native_only = false;
+  } failure_;
   // The selected dependency is currently held.
   bool entered_ = false;
   // The outer test owner permits the selected dependency to continue.

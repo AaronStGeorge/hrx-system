@@ -559,8 +559,12 @@ TEST_F(MemoryTest, PendingCommitChargesBudgetAndLeavesPublishedStorageUsable) {
 }
 
 TEST_F(MemoryTest, FailedReadinessDoesNotReleaseNativeOperationOwnership) {
-  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, kSlabSize, 256,
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, 2 * kSlabSize, 256,
                                                     &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, kSlabSize, 256,
+                                                    &statistics[1], &second));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(second, 0, kSlabSize));
+  RoundTrip(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
   iree_hal_semaphore_t* ready = nullptr;
   IREE_ASSERT_OK(iree_hal_semaphore_create(
       loom_serve_device_handle(device), IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
@@ -584,17 +588,74 @@ TEST_F(MemoryTest, FailedReadinessDoesNotReleaseNativeOperationOwnership) {
                           iree_hal_semaphore_query(ready, &value));
     EXPECT_FALSE(loom_serve_memory_operation_is_complete(operation));
     EXPECT_EQ(loom_serve_memory_pool_statistics(pool).pending_bytes, kSlabSize);
+    CheckRetained(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
   }
   loom_serve_memory_operation_await(operation);
   EXPECT_TRUE(loom_serve_memory_operation_is_complete(operation));
+  IREE_EXPECT_OK(loom_serve_memory_operation_query_status(operation));
+  IREE_EXPECT_OK(loom_serve_memory_pool_query_status(pool));
   uint64_t value = 0;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_CANCELLED,
                         iree_hal_semaphore_query(ready, &value));
   const auto memory = loom_serve_memory_pool_statistics(pool);
-  EXPECT_EQ(memory.committed_bytes, kSlabSize);
+  EXPECT_EQ(memory.committed_bytes, 2 * kSlabSize);
   EXPECT_EQ(memory.pending_bytes, 0u);
   loom_serve_memory_operation_free(operation);
   iree_hal_semaphore_release(ready);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, kSlabSize, kSlabSize));
+  RoundTrip(loom_serve_virtual_buffer_handle(first), kSlabSize, 0x87654321);
+  CheckRetained(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
+}
+
+TEST_F(MemoryTest, NativeAllocationFailurePreservesWarmWorkAndAllowsRetry) {
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, kSlabSize, 256,
+                                                    &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, kSlabSize, 256,
+                                                    &statistics[1], &second));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
+  RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
+
+  native.FailNextAllocation(IREE_ALLOCATOR_COMMAND_CALLOC,
+                            /*native_only=*/true);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_serve_virtual_buffer_commit(second, 0, kSlabSize));
+  IREE_EXPECT_OK(loom_serve_memory_pool_query_status(pool));
+  EXPECT_EQ(statistics[1].pending_bytes, 0u);
+  EXPECT_EQ(statistics[1].committed_bytes, 0u);
+  CheckRetained(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
+
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(second, 0, kSlabSize));
+  RoundTrip(loom_serve_virtual_buffer_handle(second), 0, 0x87654321);
+  CheckRetained(loom_serve_virtual_buffer_handle(first), 0, 0x12345678);
+}
+
+TEST_F(MemoryTest, FailedMappingKeepsSourcesUntilCheckedDetach) {
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, 2 * kSlabSize, 256,
+                                                    &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(pool, kSlabSize, 256,
+                                                    &statistics[1], &second));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(second, 0, kSlabSize));
+  RoundTrip(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
+
+  // The native virtual target grows its mapping inventory during BIND, after
+  // physical acquisition. Failing that dependency leaves owned sources but
+  // cannot claim that the complete batch is installed.
+  native.FailNextAllocation(IREE_ALLOCATOR_COMMAND_REALLOC);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_serve_virtual_buffer_commit(first, 0, 2 * kSlabSize));
+  IREE_EXPECT_OK(loom_serve_memory_pool_query_status(pool));
+  EXPECT_EQ(statistics[0].pending_bytes, 0u);
+  EXPECT_EQ(statistics[0].committed_bytes, 2 * kSlabSize);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_serve_virtual_buffer_commit(first, 0, kSlabSize));
+  CheckRetained(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
+
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_free(first));
+  first = nullptr;
+  IREE_EXPECT_OK(loom_serve_memory_pool_await(pool));
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes, kSlabSize);
+  CheckRetained(loom_serve_virtual_buffer_handle(second), 0, 0x12345678);
 }
 
 }  // namespace
