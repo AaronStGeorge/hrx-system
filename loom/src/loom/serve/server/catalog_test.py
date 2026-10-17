@@ -81,14 +81,19 @@ def check_parameter_residency(client, backing, workers):
         assert "error" not in state, state
         return state
 
-    def retained_memory():
-        devices = client.request("/v1/status")["server"]["resources"]["devices"]
-        assert len(devices) == 1, devices
-        assert devices[0]["memory"]["backing"] == backing, devices
-        return devices[0]["memory"]["retained"]
+    def settled_retained_memory():
+        # Model deactivation can finish before its accepted native releases.
+        # Compare device totals only after those releases have retired.
+        while True:
+            devices = client.request("/v1/status")["server"]["resources"]["devices"]
+            assert len(devices) == 1, devices
+            assert devices[0]["memory"]["backing"] == backing, devices
+            retained = devices[0]["memory"]["retained"]
+            if retained is None or retained["releasing_bytes"] == 0:
+                return retained
 
     before = snapshot()
-    memory_before = retained_memory()
+    memory_before = settled_retained_memory()
     assert before["parameters"]["primary"]["active"], before
     assert before["parameters"]["primary"]["backing"] == backing, before
     selector = {"model": "fixture-text"}
@@ -130,7 +135,7 @@ def check_parameter_residency(client, backing, workers):
             assert len(retained) == 1 and retained[0]["request"] is None, sessions
             assert retained[0]["position"] == 5, retained
             assert retained[0]["counters"]["completed"] == 1, retained
-            memory_cold = retained_memory()
+            memory_cold = settled_retained_memory()
             if backing == "elastic":
                 assert not parameters["active"], cold
                 assert parameters["committed_bytes"] == 0, cold
@@ -168,7 +173,7 @@ def check_parameter_residency(client, backing, workers):
             assert peer["data"][0]["embedding"] == [3, 2], peer
             assert not continuation.done()
             warmed = client.activate("fixture-text")
-            memory_warmed = retained_memory()
+            memory_warmed = settled_retained_memory()
             assert warmed["incarnation"] == before["incarnation"], warmed
             assert warmed["compilation"] == before["compilation"], warmed
             assert warmed["status"]["held_requests"] == 1, warmed
@@ -472,7 +477,7 @@ def check_device_trim(client, backing, workers):
                 "/v1/devices/trim", {"device": 0, "target_bytes": 0}
             )
             # Trim accepts native release work; physical capacity returns only
-            # after the maintenance owner completes that work.
+            # after those releases have retired.
             while True:
                 device = client.request("/v1/status")["server"]["resources"]["devices"][
                     0
