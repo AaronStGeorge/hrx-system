@@ -655,6 +655,8 @@ def shared_tool_bazel_step(
         (
             "//loom/src/loom/tools/loom-compile:execution_test",
             "//loom/src/loom/tools/loom-opt:execution_test",
+            "//loom/src/loom/tools/loom-import-cxx:execution_test",
+            "//loom/src/loom/tools/loom-import-cxx:export_roundtrip_test",
             "//loom/src/loom/tools/loom-serve:execution_test",
             "//loom/src/loom/tooling/target/cpu/serve:all",
         ),
@@ -949,7 +951,7 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
                 cmake_test_step(
                     command_name,
                     "Test shared Loom tools",
-                    regex=r"^(loom/tools/(loom-compile|loom-opt|loom-serve)/execution_test|loom/tooling/target/cpu/serve/serve_command_test)$",
+                    regex=r"^(loom/tools/(loom-compile|loom-opt|loom-import-cxx|loom-serve)/(execution_test|export_roundtrip_test)|loom/tooling/target/cpu/serve/serve_command_test)$",
                 ),
             ]
         )

@@ -122,8 +122,8 @@ and execution machine are intentionally the same.
 
 ### Shared Loom tool bundles
 
-`loom-compile`, `loom-opt`, and `loom-serve` link statically by default. Release
-bundles can share their compiler and runtime instead:
+Loom tools link statically by default. Release bundles can share the compiler
+and runtime used by `loom-compile`, `loom-opt`, and `loom-import-cxx`:
 
 ```bash
 iree-bazel-build --config=opt --//loom/config:shared_tools \
@@ -133,13 +133,14 @@ iree-bazel-build --config=opt --//loom/config:shared_tools \
 iree-cmake-configure -DLOOM_LINK_SHARED_TOOLS=ON
 ```
 
-The shared mode packages one `libloomc` and one `libiree` alongside the tools.
+The shared mode packages one `libloomc` and one `libiree` alongside the compiler
+tools. `loom-serve` keeps its compiler and runtime statically linked in either
+mode, retaining whole-program optimization and standalone deployment.
 The IREE companion includes the configured HAL drivers and owns runtime state
 used by both tools and compiler discovery. All files in this bundle come from
 the same build; the companion is not an independently versioned IREE ABI.
-Shared linkage trades some cross-library optimization for a smaller bundle.
-Local development, benchmarks, and single-file tool deployment retain the
-default static mode.
+Shared compiler tools trade some cross-library optimization for a smaller
+bundle. Local development and benchmarks retain the default static mode.
 
 CMake shared tools require CMake 3.27 or newer and static component libraries
 (`BUILD_SHARED_LIBS=OFF`). This option controls final tool composition separately
