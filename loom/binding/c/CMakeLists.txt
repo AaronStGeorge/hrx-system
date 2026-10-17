@@ -211,7 +211,18 @@ loom_cc_library(
   HDRS
     "include/loomc/interop.h"
   DEPS
+    ::interop_headers
     ::loomc
+  INCLUDES
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
+  PUBLIC
+)
+
+loomc_interop_headers(
+  NAME
+    interop_headers
+  DEPS
     loom::error::source
     loom::ir
     loom::pass::registry
@@ -219,10 +230,6 @@ loom_cc_library(
     loom::target::pipeline
     loom::target::provider
     loom::target::reporting::report
-  INCLUDES
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
-  PUBLIC
 )
 
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
@@ -323,6 +330,97 @@ loom_cc_library(
 
 endif()
 
+set(_loomc_shared_platform_components "")
+if(LOOM_IMPORT_CXX)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::import::cxx)
+endif()
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::amdgpu)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::amdgpu::iree_hal)
+endif()
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::amd::xdna)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::amd::xdna::iree_hal)
+endif()
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::spirv)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::spirv::vulkaninfo)
+endif()
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::spirv::iree_hal)
+endif()
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::spirv::vulkan)
+endif()
+if(LOOM_TARGET_ARCH_VM)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::vm)
+endif()
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::wasm)
+endif()
+if(LOOM_TARGET_ARCH_X86)
+  list(APPEND _loomc_shared_platform_components loom::binding::c::target::x86)
+endif()
+loomc_shared_libraries(
+  NAME
+    loomc_shared
+  COMPONENTS
+    ::base
+    ::loomc
+    ::task_pool
+    ::task_queue
+    loom::binding::c::target::cmd
+    loom::binding::c::target::configured
+    loom::binding::c::target::configured::ir
+    loom::binding::c::target::cpu::iree_hal
+    loom::binding::c::target::iree_hal
+    ${_loomc_shared_platform_components}
+  RUNTIME_DEPS
+    iree::async
+    iree::async::util::proactor_pool
+    iree::async::util::proactor_thread
+    iree::base
+    iree::base::core_headers
+    iree::base::cpu_data
+    iree::base::internal
+    iree::base::internal::arena
+    iree::base::internal::base64
+    iree::base::internal::fpu_state
+    iree::base::internal::json
+    iree::base::internal::path
+    iree::base::internal::unicode
+    iree::base::threading
+    iree::base::threading::thread
+    iree::base::tooling::flags
+    iree::hal
+    iree::hal::drivers::task::device_spec
+    iree::hal::drivers::task::executable::library::abi
+    iree::hal::drivers::task::executable::loader
+    iree::hal::memory::slab_cache
+    iree::hal::memory::tlsf_pool
+    iree::io::file_handle
+    iree::io::parameter_index
+    iree::io::parameter_index_provider
+    iree::io::parameter_provider
+    iree::io::stream
+    iree::math
+    iree::module::hal::types
+    iree::net::carrier
+    iree::net::carrier::stream
+    iree::schemas::xdna_executable
+    iree::task
+    iree::tokenizer
+    iree::tokenizer::format::huggingface::tokenizer_json
+    iree::tokenizer::vocab
+    iree::tooling::device_flags
+    iree::tooling::device_profiling
+    iree::tooling::device_util
+    iree::tooling::parameter_util
+    iree::vm
+    iree::vm::bytecode::module
+    iree::vm::bytecode::wire
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
 include(CMakePackageConfigHelpers)
@@ -341,6 +439,7 @@ set(_loomc_cmake_package_dir "${CMAKE_INSTALL_LIBDIR}/cmake/loomc")
 set(_loomc_build_package_dir "${CMAKE_CURRENT_BINARY_DIR}/cmake/loomc")
 
 function(_loomc_add_shared_component target_name)
+  _loomc_resolve(target_name "${target_name}")
   if(NOT TARGET "${target_name}")
     message(FATAL_ERROR
       "loomc shared package expected enabled binding target: ${target_name}")
@@ -389,31 +488,9 @@ endif()
 set(_loomc_component_targets)
 set(_loomc_object_sources)
 set(_loomc_object_targets)
-_loomc_add_shared_component(loom_binding_c_base)
-_loomc_add_shared_component(loom_binding_c_loomc)
-_loomc_add_shared_component(loom_binding_c_target_iree_hal_iree_hal)
-if(LOOM_IMPORT_CXX)
-  _loomc_add_shared_component(loom_binding_c_import_cxx_cxx)
-endif()
-if(LOOM_TARGET_ARCH_VM)
-  _loomc_add_shared_component(loom_binding_c_target_vm_vm)
-endif()
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
-  _loomc_add_shared_component(loom_binding_c_target_wasm_wasm)
-endif()
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
-  _loomc_add_shared_component(loom_binding_c_target_spirv_spirv)
-  _loomc_add_shared_component(loom_binding_c_target_spirv_vulkaninfo_vulkaninfo)
-  if(IREE_HAL_DRIVER_VULKAN)
-    _loomc_add_shared_component(loom_binding_c_target_spirv_iree_hal)
-  endif()
-  if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
-    _loomc_add_shared_component(loom_binding_c_target_spirv_vulkan_vulkan)
-  endif()
-endif()
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-  _loomc_add_shared_component(loom_binding_c_target_amdgpu_amdgpu)
-endif()
+foreach(_loomc_component IN LISTS _LOOMC_COMPONENTS)
+  _loomc_add_shared_component("${_loomc_component}")
+endforeach()
 
 foreach(_loomc_object_target IN LISTS _loomc_object_targets)
   target_compile_definitions("${_loomc_object_target}" PRIVATE
@@ -486,6 +563,10 @@ elseif(UNIX)
     "-Wl,--version-script=${_loomc_export_file}")
   set_property(TARGET loomc_shared APPEND PROPERTY
     LINK_DEPENDS "${_loomc_export_file}")
+endif()
+
+if(LOOM_LINK_SHARED_TOOLS)
+  loomc_configure_shared_tools()
 endif()
 
 if(NOT TARGET loomc::loomc)

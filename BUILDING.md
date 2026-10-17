@@ -120,6 +120,34 @@ that executes it. Target platforms and toolchains own portable ISA selection;
 local benchmark runs may add an explicit architecture flag only when the build
 and execution machine are intentionally the same.
 
+### Shared Loom tool bundles
+
+`loom-compile`, `loom-opt`, and `loom-serve` link statically by default. Release
+bundles can share their compiler and runtime instead:
+
+```bash
+iree-bazel-build --config=opt --//loom/config:shared_tools \
+  //loom/src/loom/tools/loom-compile \
+  //loom/src/loom/tools/loom-opt \
+  //loom/src/loom/tools/loom-serve
+iree-cmake-configure -DLOOM_LINK_SHARED_TOOLS=ON
+```
+
+The shared mode packages one `libloomc` and one `libiree` alongside the tools.
+The IREE companion includes the configured HAL drivers and owns runtime state
+used by both tools and compiler discovery. All files in this bundle come from
+the same build; the companion is not an independently versioned IREE ABI.
+Shared linkage trades some cross-library optimization for a smaller bundle.
+Local development, benchmarks, and single-file tool deployment retain the
+default static mode.
+
+CMake shared tools require CMake 3.27 or newer and static component libraries
+(`BUILD_SHARED_LIBS=OFF`). This option controls final tool composition separately
+from the component sharing used for in-tree development. Each selected tool's
+install component includes both libraries, with relative loader paths for
+`bin/` and `lib/` installs or a single-directory bundle. The installed LoomC SDK
+exports the same configured bindings in either mode.
+
 ### Default allocator
 
 IREE uses libc for `iree_allocator_system()` by default. Native builds can

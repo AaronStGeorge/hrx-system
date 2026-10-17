@@ -120,7 +120,7 @@ endif()
 if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
   list(APPEND _loom_serve_platform_deps loom::binding::c::target::amd::xdna::iree_hal)
 endif()
-loom_cc_binary(
+loomc_cc_binary(
   NAME
     loom-serve
   SRCS

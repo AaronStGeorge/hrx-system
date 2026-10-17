@@ -71,7 +71,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/../sanitizer/iree_sanitizer_suppressions.cmak
 function(iree_cc_library)
   cmake_parse_arguments(
     _RULE
-    "PUBLIC;TESTONLY;SHARED;ALWAYSLINK"
+    "PUBLIC;TESTONLY;SHARED;ALWAYSLINK;LINKABLE_MORE_THAN_ONCE"
     "PACKAGE;NAME;WINDOWS_DEF_FILE;CXX_STANDARD"
     "HDRS;TEXTUAL_HDRS;SRCS;COPTS;CXX_FEATURES;DEFINES;LINKOPTS;DATA;DEPS;INCLUDES;SYSTEM_INCLUDES;SANITIZER_SUPPRESSIONS"
     ${ARGN}
@@ -444,6 +444,16 @@ function(iree_cc_library)
       iree_add_alias_library(${_PACKAGE_NS} ${_NAME})
     endif()
   endif()
+  # Retain the declared link graph for final shared-library composition. The
+  # generated LINK_LIBRARIES also contains object and usage-only expressions.
+  set_property(TARGET ${_NAME} PROPERTY IREE_CC_DEPS "${_RULE_DEPS}")
+  if(NOT _RULE_IS_INTERFACE)
+    set_property(TARGET ${_NAME} APPEND PROPERTY IREE_CC_DEPS
+      ${IREE_THREADS_DEPS} ${IREE_DEFAULT_LINK_LIBRARIES})
+  endif()
+  set_property(TARGET ${_NAME} PROPERTY IREE_CC_LINKOPTS "${_RULE_LINKOPTS}")
+  set_property(TARGET ${_NAME} PROPERTY IREE_CC_LINKABLE_MORE_THAN_ONCE
+    "${_RULE_LINKABLE_MORE_THAN_ONCE}")
   iree_target_sanitizer_suppressions("${_NAME}"
     DEPS ${_RULE_DEPS} ${_DATA_TARGETS}
     SUPPRESSIONS ${_RULE_SANITIZER_SUPPRESSIONS})
