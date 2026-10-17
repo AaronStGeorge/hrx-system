@@ -120,10 +120,13 @@ iree_status_t iree_hal_amd_fabric_allocation_queue_create(
   iree_slim_mutex_initialize(&queue->mutex);
   iree_notification_initialize(&queue->notification);
   iree_thread_create_params_t params = {
-      .name = IREE_SV("hal-amdf-alloc"),
+      .name = IREE_SV("libamdf-numa-any"),
       .create_suspended = true,
   };
+  char thread_name[32];
   if (node_id != UINT32_MAX) {
+    iree_snprintf(thread_name, sizeof(thread_name), "libamdf-numa-%u", node_id);
+    params.name = iree_make_cstring_view(thread_name);
     iree_thread_affinity_set_group_any(node_id, &params.initial_affinity);
   }
   iree_status_t status =

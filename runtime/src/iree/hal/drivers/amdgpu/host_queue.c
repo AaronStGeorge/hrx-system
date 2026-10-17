@@ -758,11 +758,6 @@ void iree_hal_amdgpu_host_queue_wait_idle_before_deinitialize(
 // signal changes or teardown/error signals the stop signal. Completion wakeups
 // drain normally; stop/error wakeups perform one final drain/fail before exit.
 static int iree_hal_amdgpu_host_queue_completion_thread_main(void* entry_arg) {
-  {
-    IREE_TRACE_ZONE_BEGIN_NAMED(
-        z0, "iree_hal_amdgpu_host_queue_completion_thread_start");
-    IREE_TRACE_ZONE_END(z0);
-  }
   iree_hal_amdgpu_host_queue_t* queue =
       (iree_hal_amdgpu_host_queue_t*)entry_arg;
 

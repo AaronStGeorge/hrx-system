@@ -346,6 +346,14 @@ IREE_API_EXPORT void iree_hal_pool_trim(iree_hal_pool_t* pool,
                                         iree_device_size_t min_bytes_to_keep) {
   IREE_ASSERT_ARGUMENT(pool);
   IREE_TRACE_ZONE_BEGIN(z0);
+  IREE_TRACE({
+    char message[128];
+    int length =
+        iree_snprintf(message, sizeof(message),
+                      "HAL pool trim pool=%p flags=0x%08x keep=%" PRIu64,
+                      (void*)pool, flags, (uint64_t)min_bytes_to_keep);
+    IREE_TRACE_MESSAGE_DYNAMIC(INFO, message, (iree_host_size_t)length);
+  });
   _VTABLE_DISPATCH(pool, trim)(pool, flags, min_bytes_to_keep);
   IREE_TRACE_ZONE_END(z0);
 }
