@@ -769,7 +769,7 @@ TEST(FixedBlockPool, LargeBatchStagesOnceAndPreservesContents) {
   iree_hal_slab_provider_release(provider);
 }
 
-TEST(FixedBlockPool, SixQueueHistorySurvivesInlineAndColdStaging) {
+TEST(FixedBlockPool, SixQueueHistorySurvivesInlineAndReusableStaging) {
   CountingAllocator allocator;
   iree_hal_slab_provider_t* provider = nullptr;
   IREE_ASSERT_OK(
@@ -805,8 +805,7 @@ TEST(FixedBlockPool, SixQueueHistorySurvivesInlineAndColdStaging) {
     IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
         pool, 2, requests, death, reservations, infos, &result,
         IREE_HAL_POOL_RESERVE_FLAG_NONE));
-    EXPECT_EQ(allocator.allocation_calls(),
-              allocation_calls + (capacity == 16 ? 1 : 0));
+    EXPECT_EQ(allocator.allocation_calls(), allocation_calls);
     ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
     for (iree_host_size_t i = 0; i < 2; ++i) {
       ASSERT_NE(infos[i].reuse_frontier, nullptr);
@@ -828,6 +827,15 @@ TEST(FixedBlockPool, SixQueueHistorySurvivesInlineAndColdStaging) {
       }
       iree_hal_buffer_release(buffer);
     }
+    iree_hal_pool_release_reservations(pool, 2, reservations, death);
+    iree_hal_pool_trim(pool, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
+    const size_t trimmed_calls = allocator.allocation_calls();
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        pool, 2, requests, death, reservations, infos, &result,
+        IREE_HAL_POOL_RESERVE_FLAG_NONE));
+    ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
+    EXPECT_EQ(allocator.allocation_calls(),
+              trimmed_calls + (capacity == 16 ? 1 : 0));
     iree_hal_pool_release_reservations(pool, 2, reservations, death);
     iree_hal_pool_release(pool);
     iree_hal_pool_release(backing_pool);

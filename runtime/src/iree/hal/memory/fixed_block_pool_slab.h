@@ -72,6 +72,7 @@ extern "C" {
 
 // Consumes an acquired parent token, including on failure. Preparation and
 // rollback preserve its exact history and run outside acquisition locks.
+// Consumes optional detached |reusable_slab| metadata, including on failure.
 iree_status_t iree_hal_fixed_block_pool_slab_prepare(
     iree_hal_pool_t* backing_pool,
     const iree_hal_pool_reservation_request_t* request,
@@ -79,6 +80,7 @@ iree_status_t iree_hal_fixed_block_pool_slab_prepare(
     const iree_hal_asan_pool_options_t* asan,
     iree_hal_pool_reservation_t reservation, iree_hal_pool_acquire_info_t info,
     iree_allocator_t host_allocator,
+    iree_hal_fixed_block_pool_slab_t* reusable_slab,
     iree_hal_fixed_block_pool_slab_t** out_slab);
 
 // Retains a finite range and prepares its block metadata without a parent
@@ -95,6 +97,11 @@ iree_status_t iree_hal_fixed_block_pool_slab_allocate(
 bool iree_hal_fixed_block_pool_slab_merge_return(
     iree_hal_fixed_block_pool_slab_t* slab,
     const iree_hal_fixed_block_pool_geometry_t* geometry);
+
+// Releases the prepared view and parent token while retaining free metadata.
+// The caller has detached this slab from acquisition and release readers.
+void iree_hal_fixed_block_pool_slab_release_backing(
+    iree_hal_fixed_block_pool_slab_t* slab, iree_hal_pool_t* backing_pool);
 
 // Releases the view, returns an optional parent token with its prepared return
 // history, and destroys metadata. Runs outside pool mutation locks.

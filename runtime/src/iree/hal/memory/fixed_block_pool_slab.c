@@ -81,18 +81,48 @@ iree_status_t iree_hal_fixed_block_pool_slab_prepare(
     const iree_hal_asan_pool_options_t* asan,
     iree_hal_pool_reservation_t reservation, iree_hal_pool_acquire_info_t info,
     iree_allocator_t host_allocator,
+    iree_hal_fixed_block_pool_slab_t* reusable_slab,
     iree_hal_fixed_block_pool_slab_t** out_slab) {
   *out_slab = NULL;
   iree_hal_pool_buffer_range_t range = {0};
   iree_status_t status = iree_hal_pool_buffer_range_prepare(
       backing_pool, request, &reservation, geometry->alignment, asan, &range);
   range.memory.reuse_frontier = info.reuse_frontier;
-  if (iree_status_is_ok(status)) {
+  iree_hal_fixed_block_pool_slab_t* slab = reusable_slab;
+  if (slab &&
+      (!iree_status_is_ok(status) ||
+       range.length / geometry->backing_block_size != slab->block_count)) {
+    iree_hal_fixed_block_pool_slab_free(slab, NULL, host_allocator);
+    slab = NULL;
+  }
+  if (iree_status_is_ok(status) && slab) {
+    if (info.reuse_frontier &&
+        info.reuse_frontier->entry_count > geometry->frontier_capacity) {
+      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "initial frontier exceeds allocator capacity");
+      iree_hal_fixed_block_pool_slab_free(slab, NULL, host_allocator);
+      slab = NULL;
+    } else {
+      iree_hal_memory_fixed_block_allocator_reset(slab->allocator,
+                                                  info.reuse_frontier);
+      slab->range = range;
+      range.buffer = NULL;
+      if (info.reuse_frontier) {
+        memcpy(slab->return_frontier, info.reuse_frontier,
+               sizeof(*info.reuse_frontier) +
+                   info.reuse_frontier->entry_count *
+                       sizeof(info.reuse_frontier->entries[0]));
+      } else {
+        iree_async_frontier_initialize(slab->return_frontier, 0);
+      }
+    }
+  } else if (iree_status_is_ok(status)) {
     status = iree_hal_fixed_block_pool_slab_allocate(&range, geometry, asan,
-                                                     host_allocator, out_slab);
+                                                     host_allocator, &slab);
   }
   if (iree_status_is_ok(status)) {
-    (*out_slab)->reservation = reservation;
+    slab->reservation = reservation;
+    *out_slab = slab;
   }
   iree_hal_pool_buffer_range_deinitialize(&range);
   if (!iree_status_is_ok(status)) {
@@ -105,18 +135,10 @@ iree_status_t iree_hal_fixed_block_pool_slab_prepare(
 bool iree_hal_fixed_block_pool_slab_merge_return(
     iree_hal_fixed_block_pool_slab_t* slab,
     const iree_hal_fixed_block_pool_geometry_t* geometry) {
-  iree_async_frontier_initialize(slab->return_frontier, 0);
-  iree_hal_memory_fixed_block_allocator_allocation_t candidate;
-  for (uint32_t i = 0; i < slab->block_count; ++i) {
-    iree_hal_memory_fixed_block_allocator_query_candidate(slab->allocator, i,
-                                                          &candidate);
-    if (candidate.block_flags ||
-        (candidate.death_frontier &&
-         !iree_async_frontier_merge(slab->return_frontier,
-                                    geometry->frontier_capacity,
-                                    candidate.death_frontier))) {
-      return false;
-    }
+  if (!iree_hal_memory_fixed_block_allocator_merge_free_frontiers(
+          slab->allocator, geometry->frontier_capacity,
+          slab->return_frontier)) {
+    return false;
   }
   const iree_device_size_t managed_length =
       slab->block_count * geometry->backing_block_size;
@@ -129,14 +151,24 @@ bool iree_hal_fixed_block_pool_slab_merge_return(
   return true;
 }
 
+void iree_hal_fixed_block_pool_slab_release_backing(
+    iree_hal_fixed_block_pool_slab_t* slab, iree_hal_pool_t* backing_pool) {
+  iree_hal_pool_buffer_range_deinitialize(&slab->range);
+  iree_hal_pool_release_reservations(
+      backing_pool, 1, &slab->reservation,
+      slab->return_frontier->entry_count ? slab->return_frontier : NULL);
+  slab->reservation = (iree_hal_pool_reservation_t){0};
+  slab->next = slab->previous = NULL;
+  slab->candidate_next = slab->preparation_next = NULL;
+}
+
 void iree_hal_fixed_block_pool_slab_free(iree_hal_fixed_block_pool_slab_t* slab,
                                          iree_hal_pool_t* backing_pool,
                                          iree_allocator_t host_allocator) {
-  iree_hal_pool_buffer_range_deinitialize(&slab->range);
-  if (backing_pool) {
-    iree_hal_pool_release_reservations(
-        backing_pool, 1, &slab->reservation,
-        slab->return_frontier->entry_count ? slab->return_frontier : NULL);
+  if (backing_pool && slab->reservation.byte_length) {
+    iree_hal_fixed_block_pool_slab_release_backing(slab, backing_pool);
+  } else {
+    iree_hal_pool_buffer_range_deinitialize(&slab->range);
   }
   iree_hal_memory_fixed_block_allocator_free(slab->allocator);
   iree_allocator_free(host_allocator, slab);

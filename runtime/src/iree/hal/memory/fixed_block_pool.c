@@ -51,6 +51,15 @@ typedef struct iree_hal_fixed_block_pool_t {
     iree_hal_fixed_block_pool_slab_t* tail;
   } slabs;
 
+  // One idle metadata set, independent of backing ownership and released by
+  // trim. Protected by acquisition_mutex.
+  struct {
+    // Offset metadata whose complete parent reservation has returned.
+    iree_hal_fixed_block_pool_slab_t* slab;
+    // Durable storage for a small parent-acquisition transaction.
+    struct iree_hal_fixed_block_pool_acquire_t* acquire;
+  } reusable;
+
   // Empty-range publication independent of native allocation progress.
   struct {
     // Protects candidate links and each releasing caller's final slab access.
@@ -377,7 +386,8 @@ static void iree_hal_fixed_block_pool_unpin_slab(
 // disjoint candidate lists; the acquisition lock excludes new claims while an
 // empty slab is unlinked. Parent returns never run with either metadata lock.
 static void iree_hal_fixed_block_pool_return_unused_slabs(
-    iree_hal_fixed_block_pool_t* pool, iree_device_size_t min_bytes_to_keep) {
+    iree_hal_fixed_block_pool_t* pool, iree_device_size_t min_bytes_to_keep,
+    bool retain_metadata) {
   iree_slim_mutex_lock(&pool->publication.mutex);
   iree_hal_fixed_block_pool_slab_t* candidates = pool->publication.candidates;
   pool->publication.candidates = NULL;
@@ -412,8 +422,20 @@ static void iree_hal_fixed_block_pool_return_unused_slabs(
           slab->block_count * pool->geometry.backing_block_size,
           iree_memory_order_relaxed);
       iree_atomic_fetch_sub(&pool->slab_count, 1, iree_memory_order_relaxed);
-      iree_hal_fixed_block_pool_slab_free(slab, pool->backing_pool,
-                                          pool->host_allocator);
+      if (retain_metadata) {
+        iree_hal_fixed_block_pool_slab_release_backing(slab,
+                                                       pool->backing_pool);
+        iree_slim_mutex_lock(&pool->acquisition_mutex);
+        if (!pool->reusable.slab) {
+          pool->reusable.slab = slab;
+          slab = NULL;
+        }
+        iree_slim_mutex_unlock(&pool->acquisition_mutex);
+      }
+      if (slab) {
+        iree_hal_fixed_block_pool_slab_free(slab, pool->backing_pool,
+                                            pool->host_allocator);
+      }
     } else {
       // Individual block histories remain useful when their union does not
       // fit the configured whole-range return frontier.
@@ -700,6 +722,11 @@ static void iree_hal_fixed_block_pool_destroy(iree_hal_pool_t* base_pool) {
                                         pool->host_allocator);
     slab = next;
   }
+  if (pool->reusable.slab) {
+    iree_hal_fixed_block_pool_slab_free(pool->reusable.slab, NULL,
+                                        pool->host_allocator);
+  }
+  iree_allocator_free(pool->host_allocator, pool->reusable.acquire);
   iree_hal_memory_trace_deinitialize(&pool->trace);
   iree_hal_pool_release(pool->backing_pool);
   iree_hal_pool_deinitialize(base_pool);
@@ -879,7 +906,8 @@ static iree_host_size_t iree_hal_fixed_block_pool_select_candidates(
         &elements[target].allocation);
   }
   iree_slim_mutex_unlock(&pool->acquisition_mutex);
-  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
+  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0,
+                                                /*retain_metadata=*/true);
   return ready_count + pending_count;
 }
 
@@ -981,18 +1009,29 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_promote(
   iree_host_size_t total_size = 0;
   iree_host_size_t elements_offset = 0;
   iree_host_size_t frontiers_offset = 0;
+  const iree_host_size_t capacity =
+      iree_max(source->call.count,
+               IREE_HAL_FIXED_BLOCK_POOL_INLINE_TRANSACTION_CAPACITY);
   IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
       sizeof(*source), &total_size,
-      IREE_STRUCT_FIELD(source->call.count,
-                        iree_hal_fixed_block_pool_acquire_element_t,
+      IREE_STRUCT_FIELD(capacity, iree_hal_fixed_block_pool_acquire_element_t,
                         &elements_offset),
-      IREE_STRUCT_ARRAY_FIELD_ALIGNED(
-          source->call.count, source->frontier_stride, uint8_t,
-          IREE_ASYNC_FRONTIER_ALIGNMENT, &frontiers_offset),
+      IREE_STRUCT_ARRAY_FIELD_ALIGNED(capacity, source->frontier_stride,
+                                      uint8_t, IREE_ASYNC_FRONTIER_ALIGNMENT,
+                                      &frontiers_offset),
       IREE_STRUCT_FIELD(source->frontier_stride, uint8_t, NULL)));
   iree_hal_fixed_block_pool_acquire_t* acquire = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(source->pool->host_allocator,
-                                             total_size, (void**)&acquire));
+  if (source->call.count <=
+      IREE_HAL_FIXED_BLOCK_POOL_INLINE_TRANSACTION_CAPACITY) {
+    iree_slim_mutex_lock(&source->pool->acquisition_mutex);
+    acquire = source->pool->reusable.acquire;
+    source->pool->reusable.acquire = NULL;
+    iree_slim_mutex_unlock(&source->pool->acquisition_mutex);
+  }
+  if (!acquire) {
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc(source->pool->host_allocator,
+                                               total_size, (void**)&acquire));
+  }
   *acquire = *source;
   acquire->allocated = true;
   acquire->elements =
@@ -1068,7 +1107,8 @@ static void iree_hal_fixed_block_pool_acquire_finish(
     iree_hal_fixed_block_pool_unpin_slab(pool, slab);
   }
   iree_slim_mutex_unlock(&pool->acquisition_mutex);
-  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
+  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0,
+                                                /*retain_metadata=*/true);
   if (!committed && acquire->exposed_prefix) {
     iree_async_notification_signal_if_observed(pool->base.notification,
                                                INT32_MAX);
@@ -1077,6 +1117,15 @@ static void iree_hal_fixed_block_pool_acquire_finish(
   const iree_status_t status = acquire->status;
   const iree_hal_pool_acquire_result_t result = acquire->result;
   if (acquire->allocated) {
+    if (acquire->call.count <=
+        IREE_HAL_FIXED_BLOCK_POOL_INLINE_TRANSACTION_CAPACITY) {
+      iree_slim_mutex_lock(&pool->acquisition_mutex);
+      if (!pool->reusable.acquire) {
+        pool->reusable.acquire = acquire;
+        acquire = NULL;
+      }
+      iree_slim_mutex_unlock(&pool->acquisition_mutex);
+    }
     iree_allocator_free(pool->host_allocator, acquire);
   }
   completion.fn(completion.user_data, status, result);
@@ -1111,10 +1160,14 @@ static void iree_hal_fixed_block_pool_acquire_progress(
         break;
       }
       iree_hal_fixed_block_pool_slab_t* slab = NULL;
+      iree_slim_mutex_lock(&pool->acquisition_mutex);
+      iree_hal_fixed_block_pool_slab_t* reusable_slab = pool->reusable.slab;
+      pool->reusable.slab = NULL;
+      iree_slim_mutex_unlock(&pool->acquisition_mutex);
       acquire->status = iree_hal_fixed_block_pool_slab_prepare(
           pool->backing_pool, &pool->backing_request, &pool->geometry,
           &pool->asan_options, acquire->parent.reservation,
-          acquire->parent.info, pool->host_allocator, &slab);
+          acquire->parent.info, pool->host_allocator, reusable_slab, &slab);
       if (!iree_status_is_ok(acquire->status)) {
         break;
       }
@@ -1303,7 +1356,8 @@ static void iree_hal_fixed_block_pool_release_reservations(
     iree_hal_fixed_block_pool_release_one_reservation(
         base_pool, &reservations[i], death_frontier);
   }
-  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
+  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0,
+                                                /*retain_metadata=*/true);
   iree_async_notification_signal_if_observed(pool->base.notification,
                                              INT32_MAX);
 }
@@ -1552,18 +1606,30 @@ static void iree_hal_fixed_block_pool_trim(
     iree_hal_pool_t* base_pool, iree_hal_pool_trim_flags_t flags,
     iree_device_size_t min_bytes_to_keep) {
   iree_hal_fixed_block_pool_t* pool = (iree_hal_fixed_block_pool_t*)base_pool;
-  if (!pool->backing_pool) {
-    return;
-  }
   iree_slim_mutex_lock(&pool->acquisition_mutex);
-  iree_slim_mutex_lock(&pool->publication.mutex);
-  for (iree_hal_fixed_block_pool_slab_t* slab = pool->slabs.head; slab;
-       slab = slab->next) {
-    iree_hal_fixed_block_pool_note_candidate(pool, slab);
+  if (pool->backing_pool) {
+    iree_slim_mutex_lock(&pool->publication.mutex);
+    for (iree_hal_fixed_block_pool_slab_t* slab = pool->slabs.head; slab;
+         slab = slab->next) {
+      iree_hal_fixed_block_pool_note_candidate(pool, slab);
+    }
+    iree_slim_mutex_unlock(&pool->publication.mutex);
   }
-  iree_slim_mutex_unlock(&pool->publication.mutex);
+  iree_hal_fixed_block_pool_slab_t* reusable_slab = pool->reusable.slab;
+  iree_hal_fixed_block_pool_acquire_t* reusable_acquire =
+      pool->reusable.acquire;
+  pool->reusable.slab = NULL;
+  pool->reusable.acquire = NULL;
   iree_slim_mutex_unlock(&pool->acquisition_mutex);
-  iree_hal_fixed_block_pool_return_unused_slabs(pool, min_bytes_to_keep);
+  if (pool->backing_pool) {
+    iree_hal_fixed_block_pool_return_unused_slabs(pool, min_bytes_to_keep,
+                                                  /*retain_metadata=*/false);
+  }
+  if (reusable_slab) {
+    iree_hal_fixed_block_pool_slab_free(reusable_slab, NULL,
+                                        pool->host_allocator);
+  }
+  iree_allocator_free(pool->host_allocator, reusable_acquire);
   (void)flags;
 }
 
