@@ -117,8 +117,11 @@ in an encoder.
 
 ## Build and select required cases
 
-Ordinary GPU corpora have the following process-lifetime test targets. Appending
-`_instance` selects a second invocation of the same dynamic executable.
+Ordinary GPU corpora have the following process-lifetime test targets. Focused
+ownership checks can use the same executable with
+`--amdf_native_lifetime=instance`. Packages that explicitly list both native
+lifetimes also provide an `_instance` test target; ordinary corpora do not
+duplicate every case across lifetimes.
 
 | Corpus | Bazel target |
 | --- | --- |

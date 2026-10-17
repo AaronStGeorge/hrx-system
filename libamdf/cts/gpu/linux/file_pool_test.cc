@@ -541,6 +541,13 @@ class GpuFilePoolTest : public DispatchTest {
                   shared_mapping_, AMDF_HOST_CACHE_OPERATION_FLUSH, 0,
                   host.byte_length),
               AMDF_STATUS_OK);
+    std::vector<uint32_t> expected_pool(8 * kWordCount, kGuard);
+    std::memcpy(pool_.host.pointer, expected_pool.data(),
+                pool_.info.byte_length);
+    ASSERT_EQ(this->api_->host_mapping_cache_control(
+                  pool_.mapping, AMDF_HOST_CACHE_OPERATION_FLUSH, 0,
+                  pool_.info.byte_length),
+              AMDF_STATUS_OK);
     ASSERT_NO_FATAL_FAILURE(PrepareDispatch());
     for (uint32_t generation = 0; generation < 2; ++generation) {
       const uint32_t count = kWordCount - 17 - generation;
@@ -556,6 +563,52 @@ class GpuFilePoolTest : public DispatchTest {
             kSdma ? input : static_cast<uint32_t>(uint64_t{input} * 3 + addend);
       }
     }
+    // A pool can grow through independent slabs without changing its virtual
+    // region. Rebind both slots after their final readers, then use the prior
+    // slab's output through the same addresses in the reverse direction.
+    for (uint32_t generation = 0; generation < 2; ++generation) {
+      SCOPED_TRACE(generation);
+      const bool forward = generation == 0;
+      const uint32_t input_slot = forward ? 2 : 3;
+      const uint32_t output_slot = forward ? 3 : 4;
+      const std::array<amdf_memory_mapping_update_t, 2> updates = {{
+          {
+              .byte_length = kUnit,
+              .memory = forward ? shared_memory_ : pool_.memory,
+              .access = AMDF_MEMORY_ACCESS_READ,
+              .source_byte_offset = input_slot * kUnit,
+          },
+          {
+              .target_byte_offset = kUnit,
+              .byte_length = kUnit,
+              .memory = forward ? pool_.memory : shared_memory_,
+              .access = kReadWrite,
+              .source_byte_offset = output_slot * kUnit,
+          },
+      }};
+      ASSERT_EQ(this->api_->memory_reservation_update(
+                    reservation_, 0, updates.size(), updates.data()),
+                AMDF_STATUS_OK);
+      const uint32_t count = kWordCount - 31 - generation;
+      const uint32_t addend = 0xc31f6907u + generation;
+      ASSERT_NO_FATAL_FAILURE(Publish(alias_address_, alias_address_ + kUnit,
+                                      count, addend, generation + 3));
+      ASSERT_NO_FATAL_FAILURE(Wait(generation + 3));
+      const auto& source = forward ? expected : expected_pool;
+      auto& destination = forward ? expected_pool : expected;
+      for (uint32_t i = 0; i < count; ++i) {
+        const uint32_t input = source[input_slot * kWordCount + i];
+        destination[output_slot * kWordCount + i] =
+            kSdma ? input : static_cast<uint32_t>(uint64_t{input} * 3 + addend);
+      }
+    }
+    ASSERT_EQ(this->api_->host_mapping_cache_control(
+                  pool_.mapping, AMDF_HOST_CACHE_OPERATION_INVALIDATE, 0,
+                  pool_.info.byte_length),
+              AMDF_STATUS_OK);
+    EXPECT_EQ(std::memcmp(pool_.host.pointer, expected_pool.data(),
+                          pool_.info.byte_length),
+              0);
     ASSERT_EQ(this->api_->host_mapping_cache_control(
                   shared_mapping_, AMDF_HOST_CACHE_OPERATION_INVALIDATE, 0,
                   host.byte_length),
