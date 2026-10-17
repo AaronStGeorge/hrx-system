@@ -70,17 +70,16 @@ struct iree_hal_fixed_block_pool_slab_t {
 extern "C" {
 #endif
 
-// Prepares one ordinary parent reservation outside the acquisition lock.
-// Failures return the original source history and leave out_slab NULL.
-iree_status_t iree_hal_fixed_block_pool_slab_acquire(
+// Consumes an acquired parent token, including on failure. Preparation and
+// rollback preserve its exact history and run outside acquisition locks.
+iree_status_t iree_hal_fixed_block_pool_slab_prepare(
     iree_hal_pool_t* backing_pool,
     const iree_hal_pool_reservation_request_t* request,
     const iree_hal_fixed_block_pool_geometry_t* geometry,
     const iree_hal_asan_pool_options_t* asan,
-    const iree_async_frontier_t* requester, iree_hal_pool_reserve_flags_t flags,
+    iree_hal_pool_reservation_t reservation, iree_hal_pool_acquire_info_t info,
     iree_allocator_t host_allocator,
-    iree_hal_fixed_block_pool_slab_t** out_slab,
-    iree_hal_pool_acquire_result_t* out_result);
+    iree_hal_fixed_block_pool_slab_t** out_slab);
 
 // Retains a finite range and prepares its block metadata without a parent
 // token.

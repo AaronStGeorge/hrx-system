@@ -218,6 +218,7 @@ iree_cc_test(
     iree::async::platform
     iree::base
     iree::hal
+    iree::hal::testing::deferred_pool
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -574,6 +575,7 @@ iree_cc_test(
     iree::async::platform
     iree::base
     iree::hal
+    iree::hal::testing::deferred_pool
     iree::testing::gtest
     iree::testing::gtest_main
 )

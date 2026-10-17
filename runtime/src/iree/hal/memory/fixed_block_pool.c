@@ -864,6 +864,22 @@ static iree_host_size_t iree_hal_fixed_block_pool_select_candidates(
       elements[i].slab = NULL;
     }
   }
+  // Compact pending candidates after the ready prefix. Only selection state
+  // moves: ASAN layouts belong to request positions, not candidate blocks.
+  for (iree_host_size_t i = 0; i < pending_count; ++i) {
+    const iree_host_size_t source = request_count - pending_count + i;
+    const iree_host_size_t target = ready_count + i;
+    if (source == target) {
+      continue;
+    }
+    elements[target].slab = elements[source].slab;
+    elements[source].slab = NULL;
+    elements[target].result = elements[source].result;
+    iree_hal_fixed_block_pool_copy_candidate(
+        &elements[source].allocation,
+        (iree_async_frontier_t*)(frontier_storage + target * frontier_stride),
+        &elements[target].allocation);
+  }
   iree_slim_mutex_unlock(&pool->acquisition_mutex);
   iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
   return ready_count + pending_count;
@@ -902,6 +918,302 @@ static bool iree_hal_fixed_block_pool_commit_candidates(
   return current;
 }
 
+// Stack-resident on ready paths; parent acquisition promotes this state once
+// and keeps the selected prefix until whole-batch publication or rollback.
+typedef struct iree_hal_fixed_block_pool_acquire_t {
+  // Pool borrowed through the submitting caller's completion contract.
+  iree_hal_fixed_block_pool_t* pool;
+  // Captured public transaction arguments.
+  struct {
+    // Number of request and output array elements.
+    iree_host_size_t count;
+    // Validated requests, borrowed through terminal completion.
+    const iree_hal_pool_reservation_request_t* requests;
+    // Requester ordering proof, independent of physical completion.
+    const iree_async_frontier_t* frontier;
+    // Reservations published only after the complete transaction succeeds.
+    iree_hal_pool_reservation_t* reservations;
+    // Results and prior-use histories published with completion.
+    iree_hal_pool_acquire_info_t* infos;
+    // Exactly one accepted terminal completion.
+    iree_hal_pool_acquire_callback_t completion;
+    // Behavior selected at the public acquisition boundary.
+    iree_hal_pool_reserve_flags_t flags;
+  } call;
+  // Selected blocks, including a claimed prefix and unclaimed snapshots.
+  iree_hal_fixed_block_pool_acquire_element_t* elements;
+  // Snapshot array plus one scratch frontier for unlocked eligibility checks.
+  uint8_t* frontiers;
+  // Byte stride of each frontier snapshot.
+  iree_host_size_t frontier_stride;
+  // Number of already claimed elements, with their charges and histories.
+  iree_host_size_t acquired_count;
+  // Index identifying the first request a declined transaction cannot satisfy.
+  iree_host_size_t unavailable_index;
+  // True when this object owns its trailing element/frontier storage.
+  bool allocated;
+  // Whether a no-growth caller was refused before asking the parent.
+  bool growth_required;
+  // Prefix capacity was withheld across an unlocked parent preparation.
+  bool exposed_prefix;
+  // New slabs pinned against trim until this transaction finishes.
+  iree_hal_fixed_block_pool_slab_t* preparations;
+  // Terminal infrastructure failure, transferred to completion.
+  iree_status_t status;
+  // Whole-batch capacity outcome; successful items retain individual results.
+  iree_hal_pool_acquire_result_t result;
+  // Stable parent request output and publication handoff.
+  struct {
+    // Submission and callback must both finish before resuming.
+    iree_atomic_int32_t pending;
+    // A parent result is awaiting consumption by the pump.
+    bool active;
+    // Acquired token consumed by slab setup on success.
+    iree_hal_pool_reservation_t reservation;
+    // Exact prior-use history, borrowed from the acquired token.
+    iree_hal_pool_acquire_info_t info;
+    // Parent capacity result, published before the completion handoff.
+    iree_hal_pool_acquire_result_t result;
+  } parent;
+} iree_hal_fixed_block_pool_acquire_t;
+
+// Allocates durable transaction storage on a cold path. Promotion follows a
+// successful claim, so all retained histories already point at stable blocks.
+static iree_status_t iree_hal_fixed_block_pool_acquire_promote(
+    iree_hal_fixed_block_pool_acquire_t** inout_acquire) {
+  iree_hal_fixed_block_pool_acquire_t* source = *inout_acquire;
+  iree_host_size_t total_size = 0;
+  iree_host_size_t elements_offset = 0;
+  iree_host_size_t frontiers_offset = 0;
+  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
+      sizeof(*source), &total_size,
+      IREE_STRUCT_FIELD(source->call.count,
+                        iree_hal_fixed_block_pool_acquire_element_t,
+                        &elements_offset),
+      IREE_STRUCT_ARRAY_FIELD_ALIGNED(
+          source->call.count, source->frontier_stride, uint8_t,
+          IREE_ASYNC_FRONTIER_ALIGNMENT, &frontiers_offset),
+      IREE_STRUCT_FIELD(source->frontier_stride, uint8_t, NULL)));
+  iree_hal_fixed_block_pool_acquire_t* acquire = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(source->pool->host_allocator,
+                                             total_size, (void**)&acquire));
+  *acquire = *source;
+  acquire->allocated = true;
+  acquire->elements =
+      (iree_hal_fixed_block_pool_acquire_element_t*)((uint8_t*)acquire +
+                                                     elements_offset);
+  acquire->frontiers = (uint8_t*)acquire + frontiers_offset;
+  // Large transactions allocate before initialization; promotion after a miss
+  // copies the already initialized elements and their acquired histories.
+  if (source->elements) {
+    memcpy(acquire->elements, source->elements,
+           source->call.count * sizeof(*source->elements));
+  }
+  *inout_acquire = acquire;
+  return iree_ok_status();
+}
+
+static void iree_hal_fixed_block_pool_acquire_finish(
+    iree_hal_fixed_block_pool_acquire_t* acquire) {
+  iree_hal_fixed_block_pool_t* pool = acquire->pool;
+  const bool committed = iree_status_is_ok(acquire->status) &&
+                         acquire->acquired_count == acquire->call.count;
+  if (iree_status_is_ok(acquire->status)) {
+    if (committed) {
+      acquire->result = IREE_HAL_POOL_ACQUIRE_OK_FRESH;
+      for (iree_host_size_t i = 0; i < acquire->call.count; ++i) {
+        iree_hal_fixed_block_pool_acquire_element_t* element =
+            &acquire->elements[i];
+        iree_hal_fixed_block_pool_return_allocation(
+            pool, element->slab, &element->allocation,
+            acquire->call.requests[i].allocation_size, &element->asan_layout,
+            element->result, &acquire->call.reservations[i],
+            &acquire->call.infos[i]);
+        if (element->result == IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT ||
+            (element->result == IREE_HAL_POOL_ACQUIRE_OK &&
+             acquire->result == IREE_HAL_POOL_ACQUIRE_OK_FRESH)) {
+          acquire->result = element->result;
+        }
+      }
+    } else {
+      iree_atomic_fetch_add(acquire->result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED
+                                ? &pool->exhausted_count
+                                : &pool->over_budget_count,
+                            1, iree_memory_order_relaxed);
+      memset(acquire->call.infos, 0,
+             acquire->call.count * sizeof(*acquire->call.infos));
+      acquire->call.infos[acquire->unavailable_index] =
+          (iree_hal_pool_acquire_info_t){
+              .result = acquire->result,
+              .flags = acquire->growth_required
+                           ? IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED
+                           : IREE_HAL_POOL_ACQUIRE_FLAG_NONE,
+          };
+    }
+  }
+  iree_slim_mutex_lock(&pool->acquisition_mutex);
+  if (!committed) {
+    for (iree_host_size_t i = 0; i < acquire->acquired_count; ++i) {
+      iree_hal_fixed_block_pool_acquire_element_t* element =
+          &acquire->elements[i];
+      iree_hal_memory_fixed_block_allocator_restore(
+          element->slab->allocator, element->allocation.block_index);
+      iree_atomic_fetch_sub(&element->slab->live_count, 1,
+                            iree_memory_order_relaxed);
+    }
+    iree_hal_fixed_block_pool_uncharge_reservation(
+        pool, acquire->acquired_count * pool->geometry.backing_block_size);
+  }
+  for (iree_host_size_t i = 0; i < acquire->call.count; ++i) {
+    if (acquire->elements[i].slab) {
+      iree_hal_fixed_block_pool_unpin_slab(pool, acquire->elements[i].slab);
+    }
+  }
+  while (acquire->preparations) {
+    iree_hal_fixed_block_pool_slab_t* slab = acquire->preparations;
+    acquire->preparations = slab->preparation_next;
+    iree_hal_fixed_block_pool_unpin_slab(pool, slab);
+  }
+  iree_slim_mutex_unlock(&pool->acquisition_mutex);
+  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
+  if (!committed && acquire->exposed_prefix) {
+    iree_async_notification_signal_if_observed(pool->base.notification,
+                                               INT32_MAX);
+  }
+  const iree_hal_pool_acquire_callback_t completion = acquire->call.completion;
+  const iree_status_t status = acquire->status;
+  const iree_hal_pool_acquire_result_t result = acquire->result;
+  if (acquire->allocated) {
+    iree_allocator_free(pool->host_allocator, acquire);
+  }
+  completion.fn(completion.user_data, status, result);
+}
+
+// The mutual completion/pump recursion is broken for inline completions by
+// joining the callback with the return from its submission.
+static void iree_hal_fixed_block_pool_acquire_progress(
+    iree_hal_fixed_block_pool_acquire_t* acquire);
+
+static void iree_hal_fixed_block_pool_acquire_parent_complete(
+    void* user_data, iree_status_t status,
+    iree_hal_pool_acquire_result_t result) {
+  iree_hal_fixed_block_pool_acquire_t* acquire = user_data;
+  acquire->status = status;
+  acquire->parent.result = result;
+  if (iree_atomic_fetch_sub(&acquire->parent.pending, 1,
+                            iree_memory_order_acq_rel) == 1) {
+    iree_hal_fixed_block_pool_acquire_progress(acquire);
+  }
+}
+
+static void iree_hal_fixed_block_pool_acquire_progress(
+    iree_hal_fixed_block_pool_acquire_t* acquire) {
+  iree_hal_fixed_block_pool_t* pool = acquire->pool;
+  while (iree_status_is_ok(acquire->status)) {
+    if (acquire->parent.active) {
+      acquire->parent.active = false;
+      acquire->result = acquire->parent.result;
+      if (acquire->result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED ||
+          acquire->result == IREE_HAL_POOL_ACQUIRE_OVER_BUDGET) {
+        break;
+      }
+      iree_hal_fixed_block_pool_slab_t* slab = NULL;
+      acquire->status = iree_hal_fixed_block_pool_slab_prepare(
+          pool->backing_pool, &pool->backing_request, &pool->geometry,
+          &pool->asan_options, acquire->parent.reservation,
+          acquire->parent.info, pool->host_allocator, &slab);
+      if (!iree_status_is_ok(acquire->status)) {
+        break;
+      }
+      slab->pins = 1;
+      slab->preparation_next = acquire->preparations;
+      acquire->preparations = slab;
+      iree_slim_mutex_lock(&pool->acquisition_mutex);
+      iree_hal_fixed_block_pool_publish_slab(pool, slab);
+      iree_slim_mutex_unlock(&pool->acquisition_mutex);
+      iree_async_notification_signal_if_observed(pool->base.notification,
+                                                 INT32_MAX);
+    }
+    const iree_host_size_t remaining =
+        acquire->call.count - acquire->acquired_count;
+    const iree_device_size_t remaining_charge =
+        remaining * pool->geometry.backing_block_size;
+    const iree_device_size_t reserved = (iree_device_size_t)iree_atomic_load(
+        &pool->bytes_reserved, iree_memory_order_relaxed);
+    if (pool->budget_limit &&
+        remaining_charge >
+            pool->budget_limit - iree_min(reserved, pool->budget_limit)) {
+      acquire->result = IREE_HAL_POOL_ACQUIRE_OVER_BUDGET;
+      acquire->unavailable_index = 0;
+      break;
+    }
+    iree_hal_fixed_block_pool_acquire_element_t* elements =
+        acquire->elements + acquire->acquired_count;
+    const iree_host_size_t selected_count =
+        iree_hal_fixed_block_pool_select_candidates(
+            pool, remaining, acquire->call.frontier, acquire->call.flags,
+            acquire->frontier_stride,
+            acquire->frontiers +
+                acquire->acquired_count * acquire->frontier_stride,
+            elements);
+    if (selected_count < remaining &&
+        (!pool->backing_pool ||
+         iree_any_bit_set(acquire->call.flags,
+                          IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH))) {
+      acquire->result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
+      acquire->growth_required = pool->backing_pool != NULL;
+      acquire->unavailable_index = acquire->acquired_count + selected_count;
+      break;
+    }
+    if (selected_count) {
+      if (!iree_hal_fixed_block_pool_commit_candidates(
+              pool, selected_count,
+              selected_count * pool->geometry.backing_block_size, elements,
+              &acquire->result)) {
+        continue;
+      }
+      if (acquire->result == IREE_HAL_POOL_ACQUIRE_OVER_BUDGET) {
+        acquire->unavailable_index = 0;
+        break;
+      }
+      acquire->acquired_count += selected_count;
+    }
+    if (acquire->acquired_count == acquire->call.count) {
+      break;
+    }
+    acquire->unavailable_index = acquire->acquired_count;
+    acquire->exposed_prefix |= acquire->acquired_count != 0;
+    if (!acquire->allocated) {
+      iree_status_t status =
+          iree_hal_fixed_block_pool_acquire_promote(&acquire);
+      acquire->status = status;
+      if (!iree_status_is_ok(acquire->status)) {
+        break;
+      }
+    }
+    acquire->parent.active = true;
+    acquire->parent.info = (iree_hal_pool_acquire_info_t){0};
+    iree_atomic_store(&acquire->parent.pending, 2, iree_memory_order_relaxed);
+    iree_status_t status = iree_hal_pool_acquire_reservations(
+        pool->backing_pool, 1, &pool->backing_request, acquire->call.frontier,
+        &acquire->parent.reservation, &acquire->parent.info,
+        (iree_hal_pool_acquire_callback_t){
+            .fn = iree_hal_fixed_block_pool_acquire_parent_complete,
+            .user_data = acquire,
+        },
+        acquire->call.flags);
+    if (!iree_status_is_ok(status)) {
+      iree_hal_fixed_block_pool_acquire_parent_complete(
+          acquire, status, IREE_HAL_POOL_ACQUIRE_NONE);
+    }
+    if (iree_atomic_fetch_sub(&acquire->parent.pending, 1,
+                              iree_memory_order_acq_rel) != 1) {
+      return;
+    }
+  }
+  iree_hal_fixed_block_pool_acquire_finish(acquire);
+}
+
 static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
     iree_hal_pool_t* base_pool, iree_host_size_t request_count,
     const iree_hal_pool_reservation_request_t* requests,
@@ -919,9 +1231,6 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
                        (sizeof(iree_async_frontier_t) +
                         IREE_HAL_FIXED_BLOCK_POOL_INLINE_FRONTIER_CAPACITY *
                             sizeof(iree_async_frontier_entry_t))];
-  const iree_host_size_t frontier_stride =
-      sizeof(iree_async_frontier_t) +
-      pool->geometry.frontier_capacity * sizeof(iree_async_frontier_entry_t);
   const bool needs_storage =
       request_count > IREE_ARRAYSIZE(inline_elements) ||
       pool->geometry.frontier_capacity >
@@ -945,35 +1254,34 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
                   IREE_HAL_POOL_ACQUIRE_EXHAUSTED);
     return iree_ok_status();
   }
-
-  iree_hal_fixed_block_pool_acquire_element_t* elements = inline_elements;
-  uint8_t* frontier_storage = inline_frontiers;
-  void* storage = NULL;
+  iree_hal_fixed_block_pool_acquire_t inline_acquire = {
+      .pool = pool,
+      .call =
+          {
+              .count = request_count,
+              .requests = requests,
+              .frontier = requester_frontier,
+              .reservations = out_reservations,
+              .infos = out_infos,
+              .completion = completion,
+              .flags = flags,
+          },
+      .elements = needs_storage ? NULL : inline_elements,
+      .frontiers = inline_frontiers,
+      .frontier_stride = sizeof(iree_async_frontier_t) +
+                         pool->geometry.frontier_capacity *
+                             sizeof(iree_async_frontier_entry_t),
+  };
+  iree_hal_fixed_block_pool_acquire_t* acquire = &inline_acquire;
   if (needs_storage) {
-    iree_host_size_t total_size = 0;
-    iree_host_size_t frontier_offset = 0;
-    // The extra frontier is a scratch snapshot reused during candidate scans.
-    // Express it separately so request_count + 1 cannot overflow.
-    IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
-        0, &total_size,
-        IREE_STRUCT_FIELD(request_count,
-                          iree_hal_fixed_block_pool_acquire_element_t, NULL),
-        IREE_STRUCT_ARRAY_FIELD_ALIGNED(request_count, frontier_stride, uint8_t,
-                                        IREE_ASYNC_FRONTIER_ALIGNMENT,
-                                        &frontier_offset),
-        IREE_STRUCT_FIELD(frontier_stride, uint8_t, NULL)));
-    IREE_RETURN_IF_ERROR(
-        iree_allocator_malloc(pool->host_allocator, total_size, &storage));
-    elements = (iree_hal_fixed_block_pool_acquire_element_t*)storage;
-    frontier_storage = (uint8_t*)storage + frontier_offset;
+    IREE_RETURN_IF_ERROR(iree_hal_fixed_block_pool_acquire_promote(&acquire));
   }
-
-  memset(elements, 0, request_count * sizeof(*elements));
+  memset(acquire->elements, 0, request_count * sizeof(*acquire->elements));
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; i < request_count && iree_status_is_ok(status);
        ++i) {
     status = iree_hal_fixed_block_pool_validate_reservation_request(
-        pool, &requests[i], &elements[i].asan_layout);
+        pool, &requests[i], &acquire->elements[i].asan_layout);
   }
   iree_device_size_t charged_length = 0;
   if (iree_status_is_ok(status) &&
@@ -982,108 +1290,10 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
     status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "fixed-block transaction charge overflows");
   }
-
-  iree_hal_fixed_block_pool_slab_t* preparations = NULL;
-  iree_hal_pool_acquire_result_t result = IREE_HAL_POOL_ACQUIRE_NONE;
-  iree_host_size_t selected_count = 0;
-  bool growth_required = false;
-  while (iree_status_is_ok(status)) {
-    // Admission precedes source growth; commit rechecks against concurrent use.
-    const iree_device_size_t reserved = (iree_device_size_t)iree_atomic_load(
-        &pool->bytes_reserved, iree_memory_order_relaxed);
-    if (pool->budget_limit &&
-        charged_length >
-            pool->budget_limit - iree_min(reserved, pool->budget_limit)) {
-      result = IREE_HAL_POOL_ACQUIRE_OVER_BUDGET;
-      break;
-    }
-    selected_count = iree_hal_fixed_block_pool_select_candidates(
-        pool, request_count, requester_frontier, flags, frontier_stride,
-        frontier_storage, elements);
-    if (selected_count == request_count) {
-      if (iree_hal_fixed_block_pool_commit_candidates(
-              pool, request_count, charged_length, elements, &result)) {
-        break;
-      }
-      continue;
-    }
-    result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
-    if (!pool->backing_pool) {
-      break;
-    }
-    if (iree_any_bit_set(flags, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH)) {
-      growth_required = true;
-      break;
-    }
-    iree_hal_fixed_block_pool_slab_t* slab = NULL;
-    status = iree_hal_fixed_block_pool_slab_acquire(
-        pool->backing_pool, &pool->backing_request, &pool->geometry,
-        &pool->asan_options, requester_frontier, flags, pool->host_allocator,
-        &slab, &result);
-    if (!slab) {
-      break;
-    }
-    // Preserve published growth across unlocked retries. Other requesters may
-    // use its free blocks, but returning empty backing cannot erase transaction
-    // progress.
-    slab->pins = 1;
-    slab->preparation_next = preparations;
-    preparations = slab;
-    iree_slim_mutex_lock(&pool->acquisition_mutex);
-    iree_hal_fixed_block_pool_publish_slab(pool, slab);
-    iree_slim_mutex_unlock(&pool->acquisition_mutex);
-    iree_async_notification_signal_if_observed(pool->base.notification,
-                                               INT32_MAX);
-  }
   if (iree_status_is_ok(status)) {
-    if (result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED ||
-        result == IREE_HAL_POOL_ACQUIRE_OVER_BUDGET) {
-      if (result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED) {
-        iree_atomic_fetch_add(&pool->exhausted_count, 1,
-                              iree_memory_order_relaxed);
-      } else {
-        iree_atomic_fetch_add(&pool->over_budget_count, 1,
-                              iree_memory_order_relaxed);
-      }
-      memset(out_infos, 0, request_count * sizeof(*out_infos));
-      iree_hal_pool_acquire_info_t* info =
-          &out_infos[result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED ? selected_count
-                                                               : 0];
-      info->result = result;
-      if (growth_required) {
-        info->flags = IREE_HAL_POOL_ACQUIRE_FLAG_GROWTH_REQUIRED;
-      }
-    } else {
-      for (iree_host_size_t i = 0; i < request_count; ++i) {
-        const iree_hal_pool_acquire_result_t item_result = elements[i].result;
-        iree_hal_fixed_block_pool_return_allocation(
-            pool, elements[i].slab, &elements[i].allocation,
-            requests[i].allocation_size, &elements[i].asan_layout, item_result,
-            &out_reservations[i], &out_infos[i]);
-        if (item_result == IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT ||
-            (item_result == IREE_HAL_POOL_ACQUIRE_OK &&
-             result == IREE_HAL_POOL_ACQUIRE_OK_FRESH)) {
-          result = item_result;
-        }
-      }
-    }
-  }
-  iree_slim_mutex_lock(&pool->acquisition_mutex);
-  for (iree_host_size_t i = 0; i < request_count; ++i) {
-    if (elements[i].slab) {
-      iree_hal_fixed_block_pool_unpin_slab(pool, elements[i].slab);
-    }
-  }
-  while (preparations) {
-    iree_hal_fixed_block_pool_slab_t* slab = preparations;
-    preparations = slab->preparation_next;
-    iree_hal_fixed_block_pool_unpin_slab(pool, slab);
-  }
-  iree_slim_mutex_unlock(&pool->acquisition_mutex);
-  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
-  iree_allocator_free(pool->host_allocator, storage);
-  if (iree_status_is_ok(status)) {
-    completion.fn(completion.user_data, iree_ok_status(), result);
+    iree_hal_fixed_block_pool_acquire_progress(acquire);
+  } else if (acquire->allocated) {
+    iree_allocator_free(pool->host_allocator, acquire);
   }
   return status;
 }

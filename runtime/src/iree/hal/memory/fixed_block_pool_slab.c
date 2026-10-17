@@ -74,25 +74,15 @@ iree_status_t iree_hal_fixed_block_pool_slab_allocate(
   return status;
 }
 
-iree_status_t iree_hal_fixed_block_pool_slab_acquire(
+iree_status_t iree_hal_fixed_block_pool_slab_prepare(
     iree_hal_pool_t* backing_pool,
     const iree_hal_pool_reservation_request_t* request,
     const iree_hal_fixed_block_pool_geometry_t* geometry,
     const iree_hal_asan_pool_options_t* asan,
-    const iree_async_frontier_t* requester, iree_hal_pool_reserve_flags_t flags,
+    iree_hal_pool_reservation_t reservation, iree_hal_pool_acquire_info_t info,
     iree_allocator_t host_allocator,
-    iree_hal_fixed_block_pool_slab_t** out_slab,
-    iree_hal_pool_acquire_result_t* out_result) {
+    iree_hal_fixed_block_pool_slab_t** out_slab) {
   *out_slab = NULL;
-  iree_hal_pool_reservation_t reservation = {0};
-  iree_hal_pool_acquire_info_t info = {0};
-  IREE_RETURN_IF_ERROR(iree_hal_pool_acquire_reservations_sync(
-      backing_pool, 1, request, requester, &reservation, &info, out_result,
-      flags));
-  if (*out_result == IREE_HAL_POOL_ACQUIRE_EXHAUSTED ||
-      *out_result == IREE_HAL_POOL_ACQUIRE_OVER_BUDGET) {
-    return iree_ok_status();
-  }
   iree_hal_buffer_t* buffer = NULL;
   iree_hal_pool_buffer_range_t range = {0};
   iree_status_t status = iree_hal_pool_materialize_reservations(
