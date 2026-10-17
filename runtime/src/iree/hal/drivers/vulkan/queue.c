@@ -6541,7 +6541,7 @@ typedef struct iree_hal_vulkan_staged_transfer_t
     iree_hal_vulkan_staged_transfer_t;
 
 typedef struct iree_hal_vulkan_staged_transfer_chunk_t {
-  // Owning staged transfer.
+  // Immutable owner, including after a completed chunk is recycled.
   iree_hal_vulkan_staged_transfer_t* transfer;
 
   // Staging slot owned while this chunk is active.
@@ -7063,7 +7063,6 @@ static void iree_hal_vulkan_staged_transfer_pump(
       if (chunk) {
         const iree_device_size_t remaining_length =
             transfer->requested_length - transfer->submitted_length;
-        chunk->transfer = transfer;
         chunk->slot = slot;
         chunk->transfer_offset = transfer->submitted_length;
         chunk->length = iree_min(transfer->chunk_size, remaining_length);
@@ -7250,6 +7249,9 @@ static iree_status_t iree_hal_vulkan_staged_transfer_create(
   transfer->kind = kind;
   transfer->host_kind = host_kind;
   transfer->chunk_count = ring->slot_count;
+  for (uint32_t i = 0; i < transfer->chunk_count; ++i) {
+    transfer->chunks[i].transfer = transfer;
+  }
   iree_status_t status = iree_hal_semaphore_list_clone(
       &signal_semaphore_list, transfer->host_allocator,
       &transfer->signal_semaphore_list);

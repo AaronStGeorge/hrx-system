@@ -6,17 +6,20 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <thread>
 #include <vector>
 
+#include "iree/async/notification.h"
 #include "iree/hal/cts/util/pool_test_util.h"
 #include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/drivers/vulkan/queue_test_util.h"
 #include "iree/hal/memory/fixed_block_pool.h"
-#include "iree/hal/memory/maintenance.h"
 #include "iree/hal/memory/slab_cache.h"
 #include "iree/hal/memory/tlsf_pool.h"
 
@@ -40,6 +43,94 @@ static void ObserveResourceRefCount(void* user_data,
   iree_status_free(status);
   observation->result.set_value(ref_count);
 }
+
+// Holds one real device allocator call from its native allocation worker.
+// Native Vulkan objects, the slab provider, and queue operations remain real.
+struct NativeAllocationGate {
+  // Synchronizes the hold and final allocator-lifetime observation.
+  std::mutex mutex;
+  // Publishes entry, release, and complete native-owner destruction.
+  std::condition_variable condition;
+  // Caller thread, whose queue capture allocations are never held.
+  std::thread::id caller = std::this_thread::get_id();
+  // Allocator command selected for the next non-caller operation.
+  iree_allocator_command_t command = IREE_ALLOCATOR_COMMAND_MALLOC;
+  // One matching dependency will stop before entering the system allocator.
+  bool armed = false;
+  // The selected native dependency reached the hold.
+  bool entered = false;
+  // The test released that dependency.
+  bool released = false;
+  // Live allocations belonging to the fresh device and its native worker.
+  size_t allocation_count = 0;
+
+  static iree_status_t Control(void* user_data,
+                               iree_allocator_command_t command,
+                               const void* params, void** inout_pointer) {
+    auto* gate = static_cast<NativeAllocationGate*>(user_data);
+    const bool was_allocated = *inout_pointer != nullptr;
+    {
+      std::unique_lock<std::mutex> lock(gate->mutex);
+      if (gate->armed && gate->command == command &&
+          std::this_thread::get_id() != gate->caller) {
+        gate->armed = false;
+        gate->entered = true;
+        gate->condition.notify_all();
+        gate->condition.wait(lock, [&] { return gate->released; });
+      }
+    }
+    const auto allocator = iree_allocator_system();
+    iree_status_t status =
+        allocator.ctl(allocator.self, command, params, inout_pointer);
+    std::lock_guard<std::mutex> lock(gate->mutex);
+    if (iree_status_is_ok(status)) {
+      if (command == IREE_ALLOCATOR_COMMAND_FREE) {
+        gate->allocation_count -= was_allocated ? 1 : 0;
+      } else if (!was_allocated) {
+        ++gate->allocation_count;
+      }
+    }
+    gate->condition.notify_all();
+    return status;
+  }
+
+  iree_allocator_t allocator() { return {this, Control}; }
+
+  void Arm(iree_allocator_command_t held_command) {
+    std::lock_guard<std::mutex> lock(mutex);
+    command = held_command;
+    entered = released = false;
+    armed = true;
+  }
+
+  void WaitEntered() {
+    std::unique_lock<std::mutex> lock(mutex);
+    condition.wait(lock, [&] { return entered; });
+  }
+
+  void Release() {
+    std::lock_guard<std::mutex> lock(mutex);
+    armed = false;
+    released = true;
+    condition.notify_all();
+  }
+
+  void WaitEmpty() {
+    std::unique_lock<std::mutex> lock(mutex);
+    condition.wait(lock, [&] { return allocation_count == 0; });
+  }
+};
+
+struct ScopedNativeAllocationHold {
+  ScopedNativeAllocationHold(NativeAllocationGate& gate,
+                             iree_allocator_command_t command)
+      : gate(gate) {
+    gate.Arm(command);
+  }
+  ~ScopedNativeAllocationHold() { gate.Release(); }
+  // Dependency whose hold always ends before captured device resources unwind.
+  NativeAllocationGate& gate;
+};
 
 class VulkanSlabPoolTest : public CtsTestBase<> {
  protected:
@@ -92,17 +183,22 @@ class VulkanSlabPoolTest : public CtsTestBase<> {
         semaphores, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
   }
 
-  // Joins queued child/cache returns, including work they enqueue. A pending
-  // frontier callback can still enqueue native source retirement afterward.
-  void JoinMaintenance(iree_hal_pool_t* source) {
-    iree_hal_memory_maintenance_call(
-        source->maintenance,
-        [](void* user_data) {
-          auto* owner = static_cast<iree_hal_memory_maintenance_t*>(user_data);
-          while (iree_hal_memory_maintenance_run_one(owner)) {
-          }
-        },
-        source->maintenance);
+  void WaitCommittedBytes(iree_hal_pool_t* pool, iree_device_size_t expected) {
+    auto* notification = iree_hal_pool_notification(pool);
+    for (;;) {
+      const uint32_t token =
+          iree_async_notification_begin_observe(notification);
+      iree_hal_pool_stats_t stats;
+      iree_hal_pool_query_stats(pool, &stats);
+      if (stats.bytes_committed == expected) {
+        iree_async_notification_end_observe(notification);
+        return;
+      }
+      const bool signaled = iree_async_notification_wait_for_token(
+          notification, token, iree_infinite_timeout());
+      iree_async_notification_end_observe(notification);
+      ASSERT_TRUE(signaled);
+    }
   }
 
   // Borrowed provisioned transfer queues with distinct canonical families.
@@ -178,7 +274,101 @@ TEST_P(VulkanSlabPoolTest, CapturesExactFamiliesWithoutAllocatingBacking) {
                               iree_hal_semaphore_list_empty(), buffer, 0,
                               &result, sizeof(result), /*barriers=*/NULL));
   buffer.reset();
-  JoinMaintenance(source);
+}
+
+TEST_P(VulkanSlabPoolTest, NativeAllocationDoesNotBlockCachedWorkOrRetirement) {
+  NativeAllocationGate native;
+  DeviceCreateContext context;
+  IREE_ASSERT_OK(context.Initialize(iree_allocator_system()));
+  Ref<iree_hal_device_t> device;
+  Ref<iree_hal_device_group_t> group;
+  IREE_ASSERT_OK(iree_hal_driver_create_default_device(
+      driver_, context.params(), native.allocator(), device.out()));
+  IREE_ASSERT_OK(iree_hal_device_group_create_from_device(
+      device, context.frontier_tracker(), iree_allocator_system(),
+      group.out()));
+  auto* queue = iree_hal_device_queue(
+      device, iree_hal_queue_family_ordinal(iree_hal_queue_family(queues_[0])),
+      0);
+  ASSERT_NE(queue, nullptr);
+  Ref<iree_hal_pool_t> source;
+  IREE_ASSERT_OK(CreateQueueSlabPool(
+      group, iree_hal_queue_family(queue), IREE_HAL_BUFFER_USAGE_TRANSFER,
+      /*host_access=*/{}, iree_allocator_system(), source.out()));
+  Ref<iree_hal_pool_t> finite;
+  const iree_hal_fixed_block_pool_options_t options = {
+      .block_size = 4096,
+      .blocks_per_slab = 1,
+      .frontier_capacity = 2,
+  };
+  IREE_ASSERT_OK(CreateFiniteBlockPool(source, options, iree_allocator_system(),
+                                       finite.out()));
+  const auto request = iree_hal_make_pool_reservation_request(4096, 0);
+  Ref<iree_hal_buffer_t> growing;
+  {
+    SemaphoreList allocated(device, {0}, {1});
+    {
+      ScopedNativeAllocationHold hold(native, IREE_ALLOCATOR_COMMAND_CALLOC);
+      IREE_ASSERT_OK(
+          iree_hal_queue_alloca(queue, iree_hal_semaphore_list_empty(),
+                                allocated, source, 1, &request, growing.out()));
+      native.WaitEntered();
+      EXPECT_FALSE(iree_hal_semaphore_list_poll(allocated));
+      Ref<iree_hal_buffer_t> cached;
+      SemaphoreList cached_ready(device, {0}, {1});
+      IREE_ASSERT_OK(iree_hal_queue_alloca(
+          queue, iree_hal_semaphore_list_empty(), cached_ready, finite, 1,
+          &request, cached.out()));
+      EXPECT_TRUE(iree_hal_semaphore_list_poll(cached_ready));
+      const uint32_t pattern = 0xC01DCAFE;
+      SemaphoreList filled(device, {0}, {1});
+      IREE_ASSERT_OK(iree_hal_queue_fill(
+          queue, cached_ready, filled, cached, 0, sizeof(pattern), &pattern,
+          sizeof(pattern), nullptr, IREE_HAL_FILL_FLAG_NONE));
+      uint32_t result = 0;
+      SemaphoreList downloaded(device, {0}, {1});
+      IREE_ASSERT_OK(iree_hal_queue_download(queue, filled, downloaded, cached,
+                                             0, &result, sizeof(result),
+                                             nullptr));
+      Wait(downloaded);
+      EXPECT_EQ(result, pattern);
+      SemaphoreList returned(device, {0}, {1});
+      auto* buffer = cached.get();
+      IREE_ASSERT_OK(
+          iree_hal_queue_dealloca(queue, downloaded, returned, 1, &buffer));
+      EXPECT_TRUE(iree_hal_semaphore_list_poll(returned));
+      EXPECT_FALSE(iree_hal_semaphore_list_poll(allocated));
+    }
+    Wait(allocated);
+  }
+  finite.reset();
+  {
+    ScopedNativeAllocationHold hold(native, IREE_ALLOCATOR_COMMAND_FREE);
+    growing.reset();
+    native.WaitEntered();
+    // Pool return stays asynchronous. Final device destruction is the native
+    // ownership join, so it cannot finish while cleanup remains held.
+    source.reset();
+    group.reset();
+    iree_hal_device_t* retiring = device.get();
+    iree_hal_device_retain(retiring);
+    device.reset();
+    std::promise<void> started;
+    std::promise<void> destroyed;
+    auto destroyed_future = destroyed.get_future();
+    std::thread teardown([&] {
+      started.set_value();
+      iree_hal_device_release(retiring);
+      destroyed.set_value();
+    });
+    started.get_future().get();
+    EXPECT_EQ(destroyed_future.wait_for(std::chrono::seconds(0)),
+              std::future_status::timeout);
+    native.Release();
+    teardown.join();
+    destroyed_future.get();
+  }
+  native.WaitEmpty();
 }
 
 TEST_P(VulkanSlabPoolTest, PendingAllocationDoesNotBlockIndependentTransfer) {
@@ -465,7 +655,6 @@ TEST_P(VulkanSlabPoolTest, QueueReleasesBuffersBeforeTerminalSignal) {
     EXPECT_EQ(iree_atomic_ref_count_load(&buffer.get()->resource.ref_count),
               1u);
     buffer.reset();
-    JoinMaintenance(source);
   }
 }
 
@@ -513,7 +702,6 @@ TEST_P(VulkanSlabPoolTest,
   command_buffer.reset();
   EXPECT_EQ(iree_atomic_ref_count_load(&buffer.get()->resource.ref_count), 1u);
   buffer.reset();
-  JoinMaintenance(source);
 }
 
 TEST_P(VulkanSlabPoolTest, RequiredAndPreferredHostGrants) {
@@ -577,7 +765,6 @@ TEST_P(VulkanSlabPoolTest, RequiredAndPreferredHostGrants) {
       }
       IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
       buffer.reset();
-      JoinMaintenance(source);
     }
   }
 
@@ -639,7 +826,6 @@ TEST_P(VulkanSlabPoolTest, CachedHostAccessIsAnExactNativeClass) {
   EXPECT_EQ(result, value);
   IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
   buffer.reset();
-  JoinMaintenance(required);
 }
 
 TEST_P(VulkanSlabPoolTest, ImportsHostStorageThroughSelectedNativeRoute) {
@@ -726,7 +912,6 @@ TEST_P(VulkanSlabPoolTest, ImportsHostStorageThroughSelectedNativeRoute) {
   IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
 
   buffer.reset();
-  JoinMaintenance(source);
   const ImportedHostAllocationReleaseResult released = release_result.get();
   EXPECT_TRUE(released.storage_class_matches);
   EXPECT_TRUE(released.payload_matches);
@@ -765,7 +950,6 @@ TEST_P(VulkanSlabPoolTest, NativeOnlyAndHostOnlyDoNotGrantQueueOperations) {
                             0, sizeof(value), /*barriers=*/NULL,
                             IREE_HAL_UPDATE_FLAG_NONE));
   buffer.reset();
-  JoinMaintenance(source);
 
   iree_hal_pool_scope_t host_scope = {};
   host_scope.host.access = IREE_HAL_MEMORY_ACCESS_ALL;
@@ -794,7 +978,6 @@ TEST_P(VulkanSlabPoolTest, NativeOnlyAndHostOnlyDoNotGrantQueueOperations) {
       iree_hal_queue_alloca(queues_[0], iree_hal_semaphore_list_empty(),
                             allocated, host_source, 1, &request, queued.out()));
   buffer.reset();
-  JoinMaintenance(host_source);
 }
 
 TEST_P(VulkanSlabPoolTest, RejectsUnpreparedInterfacesAndNativeProperties) {
@@ -952,7 +1135,6 @@ TEST_P(VulkanSlabPoolTest, SharedBackingAcrossFamiliesAndAllocationPolicies) {
                                              deallocated, 1, &raw_buffer));
       Wait(deallocated);
       buffer.reset();
-      JoinMaintenance(source);
       iree_hal_pool_stats_t stats;
       iree_hal_pool_query_stats(child, &stats);
       EXPECT_EQ(stats.bytes_committed, 0u);
@@ -966,7 +1148,7 @@ TEST_P(VulkanSlabPoolTest, SharedBackingAcrossFamiliesAndAllocationPolicies) {
   EXPECT_EQ(cache_stats.hit_count, 5u);
   EXPECT_EQ(cache_stats.ready_count, 1u);
   iree_hal_pool_trim(cache, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
-  JoinMaintenance(source);
+  ASSERT_NO_FATAL_FAILURE(WaitCommittedBytes(source, 0));
   iree_hal_pool_query_stats(cache, &stats);
   EXPECT_EQ(stats.bytes_committed, 0u);
   iree_hal_pool_query_stats(source, &stats);

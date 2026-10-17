@@ -8,8 +8,6 @@
 
 #include "iree/async/operations/file.h"
 #include "iree/async/proactor.h"
-#include "iree/hal/drivers/vulkan/memory_backend.h"
-#include "iree/hal/memory/maintenance.h"
 
 // Request records, not payload slots. Each continuation advances by one stripe
 // in the caller's final backing; no staging resource or copy submission exists.
@@ -67,8 +65,6 @@ struct iree_hal_vulkan_file_transfer_t {
   iree_hal_semaphore_list_t signals;
   // Caller-requested dependency after native I/O and cache maintenance.
   iree_hal_vulkan_queue_barriers_t publication;
-  // Placed continuation for noncoherent publication on the existing host owner.
-  iree_hal_memory_maintenance_entry_t maintenance_entry;
   // Fixed native request capacity; independent of payload size.
   iree_hal_vulkan_file_transfer_lane_t
       lanes[IREE_HAL_VULKAN_FILE_TRANSFER_LANE_COUNT];
@@ -119,14 +115,6 @@ static void iree_hal_vulkan_file_transfer_publish(
   iree_hal_resource_release(&transfer->resource);
 }
 
-static void iree_hal_vulkan_file_transfer_flush(
-    iree_hal_memory_maintenance_entry_t* entry) {
-  iree_hal_vulkan_file_transfer_t* transfer = iree_containerof(
-      entry, iree_hal_vulkan_file_transfer_t, maintenance_entry);
-  iree_hal_vulkan_file_transfer_publish(
-      transfer, iree_hal_vulkan_buffer_flush_host_span(&transfer->span));
-}
-
 static void iree_hal_vulkan_file_transfer_lane_finish(
     iree_hal_vulkan_file_transfer_lane_t* lane, iree_status_t status) {
   iree_hal_vulkan_file_transfer_t* transfer = lane->transfer;
@@ -144,16 +132,9 @@ static void iree_hal_vulkan_file_transfer_lane_finish(
   if (iree_status_is_ok(status) &&
       transfer->file_access == IREE_HAL_MEMORY_ACCESS_READ &&
       !transfer->span.coherent) {
-    const iree_hal_vulkan_memory_backend_t* backend =
-        (const iree_hal_vulkan_memory_backend_t*)iree_hal_device_memory_backend(
-            iree_hal_queue_family_device(
-                iree_hal_queue_family(&transfer->queue->base)));
-    transfer->maintenance_entry.fn = iree_hal_vulkan_file_transfer_flush;
-    iree_hal_memory_maintenance_enqueue(backend->maintenance,
-                                        &transfer->maintenance_entry);
-  } else {
-    iree_hal_vulkan_file_transfer_publish(transfer, status);
+    status = iree_hal_vulkan_buffer_flush_host_span(&transfer->span);
   }
+  iree_hal_vulkan_file_transfer_publish(transfer, status);
 }
 
 static iree_status_t iree_hal_vulkan_file_transfer_issue(
@@ -292,7 +273,7 @@ static void iree_hal_vulkan_file_transfer_start(
     transfer->lanes[i].transfer = transfer;
     transfer->lanes[i].offset = i * transfer->chunk_size;
   }
-  // One lifetime covers every accepted request and any deferred flush. The
+  // One lifetime covers every accepted request and final cache publication. The
   // entry action additionally retains the object until this function returns,
   // including when all native completions race initial submission.
   iree_hal_resource_retain(&transfer->resource);

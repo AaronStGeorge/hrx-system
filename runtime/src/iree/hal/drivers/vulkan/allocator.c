@@ -11,12 +11,12 @@
 #include "iree/async/notification.h"
 #include "iree/base/internal/memory.h"
 #include "iree/base/threading/mutex.h"
+#include "iree/hal/drivers/vulkan/allocation_queue.h"
 #include "iree/hal/drivers/vulkan/atomic.h"
 #include "iree/hal/drivers/vulkan/buffer.h"
 #include "iree/hal/drivers/vulkan/device_plan.h"
 #include "iree/hal/drivers/vulkan/queue.h"
 #include "iree/hal/drivers/vulkan/sparse_buffer.h"
-#include "iree/hal/memory/maintenance_thread.h"
 
 //===----------------------------------------------------------------------===//
 // iree_hal_vulkan_allocator_t
@@ -103,8 +103,8 @@ struct iree_hal_vulkan_allocator_t {
   // Shared notification published when Vulkan pool capacity changes.
   iree_async_notification_t* memory_notification;
 
-  // Shared cold memory worker independent of execution queue failure/lifetime.
-  iree_hal_memory_maintenance_t* memory_maintenance;
+  // Native slab allocation/free queue, independent of execution queue work.
+  iree_hal_vulkan_allocation_queue_t* allocation_queue;
 
   // Aggregate allocation statistics.
   IREE_STATISTICS(iree_hal_allocator_statistics_t statistics;)
@@ -378,10 +378,11 @@ void iree_hal_vulkan_allocator_deinitialize_memory_services(
     iree_hal_allocator_t* base_allocator) {
   iree_hal_vulkan_allocator_t* allocator =
       iree_hal_vulkan_allocator_cast(base_allocator);
+  iree_hal_vulkan_allocation_queue_close(allocator->allocation_queue);
   iree_async_notification_release(allocator->memory_notification);
   allocator->memory_notification = NULL;
-  iree_hal_memory_maintenance_release(allocator->memory_maintenance);
-  allocator->memory_maintenance = NULL;
+  iree_hal_vulkan_allocation_queue_release(allocator->allocation_queue);
+  allocator->allocation_queue = NULL;
 }
 
 iree_status_t iree_hal_vulkan_allocator_initialize_memory_services(
@@ -395,9 +396,9 @@ iree_status_t iree_hal_vulkan_allocator_initialize_memory_services(
       proactor, IREE_ASYNC_NOTIFICATION_FLAG_NONE,
       &allocator->memory_notification);
   if (iree_status_is_ok(status)) {
-    status = iree_hal_memory_maintenance_thread_create(
+    status = iree_hal_vulkan_allocation_queue_create(
         memory_affinity, allocator->host_allocator,
-        &allocator->memory_maintenance);
+        &allocator->allocation_queue);
   }
   if (!iree_status_is_ok(status)) {
     iree_hal_vulkan_allocator_deinitialize_memory_services(base_allocator);
@@ -412,9 +413,9 @@ iree_async_notification_t* iree_hal_vulkan_allocator_memory_notification(
   return iree_hal_vulkan_allocator_cast(base_allocator)->memory_notification;
 }
 
-iree_hal_memory_maintenance_t* iree_hal_vulkan_allocator_memory_maintenance(
+iree_hal_vulkan_allocation_queue_t* iree_hal_vulkan_allocator_allocation_queue(
     iree_hal_allocator_t* base_allocator) {
-  return iree_hal_vulkan_allocator_cast(base_allocator)->memory_maintenance;
+  return iree_hal_vulkan_allocator_cast(base_allocator)->allocation_queue;
 }
 
 static iree_status_t iree_hal_vulkan_allocator_query_memory_heaps(

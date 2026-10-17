@@ -144,7 +144,7 @@ iree_status_t iree_hal_vulkan_buffer_resolve_host_span(
     iree_device_size_t length, iree_hal_vulkan_buffer_host_span_t* out_span);
 
 // Performs native maintenance on an already prepared host span. Coherent spans
-// are no-ops. Noncoherent maintenance runs on a host executor after producer
+// are no-ops. Noncoherent maintenance runs directly after producer
 // completion and before the corresponding consumer publication.
 iree_status_t iree_hal_vulkan_buffer_flush_host_span(
     const iree_hal_vulkan_buffer_host_span_t* span);
