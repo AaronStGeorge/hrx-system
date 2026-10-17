@@ -328,10 +328,10 @@ loom_execution_test(
 endif()
 endif()
 
-if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+if(LOOM_IMPORT_CXX)
 loom_test_module(
   NAME
-    integer_intrinsics_test_module
+    integer_intrinsics_module
   SRCS
     "integer_intrinsics.cxx"
 )
@@ -343,7 +343,7 @@ loom_execution_test(
   NAME
     integer_intrinsics_test_execute_vm_reference_test
   MODULE
-    "::integer_intrinsics_test_module"
+    "::integer_intrinsics_module"
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
     "loom-execution-profile=vm_reference"

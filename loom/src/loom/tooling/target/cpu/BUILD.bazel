@@ -86,6 +86,17 @@ iree_executable_test(
     ]
 ]
 
+# Public C++ integer intrinsics execute through the native x86 task path.
+loom_test(
+    name = "integer_intrinsics_test",
+    benchmark_smoke = False,
+    execution_profiles = [_X86_TASK_HARDWARE_PROFILE],
+    module = "//loom/src/loom/import/cxx/test:integer_intrinsics_module",
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/import:cxx",
+    ]) + ["@platforms//cpu:x86_64"],
+)
+
 # Executes the complete shared integer bit-count family through the task HAL.
 iree_executable_test(
     name = "integer_bit_counts_scenario_test",
