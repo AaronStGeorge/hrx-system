@@ -115,7 +115,8 @@ function(_loomc_collect roots mode out_objects out_libraries out_owned out_optio
       continue()
     endif()
     if(_object)
-      list(APPEND _objects "$<TARGET_OBJECTS:${_object}>")
+      get_property(_target_objects TARGET "${_target}" PROPERTY IREE_CC_OBJECTS)
+      list(APPEND _objects ${_target_objects})
       if(mode STREQUAL "runtime" AND NOT WIN32)
         # IREE's default compile options explicitly hide symbols. The companion
         # exports its C interfaces through the final platform export list.
