@@ -34,6 +34,7 @@ TEST(SourceTest, DiagnosticWithoutOperationsHasNoSource) {
   EXPECT_EQ(diagnostic.params, &parameter);
   EXPECT_EQ(diagnostic.param_count, 1u);
   EXPECT_EQ(diagnostic.emitter, LOOM_EMITTER_PASS);
+  EXPECT_EQ(diagnostic.module, nullptr);
   EXPECT_EQ(diagnostic.severity, LOOM_DIAGNOSTIC_ERROR);
   EXPECT_EQ(diagnostic.origin.provenance,
             LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
@@ -188,6 +189,37 @@ class SourceResolverTest : public ::testing::Test {
   // Owner of the source and location namespaces under test.
   loom_module_t* module = nullptr;
 };
+
+TEST_F(SourceResolverTest, DiagnosticTypeOwnerDoesNotRequireAnOperation) {
+  loom_module_t* other_module = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("other"), &pool,
+                                      nullptr, iree_allocator_system(),
+                                      &other_module));
+  const loom_diagnostic_param_t parameters[] = {
+      loom_param_string(IREE_SV("operand")),
+      loom_param_type(loom_type_scalar(LOOM_SCALAR_TYPE_F32)),
+      loom_param_string(IREE_SV("annotation")),
+      loom_param_type(loom_type_scalar(LOOM_SCALAR_TYPE_I32)),
+  };
+  loom_diagnostic_emission_t emission = {
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1),
+      .params = parameters,
+      .param_count = IREE_ARRAYSIZE(parameters),
+  };
+  loom_diagnostic_related_location_t
+      related_locations[LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS];
+  loom_diagnostic_t diagnostic;
+  loom_source_resolve_diagnostic(module, {}, LOOM_EMITTER_PASS, &emission,
+                                 related_locations, &diagnostic);
+  EXPECT_EQ(diagnostic.module, module);
+  emission.module = other_module;
+  loom_source_resolve_diagnostic(module, {}, LOOM_EMITTER_PASS, &emission,
+                                 related_locations, &diagnostic);
+  EXPECT_EQ(diagnostic.module, other_module);
+  EXPECT_EQ(diagnostic.origin.provenance,
+            LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
+  loom_module_free(other_module);
+}
 
 TEST_F(SourceResolverTest,
        ExactResolutionRejectsUnavailableAndReversedCoordinates) {

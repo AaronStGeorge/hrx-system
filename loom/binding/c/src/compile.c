@@ -274,7 +274,7 @@ static loomc_status_t loomc_compile_specialize_functions(
       },
       function_versions, &error_count)));
   if (error_count != 0) {
-    return loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+    loomc_result_set_status_code(result, LOOMC_STATUS_FAILED_PRECONDITION);
   }
   return loomc_ok_status();
 }
@@ -807,8 +807,8 @@ static loomc_status_t loomc_compile_module_impl(
 
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_result_create(
-      LOOMC_RESULT_STATE_SUCCEEDED,
-      loomc_context_source_retention(compiler->context), allocator, &result));
+      LOOMC_STATUS_OK, loomc_context_source_retention(compiler->context),
+      allocator, &result));
   loomc_status_t status = loomc_compile_module_into_result(
       compiler, workspace, pass_program, module, options, target_specialization,
       compile_report, result);
@@ -924,16 +924,16 @@ loomc_status_t loomc_compile_artifact(
 
   loomc_result_t* result = NULL;
   loomc_status_t status = loomc_result_create(
-      LOOMC_RESULT_STATE_SUCCEEDED,
-      loomc_context_source_retention(compiler->context), allocator, &result);
+      LOOMC_STATUS_OK, loomc_context_source_retention(compiler->context),
+      allocator, &result);
   loomc_emit_transaction_t emit_transaction = {0};
   if (loomc_status_is_ok(status)) {
     status = loomc_emit_transaction_initialize(
         options ? options->emit_options : NULL, result, &emit_transaction);
   }
   if (loomc_status_is_ok(status)) {
-    loomc_emit_transaction_set_diagnostic_context(
-        &emit_transaction, internal_module, target_environment);
+    loomc_emit_transaction_set_diagnostic_environment(&emit_transaction,
+                                                      target_environment);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status = loomc_module_admit(module, target_environment, result);
@@ -1056,14 +1056,13 @@ loomc_status_t loomc_compile_artifact(
     status = loomc_status_join(status, source_status);
     loomc_module_adopt_loom_module_replacement(module, internal_module,
                                                LOOMC_MODULE_INPUT_UNVERIFIED);
-    loomc_emit_transaction_set_diagnostic_context(
-        &emit_transaction, internal_module, target_environment);
     if (!loomc_status_is_ok(status)) {
       status = loomc_compile_fail_result_from_status(
           result, loomc_make_cstring_view("COMPILE/MATERIALIZE"), status);
     }
-    if (loomc_status_is_ok(status) && error_count != 0) {
-      status = loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+    if (loomc_status_is_ok(status) && loomc_result_succeeded(result) &&
+        error_count != 0) {
+      loomc_result_set_status_code(result, LOOMC_STATUS_FAILED_PRECONDITION);
     }
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result) &&
