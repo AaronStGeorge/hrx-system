@@ -50,6 +50,8 @@ from loom.target.low_descriptors import (
     ScheduleClass,
 )
 
+from .encoding import Flag
+
 _REG_GPR32 = "x86.gpr32"
 _REG_GPR64 = "x86.gpr64"
 _REG_XMM = "x86.xmm"
@@ -331,6 +333,20 @@ def _gpr32_result(field_name: str = "dst") -> Operand:
 
 def _gpr32_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _GPR32_ALT)
+
+
+def _gpr_width_flags(bit_count: int) -> Flag:
+    if bit_count == 8:
+        return Flag.BYTE
+    if bit_count == 16:
+        return Flag.OPERAND_16
+    if bit_count == 64:
+        return Flag.REX_W
+    return Flag(0)
+
+
+def _gpr_width_operand(bit_count: int, field_name: str) -> Operand:
+    return _gpr64_operand(field_name) if bit_count == 64 else _gpr32_operand(field_name)
 
 
 def _xmm_operand(field_name: str) -> Operand:

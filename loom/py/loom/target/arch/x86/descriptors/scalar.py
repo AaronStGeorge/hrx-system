@@ -93,9 +93,14 @@ from .common import (
     _gpr32_result,
     _gpr64_operand,
     _gpr64_result,
+    _gpr_width_flags,
+    _gpr_width_operand,
 )
 from .encoding import Flag, Form, encoding
-from .integer_bits import X86_SCALAR_INTEGER_BIT_DESCRIPTORS
+from .integer_bits import (
+    X86_SCALAR_INTEGER_BIT_DESCRIPTORS,
+    X86_SCALAR_NATIVE_COUNT_DESCRIPTORS,
+)
 from .memory import memory_descriptors, read_memory_binary_descriptors
 
 _NON_TRAPPING_SCALAR_FORMS = frozenset(
@@ -107,6 +112,7 @@ _NON_TRAPPING_SCALAR_FORMS = frozenset(
         Form.SHIFT_IMMEDIATE,
         Form.SHIFT_COUNT,
         Form.UNARY_R_RM,
+        Form.UNARY_F3_R_RM,
         Form.SELECT,
         Form.SUBTRACT_IF_UGE,
         Form.COMPARE,
@@ -757,20 +763,6 @@ _INTEGER_PREDICATE_IMMEDIATE = Immediate(
     bit_width=8,
     unsigned_max=0x0F,
 )
-
-
-def _gpr_width_flags(bit_count: int) -> Flag:
-    if bit_count == 8:
-        return Flag.BYTE
-    if bit_count == 16:
-        return Flag.OPERAND_16
-    if bit_count == 64:
-        return Flag.REX_W
-    return Flag(0)
-
-
-def _gpr_width_operand(bit_count: int, field_name: str) -> Operand:
-    return _gpr64_operand(field_name) if bit_count == 64 else _gpr32_operand(field_name)
 
 
 def _gpr_compare_immediate(bit_count: int) -> Immediate:
@@ -1583,9 +1575,13 @@ X86_SCALAR_BMI2_DESCRIPTORS = tuple(
         strict=True,
     )
 )
+X86_SCALAR_FEATURE_DESCRIPTORS = (
+    *X86_SCALAR_BMI2_DESCRIPTORS,
+    *X86_SCALAR_NATIVE_COUNT_DESCRIPTORS,
+)
 X86_SCALAR_DESCRIPTORS = (
     *X86_SCALAR_BASE_DESCRIPTORS,
-    *X86_SCALAR_BMI2_DESCRIPTORS,
+    *X86_SCALAR_FEATURE_DESCRIPTORS,
 )
 
 X86_SCALAR_DESCRIPTOR_SET = DescriptorSet(

@@ -26,7 +26,7 @@ from .packed_dot import (
     X86_AVX_VNNI_INT8_DESCRIPTOR_SET,
     X86_AVX_VNNI_INT16_DESCRIPTOR_SET,
 )
-from .scalar import X86_SCALAR_BMI2_DESCRIPTORS
+from .scalar import X86_SCALAR_FEATURE_DESCRIPTORS
 
 _X86_DESCRIPTOR_SET_COMPONENTS = tuple[tuple[DescriptorSet, frozenset[str]], ...]
 
@@ -134,7 +134,7 @@ X86_AVX2_FEATURES_DESCRIPTOR_SET = _composite_descriptor_set(
     c_table_prefix="X86Avx2FeaturesCore",
     c_enum_prefix="X86_AVX2_FEATURES_CORE",
     components=_X86_AVX2_FEATURE_COMPONENTS,
-    extension_descriptors=X86_SCALAR_BMI2_DESCRIPTORS,
+    extension_descriptors=X86_SCALAR_FEATURE_DESCRIPTORS,
 )
 
 X86_AVX512_FEATURES_DESCRIPTOR_SET = _composite_descriptor_set(
@@ -145,5 +145,5 @@ X86_AVX512_FEATURES_DESCRIPTOR_SET = _composite_descriptor_set(
     c_table_prefix="X86Avx512FeaturesCore",
     c_enum_prefix="X86_AVX512_FEATURES_CORE",
     components=_X86_AVX512_FEATURE_COMPONENTS,
-    extension_descriptors=X86_SCALAR_BMI2_DESCRIPTORS,
+    extension_descriptors=X86_SCALAR_FEATURE_DESCRIPTORS,
 )

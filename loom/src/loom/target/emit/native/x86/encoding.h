@@ -79,6 +79,8 @@ typedef enum loom_x86_encoding_form_e {
   LOOM_X86_ENCODING_FORM_COMPARE_BRANCH = 37,
   // Compares a register and immediate and branches on the condition code.
   LOOM_X86_ENCODING_FORM_COMPARE_IMMEDIATE_BRANCH = 38,
+  // F3-prefixed unary input in ModRM.r/m and result in ModRM.reg.
+  LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM = 39,
 } loom_x86_encoding_form_t;
 
 // Native fixup identities. Object adapters supply their format's mapping.

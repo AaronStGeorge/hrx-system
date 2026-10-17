@@ -464,6 +464,10 @@ void loom_x86_encode_instruction(
     case LOOM_X86_ENCODING_FORM_UNARY_R_RM:
       loom_x86_encode_registers(instruction, encoding_id, result, lhs);
       break;
+    case LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM:
+      loom_x86_encode_byte(instruction, 0xf3);
+      loom_x86_encode_registers(instruction, encoding_id, result, lhs);
+      break;
     case LOOM_X86_ENCODING_FORM_SELECT:
       loom_x86_encode_registers(instruction, 0x85, lhs, lhs);
       loom_x86_encode_registers(instruction, encoding_id, result, rhs);

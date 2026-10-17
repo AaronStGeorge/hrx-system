@@ -552,6 +552,24 @@ TEST(EncodingTest, RegisterDirectionAndWidth) {
                  {0x45, 0x01, 0xd1}, 1u << 9);
 }
 
+TEST(EncodingTest, MandatoryF3UnaryWidthsAndExtendedRegisters) {
+  loom_x86_encoding_operands_t operands = {.result = 1};
+  operands.inputs[0] = 2;
+  ExpectEncoding(
+      LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM,
+      LOOM_X86_ENCODING_OPCODE_0F | 0xbc | LOOM_X86_ENCODING_OPERAND_16,
+      operands, {0xf3, 0x66, 0x0f, 0xbc, 0xca}, 1u << 1);
+  ExpectEncoding(LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM,
+                 LOOM_X86_ENCODING_OPCODE_0F | 0xbd, operands,
+                 {0xf3, 0x0f, 0xbd, 0xca}, 1u << 1);
+
+  operands.result = 9;
+  operands.inputs[0] = 10;
+  ExpectEncoding(LOOM_X86_ENCODING_FORM_UNARY_F3_R_RM,
+                 LOOM_X86_ENCODING_OPCODE_0F | 0xb8 | LOOM_X86_ENCODING_REX_W,
+                 operands, {0xf3, 0x4d, 0x0f, 0xb8, 0xca}, 1u << 9);
+}
+
 TEST(EncodingTest, DestructiveUnaryRegisterWidth) {
   loom_x86_encoding_operands_t operands = {.result = 0};
   operands.inputs[0] = 0;

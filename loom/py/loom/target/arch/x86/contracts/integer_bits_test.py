@@ -14,6 +14,14 @@ from loom.target.arch.x86.descriptors import (
     X86_SCALAR_DESCRIPTOR_SET,
 )
 from loom.target.arch.x86.descriptors.encoding import Flag, Form, encoding
+from loom.target.arch.x86.descriptors.integer_bits import (
+    X86_SCALAR_NATIVE_COUNT_DESCRIPTORS,
+)
+from loom.target.arch.x86.feature_bits import (
+    FEATURE_BMI,
+    FEATURE_LZCNT,
+    FEATURE_POPCNT,
+)
 from loom.target.contracts import EmitDescriptorOp, GuardKind, Scalar, descriptor_by_key
 from loom.target.low_descriptors import DescriptorFlag, OperandRole
 
@@ -51,6 +59,51 @@ def test_bit_scan_descriptors_cover_both_baseline_register_widths() -> None:
                 DescriptorFlag.DEAD_REMOVABLE,
                 DescriptorFlag.SAFE_TO_SPECULATE,
             )
+
+
+def test_native_count_descriptors_cover_every_operation_and_width() -> None:
+    expected_keys = set()
+    for operation, semantic, opcode, feature in (
+        ("lzcnt", "ctlz", 0x0FBD, FEATURE_LZCNT),
+        ("tzcnt", "cttz", 0x0FBC, FEATURE_BMI),
+        ("popcnt", "ctpop", 0x0FB8, FEATURE_POPCNT),
+    ):
+        for bit_count in (16, 32, 64):
+            key = f"x86.scalar.{operation}.gpr{bit_count}"
+            expected_keys.add(key)
+            descriptor = _descriptor(key)
+            assert descriptor.encoding_format_id == Form.UNARY_F3_R_RM
+            assert descriptor.encoding_id == encoding(
+                opcode,
+                flags=(
+                    Flag.OPERAND_16
+                    if bit_count == 16
+                    else Flag.REX_W
+                    if bit_count == 64
+                    else 0
+                ),
+            )
+            assert descriptor.semantic_tag == (
+                f"integer.bit_count.{semantic}.i{bit_count}"
+            )
+            assert descriptor.feature_mask_words == (feature,)
+            assert tuple(operand.role for operand in descriptor.operands) == (
+                OperandRole.RESULT,
+                OperandRole.OPERAND,
+            )
+            assert {
+                alternative.reg_class
+                for operand in descriptor.operands
+                for alternative in operand.reg_alts
+            } == {"x86.gpr64" if bit_count == 64 else "x86.gpr32"}
+            assert descriptor.flags == (
+                DescriptorFlag.DEAD_REMOVABLE,
+                DescriptorFlag.SAFE_TO_SPECULATE,
+            )
+
+    assert {descriptor.key for descriptor in X86_SCALAR_NATIVE_COUNT_DESCRIPTORS} == (
+        expected_keys
+    )
 
 
 def test_scalar_and_index_bit_count_rules_cover_the_complete_native_family() -> None:
