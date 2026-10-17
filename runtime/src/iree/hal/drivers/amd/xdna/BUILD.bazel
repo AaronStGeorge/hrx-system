@@ -394,11 +394,22 @@ _NATIVE_QUEUE_TEST_PLATFORMS = select({
 })
 
 iree_runtime_cc_library(
+    name = "allocation_tracker",
+    testonly = True,
+    hdrs = ["testing/allocation_tracker.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "queue_test_util",
     testonly = True,
     hdrs = ["testing/queue_test_util.h"],
     target_compatible_with = _NATIVE_QUEUE_TEST_PLATFORMS,
     deps = [
+        ":allocation_tracker",
         ":device",
         ":memory",
         ":queue",

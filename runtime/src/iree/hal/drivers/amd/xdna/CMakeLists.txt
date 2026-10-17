@@ -501,6 +501,20 @@ iree_cc_library(
 )
 endif()
 
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
+    allocation_tracker
+  HDRS
+    "testing/allocation_tracker.h"
+  DEPS
+    iree::base
+    iree::testing::gtest
+  TESTONLY
+  PUBLIC
+)
+endif()
+
 if(AMDF_BUILD AND (CMAKE_SYSTEM_NAME STREQUAL "Android" OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows"))
 iree_cc_library(
   NAME
@@ -508,6 +522,7 @@ iree_cc_library(
   HDRS
     "testing/queue_test_util.h"
   DEPS
+    ::allocation_tracker
     ::device
     ::memory
     ::queue
