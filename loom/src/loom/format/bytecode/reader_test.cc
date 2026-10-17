@@ -1436,7 +1436,9 @@ class ReaderTest : public ::testing::Test {
         loom_module_register_source(module, IREE_SV("model.loom"), &source_id));
     loom_location_id_t location_id = LOOM_LOCATION_UNKNOWN;
     IREE_CHECK_OK(loom_module_add_location(
-        module, loom_location_file_range(source_id, 1, 1, 1, 2), &location_id));
+        module,
+        loom_location_file_range(source_id, 70001, 80002, 90003, 100004),
+        &location_id));
     AddSimpleFunction(module, "located")->location = location_id;
     return module;
   }
@@ -2841,7 +2843,8 @@ TEST_F(ReaderTest, MaterializesExactIndexedSymbolSelection) {
   loom_module_t* module = CreateLocatedModule();
   loom_location_id_t selected_location = LOOM_LOCATION_UNKNOWN;
   IREE_ASSERT_OK(loom_module_add_location(
-      module, loom_location_file_range(0, 8, 1, 10, 2), &selected_location));
+      module, loom_location_file_range(0, 110008, 120001, 130010, 140002),
+      &selected_location));
   AddSimpleFunction(module, "selected")->location = selected_location;
   auto bytes = WriteModule(module);
 
@@ -2874,8 +2877,10 @@ TEST_F(ReaderTest, MaterializesExactIndexedSymbolSelection) {
   const loom_location_entry_t& location = *loom_location_table_const_entry(
       &selected_module->locations, selected_symbol->defining_op->location);
   EXPECT_EQ(location.kind, LOOM_LOCATION_FILE);
-  EXPECT_EQ(location.file.start_line, 8u);
-  EXPECT_EQ(location.file.end_line, 10u);
+  EXPECT_EQ(location.file.start_line, 110008u);
+  EXPECT_EQ(location.file.start_col, 120001u);
+  EXPECT_EQ(location.file.end_line, 130010u);
+  EXPECT_EQ(location.file.end_col, 140002u);
   EXPECT_EQ(selected_module->locations.count, 2u);
   EXPECT_EQ(loom_test_func_callee(selected_symbol->defining_op).symbol_id, 0u);
   loom_region_t* body = loom_test_func_body(selected_symbol->defining_op);
@@ -4318,8 +4323,10 @@ TEST_F(ReaderTest, ReadsLocationTablesWithModuleSources) {
       *loom_location_table_const_entry(&read_module->locations, 1);
   EXPECT_EQ(file_location.kind, LOOM_LOCATION_FILE);
   EXPECT_EQ(file_location.file.source_id, 0u);
-  EXPECT_EQ(file_location.file.start_line, 1u);
-  EXPECT_EQ(file_location.file.end_col, 2u);
+  EXPECT_EQ(file_location.file.start_line, 70001u);
+  EXPECT_EQ(file_location.file.start_col, 80002u);
+  EXPECT_EQ(file_location.file.end_line, 90003u);
+  EXPECT_EQ(file_location.file.end_col, 100004u);
   ASSERT_EQ(read_module->symbols.count, 1u);
   ASSERT_NE(read_module->symbols.entries[0].defining_op, nullptr);
   EXPECT_EQ(read_module->symbols.entries[0].defining_op->location, 1u);

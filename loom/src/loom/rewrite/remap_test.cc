@@ -877,13 +877,14 @@ TEST_F(RemapTest, RemapsLocationsAcrossModules) {
   loom_location_field_span_t field_span = {
       .kind = LOOM_LOCATION_FIELD_OPERAND,
       .index = 0,
-      .start_line = 2,
-      .start_col = 3,
-      .end_line = 2,
-      .end_col = 7,
+      .start_line = 70002,
+      .start_col = 70003,
+      .end_line = 70002,
+      .end_col = 70007,
   };
   IREE_ASSERT_OK(loom_module_attach_location_field_spans(
-      source_, file_location_id, &field_span, 1));
+      source_, file_location_id,
+      loom_location_field_span_array_wide(&field_span, 1)));
 
   loom_location_id_t* fused_children = nullptr;
   IREE_ASSERT_OK(iree_arena_allocate_array(
@@ -924,9 +925,13 @@ TEST_F(RemapTest, RemapsLocationsAcrossModules) {
       IREE_SV("model.loom")));
   EXPECT_EQ(target_child.file.start_line, 2u);
   ASSERT_EQ(target_child.file.field_span_count, 1u);
-  ASSERT_NE(target_child.file.field_spans, nullptr);
-  EXPECT_NE(target_child.file.field_spans, &field_span);
-  EXPECT_EQ(target_child.file.field_spans[0].end_col, 7u);
+  EXPECT_EQ(target_child.file.field_span_format,
+            LOOM_LOCATION_FIELD_SPAN_FORMAT_WIDE);
+  ASSERT_NE(target_child.file.field_span_data, nullptr);
+  EXPECT_NE(target_child.file.field_span_data, &field_span);
+  const auto target_span = loom_location_file_field_span_at(&target_child, 0);
+  EXPECT_EQ(target_span.start_line, 70002u);
+  EXPECT_EQ(target_span.end_col, 70007u);
 }
 
 TEST_F(RemapTest, RemapsTaggedLocationsAcrossModules) {
