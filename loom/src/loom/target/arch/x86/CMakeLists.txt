@@ -303,6 +303,7 @@ loom_check_test_suite(
     "test/source_low/memory_wide_carriers.loom-test"
     "test/source_low/memory_wide_offsets.loom-test"
     "test/source_low/memory_word.loom-test"
+    "test/source_low/native_scalar_bit_counts.loom-test"
     "test/source_low/nested_view_selection.loom-test"
     "test/source_low/numeric_address_widening.loom-test"
     "test/source_low/numeric_bfloat_narrow_avx2.loom-test"

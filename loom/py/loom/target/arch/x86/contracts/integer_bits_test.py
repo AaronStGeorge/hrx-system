@@ -106,13 +106,40 @@ def test_native_count_descriptors_cover_every_operation_and_width() -> None:
     )
 
 
-def test_scalar_and_index_bit_count_rules_cover_the_complete_native_family() -> None:
+def test_scalar_and_index_bit_count_rules_cover_native_and_fallback_families() -> None:
     rules = scalar_integer_bit_count_rules(_descriptor)
     for rule in rules:
         rule.validate(X86_SCALAR_DESCRIPTOR_SET)
 
-    actual = {(rule.source_op, _result_type(rule)) for rule in rules}
-    expected = {
+    native = {
+        (rule.source_op, _result_type(rule)) for rule in rules if rule.priority == 1
+    }
+    expected_native = {
+        (source_op, type_pattern)
+        for type_pattern, source_ops in (
+            (
+                Scalar("i16"),
+                (scalar.scalar_ctlzi, scalar.scalar_cttzi, scalar.scalar_ctpopi),
+            ),
+            (
+                Scalar("i32"),
+                (scalar.scalar_ctlzi, scalar.scalar_cttzi, scalar.scalar_ctpopi),
+            ),
+            (
+                Scalar("i64"),
+                (scalar.scalar_ctlzi, scalar.scalar_cttzi, scalar.scalar_ctpopi),
+            ),
+            (
+                Scalar("index"),
+                (index.index_ctlzi, index.index_cttzi, index.index_ctpopi),
+            ),
+        )
+        for source_op in source_ops
+    }
+    fallback = {
+        (rule.source_op, _result_type(rule)) for rule in rules if rule.priority == 0
+    }
+    expected_fallback = {
         (source_op, type_pattern)
         for type_pattern, source_ops in (
             (
@@ -130,12 +157,15 @@ def test_scalar_and_index_bit_count_rules_cover_the_complete_native_family() -> 
         )
         for source_op in source_ops
     }
-    assert actual == expected
-    assert len(rules) == len(expected)
+    assert native == expected_native
+    assert fallback == expected_fallback
+    assert len(rules) == len(expected_native) + len(expected_fallback)
 
 
 def test_scan_recipes_repair_zero_and_population_counts_share_swar_shape() -> None:
     for rule in scalar_integer_bit_count_rules(_descriptor):
+        if rule.priority != 0:
+            continue
         emits = tuple(emit for emit in rule.emit if isinstance(emit, EmitDescriptorOp))
         descriptor_keys = tuple(emit.descriptor.key for emit in emits)
         bit_count = 32 if _result_type(rule) == Scalar("i32") else 64
