@@ -106,6 +106,13 @@ enum loom_amdgpu_tsan_shadow_layout_e {
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT = 23u,
   // Bit count of the encoded dispatch generation low bits.
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT = 20u,
+  // Dispatch generation bits encoded in the low shadow entry word.
+  LOOM_AMDGPU_TSAN_SHADOW_ENTRY_LOW_GENERATION_BIT_COUNT =
+      32u - LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT,
+  // Dispatch generation bits encoded in the high shadow entry word.
+  LOOM_AMDGPU_TSAN_SHADOW_ENTRY_HIGH_GENERATION_BIT_COUNT =
+      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_BIT_COUNT -
+      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_LOW_GENERATION_BIT_COUNT,
   // Bit offset of the encoded instrumentation site low bits.
   LOOM_AMDGPU_TSAN_SHADOW_ENTRY_SITE_SHIFT = 43u,
   // Bit count of the encoded instrumentation site low bits.
@@ -256,6 +263,8 @@ enum loom_amdgpu_tsan_report_layout_e {
   LOOM_AMDGPU_TSAN_REPORT_CAPACITY_MEMORY_GRANULE_SHIFT_OFFSET = 52u,
   // Offset of the shadow entry byte size.
   LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_ENTRY_SIZE_OFFSET = 56u,
+  // Offset of the first reserved capacity-report word.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_RESERVED0_OFFSET = 60u,
   // Offset of the reporting workgroup X coordinate.
   LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_X_OFFSET = 64u,
   // Offset of the reporting workgroup Y coordinate.
@@ -268,6 +277,8 @@ enum loom_amdgpu_tsan_report_layout_e {
   LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_Y_OFFSET = 80u,
   // Offset of the reporting workitem Z coordinate.
   LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_Z_OFFSET = 84u,
+  // Offset of the reserved capacity-report tail.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_RESERVED1_OFFSET = 88u,
 };
 
 #ifdef __cplusplus
