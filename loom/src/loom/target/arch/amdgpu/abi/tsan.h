@@ -33,6 +33,8 @@ enum loom_amdgpu_tsan_config_layout_e {
   LOOM_AMDGPU_TSAN_CONFIG_MEMORY_GRANULE_SHIFT_OFFSET = 12u,
   // Offset of the TSAN shadow allocation base pointer.
   LOOM_AMDGPU_TSAN_CONFIG_SHADOW_BASE_OFFSET = 16u,
+  // Offset of the TSAN shadow allocation byte length.
+  LOOM_AMDGPU_TSAN_CONFIG_SHADOW_SIZE_OFFSET = 24u,
   // Offset of the TSAN dispatch shadow byte stride.
   LOOM_AMDGPU_TSAN_CONFIG_DISPATCH_SHADOW_STRIDE_OFFSET = 32u,
   // Offset of the TSAN workgroup shadow byte stride.
@@ -135,6 +137,9 @@ enum loom_amdgpu_tsan_check_kind_e {
   // Conflicting accesses to the same memory location were observed without
   // intervening synchronization.
   LOOM_AMDGPU_TSAN_CHECK_KIND_DATA_RACE = 1u,
+  // The dispatch requires more workgroup shadow bytes than the queue arena
+  // provides.
+  LOOM_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY = 2u,
 };
 
 // Memory space containing the observed address in AMDGPU TSAN reports.
@@ -237,6 +242,32 @@ enum loom_amdgpu_tsan_report_layout_e {
   LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_Y_OFFSET = 112u,
   // Offset of the prior workitem Z coordinate.
   LOOM_AMDGPU_TSAN_REPORT_PRIOR_WORKITEM_ID_Z_OFFSET = 116u,
+  // Offset of the queue shadow allocation byte length in a capacity report.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_SIZE_OFFSET = 16u,
+  // Offset of the first invalid workgroup's required exclusive byte end.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_REQUIRED_SHADOW_END_OFFSET = 24u,
+  // Offset of the dispatch-specific workgroup shadow stride.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_SHADOW_STRIDE_OFFSET = 32u,
+  // Offset of the first invalid flattened workgroup ordinal.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ORDINAL_OFFSET = 40u,
+  // Offset of the dispatch's final workgroup-local memory byte size.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_LOCAL_MEMORY_SIZE_OFFSET = 48u,
+  // Offset of the shadow memory granule shift.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_MEMORY_GRANULE_SHIFT_OFFSET = 52u,
+  // Offset of the shadow entry byte size.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_ENTRY_SIZE_OFFSET = 56u,
+  // Offset of the reporting workgroup X coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_X_OFFSET = 64u,
+  // Offset of the reporting workgroup Y coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_Y_OFFSET = 68u,
+  // Offset of the reporting workgroup Z coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_Z_OFFSET = 72u,
+  // Offset of the reporting workitem X coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_X_OFFSET = 76u,
+  // Offset of the reporting workitem Y coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_Y_OFFSET = 80u,
+  // Offset of the reporting workitem Z coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_Z_OFFSET = 84u,
 };
 
 #ifdef __cplusplus
