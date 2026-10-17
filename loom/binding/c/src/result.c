@@ -243,7 +243,8 @@ loomc_status_t loomc_result_add_diagnostic(
       diagnostic->parameter_count * sizeof(loomc_diagnostic_parameter_t);
   loomc_host_size_t storage_size =
       related_size + parameter_size + diagnostic->code.size +
-      diagnostic->message.size + diagnostic->formatted_text.size;
+      diagnostic->message.size + diagnostic->formatted_text.size +
+      diagnostic->formatted_json.size;
   for (loomc_host_size_t i = 0; i < diagnostic->related_location_count; ++i) {
     storage_size += diagnostic->related_locations[i].label.size;
   }
@@ -280,6 +281,8 @@ loomc_status_t loomc_result_add_diagnostic(
       loomc_diagnostic_copy_string(diagnostic->message, &cursor);
   target->value.formatted_text =
       loomc_diagnostic_copy_string(diagnostic->formatted_text, &cursor);
+  target->value.formatted_json =
+      loomc_diagnostic_copy_string(diagnostic->formatted_json, &cursor);
   target->value.related_locations = related_locations;
   target->value.parameters = parameters;
   for (loomc_host_size_t i = 0; i < diagnostic->parameter_count; ++i) {

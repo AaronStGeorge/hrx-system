@@ -61,6 +61,7 @@ TEST(ResultTest, OwnsDiagnosticsAndArtifacts) {
   char code[] = "PARSE/001";
   char message[] = "expected a thing";
   char formatted[] = "bad.loom:1:1: error [PARSE/001]: expected a thing\n";
+  char formatted_json[] = "{\"message\":\"expected a thing\"}";
   char parameter_name[] = "expected_kind";
   char parameter_value[] = "thing";
   loomc_diagnostic_t diagnostic = {
@@ -94,6 +95,7 @@ TEST(ResultTest, OwnsDiagnosticsAndArtifacts) {
   };
   diagnostic.parameters = &parameter;
   diagnostic.parameter_count = 1;
+  diagnostic.formatted_json = loomc_make_cstring_view(formatted_json);
   LOOMC_ASSERT_OK(loomc_result_add_diagnostic(result, &diagnostic));
   const auto* retained_related =
       loomc_result_diagnostic_at(result, 0)->related_locations;
@@ -124,6 +126,7 @@ TEST(ResultTest, OwnsDiagnosticsAndArtifacts) {
   code[0] = 'X';
   message[0] = 'X';
   formatted[0] = 'X';
+  formatted_json[0] = 'X';
   label[0] = 'X';
   parameter_name[0] = 'X';
   parameter_value[0] = 'X';
@@ -145,6 +148,8 @@ TEST(ResultTest, OwnsDiagnosticsAndArtifacts) {
   EXPECT_EQ(ToString(stored_diagnostic->message), "expected a thing");
   EXPECT_EQ(ToString(stored_diagnostic->formatted_text),
             "bad.loom:1:1: error [PARSE/001]: expected a thing\n");
+  EXPECT_EQ(ToString(stored_diagnostic->formatted_json),
+            "{\"message\":\"expected a thing\"}");
   EXPECT_EQ(ToString(loomc_source_identifier(stored_diagnostic->range.source)),
             "bad.loom");
   ASSERT_EQ(stored_diagnostic->related_location_count, 1u);

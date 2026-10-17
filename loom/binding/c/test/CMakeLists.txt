@@ -127,7 +127,9 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
+    loom::error::json_sink
     loom::error::parameter
+    loom::util::stream
 )
 
 loom_cc_test(

@@ -531,6 +531,9 @@ TEST(ModuleTest, ParserDiagnosticsPreserveModuleOwnedTypes) {
     ResultPtr result_owner(result);
     EXPECT_EQ(module, nullptr);
     EXPECT_FALSE(loomc_result_succeeded(result));
+    workspace.reset();
+    context.reset();
+    source.reset();
     ASSERT_EQ(loomc_result_diagnostic_count(result), 1u);
     const auto* diagnostic = loomc_result_diagnostic_at(result, 0);
     EXPECT_EQ(ToString(diagnostic->code), "TYPE/001");
@@ -542,6 +545,13 @@ TEST(ModuleTest, ParserDiagnosticsPreserveModuleOwnedTypes) {
               "'operands[0]' type " + std::string(test_case.actual_type) +
                   " does not match 'type annotation' type " +
                   test_case.annotated_type);
+    const auto json = ToString(diagnostic->formatted_json);
+    EXPECT_NE(
+        json.find("\"type_a\":\"" + std::string(test_case.actual_type) + "\""),
+        std::string::npos);
+    EXPECT_NE(json.find("\"type_b\":\"" +
+                        std::string(test_case.annotated_type) + "\""),
+              std::string::npos);
   }
 }
 

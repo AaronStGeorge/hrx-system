@@ -8,6 +8,7 @@
 
 #include "iree/base/api.h"
 #include "loom/error/error_defs.h"
+#include "loom/error/json_sink.h"
 #include "loom/error/renderer.h"
 #include "loom/error/source.h"
 #include "loom/format/text/printer.h"
@@ -158,6 +159,8 @@ loomc_status_t loomc_result_add_loom_diagnostic(
   iree_string_builder_initialize(allocator, &message_builder);
   iree_string_builder_t formatted_builder;
   iree_string_builder_initialize(allocator, &formatted_builder);
+  iree_string_builder_t json_builder;
+  iree_string_builder_initialize(allocator, &json_builder);
   iree_string_builder_t parameter_values_builder;
   iree_string_builder_initialize(allocator, &parameter_values_builder);
   const loomc_diagnostic_type_printer_t type_printer = {
@@ -195,6 +198,12 @@ loomc_status_t loomc_result_add_loom_diagnostic(
   if (loomc_status_is_ok(status)) {
     status = loomc_format_loom_diagnostic(diagnostic, type_formatter,
                                           &formatted_builder);
+  }
+  if (loomc_status_is_ok(status)) {
+    loom_output_stream_t json_stream;
+    loom_output_stream_for_builder(&json_builder, &json_stream);
+    status = loomc_status_from_iree(loom_diagnostic_json_write_object(
+        &json_stream, diagnostic, type_formatter));
   }
   if (loomc_status_is_ok(status) && diagnostic->params &&
       diagnostic->param_count != 0 && diagnostic->error->param_count != 0) {
@@ -281,6 +290,8 @@ loomc_status_t loomc_result_add_loom_diagnostic(
             diagnostic->related_location_omitted_count,
         .parameters = parameters,
         .parameter_count = parameter_count,
+        .formatted_json = loomc_string_view_from_iree(
+            iree_string_builder_view(&json_builder)),
     };
     status = loomc_result_add_diagnostic(result, &public_diagnostic);
   }
@@ -291,6 +302,7 @@ loomc_status_t loomc_result_add_loom_diagnostic(
   loomc_source_release(diagnostic_source);
   iree_allocator_free(allocator, parameters);
   iree_string_builder_deinitialize(&parameter_values_builder);
+  iree_string_builder_deinitialize(&json_builder);
   iree_string_builder_deinitialize(&formatted_builder);
   iree_string_builder_deinitialize(&message_builder);
   iree_string_builder_deinitialize(&code_builder);

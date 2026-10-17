@@ -10,7 +10,9 @@
 #include <string>
 
 #include "iree/testing/gtest.h"
+#include "loom/error/json_sink.h"
 #include "loom/error/parameter.h"
+#include "loom/util/stream.h"
 #include "test/util.h"
 
 namespace {
@@ -215,6 +217,16 @@ TEST(DiagnosticTest, RetainsCanonicalFormatting) {
   diagnostic.origin = range;
   diagnostic.source_location = range;
 
+  iree_string_builder_t json_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &json_builder);
+  loom_output_stream_t json_stream;
+  loom_output_stream_for_builder(&json_builder, &json_stream);
+  IREE_ASSERT_OK(loom_diagnostic_json_write_object(
+      &json_stream, &diagnostic, {loom_type_format_minimal, nullptr}));
+  std::string expected_json(iree_string_builder_view(&json_builder).data,
+                            iree_string_builder_view(&json_builder).size);
+  iree_string_builder_deinitialize(&json_builder);
+
   loomc_result_t* raw_result = nullptr;
   LOOMC_ASSERT_OK(loomc_result_create(LOOMC_STATUS_FAILED_PRECONDITION,
                                       LOOMC_SOURCE_RETENTION_EXACT,
@@ -240,6 +252,9 @@ TEST(DiagnosticTest, RetainsCanonicalFormatting) {
       " 1 | duplicate\n"
       "   | ^^^^^^^^^\n"
       "   = help: Each SSA value name must be unique within its scope\n");
+  EXPECT_EQ(
+      std::string(stored->formatted_json.data, stored->formatted_json.size),
+      expected_json);
 }
 
 TEST(DiagnosticTest, RelatedLocationsOwnLabelsAndShareOnlyMatchingSnapshots) {
