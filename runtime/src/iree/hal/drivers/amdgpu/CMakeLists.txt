@@ -531,6 +531,7 @@ iree_cc_library(
   DEPS
     ::dispatch_concurrency
     ::host_memory_pools
+    ::kernarg_layout
     ::profile_events
     iree::base
     iree::base::internal

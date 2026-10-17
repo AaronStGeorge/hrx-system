@@ -2842,10 +2842,6 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_aql_command_buffer(
       logical_device->device_allocator, queue_family, mode, command_categories,
       binding_capacity, device_ordinal, physical_device->host_queue_count,
       physical_device->grid_sync_strategy,
-      iree_hal_amdgpu_tsan_state_is_enabled(&logical_device->tsan)
-          ? logical_device->tsan.device_states[device_ordinal]
-                .config.shadow_slot_count
-          : 0,
       physical_device->prepublished_kernarg_storage,
       iree_hal_amdgpu_physical_device_hostcall_buffer(physical_device),
       &logical_device->profile_metadata,
