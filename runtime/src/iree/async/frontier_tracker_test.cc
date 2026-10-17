@@ -1524,4 +1524,248 @@ TEST(ScenarioTest, DeviceLost) {
   EXPECT_EQ(state2.last_status_code, IREE_STATUS_INTERNAL);
 }
 
+TEST(FrontierJoinTest, HealthyLeasesReuseIdentityAndPreserveOldPoints) {
+  TrackerFixture fixture(1);
+  iree_async_frontier_entry_t first = {};
+  for (uint64_t i = 1; i <= 1000; ++i) {
+    iree_async_frontier_timeline_t* timeline = nullptr;
+    IREE_ASSERT_OK(iree_async_frontier_tracker_acquire_timeline(
+        fixture.tracker(), &timeline));
+    iree_async_frontier_join_t* join = nullptr;
+    IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &join));
+    const auto point = iree_async_frontier_join_begin(join);
+    if (i == 1) {
+      first = point;
+    }
+    EXPECT_EQ(point.axis, first.axis);
+    EXPECT_EQ(point.epoch, i);
+    iree_async_frontier_timeline_release(timeline);
+    iree_async_frontier_join_publish(join);
+    MAKE_FRONTIER(frontier, 1, first);
+    bool satisfied = false;
+    IREE_ASSERT_OK(iree_async_frontier_tracker_query(fixture.tracker(),
+                                                     frontier, &satisfied));
+    EXPECT_TRUE(satisfied);
+  }
+}
+
+TEST(FrontierJoinTest, FullWidthUnionOutlivesItsLeaseOwner) {
+  TrackerFixture fixture(257);
+  FRONTIER_ALLOC(first, 255);
+  iree_async_frontier_initialize(first, 255);
+  for (uint32_t i = 0; i < 256; ++i) {
+    fixture.AddAxis(Axis(static_cast<uint8_t>(i)));
+    if (i < 255) {
+      first->entries[i] = E(Axis(static_cast<uint8_t>(i)), 1);
+    }
+  }
+  MAKE_FRONTIER(last, 1, E(Axis(255), 2));
+  iree_async_frontier_timeline_t* timeline = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_acquire_timeline(fixture.tracker(),
+                                                              &timeline));
+  iree_async_frontier_join_t* join = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &join));
+  const auto point = iree_async_frontier_join_begin(join);
+  iree_async_frontier_join_merge(join, first);
+  iree_async_frontier_join_merge(join, last);
+  // Duplicate union input changes the maximum, never the number of axes.
+  last->entries[0].epoch = 3;
+  iree_async_frontier_join_merge(join, last);
+  EXPECT_EQ(join->entry_count, 256u);
+  iree_async_frontier_timeline_release(timeline);
+  MAKE_FRONTIER(result, 1, point);
+  iree_async_frontier_waiter_t waiter;
+  CallbackState state;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+      fixture.tracker(), result, TrackingCallback, &state, &waiter));
+  iree_async_frontier_join_publish(join);
+  for (uint32_t i = 0; i < 255; ++i) {
+    iree_async_frontier_tracker_advance(fixture.tracker(),
+                                        Axis(static_cast<uint8_t>(i)), 1);
+  }
+  EXPECT_EQ(state.call_count, 0);
+  iree_async_frontier_tracker_advance(fixture.tracker(), Axis(255), 2);
+  EXPECT_EQ(state.call_count, 0);
+  iree_async_frontier_tracker_advance(fixture.tracker(), Axis(255), 3);
+  EXPECT_EQ(state.call_count, 1);
+  EXPECT_EQ(state.last_status_code, IREE_STATUS_OK);
+}
+
+TEST(FrontierJoinTest, LaterFailurePreservesEarlierPendingAndCompletedProofs) {
+  TrackerFixture fixture(4);
+  fixture.AddAxis(Axis(0));
+  fixture.AddAxis(Axis(1));
+  iree_async_frontier_timeline_t* timeline = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_acquire_timeline(fixture.tracker(),
+                                                              &timeline));
+  iree_async_frontier_join_t* first = nullptr;
+  iree_async_frontier_join_t* second = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &first));
+  IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &second));
+  const auto first_point = iree_async_frontier_join_begin(first);
+  MAKE_FRONTIER(first_input, 1, E(Axis(0), 1));
+  iree_async_frontier_join_merge(first, first_input);
+  const auto second_point = iree_async_frontier_join_begin(second);
+  MAKE_FRONTIER(second_input, 1, E(Axis(1), 1));
+  iree_async_frontier_join_merge(second, second_input);
+  // A self reference is the open capture's existing input set, not a cycle.
+  MAKE_FRONTIER(self, 1, second_point);
+  iree_async_frontier_join_merge(second, self);
+  MAKE_FRONTIER(first_result, 1, first_point);
+  MAKE_FRONTIER(second_result, 1, second_point);
+  iree_async_frontier_waiter_t first_waiter;
+  iree_async_frontier_waiter_t second_waiter;
+  CallbackState first_state;
+  CallbackState second_state;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+      fixture.tracker(), first_result, TrackingCallback, &first_state,
+      &first_waiter));
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+      fixture.tracker(), second_result, TrackingCallback, &second_state,
+      &second_waiter));
+  iree_async_frontier_join_publish(second);
+  iree_async_frontier_join_publish(first);
+  iree_async_frontier_timeline_release(timeline);
+  iree_async_frontier_tracker_fail_axis(
+      fixture.tracker(), Axis(1), iree_status_from_code(IREE_STATUS_ABORTED));
+  EXPECT_EQ(second_state.call_count, 1);
+  EXPECT_EQ(second_state.last_status_code, IREE_STATUS_ABORTED);
+  EXPECT_EQ(first_state.call_count, 0);
+  iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 1);
+  EXPECT_EQ(first_state.call_count, 1);
+  EXPECT_EQ(first_state.last_status_code, IREE_STATUS_OK);
+  bool satisfied = false;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_query(fixture.tracker(),
+                                                   first_result, &satisfied));
+  EXPECT_TRUE(satisfied);
+  IREE_ASSERT_OK(iree_async_frontier_tracker_acquire_timeline(fixture.tracker(),
+                                                              &timeline));
+  iree_async_frontier_join_t* replacement = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &replacement));
+  EXPECT_NE(iree_async_frontier_join_begin(replacement).axis, first_point.axis);
+  iree_async_frontier_join_publish(replacement);
+  iree_async_frontier_timeline_release(timeline);
+}
+
+TEST(FrontierJoinTest, ChunkFailureCancelsOtherPendingInputs) {
+  TrackerFixture fixture(257);
+  FRONTIER_ALLOC(first, 255);
+  iree_async_frontier_initialize(first, 255);
+  for (uint32_t i = 0; i < 256; ++i) {
+    fixture.AddAxis(Axis(static_cast<uint8_t>(i)));
+    if (i < 255) {
+      first->entries[i] = E(Axis(static_cast<uint8_t>(i)), 1);
+    }
+  }
+  MAKE_FRONTIER(last, 1, E(Axis(255), 1));
+  iree_async_frontier_timeline_t* timeline = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_acquire_timeline(fixture.tracker(),
+                                                              &timeline));
+  iree_async_frontier_join_t* join = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &join));
+  const auto point = iree_async_frontier_join_begin(join);
+  iree_async_frontier_join_merge(join, first);
+  iree_async_frontier_join_merge(join, last);
+  iree_async_frontier_timeline_release(timeline);
+  MAKE_FRONTIER(result, 1, point);
+  iree_async_frontier_waiter_t waiter;
+  CallbackState state;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+      fixture.tracker(), result, TrackingCallback, &state, &waiter));
+  iree_async_frontier_join_publish(join);
+  iree_async_frontier_tracker_fail_axis(
+      fixture.tracker(), Axis(255), iree_status_from_code(IREE_STATUS_ABORTED));
+  EXPECT_EQ(state.call_count, 1);
+  EXPECT_EQ(state.last_status_code, IREE_STATUS_ABORTED);
+  EXPECT_EQ(iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 1),
+            0u);
+}
+
+TEST(FrontierJoinTest, DomainDestructionCancelsCapturesWithoutReferenceCycles) {
+  CallbackState state;
+  iree_async_frontier_waiter_t waiter;
+  FRONTIER_ALLOC(result, 1);
+  {
+    TrackerFixture fixture;
+    fixture.AddAxis(Axis(0));
+    iree_async_frontier_timeline_t* timeline = nullptr;
+    IREE_ASSERT_OK(iree_async_frontier_tracker_acquire_timeline(
+        fixture.tracker(), &timeline));
+    iree_async_frontier_join_t* join = nullptr;
+    IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &join));
+    iree_async_frontier_initialize(result, 1);
+    result->entries[0] = iree_async_frontier_join_begin(join);
+    MAKE_FRONTIER(input, 1, E(Axis(0), 1));
+    iree_async_frontier_join_merge(join, input);
+    IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+        fixture.tracker(), result, TrackingCallback, &state, &waiter));
+    iree_async_frontier_join_publish(join);
+    iree_async_frontier_timeline_release(timeline);
+    EXPECT_EQ(state.call_count, 0);
+  }
+  EXPECT_EQ(state.call_count, 1);
+  EXPECT_EQ(state.last_status_code, IREE_STATUS_CANCELLED);
+}
+
+TEST(FrontierJoinTest, ChunkAdmissionRacesFailureAndUnrelatedProgress) {
+  for (uint32_t iteration = 0; iteration < 32; ++iteration) {
+    TrackerFixture fixture(257);
+    FRONTIER_ALLOC(first, 255);
+    iree_async_frontier_initialize(first, 255);
+    for (uint32_t i = 0; i < 256; ++i) {
+      fixture.AddAxis(Axis(static_cast<uint8_t>(i)));
+      if (i < 255) {
+        first->entries[i] = E(Axis(static_cast<uint8_t>(i)), 1);
+      }
+    }
+    MAKE_FRONTIER(last, 1, E(Axis(255), 1));
+    iree_async_frontier_timeline_t* timeline = nullptr;
+    IREE_ASSERT_OK(iree_async_frontier_tracker_acquire_timeline(
+        fixture.tracker(), &timeline));
+    iree_async_frontier_join_t* join = nullptr;
+    IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &join));
+    const auto point = iree_async_frontier_join_begin(join);
+    iree_async_frontier_join_merge(join, first);
+    iree_async_frontier_join_merge(join, last);
+    iree_async_frontier_timeline_release(timeline);
+    MAKE_FRONTIER(result, 1, point);
+    iree_async_frontier_waiter_t waiter;
+    CallbackState state;
+    IREE_ASSERT_OK(iree_async_frontier_tracker_wait(
+        fixture.tracker(), result, TrackingCallback, &state, &waiter));
+    std::atomic<bool> start{false};
+    auto await_start = [&] {
+      while (!start.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+      }
+    };
+    std::thread publisher([&] {
+      await_start();
+      iree_async_frontier_join_publish(join);
+    });
+    std::thread failing([&] {
+      await_start();
+      iree_async_frontier_tracker_fail_axis(
+          fixture.tracker(), Axis(255),
+          iree_status_from_code(IREE_STATUS_ABORTED));
+    });
+    std::thread advancing([&] {
+      await_start();
+      // Keep axis0 pending so only failure can retire this join.
+      for (uint32_t i = 1; i < 255; ++i) {
+        iree_async_frontier_tracker_advance(fixture.tracker(),
+                                            Axis(static_cast<uint8_t>(i)), 1);
+      }
+    });
+    start.store(true, std::memory_order_release);
+    publisher.join();
+    failing.join();
+    advancing.join();
+    EXPECT_EQ(state.call_count, 1);
+    EXPECT_EQ(state.last_status_code, IREE_STATUS_ABORTED);
+    EXPECT_EQ(
+        iree_async_frontier_tracker_advance(fixture.tracker(), Axis(0), 1), 0u);
+  }
+}
+
 }  // namespace

@@ -29,6 +29,10 @@ enum iree_async_causal_domain_e {
   IREE_ASYNC_CAUSAL_DOMAIN_EPILOGUE = 2,
   // Host-side virtual queue (thread or execution context).
   IREE_ASYNC_CAUSAL_DOMAIN_HOST = 3,
+  // Tracker-owned logical joins. A failed proof affects that epoch and later
+  // epochs; earlier proofs remain valid. Ordinals are local tracker lease
+  // slots.
+  IREE_ASYNC_CAUSAL_DOMAIN_JOIN = 4,
 };
 typedef uint8_t iree_async_causal_domain_t;
 
@@ -77,11 +81,13 @@ typedef uint8_t iree_async_causal_domain_t;
 //       [39:0]  channel_id   (40 bits) — coordinator-assigned
 //     HOST domain:
 //       [39:0]  context_id   (40 bits) — thread/context identifier
+//     JOIN domain:
+//       [39:0]  lease_id     (40 bits) — tracker-assigned local identity
 //
-// Axes are computed deterministically from logical topology: the same topology
-// description always produces the same axis values, regardless of which
-// physical GPU fills each slot. This makes frontiers directly comparable across
-// machines without translation.
+// Queue axes are computed deterministically from logical topology: the same
+// topology description always produces the same axis values, regardless of
+// which physical GPU fills each slot. This makes frontiers directly comparable
+// across machines without translation.
 //
 // Example axis values (session 1, machine 3):
 //   GPU queue 0 on device 1:  0x01_03_00_01_00_000000

@@ -11,6 +11,25 @@
 #include "iree/base/internal/atomics.h"
 #include "iree/base/threading/mutex.h"
 
+struct iree_async_frontier_timeline_t {
+  // Lease owner and prepared/pending captures sharing this timeline.
+  iree_atomic_ref_count_t ref_count;
+  // Retained by external lease owners; captures borrow their causal domain.
+  iree_async_frontier_tracker_t* tracker;
+  // Stable registered JOIN-domain identity.
+  iree_async_axis_t axis;
+  // Last reserved point, serialized by the lease owner.
+  uint64_t last_epoch;
+  // Earliest failed proof, or UINT64_MAX while healthy; tracker mutex guarded.
+  uint64_t failure_epoch;
+  // Owned first failure, guarded by the tracker mutex.
+  iree_status_t failure_status;
+  // Tracker-owned inventory link, guarded by the tracker mutex.
+  struct iree_async_frontier_timeline_t* next;
+  // Healthy idle lease link, guarded by the tracker mutex.
+  struct iree_async_frontier_timeline_t* idle_next;
+};
+
 //===----------------------------------------------------------------------===//
 // Axis table
 //===----------------------------------------------------------------------===//
@@ -72,10 +91,14 @@ typedef struct iree_alignas(64) iree_async_axis_table_entry_t {
   // semaphore or any owner state it references.
   iree_async_semaphore_t* semaphore;
 
-  // Permanent failure status for this axis. OK means the axis is healthy or
-  // retired after satisfying all relevant work. Non-OK statuses are owned by
-  // the table entry and freed when the tracker is destroyed.
-  iree_status_t failure_status;
+  // Ordinary participants own a permanent failure. JOIN participants carry
+  // their epoch-qualified failure in the tracker-owned timeline record.
+  union {
+    // Owned failure for ordinary participants.
+    iree_status_t failure_status;
+    // Tracker-owned lease and epoch-qualified failures for logical joins.
+    iree_async_frontier_timeline_t* timeline;
+  };
 
   // Root of the intrusive pending-epoch index, guarded by waiters_mutex.
   iree_async_frontier_waiter_t* waiters_root;
@@ -189,7 +212,8 @@ static inline iree_async_axis_table_entry_t* iree_async_axis_table_lookup(
 // Registers |axis| in the table under the tracker's waiters_mutex.
 static iree_status_t iree_async_axis_table_register(
     iree_async_axis_table_t* table, iree_async_axis_t axis,
-    iree_async_semaphore_t* semaphore) {
+    iree_async_semaphore_t* semaphore,
+    iree_async_frontier_timeline_t* timeline) {
   if (iree_async_axis_table_lookup(table, axis) != NULL) {
     return iree_make_status(
         IREE_STATUS_ALREADY_EXISTS,
@@ -210,6 +234,9 @@ static iree_status_t iree_async_axis_table_register(
       iree_atomic_store(&entry->current_epoch, 0, iree_memory_order_relaxed);
       entry->semaphore = semaphore;
       entry->failure_status = iree_ok_status();
+      if (timeline) {
+        entry->timeline = timeline;
+      }
       iree_atomic_store(&entry->next_wait_epoch, (int64_t)UINT64_MAX,
                         iree_memory_order_relaxed);
       ++table->count;
@@ -251,6 +278,15 @@ struct iree_async_frontier_tracker_t {
   // All pending waiters for terminal failure and destruction. Normal progress
   // uses the per-axis index. All accesses hold waiters_mutex until destruction.
   iree_async_frontier_waiter_t* waiters_head;
+
+  // All logical timeline identities, including idle and failed leases.
+  iree_async_frontier_timeline_t* timelines;
+
+  // Healthy leases available for reuse without another identity allocation.
+  iree_async_frontier_timeline_t* idle_timelines;
+
+  // Next JOIN-domain ordinal. Protected by waiters_mutex.
+  uint32_t next_timeline_ordinal;
 
   // Flexible array member containing tracker-owned axis table slots.
   iree_async_axis_table_entry_t axis_table_entries[];
@@ -541,6 +577,18 @@ typedef enum iree_async_waiter_check_result_e {
   IREE_ASYNC_WAITER_CHECK_FAILED = 2,     // At least one axis failed.
 } iree_async_waiter_check_result_t;
 
+// A logical proof failing at N does not invalidate proofs before N. Ordinary
+// participants retain their device/context-wide failure semantics.
+static const iree_status_t* iree_async_axis_table_entry_failure(
+    const iree_async_axis_table_entry_t* entry, uint64_t epoch) {
+  if (iree_async_axis_domain(entry->axis) == IREE_ASYNC_CAUSAL_DOMAIN_JOIN) {
+    return epoch >= entry->timeline->failure_epoch
+               ? &entry->timeline->failure_status
+               : NULL;
+  }
+  return &entry->failure_status;
+}
+
 // Checks whether a validated frontier is satisfied or failed.
 // If FAILED, |out_failure_status| is set to the cloned failure status (caller
 // owns). Must be called under the waiters_mutex.
@@ -557,9 +605,10 @@ iree_async_frontier_tracker_check_frontier(
     iree_async_axis_table_entry_t* entry = iree_async_axis_table_lookup(
         &tracker->axis_table, frontier->entries[i].axis);
     // Check for axis failure.
-    iree_status_t failure = entry->failure_status;
-    if (!iree_status_is_ok(failure)) {
-      *out_failure_status = iree_status_clone(failure);
+    const iree_status_t* failure =
+        iree_async_axis_table_entry_failure(entry, frontier->entries[i].epoch);
+    if (failure && !iree_status_is_ok(*failure)) {
+      *out_failure_status = iree_status_clone(*failure);
       return IREE_ASYNC_WAITER_CHECK_FAILED;
     }
 
@@ -683,9 +732,18 @@ static void iree_async_frontier_tracker_destroy(
   for (uint32_t i = 0; i < tracker->axis_table.slot_count; ++i) {
     iree_async_axis_table_entry_t* entry = &tracker->axis_table.entries[i];
     if (iree_atomic_load(&entry->occupied, iree_memory_order_relaxed) &&
+        iree_async_axis_domain(entry->axis) != IREE_ASYNC_CAUSAL_DOMAIN_JOIN &&
         !iree_status_is_ok(entry->failure_status)) {
       iree_status_free(entry->failure_status);
     }
+  }
+
+  iree_async_frontier_timeline_t* timeline = tracker->timelines;
+  while (timeline) {
+    iree_async_frontier_timeline_t* next = timeline->next;
+    iree_status_free(timeline->failure_status);
+    iree_allocator_free(tracker->allocator, timeline);
+    timeline = next;
   }
 
   iree_allocator_t allocator = tracker->allocator;
@@ -724,9 +782,13 @@ IREE_API_EXPORT iree_status_t iree_async_frontier_tracker_register_axis(
     iree_async_frontier_tracker_t* tracker, iree_async_axis_t axis,
     iree_async_semaphore_t* semaphore) {
   IREE_ASSERT_ARGUMENT(tracker);
+  if (iree_async_axis_domain(axis) == IREE_ASYNC_CAUSAL_DOMAIN_JOIN) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "JOIN axes are owned by tracker timeline leases");
+  }
   iree_slim_mutex_lock(&tracker->waiters_mutex);
-  iree_status_t status =
-      iree_async_axis_table_register(&tracker->axis_table, axis, semaphore);
+  iree_status_t status = iree_async_axis_table_register(&tracker->axis_table,
+                                                        axis, semaphore, NULL);
   iree_slim_mutex_unlock(&tracker->waiters_mutex);
   return status;
 }
@@ -932,7 +994,7 @@ bool iree_async_frontier_tracker_cancel_wait(
 
 static void iree_async_frontier_tracker_fail_axis_impl(
     iree_async_frontier_tracker_t* tracker, iree_async_axis_t axis,
-    iree_status_t status, bool retire) {
+    iree_status_t status, uint64_t failure_epoch, bool retire) {
   // fail_axis/retire_axis are the error-path and clean-teardown entry points,
   // respectively. Both require a real status from the caller. Silently
   // synthesizing one hides caller bugs and produces misleading diagnostics
@@ -961,16 +1023,29 @@ static void iree_async_frontier_tracker_fail_axis_impl(
     semaphore = NULL;
   }
 
-  // Check for existing failure (first-failure-wins).
-  if (!iree_status_is_ok(entry->failure_status)) {
-    // Already failed; ignore this failure.
+  iree_status_t* stored_status = &entry->failure_status;
+  if (iree_async_axis_domain(axis) == IREE_ASYNC_CAUSAL_DOMAIN_JOIN) {
+    stored_status = &entry->timeline->failure_status;
+    if (failure_epoch >= entry->timeline->failure_epoch) {
+      iree_slim_mutex_unlock(&tracker->waiters_mutex);
+      iree_status_free(status);
+      return;
+    }
+    entry->timeline->failure_epoch = failure_epoch;
+  } else if (!iree_status_is_ok(*stored_status)) {
     iree_slim_mutex_unlock(&tracker->waiters_mutex);
     iree_status_free(status);
     return;
   }
 
-  // Store failure status (take ownership).
-  entry->failure_status = status;
+  // The first error owns the diagnostic; an earlier failed JOIN point may
+  // subsequently extend its affected interval without replacing that status.
+  if (iree_status_is_ok(*stored_status)) {
+    *stored_status = status;
+  } else {
+    iree_status_free(status);
+    status = *stored_status;
+  }
 
   // Preserve the borrowed bridge while dispatching outside the lock. A
   // concurrent retirement or a failure callback may clear the bridge and
@@ -987,7 +1062,9 @@ static void iree_async_frontier_tracker_fail_axis_impl(
   iree_async_frontier_waiter_t* waiter = tracker->waiters_head;
   while (waiter) {
     iree_async_frontier_waiter_t* next = waiter->next;
-    if (iree_async_frontier_find_axis(waiter->frontier, axis) >= 0) {
+    const int ordinal = iree_async_frontier_find_axis(waiter->frontier, axis);
+    if (ordinal >= 0 &&
+        waiter->frontier->entries[ordinal].epoch >= failure_epoch) {
       iree_async_frontier_waiter_index_erase(
           &tracker->axis_table.entries[waiter->index.axis_slot], waiter);
       iree_async_frontier_tracker_unlink_waiter(tracker, waiter);
@@ -1019,6 +1096,7 @@ void iree_async_frontier_tracker_fail_axis(
     iree_async_frontier_tracker_t* tracker, iree_async_axis_t axis,
     iree_status_t status) {
   iree_async_frontier_tracker_fail_axis_impl(tracker, axis, status,
+                                             /*failure_epoch=*/0,
                                              /*retire=*/false);
 }
 
@@ -1026,5 +1104,276 @@ IREE_API_EXPORT void iree_async_frontier_tracker_retire_axis(
     iree_async_frontier_tracker_t* tracker, iree_async_axis_t axis,
     iree_status_t status) {
   iree_async_frontier_tracker_fail_axis_impl(tracker, axis, status,
+                                             /*failure_epoch=*/0,
                                              /*retire=*/true);
+}
+
+//===----------------------------------------------------------------------===//
+// Logical timeline leases
+//===----------------------------------------------------------------------===//
+
+IREE_API_EXPORT iree_status_t iree_async_frontier_tracker_acquire_timeline(
+    iree_async_frontier_tracker_t* tracker,
+    iree_async_frontier_timeline_t** out_timeline) {
+  *out_timeline = NULL;
+  iree_slim_mutex_lock(&tracker->waiters_mutex);
+  iree_async_frontier_timeline_t* timeline = tracker->idle_timelines;
+  if (timeline) {
+    tracker->idle_timelines = timeline->idle_next;
+  }
+  iree_slim_mutex_unlock(&tracker->waiters_mutex);
+
+  if (!timeline) {
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+        tracker->allocator, sizeof(*timeline), (void**)&timeline));
+    timeline->tracker = tracker;
+    timeline->failure_epoch = UINT64_MAX;
+    iree_slim_mutex_lock(&tracker->waiters_mutex);
+    timeline->axis = iree_async_axis_make(
+        tracker->session_epoch, tracker->machine_index,
+        IREE_ASYNC_CAUSAL_DOMAIN_JOIN, tracker->next_timeline_ordinal);
+    iree_status_t status = iree_async_axis_table_register(
+        &tracker->axis_table, timeline->axis, NULL, timeline);
+    if (iree_status_is_ok(status)) {
+      ++tracker->next_timeline_ordinal;
+      timeline->next = tracker->timelines;
+      tracker->timelines = timeline;
+    }
+    iree_slim_mutex_unlock(&tracker->waiters_mutex);
+    if (!iree_status_is_ok(status)) {
+      iree_allocator_free(tracker->allocator, timeline);
+      return status;
+    }
+  }
+  timeline->idle_next = NULL;
+  iree_atomic_ref_count_init(&timeline->ref_count);
+  iree_async_frontier_tracker_retain(tracker);
+  *out_timeline = timeline;
+  return iree_ok_status();
+}
+
+IREE_API_EXPORT void iree_async_frontier_timeline_retain(
+    iree_async_frontier_timeline_t* timeline) {
+  if (timeline) {
+    iree_atomic_ref_count_inc(&timeline->ref_count);
+    iree_async_frontier_tracker_retain(timeline->tracker);
+  }
+}
+
+static void iree_async_frontier_timeline_drop_reference(
+    iree_async_frontier_timeline_t* timeline) {
+  if (!timeline || iree_atomic_ref_count_dec(&timeline->ref_count) != 1) {
+    return;
+  }
+  iree_async_frontier_tracker_t* tracker = timeline->tracker;
+  iree_slim_mutex_lock(&tracker->waiters_mutex);
+  if (iree_status_is_ok(timeline->failure_status)) {
+    timeline->idle_next = tracker->idle_timelines;
+    tracker->idle_timelines = timeline;
+  }
+  iree_slim_mutex_unlock(&tracker->waiters_mutex);
+}
+
+IREE_API_EXPORT void iree_async_frontier_timeline_release(
+    iree_async_frontier_timeline_t* timeline) {
+  if (!timeline) {
+    return;
+  }
+  iree_async_frontier_tracker_t* tracker = timeline->tracker;
+  iree_async_frontier_timeline_drop_reference(timeline);
+  iree_async_frontier_tracker_release(tracker);
+}
+
+//===----------------------------------------------------------------------===//
+// Presecured logical joins
+//===----------------------------------------------------------------------===//
+
+struct iree_async_frontier_join_wait_t {
+  // Stable capture whose pending count owns this callback.
+  iree_async_frontier_join_t* join;
+  // Ordinary tracker wait, inactive after dispatch or successful cancellation.
+  iree_async_frontier_waiter_t waiter;
+  // Immutable chunk in the capture's packed trailing storage.
+  iree_async_frontier_t* frontier;
+};
+
+IREE_API_EXPORT iree_status_t
+iree_async_frontier_join_allocate(iree_async_frontier_timeline_t* timeline,
+                                  iree_async_frontier_join_t** out_join) {
+  *out_join = NULL;
+  const uint32_t capacity = timeline->tracker->axis_table.capacity;
+  const uint32_t wait_capacity = (capacity - 1) / UINT8_MAX + 1;
+  iree_host_size_t total_size = 0;
+  iree_host_size_t waits_offset = 0;
+  iree_host_size_t entries_offset = 0;
+  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
+      sizeof(iree_async_frontier_join_t), &total_size,
+      IREE_STRUCT_FIELD(wait_capacity, iree_async_frontier_join_wait_t,
+                        &waits_offset),
+      IREE_STRUCT_FIELD(capacity, iree_async_frontier_entry_t, &entries_offset),
+      IREE_STRUCT_FIELD_FAM(wait_capacity, iree_async_frontier_t)));
+  iree_async_frontier_join_t* join = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(timeline->tracker->allocator,
+                                             total_size, (void**)&join));
+  join->timeline = timeline;
+  // Captures keep the lease occupied, but do not retain the tracker through
+  // one of its own pending waits. Domain destruction cancels those waits.
+  iree_atomic_ref_count_inc(&timeline->ref_count);
+  join->entry_capacity = capacity;
+  join->entries =
+      (iree_async_frontier_entry_t*)((uint8_t*)join + entries_offset);
+  join->waits =
+      (iree_async_frontier_join_wait_t*)((uint8_t*)join + waits_offset);
+  *out_join = join;
+  return iree_ok_status();
+}
+
+IREE_API_EXPORT void iree_async_frontier_join_free(
+    iree_async_frontier_join_t* join) {
+  if (!join) {
+    return;
+  }
+  iree_async_frontier_timeline_t* timeline = join->timeline;
+  iree_allocator_free(timeline->tracker->allocator, join);
+  iree_async_frontier_timeline_drop_reference(timeline);
+}
+
+IREE_API_EXPORT iree_async_frontier_entry_t
+iree_async_frontier_join_begin(iree_async_frontier_join_t* join) {
+  IREE_ASSERT(join->point.epoch == 0,
+              "a capture must be published before beginning another proof");
+  join->point.axis = join->timeline->axis;
+  join->point.epoch = ++join->timeline->last_epoch;
+  if (join->point.epoch > 1) {
+    join->entries[0] = join->point;
+    --join->entries[0].epoch;
+    join->entry_count = 1;
+  }
+  return join->point;
+}
+
+IREE_API_EXPORT void iree_async_frontier_join_merge(
+    iree_async_frontier_join_t* join, const iree_async_frontier_t* frontier) {
+  if (!frontier) {
+    return;
+  }
+  uint32_t position = 0;
+  for (uint8_t i = 0; i < frontier->entry_count; ++i) {
+    const iree_async_frontier_entry_t point = frontier->entries[i];
+    if (point.axis == join->point.axis) {
+      IREE_ASSERT(point.epoch <= join->point.epoch,
+                  "a mutable capture cannot depend on a future proof");
+      continue;
+    }
+    while (position < join->entry_count &&
+           join->entries[position].axis < point.axis) {
+      ++position;
+    }
+    if (position < join->entry_count &&
+        join->entries[position].axis == point.axis) {
+      join->entries[position].epoch =
+          iree_max(join->entries[position].epoch, point.epoch);
+    } else {
+      IREE_ASSERT(join->entry_count < join->entry_capacity,
+                  "registered inputs fit the tracker's identity capacity");
+      memmove(&join->entries[position + 1], &join->entries[position],
+              (join->entry_count - position) * sizeof(*join->entries));
+      join->entries[position] = point;
+      ++join->entry_count;
+    }
+  }
+}
+
+static void iree_async_frontier_join_release_pending(
+    iree_async_frontier_join_t* join) {
+  if (iree_atomic_fetch_sub(&join->pending_count, 1,
+                            iree_memory_order_acq_rel) != 1) {
+    return;
+  }
+  iree_async_frontier_tracker_t* tracker = join->timeline->tracker;
+  iree_status_t status = (iree_status_t)iree_atomic_load(
+      &join->failure_status, iree_memory_order_relaxed);
+  if (iree_status_is_ok(status)) {
+    iree_async_frontier_tracker_advance(tracker, join->point.axis,
+                                        join->point.epoch);
+  } else {
+    iree_async_frontier_tracker_fail_axis_impl(
+        tracker, join->point.axis, status, join->point.epoch, /*retire=*/false);
+  }
+  iree_async_frontier_join_free(join);
+}
+
+// Called with a submission/callback reference. Only one caller owns the walk;
+// successful cancellation consumes the corresponding callback reference.
+static void iree_async_frontier_join_cancel_failed(
+    iree_async_frontier_join_t* join) {
+  if (!iree_atomic_load(&join->published, iree_memory_order_seq_cst)) {
+    return;
+  }
+  int32_t expected = 1;
+  if (!iree_atomic_compare_exchange_strong(&join->cancellation, &expected, 2,
+                                           iree_memory_order_seq_cst,
+                                           iree_memory_order_seq_cst)) {
+    return;
+  }
+  for (uint32_t i = 0; i < join->wait_count; ++i) {
+    if (iree_async_frontier_tracker_cancel_wait(join->timeline->tracker,
+                                                &join->waits[i].waiter)) {
+      iree_async_frontier_join_release_pending(join);
+    }
+  }
+}
+
+static void iree_async_frontier_join_wait_completed(void* user_data,
+                                                    iree_status_t status) {
+  iree_async_frontier_join_wait_t* wait = user_data;
+  iree_async_frontier_join_t* join = wait->join;
+  if (!iree_status_is_ok(status)) {
+    intptr_t expected = 0;
+    if (!iree_atomic_compare_exchange_strong(
+            &join->failure_status, &expected, (intptr_t)status,
+            iree_memory_order_seq_cst, iree_memory_order_seq_cst)) {
+      iree_status_free(status);
+    }
+    int32_t cancellation = 0;
+    iree_atomic_compare_exchange_strong(&join->cancellation, &cancellation, 1,
+                                        iree_memory_order_seq_cst,
+                                        iree_memory_order_seq_cst);
+    iree_async_frontier_join_cancel_failed(join);
+  }
+  iree_async_frontier_join_release_pending(join);
+}
+
+IREE_API_EXPORT void iree_async_frontier_join_publish(
+    iree_async_frontier_join_t* join) {
+  join->wait_count = (join->entry_count + UINT8_MAX - 1) / UINT8_MAX;
+  iree_atomic_store(&join->pending_count, (int32_t)join->wait_count + 1,
+                    iree_memory_order_relaxed);
+  // Insert each compact header backwards so entries still awaiting packing
+  // cannot be overwritten. All chunks are immutable before any wait callback.
+  for (uint32_t i = join->wait_count; i > 0; --i) {
+    const uint32_t ordinal = i - 1;
+    const uint32_t first = ordinal * UINT8_MAX;
+    const uint32_t count = iree_min(join->entry_count - first, UINT8_MAX);
+    iree_async_frontier_join_wait_t* wait = &join->waits[ordinal];
+    wait->join = join;
+    wait->frontier =
+        (iree_async_frontier_t*)((uint8_t*)(join->entries + first) +
+                                 ordinal * sizeof(iree_async_frontier_t));
+    memmove(wait->frontier->entries, join->entries + first,
+            count * sizeof(*join->entries));
+    iree_async_frontier_initialize(wait->frontier, (uint8_t)count);
+  }
+  for (uint32_t i = 0; i < join->wait_count; ++i) {
+    iree_async_frontier_join_wait_t* wait = &join->waits[i];
+    iree_status_t status = iree_async_frontier_tracker_wait(
+        join->timeline->tracker, wait->frontier,
+        iree_async_frontier_join_wait_completed, wait, &wait->waiter);
+    if (!iree_status_is_ok(status)) {
+      iree_async_frontier_join_wait_completed(wait, status);
+    }
+  }
+  iree_atomic_store(&join->published, 1, iree_memory_order_seq_cst);
+  iree_async_frontier_join_cancel_failed(join);
+  iree_async_frontier_join_release_pending(join);
 }

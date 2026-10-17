@@ -9,6 +9,7 @@
 
 #include "iree/async/frontier.h"
 #include "iree/base/api.h"
+#include "iree/base/internal/atomics.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -321,6 +322,81 @@ bool iree_async_frontier_tracker_cancel_wait(
 void iree_async_frontier_tracker_fail_axis(
     iree_async_frontier_tracker_t* tracker, iree_async_axis_t axis,
     iree_status_t status);
+
+//===----------------------------------------------------------------------===//
+// Logical joins
+//===----------------------------------------------------------------------===//
+
+typedef struct iree_async_frontier_timeline_t iree_async_frontier_timeline_t;
+typedef struct iree_async_frontier_join_wait_t iree_async_frontier_join_wait_t;
+
+// Acquires a retained logical timeline. Healthy idle timelines reuse their
+// registered axis and continue its monotonically increasing epochs; completed
+// points remain valid across leases. Failed timelines are never reused.
+// The tracker owns allocation and identity storage. No thread or semaphore is
+// created. Exhaustion concerns concurrently live or failed timelines, not the
+// number of successful acquire/release cycles.
+iree_status_t iree_async_frontier_tracker_acquire_timeline(
+    iree_async_frontier_tracker_t* tracker,
+    iree_async_frontier_timeline_t** out_timeline);
+void iree_async_frontier_timeline_retain(
+    iree_async_frontier_timeline_t* timeline);
+void iree_async_frontier_timeline_release(
+    iree_async_frontier_timeline_t* timeline);
+
+// Presecured mutable capture of registered-axis dependencies. Storage is sized
+// to the tracker capacity, independently of the compact public frontier width.
+// Only |next| is caller-owned; the remaining fields belong to the join API.
+// The owner serializes begin/merge with every other capture on its timeline.
+// A returned point may escape only after its input set has become immutable.
+typedef struct iree_async_frontier_join_t {
+  // Caller-owned linkage before publish, allowing allocation-free reserve
+  // lists.
+  struct iree_async_frontier_join_t* next;
+  // Retained timeline lease, independent of the caller's metadata lifetime.
+  iree_async_frontier_timeline_t* timeline;
+  // Published proof point, or epoch zero before begin.
+  iree_async_frontier_entry_t point;
+  // Sorted unique input entries in the trailing storage before publication.
+  iree_async_frontier_entry_t* entries;
+  // Number of captured inputs, including the preceding timeline point.
+  uint32_t entry_count;
+  // Maximum distinct inputs established by the tracker capacity.
+  uint32_t entry_capacity;
+  // Presecured ordinary frontier wait records in the trailing storage.
+  iree_async_frontier_join_wait_t* waits;
+  // Number of wait records being published.
+  uint32_t wait_count;
+  // Submission and wait references preserving all callback storage.
+  iree_atomic_int32_t pending_count;
+  // First owned input failure, or zero while healthy.
+  iree_atomic_intptr_t failure_status;
+  // Set after every wait has either registered or completed inline.
+  iree_atomic_int32_t published;
+  // Zero before failure, one when requested, two when cancellation is owned.
+  iree_atomic_int32_t cancellation;
+} iree_async_frontier_join_t;
+
+// Allocates capture storage using the tracker's allocator and pins its lease.
+// The causal domain outlives unpublished captures; domain destruction cancels
+// published waits and reclaims them without an internal reference cycle.
+// This is the fallible preparation step; begin/merge/publish never allocate.
+iree_status_t iree_async_frontier_join_allocate(
+    iree_async_frontier_timeline_t* timeline,
+    iree_async_frontier_join_t** out_join);
+// Releases an unused capture that has never begun.
+void iree_async_frontier_join_free(iree_async_frontier_join_t* join);
+// Begins one immutable-in-order proof and includes its preceding timeline
+// point.
+iree_async_frontier_entry_t iree_async_frontier_join_begin(
+    iree_async_frontier_join_t* join);
+// Captures epoch maxima from a well-formed registered-axis frontier. References
+// to this open proof are already represented by its inputs and are ignored.
+void iree_async_frontier_join_merge(iree_async_frontier_join_t* join,
+                                    const iree_async_frontier_t* frontier);
+// Consumes the sealed capture. Exact waits advance/fail its point inline and
+// reclaim storage after their final callback. Must run outside caller locks.
+void iree_async_frontier_join_publish(iree_async_frontier_join_t* join);
 
 #ifdef __cplusplus
 }  // extern "C"
