@@ -300,6 +300,79 @@ TEST_P(WorkspaceTest,
   }
 }
 
+TEST_P(WorkspaceTest, PersistentStateDoesNotKeepTransientWorkspaceActive) {
+  const auto timeout = iree_make_duration_ms(3600000);
+  auto* storage =
+      loom_serve_device_storage_pool(loom_serve_device_group_at(group_, 0));
+  const auto request =
+      iree_hal_make_pool_reservation_request(sizeof(consumer_.output), 16);
+  IREE_ASSERT_OK(loom_serve_execution_alloca_from_pool(
+      producer_.execution, storage, 1, &request, &consumer_.buffer));
+  const uint32_t pattern = 0x2468ACE0;
+  iree_hal_transfer_operation_t fill = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_FILL,
+      .fill =
+          {
+              .target_buffer = consumer_.buffer,
+              .length = sizeof(consumer_.output),
+              .pattern = &pattern,
+              .pattern_length = sizeof(pattern),
+          },
+  };
+  uint64_t value = 0;
+  IREE_ASSERT_OK(
+      loom_serve_execution_transfer(producer_.execution, 1, &fill, &value));
+  IREE_ASSERT_OK(loom_serve_execution_wait(producer_.execution, value));
+  // Storage is live, but no command workspace has been acquired yet.
+  EXPECT_FALSE(
+      loom_serve_workspace_trim_idle(workspace_, iree_time_now(), timeout));
+
+  // Repeated transient allocations on the same execution must retire behind
+  // independently retained model state without keeping their slabs hot.
+  for (int iteration = 0; iteration < 4; ++iteration) {
+    IREE_ASSERT_OK(Allocate(producer_));
+    fill.fill.target_buffer = producer_.buffer;
+    IREE_ASSERT_OK(
+        loom_serve_execution_transfer(producer_.execution, 1, &fill, &value));
+    IREE_ASSERT_OK(DownloadAndRelease(producer_));
+    IREE_ASSERT_OK(loom_serve_execution_drain(producer_.execution));
+    for (uint32_t actual : producer_.output) {
+      EXPECT_EQ(actual, pattern);
+    }
+  }
+  // Queue root retirement can trail semaphore readiness. Advance the idle
+  // policy until it observes that actual boundary; the outer harness catches
+  // a lost retirement, without a timing assumption in this witness.
+  while (loom_serve_workspace_trim_idle(
+      workspace_, iree_time_now() + 2 * timeout, timeout)) {
+    std::this_thread::yield();
+  }
+  EXPECT_EQ(loom_serve_workspace_statistics(workspace_).bytes_committed, 0u);
+
+  const iree_hal_transfer_operation_t download = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+      .download =
+          {
+              .source_buffer = consumer_.buffer,
+              .target = consumer_.output.data(),
+              .length = sizeof(consumer_.output),
+          },
+  };
+  IREE_ASSERT_OK(
+      loom_serve_execution_transfer(producer_.execution, 1, &download, &value));
+  IREE_ASSERT_OK(loom_serve_execution_wait(producer_.execution, value));
+  for (uint32_t actual : consumer_.output) {
+    EXPECT_EQ(actual, pattern);
+  }
+  IREE_ASSERT_OK(loom_serve_execution_dealloca(producer_.execution,
+                                               consumer_.buffer, &value));
+  iree_hal_buffer_release(consumer_.buffer);
+  consumer_.buffer = nullptr;
+  IREE_ASSERT_OK(loom_serve_execution_drain(producer_.execution));
+  EXPECT_FALSE(
+      loom_serve_workspace_trim_idle(workspace_, iree_time_now(), timeout));
+}
+
 TEST_P(WorkspaceTest,
        SharedEscapeRetiresAfterLastReaderWithoutBlockingOtherWork) {
   IREE_ASSERT_OK(Allocate(producer_));

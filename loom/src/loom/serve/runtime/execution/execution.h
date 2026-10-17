@@ -81,8 +81,9 @@ iree_status_t loom_serve_execution_alloca(
 // Enqueues a batch from caller-selected persistent storage on the work
 // timeline. The caller owns each returned buffer. The shared workspace captures
 // the raw roots and their source pool through final queue/buffer retirement,
-// including early failed readiness. Subsequent domain work observes backing
-// readiness. Model-specific retirement tracking wraps these buffers separately.
+// including early failed readiness, in a storage scope that does not affect
+// workspace idle expiry. Subsequent domain work observes backing readiness.
+// Model-specific retirement tracking wraps these buffers separately.
 iree_status_t loom_serve_execution_alloca_from_pool(
     loom_serve_execution_t* execution, iree_hal_pool_t* pool,
     iree_host_size_t count, const iree_hal_pool_reservation_request_t* requests,

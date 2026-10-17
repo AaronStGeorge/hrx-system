@@ -45,6 +45,8 @@ struct loom_serve_workspace_scope_t {
   iree_host_size_t count;
   // True after execution releases its ownership; collection then frees storage.
   bool released;
+  // Whether this scope's roots contribute to transient workspace activity.
+  bool tracks_workspace;
   // Shared-owner scope chain, including active and released execution domains.
   struct loom_serve_workspace_scope_t* next;
 };
@@ -122,7 +124,7 @@ static void loom_serve_workspace_scope_collect(
     }
     scope->count = retained;
   }
-  if (scope->count != previous_count) {
+  if (scope->tracks_workspace && scope->count != previous_count) {
     scope->workspace->idle.since = iree_time_now();
     scope->workspace->idle.trimmed = false;
   }
@@ -164,7 +166,7 @@ static bool loom_serve_workspace_collect(
   while (*scope_link) {
     loom_serve_workspace_scope_t* scope = *scope_link;
     loom_serve_workspace_scope_collect(scope, mode);
-    live |= scope->count != 0;
+    live |= scope->tracks_workspace && scope->count != 0;
     if (scope->count || !scope->released) {
       scope_link = &scope->next;
     } else {
@@ -353,13 +355,14 @@ iree_hal_pool_stats_t loom_serve_workspace_statistics(
 }
 
 iree_status_t loom_serve_workspace_scope_allocate(
-    loom_serve_workspace_t* workspace,
+    loom_serve_workspace_t* workspace, bool tracks_workspace,
     loom_serve_workspace_scope_t** out_scope) {
   *out_scope = NULL;
   loom_serve_workspace_scope_t* scope = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(workspace->host_allocator,
                                              sizeof(*scope), (void**)&scope));
   scope->workspace = workspace;
+  scope->tracks_workspace = tracks_workspace;
   iree_slim_mutex_lock(&workspace->mutex);
   scope->next = workspace->scopes;
   workspace->scopes = scope;
@@ -416,7 +419,9 @@ void loom_serve_workspace_scope_capture(loom_serve_workspace_scope_t* scope,
       (scope->head + scope->count++) % scope->capacity;
   scope->roots[tail] = (loom_serve_workspace_root_t){buffer, pool};
   iree_hal_buffer_retain(buffer);
-  scope->workspace->idle.trimmed = false;
+  if (scope->tracks_workspace) {
+    scope->workspace->idle.trimmed = false;
+  }
   iree_slim_mutex_unlock(&scope->workspace->mutex);
 }
 

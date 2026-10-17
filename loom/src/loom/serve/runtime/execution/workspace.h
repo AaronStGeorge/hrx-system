@@ -57,10 +57,12 @@ iree_status_t loom_serve_workspace_acquire_pool(
 // Queue-owned allocation roots borrow their source pool. A scope records those
 // two references independently of a model's payloads and logical lifetime.
 // One execution owner serializes acquire/capture/retire; no queue work or
-// custom suballocation is performed by this bookkeeping.
+// custom suballocation is performed by this bookkeeping. Workspace scopes
+// keep transient backing hot while their roots are live. Storage scopes only
+// preserve lifetime: persistent model buffers do not inhibit workspace expiry.
 typedef struct loom_serve_workspace_scope_t loom_serve_workspace_scope_t;
 iree_status_t loom_serve_workspace_scope_allocate(
-    loom_serve_workspace_t* workspace,
+    loom_serve_workspace_t* workspace, bool tracks_workspace,
     loom_serve_workspace_scope_t** out_scope);
 
 // Secures capture slots before submitting an allocation batch. The caller may
@@ -99,11 +101,12 @@ iree_hal_pool_stats_t loom_serve_workspace_statistics(
 // returns are excluded from workspace accounting.
 iree_device_size_t loom_serve_workspace_trim(loom_serve_workspace_t* workspace);
 
-// Schedules cached backing trim after all captured allocations have retired
+// Schedules cached backing trim after all workspace allocations have retired
 // and remained idle for timeout nanoseconds. The caller supplies a positive
 // timeout and its current time. Returns true while roots still await collection
-// or an idle interval awaits expiry. Live roots prevent expiry, and retirement
-// starts a new interval; repeated queries do not keep unused storage hot.
+// or an idle interval awaits expiry. Live workspace roots prevent expiry, and
+// their retirement starts a new interval; persistent storage roots and repeated
+// queries do not keep unused workspace storage hot.
 // Native trim is queued without waiting for physical release.
 bool loom_serve_workspace_trim_idle(loom_serve_workspace_t* workspace,
                                     iree_time_t now, iree_duration_t timeout);
