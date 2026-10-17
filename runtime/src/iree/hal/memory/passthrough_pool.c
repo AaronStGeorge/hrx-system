@@ -9,7 +9,6 @@
 #include "iree/async/frontier_tracker.h"
 #include "iree/async/notification.h"
 #include "iree/base/internal/math.h"
-#include "iree/base/threading/notification.h"
 #include "iree/hal/memory/tracing.h"
 
 enum { IREE_HAL_PASSTHROUGH_POOL_INLINE_TRANSACTION_CAPACITY = 8 };
@@ -41,8 +40,8 @@ typedef struct iree_hal_passthrough_pool_t {
   // Provider used to acquire one slab per reservation.
   iree_hal_slab_provider_t* slab_provider;
 
-  // Retained placement-local owner of native release work.
-  iree_hal_memory_maintenance_t* maintenance;
+  // Public resource plus native allocations that still own completion state.
+  iree_atomic_ref_count_t body_ref_count;
 
   // Protects state links, waiter disposition and shutdown publication.
   iree_slim_mutex_t retirement_mutex;
@@ -50,14 +49,8 @@ typedef struct iree_hal_passthrough_pool_t {
   // Every native allocation still owned, including pending retirement.
   iree_hal_passthrough_pool_allocation_state_t* allocation_head;
 
-  // Publishes native retirement to final pool teardown.
-  iree_notification_t retirement_notification;
-
   // True after the caller has retired execution and begun pool teardown.
   bool shutting_down;
-
-  // Tracker callbacks that may still publish work; protected by the mutex.
-  iree_host_size_t pending_callbacks;
 
   // First failed retirement prerequisite, owned until pool destruction.
   iree_atomic_intptr_t failure_status;
@@ -94,9 +87,6 @@ typedef struct iree_hal_passthrough_pool_t {
 
   // Approximate live slab count for lock-free stats queries.
   iree_atomic_int32_t slab_count;
-
-  // Native allocation states still owned, including external attachments.
-  iree_atomic_int32_t allocation_count;
 
   // Total reservations committed by successful transactions.
   iree_atomic_int64_t reserve_count;
@@ -135,8 +125,11 @@ struct iree_hal_passthrough_pool_allocation_state_t {
   // Protected by the pool's retirement mutex after the allocation returns.
   iree_hal_passthrough_pool_retirement_state_t retirement_state;
 
-  // Prepared native release entry, published only after actual completion.
-  iree_hal_memory_maintenance_entry_t maintenance_entry;
+  // Native return descriptor secured before acquisition is published.
+  iree_hal_slab_release_request_t release_request;
+
+  // Joins native submission and its callback before reclaiming this state.
+  iree_atomic_int32_t release_pending;
 };
 
 // Per-reservation state owned by the reservation until release.
@@ -159,6 +152,12 @@ struct iree_hal_passthrough_pool_reservation_state_t {
 
   // Caller-owned storage registered with the group's existing tracker.
   iree_async_frontier_waiter_t waiter;
+
+  // Joins waiter registration and its callback before native retirement.
+  iree_atomic_int32_t wait_pending;
+
+  // Owned terminal prerequisite status until the registration handoff joins.
+  iree_status_t wait_status;
 
   // Exact history copied when the explicit reservation token is released.
   iree_hal_passthrough_pool_frontier_t death_frontier;
@@ -194,16 +193,6 @@ struct iree_hal_passthrough_pool_materialize_state_t {
   iree_hal_passthrough_pool_materialize_element_t elements[];
 };
 
-// Staged result for one reservation acquisition. Transactions use staging so
-// public output arrays remain untouched unless the operation succeeds.
-typedef struct iree_hal_passthrough_pool_acquire_element_t {
-  // Reservation produced for the request.
-  iree_hal_pool_reservation_t reservation;
-
-  // Acquisition metadata produced for the request.
-  iree_hal_pool_acquire_info_t info;
-} iree_hal_passthrough_pool_acquire_element_t;
-
 static const iree_hal_pool_vtable_t iree_hal_passthrough_pool_vtable;
 static void iree_hal_passthrough_pool_destroy(iree_hal_pool_t* base_pool);
 
@@ -226,8 +215,37 @@ static void* iree_hal_passthrough_pool_trace_address(
 // Reservation state helpers
 //===----------------------------------------------------------------------===//
 
-// Unlinks metadata after its native resource has been released. slab_count
-// remains charged until metadata freeing finishes, keeping teardown joined.
+// Releases the private body after public destruction and every native return.
+// No caller-visible resource reference is held by a retired allocation.
+static void iree_hal_passthrough_pool_release_body(
+    iree_hal_passthrough_pool_t* pool) {
+  if (iree_atomic_ref_count_dec(&pool->body_ref_count) != 1) {
+    return;
+  }
+  iree_allocator_t host_allocator = pool->host_allocator;
+  iree_hal_memory_trace_deinitialize(&pool->trace);
+  iree_hal_slab_provider_release(pool->slab_provider);
+  iree_async_frontier_tracker_release(pool->base.frontier_tracker);
+  iree_hal_pool_deinitialize(&pool->base);
+  iree_status_free((iree_status_t)iree_atomic_load(&pool->failure_status,
+                                                   iree_memory_order_relaxed));
+  iree_slim_mutex_deinitialize(&pool->retirement_mutex);
+  iree_allocator_free(host_allocator, pool);
+}
+
+static void iree_hal_passthrough_pool_link_allocation(
+    iree_hal_passthrough_pool_t* pool,
+    iree_hal_passthrough_pool_allocation_state_t* state) {
+  iree_atomic_ref_count_inc(&pool->body_ref_count);
+  iree_slim_mutex_lock(&pool->retirement_mutex);
+  state->next = pool->allocation_head;
+  if (pool->allocation_head) {
+    pool->allocation_head->previous = state;
+  }
+  pool->allocation_head = state;
+  iree_slim_mutex_unlock(&pool->retirement_mutex);
+}
+
 static void iree_hal_passthrough_pool_unlink_allocation(
     iree_hal_passthrough_pool_t* pool,
     iree_hal_passthrough_pool_allocation_state_t* state) {
@@ -243,39 +261,54 @@ static void iree_hal_passthrough_pool_unlink_allocation(
   iree_slim_mutex_unlock(&pool->retirement_mutex);
 }
 
-static void iree_hal_passthrough_pool_retire_allocation(
-    iree_hal_memory_maintenance_entry_t* entry) {
-  iree_hal_passthrough_pool_allocation_state_t* state =
-      (iree_hal_passthrough_pool_allocation_state_t*)((uint8_t*)entry -
-                                                      offsetof(
-                                                          iree_hal_passthrough_pool_allocation_state_t,
-                                                          maintenance_entry));
+static void iree_hal_passthrough_pool_release_completed(void* user_data) {
+  iree_hal_passthrough_pool_allocation_state_t* state = user_data;
+  if (iree_atomic_fetch_sub(&state->release_pending, 1,
+                            iree_memory_order_acq_rel) != 1) {
+    return;
+  }
   iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)state->pool;
-  const iree_allocator_t host_allocator = pool->host_allocator;
-  iree_hal_slab_provider_release_slab_sync(pool->slab_provider, &state->slab);
   iree_hal_external_storage_release(&state->external_storage);
-  const iree_device_size_t charged_length = state->charged_length;
-  iree_hal_passthrough_pool_unlink_allocation(pool, state);
-  iree_allocator_free(host_allocator, state);
-  iree_slim_mutex_lock(&pool->retirement_mutex);
-  if (charged_length) {
-    iree_atomic_fetch_sub(&pool->bytes_committed, (int64_t)charged_length,
+  if (state->charged_length) {
+    iree_atomic_fetch_sub(&pool->bytes_committed,
+                          (int64_t)state->charged_length,
                           iree_memory_order_relaxed);
     iree_atomic_fetch_sub(&pool->slab_count, 1, iree_memory_order_relaxed);
   }
-  iree_atomic_fetch_sub(&pool->allocation_count, 1, iree_memory_order_relaxed);
-  iree_notification_post(&pool->retirement_notification, IREE_ALL_WAITERS);
-  iree_slim_mutex_unlock(&pool->retirement_mutex);
+  iree_hal_passthrough_pool_unlink_allocation(pool, state);
+  iree_allocator_free(pool->host_allocator, state);
+  iree_hal_passthrough_pool_release_body(pool);
 }
 
-static void iree_hal_passthrough_pool_frontier_resolved(void* user_data,
-                                                        iree_status_t status) {
-  iree_hal_passthrough_pool_reservation_state_t* reservation_state =
-      (iree_hal_passthrough_pool_reservation_state_t*)user_data;
+static void iree_hal_passthrough_pool_retire_allocation(
+    iree_hal_passthrough_pool_allocation_state_t* state) {
+  iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)state->pool;
+  state->release_request = (iree_hal_slab_release_request_t){
+      .count = 1,
+      .slabs = &state->slab,
+      .completion = {iree_hal_passthrough_pool_release_completed, state},
+  };
+  iree_atomic_store(&state->release_pending, 2, iree_memory_order_relaxed);
+  iree_hal_slab_provider_release_slabs(pool->slab_provider,
+                                       &state->release_request);
+  iree_hal_passthrough_pool_release_completed(state);
+}
+
+static void iree_hal_passthrough_pool_frontier_join(
+    iree_hal_passthrough_pool_reservation_state_t* reservation_state) {
+  if (iree_atomic_fetch_sub(&reservation_state->wait_pending, 1,
+                            iree_memory_order_acq_rel) != 1) {
+    return;
+  }
   iree_hal_passthrough_pool_allocation_state_t* state =
       &reservation_state->allocation;
   iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)state->pool;
+  iree_status_t status = reservation_state->wait_status;
+  reservation_state->wait_status = iree_ok_status();
   const bool failed = !iree_status_is_ok(status);
+  // Shutdown may claim a quarantined allocation immediately after publication.
+  // Keep its notification owner alive through this callback's final access.
+  iree_atomic_ref_count_inc(&pool->body_ref_count);
   iree_slim_mutex_lock(&pool->retirement_mutex);
   const bool may_retire = !failed || pool->shutting_down;
   if (failed) {
@@ -291,23 +324,24 @@ static void iree_hal_passthrough_pool_frontier_resolved(void* user_data,
       may_retire ? IREE_HAL_PASSTHROUGH_POOL_RETIREMENT_QUEUED
                  : IREE_HAL_PASSTHROUGH_POOL_RETIREMENT_QUARANTINED;
   iree_slim_mutex_unlock(&pool->retirement_mutex);
-  // The first terminal failure owns the diagnostic. Dispose of subsequent
-  // callback statuses outside the metadata lock.
+  // The first failure owns the diagnostic; later failed prerequisites do not
+  // establish native retirement or replace the original cause.
   iree_status_free(status);
-  if (may_retire) {
-    iree_hal_memory_maintenance_enqueue(pool->maintenance,
-                                        &state->maintenance_entry);
-  }
   if (failed) {
     iree_async_notification_signal_if_observed(pool->base.notification,
                                                INT32_MAX);
   }
-  // The entry can already have been freed by the worker. Keep only the pool
-  // borrow until enqueue has finished accessing its maintenance owner.
-  iree_slim_mutex_lock(&pool->retirement_mutex);
-  --pool->pending_callbacks;
-  iree_notification_post(&pool->retirement_notification, IREE_ALL_WAITERS);
-  iree_slim_mutex_unlock(&pool->retirement_mutex);
+  if (may_retire) {
+    iree_hal_passthrough_pool_retire_allocation(state);
+  }
+  iree_hal_passthrough_pool_release_body(pool);
+}
+
+static void iree_hal_passthrough_pool_frontier_resolved(void* user_data,
+                                                        iree_status_t status) {
+  iree_hal_passthrough_pool_reservation_state_t* state = user_data;
+  state->wait_status = status;
+  iree_hal_passthrough_pool_frontier_join(state);
 }
 
 static void iree_hal_passthrough_pool_reservation_state_release_reference(
@@ -323,9 +357,10 @@ static void iree_hal_passthrough_pool_reservation_state_release_reference(
     return;
   }
 
+  iree_atomic_store(&reservation_state->wait_pending, 2,
+                    iree_memory_order_relaxed);
   iree_slim_mutex_lock(&pool->retirement_mutex);
   allocation->retirement_state = IREE_HAL_PASSTHROUGH_POOL_RETIREMENT_WAITING;
-  ++pool->pending_callbacks;
   iree_slim_mutex_unlock(&pool->retirement_mutex);
   iree_status_t status = iree_async_frontier_tracker_wait(
       pool->base.frontier_tracker,
@@ -336,6 +371,7 @@ static void iree_hal_passthrough_pool_reservation_state_release_reference(
   if (!iree_status_is_ok(status)) {
     iree_hal_passthrough_pool_frontier_resolved(reservation_state, status);
   }
+  iree_hal_passthrough_pool_frontier_join(reservation_state);
 }
 
 static void iree_hal_passthrough_pool_reservation_state_release_reservation(
@@ -448,7 +484,6 @@ iree_status_t iree_hal_passthrough_pool_create(
     iree_hal_pool_t** out_pool) {
   IREE_ASSERT_ARGUMENT(slab_provider);
   IREE_ASSERT_ARGUMENT(notification);
-  IREE_ASSERT_ARGUMENT(maintenance);
   IREE_ASSERT_ARGUMENT(out_pool);
   *out_pool = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -493,10 +528,9 @@ iree_status_t iree_hal_passthrough_pool_create(
   pool->base.asan_enabled =
       iree_hal_asan_pool_options_is_enabled(&options.asan);
   pool->base.maintenance = maintenance;
-  pool->maintenance = maintenance;
-  iree_hal_memory_maintenance_retain(maintenance);
+  iree_atomic_ref_count_init(&pool->body_ref_count);
+  iree_async_frontier_tracker_retain(frontier_tracker);
   iree_slim_mutex_initialize(&pool->retirement_mutex);
-  iree_notification_initialize(&pool->retirement_notification);
 
   iree_hal_slab_provider_retain(slab_provider);
   pool->slab_provider = slab_provider;
@@ -516,21 +550,10 @@ iree_status_t iree_hal_passthrough_pool_create(
   return status;
 }
 
-static bool iree_hal_passthrough_pool_retirement_is_complete(void* user_data) {
-  iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)user_data;
-  iree_slim_mutex_lock(&pool->retirement_mutex);
-  const bool complete =
-      pool->pending_callbacks == 0 &&
-      iree_atomic_load(&pool->allocation_count, iree_memory_order_relaxed) == 0;
-  iree_slim_mutex_unlock(&pool->retirement_mutex);
-  return complete;
-}
-
 static void iree_hal_passthrough_pool_destroy(iree_hal_pool_t* base_pool) {
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)base_pool;
-  iree_allocator_t host_allocator = pool->host_allocator;
-  iree_hal_memory_maintenance_entry_t* ready_head = NULL;
+  iree_hal_slab_operation_t* ready_head = NULL;
   iree_slim_mutex_lock(&pool->retirement_mutex);
   pool->shutting_down = true;
   for (iree_hal_passthrough_pool_allocation_state_t* state =
@@ -545,38 +568,31 @@ static void iree_hal_passthrough_pool_destroy(iree_hal_pool_t* base_pool) {
           (iree_hal_passthrough_pool_reservation_state_t*)state;
       if (iree_async_frontier_tracker_cancel_wait(pool->base.frontier_tracker,
                                                   &reservation_state->waiter)) {
-        --pool->pending_callbacks;
         state->retirement_state =
             IREE_HAL_PASSTHROUGH_POOL_RETIREMENT_QUARANTINED;
       }
     }
-    // Destruction's caller-quiescence contract permits cleanup after a failed
-    // or cancelled wait. An ordinary release/trim cannot make this inference.
+    // Only caller-quiescent destruction permits native cleanup after a
+    // failed or cancelled prerequisite. Ordinary release/trim cannot infer it.
     if (state->retirement_state ==
         IREE_HAL_PASSTHROUGH_POOL_RETIREMENT_QUARANTINED) {
       state->retirement_state = IREE_HAL_PASSTHROUGH_POOL_RETIREMENT_QUEUED;
-      state->maintenance_entry.next = ready_head;
-      ready_head = &state->maintenance_entry;
+      state->release_request.operation.next = ready_head;
+      ready_head = &state->release_request.operation;
     }
   }
   iree_slim_mutex_unlock(&pool->retirement_mutex);
   while (ready_head) {
-    iree_hal_memory_maintenance_entry_t* entry = ready_head;
-    ready_head = entry->next;
-    iree_hal_memory_maintenance_enqueue(pool->maintenance, entry);
+    iree_hal_slab_operation_t* operation = ready_head;
+    ready_head = operation->next;
+    iree_hal_passthrough_pool_allocation_state_t* state =
+        (iree_hal_passthrough_pool_allocation_state_t*)((uint8_t*)operation -
+                                                        offsetof(
+                                                            iree_hal_passthrough_pool_allocation_state_t,
+                                                            release_request));
+    iree_hal_passthrough_pool_retire_allocation(state);
   }
-  iree_notification_await(&pool->retirement_notification,
-                          iree_hal_passthrough_pool_retirement_is_complete,
-                          pool, iree_infinite_timeout());
-  iree_hal_memory_trace_deinitialize(&pool->trace);
-  iree_hal_pool_deinitialize(base_pool);
-  iree_hal_slab_provider_release(pool->slab_provider);
-  iree_hal_memory_maintenance_release(pool->maintenance);
-  iree_status_free((iree_status_t)iree_atomic_load(&pool->failure_status,
-                                                   iree_memory_order_relaxed));
-  iree_notification_deinitialize(&pool->retirement_notification);
-  iree_slim_mutex_deinitialize(&pool->retirement_mutex);
-  iree_allocator_free(host_allocator, pool);
+  iree_hal_passthrough_pool_release_body(pool);
   IREE_TRACE_ZONE_END(z0);
 }
 
@@ -612,36 +628,6 @@ static bool iree_hal_passthrough_pool_query_import_requirements(
       pool->slab_provider, storage_class, out_requirements);
 }
 
-typedef struct iree_hal_passthrough_pool_import_call_t {
-  // Native pool whose placement-local owner executes attachment.
-  iree_hal_passthrough_pool_t* pool;
-  // Borrowed external storage valid until the joined call returns.
-  const iree_hal_external_storage_t* storage;
-  // Staged native attachment published only after successful return.
-  iree_hal_imported_slab_t imported_slab;
-  // Native attachment failure returned to the caller.
-  iree_status_t status;
-} iree_hal_passthrough_pool_import_call_t;
-
-static void iree_hal_passthrough_pool_import_on_owner(void* user_data) {
-  iree_hal_passthrough_pool_import_call_t* call = user_data;
-  call->status = iree_hal_slab_provider_import_slab(
-      call->pool->slab_provider, call->storage, &call->imported_slab);
-}
-
-typedef struct iree_hal_passthrough_pool_import_rollback_call_t {
-  // Provider that owns the staged native attachment.
-  iree_hal_slab_provider_t* provider;
-  // Staged attachment released before returning to the failed importer.
-  iree_hal_slab_t slab;
-} iree_hal_passthrough_pool_import_rollback_call_t;
-
-static void iree_hal_passthrough_pool_import_rollback_on_owner(
-    void* user_data) {
-  iree_hal_passthrough_pool_import_rollback_call_t* call = user_data;
-  iree_hal_slab_provider_release_slab_sync(call->provider, &call->slab);
-}
-
 static void iree_hal_passthrough_pool_imported_buffer_release(
     void* user_data, iree_hal_buffer_t* buffer) {
   iree_hal_passthrough_pool_allocation_state_t* allocation = user_data;
@@ -655,8 +641,7 @@ static void iree_hal_passthrough_pool_imported_buffer_release(
                  IREE_HAL_PASSTHROUGH_POOL_RETIREMENT_LIVE);
   allocation->retirement_state = IREE_HAL_PASSTHROUGH_POOL_RETIREMENT_QUEUED;
   iree_slim_mutex_unlock(&pool->retirement_mutex);
-  iree_hal_memory_maintenance_enqueue(pool->maintenance,
-                                      &allocation->maintenance_entry);
+  iree_hal_passthrough_pool_retire_allocation(allocation);
 }
 
 static iree_status_t iree_hal_passthrough_pool_validate_imported_slab(
@@ -723,30 +708,24 @@ static iree_status_t iree_hal_passthrough_pool_import_buffer(
   memset(allocation, 0, sizeof(*allocation));
   allocation->pool = base_pool;
 
-  iree_hal_passthrough_pool_import_call_t call = {
-      .pool = pool,
-      .storage = inout_storage,
-  };
-  iree_hal_memory_maintenance_call(
-      pool->maintenance, iree_hal_passthrough_pool_import_on_owner, &call);
-  iree_status_t status = call.status;
+  iree_hal_imported_slab_t imported_slab = {0};
+  iree_status_t status = iree_hal_slab_provider_import_slab(
+      pool->slab_provider, inout_storage, &imported_slab);
   const bool native_attached = iree_status_is_ok(status);
   if (iree_status_is_ok(status)) {
     status = iree_hal_passthrough_pool_validate_imported_slab(
-        pool, logical_range, &call.imported_slab);
+        pool, logical_range, &imported_slab);
   }
 
   iree_hal_buffer_t* buffer = NULL;
   iree_device_size_t slab_offset = 0;
   if (iree_status_is_ok(status)) {
-    slab_offset = logical_range.byte_offset - call.imported_slab.storage_offset;
-    allocation->slab = call.imported_slab.slab;
+    slab_offset = logical_range.byte_offset - imported_slab.storage_offset;
+    allocation->slab = imported_slab.slab;
     iree_hal_slab_buffer_backing_initialize(
-        pool->slab_provider, &allocation->slab, &call.imported_slab.properties,
-        pool->base.notification, pool->base.frontier_tracker, pool->maintenance,
-        &allocation->buffer_backing);
-    allocation->maintenance_entry.fn =
-        iree_hal_passthrough_pool_retire_allocation;
+        pool->slab_provider, &allocation->slab, &imported_slab.properties,
+        pool->base.notification, pool->base.frontier_tracker,
+        pool->base.maintenance, &allocation->buffer_backing);
     const iree_hal_buffer_release_callback_t release_callback = {
         .fn = iree_hal_passthrough_pool_imported_buffer_release,
         .user_data = allocation,
@@ -755,9 +734,8 @@ static iree_status_t iree_hal_passthrough_pool_import_buffer(
         base_pool->memory_contract ? base_pool->memory_contract->allowed_access
                                    : IREE_HAL_MEMORY_ACCESS_ALL;
     const iree_hal_buffer_usage_t allowed_usage =
-        base_pool->memory_contract
-            ? base_pool->memory_contract->allowed_usage
-            : call.imported_slab.properties.supported_usage;
+        base_pool->memory_contract ? base_pool->memory_contract->allowed_usage
+                                   : imported_slab.properties.supported_usage;
     status = iree_hal_slab_provider_wrap_buffer(
         pool->slab_provider, &allocation->slab, slab_offset,
         logical_range.byte_length, allowed_access, allowed_usage,
@@ -770,15 +748,7 @@ static iree_status_t iree_hal_passthrough_pool_import_buffer(
     buffer->memory.offset = slab_offset;
     allocation->external_storage = *inout_storage;
     memset(inout_storage, 0, sizeof(*inout_storage));
-    iree_atomic_fetch_add(&pool->allocation_count, 1,
-                          iree_memory_order_relaxed);
-    iree_slim_mutex_lock(&pool->retirement_mutex);
-    allocation->next = pool->allocation_head;
-    if (pool->allocation_head) {
-      pool->allocation_head->previous = allocation;
-    }
-    pool->allocation_head = allocation;
-    iree_slim_mutex_unlock(&pool->retirement_mutex);
+    iree_hal_passthrough_pool_link_allocation(pool, allocation);
     iree_hal_memory_trace_alloc(
         &pool->trace,
         iree_hal_passthrough_pool_trace_address(&allocation->slab, slab_offset),
@@ -786,13 +756,8 @@ static iree_status_t iree_hal_passthrough_pool_import_buffer(
     *out_buffer = buffer;
   } else {
     if (native_attached) {
-      iree_hal_passthrough_pool_import_rollback_call_t rollback_call = {
-          .provider = pool->slab_provider,
-          .slab = call.imported_slab.slab,
-      };
-      iree_hal_memory_maintenance_call(
-          pool->maintenance, iree_hal_passthrough_pool_import_rollback_on_owner,
-          &rollback_call);
+      iree_hal_slab_provider_release_slab_sync(pool->slab_provider,
+                                               &imported_slab.slab);
     }
     iree_allocator_free(pool->host_allocator, allocation);
   }
@@ -834,198 +799,151 @@ static iree_status_t iree_hal_passthrough_pool_validate_reservation_request(
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_passthrough_pool_acquire_one_reservation(
-    iree_hal_pool_t* base_pool,
-    const iree_hal_pool_reservation_request_t* request,
-    iree_hal_pool_reservation_t* out_reservation,
-    iree_hal_pool_acquire_info_t* out_info) {
-  iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)base_pool;
-  const iree_device_size_t size = request->allocation_size;
-  const iree_device_size_t alignment =
-      request->min_alignment ? request->min_alignment : 1;
-
-  iree_hal_asan_allocation_layout_t asan_layout = {0};
-  iree_device_size_t backing_length = size;
-  if (iree_hal_asan_pool_options_is_enabled(&pool->asan_options)) {
-    IREE_RETURN_IF_ERROR(iree_hal_asan_calculate_allocation_layout(
-        &pool->asan_options, size, alignment, &asan_layout));
-    backing_length = asan_layout.backing_length;
-  }
-
-  iree_hal_slab_t slab;
-  const iree_device_size_t backing_alignment =
-      iree_max(alignment, asan_layout.backing_offset_alignment);
-  IREE_RETURN_IF_ERROR(iree_hal_slab_provider_acquire_slab_sync(
-      pool->slab_provider, backing_length, backing_alignment, &slab));
-  if (iree_hal_asan_pool_options_is_enabled(&pool->asan_options) &&
-      slab.length != asan_layout.backing_length) {
-    iree_status_t status =
-        iree_hal_asan_extend_allocation_layout(slab.length, &asan_layout);
-    if (!iree_status_is_ok(status)) {
-      iree_hal_slab_provider_release_slab_sync(pool->slab_provider, &slab);
-      return status;
-    }
-  }
-
-  iree_hal_passthrough_pool_reservation_state_t* reservation_state = NULL;
-  iree_status_t status =
-      iree_allocator_malloc(pool->host_allocator, sizeof(*reservation_state),
-                            (void**)&reservation_state);
-  if (!iree_status_is_ok(status)) {
-    iree_hal_slab_provider_release_slab_sync(pool->slab_provider, &slab);
-    return status;
-  }
-  memset(reservation_state, 0, sizeof(*reservation_state));
-  iree_hal_passthrough_pool_allocation_state_t* allocation =
-      &reservation_state->allocation;
-  allocation->pool = base_pool;
-  allocation->slab = slab;
-  iree_hal_slab_buffer_backing_initialize(
-      pool->slab_provider, &allocation->slab, &pool->slab_properties,
-      pool->base.notification, pool->base.frontier_tracker, pool->maintenance,
-      &allocation->buffer_backing);
-  allocation->charged_length = slab.native_allocation.byte_length;
-  reservation_state->asan_layout = asan_layout;
-  allocation->maintenance_entry.fn =
-      iree_hal_passthrough_pool_retire_allocation;
-  iree_atomic_store(&reservation_state->reference_count, 1,
-                    iree_memory_order_relaxed);
-  iree_atomic_store(&reservation_state->reservation_released, 0,
-                    iree_memory_order_relaxed);
-
-  memset(out_reservation, 0, sizeof(*out_reservation));
-  out_reservation->offset =
-      iree_hal_asan_pool_options_is_enabled(&pool->asan_options)
-          ? asan_layout.user_offset
-          : 0;
-  out_reservation->byte_length = size;
-  out_reservation->block_handle = (uint64_t)(uintptr_t)reservation_state;
-
-  iree_atomic_fetch_add(&pool->bytes_reserved,
-                        (int64_t)allocation->charged_length,
-                        iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->bytes_committed,
-                        (int64_t)allocation->charged_length,
-                        iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->reservation_count, 1, iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->slab_count, 1, iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->allocation_count, 1, iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->reserve_count, 1, iree_memory_order_relaxed);
-  iree_slim_mutex_lock(&pool->retirement_mutex);
-  allocation->next = pool->allocation_head;
-  if (pool->allocation_head) {
-    pool->allocation_head->previous = allocation;
-  }
-  pool->allocation_head = allocation;
-  iree_slim_mutex_unlock(&pool->retirement_mutex);
-
-  iree_hal_memory_trace_alloc(&pool->trace,
-                              iree_hal_passthrough_pool_trace_address(
-                                  &allocation->slab, out_reservation->offset),
-                              out_reservation->byte_length);
-
-  memset(out_info, 0, sizeof(*out_info));
-  out_info->result = IREE_HAL_POOL_ACQUIRE_OK_FRESH;
-  return iree_ok_status();
-}
-
-// Rolls back a reservation acquired by the current transaction before it was
-// made visible to the caller.
-static void iree_hal_passthrough_pool_rollback_reservation(
-    iree_hal_passthrough_pool_t* pool,
-    const iree_hal_pool_reservation_t* reservation) {
-  iree_hal_passthrough_pool_reservation_state_t* reservation_state =
-      (iree_hal_passthrough_pool_reservation_state_t*)(uintptr_t)
-          reservation->block_handle;
-  const iree_device_size_t user_offset =
-      iree_hal_asan_pool_options_is_enabled(&pool->asan_options)
-          ? reservation_state->asan_layout.user_offset
-          : 0;
-  iree_hal_memory_trace_free(
-      &pool->trace, iree_hal_passthrough_pool_trace_address(
-                        &reservation_state->allocation.slab, user_offset));
-  iree_atomic_fetch_add(&pool->bytes_reserved,
-                        -(int64_t)reservation_state->allocation.charged_length,
-                        iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->reservation_count, -1,
-                        iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->slab_count, -1, iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->allocation_count, -1, iree_memory_order_relaxed);
-  iree_atomic_fetch_sub(&pool->bytes_committed,
-                        (int64_t)reservation_state->allocation.charged_length,
-                        iree_memory_order_relaxed);
-  iree_atomic_fetch_add(&pool->reserve_count, -1, iree_memory_order_relaxed);
-  iree_hal_slab_provider_release_slab_sync(pool->slab_provider,
-                                           &reservation_state->allocation.slab);
-  iree_hal_passthrough_pool_unlink_allocation(pool,
-                                              &reservation_state->allocation);
-  iree_allocator_free(pool->host_allocator, reservation_state);
-}
-
-// Native growth transaction. All pointers are borrowed until the owner call
-// joins; output publication and rollback remain all-or-none.
-typedef struct iree_hal_passthrough_pool_acquire_call_t {
-  // Borrowed native pool whose provider supplies the storage.
+// Native growth is cold: all independent release records and one batch
+// continuation are secured before the first native allocation can begin.
+typedef struct iree_hal_passthrough_pool_acquire_t {
+  // Pool borrowed through terminal completion.
   iree_hal_passthrough_pool_t* pool;
-  // Number of requests and output slots.
-  iree_host_size_t request_count;
-  // Immutable geometry and permissions supplied by the caller.
+  // Caller geometry, retained by the caller through completion.
   const iree_hal_pool_reservation_request_t* requests;
-  // Reservations assigned only after every native acquisition succeeds.
+  // Caller outputs published only after the complete batch is prepared.
   iree_hal_pool_reservation_t* out_reservations;
-  // Exact reuse information assigned with the reservations.
+  // Exact acquisition facts published alongside reservations.
   iree_hal_pool_acquire_info_t* out_infos;
-  // Owned native or host allocation failure returned to the caller.
+  // Exactly one terminal pool acquisition result.
+  iree_hal_pool_acquire_callback_t completion;
+  // Stable native input/output descriptor.
+  iree_hal_slab_acquire_request_t native;
+  // Presecured native rollback descriptor, used only after acquire joins.
+  iree_hal_slab_release_request_t rollback;
+  // Independently owned records, one per native slab.
+  iree_hal_passthrough_pool_reservation_state_t** states;
+  // Joins the active native submission and callback.
+  iree_atomic_int32_t pending;
+  // Native or post-acquisition preparation failure.
   iree_status_t status;
-} iree_hal_passthrough_pool_acquire_call_t;
+} iree_hal_passthrough_pool_acquire_t;
 
-static void iree_hal_passthrough_pool_acquire_on_owner(void* user_data) {
-  iree_hal_passthrough_pool_acquire_call_t* call = user_data;
-  iree_hal_passthrough_pool_t* pool = call->pool;
-  const iree_host_size_t request_count = call->request_count;
-  iree_hal_passthrough_pool_acquire_element_t
-      inline_elements[IREE_HAL_PASSTHROUGH_POOL_INLINE_TRANSACTION_CAPACITY];
-  iree_hal_passthrough_pool_acquire_element_t* elements = inline_elements;
-  bool elements_allocated = false;
-  iree_status_t status = iree_ok_status();
-  if (request_count > IREE_ARRAYSIZE(inline_elements)) {
-    status = iree_allocator_malloc_array(pool->host_allocator, request_count,
-                                         sizeof(*elements), (void**)&elements);
-    elements_allocated = iree_status_is_ok(status);
-  }
-  if (iree_status_is_ok(status)) {
-    memset(elements, 0, request_count * sizeof(*elements));
-  }
-
-  iree_host_size_t acquired_count = 0;
-  while (acquired_count < request_count && iree_status_is_ok(status)) {
-    status = iree_hal_passthrough_pool_acquire_one_reservation(
-        &pool->base, &call->requests[acquired_count],
-        &elements[acquired_count].reservation, &elements[acquired_count].info);
-    if (iree_status_is_ok(status)) {
-      ++acquired_count;
-    }
-  }
+static void iree_hal_passthrough_pool_acquire_finish(
+    iree_hal_passthrough_pool_acquire_t* acquire) {
+  const iree_hal_pool_acquire_callback_t completion = acquire->completion;
+  const iree_status_t status = acquire->status;
+  const iree_hal_pool_acquire_result_t result =
+      iree_status_is_ok(status) ? IREE_HAL_POOL_ACQUIRE_OK_FRESH
+                                : IREE_HAL_POOL_ACQUIRE_NONE;
+  const iree_allocator_t host_allocator = acquire->pool->host_allocator;
   if (!iree_status_is_ok(status)) {
-    for (iree_host_size_t i = 0; i < acquired_count; ++i) {
-      iree_hal_passthrough_pool_rollback_reservation(pool,
-                                                     &elements[i].reservation);
+    for (iree_host_size_t i = 0; i < acquire->native.count; ++i) {
+      iree_allocator_free(host_allocator, acquire->states[i]);
     }
-    if (acquired_count != 0) {
-      iree_async_notification_signal_if_observed(pool->base.notification,
-                                                 INT32_MAX);
+  }
+  iree_allocator_free(host_allocator, acquire);
+  completion.fn(completion.user_data, status, result);
+}
+
+static void iree_hal_passthrough_pool_acquire_rollback_join(void* user_data) {
+  iree_hal_passthrough_pool_acquire_t* acquire = user_data;
+  if (iree_atomic_fetch_sub(&acquire->pending, 1, iree_memory_order_acq_rel) !=
+      1) {
+    return;
+  }
+  for (iree_host_size_t i = 0; i < acquire->native.count; ++i) {
+    iree_atomic_fetch_sub(
+        &acquire->pool->bytes_committed,
+        (int64_t)acquire->native.slabs[i].native_allocation.byte_length,
+        iree_memory_order_relaxed);
+  }
+  iree_atomic_fetch_sub(&acquire->pool->slab_count,
+                        (int32_t)acquire->native.count,
+                        iree_memory_order_relaxed);
+  iree_hal_passthrough_pool_acquire_finish(acquire);
+}
+
+static void iree_hal_passthrough_pool_acquire_join(
+    iree_hal_passthrough_pool_acquire_t* acquire) {
+  if (iree_atomic_fetch_sub(&acquire->pending, 1, iree_memory_order_acq_rel) !=
+      1) {
+    return;
+  }
+  if (!iree_status_is_ok(acquire->status)) {
+    iree_hal_passthrough_pool_acquire_finish(acquire);
+    return;
+  }
+  iree_hal_passthrough_pool_t* pool = acquire->pool;
+  const iree_host_size_t count = acquire->native.count;
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    iree_atomic_fetch_add(
+        &pool->bytes_committed,
+        (int64_t)acquire->native.slabs[i].native_allocation.byte_length,
+        iree_memory_order_relaxed);
+  }
+  iree_atomic_fetch_add(&pool->slab_count, (int32_t)count,
+                        iree_memory_order_relaxed);
+  for (iree_host_size_t i = 0; i < count && iree_status_is_ok(acquire->status);
+       ++i) {
+    iree_hal_passthrough_pool_reservation_state_t* state = acquire->states[i];
+    state->allocation.slab = acquire->native.slabs[i];
+    state->allocation.charged_length =
+        state->allocation.slab.native_allocation.byte_length;
+    if (pool->base.asan_enabled &&
+        state->allocation.slab.length != state->asan_layout.backing_length) {
+      acquire->status = iree_hal_asan_extend_allocation_layout(
+          state->allocation.slab.length, &state->asan_layout);
     }
-  } else {
-    for (iree_host_size_t i = 0; i < request_count; ++i) {
-      call->out_reservations[i] = elements[i].reservation;
-      call->out_infos[i] = elements[i].info;
-    }
+  }
+  if (!iree_status_is_ok(acquire->status)) {
+    acquire->rollback = (iree_hal_slab_release_request_t){
+        .count = count,
+        .slabs = acquire->native.slabs,
+        .completion = {iree_hal_passthrough_pool_acquire_rollback_join,
+                       acquire},
+    };
+    iree_atomic_store(&acquire->pending, 2, iree_memory_order_relaxed);
+    iree_hal_slab_provider_release_slabs(pool->slab_provider,
+                                         &acquire->rollback);
+    iree_hal_passthrough_pool_acquire_rollback_join(acquire);
+    return;
   }
 
-  if (elements_allocated) {
-    iree_allocator_free(pool->host_allocator, elements);
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    iree_hal_passthrough_pool_reservation_state_t* state = acquire->states[i];
+    iree_hal_passthrough_pool_allocation_state_t* allocation =
+        &state->allocation;
+    iree_hal_slab_buffer_backing_initialize(
+        pool->slab_provider, &allocation->slab, &pool->slab_properties,
+        pool->base.notification, pool->base.frontier_tracker,
+        pool->base.maintenance, &allocation->buffer_backing);
+    iree_atomic_store(&state->reference_count, 1, iree_memory_order_relaxed);
+    iree_hal_passthrough_pool_link_allocation(pool, allocation);
+    iree_atomic_fetch_add(&pool->bytes_reserved,
+                          (int64_t)allocation->charged_length,
+                          iree_memory_order_relaxed);
+    acquire->out_reservations[i] = (iree_hal_pool_reservation_t){
+        .offset = pool->base.asan_enabled ? state->asan_layout.user_offset : 0,
+        .byte_length = acquire->requests[i].allocation_size,
+        .block_handle = (uint64_t)(uintptr_t)state,
+    };
+    acquire->out_infos[i] = (iree_hal_pool_acquire_info_t){
+        .result = IREE_HAL_POOL_ACQUIRE_OK_FRESH,
+    };
+    iree_hal_memory_trace_alloc(
+        &pool->trace,
+        iree_hal_passthrough_pool_trace_address(
+            &allocation->slab, acquire->out_reservations[i].offset),
+        acquire->out_reservations[i].byte_length);
   }
-  call->status = status;
+  iree_atomic_fetch_add(&pool->reservation_count, (int32_t)count,
+                        iree_memory_order_relaxed);
+  iree_atomic_fetch_add(&pool->reserve_count, (int64_t)count,
+                        iree_memory_order_relaxed);
+  iree_hal_passthrough_pool_acquire_finish(acquire);
+}
+
+static void iree_hal_passthrough_pool_acquire_completed(void* user_data,
+                                                        iree_status_t status) {
+  iree_hal_passthrough_pool_acquire_t* acquire = user_data;
+  acquire->status = status;
+  iree_hal_passthrough_pool_acquire_join(acquire);
 }
 
 static iree_status_t iree_hal_passthrough_pool_acquire_reservations(
@@ -1052,8 +970,6 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservations(
   if (!iree_status_is_ok(failure)) {
     return iree_status_clone(failure);
   }
-  // Every reservation requires new backing. Defer the whole transaction before
-  // allocating either native storage or transaction metadata.
   if (iree_any_bit_set(flags, IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH)) {
     iree_atomic_fetch_add(&pool->exhausted_count, 1, iree_memory_order_relaxed);
     for (iree_host_size_t i = 0; i < request_count; ++i) {
@@ -1067,20 +983,79 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservations(
     return iree_ok_status();
   }
 
-  iree_hal_passthrough_pool_acquire_call_t call = {
+  iree_host_size_t total_size = 0;
+  iree_host_size_t geometry_offset = 0;
+  iree_host_size_t slabs_offset = 0;
+  iree_host_size_t states_offset = 0;
+  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
+      sizeof(iree_hal_passthrough_pool_acquire_t), &total_size,
+      IREE_STRUCT_FIELD(request_count, iree_hal_slab_request_t,
+                        &geometry_offset),
+      IREE_STRUCT_FIELD(request_count, iree_hal_slab_t, &slabs_offset),
+      IREE_STRUCT_FIELD(request_count,
+                        iree_hal_passthrough_pool_reservation_state_t*,
+                        &states_offset)));
+  iree_hal_passthrough_pool_acquire_t* acquire = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(pool->host_allocator, total_size,
+                                             (void**)&acquire));
+  memset(acquire, 0, total_size);
+  iree_hal_slab_request_t* geometry =
+      (iree_hal_slab_request_t*)((uint8_t*)acquire + geometry_offset);
+  *acquire = (iree_hal_passthrough_pool_acquire_t){
       .pool = pool,
-      .request_count = request_count,
       .requests = requests,
       .out_reservations = out_reservations,
       .out_infos = out_infos,
+      .completion = completion,
+      .native =
+          {
+              .count = request_count,
+              .requests = geometry,
+              .slabs = (iree_hal_slab_t*)((uint8_t*)acquire + slabs_offset),
+              .completion = {iree_hal_passthrough_pool_acquire_completed,
+                             acquire},
+          },
+      .states =
+          (iree_hal_passthrough_pool_reservation_state_t**)((uint8_t*)acquire +
+                                                            states_offset),
   };
-  iree_hal_memory_maintenance_call(
-      pool->maintenance, iree_hal_passthrough_pool_acquire_on_owner, &call);
-  if (iree_status_is_ok(call.status)) {
-    completion.fn(completion.user_data, iree_ok_status(),
-                  IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < request_count && iree_status_is_ok(status);
+       ++i) {
+    iree_hal_passthrough_pool_reservation_state_t* state = NULL;
+    status = iree_allocator_malloc(pool->host_allocator, sizeof(*state),
+                                   (void**)&state);
+    if (iree_status_is_ok(status)) {
+      memset(state, 0, sizeof(*state));
+      acquire->states[i] = state;
+      state->allocation.pool = base_pool;
+      const iree_device_size_t alignment =
+          requests[i].min_alignment ? requests[i].min_alignment : 1;
+      if (pool->base.asan_enabled) {
+        status = iree_hal_asan_calculate_allocation_layout(
+            &pool->asan_options, requests[i].allocation_size, alignment,
+            &state->asan_layout);
+      }
+      geometry[i] = (iree_hal_slab_request_t){
+          .min_length = pool->base.asan_enabled
+                            ? state->asan_layout.backing_length
+                            : requests[i].allocation_size,
+          .min_alignment =
+              iree_max(alignment, state->asan_layout.backing_offset_alignment),
+      };
+    }
   }
-  return call.status;
+  if (iree_status_is_ok(status)) {
+    iree_atomic_store(&acquire->pending, 2, iree_memory_order_relaxed);
+    iree_hal_slab_provider_acquire_slabs(pool->slab_provider, &acquire->native);
+    iree_hal_passthrough_pool_acquire_join(acquire);
+  } else {
+    for (iree_host_size_t i = 0; i < request_count; ++i) {
+      iree_allocator_free(pool->host_allocator, acquire->states[i]);
+    }
+    iree_allocator_free(pool->host_allocator, acquire);
+  }
+  return status;
 }
 
 static void iree_hal_passthrough_pool_release_one_reservation(
@@ -1316,8 +1291,8 @@ static void iree_hal_passthrough_pool_trim(
     iree_hal_pool_t* base_pool, iree_hal_pool_trim_flags_t flags,
     iree_device_size_t min_bytes_to_keep) {
   iree_hal_passthrough_pool_t* pool = (iree_hal_passthrough_pool_t*)base_pool;
-  // Every returned slab already has retirement scheduled. This pool retains
-  // no idle backing and does not wait on the shared maintenance executor.
+  // Every returned slab already has its exact retirement prerequisite. This
+  // pool retains no idle backing and trim does not wait for native releases.
   (void)min_bytes_to_keep;
   iree_hal_slab_provider_trim(pool->slab_provider, flags);
 }

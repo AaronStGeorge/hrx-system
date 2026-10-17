@@ -334,8 +334,6 @@ iree_cc_test(
     "passthrough_pool_test.cc"
   DEPS
     ::cpu_slab_provider
-    ::maintenance
-    ::maintenance_thread
     ::passthrough_pool
     iree::async
     iree::async::platform

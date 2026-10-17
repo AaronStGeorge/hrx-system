@@ -86,7 +86,6 @@ iree_cc_test(
     iree::hal::drivers::task::device
     iree::hal::memory::cpu_slab_provider
     iree::hal::memory::fixed_block_pool
-    iree::hal::memory::maintenance
     iree::hal::memory::passthrough_pool
     iree::hal::memory::slab_cache
     iree::hal::memory::tlsf_pool

@@ -20,7 +20,6 @@
 #include "iree/hal/drivers/task/queue/queue.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/fixed_block_pool.h"
-#include "iree/hal/memory/maintenance.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/slab_cache.h"
 #include "iree/hal/memory/tlsf_pool.h"
@@ -637,30 +636,9 @@ class TaskQueueNativeRetirementTest : public TaskQueueAllocaTest {
   // Completion-driven pool destruction must not wait on this sole worker.
   iree_host_size_t WorkerCount() const override { return 1; }
 
+  // This source deliberately uses the inline CPU provider. The pool never
+  // overrides provider execution placement with an independent worker.
   void UseNativePool() {
-    struct OwnerProbe : iree_hal_memory_maintenance_entry_t {
-      // Protects the identity and the callback's final notification access.
-      std::mutex mutex;
-      // Wakes the test after the captured owner runs the probe.
-      std::condition_variable condition;
-      // Identity of the independent memory-domain worker.
-      std::thread::id thread;
-      // Set by the owner under the mutex.
-      bool complete = false;
-    } probe;
-    probe.fn = [](iree_hal_memory_maintenance_entry_t* entry) {
-      auto* probe = static_cast<OwnerProbe*>(entry);
-      std::lock_guard<std::mutex> lock(probe->mutex);
-      probe->thread = std::this_thread::get_id();
-      probe->complete = true;
-      probe->condition.notify_all();
-    };
-    iree_hal_memory_maintenance_enqueue(backing_pool_->maintenance, &probe);
-    {
-      std::unique_lock<std::mutex> lock(probe.mutex);
-      probe.condition.wait(lock, [&] { return probe.complete; });
-      memory_thread_ = probe.thread;
-    }
     iree_hal_slab_provider_t* provider = nullptr;
     IREE_ASSERT_OK(iree_hal_cpu_slab_provider_create(
         /*min_alignment=*/0, backing_.allocator(), &provider));
@@ -672,8 +650,8 @@ class TaskQueueNativeRetirementTest : public TaskQueueAllocaTest {
     };
     iree_status_t status = iree_hal_passthrough_pool_create(
         options, provider, backing_pool_->notification,
-        backing_pool_->frontier_tracker, backing_pool_->maintenance,
-        iree_allocator_system(), &pool_);
+        backing_pool_->frontier_tracker, nullptr, iree_allocator_system(),
+        &pool_);
     iree_hal_slab_provider_release(provider);
     IREE_ASSERT_OK(status);
     notification_ = iree_hal_pool_notification(pool_);
@@ -681,11 +659,9 @@ class TaskQueueNativeRetirementTest : public TaskQueueAllocaTest {
 
   // Remains alive through the base fixture's pool and device teardown.
   NativeBackingObserver backing_;
-  // Identity captured directly from the selected maintenance owner.
-  std::thread::id memory_thread_;
 };
 
-TEST_P(TaskQueueNativeRetirementTest, QueueBytesRetireOnCapturedOwner) {
+TEST_P(TaskQueueNativeRetirementTest, QueueBytesRetireThroughInlineProvider) {
   ASSERT_NO_FATAL_FAILURE(UseNativePool());
   struct OwnerProbe {
     // Live pool whose trim must be callable from the sole executor worker.
@@ -750,8 +726,7 @@ TEST_P(TaskQueueNativeRetirementTest, QueueBytesRetireOnCapturedOwner) {
   initial_buffers_[0] = nullptr;
   // No subsequent allocation, trim, or destruction drives this native free.
   backing_.AwaitRelease();
-  EXPECT_EQ(backing_.release_thread(), memory_thread_);
-  EXPECT_NE(backing_.release_thread(), owner_probe.executor_thread);
+  EXPECT_EQ(backing_.release_thread(), owner_probe.executor_thread);
   EXPECT_NE(backing_.release_thread(), std::this_thread::get_id());
 }
 
@@ -852,8 +827,7 @@ TEST_P(TaskQueueNativeRetirementTest,
                                            /*frontier=*/nullptr));
   ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[2], 2));
   backing_.AwaitRelease();
-  EXPECT_EQ(backing_.release_thread(), memory_thread_);
-  EXPECT_NE(backing_.release_thread(), output.executor_thread);
+  EXPECT_EQ(backing_.release_thread(), output.executor_thread);
   for (size_t i = 0; i < output.words.size(); ++i) {
     EXPECT_EQ(output.words[i], 0xCAFE1000u + i / (output.words.size() / 2));
   }
@@ -895,8 +869,8 @@ TEST_P(TaskQueueNativeRetirementTest, CompletionCanDestroyItsPool) {
         iree_status_t status = iree_hal_buffer_map_read(
             completion->buffer, 0, completion->words.data(),
             sizeof(completion->words));
-        // Final pool release on a Task worker must join native cleanup without
-        // depending on work scheduled to that same worker.
+        // The explicitly inline provider completes native return here. Final
+        // pool release must not introduce a hop or wait on this sole worker.
         iree_hal_buffer_release(completion->buffer);
         iree_hal_pool_trim(completion->pool, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
         iree_hal_pool_release(completion->pool);
@@ -915,8 +889,7 @@ TEST_P(TaskQueueNativeRetirementTest, CompletionCanDestroyItsPool) {
   IREE_ASSERT_OK(status);
   ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[1], completed_value));
   EXPECT_TRUE(backing_.released());
-  EXPECT_EQ(backing_.release_thread(), memory_thread_);
-  EXPECT_NE(backing_.release_thread(), completion.thread);
+  EXPECT_EQ(backing_.release_thread(), completion.thread);
   for (uint32_t value : completion.words) {
     EXPECT_EQ(value, pattern);
   }
