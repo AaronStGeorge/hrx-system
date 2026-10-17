@@ -130,12 +130,7 @@ void Intrinsics::declaration(cxx::FunctionSymbol* function,
       break;
     }
   }
-  const bool permits_reference_body =
-      function->isTemplatePattern() && selected &&
-      !selected->arguments.empty() &&
-      NumericConversionIntrinsic::supports_reference_body(
-          selected->arguments[0]->name());
-  if (function->declaration() && !permits_reference_body) {
+  if (function->declaration()) {
     diagnostics_.reject(unit_, owner,
                         "an intrinsic requires one operation binding and no "
                         "function body");

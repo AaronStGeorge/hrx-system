@@ -7,11 +7,15 @@
 #include "loom/import/cxx/binding/numeric_conversion.h"
 
 #include <cxx/names.h>
+#include <cxx/symbols.h>
 #include <cxx/types.h>
 
 #include <cstddef>
+#include <memory>
+#include <utility>
 
 #include "iree/base/api.h"
+#include "loom/import/cxx/source/attributes.h"
 #include "loom/import/cxx/source/error.h"
 #include "loom/import/cxx/value/scalar.h"
 #include "loom/import/cxx/value/vector.h"
@@ -40,9 +44,54 @@ bool same_shape(const VectorPartition& lhs, const VectorPartition& rhs) {
 
 }  // namespace
 
-bool NumericConversionIntrinsic::supports_reference_body(
-    std::string_view name) {
-  return name == "numeric.convert";
+std::optional<cxx::ConstValue> NumericConversionConstantEvaluator::evaluate(
+    cxx::ASTInterpreter& interpreter, cxx::FunctionSymbol* function,
+    std::span<const cxx::ConstValue> arguments) {
+  const auto* operation = annotation(function, "op");
+  if (!operation || operation->arguments.size() != 1 ||
+      operation->arguments[0]->name() != "numeric.convert" ||
+      arguments.size() != 1) {
+    return std::nullopt;
+  }
+
+  auto* unit = interpreter.translationUnit();
+  auto traits = unit->typeTraits();
+  const auto* signature = cxx::type_cast<cxx::FunctionType>(function->type());
+  if (!signature || signature->parameterTypes().size() != 1) {
+    return std::nullopt;
+  }
+  const auto* input_type =
+      traits.remove_cv(signature->parameterTypes().front());
+  const auto* output_type = traits.remove_cv(signature->returnType());
+  const auto* input_vector = cxx::type_cast<cxx::VectorType>(input_type);
+  const auto* output_vector = cxx::type_cast<cxx::VectorType>(output_type);
+  if (!input_vector && !output_vector) {
+    return interpreter.convertArithmetic(arguments.front(), input_type,
+                                         output_type);
+  }
+  if (!input_vector || !output_vector ||
+      input_vector->elementCount() != output_vector->elementCount()) {
+    return std::nullopt;
+  }
+
+  const auto* input =
+      std::get_if<std::shared_ptr<cxx::InitializerList>>(&arguments.front());
+  if (!input || !*input ||
+      (*input)->elements.size() != input_vector->elementCount()) {
+    return std::nullopt;
+  }
+  auto output = std::make_shared<cxx::InitializerList>();
+  output->elements.reserve((*input)->elements.size());
+  for (const auto& [element, element_type] : (*input)->elements) {
+    auto converted = interpreter.convertArithmetic(
+        element, element_type, output_vector->elementType());
+    if (!converted) {
+      return std::nullopt;
+    }
+    output->elements.emplace_back(std::move(*converted),
+                                  output_vector->elementType());
+  }
+  return cxx::ConstValue{std::move(output)};
 }
 
 std::optional<NumericConversionIntrinsic::Operation>
@@ -51,7 +100,7 @@ NumericConversionIntrinsic::admit(cxx::TranslationUnit& unit,
                                   const cxx::Attribute& attribute,
                                   cxx::AST* owner) {
   if (attribute.arguments.empty() ||
-      !supports_reference_body(attribute.arguments[0]->name())) {
+      attribute.arguments[0]->name() != "numeric.convert") {
     return std::nullopt;
   }
   if (attribute.arguments.size() != 1) {

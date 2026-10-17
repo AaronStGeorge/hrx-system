@@ -7,12 +7,12 @@
 #ifndef LOOM_IMPORT_CXX_BINDING_NUMERIC_CONVERSION_H_
 #define LOOM_IMPORT_CXX_BINDING_NUMERIC_CONVERSION_H_
 
+#include <cxx/ast_interpreter.h>
 #include <cxx/attributes.h>
 #include <cxx/types_fwd.h>
 
 #include <optional>
 #include <span>
-#include <string_view>
 
 #include "loom/import/cxx/source/source.h"
 #include "loom/import/cxx/value/representation.h"
@@ -23,6 +23,16 @@ namespace loom::cxx_import {
 class Scalars;
 class Vectors;
 
+// Provides C++ constant semantics for declaration-only numeric.convert
+// specializations. Runtime calls are resolved independently by the intrinsic.
+class NumericConversionConstantEvaluator final
+    : public cxx::ConstexprCallProvider {
+ public:
+  std::optional<cxx::ConstValue> evaluate(
+      cxx::ASTInterpreter& interpreter, cxx::FunctionSymbol* function,
+      std::span<const cxx::ConstValue> arguments) override;
+};
+
 // One explicit numeric conversion over a source scalar, native fixed vector,
 // or rank-generic semantic vector. Resolved C++ types retain integer
 // signedness after their signless High carriers have been selected.
@@ -31,10 +41,6 @@ class NumericConversionIntrinsic {
   struct Operation {
     bool operator==(const Operation&) const = default;
   };
-
-  // Whether the source-operation family has a constexpr C++ reference body.
-  // Other loom::op bindings remain declaration-only.
-  static bool supports_reference_body(std::string_view name);
 
   // Admits numeric.convert independently of a dependent specialization.
   static std::optional<Operation> admit(cxx::TranslationUnit& unit,
@@ -48,8 +54,7 @@ class NumericConversionIntrinsic {
       Operation operation, cxx::TranslationUnit& unit, Diagnostics& diagnostics,
       Types& types, const cxx::FunctionType* signature, cxx::AST* owner);
 
-  // Emits the direct High conversion. Reference function bodies are used only
-  // by the C++ frontend's constant evaluator and never appear in runtime IR.
+  // Emits the direct High conversion.
   Value call(std::span<const Value> arguments, ValueArena& arena,
              Scalars& scalars, Vectors& vectors, cxx::AST* owner) const;
 

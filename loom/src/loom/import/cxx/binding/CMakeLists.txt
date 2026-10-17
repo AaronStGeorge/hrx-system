@@ -649,6 +649,7 @@ loom_cc_library(
     iree::base
     iree::third_party::cxx_parser
     loom::import::cxx::source
+    loom::import::cxx::source::attributes
     loom::import::cxx::source::error
     loom::import::cxx::value::representation
     loom::import::cxx::value::scalar
