@@ -872,9 +872,8 @@ class TaskQueueNativeAllocationTest : public TaskQueueAllocaTest {
   void UseNativePool() {
     iree_async_proactor_pool_entry_t* entry = nullptr;
     IREE_ASSERT_OK(iree_async_proactor_pool_acquire(progress_[0], 0, &entry));
-    iree_hal_task_allocation_queue_t* queue = nullptr;
     iree_status_t status = iree_hal_task_allocation_queue_create(
-        executor_, entry, iree_allocator_system(), &queue);
+        executor_, entry, iree_allocator_system(), &native_queue_);
     iree_async_proactor_pool_entry_release(entry);
     IREE_ASSERT_OK(status);
     iree_hal_slab_provider_t* source = nullptr;
@@ -883,9 +882,8 @@ class TaskQueueNativeAllocationTest : public TaskQueueAllocaTest {
     iree_hal_slab_provider_t* provider = nullptr;
     if (iree_status_is_ok(status)) {
       status = iree_hal_task_slab_provider_create(
-          queue, source, iree_allocator_system(), &provider);
+          native_queue_, source, iree_allocator_system(), &provider);
     }
-    iree_hal_task_allocation_queue_release(queue);
     iree_hal_slab_provider_release(source);
     if (iree_status_is_ok(status)) {
       const iree_hal_passthrough_pool_options_t options = {
@@ -920,8 +918,10 @@ class TaskQueueNativeAllocationTest : public TaskQueueAllocaTest {
     iree_hal_pool_release(native_pool_);
     native_pool_ = nullptr;
     TaskQueueAllocaTest::TearDown();
-    // Native cleanup owns the allocator dependency through provider teardown,
-    // even if final device/executor release preceded that cleanup.
+    // This fixture owns an additional native queue independently of its device.
+    // Join it at the same outer ownership boundary used by device destruction.
+    iree_hal_task_allocation_queue_close(native_queue_);
+    iree_hal_task_allocation_queue_release(native_queue_);
     backing_.AwaitEmpty();
   }
 
@@ -967,6 +967,8 @@ class TaskQueueNativeAllocationTest : public TaskQueueAllocaTest {
   NativeBackingObserver backing_;
   // Native source retained independently of the finite reusable child.
   iree_hal_pool_t* native_pool_ = nullptr;
+  // Explicit native allocation owner joined after all queue/pool producers.
+  iree_hal_task_allocation_queue_t* native_queue_ = nullptr;
 };
 
 TEST_P(TaskQueueNativeAllocationTest, ReadyWorkPassesBlockedNativeAllocation) {

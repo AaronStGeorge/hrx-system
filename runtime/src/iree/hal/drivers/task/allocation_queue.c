@@ -7,13 +7,12 @@
 #include "iree/hal/drivers/task/allocation_queue.h"
 
 #include "iree/base/threading/mutex.h"
+#include "iree/base/threading/notification.h"
 #include "iree/task/process.h"
 
 struct iree_hal_task_allocation_queue_t {
-  // Public owners; final release terminates the process before freeing storage.
+  // Device and native provider ownership; the device joins before releasing.
   iree_hal_resource_t resource;
-  // Public teardown and process final release each own one storage claim.
-  iree_atomic_ref_count_t body_ref_count;
   // Allocator for the process and queue body.
   iree_allocator_t host_allocator;
   // Existing executor retained until the process's final access.
@@ -24,12 +23,16 @@ struct iree_hal_task_allocation_queue_t {
   iree_task_process_t process;
   // Protects only queue linkage and closing state, never native calls.
   iree_slim_mutex_t mutex;
+  // Wakes the device's outer teardown after the process's last access.
+  iree_notification_t notification;
   // First pending batch; NULL when no native work is queued.
   iree_hal_slab_operation_t* head;
   // Last pending batch, valid only when head is non-NULL.
   iree_hal_slab_operation_t* tail;
-  // Final public release has requested process termination.
+  // Device teardown has requested process termination.
   bool closing;
+  // Process release has completed; protected by mutex.
+  bool closed;
 };
 
 typedef struct iree_hal_task_slab_provider_t {
@@ -84,34 +87,51 @@ static iree_status_t iree_hal_task_allocation_queue_drain(
   return iree_ok_status();
 }
 
-static void iree_hal_task_allocation_queue_release_body(
-    iree_hal_task_allocation_queue_t* queue) {
-  if (iree_atomic_ref_count_dec(&queue->body_ref_count) != 1) {
-    return;
-  }
-  iree_task_executor_t* executor = queue->executor;
-  iree_async_proactor_pool_entry_release(queue->progress_entry);
-  iree_slim_mutex_deinitialize(&queue->mutex);
-  iree_allocator_free(queue->host_allocator, queue);
-  iree_task_executor_release(executor);
-}
-
 static void iree_hal_task_allocation_queue_process_release(
     iree_task_process_t* process) {
-  iree_hal_task_allocation_queue_release_body(process->user_data);
+  iree_hal_task_allocation_queue_t* queue = process->user_data;
+  iree_slim_mutex_lock(&queue->mutex);
+  queue->closed = true;
+  iree_notification_post(&queue->notification, IREE_ALL_WAITERS);
+  iree_slim_mutex_unlock(&queue->mutex);
+}
+
+static bool iree_hal_task_allocation_queue_is_closed(void* user_data) {
+  iree_hal_task_allocation_queue_t* queue = user_data;
+  iree_slim_mutex_lock(&queue->mutex);
+  const bool closed = queue->closed;
+  iree_slim_mutex_unlock(&queue->mutex);
+  return closed;
+}
+
+void iree_hal_task_allocation_queue_close(
+    iree_hal_task_allocation_queue_t* queue) {
+  if (!queue) {
+    return;
+  }
+  iree_slim_mutex_lock(&queue->mutex);
+  const bool closing = queue->closing;
+  queue->closing = true;
+  iree_slim_mutex_unlock(&queue->mutex);
+  if (!closing) {
+    iree_task_executor_schedule_process(queue->executor, &queue->process);
+  }
+  iree_notification_await(&queue->notification,
+                          iree_hal_task_allocation_queue_is_closed, queue,
+                          iree_infinite_timeout());
 }
 
 static void iree_hal_task_allocation_queue_destroy(
     iree_hal_resource_t* resource) {
   iree_hal_task_allocation_queue_t* queue =
       (iree_hal_task_allocation_queue_t*)resource;
-  iree_slim_mutex_lock(&queue->mutex);
-  queue->closing = true;
-  iree_slim_mutex_unlock(&queue->mutex);
-  // Public teardown's body claim protects this wake from concurrent process
-  // final release. Neither side reclaims storage until both have returned it.
-  iree_task_executor_schedule_process(queue->executor, &queue->process);
-  iree_hal_task_allocation_queue_release_body(queue);
+  IREE_ASSERT(queue->closed, "the device must join native allocation shutdown");
+  iree_task_executor_t* executor = queue->executor;
+  iree_async_proactor_pool_entry_release(queue->progress_entry);
+  iree_notification_deinitialize(&queue->notification);
+  iree_slim_mutex_deinitialize(&queue->mutex);
+  iree_allocator_free(queue->host_allocator, queue);
+  iree_task_executor_release(executor);
 }
 
 static const iree_hal_resource_vtable_t iree_hal_task_allocation_queue_vtable =
@@ -130,14 +150,13 @@ iree_status_t iree_hal_task_allocation_queue_create(
       iree_allocator_malloc(host_allocator, sizeof(*queue), (void**)&queue));
   iree_hal_resource_initialize(&iree_hal_task_allocation_queue_vtable,
                                &queue->resource);
-  iree_atomic_ref_count_init(&queue->body_ref_count);
-  iree_atomic_ref_count_inc(&queue->body_ref_count);
   queue->host_allocator = host_allocator;
   queue->executor = executor;
   iree_task_executor_retain(executor);
   queue->progress_entry = progress_entry;
   iree_async_proactor_pool_entry_retain(progress_entry);
   iree_slim_mutex_initialize(&queue->mutex);
+  iree_notification_initialize(&queue->notification);
   iree_task_process_initialize(iree_hal_task_allocation_queue_drain,
                                /*suspend_count=*/0, /*wake_budget=*/1,
                                &queue->process);

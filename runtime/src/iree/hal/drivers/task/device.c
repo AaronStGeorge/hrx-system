@@ -74,6 +74,9 @@ typedef struct iree_hal_task_device_t {
   // Owned native CPU memory resources, exposed as an immutable borrowed view.
   iree_hal_host_memory_backend_t memory_backend;
 
+  // Native allocation process joined before releasing device allocator state.
+  iree_hal_task_allocation_queue_t* allocation_queue;
+
   // Proactor pool for async I/O. Retained for the lifetime of the device to
   // ensure proactor threads outlive all device resources (semaphores, etc.).
   iree_async_proactor_pool_t* proactor_pool;
@@ -255,10 +258,11 @@ static iree_status_t iree_hal_task_device_select_progress(
 static iree_status_t iree_hal_task_device_create_slab_providers(
     iree_task_executor_t* executor,
     iree_async_proactor_pool_entry_t* progress_entry,
-    iree_allocator_t host_allocator, iree_hal_host_memory_backend_t* backend) {
-  iree_hal_task_allocation_queue_t* queue = NULL;
+    iree_allocator_t host_allocator, iree_hal_host_memory_backend_t* backend,
+    iree_hal_task_allocation_queue_t** out_queue) {
   IREE_RETURN_IF_ERROR(iree_hal_task_allocation_queue_create(
-      executor, progress_entry, host_allocator, &queue));
+      executor, progress_entry, host_allocator, out_queue));
+  iree_hal_task_allocation_queue_t* queue = *out_queue;
   iree_hal_slab_provider_t* heap_provider = NULL;
   iree_hal_slab_provider_t* shared_provider = NULL;
   iree_status_t status = iree_hal_cpu_slab_provider_create(
@@ -277,7 +281,6 @@ static iree_status_t iree_hal_task_device_create_slab_providers(
   }
   iree_hal_slab_provider_release(shared_provider);
   iree_hal_slab_provider_release(heap_provider);
-  iree_hal_task_allocation_queue_release(queue);
   return status;
 }
 
@@ -381,7 +384,7 @@ iree_status_t iree_hal_task_device_create(
   if (iree_status_is_ok(status)) {
     status = iree_hal_task_device_create_slab_providers(
         queue_executors[0], memory_progress, host_allocator,
-        &device->memory_backend);
+        &device->memory_backend, &device->allocation_queue);
   }
   if (iree_status_is_ok(status)) {
     status = iree_async_notification_create(
@@ -507,6 +510,8 @@ static void iree_hal_task_device_destroy(iree_hal_device_t* base_device) {
 
   iree_hal_slab_provider_release(device->memory_backend.slab_provider);
   iree_hal_slab_provider_release(device->memory_backend.mapping_provider);
+  iree_hal_task_allocation_queue_close(device->allocation_queue);
+  iree_hal_task_allocation_queue_release(device->allocation_queue);
   iree_async_notification_release(device->memory_backend.notification);
   iree_hal_allocator_release(device->device_allocator);
   iree_hal_channel_provider_release(device->channel_provider);

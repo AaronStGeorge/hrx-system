@@ -34,6 +34,13 @@ void iree_hal_task_allocation_queue_retain(
 void iree_hal_task_allocation_queue_release(
     iree_hal_task_allocation_queue_t* queue);
 
+// Drains accepted native batches and joins the process's final access. The
+// owning device calls this from its outer teardown after all public queue and
+// pool producers are quiescent, before releasing its queue reference. Provider
+// references may be released on workers; they never initiate a shutdown wait.
+void iree_hal_task_allocation_queue_close(
+    iree_hal_task_allocation_queue_t* queue);
+
 // Creates a provider routing native slab batches through |queue|. The native
 // source is an inline CPU heap or shared-section provider; all other operations
 // retain that source's execution semantics. Both source and queue are retained.
