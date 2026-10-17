@@ -495,6 +495,13 @@ iree_status_t iree_hal_memory_tlsf_initialize(
 // (debug builds assert that allocation_count is zero).
 void iree_hal_memory_tlsf_deinitialize(iree_hal_memory_tlsf_t* tlsf);
 
+// Rebinds a completely free allocator to new backing of the same geometry.
+// The caller has transferred the old range's complete history to its owner.
+// Replaces that history with |initial_frontier|, whose width must fit the
+// configured capacity, and retains split metadata without walking its nodes.
+void iree_hal_memory_tlsf_reset(iree_hal_memory_tlsf_t* tlsf,
+                                const iree_async_frontier_t* initial_frontier);
+
 // Finds the next free block of at least |minimum_length| bytes. Pass
 // BLOCK_INDEX_NONE for |after_block| to begin, then the previous candidate's
 // index to continue. Candidates are visited once in size-class/list order;

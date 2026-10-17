@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <array>
+#include <atomic>
 #include <thread>
 #include <vector>
 
@@ -20,6 +21,42 @@
 #include "iree/testing/status_matchers.h"
 
 namespace {
+
+struct MetadataAllocator {
+  // Calls that would obtain or resize host storage.
+  std::atomic<uint64_t> allocations{0};
+  // Successfully allocated host objects that have not been freed.
+  std::atomic<int64_t> live{0};
+  // Rejects allocation while preserving infallible release.
+  std::atomic<bool> fail{false};
+
+  static iree_status_t Control(void* self, iree_allocator_command_t command,
+                               const void* params, void** pointer) {
+    auto* state = static_cast<MetadataAllocator*>(self);
+    const bool had_storage = (command == IREE_ALLOCATOR_COMMAND_FREE ||
+                              command == IREE_ALLOCATOR_COMMAND_REALLOC) &&
+                             *pointer != nullptr;
+    if (command != IREE_ALLOCATOR_COMMAND_FREE) {
+      ++state->allocations;
+      if (state->fail) {
+        return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "metadata allocation rejected");
+      }
+    }
+    const auto system = iree_allocator_system();
+    iree_status_t status = system.ctl(system.self, command, params, pointer);
+    if (iree_status_is_ok(status)) {
+      if (command == IREE_ALLOCATOR_COMMAND_FREE && had_storage) {
+        --state->live;
+      } else if (command != IREE_ALLOCATOR_COMMAND_FREE && !had_storage) {
+        ++state->live;
+      }
+    }
+    return status;
+  }
+
+  iree_allocator_t allocator() { return {this, Control}; }
+};
 
 class TLSFPoolReservationTest : public ::testing::Test {
  protected:
@@ -54,6 +91,7 @@ class TLSFPoolReservationTest : public ::testing::Test {
     iree_async_frontier_tracker_release(tracker_);
     iree_async_notification_release(notification_);
     iree_async_proactor_release(proactor_);
+    EXPECT_EQ(metadata_.live, 0);
   }
 
   static iree_async_axis_t Axis() {
@@ -100,6 +138,8 @@ class TLSFPoolReservationTest : public ::testing::Test {
 
   // Source allocation and progress owners outlive every child.
   iree_allocator_t allocator_ = iree_allocator_system();
+  // Optional accounting and allocation failures for child metadata only.
+  MetadataAllocator metadata_;
   // Native notification execution context.
   iree_async_proactor_t* proactor_ = nullptr;
   // Shared capacity event.
@@ -115,6 +155,122 @@ class TLSFPoolReservationTest : public ::testing::Test {
   // Children in construction order, destroyed in reverse order.
   std::vector<iree_hal_pool_t*> pools_;
 };
+
+TEST_F(TLSFPoolReservationTest, SiblingReuseNeedsNoMetadataAllocation) {
+  std::array<iree_hal_pool_t*, 2> children;
+  for (auto& child : children) {
+    IREE_ASSERT_OK(Create(cache_, 0, metadata_.allocator(), &child));
+  }
+  const int64_t initial_live = metadata_.live;
+  const auto request = Request(512);
+  auto cycle = [&](iree_hal_pool_t* child, uint8_t pattern) {
+    iree_hal_pool_reservation_t reservation;
+    iree_hal_pool_acquire_info_t info;
+    iree_hal_pool_acquire_result_t result;
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        child, 1, &request, nullptr, &reservation, &info, &result,
+        IREE_HAL_POOL_RESERVE_FLAG_NONE));
+    ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+    iree_hal_pool_reservation_view_t view;
+    ASSERT_TRUE(
+        iree_hal_pool_query_reservation_views(child, 1, &reservation, &view));
+    std::array<uint8_t, 512> bytes;
+    bytes.fill(pattern);
+    const auto offset =
+        view.byte_offset - iree_hal_buffer_byte_offset(view.buffer);
+    IREE_ASSERT_OK(iree_hal_buffer_map_write(view.buffer, offset, bytes.data(),
+                                             bytes.size()));
+    bytes.fill(0);
+    IREE_ASSERT_OK(iree_hal_buffer_map_read(view.buffer, offset, bytes.data(),
+                                            bytes.size()));
+    for (uint8_t value : bytes) {
+      EXPECT_EQ(value, pattern);
+    }
+    iree_hal_pool_release_reservations(child, 1, &reservation, nullptr);
+    iree_hal_pool_stats_t stats;
+    iree_hal_pool_query_stats(child, &stats);
+    EXPECT_EQ(stats.bytes_committed, 0u);
+  };
+  for (auto* child : children) {
+    cycle(child, 0x51);
+  }
+  const uint64_t allocations = metadata_.allocations;
+  metadata_.fail = true;
+  for (int i = 0; i < 32; ++i) {
+    cycle(children[i % 2], 0x80 + i);
+  }
+  EXPECT_EQ(metadata_.allocations, allocations);
+  iree_hal_pool_stats_t native_stats;
+  iree_hal_pool_query_stats(native_, &native_stats);
+  EXPECT_EQ(native_stats.reserve_count, 1u);
+
+  for (auto* child : children) {
+    iree_hal_pool_trim(child, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
+  }
+  EXPECT_EQ(metadata_.live, initial_live);
+  metadata_.fail = false;
+  for (auto* child : children) {
+    cycle(child, 0x73);
+  }
+  EXPECT_GT(metadata_.allocations, allocations);
+}
+
+TEST_F(TLSFPoolReservationTest, ReusedMetadataAdoptsSiblingHistory) {
+  std::array<iree_hal_pool_t*, 2> children;
+  for (auto& child : children) {
+    IREE_ASSERT_OK(Create(cache_, 0, allocator_, &child));
+  }
+  const auto request = Request(512);
+  for (uint64_t epoch = 0; epoch < 6; ++epoch) {
+    auto* child = children[epoch % 2];
+    iree_async_single_frontier_t frontier;
+    iree_async_single_frontier_initialize(&frontier, Axis(), epoch);
+    const auto* history =
+        iree_async_single_frontier_as_const_frontier(&frontier);
+    iree_hal_pool_reservation_t reservation;
+    iree_hal_pool_acquire_info_t info;
+    iree_hal_pool_acquire_result_t result;
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        child, 1, &request, history, &reservation, &info, &result,
+        IREE_HAL_POOL_RESERVE_FLAG_NONE));
+    if (epoch) {
+      ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
+      ASSERT_NE(info.reuse_frontier, nullptr);
+      EXPECT_EQ(iree_async_frontier_compare(info.reuse_frontier, history),
+                IREE_ASYNC_FRONTIER_EQUAL);
+    } else {
+      ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+    }
+    iree_async_single_frontier_initialize(&frontier, Axis(), epoch + 1);
+    iree_hal_pool_release_reservations(child, 1, &reservation, history);
+  }
+  iree_async_frontier_tracker_advance(tracker_, Axis(), 6);
+}
+
+TEST_F(TLSFPoolReservationTest, MetadataTrimRacesAcquisitionAndReturn) {
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(Create(cache_, 0, metadata_.allocator(), &pool));
+  std::array<std::thread, 3> threads;
+  for (size_t i = 0; i < threads.size(); ++i) {
+    threads[i] = std::thread([&, i] {
+      for (int j = 0; j < 64; ++j) {
+        if (i == 0) {
+          iree_hal_pool_trim(pool, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
+        } else {
+          iree_hal_buffer_t* buffer = nullptr;
+          IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+              pool, Request(512), iree_infinite_timeout(), &buffer));
+          CheckBytes(buffer, static_cast<uint8_t>(i + j), 16);
+          iree_hal_buffer_release(buffer);
+        }
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  iree_hal_pool_trim(pool, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
+}
 
 TEST_F(TLSFPoolReservationTest, MixedSmallLargeAndAlignedBatchUsesOneSource) {
   iree_hal_pool_t* pool = nullptr;

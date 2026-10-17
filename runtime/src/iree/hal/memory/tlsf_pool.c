@@ -101,6 +101,15 @@ typedef struct iree_hal_tlsf_pool_t {
     uint32_t count;
   } slabs;
 
+  // One idle metadata set, independent of all backing ownership. Protected by
+  // |mutex| and emptied by explicit trim.
+  struct {
+    // Free offset metadata whose entire parent reservation has returned.
+    iree_hal_tlsf_pool_slab_t* slab;
+    // Durable storage for a small parent-acquisition transaction.
+    struct iree_hal_tlsf_pool_acquire_t* acquire;
+  } reusable;
+
   // Slabs changed by growth or returned blocks. Protected by |mutex|.
   iree_hal_tlsf_pool_slab_t* return_candidates;
 
@@ -635,12 +644,24 @@ static iree_hal_tlsf_pool_slab_t* iree_hal_tlsf_pool_take_unused_slabs(
   return retired;
 }
 
-static void iree_hal_tlsf_pool_destroy_slab_list(
-    iree_hal_tlsf_pool_t* pool, iree_hal_tlsf_pool_slab_t* slab) {
+static void iree_hal_tlsf_pool_release_slab_list(
+    iree_hal_tlsf_pool_t* pool, iree_hal_tlsf_pool_slab_t* slab,
+    bool retain_metadata) {
   while (slab) {
     iree_hal_tlsf_pool_slab_t* next = slab->next;
-    iree_hal_tlsf_pool_slab_release(pool->backing_pool, slab,
-                                    pool->host_allocator);
+    if (retain_metadata) {
+      iree_hal_tlsf_pool_slab_release_backing(pool->backing_pool, slab);
+      iree_slim_mutex_lock(&pool->mutex);
+      if (!pool->reusable.slab) {
+        pool->reusable.slab = slab;
+        slab = NULL;
+      }
+      iree_slim_mutex_unlock(&pool->mutex);
+    }
+    if (slab) {
+      iree_hal_tlsf_pool_slab_release(pool->backing_pool, slab,
+                                      pool->host_allocator);
+    }
     slab = next;
   }
 }
@@ -679,7 +700,7 @@ static void iree_hal_tlsf_pool_return_unused_slabs(iree_hal_tlsf_pool_t* pool) {
   iree_hal_tlsf_pool_release_node_t* dedicated =
       iree_hal_tlsf_pool_take_dedicated_returns(pool);
   iree_slim_mutex_unlock(&pool->mutex);
-  iree_hal_tlsf_pool_destroy_slab_list(pool, retired);
+  iree_hal_tlsf_pool_release_slab_list(pool, retired, /*retain_metadata=*/true);
   iree_hal_tlsf_pool_release_dedicated_list(pool, dedicated);
 }
 
@@ -1040,6 +1061,9 @@ static void iree_hal_tlsf_pool_destroy(iree_hal_pool_t* base_pool) {
   iree_hal_tlsf_pool_release_dedicated_list(pool, dedicated);
 
   iree_hal_tlsf_pool_deinitialize_slabs(pool);
+  iree_hal_tlsf_pool_release_slab_list(pool, pool->reusable.slab,
+                                       /*retain_metadata=*/false);
+  iree_allocator_free(pool->host_allocator, pool->reusable.acquire);
   iree_slim_mutex_deinitialize(&pool->mutex);
   iree_hal_memory_trace_deinitialize(&pool->trace);
   iree_hal_pool_deinitialize(base_pool);
@@ -1424,8 +1448,8 @@ static void iree_hal_tlsf_pool_acquire_finish(
   iree_hal_tlsf_pool_free_release_node_list(
       pool, acquire->metadata.prepared.release_nodes);
   if (acquire->prepared_slab) {
-    iree_hal_tlsf_pool_slab_release(pool->backing_pool, acquire->prepared_slab,
-                                    pool->host_allocator);
+    iree_hal_tlsf_pool_release_slab_list(pool, acquire->prepared_slab,
+                                         /*retain_metadata=*/true);
   }
   if (!committed) {
     for (iree_host_size_t i = 0; i < acquire->call.count; ++i) {
@@ -1453,6 +1477,14 @@ static void iree_hal_tlsf_pool_acquire_finish(
   const iree_status_t status = acquire->status;
   const iree_hal_pool_acquire_result_t result = acquire->result;
   if (acquire->allocated) {
+    if (acquire->call.count <= IREE_HAL_TLSF_POOL_INLINE_TRANSACTION_CAPACITY) {
+      iree_slim_mutex_lock(&pool->mutex);
+      if (!pool->reusable.acquire) {
+        pool->reusable.acquire = acquire;
+        acquire = NULL;
+      }
+      iree_slim_mutex_unlock(&pool->mutex);
+    }
     iree_allocator_free(pool->host_allocator, acquire);
   }
   completion.fn(completion.user_data, status, result);
@@ -1512,10 +1544,15 @@ static void iree_hal_tlsf_pool_acquire_consume_parent(
                             iree_memory_order_relaxed);
     }
   } else {
+    iree_slim_mutex_lock(&pool->mutex);
+    iree_hal_tlsf_pool_slab_t* reusable_slab = pool->reusable.slab;
+    pool->reusable.slab = NULL;
+    iree_slim_mutex_unlock(&pool->mutex);
     acquire->status = iree_hal_tlsf_pool_slab_prepare(
         pool->backing_pool, &acquire->parent.request,
         acquire->parent.reservation, acquire->parent.info, pool->slab_options,
-        &pool->asan_options, pool->host_allocator, &acquire->prepared_slab);
+        &pool->asan_options, pool->host_allocator, reusable_slab,
+        &acquire->prepared_slab);
   }
 }
 
@@ -1629,11 +1666,17 @@ static void iree_hal_tlsf_pool_acquire_progress(
       continue;
     }
     if (!acquire->allocated) {
-      iree_hal_tlsf_pool_acquire_t* durable = NULL;
-      acquire->status = iree_allocator_malloc(
-          pool->host_allocator,
-          sizeof(*durable) + acquire->call.count * sizeof(*acquire->elements),
-          (void**)&durable);
+      iree_slim_mutex_lock(&pool->mutex);
+      iree_hal_tlsf_pool_acquire_t* durable = pool->reusable.acquire;
+      pool->reusable.acquire = NULL;
+      iree_slim_mutex_unlock(&pool->mutex);
+      if (!durable) {
+        acquire->status = iree_allocator_malloc(
+            pool->host_allocator,
+            sizeof(*durable) + IREE_HAL_TLSF_POOL_INLINE_TRANSACTION_CAPACITY *
+                                   sizeof(*acquire->elements),
+            (void**)&durable);
+      }
       if (!iree_status_is_ok(acquire->status)) {
         break;
       }
@@ -1922,9 +1965,17 @@ static void iree_hal_tlsf_pool_trim(iree_hal_pool_t* base_pool,
       iree_hal_tlsf_pool_take_free_release_nodes(pool);
   iree_hal_tlsf_pool_release_node_t* dedicated =
       iree_hal_tlsf_pool_take_dedicated_returns(pool);
+  iree_hal_tlsf_pool_slab_t* reusable_slab = pool->reusable.slab;
+  iree_hal_tlsf_pool_acquire_t* reusable_acquire = pool->reusable.acquire;
+  pool->reusable.slab = NULL;
+  pool->reusable.acquire = NULL;
   iree_slim_mutex_unlock(&pool->mutex);
   iree_hal_tlsf_pool_free_release_node_list(pool, release_nodes);
-  iree_hal_tlsf_pool_destroy_slab_list(pool, retired_slabs);
+  iree_hal_tlsf_pool_release_slab_list(pool, retired_slabs,
+                                       /*retain_metadata=*/false);
+  iree_hal_tlsf_pool_release_slab_list(pool, reusable_slab,
+                                       /*retain_metadata=*/false);
+  iree_allocator_free(pool->host_allocator, reusable_acquire);
   iree_hal_tlsf_pool_release_dedicated_list(pool, dedicated);
   (void)flags;
 }

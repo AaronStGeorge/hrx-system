@@ -65,13 +65,20 @@ iree_status_t iree_hal_tlsf_pool_slab_initialize_range(
 
 // Consumes an acquired parent token, including on failure. Its exact history
 // remains attached through materialization, initialization, and rollback.
+// Consumes optional detached |reusable_slab| metadata, including on failure.
 iree_status_t iree_hal_tlsf_pool_slab_prepare(
     iree_hal_pool_t* backing_pool,
     const iree_hal_pool_reservation_request_t* request,
     iree_hal_pool_reservation_t reservation, iree_hal_pool_acquire_info_t info,
     iree_hal_memory_tlsf_options_t options,
     const iree_hal_asan_pool_options_t* asan, iree_allocator_t host_allocator,
+    iree_hal_tlsf_pool_slab_t* reusable_slab,
     iree_hal_tlsf_pool_slab_t** out_slab);
+
+// Returns all parent ownership while preserving the free offset metadata.
+// The caller has detached this slab from allocation and preparation readers.
+void iree_hal_tlsf_pool_slab_release_backing(iree_hal_pool_t* backing_pool,
+                                             iree_hal_tlsf_pool_slab_t* slab);
 
 // Releases the prepared view, returns parent ownership, and destroys metadata.
 // Finite arenas borrow their range and have no parent token to return.
