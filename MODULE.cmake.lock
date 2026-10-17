@@ -245,6 +245,7 @@ set(IREE_DEP_TRACY_CLIENT_SHA256 "bf4af567e9c7524d07f3caa745fad02fb33bd5694f1191
 set(IREE_DEP_TRACY_CLIENT_STRIP_PREFIX "tracy-0.14.1")
 set(IREE_DEP_TRACY_CLIENT_BUILD_FILE "//build_tools/third_party/tracy_client:tracy_client.BUILD.bazel")
 set(IREE_DEP_TRACY_CLIENT_PATCHES
+  "//build_tools/third_party/tracy_client:allocator_initialization.patch"
   "//build_tools/third_party/tracy_client:worker_signal_mask.patch"
   "//build_tools/third_party/tracy_client:instruction_symbols.patch"
 )
