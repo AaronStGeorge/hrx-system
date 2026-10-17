@@ -1275,7 +1275,6 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       const loom_value_facts_t facts =
           loom_value_fact_table_lookup(match_context->fact_table, value_id);
       *out_matches =
-          loom_value_facts_is_finite(facts) &&
           loom_value_facts_is_exact_float_type(facts, destination_type);
       return iree_ok_status();
     }
