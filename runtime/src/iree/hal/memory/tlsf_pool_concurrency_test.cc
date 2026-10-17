@@ -1134,14 +1134,14 @@ TEST_F(TLSFPoolConcurrencyTest, LargeBatchUsesAllPublishedSlabs) {
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   iree_hal_pool_release_reservations(pool_, kCount, reservations, nullptr);
 
-  // One transaction record serves the complete batch across existing slabs.
+  // Reuse transaction storage for the complete batch across existing slabs.
   const size_t metadata_calls = metadata_allocator_.allocation_calls();
   const size_t native_calls = native_allocator_.allocation_calls();
   IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
       pool_, kCount, requests, nullptr, reservations, infos, &result,
       IREE_HAL_POOL_RESERVE_FLAG_NONE));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
-  EXPECT_EQ(metadata_allocator_.allocation_calls() - metadata_calls, 1u);
+  EXPECT_EQ(metadata_allocator_.allocation_calls(), metadata_calls);
   EXPECT_EQ(native_allocator_.allocation_calls(), native_calls);
   for (const auto& reservation : reservations) {
     CheckReservationContents(4080, reservation);

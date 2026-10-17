@@ -106,7 +106,7 @@ typedef struct iree_hal_tlsf_pool_t {
   struct {
     // Free offset metadata whose entire parent reservation has returned.
     iree_hal_tlsf_pool_slab_t* slab;
-    // Durable storage for a small parent-acquisition transaction.
+    // Durable storage sized for the largest completed acquisition batch.
     struct iree_hal_tlsf_pool_acquire_t* acquire;
   } reusable;
 
@@ -1378,8 +1378,8 @@ typedef struct iree_hal_tlsf_pool_acquire_t {
   iree_hal_tlsf_pool_acquire_element_t* elements;
   // Already selected prefix, retained across parent and metadata preparation.
   iree_host_size_t acquired_count;
-  // True when this transaction and its elements share a host allocation.
-  bool allocated;
+  // Trailing element capacity, or zero for caller-stack transaction storage.
+  iree_host_size_t element_capacity;
   // A prefix was visible as withheld capacity while the mutex was unlocked.
   bool exposed_prefix;
   // Owned infrastructure failure, transferred to terminal completion.
@@ -1476,16 +1476,16 @@ static void iree_hal_tlsf_pool_acquire_finish(
   const iree_hal_pool_acquire_callback_t completion = acquire->call.completion;
   const iree_status_t status = acquire->status;
   const iree_hal_pool_acquire_result_t result = acquire->result;
-  if (acquire->allocated) {
-    if (acquire->call.count <= IREE_HAL_TLSF_POOL_INLINE_TRANSACTION_CAPACITY) {
-      iree_slim_mutex_lock(&pool->mutex);
-      if (!pool->reusable.acquire) {
-        pool->reusable.acquire = acquire;
-        acquire = NULL;
-      }
-      iree_slim_mutex_unlock(&pool->mutex);
+  if (acquire->element_capacity) {
+    iree_hal_tlsf_pool_acquire_t* discarded = acquire;
+    iree_slim_mutex_lock(&pool->mutex);
+    if (!pool->reusable.acquire ||
+        pool->reusable.acquire->element_capacity < acquire->element_capacity) {
+      discarded = pool->reusable.acquire;
+      pool->reusable.acquire = acquire;
     }
-    iree_allocator_free(pool->host_allocator, acquire);
+    iree_slim_mutex_unlock(&pool->mutex);
+    iree_allocator_free(pool->host_allocator, discarded);
   }
   completion.fn(completion.user_data, status, result);
 }
@@ -1665,23 +1665,25 @@ static void iree_hal_tlsf_pool_acquire_progress(
       }
       continue;
     }
-    if (!acquire->allocated) {
+    if (!acquire->element_capacity) {
       iree_slim_mutex_lock(&pool->mutex);
       iree_hal_tlsf_pool_acquire_t* durable = pool->reusable.acquire;
       pool->reusable.acquire = NULL;
       iree_slim_mutex_unlock(&pool->mutex);
+      const iree_host_size_t capacity =
+          durable ? durable->element_capacity
+                  : IREE_HAL_TLSF_POOL_INLINE_TRANSACTION_CAPACITY;
       if (!durable) {
         acquire->status = iree_allocator_malloc(
             pool->host_allocator,
-            sizeof(*durable) + IREE_HAL_TLSF_POOL_INLINE_TRANSACTION_CAPACITY *
-                                   sizeof(*acquire->elements),
+            sizeof(*durable) + capacity * sizeof(*acquire->elements),
             (void**)&durable);
       }
       if (!iree_status_is_ok(acquire->status)) {
         break;
       }
       *durable = *acquire;
-      durable->allocated = true;
+      durable->element_capacity = capacity;
       durable->elements = (iree_hal_tlsf_pool_acquire_element_t*)(durable + 1);
       memcpy(durable->elements, acquire->elements,
              acquire->call.count * sizeof(*acquire->elements));
@@ -1756,10 +1758,22 @@ static iree_status_t iree_hal_tlsf_pool_acquire_reservations(
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "TLSF acquisition metadata size overflows");
     }
-    IREE_RETURN_IF_ERROR(iree_allocator_malloc(pool->host_allocator,
-                                               storage_size, (void**)&acquire));
+    acquire = NULL;
+    iree_host_size_t capacity = request_count;
+    iree_slim_mutex_lock(&pool->mutex);
+    if (pool->reusable.acquire &&
+        pool->reusable.acquire->element_capacity >= request_count) {
+      acquire = pool->reusable.acquire;
+      pool->reusable.acquire = NULL;
+      capacity = acquire->element_capacity;
+    }
+    iree_slim_mutex_unlock(&pool->mutex);
+    if (!acquire) {
+      IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+          pool->host_allocator, storage_size, (void**)&acquire));
+    }
     *acquire = inline_acquire;
-    acquire->allocated = true;
+    acquire->element_capacity = capacity;
     acquire->elements = (iree_hal_tlsf_pool_acquire_element_t*)(acquire + 1);
   }
   memset(acquire->elements, 0, request_count * sizeof(*acquire->elements));
@@ -1772,7 +1786,7 @@ static iree_status_t iree_hal_tlsf_pool_acquire_reservations(
   }
   if (iree_status_is_ok(status)) {
     iree_hal_tlsf_pool_acquire_progress(acquire);
-  } else if (acquire->allocated) {
+  } else if (acquire->element_capacity) {
     iree_allocator_free(pool->host_allocator, acquire);
   }
   return status;

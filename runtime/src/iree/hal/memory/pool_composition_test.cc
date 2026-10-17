@@ -244,45 +244,57 @@ TEST_P(PoolCompositionTest, SiblingReuseNeedsNoMetadataAllocation) {
   std::array<iree_hal_pool_t*, 2> children;
   for (auto& child : children) {
     IREE_ASSERT_OK(
-        CreateChild(source, 4096, 2, &child, 512, metadata_.allocator()));
+        CreateChild(source, 4096, 2, &child, 64, metadata_.allocator()));
   }
   const int64_t initial_live = metadata_.live;
-  const auto request = iree_hal_make_pool_reservation_request(512, 16);
-  auto cycle = [&](iree_hal_pool_t* child, uint8_t pattern) {
-    iree_hal_pool_reservation_t reservation;
-    iree_hal_pool_acquire_info_t info;
+  std::array<iree_hal_pool_reservation_request_t, 32> requests;
+  requests.fill(iree_hal_make_pool_reservation_request(64, 16));
+  auto cycle = [&](iree_hal_pool_t* child, size_t count, uint8_t pattern) {
+    std::array<iree_hal_pool_reservation_t, 32> reservations;
+    std::array<iree_hal_pool_acquire_info_t, 32> infos;
     iree_hal_pool_acquire_result_t result;
     IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
-        child, 1, &request, nullptr, &reservation, &info, &result,
-        IREE_HAL_POOL_RESERVE_FLAG_NONE));
+        child, count, requests.data(), nullptr, reservations.data(),
+        infos.data(), &result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
     ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
-    iree_hal_pool_reservation_view_t view;
-    ASSERT_TRUE(
-        iree_hal_pool_query_reservation_views(child, 1, &reservation, &view));
-    std::array<uint8_t, 512> bytes;
-    bytes.fill(pattern);
-    const auto offset =
-        view.byte_offset - iree_hal_buffer_byte_offset(view.buffer);
-    IREE_ASSERT_OK(iree_hal_buffer_map_write(view.buffer, offset, bytes.data(),
-                                             bytes.size()));
-    bytes.fill(0);
-    IREE_ASSERT_OK(iree_hal_buffer_map_read(view.buffer, offset, bytes.data(),
-                                            bytes.size()));
-    for (uint8_t value : bytes) {
-      EXPECT_EQ(value, pattern);
+    std::array<iree_hal_pool_reservation_view_t, 32> views;
+    ASSERT_TRUE(iree_hal_pool_query_reservation_views(
+        child, count, reservations.data(), views.data()));
+    std::array<uint8_t, 64> bytes;
+    for (size_t i = 0; i < count; ++i) {
+      bytes.fill(pattern + i);
+      const auto offset =
+          views[i].byte_offset - iree_hal_buffer_byte_offset(views[i].buffer);
+      IREE_ASSERT_OK(iree_hal_buffer_map_write(views[i].buffer, offset,
+                                               bytes.data(), bytes.size()));
     }
-    iree_hal_pool_release_reservations(child, 1, &reservation, nullptr);
+    for (size_t i = 0; i < count; ++i) {
+      bytes.fill(0);
+      const auto offset =
+          views[i].byte_offset - iree_hal_buffer_byte_offset(views[i].buffer);
+      IREE_ASSERT_OK(iree_hal_buffer_map_read(views[i].buffer, offset,
+                                              bytes.data(), bytes.size()));
+      for (uint8_t value : bytes) {
+        EXPECT_EQ(value, static_cast<uint8_t>(pattern + i));
+      }
+    }
+    iree_hal_pool_release_reservations(child, count, reservations.data(),
+                                       nullptr);
     iree_hal_pool_stats_t stats;
     iree_hal_pool_query_stats(child, &stats);
     EXPECT_EQ(stats.bytes_committed, 0u);
   };
   for (auto* child : children) {
-    cycle(child, 0x51);
+    for (size_t count : {1, 8, 9, 32}) {
+      cycle(child, count, 0x51);
+    }
   }
   const uint64_t allocations = metadata_.allocations;
   metadata_.fail = true;
   for (int i = 0; i < 32; ++i) {
-    cycle(children[i % 2], 0x80 + i);
+    for (size_t count : {32, 9, 8, 1}) {
+      cycle(children[i % 2], count, 0x80 + i);
+    }
   }
   EXPECT_EQ(metadata_.allocations, allocations);
   iree_hal_pool_stats_t native_stats;
@@ -295,7 +307,7 @@ TEST_P(PoolCompositionTest, SiblingReuseNeedsNoMetadataAllocation) {
   EXPECT_EQ(metadata_.live, initial_live);
   metadata_.fail = false;
   for (auto* child : children) {
-    cycle(child, 0x73);
+    cycle(child, 32, 0x73);
   }
   EXPECT_GT(metadata_.allocations, allocations);
 }
