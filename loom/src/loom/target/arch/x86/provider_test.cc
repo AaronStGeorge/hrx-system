@@ -22,8 +22,7 @@ static constexpr uint64_t kAvx2CpuFeatures = IREE_CPU_DATA0_X86_64_AVX |
                                              IREE_CPU_DATA0_X86_64_AVX2;
 static constexpr uint64_t kAvx512CpuFeatures =
     kAvx2CpuFeatures | IREE_CPU_DATA0_X86_64_AVX512F |
-    IREE_CPU_DATA0_X86_64_AVX512VL | IREE_CPU_DATA0_X86_64_AVX512DQ |
-    IREE_CPU_DATA0_X86_64_AVX512BW;
+    IREE_CPU_DATA0_X86_64_AVX512DQ | IREE_CPU_DATA0_X86_64_AVX512BW;
 
 class X86ProviderTest : public ::testing::Test {
  protected:
@@ -133,7 +132,7 @@ TEST_F(X86ProviderTest, RequiresCompleteCpuFeatureClosures) {
     uint64_t required_features;
   } cases[] = {
       {"avx2", kAvx2CpuFeatures},
-      {"avx512", kAvx512CpuFeatures},
+      {"avx512", kAvx512CpuFeatures | IREE_CPU_DATA0_X86_64_AVX512VL},
   };
   iree_cpu_data_t cpu_data = {
       .architecture = IREE_CPU_ARCHITECTURE_X86_64,
@@ -243,6 +242,7 @@ TEST_F(X86ProviderTest, ProjectsOptionalInstructionFeaturesIndependently) {
       {IREE_CPU_DATA0_X86_64_AVXVNNIINT16, LOOM_X86_FEATURE_AVX_VNNI_INT16},
       {IREE_CPU_DATA0_X86_64_AVXNECONVERT, LOOM_X86_FEATURE_AVX_NE_CONVERT},
       {IREE_CPU_DATA0_X86_64_AVX512VNNI, LOOM_X86_FEATURE_AVX512_VNNI},
+      {IREE_CPU_DATA0_X86_64_AVX512VL, LOOM_X86_FEATURE_AVX512_VL},
       {IREE_CPU_DATA0_X86_64_AVX512BF16, LOOM_X86_FEATURE_AVX512_BF16},
       {IREE_CPU_DATA0_X86_64_AVX512FP16, LOOM_X86_FEATURE_AVX512_FP16},
   };
@@ -255,9 +255,8 @@ TEST_F(X86ProviderTest, ProjectsOptionalInstructionFeaturesIndependently) {
     ASSERT_NE(selection.profile, nullptr);
     const loom_target_bundle_t* bundle =
         loom_target_profile_bundle(selection.profile);
-    const loom_x86_feature_bits_t baseline = LOOM_X86_FEATURE_AVX512_VL;
     EXPECT_EQ(bundle->config->contract_feature_bits,
-              baseline | feature_case.contract_feature);
+              feature_case.contract_feature);
     loom_target_profile_selection_release(&selection, iree_allocator_system());
   }
 }

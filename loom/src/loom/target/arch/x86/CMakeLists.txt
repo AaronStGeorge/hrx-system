@@ -109,6 +109,7 @@ loom_cc_test(
   SRCS
     "register_classes_test.cc"
   DEPS
+    ::feature_bits
     ::register_classes
     iree::testing::gtest
     iree::testing::gtest_main

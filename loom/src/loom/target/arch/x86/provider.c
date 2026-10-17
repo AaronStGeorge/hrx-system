@@ -54,7 +54,8 @@ typedef struct loom_x86_cpu_profile_policy_t {
 // descriptor instructions and the register transport emitted around them.
 // SIMD128 Low transport uses VEX moves, but its source contract is incomplete
 // and therefore unavailable as an executable profile. AVX2 contracts include
-// FMA, and the core AVX-512 contract composes AVX2 with AVX-512F/BW/DQ/VL.
+// FMA, and the AVX-512 tier composes AVX2 with AVX-512F/BW/DQ. Optional
+// descriptor features such as AVX512VL are checked through the contract mask.
 // Packed-dot rows remain unavailable until every descriptor they expose has a
 // direct native encoding and a representable CPU feature.
 static loom_x86_cpu_profile_policy_t loom_x86_cpu_profile_policy(
@@ -77,8 +78,7 @@ static loom_x86_cpu_profile_policy_t loom_x86_cpu_profile_policy(
       policy.required_field0_bits =
           IREE_CPU_DATA0_X86_64_AVX | IREE_CPU_DATA0_X86_64_FMA |
           IREE_CPU_DATA0_X86_64_AVX2 | IREE_CPU_DATA0_X86_64_AVX512F |
-          IREE_CPU_DATA0_X86_64_AVX512VL | IREE_CPU_DATA0_X86_64_AVX512DQ |
-          IREE_CPU_DATA0_X86_64_AVX512BW;
+          IREE_CPU_DATA0_X86_64_AVX512DQ | IREE_CPU_DATA0_X86_64_AVX512BW;
       policy.automatic_priority = 4;
       break;
   }
@@ -193,6 +193,14 @@ static iree_string_view_t loom_x86_feature_contract_set_key(uint8_t selector) {
   }
 }
 
+static bool loom_x86_cpu_supports_contract_features(
+    const iree_cpu_data_t* cpu_data, uint8_t selector,
+    loom_x86_feature_bits_t required_features) {
+  return iree_all_bits_set(
+      loom_x86_cpu_contract_feature_bits(cpu_data, selector),
+      required_features);
+}
+
 static void loom_x86_owned_target_profile_destroy(
     loom_target_profile_t* base_profile, iree_allocator_t allocator) {
   iree_allocator_free(allocator,
@@ -250,11 +258,18 @@ static iree_status_t loom_x86_create_owned_cpu_profile(
   const bool use_feature_contract =
       !iree_string_view_is_empty(feature_contract_set_key) &&
       !requirement_selects_core_contract;
+  const loom_x86_feature_bits_t cpu_contract_feature_bits =
+      loom_x86_cpu_contract_feature_bits(cpu_data, core_profile->selector);
   if (use_feature_contract) {
     owned->bundle_storage.config.name = feature_contract_set_key;
     owned->bundle_storage.config.contract_set_key = feature_contract_set_key;
     owned->bundle_storage.config.contract_feature_bits =
-        loom_x86_cpu_contract_feature_bits(cpu_data, core_profile->selector);
+        cpu_contract_feature_bits;
+  }
+  if (!iree_all_bits_set(cpu_contract_feature_bits,
+                         owned->bundle_storage.config.contract_feature_bits)) {
+    iree_allocator_free(allocator, owned);
+    return iree_ok_status();
   }
 
   owned->cpu_data = *cpu_data;
@@ -311,6 +326,9 @@ static iree_status_t loom_x86_select_cpu_profile(
         loom_x86_cpu_profile_policy(requested->selector);
     if (policy.automatic_priority == 0 ||
         !iree_all_bits_set(cpu_data->fields[0], policy.required_field0_bits) ||
+        !loom_x86_cpu_supports_contract_features(
+            cpu_data, requested->selector,
+            requested->base.target_bundle->config->contract_feature_bits) ||
         (requested->cpu_data != NULL &&
          !loom_x86_cpu_data_equal(cpu_data, requested->cpu_data))) {
       return iree_ok_status();

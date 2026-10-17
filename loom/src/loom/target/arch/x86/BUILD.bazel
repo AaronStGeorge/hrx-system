@@ -114,6 +114,7 @@ loom_cc_test(
     name = "register_classes_test",
     srcs = ["register_classes_test.cc"],
     deps = [
+        ":feature_bits",
         ":register_classes",
         "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/codegen/low:descriptors",

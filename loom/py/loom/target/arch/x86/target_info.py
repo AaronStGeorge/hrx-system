@@ -249,6 +249,7 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
             X86_REG_CLASS_ZMM,
             X86_REG_CLASS_K,
         ),
+        contract_feature_bits=FEATURE_AVX512_VL,
         native_bundle_key="x86-avx512",
     ),
     X86TargetProfileInfo(
