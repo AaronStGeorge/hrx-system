@@ -241,6 +241,17 @@ struct iree_hal_task_queue_op_t {
       // Pool reservation flags used when probing the selected pool.
       iree_hal_pool_reserve_flags_t reserve_flags;
 
+      // Native acquisition completion, joined with its submitting call before
+      // any continuation may consume the operation or its borrowed arrays.
+      struct {
+        // Submission and callback each relinquish one claim.
+        iree_atomic_int32_t pending;
+        // Terminal pool result, published by completion.
+        iree_hal_pool_acquire_result_t result;
+        // Owned terminal failure, consumed by the continuation.
+        iree_status_t status;
+      } acquire;
+
       // True while this operation owns every entry in |reservations|.
       bool reservations_held;
 
@@ -785,6 +796,55 @@ iree_status_t iree_hal_task_queue_submit_op_begin(
 iree_status_t iree_hal_task_queue_submit_op_finish(
     iree_hal_task_queue_op_t* operation, iree_hal_semaphore_list_t waits,
     iree_host_size_t resource_count, iree_hal_resource_t* const* resources);
+
+// Returns whether new queue progress should complete with cancellation.
+bool iree_hal_task_queue_is_shutting_down(iree_hal_task_queue_t* queue);
+
+// Constructs the terminal error for work cancelled during queue shutdown.
+iree_status_t iree_hal_task_queue_make_shutdown_status(void);
+
+// Transfers one ready operation to the existing queue process.
+void iree_hal_task_queue_schedule_ready(iree_hal_task_queue_op_t* operation);
+
+// Retires an operation and fails its signals on error, without advancing the
+// queue frontier. Consumes the operation and status.
+void iree_hal_task_queue_op_destroy(iree_hal_task_queue_op_t* operation,
+                                    iree_status_t failure_status);
+
+// Acquires and publishes allocation backing after user waits resolve. Success
+// transfers ownership to completion; failure leaves cleanup with the caller.
+iree_status_t iree_hal_task_queue_issue_alloca(
+    iree_hal_task_queue_op_t* operation);
+
+// Returns allocation ownership and completes its accepted queue operation.
+void iree_hal_task_queue_issue_dealloca(iree_hal_task_queue_op_t* operation);
+
+// Returns staged allocation reservations and destroys completed wait state.
+void iree_hal_task_queue_alloca_cleanup(iree_hal_task_queue_op_t* operation);
+
+// Marks a captured operation as requiring asynchronous dependency progress.
+void iree_hal_task_queue_profile_force_software_defer(
+    iree_hal_task_queue_op_t* operation);
+
+// Records one allocation lifecycle event when memory profiling is enabled.
+void iree_hal_task_queue_profile_record_memory_event(
+    iree_hal_task_queue_op_t* operation,
+    iree_hal_profile_memory_event_type_t type,
+    iree_hal_profile_memory_event_flags_t flags, uint32_t result,
+    const iree_hal_pool_reservation_t* reservations,
+    uint64_t frontier_entry_count);
+
+// Records the operation's transition from submitted to ready exactly once.
+void iree_hal_task_queue_profile_record_queue_event(
+    iree_hal_task_queue_op_t* operation, iree_time_t ready_host_time_ns);
+
+// Records terminal failure before the operation became ready to execute.
+void iree_hal_task_queue_profile_record_failed_before_ready(
+    iree_hal_task_queue_op_t* operation);
+
+// Begins the bounded host-execution interval when profiling is enabled.
+void iree_hal_task_queue_profile_start_host_execution(
+    iree_hal_task_queue_op_t* operation);
 
 // Publishes terminal success and retires the operation's frontier and scope.
 // Consumes the operation.

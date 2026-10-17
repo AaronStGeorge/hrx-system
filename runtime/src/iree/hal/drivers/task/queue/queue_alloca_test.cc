@@ -23,6 +23,7 @@
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/slab_cache.h"
 #include "iree/hal/memory/tlsf_pool.h"
+#include "iree/hal/testing/deferred_pool.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -555,6 +556,148 @@ TEST_P(TaskQueueAllocaTest, CompletedDeallocationIsImmediatelyReusable) {
     }
     IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
   }
+}
+
+TEST_P(TaskQueueAllocaTest, DeferredAllocationDoesNotBlockSameQueueWork) {
+  iree::hal::testing::DeferredBackingPool* deferred = nullptr;
+  IREE_ASSERT_OK(iree::hal::testing::DeferredBackingPool::Create(backing_pool_,
+                                                                 &deferred));
+  deferred->defer = true;
+  iree_hal_pool_reservation_request_t request = {
+      .allocation_size = kBlockSize,
+  };
+  uint64_t allocated_value = 1;
+  uint64_t filled_value = 2;
+  uint64_t released_value = 3;
+  const auto no_waits = iree_hal_semaphore_list_empty();
+  iree_hal_semaphore_list_t held_allocated = {1, &semaphores_[0],
+                                              &allocated_value};
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], no_waits, held_allocated,
+                                       deferred, 1, &request,
+                                       &pending_buffers_[0]));
+  ASSERT_EQ(deferred->pending.count, 1u);
+
+  iree_hal_semaphore_list_t ready_allocated = {1, &semaphores_[1],
+                                               &allocated_value};
+  iree_hal_semaphore_list_t ready_filled = {1, &semaphores_[1], &filled_value};
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], no_waits, ready_allocated,
+                                       pool_, 1, &request,
+                                       &initial_buffers_[0]));
+  const uint32_t pattern = 0x3210ABCDu;
+  IREE_ASSERT_OK(iree_hal_queue_fill(
+      queues_[0], ready_allocated, ready_filled, initial_buffers_[0], 0,
+      kBlockSize, &pattern, sizeof(pattern), nullptr, IREE_HAL_FILL_FLAG_NONE));
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[1], filled_value));
+  std::array<uint32_t, kBlockSize / sizeof(uint32_t)> actual;
+  IREE_ASSERT_OK(iree_hal_buffer_map_read(initial_buffers_[0], 0, actual.data(),
+                                          sizeof(actual)));
+  for (uint32_t value : actual) {
+    EXPECT_EQ(value, pattern);
+  }
+  uint64_t held_value = UINT64_MAX;
+  IREE_ASSERT_OK(iree_hal_semaphore_query(semaphores_[0], &held_value));
+  EXPECT_EQ(held_value, 0u);
+
+  // The native completion context resumes the captured operation directly.
+  // It has no relationship to the queue's control worker or the caller.
+  std::thread completion([&] { deferred->CompleteOne(); });
+  completion.join();
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[0], allocated_value));
+  iree_hal_semaphore_list_t held_filled = {1, &semaphores_[0], &filled_value};
+  IREE_ASSERT_OK(iree_hal_queue_fill(
+      queues_[0], held_allocated, held_filled, pending_buffers_[0], 0,
+      kBlockSize, &pattern, sizeof(pattern), nullptr, IREE_HAL_FILL_FLAG_NONE));
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[0], filled_value));
+  IREE_ASSERT_OK(iree_hal_buffer_map_read(pending_buffers_[0], 0, actual.data(),
+                                          sizeof(actual)));
+  for (uint32_t value : actual) {
+    EXPECT_EQ(value, pattern);
+  }
+
+  iree_hal_semaphore_list_t held_released = {1, &semaphores_[0],
+                                             &released_value};
+  IREE_ASSERT_OK(iree_hal_queue_dealloca(queues_[0], held_filled, held_released,
+                                         1, &pending_buffers_[0]));
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[0], released_value));
+  iree_hal_buffer_release(pending_buffers_[0]);
+  pending_buffers_[0] = nullptr;
+  iree_hal_pool_release(deferred);
+  iree_hal_semaphore_list_t ready_released = {1, &semaphores_[1],
+                                              &released_value};
+  IREE_ASSERT_OK(iree_hal_queue_dealloca(
+      queues_[0], ready_filled, ready_released, 1, &initial_buffers_[0]));
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[1], released_value));
+}
+
+TEST_P(TaskQueueAllocaTest, DeferredAllocationFailureReachesSignal) {
+  iree::hal::testing::DeferredBackingPool* deferred = nullptr;
+  IREE_ASSERT_OK(iree::hal::testing::DeferredBackingPool::Create(backing_pool_,
+                                                                 &deferred));
+  deferred->defer = true;
+  iree_hal_pool_reservation_request_t request = {
+      .allocation_size = kBlockSize,
+  };
+  uint64_t allocated_value = 1;
+  iree_hal_semaphore_list_t allocated = {1, &semaphores_[0], &allocated_value};
+  IREE_ASSERT_OK(iree_hal_queue_alloca(
+      queues_[0], iree_hal_semaphore_list_empty(), allocated, deferred, 1,
+      &request, &pending_buffers_[0]));
+  std::thread completion([&] { deferred->FailOne(); });
+  completion.join();
+  uint64_t value = 0;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        iree_hal_semaphore_query(semaphores_[0], &value));
+  iree_hal_buffer_release(pending_buffers_[0]);
+  pending_buffers_[0] = nullptr;
+  iree_hal_pool_release(deferred);
+}
+
+TEST_P(TaskQueueAllocaTest, CapacityCanReturnDuringDeferredProbe) {
+  iree::hal::testing::DeferredBackingPool* deferred = nullptr;
+  IREE_ASSERT_OK(
+      iree::hal::testing::DeferredBackingPool::Create(pool_, &deferred));
+  deferred->defer = true;
+  std::array<iree_hal_pool_reservation_request_t, 2> requests = {};
+  for (auto& request : requests) {
+    request.allocation_size = kBlockSize;
+  }
+  uint64_t allocated_value = 1;
+  uint64_t released_value = 2;
+  const auto no_waits = iree_hal_semaphore_list_empty();
+  iree_hal_semaphore_list_t initial_allocated = {1, &semaphores_[0],
+                                                 &allocated_value};
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], no_waits, initial_allocated,
+                                       pool_, requests.size(), requests.data(),
+                                       initial_buffers_.data()));
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[0], allocated_value));
+
+  iree_hal_semaphore_list_t pending_allocated = {1, &semaphores_[1],
+                                                 &allocated_value};
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[1], no_waits, pending_allocated,
+                                       deferred, 1, requests.data(),
+                                       &pending_buffers_[0]));
+  deferred->CompleteOne();
+  // The first exhausted result prepares the capacity wait and submits a
+  // second probe. Return capacity while that probe is still held.
+  ASSERT_EQ(deferred->pending.count, 1u);
+  iree_hal_semaphore_list_t initial_released = {1, &semaphores_[0],
+                                                &released_value};
+  IREE_ASSERT_OK(iree_hal_queue_dealloca(
+      queues_[0], initial_allocated, initial_released, initial_buffers_.size(),
+      initial_buffers_.data()));
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[0], released_value));
+  deferred->CompleteOne();
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[1], allocated_value));
+
+  iree_hal_semaphore_list_t pending_released = {1, &semaphores_[1],
+                                                &released_value};
+  IREE_ASSERT_OK(iree_hal_queue_dealloca(queues_[1], pending_allocated,
+                                         pending_released, 1,
+                                         &pending_buffers_[0]));
+  ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[1], released_value));
+  iree_hal_buffer_release(pending_buffers_[0]);
+  pending_buffers_[0] = nullptr;
+  iree_hal_pool_release(deferred);
 }
 
 INSTANTIATE_TEST_SUITE_P(NotificationOwners, TaskQueueAllocaTest,

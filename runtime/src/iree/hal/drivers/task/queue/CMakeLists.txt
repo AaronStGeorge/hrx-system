@@ -16,6 +16,7 @@ iree_cc_library(
     "memory_barrier.h"
     "queue.h"
   SRCS
+    "memory_allocation.c"
     "memory_barrier.c"
     "memory_mapping.c"
     "queue.c"
@@ -89,6 +90,7 @@ iree_cc_test(
     iree::hal::memory::passthrough_pool
     iree::hal::memory::slab_cache
     iree::hal::memory::tlsf_pool
+    iree::hal::testing::deferred_pool
     iree::task
     iree::testing::gtest
     iree::testing::gtest_main
