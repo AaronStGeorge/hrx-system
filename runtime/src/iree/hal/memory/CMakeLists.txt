@@ -354,7 +354,6 @@ iree_cc_library(
     "slab_cache.c"
   DEPS
     ::buffer_range
-    ::maintenance
     ::tracing
     iree::async
     iree::base
@@ -380,6 +379,7 @@ iree_cc_test(
     iree::async::platform
     iree::base
     iree::hal
+    iree::hal::testing::deferred_pool
     iree::testing::gtest
     iree::testing::gtest_main
 )

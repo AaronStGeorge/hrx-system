@@ -22,6 +22,7 @@
 #include "iree/hal/memory/maintenance_thread.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/tlsf_pool.h"
+#include "iree/hal/testing/deferred_pool.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -228,6 +229,202 @@ class SlabCacheTest : public ::testing::Test {
   static constexpr iree_device_size_t kMinAlignment = 16;
 };
 
+class DeferredSlabCacheTest : public SlabCacheTest {
+ protected:
+  void SetUp() override {
+    SlabCacheTest::SetUp();
+    iree_hal_pool_release(cache_);
+    cache_ = nullptr;
+    IREE_ASSERT_OK(
+        iree::hal::testing::DeferredBackingPool::Create(native_, &parent_));
+    IREE_ASSERT_OK(CreateCache(parent_, 4096, 0, 4, &cache_));
+  }
+
+  void TearDown() override {
+    iree_hal_pool_release(parent_);
+    SlabCacheTest::TearDown();
+  }
+
+  void Seed(iree_hal_pool_reservation_t* reservation) {
+    iree_hal_pool_acquire_info_t info;
+    iree_hal_pool_acquire_result_t result;
+    IREE_ASSERT_OK(Acquire(cache_, 4096, nullptr,
+                           IREE_HAL_POOL_RESERVE_FLAG_NONE, reservation, &info,
+                           &result));
+    ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  }
+
+  // Retained dependency adapter; the cache owns its own parent reference.
+  iree::hal::testing::DeferredBackingPool* parent_ = nullptr;
+};
+
+TEST_F(DeferredSlabCacheTest, PendingPrefixSurvivesDeferredGrowth) {
+  iree_hal_pool_reservation_t initial[2];
+  ASSERT_NO_FATAL_FAILURE(Seed(&initial[0]));
+  ASSERT_NO_FATAL_FAILURE(Seed(&initial[1]));
+  iree_async_single_frontier_t death = {.entry_count = 1};
+  death.entries[0] = {Axis(0), 7};
+  const auto* history = iree_async_fixed_frontier_as_const_frontier(&death);
+  iree_hal_pool_release_reservations(cache_, 1, &initial[0], history);
+  parent_->defer = true;
+  const iree_hal_pool_reservation_request_t requests[2] = {
+      iree_hal_make_pool_reservation_request(4096, kMinAlignment),
+      iree_hal_make_pool_reservation_request(4096, kMinAlignment),
+  };
+  std::array<iree_hal_pool_reservation_t, 2> reservations;
+  memset(reservations.data(), 0xA5, sizeof(reservations));
+  const auto originals = reservations;
+  iree_hal_pool_acquire_info_t infos[2];
+  int completions = 0;
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      cache_, 2, requests, nullptr, reservations.data(), infos,
+      {
+          .fn =
+              [](void* user_data, iree_status_t status,
+                 iree_hal_pool_acquire_result_t result) {
+                IREE_EXPECT_OK(status);
+                EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_NEEDS_WAIT);
+                ++*static_cast<int*>(user_data);
+              },
+          .user_data = &completions,
+      },
+      IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER));
+  EXPECT_EQ(completions, 0);
+  ASSERT_EQ(parent_->pending.count, 1u);
+  EXPECT_EQ(memcmp(reservations.data(), originals.data(), sizeof(originals)),
+            0);
+  iree_hal_pool_release_reservations(cache_, 1, &initial[1], nullptr);
+  iree_hal_pool_reservation_t independent;
+  iree_hal_pool_acquire_info_t info;
+  iree_hal_pool_acquire_result_t result;
+  IREE_ASSERT_OK(Acquire(cache_, 4096, nullptr,
+                         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
+                         &independent, &info, &result));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  uintptr_t address = 0;
+  IREE_ASSERT_OK(CheckBytes(cache_, independent, 0x67, &address));
+  iree_hal_pool_release_reservations(cache_, 1, &independent, nullptr);
+  std::thread completing([&] { parent_->CompleteOne(); });
+  completing.join();
+  ASSERT_EQ(completions, 1);
+  EXPECT_EQ(reservations[0].block_handle, initial[0].block_handle);
+  ASSERT_NE(infos[0].reuse_frontier, nullptr);
+  EXPECT_EQ(iree_async_frontier_compare(infos[0].reuse_frontier, history),
+            IREE_ASYNC_FRONTIER_EQUAL);
+  iree_async_frontier_tracker_advance(tracker_, Axis(0), 7);
+  for (const auto& reservation : reservations) {
+    IREE_ASSERT_OK(CheckBytes(cache_, reservation, 0xA3, &address));
+  }
+  iree_hal_pool_release_reservations(cache_, 2, reservations.data(), nullptr);
+}
+
+TEST_F(DeferredSlabCacheTest, FailureRestoresExactPrefixAndNotifies) {
+  iree_hal_pool_reservation_t initial;
+  ASSERT_NO_FATAL_FAILURE(Seed(&initial));
+  iree_async_single_frontier_t death = {.entry_count = 1};
+  death.entries[0] = {Axis(1), 13};
+  const auto* history = iree_async_fixed_frontier_as_const_frontier(&death);
+  iree_hal_pool_release_reservations(cache_, 1, &initial, history);
+  parent_->defer = true;
+  const iree_hal_pool_reservation_request_t requests[2] = {
+      iree_hal_make_pool_reservation_request(4096, kMinAlignment),
+      iree_hal_make_pool_reservation_request(4096, kMinAlignment),
+  };
+  std::array<iree_hal_pool_reservation_t, 2> reservations;
+  memset(reservations.data(), 0xA5, sizeof(reservations));
+  const auto originals = reservations;
+  iree_hal_pool_acquire_info_t infos[2];
+  int completions = 0;
+  const uint32_t token =
+      iree_async_notification_begin_observe(iree_hal_pool_notification(cache_));
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      cache_, 2, requests, history, reservations.data(), infos,
+      {
+          .fn =
+              [](void* user_data, iree_status_t status,
+                 iree_hal_pool_acquire_result_t result) {
+                IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+                ++*static_cast<int*>(user_data);
+              },
+          .user_data = &completions,
+      },
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  ASSERT_EQ(parent_->pending.count, 1u);
+  parent_->FailOne();
+  EXPECT_EQ(completions, 1);
+  EXPECT_EQ(memcmp(reservations.data(), originals.data(), sizeof(originals)),
+            0);
+  EXPECT_TRUE(iree_async_notification_wait_for_token(
+      iree_hal_pool_notification(cache_), token, iree_immediate_timeout()));
+  iree_async_notification_end_observe(iree_hal_pool_notification(cache_));
+  iree_hal_pool_acquire_result_t result;
+  IREE_ASSERT_OK(Acquire(cache_, 4096, history,
+                         IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH,
+                         &reservations[0], &infos[0], &result));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
+  EXPECT_EQ(reservations[0].block_handle, initial.block_handle);
+  EXPECT_EQ(iree_async_frontier_compare(infos[0].reuse_frontier, history),
+            IREE_ASYNC_FRONTIER_EQUAL);
+  iree_hal_pool_release_reservations(cache_, 1, reservations.data(), history);
+  iree_async_frontier_tracker_advance(tracker_, Axis(1), 13);
+}
+
+TEST_F(DeferredSlabCacheTest, RefillOwnsCacheUntilItsCallbackFinishes) {
+  parent_->defer = true;
+  IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
+  ASSERT_EQ(parent_->pending.count, 1u);
+  iree_hal_pool_release(cache_);
+  cache_ = nullptr;
+  parent_->CompleteOne();
+  Drain();
+  iree_hal_pool_stats_t stats;
+  iree_hal_pool_query_stats(native_, &stats);
+  EXPECT_EQ(stats.reserve_count, 1u);
+  EXPECT_EQ(stats.release_count, 1u);
+  EXPECT_EQ(stats.bytes_committed, 0u);
+}
+
+TEST_F(DeferredSlabCacheTest, TrimInvalidatesRefillWithoutJoining) {
+  parent_->defer = true;
+  IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
+  ASSERT_EQ(parent_->pending.count, 1u);
+  iree_hal_pool_trim(cache_, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
+  parent_->CompleteOne();
+  iree_hal_slab_cache_stats_t stats;
+  IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
+  EXPECT_EQ(stats.ready_count, 0u);
+  EXPECT_EQ(parent_->pending.count, 0u);
+  IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
+  ASSERT_EQ(parent_->pending.count, 1u);
+  IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 0));
+  parent_->CompleteOne();
+  IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
+  EXPECT_EQ(stats.ready_count, 0u);
+}
+
+TEST_F(DeferredSlabCacheTest, LargeInlineBatchesHaveBoundedParentStacks) {
+  constexpr size_t kCount = 512;
+  std::vector<iree_hal_pool_reservation_request_t> requests(
+      kCount, iree_hal_make_pool_reservation_request(4096, kMinAlignment));
+  std::vector<iree_hal_pool_reservation_t> reservations(kCount);
+  std::vector<iree_hal_pool_acquire_info_t> infos(kCount);
+  iree_hal_pool_acquire_result_t result;
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+      cache_, kCount, requests.data(), nullptr, reservations.data(),
+      infos.data(), &result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  EXPECT_EQ(parent_->maximum_depth, 1u);
+  iree_hal_pool_release_reservations(cache_, kCount, reservations.data(),
+                                     nullptr);
+  iree_hal_pool_t* prefilled = nullptr;
+  IREE_ASSERT_OK(CreateCache(parent_, 4096, kCount, kCount, &prefilled));
+  iree_hal_slab_cache_stats_t stats;
+  IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(prefilled, &stats));
+  EXPECT_EQ(stats.ready_count, kCount);
+  EXPECT_EQ(parent_->maximum_depth, 1u);
+  iree_hal_pool_release(prefilled);
+}
+
 TEST_F(SlabCacheTest, IndependentChildrenReuseOneNativeAllocation) {
   iree_hal_pool_t* first = nullptr;
   IREE_ASSERT_OK(CreateChild(cache_, 4096, &first));
@@ -368,6 +565,34 @@ TEST_F(SlabCacheTest, PendingReturnPreservesExactHistoryAndPrefersReady) {
   EXPECT_EQ(stats.ready_count, 1u);
   EXPECT_EQ(stats.pending_count, 0u);
   iree_hal_pool_release_reservations(cache_, 1, &ready, nullptr);
+}
+
+TEST_F(SlabCacheTest, ReuseCombinesRequesterAndPhysicalCompletion) {
+  iree_hal_pool_reservation_t original;
+  iree_hal_pool_acquire_info_t info;
+  iree_hal_pool_acquire_result_t result;
+  IREE_ASSERT_OK(Acquire(cache_, 4096, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
+                         &original, &info, &result));
+  IREE_ASYNC_FIXED_FRONTIER_TYPE(History, 2);
+  History history = {.entry_count = 2};
+  history.entries[0] = {Axis(0), 7};
+  history.entries[1] = {Axis(1), 11};
+  const auto* frontier = iree_async_fixed_frontier_as_const_frontier(&history);
+  iree_hal_pool_release_reservations(cache_, 1, &original, frontier);
+  iree_async_frontier_tracker_advance(tracker_, Axis(0), 7);
+  iree_async_single_frontier_t requester = {.entry_count = 1};
+  requester.entries[0] = {Axis(1), 11};
+  iree_hal_pool_reservation_t reservation;
+  IREE_ASSERT_OK(Acquire(
+      cache_, 4096, iree_async_fixed_frontier_as_const_frontier(&requester),
+      IREE_HAL_POOL_RESERVE_FLAG_DISALLOW_GROWTH, &reservation, &info,
+      &result));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
+  EXPECT_EQ(reservation.block_handle, original.block_handle);
+  EXPECT_EQ(iree_async_frontier_compare(info.reuse_frontier, frontier),
+            IREE_ASYNC_FRONTIER_EQUAL);
+  iree_hal_pool_release_reservations(cache_, 1, &reservation, frontier);
+  iree_async_frontier_tracker_advance(tracker_, Axis(1), 11);
 }
 
 TEST_F(SlabCacheTest, FailedBatchRestoresIdleCapacityWithoutNotification) {
@@ -524,7 +749,8 @@ TEST_F(SlabCacheTest, HotReuseAndTrimDoNotWaitForNativePreparation) {
   IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
   Drain();
   native_allocator_.BlockNext();
-  IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 2));
+  std::thread refill(
+      [&] { IREE_EXPECT_OK(iree_hal_slab_cache_set_target(cache_, 2)); });
   native_allocator_.AwaitEntry();
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
@@ -538,6 +764,7 @@ TEST_F(SlabCacheTest, HotReuseAndTrimDoNotWaitForNativePreparation) {
   iree_hal_pool_release_reservations(cache_, 1, &reservation, nullptr);
   iree_hal_pool_trim(cache_, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
   native_allocator_.Resume();
+  refill.join();
   Drain();
   iree_hal_slab_cache_stats_t stats;
   IREE_ASSERT_OK(iree_hal_slab_cache_query_stats(cache_, &stats));
@@ -618,7 +845,8 @@ TEST_P(SlabCacheChildReturnTest,
   // Hold a real CPU-provider allocation at its allocator boundary. Logical
   // return and peer reuse must finish before that dependency is released.
   native_allocator_.BlockNext();
-  IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
+  std::thread refill(
+      [&] { IREE_EXPECT_OK(iree_hal_slab_cache_set_target(cache_, 1)); });
   native_allocator_.AwaitEntry();
   iree_async_single_frontier_t death = {.entry_count = 1};
   death.entries[0] = {Axis(0), 7};
@@ -654,6 +882,7 @@ TEST_P(SlabCacheChildReturnTest,
   iree_hal_buffer_release(old_view);
   iree_hal_pool_release_reservations(second, 1, &reservation, nullptr);
   native_allocator_.Resume();
+  refill.join();
   Drain();
 }
 
@@ -675,7 +904,8 @@ TEST_F(SlabCacheTest, TrimReturnsCapacityDuringNativePreparation) {
   }
   Drain();
   native_allocator_.BlockNext();
-  IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
+  std::thread refill(
+      [&] { IREE_EXPECT_OK(iree_hal_slab_cache_set_target(cache_, 1)); });
   native_allocator_.AwaitEntry();
 
   // Child returns are visible to each trim immediately. Neither trim may join
@@ -702,6 +932,7 @@ TEST_F(SlabCacheTest, TrimReturnsCapacityDuringNativePreparation) {
     EXPECT_EQ(stats.slab_count, 0u);
   }
   native_allocator_.Resume();
+  refill.join();
   Drain();
   // The in-flight refill started before trimming and cannot republish capacity.
   iree_hal_pool_query_stats(cache_, &stats);
@@ -798,7 +1029,7 @@ TEST_F(SlabCacheTest, ConcurrentOwningAllocationsAndReturns) {
   EXPECT_LE(cache_stats.ready_count, 4u);
 }
 
-TEST_F(SlabCacheTest, InteriorRangePreparationPreservesNeighbors) {
+TEST_F(SlabCacheTest, RefillDoesNotTouchBackingBytes) {
   iree_hal_buffer_t* backing = nullptr;
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       native_, iree_hal_make_pool_reservation_request(8192, kMinAlignment),
@@ -820,9 +1051,7 @@ TEST_F(SlabCacheTest, InteriorRangePreparationPreservesNeighbors) {
   IREE_ASSERT_OK(
       iree_hal_buffer_map_read(backing, 0, actual.data(), actual.size()));
   for (size_t i = 0; i < actual.size(); ++i) {
-    if (i < 16 || i >= 1040) {
-      EXPECT_EQ(actual[i], pattern) << i;
-    }
+    EXPECT_EQ(actual[i], pattern) << i;
   }
   iree_hal_pool_release(cache);
   iree_hal_pool_release(interior);
