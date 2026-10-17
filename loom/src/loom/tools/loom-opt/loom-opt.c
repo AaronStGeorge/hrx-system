@@ -10,17 +10,13 @@
 #include <stdio.h>
 
 #include "iree/base/api.h"
-#include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
-#include "loom/config/application.h"
-#include "loom/config/schema.h"
-#include "loom/config/text.h"
 #include "loom/config/text_binding.h"
-#include "loom/ir/module.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/report.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/cli/loomc_diagnostic_json.h"
+#include "loom/tooling/cli/loomc_options.h"
 #include "loom/tooling/cli/loomc_result.h"
 #include "loom/tooling/config/input.h"
 #include "loom/tooling/io/file.h"
@@ -30,6 +26,7 @@
 #include "loom/util/stream.h"
 #include "loomc/interop.h"
 #include "loomc/iree.h"
+#include "loomc/module_config.h"
 #include "loomc/target/configured_ir.h"
 
 IREE_FLAG(string, to, "text", "Output format: text, bc, or bytecode.");
@@ -517,18 +514,6 @@ static iree_status_t loom_opt_append_config_files(
   return iree_ok_status();
 }
 
-static iree_status_t loom_opt_materialize_config_set(
-    loom_module_t* module, const loom_config_text_binding_set_t* config_set,
-    iree_arena_block_pool_t* block_pool,
-    loom_config_application_result_t* out_result) {
-  *out_result = (loom_config_application_result_t){0};
-  loom_config_text_materialize_options_t options;
-  loom_config_text_materialize_options_initialize(&options);
-  options.binding_set = config_set;
-  return loom_config_text_materialize_module(module, &options, block_pool,
-                                             out_result);
-}
-
 static iree_status_t loom_opt_write_pass_report(
     loom_opt_pass_report_mode_t mode, const loom_pass_report_t* report) {
   switch (mode) {
@@ -600,22 +585,19 @@ static iree_status_t loom_opt_print_module(iree_string_view_t output_path,
 }
 
 static iree_status_t loom_opt_print_config_schema(
-    iree_string_view_t output_path, const loom_module_t* module,
+    iree_string_view_t output_path, const loomc_artifact_t* artifact,
     iree_allocator_t allocator) {
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(allocator, &builder);
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(&builder, &stream);
-  iree_status_t status = loom_config_format_schema_json(module, &stream);
+  loom_tooling_output_stream_t output = {0};
+  iree_status_t status =
+      loom_tooling_output_stream_open(output_path, allocator, &output);
   if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_string(&builder, IREE_SV("\n"));
+    status = iree_status_from_loomc(
+        loomc_artifact_write_to_file(artifact, output.file));
   }
   if (iree_status_is_ok(status)) {
-    status = loom_tooling_write_output_file(
-        output_path, iree_string_builder_view(&builder), allocator);
+    status = loom_output_stream_write_char(&output.stream, '\n');
   }
-  iree_string_builder_deinitialize(&builder);
-  return status;
+  return iree_status_join(status, loom_tooling_output_stream_close(&output));
 }
 
 static iree_status_t loom_opt_print_pass_list(
@@ -843,8 +825,6 @@ int main(int argc, char** argv) {
   loomc_allocator_t loom_allocator = loomc_allocator_from_iree(allocator);
 
   iree_io_file_contents_t* contents = NULL;
-  iree_arena_block_pool_t block_pool;
-  bool block_pool_initialized = false;
   loomc_target_environment_t* public_target_environment = NULL;
   loomc_context_t* public_context = NULL;
   loomc_workspace_t* public_workspace = NULL;
@@ -869,7 +849,6 @@ int main(int argc, char** argv) {
   loom_tooling_loomc_pass_trace_t pass_trace = {0};
   bool pipeline_attempted = false;
   iree_status_code_t pipeline_status_code = IREE_STATUS_OK;
-  loom_config_application_result_t config_materialize_result = {0};
   bool module_ready = true;
 
   // The optimizer accepts target Low before artifact selection and therefore
@@ -1017,18 +996,27 @@ int main(int argc, char** argv) {
   }
   if (iree_status_is_ok(status) && !metadata_only && module_ready &&
       config_set.binding_count > 0) {
-    iree_arena_block_pool_initialize(LOOM_OPT_BLOCK_POOL_BLOCK_SIZE, allocator,
-                                     &block_pool);
-    block_pool_initialized = true;
-    const loomc_module_mutable_interop_view_t view =
-        loomc_module_get_mutable_interop_view(public_module);
-    status = loom_opt_materialize_config_set(
-        view.module, &config_set, &block_pool, &config_materialize_result);
-  }
-  if (iree_status_is_ok(status) && !metadata_only && module_ready &&
-      FLAG_verify && config_materialize_result.materialized_count > 0) {
-    status = loom_opt_verify_module(public_module, diagnostic_format, allocator,
-                                    &module_ready);
+    loomc_config_binding_t* bindings = NULL;
+    loomc_module_config_options_t options = {
+        .type = LOOMC_STRUCTURE_TYPE_MODULE_CONFIG_OPTIONS,
+        .structure_size = sizeof(options),
+    };
+    status = loom_tooling_cli_make_loomc_config_options(
+        &config_set, allocator, &bindings, &options.config);
+    // Passes may remove unused declarations before the final resolution check.
+    options.config.flags = 0;
+    if (iree_status_is_ok(status)) {
+      status = iree_status_from_loomc(
+          loomc_module_apply_config(public_module, public_workspace, &options,
+                                    loom_allocator, &public_result));
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_opt_present_loomc_result(diagnostic_format, public_result,
+                                             &module_ready);
+    }
+    loomc_result_release(public_result);
+    public_result = NULL;
+    iree_allocator_free(allocator, bindings);
   }
   if (iree_status_is_ok(status) && !metadata_only && module_ready &&
       !iree_string_view_is_empty(iree_string_view_trim(
@@ -1112,11 +1100,16 @@ int main(int argc, char** argv) {
                       IREE_STATUS_FAILED_PRECONDITION, allocator));
     }
   }
-  loomc_module_interop_view_t inspection_view = {0};
   if (iree_status_is_ok(status) && !metadata_only && module_ready &&
-      (FLAG_require_resolved_config || FLAG_print_config_schema)) {
-    status = iree_status_from_loomc(loomc_module_get_interop_view(
-        public_module, loom_allocator, &inspection_view, &public_result));
+      FLAG_require_resolved_config) {
+    const loomc_module_config_options_t options = {
+        .type = LOOMC_STRUCTURE_TYPE_MODULE_CONFIG_OPTIONS,
+        .structure_size = sizeof(options),
+        .config = {.flags = LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED},
+    };
+    status = iree_status_from_loomc(
+        loomc_module_apply_config(public_module, public_workspace, &options,
+                                  loom_allocator, &public_result));
     if (iree_status_is_ok(status)) {
       status = loom_opt_present_loomc_result(diagnostic_format, public_result,
                                              &module_ready);
@@ -1124,14 +1117,19 @@ int main(int argc, char** argv) {
     loomc_result_release(public_result);
     public_result = NULL;
   }
-  if (iree_status_is_ok(status) && !metadata_only && module_ready &&
-      FLAG_require_resolved_config) {
-    status = loom_config_require_resolved_module(inspection_view.module, NULL);
-  }
   if (iree_status_is_ok(status) && !metadata_only && module_ready) {
     if (FLAG_print_config_schema) {
-      status = loom_opt_print_config_schema(iree_make_cstring_view(FLAG_output),
-                                            inspection_view.module, allocator);
+      status = iree_status_from_loomc(loomc_module_query_config_schema(
+          public_module, loom_allocator, &public_result));
+      if (iree_status_is_ok(status)) {
+        status = loom_opt_present_loomc_result(diagnostic_format, public_result,
+                                               &module_ready);
+      }
+      if (iree_status_is_ok(status) && module_ready) {
+        status = loom_opt_print_config_schema(
+            iree_make_cstring_view(FLAG_output),
+            loomc_result_artifact_at(public_result, 0), allocator);
+      }
     } else {
       status = loom_opt_print_module(iree_make_cstring_view(FLAG_output),
                                      public_module, output_format, allocator);
@@ -1159,9 +1157,6 @@ int main(int argc, char** argv) {
   iree_io_file_contents_free(contents);
   loomc_workspace_release(public_workspace);
   loomc_context_release(public_context);
-  if (block_pool_initialized) {
-    iree_arena_block_pool_deinitialize(&block_pool);
-  }
   loomc_target_environment_release(public_target_environment);
 
   const int exit_code = had_error ? 1 : 0;

@@ -313,6 +313,9 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_native_compile_report_options_t` (exact-version interop).
   LOOMC_STRUCTURE_TYPE_NATIVE_COMPILE_REPORT_OPTIONS = 47,
+
+  /// `loomc_module_config_options_t`.
+  LOOMC_STRUCTURE_TYPE_MODULE_CONFIG_OPTIONS = 48,
 } loomc_structure_type_t;
 
 /// One loose string option entry.

@@ -52,6 +52,7 @@
             "args": [
               "{srcdir}/loom_opt_f32_arith.loom",
               "--pipeline=default",
+              "--require-resolved-config",
               "--to=bytecode",
               "--output={tmp}/default.loombc"
             ]

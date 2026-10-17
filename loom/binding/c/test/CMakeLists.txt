@@ -40,6 +40,21 @@ endif()
 
 loom_cc_test(
   NAME
+    module_config_test
+  SRCS
+    "module_config_test.cc"
+  DEPS
+    ::test_util
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::binding::c::loomc
+    loom::config::schema
+    loom::util::stream
+)
+
+loom_cc_test(
+  NAME
     interop_test
   SRCS
     "interop_test.cc"

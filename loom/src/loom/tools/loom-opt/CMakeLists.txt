@@ -16,20 +16,16 @@ loom_cc_binary(
     "loom-opt.c"
   DEPS
     iree::base
-    iree::base::internal::arena
     iree::base::tooling::flags
     loom::binding::c::interop
     loom::binding::c::loomc
     loom::binding::c::target::configured::ir
-    loom::config::application
-    loom::config::schema
-    loom::config::text
     loom::config::text_binding
-    loom::ir
     loom::pass::registry
     loom::pass::report
     loom::tooling::cli::help
     loom::tooling::cli::loomc_diagnostic_json
+    loom::tooling::cli::loomc_options
     loom::tooling::cli::loomc_result
     loom::tooling::config::input
     loom::tooling::io::file
