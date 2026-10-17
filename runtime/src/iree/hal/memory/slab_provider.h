@@ -251,13 +251,18 @@ struct iree_hal_slab_provider_t {
 
   // Concrete provider implementation hooks.
   const iree_hal_slab_provider_vtable_t* vtable;
+
+  // Native-owner allocator, valid through the final provider release. Source
+  // pools use it for presecured retirement records that can outlive their
+  // caller-owned public pool metadata.
+  iree_allocator_t host_allocator;
 };
 
 // Initializes the base slab provider fields. Called by concrete
 // implementations during their create function.
 void iree_hal_slab_provider_initialize(
     const iree_hal_slab_provider_vtable_t* vtable,
-    iree_hal_slab_provider_t* provider);
+    iree_allocator_t host_allocator, iree_hal_slab_provider_t* provider);
 
 // Retains a reference to the slab provider.
 void iree_hal_slab_provider_retain(iree_hal_slab_provider_t* provider);

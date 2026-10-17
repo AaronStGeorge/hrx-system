@@ -93,9 +93,6 @@ typedef struct iree_hal_test_opaque_slab_provider_t {
   // Base slab provider interface.
   iree_hal_slab_provider_t base;
 
-  // Host allocator used for provider metadata and slab allocations.
-  iree_allocator_t host_allocator;
-
   // Number of trim calls received by the provider.
   uint32_t trim_count;
 
@@ -138,8 +135,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_create(
                                              (void**)&provider));
   memset(provider, 0, sizeof(*provider));
   iree_hal_slab_provider_initialize(&iree_hal_test_opaque_slab_provider_vtable,
-                                    &provider->base);
-  provider->host_allocator = host_allocator;
+                                    host_allocator, &provider->base);
   *out_provider = &provider->base;
   return iree_ok_status();
 }
@@ -148,7 +144,7 @@ static void iree_hal_test_opaque_slab_provider_destroy(
     iree_hal_slab_provider_t* base_provider) {
   iree_hal_test_opaque_slab_provider_t* provider =
       (iree_hal_test_opaque_slab_provider_t*)base_provider;
-  iree_allocator_free(provider->host_allocator, provider);
+  iree_allocator_free(provider->base.host_allocator, provider);
 }
 
 static iree_status_t iree_hal_test_opaque_slab_provider_acquire_slab(
@@ -160,7 +156,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_acquire_slab(
   memset(out_slab, 0, sizeof(*out_slab));
   void* backing = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
-      provider->host_allocator, min_length, IREE_HAL_HEAP_BUFFER_ALIGNMENT,
+      provider->base.host_allocator, min_length, IREE_HAL_HEAP_BUFFER_ALIGNMENT,
       /*offset=*/0, &backing));
   out_slab->base_ptr = (uint8_t*)(uintptr_t)1;
   out_slab->length = min_length;
@@ -177,7 +173,7 @@ static void iree_hal_test_opaque_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   iree_hal_test_opaque_slab_provider_t* provider =
       (iree_hal_test_opaque_slab_provider_t*)base_provider;
-  iree_allocator_free_aligned(provider->host_allocator,
+  iree_allocator_free_aligned(provider->base.host_allocator,
                               (void*)(uintptr_t)slab->provider_handle);
 }
 
@@ -199,7 +195,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_wrap_buffer(
       IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
           IREE_HAL_MEMORY_TYPE_HOST_COHERENT | IREE_HAL_MEMORY_TYPE_HOST_CACHED,
       allowed_access, allowed_usage, allocation_size, data, release_callback,
-      provider->host_allocator, out_buffer);
+      provider->base.host_allocator, out_buffer);
 }
 
 static iree_status_t iree_hal_test_opaque_slab_provider_validate_asan_options(

@@ -74,8 +74,8 @@ static iree_status_t CreateNativePool(iree_hal_slab_provider_t* provider,
                                           iree_allocator_system(), out_pool);
 }
 
-// Uses the production native leaf. Only TLSF metadata uses the supplied host
-// allocator, allowing metadata-allocation tests to observe that policy alone.
+// Uses the production native leaf with its provider's allocator for retirement
+// metadata. The supplied host allocator owns the TLSF policy metadata.
 static iree_status_t CreateTLSFPool(iree_hal_tlsf_pool_options_t options,
                                     iree_hal_slab_provider_t* provider,
                                     iree_async_notification_t* notification,
@@ -232,9 +232,6 @@ typedef struct iree_hal_test_opaque_slab_provider_t {
   // Base slab provider interface.
   iree_hal_slab_provider_t base;
 
-  // Host allocator used for provider metadata and slab allocations.
-  iree_allocator_t host_allocator;
-
   // Number of trim calls received by the provider.
   uint32_t trim_count;
 
@@ -280,8 +277,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_create(
                                              (void**)&provider));
   memset(provider, 0, sizeof(*provider));
   iree_hal_slab_provider_initialize(&iree_hal_test_opaque_slab_provider_vtable,
-                                    &provider->base);
-  provider->host_allocator = host_allocator;
+                                    host_allocator, &provider->base);
   *out_provider = &provider->base;
   return iree_ok_status();
 }
@@ -290,7 +286,7 @@ static void iree_hal_test_opaque_slab_provider_destroy(
     iree_hal_slab_provider_t* base_provider) {
   iree_hal_test_opaque_slab_provider_t* provider =
       (iree_hal_test_opaque_slab_provider_t*)base_provider;
-  iree_allocator_free(provider->host_allocator, provider);
+  iree_allocator_free(provider->base.host_allocator, provider);
 }
 
 static iree_status_t iree_hal_test_opaque_slab_provider_acquire_slab(
@@ -302,7 +298,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_acquire_slab(
   memset(out_slab, 0, sizeof(*out_slab));
   void* backing = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
-      provider->host_allocator, min_length, IREE_HAL_HEAP_BUFFER_ALIGNMENT,
+      provider->base.host_allocator, min_length, IREE_HAL_HEAP_BUFFER_ALIGNMENT,
       /*offset=*/0, &backing));
   out_slab->base_ptr = (uint8_t*)(uintptr_t)1;
   out_slab->length = min_length;
@@ -319,7 +315,7 @@ static void iree_hal_test_opaque_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   iree_hal_test_opaque_slab_provider_t* provider =
       (iree_hal_test_opaque_slab_provider_t*)base_provider;
-  iree_allocator_free_aligned(provider->host_allocator,
+  iree_allocator_free_aligned(provider->base.host_allocator,
                               (void*)(uintptr_t)slab->provider_handle);
 }
 
@@ -345,7 +341,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_wrap_buffer(
       IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
           IREE_HAL_MEMORY_TYPE_HOST_COHERENT | IREE_HAL_MEMORY_TYPE_HOST_CACHED,
       allowed_access, allowed_usage, allocation_size, data, release_callback,
-      provider->host_allocator, out_buffer);
+      provider->base.host_allocator, out_buffer);
 }
 
 static iree_status_t iree_hal_test_opaque_slab_provider_validate_asan_options(
@@ -589,19 +585,22 @@ TEST(TLSFPoolAlignmentTest, CreationRequiresAbsoluteNativeAlignment) {
 
   auto options = DefaultOptions();
   options.tlsf_options.alignment = 2 * IREE_HAL_HEAP_BUFFER_ALIGNMENT;
+  iree_hal_pool_t* backing_pool = nullptr;
+  IREE_ASSERT_OK(
+      CreateNativePool(provider, notification, test_frontier_tracker(),
+                       iree_hal_pool_epoch_query_null(), &backing_pool));
   iree_hal_pool_t* pool = nullptr;
   const auto allocation_count = allocations.allocation_call_count.load();
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      CreateTLSFPool(options, provider, notification, test_frontier_tracker(),
-                     iree_hal_pool_epoch_query_null(), allocator, &pool));
+      iree_hal_tlsf_pool_create(backing_pool, &options, allocator, &pool));
   EXPECT_EQ(pool, nullptr);
   EXPECT_EQ(allocations.allocation_call_count, allocation_count);
 
   options.tlsf_options.alignment = IREE_HAL_HEAP_BUFFER_ALIGNMENT;
   IREE_ASSERT_OK(
-      CreateTLSFPool(options, provider, notification, test_frontier_tracker(),
-                     iree_hal_pool_epoch_query_null(), allocator, &pool));
+      iree_hal_tlsf_pool_create(backing_pool, &options, allocator, &pool));
+  iree_hal_pool_release(backing_pool);
   auto request = MakeReservationRequest(128, IREE_HAL_HEAP_BUFFER_ALIGNMENT);
   iree_hal_buffer_t* buffer = nullptr;
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(

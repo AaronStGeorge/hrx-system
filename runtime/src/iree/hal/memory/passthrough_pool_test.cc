@@ -52,9 +52,6 @@ typedef struct iree_hal_test_opaque_slab_provider_t {
   // Base slab provider interface.
   iree_hal_slab_provider_t base;
 
-  // Host allocator used for provider metadata and slab allocations.
-  iree_allocator_t host_allocator;
-
   // Test-controlled native completion, independent of the pool implementation.
   struct {
     // Retain the next native acquire descriptor until explicitly completed.
@@ -119,8 +116,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_create(
                                              (void**)&provider));
   memset(provider, 0, sizeof(*provider));
   iree_hal_slab_provider_initialize(&iree_hal_test_opaque_slab_provider_vtable,
-                                    &provider->base);
-  provider->host_allocator = host_allocator;
+                                    host_allocator, &provider->base);
   *out_provider = &provider->base;
   return iree_ok_status();
 }
@@ -132,7 +128,7 @@ static void iree_hal_test_opaque_slab_provider_destroy(
   if (provider->destruction_count) {
     ++*provider->destruction_count;
   }
-  iree_allocator_free(provider->host_allocator, provider);
+  iree_allocator_free(provider->base.host_allocator, provider);
 }
 
 static iree_status_t iree_hal_test_opaque_slab_provider_acquire_slab(
@@ -144,7 +140,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_acquire_slab(
   memset(out_slab, 0, sizeof(*out_slab));
   void* backing = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
-      provider->host_allocator, min_length, IREE_HAL_HEAP_BUFFER_ALIGNMENT,
+      provider->base.host_allocator, min_length, IREE_HAL_HEAP_BUFFER_ALIGNMENT,
       /*offset=*/0, &backing));
   out_slab->base_ptr = (uint8_t*)(uintptr_t)1;
   out_slab->length = min_length;
@@ -161,7 +157,7 @@ static void iree_hal_test_opaque_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   iree_hal_test_opaque_slab_provider_t* provider =
       (iree_hal_test_opaque_slab_provider_t*)base_provider;
-  iree_allocator_free_aligned(provider->host_allocator,
+  iree_allocator_free_aligned(provider->base.host_allocator,
                               (void*)(uintptr_t)slab->provider_handle);
   iree_atomic_fetch_add(&provider->release_count, 1, iree_memory_order_relaxed);
 }
@@ -190,7 +186,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_wrap_buffer(
       IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_HOST_VISIBLE |
           IREE_HAL_MEMORY_TYPE_HOST_COHERENT | IREE_HAL_MEMORY_TYPE_HOST_CACHED,
       allowed_access, allowed_usage, allocation_size, data, release_callback,
-      provider->host_allocator, out_buffer);
+      provider->base.host_allocator, out_buffer);
 }
 
 static iree_status_t iree_hal_test_opaque_slab_provider_validate_asan_options(
@@ -456,12 +452,19 @@ struct CountingAllocator {
   size_t live_count = 0;
   // Reject the selected allocating call; zero permits all calls.
   size_t fail_at = 0;
+  // The public owner has returned all of this allocator's storage.
+  bool closed = false;
+  // Calls made after that owner's lifetime ended.
+  size_t calls_after_close = 0;
   // Thread performing the last native allocation; frees do not change it.
   std::thread::id last_allocation_thread;
 
   static iree_status_t Control(void* self, iree_allocator_command_t command,
                                const void* params, void** inout_pointer) {
     auto* state = static_cast<CountingAllocator*>(self);
+    if (state->closed) {
+      ++state->calls_after_close;
+    }
     if (command != IREE_ALLOCATOR_COMMAND_FREE) {
       ++state->allocation_count;
       state->last_allocation_thread = std::this_thread::get_id();
@@ -595,6 +598,51 @@ TEST_F(NativePassthroughPoolTest,
   native_ = nullptr;
   EXPECT_EQ(destruction_count_, 1u);
   EXPECT_EQ(allocations_.allocation_count, allocated);
+}
+
+TEST_F(NativePassthroughPoolTest,
+       NativeRetirementDoesNotBorrowThePublicPoolAllocator) {
+  iree_hal_pool_release(pool_);
+  pool_ = nullptr;
+  CountingAllocator public_allocator;
+  IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
+      {}, provider_, notification_, tracker_, nullptr,
+      public_allocator.allocator(), &pool_));
+  native_->deferred.release = true;
+  iree_hal_buffer_t* buffer = nullptr;
+  IREE_ASSERT_OK(
+      iree_hal_pool_allocate_buffer(pool_, MakeReservationRequest(256, 16),
+                                    iree_infinite_timeout(), &buffer));
+  const uint32_t pattern = 0xCAFE1234;
+  IREE_ASSERT_OK(
+      iree_hal_buffer_map_fill(buffer, 0, 256, &pattern, sizeof(pattern)));
+  uint32_t result = 0;
+  IREE_ASSERT_OK(
+      iree_hal_buffer_map_read(buffer, 252, &result, sizeof(result)));
+  EXPECT_EQ(result, pattern);
+  iree_hal_buffer_release(buffer);
+  ASSERT_NE(native_->deferred.releases, nullptr);
+  iree_hal_pool_release(pool_);
+  pool_ = nullptr;
+  EXPECT_EQ(public_allocator.live_count, 0u);
+  public_allocator.closed = true;
+  const size_t allocation_count = allocations_.allocation_count;
+  CompleteNativeRelease(native_);
+  EXPECT_EQ(public_allocator.calls_after_close, 0u);
+  EXPECT_EQ(allocations_.allocation_count, allocation_count);
+}
+
+TEST_F(NativePassthroughPoolTest,
+       NativeMetadataFailureReturnsThePublicPoolAllocation) {
+  CountingAllocator public_allocator;
+  allocations_.fail_at = allocations_.allocation_count + 1;
+  iree_hal_pool_t* pool = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        iree_hal_passthrough_pool_create(
+                            {}, provider_, notification_, tracker_, nullptr,
+                            public_allocator.allocator(), &pool));
+  EXPECT_EQ(pool, nullptr);
+  EXPECT_EQ(public_allocator.live_count, 0u);
 }
 
 TEST_F(NativePassthroughPoolTest, CompletionMayReenterAndReleaseThePool) {

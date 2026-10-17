@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 
 #include "iree/async/frontier_tracker.h"
 #include "iree/async/notification.h"
@@ -716,6 +717,25 @@ class NativeBackingObserver {
     observe_next_allocation_ = true;
   }
 
+  void ObserveBuffer(iree_hal_buffer_t* buffer) {
+    iree_hal_buffer_mapping_t mapping = {};
+    IREE_ASSERT_OK(iree_hal_buffer_map_range(
+        buffer, IREE_HAL_MAPPING_MODE_SCOPED, IREE_HAL_MEMORY_ACCESS_READ,
+        IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, 1, &mapping));
+    const uintptr_t address =
+        reinterpret_cast<uintptr_t>(mapping.contents.data);
+    IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto& [allocation, length] : allocations_) {
+      const uintptr_t base = reinterpret_cast<uintptr_t>(allocation);
+      if (address >= base && address - base < length) {
+        allocation_ = allocation;
+        return;
+      }
+    }
+    FAIL() << "published buffer has no live native backing allocation";
+  }
+
   void BlockNextAllocation() {
     std::lock_guard<std::mutex> lock(mutex_);
     block_next_allocation_ = true;
@@ -764,6 +784,7 @@ class NativeBackingObserver {
                                const void* params, void** inout_pointer) {
     auto* observer = static_cast<NativeBackingObserver*>(self);
     bool observed_release = false;
+    void* old_pointer = *inout_pointer;
     const bool had_allocation = *inout_pointer != nullptr;
     if (command == IREE_ALLOCATOR_COMMAND_FREE) {
       std::unique_lock<std::mutex> lock(observer->mutex_);
@@ -792,10 +813,19 @@ class NativeBackingObserver {
     if (iree_status_is_ok(status)) {
       std::lock_guard<std::mutex> lock(observer->mutex_);
       if (command == IREE_ALLOCATOR_COMMAND_FREE && had_allocation) {
+        observer->allocations_.erase(old_pointer);
         --observer->live_allocations_;
         observer->condition_.notify_all();
       } else if (command != IREE_ALLOCATOR_COMMAND_FREE && !had_allocation) {
         ++observer->live_allocations_;
+      }
+      if (command != IREE_ALLOCATOR_COMMAND_FREE) {
+        if (had_allocation) {
+          observer->allocations_.erase(old_pointer);
+        }
+        observer->allocations_[*inout_pointer] =
+            static_cast<const iree_allocator_alloc_params_t*>(params)
+                ->byte_length;
       }
       if (observed_release) {
         observer->release_thread_ = std::this_thread::get_id();
@@ -824,6 +854,8 @@ class NativeBackingObserver {
   bool blocked_ = false;
   // Live native/provider allocations retaining this dependency allocator.
   size_t live_allocations_ = 0;
+  // Actual native allocation ranges for resolving a published buffer address.
+  std::unordered_map<void*, iree_host_size_t> allocations_;
   // Underlying system allocation, before aligned-pointer adjustment.
   void* allocation_ = nullptr;
   // True after the selected native allocation has actually been freed.
@@ -1132,12 +1164,12 @@ TEST_P(TaskQueueNativeRetirementTest, QueueBytesRetireThroughInlineProvider) {
   iree_hal_pool_reservation_request_t request = {
       .allocation_size = kBlockSize,
   };
-  backing_.ObserveNextAllocation();
   const iree_hal_semaphore_list_t allocated = {1, &semaphores_[1],
                                                &first_value};
   IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], observed, allocated, pool_,
                                        1, &request, &initial_buffers_[0]));
   ASSERT_NO_FATAL_FAILURE(Wait(semaphores_[1], first_value));
+  ASSERT_NO_FATAL_FAILURE(backing_.ObserveBuffer(initial_buffers_[0]));
   uint64_t filled_value = 2;
   const iree_hal_semaphore_list_t filled = {1, &semaphores_[1], &filled_value};
   const uint32_t pattern = 0xC0FFEE12u;
@@ -1179,7 +1211,6 @@ TEST_P(TaskQueueNativeRetirementTest,
   iree_hal_pool_reservation_request_t request = {
       .allocation_size = kBlockSize,
   };
-  backing_.ObserveNextAllocation();
   iree_hal_pool_reservation_t reservation;
   iree_hal_pool_acquire_info_t info;
   iree_hal_pool_acquire_result_t result;
@@ -1189,6 +1220,7 @@ TEST_P(TaskQueueNativeRetirementTest,
   IREE_ASSERT_OK(iree_hal_pool_materialize_reservations(
       pool_, 1, &request, &reservation, IREE_HAL_POOL_MATERIALIZE_FLAG_NONE,
       &initial_buffers_[0]));
+  ASSERT_NO_FATAL_FAILURE(backing_.ObserveBuffer(initial_buffers_[0]));
   iree_hal_external_storage_t external = {};
   iree_hal_buffer_range_t logical_range = {};
   IREE_ASSERT_OK(iree_hal_buffer_export(
@@ -1278,10 +1310,10 @@ TEST_P(TaskQueueNativeRetirementTest,
 
 TEST_P(TaskQueueNativeRetirementTest, CompletionCanDestroyItsPool) {
   ASSERT_NO_FATAL_FAILURE(UseNativePool());
-  backing_.ObserveNextAllocation();
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       pool_, iree_hal_make_pool_reservation_request(kBlockSize, 1),
       iree_infinite_timeout(), &initial_buffers_[0]));
+  ASSERT_NO_FATAL_FAILURE(backing_.ObserveBuffer(initial_buffers_[0]));
 
   const uint32_t pattern = 0xDCBA9876u;
   uint64_t completed_value = 1;

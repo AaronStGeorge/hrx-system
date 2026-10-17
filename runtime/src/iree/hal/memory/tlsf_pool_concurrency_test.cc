@@ -636,6 +636,7 @@ TEST_F(TLSFPoolConcurrencyTest,
 TEST_F(TLSFPoolConcurrencyTest, ReusesCapacityReturnedDuringNativePreparation) {
   iree_hal_pool_reservation_t held;
   IREE_ASSERT_OK(Acquire(4096, &held));
+  const size_t live_allocations = native_allocator_.live_allocations();
   iree_hal_pool_reservation_t reservation = {};
   native_allocator_.Arm(IREE_ALLOCATOR_COMMAND_CALLOC);
   std::thread growing([&] { IREE_EXPECT_OK(Acquire(4096, &reservation)); });
@@ -647,10 +648,10 @@ TEST_F(TLSFPoolConcurrencyTest, ReusesCapacityReturnedDuringNativePreparation) {
   iree_hal_pool_query_stats(pool_, &stats);
   EXPECT_EQ(stats.slab_count, 1u);
   EXPECT_EQ(stats.bytes_committed, 4096u);
-  // Only the provider, one native allocation and its prepared backing view
-  // remain. The unused prepared range never entered TLSF's inventory.
+  // The unused prepared range never entered TLSF's inventory. Both its backing
+  // and retirement metadata are returned; only the original slab remains.
   WaitForMaintenance();
-  EXPECT_EQ(native_allocator_.live_allocations(), 3u);
+  EXPECT_EQ(native_allocator_.live_allocations(), live_allocations);
   if (reservation.block_handle) {
     iree_hal_pool_release_reservations(pool_, 1, &reservation, nullptr);
   }

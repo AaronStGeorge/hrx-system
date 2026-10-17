@@ -66,8 +66,8 @@ static iree_status_t iree_hal_amd_fabric_slab_pool_plan_create(
   iree_hal_slab_provider_t* provider = NULL;
   iree_status_t status = iree_hal_amd_fabric_slab_provider_create(
       plan->device, plan->api, plan->event_sink,
-      plan->progress.allocation_queue, &plan->provider_options, host_allocator,
-      &provider);
+      plan->progress.allocation_queue, &plan->provider_options,
+      iree_hal_device_host_allocator(plan->device), &provider);
   if (iree_status_is_ok(status)) {
     const iree_hal_passthrough_pool_options_t options = {
         .memory_contract = plan->contract,

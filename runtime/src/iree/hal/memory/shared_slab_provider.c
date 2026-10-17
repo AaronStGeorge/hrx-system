@@ -11,8 +11,6 @@
 typedef struct iree_hal_shared_slab_provider_t {
   // Reference-counted native source.
   iree_hal_slab_provider_t base;
-  // Allocator for provider and slab metadata.
-  iree_allocator_t host_allocator;
 } iree_hal_shared_slab_provider_t;
 
 typedef struct iree_hal_shared_slab_t {
@@ -39,7 +37,7 @@ static void iree_hal_shared_slab_provider_destroy(
     iree_hal_slab_provider_t* base) {
   iree_hal_shared_slab_provider_t* provider =
       (iree_hal_shared_slab_provider_t*)base;
-  iree_allocator_free(provider->host_allocator, provider);
+  iree_allocator_free(provider->base.host_allocator, provider);
 }
 
 static iree_status_t iree_hal_shared_slab_provider_acquire(
@@ -63,7 +61,7 @@ static iree_status_t iree_hal_shared_slab_provider_acquire(
                             "shared slab geometry exceeds host address space");
   }
   iree_hal_shared_slab_t* slab = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(provider->host_allocator,
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(provider->base.host_allocator,
                                              sizeof(*slab), (void**)&slab));
   iree_status_t status = iree_shm_create(NULL, native_length, &slab->mapping);
   if (iree_status_is_ok(status)) {
@@ -86,7 +84,7 @@ static iree_status_t iree_hal_shared_slab_provider_acquire(
         .allocation_alignment = alignment,
     };
   } else {
-    iree_allocator_free(provider->host_allocator, slab);
+    iree_allocator_free(provider->base.host_allocator, slab);
   }
   return status;
 }
@@ -98,7 +96,7 @@ static void iree_hal_shared_slab_provider_release(
   iree_hal_shared_slab_t* storage =
       (iree_hal_shared_slab_t*)(uintptr_t)slab->provider_handle;
   iree_shm_close(&storage->mapping);
-  iree_allocator_free(provider->host_allocator, storage);
+  iree_allocator_free(provider->base.host_allocator, storage);
 }
 
 static iree_status_t iree_hal_shared_slab_provider_wrap(
@@ -119,7 +117,7 @@ static iree_status_t iree_hal_shared_slab_provider_wrap(
       placement, IREE_HAL_CPU_SLAB_PROVIDER_MEMORY_TYPE, allowed_access,
       allowed_usage, slab->length,
       iree_make_byte_span(slab->base_ptr, (iree_host_size_t)slab->length),
-      release_callback, provider->host_allocator, out_buffer));
+      release_callback, provider->base.host_allocator, out_buffer));
   (*out_buffer)->byte_offset = slab_offset;
   (*out_buffer)->byte_length = allocation_size;
   (*out_buffer)->memory.bindings = storage->bindings;
@@ -207,8 +205,7 @@ iree_status_t iree_hal_shared_slab_provider_create(
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, sizeof(*provider),
                                              (void**)&provider));
   iree_hal_slab_provider_initialize(&iree_hal_shared_slab_provider_vtable,
-                                    &provider->base);
-  provider->host_allocator = host_allocator;
+                                    host_allocator, &provider->base);
   *out_provider = &provider->base;
   return iree_ok_status();
 }

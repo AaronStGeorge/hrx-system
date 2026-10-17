@@ -62,14 +62,16 @@ typedef struct iree_hal_passthrough_pool_options_t {
 //
 // Final public release requires returned reservations/views and
 // caller-quiescent execution. It cancels pending retirement records and submits
-// native cleanup without waiting. Private pool metadata, |slab_provider|,
-// |notification|, and |frontier_tracker| remain retained through their last
-// completion. A provider that defers native work must retain the native
-// resources that work uses.
+// native cleanup without waiting. Public metadata is freed before returning.
+// Private retirement state uses the retained provider's host allocator and
+// retains |notification| and |frontier_tracker| through final completion. The
+// provider's native owner and allocator must remain valid through that final
+// provider release; neither depends on the public pool's allocator.
 //
 // |maintenance| is borrowed only as backing advice context. It does not select
-// execution for acquisition, release, or import. |host_allocator| owns pool,
-// per-slab release records, and acquisition/materialization transaction state.
+// execution for acquisition, release, or import. |host_allocator| owns public
+// pool metadata. Native retirement records and source transactions use the
+// provider's allocator, whose lifetime covers their terminal completion.
 iree_status_t iree_hal_passthrough_pool_create(
     iree_hal_passthrough_pool_options_t options,
     iree_hal_slab_provider_t* slab_provider,

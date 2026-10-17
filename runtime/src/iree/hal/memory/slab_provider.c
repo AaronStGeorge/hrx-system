@@ -11,9 +11,10 @@
 
 void iree_hal_slab_provider_initialize(
     const iree_hal_slab_provider_vtable_t* vtable,
-    iree_hal_slab_provider_t* provider) {
+    iree_allocator_t host_allocator, iree_hal_slab_provider_t* provider) {
   iree_atomic_ref_count_init(&provider->ref_count);
   provider->vtable = vtable;
+  provider->host_allocator = host_allocator;
 }
 
 void iree_hal_slab_provider_retain(iree_hal_slab_provider_t* provider) {

@@ -19,9 +19,6 @@ typedef struct iree_hal_amdgpu_slab_provider_t {
   // Base slab-provider interface header.
   iree_hal_slab_provider_t base;
 
-  // Host allocator used to allocate and free the provider.
-  iree_allocator_t host_allocator;
-
   // Borrowed HAL device used when wrapping slabs as AMDGPU buffers.
   iree_hal_device_t* device;
 
@@ -514,8 +511,7 @@ iree_status_t iree_hal_amdgpu_slab_provider_create(
                             (void**)&provider));
   memset(provider, 0, sizeof(*provider));
   iree_hal_slab_provider_initialize(&iree_hal_amdgpu_slab_provider_vtable,
-                                    &provider->base);
-  provider->host_allocator = host_allocator;
+                                    host_allocator, &provider->base);
   provider->device = device;
   provider->import_allocator = import_allocator;
   provider->libhsa = libhsa;
@@ -607,7 +603,7 @@ static void iree_hal_amdgpu_slab_provider_destroy(
     iree_hal_slab_provider_t* base_provider) {
   iree_hal_amdgpu_slab_provider_t* provider =
       iree_hal_amdgpu_slab_provider_cast(base_provider);
-  iree_allocator_t host_allocator = provider->host_allocator;
+  iree_allocator_t host_allocator = provider->base.host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_memory_trace_deinitialize(&provider->trace);
   iree_allocator_free(host_allocator, provider);
@@ -641,14 +637,15 @@ static iree_status_t iree_hal_amdgpu_slab_provider_acquire_slab(
   }
 
   iree_hal_amdgpu_slab_handle_t* slab_handle = NULL;
-  iree_status_t status = iree_allocator_malloc(
-      provider->host_allocator, sizeof(*slab_handle), (void**)&slab_handle);
+  iree_status_t status =
+      iree_allocator_malloc(provider->base.host_allocator, sizeof(*slab_handle),
+                            (void**)&slab_handle);
   if (iree_status_is_ok(status)) {
     memset(slab_handle, 0, sizeof(*slab_handle));
     slab_handle->allocation_size = allocation_size;
     slab_handle->libhsa = provider->libhsa;
     slab_handle->asan_state = provider->asan_state;
-    slab_handle->host_allocator = provider->host_allocator;
+    slab_handle->host_allocator = provider->base.host_allocator;
   }
 
   void* base_ptr = NULL;
@@ -708,7 +705,7 @@ static iree_status_t iree_hal_amdgpu_slab_provider_acquire_slab(
         iree_hsa_amd_memory_pool_free(IREE_LIBHSA(provider->libhsa), base_ptr));
   }
   if (!iree_status_is_ok(status) && !slab_handle_consumed) {
-    iree_allocator_free(provider->host_allocator, slab_handle);
+    iree_allocator_free(provider->base.host_allocator, slab_handle);
   }
 
   IREE_TRACE_ZONE_END(z0);
@@ -752,14 +749,14 @@ static iree_status_t iree_hal_amdgpu_slab_provider_import_slab(
 
   iree_hal_amdgpu_slab_handle_t* slab_handle = NULL;
   if (iree_status_is_ok(status)) {
-    status = iree_allocator_malloc(provider->host_allocator,
+    status = iree_allocator_malloc(provider->base.host_allocator,
                                    sizeof(*slab_handle), (void**)&slab_handle);
   }
   if (iree_status_is_ok(status)) {
     memset(slab_handle, 0, sizeof(*slab_handle));
     slab_handle->allocation_size = storage->byte_length;
     slab_handle->imported_buffer = imported_buffer;
-    slab_handle->host_allocator = provider->host_allocator;
+    slab_handle->host_allocator = provider->base.host_allocator;
 
     const iree_hal_amdgpu_buffer_native_t* native =
         iree_hal_amdgpu_buffer_native(imported_buffer);
@@ -801,7 +798,7 @@ static iree_status_t iree_hal_amdgpu_slab_provider_import_slab(
 
   if (!iree_status_is_ok(status)) {
     iree_hal_buffer_release(imported_buffer);
-    iree_allocator_free(provider->host_allocator, slab_handle);
+    iree_allocator_free(provider->base.host_allocator, slab_handle);
   }
 
   IREE_TRACE_ZONE_END(z0);
@@ -840,7 +837,7 @@ static void iree_hal_amdgpu_slab_provider_release_slab(
     if (slab_handle->imported_buffer) {
       iree_hal_memory_trace_free(&provider->trace, slab->base_ptr);
       iree_hal_buffer_release(slab_handle->imported_buffer);
-      iree_allocator_free(provider->host_allocator, slab_handle);
+      iree_allocator_free(provider->base.host_allocator, slab_handle);
       iree_atomic_fetch_add(&provider->total_released, 1,
                             iree_memory_order_relaxed);
       IREE_TRACE_ZONE_END(z0);
@@ -925,7 +922,7 @@ static iree_status_t iree_hal_amdgpu_slab_provider_wrap_buffer(
       provider->libhsa, placement, memory_type, allowed_access, allowed_usage,
       atomic_memory_cells, slab->length, slab_offset, allocation_size,
       device_pointer, host_pointer, release_callback, provider->buffer_pool,
-      provider->host_allocator, out_buffer);
+      provider->base.host_allocator, out_buffer);
 }
 
 static iree_status_t iree_hal_amdgpu_slab_provider_validate_asan_options(

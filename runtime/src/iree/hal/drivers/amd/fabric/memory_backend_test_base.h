@@ -719,7 +719,19 @@ struct FakeNative {
 class MemoryBackendTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    allocator_ = iree_allocator_system();
+    allocator_ = {
+        &native_,
+        +[](void* self, iree_allocator_command_t command, const void* params,
+            void** inout_pointer) -> iree_status_t {
+          auto* native = static_cast<FakeNative*>(self);
+          if (command != IREE_ALLOCATOR_COMMAND_FREE &&
+              native->fail_metadata_allocation.exchange(false)) {
+            return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                    "buffer metadata allocation failed");
+          }
+          const auto system = iree_allocator_system();
+          return system.ctl(system.self, command, params, inout_pointer);
+        }};
     iree_hal_slab_pool_options_initialize(&pool_options_);
     IREE_ASSERT_OK(iree_async_notification_create(
         test_proactor(), IREE_ASYNC_NOTIFICATION_FLAG_NONE, &notification_));

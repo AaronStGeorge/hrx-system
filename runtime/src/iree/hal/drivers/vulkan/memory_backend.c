@@ -61,7 +61,8 @@ static iree_status_t iree_hal_vulkan_slab_pool_plan_create(
       (iree_hal_vulkan_slab_pool_plan_t*)base;
   iree_hal_slab_provider_t* provider = NULL;
   iree_status_t status = iree_hal_vulkan_slab_provider_create(
-      plan->allocator, plan->provider_options, plan->trace_name, host_allocator,
+      plan->allocator, plan->provider_options, plan->trace_name,
+      iree_hal_device_host_allocator(plan->provider_options.parent_device),
       &provider);
   if (iree_status_is_ok(status)) {
     const iree_hal_passthrough_pool_options_t options = {

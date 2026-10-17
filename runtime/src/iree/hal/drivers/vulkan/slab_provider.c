@@ -24,9 +24,6 @@ typedef struct iree_hal_vulkan_slab_provider_t {
   // Base slab provider for vtable dispatch and reference counting.
   iree_hal_slab_provider_t base;
 
-  // Host allocator used for provider-owned host allocations.
-  iree_allocator_t host_allocator;
-
   // Parent Vulkan allocator used to materialize whole slabs.
   iree_hal_vulkan_allocator_t* allocator;
 
@@ -143,8 +140,7 @@ iree_status_t iree_hal_vulkan_slab_provider_create(
                                 (void**)&provider));
   memset(provider, 0, sizeof(*provider));
   iree_hal_slab_provider_initialize(&iree_hal_vulkan_slab_provider_vtable,
-                                    &provider->base);
-  provider->host_allocator = host_allocator;
+                                    host_allocator, &provider->base);
   provider->allocator = allocator;
   provider->parent_device = options.parent_device;
   provider->allocation_queue = options.allocation_queue;
@@ -183,7 +179,7 @@ static void iree_hal_vulkan_slab_provider_destroy(
     iree_hal_slab_provider_t* base_provider) {
   iree_hal_vulkan_slab_provider_t* provider =
       iree_hal_vulkan_slab_provider_cast(base_provider);
-  iree_allocator_t host_allocator = provider->host_allocator;
+  iree_allocator_t host_allocator = provider->base.host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_memory_trace_deinitialize(&provider->trace);
   iree_hal_vulkan_allocation_queue_release(provider->allocation_queue);
@@ -414,7 +410,7 @@ static iree_status_t iree_hal_vulkan_slab_provider_wrap_buffer(
       allowed_access, allowed_usage, native->handle_length, handle_offset,
       allocation_size, memory_property_flags, provider->non_coherent_atom_size,
       device_memory, mapping_state, handle, device_address,
-      native->host_allocation, release_callback, provider->host_allocator,
+      native->host_allocation, release_callback, provider->base.host_allocator,
       out_buffer);
   if (iree_status_is_ok(status) && provider->mapping_granularity) {
     iree_hal_vulkan_buffer_prepare_mapping_source(

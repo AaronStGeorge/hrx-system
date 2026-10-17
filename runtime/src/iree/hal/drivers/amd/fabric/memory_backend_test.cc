@@ -456,19 +456,6 @@ TEST_F(MemoryBackendTest, HostExportDoesNotGrantPublicMapping) {
 
 TEST_F(MemoryBackendTest, WrapperFailureRollsBackBeforeConsumingStorage) {
   native_.registration_enabled = true;
-  allocator_ = {
-      &native_,
-      +[](void* self, iree_allocator_command_t command, const void* params,
-          void** inout_pointer) -> iree_status_t {
-        auto* native = static_cast<FakeNative*>(self);
-        if (command != IREE_ALLOCATOR_COMMAND_FREE &&
-            native->fail_metadata_allocation.exchange(false)) {
-          return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                                  "buffer metadata allocation failed");
-        }
-        const auto system = iree_allocator_system();
-        return system.ctl(system.self, command, params, inout_pointer);
-      }};
   const iree_hal_pool_import_class_t import_class = {
       {IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER, {0, 0}}, {}};
   pool_options_.owned.mode = IREE_HAL_SLAB_POOL_IMPORT_ONLY;

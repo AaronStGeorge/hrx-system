@@ -78,7 +78,7 @@ static iree_status_t iree_hal_amdgpu_slab_pool_plan_create(
   iree_status_t status = iree_hal_amdgpu_slab_provider_create(
       plan->device, plan->allocator, plan->libhsa, plan->provider_options,
       plan->physical_ordinal, plan->buffer_pool, plan->trace_name,
-      host_allocator, &provider);
+      iree_hal_device_host_allocator(plan->device), &provider);
   if (iree_status_is_ok(status)) {
     const iree_hal_passthrough_pool_options_t options = {
         .memory_contract = plan->contract,

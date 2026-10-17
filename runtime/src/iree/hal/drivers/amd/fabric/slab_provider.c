@@ -12,8 +12,6 @@
 typedef struct iree_hal_amd_fabric_slab_provider_t {
   // Base slab-provider interface header.
   iree_hal_slab_provider_t base;
-  // Host allocator owning this provider and slab metadata.
-  iree_allocator_t host_allocator;
   // Retained HAL device owning placement, scope, and progress services.
   iree_hal_device_t* device;
   // Native allocation domain shared by all engines on this NUMA node.
@@ -114,8 +112,7 @@ iree_status_t iree_hal_amd_fabric_slab_provider_create(
       iree_allocator_malloc(host_allocator, total_size, (void**)&provider));
   memset(provider, 0, total_size);
   iree_hal_slab_provider_initialize(&iree_hal_amd_fabric_slab_provider_vtable,
-                                    &provider->base);
-  provider->host_allocator = host_allocator;
+                                    host_allocator, &provider->base);
   provider->device = device;
   iree_hal_device_retain(device);
   provider->allocation_queue = allocation_queue;
@@ -181,9 +178,11 @@ static void iree_hal_amd_fabric_slab_provider_destroy(
   for (uint32_t i = 0; i < provider->options.memory.access_count; ++i) {
     iree_hal_device_release(provider->options.access_devices[i]);
   }
-  iree_hal_device_release(provider->device);
-  iree_hal_amd_fabric_allocation_queue_release(provider->allocation_queue);
-  iree_allocator_free(provider->host_allocator, provider);
+  iree_hal_device_t* device = provider->device;
+  iree_hal_amd_fabric_allocation_queue_t* queue = provider->allocation_queue;
+  iree_allocator_free(provider->base.host_allocator, provider);
+  iree_hal_amd_fabric_allocation_queue_release(queue);
+  iree_hal_device_release(device);
 }
 
 static iree_status_t iree_hal_amd_fabric_slab_handle_allocate(
@@ -202,7 +201,7 @@ static iree_status_t iree_hal_amd_fabric_slab_handle_allocate(
                         iree_hal_amd_fabric_mapping_source_t,
                         &mapping_source_offset)));
   iree_hal_amd_fabric_slab_handle_t* handle = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(provider->host_allocator,
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(provider->base.host_allocator,
                                              total_size, (void**)&handle));
   memset(handle, 0, total_size);
   handle->bindings =
@@ -307,7 +306,7 @@ static iree_status_t iree_hal_amd_fabric_slab_provider_acquire_slab(
   } else {
     iree_hal_amd_fabric_memory_deinitialize(provider->api, provider->event_sink,
                                             &handle->memory);
-    iree_allocator_free(provider->host_allocator, handle);
+    iree_allocator_free(provider->base.host_allocator, handle);
   }
   return status;
 }
@@ -386,7 +385,7 @@ static iree_status_t iree_hal_amd_fabric_slab_provider_import_slab(
   } else {
     iree_hal_amd_fabric_memory_deinitialize(provider->api, provider->event_sink,
                                             &handle->memory);
-    iree_allocator_free(provider->host_allocator, handle);
+    iree_allocator_free(provider->base.host_allocator, handle);
   }
   return status;
 }
@@ -427,7 +426,7 @@ static void iree_hal_amd_fabric_slab_provider_release_slab(
   }
   iree_hal_amd_fabric_memory_deinitialize(provider->api, provider->event_sink,
                                           &handle->memory);
-  iree_allocator_free(provider->host_allocator, handle);
+  iree_allocator_free(provider->base.host_allocator, handle);
   iree_atomic_fetch_add(&provider->total_released, 1,
                         iree_memory_order_relaxed);
 }
@@ -456,7 +455,8 @@ static iree_status_t iree_hal_amd_fabric_slab_provider_wrap_buffer(
           .offset = slab_offset,
       },
       allocation_size, provider->properties.memory_type, allowed_access,
-      allowed_usage, release_callback, provider->host_allocator, out_buffer);
+      allowed_usage, release_callback, provider->base.host_allocator,
+      out_buffer);
 }
 
 static iree_status_t iree_hal_amd_fabric_slab_provider_validate_asan_options(

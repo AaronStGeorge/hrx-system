@@ -35,8 +35,6 @@ struct iree_hal_task_allocation_queue_t {
 typedef struct iree_hal_task_slab_provider_t {
   // Shared native provider interface and ownership.
   iree_hal_slab_provider_t base;
-  // Allocator for this provider wrapper.
-  iree_allocator_t host_allocator;
   // Retained native allocation domain shared with other memory classes.
   iree_hal_task_allocation_queue_t* queue;
   // Retained synchronous CPU allocation source.
@@ -177,9 +175,10 @@ static void iree_hal_task_slab_provider_destroy(
     iree_hal_slab_provider_t* base) {
   iree_hal_task_slab_provider_t* provider =
       (iree_hal_task_slab_provider_t*)base;
+  iree_hal_task_allocation_queue_t* queue = provider->queue;
   iree_hal_slab_provider_release(provider->native_provider);
-  iree_hal_task_allocation_queue_release(provider->queue);
-  iree_allocator_free(provider->host_allocator, provider);
+  iree_allocator_free(provider->base.host_allocator, provider);
+  iree_hal_task_allocation_queue_release(queue);
 }
 
 static void iree_hal_task_slab_provider_acquire_slabs(
@@ -323,8 +322,7 @@ iree_status_t iree_hal_task_slab_provider_create(
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, sizeof(*provider),
                                              (void**)&provider));
   iree_hal_slab_provider_initialize(&iree_hal_task_slab_provider_vtable,
-                                    &provider->base);
-  provider->host_allocator = host_allocator;
+                                    host_allocator, &provider->base);
   provider->queue = queue;
   iree_hal_task_allocation_queue_retain(queue);
   provider->native_provider = native_provider;
