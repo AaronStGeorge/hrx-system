@@ -763,7 +763,9 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
     return iree_ok_status();
   }
 
-  // Check if all results are now exact constants.
+  // Dense exact facts describe scalar values. An aggregate may carry the
+  // same numeric envelope for every element without being a scalar constant;
+  // its dialect-owned patterns materialize the aggregate representation.
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (results[i] == LOOM_VALUE_ID_INVALID) {
@@ -771,7 +773,9 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
     }
     loom_value_facts_t facts =
         loom_value_fact_table_lookup(rewriter->fact_table, results[i]);
-    if (!loom_value_facts_is_exact(facts)) {
+    if (!loom_value_facts_is_exact(facts) ||
+        !loom_type_is_scalar(
+            loom_module_value_type(rewriter->module, results[i]))) {
       return iree_ok_status();
     }
   }

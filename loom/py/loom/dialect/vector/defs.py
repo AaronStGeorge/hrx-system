@@ -3840,6 +3840,7 @@ vector_uitofp = _vector_cast(
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise unsigned integer to floating-point conversion with unchanged shape."),
     facts="loom_vector_uitofp_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[SAFE_TO_SPECULATE],
     eager_execution_cost=1,
 )
