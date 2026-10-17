@@ -96,8 +96,8 @@ bool iree_hal_fixed_block_pool_slab_merge_return(
     iree_hal_fixed_block_pool_slab_t* slab,
     const iree_hal_fixed_block_pool_geometry_t* geometry);
 
-// Returns an optional parent token with its prepared return history, releases
-// the view, and destroys metadata. Runs outside pool mutation locks.
+// Releases the view, returns an optional parent token with its prepared return
+// history, and destroys metadata. Runs outside pool mutation locks.
 void iree_hal_fixed_block_pool_slab_free(iree_hal_fixed_block_pool_slab_t* slab,
                                          iree_hal_pool_t* backing_pool,
                                          iree_allocator_t host_allocator);

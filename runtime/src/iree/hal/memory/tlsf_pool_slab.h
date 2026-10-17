@@ -73,7 +73,7 @@ iree_status_t iree_hal_tlsf_pool_slab_prepare(
     const iree_hal_asan_pool_options_t* asan, iree_allocator_t host_allocator,
     iree_hal_tlsf_pool_slab_t** out_slab);
 
-// Returns parent ownership before destroying its prepared view and metadata.
+// Releases the prepared view, returns parent ownership, and destroys metadata.
 // Finite arenas borrow their range and have no parent token to return.
 void iree_hal_tlsf_pool_slab_release(iree_hal_pool_t* backing_pool,
                                      iree_hal_tlsf_pool_slab_t* slab,

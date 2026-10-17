@@ -106,19 +106,12 @@ iree_status_t iree_hal_tlsf_pool_dedicated_prepare(
     status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "backing history exceeds TLSF frontier capacity");
   }
-  iree_hal_buffer_t* buffer = NULL;
   if (iree_status_is_ok(status)) {
-    status = iree_hal_pool_materialize_reservations(
-        backing_pool, 1, backing_request, &backing->reservation,
-        IREE_HAL_POOL_MATERIALIZE_FLAG_NONE, &buffer);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_pool_buffer_range_initialize(
-        buffer, 0, IREE_HAL_WHOLE_BUFFER, backing_request->min_alignment, asan,
-        &backing->range);
+    status = iree_hal_pool_buffer_range_prepare(
+        backing_pool, backing_request, &backing->reservation,
+        backing_request->min_alignment, asan, &backing->range);
     backing->range.memory.reuse_frontier = info.reuse_frontier;
   }
-  iree_hal_buffer_release(buffer);
   if (iree_status_is_ok(status) &&
       iree_hal_asan_pool_options_is_enabled(asan)) {
     node->asan_layout = *asan_layout;
@@ -142,9 +135,9 @@ iree_status_t iree_hal_tlsf_pool_dedicated_prepare(
     }
     *out_node = node;
   } else {
+    iree_hal_pool_buffer_range_deinitialize(&backing->range);
     iree_hal_pool_release_reservations(backing_pool, 1, &backing->reservation,
                                        info.reuse_frontier);
-    iree_hal_pool_buffer_range_deinitialize(&backing->range);
     iree_allocator_free(host_allocator, node);
   }
   return status;
@@ -160,8 +153,7 @@ bool iree_hal_tlsf_pool_dedicated_merge_return_frontier(
   }
   const iree_hal_tlsf_pool_dedicated_backing_t* backing =
       iree_hal_tlsf_pool_dedicated_backing(node, layout);
-  return !(backing->range.offset ||
-           backing->range.length != backing->reservation.byte_length) ||
+  return backing->range.length == backing->reservation.byte_length ||
          !backing->range.memory.reuse_frontier ||
          iree_async_frontier_merge(frontier, layout->frontier.capacity,
                                    backing->range.memory.reuse_frontier);
@@ -182,9 +174,9 @@ void iree_hal_tlsf_pool_dedicated_release(
       iree_hal_tlsf_pool_dedicated_backing(node, layout);
   const iree_async_frontier_t* frontier =
       iree_hal_tlsf_pool_reservation_frontier(node, layout->frontier.offset);
+  iree_hal_pool_buffer_range_deinitialize(&backing->range);
   iree_hal_pool_release_reservations(backing_pool, 1, &backing->reservation,
                                      frontier->entry_count ? frontier : NULL);
-  iree_hal_pool_buffer_range_deinitialize(&backing->range);
   iree_allocator_free(host_allocator, node);
 }
 

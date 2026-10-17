@@ -83,28 +83,22 @@ iree_status_t iree_hal_fixed_block_pool_slab_prepare(
     iree_allocator_t host_allocator,
     iree_hal_fixed_block_pool_slab_t** out_slab) {
   *out_slab = NULL;
-  iree_hal_buffer_t* buffer = NULL;
   iree_hal_pool_buffer_range_t range = {0};
-  iree_status_t status = iree_hal_pool_materialize_reservations(
-      backing_pool, 1, request, &reservation,
-      IREE_HAL_POOL_MATERIALIZE_FLAG_NONE, &buffer);
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_pool_buffer_range_initialize(
-        buffer, 0, IREE_HAL_WHOLE_BUFFER, geometry->alignment, asan, &range);
-    range.memory.reuse_frontier = info.reuse_frontier;
-  }
+  iree_status_t status = iree_hal_pool_buffer_range_prepare(
+      backing_pool, request, &reservation, geometry->alignment, asan, &range);
+  range.memory.reuse_frontier = info.reuse_frontier;
   if (iree_status_is_ok(status)) {
     status = iree_hal_fixed_block_pool_slab_allocate(&range, geometry, asan,
                                                      host_allocator, out_slab);
   }
   if (iree_status_is_ok(status)) {
     (*out_slab)->reservation = reservation;
-  } else {
+  }
+  iree_hal_pool_buffer_range_deinitialize(&range);
+  if (!iree_status_is_ok(status)) {
     iree_hal_pool_release_reservations(backing_pool, 1, &reservation,
                                        info.reuse_frontier);
   }
-  iree_hal_pool_buffer_range_deinitialize(&range);
-  iree_hal_buffer_release(buffer);
   return status;
 }
 
@@ -126,7 +120,7 @@ bool iree_hal_fixed_block_pool_slab_merge_return(
   }
   const iree_device_size_t managed_length =
       slab->block_count * geometry->backing_block_size;
-  if ((slab->range.offset || managed_length != slab->reservation.byte_length) &&
+  if (managed_length != slab->reservation.byte_length &&
       slab->range.memory.reuse_frontier) {
     return iree_async_frontier_merge(slab->return_frontier,
                                      geometry->frontier_capacity,
@@ -138,12 +132,12 @@ bool iree_hal_fixed_block_pool_slab_merge_return(
 void iree_hal_fixed_block_pool_slab_free(iree_hal_fixed_block_pool_slab_t* slab,
                                          iree_hal_pool_t* backing_pool,
                                          iree_allocator_t host_allocator) {
+  iree_hal_pool_buffer_range_deinitialize(&slab->range);
   if (backing_pool) {
     iree_hal_pool_release_reservations(
         backing_pool, 1, &slab->reservation,
         slab->return_frontier->entry_count ? slab->return_frontier : NULL);
   }
-  iree_hal_pool_buffer_range_deinitialize(&slab->range);
   iree_hal_memory_fixed_block_allocator_free(slab->allocator);
   iree_allocator_free(host_allocator, slab);
 }

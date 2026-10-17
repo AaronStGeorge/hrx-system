@@ -401,6 +401,11 @@ TEST_P(PoolCompositionTest, InteriorBackingPreservesNeighborBytes) {
                            IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservations[i],
                            &info, &result));
     ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+    iree_hal_pool_reservation_view_t view;
+    ASSERT_TRUE(iree_hal_pool_query_reservation_views(children[i], 1,
+                                                      &reservations[i], &view));
+    EXPECT_EQ(view.buffer, backing_);
+    EXPECT_EQ(view.byte_offset, 128 + i * 1024);
     uintptr_t address = 0;
     IREE_ASSERT_OK(
         CheckBytes(children[i], reservations[i], 0x80 + i, &address));
@@ -579,7 +584,7 @@ TEST_P(PoolCompositionTest, ReservationViewPreservesPreparedRangeAndHistory) {
   iree_hal_pool_reservation_view_t view = {};
   ASSERT_TRUE(
       iree_hal_pool_query_reservation_views(child, 1, &reservation, &view));
-  ASSERT_NE(view.buffer, nullptr);
+  EXPECT_EQ(view.buffer, backing_);
   EXPECT_EQ(view.byte_length, reservation.byte_length);
   EXPECT_EQ(view.memory.reuse_frontier, info.reuse_frontier);
 
