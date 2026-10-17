@@ -243,8 +243,8 @@ typedef struct iree_alignas(IREE_ASYNC_FRONTIER_ALIGNMENT)
 //
 //   F1 BEFORE F2: Every axis in F1 is at the same or earlier epoch than in F2,
 //                 and at least one is strictly earlier. F1's "cut" is entirely
-//                 to the left of F2's. Anything that depends on F1 being
-//                 satisfied also satisfies F2 (but not vice versa).
+//                 to the left of F2's. Satisfying F2 also satisfies F1
+//                 (but not vice versa).
 //
 //   F1 AFTER F2:  The reverse. F2 happens-before F1.
 //

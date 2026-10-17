@@ -295,13 +295,16 @@ TEST_P(PoolCompositionTest, SiblingReuseNeedsNoMetadataAllocation) {
     }
   }
   const uint64_t allocations = metadata_.allocations;
+  const uint64_t progress_allocations = progress_metadata_.allocations;
   metadata_.fail = true;
+  progress_metadata_.fail = true;
   for (int i = 0; i < 32; ++i) {
     for (size_t count : {32, 9, 8, 1}) {
       cycle(children[i % 2], count, 0x80 + i);
     }
   }
   EXPECT_EQ(metadata_.allocations, allocations);
+  EXPECT_EQ(progress_metadata_.allocations, progress_allocations);
   iree_hal_pool_stats_t native_stats;
   iree_hal_pool_query_stats(native_pool_, &native_stats);
   EXPECT_EQ(native_stats.reserve_count, 1u);
@@ -311,6 +314,7 @@ TEST_P(PoolCompositionTest, SiblingReuseNeedsNoMetadataAllocation) {
   }
   EXPECT_EQ(metadata_.live, initial_live);
   metadata_.fail = false;
+  progress_metadata_.fail = false;
   for (auto* child : children) {
     cycle(child, 32, 0x73);
   }

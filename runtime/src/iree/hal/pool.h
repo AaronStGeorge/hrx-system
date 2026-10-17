@@ -76,9 +76,12 @@ enum iree_hal_pool_acquire_result_e {
   // non-dominated death frontiers and the pool chose not to hand one out
   // as NEEDS_WAIT.
   //
-  // The caller should observe the pool's notification, retry the reservation,
-  // and wait on the observed token only if the pool remains exhausted. No
-  // reservation was made; |out_reservations| is not modified.
+  // With ALLOW_WAIT_FRONTIER, the caller may observe the pool's capacity
+  // sources, retry, and wait on the observed tokens if still exhausted.
+  // Without that flag, completion of pending accesses may make a free block
+  // eligible without publishing a capacity notification; such callers poll
+  // eligibility or supply their own progress source. No reservation was made;
+  // |out_reservations| is not modified.
   IREE_HAL_POOL_ACQUIRE_EXHAUSTED = 4,
 
   // The pool's budget limit would be exceeded by this reservation. The
@@ -152,9 +155,11 @@ enum iree_hal_pool_reserve_flag_bits_e {
   // are used or release the reservation with that frontier to preserve the
   // block's dependency metadata.
   //
-  // Callers that cannot model queue-owned hidden memory dependencies must omit
-  // this flag. Such calls should receive only immediately-usable reservations
-  // or transient EXHAUSTED/OVER_BUDGET results from well-behaved pools.
+  // Omitting this flag restricts acquisition to immediately usable ranges.
+  // Capacity notifications alone cannot drive retries in that mode: completing
+  // a prior access does not publish a capacity change. Asynchronous callers
+  // accept the frontier and arrange its dependency; synchronous callers may
+  // use iree_hal_pool_allocate_buffer, which waits for actual completion.
   IREE_HAL_POOL_RESERVE_FLAG_ALLOW_WAIT_FRONTIER = 1u << 0,
 };
 
@@ -780,6 +785,9 @@ IREE_API_EXPORT void iree_hal_pool_trim(iree_hal_pool_t* pool,
 // an unbounded source that reports allocation failures directly as statuses.
 // Backing pools may publish independent capacity changes; allocation retries
 // use the common pool_wait helper to observe every captured source.
+// This observes logical capacity, not completion of earlier buffer accesses.
+// Acquisition loops driven by these notifications accept wait frontiers and
+// separately arrange the returned dependencies before accessing reserved bytes.
 //
 // The notification is advisory over pool state. Callers must observe the
 // notification epoch before checking the pool state, and then wait on that
