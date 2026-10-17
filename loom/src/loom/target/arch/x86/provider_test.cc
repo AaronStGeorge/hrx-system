@@ -93,8 +93,8 @@ TEST_F(X86ProviderTest, SelectsStrongestExecutableCpuProfile) {
     iree_string_view_t contract_set_key;
   } cases[] = {
       {0, LOOM_X86_TARGET_KIND_SCALAR, IREE_SV("x86.scalar.core")},
-      {IREE_CPU_DATA0_X86_64_AVX, LOOM_X86_TARGET_KIND_SIMD128,
-       IREE_SV("x86.simd128.core")},
+      {IREE_CPU_DATA0_X86_64_AVX, LOOM_X86_TARGET_KIND_SCALAR,
+       IREE_SV("x86.scalar.core")},
       {kAvx2CpuFeatures, LOOM_X86_TARGET_KIND_AVX2,
        IREE_SV("x86.avx2_features.core")},
       {kAvx512CpuFeatures, LOOM_X86_TARGET_KIND_AVX512,
@@ -132,7 +132,6 @@ TEST_F(X86ProviderTest, RequiresCompleteCpuFeatureClosures) {
     const char* selector;
     uint64_t required_features;
   } cases[] = {
-      {"simd128", IREE_CPU_DATA0_X86_64_AVX},
       {"avx2", kAvx2CpuFeatures},
       {"avx512", kAvx512CpuFeatures},
   };
@@ -294,8 +293,8 @@ TEST_F(X86ProviderTest, RejectsNonExecutableAndForeignProfiles) {
       .architecture = IREE_CPU_ARCHITECTURE_X86_64,
       .fields = {UINT64_MAX},
   };
-  for (iree_string_view_t selector :
-       {IREE_SV("packed_dot"), IREE_SV("avx512_packed_dot")}) {
+  for (iree_string_view_t selector : {IREE_SV("simd128"), IREE_SV("packed_dot"),
+                                      IREE_SV("avx512_packed_dot")}) {
     ExpectStaticSelection(&cpu_data, Profile(selector), nullptr);
   }
 

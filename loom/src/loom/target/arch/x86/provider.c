@@ -52,10 +52,11 @@ typedef struct loom_x86_cpu_profile_policy_t {
 
 // Returns native execution requirements for |selector|. These include both
 // descriptor instructions and the register transport emitted around them.
-// SIMD128 transport uses VEX moves, AVX2 contracts include FMA, and the core
-// AVX-512 contract composes AVX2 with AVX-512F/BW/DQ/VL. Packed-dot rows remain
-// unavailable until every descriptor they expose has a direct native encoding
-// and a representable CPU feature.
+// SIMD128 Low transport uses VEX moves, but its source contract is incomplete
+// and therefore unavailable as an executable profile. AVX2 contracts include
+// FMA, and the core AVX-512 contract composes AVX2 with AVX-512F/BW/DQ/VL.
+// Packed-dot rows remain unavailable until every descriptor they expose has a
+// direct native encoding and a representable CPU feature.
 static loom_x86_cpu_profile_policy_t loom_x86_cpu_profile_policy(
     uint8_t selector) {
   loom_x86_cpu_profile_policy_t policy = {0};
@@ -65,7 +66,6 @@ static loom_x86_cpu_profile_policy_t loom_x86_cpu_profile_policy(
       break;
     case LOOM_X86_TARGET_KIND_SIMD128:
       policy.required_field0_bits = IREE_CPU_DATA0_X86_64_AVX;
-      policy.automatic_priority = 2;
       break;
     case LOOM_X86_TARGET_KIND_AVX2:
       policy.required_field0_bits = IREE_CPU_DATA0_X86_64_AVX |
