@@ -241,6 +241,17 @@ iree_runtime_cc_test(
 )
 
 iree_runtime_cc_test(
+    name = "virtual_buffer_tests",
+    srcs = ["virtual_buffer_test.cc"],
+    deps = [
+        ":backends",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/hal/cts/util:test_main",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "native_buffer_tests",
     srcs = ["buffer_test.cc"],
     deps = [

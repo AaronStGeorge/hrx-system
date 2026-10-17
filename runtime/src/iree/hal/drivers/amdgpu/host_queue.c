@@ -33,6 +33,7 @@
 #include "iree/hal/drivers/amdgpu/host_queue_waits.h"
 #include "iree/hal/drivers/amdgpu/hsa_queue.h"
 #include "iree/hal/drivers/amdgpu/logical_device.h"
+#include "iree/hal/drivers/amdgpu/memory_backend.h"
 #include "iree/hal/drivers/amdgpu/semaphore.h"
 #include "iree/hal/drivers/amdgpu/system_event.h"
 #include "iree/hal/drivers/amdgpu/transient_buffer.h"
@@ -2662,6 +2663,7 @@ static const iree_hal_queue_vtable_t iree_hal_amdgpu_host_queue_vtable = {
     .flush = iree_hal_amdgpu_host_queue_flush,
     .alloca = iree_hal_amdgpu_host_queue_alloca,
     .dealloca = iree_hal_amdgpu_host_queue_dealloca,
+    .map = iree_hal_amdgpu_memory_mapping_queue_map,
     .transfer = iree_hal_amdgpu_host_queue_transfer,
     .read = iree_hal_amdgpu_host_queue_read,
     .write = iree_hal_amdgpu_host_queue_write,

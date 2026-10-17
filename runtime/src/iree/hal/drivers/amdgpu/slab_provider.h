@@ -48,6 +48,9 @@ enum iree_hal_amdgpu_slab_provider_flag_bits_e {
   // Slabs are acquired with HSA VMM and mapped into the ASAN-owned application
   // virtual address window.
   IREE_HAL_AMDGPU_SLAB_PROVIDER_FLAG_ASAN_VMM = 1u << 1,
+  // Slabs own ordinary VMM addresses and expose their complete physical handle
+  // for explicit aliases. This route is independent of ASAN's address window.
+  IREE_HAL_AMDGPU_SLAB_PROVIDER_FLAG_MAPPING_SOURCE = 1u << 2,
 };
 
 // HSA memory pool, mapping policy, and HAL capabilities exposed by a slab

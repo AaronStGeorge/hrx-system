@@ -31,7 +31,8 @@ typedef struct iree_hal_amdgpu_buffer_t iree_hal_amdgpu_buffer_t;
 enum iree_hal_amdgpu_buffer_binding_index_e {
   IREE_HAL_AMDGPU_BUFFER_BINDING_DEVICE_ADDRESS = 0,
   IREE_HAL_AMDGPU_BUFFER_BINDING_HOST = 1,
-  IREE_HAL_AMDGPU_BUFFER_BINDING_COUNT = 2,
+  IREE_HAL_AMDGPU_BUFFER_BINDING_MAPPING_SOURCE = 2,
+  IREE_HAL_AMDGPU_BUFFER_BINDING_COUNT = 3,
 };
 
 // Inline native facts borrowed by prepared views for their allocation epoch.
@@ -52,6 +53,12 @@ static inline const iree_hal_amdgpu_buffer_native_t*
 iree_hal_amdgpu_buffer_native(const iree_hal_buffer_t* buffer) {
   return (const iree_hal_amdgpu_buffer_native_t*)buffer->memory.bindings;
 }
+
+// Publishes a borrowed native mapping descriptor before the buffer escapes its
+// constructor. The provider keeps it live for the buffer's allocation epoch.
+void iree_hal_amdgpu_buffer_prepare_mapping_source(iree_hal_buffer_t* buffer,
+                                                   const void* descriptor,
+                                                   uint32_t granularity);
 
 // Per-physical-device pool of materialized AMDGPU HAL buffer wrappers.
 //

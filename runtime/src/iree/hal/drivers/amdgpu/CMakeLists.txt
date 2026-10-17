@@ -391,6 +391,7 @@ iree_cc_library(
     "transient_buffer.h"
     "tsan_state.c"
     "tsan_state.h"
+    "virtual_buffer.c"
     "virtual_memory.c"
     "virtual_memory.h"
   DEPS

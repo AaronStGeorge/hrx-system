@@ -233,6 +233,7 @@ const iree_hal_buffer_binding_layout_t* iree_hal_amdgpu_buffer_binding_layout(
   static const uint16_t types[] = {
       IREE_HAL_BUFFER_INTERFACE_DEVICE_ADDRESS,
       IREE_HAL_BUFFER_INTERFACE_HOST,
+      IREE_HAL_BUFFER_INTERFACE_MAPPING_SOURCE,
   };
   static const iree_hal_buffer_binding_layout_t layout = {
       .byte_length = sizeof(iree_hal_amdgpu_buffer_native_t),
@@ -241,6 +242,17 @@ const iree_hal_buffer_binding_layout_t* iree_hal_amdgpu_buffer_binding_layout(
       .types = types,
   };
   return &layout;
+}
+
+void iree_hal_amdgpu_buffer_prepare_mapping_source(
+    iree_hal_buffer_t* base_buffer, const void* descriptor,
+    uint32_t granularity) {
+  iree_hal_amdgpu_buffer_t* buffer = iree_hal_amdgpu_buffer_cast(base_buffer);
+  buffer->native.bindings[IREE_HAL_AMDGPU_BUFFER_BINDING_MAPPING_SOURCE] =
+      (iree_hal_buffer_native_binding_t){
+          .mapping_source = {.descriptor = descriptor,
+                             .granularity = granularity},
+      };
 }
 
 // Packet emission may precede alloca commitment. Resolve that staged edge once;
