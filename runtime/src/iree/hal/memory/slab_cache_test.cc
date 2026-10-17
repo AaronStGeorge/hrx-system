@@ -549,6 +549,106 @@ TEST_F(SlabCacheTest, HotReuseAndTrimDoNotWaitForNativePreparation) {
   EXPECT_EQ(stats.ready_count, 2u);
 }
 
+class SlabCacheChildReturnTest : public SlabCacheTest,
+                                 public ::testing::WithParamInterface<bool> {
+ protected:
+  void SetUp() override {
+    SlabCacheTest::SetUp();
+    iree_hal_pool_release(cache_);
+    cache_ = nullptr;
+    iree_hal_slab_cache_options_t options;
+    iree_hal_slab_cache_options_initialize(&options);
+    // Both child policies fit this explicit class, including the fixed-block
+    // allocator's absolute alignment guarantee for its 4-KiB blocks.
+    options.slab = iree_hal_make_pool_reservation_request(4096, 4096);
+    IREE_ASSERT_OK(
+        iree_hal_slab_cache_create(native_, &options, allocator_, &cache_));
+  }
+
+  iree_status_t CreateAllocatingChild(iree_hal_pool_t** out_pool) {
+    if (!GetParam()) {
+      return CreateChild(cache_, 4096, out_pool);
+    }
+    iree_hal_fixed_block_pool_options_t options = {
+        .block_size = 4096,
+        .blocks_per_slab = 1,
+        .frontier_capacity = 2,
+    };
+    iree_status_t status = iree_hal_fixed_block_pool_create(
+        cache_, &options, allocator_, out_pool);
+    if (iree_status_is_ok(status)) {
+      children_.push_back(*out_pool);
+    }
+    return status;
+  }
+};
+
+TEST_P(SlabCacheChildReturnTest,
+       ReturnsBackingToPeerWhileNativeAllocationIsBlocked) {
+  iree_hal_pool_t* first = nullptr;
+  iree_hal_pool_t* second = nullptr;
+  IREE_ASSERT_OK(CreateAllocatingChild(&first));
+  IREE_ASSERT_OK(CreateAllocatingChild(&second));
+  iree_hal_pool_reservation_t reservation;
+  iree_hal_pool_acquire_info_t info;
+  iree_hal_pool_acquire_result_t result;
+  IREE_ASSERT_OK(Acquire(first, 4096, nullptr, IREE_HAL_POOL_RESERVE_FLAG_NONE,
+                         &reservation, &info, &result));
+  ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  const auto request = iree_hal_make_pool_reservation_request(4096, 16);
+  iree_hal_buffer_t* old_view = nullptr;
+  IREE_ASSERT_OK(iree_hal_pool_materialize_reservations(
+      first, 1, &request, &reservation, IREE_HAL_POOL_MATERIALIZE_FLAG_NONE,
+      &old_view));
+  uintptr_t original_address = 0;
+  IREE_ASSERT_OK(CheckBytes(first, reservation, 0x49, &original_address));
+  Drain();
+
+  // Hold a real CPU-provider allocation at its allocator boundary. Logical
+  // return and peer reuse must finish before that dependency is released.
+  native_allocator_.BlockNext();
+  IREE_ASSERT_OK(iree_hal_slab_cache_set_target(cache_, 1));
+  native_allocator_.AwaitEntry();
+  iree_async_single_frontier_t death = {.entry_count = 1};
+  death.entries[0] = {Axis(0), 7};
+  const auto* frontier = iree_async_fixed_frontier_as_const_frontier(&death);
+  iree_hal_pool_release_reservations(first, 1, &reservation, frontier);
+  iree_hal_pool_stats_t stats;
+  iree_hal_pool_query_stats(first, &stats);
+  EXPECT_EQ(stats.bytes_committed, 0u);
+  iree_hal_pool_query_stats(cache_, &stats);
+  EXPECT_EQ(stats.bytes_free, 4096u);
+  EXPECT_FALSE(iree_async_frontier_tracker_query_epoch(tracker_, Axis(0), 7));
+
+  // The peer takes the same physical allocation using causal proof, without
+  // waiting for physical completion or destroying the old buffer view.
+  IREE_EXPECT_OK(Acquire(second, 4096, frontier,
+                         IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservation, &info,
+                         &result));
+  EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK);
+  EXPECT_EQ(iree_async_frontier_compare(info.reuse_frontier, frontier),
+            IREE_ASYNC_FRONTIER_EQUAL);
+  iree_hal_pool_query_stats(native_, &stats);
+  EXPECT_EQ(stats.reserve_count, 1u);
+  iree_async_frontier_tracker_advance(tracker_, Axis(0), 7);
+  uintptr_t reused_address = 0;
+  IREE_EXPECT_OK(CheckBytes(second, reservation, 0xA7, &reused_address));
+  EXPECT_EQ(reused_address, original_address);
+  std::array<uint8_t, 4096> bytes;
+  IREE_EXPECT_OK(
+      iree_hal_buffer_map_read(old_view, 0, bytes.data(), bytes.size()));
+  for (uint8_t value : bytes) {
+    EXPECT_EQ(value, 0xA7);
+  }
+  iree_hal_buffer_release(old_view);
+  iree_hal_pool_release_reservations(second, 1, &reservation, nullptr);
+  native_allocator_.Resume();
+  Drain();
+}
+
+INSTANTIATE_TEST_SUITE_P(TLSFAndFixedBlock, SlabCacheChildReturnTest,
+                         ::testing::Bool());
+
 TEST_F(SlabCacheTest, TrimIncludesQueuedChildReturnsDuringNativePreparation) {
   iree_hal_pool_t* children[2];
   iree_hal_pool_reservation_t reservations[2];

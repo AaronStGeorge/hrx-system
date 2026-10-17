@@ -168,7 +168,6 @@ iree_cc_library(
     ::buffer_range
     ::fixed_block_allocator
     ::fixed_block_pool_slab
-    ::maintenance
     ::tracing
     iree::async
     iree::base
@@ -452,7 +451,6 @@ iree_cc_library(
     "tlsf_pool.c"
   DEPS
     ::buffer_range
-    ::maintenance
     ::tlsf
     ::tlsf_pool_reservation
     ::tracing

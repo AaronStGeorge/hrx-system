@@ -153,7 +153,6 @@ iree_runtime_cc_library(
         ":buffer_range",
         ":fixed_block_allocator",
         ":fixed_block_pool_slab",
-        ":maintenance",
         ":tracing",
         "//runtime/src/iree/async",
         "//runtime/src/iree/base",
@@ -400,7 +399,6 @@ iree_runtime_cc_library(
     hdrs = ["tlsf_pool.h"],
     deps = [
         ":buffer_range",
-        ":maintenance",
         ":tlsf",
         ":tlsf_pool_reservation",
         ":tracing",

@@ -12,7 +12,6 @@
 #include "iree/base/internal/math.h"
 #include "iree/base/threading/mutex.h"
 #include "iree/hal/memory/fixed_block_pool_slab.h"
-#include "iree/hal/memory/maintenance.h"
 #include "iree/hal/memory/tracing.h"
 
 enum {
@@ -52,23 +51,13 @@ typedef struct iree_hal_fixed_block_pool_t {
     iree_hal_fixed_block_pool_slab_t* tail;
   } slabs;
 
-  // Changed-range publication and coalesced cold retirement.
+  // Empty-range publication independent of native allocation progress.
   struct {
-    // Guards only links, final release access, scheduling and callback joining.
+    // Protects candidate links and each releasing caller's final slab access.
     iree_slim_mutex_t mutex;
-    // Joins this pool's final maintenance callback during destruction.
-    iree_notification_t notification;
-    // Single reusable entry on the captured maintenance owner.
-    iree_hal_memory_maintenance_entry_t entry;
-    // Changed slabs awaiting inspection, each linked at most once.
+    // Changed slabs awaiting detachment, each linked at most once.
     iree_hal_fixed_block_pool_slab_t* candidates;
-    // Whether another pass was requested during the current callback.
-    bool requested;
-    // Whether the entry is queued or executing.
-    bool pending;
-    // Floor for the next explicit trim pass; automatic passes use zero.
-    iree_device_size_t trim_floor;
-  } maintenance;
+  } publication;
 
   // Host allocator used for pool and slab metadata.
   iree_allocator_t host_allocator;
@@ -358,18 +347,17 @@ static void iree_hal_fixed_block_pool_unlink_slab(
 }
 
 // The publication mutex makes the releasing thread's final slab access atomic
-// with respect to maintenance detaching it. It never protects raw allocation,
-// frontier inspection or native work.
+// with respect to another caller detaching it. It never protects raw
+// allocation, frontier inspection or native work.
 static void iree_hal_fixed_block_pool_note_candidate(
     iree_hal_fixed_block_pool_t* pool, iree_hal_fixed_block_pool_slab_t* slab)
     IREE_THREAD_ANNOTATION_ATTRIBUTE(
-        requires_capability(&pool->maintenance.mutex)) {
+        requires_capability(&pool->publication.mutex)) {
   if (!slab->candidate_queued) {
     slab->candidate_queued = true;
-    slab->candidate_next = pool->maintenance.candidates;
-    pool->maintenance.candidates = slab;
+    slab->candidate_next = pool->publication.candidates;
+    pool->publication.candidates = slab;
   }
-  pool->maintenance.requested = true;
 }
 
 static void iree_hal_fixed_block_pool_unpin_slab(
@@ -377,94 +365,63 @@ static void iree_hal_fixed_block_pool_unpin_slab(
     IREE_THREAD_ANNOTATION_ATTRIBUTE(
         requires_capability(&pool->acquisition_mutex)) {
   if (--slab->pins == 0 && pool->backing_pool) {
-    iree_slim_mutex_lock(&pool->maintenance.mutex);
+    iree_slim_mutex_lock(&pool->publication.mutex);
     if (iree_atomic_load(&slab->live_count, iree_memory_order_relaxed) == 0) {
-      pool->maintenance.trim_floor = 0;
       iree_hal_fixed_block_pool_note_candidate(pool, slab);
     }
-    iree_slim_mutex_unlock(&pool->maintenance.mutex);
+    iree_slim_mutex_unlock(&pool->publication.mutex);
   }
 }
 
-static void iree_hal_fixed_block_pool_schedule_maintenance(
-    iree_hal_fixed_block_pool_t* pool) {
-  if (!pool->backing_pool) {
-    return;
-  }
-  bool enqueue = false;
-  iree_slim_mutex_lock(&pool->maintenance.mutex);
-  if (pool->maintenance.requested && !pool->maintenance.pending) {
-    pool->maintenance.pending = true;
-    enqueue = true;
-  }
-  iree_slim_mutex_unlock(&pool->maintenance.mutex);
-  if (enqueue) {
-    iree_hal_memory_maintenance_enqueue(pool->base.maintenance,
-                                        &pool->maintenance.entry);
-  }
-}
-
-static void iree_hal_fixed_block_pool_maintain(
-    iree_hal_memory_maintenance_entry_t* entry) {
-  iree_hal_fixed_block_pool_t* pool =
-      (iree_hal_fixed_block_pool_t*)((uint8_t*)entry -
-                                     offsetof(iree_hal_fixed_block_pool_t,
-                                              maintenance.entry));
-  for (;;) {
-    iree_slim_mutex_lock(&pool->maintenance.mutex);
-    if (!pool->maintenance.requested) {
-      pool->maintenance.pending = false;
-      iree_notification_post(&pool->maintenance.notification, IREE_ALL_WAITERS);
-      iree_slim_mutex_unlock(&pool->maintenance.mutex);
-      return;
+// Detaches only slabs whose ownership changed. Concurrent callers take
+// disjoint candidate lists; the acquisition lock excludes new claims while an
+// empty slab is unlinked. Parent returns never run with either metadata lock.
+static void iree_hal_fixed_block_pool_return_unused_slabs(
+    iree_hal_fixed_block_pool_t* pool, iree_device_size_t min_bytes_to_keep) {
+  iree_slim_mutex_lock(&pool->publication.mutex);
+  iree_hal_fixed_block_pool_slab_t* candidates = pool->publication.candidates;
+  pool->publication.candidates = NULL;
+  iree_slim_mutex_unlock(&pool->publication.mutex);
+  while (candidates) {
+    iree_hal_fixed_block_pool_slab_t* slab = candidates;
+    candidates = slab->candidate_next;
+    iree_slim_mutex_lock(&pool->acquisition_mutex);
+    iree_slim_mutex_lock(&pool->publication.mutex);
+    slab->candidate_queued = false;
+    const iree_device_size_t committed = (iree_device_size_t)iree_atomic_load(
+        &pool->bytes_committed, iree_memory_order_relaxed);
+    const bool detach =
+        slab->pins == 0 &&
+        iree_atomic_load(&slab->live_count, iree_memory_order_relaxed) == 0 &&
+        slab->range.length <=
+            committed - iree_min(committed, min_bytes_to_keep);
+    if (detach) {
+      iree_hal_fixed_block_pool_unlink_slab(pool, slab);
     }
-    pool->maintenance.requested = false;
-    iree_hal_fixed_block_pool_slab_t* candidates = pool->maintenance.candidates;
-    pool->maintenance.candidates = NULL;
-    const iree_device_size_t floor = pool->maintenance.trim_floor;
-    pool->maintenance.trim_floor = 0;
-    iree_slim_mutex_unlock(&pool->maintenance.mutex);
+    iree_slim_mutex_unlock(&pool->publication.mutex);
+    iree_slim_mutex_unlock(&pool->acquisition_mutex);
+    if (!detach) {
+      continue;
+    }
 
-    while (candidates) {
-      iree_hal_fixed_block_pool_slab_t* slab = candidates;
-      candidates = slab->candidate_next;
+    if (iree_hal_fixed_block_pool_slab_merge_return(slab, &pool->geometry)) {
+      iree_atomic_fetch_sub(&pool->bytes_committed, slab->range.length,
+                            iree_memory_order_relaxed);
+      iree_atomic_fetch_sub(
+          &pool->bytes_managed,
+          slab->block_count * pool->geometry.backing_block_size,
+          iree_memory_order_relaxed);
+      iree_atomic_fetch_sub(&pool->slab_count, 1, iree_memory_order_relaxed);
+      iree_hal_fixed_block_pool_slab_free(slab, pool->backing_pool,
+                                          pool->host_allocator);
+    } else {
+      // Individual block histories remain useful when their union does not
+      // fit the configured whole-range return frontier.
       iree_slim_mutex_lock(&pool->acquisition_mutex);
-      iree_slim_mutex_lock(&pool->maintenance.mutex);
-      slab->candidate_queued = false;
-      const iree_device_size_t committed = (iree_device_size_t)iree_atomic_load(
-          &pool->bytes_committed, iree_memory_order_relaxed);
-      const bool detach =
-          slab->pins == 0 &&
-          iree_atomic_load(&slab->live_count, iree_memory_order_relaxed) == 0 &&
-          slab->range.length <= committed - iree_min(committed, floor);
-      if (detach) {
-        iree_hal_fixed_block_pool_unlink_slab(pool, slab);
-      }
-      iree_slim_mutex_unlock(&pool->maintenance.mutex);
+      iree_hal_fixed_block_pool_link_slab(pool, slab);
       iree_slim_mutex_unlock(&pool->acquisition_mutex);
-      if (!detach) {
-        continue;
-      }
-
-      if (iree_hal_fixed_block_pool_slab_merge_return(slab, &pool->geometry)) {
-        iree_atomic_fetch_sub(&pool->bytes_committed, slab->range.length,
-                              iree_memory_order_relaxed);
-        iree_atomic_fetch_sub(
-            &pool->bytes_managed,
-            slab->block_count * pool->geometry.backing_block_size,
-            iree_memory_order_relaxed);
-        iree_atomic_fetch_sub(&pool->slab_count, 1, iree_memory_order_relaxed);
-        iree_hal_fixed_block_pool_slab_free(slab, pool->backing_pool,
-                                            pool->host_allocator);
-      } else {
-        // Individual block histories remain useful even when their union does
-        // not fit the configured whole-range return frontier.
-        iree_slim_mutex_lock(&pool->acquisition_mutex);
-        iree_hal_fixed_block_pool_link_slab(pool, slab);
-        iree_slim_mutex_unlock(&pool->acquisition_mutex);
-        iree_async_notification_signal_if_observed(pool->base.notification,
-                                                   INT32_MAX);
-      }
+      iree_async_notification_signal_if_observed(pool->base.notification,
+                                                 INT32_MAX);
     }
   }
 }
@@ -602,10 +559,6 @@ static iree_status_t iree_hal_fixed_block_pool_create_impl(
     iree_allocator_t host_allocator, iree_hal_pool_t** out_pool) {
   iree_hal_pool_capabilities_t capabilities = {0};
   if (backing_pool) {
-    if (!backing_pool->maintenance) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "fixed-block backing has no maintenance owner");
-    }
     IREE_RETURN_IF_ERROR(
         iree_hal_pool_validate_asan_options(backing_pool, &options->asan));
     iree_hal_pool_query_capabilities(backing_pool, &capabilities);
@@ -676,9 +629,7 @@ static iree_status_t iree_hal_fixed_block_pool_create_impl(
   pool->asan_options = options->asan;
   pool->budget_limit = options->budget_limit;
   iree_slim_mutex_initialize(&pool->acquisition_mutex);
-  iree_slim_mutex_initialize(&pool->maintenance.mutex);
-  iree_notification_initialize(&pool->maintenance.notification);
-  pool->maintenance.entry.fn = iree_hal_fixed_block_pool_maintain;
+  iree_slim_mutex_initialize(&pool->publication.mutex);
   status = iree_hal_memory_trace_initialize_pool(
       options->trace_name, IREE_HAL_FIXED_BLOCK_POOL_TRACE_ID, host_allocator,
       &pool->trace);
@@ -733,20 +684,9 @@ iree_status_t iree_hal_fixed_block_pool_create_from_buffer(
   return status;
 }
 
-static bool iree_hal_fixed_block_pool_maintenance_is_idle(void* user_data) {
-  iree_hal_fixed_block_pool_t* pool = (iree_hal_fixed_block_pool_t*)user_data;
-  iree_slim_mutex_lock(&pool->maintenance.mutex);
-  const bool idle = !pool->maintenance.pending;
-  iree_slim_mutex_unlock(&pool->maintenance.mutex);
-  return idle;
-}
-
 static void iree_hal_fixed_block_pool_destroy(iree_hal_pool_t* base_pool) {
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_fixed_block_pool_t* pool = (iree_hal_fixed_block_pool_t*)base_pool;
-  iree_notification_await(&pool->maintenance.notification,
-                          iree_hal_fixed_block_pool_maintenance_is_idle, pool,
-                          iree_infinite_timeout());
   iree_hal_fixed_block_pool_slab_t* slab = pool->slabs.head;
   while (slab) {
     iree_hal_fixed_block_pool_slab_t* next = slab->next;
@@ -765,8 +705,7 @@ static void iree_hal_fixed_block_pool_destroy(iree_hal_pool_t* base_pool) {
   iree_hal_memory_trace_deinitialize(&pool->trace);
   iree_hal_pool_release(pool->backing_pool);
   iree_hal_pool_deinitialize(base_pool);
-  iree_notification_deinitialize(&pool->maintenance.notification);
-  iree_slim_mutex_deinitialize(&pool->maintenance.mutex);
+  iree_slim_mutex_deinitialize(&pool->publication.mutex);
   iree_slim_mutex_deinitialize(&pool->acquisition_mutex);
   iree_allocator_free(pool->host_allocator, pool);
   IREE_TRACE_ZONE_END(z0);
@@ -926,7 +865,7 @@ static iree_host_size_t iree_hal_fixed_block_pool_select_candidates(
     }
   }
   iree_slim_mutex_unlock(&pool->acquisition_mutex);
-  iree_hal_fixed_block_pool_schedule_maintenance(pool);
+  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
   return ready_count + pending_count;
 }
 
@@ -1084,7 +1023,8 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
       break;
     }
     // Preserve published growth across unlocked retries. Other requesters may
-    // use its free blocks, but maintenance cannot erase transaction progress.
+    // use its free blocks, but returning empty backing cannot erase transaction
+    // progress.
     slab->pins = 1;
     slab->preparation_next = preparations;
     preparations = slab;
@@ -1140,7 +1080,7 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservations(
     iree_hal_fixed_block_pool_unpin_slab(pool, slab);
   }
   iree_slim_mutex_unlock(&pool->acquisition_mutex);
-  iree_hal_fixed_block_pool_schedule_maintenance(pool);
+  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
   iree_allocator_free(pool->host_allocator, storage);
   return status;
 }
@@ -1158,14 +1098,13 @@ static void iree_hal_fixed_block_pool_release_one_reservation(
                                                 death_frontier);
   // The raw bitmap is reusable now; the live count keeps this final slab
   // access ordered before cold detachment, including immediate block reuse.
-  iree_slim_mutex_lock(&pool->maintenance.mutex);
+  iree_slim_mutex_lock(&pool->publication.mutex);
   const int32_t previous_live_count =
       iree_atomic_fetch_sub(&slab->live_count, 1, iree_memory_order_relaxed);
   if (pool->backing_pool && previous_live_count == 1) {
-    pool->maintenance.trim_floor = 0;
     iree_hal_fixed_block_pool_note_candidate(pool, slab);
   }
-  iree_slim_mutex_unlock(&pool->maintenance.mutex);
+  iree_slim_mutex_unlock(&pool->publication.mutex);
   iree_hal_fixed_block_pool_uncharge_reservation(
       pool, pool->geometry.backing_block_size);
   iree_atomic_fetch_sub(&pool->reservation_count, 1, iree_memory_order_relaxed);
@@ -1181,7 +1120,7 @@ static void iree_hal_fixed_block_pool_release_reservations(
     iree_hal_fixed_block_pool_release_one_reservation(
         base_pool, &reservations[i], death_frontier);
   }
-  iree_hal_fixed_block_pool_schedule_maintenance(pool);
+  iree_hal_fixed_block_pool_return_unused_slabs(pool, 0);
   iree_async_notification_signal_if_observed(pool->base.notification,
                                              INT32_MAX);
 }
@@ -1434,18 +1373,14 @@ static void iree_hal_fixed_block_pool_trim(
     return;
   }
   iree_slim_mutex_lock(&pool->acquisition_mutex);
-  iree_slim_mutex_lock(&pool->maintenance.mutex);
-  pool->maintenance.trim_floor =
-      pool->maintenance.requested
-          ? iree_min(pool->maintenance.trim_floor, min_bytes_to_keep)
-          : min_bytes_to_keep;
+  iree_slim_mutex_lock(&pool->publication.mutex);
   for (iree_hal_fixed_block_pool_slab_t* slab = pool->slabs.head; slab;
        slab = slab->next) {
     iree_hal_fixed_block_pool_note_candidate(pool, slab);
   }
-  iree_slim_mutex_unlock(&pool->maintenance.mutex);
+  iree_slim_mutex_unlock(&pool->publication.mutex);
   iree_slim_mutex_unlock(&pool->acquisition_mutex);
-  iree_hal_fixed_block_pool_schedule_maintenance(pool);
+  iree_hal_fixed_block_pool_return_unused_slabs(pool, min_bytes_to_keep);
   (void)flags;
 }
 

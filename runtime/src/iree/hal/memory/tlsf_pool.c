@@ -11,9 +11,7 @@
 #include "iree/async/notification.h"
 #include "iree/base/internal/math.h"
 #include "iree/base/threading/mutex.h"
-#include "iree/base/threading/notification.h"
 #include "iree/hal/memory/buffer_range.h"
-#include "iree/hal/memory/maintenance.h"
 #include "iree/hal/memory/tlsf_pool_reservation.h"
 #include "iree/hal/memory/tracing.h"
 
@@ -33,7 +31,7 @@ typedef struct iree_hal_tlsf_pool_slab_t {
   // Previous owned slab, allowing constant-time removal of unused backing.
   struct iree_hal_tlsf_pool_slab_t* previous;
 
-  // Next slab whose free state must be checked by maintenance.
+  // Next slab whose free state changed during a metadata transaction.
   struct iree_hal_tlsf_pool_slab_t* candidate_next;
 
   // Whether this slab is already linked in the return-candidate list.
@@ -134,20 +132,6 @@ typedef struct iree_hal_tlsf_pool_t {
 
   // Slabs changed by growth or returned blocks. Protected by |mutex|.
   iree_hal_tlsf_pool_slab_t* return_candidates;
-
-  // Coalesced cold work. Its mutex guards only scheduling and final joining.
-  struct {
-    // Protects requested/pending and the callback's final notification access.
-    iree_slim_mutex_t mutex;
-    // Joins this pool's work during caller-quiescent destruction.
-    iree_notification_t notification;
-    // Reusable entry on the backing pool's captured maintenance owner.
-    iree_hal_memory_maintenance_entry_t entry;
-    // Whether a producer requested another pass over changed metadata.
-    bool requested;
-    // Whether the entry is queued or executing.
-    bool pending;
-  } maintenance;
 
   // Preferred slab to try first for the next allocation. Protected by |mutex|.
   iree_hal_tlsf_pool_slab_t* preferred_slab;
@@ -283,30 +267,6 @@ static bool iree_hal_tlsf_pool_query_completed_epoch(void* user_data,
 //===----------------------------------------------------------------------===//
 // Internal helpers
 //===----------------------------------------------------------------------===//
-
-static void iree_hal_tlsf_pool_schedule_maintenance(
-    iree_hal_tlsf_pool_t* pool) {
-  if (!pool->backing_pool) {
-    return;
-  }
-  iree_slim_mutex_lock(&pool->maintenance.mutex);
-  pool->maintenance.requested = true;
-  const bool enqueue = !pool->maintenance.pending;
-  pool->maintenance.pending = true;
-  iree_slim_mutex_unlock(&pool->maintenance.mutex);
-  if (enqueue) {
-    iree_hal_memory_maintenance_enqueue(pool->base.maintenance,
-                                        &pool->maintenance.entry);
-  }
-}
-
-static bool iree_hal_tlsf_pool_maintenance_is_idle(void* user_data) {
-  iree_hal_tlsf_pool_t* pool = user_data;
-  iree_slim_mutex_lock(&pool->maintenance.mutex);
-  const bool idle = !pool->maintenance.pending;
-  iree_slim_mutex_unlock(&pool->maintenance.mutex);
-  return idle;
-}
 
 static void iree_hal_tlsf_pool_note_return_candidate(
     iree_hal_tlsf_pool_t* pool, iree_hal_tlsf_pool_slab_t* slab)
@@ -740,7 +700,7 @@ static bool iree_hal_tlsf_pool_query_full_free_slab(
 }
 
 // Removes only ownership metadata. Parent calls and metadata destruction run
-// after dropping the mutation mutex on the captured maintenance owner.
+// after dropping the mutation mutex, in the returning caller's context.
 static void iree_hal_tlsf_pool_detach_slab(iree_hal_tlsf_pool_t* pool,
                                            iree_hal_tlsf_pool_slab_t* slab)
     IREE_THREAD_ANNOTATION_ATTRIBUTE(requires_capability(&pool->mutex)) {
@@ -840,32 +800,16 @@ static void iree_hal_tlsf_pool_release_dedicated_list(
   }
 }
 
-static void iree_hal_tlsf_pool_maintain(
-    iree_hal_memory_maintenance_entry_t* entry) {
-  iree_hal_tlsf_pool_t* pool =
-      (iree_hal_tlsf_pool_t*)((uint8_t*)entry - offsetof(iree_hal_tlsf_pool_t,
-                                                         maintenance.entry));
-  for (;;) {
-    iree_slim_mutex_lock(&pool->maintenance.mutex);
-    if (!pool->maintenance.requested) {
-      pool->maintenance.pending = false;
-      iree_notification_post(&pool->maintenance.notification, IREE_ALL_WAITERS);
-      iree_slim_mutex_unlock(&pool->maintenance.mutex);
-      return;
-    }
-    pool->maintenance.requested = false;
-    iree_slim_mutex_unlock(&pool->maintenance.mutex);
-
-    iree_slim_mutex_lock(&pool->mutex);
-    iree_hal_tlsf_pool_drain_pending_releases(pool);
-    iree_hal_tlsf_pool_slab_t* retired =
-        iree_hal_tlsf_pool_take_unused_slabs(pool, 0);
-    iree_hal_tlsf_pool_release_node_t* dedicated =
-        iree_hal_tlsf_pool_take_dedicated_returns(pool);
-    iree_slim_mutex_unlock(&pool->mutex);
-    iree_hal_tlsf_pool_destroy_slab_list(pool, retired);
-    iree_hal_tlsf_pool_release_dedicated_list(pool, dedicated);
-  }
+static void iree_hal_tlsf_pool_return_unused_slabs(iree_hal_tlsf_pool_t* pool) {
+  iree_slim_mutex_lock(&pool->mutex);
+  iree_hal_tlsf_pool_drain_pending_releases(pool);
+  iree_hal_tlsf_pool_slab_t* retired =
+      iree_hal_tlsf_pool_take_unused_slabs(pool, 0);
+  iree_hal_tlsf_pool_release_node_t* dedicated =
+      iree_hal_tlsf_pool_take_dedicated_returns(pool);
+  iree_slim_mutex_unlock(&pool->mutex);
+  iree_hal_tlsf_pool_destroy_slab_list(pool, retired);
+  iree_hal_tlsf_pool_release_dedicated_list(pool, dedicated);
 }
 
 static void iree_hal_tlsf_pool_deinitialize_slabs(iree_hal_tlsf_pool_t* pool) {
@@ -1068,12 +1012,6 @@ static iree_status_t iree_hal_tlsf_pool_create_impl(
                             "range_length must be > 0");
   }
   if (backing_pool) {
-    if (!backing_pool->maintenance) {
-      IREE_TRACE_ZONE_END(z0);
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "TLSF backing pool has no memory maintenance owner");
-    }
     if (options.tlsf_options.initial_frontier) {
       IREE_TRACE_ZONE_END(z0);
       return iree_make_status(
@@ -1160,9 +1098,6 @@ static iree_status_t iree_hal_tlsf_pool_create_impl(
     return status;
   }
   iree_slim_mutex_initialize(&pool->mutex);
-  iree_slim_mutex_initialize(&pool->maintenance.mutex);
-  iree_notification_initialize(&pool->maintenance.notification);
-  pool->maintenance.entry.fn = iree_hal_tlsf_pool_maintain;
   iree_atomic_store(&pool->pending_release_head, 0, iree_memory_order_relaxed);
   pool->host_allocator = host_allocator;
   pool->source_range = source_range;
@@ -1284,9 +1219,6 @@ static void iree_hal_tlsf_pool_destroy(iree_hal_pool_t* base_pool) {
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_tlsf_pool_t* pool = (iree_hal_tlsf_pool_t*)base_pool;
 
-  iree_notification_await(&pool->maintenance.notification,
-                          iree_hal_tlsf_pool_maintenance_is_idle, pool,
-                          iree_infinite_timeout());
   iree_slim_mutex_lock(&pool->mutex);
   iree_hal_tlsf_pool_drain_pending_releases(pool);
   iree_hal_tlsf_pool_flush_quarantine(pool);
@@ -1308,8 +1240,6 @@ static void iree_hal_tlsf_pool_destroy(iree_hal_pool_t* base_pool) {
   iree_hal_tlsf_pool_release_dedicated_list(pool, dedicated);
 
   iree_hal_tlsf_pool_deinitialize_slabs(pool);
-  iree_notification_deinitialize(&pool->maintenance.notification);
-  iree_slim_mutex_deinitialize(&pool->maintenance.mutex);
   iree_slim_mutex_deinitialize(&pool->mutex);
   iree_hal_memory_trace_deinitialize(&pool->trace);
   iree_hal_pool_deinitialize(base_pool);
@@ -1759,15 +1689,15 @@ static iree_status_t iree_hal_tlsf_pool_acquire_reservations(
         }
       }
     }
-    const bool needs_maintenance =
+    const bool has_unused_slabs =
         pool->return_candidates != NULL || pool->dedicated.returns != NULL;
     if (needs_preparation && metadata.required.slab) {
       elements[preparing_count++].preparing_slab = metadata.required.slab;
       ++metadata.required.slab->preparation_count;
     }
     iree_slim_mutex_unlock(&pool->mutex);
-    if (needs_maintenance) {
-      iree_hal_tlsf_pool_schedule_maintenance(pool);
+    if (has_unused_slabs) {
+      iree_hal_tlsf_pool_return_unused_slabs(pool);
     }
     // A restored prefix was never visible to competing acquisitions. Only new
     // backing creates capacity progress; a rollback-only signal would let a
@@ -1861,7 +1791,7 @@ static iree_status_t iree_hal_tlsf_pool_acquire_reservations(
                                                elements[i].preparing_slab);
     }
     iree_slim_mutex_unlock(&pool->mutex);
-    iree_hal_tlsf_pool_schedule_maintenance(pool);
+    iree_hal_tlsf_pool_return_unused_slabs(pool);
   }
   iree_allocator_free(pool->host_allocator, metadata.prepared.blocks.storage);
   iree_hal_tlsf_pool_free_release_node_list(pool,
@@ -1951,7 +1881,7 @@ static void iree_hal_tlsf_pool_release_reservations(
     iree_hal_tlsf_pool_release_one_reservation(base_pool, &reservations[i],
                                                death_frontier);
   }
-  iree_hal_tlsf_pool_schedule_maintenance(pool);
+  iree_hal_tlsf_pool_return_unused_slabs(pool);
   iree_async_notification_signal_if_observed(pool->base.notification,
                                              INT32_MAX);
 }
@@ -2086,14 +2016,12 @@ static void iree_hal_tlsf_pool_trim(iree_hal_pool_t* base_pool,
   }
   iree_hal_tlsf_pool_release_node_t* release_nodes =
       iree_hal_tlsf_pool_take_free_release_nodes(pool);
-  const bool needs_maintenance =
-      pool->return_candidates != NULL || pool->dedicated.returns != NULL;
+  iree_hal_tlsf_pool_release_node_t* dedicated =
+      iree_hal_tlsf_pool_take_dedicated_returns(pool);
   iree_slim_mutex_unlock(&pool->mutex);
   iree_hal_tlsf_pool_free_release_node_list(pool, release_nodes);
   iree_hal_tlsf_pool_destroy_slab_list(pool, retired_slabs);
-  if (needs_maintenance) {
-    iree_hal_tlsf_pool_schedule_maintenance(pool);
-  }
+  iree_hal_tlsf_pool_release_dedicated_list(pool, dedicated);
   (void)flags;
 }
 
