@@ -139,8 +139,7 @@ kernel.def @vector_workgroup_payload() {
   %8 = scalar.fptrunc %7 : f32 to bf16
   %9 = vector.extract %5[1] : vector<2xf32> -> f32
   %10 = scalar.fptrunc %9 : f32 to bf16
-  %12 = vector.splat %8 : vector<2xbf16>
-  %result = vector.insert %10 into %12[1] : bf16, vector<2xbf16>
+  %result = vector.from_elements %8, %10 : vector<2xbf16>
   test.use %result : vector<2xbf16>
   kernel.return
 }
