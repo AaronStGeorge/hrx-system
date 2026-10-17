@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "iree/hal/testing/mock_device.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -275,6 +276,14 @@ struct FakeNative {
 class SlabProviderTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    iree_hal_mock_device_options_t options;
+    iree_hal_mock_device_options_initialize(&options);
+    for (auto** device : {&devices_[0], &devices_[1]}) {
+      IREE_ASSERT_OK(iree_hal_mock_device_create(
+          &options, iree_allocator_system(), device));
+    }
+    IREE_ASSERT_OK(iree_hal_amd_fabric_allocation_queue_create(
+        UINT32_MAX, iree_allocator_system(), &allocation_queue_));
     CreateProvider(AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE);
   }
 
@@ -305,6 +314,7 @@ class SlabProviderTest : public ::testing::Test {
     options.memory.profile.allocation.maximum_alignment = 4096;
     options.memory.access_count = 2;
     options.memory.accesses = accesses_;
+    options.access_devices = devices_;
     native_.required_flags = host_access ? AMDF_MEMORY_FLAG_HOST_VISIBLE : 0;
     options.memory.required_flags = native_.required_flags;
     options.memory.host_access = host_access;
@@ -371,12 +381,17 @@ class SlabProviderTest : public ::testing::Test {
     }
     options.maintenance_alignment = 64;
     IREE_ASSERT_OK(iree_hal_amd_fabric_slab_provider_create(
-        reinterpret_cast<iree_hal_device_t*>(uintptr_t{1}), &native_.api,
-        iree_hal_device_event_sink_discard(), &options, iree_allocator_system(),
-        &provider_));
+        devices_[0], &native_.api, iree_hal_device_event_sink_discard(),
+        allocation_queue_, &options, iree_allocator_system(), &provider_));
   }
 
-  void TearDown() override { iree_hal_slab_provider_release(provider_); }
+  void TearDown() override {
+    iree_hal_slab_provider_release(provider_);
+    for (auto* device : devices_) {
+      iree_hal_device_release(device);
+    }
+    iree_hal_amd_fabric_allocation_queue_release(allocation_queue_);
+  }
 
   // Mocked native dependency.
   FakeNative native_;
@@ -384,6 +399,10 @@ class SlabProviderTest : public ::testing::Test {
   amdf_memory_device_access_t accesses_[2] = {};
   // Owned production provider under test.
   iree_hal_slab_provider_t* provider_ = nullptr;
+  // HAL owners retained by the provider, with native dependencies mocked above.
+  iree_hal_device_t* devices_[2] = {};
+  // Native worker used by the real provider acquisition and release paths.
+  iree_hal_amd_fabric_allocation_queue_t* allocation_queue_ = nullptr;
 };
 
 TEST_F(SlabProviderTest, PublishesRangedBindingsAndCacheControl) {

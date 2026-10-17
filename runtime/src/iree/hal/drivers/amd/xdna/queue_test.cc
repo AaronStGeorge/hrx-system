@@ -143,7 +143,7 @@ TEST(XdnaDeviceTest, PublishesMemoryProgressBackend) {
             harness.context->data_source.scope);
   EXPECT_EQ(backend->native.storage[0].physical_device_affinity, 0u);
   EXPECT_NE(backend->notification, nullptr);
-  EXPECT_NE(backend->maintenance, nullptr);
+  EXPECT_NE(backend->allocation_queue, nullptr);
   ASSERT_NE(backend->epoch_query.fn, nullptr);
   EXPECT_FALSE(backend->epoch_query.fn(backend->epoch_query.user_data, 0, 0));
 

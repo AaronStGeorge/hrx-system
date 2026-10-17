@@ -170,16 +170,18 @@ TEST_F(MemoryBackendTest,
   EXPECT_EQ(cache_stats.hit_count, 1u);
 
   iree_hal_pool_trim(cache, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
-  iree_hal_memory_maintenance_call(
-      maintenance_,
-      [](void* user_data) {
-        auto* owner = static_cast<iree_hal_memory_maintenance_t*>(user_data);
-        while (iree_hal_memory_maintenance_run_one(owner)) {
-        }
-      },
-      maintenance_);
   iree_hal_pool_stats_t stats;
-  iree_hal_pool_query_stats(pool, &stats);
+  while (true) {
+    const uint32_t token = iree_async_notification_begin_observe(notification_);
+    iree_hal_pool_query_stats(pool, &stats);
+    if (!stats.bytes_committed) {
+      iree_async_notification_end_observe(notification_);
+      break;
+    }
+    iree_async_notification_wait_for_token(notification_, token,
+                                           iree_infinite_timeout());
+    iree_async_notification_end_observe(notification_);
+  }
   EXPECT_EQ(stats.bytes_reserved, 0u);
   EXPECT_EQ(stats.bytes_committed, 0u);
   EXPECT_EQ(native_.destroy_count, 1);
@@ -309,6 +311,7 @@ TEST_F(MemoryBackendTest, JoinsOwnedAndRegisteredVisibilityAtConstruction) {
   iree_hal_buffer_release(imported);
   iree_hal_buffer_release(owned);
   iree_hal_pool_release(pool);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.create_count, 2);
   EXPECT_EQ(native_.destroy_count, 2);
 }
@@ -447,6 +450,7 @@ TEST_F(MemoryBackendTest, HostExportDoesNotGrantPublicMapping) {
   EXPECT_EQ(native_.destroy_count, 0);
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.destroy_count, 1);
 }
 
@@ -478,9 +482,13 @@ TEST_F(MemoryBackendTest, WrapperFailureRollsBackBeforeConsumingStorage) {
     FakeNative* native;
     // Original transport pointer, independent of the registered envelope.
     void* pointer;
-    // Callback executions, read only after pool retirement joins.
-    int count;
-  } release_state = {&native_, bytes, 0};
+    // Guards the caller-owned external storage lifetime.
+    std::mutex mutex;
+    // Published by the final external storage release callback.
+    std::condition_variable condition;
+    // Callback executions, guarded by mutex after ownership transfer.
+    int count = 0;
+  } release_state = {&native_, bytes};
   iree_hal_external_storage_t storage = {
       .storage_class = import_class.storage_class,
   };
@@ -494,7 +502,9 @@ TEST_F(MemoryBackendTest, WrapperFailureRollsBackBeforeConsumingStorage) {
     EXPECT_EQ(payload.host_pointer, state->pointer);
     EXPECT_EQ(state->native->destroy_count, 2);
     EXPECT_EQ(state->native->unmap_count, 2);
+    std::lock_guard<std::mutex> lock(state->mutex);
     ++state->count;
+    state->condition.notify_all();
   };
   storage.release_user_data = &release_state;
   const auto original = storage;
@@ -517,6 +527,8 @@ TEST_F(MemoryBackendTest, WrapperFailureRollsBackBeforeConsumingStorage) {
   EXPECT_EQ(iree_hal_buffer_memory_view(buffer).offset, 64u);
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
+  std::unique_lock<std::mutex> lock(release_state.mutex);
+  release_state.condition.wait(lock, [&] { return release_state.count == 1; });
   EXPECT_EQ(release_state.count, 1);
 }
 
@@ -599,7 +611,7 @@ TEST_F(MemoryBackendTest, MixedEnginesAllocateOneBackingWithExactBindings) {
   }
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.unmap_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
 }
@@ -641,7 +653,7 @@ TEST_F(MemoryBackendTest, DeviceOnlyContractOmitsHostBindingAndHostQueries) {
   }
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.unmap_count, 0);
   EXPECT_EQ(native_.destroy_count, 1);
 }
@@ -695,7 +707,7 @@ TEST_F(MemoryBackendTest, RequiredPlacementSelectsBackingOwner) {
     iree_hal_buffer_release(buffer);
     iree_hal_pool_release(pool);
   }
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.create_count, 2);
   EXPECT_EQ(native_.destroy_count, 2);
 }
@@ -766,7 +778,7 @@ TEST_F(MemoryBackendTest, HostNumaPlacementPreservesAllConsumerBindings) {
     iree_hal_buffer_release(buffer);
     iree_hal_pool_release(pool);
   }
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.create_count, 2);
   EXPECT_EQ(native_.destroy_count, 2);
 }
@@ -790,7 +802,7 @@ TEST_F(MemoryBackendTest, HostNumaPreferenceFallsBackOnlyAtPoolConstruction) {
   EXPECT_EQ(native_.created_placement.kind, AMDF_MEMORY_PLACEMENT_KIND_NONE);
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
 }
 
 TEST_F(MemoryBackendTest, PlacedAllocationFailureDoesNotRelocate) {
@@ -812,7 +824,7 @@ TEST_F(MemoryBackendTest, PlacedAllocationFailureDoesNotRelocate) {
             AMDF_MEMORY_PLACEMENT_KIND_HOST_NUMA);
   EXPECT_EQ(native_.created_placement.node, host_node_id_);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.destroy_count, 0);
 }
 
@@ -828,7 +840,7 @@ TEST_F(MemoryBackendTest, HostPlacementDoesNotChangeAutomaticSelection) {
   EXPECT_EQ(native_.created_placement.kind, AMDF_MEMORY_PLACEMENT_KIND_NONE);
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
 }
 
 TEST_F(MemoryBackendTest, CpuOnlyHostPlacementNeedsNoNativeAttachment) {
@@ -865,7 +877,7 @@ TEST_F(MemoryBackendTest, CpuOnlyHostPlacementNeedsNoNativeAttachment) {
   }
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.create_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
 }
@@ -903,7 +915,7 @@ TEST_F(MemoryBackendTest, HostRegistrationKeepsSourcePlacement) {
   iree_hal_buffer_release(imported);
   iree_hal_buffer_release(owned);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.create_count, 2);
   EXPECT_EQ(native_.destroy_count, 2);
 }
@@ -973,7 +985,7 @@ TEST_F(MemoryBackendTest, PlacementOwnerNeedNotExposeAnAccessFamily) {
       EXPECT_FALSE(iree_hal_memory_effects_is_supported(transition.acquire));
       iree_hal_buffer_release(buffer);
       iree_hal_pool_release(pool);
-      iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+      native_.AwaitEmpty();
     }
   }
   EXPECT_EQ(native_.create_count, 4);
@@ -1073,7 +1085,7 @@ TEST_F(MemoryBackendTest, CpuAccessKeepsNativeOwnerPrivate) {
       }
       iree_hal_buffer_release(buffer);
       iree_hal_pool_release(pool);
-      iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+      native_.AwaitEmpty();
     }
     native_.host_mappable = false;
     iree_hal_pool_t* pool = nullptr;
@@ -1203,7 +1215,7 @@ TEST_F(MemoryBackendTest, PreferredPlacementReportsAchievedBacking) {
     iree_hal_buffer_release(buffer);
     iree_hal_pool_release(pool);
   }
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
 }
 
 TEST_F(MemoryBackendTest, OneDeviceCanPublishSeveralAddressInterfaces) {
@@ -1238,7 +1250,7 @@ TEST_F(MemoryBackendTest, OneDeviceCanPublishSeveralAddressInterfaces) {
   EXPECT_EQ(native_.create_count, 1);
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.destroy_count, 1);
 }
 
@@ -1289,7 +1301,7 @@ TEST_F(MemoryBackendTest, CpuExecutionUsesNativeHostViewWithoutPublicMapping) {
           IREE_HAL_BUFFER_MAP_FLAG_NONE, 0, 64, &mapping));
   iree_hal_buffer_release(buffer);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.destroy_count, 1);
   EXPECT_EQ(native_.unmap_count, 1);
 }
@@ -1425,7 +1437,7 @@ TEST_F(MemoryBackendTest, PreparesOneHostSourceForCpuAndPublicHostScopes) {
   iree_hal_buffer_release(view);
   iree_hal_buffer_release(backing);
   iree_hal_pool_release(pool);
-  iree_hal_memory_maintenance_call(maintenance_, +[](void*) {}, nullptr);
+  native_.AwaitEmpty();
   EXPECT_EQ(native_.create_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
 }

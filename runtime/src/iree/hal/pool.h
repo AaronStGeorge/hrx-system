@@ -726,8 +726,10 @@ IREE_API_EXPORT iree_status_t iree_hal_pool_materialize_reservations(
 //
 // On success the pool consumes and zeros |inout_storage| and owns its optional
 // release callback until the imported buffer is destroyed. Native attachments
-// are released before the callback runs. On failure |inout_storage| is
-// unchanged and |out_buffer| remains NULL. Import performs no copy or execution
+// are released before the callback runs. Final imported-view destruction
+// completes native detach before returning, including when the storage has no
+// release callback. On failure |inout_storage| is unchanged and |out_buffer|
+// remains NULL. Import performs no copy or execution
 // wait; the caller completes prior users before registration or attachment.
 IREE_API_EXPORT iree_status_t iree_hal_pool_import_buffer(
     iree_hal_pool_t* pool, iree_hal_external_storage_t* inout_storage,

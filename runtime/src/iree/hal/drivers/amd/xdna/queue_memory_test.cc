@@ -22,10 +22,17 @@ namespace {
 using iree::hal::amd::xdna::testing::ExpectHostAllocationsUnchanged;
 using iree::hal::amd::xdna::testing::HostAllocationCounters;
 using iree::hal::amd::xdna::testing::HostAllocationSnapshot;
+using iree::hal::amd::xdna::testing::NativeProvider;
 using iree::hal::amd::xdna::testing::QueueHarness;
 using iree::hal::amd::xdna::testing::SnapshotHostAllocations;
 using iree::hal::amd::xdna::testing::TrackingAllocator;
 using iree::hal::testing::DeferredBackingPool;
+
+struct ScopedMemoryGate {
+  // Native dependency gate released even after a test assertion returns.
+  NativeProvider::MemoryGate* gate;
+  ~ScopedMemoryGate() { gate->Release(); }
+};
 
 TEST(XdnaQueueTest, CachedQueueAllocationPublishesContractBeforeDispatch) {
   QueueHarness harness;
@@ -502,7 +509,10 @@ TEST(XdnaQueueMemoryTest, CachedWorkPassesPendingBackingOnSameQueue) {
 
   std::thread completion([&] { deferred->CompleteOne(); });
   completion.join();
-  // Completing backing needs no additional proactor or worker handoff.
+  // Backing now performs an asynchronous native allocation. Completion still
+  // needs no proactor polling or host-service handoff to publish readiness.
+  IREE_ASSERT_OK(iree_hal_semaphore_wait(harness.done, held_value,
+                                         iree_infinite_timeout(), 0));
   IREE_ASSERT_OK(iree_hal_semaphore_query(harness.done, &reached_value));
   EXPECT_EQ(reached_value, held_value);
   const std::array<iree_hal_buffer_t*, 3> buffers = {anchor, pending, ready};
@@ -673,6 +683,119 @@ TEST(XdnaQueueMemoryTest, SharedPrerequisiteDoesNotOverflowLargeBatch) {
   iree_hal_pool_release(pool);
   iree_hal_buffer_release(backing);
   iree_hal_pool_release(source);
+}
+
+TEST(XdnaQueueMemoryTest, NativeGrowthLeavesCachedMemoryAndExecutionReady) {
+  QueueHarness harness;
+  ASSERT_NO_FATAL_FAILURE(harness.Initialize());
+  ASSERT_NO_FATAL_FAILURE(harness.SealDeviceGroup());
+  ASSERT_NO_FATAL_FAILURE(harness.RegisterNativeObserver());
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(harness.CreateCachedTLSFPool(
+      IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_STORAGE, &pool));
+  iree_hal_executable_t* executable = nullptr;
+  iree_hal_executable_function_t function;
+  ASSERT_NO_FATAL_FAILURE(harness.LoadExecutable(
+      iree::hal::amd::xdna::testing::ImageFixture(), &executable, &function));
+  iree_hal_semaphore_t* progress = nullptr;
+  IREE_ASSERT_OK(iree_hal_semaphore_create(
+      harness.device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0, 0, &progress));
+  const auto small = iree_hal_make_pool_reservation_request(64, 0);
+  const auto large = iree_hal_make_pool_reservation_request(128 * 1024, 0);
+  iree_hal_buffer_t* anchor = nullptr;
+  iree_hal_buffer_t* growing = nullptr;
+  iree_hal_buffer_t* cached = nullptr;
+  uint64_t value = 1;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(
+      harness.queue, {}, {1, &progress, &value}, pool, 1, &small, &anchor));
+  ASSERT_NO_FATAL_FAILURE(harness.PollUntilValue(progress, value));
+
+  harness.native.allocation_gate.Arm(large.allocation_size);
+  ScopedMemoryGate gate{&harness.native.allocation_gate};
+  IREE_ASSERT_OK(iree_hal_queue_alloca(harness.queue, {},
+                                       {1, &harness.done, &value}, pool, 1,
+                                       &large, &growing));
+  harness.native.allocation_gate.AwaitEntry();
+  uint64_t allocated = 2;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(
+      harness.queue, {}, {1, &progress, &allocated}, pool, 1, &small, &cached));
+  uint64_t observed = 0;
+  IREE_ASSERT_OK(iree_hal_semaphore_query(progress, &observed));
+  EXPECT_EQ(observed, allocated);
+  const std::array<uint32_t, 4> expected = {19, 23, 0xABCD1234, 0x98765432};
+  std::array<uint32_t, 4> actual = {};
+  iree_hal_transfer_operation_t upload = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPLOAD,
+  };
+  upload.upload.source = expected.data();
+  upload.upload.target_buffer = cached;
+  upload.upload.length = sizeof(expected);
+  uint64_t uploaded = 3;
+  IREE_ASSERT_OK(
+      iree_hal_queue_transfer(harness.queue, {1, &progress, &allocated},
+                              {1, &progress, &uploaded}, 1, &upload, nullptr));
+  const auto binding = iree_hal_make_buffer_ref(cached, 0, 64);
+  uint64_t dispatched = 4;
+  IREE_ASSERT_OK(iree_hal_queue_dispatch(
+      harness.queue, {1, &progress, &uploaded}, {1, &progress, &dispatched},
+      executable, function, iree_hal_make_static_dispatch_config(1, 1, 1), {},
+      {1, &binding}, nullptr, 0));
+  iree_hal_transfer_operation_t download = {
+      .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
+  };
+  download.download.source_buffer = cached;
+  download.download.target = actual.data();
+  download.download.length = sizeof(actual);
+  uint64_t downloaded = 5;
+  IREE_ASSERT_OK(iree_hal_queue_transfer(
+      harness.queue, {1, &progress, &dispatched}, {1, &progress, &downloaded},
+      1, &download, nullptr));
+  ASSERT_NO_FATAL_FAILURE(harness.PollUntilValue(progress, downloaded));
+  EXPECT_EQ(actual, expected);
+  EXPECT_EQ(harness.native.submission_count, 1u);
+  IREE_ASSERT_OK(iree_hal_semaphore_query(harness.done, &observed));
+  EXPECT_EQ(observed, 0u);
+
+  gate.gate->Release();
+  IREE_ASSERT_OK(
+      iree_hal_semaphore_wait(harness.done, value, iree_infinite_timeout(), 0));
+  const std::array<iree_hal_buffer_t*, 3> buffers = {anchor, growing, cached};
+  IREE_ASSERT_OK(iree_hal_queue_dealloca(harness.queue, {}, {}, buffers.size(),
+                                         buffers.data()));
+  for (auto* buffer : buffers) {
+    iree_hal_buffer_release(buffer);
+  }
+  iree_hal_semaphore_release(progress);
+  iree_hal_executable_release(executable);
+  iree_hal_pool_release(pool);
+}
+
+TEST(XdnaQueueMemoryTest, PendingNativeFreeRetainsDeviceAndFabric) {
+  QueueHarness harness;
+  ASSERT_NO_FATAL_FAILURE(harness.Initialize());
+  ASSERT_NO_FATAL_FAILURE(harness.SealDeviceGroup());
+  ASSERT_NO_FATAL_FAILURE(harness.RegisterNativeObserver());
+  iree_hal_pool_t* pool = nullptr;
+  IREE_ASSERT_OK(harness.CreateSlabPool(IREE_HAL_BUFFER_USAGE_TRANSFER, &pool));
+  // Match the native profile's allocation granularity so the gate observes
+  // exactly this allocation's destruction.
+  constexpr iree_device_size_t kAllocationSize = 4096;
+  iree_hal_buffer_t* buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+      pool, iree_hal_make_pool_reservation_request(kAllocationSize, 0),
+      iree_infinite_timeout(), &buffer));
+  harness.native.release_gate.Arm(kAllocationSize);
+  ScopedMemoryGate gate{&harness.native.release_gate};
+  iree_hal_buffer_release(buffer);
+  harness.native.release_gate.AwaitEntry();
+  iree_hal_pool_release(pool);
+  harness.ReleaseDevice();
+  EXPECT_EQ(harness.native.context_destroy_count, 0u);
+  EXPECT_EQ(harness.native.instance_destroy_count, 0u);
+  gate.gate->Release();
+  ASSERT_NO_FATAL_FAILURE(harness.PollUntilDeviceDestroyed());
+  EXPECT_EQ(harness.native.instance_destroy_count, 1u);
+  EXPECT_EQ(harness.native.live_memories, 0u);
 }
 
 }  // namespace

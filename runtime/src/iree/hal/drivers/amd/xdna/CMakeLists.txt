@@ -492,8 +492,9 @@ iree_cc_library(
     iree::base
     iree::base::internal
     iree::hal
+    iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::fabric::memory_backend
-    iree::hal::memory::maintenance_thread
+    iree::hal::drivers::amd::fabric::slab_provider
     iree::hal::utils::device_spec_builder
     iree::hal::utils::files
   PUBLIC
@@ -517,6 +518,7 @@ iree_cc_library(
     iree::async::util::proactor_pool
     iree::base
     iree::hal
+    iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::fabric::buffer
     iree::hal::drivers::amd::fabric::memory_backend
     iree::hal::drivers::amd::xdna::image::testing::image_fixture
