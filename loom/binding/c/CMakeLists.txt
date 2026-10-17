@@ -169,6 +169,7 @@ loom_cc_library(
     loom::pass::pipeline_snapshot
     loom::pass::program
     loom::pass::registry
+    loom::pass::report
     loom::pass::tooling
     loom::pass::trace
     loom::pass::value_facts
@@ -210,6 +211,7 @@ loom_cc_library(
     ::loomc
     loom::error::source
     loom::ir
+    loom::pass::report
     loom::target::pipeline
     loom::target::provider
     loom::target::reporting::report

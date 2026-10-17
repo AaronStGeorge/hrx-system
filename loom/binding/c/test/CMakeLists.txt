@@ -49,6 +49,10 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::error::parameter
+    loom::pass::registry
+    loom::pass::report
+    loom::target::math_policy
 )
 
 loom_cc_test(
