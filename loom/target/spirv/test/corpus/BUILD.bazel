@@ -167,6 +167,7 @@ _ALL_PROFILE_XFAILS = {
     "kernel/subgroup/reduce.loom:@subgroup_integer_reductions": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_bfloat_arithmetic": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_bfloat_extrema": "TARGET/003",
+    "kernel/subgroup/scan.loom:@subgroup_scan_exact_narrowing": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_float_extrema": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_i32": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_wide_extrema": "TARGET/003",
