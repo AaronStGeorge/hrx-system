@@ -569,11 +569,6 @@ static iree_status_t loom_serve_finite_model_link(
           model->weights.values, &stage->command));
     }
   }
-  // Register maximum cohort geometry and packet alignment without committing
-  // any backing. The control module separately registers reflected workspace.
-  IREE_RETURN_IF_ERROR(loom_serve_execution_reserve_workspace(
-      model->execution, iree_max(model->input_capacity, model->output_capacity),
-      LOOM_SERVE_FINITE_BUFFER_ALIGNMENT));
   IREE_RETURN_IF_ERROR(loom_serve_finite_create_control(model, module));
   const loom_serve_finite_executable_options_t options = {
       .device = model->owner,
@@ -1099,13 +1094,18 @@ iree_status_t loom_serve_finite_model_submit(
       model->invocation.payload, 0,
       iree_vm_buffer_length(model->invocation.payload), &input));
   loom_serve_execution_t* execution = model->execution;
+  const iree_host_size_t output_length =
+      loom_serve_finite_result_output_length(model->invocation.result);
+  // Admission ceilings bound source plans, not physical slab geometry. Register
+  // only this cohort's extents before allocating either buffer; command-private
+  // workspace is registered separately from its reflected requirements.
+  IREE_RETURN_IF_ERROR(loom_serve_execution_reserve_workspace(
+      execution, iree_max(input.data_length, output_length),
+      LOOM_SERVE_FINITE_BUFFER_ALIGNMENT));
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; i < 2 && iree_status_is_ok(status); ++i) {
-    const iree_host_size_t length =
-        i ? loom_serve_finite_result_output_length(model->invocation.result)
-          : input.data_length;
     const iree_hal_pool_reservation_request_t request = {
-        .allocation_size = length,
+        .allocation_size = i ? output_length : input.data_length,
         .min_alignment = LOOM_SERVE_FINITE_BUFFER_ALIGNMENT,
     };
     status =

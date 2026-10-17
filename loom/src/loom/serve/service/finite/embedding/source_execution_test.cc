@@ -605,7 +605,8 @@ class RequestChoiceTest : public GenerationSelectionTest {
   }
 
   void Load(loom_serve_variant_cache_options_t cache,
-            bool reject_two_units = false) {
+            bool reject_two_units = false,
+            std::array<uint32_t, 2> capacity_factors = {20, 16}) {
     interface_.set_observer(interface_.self, {});
     loom_serve_finite_service_free(std::exchange(service_, nullptr));
     IREE_ASSERT_OK(
@@ -629,6 +630,18 @@ class RequestChoiceTest : public GenerationSelectionTest {
       std::ifstream input(paths[i]);
       ASSERT_TRUE(input.good()) << paths[i];
       contents[i].assign(std::istreambuf_iterator<char>(input), {});
+    }
+    // Only cold admission capacities change. Packet preparation, row plans,
+    // stage configuration, and actual command workspace remain identical.
+    const std::array<uint32_t, 2> default_factors = {20, 16};
+    for (size_t i = 0; i < capacity_factors.size(); ++i) {
+      const std::string original =
+          "scalar.constant " + std::to_string(default_factors[i]) + " : i64";
+      const auto offset = contents[4].find(original);
+      ASSERT_NE(offset, std::string::npos);
+      contents[4].replace(
+          offset, original.size(),
+          "scalar.constant " + std::to_string(capacity_factors[i]) + " : i64");
     }
     const auto position = contents[2].find("@prepare_batch(");
     ASSERT_NE(position, std::string::npos);
@@ -689,6 +702,7 @@ class RequestChoiceTest : public GenerationSelectionTest {
     loom_serve_test_embedding_model_lifecycle_t load;
     IREE_ASSERT_OK(load.Run(device_, options, {this, Allocate}));
     model_ = load.model;
+    transfer_value_ = 0;
     update_ = loom_serve_finite_model_execution_update(model_);
     loom_serve_package_release(std::exchange(package_, nullptr));
     ASSERT_NO_FATAL_FAILURE(CreateService(0));
@@ -827,6 +841,35 @@ TEST_P(RequestChoiceTest, OversizeChoiceRunsWithoutBecomingIdleCacheStorage) {
     ASSERT_NO_FATAL_FAILURE(
         RunChoice(R"({"model":"fixture","input":"a"})", false, {1, 1, 1, 1}));
   }
+}
+
+TEST_P(RequestChoiceTest, AdmissionCeilingsDoNotSizeWorkspaceBacking) {
+  constexpr uint32_t kCapacityFactor = 2048;
+  constexpr uint64_t kCapacityBytes = 64 * kCapacityFactor;
+  const auto run = [&] {
+    ASSERT_NO_FATAL_FAILURE(
+        RunChoice(R"({"model":"fixture","input":"a"})", false, {1, 1, 1, 1}));
+    const auto workspace =
+        loom_serve_device_memory_statistics(device_).workspace;
+    EXPECT_GT(workspace.bytes_committed, 0u);
+    EXPECT_LT(workspace.bytes_committed, kCapacityBytes);
+  };
+  ASSERT_NO_FATAL_FAILURE(run());
+  // Enlarge each independent admission ceiling without changing the work.
+  ASSERT_NO_FATAL_FAILURE(
+      Load({2, 16 * 1024 * 1024}, false, {kCapacityFactor, 16}));
+  ASSERT_NO_FATAL_FAILURE(run());
+  ASSERT_NO_FATAL_FAILURE(
+      Load({2, 16 * 1024 * 1024}, false, {20, kCapacityFactor}));
+  ASSERT_NO_FATAL_FAILURE(run());
+  // Actual cohort growth still acquires its required backing on demand.
+  ASSERT_NO_FATAL_FAILURE(PrepareChoice(
+      R"({"model":"fixture","input":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]})"));
+  IREE_ASSERT_OK(Resolve());
+  ASSERT_NO_FATAL_FAILURE(CheckChoice({31, 31, 1, 2}));
+  EXPECT_LT(
+      loom_serve_device_memory_statistics(device_).workspace.bytes_committed,
+      kCapacityBytes);
 }
 
 TEST_P(RequestChoiceTest, CancellationCollectsAcceptedCompilerBeforeRelease) {
