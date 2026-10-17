@@ -444,6 +444,23 @@ iree_cc_library(
 
 iree_cc_library(
   NAME
+    tlsf_pool_slab
+  HDRS
+    "tlsf_pool_slab.h"
+  SRCS
+    "tlsf_pool_slab.c"
+  DEPS
+    ::buffer_range
+    ::tlsf
+    iree::async
+    iree::base
+    iree::base::internal
+    iree::hal
+  PUBLIC
+)
+
+iree_cc_library(
+  NAME
     tlsf_pool
   HDRS
     "tlsf_pool.h"
@@ -453,6 +470,7 @@ iree_cc_library(
     ::buffer_range
     ::tlsf
     ::tlsf_pool_reservation
+    ::tlsf_pool_slab
     ::tracing
     iree::async
     iree::base

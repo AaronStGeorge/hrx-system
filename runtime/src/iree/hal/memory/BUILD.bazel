@@ -394,6 +394,21 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "tlsf_pool_slab",
+    srcs = ["tlsf_pool_slab.c"],
+    hdrs = ["tlsf_pool_slab.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":buffer_range",
+        ":tlsf",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "tlsf_pool",
     srcs = ["tlsf_pool.c"],
     hdrs = ["tlsf_pool.h"],
@@ -401,6 +416,7 @@ iree_runtime_cc_library(
         ":buffer_range",
         ":tlsf",
         ":tlsf_pool_reservation",
+        ":tlsf_pool_slab",
         ":tracing",
         "//runtime/src/iree/async",
         "//runtime/src/iree/base",

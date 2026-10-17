@@ -206,7 +206,9 @@ TEST_F(TLSFPoolReservationTest, DedicatedMetadataDoesNotAllocateOffsetTables) {
       pool, 1, &request, nullptr, &reservation, &info, &result,
       IREE_HAL_POOL_RESERVE_FLAG_NONE));
   ASSERT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
-  EXPECT_EQ(counts.count, 1u);
+  // One durable acquisition continuation and one dedicated ownership record;
+  // neither carries the offset tables required by a suballocated slab.
+  EXPECT_EQ(counts.count, 2u);
   EXPECT_LT(counts.maximum_size, sizeof(iree_hal_memory_tlsf_t));
   iree_hal_pool_release_reservations(pool, 1, &reservation, nullptr);
   // The allocator context is local, so finish its pool before returning.
