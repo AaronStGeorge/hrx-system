@@ -94,6 +94,8 @@ iree_cc_binary_benchmark(
     iree::hal::drivers::amd::xdna::image::testdata::mul_i32_npu4
     iree::testing::benchmark_main
     iree::third_party::google_benchmark
+  ARGS
+    "--benchmark_filter=XdnaQueueBenchmark/(ReadyEndToEnd/|UnresolvedSubmitOnly/|RecordedSwitchingEndToEnd/6/|MeasuredRecordedStreamingEndToEnd/1/)"
   TESTONLY
   LABELS
     "benchmark"

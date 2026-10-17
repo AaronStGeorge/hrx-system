@@ -69,6 +69,8 @@ iree_runtime_cc_test(
 iree_runtime_cc_benchmark(
     name = "queue_benchmark",
     srcs = ["queue_benchmark.cc"],
+    # Exercise each harness path without running the full depth/timing matrix.
+    args = ["--benchmark_filter=XdnaQueueBenchmark/(ReadyEndToEnd/|UnresolvedSubmitOnly/|RecordedSwitchingEndToEnd/6/|MeasuredRecordedStreamingEndToEnd/1/)"],
     tags = ["benchmark"],
     deps = [
         "//runtime/src/iree/async",
