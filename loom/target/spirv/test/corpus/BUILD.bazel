@@ -160,6 +160,7 @@ _ALL_PROFILE_XFAILS = {
     "kernel/subgroup/active_predicate.loom:@subgroup_active_predicate": "TARGET/003",
     "kernel/subgroup/match.loom:@subgroup_match_all_i32": "TARGET/032",
     "kernel/subgroup/match.loom:@subgroup_match_any_i32": "TARGET/032",
+    "kernel/subgroup/reduce.loom:@subgroup_converted_components": "TARGET/003",
     "kernel/subgroup/reduce.loom:@subgroup_extended_reductions": "TARGET/003",
     "kernel/subgroup/reduce.loom:@subgroup_float_reductions": "TARGET/003",
     "kernel/subgroup/reduce.loom:@subgroup_half_extrema": "TARGET/003",
