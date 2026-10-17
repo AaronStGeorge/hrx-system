@@ -9,10 +9,12 @@
 #include <cstring>
 #include <future>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "iree/hal/cts/util/pool_test_util.h"
 #include "iree/hal/cts/util/test_base.h"
+#include "iree/hal/drivers/vulkan/queue_test_util.h"
 #include "iree/hal/memory/fixed_block_pool.h"
 #include "iree/hal/memory/maintenance.h"
 #include "iree/hal/memory/slab_cache.h"
@@ -177,6 +179,245 @@ TEST_P(VulkanSlabPoolTest, CapturesExactFamiliesWithoutAllocatingBacking) {
                               &result, sizeof(result), /*barriers=*/NULL));
   buffer.reset();
   JoinMaintenance(source);
+}
+
+TEST_P(VulkanSlabPoolTest, PendingAllocationDoesNotBlockIndependentTransfer) {
+  Ref<iree_hal_pool_t> source;
+  IREE_ASSERT_OK(CreateSource(Scope(), source.out()));
+  Ref<iree_hal_buffer_t> resident;
+  const auto request = iree_hal_make_pool_reservation_request(4096, 0);
+  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+      source, request, iree_infinite_timeout(), resident.out()));
+  iree_hal_pool_stats_t before;
+  iree_hal_pool_query_stats(source, &before);
+
+  SemaphoreList gate(device_, {0}, {1});
+  SemaphoreList allocated(device_, {0}, {1});
+  Ref<iree_hal_buffer_t> pending;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], gate, allocated, source, 1,
+                                       &request, pending.out()));
+  iree_hal_pool_stats_t blocked;
+  iree_hal_pool_query_stats(source, &blocked);
+  EXPECT_EQ(blocked.reserve_count, before.reserve_count);
+  EXPECT_EQ(blocked.bytes_committed, before.bytes_committed);
+
+  constexpr uint32_t pattern = 0xACCE551B;
+  SemaphoreList filled(device_, {0}, {1});
+  IREE_ASSERT_OK(iree_hal_queue_fill(
+      queues_[0], iree_hal_semaphore_list_empty(), filled, resident, 0, 4096,
+      &pattern, sizeof(pattern), nullptr, IREE_HAL_FILL_FLAG_NONE));
+  Wait(filled);
+  EXPECT_EQ(ReadBufferData<uint32_t>(resident)[0], pattern);
+  EXPECT_FALSE(iree_hal_semaphore_list_poll(allocated));
+
+  IREE_ASSERT_OK(iree_hal_semaphore_list_signal(gate, nullptr));
+  Wait(allocated);
+  SemaphoreList returned(device_, {0}, {1});
+  auto* buffer = pending.get();
+  IREE_ASSERT_OK(
+      iree_hal_queue_dealloca(queues_[0], allocated, returned, 1, &buffer));
+  Wait(returned);
+}
+
+TEST_P(VulkanSlabPoolTest, TransfersResolveNestedViewsAfterAllocation) {
+  Ref<iree_hal_pool_t> source;
+  IREE_ASSERT_OK(CreateSource(Scope(), source.out()));
+  const auto request = iree_hal_make_pool_reservation_request(512, 0);
+  for (iree_device_size_t update_offset : {0, 1}) {
+    SCOPED_TRACE(update_offset);
+    SemaphoreList gate(device_, {0}, {1});
+    SemaphoreList allocated(device_, {0}, {1});
+    Ref<iree_hal_buffer_t> allocation;
+    IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], gate, allocated, source, 1,
+                                         &request, allocation.out()));
+    Ref<iree_hal_buffer_t> outer;
+    Ref<iree_hal_buffer_t> view;
+    IREE_ASSERT_OK(iree_hal_buffer_subspan(
+        allocation, 8, 264, iree_allocator_system(), outer.out()));
+    IREE_ASSERT_OK(iree_hal_buffer_subspan(
+        outer, 4, 256, iree_allocator_system(), view.out()));
+    outer.reset();
+    Ref<iree_hal_buffer_t> destination;
+    IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+        source, request, iree_infinite_timeout(), destination.out()));
+    const uint8_t pattern = 0xCD;
+    const auto update = MakeDeterministicBytes(16);
+    SemaphoreList filled(device_, {0}, {1});
+    SemaphoreList updated(device_, {0}, {1});
+    SemaphoreList copied(device_, {0}, {1});
+    IREE_ASSERT_OK(iree_hal_queue_fill(queues_[0], allocated, filled, view, 0,
+                                       256, &pattern, sizeof(pattern), nullptr,
+                                       IREE_HAL_FILL_FLAG_NONE));
+    IREE_ASSERT_OK(iree_hal_queue_update(
+        queues_[0], filled, updated, update.data(), 0, view, update_offset,
+        update.size(), nullptr, IREE_HAL_UPDATE_FLAG_NONE));
+    IREE_ASSERT_OK(iree_hal_queue_copy(queues_[0], updated, copied, view, 0,
+                                       destination, 0, 256, nullptr,
+                                       IREE_HAL_COPY_FLAG_NONE));
+    EXPECT_FALSE(iree_hal_semaphore_list_poll(copied));
+    IREE_ASSERT_OK(iree_hal_semaphore_list_signal(gate, nullptr));
+    Wait(copied);
+    std::vector<uint8_t> expected(256, pattern);
+    std::copy(update.begin(), update.end(), expected.begin() + update_offset);
+    EXPECT_EQ(ReadBufferBytes(destination, 0, 256), expected);
+    view.reset();
+    SemaphoreList returned(device_, {0}, {1});
+    auto* buffer = allocation.get();
+    IREE_ASSERT_OK(
+        iree_hal_queue_dealloca(queues_[0], copied, returned, 1, &buffer));
+    Wait(returned);
+  }
+}
+
+TEST_P(VulkanSlabPoolTest, AllocationFailureCancelsUnsignaledPrerequisites) {
+  Ref<iree_hal_pool_t> source;
+  IREE_ASSERT_OK(CreateSource(Scope(), source.out()));
+  const auto request = iree_hal_make_pool_reservation_request(4096, 0);
+  SemaphoreList gates(device_, {0, 0}, {1, 1});
+  SemaphoreList allocated(device_, {0}, {1});
+  Ref<iree_hal_buffer_t> pending;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], gates, allocated, source, 1,
+                                       &request, pending.out()));
+  iree_hal_semaphore_fail(gates.semaphores[0],
+                          iree_status_from_code(IREE_STATUS_ABORTED));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      iree_hal_semaphore_list_wait(allocated, iree_infinite_timeout(),
+                                   IREE_ASYNC_WAIT_FLAG_NONE));
+  pending.reset();
+  source.reset();
+  // The unused prerequisite no longer holds an operation callback.
+  IREE_ASSERT_OK(iree_hal_semaphore_signal(gates.semaphores[1], 1, nullptr));
+}
+
+TEST_P(VulkanSlabPoolTest, QueueRetirementCancelsPendingAllocation) {
+  DeviceCreateContext context;
+  IREE_ASSERT_OK(context.Initialize(iree_allocator_system()));
+  Ref<iree_hal_device_group_t> group;
+  Ref<iree_hal_device_t> device;
+  IREE_ASSERT_OK(iree_hal_driver_create_default_device(
+      driver_, context.params(), iree_allocator_system(), device.out()));
+  IREE_ASSERT_OK(iree_hal_device_group_create_from_device(
+      device, context.frontier_tracker(), iree_allocator_system(),
+      group.out()));
+  auto* queue = iree_hal_device_queue(
+      device, iree_hal_queue_family_ordinal(iree_hal_queue_family(queues_[0])),
+      0);
+  ASSERT_NE(queue, nullptr);
+  const iree_hal_pool_family_access_t access = {
+      .family = iree_hal_queue_family(queue),
+      .usage = IREE_HAL_BUFFER_USAGE_TRANSFER,
+  };
+  const iree_hal_pool_scope_t scope = {1, &access, {}};
+  iree_hal_slab_pool_options_t options;
+  iree_hal_slab_pool_options_initialize(&options);
+  Ref<iree_hal_pool_t> source;
+  IREE_ASSERT_OK(iree_hal_slab_pool_create(
+      group, scope, &options, iree_allocator_system(), source.out()));
+  const auto request = iree_hal_make_pool_reservation_request(4096, 0);
+  SemaphoreList gate(device, {0}, {1});
+  SemaphoreList allocated(device, {0}, {1});
+  Ref<iree_hal_buffer_t> pending;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queue, gate, allocated, source, 1,
+                                       &request, pending.out()));
+
+  iree_hal_fixed_block_pool_options_t block_options = {
+      .block_size = 4096,
+      .blocks_per_slab = 1,
+      .frontier_capacity = 2,
+      .budget_limit = 4096,
+  };
+  Ref<iree_hal_pool_t> blocks;
+  IREE_ASSERT_OK(iree_hal_fixed_block_pool_create(
+      source, &block_options, iree_allocator_system(), blocks.out()));
+  Ref<iree_hal_buffer_t> occupied;
+  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+      blocks, request, iree_infinite_timeout(), occupied.out()));
+  SemaphoreList capacity_ready(device, {0}, {1});
+  Ref<iree_hal_buffer_t> capacity_pending;
+  IREE_ASSERT_OK(iree_hal_queue_alloca(queue, iree_hal_semaphore_list_empty(),
+                                       capacity_ready, blocks, 1, &request,
+                                       capacity_pending.out()));
+  EXPECT_FALSE(iree_hal_semaphore_list_poll(capacity_ready));
+
+  RetireVulkanQueue(queue);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_CANCELLED,
+      iree_hal_semaphore_list_wait(allocated, iree_infinite_timeout(),
+                                   IREE_ASYNC_WAIT_FLAG_NONE));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_CANCELLED,
+      iree_hal_semaphore_list_wait(capacity_ready, iree_infinite_timeout(),
+                                   IREE_ASYNC_WAIT_FLAG_NONE));
+  capacity_pending.reset();
+  occupied.reset();
+  blocks.reset();
+  pending.reset();
+  source.reset();
+  IREE_ASSERT_OK(iree_hal_semaphore_list_signal(gate, nullptr));
+}
+
+TEST_P(VulkanSlabPoolTest, ConcurrentDependencyFailureRetiresCapture) {
+  Ref<iree_hal_pool_t> source;
+  IREE_ASSERT_OK(CreateSource(Scope(), source.out()));
+  const auto request = iree_hal_make_pool_reservation_request(4096, 0);
+  for (int i = 0; i < 64; ++i) {
+    SemaphoreList gates(device_, {0, 0}, {1, 1});
+    SemaphoreList allocated(device_, {0}, {1});
+    Ref<iree_hal_buffer_t> pending;
+    IREE_ASSERT_OK(iree_hal_queue_alloca(queues_[0], gates, allocated, source,
+                                         1, &request, pending.out()));
+    std::thread failure([&] {
+      iree_hal_semaphore_fail(gates.semaphores[0],
+                              iree_status_from_code(IREE_STATUS_ABORTED));
+    });
+    std::thread success([&] {
+      IREE_EXPECT_OK(
+          iree_hal_semaphore_signal(gates.semaphores[1], 1, nullptr));
+    });
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_ABORTED,
+        iree_hal_semaphore_list_wait(allocated, iree_infinite_timeout(),
+                                     IREE_ASYNC_WAIT_FLAG_NONE));
+    pending.reset();
+    success.join();
+    failure.join();
+  }
+}
+
+TEST_P(VulkanSlabPoolTest, FailedDeallocationLeavesAllocationLive) {
+  Ref<iree_hal_pool_t> source;
+  IREE_ASSERT_OK(CreateSource(Scope(), source.out()));
+  const auto request = iree_hal_make_pool_reservation_request(4096, 0);
+  SemaphoreList allocated(device_, {0}, {1});
+  Ref<iree_hal_buffer_t> buffer;
+  IREE_ASSERT_OK(
+      iree_hal_queue_alloca(queues_[0], iree_hal_semaphore_list_empty(),
+                            allocated, source, 1, &request, buffer.out()));
+  Wait(allocated);
+  SemaphoreList gates(device_, {0, 0}, {1, 1});
+  SemaphoreList failed_return(device_, {0}, {1});
+  auto* raw_buffer = buffer.get();
+  IREE_ASSERT_OK(iree_hal_queue_dealloca(queues_[0], gates, failed_return, 1,
+                                         &raw_buffer));
+  iree_hal_semaphore_fail(gates.semaphores[0],
+                          iree_status_from_code(IREE_STATUS_ABORTED));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      iree_hal_semaphore_list_wait(failed_return, iree_infinite_timeout(),
+                                   IREE_ASYNC_WAIT_FLAG_NONE));
+  constexpr uint32_t pattern = 0xA110CA;
+  SemaphoreList filled(device_, {0}, {1});
+  IREE_ASSERT_OK(iree_hal_queue_fill(queues_[0], allocated, filled, buffer, 0,
+                                     4096, &pattern, sizeof(pattern), nullptr,
+                                     IREE_HAL_FILL_FLAG_NONE));
+  Wait(filled);
+  EXPECT_EQ(ReadBufferData<uint32_t>(buffer)[0], pattern);
+  SemaphoreList returned(device_, {0}, {1});
+  IREE_ASSERT_OK(
+      iree_hal_queue_dealloca(queues_[0], filled, returned, 1, &raw_buffer));
+  Wait(returned);
+  IREE_ASSERT_OK(iree_hal_semaphore_signal(gates.semaphores[1], 1, nullptr));
 }
 
 TEST_P(VulkanSlabPoolTest, QueueReleasesBuffersBeforeTerminalSignal) {

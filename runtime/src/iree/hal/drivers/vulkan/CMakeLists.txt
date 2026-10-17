@@ -418,6 +418,7 @@ iree_cc_library(
     "physical_device_selection.h"
     "queue.c"
     "queue.h"
+    "queue_memory.c"
     "queue_stats.h"
     "semaphore.c"
     "semaphore.h"

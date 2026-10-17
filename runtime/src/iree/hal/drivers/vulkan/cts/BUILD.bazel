@@ -158,6 +158,7 @@ iree_runtime_cc_test(
         "//runtime/src/iree/hal/cts/util:registry",
         "//runtime/src/iree/hal/cts/util:test_base",
         "//runtime/src/iree/hal/cts/util:test_main",
+        "//runtime/src/iree/hal/drivers/vulkan:queue_test_util",
         "//runtime/src/iree/hal/memory:fixed_block_pool",
         "//runtime/src/iree/hal/memory:maintenance",
         "//runtime/src/iree/hal/memory:slab_cache",
