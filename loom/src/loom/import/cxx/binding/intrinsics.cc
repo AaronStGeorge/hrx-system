@@ -77,7 +77,7 @@ void Intrinsics::declaration(cxx::FunctionSymbol* function,
         if (name != "op") {
           return;
         }
-        if (found || function->declaration()) {
+        if (found) {
           diagnostics_.reject(unit_, owner,
                               "an intrinsic requires one operation binding and "
                               "no function body");
@@ -130,6 +130,16 @@ void Intrinsics::declaration(cxx::FunctionSymbol* function,
       break;
     }
   }
+  const bool permits_reference_body =
+      function->isTemplatePattern() && selected &&
+      !selected->arguments.empty() &&
+      NumericConversionIntrinsic::supports_reference_body(
+          selected->arguments[0]->name());
+  if (function->declaration() && !permits_reference_body) {
+    diagnostics_.reject(unit_, owner,
+                        "an intrinsic requires one operation binding and no "
+                        "function body");
+  }
   if (function->isTemplatePattern()) {
     TemplateBinding binding{selected, {}};
     if (auto* scalar = loom_cxx_scalar_binding_find(
@@ -138,6 +148,9 @@ void Intrinsics::declaration(cxx::FunctionSymbol* function,
     } else if (auto arithmetic = VectorArithmeticIntrinsic::admit(
                    unit_, diagnostics_, *selected, owner)) {
       binding.operation = *arithmetic;
+    } else if (auto conversion = NumericConversionIntrinsic::admit(
+                   unit_, diagnostics_, *selected, owner)) {
+      binding.operation = *conversion;
     } else if (auto shaped = ShapedIntrinsic::admit(unit_, diagnostics_,
                                                     *selected, owner)) {
       binding.operation = *shaped;
@@ -237,6 +250,11 @@ Intrinsics::Binding Intrinsics::resolve(cxx::FunctionSymbol* function,
                                                          attribute, owner)) {
     return VectorArithmeticIntrinsic::resolve(*arithmetic, unit_, diagnostics_,
                                               types_, signature, owner);
+  }
+  if (auto conversion = NumericConversionIntrinsic::admit(unit_, diagnostics_,
+                                                          attribute, owner)) {
+    return NumericConversionIntrinsic::resolve(*conversion, unit_, diagnostics_,
+                                               types_, signature, owner);
   }
   if (auto shaped =
           ShapedIntrinsic::admit(unit_, diagnostics_, attribute, owner)) {
@@ -381,6 +399,10 @@ Intrinsics::Binding* Intrinsics::concrete_binding(cxx::FunctionSymbol* function,
                                  T, VectorArithmeticIntrinsic::Operation>) {
           return VectorArithmeticIntrinsic::resolve(
               operation, unit_, diagnostics_, types_, signature, owner);
+        } else if constexpr (std::is_same_v<
+                                 T, NumericConversionIntrinsic::Operation>) {
+          return NumericConversionIntrinsic::resolve(
+              operation, unit_, diagnostics_, types_, signature, owner);
         } else if constexpr (std::is_same_v<T, ShapedIntrinsic::Operation>) {
           return ShapedIntrinsic::resolve(operation, unit_, diagnostics_,
                                           types_, signature, owner);
@@ -482,6 +504,9 @@ IntrinsicCallResult Intrinsics::call(const Binding& admitted,
   }
   if (auto* arithmetic = std::get_if<VectorArithmeticIntrinsic>(binding)) {
     return {arithmetic->call(arguments, arena, math_flags, builder, location)};
+  }
+  if (auto* conversion = std::get_if<NumericConversionIntrinsic>(binding)) {
+    return {conversion->call(arguments, arena, scalars_, vectors_, owner)};
   }
   std::array<loom_value_id_t, 8> inline_values;
   std::vector<loom_value_id_t> overflow;
