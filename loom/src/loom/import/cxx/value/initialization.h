@@ -8,6 +8,10 @@
 #define LOOM_IMPORT_CXX_VALUE_INITIALIZATION_H_
 
 #include <cxx/ast_fwd.h>
+#include <cxx/symbols_fwd.h>
+
+#include <array>
+#include <optional>
 
 #include "loom/import/cxx/value/objects.h"
 #include "loom/import/cxx/value/vector.h"
@@ -30,10 +34,23 @@ class Initialization {
     virtual Value convert(cxx::ExpressionAST* expression, const cxx::Type* type,
                           cxx::AST* owner) = 0;
     virtual void effect(cxx::ExpressionAST* expression) = 0;
+    // Installs one source current-object scope. Value receivers publish each
+    // completed field into the ordinary symbol environment; storage receivers
+    // retain the destination identity used by field lvalues.
+    virtual void enter_value_receiver(const RecordPartition& record) = 0;
+    virtual void enter_storage_receiver(const RecordPartition& record,
+                                        StorageProjection destination,
+                                        const cxx::Type* object_type) = 0;
+    virtual void publish_receiver_member(cxx::FieldSymbol* field,
+                                         Value value) = 0;
+    virtual void complete_storage_receiver_member(cxx::FieldSymbol* field) = 0;
+    virtual Value receiver_member(cxx::FieldSymbol* field, cxx::AST* owner) = 0;
+    virtual void leave_receiver() = 0;
     // Branch construction retains the translator's automatic-binding joins.
-    virtual void conditional_object(
-        StorageProjection destination, const cxx::Type* type,
-        cxx::ConditionalExpressionAST* expression) = 0;
+    virtual void conditional_object(StorageProjection destination,
+                                    const cxx::Type* type,
+                                    cxx::ConditionalExpressionAST* expression,
+                                    bool retained) = 0;
 
    protected:
     ~Evaluation() = default;
@@ -54,22 +71,46 @@ class Initialization {
         arena_(arena),
         locations_(locations),
         builder_(builder),
-        evaluation_(evaluation) {}
+        evaluation_(evaluation) {
+    zero_name_ids_.fill(LOOM_STRING_ID_INVALID);
+  }
 
-  // Builds value-initialized components; an empty list includes zero/default
-  // members supplied by source normalization.
-  Value value(const cxx::Type* type, cxx::List<cxx::ExpressionAST*>* elements,
-              cxx::AST* owner);
+  // Builds one source value from its complete normalized initializer. The
+  // selected constructor is retained separately on declarations and implicit
+  // array elements that do not use a construction expression.
+  Value value(const cxx::Type* type, cxx::ExpressionAST* initializer,
+              cxx::FunctionSymbol* constructor, cxx::AST* owner,
+              std::optional<Value> retained = std::nullopt);
   // Initializes an already allocated object from a present source initializer.
   // Array scalar elements keep the allocation's retained typed view.
   void storage(StorageAllocation allocation, const cxx::Type* type,
-               cxx::ExpressionAST* initializer, cxx::AST* owner);
+               cxx::ExpressionAST* initializer,
+               cxx::FunctionSymbol* constructor, cxx::AST* owner);
   // Constructs a projected object, including one selected initializer arm.
   // The caller has already allocated and admitted the destination storage.
   void object(StorageProjection destination, const cxx::Type* type,
-              cxx::ExpressionAST* initializer, cxx::AST* owner);
+              cxx::ExpressionAST* initializer, cxx::FunctionSymbol* constructor,
+              cxx::AST* owner, bool retained = false);
 
  private:
+  Value from_elements(const cxx::Type* type,
+                      cxx::List<cxx::ExpressionAST*>* elements,
+                      cxx::VariableSymbol* implicit_element,
+                      cxx::FunctionSymbol* constructor, cxx::AST* owner,
+                      std::optional<Value> retained);
+  loom_string_id_t zero_name(loom_scalar_type_t scalar_type);
+  Value zero(const cxx::Type* type, cxx::AST* owner);
+  Value default_record(const RecordPartition& record,
+                       cxx::FunctionSymbol* constructor, bool zero_initialize,
+                       cxx::AST* owner, std::optional<Value> retained);
+  Value finish_value_receiver(const RecordPartition& record, cxx::AST* owner);
+  void default_storage_record(StorageProjection destination,
+                              const RecordPartition& record,
+                              const cxx::Type* object_type,
+                              cxx::FunctionSymbol* constructor,
+                              bool zero_initialize, bool retained,
+                              cxx::AST* owner);
+
   // Source type traits retain qualifiers on memory subobjects.
   cxx::TranslationUnit& unit_;
   // Source admission failures retain their owning clause.
@@ -92,6 +133,8 @@ class Initialization {
   loom_builder_t& builder_;
   // Borrowed evaluator outlives all initializer traversal.
   Evaluation& evaluation_;
+  // Lazily interned compiler names distinguish simultaneous scalar zero types.
+  std::array<loom_string_id_t, LOOM_SCALAR_TYPE_COUNT_> zero_name_ids_;
 };
 
 }  // namespace loom::cxx_import

@@ -27,6 +27,16 @@ cxx::ExpressionAST* unwrap_expression(cxx::ExpressionAST* expression) {
   return expression;
 }
 
+bool is_current_object(cxx::ExpressionAST* expression) {
+  expression = unwrap_expression(expression);
+  if (cxx::ast_cast<cxx::ThisExpressionAST>(expression)) {
+    return true;
+  }
+  auto* unary = cxx::ast_cast<cxx::UnaryExpressionAST>(expression);
+  return unary && !unary->symbol && unary->op == cxx::TokenKind::T_STAR &&
+         is_current_object(unary->expression);
+}
+
 cxx::FunctionSymbol* direct_callee(cxx::CallExpressionAST* call) {
   auto* id = cxx::ast_cast<cxx::IdExpressionAST>(
       unwrap_expression(call ? call->baseExpression : nullptr));

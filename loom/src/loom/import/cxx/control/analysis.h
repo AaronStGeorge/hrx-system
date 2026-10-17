@@ -116,7 +116,15 @@ class ControlFlow final : private cxx::ASTVisitor {
   void visit(cxx::CompoundAssignmentExpressionAST* ast) override;
   void visit(cxx::PostIncrExpressionAST* ast) override;
   void visit(cxx::UnaryExpressionAST* ast) override;
+  void visit(cxx::InitDeclaratorAST* ast) override;
+  void visit(cxx::ConditionExpressionAST* ast) override;
+  void visit(cxx::BracedInitListAST* ast) override;
+  void visit(cxx::TypeConstructionAST* ast) override;
+  void visit(cxx::BracedTypeConstructionAST* ast) override;
   static bool structured(cxx::AST* ast);
+  void analyze_default_constructor(const cxx::Type* type,
+                                   cxx::FunctionSymbol* constructor,
+                                   cxx::AST* owner);
   void record(cxx::ExpressionAST* expression);
   std::optional<Destination> classify_destination(
       cxx::ExpressionAST* expression);
@@ -151,6 +159,8 @@ class ControlFlow final : private cxx::ASTVisitor {
   std::unordered_map<cxx::ForStatementAST*, CountedLoop> counted_;
   // Sparse path sets retain statements with function or iteration exits.
   std::unordered_map<cxx::StatementAST*, unsigned> paths_;
+  // Canonical implicit constructor bodies visited once for this function.
+  std::unordered_set<cxx::FunctionSymbol*> analyzed_constructors_;
 };
 
 }  // namespace loom::cxx_import

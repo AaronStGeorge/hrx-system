@@ -19,6 +19,10 @@ cxx::ExpressionAST* strip_implicit_casts(cxx::ExpressionAST* expression);
 // parenthesized nesting.
 cxx::ExpressionAST* unwrap_expression(cxx::ExpressionAST* expression);
 
+// Whether an expression denotes the implicit object parameter, including
+// transparent parentheses, conversions, and an explicit dereference of this.
+bool is_current_object(cxx::ExpressionAST* expression);
+
 // Returns the directly named function called by |call|, or null for indirect
 // calls and other callable expressions.
 cxx::FunctionSymbol* direct_callee(cxx::CallExpressionAST* call);

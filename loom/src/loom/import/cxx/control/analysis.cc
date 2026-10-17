@@ -7,6 +7,8 @@
 #include "loom/import/cxx/control/analysis.h"
 
 #include <cxx/ast.h>
+#include <cxx/ast_rewriter.h>
+#include <cxx/function_body.h>
 #include <cxx/symbols.h>
 #include <cxx/translation_unit.h>
 #include <cxx/types.h>
@@ -18,17 +20,6 @@
 #include "loom/import/cxx/source/expressions.h"
 
 namespace loom::cxx_import {
-namespace {
-
-cxx::ExpressionAST* unwrapped(cxx::ExpressionAST* expression) {
-  expression = strip_implicit_casts(expression);
-  while (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(expression)) {
-    expression = strip_implicit_casts(nested->expression);
-  }
-  return expression;
-}
-
-}  // namespace
 
 ControlFlow::ControlFlow(cxx::TranslationUnit& unit, Diagnostics& diagnostics,
                          Types& types, cxx::StatementAST* body)
@@ -259,6 +250,73 @@ void ControlFlow::visit(cxx::UnaryExpressionAST* ast) {
   }
 }
 
+void ControlFlow::analyze_default_constructor(const cxx::Type* type,
+                                              cxx::FunctionSymbol* constructor,
+                                              cxx::AST* owner) {
+  type = types_.unqualified(type);
+  while (auto* array = cxx::type_cast<cxx::BoundedArrayType>(type)) {
+    type = types_.unqualified(array->elementType());
+  }
+  auto* record = types_.record(type, owner);
+  if (!record || !constructor ||
+      constructor != record->source->defaultConstructor() ||
+      !analyzed_constructors_.insert(constructor).second) {
+    return;
+  }
+  cxx::ASTRewriter::requireFunctionDefinition(&unit_, constructor);
+  auto* definition = constructor->resolvedDefinition()->declaration();
+  auto* body = definition ? definition->functionBody : nullptr;
+  if (!body) {
+    return;
+  }
+
+  // A synthesized constructor is an expression-local initialization plan, not
+  // a lexical child of every source construct that invokes it. Its own
+  // structured expressions still retain their mutation summaries.
+  auto enclosing_owners = std::move(owners_);
+  owners_.clear();
+  for (auto* initializer : cxx::ListView{cxx::ctor_initializers(body)}) {
+    accept(initializer);
+  }
+  owners_ = std::move(enclosing_owners);
+}
+
+void ControlFlow::visit(cxx::InitDeclaratorAST* ast) {
+  cxx::ASTVisitor::visit(ast);
+  auto* variable = cxx::symbol_cast<cxx::VariableSymbol>(ast->symbol);
+  if (variable) {
+    analyze_default_constructor(variable->type(), variable->constructor(), ast);
+  }
+}
+
+void ControlFlow::visit(cxx::ConditionExpressionAST* ast) {
+  cxx::ASTVisitor::visit(ast);
+  if (ast->symbol) {
+    analyze_default_constructor(ast->symbol->type(), ast->symbol->constructor(),
+                                ast);
+  }
+}
+
+void ControlFlow::visit(cxx::BracedInitListAST* ast) {
+  cxx::ASTVisitor::visit(ast);
+  if (!ast->implicitElement) {
+    return;
+  }
+  accept(ast->implicitElement->initializer());
+  analyze_default_constructor(ast->implicitElement->type(),
+                              ast->implicitElement->constructor(), ast);
+}
+
+void ControlFlow::visit(cxx::TypeConstructionAST* ast) {
+  cxx::ASTVisitor::visit(ast);
+  analyze_default_constructor(ast->type, ast->constructorSymbol, ast);
+}
+
+void ControlFlow::visit(cxx::BracedTypeConstructionAST* ast) {
+  cxx::ASTVisitor::visit(ast);
+  analyze_default_constructor(ast->type, ast->constructorSymbol, ast);
+}
+
 bool ControlFlow::structured(cxx::AST* ast) {
   if (auto* binary = cxx::ast_cast<cxx::BinaryExpressionAST>(ast)) {
     return !binary->symbol && (binary->op == cxx::TokenKind::T_AMP_AMP ||
@@ -310,11 +368,17 @@ std::optional<Destination> ControlFlow::classify_destination(
     return std::nullopt;
   }
   auto* member = cxx::ast_cast<cxx::MemberExpressionAST>(expression);
-  if (!member || member->accessOp != cxx::TokenKind::T_DOT) {
+  if (!member) {
     return std::nullopt;
   }
   auto* field = cxx::symbol_cast<cxx::FieldSymbol>(member->symbol);
   if (!field || field->isStatic()) {
+    return std::nullopt;
+  }
+  if (is_current_object(member->baseExpression)) {
+    return Destination{field, 0, nullptr};
+  }
+  if (member->accessOp != cxx::TokenKind::T_DOT) {
     return std::nullopt;
   }
   // Establish the automatic owner before requesting any SSA partition: a dot
@@ -367,16 +431,16 @@ std::optional<CountedLoop> ControlFlow::classify(cxx::ForStatementAST* loop) {
       declaration
           ? cxx::ast_cast<cxx::SimpleDeclarationAST>(declaration->declaration)
           : nullptr;
-  auto* condition =
-      cxx::ast_cast<cxx::BinaryExpressionAST>(unwrapped(loop->condition));
+  auto* condition = cxx::ast_cast<cxx::BinaryExpressionAST>(
+      unwrap_expression(loop->condition));
   if (!initial || !initial->initDeclaratorList ||
       initial->initDeclaratorList->next || !condition || condition->symbol ||
       condition->op != cxx::TokenKind::T_LESS) {
     return std::nullopt;
   }
   auto* induction = initial->initDeclaratorList->value->symbol;
-  auto* left =
-      cxx::ast_cast<cxx::IdExpressionAST>(unwrapped(condition->leftExpression));
+  auto* left = cxx::ast_cast<cxx::IdExpressionAST>(
+      unwrap_expression(condition->leftExpression));
   auto traits = unit_.typeTraits();
   if (!left || left->symbol != induction ||
       traits.is_volatile(induction->type()) ||
@@ -390,25 +454,25 @@ std::optional<CountedLoop> ControlFlow::classify(cxx::ForStatementAST* loop) {
   }
 
   unsigned step_value = 1;
-  auto* increment_expression = unwrapped(loop->expression);
+  auto* increment_expression = unwrap_expression(loop->expression);
   auto* step = cxx::ast_cast<cxx::UnaryExpressionAST>(increment_expression);
   auto* post = cxx::ast_cast<cxx::PostIncrExpressionAST>(increment_expression);
   auto* compound =
       cxx::ast_cast<cxx::CompoundAssignmentExpressionAST>(increment_expression);
   cxx::IdExpressionAST* increment = nullptr;
   if (step && !step->symbol && step->op == cxx::TokenKind::T_PLUS_PLUS) {
-    increment =
-        cxx::ast_cast<cxx::IdExpressionAST>(unwrapped(step->expression));
+    increment = cxx::ast_cast<cxx::IdExpressionAST>(
+        unwrap_expression(step->expression));
   } else if (post && !post->symbol && post->op == cxx::TokenKind::T_PLUS_PLUS) {
-    increment =
-        cxx::ast_cast<cxx::IdExpressionAST>(unwrapped(post->baseExpression));
+    increment = cxx::ast_cast<cxx::IdExpressionAST>(
+        unwrap_expression(post->baseExpression));
   } else if (compound && !compound->symbol &&
              compound->op == cxx::TokenKind::T_PLUS_EQUAL) {
     auto amount = integer_constant(unit_, compound->rightExpression);
     if (amount && *amount > 0 && *amount <= UINT32_MAX) {
       step_value = static_cast<unsigned>(*amount);
       increment = cxx::ast_cast<cxx::IdExpressionAST>(
-          unwrapped(compound->targetExpression));
+          unwrap_expression(compound->targetExpression));
     }
   }
   const auto& body_writes = written(loop->statement);
@@ -424,7 +488,7 @@ std::optional<CountedLoop> ControlFlow::classify(cxx::ForStatementAST* loop) {
     return std::nullopt;
   }
   auto* bound = cxx::ast_cast<cxx::IdExpressionAST>(
-      unwrapped(condition->rightExpression));
+      unwrap_expression(condition->rightExpression));
   const auto& loop_writes = written(loop);
   if (step_value != 1 || !bound || !traits.is_integral_or_enum(bound->type) ||
       traits.is_volatile(bound->type) ||

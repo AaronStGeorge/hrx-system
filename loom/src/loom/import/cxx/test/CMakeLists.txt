@@ -138,6 +138,7 @@ loom_check_test_suite(
     "predicate_contracts.cxx-test"
     "predicate_contracts_invalid.cxx-test"
     "record_arrays.cxx-test"
+    "record_initialization.cxx-test"
     "record_memory.cxx-test"
     "record_memory_invalid.cxx-test"
     "records.cxx-test"

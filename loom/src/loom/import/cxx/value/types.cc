@@ -1078,13 +1078,21 @@ bool Types::is_opaque_dialect(const cxx::Type* type, std::string_view name,
 
 // The frontend has selected the special member and checked accessibility,
 // deletion, cv and overload resolution. Source admission establishes trivial
-// lifecycle semantics before an implicit copy becomes an SSA value copy.
-void Types::admit_copy(cxx::FunctionSymbol* constructor, const cxx::Type* type,
-                       cxx::AST* owner) {
+// lifecycle semantics before an implicit copy becomes an SSA value copy. An
+// admitted record's default constructor contributes only its canonical member
+// initialization plan; Initialization evaluates that plan against the current
+// object.
+void Types::admit_construction(cxx::FunctionSymbol* constructor,
+                               const cxx::Type* type, cxx::AST* owner) {
   if (!constructor) {
     return;
   }
-  const auto& admitted = partition(type, owner);
+  // Array initialization retains an element constructor on the array entity.
+  // Initialization admits and executes it independently for every element.
+  if (unit_.typeTraits().is_array(type)) {
+    return;
+  }
+  const auto& admitted = partition(unqualified(type), owner);
   cxx::ClassSymbol* source = nullptr;
   bool is_record = admitted.kind == ValueKind::Record;
   if (admitted.kind == ValueKind::Record) {
@@ -1105,12 +1113,13 @@ void Types::admit_copy(cxx::FunctionSymbol* constructor, const cxx::Type* type,
     source = static_cast<const TensorPartition&>(admitted).source;
   }
   if (source && constructor == source->defaultConstructor()) {
+    if (is_record) {
+      return;
+    }
     diagnostics_.reject(
         unit_, owner,
-        is_record ? "default record construction requires source object "
-                    "initialization semantics"
-                  : "default Loom source type construction requires source "
-                    "object initialization semantics");
+        "default Loom source type construction requires source object "
+        "initialization semantics");
   }
   if (!source || (constructor != source->copyConstructor() &&
                   constructor != source->moveConstructor())) {
