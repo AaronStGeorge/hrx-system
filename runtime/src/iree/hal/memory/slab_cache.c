@@ -521,8 +521,7 @@ iree_status_t iree_hal_slab_cache_create(
   status = iree_hal_slab_cache_validate_request(cache, &cache->slab);
   if (iree_status_is_ok(status)) {
     status = iree_hal_memory_trace_initialize_pool(
-        options->trace_name, "iree-hal-slab-cache", host_allocator,
-        &cache->trace);
+        options->trace_name, "iree-hal-slab-cache", &cache->trace);
   }
   if (iree_status_is_ok(status)) {
     cache->refill_requested = cache->target_count != 0;

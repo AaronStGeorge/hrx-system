@@ -976,8 +976,7 @@ static iree_status_t iree_hal_tlsf_pool_create_impl(
       frontier_tracker, tlsf_options.frontier_capacity, &pool->history);
   if (iree_status_is_ok(status)) {
     status = iree_hal_memory_trace_initialize_pool(
-        options.trace_name, IREE_HAL_TLSF_POOL_TRACE_ID, host_allocator,
-        &pool->trace);
+        options.trace_name, IREE_HAL_TLSF_POOL_TRACE_ID, &pool->trace);
   }
   iree_hal_tlsf_pool_slab_t* initial_slab = NULL;
   if (iree_status_is_ok(status) && source_range.buffer) {

@@ -163,8 +163,7 @@ iree_status_t iree_hal_vulkan_slab_provider_create(
   provider->total_released = IREE_ATOMIC_VAR_INIT(0);
 
   iree_status_t status = iree_hal_memory_trace_initialize(
-      trace_name, IREE_HAL_VULKAN_SLAB_PROVIDER_TRACE_ID, host_allocator,
-      &provider->trace);
+      trace_name, IREE_HAL_VULKAN_SLAB_PROVIDER_TRACE_ID, &provider->trace);
   if (iree_status_is_ok(status)) {
     *out_provider = &provider->base;
   } else {

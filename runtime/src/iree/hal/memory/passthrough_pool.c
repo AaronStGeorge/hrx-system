@@ -567,8 +567,7 @@ iree_status_t iree_hal_passthrough_pool_create(
                             : pool->slab_properties.supported_usage;
 
   status = iree_hal_memory_trace_initialize_pool(
-      options.trace_name, IREE_HAL_PASSTHROUGH_POOL_TRACE_ID,
-      pool->host_allocator, &pool->trace);
+      options.trace_name, IREE_HAL_PASSTHROUGH_POOL_TRACE_ID, &pool->trace);
   if (iree_status_is_ok(status)) {
     *out_pool = &public_pool->base;
   } else {

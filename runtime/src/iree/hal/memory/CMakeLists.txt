@@ -464,6 +464,18 @@ iree_cc_library(
   PUBLIC
 )
 
+iree_cc_test(
+  NAME
+    tracing_test
+  SRCS
+    "tracing_test.cc"
+  DEPS
+    ::tracing
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 iree_cc_binary_benchmark(
   NAME
     tlsf_benchmark

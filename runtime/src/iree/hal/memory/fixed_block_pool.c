@@ -660,8 +660,7 @@ static iree_status_t iree_hal_fixed_block_pool_create_impl(
       pool->base.frontier_tracker, geometry.frontier_capacity, &pool->history);
   if (iree_status_is_ok(status)) {
     status = iree_hal_memory_trace_initialize_pool(
-        options->trace_name, IREE_HAL_FIXED_BLOCK_POOL_TRACE_ID, host_allocator,
-        &pool->trace);
+        options->trace_name, IREE_HAL_FIXED_BLOCK_POOL_TRACE_ID, &pool->trace);
   }
   if (iree_status_is_ok(status) && range) {
     iree_async_single_frontier_t compact_storage;
