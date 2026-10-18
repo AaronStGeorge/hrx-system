@@ -153,11 +153,11 @@ TEST_F(InputCountTest, CountingProgressesWithEveryExecutionRowOccupied) {
 
 TEST_F(InputCountTest, StopJoinsBorrowedHeadAndCancelsQueuedQueries) {
   const auto body = Request(Message("user", "abxa"));
-  const int first = Send(body, "", kInputTokens);
-  const int second = Send(body, "", kInputTokens);
   loom_serve_http_connection_t* connections[2] = {};
   const loom_serve_http_request_t* requests[2] = {};
+  const int first = Send(body, "", kInputTokens);
   IREE_ASSERT_OK(http_.TakeRequest(first, &connections[0], &requests[0]));
+  const int second = Send(body, "", kInputTokens);
   IREE_ASSERT_OK(http_.TakeRequest(second, &connections[1], &requests[1]));
   OwnerTurn::Run(loom_serve_host_executor(host_), [&] {
     for (size_t i = 0; i < 2; ++i) {
@@ -214,11 +214,13 @@ TEST_F(InputCountTest, FullQueueRejectsWithoutDisturbingAcceptedQueries) {
 
 TEST_F(InputCountTest, DisconnectRetiresTheHeadBeforeReusingItsClaim) {
   const auto body = Request(Message("user", "abxa"));
-  const int first = Send(body, "", kInputTokens);
-  const int second = Send(body, "", kInputTokens);
   loom_serve_http_connection_t* connections[2] = {};
   const loom_serve_http_request_t* requests[2] = {};
+  // Claims follow server readiness, not client send order. Claim each peer
+  // before sending the next so closing first cancels the borrowed head.
+  const int first = Send(body, "", kInputTokens);
   IREE_ASSERT_OK(http_.TakeRequest(first, &connections[0], &requests[0]));
+  const int second = Send(Request(Message("user", "bax")), "", kInputTokens);
   IREE_ASSERT_OK(http_.TakeRequest(second, &connections[1], &requests[1]));
   OwnerTurn::Run(loom_serve_host_executor(host_), [&] {
     for (size_t i = 0; i < 2; ++i) {
@@ -237,7 +239,7 @@ TEST_F(InputCountTest, DisconnectRetiresTheHeadBeforeReusingItsClaim) {
       },
       connections[0], iree_infinite_timeout()));
   ASSERT_NO_FATAL_FAILURE(AdvanceUntil(interface_, [&] { return Idle(); }));
-  EXPECT_NE(Read(second).find("{\"input_tokens\":4}"), std::string::npos);
+  EXPECT_NE(Read(second).find("{\"input_tokens\":3}"), std::string::npos);
   EXPECT_EQ(interface_.telemetry.counters->cancelled, 1u);
   EXPECT_EQ(interface_.telemetry.counters->completed, 1u);
   EXPECT_NE(Count(body).find("{\"input_tokens\":4}"), std::string::npos);
