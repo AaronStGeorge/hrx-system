@@ -177,6 +177,12 @@ TEST_F(SlabProviderTest, NativeReleaseCanDestroySanitizedDevice) {
   iree_hal_amdgpu_logical_device_options_t device_options;
   iree_hal_amdgpu_logical_device_options_initialize(&device_options);
   device_options.asan.enabled = true;
+  if (iree_hal_amdgpu_logical_device_options_query_host_compatibility(
+          &device_options) ==
+      IREE_HAL_AMDGPU_LOGICAL_DEVICE_HOST_COMPATIBILITY_INCOMPATIBLE_HOST_TSAN_ASAN) {
+    GTEST_SKIP()
+        << "AMDGPU ASAN is not supported in host ThreadSanitizer builds";
+  }
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.Initialize(&device_options, &libhsa_, &topology_,
                                         host_allocator_));
