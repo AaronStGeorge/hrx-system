@@ -594,6 +594,18 @@ or family selector and applies it to both the runtime HAL target set and Loom's
 trees, then run the union of tests that require the AMDGPU HAL at build time or
 an AMD GPU at execution time.
 
+The Windows **AMD gfx1201** Bazel job uses
+`iree-bazel-amdgpu-native-asan --amdgpu-target gfx1201` for native libamdf
+queue coverage. This profile requires an exact GPU target and admits only
+the native GPU resource; it needs neither an NPU nor ROCr, Vulkan, or D3D12.
+It enumerates queue families, requires a finite PM4 copy to retire on the named
+target, and runs the same finite-copy check for SDMA when the driver exposes
+that family. Both process and instance lifetimes pass these checks before
+the queue capacity, notification, discovery, and native dependency tests run.
+An unavailable SDMA family remains an explicit skip rather than execution
+proof. Each test phase retains its own results, including repeated invocations
+of the same corpus. `iree-bazel-amdgpu-native` is the unsanitized form.
+
 XDNA commands configure an XDNA-only libamdf and include its CTS, the XDNA HAL
 CTS, and Loom's native execution corpus. They need the native XDNA driver and
 access to the assigned NPU, but not ROCr, XRT, or an AMDGPU device compiler.
