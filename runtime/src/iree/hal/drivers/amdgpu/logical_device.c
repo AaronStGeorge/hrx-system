@@ -2157,7 +2157,6 @@ static void iree_hal_amdgpu_logical_device_destroy(
   logical_device->system_event_registration = NULL;
 
   iree_hal_amdgpu_feedback_state_deinitialize(&logical_device->feedback);
-  iree_hal_amdgpu_asan_state_deinitialize(&logical_device->asan);
   iree_hal_amdgpu_tsan_state_deinitialize(&logical_device->tsan);
 
   // Devices may hold allocations and need to be cleaned up first.
@@ -2169,6 +2168,10 @@ static void iree_hal_amdgpu_logical_device_destroy(
   iree_hal_allocator_release(logical_device->device_allocator);
   iree_hal_channel_provider_release(logical_device->channel_provider);
   iree_hal_device_spec_release(logical_device->device_spec);
+
+  // Native allocation queues and slab releases borrow the ASAN mapping state.
+  // Finish their teardown before draining quarantine and releasing its window.
+  iree_hal_amdgpu_asan_state_deinitialize(&logical_device->asan);
 
   // This may unload HSA; must come after all resources are released.
   iree_hal_amdgpu_system_free(logical_device->system);
