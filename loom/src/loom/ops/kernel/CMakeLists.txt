@@ -9,6 +9,21 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    launch_config_dependence
+  HDRS
+    "launch_config_dependence.h"
+  SRCS
+    "launch_config_dependence.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::analysis::value_relation
+    loom::ir
+  PUBLIC
+)
+
 loom_generated_cc_library(
   NAME
     kernel
@@ -39,10 +54,10 @@ loom_generated_cc_library(
   EXTRA_OUTPUTS
     "ops.inc"
   DEPS
+    ::launch_config_dependence
     iree::base
     iree::base::internal
     iree::base::internal::arena
-    loom::analysis::value_relation
     loom::error::emitter
     loom::error::error_defs
     loom::error::parameter
