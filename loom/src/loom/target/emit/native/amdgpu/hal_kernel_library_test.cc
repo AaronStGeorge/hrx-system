@@ -1811,10 +1811,22 @@ TEST_F(AmdgpuHalKernelLibraryTest,
   const Section& rodata = FindSection(sections, ".rodata");
   const Section& data = FindSection(sections, ".data");
 
+  constexpr uint64_t kAsanConfigOffset = 0u;
+  constexpr uint64_t kTsanConfigOffset =
+      kAsanConfigOffset + LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH +
+      LOOM_AMDGPU_ASAN_GLOBAL_LAYOUT_V0_GRANULE_SIZE;
+  constexpr uint64_t kFeedbackConfigOffset =
+      kTsanConfigOffset + LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_BYTE_LENGTH +
+      LOOM_AMDGPU_ASAN_GLOBAL_LAYOUT_V0_GRANULE_SIZE;
+  constexpr uint64_t kDataByteLength =
+      kFeedbackConfigOffset +
+      LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH +
+      LOOM_AMDGPU_ASAN_GLOBAL_LAYOUT_V0_GRANULE_SIZE;
+
   EXPECT_EQ(data.type, LOOM_NATIVE_ELF_SECTION_TYPE_PROGBITS);
   EXPECT_EQ(data.flags, LOOM_NATIVE_ELF_SECTION_FLAG_WRITE |
                             LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC);
-  EXPECT_EQ(data.size, 280u);
+  EXPECT_EQ(data.size, kDataByteLength);
   EXPECT_EQ(rodata.size, 80u);
 
   const std::string dynstr_contents =
@@ -1833,7 +1845,8 @@ TEST_F(AmdgpuHalKernelLibraryTest,
   EXPECT_EQ(LoadLeU16(hsaco, asan_symbol + 6), data.index);
   EXPECT_EQ(LoadLeU64(hsaco, asan_symbol + 16),
             LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH);
-  EXPECT_EQ(LoadLeU64(hsaco, asan_symbol + 8), data.address);
+  EXPECT_EQ(LoadLeU64(hsaco, asan_symbol + 8),
+            data.address + kAsanConfigOffset);
 
   EXPECT_EQ(ReadNullTerminatedString(dynstr_contents,
                                      LoadLeU32(hsaco, tsan_symbol + 0)),
@@ -1842,7 +1855,8 @@ TEST_F(AmdgpuHalKernelLibraryTest,
   EXPECT_EQ(LoadLeU16(hsaco, tsan_symbol + 6), data.index);
   EXPECT_EQ(LoadLeU64(hsaco, tsan_symbol + 16),
             LOOM_AMDGPU_RUNTIME_GLOBAL_TSAN_CONFIG_BYTE_LENGTH);
-  EXPECT_EQ(LoadLeU64(hsaco, tsan_symbol + 8), data.address + 104u);
+  EXPECT_EQ(LoadLeU64(hsaco, tsan_symbol + 8),
+            data.address + kTsanConfigOffset);
 
   EXPECT_EQ(
       ReadNullTerminatedString(dynstr_contents,
@@ -1852,7 +1866,8 @@ TEST_F(AmdgpuHalKernelLibraryTest,
   EXPECT_EQ(LoadLeU16(hsaco, final_feedback_symbol + 6), data.index);
   EXPECT_EQ(LoadLeU64(hsaco, final_feedback_symbol + 16),
             LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
-  EXPECT_EQ(LoadLeU64(hsaco, final_feedback_symbol + 8), data.address + 208u);
+  EXPECT_EQ(LoadLeU64(hsaco, final_feedback_symbol + 8),
+            data.address + kFeedbackConfigOffset);
 
   EXPECT_EQ(
       ReadNullTerminatedString(dynstr_contents,

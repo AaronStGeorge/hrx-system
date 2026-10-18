@@ -224,10 +224,10 @@ static void loom_amdgpu_sanitizer_validate_shadow_capacity_report_values(
       builder, descriptor_set, report->workgroup_ordinal, 2);
   loom_amdgpu_sanitizer_race_require_data_register(
       builder, descriptor_set, report->workgroup_local_memory_size, 1);
+  loom_amdgpu_sanitizer_race_require_data_register(builder, descriptor_set,
+                                                   report->shadow_cell_size, 1);
   loom_amdgpu_sanitizer_race_require_data_register(
-      builder, descriptor_set, report->memory_granule_shift, 1);
-  loom_amdgpu_sanitizer_race_require_data_register(
-      builder, descriptor_set, report->shadow_entry_size, 1);
+      builder, descriptor_set, report->shadow_history_count, 1);
   for (uint32_t i = 0; i < 3; ++i) {
     loom_amdgpu_sanitizer_race_require_data_register(
         builder, descriptor_set, report->current_workgroup_ids[i], 1);
@@ -285,10 +285,10 @@ iree_status_t loom_amdgpu_build_sanitizer_race_shadow_capacity_report_payload(
   } u32_fields[] = {
       {LOOM_AMDGPU_TSAN_REPORT_CAPACITY_LOCAL_MEMORY_SIZE_OFFSET,
        report->workgroup_local_memory_size},
-      {LOOM_AMDGPU_TSAN_REPORT_CAPACITY_MEMORY_GRANULE_SHIFT_OFFSET,
-       report->memory_granule_shift},
-      {LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_ENTRY_SIZE_OFFSET,
-       report->shadow_entry_size},
+      {LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_CELL_SIZE_OFFSET,
+       report->shadow_cell_size},
+      {LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_HISTORY_COUNT_OFFSET,
+       report->shadow_history_count},
       {LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_X_OFFSET,
        report->current_workgroup_ids[0]},
       {LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_Y_OFFSET,

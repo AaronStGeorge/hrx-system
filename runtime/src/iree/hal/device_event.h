@@ -384,10 +384,10 @@ typedef struct iree_hal_device_tsan_shadow_capacity_report_t {
   uint64_t workgroup_ordinal;
   // Final workgroup-local memory byte size carried by the dispatch packet.
   uint32_t workgroup_local_memory_size;
-  // Log2 application memory bytes represented by one shadow entry.
-  uint32_t memory_granule_shift;
-  // Bytes in each shadow entry.
-  uint32_t shadow_entry_size;
+  // Bytes in each application-byte shadow cell.
+  uint32_t shadow_cell_size;
+  // Access histories retained in each shadow cell.
+  uint32_t shadow_history_count;
   // Reserved for future capacity report fields. Must be zero.
   uint32_t reserved0;
   // Workgroup id that observed the capacity failure.

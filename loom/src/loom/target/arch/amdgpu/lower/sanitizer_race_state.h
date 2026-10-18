@@ -24,14 +24,10 @@ typedef struct loom_amdgpu_sanitizer_race_config_values_t {
   loom_value_id_t address;
   // TSAN config flags from loom_amdgpu_tsan_config_flag_bits_e.
   loom_value_id_t flags;
-  // Log2 application bytes represented by one shadow entry.
-  loom_value_id_t memory_granule_shift;
   // Queue-local shadow allocation base.
   loom_value_id_t shadow_base;
   // Total bytes in the queue-local shadow allocation.
   loom_value_id_t shadow_size;
-  // Bytes in each shadow entry.
-  loom_value_id_t shadow_entry_size;
 } loom_amdgpu_sanitizer_race_config_values_t;
 
 typedef struct loom_amdgpu_sanitizer_race_shadow_entry_base_t {

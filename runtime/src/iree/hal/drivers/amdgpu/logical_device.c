@@ -180,16 +180,9 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
   out_options->asan.redzone_size = IREE_HAL_AMDGPU_ASAN_DEFAULT_REDZONE_SIZE;
   out_options->asan.quarantine_size =
       IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE;
-  out_options->tsan.memory_granule_shift =
-      IREE_HAL_AMDGPU_TSAN_DEFAULT_MEMORY_GRANULE_SHIFT;
   out_options->tsan.report_policy =
       IREE_HAL_AMDGPU_TSAN_REPORT_POLICY_FAIL_DEVICE;
-  out_options->tsan.workgroup_local_memory_size =
-      IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_LOCAL_MEMORY_SIZE;
-  out_options->tsan.workgroup_capacity =
-      IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_CAPACITY;
-  out_options->tsan.shadow_slot_count =
-      IREE_HAL_AMDGPU_TSAN_DEFAULT_SHADOW_SLOT_COUNT;
+  out_options->tsan.shadow_size = IREE_HAL_AMDGPU_TSAN_DEFAULT_SHADOW_SIZE;
 
   out_options->preallocate_pools = 1;
 }
@@ -421,83 +414,16 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
                                 "invalid AMDGPU TSAN report policy value %u",
                                 (uint32_t)options->tsan.report_policy);
     }
-    if (options->tsan.memory_granule_shift >
-        IREE_HAL_AMDGPU_TSAN_MAX_MEMORY_GRANULE_SHIFT) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "AMDGPU TSAN memory granule shift %u exceeds max shift %u",
-          options->tsan.memory_granule_shift,
-          IREE_HAL_AMDGPU_TSAN_MAX_MEMORY_GRANULE_SHIFT);
-    }
-    if (options->tsan.workgroup_local_memory_size != 0 &&
-        !iree_device_size_is_power_of_two(
-            options->tsan.workgroup_local_memory_size)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU TSAN workgroup local-memory size %u must be zero for "
-          "auto-detect or a power of two",
-          options->tsan.workgroup_local_memory_size);
-    }
-    if (options->tsan.workgroup_capacity == 0) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU TSAN workgroup capacity must be non-zero");
-    }
-    if (options->tsan.shadow_slot_count == 0) {
+    if (options->tsan.shadow_size == 0) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "AMDGPU TSAN shadow slot count must be non-zero");
+                              "AMDGPU TSAN shadow size must be non-zero");
     }
-    if (!iree_device_size_is_power_of_two(options->tsan.shadow_slot_count)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "AMDGPU TSAN shadow slot count %u must be a "
-                              "power of two",
-                              options->tsan.shadow_slot_count);
-    }
-    if (options->tsan.workgroup_local_memory_size != 0) {
-      const uint64_t granule_size = 1ull << options->tsan.memory_granule_shift;
-      const uint64_t workgroup_entry_count =
-          (options->tsan.workgroup_local_memory_size + granule_size - 1) >>
-          options->tsan.memory_granule_shift;
-      if (workgroup_entry_count >
-          UINT64_MAX / IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE) {
-        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "AMDGPU TSAN workgroup shadow data overflows: "
-                                "local_memory_size=%u, granule_shift=%u",
-                                options->tsan.workgroup_local_memory_size,
-                                options->tsan.memory_granule_shift);
-      }
-      const uint64_t workgroup_shadow_data_size =
-          workgroup_entry_count * IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE;
-      if (workgroup_shadow_data_size >
-          UINT64_MAX - IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "AMDGPU TSAN workgroup shadow size overflows: "
-            "header_size=%u, data_size=%" PRIu64,
-            IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE,
-            workgroup_shadow_data_size);
-      }
-      const uint64_t workgroup_shadow_stride =
-          IREE_HAL_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_SIZE +
-          workgroup_shadow_data_size;
-      if (workgroup_shadow_stride >
-          UINT64_MAX / options->tsan.workgroup_capacity) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "AMDGPU TSAN dispatch shadow size overflows: "
-            "workgroup_shadow_stride=%" PRIu64 ", workgroup_capacity=%u",
-            workgroup_shadow_stride, options->tsan.workgroup_capacity);
-      }
-      const uint64_t dispatch_shadow_stride =
-          workgroup_shadow_stride * options->tsan.workgroup_capacity;
-      if (dispatch_shadow_stride >
-          UINT64_MAX / options->tsan.shadow_slot_count) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "AMDGPU TSAN queue shadow size overflows: "
-            "dispatch_shadow_stride=%" PRIu64 ", shadow_slot_count=%u",
-            dispatch_shadow_stride, options->tsan.shadow_slot_count);
-      }
+    if (options->tsan.shadow_size > IREE_HAL_AMDGPU_TSAN_MAX_SHADOW_SIZE) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU TSAN shadow size %" PRIu64
+                              " exceeds max size %" PRIu64,
+                              (uint64_t)options->tsan.shadow_size,
+                              (uint64_t)IREE_HAL_AMDGPU_TSAN_MAX_SHADOW_SIZE);
     }
   }
   return iree_ok_status();
@@ -2059,10 +1985,8 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
         host_allocator, &logical_device->asan);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_tsan_state_initialize(
-        &resolved_options, logical_device->system,
-        logical_device->physical_device_count, logical_device->physical_devices,
-        host_allocator, &logical_device->tsan);
+    status = iree_hal_amdgpu_tsan_state_initialize(&resolved_options,
+                                                   &logical_device->tsan);
   }
 
   // If requested then warmup pools that we expect to grow on the first usage of

@@ -122,8 +122,8 @@ class FeedbackStateTest : public ::testing::Test {
     capacity.workgroup_shadow_stride = 16;
     capacity.workgroup_ordinal = 256;
     capacity.workgroup_local_memory_size = 2048;
-    capacity.memory_granule_shift = 2;
-    capacity.shadow_entry_size = 8;
+    capacity.shadow_cell_size = 16;
+    capacity.shadow_history_count = 2;
     capacity.current_workgroup_id[0] = 16;
     capacity.current_workgroup_id[1] = 4;
     capacity.current_workgroup_id[2] = 1;
@@ -226,8 +226,8 @@ TEST_F(FeedbackStateTest, TsanShadowCapacityPublishesTypedResourceError) {
   EXPECT_EQ(capacity.workgroup_shadow_stride, 16u);
   EXPECT_EQ(capacity.workgroup_ordinal, 256u);
   EXPECT_EQ(capacity.workgroup_local_memory_size, 2048u);
-  EXPECT_EQ(capacity.memory_granule_shift, 2u);
-  EXPECT_EQ(capacity.shadow_entry_size, 8u);
+  EXPECT_EQ(capacity.shadow_cell_size, 16u);
+  EXPECT_EQ(capacity.shadow_history_count, 2u);
   EXPECT_EQ(capacity.current_workgroup_id[0], 16u);
   EXPECT_EQ(capacity.current_workgroup_id[1], 4u);
   EXPECT_EQ(capacity.current_workgroup_id[2], 1u);
