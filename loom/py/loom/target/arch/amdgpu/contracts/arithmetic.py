@@ -37,7 +37,6 @@ from loom.target.arch.amdgpu.contracts.packed_i8 import (
     packed_i8_logical_shift_rules,
     packed_i8_sub_rules,
 )
-from loom.target.arch.amdgpu.contracts.trigonometry import sin_turns_rules
 from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_SOURCE_INLINE_F32_VALUES,
     build_amdgpu_contract_descriptor_set,
@@ -4783,7 +4782,7 @@ def _rules() -> tuple[ContractCase, ...]:
             *_f32_fma_rules(vector.vector_fmaf, _VEC_F32_STATIC),
             _unary_rule(vector.vector_exp2f, _VEC_F32_STATIC, "amdgpu.v_exp_f32"),
             _unary_rule(vector.vector_log2f, _VEC_F32_STATIC, "amdgpu.v_log_f32"),
-            *sin_turns_rules(_DESCRIPTOR_SET, vector.vector_sinturnsf, _VEC_F32_STATIC),
+            _unary_rule(vector.vector_sinturnsf, _VEC_F32_STATIC, "amdgpu.v_sin_f32"),
             _unary_rule(vector.vector_costurnsf, _VEC_F32_STATIC, "amdgpu.v_cos_f32"),
             _unary_rule(vector.vector_floorf, _VEC_F32_STATIC, "amdgpu.v_floor_f32"),
             _unary_rule(vector.vector_ceilf, _VEC_F32_STATIC, "amdgpu.v_ceil_f32"),
@@ -5129,7 +5128,7 @@ def _rules() -> tuple[ContractCase, ...]:
             _fma_rule(scalar_math.scalar_fmaf, _F64, "amdgpu.v_fma_f64"),
             _unary_rule(scalar_math.scalar_exp2f, _F32, "amdgpu.v_exp_f32"),
             _unary_rule(scalar_math.scalar_log2f, _F32, "amdgpu.v_log_f32"),
-            *sin_turns_rules(_DESCRIPTOR_SET, scalar_math.scalar_sinturnsf, _F32),
+            _unary_rule(scalar_math.scalar_sinturnsf, _F32, "amdgpu.v_sin_f32"),
             _unary_rule(scalar_math.scalar_costurnsf, _F32, "amdgpu.v_cos_f32"),
             _unary_rule(scalar_math.scalar_floorf, _F32, "amdgpu.v_floor_f32"),
             _unary_rule(scalar_math.scalar_floorf, _F64, "amdgpu.v_floor_f64"),
