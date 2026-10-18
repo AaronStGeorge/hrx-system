@@ -1090,10 +1090,10 @@ DefinedFunction Functions::define(cxx::FunctionSymbol* symbol, Types& types,
              : 0) |
             (predicates.empty() ? 0
                                 : LOOM_KERNEL_DEF_BUILD_FLAG_HAS_PREDICATES),
-        0, target, LOOM_STRING_ID_INVALID, 0, callee,
-        configuration_arguments.data(), configuration_arguments.size(),
-        arguments.data(), arguments.size(), predicates.data(),
-        predicates.size(), locations.get(definition), &op));
+        /*linkage=*/0, /*retain=*/0, target, LOOM_STRING_ID_INVALID,
+        /*export_linkage=*/0, callee, configuration_arguments.data(),
+        configuration_arguments.size(), arguments.data(), arguments.size(),
+        predicates.data(), predicates.size(), locations.get(definition), &op));
     auto saved =
         loom_builder_enter_region(builder, op, loom_kernel_def_config(op));
     auto spelling = loom_string_table_get(&module_->strings, name_id);
@@ -1149,8 +1149,10 @@ DefinedFunction Functions::define(cxx::FunctionSymbol* symbol, Types& types,
                  ? LOOM_FUNC_DEF_BUILD_FLAG_HAS_INLINE_POLICY
                  : 0) |
             (predicates.empty() ? 0 : LOOM_FUNC_DEF_BUILD_FLAG_HAS_PREDICATES),
-        exported_.contains(symbol) ? LOOM_FUNC_VISIBILITY_PUBLIC : 0, 0,
-        annotated(symbol, "device") ? LOOM_FUNC_CC_DEVICE : 0, 0, 0,
+        exported_.contains(symbol) ? LOOM_FUNC_VISIBILITY_PUBLIC : 0,
+        /*linkage=*/0, /*retain=*/0,
+        annotated(symbol, "device") ? LOOM_FUNC_CC_DEVICE : 0,
+        /*effect_contract=*/0, /*temperature=*/0,
         annotated(symbol, "force_inline") ? LOOM_INLINE_POLICY_INLINE : 0, {},
         0, {}, 0, {}, callees_.at(symbol->canonical()), arguments.data(),
         arguments.size(), results.data(), results.size(), tied_results.data(),
