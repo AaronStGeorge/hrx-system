@@ -181,7 +181,10 @@ static bool loom_low_allocation_preference_is_structural(
   if (relation->cause == LOOM_LOW_PLACEMENT_CAUSE_SCHEDULE_PAIR_AFFINITY) {
     return false;
   }
-  return relation->kind == LOOM_LOW_PLACEMENT_RELATION_DISJOINT_STORAGE ||
+  return (relation->kind == LOOM_LOW_PLACEMENT_RELATION_SAME_REGISTER_ORDINAL &&
+          iree_any_bit_set(relation->flags,
+                           LOOM_LOW_PLACEMENT_RELATION_FLAG_PREFERRED)) ||
+         relation->kind == LOOM_LOW_PLACEMENT_RELATION_DISJOINT_STORAGE ||
          (relation->kind == LOOM_LOW_PLACEMENT_RELATION_SAME_STORAGE &&
           (relation->cause == LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY ||
            relation->cause == LOOM_LOW_PLACEMENT_CAUSE_LOW_MOVE));
@@ -243,9 +246,10 @@ static bool loom_low_allocation_preference_structural_is_actionable(
     }
     counterpart_class = assigned->descriptor_reg_class_id;
   }
-  return loom_low_allocation_storage_reg_classes_share(
-      query->structural.constraints->target->descriptor_set, candidate_class,
-      counterpart_class);
+  return relation->kind == LOOM_LOW_PLACEMENT_RELATION_SAME_REGISTER_ORDINAL ||
+         loom_low_allocation_storage_reg_classes_share(
+             query->structural.constraints->target->descriptor_set,
+             candidate_class, counterpart_class);
 }
 
 static void loom_low_allocation_preference_prepare_structural(
@@ -466,8 +470,10 @@ static uint32_t loom_low_allocation_preference_structural_penalty(
             query, relation, counterpart_ordinal);
       }
       if (counterpart == NULL ||
-          !loom_low_allocation_storage_assignment_classes_share(
-              descriptor_set, candidates[i], counterpart)) {
+          (relation->kind !=
+               LOOM_LOW_PLACEMENT_RELATION_SAME_REGISTER_ORDINAL &&
+           !loom_low_allocation_storage_assignment_classes_share(
+               descriptor_set, candidates[i], counterpart))) {
         continue;
       }
       if (!loom_low_allocation_storage_placement_relation_satisfied(

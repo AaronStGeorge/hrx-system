@@ -82,6 +82,35 @@ r25: written
 
 // ====
 
+// Reversed FIFO inputs retain the pointer-selected tuple order across the
+// initial edge. Both FIFO registers are occupied, so an accidental swap has no
+// scratch register and must be prevented by placement instead of move repair.
+// RUN: with-checks emit low-allocation @paired_fifo_loop
+
+low.func.def target<amd.xdna.aie2p.core> @paired_fifo_loop(%count: reg<aie2p.er>, %pointer0: reg<aie2p.eps>, %pointer1: reg<aie2p.eps>, %fifo1: reg<aie2p.eldfiforeg>, %fifo0: reg<aie2p.eldfiforeg>, %output: reg<aie2p.ep>) asm {
+  %one = mova.i32 1
+  %position0 = mova.fifo.position 0
+  %position1 = mova.fifo.position 0
+  low.br ^loop(%count: reg<aie2p.er>, %pointer0: reg<aie2p.eps>, %fifo0: reg<aie2p.eldfiforeg>, %position0: reg<aie2p.erf2>, %pointer1: reg<aie2p.eps>, %fifo1: reg<aie2p.eldfiforeg>, %position1: reg<aie2p.erf2>)
+^loop(%remaining: reg<aie2p.er>, %left_pointer: reg<aie2p.eps>, %left_fifo: reg<aie2p.eldfiforeg>, %left_position: reg<aie2p.erf2>, %right_pointer: reg<aie2p.eps>, %right_fifo: reg<aie2p.eldfiforeg>, %right_position: reg<aie2p.erf2>):
+  low.cond_br %remaining, ^body, ^exit : reg<aie2p.er>
+^body:
+  %left, %next_left_pointer, %next_left_fifo, %next_left_position = vlda.pop.512.i32x16 %left_pointer, %left_fifo, %left_position
+  %right, %next_right_pointer, %next_right_fifo, %next_right_position = vldb.pop.512.i32x16 %right_pointer, %right_fifo, %right_position
+  vst.512.i32x16 %left, %output, 0
+  vst.512.i32x16 %right, %output, 64
+  %next_remaining = sub %remaining, %one
+  low.br ^loop(%next_remaining: reg<aie2p.er>, %next_left_pointer: reg<aie2p.eps>, %next_left_fifo: reg<aie2p.eldfiforeg>, %next_left_position: reg<aie2p.erf2>, %next_right_pointer: reg<aie2p.eps>, %next_right_fifo: reg<aie2p.eldfiforeg>, %next_right_position: reg<aie2p.erf2>)
+^exit:
+  return
+}
+
+// ----
+CHECK: spills: 0
+CHECK: copies: coalesced=0 materialized=0
+
+// ====
+
 // Reversed parameter order must preserve two independent FIFO tuples.
 // RUN: with-checks emit low-allocation @fifo_pair diagnostics=placement-decisions
 

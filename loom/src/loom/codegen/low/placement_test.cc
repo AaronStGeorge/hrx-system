@@ -34,6 +34,8 @@ TEST(LowPlacementTest, ClassifiesEdgeCauses) {
       LOOM_LOW_PLACEMENT_CAUSE_LOW_SCF_CONDITION));
   EXPECT_FALSE(loom_low_placement_cause_is_edge(
       LOOM_LOW_PLACEMENT_CAUSE_SCHEDULE_PAIR_AFFINITY));
+  EXPECT_FALSE(loom_low_placement_cause_is_edge(
+      LOOM_LOW_PLACEMENT_CAUSE_EDGE_PAIR_AFFINITY));
 }
 
 TEST(LowPlacementTest, ComposedRelationHasNoDirectSourceOperand) {

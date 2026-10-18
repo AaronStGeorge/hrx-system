@@ -6,6 +6,7 @@
 
 #include "loom/codegen/low/allocation/placement.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -134,7 +135,8 @@ TEST(LowPlacementTest, DefiningTransferPrecedesEarlierCollectedUses) {
 
     // Execution is entry -> producer -> consumer. Region layout visits the
     // consumer first, so its input constraint precedes the defining transfer
-    // in the collector. Both branch payloads exercise the reverse edge index.
+    // in the collector. The three branch payloads exercise the reverse edge
+    // index; the final pair also induces a source-ordinal affinity.
     loom_block_t* consumer = nullptr;
     loom_block_t* producer = nullptr;
     IREE_ASSERT_OK(loom_region_append_block(module, body, &consumer));
@@ -142,9 +144,13 @@ TEST(LowPlacementTest, DefiningTransferPrecedesEarlierCollectedUses) {
     loom_value_id_t forwarded = LOOM_VALUE_ID_INVALID;
     IREE_ASSERT_OK(loom_module_define_value(module, types[1], &forwarded));
     IREE_ASSERT_OK(loom_block_add_arg(module, producer, forwarded));
-    loom_value_id_t received = LOOM_VALUE_ID_INVALID;
-    IREE_ASSERT_OK(loom_module_define_value(module, types[1], &received));
-    IREE_ASSERT_OK(loom_block_add_arg(module, consumer, received));
+    loom_value_id_t received_primary = LOOM_VALUE_ID_INVALID;
+    IREE_ASSERT_OK(
+        loom_module_define_value(module, types[0], &received_primary));
+    IREE_ASSERT_OK(loom_block_add_arg(module, consumer, received_primary));
+    loom_value_id_t received_peer = LOOM_VALUE_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_define_value(module, types[1], &received_peer));
+    IREE_ASSERT_OK(loom_block_add_arg(module, consumer, received_peer));
     loom_op_t* entry_branch = nullptr;
     IREE_ASSERT_OK(loom_low_br_build(&builder, producer, &peer, 1,
                                      LOOM_LOCATION_UNKNOWN, &entry_branch));
@@ -157,14 +163,21 @@ TEST(LowPlacementTest, DefiningTransferPrecedesEarlierCollectedUses) {
                                              LOOM_LOCATION_UNKNOWN, &transfer));
     const loom_value_id_t result = loom_op_results(transfer)[0];
     loom_op_t* producer_branch = nullptr;
-    IREE_ASSERT_OK(loom_low_br_build(&builder, consumer, &forwarded, 1,
+    const loom_value_id_t payload[] = {result, forwarded};
+    IREE_ASSERT_OK(loom_low_br_build(&builder, consumer, payload,
+                                     IREE_ARRAYSIZE(payload),
                                      LOOM_LOCATION_UNKNOWN, &producer_branch));
     loom_builder_set_block(&builder, consumer);
-    const loom_value_id_t inputs[] = {result, received};
+    const loom_value_id_t inputs[] = {result, received_peer};
     loom_op_t* use = nullptr;
     IREE_ASSERT_OK(loom_low_build_resolved_descriptor_op(
         &builder, &descriptor_set, &descriptor, 0, inputs, 2, {}, nullptr, 0,
         nullptr, 0, LOOM_LOCATION_UNKNOWN, &use));
+    const loom_value_id_t edge_inputs[] = {received_primary, received_peer};
+    loom_op_t* edge_use = nullptr;
+    IREE_ASSERT_OK(loom_low_build_resolved_descriptor_op(
+        &builder, &descriptor_set, &descriptor, 0, edge_inputs, 2, {}, nullptr,
+        0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &edge_use));
     loom_op_t* terminator = nullptr;
     IREE_ASSERT_OK(loom_low_return_build(&builder, nullptr, 0,
                                          LOOM_LOCATION_UNKNOWN, &terminator));
@@ -208,7 +221,8 @@ TEST(LowPlacementTest, DefiningTransferPrecedesEarlierCollectedUses) {
     ASSERT_EQ(defining, &placement.relations[range.start]);
     EXPECT_EQ(defining->op, transfer);
     EXPECT_EQ(placement.relations[range.start + 1].op, use);
-    for (auto value : {source, peer, forwarded, received}) {
+    for (auto value :
+         {source, peer, forwarded, received_primary, received_peer}) {
       EXPECT_EQ(
           loom_low_placement_defining_transfer_for_value_ordinal(
               &placement, loom_local_value_domain_try_ordinal(&domain, value)),
@@ -222,11 +236,32 @@ TEST(LowPlacementTest, DefiningTransferPrecedesEarlierCollectedUses) {
         EXPECT_EQ(placement.relations[index].source_ordinal, i);
       }
     }
-    ASSERT_EQ(placement.edge_relation_count, 2u);
+    ASSERT_EQ(placement.edge_relation_count, 3u);
     EXPECT_EQ(placement.relations[placement.edge_relation_indices[0]].op,
               entry_branch);
     EXPECT_EQ(placement.relations[placement.edge_relation_indices[1]].op,
               producer_branch);
+    EXPECT_EQ(placement.relations[placement.edge_relation_indices[2]].op,
+              producer_branch);
+    const auto forwarded_ordinal =
+        loom_local_value_domain_try_ordinal(&domain, forwarded);
+    uint32_t edge_affinity_count = 0;
+    for (iree_host_size_t i = 0; i < placement.relation_count; ++i) {
+      const auto& relation = placement.relations[i];
+      if (relation.cause != LOOM_LOW_PLACEMENT_CAUSE_EDGE_PAIR_AFFINITY) {
+        continue;
+      }
+      ++edge_affinity_count;
+      EXPECT_EQ(relation.kind,
+                LOOM_LOW_PLACEMENT_RELATION_SAME_REGISTER_ORDINAL);
+      EXPECT_EQ(relation.flags, LOOM_LOW_PLACEMENT_RELATION_FLAG_PREFERRED);
+      EXPECT_EQ(relation.priority, 1u);
+      EXPECT_EQ(std::min(relation.result_ordinal, relation.source_ordinal),
+                std::min(ordinal, forwarded_ordinal));
+      EXPECT_EQ(std::max(relation.result_ordinal, relation.source_ordinal),
+                std::max(ordinal, forwarded_ordinal));
+    }
+    EXPECT_EQ(edge_affinity_count, 1u);
     loom_local_value_domain_release(&domain);
     loom_module_free(module);
   }

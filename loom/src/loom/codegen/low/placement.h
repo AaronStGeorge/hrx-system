@@ -53,6 +53,9 @@ typedef enum loom_low_placement_cause_bits_e {
   // Target descriptor constraint coupling physical-register candidate
   // ordinals without aliasing their storage.
   LOOM_LOW_PLACEMENT_CAUSE_DESCRIPTOR_CONSTRAINT = 11,
+  // Preferred source pairing induced by constrained destinations on one
+  // logical control-flow edge.
+  LOOM_LOW_PLACEMENT_CAUSE_EDGE_PAIR_AFFINITY = 12,
 } loom_low_placement_cause_bits_t;
 typedef uint8_t loom_low_placement_cause_t;
 

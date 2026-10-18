@@ -314,6 +314,48 @@ TEST_F(LowAllocationPreferenceTest, NonperiodicCostsRemainDirect) {
   EXPECT_EQ(Penalty(query, 4), 0u);
 }
 
+TEST_F(LowAllocationPreferenceTest,
+       PreferredRegisterOrdinalScoresDisjointClasses) {
+  const uint16_t candidate_ids[] = {0, 1, 2, 3};
+  const uint16_t candidate_ordinals[] = {0, 1, 0, 1};
+  descriptors_.physical_register_candidate_ids = candidate_ids;
+  descriptors_.physical_register_candidate_count =
+      IREE_ARRAYSIZE(candidate_ids);
+  descriptors_.physical_register_candidate_ordinals = candidate_ordinals;
+  for (uint16_t i = 0; i < 2; ++i) {
+    classes_[i].flags |= LOOM_LOW_REG_CLASS_FLAG_EXPLICIT_PHYSICAL_REGISTERS;
+    classes_[i].allocatable_count = 2;
+    classes_[i].physical_register_candidate_start = 2 * i;
+    classes_[i].candidate_lookup = {(uint32_t)(2 * i), (uint16_t)(2 * i), 2};
+    intervals_[i].value_class.register_class_id = i;
+    intervals_[i].unit_count = 1;
+    assignments_[i].descriptor_reg_class_id = i;
+    assignments_[i].unit_count = assignments_[i].location_count = 1;
+  }
+  loom_low_placement_relation_t relation = {
+      .result_ordinal = 0,
+      .source_ordinal = 1,
+      .unit_count = 1,
+      .kind = LOOM_LOW_PLACEMENT_RELATION_SAME_REGISTER_ORDINAL,
+      .cause = LOOM_LOW_PLACEMENT_CAUSE_EDGE_PAIR_AFFINITY,
+      .flags = LOOM_LOW_PLACEMENT_RELATION_FLAG_PREFERRED,
+      .priority = 3,
+  };
+  placement_.relations = &relation;
+  placement_.relation_count = placement_.location_relation_count = 1;
+  ranges_[0] = {0, 1};
+  source_ranges_[1] = {0, 1};
+  const uint32_t source_index = 0;
+  placement_.relation_indices_by_source_ordinal = &source_index;
+  assignment_indices_[1] = 1;
+  assignments_[1].location_base = 3;
+  index_.instruction_use_count = index_.use_count;
+
+  const auto query = Prepare();
+  EXPECT_EQ(Penalty(query, 0), 3u);
+  EXPECT_EQ(Penalty(query, 1), 0u);
+}
+
 TEST_F(LowAllocationPreferenceTest, EmptyIndexAllocatesNothing) {
   loom_low_allocation_preference_workspace_t empty = {};
   loom_low_placement_preference_index_t index = {};
