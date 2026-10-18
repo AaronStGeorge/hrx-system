@@ -76,6 +76,13 @@ command.program.def public @domains_interleaved() launch(%base: buffer, %adapter
   command.return
 }
 
+command.program.def public @domains_swapped() launch(%adapter: buffer, %base: buffer, %output: buffer) {
+  %left = command.parameter %base, "raw" : view<8xi32>
+  %right = command.parameter %adapter, "raw" : view<8xi32>
+  kernel.launch @consume(%left, %right, %right, %output) : (view<8xi32>, view<8xi32>, view<8xi32>, buffer)
+  command.return
+}
+
 command.program.def public @many_domains() launch(%root0: buffer, %root1: buffer, %root2: buffer, %root3: buffer, %root4: buffer, %root5: buffer, %root6: buffer, %root7: buffer, %root8: buffer, %output: buffer) {
   %p0 = command.parameter %root0, "raw" : view<8xi32>
   %p1 = command.parameter %root1, "raw" : view<8xi32>

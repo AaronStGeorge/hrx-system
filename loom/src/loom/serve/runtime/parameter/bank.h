@@ -32,7 +32,17 @@ iree_status_t loom_serve_parameter_bank_allocate(
     loom_serve_device_t* device, const loom_cmd_program_t* program,
     iree_allocator_t host_allocator, loom_serve_parameter_bank_t** out_bank);
 
-// Domain count and borrowed plans in the checked declaration's binding order.
+// Allocates only the selected domain of a checked program. The resulting bank
+// has one domain at index zero, independent of its original binding ordinal.
+// The selected ordinal is below fixed_buffer_count. Ownership and partial
+// failure follow allocate above; other roots are neither allocated nor
+// borrowed.
+iree_status_t loom_serve_parameter_bank_allocate_domain(
+    loom_serve_device_t* device, const loom_cmd_program_t* program,
+    uint32_t domain, iree_allocator_t host_allocator,
+    loom_serve_parameter_bank_t** out_bank);
+
+// Domain count and borrowed plans in allocation order.
 // A NULL bank has zero domains.
 // The caller prepares each plan before admitting any execution of the bank.
 iree_host_size_t loom_serve_parameter_bank_count(
@@ -51,6 +61,24 @@ iree_hal_buffer_t* const* loom_serve_parameter_bank_buffers(
 // group and contributes no entry to an invocation's working set.
 loom_serve_residency_group_t* loom_serve_parameter_bank_group(
     const loom_serve_parameter_bank_t* bank);
+
+// A command root bound to independently owned parameter storage. The producer
+// resolves checkpoint identity before constructing this mapping. Recordings
+// retain buffer views; invocation admission covers each distinct bank's group.
+typedef struct loom_serve_parameter_binding_t {
+  // Borrowed, unretired owner through layout checking and recording.
+  const loom_serve_parameter_bank_t* bank;
+  // Selected domain below the bank's count, not the command's binding ordinal.
+  uint32_t domain;
+} loom_serve_parameter_binding_t;
+
+// Checks mapped roots in the candidate's fixed-buffer binding order. The
+// source-selected mapping may reuse domains at different command ordinals.
+// Every mapping names an existing domain; count must match the candidate.
+// Layout compatibility does not establish checkpoint or numerical identity.
+iree_status_t loom_serve_parameter_bindings_check_layout(
+    iree_host_size_t count, const loom_serve_parameter_binding_t* bindings,
+    const loom_cmd_program_t* program, iree_allocator_t host_allocator);
 
 // Checks a new source program against the bank's retained placement facts.
 // Domains, keys, offsets, extents, and alignment must match; row interleaving
