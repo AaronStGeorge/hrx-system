@@ -116,7 +116,7 @@ low.func.def target<amdgpu.rdna3_5.core> abi(hal_kernel) @generic_half(%conditio
 
 // ====
 
-// LDS loads use an unsigned halfword carrier; sign repair runs after EXEC is
+// Narrow LDS loads use unsigned carriers; sign repair runs after EXEC is
 // restored so inactive fallback lanes participate in the repair too.
 func.def @lds_signed_half(%condition: i1, %initial: vector<1xi16>, %old: vector<1xi16>) -> (vector<1xi32>) {
   %base = index.constant 0 : offset
@@ -142,6 +142,35 @@ low.func.def target<amdgpu.rdna3_5.core> abi(hal_kernel) @lds_signed_half(%condi
   s_mov_b64_exec %22
   %value = v_bfe_i32_offset_width_inline %24 {offset = 0, width = 16}
   %wide = v_bfe_i32_offset_width_inline %value {offset = 0, width = 16}
+  return %wide
+}
+
+// ====
+
+func.def @lds_signed_byte(%condition: i1, %initial: vector<1xi8>, %old: vector<1xi8>) -> (vector<1xi32>) {
+  %base = index.constant 0 : offset
+  %bytes = index.constant 1 : offset
+  %storage = buffer.alloca<workgroup> align(1) %bytes : buffer
+  %source = buffer.view %storage[%base] : buffer -> view<1xi8>
+  vector.store %initial, %source[0] : vector<1xi8>, view<1xi8>
+  %mask = vector.splat %condition : vector<1xi1>
+  %value = vector.load.mask %source[0], %mask, %old : view<1xi8>, vector<1xi1>, vector<1xi8>
+  %wide = vector.extsi %value : vector<1xi8> to vector<1xi32>
+  func.return %wide : vector<1xi32>
+}
+
+// ----
+low.func.def target<amdgpu.rdna3_5.core> abi(hal_kernel) @lds_signed_byte(%condition: reg<amdgpu.sgpr x2>, %initial: reg<amdgpu.vgpr>, %old: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm {
+  %15 = storage {byte_alignment = 1, byte_length = 1} : low.storage<workgroup>
+  %17 = v_mov_b32 0
+  ds_write_b8 %17, %initial
+  %19 = v_bfe_i32_offset_width_inline %old {offset = 0, width = 8}
+  %20 = copy %19 : reg<amdgpu.vgpr> -> reg<amdgpu.vgpr>
+  %22, %23 = s_and_saveexec_b64 %condition
+  %24 = ds_read_u8_preserve %20, %17
+  s_mov_b64_exec %22
+  %value = v_bfe_i32_offset_width_inline %24 {offset = 0, width = 8}
+  %wide = v_bfe_i32_offset_width_inline %value {offset = 0, width = 8}
   return %wide
 }
 

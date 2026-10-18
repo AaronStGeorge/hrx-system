@@ -206,7 +206,7 @@ enum {
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_OPERATION_BITS = 1u,
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_BITS = 5u,
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_BITS = 1u,
-  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_BITS = 2u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_BITS = 3u,
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_BITS = 3u,
 
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_SHIFT = 0u,
@@ -1299,18 +1299,11 @@ static void loom_amdgpu_memory_access_record_descriptor_missing(
           : LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_MISSING;
 }
 
-static bool loom_amdgpu_memory_access_needs_signed_i16_repair(
-    const loom_amdgpu_memory_access_t* access) {
-  return access->source->memory_space ==
-             LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP &&
-         access->payload_format ==
-             LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER;
-}
-
-static bool loom_amdgpu_memory_access_signed_i16_repair_is_available(
+static bool loom_amdgpu_memory_access_signed_narrow_repair_is_available(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access) {
-  if (!loom_amdgpu_memory_access_needs_signed_i16_repair(access)) {
+  if (loom_amdgpu_memory_access_signed_narrow_lds_repair_bit_count(access) ==
+      0) {
     return true;
   }
   return loom_amdgpu_descriptor_set_has_ref(
@@ -1873,10 +1866,10 @@ bool loom_amdgpu_memory_access_select_packet(
       descriptor_domain == LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_SCRATCH) {
     loom_amdgpu_memory_access_route_dynamic_terms_through_vaddr(access);
   }
-  if (!loom_amdgpu_memory_access_signed_i16_repair_is_available(
+  if (!loom_amdgpu_memory_access_signed_narrow_repair_is_available(
           selection_context->descriptor_set, access)) {
     out_diagnostic->rejection_bits |=
-        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SIGNED_I16_REPAIR_DESCRIPTOR_MISSING;
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SIGNED_NARROW_REPAIR_DESCRIPTOR_MISSING;
     return false;
   }
 
