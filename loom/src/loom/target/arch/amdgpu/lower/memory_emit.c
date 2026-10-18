@@ -390,14 +390,6 @@ static iree_status_t loom_amdgpu_materialize_memory_load_packet_for_result(
       context, source_op, low_packet, out_low_packet);
 }
 
-static bool loom_amdgpu_memory_load_packet_needs_signed_i16_repair(
-    const loom_amdgpu_memory_access_t* access) {
-  return access->source->memory_space ==
-             LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP &&
-         access->payload_format ==
-             LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER;
-}
-
 static iree_status_t loom_amdgpu_emit_memory_load_extract(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_packet, uint32_t bit_offset, uint32_t bit_count,
@@ -431,12 +423,15 @@ static iree_status_t loom_amdgpu_repair_memory_load_packet_result(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_t* access, loom_value_id_t low_packet,
     loom_value_id_t* out_low_result) {
-  if (!loom_amdgpu_memory_load_packet_needs_signed_i16_repair(access)) {
+  const uint32_t repair_bit_count =
+      loom_amdgpu_memory_access_signed_narrow_lds_repair_bit_count(access);
+  if (repair_bit_count == 0) {
     *out_low_result = low_packet;
     return iree_ok_status();
   }
   return loom_amdgpu_emit_memory_load_extract(context, source_op, low_packet, 0,
-                                              16, true, out_low_result);
+                                              repair_bit_count, true,
+                                              out_low_result);
 }
 
 static loom_value_id_t loom_amdgpu_memory_store_value(
@@ -529,6 +524,8 @@ static iree_status_t loom_amdgpu_emit_memory_load_fallback(
       packet_type, &value));
   if (packet->access.packet_byte_count < 4u) {
     const bool is_signed =
+        packet->access.payload_format ==
+            LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_8BIT_INTEGER ||
         packet->access.payload_format ==
             LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER ||
         (packet->access.packet_byte_count == 1u &&
