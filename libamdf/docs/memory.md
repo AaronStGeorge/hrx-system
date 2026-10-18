@@ -1099,6 +1099,26 @@ version alone cannot establish driver, permission, or capacity admission.
 The [native exporter implementation](https://github.com/torvalds/linux/blob/8d3ae59288f1e7d58d76558a6ee96d533bc5019f/drivers/dma-buf/udmabuf.c)
 defines its sealing, size, and page-pin requirements.
 
+Linux native residency admission is separate from the slab-size limit and
+physical payload size. KFD imports each owned export for residency tracking;
+the acquired render file imports it for GEM virtual-address mappings. For a
+foreign exporter such as udmabuf, these are separate AMDGPU objects. KFD
+validates its object on import, and publishing a GPU alias validates the render
+object. Both then consume the payload's full size in the native GTT budget,
+in addition to page-table and other native resources. The physical pages remain
+shared. Further aliases of the same GEM source in that VM do not create another
+full object per alias. The kernel's
+[GTT resource manager](https://github.com/gregkh/linux/blob/f42acb3678424d1e08f6ed27c0d8ba8a125e14d6/drivers/gpu/drm/amd/amdgpu/amdgpu_gtt_mgr.c)
+enforces that budget independently of available host RAM.
+
+`native_allocation_byte_length` describes the payload extent, including native
+rounding; it is not the aggregate driver residency charge. A successful profile
+query does not reserve that budget, and allocation or alias publication can
+fail when native capacity is exhausted. Keeping the KFD owner is required:
+its eviction tracking covers ongoing user-queue access after the finite mapping
+publication completes. A GEM reference and pinned CPU pages alone do not
+preserve that contract.
+
 File-buffer eligibility is independent of direct-I/O eligibility. The caller
 queries the actual file's memory, offset, and length alignments and checks
 completion results. Filesystems may still buffer transfers: for example,
