@@ -692,7 +692,12 @@ def cpu_config_steps(targets: tuple[str, ...], config: str) -> list[CiStep]:
             ),
         ]
         if config == "asan":
-            steps.append(shared_tool_bazel_step(config=config))
+            steps.append(
+                shared_tool_bazel_step(
+                    config=config,
+                    bazel_options=("--//loom/config/import:enable=cxx",),
+                )
+            )
         return steps
     if config in ci_config.SANITIZER_BUILD_CONFIGS:
         return [
@@ -935,7 +940,10 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
                 CiStep(
                     "Configure shared Loom tools",
                     cmake_dev_command(
-                        command_name, "configure", "-DLOOM_LINK_SHARED_TOOLS=ON"
+                        command_name,
+                        "configure",
+                        "-DLOOM_LINK_SHARED_TOOLS=ON",
+                        "-DLOOM_IMPORT_CXX=ON",
                     ),
                 ),
                 cmake_build_step(
@@ -944,6 +952,7 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
                     (
                         "loom-compile",
                         "loom-opt",
+                        "loom-import-cxx",
                         "loom-serve",
                         "loom_tooling_target_cpu_serve_loom-serve-test-tool",
                     ),

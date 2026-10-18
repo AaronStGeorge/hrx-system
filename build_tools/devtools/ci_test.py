@@ -1095,6 +1095,13 @@ class CiTest(unittest.TestCase):
         self.assertFalse(any("--config=ubsan" in line for line in command_lines))
         self.assertFalse(any("--config=tsan" in line for line in command_lines))
         self.assertFalse(any("--config=msan" in line for line in command_lines))
+        shared_step = next(
+            step for step in steps if step.name == "Test shared Loom tools"
+        )
+        self.assertIn("--//loom/config/import:enable=cxx", shared_step.argv)
+        self.assertIn(
+            "//loom/src/loom/tools/loom-import-cxx:execution_test", shared_step.argv
+        )
 
     def test_bazel_cpu_msan_command_builds_without_tests(self):
         args = ci.parse_arguments(
@@ -1562,6 +1569,8 @@ fi
             self.assertTrue(self.uses_cmake_build_dir(step, "iree-cmake-cpu"))
         self.assertNotIn("--fresh", steps[configure_index].argv)
         self.assertIn("-DLOOM_LINK_SHARED_TOOLS=ON", steps[configure_index].argv)
+        self.assertIn("-DLOOM_IMPORT_CXX=ON", steps[configure_index].argv)
+        self.assertIn("loom-import-cxx", steps[configure_index + 1].argv)
         self.assertIn(
             "loom_tooling_target_cpu_serve_loom-serve-test-tool",
             steps[configure_index + 1].argv,
