@@ -3168,6 +3168,7 @@ vector_rotli = _lanewise_binary(
     doc="Lanewise left rotate of same-typed integer vector operands. Each count is reduced modulo the element width; one-bit rotation is identity.",
     facts="loom_vector_rotli_facts",
     traits=[SAFE_TO_SPECULATE],
+    canonicalize="loom_vector_rotation_canonicalize",
     eager_execution_cost=1,
 )
 
@@ -3177,6 +3178,7 @@ vector_rotri = _lanewise_binary(
     doc="Lanewise right rotate of same-typed integer vector operands. Each count is reduced modulo the element width; one-bit rotation is identity.",
     facts="loom_vector_rotri_facts",
     traits=[SAFE_TO_SPECULATE],
+    canonicalize="loom_vector_rotation_canonicalize",
     eager_execution_cost=1,
 )
 
