@@ -620,6 +620,10 @@ static iree_status_t loom_serve_router_describe_service(
       output, iree_make_cstring_view(service->endpoint)));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output, ",\"tokenize\":%s", service->tokenizer ? "true" : "false"));
+  if (service->capabilities.input_token_count) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(output, ",\"input_tokens\":true"));
+  }
   if (admission->phase == LOOM_SERVE_REGISTRATION_READY &&
       service->reconfiguration.pool) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
