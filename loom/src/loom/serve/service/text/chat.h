@@ -123,9 +123,11 @@ typedef enum loom_serve_text_chat_boundary_e {
 // Frames and encodes the rendered prompt suffix beginning at prompt_offset in
 // the shared source VM. Source receives the exact checked marker plan and
 // returns token IDs plus one logical input span per included image. On success,
-// copies at most capacity IDs into tokens and allocates any media spans; on
-// failure all outputs are empty and tokens is untouched. input_shift accounts
-// for a retained prediction prepended by native code. No VM reference escapes.
+// copies at most capacity IDs into out_tokens and allocates any media spans.
+// A null out_tokens validates and counts the same input without copying IDs.
+// On failure all outputs are empty and out_tokens is untouched. input_shift
+// accounts for a retained prediction prepended by native code. No VM reference
+// escapes.
 iree_status_t loom_serve_text_chat_prepare_input(
     const loom_serve_text_chat_t* chat, iree_host_size_t prompt_offset,
     loom_serve_text_chat_input_format_t format,

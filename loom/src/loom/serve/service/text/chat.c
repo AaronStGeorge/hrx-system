@@ -860,8 +860,10 @@ iree_status_t loom_serve_text_chat_prepare_input(
         &parsed_span_count);
   }
   if (iree_status_is_ok(status)) {
-    for (iree_host_size_t i = 0; i < (iree_host_size_t)count; ++i) {
-      out_tokens[i] = (int32_t)iree_unaligned_load_le_u32(bytes.data + i * 4);
+    if (out_tokens) {
+      for (iree_host_size_t i = 0; i < (iree_host_size_t)count; ++i) {
+        out_tokens[i] = (int32_t)iree_unaligned_load_le_u32(bytes.data + i * 4);
+      }
     }
     *out_count = (iree_host_size_t)count;
     *out_media_spans = parsed_spans;

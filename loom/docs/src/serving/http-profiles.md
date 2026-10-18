@@ -54,6 +54,7 @@ Prepared but drained or weight-evicted models remain discoverable.
 `loom.kind`, `loom.endpoint` and `loom.tokenize` describe the modality and
 loaded tokenizer. Text also reports configured `context_length` and
 `limits.max_output_tokens`, not training context or total cache-pool capacity.
+`loom.input_tokens:true` advertises exact prepared-chat input counting.
 Capabilities do not establish learned quality or support for every optional field.
 
 Residency controls default to `component:"primary"`. A text deployment with an
@@ -507,6 +508,39 @@ source input tokens and zero output tokens: this is finite evaluation, not
 autoregressive generation. Schema/source-input failures return 422. Strict JSON
 is required; comments, trailing commas, malformed Unicode, duplicate decoded
 IDs, unknown fields and image-input extensions reject.
+
+## Count a chat before generating
+
+`POST /v1/chat/completions/input_tokens` accepts the same JSON body as chat
+completions and returns one `{"input_tokens":N}` response. It applies the
+deployment's source-defined chat template, tool catalog, thinking options,
+generation framing, and image-position accounting. It counts the complete
+fresh input, including positions that a later generation might reuse from cache.
+
+With a Chat Completions body saved as `request.json`, use the same bytes for
+counting and generation:
+
+```sh
+curl http://localhost:8080/v1/chat/completions/input_tokens \
+  -H 'Content-Type: application/json' --data-binary @request.json
+```
+
+The count runs on shared CPU workers without loading weights, reserving an
+execution row or KV capacity, projecting images, or changing retained history.
+It can progress while every generation row is occupied. It shares the model's
+source-policy invocation, so it waits for an existing CPU borrower to retire;
+it does not create another VM or block a worker waiting for model capacity.
+The normal model routing and drain policy still applies.
+
+The request's generation fields remain validated, but `stream:true` still
+returns one JSON count and no output budget is reserved. Source input is bounded
+by the deployment's context capacity; an oversized input rejects instead of
+returning a truncated count. A successful count is not a promise that input plus
+the requested completion budget will fit, or that execution memory is available.
+Omit `X-Loom-Session` and `X-Loom-Checkpoint`: this stateless endpoint rejects
+them rather than selecting cached history. The count queue uses
+`pending_capacity`; a full queue returns 503. Utility requests appear in request
+inspection and outcome counters, but never increment inference-token counters.
 
 ## Raw tokenization
 

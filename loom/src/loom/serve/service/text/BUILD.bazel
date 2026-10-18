@@ -108,6 +108,7 @@ loom_cc_library(
     testonly = True,
     srcs = [
         "component_service_test.cc",
+        "input_count_test.cc",
         "source_lifecycle_test.cc",
     ],
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
@@ -706,6 +707,22 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "input_count",
+    srcs = ["input_count.c"],
+    hdrs = ["input_count.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":chat",
+        ":response",
+        ":telemetry",
+        "//loom/src/loom/serve/telemetry:stream",
+        "//loom/src/loom/serve/transport/http:request",
+        "//loom/src/loom/serve/transport/http:server",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "service",
     srcs = ["service.c"],
     hdrs = ["service.h"],
@@ -717,6 +734,7 @@ loom_cc_library(
         ":epoch",
         ":heartbeat",
         ":input",
+        ":input_count",
         ":media_projector",
         ":model",
         ":packing",
