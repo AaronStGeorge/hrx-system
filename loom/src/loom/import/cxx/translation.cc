@@ -149,11 +149,18 @@ class Translator final : private Initialization::Evaluation {
   }
 
   void require_launch_configuration_context(cxx::AST* owner) {
-    if (current_function_.kind != FunctionKind::LaunchConfiguration &&
-        current_function_.kind != FunctionKind::ClusteredLaunchConfiguration) {
-      fail(owner,
-           "target launch query requires a kernel configuration function");
+    // Required inlining defers the IR ancestor requirement until expansion.
+    if (current_function_.kind == FunctionKind::LaunchConfiguration ||
+        current_function_.kind == FunctionKind::ClusteredLaunchConfiguration ||
+        current_function_.kind == FunctionKind::TemplateDefinition ||
+        (current_function_.kind == FunctionKind::Ordinary &&
+         loom_func_def_inline_policy(current_function_.operation) ==
+             LOOM_INLINE_POLICY_INLINE)) {
+      return;
     }
+    fail(owner,
+         "target launch query requires a kernel configuration or force-inline "
+         "helper");
   }
 
   struct ReceiverOwner {
