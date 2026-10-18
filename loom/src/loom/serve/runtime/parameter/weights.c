@@ -21,7 +21,7 @@
 enum { WEIGHT_LANES = 4 };
 
 typedef struct loom_serve_weight_span_t {
-  // Borrowed key and final byte placement from the compiled command.
+  // Final placement with a key borrowed from the plan's owned key storage.
   loom_cmd_program_parameter_t parameter;
   // Unique final storage index, resolved once before any queue work.
   iree_host_size_t storage_index;
@@ -1078,6 +1078,16 @@ iree_status_t loom_serve_weights_allocate(
   }
   IREE_TRACE_ZONE_END(z0);
   return status;
+}
+
+iree_host_size_t loom_serve_weights_parameter_count(
+    const loom_serve_weights_t* weights) {
+  return weights->span_count;
+}
+
+loom_cmd_program_parameter_t loom_serve_weights_parameter_at(
+    const loom_serve_weights_t* weights, iree_host_size_t index) {
+  return weights->spans[index].parameter;
 }
 
 static iree_status_t loom_serve_weights_activate_storage(

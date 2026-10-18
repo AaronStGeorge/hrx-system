@@ -8,6 +8,7 @@
 #define LOOM_SERVE_SERVICE_EXECUTABLES_H_
 
 #include "loom/serve/runtime/device/device.h"
+#include "loom/serve/runtime/parameter/bank.h"
 #include "loom/serve/runtime/program/jit.h"
 #include "loom/serve/runtime/program/module.h"
 #include "loom/serve/runtime/program/preparation.h"
@@ -30,8 +31,9 @@ typedef struct loom_serve_executable_options_t {
   loom_serve_jit_t* jit;
   // Immutable cold declarations, borrowed through every replacement job.
   const loom_serve_preparation_t* preparation;
-  // Original checkpoint placement, or NULL for a parameter-free direct model.
-  const loom_cmd_program_t* layout;
+  // Borrowed checkpoint owner and placement, live through every recording.
+  // NULL for a parameter-free model.
+  const loom_serve_parameter_bank_t* parameters;
   // Original recorded table, borrowed through destruction.
   const loom_serve_stage_table_t* stages;
   // Recording and workspace ownership policy shared by every generation.

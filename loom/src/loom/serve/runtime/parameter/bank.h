@@ -52,6 +52,14 @@ iree_hal_buffer_t* const* loom_serve_parameter_bank_buffers(
 loom_serve_residency_group_t* loom_serve_parameter_bank_group(
     const loom_serve_parameter_bank_t* bank);
 
+// Checks a new source program against the bank's retained placement facts.
+// Domains, keys, offsets, extents, and alignment must match; row interleaving
+// between independent domains is immaterial. This does not establish numerical
+// or checkpoint identity, which remains with source preparation. No original
+// compiler product is borrowed. NULL denotes a parameter-free bank/program.
+iree_status_t loom_serve_parameter_bank_check_layout(
+    const loom_serve_parameter_bank_t* bank, const loom_cmd_program_t* program);
+
 // Begins retirement after preparation and recording consumers relinquish the
 // bank. Installs the scheduling-only wake and releases owned root views without
 // waiting. Accepted allocation, I/O, and execution retain their own resources.

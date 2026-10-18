@@ -98,6 +98,78 @@ TEST_P(ParameterBankTest, FailedDomainPreparationRetiresAllOwnedRoots) {
   }
 }
 
+TEST_P(ParameterBankTest, ChecksRetainedLayoutAfterCompilerProductRetires) {
+  WriteCheckpoint(adapter_path_.path(), 100);
+  IREE_ASSERT_OK(Compile(0, "domains"));
+  const auto* original = loom_serve_jit_stage_program(compiled_[0]);
+  IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(device_owner_, original,
+                                                    host_allocator_, &bank_));
+  EXPECT_EQ(loom_cmd_program_parameter_at(original, 0).fixed_buffer_index, 0u);
+  IREE_ASSERT_OK(Prepare(0, path_.path().c_str()));
+  IREE_ASSERT_OK(Prepare(1, adapter_path_.path().c_str()));
+  loom_serve_jit_stage_free(compiled_[0]);
+  compiled_[0] = nullptr;
+
+  IREE_ASSERT_OK(Compile(1, "domains_interleaved"));
+  const auto* candidate = loom_serve_jit_stage_program(compiled_[1]);
+  EXPECT_EQ(loom_cmd_program_parameter_at(candidate, 0).fixed_buffer_index, 1u);
+  IREE_ASSERT_OK(loom_serve_parameter_bank_check_layout(bank_, candidate));
+  auto* group = loom_serve_parameter_bank_group(bank_);
+  IREE_ASSERT_OK(loom_serve_residency_allocate(
+      loom_serve_device_residency_cache(device_owner_), execution_, 1, &group,
+      host_allocator_, &bank_residency_));
+  IREE_ASSERT_OK(loom_serve_jit_stage_record(
+      compiled_[1], iree_hal_queue_family(dispatch_),
+      IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT, nullptr,
+      loom_serve_parameter_bank_buffers(bank_), &commands_[1]));
+  IREE_ASSERT_OK(loom_serve_residency_acquire_wait(bank_residency_));
+  ASSERT_NO_FATAL_FAILURE(Run(1, 290));
+  loom_serve_residency_release(bank_residency_);
+}
+
+TEST_P(ParameterBankTest, RejectsDifferentParameterKeysAndExtents) {
+  IREE_ASSERT_OK(Compile(0, "target"));
+  IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
+      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      host_allocator_, &bank_));
+  IREE_ASSERT_OK(Compile(1, "partial"));
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_serve_parameter_bank_check_layout(
+                            bank_, loom_serve_jit_stage_program(compiled_[1])));
+  IREE_ASSERT_OK(Compile(2, "raw"));
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_serve_parameter_bank_check_layout(
+                            bank_, loom_serve_jit_stage_program(compiled_[2])));
+}
+
+TEST_P(ParameterBankTest, RejectsChangedDomainCount) {
+  IREE_ASSERT_OK(Compile(0, "domains"));
+  IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
+      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      host_allocator_, &bank_));
+  IREE_ASSERT_OK(Compile(1, "raw"));
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_serve_parameter_bank_check_layout(
+                            bank_, loom_serve_jit_stage_program(compiled_[1])));
+  IREE_ASSERT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_serve_parameter_bank_check_layout(
+          nullptr, loom_serve_jit_stage_program(compiled_[1])));
+}
+
+TEST_P(ParameterBankTest, ChecksMoreDomainsThanInlineCursorStorage) {
+  IREE_ASSERT_OK(Compile(0, "many_domains"));
+  IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(
+      device_owner_, loom_serve_jit_stage_program(compiled_[0]),
+      host_allocator_, &bank_));
+  ASSERT_EQ(loom_serve_parameter_bank_count(bank_), 9u);
+  loom_serve_jit_stage_free(compiled_[0]);
+  compiled_[0] = nullptr;
+  IREE_ASSERT_OK(Compile(1, "many_domains"));
+  IREE_ASSERT_OK(loom_serve_parameter_bank_check_layout(
+      bank_, loom_serve_jit_stage_program(compiled_[1])));
+}
+
 TEST_P(ParameterBankTest, ParameterFreeBankNeedsNoNativeBacking) {
   const auto before = loom_serve_device_memory_statistics(device_owner_);
   IREE_ASSERT_OK(loom_serve_parameter_bank_allocate(device_owner_, nullptr,
@@ -106,6 +178,7 @@ TEST_P(ParameterBankTest, ParameterFreeBankNeedsNoNativeBacking) {
   EXPECT_EQ(loom_serve_parameter_bank_count(bank_), 0u);
   EXPECT_EQ(loom_serve_parameter_bank_buffers(bank_), nullptr);
   EXPECT_EQ(loom_serve_parameter_bank_group(bank_), nullptr);
+  IREE_EXPECT_OK(loom_serve_parameter_bank_check_layout(bank_, nullptr));
   EXPECT_TRUE(loom_serve_parameter_bank_is_retired(bank_));
   const auto after = loom_serve_device_memory_statistics(device_owner_);
   EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);

@@ -471,7 +471,7 @@ static iree_status_t loom_serve_finite_model_link(
       .device = model->owner,
       .jit = model->jit,
       .preparation = model->preparation,
-      .layout = loom_serve_jit_stage_program(model->stages.values[0]),
+      .parameters = model->parameters,
       .recording = {.queue_family = iree_hal_queue_family(dispatch),
                     .parameters =
                         loom_serve_parameter_bank_buffers(model->parameters),

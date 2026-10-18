@@ -21,6 +21,7 @@ loom_cc_library(
     ::residency
     ::weights
     iree::base
+    iree::base::internal
     iree::hal
     loom::serve::runtime::device
     loom::serve::runtime::program::command

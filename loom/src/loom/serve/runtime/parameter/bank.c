@@ -5,6 +5,8 @@
 
 #include "loom/serve/runtime/parameter/bank.h"
 
+#include "iree/base/internal/math.h"
+
 struct loom_serve_parameter_bank_t {
   // Allocator owning this bank and its trailing buffer/plan arrays.
   iree_allocator_t host_allocator;
@@ -12,13 +14,19 @@ struct loom_serve_parameter_bank_t {
   iree_host_size_t count;
   // Owned physical group; every invocation residency borrows this registration.
   loom_serve_residency_group_t* group;
-  // Owned fixed-root views followed by count owned weight-plan pointers.
+  // Owned fixed-root views followed by count owned weight-plan pointers and
+  // count alignment exponents (log2 of each root's promised byte alignment).
   iree_hal_buffer_t* buffers[];
 };
 
 static loom_serve_weights_t** loom_serve_parameter_bank_plans(
     const loom_serve_parameter_bank_t* bank) {
   return (loom_serve_weights_t**)(bank->buffers + bank->count);
+}
+
+static uint8_t* loom_serve_parameter_bank_alignments(
+    const loom_serve_parameter_bank_t* bank) {
+  return (uint8_t*)(loom_serve_parameter_bank_plans(bank) + bank->count);
 }
 
 iree_status_t loom_serve_parameter_bank_allocate(
@@ -32,7 +40,8 @@ iree_status_t loom_serve_parameter_bank_allocate(
   loom_serve_parameter_bank_t* bank = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_struct_array(
       host_allocator, sizeof(*bank), count,
-      sizeof(iree_hal_buffer_t*) + sizeof(loom_serve_weights_t*),
+      sizeof(iree_hal_buffer_t*) + sizeof(loom_serve_weights_t*) +
+          sizeof(uint8_t),
       (void**)&bank));
   bank->host_allocator = host_allocator;
   bank->count = count;
@@ -42,6 +51,9 @@ iree_status_t loom_serve_parameter_bank_allocate(
   for (uint32_t i = 0; i < count && iree_status_is_ok(status); ++i) {
     const loom_cmd_program_parameter_root_t reflected =
         loom_cmd_program_parameter_root_at(program, i);
+    loom_serve_parameter_bank_alignments(bank)[i] =
+        (uint8_t)iree_math_count_trailing_zeros_u64(
+            iree_max(reflected.minimum_alignment, 1));
     const loom_serve_weight_root_t root = {
         program, reflected, &bank->buffers[reflected.fixed_buffer_index]};
     status =
@@ -79,6 +91,71 @@ iree_hal_buffer_t* const* loom_serve_parameter_bank_buffers(
 loom_serve_residency_group_t* loom_serve_parameter_bank_group(
     const loom_serve_parameter_bank_t* bank) {
   return bank ? bank->group : NULL;
+}
+
+iree_status_t loom_serve_parameter_bank_check_layout(
+    const loom_serve_parameter_bank_t* bank,
+    const loom_cmd_program_t* program) {
+  const iree_host_size_t count = loom_serve_parameter_bank_count(bank);
+  if (count != (program ? program->requirements.fixed_buffer_count : 0)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "stage checkpoint domain count differs");
+  }
+  if (!count) {
+    return iree_ok_status();
+  }
+  loom_serve_weights_t* const* plans = loom_serve_parameter_bank_plans(bank);
+  const uint8_t* alignments = loom_serve_parameter_bank_alignments(bank);
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    const loom_cmd_program_parameter_root_t root =
+        loom_cmd_program_parameter_root_at(program, i);
+    if (iree_hal_buffer_byte_length(bank->buffers[i]) !=
+            root.required_byte_length ||
+        (UINT64_C(1) << alignments[i]) != iree_max(root.minimum_alignment, 1)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "stage parameter root %zu differs", i);
+    }
+  }
+  uint32_t inline_cursors[8] = {0};
+  uint32_t* cursors = inline_cursors;
+  if (count > IREE_ARRAYSIZE(inline_cursors)) {
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
+        bank->host_allocator, count, sizeof(*cursors), (void**)&cursors));
+  }
+  iree_status_t status = iree_ok_status();
+  for (uint32_t i = 0;
+       i < program->parameters.count && iree_status_is_ok(status); ++i) {
+    const loom_cmd_program_parameter_t actual =
+        loom_cmd_program_parameter_at(program, i);
+    const uint32_t binding = actual.fixed_buffer_index;
+    const uint32_t cursor = cursors[binding]++;
+    if (cursor == loom_serve_weights_parameter_count(plans[binding])) {
+      status =
+          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                           "stage parameter domain %u has extra rows", binding);
+    } else {
+      const loom_cmd_program_parameter_t expected =
+          loom_serve_weights_parameter_at(plans[binding], cursor);
+      if (!iree_string_view_equal(expected.key, actual.key) ||
+          expected.byte_offset != actual.byte_offset ||
+          expected.byte_length != actual.byte_length ||
+          expected.minimum_alignment != actual.minimum_alignment) {
+        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "stage parameter placement %u differs", i);
+      }
+    }
+  }
+  for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
+    if (cursors[i] != loom_serve_weights_parameter_count(plans[i])) {
+      status =
+          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                           "stage parameter domain %zu is missing rows", i);
+    }
+  }
+  if (cursors != inline_cursors) {
+    iree_allocator_free(bank->host_allocator, cursors);
+  }
+  return status;
 }
 
 void loom_serve_parameter_bank_retire(loom_serve_parameter_bank_t* bank,

@@ -8,7 +8,6 @@
 
 #include <string.h>
 
-#include "loom/serve/runtime/program/parameter_layout.h"
 #include "loom/serve/runtime/program/stage_set.h"
 #include "loomc/iree.h"
 
@@ -284,12 +283,8 @@ static iree_status_t loom_serve_executables_record(
     status = loom_serve_stage_record_check(&options->recording, stages[i]);
     const loom_cmd_program_t* program = loom_serve_jit_stage_program(stages[i]);
     if (iree_status_is_ok(status) && program) {
-      if (options->layout) {
-        status = loom_serve_parameter_layout_check(options->layout, program);
-      } else if (program->requirements.fixed_buffer_count) {
-        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                  "compiled stage adds checkpoint parameters");
-      }
+      status =
+          loom_serve_parameter_bank_check_layout(options->parameters, program);
     }
   }
   if (iree_status_is_ok(status)) {
