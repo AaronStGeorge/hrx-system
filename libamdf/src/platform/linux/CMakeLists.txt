@@ -48,9 +48,11 @@ iree_cc_library(
   DEPS
     ::file
     ::host_cache
+    ::host_reservation
     amdf::headers
     libamdf::src::allocator
     libamdf::src::platform::host_memory
+    libamdf::src::platform::host_reservation
   PUBLIC
 )
 endif()
@@ -190,7 +192,7 @@ iree_cc_library(
 )
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND AMDF_BUILD)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND IREE_ARCH STREQUAL "x86_64" AND AMDF_BUILD)
 iree_cc_test(
   NAME
     host_memory_test
@@ -205,6 +207,7 @@ iree_cc_test(
     amdf::headers
     iree::third_party::google_test
     iree::third_party::google_test_main
+    libamdf::src::allocator
     libamdf::src::platform::host_memory
   LABELS
     "iree-build-requirement=libamdf"
