@@ -99,7 +99,7 @@ struct loom_serve_weights_t {
   loom_serve_weight_storage_t* storages;
   // Number of initialized unique roots, including partial creation.
   iree_host_size_t storage_count;
-  // Activation was enqueued into the owning model's execution domain.
+  // Backing and all file/preparation work were submitted for this activation.
   bool active;
 };
 
@@ -893,12 +893,8 @@ iree_status_t loom_serve_weights_allocate(
   return status;
 }
 
-iree_status_t loom_serve_weights_activate(loom_serve_weights_t* weights,
-                                          loom_serve_execution_t* execution) {
-  IREE_ASSERT(!weights->deactivation);
-  if (weights->active) {
-    return iree_ok_status();
-  }
+static iree_status_t loom_serve_weights_activate_storage(
+    loom_serve_weights_t* weights) {
   IREE_TRACE_ZONE_BEGIN(z0);
   IREE_TRACE_ZONE_APPEND_VALUE_I64(z0,
                                    (int64_t)weights->statistics.reserved_bytes);
@@ -935,17 +931,23 @@ iree_status_t loom_serve_weights_activate(loom_serve_weights_t* weights,
     status = loom_serve_weight_stream(weights);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_serve_execution_barrier(
-        execution, (iree_hal_semaphore_list_t){weights->activation.count,
-                                               weights->activation.semaphores,
-                                               weights->activation.values});
-  }
-  if (iree_status_is_ok(status)) {
     weights->active = true;
     ++weights->activity.activations;
   }
   IREE_TRACE_ZONE_END(z0);
   return status;
+}
+
+iree_status_t loom_serve_weights_activate(loom_serve_weights_t* weights,
+                                          loom_serve_execution_t* execution) {
+  IREE_ASSERT(!weights->deactivation);
+  if (!weights->active) {
+    IREE_RETURN_IF_ERROR(loom_serve_weights_activate_storage(weights));
+  }
+  return loom_serve_execution_barrier(
+      execution, (iree_hal_semaphore_list_t){weights->activation.count,
+                                             weights->activation.semaphores,
+                                             weights->activation.values});
 }
 
 iree_status_t loom_serve_weights_await(loom_serve_weights_t* weights) {

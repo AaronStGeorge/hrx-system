@@ -369,6 +369,12 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
 
   void TearDown() override {
     iree_hal_buffer_release(workspace_);
+    if (consumer_gate_) {
+      IREE_EXPECT_OK(iree_hal_semaphore_signal(consumer_gate_, 2, nullptr));
+    }
+    if (shared_execution_) {
+      IREE_EXPECT_OK(loom_serve_execution_drain(shared_execution_));
+    }
     if (execution_) {
       IREE_EXPECT_OK(loom_serve_execution_drain(execution_));
     }
@@ -393,7 +399,9 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     IREE_EXPECT_OK(loom_serve_virtual_buffer_free(state_));
     iree_hal_buffer_release(output_buffer_);
     loom_serve_jit_release(jit_);
+    loom_serve_execution_release(shared_execution_);
     loom_serve_execution_release(execution_);
+    iree_hal_semaphore_release(consumer_gate_);
     IREE_EXPECT_OK(loom_serve_device_trim(device_owner_, 0));
     DrainNativeReturns();
     const auto memory = loom_serve_device_memory_statistics(device_owner_);
@@ -523,7 +531,8 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     return LoadRoots(shared_count, root_count, roots.data(), {path_.path()});
   }
 
-  void Run(iree_host_size_t index, int32_t first) {
+  void RunOn(loom_serve_execution_t* execution, iree_host_size_t index,
+             int32_t first) {
     if (!commands_[index]) {
       IREE_ASSERT_OK(loom_serve_jit_stage_record(
           compiled_[index], iree_hal_queue_family(dispatch_),
@@ -533,7 +542,7 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     const iree_hal_buffer_binding_t binding = {output_buffer_, 0,
                                                sizeof(output_)};
     uint64_t completion = 0;
-    IREE_ASSERT_OK(loom_serve_execution_execute(execution_, commands_[index],
+    IREE_ASSERT_OK(loom_serve_execution_execute(execution, commands_[index],
                                                 {1, &binding}, &completion));
     iree_hal_transfer_operation_t download = {
         .type = IREE_HAL_TRANSFER_OPERATION_TYPE_DOWNLOAD,
@@ -542,11 +551,15 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
     download.download.target = output_.data();
     download.download.length = sizeof(output_);
     IREE_ASSERT_OK(
-        loom_serve_execution_feedback(execution_, 1, &download, &completion));
-    IREE_ASSERT_OK(loom_serve_execution_feedback_wait(execution_, completion));
+        loom_serve_execution_feedback(execution, 1, &download, &completion));
+    IREE_ASSERT_OK(loom_serve_execution_feedback_wait(execution, completion));
     for (int32_t i = 0; i < 8; ++i) {
       EXPECT_EQ(output_[i], first + 3 * i);
     }
+  }
+
+  void Run(iree_host_size_t index, int32_t first) {
+    RunOn(execution_, index, first);
   }
 
   // Allocation policy for the real runtime and compiler.
@@ -565,6 +578,10 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   iree_hal_queue_t* transfer_ = nullptr;
   // Owned model timelines used by consuming commands.
   loom_serve_execution_t* execution_ = nullptr;
+  // Independent consumer of the same immutable roots, retired before teardown.
+  loom_serve_execution_t* shared_execution_ = nullptr;
+  // Unrelated first-consumer work, excluded from shared weight readiness.
+  iree_hal_semaphore_t* consumer_gate_ = nullptr;
   // Explicitly elastic backing or NULL for the fixed comparison arm.
   loom_serve_memory_pool_t* pool_ = nullptr;
   // Physical slab size; the shared budget holds two unique roots.
@@ -736,6 +753,74 @@ TEST_P(WeightsTest, PreparationPublishesOnlyRecordableRootAddresses) {
     EXPECT_EQ(loom_serve_weights_activity(plans_[0]).activations, 0u);
     EXPECT_EQ(loom_serve_weights_activity(plans_[0]).read_bytes, 0u);
   }
+}
+
+TEST_P(WeightsTest, SharedActivationImportsReadinessWithoutReloading) {
+  IREE_ASSERT_OK(Compile(0, "target"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_OK(CreateRoots(0, 1, &root, {path_.path()}));
+  IREE_ASSERT_OK(
+      loom_serve_device_create_execution(device_owner_, &shared_execution_));
+  IREE_ASSERT_OK(iree_hal_semaphore_create(
+      device_, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
+      IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &consumer_gate_));
+  loom_serve_weight_activity_t activity = {};
+  {
+    // Elastic backing cannot finish while the actual native allocator is
+    // held. Both consumers must inherit that dependency without host waits.
+    loom_serve::testing::ScopedNativeHold hold(device_owner_);
+    IREE_ASSERT_OK(loom_serve_weights_activate(plans_[0], execution_));
+    if (pool_) {
+      hold.WaitEntered();
+    }
+    activity = loom_serve_weights_activity(plans_[0]);
+    ASSERT_EQ(activity.activations, 1u);
+    ASSERT_GT(activity.prepared_bytes, 0u);
+    uint64_t gate_value = 1;
+    IREE_ASSERT_OK(loom_serve_execution_barrier(
+        execution_, {1, &consumer_gate_, &gate_value}));
+    const auto producer = loom_serve_execution_frontier(execution_);
+    const auto before = loom_serve_execution_frontier(shared_execution_);
+    IREE_ASSERT_OK(loom_serve_weights_activate(plans_[0], shared_execution_));
+    const auto consumer = loom_serve_execution_frontier(shared_execution_);
+    // Fail before issuing a consumer if no readiness dependency was imported;
+    // executing against unbacked elastic roots would itself be invalid.
+    ASSERT_GT(consumer.values[0], before.values[0]);
+    EXPECT_EQ(loom_serve_execution_frontier(execution_).values[0],
+              producer.values[0]);
+    if (pool_) {
+      uint64_t ready_value = 0;
+      IREE_ASSERT_OK(
+          iree_hal_semaphore_query(consumer.semaphores[0], &ready_value));
+      EXPECT_LT(ready_value, consumer.values[0]);
+    }
+  }
+  const auto shared = loom_serve_weights_activity(plans_[0]);
+  EXPECT_EQ(shared.activations, activity.activations);
+  EXPECT_EQ(shared.read_bytes, activity.read_bytes);
+  EXPECT_EQ(shared.prepared_bytes, activity.prepared_bytes);
+  EXPECT_EQ(shared.groups, activity.groups);
+  // The second consumer finishes before unrelated first-consumer work can
+  // proceed. Importing that execution's frontier would serialize them.
+  ASSERT_NO_FATAL_FAILURE(RunOn(shared_execution_, 0, 70));
+  IREE_ASSERT_OK(iree_hal_semaphore_signal(consumer_gate_, 1, nullptr));
+  ASSERT_NO_FATAL_FAILURE(Run(0, 70));
+}
+
+TEST_P(WeightsTest, WarmResidencyDoesNotResubmitActivation) {
+  IREE_ASSERT_OK(Compile(0, "target"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_OK(CreateRoots(0, 1, &root, {path_.path()}));
+  IREE_ASSERT_OK(Register(0, 0, 1));
+  IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residencies_[0]));
+  const auto before = loom_serve_execution_frontier(execution_);
+  IREE_ASSERT_OK(loom_serve_residency_acquire(residencies_[0]));
+  const auto after = loom_serve_execution_frontier(execution_);
+  EXPECT_EQ(after.values[0], before.values[0]);
+  EXPECT_EQ(after.values[1], before.values[1]);
+  EXPECT_EQ(loom_serve_weights_activity(plans_[0]).activations, 1u);
+  loom_serve_residency_release(residencies_[0]);
+  loom_serve_residency_release(residencies_[0]);
 }
 
 TEST_P(WeightsTest, SeparateCheckpointDomainsRetainSharedBaseStorage) {

@@ -26,7 +26,7 @@ typedef struct loom_serve_weight_root_t {
 } loom_serve_weight_root_t;
 
 // Retained checkpoint, placement, and in-place preparation plan. A single owner
-// serializes activation/deactivation with model submission. Device, queues,
+// serializes activation/deactivation with all consuming models. Device, queues,
 // and optional physical pool outlive this object. The plan owns its resolved
 // parameter keys and preparations independently of the compiler.
 typedef struct loom_serve_weights_t loom_serve_weights_t;
@@ -34,7 +34,7 @@ typedef struct loom_serve_weights_t loom_serve_weights_t;
 // Cumulative owner-side submissions, independent of telemetry retention. These
 // are accepted queue operations, not measured storage traffic or device time.
 typedef struct loom_serve_weight_activity_t {
-  // Fully submitted activations, excluding already-active no-ops.
+  // Fully submitted loads, excluding readiness imports by later consumers.
   uint64_t activations;
   // Active-to-inactive releases of physical backing.
   uint64_t deactivations;
@@ -127,12 +127,16 @@ iree_status_t loom_serve_weights_prepare(
 
 // Commits storage and streams/prepares directly into final roots through four
 // independent queue lanes, importing readiness into the consuming execution
-// domain. An already active plan is unchanged. Success means submission, not
-// completion; consuming commands use that same domain. Native backing runs on
-// the shared cold-memory executor and gates file loading through a semaphore.
-// Neither native preparation nor device completion blocks the submitting owner.
-// The caller pins backing until consuming work retires. Failure is terminal,
-// preserving backing and accepted I/O ownership until final plan destruction.
+// domain. An already active plan imports the same readiness without reloading
+// or preparing again. Each execution domain must acquire this dependency before
+// consuming a new activation; already-dependent warm residencies need no call.
+// Success means submission, not completion. Native backing runs on the shared
+// cold-memory executor and gates file loading through a semaphore. Neither
+// native preparation nor device completion blocks the submitting owner.
+// The caller pins backing until every consuming domain retires. A failed load
+// is terminal and preserves accepted I/O ownership through plan destruction.
+// Rejected readiness import leaves a successfully submitted load active; it
+// does not cancel or replay the producer or other consumers.
 iree_status_t loom_serve_weights_activate(loom_serve_weights_t* weights,
                                           loom_serve_execution_t* execution);
 
