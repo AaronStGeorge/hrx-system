@@ -73,14 +73,22 @@ admission retains the prepared cohort without repeating source preparation.
 During `prepare_batch`, the same `prepare` capability can declare additional
 command/direct stages and bind their configuration or workspace limit. Its
 ordinals start after the immutable cold declarations and live for this invocation.
-Request preparation cannot declare parameters or modify cold declarations.
-Compiled commands retain the original fixed parameter layout; both stage kinds
+Command stages can declare parameter bindings selecting or reordering checkpoint
+domains already retained by the model. Identity includes the ordered checkpoint
+files and preparation policy; equal tensor names or shapes never substitute for
+the selected contents. Every request stage declares the same binding map, and
+its reflected placement must fit those retained domains. A checkpoint absent
+from the registration is rejected before admission. Omitting declarations preserves the
+whole original layout. Cold declarations remain immutable, and both stage kinds
 preserve the two input/output roots.
 
 The finite owner captures the selected source generation with the batch. It
-resolves exact declaration matches or asynchronously compiles misses before
-parameter admission. Both the finite HTTP scheduler and embedded text projector
-use this owner. Source-package uploads can retire after indexing; every choice
+resolves exact declaration matches before parameter admission. Choices with the
+same stage kinds, roots, and configuration share immutable compiled products;
+different checkpoint selections receive their own fixed recordings without
+recompilation. Workspace limits are checked independently for each declaration.
+Other misses compile asynchronously. Both the finite HTTP scheduler and embedded
+text projector use this owner. Source-package uploads can retire after indexing; every choice
 shares its generation's immutable source index and checkpoint residency.
 Cancellation collects accepted compilation before releasing its borrowed inputs.
 
@@ -88,8 +96,8 @@ Cancellation collects accepted compilation before releasing its borrowed inputs.
 Zero disables idle retention, not specialization. One active choice can exceed
 the idle budget and retire afterward. LRU eviction first releases any runner
 table borrowing the victim, then its portable stages, and finally unreferenced
-native keys/code. Code shared by another retained stage survives. Accounting
-includes requested declaration/table storage and native artifact bytes, not
+native keys/code. Code shared by another retained choice survives and is charged
+only once. Accounting includes requested declaration/table storage and native artifact bytes, not
 fixed source/index capacity, compiler scratch, or driver-private allocations.
 Management source selection affects future batches without changing a captured
 or executing batch.

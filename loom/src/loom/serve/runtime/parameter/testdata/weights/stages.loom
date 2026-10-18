@@ -69,6 +69,18 @@ command.program.def public @domains() launch(%base: buffer, %adapter: buffer, %o
   command.return
 }
 
+command.program.def public @domains_workspace() launch(%base: buffer, %adapter: buffer, %output: buffer) {
+  %left = command.parameter %base, "raw" : view<8xi32>
+  %right = command.parameter %adapter, "raw" : view<8xi32>
+  %bytes = index.constant 32 : offset
+  %temporary = buffer.alloca<global> align(16) %bytes : buffer
+  kernel.launch @consume(%left, %right, %right, %temporary) : (view<8xi32>, view<8xi32>, view<8xi32>, buffer)
+  %c0 = index.constant 0 : offset
+  %intermediate = buffer.view %temporary[%c0] : buffer -> view<8xi32>
+  kernel.launch @consume(%intermediate, %intermediate, %intermediate, %output) : (view<8xi32>, view<8xi32>, view<8xi32>, buffer)
+  command.return
+}
+
 command.program.def public @domains_interleaved() launch(%base: buffer, %adapter: buffer, %output: buffer) {
   %right = command.parameter %adapter, "raw" : view<8xi32>
   %left = command.parameter %base, "raw" : view<8xi32>

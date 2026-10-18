@@ -874,7 +874,8 @@ static iree_status_t loom_serve_image_prepare_request(
   };
   iree_vm_variant_t results[2] = {0};
   loom_serve_preparation_module_begin(model->control.preparation,
-                                      model->stages.count, 0);
+                                      model->stages.count,
+                                      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
   iree_status_t status =
       iree_vm_invoke(loom_serve_program_invocation(model->control.program),
                      model->control.prepare_request,

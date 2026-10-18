@@ -12,6 +12,14 @@ package(
     licenses = ["notice"],
 )
 
+exports_files(
+    [
+        "executables_test.cc",
+        "testdata/executables/prepare.loom",
+    ],
+    visibility = ["//loom/src/loom/serve:implementation"],
+)
+
 loom_cc_library(
     name = "service",
     hdrs = ["service.h"],

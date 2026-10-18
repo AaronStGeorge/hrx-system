@@ -75,8 +75,9 @@ iree_status_t loom_serve_preparation_module_create(
     iree_vm_module_t** out_module);
 
 enum loom_serve_preparation_flag_bits_e {
-  // Allows checkpoint declarations during cold model construction. Request
-  // choices reuse the already prepared checkpoint placement instead.
+  // Allows checkpoint declarations when the caller owns parameter resolution.
+  // Cold construction prepares the declared roots; request choices select
+  // compatible retained domains before recording.
   LOOM_SERVE_PREPARATION_FLAG_PARAMETERS = 1u << 0,
 };
 typedef uint32_t loom_serve_preparation_flags_t;
@@ -149,6 +150,13 @@ iree_host_size_t loom_serve_preparation_storage_size(
 // part of identity. NULL compares equal only to NULL.
 bool loom_serve_preparation_equal(const loom_serve_preparation_t* lhs,
                                   const loom_serve_preparation_t* rhs);
+
+// Exact compiler inputs in declaration order: product kind, root, and config
+// spelling. Checkpoint identity, selection tags, and workspace limits do not
+// specialize code. A consumer reusing these products still checks the new
+// declaration's workspace limit and binds its selected checkpoint storage.
+bool loom_serve_preparation_code_equal(const loom_serve_preparation_t* lhs,
+                                       const loom_serve_preparation_t* rhs);
 
 // Borrows an immutable declaration; |index| is below stage_count.
 const loom_serve_preparation_stage_t* loom_serve_preparation_stage(

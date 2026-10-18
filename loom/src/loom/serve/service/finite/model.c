@@ -904,7 +904,8 @@ iree_status_t loom_serve_finite_model_prepare_batch(
       iree_vm_buffer_create(count * 16, 8, model->host_allocator, &ranges));
   loom_serve_executables_capture(model->executables);
   loom_serve_preparation_module_begin(model->control.preparation,
-                                      model->stages.count, 0);
+                                      model->stages.count,
+                                      LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
   iree_status_t status =
       iree_vm_buffer_create(length, 8, model->host_allocator, &packed);
   iree_byte_span_t records = iree_byte_span_empty();

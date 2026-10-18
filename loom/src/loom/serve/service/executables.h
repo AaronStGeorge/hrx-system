@@ -62,7 +62,10 @@ loom_serve_execution_update_t loom_serve_executables_update(
 void loom_serve_executables_capture(loom_serve_executables_t* executables);
 
 // Transfers source declarations after CPU preparation, including NULL for a
-// cold-table invocation. Serialized with owner advance and selection.
+// cold-table invocation. Command stages can explicitly select/reorder retained
+// checkpoint domains by source identity; omitted declarations preserve the
+// whole original layout. All request stages share one binding map. Serialized
+// with owner advance and selection.
 void loom_serve_executables_declare(loom_serve_executables_t* executables,
                                     loom_serve_preparation_t* preparation);
 

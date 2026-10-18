@@ -1,0 +1,42 @@
+func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
+
+func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %source: i32, %directory: buffer, %path: buffer, %policy: buffer)
+
+func.decl import("prepare") @workspace_limit(%stage: i32, %bytes: i64)
+
+func.decl import("runner") @execute_1(%stage: i32, %output: hal.buffer) -> (i64)
+
+global.rodata.def @empty = bytes("")
+
+func.def public @declare(%root: buffer, %left: buffer, %right: buffer, %policy: buffer, %count: i32, %tag: i64, %limit: i64) {
+  %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
+  %c0_i64 = scalar.constant 0 : i64
+  %limited = scalar.cmpi ne, %limit, %c0_i64 : i64
+  scf.if %limited {
+    func.call @workspace_limit(%stage, %limit) : (i32, i64)
+  }
+  %c0 = scalar.constant 0 : i32
+  %c1 = scalar.constant 1 : i32
+  %empty = global.load @empty : buffer
+  %has_left = scalar.cmpi sgt, %count, %c0 : i32
+  scf.if %has_left {
+    func.call @parameter(%stage, %c0, %c0, %empty, %left, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+  }
+  %has_right = scalar.cmpi sgt, %count, %c1 : i32
+  scf.if %has_right {
+    func.call @parameter(%stage, %c1, %c0, %empty, %right, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+  }
+  func.return
+}
+
+func.def public @mixed(%root: buffer, %left: buffer, %right: buffer, %policy: buffer, %count: i32, %tag: i64, %limit: i64) {
+  %c0 = scalar.constant 0 : i32
+  func.call @declare(%root, %left, %right, %policy, %c0, %tag, %limit) : (buffer, buffer, buffer, buffer, i32, i64, i64)
+  func.call @declare(%root, %left, %right, %policy, %count, %tag, %limit) : (buffer, buffer, buffer, buffer, i32, i64, i64)
+  func.return
+}
+
+func.def public @submit(%stage: i32, %output: hal.buffer) -> (i64) {
+  %completion = func.call @execute_1(%stage, %output) : (i32, hal.buffer) -> (i64)
+  func.return %completion : i64
+}

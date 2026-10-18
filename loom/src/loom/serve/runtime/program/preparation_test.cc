@@ -340,6 +340,7 @@ TEST_F(PreparationCaptureTest, EmptyCaptureNeedsNoDeclarationStorage) {
   EXPECT_EQ(preparation, nullptr);
   EXPECT_EQ(loom_serve_preparation_storage_size(preparation), 0u);
   EXPECT_TRUE(loom_serve_preparation_equal(preparation, nullptr));
+  EXPECT_TRUE(loom_serve_preparation_code_equal(preparation, nullptr));
 }
 
 TEST_F(PreparationCaptureTest, IdentityAndStorageBelongToOwnedDeclarations) {
@@ -352,12 +353,17 @@ TEST_F(PreparationCaptureTest, IdentityAndStorageBelongToOwnedDeclarations) {
                           iree_vm_variant_span_from_array(results)));
     second = loom_serve_preparation_module_take(module);
     EXPECT_FALSE(loom_serve_preparation_equal(second, nullptr));
+    EXPECT_FALSE(loom_serve_preparation_code_equal(second, nullptr));
     if (!preparation) {
       preparation = second;
       second = nullptr;
       continue;
     }
     EXPECT_EQ(loom_serve_preparation_equal(preparation, second), tag == 99);
+    // This fixture also binds the tag as a config value, so different tags
+    // here really are distinct compiler inputs.
+    EXPECT_EQ(loom_serve_preparation_code_equal(preparation, second),
+              tag == 99);
     EXPECT_EQ(loom_serve_preparation_storage_size(second),
               loom_serve_preparation_storage_size(preparation) +
                   (tag == 100 ? 2 : 0));
