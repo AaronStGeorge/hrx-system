@@ -4310,6 +4310,13 @@ iree_status_t loom_vector_select_facts(loom_fact_context_t* context,
     }
   }
 
+  // A missing mask/component summary cannot discard numeric guarantees that
+  // hold for every element of either alternative. Structural relationships and
+  // execution distribution do not transfer through an arbitrary lane choice.
+  const loom_value_facts_t true_element =
+      loom_vector_numeric_element_facts(operand_facts[1]);
+  const loom_value_facts_t false_element =
+      loom_vector_numeric_element_facts(operand_facts[2]);
   loom_value_fact_small_static_lanes_t condition_lanes = {0};
   loom_type_t result_type =
       loom_module_value_type(module, loom_vector_select_result(op));
@@ -4317,7 +4324,7 @@ iree_status_t loom_vector_select_facts(loom_fact_context_t* context,
   if (!loom_type_static_element_count(result_type, &result_lane_count) ||
       result_lane_count == 0 ||
       result_lane_count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
-    result_facts[0] = loom_value_facts_unknown();
+    loom_value_facts_meet(&true_element, &false_element, &result_facts[0]);
     return iree_ok_status();
   }
   if (!loom_vector_facts_query_uniform_element(context, operand_facts[0],
@@ -4325,7 +4332,7 @@ iree_status_t loom_vector_select_facts(loom_fact_context_t* context,
       (!loom_vector_facts_query_small_lanes(context, operand_facts[0],
                                             &condition_lanes) ||
        condition_lanes.count != (iree_host_size_t)result_lane_count)) {
-    result_facts[0] = loom_value_facts_unknown();
+    loom_value_facts_meet(&true_element, &false_element, &result_facts[0]);
     return iree_ok_status();
   }
   loom_type_t element_type =
@@ -4338,23 +4345,23 @@ iree_status_t loom_vector_select_facts(loom_fact_context_t* context,
     if (!loom_value_facts_is_exact(condition)) {
       loom_value_facts_t true_lane = {0};
       loom_value_facts_t false_lane = {0};
-      if (loom_vector_facts_query_lane(context, operand_facts[1], i,
-                                       &true_lane) &&
-          loom_vector_facts_query_lane(context, operand_facts[2], i,
-                                       &false_lane)) {
-        IREE_RETURN_IF_ERROR(loom_value_fact_table_meet_for_type(
-            context->table, module, element_type, context->table, true_lane,
-            context->table, false_lane, &lanes[i]));
-      } else {
-        lanes[i] = loom_value_facts_unknown();
+      if (!loom_vector_facts_query_lane(context, operand_facts[1], i,
+                                        &true_lane)) {
+        true_lane = true_element;
       }
+      if (!loom_vector_facts_query_lane(context, operand_facts[2], i,
+                                        &false_lane)) {
+        false_lane = false_element;
+      }
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_meet_for_type(
+          context->table, module, element_type, context->table, true_lane,
+          context->table, false_lane, &lanes[i]));
       continue;
     }
     if (!loom_vector_facts_query_lane(
             context, condition.range_lo ? operand_facts[1] : operand_facts[2],
             i, &lanes[i])) {
-      result_facts[0] = loom_value_facts_unknown();
-      return iree_ok_status();
+      lanes[i] = condition.range_lo ? true_element : false_element;
     }
   }
   loom_value_fact_small_static_lanes_t lane_slice = {
