@@ -827,6 +827,17 @@ def amdgpu_windows_steps(
     )
     steps = [
         bazel_configure_step(extra_options=options),
+        bazel_test_step(
+            "Query Windows GPU native queue capabilities",
+            ("//libamdf/src/gpu/umd/wddm/wkmi:adapter_info_system_test",),
+            config=config,
+            available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+            bazel_options=options
+            + (
+                f"--test_arg=--amdf_gpu_target={target_selector}",
+                "--test_output=all",
+            ),
+        ),
         bazel_run_step(
             "Enumerate Windows GPU queue families",
             "//libamdf/examples:enumerate",
