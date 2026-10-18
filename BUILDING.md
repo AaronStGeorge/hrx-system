@@ -148,6 +148,8 @@ from the component sharing used for in-tree development. Each selected tool's
 install component includes both libraries, with relative loader paths for
 `bin/` and `lib/` installs or a single-directory bundle. The installed LoomC SDK
 exports the same configured bindings in either mode.
+Windows CMake builds place the shared tools and both DLLs together under the
+build tree's `bin/` directory so the tools also run directly from the build tree.
 
 ### Default allocator
 

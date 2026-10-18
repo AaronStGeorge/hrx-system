@@ -210,6 +210,12 @@ function(loomc_configure_shared_tools)
     DEPS ${_LOOMC_COMPONENTS} loomc_runtime)
 
   get_property(_tools GLOBAL PROPERTY LOOMC_SHARED_TOOLS)
+  if(WIN32)
+    # Windows resolves dependent DLLs beside the executable. Keep the build
+    # bundle together so tools run directly as well as through CTest.
+    set_target_properties(loomc_shared loomc_runtime ${_tools} PROPERTIES
+      RUNTIME_OUTPUT_DIRECTORY "${IREE_BINARY_DIR}/bin")
+  endif()
   set(_install_components "${HRX_PUBLIC_DIST_COMPONENT}")
   foreach(_tool IN LISTS _tools)
     get_property(_deps TARGET "${_tool}" PROPERTY IREE_CC_DEPS)
