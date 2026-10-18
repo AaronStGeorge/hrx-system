@@ -738,21 +738,12 @@ static iree_status_t iree_hal_amdgpu_feedback_state_initialize_device(
         "AMDGPU feedback requires initialized physical devices");
   }
 
-  hsa_amd_memory_pool_t control_memory_pool =
+  hsa_amd_memory_pool_t host_memory_pool =
       physical_device->host_memory_pools.fine_pool;
-  if (IREE_UNLIKELY(!control_memory_pool.handle)) {
+  if (IREE_UNLIKELY(!host_memory_pool.handle)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU feedback requires a host fine-grained control memory pool");
-  }
-
-  hsa_amd_memory_pool_t ring_memory_pool =
-      physical_device->coarse_block_pools.large.memory_pool;
-  if (IREE_UNLIKELY(!ring_memory_pool.handle)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU feedback requires a coarse-grained device-local ring memory "
-        "pool");
+        "AMDGPU feedback requires a host fine-grained memory pool");
   }
 
   out_device_state->parent = state;
@@ -762,8 +753,7 @@ static iree_status_t iree_hal_amdgpu_feedback_state_initialize_device(
   const iree_hal_amdgpu_feedback_channel_params_t channel_params = {
       .libhsa = state->libhsa,
       .device_agent = physical_device->device_agent,
-      .control_memory_pool = control_memory_pool,
-      .ring_memory_pool = ring_memory_pool,
+      .host_memory_pool = host_memory_pool,
       .topology = &system->topology,
       .minimum_capacity = 0,
   };
