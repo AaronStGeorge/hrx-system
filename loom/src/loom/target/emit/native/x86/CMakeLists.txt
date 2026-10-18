@@ -441,7 +441,7 @@ loom_generated_file(
     "--output="
   ARGS
     "${PROJECT_SOURCE_DIR}/loom/src/loom/target/emit/native/x86/test/hal_dispatch.loom"
-    "--target=x86:scalar"
+    "--target=x86:avx2"
   INPUTS
     "test/hal_dispatch.loom"
   TESTONLY
@@ -473,7 +473,7 @@ loom_generated_file(
     "{path}"
   ARGS
     "${PROJECT_SOURCE_DIR}/loom/src/loom/target/emit/native/x86/test/hal_dispatch.loom"
-    "x86:scalar"
+    "x86:avx2"
   INPUTS
     "test/hal_dispatch.loom"
   TESTONLY
