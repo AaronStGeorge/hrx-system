@@ -34,6 +34,12 @@ typedef struct loom_kernel_launch_config_dependence_t {
   iree_host_size_t dependent_value_capacity;
 } loom_kernel_launch_config_dependence_t;
 
+// Returns whether no storage-derived values have been discovered.
+static inline bool loom_kernel_launch_config_dependence_is_empty(
+    const loom_kernel_launch_config_dependence_t* dependence) {
+  return dependence->dependent_value_count == 0;
+}
+
 // Initializes an empty dependence set over |module|. Storage grows lazily
 // except for the directly indexed membership bitmap.
 iree_status_t loom_kernel_launch_config_dependence_initialize(

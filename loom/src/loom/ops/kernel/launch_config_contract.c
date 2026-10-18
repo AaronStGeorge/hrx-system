@@ -7,6 +7,7 @@
 #include "loom/ops/kernel/launch_config_contract.h"
 
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/launch_config_callable_summary.h"
 #include "loom/ops/kernel/launch_config_dependence.h"
@@ -102,8 +103,10 @@ static iree_status_t loom_kernel_launch_config_contract_classify_op(
   }
 
   const loom_kernel_launch_config_callable_summary_t* summary = NULL;
-  IREE_RETURN_IF_ERROR(loom_kernel_launch_config_callable_cache_lookup(
-      &analysis->callables, op, &summary));
+  if (loom_func_call_isa(op)) {
+    IREE_RETURN_IF_ERROR(loom_kernel_launch_config_callable_cache_lookup(
+        &analysis->callables, op, &summary));
+  }
   if (summary) {
     if (summary->failure != LOOM_KERNEL_LAUNCH_CONFIG_CONTRACT_FAILURE_NONE) {
       loom_kernel_launch_config_contract_fail(
@@ -276,8 +279,8 @@ iree_status_t loom_kernel_launch_config_contract_analyze(
   }
   IREE_ASSERT_NE(analysis.config_region_index, LOOM_REGION_INDEX_NONE);
 
-  IREE_RETURN_IF_ERROR(loom_kernel_launch_config_callable_cache_initialize(
-      module, scratch_arena, &analysis.callables));
+  loom_kernel_launch_config_callable_cache_initialize(module, scratch_arena,
+                                                      &analysis.callables);
   IREE_RETURN_IF_ERROR(loom_kernel_launch_config_dependence_initialize(
       module, scratch_arena, &analysis.dependence));
 
@@ -319,12 +322,14 @@ iree_status_t loom_kernel_launch_config_contract_analyze(
     }
   }
 
-  IREE_RETURN_IF_ERROR(
-      loom_kernel_launch_config_dependence_propagate(&analysis.dependence));
-  loom_kernel_launch_config_contract_check_sizes(&analysis);
-  if (out_contract->failure ==
-      LOOM_KERNEL_LAUNCH_CONFIG_CONTRACT_FAILURE_NONE) {
-    loom_kernel_launch_config_contract_check_count_ranges(&analysis);
+  if (!loom_kernel_launch_config_dependence_is_empty(&analysis.dependence)) {
+    IREE_RETURN_IF_ERROR(
+        loom_kernel_launch_config_dependence_propagate(&analysis.dependence));
+    loom_kernel_launch_config_contract_check_sizes(&analysis);
+    if (out_contract->failure ==
+        LOOM_KERNEL_LAUNCH_CONFIG_CONTRACT_FAILURE_NONE) {
+      loom_kernel_launch_config_contract_check_count_ranges(&analysis);
+    }
   }
   return iree_ok_status();
 }

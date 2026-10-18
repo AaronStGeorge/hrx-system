@@ -11,6 +11,7 @@
 
 #include "loom/analysis/value_relation.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/kernel/launch_config_dependence.h"
 #include "loom/ops/op_defs.h"
 #include "loom/util/reference_transfer.h"
@@ -122,7 +123,7 @@ bool loom_kernel_launch_config_callable_result_references_argument(
          0;
 }
 
-iree_status_t loom_kernel_launch_config_callable_cache_initialize(
+void loom_kernel_launch_config_callable_cache_initialize(
     const loom_module_t* module, iree_arena_allocator_t* arena,
     loom_kernel_launch_config_callable_cache_t* out_cache) {
   IREE_ASSERT_ARGUMENT(module);
@@ -132,8 +133,6 @@ iree_status_t loom_kernel_launch_config_callable_cache_initialize(
       .module = module,
       .arena = arena,
   };
-  return loom_value_fact_table_initialize(&out_cache->summary_facts, arena,
-                                          /*initial_capacity=*/0);
 }
 
 static bool loom_kernel_launch_config_callable_resolve(
@@ -320,8 +319,10 @@ static iree_status_t loom_kernel_launch_config_callable_classify_op(
   }
 
   const loom_kernel_launch_config_callable_summary_t* callee = NULL;
-  IREE_RETURN_IF_ERROR(loom_kernel_launch_config_callable_cache_lookup(
-      build->cache, op, &callee));
+  if (loom_func_call_isa(op)) {
+    IREE_RETURN_IF_ERROR(loom_kernel_launch_config_callable_cache_lookup(
+        build->cache, op, &callee));
+  }
   if (callee) {
     if (callee->failure != LOOM_KERNEL_LAUNCH_CONFIG_CONTRACT_FAILURE_NONE) {
       loom_kernel_launch_config_callable_fail(
@@ -577,7 +578,7 @@ static iree_status_t loom_kernel_launch_config_callable_summarize_results(
       joined_facts = next_facts;
     }
     IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact_for_type(
-        &build->cache->summary_facts, &build->facts, build->cache->module,
+        build->cache->summary_facts, &build->facts, build->cache->module,
         result_type, joined_facts, &summary->result_facts[result_index]));
     if (dependent) {
       summary->dependent_result_bits[result_index / 64] |=
@@ -685,11 +686,18 @@ iree_status_t loom_kernel_launch_config_callable_cache_lookup(
     return iree_ok_status();
   }
   if (!cache->summaries) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        cache->arena, cache->module->symbols.count, sizeof(*cache->summaries),
-        (void**)&cache->summaries));
-    memset(cache->summaries, 0,
-           cache->module->symbols.count * sizeof(*cache->summaries));
+    loom_kernel_launch_config_callable_summary_t** summaries = NULL;
+    loom_value_fact_table_t* summary_facts = NULL;
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(cache->arena, cache->module->symbols.count,
+                                  sizeof(*summaries), (void**)&summaries));
+    memset(summaries, 0, cache->module->symbols.count * sizeof(*summaries));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(
+        cache->arena, sizeof(*summary_facts), (void**)&summary_facts));
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
+        summary_facts, cache->arena, /*initial_capacity=*/0));
+    cache->summaries = summaries;
+    cache->summary_facts = summary_facts;
   }
   loom_kernel_launch_config_callable_summary_t* summary =
       cache->summaries[symbol_id];
@@ -739,7 +747,7 @@ iree_status_t loom_kernel_launch_config_callable_resolve_results(
     const loom_type_t result_type =
         loom_module_value_type(module, results.values[result_index]);
     IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact_for_type(
-        context->table, &cache->summary_facts, module, result_type,
+        context->table, cache->summary_facts, module, result_type,
         summary->result_facts[result_index], &result_facts[result_index]));
     if (!loom_type_is_buffer(result_type) && !loom_type_is_view(result_type)) {
       continue;

@@ -56,19 +56,19 @@ typedef struct loom_kernel_launch_config_callable_cache_t {
   iree_arena_allocator_t* arena;
   // Lazily allocated symbol-indexed summary pointers.
   loom_kernel_launch_config_callable_summary_t** summaries;
-  // Fact owner for compact joined result records and extension payloads.
-  loom_value_fact_table_t summary_facts;
+  // Lazily allocated fact owner for joined results and extension payloads.
+  loom_value_fact_table_t* summary_facts;
 } loom_kernel_launch_config_callable_cache_t;
 
 // Initializes an allocation-free cache. Symbol storage and fact extensions are
 // allocated only after observing a required-inline call.
-iree_status_t loom_kernel_launch_config_callable_cache_initialize(
+void loom_kernel_launch_config_callable_cache_initialize(
     const loom_module_t* module, iree_arena_allocator_t* arena,
     loom_kernel_launch_config_callable_cache_t* out_cache);
 
-// Returns the cached summary for an explicitly required-inline direct call.
-// Ordinary calls return NULL. Semantic failures are retained in the summary;
-// only allocation failure is returned as a status.
+// Returns the cached summary for an explicitly required-inline func.call.
+// Ordinary calls return NULL. |call_op| must be a func.call. Semantic failures
+// are retained in the summary; only allocation failure is returned as a status.
 iree_status_t loom_kernel_launch_config_callable_cache_lookup(
     loom_kernel_launch_config_callable_cache_t* cache, const loom_op_t* call_op,
     const loom_kernel_launch_config_callable_summary_t** out_summary);
