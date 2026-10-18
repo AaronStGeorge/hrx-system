@@ -7,9 +7,10 @@
 """Resolves the x64 STL ASAN companion for a selected Visual C++ installation.
 
 Clang supplies the sanitizer runtime, but instrumented Microsoft STL headers
-also require stl_asan.lib from Visual Studio's optional ASAN component. When it
-is absent, extract only that library from the selected installation's catalog
-into build-owned storage. The installed toolchain is never modified.
+also require stl_asan.lib from Visual Studio's optional ASAN component. Publish
+the selected installation's exact companion into build-owned storage, fetching
+and verifying its package when it is not installed. The installed toolchain is
+never modified.
 """
 
 from __future__ import annotations
@@ -27,15 +28,28 @@ import zipfile
 from pathlib import Path
 
 
-def resolve_stl_asan(tools_dir: Path, catalog_path: Path, output_dir: Path) -> Path:
-    """Returns a library search directory, fetching the exact companion if absent."""
-    installed = tools_dir / "lib" / "x64" / "stl_asan.lib"
-    if installed.is_file():
-        return installed.parent
+def _publish_library(destination: Path, contents: bytes, source: str) -> None:
+    if not contents:
+        raise ValueError(f"Empty STL ASAN companion: {source}")
+    destination.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination) as directory:
+        staged = Path(directory) / "stl_asan.lib"
+        staged.write_bytes(contents)
+        staged.replace(destination / "stl_asan.lib")
 
+
+def resolve_stl_asan(tools_dir: Path, catalog_path: Path, output_dir: Path) -> Path:
+    """Publishes the exact companion and returns its build-owned directory."""
     tools_version = tools_dir.name
     if not re.fullmatch(r"\d+\.\d+\.\d+", tools_version):
         raise ValueError(f"Invalid Visual C++ tools version: {tools_version}")
+    destination = output_dir / tools_version / "x64"
+
+    installed = tools_dir / "lib" / "x64" / "stl_asan.lib"
+    if installed.is_file():
+        _publish_library(destination, installed.read_bytes(), str(installed))
+        return destination
+
     family = ".".join(tools_version.split(".")[:2])
     catalog = json.loads(catalog_path.read_text(encoding="utf-8-sig"))
     packages = [
@@ -59,9 +73,8 @@ def resolve_stl_asan(tools_dir: Path, catalog_path: Path, output_dir: Path) -> P
         raise ValueError(f"Unexpected Visual Studio payload URL: {payload['url']}")
     print(f"Fetching {package['id']} {package['version']}", file=sys.stderr)
 
-    destination = output_dir / tools_version / "x64"
-    destination.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=destination) as directory:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=output_dir) as directory:
         archive_path = Path(directory) / "asan.vsix"
         with urllib.request.urlopen(payload["url"], timeout=60) as response:
             with archive_path.open("wb") as output:
@@ -74,11 +87,7 @@ def resolve_stl_asan(tools_dir: Path, catalog_path: Path, output_dir: Path) -> P
         with zipfile.ZipFile(archive_path) as archive:
             # Read one exact member; no archive-controlled path is extracted.
             library = archive.read(member)
-        if not library:
-            raise ValueError(f"Empty STL ASAN companion: {member}")
-        staged = Path(directory) / "stl_asan.lib"
-        staged.write_bytes(library)
-        staged.replace(destination / "stl_asan.lib")
+    _publish_library(destination, library, member)
     return destination
 
 

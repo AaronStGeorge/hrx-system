@@ -23,7 +23,7 @@ class WindowsStlAsanTest(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
-        self.tools = self.root / "MSVC" / "14.44.35207"
+        self.tools = self.root / "Program Files (x86)" / "MSVC" / "14.44.35207"
         self.output = self.root / "output"
         self.catalog_path = self.root / "catalog.json"
         self.payload = {
@@ -63,8 +63,12 @@ class WindowsStlAsanTest(unittest.TestCase):
                 self.tools, self.catalog_path, self.output
             )
         fetch.assert_not_called()
-        self.assertEqual(result, library.parent)
-        self.assertFalse(self.output.exists())
+        self.assertEqual(result, self.output / self.tools.name / "x64")
+        self.assertEqual((result / "stl_asan.lib").read_bytes(), b"installed")
+        self.assertEqual(
+            [path.name for path in self.output.rglob("*") if path.is_file()],
+            ["stl_asan.lib"],
+        )
 
     def test_verified_package_extracts_only_exact_companion(self):
         data = self.archive()
