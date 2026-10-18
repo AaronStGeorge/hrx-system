@@ -16,6 +16,7 @@
 #include "loom/target/arch/amdgpu/lower/preamble.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_race.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_race_history_layout.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_race_lifetime.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_race_shadow_layout.h"
 #include "loom/target/arch/amdgpu/lower/system_memory.h"
@@ -242,24 +243,27 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_shadow_entry_base(
   *out_base = (loom_amdgpu_sanitizer_race_shadow_entry_base_t){0};
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
+  const loom_amdgpu_sanitizer_race_history_layout_t* layout =
+      loom_amdgpu_sanitizer_race_legacy_history_layout();
+  const uint32_t generation_low_bit_count = 32u - layout->generation.shift;
+  const uint32_t generation_high_bit_count =
+      layout->generation.bit_count - generation_low_bit_count;
 
   loom_value_id_t workitem_bits = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_WORKITEM_SHIFT, workitem_linear_id,
-      vgpr_type, &workitem_bits));
+      layout->workitem.shift, workitem_linear_id, vgpr_type, &workitem_bits));
 
   loom_value_id_t generation_low_part = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-      generation_low,
-      (1u << LOOM_AMDGPU_TSAN_SHADOW_ENTRY_LOW_GENERATION_BIT_COUNT) - 1u,
-      vgpr_type, &generation_low_part));
+      generation_low, (1u << generation_low_bit_count) - 1u, vgpr_type,
+      &generation_low_part));
   loom_value_id_t generation_low_bits = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_GENERATION_SHIFT, generation_low_part,
-      vgpr_type, &generation_low_bits));
+      layout->generation.shift, generation_low_part, vgpr_type,
+      &generation_low_bits));
 
   loom_value_id_t low = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_binary(
@@ -269,14 +273,13 @@ static iree_status_t loom_amdgpu_sanitizer_race_build_shadow_entry_base(
   loom_value_id_t generation_high_bits = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT,
-      LOOM_AMDGPU_TSAN_SHADOW_ENTRY_LOW_GENERATION_BIT_COUNT, generation_low,
-      vgpr_type, &generation_high_bits));
+      generation_low_bit_count, generation_low, vgpr_type,
+      &generation_high_bits));
   loom_value_id_t high = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-      generation_high_bits,
-      (1u << LOOM_AMDGPU_TSAN_SHADOW_ENTRY_HIGH_GENERATION_BIT_COUNT) - 1u,
-      vgpr_type, &high));
+      generation_high_bits, (1u << generation_high_bit_count) - 1u, vgpr_type,
+      &high));
 
   *out_base = (loom_amdgpu_sanitizer_race_shadow_entry_base_t){
       .low = low,

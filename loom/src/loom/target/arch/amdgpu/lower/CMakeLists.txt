@@ -121,6 +121,7 @@ loom_cc_library(
     "sanitizer.h"
     "sanitizer_access.h"
     "sanitizer_race.h"
+    "sanitizer_race_history_layout.h"
     "sanitizer_race_history_policy.h"
     "sanitizer_race_lifetime.h"
     "sanitizer_race_report.h"
@@ -242,6 +243,7 @@ loom_cc_library(
     "sanitizer.c"
     "sanitizer_access.c"
     "sanitizer_race.c"
+    "sanitizer_race_history_layout.c"
     "sanitizer_race_history_policy.c"
     "sanitizer_race_lifetime.c"
     "sanitizer_race_plan.c"
@@ -643,6 +645,22 @@ loom_cc_test(
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
     loom::verify
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    sanitizer_race_history_layout_test
+  SRCS
+    "sanitizer_race_history_layout_test.cc"
+  DEPS
+    ::lower
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::target::arch::amdgpu::abi::tsan
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )
