@@ -608,6 +608,10 @@ loom_check_test_suite(
             "//loom/target/amdgpu:gfx1200",
             "//loom/target/amdgpu:gfx1250",
         ],
+        "test/source_low/narrow_kernel_arguments.loom-test": [
+            "//loom/target/amdgpu:" + target
+            for target in LOOM_AMDGPU_SUPPORTED_TARGETS
+        ],
         "test/source_low/predicate_truncation.loom-test": [
             "//loom/target/amdgpu:" + target
             for target in LOOM_AMDGPU_SUPPORTED_TARGETS
