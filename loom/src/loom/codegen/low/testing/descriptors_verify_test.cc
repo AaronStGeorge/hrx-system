@@ -287,6 +287,8 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.reg_class_alt_count = IREE_ARRAYSIZE(tables->reg_class_alts);
   tables->set.schedule_classes = tables->schedule_classes;
   tables->set.schedule_class_count = IREE_ARRAYSIZE(tables->schedule_classes);
+  tables->set.schedule_class_row_count =
+      IREE_ARRAYSIZE(tables->schedule_classes);
   tables->set.issue_uses = tables->issue_uses;
   tables->set.issue_use_count = IREE_ARRAYSIZE(tables->issue_uses);
   tables->set.resources = tables->resources;
@@ -2483,6 +2485,29 @@ TEST(LowDescriptorsTest, RejectsIncorrectMinimumIssueCycles) {
                         loom_low_descriptor_set_verify(&tables.set));
 }
 
+TEST(LowDescriptorsTest, ResolvesScheduleClassRowId) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  uint16_t schedule_class_row_ids[] = {0, 2};
+  loom_low_schedule_class_t schedule_classes[] = {
+      tables.schedule_classes[0],
+      tables.schedule_classes[1],
+      tables.schedule_classes[1],
+  };
+  schedule_classes[1].latency_cycles = 17;
+  schedule_classes[2].latency_cycles = 23;
+  tables.set.schedule_classes = schedule_classes;
+  tables.set.schedule_class_count = IREE_ARRAYSIZE(schedule_class_row_ids);
+  tables.set.schedule_class_row_count = IREE_ARRAYSIZE(schedule_classes);
+  tables.set.schedule_class_row_ids = schedule_class_row_ids;
+
+  IREE_EXPECT_OK(loom_low_descriptor_set_verify(&tables.set));
+  EXPECT_EQ(loom_low_descriptor_set_schedule_class(&tables.set,
+                                                   &tables.descriptor_views[1])
+                ->latency_cycles,
+            23);
+}
+
 TEST(LowDescriptorsTest, MinimumIssueCyclesCombineOnlyRequiredAliasDemand) {
   TestTables tables;
   InitializeTestTables(&tables);
@@ -2557,6 +2582,19 @@ TEST(LowDescriptorsTest, RejectsIssueUseUnitsAboveResourceCapacity) {
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, IgnoresUnselectedScheduleClassCapacity) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.issue_uses[0].units = 2;
+  const uint64_t descriptor_membership_words[] = {UINT64_C(1)};
+  tables.set.descriptor_membership_words = descriptor_membership_words;
+  tables.set.descriptor_count = 1;
+  tables.set.descriptor_ref_count = 1;
+  tables.descriptor_refs[0] = 0;
+
+  IREE_EXPECT_OK(loom_low_descriptor_set_verify(&tables.set));
 }
 
 }  // namespace

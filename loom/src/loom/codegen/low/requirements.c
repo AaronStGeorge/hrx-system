@@ -120,9 +120,9 @@ static iree_status_t loom_low_requirements_verify_descriptor_schedule(
     const loom_low_descriptor_t* descriptor,
     iree_string_view_t descriptor_key) {
   const loom_low_schedule_class_t* schedule_class =
-      &descriptor_set->schedule_classes[loom_low_descriptor_set_descriptor_view(
-                                            descriptor_set, descriptor)
-                                            ->schedule_class_id];
+      loom_low_descriptor_set_schedule_class(
+          descriptor_set,
+          loom_low_descriptor_set_descriptor_view(descriptor_set, descriptor));
   const bool has_effect_or_control_payload =
       loom_low_descriptor_layout(descriptor_set, descriptor)->effect_count !=
           0 ||

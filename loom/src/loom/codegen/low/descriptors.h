@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 62u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 63u
 
 // Sentinel for absent target-family or descriptor-set stable IDs.
 #define LOOM_LOW_STABLE_ID_NONE UINT64_C(0)
@@ -1311,7 +1311,8 @@ static_assert(sizeof(loom_low_descriptor_layout_t) == 34,
 typedef struct loom_low_descriptor_view_t {
   // Generated target-neutral semantic instruction classes.
   loom_low_instruction_class_flags_t instruction_class_flags;
-  // Required schedule-class identifier for this descriptor.
+  // Family-canonical schedule-class ID. The selected descriptor set resolves
+  // its physical row.
   uint16_t schedule_class_id;
   // Unique canonical asm form ordinal for descriptor-driven text emission, or
   // LOOM_LOW_ASM_FORM_ORDINAL_NONE when no unambiguous form exists.
@@ -1739,12 +1740,17 @@ typedef struct loom_low_descriptor_set_t {
   uint32_t register_part_count;
   // Dense register-class alternative rows referenced by operands.
   const loom_low_reg_class_alt_t* reg_class_alts;
+  // Family schedule-class row pool: canonical rows followed by view variants.
+  const loom_low_schedule_class_t* schedule_classes;
+  // Optional physical row IDs indexed by canonical schedule-class ID. A NULL
+  // pointer means canonical IDs index |schedule_classes| directly.
+  const uint16_t* schedule_class_row_ids;
   // Number of register-class alternative rows owned by this set.
   uint32_t reg_class_alt_count;
-  // Dense schedule classes referenced by descriptors.
-  const loom_low_schedule_class_t* schedule_classes;
-  // Number of schedule classes owned by this set.
-  uint32_t schedule_class_count;
+  // Number of canonical schedule-class IDs addressable by descriptor views.
+  uint16_t schedule_class_count;
+  // Number of physical rows in |schedule_classes|, including view variants.
+  uint16_t schedule_class_row_count;
   // Dense named timing events referenced by operands and effects.
   const loom_low_timing_event_t* timing_events;
   // Number of timing-event rows owned by this set.
@@ -1858,6 +1864,26 @@ loom_low_descriptor_set_descriptor_view(
       (uint32_t)(descriptor - descriptor_set->descriptors);
   return loom_low_descriptor_set_descriptor_view_at(descriptor_set,
                                                     descriptor_ordinal);
+}
+
+// Resolves a canonical schedule-class ID into the shared physical row pool.
+IREE_ATTRIBUTE_ALWAYS_INLINE static inline uint16_t
+loom_low_descriptor_set_schedule_class_row_id(
+    const loom_low_descriptor_set_t* descriptor_set, uint16_t canonical_id) {
+  return descriptor_set->schedule_class_row_ids == NULL
+             ? canonical_id
+             : descriptor_set->schedule_class_row_ids[canonical_id];
+}
+
+// Returns the schedule class owned by |descriptor_set| for a verified
+// descriptor view.
+IREE_ATTRIBUTE_ALWAYS_INLINE static inline const loom_low_schedule_class_t*
+loom_low_descriptor_set_schedule_class(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_view_t* descriptor_view) {
+  const uint16_t row_id = loom_low_descriptor_set_schedule_class_row_id(
+      descriptor_set, descriptor_view->schedule_class_id);
+  return &descriptor_set->schedule_classes[row_id];
 }
 
 // Returns the target-storage identity key for |reg_class_id|. Explicit

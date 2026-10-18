@@ -705,6 +705,7 @@ def _validate_timing_event_name(name: str, description: str) -> None:
 def validate_schedule_model(descriptor_set: DescriptorSet) -> tuple[frozenset[str], dict[str, int]]:
     """Validates capacity and retains disjoint classes and resource-demand bounds."""
 
+    register_class_names = {reg_class.name for reg_class in descriptor_set.reg_classes}
     resources: dict[str, Resource] = {}
     contention_group_capacities: dict[int, int] = {}
     for resource in descriptor_set.resources:
@@ -812,6 +813,21 @@ def validate_schedule_model(descriptor_set: DescriptorSet) -> tuple[frozenset[st
                 units = required_units.get(key, 0) + reserved_units.get(key, 0)
                 if units > resource.capacity_per_cycle:
                     raise ValueError(f"{description} consumes {units} units from {calendar_key} at relative cycle {cycle}, exceeding capacity {resource.capacity_per_cycle}")
+        for hazard in schedule_class.hazards:
+            if hazard_reference_count(hazard) != 1:
+                raise ValueError(f"{description} hazard must reference exactly one resource, counter, or target id")
+            if hazard.resource is not None and hazard.resource not in resources:
+                raise ValueError(f"{description} hazard references unknown resource '{hazard.resource}'")
+            if hazard.counter_id is not None:
+                validate_u16(hazard.counter_id, f"{description} hazard counter id")
+            if hazard.target_id is not None:
+                validate_u16(hazard.target_id, f"{description} hazard target id")
+            validate_u16(hazard.producer_stage, f"{description} hazard producer stage")
+            validate_u16(hazard.consumer_stage, f"{description} hazard consumer stage")
+            validate_u16(hazard.distance, f"{description} hazard distance")
+        for pressure_delta in schedule_class.pressure_deltas:
+            if pressure_delta.reg_class not in register_class_names:
+                raise ValueError(f"{description} references unknown pressure register class '{pressure_delta.reg_class}'")
         if schedule_class.issue_uses and disjoint_issue_uses:
             disjoint_schedule_classes.add(schedule_class.name)
         validate_u16(minimum_issue_cycles, f"{description} minimum issue cycles")

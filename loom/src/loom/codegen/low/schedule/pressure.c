@@ -1103,8 +1103,8 @@ static void loom_low_schedule_select_candidate_schedule_class(
         loom_low_descriptor_set_descriptor_view_at(
             descriptor_set, alternative->alternative_descriptor_ordinal);
     const loom_low_schedule_class_t* alternative_schedule_class =
-        &descriptor_set
-             ->schedule_classes[alternative_descriptor_view->schedule_class_id];
+        loom_low_descriptor_set_schedule_class(descriptor_set,
+                                               alternative_descriptor_view);
     loom_low_schedule_candidate_score_t alternative_score = *score;
     loom_low_schedule_score_candidate_schedule_class(
         state, alternative_schedule_class, &alternative_score);

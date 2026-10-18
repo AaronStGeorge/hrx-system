@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from loom.target.low_descriptors import Descriptor, DescriptorSet
@@ -17,7 +18,12 @@ from .avx512 import X86_AVX512_CORE_DESCRIPTOR_SET
 from .avx512_bf16 import X86_AVX512_BF16_DESCRIPTOR_SET
 from .avx512_fp16 import X86_AVX512_FP16_DESCRIPTOR_SET
 from .avx_ne_convert import X86_AVX_NE_CONVERT_DESCRIPTOR_SET
-from .common import _merge_named_items, _qualify_packed_dot_descriptor_asm_forms
+from .common import (
+    _RESOURCE_DOT,
+    _RESOURCE_VECTOR,
+    _merge_named_items,
+    _qualify_packed_dot_descriptor_asm_forms,
+)
 from .f16c import X86_F16C_DESCRIPTOR_SET
 from .packed_dot import (
     X86_AVX10_2_DESCRIPTOR_SET,
@@ -93,6 +99,20 @@ def _composite_descriptor_set(
     extension_descriptors: tuple[Descriptor, ...] = (),
 ) -> DescriptorSet:
     core = components[0][0]
+    resources = _merge_named_items(
+        tuple(descriptor_set.resources for descriptor_set, _ in components)
+    )
+    resources_by_name = {resource.name: resource for resource in resources}
+    vector_resource = resources_by_name.get(_RESOURCE_VECTOR)
+    if vector_resource is not None and _RESOURCE_DOT in resources_by_name:
+        # Packed-dot overlays share the core vector execution pipes. The core
+        # profile owns their capacity and numeric contention-group identity.
+        resources_by_name[_RESOURCE_DOT] = replace(
+            resources_by_name[_RESOURCE_DOT],
+            capacity_per_cycle=vector_resource.capacity_per_cycle,
+            contention_group_id=vector_resource.contention_group_id,
+        )
+        resources = tuple(resources_by_name[resource.name] for resource in resources)
     return DescriptorSet(
         key=key,
         target_key="x86",
@@ -113,9 +133,7 @@ def _composite_descriptor_set(
             tuple(descriptor_set.reg_classes for descriptor_set, _ in components)
         ),
         register_packing_resources=core.register_packing_resources,
-        resources=_merge_named_items(
-            tuple(descriptor_set.resources for descriptor_set, _ in components)
-        ),
+        resources=resources,
         schedule_classes=_merge_named_items(
             tuple(descriptor_set.schedule_classes for descriptor_set, _ in components)
         ),

@@ -680,8 +680,9 @@ low.func.def target<test.low.core> @physical_reuse(%seed: reg<test.phys>) -> (re
                          &frame.allocation, &packet, j)
                          ->location_base;
     }
-    const loom_low_physical_instruction_t instruction = {
-        packet.descriptor_ordinal, registers};
+    const loom_low_physical_instruction_t instruction =
+        loom_low_physical_instruction_make(
+            frame.target.descriptor_set, packet.descriptor_ordinal, registers);
     const uint32_t proposed_cycle =
         iree_max(iree_max(next_cycle, packet.node->issue_cycle),
                  loom_low_physical_issue_source_ready_cycle(&issue, i));
@@ -700,8 +701,12 @@ low.func.def target<test.low.core> @physical_reuse(%seed: reg<test.phys>) -> (re
   const uint16_t read_registers[] = {0};
   uint16_t write_registers[] = {0, 1};
   const loom_low_physical_instruction_t pair[] = {
-      {read_packet.descriptor_ordinal, read_registers},
-      {write_packet.descriptor_ordinal, write_registers},
+      loom_low_physical_instruction_make(frame.target.descriptor_set,
+                                         read_packet.descriptor_ordinal,
+                                         read_registers),
+      loom_low_physical_instruction_make(frame.target.descriptor_set,
+                                         write_packet.descriptor_ordinal,
+                                         write_registers),
   };
   EXPECT_FALSE(
       loom_low_physical_issue_group_fits(frame.target.descriptor_set, pair, 2));
@@ -1619,9 +1624,11 @@ TEST_F(LowEmissionFrameTest, StructuralModelCarriesNativePacketTiming) {
   const loom_low_descriptor_view_t* schedule_descriptor_view =
       loom_low_descriptor_set_descriptor_view_at(
           descriptor_set, TEST_LOW_CORE_DESCRIPTOR_REF_TEST_ADD_I32);
+  const uint16_t expected_schedule_class_id =
+      schedule_descriptor_view->schedule_class_id;
   const loom_low_schedule_class_t* expected_schedule_class =
-      &descriptor_set
-           ->schedule_classes[schedule_descriptor_view->schedule_class_id];
+      loom_low_descriptor_set_schedule_class(descriptor_set,
+                                             schedule_descriptor_view);
   ASSERT_EQ(expected_schedule_class->latency_cycles, 1u);
   ASSERT_EQ(expected_schedule_class->minimum_issue_separation_cycles, 1);
   ASSERT_EQ(expected_schedule_class->issue_use_count, 1u);
@@ -1635,8 +1642,7 @@ TEST_F(LowEmissionFrameTest, StructuralModelCarriesNativePacketTiming) {
   EXPECT_EQ(address_node->descriptor, nullptr);
   EXPECT_EQ(address_node->source_descriptor_ordinal,
             LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
-  EXPECT_EQ(address_node->schedule_class_id,
-            schedule_descriptor_view->schedule_class_id);
+  EXPECT_EQ(address_node->schedule_class_id, expected_schedule_class_id);
   EXPECT_EQ(address_node->schedule_class, expected_schedule_class);
   EXPECT_GE(load_node->issue_cycle,
             address_node->issue_cycle +
@@ -1645,7 +1651,7 @@ TEST_F(LowEmissionFrameTest, StructuralModelCarriesNativePacketTiming) {
   const loom_low_schedule_model_summary_t* model_summary = nullptr;
   for (iree_host_size_t i = 0; i < frame.schedule.model_summary_count; ++i) {
     if (frame.schedule.model_summaries[i].schedule_class_id ==
-        schedule_descriptor_view->schedule_class_id) {
+        expected_schedule_class_id) {
       model_summary = &frame.schedule.model_summaries[i];
       break;
     }

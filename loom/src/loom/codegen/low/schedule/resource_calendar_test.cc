@@ -37,8 +37,8 @@ class ScheduleResourceCalendarTest : public ::testing::Test {
     const loom_low_descriptor_view_t* descriptor_view =
         loom_low_descriptor_set_descriptor_view_at(descriptor_set_,
                                                    descriptor_ref);
-    return &descriptor_set_
-                ->schedule_classes[descriptor_view->schedule_class_id];
+    return loom_low_descriptor_set_schedule_class(descriptor_set_,
+                                                  descriptor_view);
   }
 
   uint32_t FindEarliest(const loom_low_schedule_class_t* schedule_class,
@@ -143,6 +143,7 @@ TEST_F(ScheduleResourceCalendarTest,
   loom_low_descriptor_set_t descriptor_set = {
       .schedule_classes = classes,
       .schedule_class_count = IREE_ARRAYSIZE(classes),
+      .schedule_class_row_count = IREE_ARRAYSIZE(classes),
       .issue_uses = uses,
       .issue_use_count = IREE_ARRAYSIZE(uses),
       .resources = &resource,
@@ -258,6 +259,7 @@ TEST_F(ScheduleResourceCalendarTest, HistoryRetainsStageOccupancyAcrossWraps) {
   loom_low_descriptor_set_t descriptors = {
       .schedule_classes = classes,
       .schedule_class_count = IREE_ARRAYSIZE(classes),
+      .schedule_class_row_count = IREE_ARRAYSIZE(classes),
       .issue_uses = uses,
       .issue_use_count = IREE_ARRAYSIZE(uses),
       .resources = resources,
@@ -307,6 +309,7 @@ TEST_F(ScheduleResourceCalendarTest, ForwardIssueFloorDoesNotExcludeHistory) {
   loom_low_descriptor_set_t descriptors = {
       .schedule_classes = &schedule_class,
       .schedule_class_count = 1,
+      .schedule_class_row_count = 1,
       .issue_uses = &use,
       .issue_use_count = 1,
       .resources = &resource,

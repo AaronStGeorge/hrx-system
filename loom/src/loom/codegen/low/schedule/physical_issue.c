@@ -84,10 +84,7 @@ void loom_low_physical_issue_commit_source(loom_low_physical_issue_t* issue,
 static const loom_low_schedule_class_t* loom_low_physical_instruction_class(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_physical_instruction_t* instruction) {
-  const loom_low_descriptor_view_t* view =
-      loom_low_descriptor_set_descriptor_view_at(
-          descriptor_set, instruction->descriptor_ordinal);
-  return &descriptor_set->schedule_classes[view->schedule_class_id];
+  return &descriptor_set->schedule_classes[instruction->schedule_class_row_id];
 }
 
 static bool loom_low_physical_registers_overlap(

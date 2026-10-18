@@ -646,12 +646,12 @@ static iree_status_t loom_wasm_record_descriptor_flags(
     loom_wasm_emit_state_t* state, const loom_low_descriptor_t* descriptor) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_wasm_core_simd128_descriptor_set();
-  const uint16_t schedule_class_id =
-      loom_low_descriptor_set_descriptor_view(descriptor_set, descriptor)
-          ->schedule_class_id;
-  if (schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
+  const loom_low_descriptor_view_t* descriptor_view =
+      loom_low_descriptor_set_descriptor_view(descriptor_set, descriptor);
+  if (descriptor_view->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
     return iree_ok_status();
   }
+  const uint16_t schedule_class_id = descriptor_view->schedule_class_id;
   if (schedule_class_id >= descriptor_set->schedule_class_count) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
@@ -659,7 +659,7 @@ static iree_status_t loom_wasm_record_descriptor_flags(
         schedule_class_id);
   }
   const loom_low_schedule_class_t* schedule_class =
-      &descriptor_set->schedule_classes[schedule_class_id];
+      loom_low_descriptor_set_schedule_class(descriptor_set, descriptor_view);
   const loom_low_schedule_class_flags_t memory_flags =
       LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD |
       LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE;

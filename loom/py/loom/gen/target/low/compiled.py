@@ -95,6 +95,35 @@ class CompiledResourceCalendar:
 
 
 @dataclass(frozen=True, slots=True)
+class CompiledScheduleModel:
+    """Canonical scheduling tables selected by one descriptor-set view."""
+
+    resources: tuple[Resource, ...]
+    resource_calendars: tuple[CompiledResourceCalendar, ...]
+    resource_calendar_slot_count: int
+    resource_calendar_lookback_cycles: int
+    schedule_classes: tuple[ScheduleClass, ...]
+    timing_events: tuple[TimingEvent, ...]
+    event_separations: tuple[EventSeparation, ...]
+    resource_ids: dict[str, int]
+    schedule_class_ids: dict[str, int]
+    timing_event_ids: dict[str, int]
+    issue_uses: tuple[IssueUse, ...]
+    hazards: tuple[Hazard, ...]
+    pressure_deltas: tuple[PressureDelta, ...]
+    schedule_rows: tuple[dict[str, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CompiledScheduleClassTable:
+    """Family-wide schedule-class rows indexed by physical row IDs."""
+
+    schedule_classes: tuple[ScheduleClass, ...]
+    schedule_rows: tuple[dict[str, int], ...]
+    canonical_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class DescriptorAllowlist:
     keys: tuple[str, ...] = ()
     semantic_tags: tuple[str, ...] = ()
@@ -179,6 +208,8 @@ class CompiledDescriptorSet:
     # Earlier issue distance retained before the native issue high-water mark.
     resource_calendar_lookback_cycles: int
     schedule_classes: list[ScheduleClass]
+    # Canonical schedule rows followed by distinct rows contributed by views.
+    schedule_class_table: CompiledScheduleClassTable
     timing_events: list[TimingEvent]
     event_separations: list[EventSeparation]
     enum_domains: list[EnumDomain]
@@ -225,6 +256,25 @@ class CompiledDescriptorSet:
     schedule_rows: list[dict[str, int]]
     enum_domain_rows: list[dict[str, int]]
 
+    @property
+    def schedule_model(self) -> CompiledScheduleModel:
+        return CompiledScheduleModel(
+            resources=tuple(self.resources),
+            resource_calendars=tuple(self.resource_calendars),
+            resource_calendar_slot_count=self.resource_calendar_slot_count,
+            resource_calendar_lookback_cycles=self.resource_calendar_lookback_cycles,
+            schedule_classes=tuple(self.schedule_classes),
+            timing_events=tuple(self.timing_events),
+            event_separations=tuple(self.event_separations),
+            resource_ids=self.resource_ids,
+            schedule_class_ids=self.schedule_class_ids,
+            timing_event_ids=self.timing_event_ids,
+            issue_uses=tuple(self.issue_uses),
+            hazards=tuple(self.hazards),
+            pressure_deltas=tuple(self.pressure_deltas),
+            schedule_rows=tuple(self.schedule_rows),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class DescriptorSetView:
@@ -233,6 +283,9 @@ class DescriptorSetView:
     reg_classes: tuple[RegClass | None, ...]
     descriptors: tuple[Descriptor, ...]
     instruction_classes: tuple[tuple[InstructionClass, ...], ...]
+    schedule_model: CompiledScheduleModel
+    # Runtime row IDs indexed by canonical schedule-class ID. Empty is identity.
+    schedule_class_row_ids: tuple[int, ...]
     storage_descriptor_ordinals: tuple[int, ...]
     descriptor_ordinal_count: int
     descriptor_membership_words: tuple[int, ...]

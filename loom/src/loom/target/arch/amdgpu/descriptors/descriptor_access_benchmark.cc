@@ -133,8 +133,8 @@ static void BM_ScheduleFacts(benchmark::State& state,
         const loom_low_descriptor_view_t* descriptor_view =
             &descriptor_set->descriptor_views[descriptor_ordinal];
         const loom_low_schedule_class_t* schedule_class =
-            &descriptor_set
-                 ->schedule_classes[descriptor_view->schedule_class_id];
+            loom_low_descriptor_set_schedule_class(descriptor_set,
+                                                   descriptor_view);
         return static_cast<uint64_t>(descriptor_view->instruction_class_flags) +
                schedule_class->latency_cycles +
                schedule_class->schedule_distance_cycles +
@@ -180,8 +180,8 @@ static void BM_MixedFacts(benchmark::State& state,
         const loom_low_descriptor_view_t* descriptor_view =
             &descriptor_set->descriptor_views[descriptor_ordinal];
         const loom_low_schedule_class_t* schedule_class =
-            &descriptor_set
-                 ->schedule_classes[descriptor_view->schedule_class_id];
+            loom_low_descriptor_set_schedule_class(descriptor_set,
+                                                   descriptor_view);
         uint64_t result = descriptor->stable_id + descriptor->operand_start +
                           loom_low_descriptor_layout(descriptor_set, descriptor)
                               ->effect_start +

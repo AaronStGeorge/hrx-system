@@ -1009,10 +1009,8 @@ static void loom_aie2p_bundle_plan_instruction(
   uint16_t* registers =
       builder->instruction_registers +
       group_index * descriptor_set->maximum_descriptor_operand_count;
-  builder->instructions[group_index] = (loom_low_physical_instruction_t){
-      .descriptor_ordinal = descriptor_ordinal,
-      .physical_registers = registers,
-  };
+  builder->instructions[group_index] = loom_low_physical_instruction_make(
+      descriptor_set, descriptor_ordinal, registers);
   for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
     const loom_low_operand_t* operand =
         loom_low_descriptor_operand(descriptor_set, descriptor, i);
