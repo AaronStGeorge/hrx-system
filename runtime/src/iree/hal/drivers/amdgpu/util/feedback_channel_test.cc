@@ -106,15 +106,12 @@ class FeedbackChannelTest : public ::testing::Test {
 
   void SetUp() override {
     IREE_ASSERT_OK(iree_hal_amdgpu_find_fine_global_memory_pool(
-        &libhsa, topology.cpu_agents[0], &control_memory_pool_));
-    IREE_ASSERT_OK(iree_hal_amdgpu_find_coarse_global_memory_pool(
-        &libhsa, topology.gpu_agents[0], &ring_memory_pool_));
+        &libhsa, topology.cpu_agents[0], &host_memory_pool_));
 
     iree_hal_amdgpu_feedback_channel_params_t params = {
         .libhsa = &libhsa,
         .device_agent = topology.gpu_agents[0],
-        .control_memory_pool = control_memory_pool_,
-        .ring_memory_pool = ring_memory_pool_,
+        .host_memory_pool = host_memory_pool_,
         .topology = &topology,
         .minimum_capacity = 4 * 1024,
     };
@@ -129,10 +126,8 @@ class FeedbackChannelTest : public ::testing::Test {
   static iree_allocator_t host_allocator;
   static iree_hal_amdgpu_libhsa_t libhsa;
   static iree_hal_amdgpu_topology_t topology;
-  // CPU fine-grained pool used for the channel control block.
-  hsa_amd_memory_pool_t control_memory_pool_ = {};
-  // GPU global memory pool used to create the pinned VMM packet ring.
-  hsa_amd_memory_pool_t ring_memory_pool_ = {};
+  // CPU fine-grained pool used for channel control and packet storage.
+  hsa_amd_memory_pool_t host_memory_pool_ = {};
   // Feedback channel under test.
   iree_hal_amdgpu_feedback_channel_t channel_ = {};
 };
