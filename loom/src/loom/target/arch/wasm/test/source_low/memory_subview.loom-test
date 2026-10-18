@@ -128,10 +128,9 @@ func.def @make_storage_crop(%input: buffer, %origin: offset, %columns: index) ->
   %schema = encoding.define #encoding.f32 : encoding<schema>
   %storage = encoding.define #encoding.storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
   %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
-  // ERROR@+1: WASM/006 {op_name="buffer.view", bit_count="32"}
   %source = buffer.view %input_aligned[%origin] : buffer -> view<4x[%columns]xf32, %storage>
-  // ERROR@+1: WASM/006 {op_name="view.subview", bit_count="32"}
   %crop = view.subview %source[1, 2] : view<4x[%columns]xf32, %storage> -> view<2x3xf32, %storage>
+  // ERROR@+1: TARGET/033 {op_name="func.return", field_name="source", actual_type="encoding<storage>"}
   func.return %storage, %crop : encoding<storage>, view<2x3xf32, %storage>
 }
 
