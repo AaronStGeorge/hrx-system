@@ -407,7 +407,7 @@ loom_generated_file(
     testonly = True,
     args = [
         "$(location test/hal_dispatch.loom)",
-        "--target=x86:scalar",
+        "--target=x86:avx2",
     ],
     generator = "//loom/src/loom/tools/loom-compile:loom-compile",
     inputs = ["test/hal_dispatch.loom"],
@@ -431,7 +431,7 @@ loom_generated_file(
     testonly = True,
     args = [
         "$(location test/hal_dispatch.loom)",
-        "x86:scalar",
+        "x86:avx2",
     ],
     generator = "//loom/binding/c/example:compile_artifact",
     inputs = ["test/hal_dispatch.loom"],
