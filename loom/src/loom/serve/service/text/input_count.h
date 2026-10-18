@@ -67,6 +67,7 @@ iree_status_t loom_serve_text_input_count_run(
 
 // Consumes the released head's outcome and relinquishes its claim. Telemetry
 // counts the utility request, not inference tokens that were never executed.
+// Unexpected source failures propagate even after client cancellation or stop.
 iree_status_t loom_serve_text_input_count_complete(
     loom_serve_text_input_count_t* queue, bool stopping, iree_status_t status,
     loom_serve_text_telemetry_t* telemetry, iree_string_builder_t* scratch);

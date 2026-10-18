@@ -114,7 +114,9 @@ loom_cc_library(
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
     visibility = ["//visibility:private"],
     deps = [
+        ":input_count",
         ":source_service_fixture",
+        ":telemetry",
         "//loom/src/loom/serve/service/finite:component",
         "//loom/src/loom/serve/telemetry:latency",
     ],

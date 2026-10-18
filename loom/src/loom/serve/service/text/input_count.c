@@ -94,38 +94,46 @@ iree_status_t loom_serve_text_input_count_complete(
     loom_serve_text_telemetry_t* telemetry, iree_string_builder_t* scratch) {
   const loom_serve_text_input_count_request_t request = queue->requests[0];
   loom_serve_text_input_count_remove(queue, 0);
+  const bool request_error = iree_status_is_invalid_argument(status) ||
+                             iree_status_is_out_of_range(status) ||
+                             iree_status_is_unimplemented(status) ||
+                             iree_status_is_resource_exhausted(status);
+  if (!iree_status_is_ok(status) && !request_error) {
+    // A disconnected client cannot hide a source failure from the model owner.
+    loom_serve_text_telemetry_end(telemetry, request.receipt,
+                                  LOOM_SERVE_TELEMETRY_FAILED, 0, status);
+    loom_serve_http_connection_abort(request.connection);
+    return status;
+  }
   if (stopping || loom_serve_http_connection_failed(request.connection)) {
     loom_serve_text_telemetry_end(telemetry, request.receipt,
-                                  LOOM_SERVE_TELEMETRY_CANCELLED, 0, status);
+                                  telemetry->failure_code
+                                      ? LOOM_SERVE_TELEMETRY_FAILED
+                                      : LOOM_SERVE_TELEMETRY_CANCELLED,
+                                  0, status);
     iree_status_free(status);
     loom_serve_http_connection_abort(request.connection);
     return iree_ok_status();
   }
-  if (!iree_status_is_ok(status)) {
-    if (iree_status_is_invalid_argument(status) ||
-        iree_status_is_out_of_range(status) ||
-        iree_status_is_unimplemented(status) ||
-        iree_status_is_resource_exhausted(status)) {
-      const bool unsupported = iree_status_is_unimplemented(status);
-      const bool exhausted = iree_status_is_resource_exhausted(status);
-      return loom_serve_text_response_reject(telemetry, request.connection,
-                                             request.receipt,
-                                             unsupported ? 501
-                                             : exhausted ? 503
-                                                         : 400,
-                                             unsupported ? "Not Implemented"
-                                             : exhausted ? "Service Unavailable"
-                                                         : "Bad Request",
-                                             status, queue->host_allocator);
-    }
-  } else {
-    iree_string_builder_reset(scratch);
-    status = iree_string_builder_append_format(
-        scratch,
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
-        "Connection: close\r\n\r\n{\"input_tokens\":%zu}",
-        queue->input_tokens);
+  if (request_error) {
+    const bool unsupported = iree_status_is_unimplemented(status);
+    const bool exhausted = iree_status_is_resource_exhausted(status);
+    return loom_serve_text_response_reject(telemetry, request.connection,
+                                           request.receipt,
+                                           unsupported ? 501
+                                           : exhausted ? 503
+                                                       : 400,
+                                           unsupported ? "Not Implemented"
+                                           : exhausted ? "Service Unavailable"
+                                                       : "Bad Request",
+                                           status, queue->host_allocator);
   }
+  iree_string_builder_reset(scratch);
+  status = iree_string_builder_append_format(
+      scratch,
+      "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+      "Connection: close\r\n\r\n{\"input_tokens\":%zu}",
+      queue->input_tokens);
   if (iree_status_is_ok(status)) {
     iree_status_t sent = loom_serve_http_connection_send(
         request.connection, iree_string_builder_view(scratch));

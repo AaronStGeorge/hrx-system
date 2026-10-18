@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/serve/service/text/input_count.h"
+
 #include "loom/serve/service/text/service_test_fixture.h"
 
 namespace {
@@ -263,6 +265,123 @@ TEST_F(InputCountTest, InvalidInputDoesNotPoisonTheModel) {
       Count(Request(Message("user", "abxa"))).find("{\"input_tokens\":4}"),
       std::string::npos);
   ExpectCold();
+}
+
+// Completion consumes a task's returned status after release. Exercise that
+// boundary with real transport claims and externally reported task failures.
+class InputCountOutcomeTest : public SourceTextServiceTest {
+ protected:
+  void SetUp() override {
+    ASSERT_NO_FATAL_FAILURE(SourceTextServiceTest::SetUp());
+    IREE_ASSERT_OK(loom_serve_text_telemetry_initialize(
+        nullptr, host_allocator_, &telemetry_));
+    IREE_ASSERT_OK(
+        loom_serve_text_input_count_initialize(2, host_allocator_, &queries_));
+    iree_string_builder_initialize(host_allocator_, &scratch_);
+  }
+
+  void TearDown() override {
+    loom_serve_text_input_count_cancel(&queries_, false, true, &telemetry_);
+    loom_serve_text_input_count_deinitialize(&queries_);
+    iree_string_builder_deinitialize(&scratch_);
+    loom_serve_telemetry_stream_free(telemetry_.stream);
+    SourceTextServiceTest::TearDown();
+  }
+
+  void Enqueue(int* out_client) {
+    *out_client = Send(Request(Message("user", "a")), "", kInputTokens);
+    loom_serve_http_connection_t* connection = nullptr;
+    const loom_serve_http_request_t* request = nullptr;
+    IREE_ASSERT_OK(http_.TakeRequest(*out_client, &connection, &request));
+    IREE_ASSERT_OK(loom_serve_text_input_count_enqueue(
+        &queries_, connection, request,
+        loom_serve_text_telemetry_begin(&telemetry_), &telemetry_));
+  }
+
+  // Real HTTP claims retained until their task outcomes are consumed.
+  loom_serve_text_input_count_t queries_ = {};
+  // Owner-only request accounting, independent of the unused model fixture.
+  loom_serve_text_telemetry_t telemetry_ = {};
+  // Response assembly backing retained through the test owner lifetime.
+  iree_string_builder_t scratch_ = {};
+};
+
+TEST_F(InputCountOutcomeTest, DisconnectCannotHideFatalSourceFailure) {
+  int client = -1;
+  ASSERT_NO_FATAL_FAILURE(Enqueue(&client));
+  const linger reset = {1, 0};
+  ASSERT_EQ(setsockopt(client, SOL_SOCKET, SO_LINGER, &reset, sizeof(reset)),
+            0);
+  ASSERT_EQ(close(client), 0);
+  ASSERT_TRUE(iree_notification_await(
+      loom_serve_http_server_notification(server_),
+      [](void* self) {
+        return loom_serve_http_connection_failed(
+            static_cast<loom_serve_http_connection_t*>(self));
+      },
+      queries_.requests[0].connection, iree_infinite_timeout()));
+  iree_status_t status = loom_serve_text_input_count_complete(
+      &queries_, false, iree_make_status(IREE_STATUS_INTERNAL, "source failed"),
+      &telemetry_, &scratch_);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INTERNAL);
+  iree_status_free(status);
+  EXPECT_EQ(queries_.count, 0u);
+  EXPECT_EQ(telemetry_.counters.failed, 1u);
+  EXPECT_EQ(telemetry_.counters.cancelled, 0u);
+}
+
+TEST_F(InputCountOutcomeTest, StopCannotHideFatalSourceFailure) {
+  int client = -1;
+  ASSERT_NO_FATAL_FAILURE(Enqueue(&client));
+  iree_status_t status = loom_serve_text_input_count_complete(
+      &queries_, true, iree_make_status(IREE_STATUS_INTERNAL, "source failed"),
+      &telemetry_, &scratch_);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INTERNAL);
+  iree_status_free(status);
+  EXPECT_TRUE(Read(client, true).empty());
+  EXPECT_EQ(telemetry_.counters.failed, 1u);
+  EXPECT_EQ(telemetry_.counters.cancelled, 0u);
+}
+
+TEST_F(InputCountOutcomeTest, ModelFailureAccountsBothBorrowedAndQueuedClaims) {
+  int first = -1, second = -1;
+  ASSERT_NO_FATAL_FAILURE(Enqueue(&first));
+  ASSERT_NO_FATAL_FAILURE(Enqueue(&second));
+  iree_status_t failure = iree_make_status(IREE_STATUS_UNAVAILABLE);
+  loom_serve_text_telemetry_fail(&telemetry_, failure);
+  iree_status_free(failure);
+  EXPECT_TRUE(
+      loom_serve_text_input_count_cancel(&queries_, true, true, &telemetry_));
+  EXPECT_EQ(queries_.count, 1u);
+  EXPECT_EQ(telemetry_.counters.failed, 1u);
+  IREE_ASSERT_OK(loom_serve_text_input_count_complete(
+      &queries_, true, iree_ok_status(), &telemetry_, &scratch_));
+  EXPECT_TRUE(Read(first, true).empty());
+  EXPECT_TRUE(Read(second, true).empty());
+  EXPECT_EQ(telemetry_.counters.failed, 2u);
+  EXPECT_EQ(telemetry_.counters.cancelled, 0u);
+  EXPECT_EQ(telemetry_.counters.input_tokens, 0u);
+}
+
+TEST_F(InputCountOutcomeTest, ValidationFailuresRemainRequestLocal) {
+  for (const auto code :
+       {IREE_STATUS_INVALID_ARGUMENT, IREE_STATUS_OUT_OF_RANGE,
+        IREE_STATUS_UNIMPLEMENTED, IREE_STATUS_RESOURCE_EXHAUSTED}) {
+    int client = -1;
+    ASSERT_NO_FATAL_FAILURE(Enqueue(&client));
+    IREE_ASSERT_OK(loom_serve_text_input_count_complete(
+        &queries_, false, iree_make_status(code), &telemetry_, &scratch_));
+    const auto response = Read(client);
+    EXPECT_EQ(response.find(code == IREE_STATUS_UNIMPLEMENTED ? "HTTP/1.1 501"
+                            : code == IREE_STATUS_RESOURCE_EXHAUSTED
+                                ? "HTTP/1.1 503"
+                                : "HTTP/1.1 400"),
+              0u)
+        << response;
+  }
+  EXPECT_EQ(telemetry_.counters.rejected, 4u);
+  EXPECT_EQ(telemetry_.counters.failed, 0u);
+  EXPECT_EQ(telemetry_.counters.cancelled, 0u);
 }
 
 }  // namespace

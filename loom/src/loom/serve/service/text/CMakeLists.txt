@@ -125,7 +125,9 @@ loom_cc_library(
     "input_count_test.cc"
     "source_lifecycle_test.cc"
   DEPS
+    ::input_count
     ::source_service_fixture
+    ::telemetry
     loom::serve::service::finite::component
     loom::serve::telemetry::latency
   TESTONLY
