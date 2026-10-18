@@ -36,8 +36,9 @@ typedef struct loom_serve_jit_compiler_t {
 typedef struct loom_serve_jit_job_t loom_serve_jit_job_t;
 typedef struct loom_serve_jit_request_t loom_serve_jit_request_t;
 
-// Loaded code shared by a cache entry and every compiled stage using it. Its
-// lifetime is independent of source keys, compiler diagnostics and the catalog.
+// Loaded code shared by a cache entry and every compiled stage using it.
+// Recorded consumers retain HAL objects independently; their lifetime also
+// protects the native key from cache trimming.
 typedef struct loom_serve_jit_executable_t {
   // Cache and stage ownership; recorded commands retain HAL objects directly.
   iree_atomic_ref_count_t ref_count;
@@ -376,11 +377,26 @@ loom_serve_jit_cache_storage_t loom_serve_jit_cache_storage(
   return storage;
 }
 
+static bool loom_serve_jit_executable_is_shared(
+    const loom_serve_jit_executable_t* executable) {
+  if (iree_atomic_ref_count_load(&executable->ref_count) != 1 ||
+      (executable->dispatch &&
+       loom_serve_dispatch_is_shared(executable->dispatch))) {
+    return true;
+  }
+  const iree_hal_resource_t* resource =
+      (const iree_hal_resource_t*)executable->handle;
+  // The cache owns one HAL reference and a direct descriptor owns another.
+  // Any remaining reference is a recorded command or accepted device work.
+  const int32_t owned_references = executable->dispatch ? 2 : 1;
+  return iree_atomic_ref_count_load(&resource->ref_count) != owned_references;
+}
+
 void loom_serve_jit_trim(loom_serve_jit_t* jit) {
   iree_host_size_t count = 0;
   for (iree_host_size_t i = 0; i < jit->natives.count; ++i) {
     loom_serve_jit_native_t* native = jit->natives.values[i];
-    if (iree_atomic_ref_count_load(&native->executable->ref_count) == 1) {
+    if (!loom_serve_jit_executable_is_shared(native->executable)) {
       loom_serve_jit_native_release(native, jit->host_allocator);
     } else {
       jit->natives.values[count++] = native;

@@ -7,7 +7,7 @@
 #include "loom/serve/runtime/execution/dispatch.h"
 
 struct loom_serve_dispatch_t {
-  // Shared ownership between the compiler stage and retained model module.
+  // Shared ownership between native cache entries and retained model modules.
   iree_atomic_ref_count_t ref_count;
   // Allocator owning this descriptor and its trailing argument map.
   iree_allocator_t host_allocator;
@@ -34,6 +34,10 @@ void loom_serve_dispatch_release(loom_serve_dispatch_t* dispatch) {
     iree_hal_executable_release(dispatch->executable);
     iree_allocator_free(dispatch->host_allocator, dispatch);
   }
+}
+
+bool loom_serve_dispatch_is_shared(const loom_serve_dispatch_t* dispatch) {
+  return iree_atomic_ref_count_load(&dispatch->ref_count) != 1;
 }
 
 iree_status_t loom_serve_dispatch_create(

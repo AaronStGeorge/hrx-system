@@ -29,6 +29,10 @@ iree_status_t loom_serve_dispatch_create(
 void loom_serve_dispatch_retain(loom_serve_dispatch_t* dispatch);
 void loom_serve_dispatch_release(loom_serve_dispatch_t* dispatch);
 
+// Whether another owner retains this descriptor. The caller holds a reference
+// and serializes new borrows; concurrent releases may delay collection only.
+bool loom_serve_dispatch_is_shared(const loom_serve_dispatch_t* dispatch);
+
 // Number of logical buffer arguments, in authored launch signature order.
 uint16_t loom_serve_dispatch_binding_count(
     const loom_serve_dispatch_t* dispatch);
