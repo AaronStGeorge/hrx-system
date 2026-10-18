@@ -116,6 +116,7 @@ loom_cc_library(
   NAME
     schedule
   HDRS
+    "completion_cost.h"
     "completion_demand.h"
     "dependency_incoming.h"
     "diagnostics.h"
@@ -130,6 +131,8 @@ loom_cc_library(
     "call_pressure.h"
     "candidate_policy.c"
     "candidate_policy.h"
+    "completion_cost.c"
+    "completion_cost.h"
     "completion_demand.c"
     "context.h"
     "dependency_incoming.c"
@@ -305,6 +308,20 @@ loom_cc_test(
     loom::ir
     loom::util::cfg_graph
     loom::util::segmented_storage
+)
+
+loom_cc_test(
+  NAME
+    completion_cost_test
+  SRCS
+    "completion_cost_test.cc"
+  DEPS
+    ::dependencies
+    ::dependency_index
+    ::schedule
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

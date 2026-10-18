@@ -333,8 +333,8 @@ typedef struct loom_low_schedule_build_state_t {
   loom_low_schedule_resource_calendar_t resource_calendar;
   // Earliest issue cycle allowed by each node's latency-bearing dependencies.
   uint32_t* node_ready_issue_cycles;
-  // Target-provided issue cost for completion waits required by each node.
-  uint16_t* node_completion_wait_cycles;
+  // Incremental completion-wait costs for resource-stall candidate scoring.
+  uint16_t* node_completion_cost_cycles;
   // Completion latency opened by counter-tracked memory-effect producers.
   uint16_t* node_opened_completion_latency_cycles;
   // Maximum same-block producer latency consumed by each node.
