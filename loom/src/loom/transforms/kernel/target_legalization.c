@@ -472,6 +472,10 @@ typedef struct loom_kernel_scan_state_t {
   loom_type_t logical_type;
   // Type carried through shuffle and combine operations.
   loom_type_t value_type;
+  // Native arithmetic packet shape, or zero when the complete carrier exists.
+  loom_vector_packet_shape_t packet_shape;
+  // Scoped scratch reused for the result packets of each arithmetic operation.
+  loom_value_id_t* packet_values;
   loom_type_t i1_type;
   loom_type_t i32_type;
   loom_type_t mask_type;
@@ -637,10 +641,70 @@ static iree_status_t loom_kernel_scan_build_logical_value(
   return iree_ok_status();
 }
 
+// Construct arithmetic in native carriers before scalar consumers can expand
+// an unsupported aggregate's producer graph. Participation and lane selection
+// remain shared by all packets, and slices consume already-captured SSA values.
+static iree_status_t loom_kernel_scan_build_packet_operation(
+    loom_kernel_scan_state_t* state, loom_value_id_t condition,
+    loom_value_id_t left, loom_value_id_t right, loom_value_id_t* out_value) {
+  const loom_vector_packet_shape_t* shape = &state->packet_shape;
+  iree_status_t status = iree_ok_status();
+  for (uint32_t i = 0; i < shape->chunk_count && iree_status_is_ok(status);
+       ++i) {
+    const int64_t offset = i * shape->chunk_lane_count;
+    const uint32_t lane_count =
+        iree_min(shape->chunk_lane_count, shape->lane_count - offset);
+    const loom_type_t packet_type =
+        loom_vector_packet_type(state->value_type, lane_count);
+    loom_op_t* left_slice = NULL;
+    status = loom_vector_slice_build(state->builder, left, NULL, 0, &offset, 1,
+                                     packet_type, state->location, &left_slice);
+    loom_op_t* right_slice = NULL;
+    if (iree_status_is_ok(status)) {
+      status =
+          loom_vector_slice_build(state->builder, right, NULL, 0, &offset, 1,
+                                  packet_type, state->location, &right_slice);
+    }
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    if (condition == LOOM_VALUE_ID_INVALID) {
+      status = loom_vector_combining_build(
+          state->builder, state->kind, /*fastmath_flags=*/0,
+          loom_vector_slice_result(left_slice),
+          loom_vector_slice_result(right_slice), packet_type, state->location,
+          &state->packet_values[i]);
+    } else {
+      loom_op_t* select = NULL;
+      status = loom_scf_select_build(state->builder, condition,
+                                     loom_vector_slice_result(left_slice),
+                                     loom_vector_slice_result(right_slice),
+                                     packet_type, state->location, &select);
+      if (iree_status_is_ok(status)) {
+        state->packet_values[i] = loom_scf_select_result(select);
+      }
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    loom_op_t* assembled = NULL;
+    status = loom_vector_concat_build(state->builder, 0, state->packet_values,
+                                      shape->chunk_count, state->value_type,
+                                      state->location, &assembled);
+    if (iree_status_is_ok(status)) {
+      *out_value = loom_vector_concat_result(assembled);
+    }
+  }
+  return status;
+}
+
 static iree_status_t loom_kernel_scan_build_select(
     loom_kernel_scan_state_t* state, loom_value_id_t condition,
     loom_value_id_t true_value, loom_value_id_t false_value, loom_type_t type,
     loom_value_id_t* out_value) {
+  if (state->packet_shape.chunk_count != 0 && loom_type_is_vector(type)) {
+    return loom_kernel_scan_build_packet_operation(state, condition, true_value,
+                                                   false_value, out_value);
+  }
   loom_op_t* select = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_select_build(state->builder, condition,
                                              true_value, false_value, type,
@@ -1007,6 +1071,10 @@ static iree_status_t loom_kernel_scan_build_combine(
         state->builder, state->kind, /*fastmath_flags=*/0, lhs, rhs,
         state->value_type, state->location, out_result);
   }
+  if (state->packet_shape.chunk_count != 0) {
+    return loom_kernel_scan_build_packet_operation(state, LOOM_VALUE_ID_INVALID,
+                                                   lhs, rhs, out_result);
+  }
   return loom_vector_combining_build(
       state->builder, state->kind, /*fastmath_flags=*/0, lhs, rhs,
       state->value_type, state->location, out_result);
@@ -1094,6 +1162,16 @@ static iree_status_t loom_kernel_scan_state_initialize(
       .direct_physical_lanes =
           loom_kernel_scan_has_direct_physical_lanes(context, op, cluster),
   };
+  loom_vector_packet_shape_t packet_shape;
+  if (context->vector_packet_policy != NULL &&
+      loom_vector_packet_shape_from_type(context, context->vector_packet_policy,
+                                         value_type, &packet_shape) &&
+      packet_shape.chunk_count <= UINT16_MAX) {
+    out_state->packet_shape = packet_shape;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        context->arena, packet_shape.chunk_count,
+        sizeof(*out_state->packet_values), (void**)&out_state->packet_values));
+  }
   if (out_state->direct_physical_lanes) {
     if (need_active_count) {
       IREE_RETURN_IF_ERROR(loom_kernel_scan_build_integer_constant(

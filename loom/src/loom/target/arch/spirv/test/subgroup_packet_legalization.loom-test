@@ -207,3 +207,70 @@ kernel.def @native_carriers() {
   test.use %single_result, %wide_result : f32, vector<4xf64>
   kernel.return
 }
+
+// ====
+
+// RUN: pass target=spirv:vulkan1.3+bda+subgroup32+reductions+hal target-legalize{mode=final},canonicalize,dce
+
+// A two-lane reverse scan requires one shared shuffle stage. Preserve packed
+// arithmetic through the scalar observer rather than replaying every lane.
+kernel.def @packet_reference_arithmetic() {
+  %unit = index.constant 1 : index
+  %width = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%output: buffer, %left: f32, %right: f32) {
+  %base = index.constant 0 : offset
+  %item = kernel.workitem.id<x> : index
+  %destination = buffer.view %output[%base] : buffer -> view<32x2xf32>
+  %values = vector.from_elements %left, %right, %left, %right, %left, %right : vector<6xf32>
+  %prefix = kernel.subgroup.scan<addf> %values {cluster_size = 2, direction = reverse, mode = inclusive} : vector<6xf32>
+  %head = vector.extract %prefix[3] : vector<6xf32> -> f32
+  %observed = vector.extract %prefix[5] : vector<6xf32> -> f32
+  view.store %head, %destination[%item, 0] : f32, view<32x2xf32>
+  view.store %observed, %destination[%item, 1] : f32, view<32x2xf32>
+  kernel.return
+}
+
+// ----
+kernel.def @packet_reference_arithmetic() {
+  %unit = index.constant 1 : index
+  %width = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%output: buffer, %left: f32, %right: f32) {
+  %base = index.constant 0 : offset
+  %item = kernel.workitem.id<x> : index
+  %destination = buffer.view %output[%base] : buffer -> view<32x2xf32>
+  %46 = scalar.constant 32 : i32
+  %90 = scalar.constant 1 : i32
+  %54 = kernel.subgroup.lane.id : index
+  %55 = index.cast %54 : index to i32
+  %88 = scalar.constant 1 : i32
+  %89 = scalar.shrui %55, %88 : i32
+  %58 = scalar.addi %55, %90 : i32
+  %86 = scalar.constant 1 : i32
+  %87 = scalar.shrui %58, %86 : i32
+  %60 = scalar.cmpi eq, %87, %89 : i32
+  %61 = scalar.cmpi ult, %58, %46 : i32
+  %63 = scalar.andi %60, %61 : i1
+  %64 = scf.select %63, %58, %55 : i32
+  %84 = scalar.constant 31 : i32
+  %85 = scalar.andi %64, %84 : i32
+  %83 = vector.from_elements %left, %right, %left, %right : vector<4xf32>
+  %70, %71 = kernel.subgroup.shuffle<index> %83, %85, %46 : vector<4xf32>, i32, i32
+  %82 = vector.from_elements %left, %right : vector<2xf32>
+  %73, %74 = kernel.subgroup.shuffle<index> %82, %85, %46 : vector<2xf32>, i32, i32
+  %68 = scalar.andi %63, %71 : i1
+  %38 = vector.from_elements %left, %right, %left, %right : vector<4xf32>
+  %18 = vector.addf %70, %38 : vector<4xf32>
+  %34 = vector.from_elements %left, %right : vector<2xf32>
+  %21 = vector.addf %73, %34 : vector<2xf32>
+  %33 = vector.from_elements %left, %right, %left, %right : vector<4xf32>
+  %25 = scf.select %68, %18, %33 : vector<4xf32>
+  %32 = vector.from_elements %left, %right : vector<2xf32>
+  %28 = scf.select %68, %21, %32 : vector<2xf32>
+  %head = vector.extract %25[3] : vector<4xf32> -> f32
+  %observed = vector.extract %28[1] : vector<2xf32> -> f32
+  view.store %head, %destination[%item, 0] : f32, view<32x2xf32>
+  view.store %observed, %destination[%item, 1] : f32, view<32x2xf32>
+  kernel.return
+}
