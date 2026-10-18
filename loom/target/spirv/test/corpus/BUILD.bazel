@@ -175,6 +175,7 @@ _ALL_PROFILE_XFAILS = {
     "kernel/subgroup/scan.loom:@subgroup_scan_exact_narrowing": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_float_extrema": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_i32": "TARGET/003",
+    "kernel/subgroup/scan.loom:@subgroup_scan_strided_sums": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_wide_extrema": "TARGET/003",
     "kernel/subgroup/scan.loom:@subgroup_scan_wide_sums": "TARGET/002",
     "kernel/subgroup/shuffle_dynamic.loom:@subgroup_shuffle_dynamic_down": "TARGET/003",

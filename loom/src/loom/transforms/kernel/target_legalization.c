@@ -476,7 +476,6 @@ typedef struct loom_kernel_scan_state_t {
   loom_vector_packet_shape_t packet_shape;
   // Scoped scratch reused for the result packets of each arithmetic operation.
   loom_value_id_t* packet_values;
-  loom_type_t i1_type;
   loom_type_t i32_type;
   loom_type_t mask_type;
   loom_combining_kind_t kind;
@@ -1025,10 +1024,13 @@ static iree_status_t loom_kernel_scan_build_source_rank(
   return iree_ok_status();
 }
 
-static iree_status_t loom_kernel_scan_build_shuffle(
+// A valid rank selects a set bit in cluster_active_mask. The straight-line
+// collective expansion preserves that participation, so callers need only
+// their rank predicate to discard an absent source; shuffle validity adds no
+// information. Direct physical-lane shuffles do not have this guarantee.
+static iree_status_t loom_kernel_scan_build_rank_shuffle(
     loom_kernel_scan_state_t* state, loom_value_id_t value,
-    loom_value_id_t source_rank, loom_value_id_t source_rank_valid,
-    loom_value_id_t* out_value, loom_value_id_t* out_valid) {
+    loom_value_id_t source_rank, loom_value_id_t* out_value) {
   loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_kernel_scan_build_physical_lane(state, source_rank, &source_lane));
@@ -1038,9 +1040,7 @@ static iree_status_t loom_kernel_scan_build_shuffle(
       source_lane, state->subgroup_size_i32, state->value_type, state->location,
       &shuffle_op));
   *out_value = loom_kernel_subgroup_shuffle_result(shuffle_op);
-  return loom_kernel_scan_build_and(
-      state, source_rank_valid, loom_kernel_subgroup_shuffle_valid(shuffle_op),
-      state->i1_type, out_valid);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_kernel_scan_build_direct_shuffle(
@@ -1152,7 +1152,6 @@ static iree_status_t loom_kernel_scan_state_initialize(
       .location = op->location,
       .logical_type = logical_type,
       .value_type = value_type,
-      .i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1),
       .i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32),
       .mask_type = loom_type_scalar(subgroup_size <= 32 ? LOOM_SCALAR_TYPE_I32
                                                         : LOOM_SCALAR_TYPE_I64),
@@ -1206,12 +1205,10 @@ static iree_status_t loom_kernel_scan_build_inclusive(
           state, accumulator, direction, distance, &peer, &peer_valid));
     } else {
       loom_value_id_t source_rank = LOOM_VALUE_ID_INVALID;
-      loom_value_id_t source_rank_valid = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_kernel_scan_build_source_rank(
-          state, direction, distance, &source_rank, &source_rank_valid));
-      IREE_RETURN_IF_ERROR(loom_kernel_scan_build_shuffle(
-          state, accumulator, source_rank, source_rank_valid, &peer,
-          &peer_valid));
+          state, direction, distance, &source_rank, &peer_valid));
+      IREE_RETURN_IF_ERROR(loom_kernel_scan_build_rank_shuffle(
+          state, accumulator, source_rank, &peer));
     }
     loom_value_id_t combined = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(
@@ -1284,19 +1281,14 @@ iree_status_t loom_kernel_target_legalize_subgroup_reduce(
         &shuffle_op));
     reduction = loom_kernel_subgroup_shuffle_result(shuffle_op);
   } else {
+    // The executing lane belongs to its cluster, so the last active rank
+    // exists.
     loom_op_t* last_rank_op = NULL;
     IREE_RETURN_IF_ERROR(loom_scalar_subi_build(
         state.builder, 0, state.cluster_active_count, state.one_mask,
         state.mask_type, state.location, &last_rank_op));
-    loom_op_t* valid_op = NULL;
-    IREE_RETURN_IF_ERROR(
-        loom_scalar_cmpi_build(state.builder, LOOM_SCALAR_CMPI_PREDICATE_UGT,
-                               state.cluster_active_count, state.zero_mask,
-                               state.location, &valid_op));
-    loom_value_id_t reduction_valid = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_kernel_scan_build_shuffle(
-        &state, inclusive, loom_scalar_subi_result(last_rank_op),
-        loom_scalar_cmpi_result(valid_op), &reduction, &reduction_valid));
+    IREE_RETURN_IF_ERROR(loom_kernel_scan_build_rank_shuffle(
+        &state, inclusive, loom_scalar_subi_result(last_rank_op), &reduction));
   }
 
   loom_value_id_t logical_reduction = LOOM_VALUE_ID_INVALID;
@@ -1366,12 +1358,10 @@ iree_status_t loom_kernel_target_legalize_subgroup_scan(
           &state, accumulator, direction, 1, &shifted, &shifted_valid));
     } else {
       loom_value_id_t source_rank = LOOM_VALUE_ID_INVALID;
-      loom_value_id_t source_rank_valid = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_kernel_scan_build_source_rank(
-          &state, direction, 1, &source_rank, &source_rank_valid));
-      IREE_RETURN_IF_ERROR(loom_kernel_scan_build_shuffle(
-          &state, accumulator, source_rank, source_rank_valid, &shifted,
-          &shifted_valid));
+          &state, direction, 1, &source_rank, &shifted_valid));
+      IREE_RETURN_IF_ERROR(loom_kernel_scan_build_rank_shuffle(
+          &state, accumulator, source_rank, &shifted));
     }
     loom_value_id_t seed = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_kernel_scan_build_seed(&state, &seed));
