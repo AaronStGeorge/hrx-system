@@ -694,6 +694,28 @@ loom_cc_test(
     }),
 )
 
+loom_cc_binary(
+    name = "stage_table_storage_benchmark",
+    testonly = True,
+    srcs = ["//loom/src/loom/serve/runtime/program:stage_table_storage_benchmark.cc"],
+    tags = ["manual"],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:amdgpu_hal",
+    ]),
+    deps = [
+        ":test_compiler",
+        ":test_device",
+        "//loom/src/loom/serve/runtime/device",
+        "//loom/src/loom/serve/runtime/parameter:bank",
+        "//loom/src/loom/serve/runtime/program:jit",
+        "//loom/src/loom/serve/runtime/program:stage_table",
+        "//loom/src/loom/serve/testing:compiler",
+        "//loom/src/loom/serve/testing:device",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+    ],
+)
+
 loom_cc_test(
     name = "retirement_test",
     srcs = ["//loom/src/loom/serve/runtime/execution:retirement_test.cc"],

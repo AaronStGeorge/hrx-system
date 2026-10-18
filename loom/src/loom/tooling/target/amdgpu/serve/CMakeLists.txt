@@ -939,6 +939,27 @@ loom_cc_test(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
+loom_cc_binary(
+  NAME
+    stage_table_storage_benchmark
+  SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/stage_table_storage_benchmark.cc"
+  DEPS
+    ::test_compiler
+    ::test_device
+    iree::base
+    iree::hal
+    loom::serve::runtime::device
+    loom::serve::runtime::parameter::bank
+    loom::serve::runtime::program::jit
+    loom::serve::runtime::program::stage_table
+    loom::serve::testing::compiler
+    loom::serve::testing::device
+  TESTONLY
+)
+endif()
+
 if(IREE_HAL_DRIVER_AMDGPU AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
 loom_cc_test(
   NAME
