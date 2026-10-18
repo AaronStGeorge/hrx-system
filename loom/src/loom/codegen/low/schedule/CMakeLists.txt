@@ -117,6 +117,7 @@ loom_cc_library(
     schedule
   HDRS
     "completion_demand.h"
+    "dependency_incoming.h"
     "diagnostics.h"
     "json.h"
     "run.h"
@@ -131,6 +132,7 @@ loom_cc_library(
     "candidate_policy.h"
     "completion_demand.c"
     "context.h"
+    "dependency_incoming.c"
     "descriptor_rows.c"
     "descriptor_rows.h"
     "diagnostics.c"

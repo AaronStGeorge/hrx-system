@@ -1457,9 +1457,14 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
   }
   iree_arena_deinitialize(&dependency_scratch_arena);
   IREE_RETURN_IF_ERROR(dependency_index_status);
+  if (state->pressure_limits.unspillable_completion_domain_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_low_schedule_dependency_incoming_index_initialize(
+        &state->dependency_index, state->nodes, state->scratch_arena,
+        &state->dependency_incoming_index));
+  }
   if (loom_low_schedule_strategy_uses_pressure(state->options->strategy)) {
     IREE_RETURN_IF_ERROR(loom_low_schedule_completion_demand_initialize(
-        &state->dependency_index, state->nodes,
+        &state->dependency_index, &state->dependency_incoming_index,
         state->pressure_limits.unspillable_completion_domain_count,
         state->scratch_arena, &pressure_state.unspillable_completion_demand));
     IREE_RETURN_IF_ERROR(loom_low_schedule_pressure_initialize_unlock_summaries(

@@ -15,6 +15,7 @@
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/memory_access.h"
 #include "loom/codegen/low/representation_binding.h"
+#include "loom/codegen/low/schedule/dependency_incoming.h"
 #include "loom/codegen/low/schedule/dependency_index.h"
 #include "loom/codegen/low/schedule/resource_calendar.h"
 #include "loom/codegen/low/schedule/setup_order.h"
@@ -308,6 +309,8 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t storage_relation_count;
   // Compact producer/consumer groups used by list scheduling.
   loom_low_schedule_dependency_index_t dependency_index;
+  // Same-block dependency groups indexed by consumer for reverse traversals.
+  loom_low_schedule_dependency_incoming_index_t dependency_incoming_index;
   // Node indices in final scheduled order.
   uint32_t* scheduled_node_indices;
   // Contiguous node groups sharing an abstract issue cycle.

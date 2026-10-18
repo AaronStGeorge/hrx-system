@@ -108,6 +108,7 @@ loom_cc_library(
         "candidate_policy.h",
         "completion_demand.c",
         "context.h",
+        "dependency_incoming.c",
         "descriptor_rows.c",
         "descriptor_rows.h",
         "diagnostics.c",
@@ -142,6 +143,7 @@ loom_cc_library(
     ],
     hdrs = [
         "completion_demand.h",
+        "dependency_incoming.h",
         "diagnostics.h",
         "json.h",
         "run.h",
