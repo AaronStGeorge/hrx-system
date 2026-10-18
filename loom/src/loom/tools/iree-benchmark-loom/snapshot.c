@@ -584,6 +584,22 @@ static iree_status_t iree_benchmark_loom_snapshot_append_repetition(
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("state"),
       iree_benchmark_loom_snapshot_result_state(event->benchmark_result)));
+  if (selection->case_plan != NULL &&
+      event->benchmark_result->has_sample_ordinal) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_fields_json(
+        event->candidate->module, selection->case_plan,
+        event->benchmark_result->sample_ordinal, &object));
+  }
+  if (event->benchmark_result->has_benchmark_sample_ordinal) {
+    IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+        &object, IREE_SV("benchmark_sample_index"),
+        event->benchmark_result->benchmark_sample_ordinal));
+  }
+  if (event->benchmark_result->has_scenario_coordinate) {
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_write_scenario_coordinate_fields_json(
+            event->benchmark_result->scenario_coordinate, &object));
+  }
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_evidence_fields_json(
       &selection->policy, event->benchmark_result,
       event->candidate->correctness_sample_count,

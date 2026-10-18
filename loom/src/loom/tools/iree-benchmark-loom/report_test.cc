@@ -231,6 +231,59 @@ TEST(BenchmarkReportTest, WritesScenarioResultCoordinate) {
   iree_string_builder_deinitialize(&builder);
 }
 
+TEST(BenchmarkReportTest, WritesScenarioRepetitionCoordinate) {
+  iree_benchmark_loom_run_identity_t run = {.run_id = IREE_SV("run")};
+  loom_module_t module = {};
+  loom_testbench_benchmark_plan_t benchmark_plan = {
+      .name = IREE_SV("scenario_throughput"),
+  };
+  loom_testbench_scenario_plan_t scenario_plan = {.name = IREE_SV("scenario")};
+  iree_benchmark_loom_selected_benchmark_t selection = {
+      .identity = {.candidate_id = IREE_SV("candidate")},
+      .benchmark_plan = &benchmark_plan,
+      .scenario_plan = &scenario_plan,
+      .policy =
+          {
+              .measure_kind = IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE,
+              .measure = IREE_SV("dispatch_complete"),
+          },
+  };
+  iree_benchmark_loom_dispatch_comparison_candidate_t candidate = {
+      .selection = &selection,
+      .module = &module,
+  };
+  iree_benchmark_loom_benchmark_result_t result = {
+      .executed = true,
+      .passed = true,
+      .has_benchmark_sample_ordinal = true,
+      .benchmark_sample_ordinal = 17,
+      .has_scenario_coordinate = true,
+      .scenario_coordinate = {2, 3, 5},
+      .samples_per_iteration = 1,
+  };
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(iree_benchmark_loom_append_benchmark_repetition_row(
+      &run, &candidate, &selection.identity, IREE_SV("group"), IREE_SV("ABABA"),
+      /*order_index=*/0, /*repetition_index=*/0, 'A',
+      /*profile_suppressed=*/true, &result, &builder));
+
+  const iree_string_view_t root =
+      ParseJsonDocument(iree_string_builder_view(&builder));
+  ExpectObjectValueEquals(root, IREE_SV("benchmark_sample_index"),
+                          IREE_SV("17"));
+  ExpectObjectValueEquals(root, IREE_SV("configuration_ordinal"), IREE_SV("2"));
+  ExpectObjectValueEquals(root, IREE_SV("trial_index"), IREE_SV("3"));
+  ExpectObjectValueEquals(root, IREE_SV("trial_ordinal"), IREE_SV("5"));
+  const iree_string_view_t benchmark_result =
+      LookupObject(root, IREE_SV("benchmark_result"));
+  ExpectObjectValueEquals(benchmark_result, IREE_SV("scenario"),
+                          IREE_SV("scenario"));
+
+  iree_string_builder_deinitialize(&builder);
+}
+
 TEST(BenchmarkReportTest, WritesStatusFieldJson) {
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
