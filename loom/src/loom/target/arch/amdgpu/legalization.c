@@ -388,6 +388,36 @@ static iree_status_t loom_amdgpu_legalize_vector_shuffle(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_legalize_masked_load(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (!loom_amdgpu_legalizer_descriptor_set_is_amdgpu(
+          context->descriptor_set)) {
+    return iree_ok_status();
+  }
+  const loom_type_t result_type =
+      loom_module_value_type(context->module, loom_op_const_results(op)[0]);
+  if (loom_type_rank(result_type) != 1 ||
+      !loom_target_legalization_has_source_vector_carrier(
+          context, result_type, loom_op_const_results(op)[0])) {
+    return iree_ok_status();
+  }
+  const loom_memory_access_t access =
+      loom_memory_access_cast(context->module, op);
+  loom_value_id_t condition = LOOM_VALUE_ID_INVALID;
+  if (loom_value_fact_table_query_uniform_element_origin(
+          context->fact_table, context->module, loom_memory_access_mask(access),
+          &condition)) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_DEFER;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_legalize_vector_load(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -1150,6 +1180,10 @@ static const loom_target_legalizer_rule_t kAmdgpuLegalizerRules[] = {
     {
         .root_kind = LOOM_OP_VECTOR_LOAD,
         .legalize = loom_amdgpu_legalize_vector_load,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_LOAD_MASK,
+        .legalize = loom_amdgpu_legalize_masked_load,
     },
     {
         .root_kind = LOOM_OP_VECTOR_STORE,

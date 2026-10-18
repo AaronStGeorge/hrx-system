@@ -298,7 +298,8 @@ static_assert(
 
 #define LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(                           \
     domain, address_form, kind, packet_byte_count, payload_register_class, \
-    payload_format, payload_register_count, descriptor_ref_value)          \
+    payload_format, payload_register_count, descriptor_ref_value,          \
+    preserving_ref)                                                        \
   {                                                                        \
       .key = LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KEY(                  \
           domain, address_form,                                            \
@@ -306,6 +307,7 @@ static_assert(
           (packet_byte_count), payload_register_class, payload_format,     \
           (payload_register_count)),                                       \
       .descriptor_ref = descriptor_ref_value,                              \
+      .preserving_descriptor_ref = preserving_ref,                         \
   },
 
 #define LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_RANGE(                     \
@@ -352,6 +354,9 @@ typedef struct loom_amdgpu_memory_descriptor_candidate_t {
   loom_amdgpu_memory_descriptor_candidate_key_t key;
   // Stable descriptor ref selected when present in the descriptor set.
   loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // Tied load form, or NONE for scalar memory and stores. Fits existing
+  // padding.
+  loom_amdgpu_descriptor_ref_t preserving_descriptor_ref;
 } loom_amdgpu_memory_descriptor_candidate_t;
 static_assert(sizeof(loom_amdgpu_memory_descriptor_candidate_t) == 8,
               "memory descriptor candidate rows must stay compact");
@@ -414,7 +419,7 @@ static bool loom_amdgpu_select_memory_descriptor_candidate(
     loom_low_source_memory_operation_kind_t kind, uint32_t packet_byte_count,
     loom_amdgpu_memory_payload_register_class_t payload_register_class,
     loom_amdgpu_memory_payload_format_t payload_format,
-    uint32_t payload_register_count,
+    uint32_t payload_register_count, bool preserve_inactive,
     const loom_low_descriptor_t** out_descriptor,
     uint32_t* out_descriptor_ordinal) {
   *out_descriptor = NULL;
@@ -439,7 +444,8 @@ static bool loom_amdgpu_select_memory_descriptor_candidate(
     const loom_amdgpu_memory_descriptor_candidate_t* candidate =
         &kAmdgpuMemoryDescriptorCandidates[i];
     const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
-        descriptor_set, candidate->descriptor_ref);
+        descriptor_set, preserve_inactive ? candidate->preserving_descriptor_ref
+                                          : candidate->descriptor_ref);
     if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
       continue;
     }
@@ -465,7 +471,8 @@ static bool loom_amdgpu_select_buffer_memory_descriptor(
       descriptor_set, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
       address_form, kind, access->packet_byte_count,
       access->payload_register_class, access->payload_format,
-      access->payload_register_count, out_descriptor, out_descriptor_ordinal);
+      access->payload_register_count, access->preserve_inactive, out_descriptor,
+      out_descriptor_ordinal);
 }
 
 static bool loom_amdgpu_select_global_saddr_memory_descriptor(
@@ -478,8 +485,8 @@ static bool loom_amdgpu_select_global_saddr_memory_descriptor(
       descriptor_set, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
       LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR, kind,
       access->packet_byte_count, access->payload_register_class,
-      access->payload_format, access->payload_register_count, out_descriptor,
-      out_descriptor_ordinal);
+      access->payload_format, access->payload_register_count,
+      access->preserve_inactive, out_descriptor, out_descriptor_ordinal);
 }
 
 static bool loom_amdgpu_select_global_smem_memory_descriptor(
@@ -492,8 +499,8 @@ static bool loom_amdgpu_select_global_smem_memory_descriptor(
       descriptor_set, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SMEM,
       LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM, kind,
       access->packet_byte_count, access->payload_register_class,
-      access->payload_format, access->payload_register_count, out_descriptor,
-      out_descriptor_ordinal);
+      access->payload_format, access->payload_register_count,
+      access->preserve_inactive, out_descriptor, out_descriptor_ordinal);
 }
 
 static bool loom_amdgpu_select_flat_memory_descriptor(
@@ -509,8 +516,8 @@ static bool loom_amdgpu_select_flat_memory_descriptor(
   return loom_amdgpu_select_memory_descriptor_candidate(
       descriptor_set, domain, LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT, kind,
       access->packet_byte_count, access->payload_register_class,
-      access->payload_format, access->payload_register_count, out_descriptor,
-      out_descriptor_ordinal);
+      access->payload_format, access->payload_register_count,
+      access->preserve_inactive, out_descriptor, out_descriptor_ordinal);
 }
 
 static bool loom_amdgpu_select_scratch_memory_descriptor(
@@ -523,8 +530,8 @@ static bool loom_amdgpu_select_scratch_memory_descriptor(
       descriptor_set, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_SCRATCH,
       LOOM_AMDGPU_MEMORY_ADDRESS_FORM_SCRATCH_VADDR, kind,
       access->packet_byte_count, access->payload_register_class,
-      access->payload_format, access->payload_register_count, out_descriptor,
-      out_descriptor_ordinal);
+      access->payload_format, access->payload_register_count,
+      access->preserve_inactive, out_descriptor, out_descriptor_ordinal);
 }
 
 static bool loom_amdgpu_select_ds_memory_descriptor(
@@ -537,7 +544,8 @@ static bool loom_amdgpu_select_ds_memory_descriptor(
       descriptor_set, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
       LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT, kind, access->packet_byte_count,
       access->payload_register_class, access->payload_format,
-      access->payload_register_count, out_descriptor, out_descriptor_ordinal);
+      access->payload_register_count, access->preserve_inactive, out_descriptor,
+      out_descriptor_ordinal);
 }
 
 static bool loom_amdgpu_select_memory_descriptor(
@@ -1071,7 +1079,9 @@ static bool loom_amdgpu_select_ds2_memory_descriptor(
     const loom_amdgpu_memory_descriptor_candidate_t* candidate =
         &kAmdgpuMemoryDescriptorCandidates[i];
     const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
-        descriptor_set, candidate->descriptor_ref);
+        descriptor_set, access->preserve_inactive
+                            ? candidate->preserving_descriptor_ref
+                            : candidate->descriptor_ref);
     if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
       continue;
     }
@@ -1137,8 +1147,8 @@ static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
           descriptor_set, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
           LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID, kind,
           access->packet_byte_count, access->payload_register_class,
-          access->payload_format, access->payload_register_count, &descriptor,
-          &descriptor_ordinal)) {
+          access->payload_format, access->payload_register_count,
+          access->preserve_inactive, &descriptor, &descriptor_ordinal)) {
     return false;
   }
   loom_amdgpu_descriptor_offset_immediate_info_t offset_info;
@@ -1234,8 +1244,8 @@ iree_string_view_t loom_amdgpu_memory_ds_addtid_reason_key(
           descriptor_set, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
           LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID, kind,
           access->packet_byte_count, access->payload_register_class,
-          access->payload_format, access->payload_register_count, &descriptor,
-          &descriptor_ordinal)) {
+          access->payload_format, access->payload_register_count,
+          access->preserve_inactive, &descriptor, &descriptor_ordinal)) {
     return IREE_SV("descriptor_missing");
   }
   loom_amdgpu_descriptor_offset_immediate_info_t offset_info;
@@ -1720,7 +1730,8 @@ loom_amdgpu_memory_address_attempt_apply(
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_GLOBAL_SMEM:
-      if (!allow_global_smem || selection_context->root_prefers_vgpr) {
+      if (!allow_global_smem || access->preserve_inactive ||
+          selection_context->root_prefers_vgpr) {
         return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
       }
       if (!loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {

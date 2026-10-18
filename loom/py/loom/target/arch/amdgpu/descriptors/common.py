@@ -873,6 +873,8 @@ class AmdgpuMemoryDescriptorCandidate:
     payload_format: AmdgpuMemoryPayloadFormat
     payload_register_count: int
     descriptor_key: str
+    # Tied destination form for lane-predicated loads; absent for stores/SMEM.
+    preserving_descriptor_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
