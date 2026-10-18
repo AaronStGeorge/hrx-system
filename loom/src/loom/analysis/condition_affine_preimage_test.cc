@@ -459,24 +459,27 @@ TEST_F(ConditionAffinePreimageTest, OffsetPreimagesRespectTargetCarrier) {
     loom_target_facts_t target_facts = {};
     target_facts.storage.snapshot.offset_bitwidth = carrier_width;
     fact_table_.context.target_facts = &target_facts;
-    const loom_value_id_t dynamic = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
-    const loom_value_id_t constant = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
-    const loom_value_id_t bound = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
-    DefineFacts(dynamic, loom_value_facts_make(0, 24, 1));
-    DefineFacts(constant, loom_value_facts_exact_i64(25));
-    DefineFacts(bound, loom_value_facts_exact_i64(40));
-    loom_op_t* add = nullptr;
-    IREE_ASSERT_OK(loom_index_add_build(&builder_, dynamic, constant, type,
-                                        LOOM_LOCATION_UNKNOWN, &add));
-    IREE_ASSERT_OK(
-        loom_value_fact_table_compute_op(&fact_table_, module_, add));
-    const loom_op_t* compare = BuildIndexCompare(
-        LOOM_INDEX_CMP_PREDICATE_ULT, loom_index_add_result(add), bound);
+    for (bool dynamic_rhs : {false, true}) {
+      const loom_value_id_t dynamic = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
+      const loom_value_id_t constant = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
+      const loom_value_id_t bound = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
+      DefineFacts(dynamic, loom_value_facts_make(0, 24, 1));
+      DefineFacts(constant, loom_value_facts_exact_i64(25));
+      DefineFacts(bound, loom_value_facts_exact_i64(40));
+      loom_op_t* add = nullptr;
+      IREE_ASSERT_OK(loom_index_add_build(
+          &builder_, dynamic_rhs ? constant : dynamic,
+          dynamic_rhs ? dynamic : constant, type, LOOM_LOCATION_UNKNOWN, &add));
+      IREE_ASSERT_OK(
+          loom_value_fact_table_compute_op(&fact_table_, module_, add));
+      const loom_op_t* compare = BuildIndexCompare(
+          LOOM_INDEX_CMP_PREDICATE_ULT, loom_index_add_result(add), bound);
 
-    Query(loom_index_cmp_result(compare));
-    const auto facts = Apply(dynamic);
-    EXPECT_EQ(facts.range_lo, 0);
-    EXPECT_EQ(facts.range_hi, 14);
+      Query(loom_index_cmp_result(compare));
+      const auto facts = Apply(dynamic);
+      EXPECT_EQ(facts.range_lo, 0);
+      EXPECT_EQ(facts.range_hi, 14);
+    }
 
     const loom_value_id_t dynamic_lhs = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
     const loom_value_id_t constant_rhs = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
@@ -491,13 +494,32 @@ TEST_F(ConditionAffinePreimageTest, OffsetPreimagesRespectTargetCarrier) {
                                         &subtract));
     IREE_ASSERT_OK(
         loom_value_fact_table_compute_op(&fact_table_, module_, subtract));
-    compare =
+    const loom_op_t* compare =
         BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_ULT,
                           loom_index_sub_result(subtract), difference_bound);
     Query(loom_index_cmp_result(compare));
     const auto lhs_facts = Apply(dynamic_lhs);
     EXPECT_EQ(lhs_facts.range_lo, 25);
     EXPECT_EQ(lhs_facts.range_hi, 39);
+
+    const loom_value_id_t constant_lhs = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
+    const loom_value_id_t dynamic_rhs = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
+    const loom_value_id_t rhs_bound = DefineValue(LOOM_SCALAR_TYPE_OFFSET);
+    DefineFacts(constant_lhs, loom_value_facts_exact_i64(39));
+    DefineFacts(dynamic_rhs, loom_value_facts_make(0, 24, 1));
+    DefineFacts(rhs_bound, loom_value_facts_exact_i64(30));
+    subtract = nullptr;
+    IREE_ASSERT_OK(loom_index_sub_build(&builder_, constant_lhs, dynamic_rhs,
+                                        type, LOOM_LOCATION_UNKNOWN,
+                                        &subtract));
+    IREE_ASSERT_OK(
+        loom_value_fact_table_compute_op(&fact_table_, module_, subtract));
+    compare = BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_ULT,
+                                loom_index_sub_result(subtract), rhs_bound);
+    Query(loom_index_cmp_result(compare));
+    const auto rhs_facts = Apply(dynamic_rhs);
+    EXPECT_EQ(rhs_facts.range_lo, 10);
+    EXPECT_EQ(rhs_facts.range_hi, 24);
   }
 
   loom_target_facts_t target_facts = {};
