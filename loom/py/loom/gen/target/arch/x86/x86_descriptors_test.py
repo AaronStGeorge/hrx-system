@@ -18,6 +18,9 @@ from loom.gen.target.low import compiler
 from loom.target.arch.x86 import descriptors as x86_descriptor_data
 from loom.target.arch.x86 import native_vector
 from loom.target.arch.x86.descriptors.encoding import Flag, Form, encoding
+from loom.target.arch.x86.descriptors.integer_bits import (
+    X86_SCALAR_NATIVE_COUNT_DESCRIPTORS,
+)
 from loom.target.arch.x86.feature_bits import FEATURE_BMI2
 from loom.target.arch.x86.scalar_families import (
     X86_SCALAR_READ_MEMORY_FAMILIES,
@@ -161,6 +164,7 @@ def test_scalar_speculation_facts_cover_total_integer_forms() -> None:
         Form.SHIFT_IMMEDIATE,
         Form.SHIFT_COUNT,
         Form.UNARY_R_RM,
+        Form.UNARY_F3_R_RM,
         Form.SELECT,
         Form.SUBTRACT_IF_UGE,
         Form.COMPARE,
@@ -237,6 +241,33 @@ def test_bmi2_variable_shifts_are_one_feature_qualified_physical_family() -> Non
         feature_views,
     )
     assert {key: sum(descriptor.key == key for descriptor in storage.descriptors) for key in expected_keys} == dict.fromkeys(expected_keys, 1)
+
+
+def test_native_counts_are_one_feature_qualified_physical_family() -> None:
+    expected = {descriptor.key: descriptor.feature_mask_words for descriptor in X86_SCALAR_NATIVE_COUNT_DESCRIPTORS}
+    assert len(expected) == 9
+
+    feature_views = (
+        x86_descriptor_data.X86_SCALAR_DESCRIPTOR_SET,
+        x86_descriptor_data.X86_AVX2_FEATURES_DESCRIPTOR_SET,
+        x86_descriptor_data.X86_AVX512_FEATURES_DESCRIPTOR_SET,
+    )
+    core_views = (
+        x86_descriptor_data.X86_SIMD128_DESCRIPTOR_SET,
+        x86_descriptor_data.X86_AVX2_DESCRIPTOR_SET,
+        x86_descriptor_data.X86_AVX512_CORE_DESCRIPTOR_SET,
+    )
+    for descriptor_set in feature_views:
+        actual = {descriptor.key: descriptor.feature_mask_words for descriptor in descriptor_set.descriptors if descriptor.key in expected}
+        assert actual == expected
+    for descriptor_set in core_views:
+        assert expected.keys().isdisjoint(descriptor.key for descriptor in descriptor_set.descriptors)
+
+    storage = x86_descriptors._shared_storage_descriptor_set(
+        x86_descriptor_data.X86_AVX512_FEATURES_DESCRIPTOR_SET,
+        feature_views,
+    )
+    assert {key: sum(descriptor.key == key for descriptor in storage.descriptors) for key in expected} == dict.fromkeys(expected, 1)
 
 
 def test_native_facts_cover_core_profiles() -> None:

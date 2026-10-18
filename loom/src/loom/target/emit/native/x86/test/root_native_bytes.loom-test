@@ -148,3 +148,51 @@ low.func.def target<x86.avx512_features.core>(@target) @fp16_zmm(%input: reg<x86
 
 // ----
 code: 62 f5 7c 48 51 c0 62 f6 7d 48 4e c0 c3
+
+// ====
+
+// RUN: emit x86-native-bytes @native_counts_i16 fixed=%input:physical_register:7:1 fixed=%leading:physical_register:9:1 fixed=%trailing:physical_register:10:1 fixed=%population:physical_register:0:1
+x86.target<scalar> @target {features = [bmi, popcnt, lzcnt]}
+
+low.func.def target<x86.scalar.core>(@target) @native_counts_i16() -> (reg<x86.gpr32>) asm {
+  %input = mov.imm32 65535
+  %leading = lzcnt.gpr16 %input
+  %trailing = tzcnt.gpr16 %leading
+  %population = popcnt.gpr16 %trailing
+  return %population
+}
+
+// ----
+code: bf ff ff 00 00 f3 66 44 0f bd cf f3 66 45 0f bc d1 f3 66 41 0f b8 c2 c3
+
+// ====
+
+// RUN: emit x86-native-bytes @native_counts_i32 fixed=%input:physical_register:7:1 fixed=%leading:physical_register:9:1 fixed=%trailing:physical_register:10:1 fixed=%population:physical_register:0:1
+x86.target<scalar> @target {features = [bmi, popcnt, lzcnt]}
+
+low.func.def target<x86.scalar.core>(@target) @native_counts_i32() -> (reg<x86.gpr32>) asm {
+  %input = mov.imm32 2147483647
+  %leading = lzcnt.gpr32 %input
+  %trailing = tzcnt.gpr32 %leading
+  %population = popcnt.gpr32 %trailing
+  return %population
+}
+
+// ----
+code: bf ff ff ff 7f f3 44 0f bd cf f3 45 0f bc d1 f3 41 0f b8 c2 c3
+
+// ====
+
+// RUN: emit x86-native-bytes @native_counts_i64 fixed=%input:physical_register:7:1 fixed=%leading:physical_register:9:1 fixed=%trailing:physical_register:10:1 fixed=%population:physical_register:0:1
+x86.target<scalar> @target {features = [bmi, popcnt, lzcnt]}
+
+low.func.def target<x86.scalar.core>(@target) @native_counts_i64() -> (reg<x86.gpr64>) asm {
+  %input = mov.imm64 42
+  %leading = lzcnt.gpr64 %input
+  %trailing = tzcnt.gpr64 %leading
+  %population = popcnt.gpr64 %trailing
+  return %population
+}
+
+// ----
+code: bf 2a 00 00 00 f3 4c 0f bd cf f3 4d 0f bc d1 f3 49 0f b8 c2 c3

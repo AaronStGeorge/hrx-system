@@ -91,6 +91,8 @@ IREE_CPU_FEATURE_BIT(X86_64, 0, 4, SSE4A, "sse4a")
 // Scalar integer features.
 IREE_CPU_FEATURE_BIT(X86_64, 0, 5, BMI, "bmi")
 IREE_CPU_FEATURE_BIT(X86_64, 0, 6, BMI2, "bmi2")
+IREE_CPU_FEATURE_BIT(X86_64, 0, 7, POPCNT, "popcnt")
+IREE_CPU_FEATURE_BIT(X86_64, 0, 8, LZCNT, "lzcnt")
 
 // AVX features.
 IREE_CPU_FEATURE_BIT(X86_64, 0, 10, AVX, "avx")

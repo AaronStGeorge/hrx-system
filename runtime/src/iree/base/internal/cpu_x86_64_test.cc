@@ -16,7 +16,8 @@ constexpr uint64_t kSseFeatures =
     IREE_CPU_DATA0_X86_64_SSE41 | IREE_CPU_DATA0_X86_64_SSE42 |
     IREE_CPU_DATA0_X86_64_SSE4A;
 constexpr uint64_t kScalarFeatures =
-    kSseFeatures | IREE_CPU_DATA0_X86_64_BMI | IREE_CPU_DATA0_X86_64_BMI2;
+    kSseFeatures | IREE_CPU_DATA0_X86_64_BMI | IREE_CPU_DATA0_X86_64_BMI2 |
+    IREE_CPU_DATA0_X86_64_POPCNT | IREE_CPU_DATA0_X86_64_LZCNT;
 constexpr uint64_t kAvxFeatures =
     IREE_CPU_DATA0_X86_64_AVX | IREE_CPU_DATA0_X86_64_FMA |
     IREE_CPU_DATA0_X86_64_FMA4 | IREE_CPU_DATA0_X86_64_XOP |
@@ -39,8 +40,8 @@ constexpr uint64_t kAmxFeatures = IREE_CPU_DATA0_X86_64_AMXTILE |
 iree_cpu_x86_64_capabilities_t InstructionCapabilities() {
   iree_cpu_x86_64_capabilities_t capabilities = {};
   capabilities.leaf1.ecx = (1u << 0) | (1u << 9) | (1u << 12) | (1u << 19) |
-                           (1u << 20) | (1u << 26) | (1u << 27) | (1u << 28) |
-                           (1u << 29);
+                           (1u << 20) | (1u << 23) | (1u << 26) | (1u << 27) |
+                           (1u << 28) | (1u << 29);
   capabilities.leaf7_0.ebx = (1u << 3) | (1u << 5) | (1u << 8) | (1u << 16) |
                              (1u << 17) | (1u << 21) | (1u << 28) | (1u << 30) |
                              (1u << 31);
@@ -49,7 +50,8 @@ iree_cpu_x86_64_capabilities_t InstructionCapabilities() {
   capabilities.leaf7_0.edx = (1u << 22) | (1u << 23) | (1u << 24) | (1u << 25);
   capabilities.leaf7_1.eax = (1u << 4) | (1u << 5);
   capabilities.leaf7_1.edx = (1u << 4) | (1u << 5) | (1u << 10);
-  capabilities.extended_leaf1.ecx = (1u << 6) | (1u << 11) | (1u << 16);
+  capabilities.extended_leaf1.ecx =
+      (1u << 5) | (1u << 6) | (1u << 11) | (1u << 16);
   return capabilities;
 }
 
@@ -67,13 +69,25 @@ TEST(CpuX86_64Test, InstructionSupportDoesNotEnableOsState) {
 }
 
 TEST(CpuX86_64Test, ScalarInstructionFeaturesRemainIndependent) {
-  iree_cpu_x86_64_capabilities_t capabilities = {};
-  capabilities.leaf7_0.ebx = 1u << 3;
-  EXPECT_EQ(iree_cpu_x86_64_decode_features(&capabilities),
-            IREE_CPU_DATA0_X86_64_BMI);
-  capabilities.leaf7_0.ebx = 1u << 8;
-  EXPECT_EQ(iree_cpu_x86_64_decode_features(&capabilities),
-            IREE_CPU_DATA0_X86_64_BMI2);
+  const struct {
+    uint32_t leaf1_ecx;
+    uint32_t leaf7_0_ebx;
+    uint32_t extended_leaf1_ecx;
+    uint64_t expected;
+  } cases[] = {
+      {.leaf7_0_ebx = 1u << 3, .expected = IREE_CPU_DATA0_X86_64_BMI},
+      {.leaf7_0_ebx = 1u << 8, .expected = IREE_CPU_DATA0_X86_64_BMI2},
+      {.leaf1_ecx = 1u << 23, .expected = IREE_CPU_DATA0_X86_64_POPCNT},
+      {.extended_leaf1_ecx = 1u << 5, .expected = IREE_CPU_DATA0_X86_64_LZCNT},
+  };
+  for (const auto& test_case : cases) {
+    iree_cpu_x86_64_capabilities_t capabilities = {};
+    capabilities.leaf1.ecx = test_case.leaf1_ecx;
+    capabilities.leaf7_0.ebx = test_case.leaf7_0_ebx;
+    capabilities.extended_leaf1.ecx = test_case.extended_leaf1_ecx;
+    EXPECT_EQ(iree_cpu_x86_64_decode_features(&capabilities),
+              test_case.expected);
+  }
 }
 
 TEST(CpuX86_64Test, XsaveAndOsxsaveAreRequired) {
@@ -176,6 +190,13 @@ TEST(CpuX86_64Test, HostQueryMatchesCompilerCapabilities) {
             __builtin_cpu_supports("bmi") != 0);
   EXPECT_EQ((cpu_data.fields[0] & IREE_CPU_DATA0_X86_64_BMI2) != 0,
             __builtin_cpu_supports("bmi2") != 0);
+  EXPECT_EQ((cpu_data.fields[0] & IREE_CPU_DATA0_X86_64_POPCNT) != 0,
+            __builtin_cpu_supports("popcnt") != 0);
+#if !defined(__clang__) || __clang_major__ >= 19
+  // Clang added LZCNT to its runtime feature mask in version 19.
+  EXPECT_EQ((cpu_data.fields[0] & IREE_CPU_DATA0_X86_64_LZCNT) != 0,
+            __builtin_cpu_supports("lzcnt") != 0);
+#endif  // !__clang__ || __clang_major__ >= 19
   EXPECT_EQ((cpu_data.fields[0] & IREE_CPU_DATA0_X86_64_AVX) != 0,
             __builtin_cpu_supports("avx") != 0);
   EXPECT_EQ((cpu_data.fields[0] & IREE_CPU_DATA0_X86_64_AVX2) != 0,

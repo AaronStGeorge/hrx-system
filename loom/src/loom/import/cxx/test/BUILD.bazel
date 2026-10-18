@@ -326,10 +326,16 @@ loom_test(
     target_compatible_with = _HOST_COMPATIBILITY,
 )
 
+loom_test_module(
+    name = "integer_intrinsics_module",
+    srcs = ["integer_intrinsics.cxx"],
+    target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+)
+
 loom_test(
     name = "integer_intrinsics_test",
-    srcs = ["integer_intrinsics.cxx"],
     execution_profiles = [VM_REFERENCE_PROFILE],
+    module = ":integer_intrinsics_module",
     target_compatible_with = _HOST_COMPATIBILITY,
 )
 

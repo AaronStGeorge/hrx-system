@@ -25,8 +25,11 @@ from loom.target.arch.x86.feature_bits import (
     FEATURE_AVX_VNNI,
     FEATURE_AVX_VNNI_INT8,
     FEATURE_AVX_VNNI_INT16,
+    FEATURE_BMI,
     FEATURE_BMI2,
     FEATURE_F16C,
+    FEATURE_LZCNT,
+    FEATURE_POPCNT,
     X86_KNOWN_FEATURE_BITS,
 )
 
@@ -53,6 +56,10 @@ X86_FEATURE_PROFILE_AVX_VNNI = "avx_vnni"
 X86_FEATURE_PROFILE_AVX_VNNI_INT8 = "avx_vnni_int8"
 X86_FEATURE_PROFILE_AVX_VNNI_INT16 = "avx_vnni_int16"
 X86_FEATURE_PROFILE_AVX10_2 = "avx10_2"
+
+_X86_NATIVE_SCALAR_FEATURE_BITS = (
+    FEATURE_BMI | FEATURE_BMI2 | FEATURE_POPCNT | FEATURE_LZCNT
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,7 +240,7 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         register_classes=_with_base_registers(),
         native_bundle_key="x86-scalar",
         feature_contract_set_key="x86.scalar.core",
-        supported_feature_bits=FEATURE_BMI2,
+        supported_feature_bits=_X86_NATIVE_SCALAR_FEATURE_BITS,
         automatic_priority=1,
     ),
     X86TargetProfileInfo(
@@ -258,7 +265,7 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
             | FEATURE_AVX_VNNI_INT16
             | FEATURE_AVX_NE_CONVERT
             | FEATURE_F16C
-            | FEATURE_BMI2
+            | _X86_NATIVE_SCALAR_FEATURE_BITS
         ),
         required_cpu_features=("AVX", "FMA", "AVX2"),
         automatic_priority=3,

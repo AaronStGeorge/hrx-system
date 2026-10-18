@@ -98,4 +98,25 @@ X86_FEATURE_INFOS: tuple[X86FeatureInfo, ...] = (
         "BMI2",
         "BMI2 scalar bit manipulation instructions.",
     ),
+    X86FeatureInfo(
+        "bmi",
+        "BMI",
+        "LOOM_X86_FEATURE_BMI",
+        "BMI",
+        "BMI1 scalar bit manipulation instructions.",
+    ),
+    X86FeatureInfo(
+        "popcnt",
+        "POPCNT",
+        "LOOM_X86_FEATURE_POPCNT",
+        "POPCNT",
+        "Scalar population-count instructions.",
+    ),
+    X86FeatureInfo(
+        "lzcnt",
+        "LZCNT",
+        "LOOM_X86_FEATURE_LZCNT",
+        "LZCNT",
+        "Scalar leading-zero-count instructions.",
+    ),
 )
