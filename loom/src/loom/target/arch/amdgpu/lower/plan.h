@@ -307,10 +307,13 @@ enum loom_amdgpu_bf16_pack_kind_e {
   LOOM_AMDGPU_BF16_PACK_KIND_NATIVE = 1,
   // Pack the upper F32 bits after proving every lane exactly representable.
   LOOM_AMDGPU_BF16_PACK_KIND_EXACT = 2,
+  // Gather the upper F32 bytes with one byte-permutation packet after proving
+  // every lane exactly representable.
+  LOOM_AMDGPU_BF16_PACK_KIND_EXACT_PERMUTE = 3,
   // Round through integer packets after proving inputs are not NaNs.
-  LOOM_AMDGPU_BF16_PACK_KIND_ROUND_NOT_NAN = 3,
+  LOOM_AMDGPU_BF16_PACK_KIND_ROUND_NOT_NAN = 4,
   // Round through integer packets with NaN payload repair.
-  LOOM_AMDGPU_BF16_PACK_KIND_ROUND_PRESERVE_NAN = 4,
+  LOOM_AMDGPU_BF16_PACK_KIND_ROUND_PRESERVE_NAN = 5,
 };
 
 typedef uint8_t loom_amdgpu_f16_pack_kind_t;

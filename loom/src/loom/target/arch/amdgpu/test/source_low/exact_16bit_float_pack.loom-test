@@ -16,6 +16,30 @@ low.func.def target<amdgpu.rdna3.core>(@target) abi(hal_kernel) @exact_i8_to_bf1
   %9 = v_cvt_f32_i32 %8
   %10 = v_bfe_i32_offset_width_inline %input {offset = 16, width = 8}
   %11 = v_cvt_f32_i32 %10
+  %15 = v_perm_b32_src2_lit %7, %9, 50464518
+  %17 = v_lshrrev_b32_src0_inline %11, 16
+  %narrow = concat(%15, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %narrow
+}
+
+// ====
+
+amdgpu.target<gfx942> @target
+
+func.def target(@target) @exact_i8_to_bf16_without_literal_permute(%input: vector<3xi8>) -> (vector<3xbf16>) {
+  %wide = vector.sitofp %input : vector<3xi8> to vector<3xf32>
+  %narrow = vector.fptrunc %wide : vector<3xf32> to vector<3xbf16>
+  func.return %narrow : vector<3xbf16>
+}
+
+// ----
+low.func.def target<amdgpu.cdna3.core>(@target) abi(hal_kernel) @exact_i8_to_bf16_without_literal_permute(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
+  %6 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 1}
+  %7 = v_cvt_f32_i32 %6
+  %8 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 1, src0_sext = 1}
+  %9 = v_cvt_f32_i32 %8
+  %10 = v_mov_b32_sdwa %input {dst_sel = 6, dst_unused = 0, src0_sel = 2, src0_sext = 1}
+  %11 = v_cvt_f32_i32 %10
   %15 = v_lshrrev_b32_src0_inline %7, 16
   %16 = v_and_b32_lit %9, 4294901760
   %17 = v_or_b32 %15, %16
