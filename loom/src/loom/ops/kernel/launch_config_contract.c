@@ -8,12 +8,20 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/kernel/launch_config.h"
+#include "loom/ops/kernel/launch_config_callable_summary.h"
 #include "loom/ops/kernel/launch_config_dependence.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/reference_facts.h"
 #include "loom/util/walk.h"
+
+typedef struct loom_kernel_launch_config_contract_read_t {
+  // Direct load or summarized helper call establishing the read.
+  const loom_op_t* op;
+  // Storage value whose origin must be a projected workload argument.
+  loom_value_id_t storage;
+} loom_kernel_launch_config_contract_read_t;
 
 typedef struct loom_kernel_launch_config_contract_analysis_t {
   // Module containing the kernel definition.
@@ -30,12 +38,14 @@ typedef struct loom_kernel_launch_config_contract_analysis_t {
   iree_arena_allocator_t* arena;
   // Facts computed once for config_region and its nested regions.
   loom_value_fact_table_t facts;
-  // Read operations retained in source order during effect classification.
-  const loom_op_t** read_ops;
-  // Number of entries in read_ops.
-  iree_host_size_t read_op_count;
-  // Allocated entry capacity in read_ops.
-  iree_host_size_t read_op_capacity;
+  // Required-inline callable summaries shared by classification and facts.
+  loom_kernel_launch_config_callable_cache_t callables;
+  // Reads retained in source order during effect classification.
+  loom_kernel_launch_config_contract_read_t* reads;
+  // Number of entries in reads.
+  iree_host_size_t read_count;
+  // Allocated entry capacity in reads.
+  iree_host_size_t read_capacity;
   // Storage-derived value closure shared with callable summaries.
   loom_kernel_launch_config_dependence_t dependence;
   // Analysis result populated at the first semantic failure.
@@ -55,14 +65,18 @@ static void loom_kernel_launch_config_contract_fail(
 
 static iree_status_t loom_kernel_launch_config_contract_record_read(
     loom_kernel_launch_config_contract_analysis_t* analysis,
-    const loom_op_t* op) {
-  if (analysis->read_op_count == analysis->read_op_capacity) {
+    const loom_op_t* op, loom_value_id_t storage) {
+  if (analysis->read_count == analysis->read_capacity) {
     IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        analysis->arena, analysis->read_op_count, analysis->read_op_count + 1,
-        sizeof(*analysis->read_ops), &analysis->read_op_capacity,
-        (void**)&analysis->read_ops));
+        analysis->arena, analysis->read_count, analysis->read_count + 1,
+        sizeof(*analysis->reads), &analysis->read_capacity,
+        (void**)&analysis->reads));
   }
-  analysis->read_ops[analysis->read_op_count++] = op;
+  analysis->reads[analysis->read_count++] =
+      (loom_kernel_launch_config_contract_read_t){
+          .op = op,
+          .storage = storage,
+      };
   return iree_ok_status();
 }
 
@@ -86,6 +100,45 @@ static iree_status_t loom_kernel_launch_config_contract_classify_op(
     *out_result = LOOM_WALK_ABORT;
     return iree_ok_status();
   }
+
+  const loom_kernel_launch_config_callable_summary_t* summary = NULL;
+  IREE_RETURN_IF_ERROR(loom_kernel_launch_config_callable_cache_lookup(
+      &analysis->callables, op, &summary));
+  if (summary) {
+    if (summary->failure != LOOM_KERNEL_LAUNCH_CONFIG_CONTRACT_FAILURE_NONE) {
+      loom_kernel_launch_config_contract_fail(
+          analysis, summary->failure,
+          summary->failure_op ? summary->failure_op : op);
+      analysis->contract->failure_traits = summary->failure_traits;
+      *out_result = LOOM_WALK_ABORT;
+      return iree_ok_status();
+    }
+    const loom_call_like_t call =
+        loom_call_like_const_cast(analysis->module, op);
+    const loom_value_slice_t operands = loom_call_like_operands(call);
+    const loom_value_slice_t results = loom_call_like_results(call);
+    const uint16_t argument_count = (uint16_t)iree_min(
+        (iree_host_size_t)summary->argument_count, operands.count);
+    const uint16_t result_count = (uint16_t)iree_min(
+        (iree_host_size_t)summary->result_count, results.count);
+    for (uint16_t i = 0; i < argument_count; ++i) {
+      if (loom_kernel_launch_config_callable_reads_argument(summary, i)) {
+        IREE_RETURN_IF_ERROR(loom_kernel_launch_config_contract_record_read(
+            analysis, op, operands.values[i]));
+      }
+    }
+    for (uint16_t i = 0; i < result_count; ++i) {
+      if (loom_kernel_launch_config_callable_result_is_dependent(summary, i)) {
+        IREE_RETURN_IF_ERROR(loom_kernel_launch_config_dependence_mark(
+            &analysis->dependence, results.values[i]));
+      }
+    }
+    if (summary->effect_contract == LOOM_CALLABLE_EFFECT_CONTRACT_READONLY) {
+      analysis->contract->effect_contract =
+          LOOM_CALLABLE_EFFECT_CONTRACT_READONLY;
+    }
+    return iree_ok_status();
+  }
   if (!iree_any_bit_set(traits, LOOM_TRAIT_READS_MEMORY)) {
     return iree_ok_status();
   }
@@ -102,15 +155,13 @@ static iree_status_t loom_kernel_launch_config_contract_classify_op(
     return iree_ok_status();
   }
   analysis->contract->effect_contract = LOOM_CALLABLE_EFFECT_CONTRACT_READONLY;
-  return loom_kernel_launch_config_contract_record_read(analysis, op);
+  return loom_kernel_launch_config_contract_record_read(
+      analysis, op, loom_memory_access_view(access));
 }
 
 static bool loom_kernel_launch_config_contract_read_origin_is_workload(
     const loom_kernel_launch_config_contract_analysis_t* analysis,
-    const loom_op_t* read_op) {
-  const loom_memory_access_t access =
-      loom_memory_access_cast(analysis->module, read_op);
-  const loom_value_id_t storage = loom_memory_access_view(access);
+    loom_value_id_t storage) {
   if (storage == LOOM_VALUE_ID_INVALID ||
       storage >= analysis->module->values.count) {
     return false;
@@ -225,6 +276,8 @@ iree_status_t loom_kernel_launch_config_contract_analyze(
   }
   IREE_ASSERT_NE(analysis.config_region_index, LOOM_REGION_INDEX_NONE);
 
+  IREE_RETURN_IF_ERROR(loom_kernel_launch_config_callable_cache_initialize(
+      module, scratch_arena, &analysis.callables));
   IREE_RETURN_IF_ERROR(loom_kernel_launch_config_dependence_initialize(
       module, scratch_arena, &analysis.dependence));
 
@@ -243,22 +296,26 @@ iree_status_t loom_kernel_launch_config_contract_analyze(
 
   IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
       &analysis.facts, scratch_arena, /*initial_capacity=*/0));
+  analysis.facts.context.resolve_call_results.user_data = &analysis.callables;
+  analysis.facts.context.resolve_call_results.fn =
+      loom_kernel_launch_config_callable_resolve_results;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_region(
       &analysis.facts, module, analysis.function, analysis.config_region,
       (loom_op_t*)kernel_op));
-  for (iree_host_size_t i = 0; i < analysis.read_op_count; ++i) {
-    const loom_op_t* read_op = analysis.read_ops[i];
-    if (!loom_kernel_launch_config_contract_read_origin_is_workload(&analysis,
-                                                                    read_op)) {
+  for (iree_host_size_t i = 0; i < analysis.read_count; ++i) {
+    const loom_kernel_launch_config_contract_read_t read = analysis.reads[i];
+    if (!loom_kernel_launch_config_contract_read_origin_is_workload(
+            &analysis, read.storage)) {
       loom_kernel_launch_config_contract_fail(
           &analysis, LOOM_KERNEL_LAUNCH_CONFIG_CONTRACT_FAILURE_READ_ORIGIN,
-          read_op);
+          read.op);
       return iree_ok_status();
     }
-    const loom_value_id_t* results = loom_op_const_results(read_op);
-    for (uint16_t j = 0; j < read_op->result_count; ++j) {
-      IREE_RETURN_IF_ERROR(loom_kernel_launch_config_dependence_mark(
-          &analysis.dependence, results[j]));
+    const loom_memory_access_t access =
+        loom_memory_access_cast(module, read.op);
+    if (loom_memory_access_isa(access)) {
+      IREE_RETURN_IF_ERROR(loom_kernel_launch_config_dependence_mark_results(
+          &analysis.dependence, read.op));
     }
   }
 

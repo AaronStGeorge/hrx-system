@@ -33,6 +33,7 @@ loom_generated_cc_library(
     "canonicalize.c"
     "facts.c"
     "launch_config.c"
+    "launch_config_callable_summary.c"
     "launch_config_contract.c"
     "verify.c"
   TEXTUAL_HDRS
@@ -45,6 +46,7 @@ loom_generated_cc_library(
     "tables.c"
   HDRS
     "launch_config.h"
+    "launch_config_callable_summary.h"
     "launch_config_contract.h"
     "ops.h"
   ARGS
@@ -58,6 +60,7 @@ loom_generated_cc_library(
     iree::base
     iree::base::internal
     iree::base::internal::arena
+    loom::analysis::value_relation
     loom::error::emitter
     loom::error::error_defs
     loom::error::parameter
