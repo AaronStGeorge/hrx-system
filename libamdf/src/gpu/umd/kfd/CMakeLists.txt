@@ -446,7 +446,6 @@ iree_cc_test(
     ::buffer
     ::device_state
     ::memory
-    ::memory_reservation
     amdf::headers
     iree::third_party::google_test
     iree::third_party::google_test_main
@@ -485,7 +484,9 @@ iree_cc_library(
     "memory.h"
   SRCS
     "memory.c"
+    "memory_reservation.c"
   DEPS
+    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_amdgpu_uapi>
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_drm_uapi>
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>
     ::buffer
@@ -515,7 +516,6 @@ iree_cc_test(
     ::device_state
     ::memory
     ::memory_profile
-    ::memory_reservation
     amdf::headers
     iree::third_party::google_test
     iree::third_party::google_test_main
@@ -525,27 +525,6 @@ iree_cc_test(
   LABELS
     "iree-build-requirement=libamdf"
     "iree-build-requirement=libamdf.gpu"
-)
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND IREE_ARCH STREQUAL "x86_64" AND AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA))
-iree_cc_library(
-  NAME
-    memory_reservation
-  SRCS
-    "memory_reservation.c"
-  DEPS
-    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_amdgpu_uapi>
-    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_drm_uapi>
-    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>
-    ::buffer
-    ::device_state
-    ::memory
-    amdf::headers
-    libamdf::src::allocator
-    libamdf::src::gpu::umd::memory_reservation
-    libamdf::src::platform::linux::file
-  PUBLIC
 )
 endif()
 
@@ -562,7 +541,7 @@ iree_cc_test(
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_drm_uapi>
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>
     ::device_state
-    ::memory_reservation
+    ::memory
     amdf::headers
     iree::third_party::google_test
     iree::third_party::google_test_main
@@ -704,7 +683,6 @@ iree_cc_library(
     ::instance
     ::kernel_queue
     ::memory
-    ::memory_reservation
     ::user_queue
     amdf::headers
   PUBLIC
