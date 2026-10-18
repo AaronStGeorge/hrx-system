@@ -11,6 +11,7 @@
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/retirement.h"
+#include "loom/serve/runtime/parameter/bank.h"
 #include "loom/serve/runtime/parameter/weights.h"
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/json.h"
@@ -41,8 +42,9 @@ struct loom_serve_image_model_t {
   loom_serve_execution_t* execution;
   // Final input/output view ownership before host payload release.
   loom_serve_retirement_t retirement;
-  // Owned physical parameter group, outliving borrowing invocation residencies.
-  loom_serve_residency_group_t* parameter_group;
+  // Owned checkpoint roots and plans, outliving borrowing invocation
+  // residencies.
+  loom_serve_parameter_bank_t* parameters;
   // Atomic invocation working set and independent admission interest.
   loom_serve_residency_t* residency;
   // Idle request-code policy, independent of source-owned geometry options.
@@ -104,15 +106,6 @@ struct loom_serve_image_model_t {
     // Cold-resolved image-submission and feedback function.
     iree_vm_function_t generate;
   } control;
-  // Shared immutable parameter domains in command reflection order.
-  struct {
-    // Number of owned slots, including partial initialization.
-    uint32_t count;
-    // Owned HAL buffer array; uninitialized slots are NULL.
-    iree_hal_buffer_t** values;
-    // Owned checkpoint/preparation plans in the same domain order.
-    loom_serve_weights_t** plans;
-  } weights;
   // Fixed-capacity opaque input; request output and workspace are queue-owned.
   iree_hal_buffer_t* input;
   // Exact-size serialized invocation feedback, reused until the next prepare.
@@ -135,10 +128,6 @@ static void loom_serve_image_model_release_consumers(
   model->invocation.workspace = NULL;
   iree_hal_buffer_release(model->invocation.output);
   model->invocation.output = NULL;
-  for (iree_host_size_t i = 0; i < model->weights.count; ++i) {
-    iree_hal_buffer_release(model->weights.values[i]);
-    model->weights.values[i] = NULL;
-  }
   iree_hal_buffer_release(model->input);
   model->input = NULL;
 }
@@ -150,12 +139,9 @@ void loom_serve_image_model_retire(loom_serve_image_model_t* model,
     loom_serve_execution_set_retirement_observer(model->execution, wake,
                                                  user_data);
   }
-  for (iree_host_size_t i = 0; i < model->weights.count; ++i) {
-    loom_serve_weights_set_retirement_observer(model->weights.plans[i], wake,
-                                               user_data);
-  }
   loom_serve_retirement_set_observer(&model->retirement, wake, user_data);
   loom_serve_image_model_release_consumers(model);
+  loom_serve_parameter_bank_retire(model->parameters, wake, user_data);
 }
 
 bool loom_serve_image_model_is_retired(loom_serve_image_model_t* model) {
@@ -164,10 +150,7 @@ bool loom_serve_image_model_is_retired(loom_serve_image_model_t* model) {
   }
   bool retired =
       !model->execution || loom_serve_execution_is_retired(model->execution);
-  for (iree_host_size_t i = 0; model->weights.plans && i < model->weights.count;
-       ++i) {
-    retired &= loom_serve_weights_is_retired(model->weights.plans[i]);
-  }
+  retired &= loom_serve_parameter_bank_is_retired(model->parameters);
   return retired && loom_serve_retirement_is_idle(&model->retirement);
 }
 
@@ -179,22 +162,13 @@ static iree_status_t loom_serve_image_model_destroy_resources(
     return iree_ok_status();
   }
   loom_serve_image_model_release_consumers(model);
+  loom_serve_parameter_bank_retire(model->parameters, NULL, NULL);
   IREE_ASSERT(loom_serve_image_model_is_retired(model));
   loom_serve_residency_free(model->residency);
   model->residency = NULL;
-  loom_serve_residency_group_free(model->parameter_group);
-  model->parameter_group = NULL;
-  iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0;
-       model->weights.plans && i < model->weights.count &&
-       iree_status_is_ok(status);
-       ++i) {
-    status = loom_serve_weights_free(model->weights.plans[i]);
-    if (iree_status_is_ok(status)) {
-      model->weights.plans[i] = NULL;
-    }
-  }
+  iree_status_t status = loom_serve_parameter_bank_free(model->parameters);
   if (iree_status_is_ok(status)) {
+    model->parameters = NULL;
     loom_serve_retirement_deinitialize(&model->retirement);
     iree_vm_buffer_release(model->control.tags);
     iree_vm_buffer_release(model->control.state);
@@ -206,8 +180,6 @@ static iree_status_t loom_serve_image_model_destroy_resources(
     iree_vm_buffer_release(model->invocation.payload);
     iree_vm_environment_free(model->control.environment);
     loom_serve_execution_release(model->execution);
-    iree_allocator_free(model->host_allocator, model->weights.values);
-    iree_allocator_free(model->host_allocator, model->weights.plans);
     iree_allocator_free(model->host_allocator, (void*)model->name.data);
     loom_serve_jit_release(model->jit);
     iree_tokenizer_free(model->tokenizer);
@@ -228,9 +200,7 @@ iree_status_t loom_serve_image_model_free(loom_serve_image_model_t* model) {
   }
   loom_serve_image_model_retire(model, NULL, NULL);
   iree_status_t status = loom_serve_execution_drain(model->execution);
-  for (iree_host_size_t i = 0; i < model->weights.count; ++i) {
-    loom_serve_weights_await_retirement(model->weights.plans[i]);
-  }
+  loom_serve_parameter_bank_await_retirement(model->parameters);
   loom_serve_retirement_await(&model->retirement);
   return iree_status_join(status,
                           loom_serve_image_model_destroy_resources(model));
@@ -485,51 +455,24 @@ static iree_status_t loom_serve_image_create_control(
 
 static iree_status_t loom_serve_image_model_bind(
     loom_serve_image_model_t* model) {
-  const iree_allocator_t host_allocator = model->host_allocator;
-  iree_hal_device_t* device = loom_serve_device_handle(model->owner);
-  iree_hal_queue_t* dispatch = loom_serve_device_dispatch_queue(model->owner);
   IREE_RETURN_IF_ERROR(loom_serve_image_check_layouts(model));
   IREE_RETURN_IF_ERROR(
       loom_serve_device_create_execution(model->owner, &model->execution));
   const loom_cmd_program_t* program =
       loom_serve_jit_stage_program(model->stages.values[0]);
-  const uint32_t roots = program->requirements.fixed_buffer_count;
-  if (roots) {
-    IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-        host_allocator, roots, sizeof(*model->weights.values),
-        (void**)&model->weights.values));
-    model->weights.count = roots;
-    IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-        host_allocator, roots, sizeof(*model->weights.plans),
-        (void**)&model->weights.plans));
-  }
-  iree_status_t status = iree_ok_status();
-  for (uint32_t i = 0; i < roots && iree_status_is_ok(status); ++i) {
-    const loom_cmd_program_parameter_root_t reflected =
-        loom_cmd_program_parameter_root_at(program, i);
-    const loom_serve_weight_root_t root = {
-        program, reflected,
-        &model->weights.values[reflected.fixed_buffer_index]};
-    status = loom_serve_weights_allocate(
-        device, loom_serve_device_transfer_queue(model->owner), dispatch,
-        loom_serve_device_storage_pool(model->owner),
-        loom_serve_device_memory_pool(model->owner),
-        loom_serve_device_workspace(model->owner), 0, 1, &root, host_allocator,
-        &model->weights.plans[i]);
-  }
-  return status;
+  return loom_serve_parameter_bank_allocate(
+      model->owner, program, model->host_allocator, &model->parameters);
 }
 
 static iree_status_t loom_serve_image_model_link(
     loom_serve_image_model_t* model, iree_vm_module_t* module,
     iree_hal_command_buffer_mode_t command_mode) {
   const iree_allocator_t host_allocator = model->host_allocator;
-  IREE_RETURN_IF_ERROR(loom_serve_residency_group_allocate(
-      loom_serve_device_residency_cache(model->owner), model->weights.count,
-      model->weights.plans, host_allocator, &model->parameter_group));
+  loom_serve_residency_group_t* group =
+      loom_serve_parameter_bank_group(model->parameters);
   IREE_RETURN_IF_ERROR(loom_serve_residency_allocate(
-      loom_serve_device_residency_cache(model->owner), model->execution, 1,
-      &model->parameter_group, host_allocator, &model->residency));
+      loom_serve_device_residency_cache(model->owner), model->execution,
+      group ? 1 : 0, &group, host_allocator, &model->residency));
   const loom_serve_executable_options_t options = {
       .device = model->owner,
       .jit = model->jit,
@@ -537,7 +480,8 @@ static iree_status_t loom_serve_image_model_link(
       .layout = loom_serve_jit_stage_program(model->stages.values[0]),
       .recording = {.queue_family = iree_hal_queue_family(
                         loom_serve_device_dispatch_queue(model->owner)),
-                    .parameters = model->weights.values,
+                    .parameters =
+                        loom_serve_parameter_bank_buffers(model->parameters),
                     .command_mode = command_mode,
                     .binding_count = 2,
                     .workspace = LOOM_SERVE_STAGE_WORKSPACE_INVOCATION,
@@ -780,7 +724,7 @@ iree_status_t loom_serve_image_load_advance(loom_serve_image_load_t* load,
         load->phase = IMAGE_LOAD_WEIGHTS;
         break;
       case IMAGE_LOAD_WEIGHTS:
-        if (load->index < model->weights.count) {
+        if (load->index < loom_serve_parameter_bank_count(model->parameters)) {
           const uint32_t i = load->index++;
           const loom_serve_preparation_stage_t* declaration =
               loom_serve_preparation_stage(model->preparation, 0);
@@ -790,9 +734,9 @@ iree_status_t loom_serve_image_load_advance(loom_serve_image_load_t* load,
           load->event.pending = true;
           iree_slim_mutex_unlock(&load->event.mutex);
           status = loom_serve_weights_prepare_async(
-              model->weights.plans[i], host, model->jit, load->command_mode,
-              &load->options.sources, parameter, loom_serve_image_load_complete,
-              load);
+              loom_serve_parameter_bank_weights(model->parameters, i), host,
+              model->jit, load->command_mode, &load->options.sources, parameter,
+              loom_serve_image_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {
           load->phase = IMAGE_LOAD_LINK;

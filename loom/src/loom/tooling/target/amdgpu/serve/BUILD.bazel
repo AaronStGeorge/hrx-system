@@ -719,6 +719,7 @@ loom_cc_test(
 loom_cc_test(
     name = "weights_test",
     srcs = [
+        "//loom/src/loom/serve/runtime/parameter:bank_test.cc",
         "//loom/src/loom/serve/runtime/parameter:weights_packing_test.cc",
         "//loom/src/loom/serve/runtime/parameter:weights_test.cc",
         "//loom/src/loom/serve/runtime/parameter:weights_test_base.h",
@@ -743,6 +744,7 @@ loom_cc_test(
         "//loom/src/loom/serve/runtime/device",
         "//loom/src/loom/serve/runtime/execution",
         "//loom/src/loom/serve/runtime/parameter:activation",
+        "//loom/src/loom/serve/runtime/parameter:bank",
         "//loom/src/loom/serve/runtime/parameter:residency",
         "//loom/src/loom/serve/runtime/parameter:weights",
         "//loom/src/loom/serve/runtime/program:jit",

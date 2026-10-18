@@ -972,6 +972,7 @@ loom_cc_test(
   NAME
     weights_test
   SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/bank_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_packing_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test_base.h"
@@ -997,6 +998,7 @@ loom_cc_test(
     loom::serve::runtime::device
     loom::serve::runtime::execution
     loom::serve::runtime::parameter::activation
+    loom::serve::runtime::parameter::bank
     loom::serve::runtime::parameter::residency
     loom::serve::runtime::parameter::weights
     loom::serve::runtime::program::jit
