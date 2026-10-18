@@ -7,8 +7,8 @@
 #include "iree/hal/drivers/amdgpu/device/support/kernel.h"
 
 IREE_AMDGPU_ATTRIBUTE_KERNEL void write_dispatch_counts(uint32_t* output) {
-  output[0] = 512;
-  output[1] = 16;
+  output[0] = 32;
+  output[1] = 2;
   output[2] = 3;
 }
 
@@ -19,9 +19,9 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void read_dispatch_geometry(uint32_t* output) {
 
   // Use the known producer shape for addressing so stale geometry is reported
   // as a wrong value instead of changing the output address or losing a record.
-  const uint32_t record = (iree_hal_amdgpu_device_group_id_z() * 16 +
+  const uint32_t record = (iree_hal_amdgpu_device_group_id_z() * 2 +
                            iree_hal_amdgpu_device_group_id_y()) *
-                              512 +
+                              32 +
                           iree_hal_amdgpu_device_group_id_x();
   const iree_amdgpu_kernel_implicit_args_t* implicit_args =
       (const iree_amdgpu_kernel_implicit_args_t*)

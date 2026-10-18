@@ -76,8 +76,10 @@ TEST_P(IndirectDispatchTest, EveryWorkgroupObservesDeviceGeneratedGeometry) {
       executable, IREE_SV("read_dispatch_geometry"), &read_geometry));
 
   // These are the device producer's dimensions, not host dispatch parameters.
-  constexpr std::array<uint32_t, 3> kExpectedCounts = {512, 16, 3};
-  constexpr iree_host_size_t kRecordCount = 512 * 16 * 3;
+  // Keep every axis nontrivial while bounding simulator execution work.
+  constexpr std::array<uint32_t, 3> kExpectedCounts = {32, 2, 3};
+  constexpr iree_host_size_t kRecordCount =
+      kExpectedCounts[0] * kExpectedCounts[1] * kExpectedCounts[2];
   constexpr iree_host_size_t kRecordLength = 6;
   constexpr iree_host_size_t kGuardLength = 16;
   constexpr uint32_t kSentinel = 0xCDCDCDCDu;
