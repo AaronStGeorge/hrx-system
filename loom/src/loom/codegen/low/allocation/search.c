@@ -630,7 +630,10 @@ static bool loom_low_allocation_search_find_ordered_unoccupied_location(
   }
 }
 
-static void loom_low_allocation_search_find_location_for_release_policy(
+// Keep the ordinary search outlined so adding cold repair policies cannot
+// perturb register allocation in the successful first-fit path.
+IREE_ATTRIBUTE_NOINLINE static void
+loom_low_allocation_search_find_location_for_release_policy(
     loom_low_allocation_search_context_t* context,
     const loom_low_allocation_assignment_t* candidate_template,
     const loom_low_allocation_search_location_query_t* query,
@@ -722,6 +725,54 @@ static void loom_low_allocation_search_find_location_for_release_policy(
   }
 }
 
+// Fragmentation repair is an independent aggregate coloring, not another pass
+// through the aligned-first order that already failed. Scalar repair retains
+// the ordinary frontier-aware search above.
+IREE_ATTRIBUTE_NOINLINE IREE_ATTRIBUTE_COLD static void
+loom_low_allocation_search_find_dense_aggregate_location(
+    loom_low_allocation_search_context_t* context,
+    const loom_low_allocation_assignment_t* candidate_template,
+    const loom_low_allocation_search_location_query_t* query,
+    uint32_t minimum_base, uint32_t last_base, uint32_t alignment,
+    loom_low_allocation_storage_release_policy_t release_policy,
+    loom_low_allocation_search_location_choice_t* out_choice) {
+  *out_choice = (loom_low_allocation_search_location_choice_t){0};
+  const uint64_t candidate_count = (uint64_t)last_base / alignment + 1;
+  for (uint64_t i = 0; i < candidate_count; ++i) {
+    const uint32_t base = (uint32_t)(i * alignment);
+    if (base < minimum_base) {
+      continue;
+    }
+    if (loom_low_allocation_search_consider_linear_location(
+            context, candidate_template, query, base, release_policy,
+            out_choice)) {
+      return;
+    }
+  }
+}
+
+// Keep repair dispatch out of its callers and the ordinary search above.
+IREE_ATTRIBUTE_NOINLINE static void
+loom_low_allocation_search_find_linear_location_for_release_policy(
+    loom_low_allocation_search_context_t* context,
+    const loom_low_allocation_assignment_t* candidate_template,
+    const loom_low_allocation_search_location_query_t* query,
+    uint32_t minimum_base, uint32_t last_base, uint32_t alignment,
+    uint32_t scalar_packing_frontier,
+    loom_low_allocation_storage_release_policy_t release_policy,
+    loom_low_allocation_search_location_choice_t* out_choice) {
+  if (IREE_UNLIKELY(candidate_template->unit_count > 1 &&
+                    context->scalar_packing.frontiers_by_reg_class != NULL)) {
+    loom_low_allocation_search_find_dense_aggregate_location(
+        context, candidate_template, query, minimum_base, last_base, alignment,
+        release_policy, out_choice);
+    return;
+  }
+  loom_low_allocation_search_find_location_for_release_policy(
+      context, candidate_template, query, minimum_base, last_base, alignment,
+      scalar_packing_frontier, release_policy, out_choice);
+}
+
 // Pressure release can only add feasible bases. Its minimum is strictly lower
 // than the forbidden minimum exactly when the first pressure-legal candidate
 // still has a forbidden lease conflict. Select that policy before searching in
@@ -769,7 +820,7 @@ loom_low_allocation_search_find_linear_pressure_choice(
             LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)
             ? LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FOR_PRESSURE
             : LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN;
-    loom_low_allocation_search_find_location_for_release_policy(
+    loom_low_allocation_search_find_linear_location_for_release_policy(
         context, candidate_template, query, (uint32_t)base, last_base,
         alignment, scalar_packing_frontier, policy, out_choice);
     return policy;
@@ -909,7 +960,7 @@ static void loom_low_allocation_search_find_for_release_policy(
         context, candidate_template, query, explicit_candidate_count, alignment,
         release_policy, out_choice);
   } else {
-    loom_low_allocation_search_find_location_for_release_policy(
+    loom_low_allocation_search_find_linear_location_for_release_policy(
         context, candidate_template, query, /*minimum_base=*/0, last_base,
         alignment, scalar_packing_frontier, release_policy, out_choice);
   }

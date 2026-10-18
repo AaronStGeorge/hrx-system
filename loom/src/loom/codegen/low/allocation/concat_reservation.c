@@ -443,11 +443,14 @@ loom_low_allocation_concat_reservation_find_location_for_source(
           context->unit_liveness->end_points,
           context->unit_liveness->point_count, &reservation);
   const loom_low_descriptor_set_t* descriptor_set = context->descriptor_set;
-  const uint32_t preferred_alignment = iree_max(
-      result_alignment,
-      loom_low_reg_class_preferred_unit_alignment(
-          &descriptor_set->reg_classes[capacity.descriptor_reg_class_id],
-          result_interval->unit_count));
+  const uint32_t preferred_alignment =
+      context->scalar_packing.frontiers_by_reg_class != NULL
+          ? result_alignment
+          : iree_max(result_alignment,
+                     loom_low_reg_class_preferred_unit_alignment(
+                         &descriptor_set
+                              ->reg_classes[capacity.descriptor_reg_class_id],
+                         result_interval->unit_count));
   loom_low_allocation_assignment_t source = {
       .value_id = source_interval->value_id,
       .descriptor_reg_class_id = source_capacity.descriptor_reg_class_id,
