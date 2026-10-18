@@ -95,11 +95,76 @@ static bool loom_low_schedule_setup_order_is_member(
          (node->operand_count != 0 || requires_register);
 }
 
+// Artificial prerequisites must preserve the footprint of storage that
+// allocation cannot spill. Keep conversions and contractions available
+// to pressure scheduling so those inputs can retire before independent work.
+static bool loom_low_schedule_setup_order_preserves_required_pressure(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_node_t* node) {
+  if (node->result_count != 1) {
+    return false;
+  }
+  const loom_low_schedule_value_record_t* result =
+      &state->values[loom_low_schedule_node_const_result_ordinals(node)[0]];
+  const uint16_t result_pressure_set =
+      result->unit_count != 0
+          ? loom_low_reg_class_pressure_set_id(
+                &state->target.descriptor_set
+                     ->reg_classes[result->register_class_id])
+          : 0;
+  uint64_t operand_units = 0;
+  const loom_value_ordinal_t* operands =
+      loom_low_schedule_node_const_operand_ordinals(node);
+  for (uint16_t i = 0; i < node->operand_count; ++i) {
+    const loom_low_schedule_value_record_t* operand =
+        &state->values[operands[i]];
+    if (operand->unit_count == 0 ||
+        !loom_low_schedule_value_requires_register(operand)) {
+      continue;
+    }
+    if (operand->register_class_id != result->register_class_id &&
+        (result_pressure_set == 0 ||
+         loom_low_reg_class_pressure_set_id(
+             &state->target.descriptor_set
+                  ->reg_classes[operand->register_class_id]) !=
+             result_pressure_set)) {
+      // A singleton may constrain the same storage more tightly than its
+      // source class. Retaining the flexible source does not add storage, and
+      // the fixed destination still needs its exclusion ordering.
+      const loom_low_descriptor_set_t* descriptors =
+          state->target.descriptor_set;
+      if (result->unit_count != 1 ||
+          !iree_all_bits_set(
+              descriptors->reg_classes[result->register_class_id].flags,
+              LOOM_LOW_REG_CLASS_FLAG_EXPLICIT_PHYSICAL_REGISTERS) ||
+          descriptors->reg_classes[result->register_class_id]
+                  .allocatable_count != 1 ||
+          !loom_low_descriptor_set_find_physical_register_candidate(
+              descriptors, operand->register_class_id,
+              loom_low_descriptor_set_physical_register_candidate(
+                  descriptors, result->register_class_id, 0),
+              NULL)) {
+        return false;
+      }
+    }
+    operand_units += operand->unit_count;
+  }
+  if (operand_units == 0) {
+    return true;
+  }
+  return loom_low_schedule_value_requires_register(result) &&
+         operand_units <= result->unit_count &&
+         !iree_any_bit_set(node->flags,
+                           LOOM_LOW_SCHEDULE_NODE_FLAG_EARLY_CLOBBER |
+                               LOOM_LOW_SCHEDULE_NODE_FLAG_LATE_READS);
+}
+
 void loom_low_schedule_setup_order_classify_node(
     loom_low_schedule_build_state_t* state, loom_low_schedule_node_t* node,
     bool order_structural_setup) {
   if (loom_low_schedule_setup_order_is_member(state, node,
-                                              order_structural_setup)) {
+                                              order_structural_setup) &&
+      loom_low_schedule_setup_order_preserves_required_pressure(state, node)) {
     node->flags |= LOOM_LOW_SCHEDULE_NODE_FLAG_ORDERED_SETUP;
     state->setup_order.has_members = true;
   }
