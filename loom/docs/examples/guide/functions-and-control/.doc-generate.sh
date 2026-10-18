@@ -168,7 +168,7 @@ for policy in serial pipelined; do
     --output="routed-${policy}.hsaco" --compile-report=details \
     --compile-report-output="routed-${policy}.report.json"
   "${loom_benchmark}" routed-row-combine.loom \
-    --benchmark="@routed_row_combine_${policy}_n8_t256" \
+    --benchmark="@routed_row_combine_${policy}_workloads" --sample=2 \
     --dry-run --output="routed-${policy}.plan.json"
 done
 "${loom_report}" diff routed-serial.report.json routed-pipelined.report.json \

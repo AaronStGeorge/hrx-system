@@ -664,10 +664,13 @@ and cancellation cases, then compare the two named workloads:
 ```shell
 iree-test-loom routed-row-combine.loom --device=amdgpu --sanitizer=access
 
-iree-benchmark-loom routed-row-combine.loom \
-  --compare=@routed_row_combine_serial_n8_t256,@routed_row_combine_pipelined_n8_t256 \
-  --device=amdgpu --measure=dispatch_complete --batch-size=64 \
-  --interleave=ABABA --output=routed-comparison.json
+for policy in serial pipelined; do
+  iree-benchmark-loom routed-row-combine.loom \
+    --benchmark="@routed_row_combine_${policy}_workloads" --sample=2 \
+    --device=amdgpu --measure=dispatch_complete --batch-size=64 \
+    --iterations=16 --warmup-iterations=3 \
+    --output="routed-${policy}.json"
+done
 
 loom-compile routed-row-combine.loom --root=@routed_row_combine_pipelined \
   --target=amdgpu:gfx11-generic --format=amdgpu-hsaco \
@@ -677,12 +680,16 @@ loom-compile-report show routed.report.json
 loom-compile-report suggest routed.report.json
 ```
 
-The `n8_t1`, `n8_t16` and `n8_t256` rows select one, sixteen and 256 tokens
-with eight routes each; `n32` rows exercise a longer recurrence. Each benchmark
-case has one dispatch and an independent analytic expectation. Compare final
-register use, code size, copy waits and JIT cost alongside device time. A partial
-wait can preserve overlap within a body while backedge copies still drain it;
-neither that wait count nor a deeper queue predicts which policy wins.
+Each policy's workload group generates six samples: one, sixteen and 256 tokens
+with eight routes each, followed by the same token counts with 32 routes.
+`--sample=2` selects eight routes and 256 tokens. Each sample invokes one kernel;
+input generation stays outside the measured invocation. Correctness scenarios
+check the ordered recurrence against an independent oracle. Scenario policies
+run in separate invocations; keep machine conditions matched when comparing
+the saved measurements. Compare final register use, code size, copy waits and
+JIT cost alongside device time. A partial wait can preserve overlap within a
+body while backedge copies still drain it; neither that wait count nor a deeper
+queue predicts which policy wins.
 
 ## Pipeline cooperative paged attention
 

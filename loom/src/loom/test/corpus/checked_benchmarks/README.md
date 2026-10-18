@@ -122,11 +122,14 @@ weights/payloads one ahead. Carrying only the ID in the metadata stage avoids
 making the weight an immediate consumer of that lookup.
 
 The varied-input checks preserve row/weight identity across startup, drain,
-holes, duplicates and tails. Independent analytic cases check missing routes,
-floating-point recurrence order, and the benchmark outputs. Access testing uses
-undersized backing storage for inactive routes. The `n8_t1`, `n8_t16`, and
-`n8_t256` benchmark suffixes cover decode and batched combines; `n32` rows stress
-a longer recurrence. Each benchmark case launches exactly one kernel.
+holes, duplicates and tails. Correctness scenarios use an independent,
+route-ordered oracle and analytic expectations for missing routes and
+floating-point recurrence order. Access testing uses undersized backing storage
+for inactive routes. The `@routed_row_combine_serial_workloads` and
+`@routed_row_combine_pipelined_workloads` benchmarks each generate six samples:
+one, sixteen and 256 tokens with eight routes, followed by the same token counts
+with 32 routes. `--sample=2` selects eight routes and 256 tokens. Each sample
+launches one kernel, with input generation outside the measured invocation.
 
 Compare the serial and pipelined rows under the same batching and cache policy.
 Native partial waits show overlap inside the unrolled body; edge copies may
