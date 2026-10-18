@@ -12,6 +12,7 @@
 
 #include "loom/error/diagnostic.h"
 #include "loom/error/source.h"
+#include "loom/tooling/execution/hal/benchmark.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/testbench/scenario/executor.h"
 
@@ -33,6 +34,17 @@ typedef struct loom_run_hal_testbench_scenario_profile_t {
   // Diagnostic sink for scenario adapter errors outside public compilation.
   loom_diagnostic_sink_t diagnostic_sink;
 } loom_run_hal_testbench_scenario_profile_t;
+
+typedef struct loom_run_hal_testbench_scenario_benchmark_result_t {
+  // HAL timing, input-ring, command-buffer, and final-profile evidence.
+  loom_run_hal_benchmark_result_t benchmark;
+  // Number of HAL bindings materialized for each physical call.
+  iree_host_size_t binding_count_per_call;
+  // Sum of logical binding byte lengths in one physical call.
+  uint64_t binding_set_bytes;
+  // Sum of logical binding byte lengths across the physical input ring.
+  uint64_t binding_ring_bytes;
+} loom_run_hal_testbench_scenario_benchmark_result_t;
 
 // Initializes a borrowing HAL scenario profile without compiling a product.
 void loom_run_hal_testbench_scenario_profile_initialize(
@@ -57,6 +69,26 @@ void loom_run_hal_testbench_scenario_profile_initialize(
 loom_testbench_execution_profile_t
 loom_run_hal_testbench_scenario_execution_profile(
     loom_run_hal_testbench_scenario_profile_t* profile);
+
+// Benchmarks materialized calls from a prepared HAL scenario product.
+//
+// |calls| are independent physical realizations of one concrete semantic
+// trial. The logical batch size comes from |options| and may differ from
+// |call_count|. Target-local staging and replay preparation occur outside the
+// measured timing window.
+iree_status_t loom_run_hal_testbench_benchmark_scenario_product(
+    const loom_testbench_prepared_product_t* prepared_product,
+    const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t call_count, loom_testbench_product_call_t* calls,
+    const loom_run_hal_benchmark_options_t* options,
+    iree_allocator_t host_allocator,
+    loom_run_hal_testbench_scenario_benchmark_result_t* out_result);
+
+// Returns the compiled HAL provider owned by |prepared_product|, or NULL when
+// the product belongs to another execution profile.
+const loom_run_hal_testbench_actual_provider_t*
+loom_run_hal_testbench_scenario_product_provider(
+    const loom_testbench_prepared_product_t* prepared_product);
 
 #ifdef __cplusplus
 }  // extern "C"

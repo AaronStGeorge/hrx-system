@@ -160,6 +160,7 @@ loom_cc_library(
     srcs = ["scenario_profile.c"],
     hdrs = ["scenario_profile.h"],
     deps = [
+        ":benchmark",
         ":invocation",
         ":testbench_actual",
         ":testbench_staging",

@@ -31,21 +31,6 @@ typedef struct iree_benchmark_loom_hal_input_ring_t {
   iree_benchmark_loom_data_cache_summary_t summary;
 } iree_benchmark_loom_hal_input_ring_t;
 
-static bool iree_benchmark_loom_hal_invocation_options_equal(
-    const loom_run_hal_invocation_options_t* lhs,
-    const loom_run_hal_invocation_options_t* rhs) {
-  if (!iree_string_view_equal(lhs->function_name, rhs->function_name) ||
-      lhs->constant_byte_length != rhs->constant_byte_length) {
-    return false;
-  }
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(lhs->workgroup_count); ++i) {
-    if (lhs->workgroup_count[i] != rhs->workgroup_count[i]) {
-      return false;
-    }
-  }
-  return memcmp(lhs->constants, rhs->constants, lhs->constant_byte_length) == 0;
-}
-
 static iree_status_t iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
     const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_case_plan_t* case_plan,
@@ -135,8 +120,8 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
         module_plan, case_plan, provider, materializer_options, sample_ordinal,
         allocator, &out_ring->plans[i]);
     if (iree_status_is_ok(status) &&
-        !iree_benchmark_loom_hal_invocation_options_equal(
-            &out_ring->plans[0].options, &out_ring->plans[i].options)) {
+        !loom_run_hal_invocation_options_equal(&out_ring->plans[0].options,
+                                               &out_ring->plans[i].options)) {
       status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "HAL benchmark input ring materialization changed dispatch constants "
@@ -378,7 +363,7 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
     for (iree_host_size_t step_index = 0;
          iree_status_is_ok(status) && step_index < sequence->provider_count;
          ++step_index) {
-      if (!iree_benchmark_loom_hal_invocation_options_equal(
+      if (!loom_run_hal_invocation_options_equal(
               &out_ring->plans[step_index].options,
               &ring_plans[step_index].options)) {
         status = iree_make_status(

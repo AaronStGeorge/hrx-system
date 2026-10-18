@@ -248,6 +248,7 @@ loom_cc_library(
   SRCS
     "scenario_profile.c"
   DEPS
+    ::benchmark
     ::invocation
     ::testbench_actual
     ::testbench_staging
