@@ -7,6 +7,7 @@
 #include "loom/transforms/kernel/target_legalization.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #include "loom/analysis/control_uniformity.h"
 #include "loom/ops/combining.h"
@@ -19,8 +20,140 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/transforms/kernel/workgroup_collective_legalization.h"
+#include "loom/transforms/vector/packet_plan.h"
 
 #define LOOM_KERNEL_SCAN_MAX_SELECTOR_LEVELS 6u
+
+// The subgroup payload family has one componentwise value/result pair.
+// Addressing, clustering, and participation do not depend on vector components.
+// Keep every packet at the authored convergence point and consume its captured
+// SSA value rather than replaying the producer across the collective.
+static iree_status_t loom_kernel_legalize_subgroup_packets(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (context->vector_packet_policy == NULL ||
+      context->source_function_has_unsupported_vector_carrier) {
+    return iree_ok_status();
+  }
+  const loom_value_id_t source = loom_op_const_operands(op)[0];
+  const loom_type_t source_type =
+      loom_module_value_type(context->module, source);
+  if (!loom_type_is_vector(source_type) ||
+      loom_target_legalization_has_source_vector_carrier(context, source_type,
+                                                         source)) {
+    return iree_ok_status();
+  }
+  loom_vector_packet_shape_t shape;
+  if (!loom_vector_packet_shape_from_type(
+          context, context->vector_packet_policy, source_type, &shape) ||
+      shape.chunk_count > UINT16_MAX) {
+    return iree_ok_status();
+  }
+
+  // Native packets avoid the portable shuffle tree. Otherwise expand the tree
+  // or normalize dynamic addressing once for the logical payload and packetize
+  // the resulting shuffles. Splitting first would duplicate scalar lane work.
+  const uint32_t tail_lane_count = shape.lane_count % shape.chunk_lane_count;
+  const uint32_t lane_counts[] = {shape.chunk_lane_count, tail_lane_count};
+  iree_status_t status = iree_ok_status();
+  bool native_packets = true;
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(lane_counts) && iree_status_is_ok(status); ++i) {
+    if (lane_counts[i] == 0) {
+      continue;
+    }
+    const loom_target_contract_vector_lane_projection_t projection = {
+        .source_lane_count = shape.lane_count,
+        .projected_lane_count = lane_counts[i],
+    };
+    loom_target_contract_query_result_t result =
+        loom_target_contract_query_result_empty();
+    status =
+        loom_target_legalization_query_contract_with_vector_lane_projection(
+            context, op, projection, &result);
+    if (result.outcome != LOOM_TARGET_CONTRACT_QUERY_LEGAL) {
+      native_packets = false;
+      break;
+    }
+  }
+  if (!iree_status_is_ok(status) || !native_packets) {
+    return status;
+  }
+
+  loom_value_id_t* packets = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      context->arena, shape.chunk_count, sizeof(*packets), (void**)&packets));
+  loom_rewriter_t* rewriter = context->rewriter;
+  loom_builder_t* builder = &rewriter->builder;
+  loom_builder_set_before(builder, op);
+  const loom_value_id_t checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_value_id_t replacements[2] = {LOOM_VALUE_ID_INVALID,
+                                     LOOM_VALUE_ID_INVALID};
+  for (uint32_t i = 0; i < shape.chunk_count && iree_status_is_ok(status);
+       ++i) {
+    const int64_t offset = i * shape.chunk_lane_count;
+    const uint32_t lane_count =
+        iree_min(shape.chunk_lane_count, shape.lane_count - offset);
+    const loom_type_t packet_type =
+        loom_vector_packet_type(source_type, lane_count);
+    loom_op_t* slice = NULL;
+    status = loom_vector_slice_build(builder, source, NULL, 0, &offset, 1,
+                                     packet_type, op->location, &slice);
+    loom_op_t* packet = NULL;
+    if (iree_status_is_ok(status)) {
+      status = loom_builder_allocate_op(
+          builder, op->kind, op->operand_count, op->result_count, 0, 0,
+          op->attribute_count, op->location, &packet);
+    }
+    if (iree_status_is_ok(status)) {
+      packet->instance_flags = op->instance_flags;
+      memcpy(loom_op_attrs(packet), loom_op_const_attrs(op),
+             op->attribute_count * sizeof(loom_attribute_t));
+      memcpy(loom_op_operands(packet), loom_op_const_operands(op),
+             op->operand_count * sizeof(loom_value_id_t));
+      loom_op_operands(packet)[0] = loom_vector_slice_result(slice);
+      status = loom_builder_define_result(builder, packet_type,
+                                          &loom_op_results(packet)[0]);
+    }
+    // Only shuffle has a second result. Its validity depends on the common
+    // source lane and active participants, not on any packet's payload.
+    if (iree_status_is_ok(status) && op->result_count == 2) {
+      status = loom_builder_define_result(builder,
+                                          loom_type_scalar(LOOM_SCALAR_TYPE_I1),
+                                          &loom_op_results(packet)[1]);
+      if (i == 0) {
+        replacements[1] = loom_op_results(packet)[1];
+      }
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_builder_finalize_op(builder, packet);
+      packets[i] = loom_op_results(packet)[0];
+    }
+  }
+  loom_op_t* assembled = NULL;
+  if (iree_status_is_ok(status)) {
+    status = loom_vector_concat_build(builder, 0, packets, shape.chunk_count,
+                                      source_type, op->location, &assembled);
+  }
+  if (iree_status_is_ok(status)) {
+    replacements[0] = loom_vector_concat_result(assembled);
+    status = loom_rewriter_preserve_result_names_on_new_values(
+        rewriter, op, replacements, op->result_count, checkpoint);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_replace_all_uses_and_erase(
+        rewriter, op, replacements, op->result_count);
+  }
+  if (iree_status_is_ok(status)) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN;
+  }
+  return status;
+}
 
 //===----------------------------------------------------------------------===//
 // Subgroup shuffle reference legalization
@@ -1182,6 +1315,21 @@ iree_status_t loom_kernel_target_legalize_subgroup_scan(
 }
 
 static const loom_target_legalizer_rule_t kKernelLegalizerRules[] = {
+    {
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+        .root_kind = LOOM_OP_KERNEL_SUBGROUP_REDUCE,
+        .legalize = loom_kernel_legalize_subgroup_packets,
+    },
+    {
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+        .root_kind = LOOM_OP_KERNEL_SUBGROUP_SCAN,
+        .legalize = loom_kernel_legalize_subgroup_packets,
+    },
+    {
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+        .root_kind = LOOM_OP_KERNEL_SUBGROUP_SHUFFLE,
+        .legalize = loom_kernel_legalize_subgroup_packets,
+    },
     {
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
         .root_kind = LOOM_OP_KERNEL_SUBGROUP_SHUFFLE,
