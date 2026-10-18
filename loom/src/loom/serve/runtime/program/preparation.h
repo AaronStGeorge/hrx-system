@@ -76,8 +76,8 @@ iree_status_t loom_serve_preparation_module_create(
 
 enum loom_serve_preparation_flag_bits_e {
   // Allows checkpoint declarations when the caller owns parameter resolution.
-  // Cold construction prepares the declared roots; request choices select
-  // compatible retained domains before recording.
+  // Cold construction prepares the declared roots; request choices reuse or
+  // prepare compatible domains before recording.
   LOOM_SERVE_PREPARATION_FLAG_PARAMETERS = 1u << 0,
 };
 typedef uint32_t loom_serve_preparation_flags_t;

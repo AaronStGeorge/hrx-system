@@ -80,6 +80,13 @@ iree_status_t loom_serve_parameter_bindings_check_layout(
     iree_host_size_t count, const loom_serve_parameter_binding_t* bindings,
     const loom_cmd_program_t* program, iree_allocator_t host_allocator);
 
+// Cache-key comparison for a single-domain bank and one checked command root.
+// Same checkpoint contents may need distinct packed placement; incompatible
+// layout is a cache miss, not an invalid source declaration.
+bool loom_serve_parameter_bank_matches_domain(
+    const loom_serve_parameter_bank_t* bank, const loom_cmd_program_t* program,
+    uint32_t domain);
+
 // Checks a new source program against the bank's retained placement facts.
 // Domains, keys, offsets, extents, and alignment must match; row interleaving
 // between independent domains is immaterial. This does not establish numerical

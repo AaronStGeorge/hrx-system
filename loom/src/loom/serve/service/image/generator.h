@@ -79,6 +79,12 @@ typedef struct loom_serve_image_generator_t {
   // activation-owner data, even while CPU preparation borrows the invocation.
   // NULL means the generator does not expose weight activity, not zero work.
   loom_serve_weight_activity_t (*weight_activity)(void* self);
+  // Optional owner-side collection of idle checkpoint retirement. A failure
+  // preserves native ownership for outer model teardown, never silent retry.
+  iree_status_t (*query_status)(void* self);
+  // Optional accepted retirement still owning asynchronous callbacks. Fully
+  // retired resources with a native cleanup failure do not imply pending work.
+  bool (*is_pending)(void* self);
   // Optional independent execution compiler over retained preparation/state.
   // Selection affects subsequent preparations. An active request pins its
   // generation through all parts; CPU preparation serializes with selection.

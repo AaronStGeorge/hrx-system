@@ -101,8 +101,9 @@ iree_status_t loom_serve_finite_load_free(loom_serve_finite_load_t* load);
 // Cold prepare imports declare command or direct-dispatch stages and their
 // configuration. Command stages can also declare checkpoint parameter domains.
 // prepare_batch may use the same stage/config imports to declare request
-// executables, with ordinals following the cold table. These reuse the cold
-// checkpoint placement; request code cannot declare new parameter domains.
+// executables, with ordinals following the cold table. Explicit checkpoint
+// declarations reuse retained placement or prepare independent banks on demand;
+// omitted declarations preserve the cold checkpoint layout.
 // Tokenizer asset is relative to asset_root; empty omits tokenization support.
 // State is immutable across requests. Positive units bound cohort work/storage;
 // equal tags permit batching. Ranges contain [offset, length] i64 pairs into
@@ -161,6 +162,18 @@ const iree_tokenizer_t* loom_serve_finite_model_tokenizer(
     const loom_serve_finite_model_t* model);
 loom_serve_residency_t* loom_serve_finite_model_residency(
     const loom_serve_finite_model_t* model);
+
+// Model-wide checkpoint accounting and policy, including idle cached banks.
+loom_serve_residency_snapshot_t loom_serve_finite_model_parameters(
+    const loom_serve_finite_model_t* model);
+void loom_serve_finite_model_set_pinned(loom_serve_finite_model_t* model,
+                                        bool pinned);
+iree_status_t loom_serve_finite_model_deactivate(
+    loom_serve_finite_model_t* model, bool* out_complete);
+// Owner-side idle retirement; native failures retain ownership for teardown.
+iree_status_t loom_serve_finite_model_query_status(
+    loom_serve_finite_model_t* model);
+bool loom_serve_finite_model_is_pending(const loom_serve_finite_model_t* model);
 
 typedef struct loom_serve_finite_prepared_t {
   // Owned source bytes. The input buffer remains retained by the request owner

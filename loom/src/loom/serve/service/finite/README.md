@@ -73,14 +73,14 @@ admission retains the prepared cohort without repeating source preparation.
 During `prepare_batch`, the same `prepare` capability can declare additional
 command/direct stages and bind their configuration or workspace limit. Its
 ordinals start after the immutable cold declarations and live for this invocation.
-Command stages can declare parameter bindings selecting or reordering checkpoint
-domains already retained by the model. Identity includes the ordered checkpoint
-files and preparation policy; equal tensor names or shapes never substitute for
-the selected contents. Every request stage declares the same binding map, and
-its reflected placement must fit those retained domains. A checkpoint absent
-from the registration is rejected before admission. Omitting declarations preserves the
-whole original layout. Cold declarations remain immutable, and both stage kinds
-preserve the two input/output roots.
+Command stages can select or reorder retained checkpoint domains, or prepare
+new domains on demand. Identity includes the source generation, ordered
+checkpoint files, preparation policy, and packed placement; equal tensor names
+or shapes never substitute for selected contents. Every request stage declares
+the same binding map. Omitting declarations preserves the original layout.
+Cold declarations remain immutable, and both stage kinds preserve the two
+input/output roots. The complete working set includes cold roots because the
+source can still invoke those ordinals.
 
 The finite owner captures the selected source generation with the batch. It
 resolves exact declaration matches before parameter admission. Choices with the
@@ -89,8 +89,9 @@ different checkpoint selections receive their own fixed recordings without
 recompilation. Workspace limits are checked independently for each declaration.
 Other misses compile asynchronously. Both the finite HTTP scheduler and embedded
 text projector use this owner. Source-package uploads can retire after indexing; every choice
-shares its generation's immutable source index and checkpoint residency.
-Cancellation collects accepted compilation before releasing its borrowed inputs.
+shares its generation's immutable source index. The original source namespace
+is retained for preparation policies; filesystem inputs remain immutable while
+registered. Cancellation joins accepted work before releasing its borrows.
 
 `specialization_cache` limits idle choices by count and retained payload bytes.
 Zero disables idle retention, not specialization. One active choice can exceed
@@ -101,6 +102,18 @@ only once. Accounting includes requested declaration/table storage and native ar
 fixed source/index capacity, compiler scratch, or driver-private allocations.
 Management source selection affects future batches without changing a captured
 or executing batch.
+
+Prepared checkpoints have independent count and packed-byte retention limits.
+The model retains up to 16 entries and 1 GiB of final packed factors; one active
+request may exceed the idle limit and retire afterward. These are logical
+retention limits, not total host-memory limits. Source indexes, preparation
+recipes, and native recording metadata are separate. The shared physical pool
+governs actual backing and admits cold plus selected groups atomically. A code
+eviction does not discard prepared checkpoints. Parameter eviction releases
+dependent fixed recordings before their banks, with idle owner turns joining
+accepted retirement. Management pinning and drain include cached banks, and
+cumulative activity survives logical eviction. No dense merged base copy is
+created.
 
 ## Compact results and physical storage
 

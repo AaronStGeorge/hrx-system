@@ -5,6 +5,10 @@
 
 #include "loom/serve/service/executables.h"
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+
 #include "iree/base/tooling/flags.h"
 #include "iree/vm/buffer.h"
 #include "iree/vm/sync.h"
@@ -21,10 +25,12 @@ class ExecutablesTest : public WeightsTest {
     if (execution_) {
       IREE_EXPECT_OK(loom_serve_execution_drain(execution_));
     }
-    if (executables_) {
+    if (executables_ && !retiring_) {
       loom_serve_executables_release(executables_);
     }
-    loom_serve_executables_free(executables_);
+    loom_serve_executables_retire(executables_);
+    loom_serve_executables_await_retirement(executables_);
+    IREE_EXPECT_OK(loom_serve_executables_free(executables_));
     loom_serve_program_free(control_);
     iree_vm_module_release(runner_);
     loom_serve_stage_table_free(table_);
@@ -44,8 +50,14 @@ class ExecutablesTest : public WeightsTest {
                         const char* entry = "declare") {
     const std::string policy = directory_ + "/policy.loom";
     const std::string strings[] = {
-        root, swapped ? adapter_path_.path() : path_.path(),
-        swapped ? path_.path() : adapter_path_.path(), policy};
+        root,
+        selected_checkpoint_.empty()
+            ? (swapped ? adapter_path_.path() : path_.path())
+            : selected_checkpoint_,
+        selected_right_.empty()
+            ? (swapped ? path_.path() : adapter_path_.path())
+            : selected_right_,
+        policy};
     iree_vm_variant_t arguments[7] = {};
     iree_status_t status = iree_ok_status();
     for (size_t i = 0; i < IREE_ARRAYSIZE(strings) && iree_status_is_ok(status);
@@ -83,7 +95,10 @@ class ExecutablesTest : public WeightsTest {
   }
 
   iree_status_t Create(iree_host_size_t capacity = 4,
-                       iree_host_size_t max_bytes = 16 * 1024 * 1024) {
+                       iree_host_size_t max_bytes = 16 * 1024 * 1024,
+                       iree_host_size_t parameter_capacity = 4,
+                       iree_host_size_t parameter_bytes = 1024 * 1024,
+                       bool single_domain = false) {
     iree_notification_initialize(&notification_);
     WriteCheckpoint(adapter_path_.path(), 100);
     IREE_RETURN_IF_ERROR(
@@ -94,14 +109,17 @@ class ExecutablesTest : public WeightsTest {
     const iree_vm_ref_type_table_t* types = nullptr;
     IREE_RETURN_IF_ERROR(iree_hal_module_register_types(environment_, &types));
     IREE_RETURN_IF_ERROR(iree_hal_module_types_resolve(types, &hal_types_));
-    IREE_RETURN_IF_ERROR(Declare("domains", false, 2, 0, 0, &preparation_));
-    IREE_RETURN_IF_ERROR(Compile(0, "domains"));
+    const char* root_name = single_domain ? "raw" : "domains";
+    IREE_RETURN_IF_ERROR(
+        Declare(root_name, false, single_domain ? 1 : 2, 0, 0, &preparation_));
+    IREE_RETURN_IF_ERROR(Compile(0, root_name));
     IREE_RETURN_IF_ERROR(loom_serve_parameter_bank_allocate(
         device_owner_, loom_serve_jit_stage_program(compiled_[0]),
         host_allocator_, &bank_));
     const auto* declaration = loom_serve_preparation_stage(preparation_, 0);
     iree_status_t status = iree_ok_status();
-    for (size_t i = 0; i < 2 && iree_status_is_ok(status); ++i) {
+    for (size_t i = 0;
+         i < declaration->parameter_count && iree_status_is_ok(status); ++i) {
       status = loom_serve_weights_prepare(
           loom_serve_parameter_bank_weights(bank_, i),
           loom_serve_device_host(device_owner_), jit_,
@@ -116,6 +134,9 @@ class ExecutablesTest : public WeightsTest {
     loom_serve_executable_options_t options = {
         .device = device_owner_,
         .jit = jit_,
+        .sources = &sources_,
+        .execution = execution_,
+        .residency = residency_,
         .preparation = preparation_,
         .parameters = bank_,
         .recording =
@@ -125,6 +146,7 @@ class ExecutablesTest : public WeightsTest {
                 .binding_count = 1,
             },
         .cache = {capacity, max_bytes},
+        .parameter_cache = {parameter_capacity, parameter_bytes},
     };
     IREE_RETURN_IF_ERROR(loom_serve_stage_table_allocate(
         &options.recording, nullptr, 1, compiled_.data(), host_allocator_,
@@ -193,7 +215,8 @@ class ExecutablesTest : public WeightsTest {
   }
 
   void Execute(int32_t first, int32_t stride = 3) {
-    IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residency_));
+    auto* residency = loom_serve_executables_residency(executables_);
+    IREE_ASSERT_OK(loom_serve_residency_acquire_wait(residency));
     iree_vm_variant_t arguments[] = {
         iree_vm_variant_from_i32(1),
         iree_hal_buffer_variant_from_ptr_borrowed(&hal_types_, output_buffer_)};
@@ -218,11 +241,26 @@ class ExecutablesTest : public WeightsTest {
     IREE_ASSERT_OK(
         loom_serve_execution_feedback(execution_, 1, &download, &completion));
     IREE_ASSERT_OK(loom_serve_execution_feedback_wait(execution_, completion));
-    loom_serve_residency_release(residency_);
+    loom_serve_residency_release(residency);
     for (size_t i = 0; i < output_.size(); ++i) {
       EXPECT_EQ(output_[i], first + stride * i);
     }
     loom_serve_executables_release(executables_);
+  }
+
+  void CollectIdle() {
+    IREE_ASSERT_OK(loom_serve_executables_query_status(executables_));
+    while (loom_serve_executables_is_pending(executables_)) {
+      const uint32_t ticket = iree_notification_prepare_wait(&notification_);
+      IREE_ASSERT_OK(loom_serve_executables_query_status(executables_));
+      if (loom_serve_executables_is_pending(executables_)) {
+        iree_notification_commit_wait(&notification_, ticket,
+                                      IREE_DURATION_ZERO,
+                                      IREE_TIME_INFINITE_FUTURE);
+      } else {
+        iree_notification_cancel_wait(&notification_);
+      }
+    }
   }
 
   // Authored locators are rooted in the test's declared runfiles namespace.
@@ -251,6 +289,12 @@ class ExecutablesTest : public WeightsTest {
   iree_vm_function_t submit_ = {};
   // Outer-thread completion notification; no worker waits here.
   iree_notification_t notification_ = {};
+  // Optional request checkpoint, distinct from both registered domains.
+  std::string selected_checkpoint_;
+  // Optional second request domain, including an alias of the first domain.
+  std::string selected_right_;
+  // Terminal retirement has already released request and recording consumers.
+  bool retiring_ = false;
 };
 
 TEST_P(ExecutablesTest, RebindsCheckpointDataWithoutRecompilingSharedCode) {
@@ -369,6 +413,300 @@ TEST_P(ExecutablesTest, SharedCodeChecksEachRequestsWorkspaceLimit) {
   IREE_ASSERT_OK(Select("domains_workspace", true, 2, 2, 4096));
   ASSERT_NO_FATAL_FAILURE(Execute(570, 9));
   EXPECT_EQ(compilation_.commands, commands);
+}
+
+TEST_P(ExecutablesTest, PreparesNewCheckpointWithoutReplacingColdStorage) {
+  IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 4, 1024 * 1024, true));
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = checkpoint.path();
+  const auto* base = loom_serve_parameter_bank_buffers(bank_)[0];
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  const auto commands = compilation_.commands;
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  EXPECT_EQ(loom_serve_residency_activity(
+                loom_serve_executables_residency(executables_))
+                .activations,
+            2u);
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  EXPECT_EQ(compilation_.commands, commands);
+  EXPECT_EQ(loom_serve_parameter_bank_buffers(bank_)[0], base);
+}
+
+TEST_P(ExecutablesTest, CodeEvictionKeepsPreparedCheckpoint) {
+  IREE_ASSERT_OK(Create(0, 16 * 1024 * 1024, 4, 1024 * 1024, true));
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = checkpoint.path();
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  const auto commands = compilation_.commands;
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  EXPECT_EQ(loom_serve_residency_activity(
+                loom_serve_executables_residency(executables_))
+                .activations,
+            2u);
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  EXPECT_EQ(compilation_.commands, commands + 1);
+}
+
+TEST_P(ExecutablesTest, ParameterByteBudgetRetiresRecordingsAndBank) {
+  IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 4, 1, true));
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = checkpoint.path();
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  ASSERT_NO_FATAL_FAILURE(CollectIdle());
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  EXPECT_EQ(loom_serve_residency_activity(
+                loom_serve_executables_residency(executables_))
+                .activations,
+            1u);
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  ASSERT_NO_FATAL_FAILURE(CollectIdle());
+}
+
+TEST_P(ExecutablesTest, MissingNewCheckpointDoesNotPoisonNextSelection) {
+  IREE_ASSERT_OK(Create());
+  selected_checkpoint_ = "absent-checkpoint.safetensors";
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_NOT_FOUND, Select("raw", false, 1));
+  loom_serve_executables_release(executables_);
+  ASSERT_NO_FATAL_FAILURE(CollectIdle());
+  selected_checkpoint_.clear();
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(90));
+}
+
+TEST_P(ExecutablesTest, AdmissionRejectsCompleteSetBeforeAnyActivation) {
+  if (!GetParam()) {
+    GTEST_SKIP() << "Fixed storage has no physical-pool budget";
+  }
+  IREE_ASSERT_OK(Create());
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = checkpoint.path();
+  IREE_ASSERT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        Select("raw", false, 1));
+  EXPECT_EQ(
+      loom_serve_executables_parameters(executables_).activity.activations, 0u);
+  loom_serve_executables_release(executables_);
+  selected_checkpoint_.clear();
+  IREE_ASSERT_OK(Select("domains", false));
+  ASSERT_NO_FATAL_FAILURE(Execute(290));
+}
+
+TEST_P(ExecutablesTest, PackedLayoutIsPartOfCheckpointIdentity) {
+  IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 4, 1024 * 1024, true));
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = checkpoint.path();
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  IREE_ASSERT_OK(Select("target", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(670));
+  const auto commands = compilation_.commands;
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  EXPECT_EQ(compilation_.commands, commands);
+}
+
+TEST_P(ExecutablesTest, PinnedBanksSurviveCodeEvictionAndDrainReloads) {
+  if (!GetParam()) {
+    GTEST_SKIP() << "Fixed storage cannot deactivate";
+  }
+  IREE_ASSERT_OK(Create(0, 16 * 1024 * 1024, 4, 1024 * 1024, true));
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = checkpoint.path();
+  loom_serve_executables_set_pinned(executables_, true);
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  const auto before = loom_serve_executables_parameters(executables_);
+  EXPECT_EQ(before.activity.activations, 2u);
+  IREE_ASSERT_OK(loom_serve_residency_cache_trim(
+      loom_serve_device_residency_cache(device_owner_), 0));
+  EXPECT_EQ(
+      loom_serve_executables_parameters(executables_).memory.committed_bytes,
+      before.memory.committed_bytes);
+  bool complete = false;
+  IREE_ASSERT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_serve_executables_deactivate(executables_, &complete));
+  loom_serve_executables_set_pinned(executables_, false);
+  IREE_ASSERT_OK(loom_serve_executables_deactivate(executables_, &complete));
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool_));
+  IREE_ASSERT_OK(loom_serve_executables_deactivate(executables_, &complete));
+  EXPECT_TRUE(complete);
+  const auto drained = loom_serve_executables_parameters(executables_);
+  EXPECT_EQ(drained.memory.committed_bytes, 0u);
+  EXPECT_EQ(drained.activity.deactivations, 2u);
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  EXPECT_EQ(
+      loom_serve_executables_parameters(executables_).activity.activations, 4u);
+}
+
+TEST_P(ExecutablesTest, RepeatedDomainSharesOnePhysicalBank) {
+  IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 4, 1024 * 1024, true));
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = selected_right_ = checkpoint.path();
+  IREE_ASSERT_OK(Select("domains", false));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  EXPECT_EQ(
+      loom_serve_executables_parameters(executables_).activity.activations, 2u);
+  IREE_ASSERT_OK(Select("domains_workspace", false));
+  ASSERT_NO_FATAL_FAILURE(Execute(2070, 9));
+  EXPECT_EQ(
+      loom_serve_executables_parameters(executables_).activity.activations, 2u);
+}
+
+TEST_P(ExecutablesTest, CancellationJoinsNewBankAllocationBeforeReuse) {
+  if (GetParam()) {
+    GTEST_SKIP() << "Elastic roots allocate backing at activation";
+  }
+  IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 4, 1024 * 1024, true));
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(90));
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = checkpoint.path();
+  IREE_ASSERT_OK(Begin("raw", false, 1));
+  std::atomic<bool> cancel = false;
+  iree_status_t status = iree_ok_status();
+  ScopedNativeHold hold(device_owner_);
+  std::thread owner([&] {
+    bool complete = false;
+    while (!complete && iree_status_is_ok(status)) {
+      const uint32_t ticket = iree_notification_prepare_wait(&notification_);
+      status = loom_serve_executables_advance(executables_, cancel.load(),
+                                              &complete);
+      if (!complete && iree_status_is_ok(status)) {
+        iree_notification_commit_wait(&notification_, ticket,
+                                      IREE_DURATION_ZERO,
+                                      IREE_TIME_INFINITE_FUTURE);
+      } else {
+        iree_notification_cancel_wait(&notification_);
+      }
+    }
+  });
+  hold.WaitEntered();
+  cancel.store(true);
+  hold.Release();
+  owner.join();
+  IREE_ASSERT_OK(status);
+  loom_serve_executables_release(executables_);
+  EXPECT_EQ(
+      loom_serve_executables_parameters(executables_).activity.activations, 1u);
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+}
+
+TEST_P(ExecutablesTest, ExactChoiceHitsRefreshCheckpointLru) {
+  IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 2, 1024 * 1024, true));
+  iree::testing::TempFilePath first("loom_first", ".safetensors");
+  iree::testing::TempFilePath second("loom_second", ".safetensors");
+  iree::testing::TempFilePath third("loom_third", ".safetensors");
+  WriteCheckpoint(first.path(), 200);
+  WriteCheckpoint(second.path(), 300);
+  WriteCheckpoint(third.path(), 400);
+  selected_checkpoint_ = first.path();
+  IREE_ASSERT_OK(Select("target", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(670));
+  selected_checkpoint_ = second.path();
+  IREE_ASSERT_OK(Select("target", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(970));
+  selected_checkpoint_ = first.path();
+  IREE_ASSERT_OK(Select("target", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(670));
+  selected_checkpoint_ = third.path();
+  IREE_ASSERT_OK(Select("target", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(1270));
+  ASSERT_NO_FATAL_FAILURE(CollectIdle());
+  const auto commands = compilation_.commands;
+  const auto activations =
+      loom_serve_executables_parameters(executables_).activity.activations;
+  selected_checkpoint_ = first.path();
+  IREE_ASSERT_OK(Select("target", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(670));
+  // An exact choice hit refreshed the first checkpoint, not just its code.
+  EXPECT_EQ(compilation_.commands, commands);
+  selected_checkpoint_ = second.path();
+  IREE_ASSERT_OK(Select("target", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(970));
+  EXPECT_EQ(compilation_.commands, commands + 2);
+  ASSERT_NO_FATAL_FAILURE(CollectIdle());
+  EXPECT_GT(
+      loom_serve_executables_parameters(executables_).activity.activations,
+      activations);
+}
+
+TEST_P(ExecutablesTest, ReplacementRecordingsRetireBeforeCheckpointJoin) {
+  IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 4, 1024 * 1024, true));
+  const iree_string_view_t providers[] = {IREE_SV("stages.loom"),
+                                          IREE_SV("packing.loom")};
+  const loom_serve_sources_t sources = {
+      .base_directory =
+          iree_make_string_view(directory_.data(), directory_.size()),
+      .count = IREE_ARRAYSIZE(providers),
+      .values = providers,
+  };
+  struct Completion {
+    // Joins the producer's final access before the owner takes its value.
+    std::mutex mutex;
+    // Notifies only the outer application thread, never the shared executor.
+    std::condition_variable condition;
+    // Owned producer outcome, transferred when ready is published.
+    iree_status_t status = iree_ok_status();
+    // Owned replacement generation until select/dispose below.
+    void* value = nullptr;
+    // Terminal compile/recording publication under mutex.
+    bool ready = false;
+  } completion;
+  auto update = loom_serve_executables_update(executables_);
+  IREE_ASSERT_OK(update.compile(
+      update.self, &sources,
+      [](void* self, iree_status_t status, void* value,
+         const loom_serve_compilation_report_t* report) {
+        auto* completion = static_cast<Completion*>(self);
+        std::lock_guard<std::mutex> lock(completion->mutex);
+        completion->status = status;
+        completion->value = value;
+        completion->ready = true;
+        completion->condition.notify_one();
+      },
+      &completion));
+  {
+    std::unique_lock<std::mutex> lock(completion.mutex);
+    completion.condition.wait(lock, [&] { return completion.ready; });
+  }
+  auto status = completion.status;
+  if (iree_status_is_ok(status)) {
+    status = update.select(update.self, completion.value);
+  }
+  update.dispose(completion.value);
+  IREE_ASSERT_OK(status);
+  iree::testing::TempFilePath checkpoint("loom_request", ".safetensors");
+  WriteCheckpoint(checkpoint.path(), 200);
+  selected_checkpoint_ = checkpoint.path();
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  IREE_ASSERT_OK(update.select(update.self, nullptr));
+  IREE_ASSERT_OK(loom_serve_execution_drain(execution_));
+  retiring_ = true;
+  loom_serve_executables_retire(executables_);
+  loom_serve_program_free(control_);
+  control_ = nullptr;
+  iree_vm_module_release(runner_);
+  runner_ = nullptr;
+  loom_serve_stage_table_free(table_);
+  table_ = nullptr;
+  loom_serve_parameter_bank_retire(bank_, nullptr, nullptr);
+  // No producer remains. A retained replacement table would keep a root view
+  // alive forever and make the model's bank-retirement join self-dependent.
+  EXPECT_TRUE(loom_serve_parameter_bank_is_retired(bank_));
 }
 
 INSTANTIATE_TEST_SUITE_P(Native, ExecutablesTest, ::testing::Bool());

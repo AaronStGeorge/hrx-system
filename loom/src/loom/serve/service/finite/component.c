@@ -55,7 +55,9 @@ loom_serve_finite_component_phase_t loom_serve_finite_component_phase(
 
 bool loom_serve_finite_component_is_pending(
     const loom_serve_finite_component_t* component) {
-  return component && component->phase == LOOM_SERVE_FINITE_COMPONENT_PREPARING;
+  return component &&
+         (component->phase == LOOM_SERVE_FINITE_COMPONENT_PREPARING ||
+          loom_serve_finite_model_is_pending(component->model));
 }
 
 const loom_serve_compilation_report_t* loom_serve_finite_component_report(
@@ -75,8 +77,7 @@ bool loom_serve_finite_component_parameters(
   if (!component->model) {
     return false;
   }
-  *out_parameters = loom_serve_residency_snapshot(
-      loom_serve_finite_model_residency(component->model));
+  *out_parameters = loom_serve_finite_model_parameters(component->model);
   return true;
 }
 
@@ -84,8 +85,7 @@ void loom_serve_finite_component_set_pinned(
     loom_serve_finite_component_t* component, bool pinned) {
   component->pinned = pinned;
   if (component->model) {
-    loom_serve_residency_set_pinned(
-        loom_serve_finite_model_residency(component->model), pinned);
+    loom_serve_finite_model_set_pinned(component->model, pinned);
   }
 }
 
@@ -95,8 +95,15 @@ bool loom_serve_finite_component_advance(
     return false;
   }
   component->stopping |= stopping;
-  if (!loom_serve_finite_component_is_pending(component)) {
-    return false;
+  if (component->phase != LOOM_SERVE_FINITE_COMPONENT_PREPARING) {
+    const bool pending = loom_serve_finite_model_is_pending(component->model);
+    iree_status_t status =
+        loom_serve_finite_model_query_status(component->model);
+    if (!iree_status_is_ok(status)) {
+      component->status = iree_status_join(component->status, status);
+      component->phase = LOOM_SERVE_FINITE_COMPONENT_FAILED;
+    }
+    return pending && !loom_serve_finite_model_is_pending(component->model);
   }
   bool complete = false;
   component->status = loom_serve_finite_load_advance(
@@ -109,8 +116,7 @@ bool loom_serve_finite_component_advance(
                                loom_serve_finite_load_report(component->load));
   if (iree_status_is_ok(component->status)) {
     component->model = loom_serve_finite_load_take_model(component->load);
-    loom_serve_residency_set_pinned(
-        loom_serve_finite_model_residency(component->model), component->pinned);
+    loom_serve_finite_model_set_pinned(component->model, component->pinned);
   }
   iree_status_t cleanup = loom_serve_finite_load_free(component->load);
   if (iree_status_is_ok(cleanup)) {
@@ -183,7 +189,7 @@ iree_status_t loom_serve_finite_component_trim(
       return iree_ok_status();
     }
     if (loom_serve_residency_snapshot(residency).elastic) {
-      return loom_serve_residency_deactivate(residency, out_complete);
+      return loom_serve_finite_model_deactivate(component->model, out_complete);
     }
   }
   IREE_RETURN_IF_ERROR(

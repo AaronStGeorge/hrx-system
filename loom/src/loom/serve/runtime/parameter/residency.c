@@ -51,6 +51,8 @@ struct loom_serve_residency_group_t {
   bool active;
   // Logical release interest retained until owner collection.
   bool releasing;
+  // Bank owner's persistent retention, independent of borrowing residencies.
+  bool pinned;
   // Last final consumer release or explicit unpin, not observation time.
   iree_time_t idle_since;
   // Number of exclusive borrowed plans in the trailing array.
@@ -135,6 +137,21 @@ void loom_serve_residency_set_pinned(loom_serve_residency_t* residency,
 
 bool loom_serve_residency_is_pinned(const loom_serve_residency_t* residency) {
   return residency->pin_count || residency->pinned;
+}
+
+void loom_serve_residency_group_set_pinned(loom_serve_residency_group_t* group,
+                                           bool pinned) {
+  if (group->pinned != pinned) {
+    group->pinned = pinned;
+    if (!pinned) {
+      group->idle_since = iree_time_now();
+    }
+  }
+}
+
+bool loom_serve_residency_group_is_pinned(
+    const loom_serve_residency_group_t* group) {
+  return group->pinned || group->pin_count || group->retention_count;
 }
 
 void loom_serve_residency_set_reclaimer(
@@ -286,7 +303,7 @@ static void loom_serve_residency_group_append(
   cache->groups.newest = group;
 }
 
-static iree_status_t loom_serve_residency_group_deactivate(
+iree_status_t loom_serve_residency_group_deactivate(
     loom_serve_residency_group_t* group, bool* out_complete) {
   *out_complete = false;
   if (group->active) {
@@ -321,7 +338,7 @@ iree_status_t loom_serve_residency_deactivate(loom_serve_residency_t* residency,
   bool pinned = residency->pin_count || residency->pinned;
   for (iree_host_size_t i = 0; i < residency->group_count; ++i) {
     const loom_serve_residency_group_t* group = residency->entries[i].group;
-    pinned |= !group->releasing && (group->pin_count || group->retention_count);
+    pinned |= !group->releasing && loom_serve_residency_group_is_pinned(group);
   }
   if (pinned || !residency->cache->pool) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -375,8 +392,8 @@ iree_status_t loom_serve_residency_cache_trim_idle(
   iree_status_t status = iree_ok_status();
   for (loom_serve_residency_group_t* entry = cache->groups.oldest;
        entry && iree_status_is_ok(status); entry = entry->next) {
-    if (!entry->active || !entry->weight_count || entry->pin_count ||
-        entry->retention_count) {
+    if (!entry->active || !entry->weight_count ||
+        loom_serve_residency_group_is_pinned(entry)) {
       continue;
     }
     if (now - entry->idle_since < timeout) {
@@ -399,7 +416,7 @@ iree_status_t loom_serve_residency_cache_trim(
        entry && iree_status_is_ok(status) &&
        loom_serve_residency_cache_projected_bytes(cache) > target_bytes;
        entry = entry->next) {
-    if (entry->active && !entry->pin_count && !entry->retention_count &&
+    if (entry->active && !loom_serve_residency_group_is_pinned(entry) &&
         !entry->releasing &&
         loom_serve_residency_group_statistics(entry).committed_bytes) {
       bool complete = false;
@@ -420,7 +437,7 @@ static iree_status_t loom_serve_residency_reclaim(void* user_data,
         loom_serve_residency_group_statistics(entry);
     const uint64_t committed_bytes =
         memory.committed_bytes - memory.releasing_bytes;
-    if (entry->pin_count || entry->retention_count || !entry->active) {
+    if (loom_serve_residency_group_is_pinned(entry) || !entry->active) {
       pinned_bytes += committed_bytes;
     } else {
       remaining -= committed_bytes;

@@ -820,6 +820,8 @@ static bool loom_serve_image_is_active(void* self) {
 static bool loom_serve_image_is_pending(void* self) {
   loom_serve_image_service_t* service = self;
   return loom_serve_image_is_active(service) ||
+         (service->generator.is_pending &&
+          service->generator.is_pending(service->generator.self)) ||
          loom_serve_execution_reconfiguration_pending(
              service->reconfiguration) ||
          loom_serve_timer_is_pending(&service->timer);
@@ -836,6 +838,11 @@ static iree_status_t loom_serve_image_advance(
   }
   loom_serve_image_prune(service, out_progress);
   loom_serve_image_collect(service, out_progress);
+  if (service->generator.query_status) {
+    service->status = iree_status_join(
+        service->status,
+        service->generator.query_status(service->generator.self));
+  }
   *out_progress |= loom_serve_execution_reconfiguration_advance(
       service->reconfiguration,
       iree_status_is_ok(service->status) &&

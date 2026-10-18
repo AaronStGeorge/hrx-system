@@ -69,6 +69,19 @@ iree_status_t loom_serve_residency_group_allocate(
 // operations have retired. Does not destroy borrowed plans. NULL is accepted.
 void loom_serve_residency_group_free(loom_serve_residency_group_t* group);
 
+// Bank-owner retention, independent of invocation residency lifetimes. Applies
+// to current and future activations without loading; destruction drops policy.
+void loom_serve_residency_group_set_pinned(loom_serve_residency_group_t* group,
+                                           bool pinned);
+bool loom_serve_residency_group_is_pinned(
+    const loom_serve_residency_group_t* group);
+
+// Owner-side release of an unpinned elastic group. The caller excludes new
+// admission and has checked the complete set before releasing its first group.
+// Repeated calls collect accepted release; native failures preserve ownership.
+iree_status_t loom_serve_residency_group_deactivate(
+    loom_serve_residency_group_t* group, bool* out_complete);
+
 // Registers one invocation/cohort working set of distinct groups in this cache.
 // Copies the pointer array; groups outlive the residency. Borrows execution for
 // readiness import and synchronous outer-thread error retirement, never waiting

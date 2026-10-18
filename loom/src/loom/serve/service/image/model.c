@@ -97,7 +97,7 @@ struct loom_serve_image_model_t {
     loom_serve_program_t* program;
     // Retained native runner whose command table changes without VM relinking.
     iree_vm_module_t* runner;
-    // Invocation-only declaration capture, with no parameter authority.
+    // Scoped request declaration capture, including checkpoint bindings.
     iree_vm_module_t* preparation;
     // Opaque source-owned state, retained across serialized requests.
     iree_vm_buffer_t* state;
@@ -114,8 +114,7 @@ struct loom_serve_image_model_t {
 
 static void loom_serve_image_model_release_consumers(
     loom_serve_image_model_t* model) {
-  loom_serve_executables_free(model->executables);
-  model->executables = NULL;
+  loom_serve_executables_retire(model->executables);
   loom_serve_program_free(model->control.program);
   model->control.program = NULL;
   iree_vm_module_release(model->control.runner);
@@ -135,6 +134,10 @@ static void loom_serve_image_model_release_consumers(
 void loom_serve_image_model_retire(loom_serve_image_model_t* model,
                                    void (*wake)(void* user_data),
                                    void* user_data) {
+  if (model->executables) {
+    loom_serve_executables_set_observer(
+        model->executables, (loom_serve_wake_callback_t){wake, user_data});
+  }
   if (model->execution) {
     loom_serve_execution_set_retirement_observer(model->execution, wake,
                                                  user_data);
@@ -151,6 +154,7 @@ bool loom_serve_image_model_is_retired(loom_serve_image_model_t* model) {
   bool retired =
       !model->execution || loom_serve_execution_is_retired(model->execution);
   retired &= loom_serve_parameter_bank_is_retired(model->parameters);
+  retired &= loom_serve_executables_is_retired(model->executables);
   return retired && loom_serve_retirement_is_idle(&model->retirement);
 }
 
@@ -164,6 +168,8 @@ static iree_status_t loom_serve_image_model_destroy_resources(
   loom_serve_image_model_release_consumers(model);
   loom_serve_parameter_bank_retire(model->parameters, NULL, NULL);
   IREE_ASSERT(loom_serve_image_model_is_retired(model));
+  IREE_RETURN_IF_ERROR(loom_serve_executables_free(model->executables));
+  model->executables = NULL;
   loom_serve_residency_free(model->residency);
   model->residency = NULL;
   iree_status_t status = loom_serve_parameter_bank_free(model->parameters);
@@ -201,6 +207,7 @@ iree_status_t loom_serve_image_model_free(loom_serve_image_model_t* model) {
   loom_serve_image_model_retire(model, NULL, NULL);
   iree_status_t status = loom_serve_execution_drain(model->execution);
   loom_serve_parameter_bank_await_retirement(model->parameters);
+  loom_serve_executables_await_retirement(model->executables);
   loom_serve_retirement_await(&model->retirement);
   return iree_status_join(status,
                           loom_serve_image_model_destroy_resources(model));
@@ -466,6 +473,7 @@ static iree_status_t loom_serve_image_model_bind(
 
 static iree_status_t loom_serve_image_model_link(
     loom_serve_image_model_t* model, iree_vm_module_t* module,
+    const loom_serve_sources_t* sources,
     iree_hal_command_buffer_mode_t command_mode) {
   const iree_allocator_t host_allocator = model->host_allocator;
   loom_serve_residency_group_t* group =
@@ -476,6 +484,9 @@ static iree_status_t loom_serve_image_model_link(
   const loom_serve_executable_options_t options = {
       .device = model->owner,
       .jit = model->jit,
+      .sources = sources,
+      .execution = model->execution,
+      .residency = model->residency,
       .preparation = model->preparation,
       .parameters = model->parameters,
       .recording = {.queue_family = iree_hal_queue_family(
@@ -486,7 +497,8 @@ static iree_status_t loom_serve_image_model_link(
                     .binding_count = 2,
                     .workspace = LOOM_SERVE_STAGE_WORKSPACE_INVOCATION,
                     .command_quantum = model->command_quantum},
-      .cache = model->specialization_cache};
+      .cache = model->specialization_cache,
+      .parameter_cache = {16, 1024 * 1024 * 1024}};
   iree_status_t status = loom_serve_stage_table_allocate(
       &options.recording, NULL, model->stages.count, model->stages.values,
       host_allocator, &model->stages.table);
@@ -748,8 +760,8 @@ iree_status_t loom_serve_image_load_advance(loom_serve_image_load_t* load,
           return iree_ok_status();
         }
         if (iree_status_is_ok(status)) {
-          status = loom_serve_image_model_link(model, load->module,
-                                               load->command_mode);
+          status = loom_serve_image_model_link(
+              model, load->module, &load->options.sources, load->command_mode);
         }
         load->phase = IMAGE_LOAD_COMPLETE;
         break;
@@ -958,22 +970,42 @@ iree_status_t loom_serve_image_model_activate(loom_serve_image_model_t* model) {
 
 iree_status_t loom_serve_image_model_deactivate(loom_serve_image_model_t* model,
                                                 bool* out_complete) {
-  return loom_serve_residency_deactivate(model->residency, out_complete);
+  return loom_serve_executables_deactivate(model->executables, out_complete);
 }
 
 loom_serve_residency_t* loom_serve_image_model_residency(
     const loom_serve_image_model_t* model) {
-  return model->residency;
+  return loom_serve_executables_residency(model->executables);
+}
+
+loom_serve_residency_snapshot_t loom_serve_image_model_parameters(
+    const loom_serve_image_model_t* model) {
+  return loom_serve_executables_parameters(model->executables);
+}
+
+void loom_serve_image_model_set_pinned(loom_serve_image_model_t* model,
+                                       bool pinned) {
+  loom_serve_executables_set_pinned(model->executables, pinned);
+}
+
+iree_status_t loom_serve_image_model_query_status(
+    loom_serve_image_model_t* model) {
+  return model ? loom_serve_executables_query_status(model->executables)
+               : iree_ok_status();
+}
+
+bool loom_serve_image_model_is_pending(const loom_serve_image_model_t* model) {
+  return model && loom_serve_executables_is_pending(model->executables);
 }
 
 loom_serve_memory_statistics_t loom_serve_image_model_weight_statistics(
     const loom_serve_image_model_t* model) {
-  return loom_serve_residency_statistics(model->residency);
+  return loom_serve_executables_parameters(model->executables).memory;
 }
 
 loom_serve_weight_activity_t loom_serve_image_model_weight_activity(
     const loom_serve_image_model_t* model) {
-  return loom_serve_residency_activity(model->residency);
+  return loom_serve_executables_parameters(model->executables).activity;
 }
 
 iree_status_t loom_serve_image_model_prepare_request(
@@ -1117,7 +1149,8 @@ iree_const_byte_span_t loom_serve_image_model_complete(
     loom_serve_image_model_t* model) {
   iree_vm_buffer_release(model->invocation.payload);
   model->invocation.payload = NULL;
-  loom_serve_residency_release(model->residency);
+  loom_serve_residency_release(
+      loom_serve_executables_residency(model->executables));
   loom_serve_executables_release(model->executables);
   return iree_make_const_byte_span(model->output.data,
                                    model->output.data_length);
@@ -1151,7 +1184,8 @@ iree_status_t loom_serve_image_model_generate(
   loom_serve_image_model_set_observer(model, (loom_serve_wake_callback_t){0});
   iree_notification_deinitialize(&notification);
   if (iree_status_is_ok(status)) {
-    status = loom_serve_residency_acquire_wait(model->residency);
+    status = loom_serve_residency_acquire_wait(
+        loom_serve_executables_residency(model->executables));
   }
   if (!iree_status_is_ok(status)) {
     loom_serve_image_model_discard_prepared_request(model);
@@ -1227,6 +1261,14 @@ static loom_serve_weight_activity_t loom_serve_image_generator_weight_activity(
   return loom_serve_image_model_weight_activity(self);
 }
 
+static iree_status_t loom_serve_image_generator_query_status(void* self) {
+  return loom_serve_image_model_query_status(self);
+}
+
+static bool loom_serve_image_generator_is_pending(void* self) {
+  return loom_serve_image_model_is_pending(self);
+}
+
 loom_serve_image_generator_t loom_serve_image_model_generator(
     loom_serve_image_model_t* model) {
   return (loom_serve_image_generator_t){
@@ -1239,6 +1281,8 @@ loom_serve_image_generator_t loom_serve_image_model_generator(
       .submit = loom_serve_image_generator_submit,
       .complete = loom_serve_image_generator_complete,
       .weight_activity = loom_serve_image_generator_weight_activity,
+      .query_status = loom_serve_image_generator_query_status,
+      .is_pending = loom_serve_image_generator_is_pending,
       .execution_update = loom_serve_executables_update(model->executables),
       .tokenizer = model->tokenizer,
       .capacity_domain = loom_serve_residency_cache(model->residency)};

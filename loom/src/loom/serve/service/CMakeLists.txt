@@ -71,6 +71,7 @@ loom_cc_library(
     "executables.c"
   DEPS
     iree::base
+    iree::base::threading
     iree::hal
     iree::vm
     loom::binding::c::loomc
@@ -78,6 +79,8 @@ loom_cc_library(
     loom::serve::runtime::device
     loom::serve::runtime::host
     loom::serve::runtime::parameter::bank
+    loom::serve::runtime::parameter::residency
+    loom::serve::runtime::parameter::weights
     loom::serve::runtime::program::compilation
     loom::serve::runtime::program::jit
     loom::serve::runtime::program::module

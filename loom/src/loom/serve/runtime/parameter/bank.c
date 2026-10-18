@@ -214,6 +214,42 @@ iree_status_t loom_serve_parameter_bank_check_layout(
   return status;
 }
 
+bool loom_serve_parameter_bank_matches_domain(
+    const loom_serve_parameter_bank_t* bank, const loom_cmd_program_t* program,
+    uint32_t domain) {
+  const loom_cmd_program_parameter_root_t root =
+      loom_cmd_program_parameter_root_at(program, domain);
+  if (iree_hal_buffer_byte_length(bank->buffers[0]) !=
+          root.required_byte_length ||
+      (UINT64_C(1) << loom_serve_parameter_bank_alignments(bank)[0]) !=
+          iree_max(root.minimum_alignment, 1)) {
+    return false;
+  }
+  const loom_serve_weights_t* weights =
+      loom_serve_parameter_bank_plans(bank)[0];
+  const iree_host_size_t count = loom_serve_weights_parameter_count(weights);
+  iree_host_size_t cursor = 0;
+  for (uint32_t i = 0; i < program->parameters.count; ++i) {
+    const loom_cmd_program_parameter_t actual =
+        loom_cmd_program_parameter_at(program, i);
+    if (actual.fixed_buffer_index != domain) {
+      continue;
+    }
+    if (cursor == count) {
+      return false;
+    }
+    const loom_cmd_program_parameter_t expected =
+        loom_serve_weights_parameter_at(weights, cursor++);
+    if (!iree_string_view_equal(expected.key, actual.key) ||
+        expected.byte_offset != actual.byte_offset ||
+        expected.byte_length != actual.byte_length ||
+        expected.minimum_alignment != actual.minimum_alignment) {
+      return false;
+    }
+  }
+  return cursor == count;
+}
+
 void loom_serve_parameter_bank_retire(loom_serve_parameter_bank_t* bank,
                                       void (*wake)(void* user_data),
                                       void* user_data) {

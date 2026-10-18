@@ -112,8 +112,7 @@ struct loom_serve_finite_model_t {
 // sequence and may still own accepted backing allocations.
 static void loom_serve_finite_model_release_consumers(
     loom_serve_finite_model_t* model) {
-  loom_serve_executables_free(model->executables);
-  model->executables = NULL;
+  loom_serve_executables_retire(model->executables);
   loom_serve_program_free(model->control.program);
   model->control.program = NULL;
   iree_vm_module_release(model->control.runner);
@@ -131,6 +130,10 @@ static void loom_serve_finite_model_release_consumers(
 void loom_serve_finite_model_retire(loom_serve_finite_model_t* model,
                                     void (*wake)(void* user_data),
                                     void* user_data) {
+  if (model->executables) {
+    loom_serve_executables_set_observer(
+        model->executables, (loom_serve_wake_callback_t){wake, user_data});
+  }
   if (model->execution) {
     loom_serve_execution_set_retirement_observer(model->execution, wake,
                                                  user_data);
@@ -146,6 +149,7 @@ bool loom_serve_finite_model_is_retired(loom_serve_finite_model_t* model) {
   bool retired =
       !model->execution || loom_serve_execution_is_retired(model->execution);
   retired &= loom_serve_parameter_bank_is_retired(model->parameters);
+  retired &= loom_serve_executables_is_retired(model->executables);
   return retired;
 }
 
@@ -159,6 +163,8 @@ static iree_status_t loom_serve_finite_model_destroy_resources(
   loom_serve_finite_model_release_consumers(model);
   loom_serve_parameter_bank_retire(model->parameters, NULL, NULL);
   IREE_ASSERT(loom_serve_finite_model_is_retired(model));
+  IREE_RETURN_IF_ERROR(loom_serve_executables_free(model->executables));
+  model->executables = NULL;
   loom_serve_residency_free(model->residency);
   model->residency = NULL;
   iree_status_t status = loom_serve_parameter_bank_free(model->parameters);
@@ -201,6 +207,7 @@ iree_status_t loom_serve_finite_model_free(loom_serve_finite_model_t* model) {
   loom_serve_finite_model_retire(model, NULL, NULL);
   iree_status_t status = loom_serve_execution_drain(model->execution);
   loom_serve_parameter_bank_await_retirement(model->parameters);
+  loom_serve_executables_await_retirement(model->executables);
   return iree_status_join(status,
                           loom_serve_finite_model_destroy_resources(model));
 }
@@ -459,6 +466,7 @@ static iree_status_t loom_serve_finite_model_bind(
 
 static iree_status_t loom_serve_finite_model_link(
     loom_serve_finite_model_t* model, iree_vm_module_t* module,
+    const loom_serve_sources_t* sources,
     iree_hal_command_buffer_mode_t command_mode) {
   const iree_allocator_t host_allocator = model->host_allocator;
   iree_hal_queue_t* dispatch = loom_serve_device_dispatch_queue(model->owner);
@@ -470,6 +478,9 @@ static iree_status_t loom_serve_finite_model_link(
   const loom_serve_executable_options_t options = {
       .device = model->owner,
       .jit = model->jit,
+      .sources = sources,
+      .execution = model->execution,
+      .residency = model->residency,
       .preparation = model->preparation,
       .parameters = model->parameters,
       .recording = {.queue_family = iree_hal_queue_family(dispatch),
@@ -477,7 +488,8 @@ static iree_status_t loom_serve_finite_model_link(
                         loom_serve_parameter_bank_buffers(model->parameters),
                     .command_mode = command_mode,
                     .binding_count = 2},
-      .cache = model->specialization_cache};
+      .cache = model->specialization_cache,
+      .parameter_cache = {16, 1024 * 1024 * 1024}};
   IREE_RETURN_IF_ERROR(loom_serve_stage_table_allocate(
       &options.recording, NULL, model->stages.count, model->stages.values,
       host_allocator, &model->stages.table));
@@ -718,8 +730,8 @@ iree_status_t loom_serve_finite_load_advance(
           return iree_ok_status();
         }
         if (iree_status_is_ok(status)) {
-          status = loom_serve_finite_model_link(model, load->module,
-                                                load->command_mode);
+          status = loom_serve_finite_model_link(
+              model, load->module, &load->options.sources, load->command_mode);
         }
         load->phase = FINITE_LOAD_COMPLETE;
         break;
@@ -832,7 +844,33 @@ const iree_tokenizer_t* loom_serve_finite_model_tokenizer(
 
 loom_serve_residency_t* loom_serve_finite_model_residency(
     const loom_serve_finite_model_t* model) {
-  return model->residency;
+  return loom_serve_executables_residency(model->executables);
+}
+
+loom_serve_residency_snapshot_t loom_serve_finite_model_parameters(
+    const loom_serve_finite_model_t* model) {
+  return loom_serve_executables_parameters(model->executables);
+}
+
+void loom_serve_finite_model_set_pinned(loom_serve_finite_model_t* model,
+                                        bool pinned) {
+  loom_serve_executables_set_pinned(model->executables, pinned);
+}
+
+iree_status_t loom_serve_finite_model_deactivate(
+    loom_serve_finite_model_t* model, bool* out_complete) {
+  return loom_serve_executables_deactivate(model->executables, out_complete);
+}
+
+iree_status_t loom_serve_finite_model_query_status(
+    loom_serve_finite_model_t* model) {
+  return model ? loom_serve_executables_query_status(model->executables)
+               : iree_ok_status();
+}
+
+bool loom_serve_finite_model_is_pending(
+    const loom_serve_finite_model_t* model) {
+  return model && loom_serve_executables_is_pending(model->executables);
 }
 
 iree_status_t loom_serve_finite_model_prepare_request(
@@ -1005,7 +1043,8 @@ iree_status_t loom_serve_finite_model_submit(
     loom_serve_execution_frontier_t* out_frontier) {
   *out_result = NULL;
   *out_frontier = (loom_serve_execution_frontier_t){0};
-  loom_serve_residency_cancel_admission(model->residency);
+  loom_serve_residency_cancel_admission(
+      loom_serve_executables_residency(model->executables));
   iree_const_byte_span_t input;
   IREE_RETURN_IF_ERROR(iree_vm_buffer_map_read(
       model->invocation.payload, 0,
@@ -1072,6 +1111,7 @@ iree_status_t loom_serve_finite_model_submit(
 }
 
 void loom_serve_finite_model_complete(loom_serve_finite_model_t* model) {
-  loom_serve_residency_release(model->residency);
+  loom_serve_residency_release(
+      loom_serve_executables_residency(model->executables));
   loom_serve_finite_model_release_batch(model);
 }
