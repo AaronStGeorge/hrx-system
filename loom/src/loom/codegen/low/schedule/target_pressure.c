@@ -12,6 +12,7 @@
 #include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/codegen/low/schedule/call_pressure.h"
 #include "loom/codegen/low/schedule/pressure_lifetime.h"
+#include "loom/codegen/low/schedule/required_pressure.h"
 #include "loom/target/residency.h"
 
 static uint64_t loom_low_schedule_project_live_units(
@@ -1240,6 +1241,8 @@ void loom_low_schedule_target_pressure_score_candidate(
       state, pressure_state, candidate_node_index, score);
   loom_low_schedule_score_candidate_pressure_limits(
       state, pressure_state, candidate_node_index, score);
+  loom_low_schedule_required_pressure_score_candidate(state, pressure_state,
+                                                      score);
   loom_low_schedule_score_active_unspillable_completions(
       state, pressure_state, candidate_node_index, score);
   loom_low_schedule_call_pressure_score_candidate(state, pressure_state,

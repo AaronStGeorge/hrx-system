@@ -15,6 +15,7 @@
 #include "loom/codegen/low/schedule/completion_wait.h"
 #include "loom/codegen/low/schedule/pressure_lifetime.h"
 #include "loom/codegen/low/schedule/ready_frontier.h"
+#include "loom/codegen/low/schedule/required_pressure.h"
 #include "loom/codegen/low/schedule/target_pressure.h"
 #include "loom/target/registers.h"
 
@@ -282,6 +283,13 @@ iree_status_t loom_low_schedule_pressure_initialize(
   const uint16_t unspillable_domain_count =
       state->pressure_limits.unspillable_completion_domain_count;
   if (unspillable_domain_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->scratch_arena, unspillable_domain_count,
+        sizeof(*out_pressure_state->required_pressure),
+        (void**)&out_pressure_state->required_pressure));
+    memset(out_pressure_state->required_pressure, 0,
+           unspillable_domain_count *
+               sizeof(*out_pressure_state->required_pressure));
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->scratch_arena, unspillable_domain_count,
         sizeof(*out_pressure_state->candidate_unspillable_activation_units),
@@ -652,6 +660,8 @@ static uint32_t loom_low_schedule_remove_live_pressure_value(
   }
   loom_low_schedule_target_pressure_remove_packing_completion_value(
       state, pressure_state, value_ordinal);
+  loom_low_schedule_required_pressure_adjust_live(
+      state, pressure_state, value, -(int64_t)value->live_unit_count);
   const uint32_t transfer_units =
       loom_low_schedule_pressure_alias_transfer_from_source(
           state, pressure_state, value_ordinal);
@@ -700,6 +710,8 @@ static void loom_low_schedule_add_source_pressure_value(
   }
   IREE_ASSERT_LE(transferred_units, value->live_unit_count);
   const uint32_t added_units = value->live_unit_count - transferred_units;
+  loom_low_schedule_required_pressure_adjust_live(state, pressure_state, value,
+                                                  value->live_unit_count);
   pressure_state->current_live_units += added_units;
   const uint16_t reg_class_id = value->register_class_id;
   if (reg_class_id == LOOM_LOW_REG_CLASS_NONE) {
@@ -768,6 +780,11 @@ static void loom_low_schedule_reset_source_pressure_block(
   loom_low_schedule_reset_block_pressure_sets(pressure_state);
   loom_low_schedule_pressure_alias_reset(&pressure_state->storage_aliases);
   pressure_state->current_live_units = 0;
+  if (pressure_state->required_pressure != NULL) {
+    memset(pressure_state->required_pressure, 0,
+           state->pressure_limits.unspillable_completion_domain_count *
+               sizeof(*pressure_state->required_pressure));
+  }
 }
 
 void loom_low_schedule_initialize_source_pressure_block(
@@ -832,6 +849,11 @@ void loom_low_schedule_pressure_initialize_block(
     const loom_low_schedule_block_t* block_record,
     loom_low_schedule_pressure_state_t* pressure_state) {
   pressure_state->current_live_units = 0;
+  if (pressure_state->required_pressure != NULL) {
+    memset(pressure_state->required_pressure, 0,
+           state->pressure_limits.unspillable_completion_domain_count *
+               sizeof(*pressure_state->required_pressure));
+  }
   loom_low_schedule_target_pressure_reset_packing_completions(state,
                                                               pressure_state);
   for (iree_host_size_t i = 0; i < pressure_state->block_reg_class_count; ++i) {
@@ -923,6 +945,8 @@ void loom_low_schedule_pressure_initialize_block(
     value->flags |= LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
     pressure_state->current_live_units += unit_count;
     value->live_unit_count = unit_count;
+    loom_low_schedule_required_pressure_adjust_live(state, pressure_state,
+                                                    value, unit_count);
     const uint16_t reg_class_id = value->register_class_id;
     if (reg_class_id != LOOM_LOW_REG_CLASS_NONE &&
         pressure_state->current_live_units_by_reg_class) {
@@ -1122,7 +1146,17 @@ static void loom_low_schedule_select_candidate_schedule_class(
 }
 
 static void loom_low_schedule_reset_candidate_pressure_deltas(
+    const loom_low_schedule_build_state_t* state,
     loom_low_schedule_pressure_state_t* pressure_state) {
+  for (uint16_t domain = 0;
+       domain < state->pressure_limits.unspillable_completion_domain_count;
+       ++domain) {
+    loom_low_schedule_required_pressure_t* record =
+        &pressure_state->required_pressure[domain];
+    record->candidate_delta_units = 0;
+    record->candidate_write_delta_units = 0;
+    record->candidate_early_added_units = 0;
+  }
   for (iree_host_size_t i = 0;
        i < pressure_state->candidate_delta_touched_count; ++i) {
     const uint16_t reg_class_id =
@@ -1199,7 +1233,7 @@ static void loom_low_schedule_note_candidate_pressure_delta(
 void loom_low_schedule_pressure_initialize_current_cliff_penalty(
     const loom_low_schedule_build_state_t* state,
     loom_low_schedule_pressure_state_t* pressure_state) {
-  loom_low_schedule_reset_candidate_pressure_deltas(pressure_state);
+  loom_low_schedule_reset_candidate_pressure_deltas(state, pressure_state);
   loom_low_schedule_candidate_score_t score = {
       .pressure_cliff_units = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
       .units_until_pressure_cliff = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
@@ -1696,7 +1730,7 @@ void loom_low_schedule_pressure_score_candidate(
     const uint32_t* indegrees, uint32_t node_index,
     loom_low_schedule_candidate_score_t* out_score) {
   const loom_low_schedule_node_t* node = &state->nodes[node_index];
-  loom_low_schedule_reset_candidate_pressure_deltas(pressure_state);
+  loom_low_schedule_reset_candidate_pressure_deltas(state, pressure_state);
   uint64_t killed_live_units = 0;
   uint32_t killed_live_value_count = 0;
   uint64_t produced_live_units = 0;
@@ -1732,6 +1766,10 @@ void loom_low_schedule_pressure_score_candidate(
     if (value->remaining_use_count != candidate_use_count) {
       continue;
     }
+    loom_low_schedule_required_pressure_adjust_candidate(
+        state, pressure_state, value, -(int64_t)value->live_unit_count,
+        iree_any_bit_set(value->flags,
+                         LOOM_LOW_SCHEDULE_VALUE_FLAG_CANDIDATE_LATE_READ));
     loom_low_schedule_pressure_alias_note_candidate_result_releases(
         state, pressure_state, value_ordinal);
     const loom_low_schedule_pressure_alias_transfer_t transfer =
@@ -1792,6 +1830,8 @@ void loom_low_schedule_pressure_score_candidate(
             state, pressure_state, node_index, result_ordinals[result_index]);
     const uint32_t unit_count = value->unit_count - alias_units;
     produced_live_units += unit_count;
+    loom_low_schedule_required_pressure_adjust_candidate(
+        state, pressure_state, value, unit_count, false);
     if (unit_count != 0) {
       // Repair retained this result's private consumer placement. Keep that
       // placement for input-free clones too; the ready policy can still
@@ -1813,6 +1853,12 @@ void loom_low_schedule_pressure_score_candidate(
                          LOOM_LOW_SCHEDULE_VALUE_FLAG_EARLY_WRITE)) {
       loom_low_schedule_pressure_lifetime_note_early_result(
           state, pressure_state, value->register_class_id, unit_count);
+      loom_low_schedule_required_pressure_t* required =
+          loom_low_schedule_required_pressure_for_value(state, pressure_state,
+                                                        value);
+      if (required != NULL) {
+        required->candidate_early_added_units += unit_count;
+      }
     }
   }
   IREE_ASSERT_LE(killed_live_units, pressure_state->current_live_units);
@@ -1970,6 +2016,8 @@ void loom_low_schedule_pressure_note_node_scheduled(
     const uint32_t unit_count = value->unit_count - alias_units;
     value->live_unit_count = unit_count;
     pressure_state->current_live_units += unit_count;
+    loom_low_schedule_required_pressure_adjust_live(state, pressure_state,
+                                                    value, unit_count);
     const uint16_t reg_class_id = value->register_class_id;
     if (reg_class_id != LOOM_LOW_REG_CLASS_NONE &&
         pressure_state->current_live_units_by_reg_class) {

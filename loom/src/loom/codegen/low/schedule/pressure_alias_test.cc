@@ -9,6 +9,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/schedule/pressure.h"
+#include "loom/codegen/low/schedule/required_pressure.h"
 
 namespace loom {
 namespace {
@@ -26,7 +27,8 @@ class PressureAliasTest : public ::testing::Test {
   }
 
   void CheckTransfer(uint32_t alias_unit_count,
-                     loom_low_schedule_value_flags_t source_flags) {
+                     loom_low_schedule_value_flags_t source_flags,
+                     uint32_t required_mask = 0, bool alias_dies = false) {
     // An active source owns two units borrowed by a surviving alias. The
     // candidate consumes that source and produces a new alias of the survivor.
     // Wider survivors already own their remaining units privately.
@@ -41,6 +43,15 @@ class PressureAliasTest : public ::testing::Test {
     values[0].remaining_use_count = 1;
     values[0].flags |= source_flags;
     values[2].flags = 0;
+    if (alias_dies) {
+      values[1].remaining_use_count = 1;
+      values[1].flags |= LOOM_LOW_SCHEDULE_VALUE_FLAG_CANDIDATE_LATE_READ;
+    }
+    for (uint32_t i = 0; i < IREE_ARRAYSIZE(values); ++i) {
+      if (required_mask & (1u << i)) {
+        values[i].flags |= LOOM_LOW_SCHEDULE_VALUE_FLAG_REQUIRES_REGISTER;
+      }
+    }
     uint32_t value_producer_nodes[] = {
         LOOM_LOW_SCHEDULE_NODE_NONE,
         0,
@@ -75,12 +86,27 @@ class PressureAliasTest : public ::testing::Test {
         .storage_relations = {relation_starts, &relations, 2, 2},
     };
     loom_low_schedule_pressure_state_t pressure = {};
+    uint16_t completion_domains[] = {0};
+    state.pressure_limits.unspillable_completion_domain_ids_by_reg_class =
+        completion_domains;
+    loom_low_schedule_completion_domain_t completion = {
+        .capacity = 8,
+        .reg_class_id = 0,
+    };
+    state.pressure_limits.unspillable_completion_domains = &completion;
+    state.pressure_limits.unspillable_completion_domain_count = 1;
+    loom_low_schedule_required_pressure_t required = {};
+    pressure.required_pressure = &required;
     IREE_ASSERT_OK(loom_low_schedule_pressure_alias_initialize(
         &state, &pressure.storage_aliases));
     values[1].live_unit_count =
         alias_unit_count -
         loom_low_schedule_pressure_alias_append_scheduled_result(
             &state, &pressure, 0, 1);
+    const uint64_t source_required_units = required_mask & 1u ? 2 : 0;
+    const uint64_t alias_required_units =
+        required_mask & 2u ? alias_unit_count - 2 : 0;
+    required.live_units = source_required_units + alias_required_units;
     uint16_t operand_use_counts[] = {1, 1, 0};
     uint32_t scratch_counts[] = {0, 0, 0};
     loom_value_ordinal_t operand_ordinals[] = {0, 1, 0};
@@ -92,17 +118,34 @@ class PressureAliasTest : public ::testing::Test {
     const auto transfer =
         loom_low_schedule_pressure_alias_candidate_transfer_from_source(
             &state, &pressure, 0);
+    const bool late = iree_any_bit_set(
+        source_flags, LOOM_LOW_SCHEDULE_VALUE_FLAG_CANDIDATE_LATE_READ);
+    const int64_t transferred_required_units = required_mask & 2u ? 2 : 0;
+    if (alias_dies) {
+      // The alias inherits storage between the ordinary source read and its
+      // own late read. It contributes to write-time pressure, not final demand.
+      EXPECT_EQ(transfer.live_units, 0u);
+      EXPECT_EQ(transfer.late_units, 2u);
+      EXPECT_EQ(required.candidate_delta_units, 0);
+      EXPECT_EQ(required.candidate_write_delta_units,
+                late ? 0 : transferred_required_units);
+      return;
+    }
     EXPECT_EQ(transfer.live_units, 2u);
     const uint32_t predicted =
         loom_low_schedule_pressure_alias_candidate_result_units(
             &state, &pressure, 1, 2);
-    const bool late = iree_any_bit_set(
-        source_flags, LOOM_LOW_SCHEDULE_VALUE_FLAG_CANDIDATE_LATE_READ);
+    EXPECT_EQ(required.candidate_delta_units, transferred_required_units);
+    EXPECT_EQ(required.candidate_write_delta_units,
+              late ? 0 : transferred_required_units);
     EXPECT_EQ(predicted, late ? 0u : alias_unit_count);
     if (!late) {
       EXPECT_EQ(loom_low_schedule_pressure_alias_transfer_from_source(
                     &state, &pressure, 0),
                 2u);
+      EXPECT_EQ(required.live_units, source_required_units +
+                                         alias_required_units +
+                                         transferred_required_units);
       values[0].flags &= ~LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE;
       values[0].live_unit_count = 0;
       values[0].remaining_use_count = 0;
@@ -130,6 +173,30 @@ TEST_F(PressureAliasTest, InheritsBeforeResultWrites) {
 TEST_F(PressureAliasTest, LateInheritanceCannotCoalesceAnEarlierResult) {
   CheckTransfer(2, LOOM_LOW_SCHEDULE_VALUE_FLAG_CANDIDATE_LATE_READ);
   CheckTransfer(4, LOOM_LOW_SCHEDULE_VALUE_FLAG_CANDIDATE_LATE_READ);
+}
+
+TEST_F(PressureAliasTest, RequiredOwnershipFollowsTheTransferPhase) {
+  for (uint32_t required_mask = 0; required_mask < 4; ++required_mask) {
+    SCOPED_TRACE(required_mask);
+    for (uint32_t alias_unit_count : {2u, 4u}) {
+      CheckTransfer(alias_unit_count, 0, required_mask);
+      CheckTransfer(alias_unit_count,
+                    LOOM_LOW_SCHEDULE_VALUE_FLAG_CANDIDATE_LATE_READ,
+                    required_mask);
+    }
+  }
+}
+
+TEST_F(PressureAliasTest, RequiredLateAliasRetainsTransientOwnership) {
+  for (uint32_t required_mask = 0; required_mask < 4; ++required_mask) {
+    SCOPED_TRACE(required_mask);
+    for (uint32_t alias_unit_count : {2u, 4u}) {
+      CheckTransfer(alias_unit_count, 0, required_mask, true);
+      CheckTransfer(alias_unit_count,
+                    LOOM_LOW_SCHEDULE_VALUE_FLAG_CANDIDATE_LATE_READ,
+                    required_mask, true);
+    }
+  }
 }
 
 }  // namespace

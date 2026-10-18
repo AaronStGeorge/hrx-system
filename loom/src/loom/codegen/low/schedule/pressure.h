@@ -25,11 +25,15 @@ typedef struct loom_low_schedule_resource_pressure_record_t
     loom_low_schedule_resource_pressure_record_t;
 typedef struct loom_low_schedule_unlock_record_t
     loom_low_schedule_unlock_record_t;
+typedef struct loom_low_schedule_required_pressure_t
+    loom_low_schedule_required_pressure_t;
 
 // Mutable pressure simulation state for one scheduling run.
 struct loom_low_schedule_pressure_state_t {
   // Current live register units by descriptor register-class ID.
   uint64_t* current_live_units_by_reg_class;
+  // Required ownership and instruction-phase changes by completion domain.
+  loom_low_schedule_required_pressure_t* required_pressure;
   // Block-local aligned-packing headroom by descriptor register-class ID.
   uint32_t* packing_reserve_units_by_reg_class;
   // Shared pressure state for register classes with one allocation domain.
