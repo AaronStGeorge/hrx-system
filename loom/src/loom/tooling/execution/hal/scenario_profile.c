@@ -484,6 +484,12 @@ static iree_status_t loom_run_hal_testbench_scenario_product_benchmark(
   return status;
 }
 
+static const loom_testbench_product_vtable_t
+    loom_run_hal_testbench_scenario_product_vtable = {
+        .execute = loom_run_hal_testbench_scenario_product_execute,
+        .benchmark = loom_run_hal_testbench_scenario_product_benchmark,
+};
+
 static iree_status_t loom_run_hal_testbench_scenario_symbol_name_from_ref(
     const loom_module_t* module, loom_symbol_ref_t ref,
     iree_string_view_t* out_name) {
@@ -894,8 +900,7 @@ static iree_status_t loom_run_hal_testbench_scenario_product_prepare(
   }
   if (iree_status_is_ok(status)) {
     *out_product = (loom_testbench_prepared_product_t){
-        .execute = loom_run_hal_testbench_scenario_product_execute,
-        .benchmark = loom_run_hal_testbench_scenario_product_benchmark,
+        .vtable = &loom_run_hal_testbench_scenario_product_vtable,
         .destroy = loom_run_hal_testbench_scenario_product_destroy,
         .user_data = product,
     };
