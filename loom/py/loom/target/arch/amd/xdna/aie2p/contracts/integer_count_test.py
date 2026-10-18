@@ -216,9 +216,9 @@ def _evaluate_scalar_i64_rule(rule: DescriptorRule, input_value: int) -> int:
             result = operands["s0"] ^ operands["s1"]
         elif key == "and.i32":
             result = operands["s0"] & operands["s1"]
-        elif key == "add.i32":
+        elif key in ("add.i32", "add.no-carry.i32"):
             result = operands["s0"] + operands["s1"]
-        elif key == "add.i32.immediate":
+        elif key in ("add.i32.immediate", "add.no-carry.i32.immediate"):
             result = operands["s0"] + emit.immediates["imm"]
         elif key == "select.zero.i32":
             result = operands["s0"] if operands["s2"] == 0 else operands["s1"]

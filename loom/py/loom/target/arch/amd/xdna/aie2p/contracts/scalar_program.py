@@ -139,6 +139,14 @@ class ScalarProgram:
         immediates: Mapping[str, int] | None = None,
         copy_operands: Sequence[str] = (),
     ) -> ValueRef:
+        descriptor_key = f"amd.xdna.aie2p.{operation}"
+        result_field = "d0"
+        if operation == "add.i32":
+            descriptor_key = "amd.xdna.aie2p.add.no-carry.i32"
+            result_field = "dst"
+        elif operation == "add.i32.immediate":
+            descriptor_key = "amd.xdna.aie2p.add.no-carry.i32.immediate"
+            result_field = "dst"
         result = (
             ValueRef.result("result")
             if result_name is None
@@ -146,13 +154,13 @@ class ScalarProgram:
         )
         self.emits.append(
             EmitDescriptorOp(
-                descriptor=descriptor_by_key(
-                    AIE2P_CORE_DESCRIPTOR_SET, f"amd.xdna.aie2p.{operation}"
-                ),
+                descriptor=descriptor_by_key(AIE2P_CORE_DESCRIPTOR_SET, descriptor_key),
                 operands=operands,
-                results={"d0": result},
+                results={result_field: result},
                 result_types=(
-                    None if result_name is None else {"d0": DescriptorResultType()}
+                    None
+                    if result_name is None
+                    else {result_field: DescriptorResultType()}
                 ),
                 immediates={} if immediates is None else immediates,
                 form=DescriptorEmitForm.OP,

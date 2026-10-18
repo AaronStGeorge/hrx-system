@@ -41,7 +41,7 @@ def _evaluate(rule, numerator, divisor, multiplier=0, shift=0):
             value = operands["s0"] & operands["s1"]
         elif operation == "xor.i32":
             value = operands["s0"] ^ operands["s1"]
-        elif operation == "add.i32":
+        elif operation in ("add.i32", "add.no-carry.i32"):
             value = operands["s0"] + operands["s1"]
         elif operation == "sub.i32":
             value = operands["s0"] - operands["s1"]

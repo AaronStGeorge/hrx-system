@@ -752,6 +752,15 @@ _BASE_DESCRIPTOR_SPECS = (
         flags=(DescriptorFlag.SAFE_TO_SPECULATE,),
     ),
     _DescriptorSpec(
+        "ADD_NC_mv_add_ri",
+        f"{_TARGET_KEY}.add.no-carry.i32.immediate",
+        "integer.add.i32",
+        "II_ADD_NC_mv_add_ri_eR",
+        storage_overrides=(("dst", "eR"),),
+        asm_mnemonic="add.nc.immediate",
+        flags=(DescriptorFlag.SAFE_TO_SPECULATE,),
+    ),
+    _DescriptorSpec(
         "ADD_add_r_ri",
         f"{_TARGET_KEY}.add.i32.immediate",
         "integer.add.i32",
@@ -1771,6 +1780,15 @@ _BASE_DESCRIPTOR_SPECS = (
         f"{_TARGET_KEY}.add.i32",
         "integer.add.i32",
         "II_ADD_alu_r_rr",
+    ),
+    _DescriptorSpec(
+        "ADD_NC_mv_add_rr",
+        f"{_TARGET_KEY}.add.no-carry.i32",
+        "integer.add.i32",
+        "II_ADD_NC_mv_add_rr_eR",
+        storage_overrides=(("dst", "eR"),),
+        asm_mnemonic="add.nc",
+        flags=(DescriptorFlag.SAFE_TO_SPECULATE,),
     ),
     _DescriptorSpec(
         "ADD_alu_r_rr",

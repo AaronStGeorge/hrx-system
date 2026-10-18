@@ -240,7 +240,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   mov.ms.last %step
   %101 = mov.ss
   rel %step, 48
-  %208 = add.rr %record_index, %step
+  %208 = add.nc %record_index, %step
   low.br ^_bb1(%208: reg<aie2p.er>)
 ^_bb3:
   rel %step, 50
@@ -448,7 +448,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   acq %122, 51
   %left_value = lda %left_source, 0
   %right_value = lda %right_source, 0
-  %sum_value = add.rr %left_value, %right_value
+  %sum_value = add.nc %left_value, %right_value
   %difference_value = sub %left_value, %right_value
   %128 = mov.short 1
   rel %128, 48

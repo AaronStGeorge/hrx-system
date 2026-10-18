@@ -26,17 +26,15 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @subview_nested_dy
   %26 = mov.static-byte-offset 76
   %27 = mov.i32 5
   %28 = lshl %row_bounded, %27
-  %29 = add.rr %origin, %28
+  %29 = add.nc %origin, %28
   %30 = mov.i32 2
   %31 = lshl %column_bounded, %30
-  %32 = add.rr %29, %31
-  %33 = add.rr %32, %26
+  %32 = add.nc %29, %31
+  %33 = add.nc %32, %26
   %34 = mov.address-index %33
   %value = lda.i32.index %source_refined, %34
   %36 = mov.static-byte-offset 68
-  %39 = add.rr %origin, %28
-  %42 = add.rr %39, %31
-  %43 = add.rr %42, %36
+  %43 = add.nc %32, %36
   %44 = mov.address-index %43
   st.i32.index %value, %destination_inner, %44
   return %value
@@ -183,12 +181,12 @@ low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @subview_co
   %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %25 = mov.i32 3
   %26 = lshl %row_stride, %25
-  %27 = add.rr %origin, %26
+  %27 = add.nc %origin, %26
   %29 = lshl %column_stride, %25
-  %30 = add.rr %27, %29
+  %30 = add.nc %27, %29
   %31 = mov.i32 2
   %32 = lshl %row_stride, %31
-  %33 = add.rr %30, %32
+  %33 = add.nc %30, %32
   %34 = mov.address-index %33
   %value = lda.i32.index %inner, %34
   st %value, %destination, 4
@@ -234,11 +232,11 @@ low.func.def public target<amd.xdna.aie2p.core> abi(object_function) @subview_co
   %destination = resource<native_pointer> {index = 1, source_type = buffer} : reg<aie2p.ep>
   %43 = mov.i32 2
   %44 = lshl %first_columns, %43
-  %47 = add.rr %44, %44
+  %47 = add.nc %44, %44
   %48 = add.address-index.immediate %47, 20
   %value$49 = lda.i32.index %crop, %48
   %51 = lshl %second_columns, %43
-  %54 = add.rr %51, %51
+  %54 = add.nc %51, %51
   %55 = add.address-index.immediate %54, 20
   %value$56 = lda.i32.index %crop, %55
   %57 = vbcst.32 %value$49

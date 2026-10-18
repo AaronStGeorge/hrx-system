@@ -139,8 +139,8 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @offset_scale_loop
   %28 = lt %iteration, %count
   low.cond_br %28, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  %next = add.rr %current, %stride
-  %30 = add.rr %iteration, %step
+  %next = add.nc %current, %stride
+  %30 = add.nc %iteration, %step
   low.br ^_bb1(%30: reg<aie2p.er>, %next: reg<aie2p.er>)
 ^_bb3:
   %previous = sub %current, %stride

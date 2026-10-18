@@ -47,7 +47,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @load_bfloat_at(%b
   %source = resource<native_pointer> {index = 0, source_type = buffer} : reg<aie2p.ep>
   %13 = mov.i32 1
   %14 = lshl %position, %13
-  %15 = add.rr %base, %14
+  %15 = add.nc %base, %14
   %16 = mov.address-index %15
   %value = lda.i16.index %source, %16
   %18 = mov.short 16

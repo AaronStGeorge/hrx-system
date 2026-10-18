@@ -233,7 +233,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @f32x32_captured_m
   %59 = vsel.32 %54, %56, %58
   %60 = vmov.vector512.to.accumulator512 %47
   %61 = vmov.vector512.to.accumulator512 %59
-  %63 = add.rr %position, %step
+  %63 = add.nc %position, %step
   low.br ^_bb1(%63: reg<aie2p.er>, %60: reg<aie2p.mbms>, %61: reg<aie2p.mbms>)
 ^_bb3:
   %initial = mov.i32 -956301312
@@ -321,7 +321,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @f32x32_captured_a
   %55 = vmov.accumulator512.to.vector512 %54
   %56 = vmov.vector512.to.accumulator512 %45
   %57 = vmov.vector512.to.accumulator512 %55
-  %59 = add.rr %position, %step
+  %59 = add.nc %position, %step
   low.br ^_bb1(%59: reg<aie2p.er>, %56: reg<aie2p.mbms>, %57: reg<aie2p.mbms>)
 ^_bb3:
   %61 = vmov.accumulator512.to.vector512 %113

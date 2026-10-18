@@ -114,7 +114,7 @@ low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @matrix_b
   %rhs_fragment = vconv.bfp16ebs8.fp32 %69
   %71 = mova.i32 780
   %next = mma.bfp16ebs8.m8n8k8 %accumulator, %lhs_fragment, %rhs_fragment, %71
-  %73 = add.rr %record, %step
+  %73 = add.nc %record, %step
   low.br ^_bb1(%73: reg<aie2p.er>, %next: reg<aie2p.mbms x4>)
 ^_bb3:
   %74 = slice %accumulator[0] : reg<aie2p.mbms x4> -> reg<aie2p.mbms>

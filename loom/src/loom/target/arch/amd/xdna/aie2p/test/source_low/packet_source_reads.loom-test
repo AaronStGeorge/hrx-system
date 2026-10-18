@@ -99,7 +99,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @preserve_outer_re
   vst.512.i32x16 %33, %destination0_view, 64
   vst.512.i32x16 %32, %destination1_view, 0
   vst.512.i32x16 %33, %destination1_view, 64
-  %37 = add.rr %iteration, %step
+  %37 = add.nc %iteration, %step
   low.br ^_bb1(%37: reg<aie2p.er>)
 ^_bb3:
   return

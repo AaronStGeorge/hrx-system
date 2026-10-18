@@ -77,14 +77,14 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %141, 48
   %324 = mov.short 4
   %325 = mov.short 12
-  %326 = add.rr %write, %324
+  %326 = add.nc %write, %324
   %327 = eq %326, %325
   %328 = copy %327 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %329 = sel.nez %320, %326, %328
   %330 = mov.address-index %write
   st.i32.index %value, %payload, %330
   rel %319, 49
-  %331 = add.rr %value, %319
+  %331 = add.nc %value, %319
   low.br ^_bb1(%331: reg<aie2p.er>, %329: reg<aie2p.er>)
 ^_bb3:
   rel %319, 50
@@ -107,7 +107,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   acq %202, 49
   %339 = mov.short 4
   %340 = mov.short 12
-  %341 = add.rr %read, %339
+  %341 = add.nc %read, %339
   %342 = eq %341, %340
   %343 = copy %342 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %344 = sel.nez %335, %341, %343
@@ -141,7 +141,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   mov.ms.last %336
   %182 = mov.ss
   rel %336, 48
-  %355 = add.rr %record, %336
+  %355 = add.nc %record, %336
   low.br ^_bb1(%355: reg<aie2p.er>, %344: reg<aie2p.er>)
 ^_bb3:
   rel %336, 50
@@ -414,14 +414,14 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %141, 48
   %324 = mov.short 4
   %325 = mov.short 12
-  %326 = add.rr %write, %324
+  %326 = add.nc %write, %324
   %327 = eq %326, %325
   %328 = copy %327 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %329 = sel.nez %320, %326, %328
   %330 = mov.address-index %write
   st.i32.index %value, %payload, %330
   rel %319, 49
-  %331 = add.rr %value, %319
+  %331 = add.nc %value, %319
   low.br ^_bb1(%331: reg<aie2p.er>, %329: reg<aie2p.er>)
 ^_bb3:
   rel %319, 50
@@ -444,7 +444,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   acq %202, 49
   %339 = mov.short 4
   %340 = mov.short 12
-  %341 = add.rr %read, %339
+  %341 = add.nc %read, %339
   %342 = eq %341, %340
   %343 = copy %342 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %344 = sel.nez %335, %341, %343
@@ -478,7 +478,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   mov.ms.last %336
   %182 = mov.ss
   rel %336, 48
-  %355 = add.rr %record, %336
+  %355 = add.nc %record, %336
   low.br ^_bb1(%355: reg<aie2p.er>, %344: reg<aie2p.er>)
 ^_bb3:
   rel %336, 50
@@ -759,7 +759,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %140, 48
   st %value, %payload, 0
   rel %291, 49
-  %295 = add.rr %value, %291
+  %295 = add.nc %value, %291
   low.br ^_bb1(%295: reg<aie2p.er>)
 ^_bb3:
   rel %291, 50
@@ -804,7 +804,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   mov.ms.last %305
   %172 = mov.ss
   rel %299, 48
-  %307 = add.rr %record, %299
+  %307 = add.nc %record, %299
   low.br ^_bb1(%307: reg<aie2p.er>)
 ^_bb3:
   rel %299, 50
@@ -1081,14 +1081,14 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %141, 48
   %341 = mov.short 4
   %342 = mov.short 12
-  %343 = add.rr %write, %341
+  %343 = add.nc %write, %341
   %344 = eq %343, %342
   %345 = copy %344 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %346 = sel.nez %337, %343, %345
   %347 = mov.address-index %write
   st.i32.index %value, %payload, %347
   rel %336, 49
-  %348 = add.rr %value, %336
+  %348 = add.nc %value, %336
   low.br ^_bb1(%348: reg<aie2p.er>, %346: reg<aie2p.er>)
 ^_bb3:
   rel %336, 50
@@ -1111,7 +1111,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   acq %202, 49
   %356 = mov.short 4
   %357 = mov.short 12
-  %358 = add.rr %read, %356
+  %358 = add.nc %read, %356
   %359 = eq %358, %357
   %360 = copy %359 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %361 = sel.nez %352, %358, %360
@@ -1145,7 +1145,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   mov.ms.last %356
   %182 = mov.ss
   rel %353, 48
-  %372 = add.rr %record, %353
+  %372 = add.nc %record, %353
   low.br ^_bb1(%372: reg<aie2p.er>, %361: reg<aie2p.er>)
 ^_bb3:
   rel %353, 50

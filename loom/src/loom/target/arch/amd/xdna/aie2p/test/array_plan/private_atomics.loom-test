@@ -196,11 +196,11 @@ low.func.def retain target<amd.xdna.aie2p.core> @private_atomic_array$worker$0()
   %23 = lda %input_f32, 24
   %24 = lda %input_f32, 28
   %25 = mov.short 1
-  %26 = add.rr %23, %25
-  %27 = add.rr %24, %25
+  %26 = add.nc %23, %25
+  %27 = add.nc %24, %25
   %28 = xor %26, %25
   %29 = mov.short -1
-  %30 = add.rr %28, %29
+  %30 = add.nc %28, %29
   %31 = mov.short -101
   %32 = eq %24, %27
   %33 = copy %32 : reg<aie2p.er> -> reg<aie2p.mr27_select>

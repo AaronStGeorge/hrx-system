@@ -214,7 +214,7 @@ func.def @high_bit_offset_add(%input: offset) -> (i64) {
 // ----
 low.func.def target<amd.xdna.aie2p.core> abi(object_function) @high_bit_offset_add(%bounded: reg<aie2p.er>) -> (reg<aie2p.er x2>) asm {
   %base = mov.i32 -2147483648
-  %sum = add.rr %base, %bounded
+  %sum = add.nc %base, %bounded
   %10 = mov.short 0
   %wide = concat(%sum, %10) : (reg<aie2p.er>, reg<aie2p.er>) -> reg<aie2p.er x2>
   return %wide

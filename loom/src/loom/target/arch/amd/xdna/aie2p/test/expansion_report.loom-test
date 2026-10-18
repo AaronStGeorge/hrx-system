@@ -20,7 +20,7 @@ COMPILE-REPORT: source_low[0] function=scalar_arithmetic_expansion source_op=sca
 COMPILE-REPORT: source_low[1] function=scalar_arithmetic_expansion source_op=scalar.subf selection=rule descriptor_key=amd.xdna.aie2p.sub.f32x16.configured descriptor_semantic_tag=floating.sub.f32x16.configured emitted_ops=9
 COMPILE-REPORT: source_low[2] function=scalar_arithmetic_expansion source_op=scalar.mulf selection=rule plan_key=exact_binary32 descriptor_key=amd.xdna.aie2p.select.nonzero.i32 descriptor_semantic_tag=integer.select.nonzero.i32 emitted_ops=163
 COMPILE-REPORT: source_low[3] function=scalar_arithmetic_expansion source_op=scalar.fmaf selection=rule plan_key=exact_binary32_fma descriptor_key=amd.xdna.aie2p.select.nonzero.i32 descriptor_semantic_tag=integer.select.nonzero.i32 emitted_ops=352
-COMPILE-REPORT: source_low[4] function=scalar_arithmetic_expansion source_op=scalar.addi selection=rule descriptor_key=amd.xdna.aie2p.add.i32 descriptor_semantic_tag=integer.add.i32 emitted_ops=1
+COMPILE-REPORT: source_low[4] function=scalar_arithmetic_expansion source_op=scalar.addi selection=rule descriptor_key=amd.xdna.aie2p.add.no-carry.i32 descriptor_semantic_tag=integer.add.i32 emitted_ops=1
 
 // ====
 

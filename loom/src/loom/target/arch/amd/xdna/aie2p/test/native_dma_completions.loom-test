@@ -116,8 +116,8 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %139, 51
   acq %139, 52
   %value = lda %last_pair, 0
-  %partial_sum = add.rr %saved, %value
-  %sum = add.rr %partial_sum, %saved_pair
+  %partial_sum = add.nc %saved, %value
+  %sum = add.nc %partial_sum, %saved_pair
   st %sum, %last_pair, 0
   rel %83, 49
   acq %139, 49

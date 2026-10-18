@@ -21,7 +21,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @prefix16(%lower: 
   %18 = sel.nez %14, %15, %17
   %19 = mov.short 1
   %20 = lshl %19, %18
-  %21 = add %20, -1
+  %21 = add.nc.immediate %20, -1
   %22 = predicate.copy.scalar.to.low32 %21, %21
   %result = predicate.complete.zero.high32 %22, 0
   return %result
@@ -55,7 +55,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @prefix32(%lower: 
   %23 = sel.nez %18, %21, %22
   %24 = mov.short 1
   %25 = lshl %24, %23
-  %26 = add %25, -1
+  %26 = add.nc.immediate %25, -1
   %27 = mov.short -1
   %28 = copy %20 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %29 = sel.nez %26, %27, %28
@@ -92,7 +92,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @prefix48(%lower: 
   %23 = sel.nez %18, %21, %22
   %24 = mov.short 1
   %25 = lshl %24, %23
-  %26 = add %25, -1
+  %26 = add.nc.immediate %25, -1
   %27 = mov.short -1
   %28 = copy %20 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %29 = sel.nez %26, %27, %28
@@ -102,7 +102,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @prefix48(%lower: 
   %35 = copy %33 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %36 = sel.nez %32, %11, %35
   %38 = lshl %24, %36
-  %39 = add %38, -1
+  %39 = add.nc.immediate %38, -1
   %result = predicate.copy.scalar.to.high32 %39, %39, %30
   return %result
 }
@@ -135,7 +135,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @prefix64(%lower: 
   %23 = sel.nez %18, %21, %22
   %24 = mov.short 1
   %25 = lshl %24, %23
-  %26 = add %25, -1
+  %26 = add.nc.immediate %25, -1
   %27 = mov.short -1
   %28 = copy %20 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %29 = sel.nez %26, %27, %28
@@ -148,7 +148,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @prefix64(%lower: 
   %40 = copy %38 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %41 = sel.nez %36, %21, %40
   %43 = lshl %24, %41
-  %44 = add %43, -1
+  %44 = add.nc.immediate %43, -1
   %46 = copy %38 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %47 = sel.nez %44, %27, %46
   %result = predicate.copy.scalar.to.high32 %47, %47, %30

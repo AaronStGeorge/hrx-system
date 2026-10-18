@@ -281,6 +281,8 @@ def _binary_rule(
     source_op: Op,
     type_pattern: TypePattern,
     descriptor_key: str,
+    *,
+    result_field: str = "d0",
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     return DescriptorRule(
@@ -294,7 +296,7 @@ def _binary_rule(
                     "s0": ValueRef.operand("lhs"),
                     "s1": ValueRef.operand("rhs"),
                 },
-                results={"d0": ValueRef.result("result")},
+                results={result_field: ValueRef.result("result")},
             ),
         ),
     )
@@ -1891,7 +1893,7 @@ def _count_trailing_zeros_rule(
     type_pattern: TypePattern,
 ) -> DescriptorRule:
     constant = _descriptor("amd.xdna.aie2p.constant.i32.short")
-    add_immediate = _descriptor("amd.xdna.aie2p.add.i32.immediate")
+    add_immediate = _descriptor("amd.xdna.aie2p.add.no-carry.i32.immediate")
     bitwise_xor = _descriptor("amd.xdna.aie2p.xor.i32")
     bitwise_and = _descriptor("amd.xdna.aie2p.and.i32")
     popcount = _descriptor("amd.xdna.aie2p.popcount.i32")
@@ -1919,8 +1921,8 @@ def _count_trailing_zeros_rule(
             EmitDescriptorOp(
                 descriptor=add_immediate,
                 operands={"s0": ValueRef.operand("input")},
-                results={"d0": ValueRef.temporary("minus_one")},
-                result_types={"d0": type_pattern},
+                results={"dst": ValueRef.temporary("minus_one")},
+                result_types={"dst": type_pattern},
                 immediates={"imm": -1},
                 form=DescriptorEmitForm.OP,
             ),

@@ -297,14 +297,14 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %63, 32
   %194 = mov.short 4
   %195 = mov.short 8
-  %196 = add.rr %write, %194
+  %196 = add.nc %write, %194
   %197 = eq %196, %195
   %198 = copy %197 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %199 = sel.nez %188, %196, %198
   %200 = mov.address-index %write
   st.i32.index %value, %payload, %200
   rel %step, 33
-  %201 = add.rr %value, %step
+  %201 = add.nc %value, %step
   low.br ^_bb1(%201: reg<aie2p.er>, %199: reg<aie2p.er>)
 ^_bb3:
   rel %step, 48
@@ -532,14 +532,14 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %100, 32
   %298 = mov.short 4
   %299 = mov.short 8
-  %300 = add.rr %write, %298
+  %300 = add.nc %write, %298
   %301 = eq %300, %299
   %302 = copy %301 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %303 = sel.nez %292, %300, %302
   %304 = mov.address-index %write
   st.i32.index %value, %payload, %304
   rel %step, 33
-  %305 = add.rr %value, %step
+  %305 = add.nc %value, %step
   low.br ^_bb1(%305: reg<aie2p.er>, %303: reg<aie2p.er>)
 ^_bb3:
   rel %step, 48
@@ -589,7 +589,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_1() asm {
   %132 = mov.ss
   rel %pairs, 48
   acq %322, 49
-  %318 = add.rr %pair, %step
+  %318 = add.nc %pair, %step
   low.br ^_bb1(%318: reg<aie2p.er>)
 ^_bb3:
   %319 = mov.short 8
@@ -798,14 +798,14 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %53, 32
   %118 = mov.short 4
   %119 = mov.short 8
-  %120 = add.rr %write, %118
+  %120 = add.nc %write, %118
   %121 = eq %120, %119
   %122 = copy %121 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %123 = sel.nez %113, %120, %122
   %124 = mov.address-index %write
   st.i32.index %value, %payload, %124
   rel %step, 33
-  %125 = add.rr %value, %step
+  %125 = add.nc %value, %step
   low.br ^_bb1(%125: reg<aie2p.er>, %123: reg<aie2p.er>)
 ^_bb3:
   rel %step, 48

@@ -76,14 +76,14 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   acq %141, 48
   %316 = mov.short 4
   %317 = mov.short 8
-  %318 = add.rr %write, %316
+  %318 = add.nc %write, %316
   %319 = eq %318, %317
   %320 = copy %319 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %321 = sel.nez %312, %318, %320
   %322 = mov.address-index %write
   st.i32.index %value, %payload, %322
   rel %311, 49
-  %323 = add.rr %value, %311
+  %323 = add.nc %value, %311
   low.br ^_bb1(%323: reg<aie2p.er>, %321: reg<aie2p.er>)
 ^_bb3:
   rel %311, 50
@@ -106,7 +106,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   acq %202, 49
   %331 = mov.short 4
   %332 = mov.short 8
-  %333 = add.rr %read, %331
+  %333 = add.nc %read, %331
   %334 = eq %333, %332
   %335 = copy %334 : reg<aie2p.er> -> reg<aie2p.mr27_select>
   %336 = sel.nez %327, %333, %335
@@ -140,7 +140,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_3() asm {
   mov.ms.last %328
   %182 = mov.ss
   rel %328, 48
-  %347 = add.rr %record, %328
+  %347 = add.nc %record, %328
   low.br ^_bb1(%347: reg<aie2p.er>, %336: reg<aie2p.er>)
 ^_bb3:
   rel %328, 50

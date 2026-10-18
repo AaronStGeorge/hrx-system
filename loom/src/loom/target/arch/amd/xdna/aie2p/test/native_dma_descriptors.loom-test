@@ -77,13 +77,13 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %381 = lt %position, %end
   low.cond_br %381, ^_bb2, ^_bb3 : reg<aie2p.er>
 ^_bb2:
-  %next = add.rr %position, %248
+  %next = add.nc %position, %248
   %388 = lshl %position, %end
   %389 = mov.short 4
-  %390 = add.rr %388, %389
+  %390 = add.nc %388, %389
   %391 = mov.short 3
   %392 = lshl %position, %391
-  %393 = add.rr %392, %389
+  %393 = add.nc %392, %389
   %394 = mov.short 12
   %395 = lshl %388, %394
   %397 = or %395, %248
@@ -138,7 +138,7 @@ low.func.def inline target<amd.xdna.aie2p.core> @__pipeline_worker_0() asm {
   %111 = mov.ss
   %147 = mov.ss
   %400 = mov.short 16
-  %401 = add.rr %388, %400
+  %401 = add.nc %388, %400
   %171 = mov.local-address 458784
   %172 = lda %171, 0
   %173 = lda %171, 4

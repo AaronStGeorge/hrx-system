@@ -27,8 +27,8 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @exchange_fields(%
   %header = mov.i32 32768
   %row_bytes = mul %row, %row_stride
   %column_bytes = mul %column, %column_stride
-  %row_base = add.rr %row_bytes, %header
-  %base = add.rr %row_base, %column_bytes
+  %row_base = add.nc %row_bytes, %header
+  %base = add.nc %row_base, %column_bytes
   %27 = mov.address-index %base
   %first = lda.i32.index %view, %27
   %29 = add.address-index.immediate %base, 4
@@ -68,12 +68,12 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @copy_chunks(%row:
   %column_stride = mov.short 64
   %row_bytes = mul %row, %row_stride
   %column_bytes = mul %column, %column_stride
-  %row_base = add.rr %row_bytes, %column_stride
-  %base = add.rr %row_base, %column_bytes
+  %row_base = add.nc %row_bytes, %column_stride
+  %base = add.nc %row_base, %column_bytes
   %33 = add.address-index.immediate %base, 32
   %34 = vlda.256.i32x8.index %source_view, %33
   %39 = mov.static-byte-offset 64
-  %40 = add.rr %base, %39
+  %40 = add.nc %base, %39
   %41 = mov.address-index %40
   %42 = vlda.256.i32x8.index %source_view, %41
   vst.256.i32x8.index %34, %destination_view, %33

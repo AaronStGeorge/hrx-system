@@ -2053,6 +2053,29 @@ def test_implicit_registers_and_machine_ties_reach_low() -> None:
     assert constraints[0].rhs_operand_index == 2
 
 
+def test_no_carry_additions_avoid_sticky_state() -> None:
+    descriptors = {
+        descriptor.key: descriptor
+        for descriptor in AIE2P_CORE_DESCRIPTOR_SET.descriptors
+    }
+    for key, operand_names, has_immediate in (
+        ("add.no-carry.i32", ("dst", "s0", "s1"), False),
+        ("add.no-carry.i32.immediate", ("dst", "s0"), True),
+    ):
+        descriptor = descriptors[f"amd.xdna.aie2p.{key}"]
+        assert (
+            tuple(operand.field_name for operand in descriptor.operands)
+            == operand_names
+        )
+        assert all(
+            OperandFlag.IMPLICIT not in operand.flags for operand in descriptor.operands
+        )
+        assert descriptor.operands[0].role is OperandRole.RESULT
+        assert descriptor.operands[0].reg_alts[0].reg_class == "aie2p.er"
+        assert DescriptorFlag.SAFE_TO_SPECULATE in descriptor.flags
+        assert bool(descriptor.immediates) is has_immediate
+
+
 def test_packed_scalar_conversion_producers_are_rematerializable() -> None:
     descriptors = {
         descriptor.key: descriptor

@@ -58,7 +58,7 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @signed_dynamic_st
   %25 = lshl %23, %24
   %26 = mul %signed, %stride
   %28 = lshl %26, %24
-  %29 = add.rr %25, %28
+  %29 = add.nc %25, %28
   %30 = mov.address-index %29
   %value = lda.i32.index %view, %30
   return %value

@@ -55,7 +55,7 @@ def test_predicate_range_rules_keep_narrow_path_short() -> None:
         "amd.xdna.aie2p.select.nonzero.i32",
         "amd.xdna.aie2p.constant.i32.short",
         "amd.xdna.aie2p.lshl.i32",
-        "amd.xdna.aie2p.add.i32.immediate",
+        "amd.xdna.aie2p.add.no-carry.i32.immediate",
         "amd.xdna.aie2p.predicate.copy.scalar.to.low32",
         "amd.xdna.aie2p.predicate.complete.zero.high32",
     ]

@@ -248,7 +248,7 @@ def _memory_constraint(
 def _byte_offset_materializer() -> SourceMemoryByteOffsetMaterializer:
     return SourceMemoryByteOffsetMaterializer(
         constant=_descriptor("amd.xdna.aie2p.constant.i32"),
-        add=_descriptor("amd.xdna.aie2p.add.i32"),
+        add=_descriptor("amd.xdna.aie2p.add.no-carry.i32"),
         multiply=_descriptor("amd.xdna.aie2p.mul.i32"),
         shift_left=_descriptor("amd.xdna.aie2p.lshl.i32"),
         multiply_add=_descriptor("amd.xdna.aie2p.madd.i32"),
