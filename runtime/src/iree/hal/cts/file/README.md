@@ -5,11 +5,14 @@ device, a caller-owned proactor pool, and retained destination buffers. Each
 in-flight read has its own semaphore: completion order is independent of
 submission order. The file, pool, buffers, and semaphores survive repetitions.
 
-The two rows measure different workloads:
+The rows measure different workloads:
 
 - `BM_ReadBurst` submits `read_depth` independent reads and waits for all of
   them. Elapsed time covers the complete burst; dividing by `read_depth` gives
   amortized time per read, not individual read latency.
+- `BM_ReadIntermittent` measures a complete burst, then leaves a 1 ms application
+  gap. Reported latency excludes the gap; process CPU includes runtime activity
+  during it.
 - `BM_ReadStream` reads the selected file prefix through a ring of `read_depth`
   buffers. A lane is refilled after its previous read completes. Elapsed time
   includes the final completion of every lane.
@@ -29,9 +32,9 @@ are not performance measurements.
 ```sh
 build_tools/bin/iree-bazel-run --config=opt \
   //runtime/src/iree/hal/cts/file:file_benchmark -- \
-  --device=rdna --file=/path/to/immutable.bin \
+  --device=task --file=/path/to/immutable.bin \
   --file_length=1073741824 --read_bytes=65536 --read_depth=8 \
-  --registered_io=true --benchmark_filter=BM_ReadBurst \
+  --benchmark_filter=BM_ReadBurst \
   --benchmark_min_time=200x --benchmark_repetitions=5 \
   --benchmark_out=burst.json --benchmark_out_format=json
 ```
@@ -40,6 +43,11 @@ build_tools/bin/iree-bazel-run --config=opt \
 larger allocation per lane, allowing small reads to use the same backing
 geometry as a bulk workload. Its default is `read_bytes`. `file_length=0` uses
 the whole file; a stream's final read can be shorter than `read_bytes`.
+
+`initial_read_bytes` performs an untimed smaller read before warm-up, exercising
+transfer-cache growth without changing the timed read size. `file_proactors`
+imports the file through that many independent I/O owners, shared round-robin
+across lanes. Zero uses the device's file-import path.
 
 For storage bandwidth, select `BM_ReadStream`, an aligned range, and
 `--direct=true`. For example, 64 MiB reads at depth eight retain at least
@@ -73,6 +81,9 @@ The additional counters describe the measured shape:
 | --- | --- |
 | `read_bytes` | Maximum requested bytes per read |
 | `read_depth` | Maximum number of independent reads in flight |
+| `initial_read_bytes` | Untimed initial transfer extent before normal warm-up |
+| `file_proactors` | Number of independent file I/O owners, or zero for device import |
+| `idle_ns` | Application gap between completed bursts, excluded from elapsed latency |
 | `retained_bytes` | Sum of the HAL-reported destination allocation sizes |
 | `host_allocations_per_read` | Successful allocation/reallocation calls through the supplied IREE host allocator, divided by completed reads |
 | `direct` | Whether native uncached I/O was requested |
