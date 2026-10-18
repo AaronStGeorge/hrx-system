@@ -16,6 +16,19 @@
 extern "C" {
 #endif
 
+// Reusable score storage for one scheduling run's bounded nomination policy.
+typedef struct loom_low_schedule_candidate_policy_t {
+  // Number of register-debt words in each nominee's row.
+  iree_host_size_t register_debt_word_count;
+  // Scratch-arena rows, borrowed by scores until the next selection.
+  loom_low_schedule_register_debt_word_t* nominee_register_debts;
+} loom_low_schedule_candidate_policy_t;
+
+// Allocates bounded score storage when the strategy uses pressure scoring.
+iree_status_t loom_low_schedule_candidate_policy_initialize(
+    const loom_low_schedule_build_state_t* state,
+    loom_low_schedule_candidate_policy_t* out_policy);
+
 // Result of selecting one node from a non-empty ready frontier.
 typedef struct loom_low_schedule_candidate_selection_t {
   // Chosen node index.
@@ -35,6 +48,7 @@ typedef struct loom_low_schedule_candidate_selection_t {
 // Selects one node from a known non-empty |ready_policy| frontier.
 void loom_low_schedule_candidate_policy_select(
     const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_candidate_policy_t* policy,
     loom_low_schedule_pressure_state_t* pressure_state,
     const loom_low_schedule_ready_policy_t* ready_policy,
     const uint32_t* indegrees, uint32_t ready_candidate_count,

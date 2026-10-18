@@ -1728,6 +1728,7 @@ void loom_low_schedule_pressure_score_candidate(
     loom_low_schedule_pressure_state_t* pressure_state,
     const loom_low_schedule_ready_policy_t* ready_policy,
     const uint32_t* indegrees, uint32_t node_index,
+    loom_low_schedule_register_debt_word_t* register_debt,
     loom_low_schedule_candidate_score_t* out_score) {
   const loom_low_schedule_node_t* node = &state->nodes[node_index];
   loom_low_schedule_reset_candidate_pressure_deltas(state, pressure_state);
@@ -1901,6 +1902,7 @@ void loom_low_schedule_pressure_score_candidate(
       produced_live_units > killed_live_units &&
       !unlocks_non_growing_descriptor;
   *out_score = (loom_low_schedule_candidate_score_t){
+      .register_debt = register_debt,
       .projected_live_units = projected_live_units,
       .killed_live_units = killed_live_units,
       .killed_live_value_count = killed_live_value_count,

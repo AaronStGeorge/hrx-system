@@ -256,9 +256,14 @@ static void loom_low_schedule_score_candidate_pressure_limit(
           LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY;
     } else {
       score->flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REGISTER_DEBT;
+      loom_low_schedule_register_debt_word_t* debt =
+          &score->register_debt[reg_class_id / 64];
+      const uint64_t bank = UINT64_C(1) << (reg_class_id % 64);
+      debt->banks |= bank;
       if (opens_required_lifetime) {
         score->flags |=
             LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REQUIRED_REGISTER_DEBT;
+        debt->required_banks |= bank;
       }
     }
   }

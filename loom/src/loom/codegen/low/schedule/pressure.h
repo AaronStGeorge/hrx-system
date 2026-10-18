@@ -264,8 +264,19 @@ typedef enum loom_low_schedule_pressure_risk_e {
   LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT = 2,
 } loom_low_schedule_pressure_risk_t;
 
+// Register debt for 64 canonical register-class IDs. Shared alias pools use
+// their representative class, so all aliases identify the same physical bank.
+typedef struct loom_low_schedule_register_debt_word_t {
+  // Banks whose physical pressure grows beyond their spillable capacity.
+  uint64_t banks;
+  // Subset of banks in which the candidate opens required register lifetimes.
+  uint64_t required_banks;
+} loom_low_schedule_register_debt_word_t;
+
 // Complete bounded score for one ready scheduling candidate.
 typedef struct loom_low_schedule_candidate_score_t {
+  // Debt words borrowed from the candidate policy until its next selection.
+  loom_low_schedule_register_debt_word_t* register_debt;
   // Aggregate live register units after scheduling the candidate.
   uint64_t projected_live_units;
   // Live register units whose last use is the candidate.
@@ -472,6 +483,7 @@ void loom_low_schedule_pressure_score_candidate(
     loom_low_schedule_pressure_state_t* pressure_state,
     const loom_low_schedule_ready_policy_t* ready_policy,
     const uint32_t* indegrees, uint32_t node_index,
+    loom_low_schedule_register_debt_word_t* register_debt,
     loom_low_schedule_candidate_score_t* out_score);
 
 // Resolves a pressure source to its target descriptor-authored name.

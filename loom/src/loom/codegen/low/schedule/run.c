@@ -1360,6 +1360,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
   uint32_t* indegrees = NULL;
   loom_low_schedule_pressure_state_t pressure_state = {0};
   loom_low_schedule_ready_policy_t ready_policy = {0};
+  loom_low_schedule_candidate_policy_t candidate_policy = {0};
   if (state->dependencies.count > UINT32_MAX) {
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -1481,6 +1482,8 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
           : 1;
   IREE_RETURN_IF_ERROR(loom_low_schedule_ready_policy_initialize(
       state, (uint32_t)node_count, ready_view_count, &ready_policy));
+  IREE_RETURN_IF_ERROR(
+      loom_low_schedule_candidate_policy_initialize(state, &candidate_policy));
 
   for (iree_host_size_t block_index = 0; block_index < state->body->block_count;
        ++block_index) {
@@ -1524,7 +1527,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
       }
       loom_low_schedule_candidate_selection_t selection;
       loom_low_schedule_candidate_policy_select(
-          state, &pressure_state, &ready_policy, indegrees,
+          state, &candidate_policy, &pressure_state, &ready_policy, indegrees,
           ready_candidate_count, &selection);
       const uint32_t chosen_node = selection.chosen_node;
       loom_low_schedule_ready_policy_remove(state, &ready_policy, chosen_node);
