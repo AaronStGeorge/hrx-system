@@ -493,13 +493,18 @@ root independently through build configuration.
 
 | Workflow surface | Host compiler | AMDGPU device compiler | Coverage intent |
 | --- | --- | --- | --- |
-| Presubmit | Fetched ROCm Clang 23 | None | Runs repository policy checks and clang-tidy with the newest supported LLVM APIs. |
-| IREE Bazel/CMake CPU and importers | Ubuntu Clang 18 | None | Primary source build, test, sanitizer, and importer coverage. |
-| IREE Bazel/CMake Vulkan | Fetched ROCm Clang 23 | None | Vulkan source build and execution coverage on self-hosted runners that do not currently provision a generic Clang toolchain. |
-| IREE Bazel/CMake AMDGPU | Fetched ROCm Clang 23 | Fetched ROCm Clang 23 | Compiles and runs AMDGPU host and device code in the ROCm toolchain environment. |
-| IREE Bazel repository build | GCC 13 system toolchain | Fetched ROCm Clang 23 | Builds every supported Linux HAL driver, Loom target/importer, and build-compatible target under `//...`; it does not duplicate test execution. |
-| libHRX Bazel | Fetched ROCm Clang 23 | Fetched ROCm Clang 23 | Validates the source HRX product against its shipping ROCm compiler environment. |
-| Installed CMake/package CI | Fetched ROCm Clang 23 | Fetched ROCm Clang 23 | Builds, installs, packages, and tests the composed HRX distribution. |
+| Presubmit | Fetched ROCm Clang | None | Runs repository policy checks and clang-tidy with the newest supported LLVM APIs. |
+| IREE Bazel CPU Fastbuild/TSAN/UBSAN and CMake Sanitizer Smoke | Ubuntu Clang 18 | None | Preserves source build, test, and sanitizer coverage with the system compiler. |
+| IREE Bazel CPU ASAN and CMake CPU RelWithDebInfo | Fetched ROCm Clang | None | Exercises static and shared compiler tools, including the C++23 importer. |
+| IREE Bazel/CMake Vulkan | System GCC | None | Vulkan source build and execution coverage on self-hosted runners. |
+| IREE Bazel/CMake AMDGPU | Fetched ROCm Clang | Fetched ROCm Clang | Compiles and runs AMDGPU host and device code in the ROCm toolchain environment. |
+| IREE Bazel/CMake repository build | GCC 13 system toolchain | Fetched ROCm Clang | Builds every supported Linux HAL driver, Loom target/importer, and build-compatible target. |
+| libHRX Bazel | Fetched ROCm Clang | Fetched ROCm Clang | Validates the source HRX product against its shipping ROCm compiler environment. |
+| Installed CMake/package CI | Fetched ROCm Clang | Fetched ROCm Clang | Builds, installs, packages, and tests the composed HRX distribution. |
+
+The importer requires C++23 library facilities, including `std::expected`.
+Ubuntu Clang 18 with the runner's libstdc++ does not expose that facility, so
+the importer qualification jobs select the fetched ROCm host compiler explicitly.
 
 The `platform_coverage` rows in `.github/workflows/ci_iree.yml` are the shared
 representative set for portable optional dependencies: Linux Bazel Clang ASAN,
