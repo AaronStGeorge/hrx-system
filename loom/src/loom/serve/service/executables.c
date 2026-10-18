@@ -669,7 +669,6 @@ loom_serve_residency_snapshot_t loom_serve_executables_parameters(
       result.memory.committed_bytes += memory.committed_bytes;
       result.memory.pending_bytes += memory.pending_bytes;
       result.memory.releasing_bytes += memory.releasing_bytes;
-      result.memory.peak_bytes += memory.peak_bytes;
       result.memory.released_bytes += memory.released_bytes;
       loom_serve_weight_activity_add(&result.activity,
                                      loom_serve_weights_activity(weights));

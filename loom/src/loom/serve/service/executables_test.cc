@@ -459,6 +459,11 @@ TEST_P(ExecutablesTest, ParameterByteBudgetRetiresRecordingsAndBank) {
   IREE_ASSERT_OK(Select("raw", false, 1));
   ASSERT_NO_FATAL_FAILURE(Execute(690));
   ASSERT_NO_FATAL_FAILURE(CollectIdle());
+  const auto first = loom_serve_executables_parameters(executables_);
+  EXPECT_EQ(first.activity.activations, 2u);
+  EXPECT_EQ(first.memory.reserved_bytes, GetParam() ? kSlabBytes : 0u);
+  EXPECT_EQ(first.memory.committed_bytes, GetParam() ? kSlabBytes : 0u);
+  EXPECT_EQ(first.memory.released_bytes, GetParam() ? kSlabBytes : 0u);
   IREE_ASSERT_OK(Select("raw", false, 1));
   EXPECT_EQ(loom_serve_residency_activity(
                 loom_serve_executables_residency(executables_))
@@ -466,6 +471,36 @@ TEST_P(ExecutablesTest, ParameterByteBudgetRetiresRecordingsAndBank) {
             1u);
   ASSERT_NO_FATAL_FAILURE(Execute(690));
   ASSERT_NO_FATAL_FAILURE(CollectIdle());
+  const auto second = loom_serve_executables_parameters(executables_);
+  EXPECT_EQ(second.activity.activations, 3u);
+  EXPECT_EQ(second.memory.reserved_bytes, first.memory.reserved_bytes);
+  EXPECT_EQ(second.memory.committed_bytes, first.memory.committed_bytes);
+  EXPECT_EQ(second.memory.released_bytes, 2 * first.memory.released_bytes);
+}
+
+TEST_P(ExecutablesTest, RetainedCheckpointsDoNotAddIndependentPeaks) {
+  if (!GetParam()) {
+    GTEST_SKIP() << "Fixed storage has no physical-pool accounting";
+  }
+  IREE_ASSERT_OK(Create(4, 16 * 1024 * 1024, 4, 1024 * 1024, true));
+  iree::testing::TempFilePath first("loom_first", ".safetensors");
+  iree::testing::TempFilePath second("loom_second", ".safetensors");
+  WriteCheckpoint(first.path(), 200);
+  WriteCheckpoint(second.path(), 300);
+  selected_checkpoint_ = first.path();
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(690));
+  selected_checkpoint_ = second.path();
+  IREE_ASSERT_OK(Select("raw", false, 1));
+  ASSERT_NO_FATAL_FAILURE(Execute(990));
+  const auto memory = loom_serve_executables_parameters(executables_).memory;
+  EXPECT_EQ(memory.reserved_bytes, 3 * kSlabBytes);
+  EXPECT_EQ(memory.committed_bytes, 2 * kSlabBytes);
+  EXPECT_EQ(memory.released_bytes, kSlabBytes);
+  // The pool observes the actual overlap. A retained checkpoint's historical
+  // peak cannot be added to the independently activated replacement's peak.
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool_).peak_bytes,
+            2 * kSlabBytes);
 }
 
 TEST_P(ExecutablesTest, MissingNewCheckpointDoesNotPoisonNextSelection) {

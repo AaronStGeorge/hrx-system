@@ -23,6 +23,24 @@ typedef struct loom_serve_memory_pool_t loom_serve_memory_pool_t;
 typedef struct loom_serve_virtual_buffer_t loom_serve_virtual_buffer_t;
 typedef struct loom_serve_memory_operation_t loom_serve_memory_operation_t;
 
+// Additive usage across distinct reservations or banks on one serialized owner.
+// Views borrowing overlapping owners cannot be summed. Historical peaks are
+// not additive and belong to the storage owner that observes their transitions.
+typedef struct loom_serve_memory_usage_t {
+  // Reserved virtual bytes, including final slab alignment.
+  uint64_t reserved_bytes;
+  // Unique backing bytes currently published by the owner.
+  uint64_t committed_bytes;
+  // Budget charged to accepted commitments not yet published by the owner.
+  uint64_t pending_bytes;
+  // Backing selected for return, until logical release is published.
+  uint64_t releasing_bytes;
+  // Cumulative backing returns published by the owner.
+  uint64_t released_bytes;
+} loom_serve_memory_usage_t;
+
+// Statistics maintained by one storage owner, not reconstructed from views of
+// independently activated or retired banks.
 typedef struct loom_serve_memory_statistics_t {
   // Reserved virtual bytes, including final slab alignment.
   uint64_t reserved_bytes;

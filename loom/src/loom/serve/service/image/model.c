@@ -998,7 +998,7 @@ bool loom_serve_image_model_is_pending(const loom_serve_image_model_t* model) {
   return model && loom_serve_executables_is_pending(model->executables);
 }
 
-loom_serve_memory_statistics_t loom_serve_image_model_weight_statistics(
+loom_serve_memory_usage_t loom_serve_image_model_weight_statistics(
     const loom_serve_image_model_t* model) {
   return loom_serve_executables_parameters(model->executables).memory;
 }

@@ -63,7 +63,7 @@ typedef struct loom_serve_text_heartbeat_snapshot_t {
   // separate.
   loom_serve_memory_statistics_t state_memory;
   // Prepared parameters, independently reclaimable from retained state.
-  loom_serve_memory_statistics_t weight_memory;
+  loom_serve_memory_usage_t weight_memory;
   // Cumulative parameter read/preparation submissions, not device timings.
   loom_serve_weight_activity_t weight_activity;
   // Shared owner accounting, including other models and pooled command scratch.

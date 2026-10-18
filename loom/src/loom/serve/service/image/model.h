@@ -186,7 +186,7 @@ void loom_serve_image_model_set_pinned(loom_serve_image_model_t* model,
 iree_status_t loom_serve_image_model_query_status(
     loom_serve_image_model_t* model);
 bool loom_serve_image_model_is_pending(const loom_serve_image_model_t* model);
-loom_serve_memory_statistics_t loom_serve_image_model_weight_statistics(
+loom_serve_memory_usage_t loom_serve_image_model_weight_statistics(
     const loom_serve_image_model_t* model);
 // Copies cumulative submission activity across the model's parameter domains.
 loom_serve_weight_activity_t loom_serve_image_model_weight_activity(

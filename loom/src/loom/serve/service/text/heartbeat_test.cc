@@ -123,7 +123,7 @@ TEST_F(TextHeartbeatTest, TimerReadinessPublishesCopiedCounters) {
   counters_.input_tokens = 42;
   heartbeat_.snapshot.weight_activity = {2, 1, 64, 32, 4};
   heartbeat_.snapshot.state_memory = {100, 60, 20, 10, 80, 40};
-  heartbeat_.snapshot.weight_memory = {200, 90, 30, 15, 100, 50};
+  heartbeat_.snapshot.weight_memory = {200, 90, 30, 15, 50};
   heartbeat_.snapshot.device_memory.workspace.bytes_committed = 1234;
   const uint32_t previous_count = wake_count_.load(std::memory_order_acquire);
   bool progress = false;
@@ -149,7 +149,7 @@ TEST_F(TextHeartbeatTest, TimerReadinessPublishesCopiedCounters) {
   EXPECT_NE(first.find("\"elastic_parameters\":{\"reserved_bytes\":200,"
                        "\"committed_bytes\":90,\"pending_bytes\":30,"
                        "\"releasing_bytes\":15,"
-                       "\"peak_bytes\":100,\"released_bytes\":50}"),
+                       "\"released_bytes\":50}"),
             std::string::npos);
   EXPECT_EQ(cursor, 7u);
   AwaitWake(previous_count);

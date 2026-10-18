@@ -233,7 +233,8 @@ iree_status_t loom_serve_residency_deactivate(loom_serve_residency_t* residency,
 
 // Combined accounting for this working set. Shared groups appear in each
 // borrower's snapshot; summing borrower snapshots is not physical accounting.
-loom_serve_memory_statistics_t loom_serve_residency_statistics(
+// Independent group peaks cannot establish a simultaneous working-set peak.
+loom_serve_memory_usage_t loom_serve_residency_statistics(
     const loom_serve_residency_t* residency);
 
 // Copies cumulative submission counters across every registered weight plan.
@@ -264,7 +265,7 @@ typedef struct loom_serve_residency_snapshot_t {
     uint64_t age_ns;
   } admission;
   // Parameter-only virtual accounting, available only with elastic backing.
-  loom_serve_memory_statistics_t memory;
+  loom_serve_memory_usage_t memory;
   // Cumulative activation and preparation work, independent of current backing.
   loom_serve_weight_activity_t activity;
 } loom_serve_residency_snapshot_t;
