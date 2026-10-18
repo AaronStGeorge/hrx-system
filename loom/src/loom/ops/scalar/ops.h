@@ -126,7 +126,7 @@ enum {
   LOOM_OP_SCALAR_COUNT_ = 104,
 };
 
-// IEEE 754 fast-math relaxation flags for float operations.
+// IEEE 754 fast-math relaxation flags for float operations. nnan and ninf are independent author promises, not runtime checks or requests to clamp results. Together they guarantee finite floating-point results, but do not imply exact representability in a narrower type or absence of subnormals. Behavior outside an authored promise is not constrained by the operation's ordinary special-value contract. Flags do not refine unrelated uses of an operand.
 #define LOOM_SCALAR_FASTMATHFLAGS_REASSOC ((uint8_t)1)
 #define LOOM_SCALAR_FASTMATHFLAGS_NNAN ((uint8_t)2)
 #define LOOM_SCALAR_FASTMATHFLAGS_NINF ((uint8_t)4)

@@ -23,6 +23,7 @@ loom_check_test_suite(
     "coordinate_facts.loom-test"
     "divrem.loom-test"
     "facts.loom-test"
+    "fast_math_facts.loom-test"
     "float_conversion_facts.loom-test"
     "integer_extrema_facts.loom-test"
     "integer_partial_facts.loom-test"
