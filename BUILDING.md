@@ -236,6 +236,10 @@ runtimes. Native Windows uses the tools discovered in its Visual Studio/LLVM
 environment. Linux cross builds use clang-cl, lld-link, and llvm-ml from the
 selected Linux LLVM installation.
 
+Clang's compiler runtime supplies helpers for operations such as 128-bit
+arithmetic. Bazel and CMake resolve it from the selected compiler and link it
+into executables and shared libraries that need those helpers.
+
 #### Cross-compilation from Linux
 
 Provide a Linux LLVM installation with the x86-64 Windows compiler runtime and
