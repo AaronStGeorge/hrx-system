@@ -30,6 +30,7 @@ iree_cc_library(
   SRCS
     "host_export.c"
   DEPS
+    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_udmabuf_uapi>
     ::dma_buf
     ::file
     amdf::headers
@@ -199,6 +200,7 @@ iree_cc_test(
     "-Wl,--wrap=open"
     "-Wl,--wrap=ioctl"
   DEPS
+    $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_udmabuf_uapi>
     ::host_export
     ::host_memory
     amdf::headers
