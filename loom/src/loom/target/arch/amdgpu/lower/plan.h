@@ -313,6 +313,16 @@ enum loom_amdgpu_bf16_pack_kind_e {
   LOOM_AMDGPU_BF16_PACK_KIND_ROUND_PRESERVE_NAN = 4,
 };
 
+typedef uint8_t loom_amdgpu_f16_pack_kind_t;
+enum loom_amdgpu_f16_pack_kind_e {
+  // No F32-to-F16 pack action has been selected.
+  LOOM_AMDGPU_F16_PACK_KIND_NONE = 0,
+  // Preserve round-to-nearest-even semantics with per-lane conversion.
+  LOOM_AMDGPU_F16_PACK_KIND_ROUND = 1,
+  // Use packed round-toward-zero conversion after proving every lane exact.
+  LOOM_AMDGPU_F16_PACK_KIND_EXACT_NATIVE = 2,
+};
+
 typedef uint8_t loom_amdgpu_vector_scale_materialization_kind_t;
 enum loom_amdgpu_vector_scale_materialization_kind_e {
   // The conversion consumes its scale source directly, if present.
@@ -385,6 +395,8 @@ typedef struct loom_amdgpu_vector_16bit_float_conversion_plan_t {
   union {
     // Selected F32-to-BF16 pack action.
     loom_amdgpu_bf16_pack_kind_t bf16_pack_kind;
+    // Selected F32-to-F16 pack action.
+    loom_amdgpu_f16_pack_kind_t f16_pack_kind;
     // Packed FP4 decode strategy when strategy_kind is FP4_DECODE.
     loom_amdgpu_fp4_decode_plan_t fp4_decode;
     // Packed FP8 encode strategy when strategy_kind is FP8_ENCODE.

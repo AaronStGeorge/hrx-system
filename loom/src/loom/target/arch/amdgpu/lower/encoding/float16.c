@@ -134,6 +134,15 @@ static iree_status_t loom_amdgpu_initialize_float16_pack_descriptors(
         LOOM_AMDGPU_FLOAT16_PACK_DESCRIPTOR_FLAG_HAS_F16_CONVERT;
   }
 
+  bool has_exact_f16_pack_descriptor = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_RTZ_F16_F32,
+      &descriptors->exact_f16_pack_descriptor, &has_exact_f16_pack_descriptor));
+  if (has_exact_f16_pack_descriptor) {
+    descriptors->flags |=
+        LOOM_AMDGPU_FLOAT16_PACK_DESCRIPTOR_FLAG_HAS_EXACT_F16_PACK;
+  }
+
   bool has_native_f16_pack_descriptor = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
       context, LOOM_AMDGPU_DESCRIPTOR_REF_V_PACK_B32_F16,
@@ -358,6 +367,23 @@ iree_status_t loom_amdgpu_emit_f32_pair_to_packed_f16_with_descriptors(
   return loom_amdgpu_emit_packed_u16_lane_pair(
       context, source_op, pack_u16_descriptor, low_lane, high_lane, lane_type,
       out_packed);
+}
+
+iree_status_t loom_amdgpu_emit_exact_f32_pair_to_packed_f16_with_descriptors(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_float16_pack_descriptors_t* descriptors,
+    loom_value_id_t low_source_lane, loom_value_id_t high_source_lane,
+    loom_type_t lane_type, loom_value_id_t* out_packed) {
+  IREE_ASSERT_TRUE(iree_any_bit_set(
+      descriptors->flags,
+      LOOM_AMDGPU_FLOAT16_PACK_DESCRIPTOR_FLAG_HAS_EXACT_F16_PACK));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+      context, source_op, low_source_lane, &low_source_lane));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+      context, source_op, high_source_lane, &high_source_lane));
+  return loom_amdgpu_emit_float16_pack_descriptor(
+      context, source_op, &descriptors->exact_f16_pack_descriptor,
+      low_source_lane, high_source_lane, lane_type, out_packed);
 }
 
 iree_status_t loom_amdgpu_emit_f32_pair_to_packed_bf16_with_descriptors(
