@@ -49,6 +49,7 @@ loom_check_test_suite(
         "target_legalize_kernel_reduce.loom-test",
         "target_legalize_kernel_scan.loom-test",
         "target_legalize_kernel_shuffle.loom-test",
+        "target_legalize_kernel_workgroup_collective.loom-test",
         "target_legalize_matrix.loom-test",
         "target_legalize_memory.loom-test",
         "target_legalize_report.loom-test",
