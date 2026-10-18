@@ -443,8 +443,8 @@ static void iree_hal_amdgpu_feedback_state_publish_tsan_event(
       target->workgroup_shadow_stride = source->workgroup_shadow_stride;
       target->workgroup_ordinal = source->workgroup_ordinal;
       target->workgroup_local_memory_size = source->workgroup_local_memory_size;
-      target->memory_granule_shift = source->memory_granule_shift;
-      target->shadow_entry_size = source->shadow_entry_size;
+      target->shadow_cell_size = source->shadow_cell_size;
+      target->shadow_history_count = source->shadow_history_count;
       memcpy(target->current_workgroup_id, source->current_workgroup_id,
              sizeof(target->current_workgroup_id));
       memcpy(target->current_workitem_id, source->current_workitem_id,

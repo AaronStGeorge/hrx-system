@@ -19,10 +19,6 @@ extern "C" {
 typedef struct loom_amdgpu_sanitizer_race_shadow_layout_config_t {
   // Total bytes in the queue-local shadow allocation.
   loom_value_id_t shadow_size;
-  // Log2 application bytes represented by one shadow entry.
-  loom_value_id_t memory_granule_shift;
-  // Bytes in each shadow entry.
-  loom_value_id_t shadow_entry_size;
 } loom_amdgpu_sanitizer_race_shadow_layout_config_t;
 
 typedef struct loom_amdgpu_sanitizer_race_shadow_layout_t {

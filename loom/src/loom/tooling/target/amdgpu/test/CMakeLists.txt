@@ -1080,39 +1080,11 @@ loom_test_module(
     tsan_test_module
   SRCS
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_tsan_actual.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/target/amdgpu/test/corpus/gfx11/fragment_repack_bf16.loom"
 )
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
-loom_execution_test(
-  NAME
-    tsan_test_execute_amdgpu_tsan_byte_granule_test
-  MODULE
-    "::tsan_test_module"
-  RUNNER_ARGS
-    "--device=amdgpu"
-    "--sanitizer=tsan"
-    "--sanitizer-reporting=report-only"
-    "--amdgpu_tsan=true"
-    "--amdgpu_tsan_report_policy=report-only"
-    "--amdgpu_tsan_memory_granule_shift=0"
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
-    "iree-build-requirement=loom.execute.iree_hal"
-    "iree-build-requirement=runtime.hal.amdgpu"
-    "iree-run-requirement=runtime.resource.amd_gpu"
-    "runtime-resource=amd-gpu"
-    "loom-execution-profile=amdgpu_tsan_byte_granule"
-    "loom-target-family=amdgpu"
-    "loom-target-class=gpu"
-    "loom-executor=hardware"
-  RESOURCE_GROUP
-    "gpu-device"
-)
-endif()
-
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 loom_execution_test(
   NAME
@@ -1164,9 +1136,7 @@ loom_execution_test(
     "--sanitizer-reporting=report-only"
     "--amdgpu_tsan=true"
     "--amdgpu_tsan_report_policy=report-only"
-    "--amdgpu_tsan_memory_granule_shift=0"
-    "--amdgpu_tsan_workgroup_local_memory_size=8"
-    "--amdgpu_tsan_workgroup_capacity=1"
+    "--amdgpu_tsan_shadow_size=2176"
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"

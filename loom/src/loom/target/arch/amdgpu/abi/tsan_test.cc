@@ -21,60 +21,26 @@ TEST(AmdgpuTsanAbiTest, ConfigConstantsMatchHalTsanAbi) {
             sizeof(iree_hal_amdgpu_tsan_config_t));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_FLAGS_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_config_t, flags));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_MEMORY_GRANULE_SHIFT_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, memory_granule_shift));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_SHADOW_BASE_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_config_t, shadow_base));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_SHADOW_SIZE_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_config_t, shadow_size));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_DISPATCH_SHADOW_STRIDE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, dispatch_shadow_stride));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_WORKGROUP_SHADOW_STRIDE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, workgroup_shadow_stride));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_WORKGROUP_CAPACITY_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, workgroup_capacity));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_SHADOW_ENTRY_SIZE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, shadow_entry_size));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_QUEUE_AQL_BASE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, queue_aql_base));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_QUEUE_AQL_SLOT_MASK_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, queue_aql_slot_mask));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_QUEUE_STATE_BASE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, queue_state_base));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_CONFIG_SHADOW_SLOT_COUNT_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_config_t, shadow_slot_count));
   EXPECT_EQ(static_cast<uint32_t>(LOOM_AMDGPU_TSAN_CONFIG_FLAG_ENABLED),
             static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_ENABLED));
   EXPECT_EQ(
-      static_cast<uint32_t>(LOOM_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_STATE),
-      static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_STATE));
-}
-
-TEST(AmdgpuTsanAbiTest, QueueStateConstantsMatchHalTsanAbi) {
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_QUEUE_STATE_BYTE_LENGTH,
-            sizeof(iree_hal_amdgpu_tsan_queue_state_t));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_QUEUE_STATE_SHADOW_BASE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_queue_state_t, shadow_base));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_QUEUE_STATE_SHADOW_SIZE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_queue_state_t, shadow_size));
-  EXPECT_EQ(
-      LOOM_AMDGPU_TSAN_QUEUE_STATE_DISPATCH_SHADOW_STRIDE_OFFSET,
-      offsetof(iree_hal_amdgpu_tsan_queue_state_t, dispatch_shadow_stride));
-  EXPECT_EQ(
-      LOOM_AMDGPU_TSAN_QUEUE_STATE_WORKGROUP_SHADOW_STRIDE_OFFSET,
-      offsetof(iree_hal_amdgpu_tsan_queue_state_t, workgroup_shadow_stride));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_QUEUE_STATE_WORKGROUP_CAPACITY_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_queue_state_t, workgroup_capacity));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_QUEUE_STATE_SHADOW_ENTRY_SIZE_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_queue_state_t, shadow_entry_size));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_QUEUE_STATE_MEMORY_GRANULE_SHIFT_OFFSET,
-            offsetof(iree_hal_amdgpu_tsan_queue_state_t, memory_granule_shift));
+      static_cast<uint32_t>(LOOM_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_SHADOW),
+      static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_SHADOW));
 }
 
 TEST(AmdgpuTsanAbiTest, ShadowConstantsMatchHalTsanAbi) {
   EXPECT_EQ(
-      static_cast<uint32_t>(LOOM_AMDGPU_TSAN_SHADOW_ENTRY_BYTE_LENGTH),
-      static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_BYTE_LENGTH));
+      static_cast<uint32_t>(LOOM_AMDGPU_TSAN_SHADOW_HISTORY_BYTE_LENGTH),
+      static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_SHADOW_HISTORY_BYTE_LENGTH));
+  EXPECT_EQ(static_cast<uint32_t>(LOOM_AMDGPU_TSAN_SHADOW_HISTORY_COUNT),
+            static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_SHADOW_HISTORY_COUNT));
+  EXPECT_EQ(
+      static_cast<uint32_t>(LOOM_AMDGPU_TSAN_SHADOW_CELL_BYTE_LENGTH),
+      static_cast<uint32_t>(IREE_HAL_AMDGPU_TSAN_SHADOW_CELL_BYTE_LENGTH));
   EXPECT_EQ(static_cast<uint32_t>(
                 LOOM_AMDGPU_TSAN_WORKGROUP_SHADOW_HEADER_BYTE_LENGTH),
             static_cast<uint32_t>(
@@ -227,12 +193,12 @@ TEST(AmdgpuTsanAbiTest, ReportConstantsMatchHalTsanAbi) {
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_LOCAL_MEMORY_SIZE_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_report_t,
                      detail.shadow_capacity.workgroup_local_memory_size));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_MEMORY_GRANULE_SHIFT_OFFSET,
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_CELL_SIZE_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_report_t,
-                     detail.shadow_capacity.memory_granule_shift));
-  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_ENTRY_SIZE_OFFSET,
+                     detail.shadow_capacity.shadow_cell_size));
+  EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_HISTORY_COUNT_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_report_t,
-                     detail.shadow_capacity.shadow_entry_size));
+                     detail.shadow_capacity.shadow_history_count));
   EXPECT_EQ(LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_X_OFFSET,
             offsetof(iree_hal_amdgpu_tsan_report_t,
                      detail.shadow_capacity.current_workgroup_id[0]));

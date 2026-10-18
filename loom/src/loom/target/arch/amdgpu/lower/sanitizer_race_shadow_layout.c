@@ -104,49 +104,17 @@ iree_status_t loom_amdgpu_build_sanitizer_race_shadow_layout(
     loom_amdgpu_sanitizer_race_shadow_layout_t* out_layout) {
   *out_layout = (loom_amdgpu_sanitizer_race_shadow_layout_t){0};
   loom_amdgpu_sanitizer_race_shadow_layout_t layout = {0};
-  loom_type_t sgpr_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_group_segment_size(
       context, source_op, &layout.workgroup_local_memory_size));
-  loom_value_id_t one = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 1, sgpr_type,
-      &one));
-  loom_value_id_t granule_size = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_LSHL_B32, one,
-      config->memory_granule_shift, sgpr_type, &granule_size));
-  loom_value_id_t granule_mask = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_SUB_U32, granule_size,
-      one, sgpr_type, &granule_mask));
-  loom_value_id_t whole_entry_count = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_LSHR_B32,
-      layout.workgroup_local_memory_size, config->memory_granule_shift,
-      sgpr_type, &whole_entry_count));
-  loom_value_id_t remainder = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B32,
-      layout.workgroup_local_memory_size, granule_mask, sgpr_type, &remainder));
-  loom_value_id_t has_remainder_scc = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr32_nonzero_scc(
-      context, source_op, remainder, &has_remainder_scc));
-  loom_value_id_t has_remainder = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_scc_word(
-      context, source_op, has_remainder_scc, &has_remainder));
-  loom_value_id_t entry_count = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
-      whole_entry_count, has_remainder, sgpr_type, &entry_count));
-
   loom_value_id_t entry_count_u64 = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_from_u32(
-      context, source_op, entry_count, &entry_count_u64));
+      context, source_op, layout.workgroup_local_memory_size,
+      &entry_count_u64));
   loom_value_id_t entry_size_u64 = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_from_u32(
-      context, source_op, config->shadow_entry_size, &entry_size_u64));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(
+      context, source_op, LOOM_AMDGPU_TSAN_SHADOW_CELL_BYTE_LENGTH,
+      &entry_size_u64));
   loom_value_id_t shadow_data_size = LOOM_VALUE_ID_INVALID;
   loom_value_id_t data_size_overflow = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_mul_checked(

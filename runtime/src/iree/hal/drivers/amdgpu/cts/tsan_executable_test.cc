@@ -109,23 +109,12 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
   EXPECT_EQ(config.record_length, sizeof(config));
   EXPECT_EQ(config.abi_version, IREE_HAL_AMDGPU_TSAN_CONFIG_ABI_VERSION_0);
   EXPECT_NE(config.flags & IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_ENABLED, 0u);
-  EXPECT_NE(config.flags & IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_STATE, 0u);
+  EXPECT_NE(config.flags & IREE_HAL_AMDGPU_TSAN_CONFIG_FLAG_QUEUE_SHADOW, 0u);
   EXPECT_NE(config.shadow_base, 0u);
   EXPECT_NE(config.shadow_size, 0u);
-  EXPECT_EQ(config.memory_granule_shift,
-            IREE_HAL_AMDGPU_TSAN_DEFAULT_MEMORY_GRANULE_SHIFT);
-  EXPECT_EQ(config.workgroup_capacity,
-            IREE_HAL_AMDGPU_TSAN_DEFAULT_WORKGROUP_CAPACITY);
-  EXPECT_EQ(config.shadow_entry_size, IREE_HAL_AMDGPU_TSAN_SHADOW_ENTRY_SIZE);
-  EXPECT_EQ(config.shadow_slot_count,
-            IREE_HAL_AMDGPU_TSAN_DEFAULT_SHADOW_SLOT_COUNT);
-  EXPECT_NE(config.workgroup_shadow_stride, 0u);
-  EXPECT_NE(config.queue_aql_base, 0u);
-  EXPECT_NE(config.queue_aql_slot_mask, 0u);
-  EXPECT_NE(config.queue_state_base, 0u);
 
   Ref<iree_hal_buffer_t> output_buffer;
-  IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(pool(), 12 * sizeof(uint64_t),
+  IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(pool(), 4 * sizeof(uint64_t),
                                              output_buffer.out()));
   Ref<iree_hal_buffer_t> fallback_buffer;
   IREE_ASSERT_OK(SanitizerCreateDeviceBuffer(pool(), sizeof(uint64_t),
@@ -159,19 +148,11 @@ TEST_P(TsanExecutableTest, PublishesTsanConfigGlobal) {
   std::vector<uint64_t> output_data;
   IREE_ASSERT_OK(
       SanitizerReadBufferData(device(), queue(), output_buffer, &output_data));
-  ASSERT_EQ(output_data.size(), 12u);
+  ASSERT_EQ(output_data.size(), 4u);
   EXPECT_EQ(output_data[0], config.record_length);
   EXPECT_EQ(output_data[1], config.flags);
   EXPECT_EQ(output_data[2], config.shadow_base);
   EXPECT_EQ(output_data[3], config.shadow_size);
-  EXPECT_EQ(output_data[4], config.workgroup_shadow_stride);
-  EXPECT_EQ(output_data[5], config.workgroup_capacity);
-  EXPECT_EQ(output_data[6], config.shadow_entry_size);
-  EXPECT_EQ(output_data[7], config.memory_granule_shift);
-  EXPECT_EQ(output_data[8], config.queue_aql_base);
-  EXPECT_EQ(output_data[9], config.queue_aql_slot_mask);
-  EXPECT_EQ(output_data[10], config.queue_state_base);
-  EXPECT_EQ(output_data[11], config.shadow_slot_count);
 }
 
 TEST_P(TsanExecutableTest, EnablesFeedbackConfigGlobal) {

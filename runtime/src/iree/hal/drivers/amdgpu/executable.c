@@ -1372,11 +1372,8 @@ static iree_status_t iree_hal_amdgpu_executable_publish_tsan_config(
         " queue ordinal %" PRIhsz,
         device_ordinal, load_variant->physical_queue_ordinal);
   }
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_tsan_state_populate_queue_config(
-                           tsan_state, queue_scope, &config),
-                       "populating TSAN config for physical device %" PRIhsz
-                       " queue ordinal %" PRIhsz,
-                       device_ordinal, load_variant->physical_queue_ordinal);
+  iree_hal_amdgpu_tsan_state_populate_queue_config(tsan_state, queue_scope,
+                                                   &config);
   iree_hal_buffer_t* global_buffer = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_global_table_buffer(
                            &load_variant->global_table, global, &global_buffer),

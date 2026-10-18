@@ -246,22 +246,22 @@ static void iree_hal_device_event_sink_stderr_print_tsan(
   if (report->check_kind == IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY) {
     const iree_hal_device_tsan_shadow_capacity_report_t* capacity =
         &report->detail.shadow_capacity;
-    fprintf(
-        stderr,
-        "  tsan: check=shadow_capacity shadow_size=%" PRIu64
-        " required_end=%" PRIu64 " workgroup_stride=%" PRIu64
-        "\n"
-        "  launch: workgroup_ordinal=%" PRIu64
-        " local_memory=%u granule_shift=%u shadow_entry_size=%u\n"
-        "  work: workgroup=(%u,%u,%u) workitem=(%u,%u,%u) "
-        "dispatch=0x%016" PRIx64 "\n",
-        capacity->shadow_size, capacity->required_shadow_end,
-        capacity->workgroup_shadow_stride, capacity->workgroup_ordinal,
-        capacity->workgroup_local_memory_size, capacity->memory_granule_shift,
-        capacity->shadow_entry_size, capacity->current_workgroup_id[0],
-        capacity->current_workgroup_id[1], capacity->current_workgroup_id[2],
-        capacity->current_workitem_id[0], capacity->current_workitem_id[1],
-        capacity->current_workitem_id[2], report->source_dispatch_ptr);
+    fprintf(stderr,
+            "  tsan: check=shadow_capacity shadow_size=%" PRIu64
+            " required_end=%" PRIu64 " workgroup_stride=%" PRIu64
+            "\n"
+            "  launch: workgroup_ordinal=%" PRIu64
+            " local_memory=%u shadow_cell_size=%u shadow_history_count=%u\n"
+            "  work: workgroup=(%u,%u,%u) workitem=(%u,%u,%u) "
+            "dispatch=0x%016" PRIx64 "\n",
+            capacity->shadow_size, capacity->required_shadow_end,
+            capacity->workgroup_shadow_stride, capacity->workgroup_ordinal,
+            capacity->workgroup_local_memory_size, capacity->shadow_cell_size,
+            capacity->shadow_history_count, capacity->current_workgroup_id[0],
+            capacity->current_workgroup_id[1],
+            capacity->current_workgroup_id[2], capacity->current_workitem_id[0],
+            capacity->current_workitem_id[1], capacity->current_workitem_id[2],
+            report->source_dispatch_ptr);
     return;
   }
 

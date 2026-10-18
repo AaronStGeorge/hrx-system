@@ -91,10 +91,10 @@ typedef struct loom_amdgpu_sanitizer_race_shadow_capacity_report_t {
   loom_value_id_t workgroup_ordinal;
   // Final group-segment byte size carried by the dispatch packet.
   loom_value_id_t workgroup_local_memory_size;
-  // Log2 application memory bytes represented by one shadow entry.
-  loom_value_id_t memory_granule_shift;
-  // Bytes in each shadow entry.
-  loom_value_id_t shadow_entry_size;
+  // Bytes in each application-byte shadow cell.
+  loom_value_id_t shadow_cell_size;
+  // Access histories retained in each shadow cell.
+  loom_value_id_t shadow_history_count;
   // Three-dimensional workgroup coordinates that observed the failure.
   loom_value_id_t current_workgroup_ids[3];
   // Three-dimensional workitem coordinates that produced the report.

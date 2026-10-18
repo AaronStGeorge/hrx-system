@@ -77,17 +77,6 @@ AMDGPU_TSAN_PROFILE = amdgpu_execution_profile(
     ],
 )
 
-AMDGPU_TSAN_BYTE_GRANULE_PROFILE = amdgpu_execution_profile(
-    name = "amdgpu_tsan_byte_granule",
-    runner_args = [
-        "--sanitizer=tsan",
-        "--sanitizer-reporting=report-only",
-        "--amdgpu_tsan=true",
-        "--amdgpu_tsan_report_policy=report-only",
-        "--amdgpu_tsan_memory_granule_shift=0",
-    ],
-)
-
 # A deliberately small queue shadow arena used to exercise the compiler's
 # exact-boundary and capacity-report paths without allocating a production-size
 # sanitizer shadow during the test.
@@ -98,8 +87,6 @@ AMDGPU_TSAN_CAPACITY_PROFILE = amdgpu_execution_profile(
         "--sanitizer-reporting=report-only",
         "--amdgpu_tsan=true",
         "--amdgpu_tsan_report_policy=report-only",
-        "--amdgpu_tsan_memory_granule_shift=0",
-        "--amdgpu_tsan_workgroup_local_memory_size=8",
-        "--amdgpu_tsan_workgroup_capacity=1",
+        "--amdgpu_tsan_shadow_size=2176",
     ],
 )

@@ -424,8 +424,8 @@ class AmdgpuSanitizerRaceReportTest : public ::testing::Test {
         .workgroup_shadow_stride = BuildVgprU64(0x9999AAAABBBBCCCCull),
         .workgroup_ordinal = BuildVgprU64(0xDDDDEEEEFFFF0000ull),
         .workgroup_local_memory_size = BuildVgprU32(48),
-        .memory_granule_shift = BuildVgprU32(4),
-        .shadow_entry_size = BuildVgprU32(8),
+        .shadow_cell_size = BuildVgprU32(16),
+        .shadow_history_count = BuildVgprU32(2),
         .current_workgroup_ids =
             {
                 BuildVgprU32(11),
@@ -610,8 +610,8 @@ TEST_F(AmdgpuSanitizerRaceReportTest, EmitsShadowCapacityPayloadStores) {
       LOOM_AMDGPU_TSAN_REPORT_CHECK_KIND_OFFSET,
       LOOM_AMDGPU_TSAN_REPORT_FLAGS_OFFSET,
       LOOM_AMDGPU_TSAN_REPORT_CAPACITY_LOCAL_MEMORY_SIZE_OFFSET,
-      LOOM_AMDGPU_TSAN_REPORT_CAPACITY_MEMORY_GRANULE_SHIFT_OFFSET,
-      LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_ENTRY_SIZE_OFFSET,
+      LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_CELL_SIZE_OFFSET,
+      LOOM_AMDGPU_TSAN_REPORT_CAPACITY_SHADOW_HISTORY_COUNT_OFFSET,
       LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_X_OFFSET,
       LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_Y_OFFSET,
       LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKGROUP_ID_Z_OFFSET,
