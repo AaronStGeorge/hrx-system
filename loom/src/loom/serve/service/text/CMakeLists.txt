@@ -836,6 +836,35 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    pending_queue
+  HDRS
+    "pending_queue.h"
+  SRCS
+    "pending_queue.c"
+  DEPS
+    ::admission
+    ::chat
+    ::checkpoint_registry
+    ::media_projector
+    ::model
+    ::pending_request
+    ::prefix_cache
+    ::response
+    ::session
+    ::session_cache
+    ::telemetry
+    iree::base
+    loom::serve::runtime::parameter::residency
+    loom::serve::telemetry::stream
+    loom::serve::transport::http::request
+    loom::serve::transport::http::server
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     input_count
   HDRS
     "input_count.h"
@@ -873,6 +902,7 @@ loom_cc_library(
     ::media_projector
     ::model
     ::packing
+    ::pending_queue
     ::pending_request
     ::prefix_cache
     ::readiness

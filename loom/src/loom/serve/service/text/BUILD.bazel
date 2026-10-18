@@ -707,6 +707,31 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "pending_queue",
+    srcs = ["pending_queue.c"],
+    hdrs = ["pending_queue.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":admission",
+        ":chat",
+        ":checkpoint_registry",
+        ":media_projector",
+        ":model",
+        ":pending_request",
+        ":prefix_cache",
+        ":response",
+        ":session",
+        ":session_cache",
+        ":telemetry",
+        "//loom/src/loom/serve/runtime/parameter:residency",
+        "//loom/src/loom/serve/telemetry:stream",
+        "//loom/src/loom/serve/transport/http:request",
+        "//loom/src/loom/serve/transport/http:server",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "input_count",
     srcs = ["input_count.c"],
     hdrs = ["input_count.h"],
@@ -738,6 +763,7 @@ loom_cc_library(
         ":media_projector",
         ":model",
         ":packing",
+        ":pending_queue",
         ":pending_request",
         ":prefix_cache",
         ":readiness",
