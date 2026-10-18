@@ -73,7 +73,7 @@ loom_cc_library(
     name = "ir_provider",
     srcs = ["ir_provider.c"],
     hdrs = ["ir_provider.h"],
-    visibility = ["//loom/src/loom/tools/loom-format:__pkg__"],
+    visibility = ["//loom/src/loom/testing:__pkg__"],
     deps = [
         ":target_record_table",
         "//loom/src/loom/ops/test",
