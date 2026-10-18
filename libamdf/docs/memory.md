@@ -1015,9 +1015,10 @@ The slab length satisfies the profile's granularity and maximum length. Adding
 address with the requested permissions. Explicit reservations retain the same
 mapping and final-reader requirements as other sources.
 
-Each independent Linux attachment receives a fresh DMA-BUF export of the same
-owned pages. Its KFD residency and GEM alias source have independent native
-lifetimes, including when logical consumers share a native driver connection.
+Each independent Linux attachment to this aliasable file backing receives a
+fresh DMA-BUF export of the same owned pages. Its KFD residency and GEM alias
+source have independent native lifetimes, including when logical consumers
+share a native driver connection.
 The exports have separate implicit-fence state: explicit queue dependencies and
 the caller's final-reader ordering establish cross-consumer synchronization.
 Public foreign KFD imports are unsupported; this construction path does not
@@ -1080,7 +1081,8 @@ program-side protocol.
 
 | Platform | Native requirements | Resource admission |
 | --- | --- | --- |
-| Linux KFD | Kernel udmabuf support (`CONFIG_UDMABUF`), a loaded service, read/write access to `/dev/udmabuf`, readable `/sys/module/udmabuf/parameters/size_limit_mb`, and the ordinary KFD/render-node access. The AMDGPU driver must accept these exports and the selected exact GPU alias contract. | The profile intersects the export size limit with all consumer limits. Backing pages remain pinned for the allocation lifetime; each attachment also consumes native import and page-table resources. File-buffer registration has its own admission, including the process's locked-memory limit for registered io_uring buffers. |
+| Linux KFD, aliasable file backing | Kernel udmabuf support (`CONFIG_UDMABUF`), a loaded service, read/write access to `/dev/udmabuf`, readable `/sys/module/udmabuf/parameters/size_limit_mb`, and the ordinary KFD/render-node access. The AMDGPU driver must accept these exports and the selected exact GPU alias contract. | The profile intersects the export size limit with all consumer limits. Backing pages remain pinned for the allocation lifetime; each attachment also consumes native import and page-table resources. File-buffer registration has its own admission, including the process's locked-memory limit for registered io_uring buffers. |
+| Linux KFD, fixed-address file staging | Process native lifetime and an available owned-host profile that registers its pages with KFD. Staging requests a default `DEVICE_ADDRESS`; its GPU access does not require `MAPPING_SOURCE`. This route needs no udmabuf exporter. | GPU page registration and native file-buffer registration admit the bounded pool independently. KFD owns the GPU registration until device uses retire; native file registrations must retire before backing destruction. |
 | Windows WDDM | The native GPU provider's owned system-page allocation and mapping services. No udmabuf service is involved. | Native allocation and page-lock admission can fail independently of file creation. Buffered/unbuffered file alignment and transfer constraints come from the file API. |
 
 Optional Linux exporter discovery runs once at instance creation. A profile
@@ -1127,6 +1129,45 @@ use buffered I/O for `O_DIRECT` writes on kernels starting with 6.14. On Windows
 [unbuffered I/O](https://learn.microsoft.com/en-us/windows/win32/fileio/file-buffering)
 imposes sector and memory alignment requirements. Neither behavior changes the
 pool's memory ownership or the need to retire native I/O before reuse.
+
+#### Bounded staging for ordinary GPU backing
+
+A large GPU working set can use ordinary GPU allocation profiles while a
+separate, bounded `HOST_FILE_IO` pool serves native file operations. Ordinary
+backing retains its GPU mapping sources and aliases. The file pool's payload,
+page pins, registrations, and native import charges then scale with concurrent
+transfer capacity instead of the entire working set. Staging adds one copy per
+transferred range, with a read and write of each byte; it trades memory traffic
+for smaller retained file-I/O resources and native admission requirements.
+
+The caller selects this construction before allocation and owns the staging
+capacity and reuse schedule. For ingress, file-read completion admits the copy
+from staging into the destination. Copy completion permits reuse of the staging
+slot; the destination remains live until all its readers finish. For egress,
+producer completion and its reported release precede the copy into staging.
+The subsequent file write consumes staging only after copy completion, and its
+terminal result permits slot reuse. Neither direction needs a second
+working-set-sized allocation.
+
+Visibility queries describe each backing separately: `FILE_IO` and the transfer
+queue on staging, then the transfer queue and compute queue or `HOST` on the
+ordinary destination. The copy joins those two backing lifetimes; a pair query
+does not describe a transfer between distinct physical allocations. Reported
+`NONE` cache operations still require the corresponding completion dependencies.
+Host accessibility alone does not qualify a view for native file I/O; the exact
+view's `FILE_IO` feature establishes that contract for buffered and direct file
+operations alike.
+
+Fixed staging addresses permit a narrower construction than the destination's
+arbitrary aliases. Staging requests `DEVICE_ADDRESS` and uses the returned
+FILE_IO/queue transitions; neither `MAPPING_SOURCE` nor `HOST_COHERENT` is
+required for that native-file edge. For Linux process lifetime, the owned-host
+registration profile supplies file-capable pages and the default GPU address
+without importing a foreign DMA-BUF. Other lifetimes can use an available
+exporter-backed profile. CPU inspection or modification of staging queries its
+separate HOST edge. The backing's file eligibility alone does not establish
+GPU access, and an unavailable staging profile leaves ordinary device and
+memory services usable.
 
 ## Atomic operations and participant reach
 
