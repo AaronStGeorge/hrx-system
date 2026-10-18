@@ -250,6 +250,7 @@ loom_cc_library(
     "sanitizer_race_report.c"
     "sanitizer_race_shadow_layout.c"
     "sanitizer_race_state.c"
+    "sanitizer_race_sync.c"
     "sanitizer_report.c"
     "sanitizer_ubsan_report.c"
     "signal.c"

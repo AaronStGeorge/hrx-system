@@ -1047,6 +1047,10 @@ static bool loom_testbench_tsan_check_parse(iree_string_view_t value,
     *out_kind = IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY;
     return true;
   }
+  if (iree_string_view_equal(value, IREE_SV("synchronization_capacity"))) {
+    *out_kind = IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY;
+    return true;
+  }
   if (iree_string_view_equal(value, IREE_SV("unknown"))) {
     *out_kind = IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN;
     return true;
@@ -1345,26 +1349,49 @@ static iree_status_t loom_testbench_event_match_tsan(
       report.flags, IREE_HAL_DEVICE_TSAN_REPORT_FLAG_PRIOR_WORKITEM_LINEAR);
   const iree_hal_device_tsan_data_race_report_t* data_race =
       &report.detail.data_race;
+  const bool is_data_race =
+      report.check_kind == IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE;
+  uint64_t report_current_site_id = 0;
+  switch (report.check_kind) {
+    case IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE:
+      report_current_site_id = data_race->current_site_id;
+      break;
+    case IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY:
+      report_current_site_id =
+          report.detail.synchronization_capacity.current_site_id;
+      break;
+    default:
+      break;
+  }
 
   *out_matches =
       (!check_present || report.check_kind == check) &&
-      (!memory_present || data_race->memory_space == memory) &&
+      (!memory_present ||
+       (is_data_race && data_race->memory_space == memory)) &&
       (!current_access_present ||
-       data_race->current_access_kind == current_access) &&
-      (!prior_access_present || data_race->prior_access_kind == prior_access) &&
-      loom_testbench_event_match_optional_u32(
-          data_race->access_length, access_length_present, access_length) &&
+       (is_data_race && data_race->current_access_kind == current_access)) &&
+      (!prior_access_present ||
+       (is_data_race && data_race->prior_access_kind == prior_access)) &&
+      (!access_length_present ||
+       (is_data_race && loom_testbench_event_match_optional_u32(
+                            data_race->access_length, true, access_length))) &&
+      (!memory_address_present ||
+       (is_data_race &&
+        loom_testbench_event_match_optional_u64(data_race->memory_address, true,
+                                                memory_address))) &&
       loom_testbench_event_match_optional_u64(
-          data_race->memory_address, memory_address_present, memory_address) &&
-      loom_testbench_event_match_optional_u64(data_race->current_site_id,
-                                              current_site_id_present,
-                                              current_site_id) &&
-      loom_testbench_event_match_optional_u64(
-          data_race->prior_site_id, prior_site_id_present, prior_site_id) &&
-      (!current_atomic_present || report_current_atomic == current_atomic) &&
-      (!prior_atomic_present || report_prior_atomic == prior_atomic) &&
-      (!current_linear_present || report_current_linear == current_linear) &&
-      (!prior_linear_present || report_prior_linear == prior_linear);
+          report_current_site_id, current_site_id_present, current_site_id) &&
+      (!prior_site_id_present ||
+       (is_data_race && loom_testbench_event_match_optional_u64(
+                            data_race->prior_site_id, true, prior_site_id))) &&
+      (!current_atomic_present ||
+       (is_data_race && report_current_atomic == current_atomic)) &&
+      (!prior_atomic_present ||
+       (is_data_race && report_prior_atomic == prior_atomic)) &&
+      (!current_linear_present ||
+       (is_data_race && report_current_linear == current_linear)) &&
+      (!prior_linear_present ||
+       (is_data_race && report_prior_linear == prior_linear));
   return iree_ok_status();
 }
 

@@ -19,6 +19,8 @@ extern "C" {
 typedef struct loom_amdgpu_sanitizer_race_shadow_layout_config_t {
   // Total bytes in the queue-local shadow allocation.
   loom_value_id_t shadow_size;
+  // Number of independently synchronized subgroups, or zero when absent.
+  uint32_t subgroup_count;
 } loom_amdgpu_sanitizer_race_shadow_layout_config_t;
 
 typedef struct loom_amdgpu_sanitizer_race_shadow_layout_t {
@@ -28,6 +30,12 @@ typedef struct loom_amdgpu_sanitizer_race_shadow_layout_t {
   loom_value_id_t workgroup_chunk_count;
   // Aligned bytes occupied by the per-chunk state bitmap.
   loom_value_id_t workgroup_chunk_state_bitmap_size;
+  // Byte offset of the subgroup clock array within the workgroup record.
+  loom_value_id_t workgroup_subgroup_clock_data_offset;
+  // Aligned bytes occupied by subgroup clocks, or invalid when absent.
+  loom_value_id_t workgroup_subgroup_clock_data_size;
+  // Bytes cleared when establishing a new workgroup-record lifetime.
+  loom_value_id_t workgroup_lifetime_data_size;
   // Byte offset of the padded history array within the workgroup record.
   loom_value_id_t workgroup_history_data_offset;
   // Bytes occupied by one workgroup shadow record for this dispatch.

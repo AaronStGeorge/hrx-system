@@ -93,6 +93,8 @@ static const char* iree_hal_device_tsan_check_kind_string(
       return "data_race";
     case IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY:
       return "shadow_capacity";
+    case IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY:
+      return "synchronization_capacity";
     case IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN:
     default:
       return "unknown";
@@ -261,6 +263,30 @@ static void iree_hal_device_event_sink_stderr_print_tsan(
             capacity->current_workgroup_id[1],
             capacity->current_workgroup_id[2], capacity->current_workitem_id[0],
             capacity->current_workitem_id[1], capacity->current_workitem_id[2],
+            report->source_dispatch_ptr);
+    return;
+  }
+
+  if (report->check_kind ==
+      IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY) {
+    const iree_hal_device_tsan_synchronization_capacity_report_t* capacity =
+        &report->detail.synchronization_capacity;
+    if (!site) {
+      fprintf(stderr, "  site: id=0x%016" PRIx64 " unresolved\n",
+              capacity->current_site_id);
+    }
+    fprintf(stderr,
+            "  tsan: check=synchronization_capacity subgroup_epoch=%u "
+            "subgroup_epoch_capacity=%u\n"
+            "  shadow: subgroup_clock_address=0x%016" PRIx64
+            "\n"
+            "  work: workgroup=(%u,%u,%u) subgroup=%u wavefront=%u "
+            "workitem_linear=%u dispatch=0x%016" PRIx64 "\n",
+            capacity->subgroup_epoch, capacity->subgroup_epoch_capacity,
+            capacity->subgroup_clock_address, capacity->current_workgroup_id[0],
+            capacity->current_workgroup_id[1],
+            capacity->current_workgroup_id[2], capacity->subgroup_id,
+            capacity->wavefront_size, capacity->current_workitem_linear_id,
             report->source_dispatch_ptr);
     return;
   }

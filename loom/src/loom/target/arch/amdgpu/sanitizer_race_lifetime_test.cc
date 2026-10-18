@@ -86,6 +86,38 @@ kernel.def target(@target) @lifetime_sync() {
     return source;
   }
 
+  std::string SourceForSubgroupTarget(uint32_t wavefront_size,
+                                      bool include_workgroup_barrier) {
+    std::string source =
+        R"(amdgpu.target<gfx11-generic> @target {subgroup_size = )";
+    source.append(std::to_string(wavefront_size));
+    source.append(R"(}
+
+kernel.def target(@target) @lifetime_sync() {
+  %unit = index.constant 1 : index
+  %threads = index.constant )");
+    source.append(std::to_string(wavefront_size * 2u));
+    source.append(R"( : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%threads, %unit, %unit) : index
+} launch() {
+  %base = index.constant 0 : offset
+  %bytes = index.constant 2048 : offset
+  %scratch = buffer.alloca<workgroup> align(16) %bytes : buffer
+  %view = buffer.view %scratch[%base] : buffer -> view<2048xi8>
+  sanitizer.race.access<write> %view[0] : view<2048xi8>
+  sanitizer.race.sync<workgroup> scope(subgroup) ordering(acq_rel)
+)");
+    if (include_workgroup_barrier) {
+      source.append(
+          "  sanitizer.race.sync<workgroup> scope(workgroup) "
+          "ordering(acq_rel)\n");
+    }
+    source.append(R"(  kernel.return
+}
+)");
+    return source;
+  }
+
   iree_status_t RunSourceToLow(loom_module_t* module) {
     const loom_target_low_legality_provider_t* legality_providers[] = {
         loom_amdgpu_low_legality_provider(),
@@ -173,6 +205,31 @@ kernel.def target(@target) @lifetime_sync() {
                                  descriptor_set_, descriptor);
   }
 
+  bool LowOpHasMnemonic(const loom_op_t* op,
+                        iree_string_view_t mnemonic) const {
+    if (!loom_low_op_isa(op) || !descriptor_set_) {
+      return false;
+    }
+    const loom_low_descriptor_t* descriptor =
+        loom_low_descriptor_set_descriptor_at(descriptor_set_,
+                                              loom_low_op_descriptor(op));
+    return descriptor &&
+           iree_string_view_equal(
+               loom_low_descriptor_set_string(descriptor_set_,
+                                              descriptor->mnemonic_string_ref),
+               mnemonic);
+  }
+
+  std::vector<loom_op_t*> Ops() const {
+    std::vector<loom_op_t*> result;
+    loom_block_t* block = nullptr;
+    loom_region_for_each_block(body_, block) {
+      loom_op_t* op = nullptr;
+      loom_block_for_each_op(block, op) { result.push_back(op); }
+    }
+    return result;
+  }
+
   std::vector<loom_op_t*> OpsForDescriptorRef(
       loom_amdgpu_descriptor_ref_t descriptor_ref) const {
     std::vector<loom_op_t*> result;
@@ -215,6 +272,17 @@ kernel.def target(@target) @lifetime_sync() {
     int64_t offset = 0;
     TryGetAttrI64(loom_low_op_attrs(op), IREE_SV("offset"), &offset);
     return offset;
+  }
+
+  bool LowOpImmediate(const loom_op_t* op, int64_t* out_immediate) const {
+    return TryGetAttrI64(loom_low_op_attrs(op), IREE_SV("imm32"),
+                         out_immediate);
+  }
+
+  const loom_op_t* ValueDefiningOp(loom_value_id_t value) const {
+    const loom_value_t* ir_value = loom_module_value(module_, value);
+    return loom_value_is_block_arg(ir_value) ? nullptr
+                                             : loom_value_def_op(ir_value);
   }
 
   loom_op_t* FindDescriptorBetween(loom_amdgpu_descriptor_ref_t descriptor_ref,
@@ -642,6 +710,172 @@ TEST_F(AmdgpuSanitizerRaceLifetimeTest,
     EXPECT_FALSE(
         BlockHasDescriptor(block, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER));
   }
+}
+
+TEST_F(AmdgpuSanitizerRaceLifetimeTest,
+       SubgroupPublicationUsesOneClockPerWavefront) {
+  for (uint32_t wavefront_size : {32u, 64u}) {
+    SCOPED_TRACE(wavefront_size);
+    const std::string source =
+        SourceForSubgroupTarget(wavefront_size,
+                                /*include_workgroup_barrier=*/false);
+    ModulePtr module = Parse(iree_make_cstring_view(source.c_str()));
+    IREE_ASSERT_OK(RunSourceToLow(module.get()));
+    loom_op_t* kernel = FindKernel(module.get(), IREE_SV("lifetime_sync"));
+    ASSERT_NE(kernel, nullptr);
+    ASSERT_TRUE(loom_low_kernel_def_isa(kernel));
+    BindKernel(module.get(), kernel);
+    ASSERT_NE(descriptor_set_, nullptr);
+
+    bool found_clock_offset_geometry = false;
+    for (loom_op_t* byte_shift : Ops()) {
+      if (!LowOpHasMnemonic(byte_shift, IREE_SV("v_lshlrev_b32"))) {
+        continue;
+      }
+      int64_t left_shift = 0;
+      if (!LowOpImmediate(byte_shift, &left_shift) || left_shift != 2) {
+        continue;
+      }
+      const loom_value_slice_t operands = loom_low_op_operands(byte_shift);
+      ASSERT_EQ(operands.count, 1u);
+      const loom_op_t* subgroup_shift = ValueDefiningOp(operands.values[0]);
+      if (!subgroup_shift ||
+          !LowOpHasMnemonic(subgroup_shift, IREE_SV("v_lshrrev_b32"))) {
+        continue;
+      }
+      int64_t right_shift = 0;
+      if (LowOpImmediate(subgroup_shift, &right_shift) &&
+          right_shift == (wavefront_size == 32u ? 5 : 6)) {
+        found_clock_offset_geometry = true;
+      }
+    }
+    EXPECT_TRUE(found_clock_offset_geometry);
+
+    loom_op_t* clock_load = nullptr;
+    loom_op_t* clock_store = nullptr;
+    for (loom_op_t* store : OpsForDescriptorRef(
+             LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR)) {
+      const loom_value_slice_t store_operands = loom_low_op_operands(store);
+      ASSERT_GE(store_operands.count, 3u);
+      const loom_op_t* increment = ValueDefiningOp(store_operands.values[1]);
+      if (!increment || !LowOpHasMnemonic(increment, IREE_SV("v_add_u32"))) {
+        continue;
+      }
+      int64_t increment_amount = 0;
+      if (!LowOpImmediate(increment, &increment_amount) ||
+          increment_amount != 1) {
+        continue;
+      }
+      const loom_value_slice_t increment_operands =
+          loom_low_op_operands(increment);
+      ASSERT_EQ(increment_operands.count, 1u);
+      const loom_op_t* load = ValueDefiningOp(increment_operands.values[0]);
+      if (!load ||
+          !LowOpHasDescriptorRef(
+              load, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32_SADDR)) {
+        continue;
+      }
+      const loom_value_slice_t load_operands = loom_low_op_operands(load);
+      ASSERT_GE(load_operands.count, 2u);
+      EXPECT_EQ(load_operands.values[0], store_operands.values[0]);
+      EXPECT_EQ(load_operands.values[1], store_operands.values[2]);
+      clock_load = const_cast<loom_op_t*>(load);
+      clock_store = store;
+    }
+    ASSERT_NE(clock_load, nullptr);
+    ASSERT_NE(clock_store, nullptr);
+    int64_t globally_coherent = 0;
+    ASSERT_TRUE(TryGetAttrI64(loom_low_op_attrs(clock_load), IREE_SV("glc"),
+                              &globally_coherent));
+    EXPECT_EQ(globally_coherent, 1);
+    EXPECT_NE(FindDescriptorBetween(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT,
+                                    clock_load, clock_store),
+              nullptr);
+    EXPECT_NE(FindDescriptorBetween(LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL1_INV,
+                                    clock_load, clock_store),
+              nullptr);
+    EXPECT_NE(FindDescriptorBetween(LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL0_INV,
+                                    clock_load, clock_store),
+              nullptr);
+    const loom_op_t* clock_block_end =
+        loom_block_const_last_op(clock_store->parent_block);
+    EXPECT_NE(FindDescriptorBetween(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT,
+                                    clock_store, clock_block_end),
+              nullptr);
+    EXPECT_NE(FindDescriptorBetween(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT_VSCNT,
+                                    clock_store, clock_block_end),
+              nullptr);
+
+    const uint32_t workitem_bit_count = wavefront_size == 32u ? 6u : 7u;
+    const uint32_t subgroup_epoch_bit_count =
+        64u - 3u - workitem_bit_count - 10u - 20u - 1u;
+    const uint32_t maximum_subgroup_epoch =
+        (1u << subgroup_epoch_bit_count) - 1u;
+    bool found_capacity_comparison = false;
+    for (loom_op_t* comparison :
+         OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32)) {
+      const loom_value_slice_t operands = loom_low_op_operands(comparison);
+      if (operands.count != 2u) {
+        continue;
+      }
+      for (iree_host_size_t i = 0; i < operands.count; ++i) {
+        const loom_value_id_t operand = operands.values[i];
+        const loom_op_t* constant = ValueDefiningOp(operand);
+        if (!constant || !loom_low_const_isa(constant)) {
+          continue;
+        }
+        int64_t immediate = 0;
+        if (TryGetAttrI64(loom_low_const_attrs(constant), IREE_SV("imm32"),
+                          &immediate) &&
+            immediate == maximum_subgroup_epoch) {
+          found_capacity_comparison = true;
+        }
+      }
+    }
+    EXPECT_TRUE(found_capacity_comparison);
+    EXPECT_TRUE(
+        OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER).empty());
+  }
+}
+
+TEST_F(AmdgpuSanitizerRaceLifetimeTest,
+       WorkgroupBarrierResetsSubgroupClockBeforeRendezvous) {
+  const std::string source =
+      SourceForSubgroupTarget(32u, /*include_workgroup_barrier=*/true);
+  ModulePtr module = Parse(iree_make_cstring_view(source.c_str()));
+  IREE_ASSERT_OK(RunSourceToLow(module.get()));
+  loom_op_t* kernel = FindKernel(module.get(), IREE_SV("lifetime_sync"));
+  ASSERT_NE(kernel, nullptr);
+  ASSERT_TRUE(loom_low_kernel_def_isa(kernel));
+  BindKernel(module.get(), kernel);
+  ASSERT_NE(descriptor_set_, nullptr);
+
+  const auto barriers =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER);
+  ASSERT_EQ(barriers.size(), 1u);
+  loom_op_t* reset_store = nullptr;
+  for (loom_op_t* store :
+       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR)) {
+    if (store->parent_block != barriers[0]->parent_block ||
+        store->block_ordinal >= barriers[0]->block_ordinal) {
+      continue;
+    }
+    const loom_value_slice_t operands = loom_low_op_operands(store);
+    ASSERT_GE(operands.count, 3u);
+    const loom_op_t* value_op = ValueDefiningOp(operands.values[1]);
+    if (!value_op || !loom_low_const_isa(value_op)) {
+      continue;
+    }
+    int64_t value = -1;
+    if (TryGetAttrI64(loom_low_const_attrs(value_op), IREE_SV("imm32"),
+                      &value) &&
+        value == 0) {
+      reset_store = store;
+    }
+  }
+  ASSERT_NE(reset_store, nullptr);
+  EXPECT_EQ(reset_store->parent_block, barriers[0]->parent_block);
+  EXPECT_LT(reset_store->block_ordinal, barriers[0]->block_ordinal);
 }
 
 TEST_F(AmdgpuSanitizerRaceLifetimeTest,

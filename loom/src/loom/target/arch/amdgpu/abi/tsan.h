@@ -167,6 +167,9 @@ enum loom_amdgpu_tsan_check_kind_e {
   // The dispatch requires more workgroup shadow bytes than the queue arena
   // provides.
   LOOM_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY = 2u,
+  // A subgroup synchronization clock cannot advance without aliasing an
+  // earlier synchronization epoch still retained in shadow history.
+  LOOM_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY = 3u,
 };
 
 // Memory space containing the observed address in AMDGPU TSAN reports.
@@ -299,6 +302,29 @@ enum loom_amdgpu_tsan_report_layout_e {
   LOOM_AMDGPU_TSAN_REPORT_CAPACITY_WORKITEM_ID_Z_OFFSET = 84u,
   // Offset of the reserved capacity-report tail.
   LOOM_AMDGPU_TSAN_REPORT_CAPACITY_RESERVED1_OFFSET = 88u,
+  // Offset of the synchronization instrumentation site identifier.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_CURRENT_SITE_ID_OFFSET = 16u,
+  // Offset of the last representable subgroup epoch.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_SUBGROUP_EPOCH_OFFSET = 24u,
+  // Offset of the number of subgroup epochs representable in one workgroup
+  // epoch.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_SUBGROUP_EPOCH_CAPACITY_OFFSET = 28u,
+  // Offset of the target wavefront width defining one subgroup.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_WAVEFRONT_SIZE_OFFSET = 32u,
+  // Offset of the flattened subgroup identifier within the workgroup.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_SUBGROUP_ID_OFFSET = 36u,
+  // Offset of the reporting workgroup X coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_WORKGROUP_ID_X_OFFSET = 40u,
+  // Offset of the reporting workgroup Y coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_WORKGROUP_ID_Y_OFFSET = 44u,
+  // Offset of the reporting workgroup Z coordinate.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_WORKGROUP_ID_Z_OFFSET = 48u,
+  // Offset of the reporting linear workitem identifier.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_WORKITEM_LINEAR_ID_OFFSET = 52u,
+  // Offset of the exhausted subgroup clock shadow address.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_SUBGROUP_CLOCK_ADDRESS_OFFSET = 56u,
+  // Offset of the reserved synchronization-capacity report tail.
+  LOOM_AMDGPU_TSAN_REPORT_SYNC_CAPACITY_RESERVED_OFFSET = 64u,
 };
 
 #ifdef __cplusplus

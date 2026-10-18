@@ -569,6 +569,7 @@ TEST_F(ExpectationTest, EvaluatesDeviceEventExpectations) {
   loom_module_t* module = ParseModule(R"(
 check.case @device_event {
   check.expect.event<device> {type = "tsan_report", severity = "error", count = 1, driver = "amdgpu", tsan = {check = "data_race", memory = "workgroup", current_access = "write", prior_access = "read", access_length = 4, memory_address = 12, current_atomic = false, prior_atomic = false}}
+  check.expect.event<device> {type = "tsan_report", severity = "error", count = 1, driver = "amdgpu", tsan = {check = "synchronization_capacity", current_site_id = 23}}
   check.expect.event<device> {type = "ubsan_report", count = 1, ubsan = {check = "assertion", site_id = 17, operand0 = 3, operand1 = 4}}
   check.return
 }
@@ -579,9 +580,10 @@ check.case @device_event {
   ASSERT_EQ(plan.issue_count, 0u);
   ASSERT_EQ(plan.case_count, 1u);
   const loom_testbench_case_plan_t& case_plan = plan.cases[0];
-  ASSERT_EQ(case_plan.expectation_count, 2u);
+  ASSERT_EQ(case_plan.expectation_count, 3u);
   EXPECT_EQ(case_plan.expectations[0].kind, LOOM_TESTBENCH_EXPECTATION_EVENT);
   EXPECT_EQ(case_plan.expectations[1].kind, LOOM_TESTBENCH_EXPECTATION_EVENT);
+  EXPECT_EQ(case_plan.expectations[2].kind, LOOM_TESTBENCH_EXPECTATION_EVENT);
 
   loom_testbench_value_table_t table = {};
   IREE_ASSERT_OK(loom_testbench_value_table_initialize_case(
@@ -617,6 +619,30 @@ check.case @device_event {
       iree_make_const_byte_span(&tsan_report, sizeof(tsan_report));
   iree_hal_device_event_sink_publish(
       loom_testbench_device_event_capture_sink(&capture), &tsan_event);
+  iree_hal_device_tsan_report_t synchronization_capacity_report = {
+      .record_length = sizeof(synchronization_capacity_report),
+      .abi_version = IREE_HAL_DEVICE_TSAN_REPORT_ABI_VERSION_0,
+      .check_kind = IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY,
+      .detail =
+          {
+              .synchronization_capacity =
+                  {
+                      .current_site_id = 23,
+                  },
+          },
+  };
+  iree_hal_device_event_t synchronization_capacity_event =
+      iree_hal_device_event_default();
+  synchronization_capacity_event.type = IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT;
+  synchronization_capacity_event.severity =
+      IREE_HAL_DEVICE_EVENT_SEVERITY_ERROR;
+  synchronization_capacity_event.source.driver_id = IREE_SV("amdgpu");
+  synchronization_capacity_event.payload =
+      iree_make_const_byte_span(&synchronization_capacity_report,
+                                sizeof(synchronization_capacity_report));
+  iree_hal_device_event_sink_publish(
+      loom_testbench_device_event_capture_sink(&capture),
+      &synchronization_capacity_event);
   iree_hal_device_ubsan_report_t ubsan_report = {
       .record_length = sizeof(ubsan_report),
       .abi_version = IREE_HAL_DEVICE_UBSAN_REPORT_ABI_VERSION_0,
@@ -633,10 +659,10 @@ check.case @device_event {
       loom_testbench_device_event_capture_sink(&capture), &ubsan_event);
   loom_testbench_device_event_list_t event_list = {};
   loom_testbench_device_event_capture_events(&capture, &event_list);
-  ASSERT_EQ(event_list.count, 2u);
+  ASSERT_EQ(event_list.count, 3u);
   EXPECT_EQ((uintptr_t)0, (uintptr_t)event_list.records[0].event.payload.data %
                               iree_alignof(iree_hal_device_tsan_report_t));
-  EXPECT_EQ((uintptr_t)0, (uintptr_t)event_list.records[1].event.payload.data %
+  EXPECT_EQ((uintptr_t)0, (uintptr_t)event_list.records[2].event.payload.data %
                               iree_alignof(iree_hal_device_ubsan_report_t));
   loom_testbench_sample_observations_t observations =
       loom_testbench_sample_observations_empty();
@@ -652,8 +678,8 @@ check.case @device_event {
   IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(
       &case_plan, &table, &observations, &report));
 
-  EXPECT_EQ(report.expectation_count, 2u);
-  EXPECT_EQ(report.passed_count, 2u);
+  EXPECT_EQ(report.expectation_count, 3u);
+  EXPECT_EQ(report.passed_count, 3u);
   EXPECT_EQ(report.failure_count, 0u);
   EXPECT_EQ(expected_device_events[0], 1u);
   EXPECT_EQ(expected_device_events[1], 1u);
@@ -662,12 +688,21 @@ check.case @device_event {
   memcpy(unaligned_tsan_payload + 1, &tsan_report, sizeof(tsan_report));
   uint8_t unaligned_ubsan_payload[sizeof(ubsan_report) + 1] = {0};
   memcpy(unaligned_ubsan_payload + 1, &ubsan_report, sizeof(ubsan_report));
-  loom_testbench_device_event_record_t unaligned_records[2] = {};
+  uint8_t unaligned_synchronization_capacity_payload
+      [sizeof(synchronization_capacity_report) + 1] = {0};
+  memcpy(unaligned_synchronization_capacity_payload + 1,
+         &synchronization_capacity_report,
+         sizeof(synchronization_capacity_report));
+  loom_testbench_device_event_record_t unaligned_records[3] = {};
   unaligned_records[0].event = tsan_event;
   unaligned_records[0].event.payload = iree_make_const_byte_span(
       unaligned_tsan_payload + 1, sizeof(tsan_report));
-  unaligned_records[1].event = ubsan_event;
-  unaligned_records[1].event.payload = iree_make_const_byte_span(
+  unaligned_records[1].event = synchronization_capacity_event;
+  unaligned_records[1].event.payload =
+      iree_make_const_byte_span(unaligned_synchronization_capacity_payload + 1,
+                                sizeof(synchronization_capacity_report));
+  unaligned_records[2].event = ubsan_event;
+  unaligned_records[2].event.payload = iree_make_const_byte_span(
       unaligned_ubsan_payload + 1, sizeof(ubsan_report));
   loom_testbench_device_event_list_t unaligned_event_list = {
       .records = unaligned_records,
@@ -678,8 +713,8 @@ check.case @device_event {
   loom_testbench_expectation_report_reset(&report);
   IREE_ASSERT_OK(loom_testbench_evaluate_case_expectations(
       &case_plan, &table, &observations, &report));
-  EXPECT_EQ(report.expectation_count, 2u);
-  EXPECT_EQ(report.passed_count, 2u);
+  EXPECT_EQ(report.expectation_count, 3u);
+  EXPECT_EQ(report.passed_count, 3u);
   EXPECT_EQ(report.failure_count, 0u);
 
   iree_string_builder_t json_builder;
@@ -690,7 +725,7 @@ check.case @device_event {
       loom_testbench_expectation_report_write_json(&report, &json_stream));
   std::string json(iree_string_builder_view(&json_builder).data,
                    iree_string_builder_view(&json_builder).size);
-  EXPECT_THAT(json, ::testing::HasSubstr("\"expectation_count\":2"));
+  EXPECT_THAT(json, ::testing::HasSubstr("\"expectation_count\":3"));
   EXPECT_THAT(json, ::testing::HasSubstr("\"failure_count\":0"));
   iree_string_builder_deinitialize(&json_builder);
 

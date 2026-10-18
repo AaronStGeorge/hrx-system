@@ -1,0 +1,219 @@
+amdgpu.target<gfx11-generic> @wave32 {subgroup_size = 32}
+
+amdgpu.target<gfx11-generic> @wave64 {subgroup_size = 64}
+
+// Publish scalar and vector values within each subgroup while allowing the two
+// subgroups to advance their publication clocks independently.
+kernel.def target(@wave32) @tsan_subgroup_exchange_wave32() {
+  %unit = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%threads, %unit, %unit) : index
+} launch(%scalar_output: buffer, %vector_output: buffer) {
+  %base = index.constant 0 : offset
+  %scalar_bytes = index.constant 256 : offset
+  %vector_bytes = index.constant 512 : offset
+  %first_subgroup_id = index.constant 0 : index
+  %peer_lane_delta = index.constant 1 : index
+  %elements_per_pair = index.constant 2 : index
+  %stored_value = scalar.constant 1 : i32
+  %stored_pair = vector.splat %stored_value : vector<2xi32>
+  %workitem = kernel.workitem.id<x> : index
+  %subgroup = kernel.subgroup.id : index
+  %peer = index.xori %workitem, %peer_lane_delta : index
+  %workitem_pair = index.mul %workitem, %elements_per_pair : index
+  %peer_pair = index.mul %peer, %elements_per_pair : index
+  %is_first_subgroup = index.cmp eq, %subgroup, %first_subgroup_id : index
+  %scalar_scratch = buffer.alloca<workgroup> align(4) %scalar_bytes : buffer
+  %vector_scratch = buffer.alloca<workgroup> align(8) %vector_bytes : buffer
+  %scalar_shared = buffer.view %scalar_scratch[%base] : buffer -> view<64xi32>
+  %vector_shared = buffer.view %vector_scratch[%base] : buffer -> view<128xi32>
+  %scalar_result = buffer.view %scalar_output[%base] : buffer -> view<64xi32>
+  %vector_result = buffer.view %vector_output[%base] : buffer -> view<128xi32>
+  view.store %stored_value, %scalar_shared[%workitem] : i32, view<64xi32>
+  vector.store %stored_pair, %vector_shared[%workitem_pair] : vector<2xi32>, view<128xi32>
+  kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
+  scf.if %is_first_subgroup {
+    kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
+  }
+  %scalar_value = view.load %scalar_shared[%peer] : view<64xi32> -> i32
+  %vector_value = vector.load %vector_shared[%peer_pair] : view<128xi32> -> vector<2xi32>
+  view.store %scalar_value, %scalar_result[%workitem] : i32, view<64xi32>
+  vector.store %vector_value, %vector_result[%workitem_pair] : vector<2xi32>, view<128xi32>
+  kernel.return
+}
+
+// Different subgroup epochs do not establish a relation between subgroups.
+kernel.def target(@wave32) @tsan_subgroup_cross_wave_race() {
+  %unit = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%threads, %unit, %unit) : index
+} launch() {
+  %base = index.constant 0 : offset
+  %bytes = index.constant 4 : offset
+  %origin = index.constant 0 : index
+  %second_subgroup_leader = index.constant 32 : index
+  %first_value = scalar.constant 1 : i32
+  %second_value = scalar.constant 2 : i32
+  %workitem = kernel.workitem.id<x> : index
+  %subgroup = kernel.subgroup.id : index
+  %is_first_subgroup = index.cmp eq, %subgroup, %origin : index
+  %is_first_leader = index.cmp eq, %workitem, %origin : index
+  %is_second_leader = index.cmp eq, %workitem, %second_subgroup_leader : index
+  %scratch = buffer.alloca<workgroup> align(4) %bytes : buffer
+  %shared = buffer.view %scratch[%base] : buffer -> view<1xi32>
+  kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
+  scf.if %is_first_subgroup {
+    kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
+  }
+  scf.if %is_first_leader {
+    view.store %first_value, %shared[%origin] : i32, view<1xi32>
+  }
+  scf.if %is_second_leader {
+    view.store %second_value, %shared[%origin] : i32, view<1xi32>
+  }
+  kernel.return
+}
+
+// A workgroup barrier supersedes earlier subgroup publications and resets the
+// per-subgroup clocks before later subgroup barriers reuse them.
+kernel.def target(@wave32) @tsan_subgroup_workgroup_reset() {
+  %unit = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%threads, %unit, %unit) : index
+} launch(%output: buffer) {
+  %base = index.constant 0 : offset
+  %bytes = index.constant 4 : offset
+  %origin = index.constant 0 : index
+  %second_subgroup_leader = index.constant 32 : index
+  %last_lane = index.constant 63 : index
+  %first_value = scalar.constant 1 : i32
+  %second_value = scalar.constant 2 : i32
+  %workitem = kernel.workitem.id<x> : index
+  %is_first_leader = index.cmp eq, %workitem, %origin : index
+  %is_second_leader = index.cmp eq, %workitem, %second_subgroup_leader : index
+  %is_last_lane = index.cmp eq, %workitem, %last_lane : index
+  %scratch = buffer.alloca<workgroup> align(4) %bytes : buffer
+  %shared = buffer.view %scratch[%base] : buffer -> view<1xi32>
+  %result = buffer.view %output[%base] : buffer -> view<1xi32>
+  scf.if %is_first_leader {
+    view.store %first_value, %shared[%origin] : i32, view<1xi32>
+  }
+  kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
+  kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+  kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
+  scf.if %is_second_leader {
+    view.store %second_value, %shared[%origin] : i32, view<1xi32>
+  }
+  kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+  scf.if %is_last_lane {
+    %value = view.load %shared[%origin] : view<1xi32> -> i32
+    view.store %value, %result[%origin] : i32, view<1xi32>
+  }
+  kernel.return
+}
+
+// Exercise the same publication relation with native wave64 subgroups.
+kernel.def target(@wave64) @tsan_subgroup_exchange_wave64() {
+  %unit = index.constant 1 : index
+  %threads = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%threads, %unit, %unit) : index
+} launch(%output: buffer) {
+  %base = index.constant 0 : offset
+  %bytes = index.constant 512 : offset
+  %peer_lane_delta = index.constant 1 : index
+  %stored_value = scalar.constant 1 : i32
+  %workitem = kernel.workitem.id<x> : index
+  %peer = index.xori %workitem, %peer_lane_delta : index
+  %scratch = buffer.alloca<workgroup> align(4) %bytes : buffer
+  %shared = buffer.view %scratch[%base] : buffer -> view<128xi32>
+  %result = buffer.view %output[%base] : buffer -> view<128xi32>
+  view.store %stored_value, %shared[%workitem] : i32, view<128xi32>
+  kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
+  %value = view.load %shared[%peer] : view<128xi32> -> i32
+  view.store %value, %result[%workitem] : i32, view<128xi32>
+  kernel.return
+}
+
+func.def @tsan_subgroup_exchange_wave32_oracle(%scalar_output: buffer, %vector_output: buffer) {
+  %base = index.constant 0 : offset
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %scalar_end = index.constant 64 : index
+  %vector_end = index.constant 128 : index
+  %expected_value = scalar.constant 1 : i32
+  %scalar_result = buffer.view %scalar_output[%base] : buffer -> view<64xi32>
+  %vector_result = buffer.view %vector_output[%base] : buffer -> view<128xi32>
+  scf.for %position = [%begin to %scalar_end step %step] {
+    view.store %expected_value, %scalar_result[%position] : i32, view<64xi32>
+  }
+  scf.for %position = [%begin to %vector_end step %step] {
+    view.store %expected_value, %vector_result[%position] : i32, view<128xi32>
+  }
+  func.return
+}
+
+func.def @tsan_subgroup_no_output_oracle() {
+  func.return
+}
+
+func.def @tsan_subgroup_workgroup_reset_oracle(%output: buffer) {
+  %base = index.constant 0 : offset
+  %expected_value = scalar.constant 2 : i32
+  %result = buffer.view %output[%base] : buffer -> view<1xi32>
+  view.store %expected_value, %result[0] : i32, view<1xi32>
+  func.return
+}
+
+func.def @tsan_subgroup_exchange_wave64_oracle(%output: buffer) {
+  %base = index.constant 0 : offset
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %end = index.constant 128 : index
+  %expected_value = scalar.constant 1 : i32
+  %result = buffer.view %output[%base] : buffer -> view<128xi32>
+  scf.for %position = [%begin to %end step %step] {
+    view.store %expected_value, %result[%position] : i32, view<128xi32>
+  }
+  func.return
+}
+
+check.scenario @tsan_subgroup_exchange_wave32_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %scalar_output = check.generate.fill value(0) : tensor<64xi32>
+    %vector_output = check.generate.fill value(0) : tensor<128xi32>
+    check.compare<@tsan_subgroup_exchange_wave32, @tsan_subgroup_exchange_wave32_oracle>(%scalar_output, %vector_output) : (tensor<64xi32>, tensor<128xi32>) -> () {
+      check.expect.bitwise actual(%scalar_output) expected(%scalar_output) : tensor<64xi32>
+      check.expect.bitwise actual(%vector_output) expected(%vector_output) : tensor<128xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @tsan_subgroup_cross_wave_race_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    check.compare<@tsan_subgroup_cross_wave_race, @tsan_subgroup_no_output_oracle>() : () -> () {
+      check.expect.event<device> {count = 1, severity = "error", tsan = {access_length = 4, check = "data_race", current_access = "write", memory = "workgroup", prior_access = "write"}, type = "tsan_report"}
+    }
+  }
+  check.return
+}
+
+check.scenario @tsan_subgroup_workgroup_reset_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@tsan_subgroup_workgroup_reset, @tsan_subgroup_workgroup_reset_oracle>(%output) : (tensor<1xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @tsan_subgroup_exchange_wave64_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<128xi32>
+    check.compare<@tsan_subgroup_exchange_wave64, @tsan_subgroup_exchange_wave64_oracle>(%output) : (tensor<128xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<128xi32>
+    }
+  }
+  check.return
+}

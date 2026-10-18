@@ -101,6 +101,25 @@ typedef struct loom_amdgpu_sanitizer_race_shadow_capacity_report_t {
   loom_value_id_t current_workitem_ids[3];
 } loom_amdgpu_sanitizer_race_shadow_capacity_report_t;
 
+typedef struct loom_amdgpu_sanitizer_race_synchronization_capacity_report_t {
+  // Compiler-assigned instrumentation site identifier for the sync operation.
+  loom_value_id_t current_site_id;
+  // Last representable subgroup epoch observed at the failed sync operation.
+  loom_value_id_t subgroup_epoch;
+  // Number of subgroup epochs representable within one workgroup epoch.
+  loom_value_id_t subgroup_epoch_capacity;
+  // Hardware wavefront width defining one subgroup.
+  loom_value_id_t wavefront_size;
+  // Flattened subgroup identifier within the workgroup.
+  loom_value_id_t subgroup_id;
+  // Three-dimensional workgroup coordinates that observed the failure.
+  loom_value_id_t current_workgroup_ids[3];
+  // Linear workitem identifier of the reporting subgroup leader.
+  loom_value_id_t current_workitem_linear_id;
+  // Device-visible address of the exhausted subgroup clock.
+  loom_value_id_t subgroup_clock_address;
+} loom_amdgpu_sanitizer_race_synchronization_capacity_report_t;
+
 typedef struct loom_amdgpu_sanitizer_race_report_island_t {
   // Entry block accepting the source/report tuple for one failed race site.
   loom_block_t* entry_block;
@@ -112,6 +131,18 @@ typedef struct loom_amdgpu_sanitizer_race_report_island_t {
   // Block arguments carrying race report values in |entry_block|.
   loom_amdgpu_sanitizer_race_report_t report_args;
 } loom_amdgpu_sanitizer_race_report_island_t;
+
+typedef struct
+    loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t {
+  // Entry block accepting one source/capacity-report tuple.
+  loom_block_t* entry_block;
+  // Terminal block reached after optional reporting or a dropped packet.
+  loom_block_t* terminal_block;
+  // Block arguments carrying current source coordinates in |entry_block|.
+  loom_amdgpu_feedback_packet_source_t source_args;
+  // Block arguments carrying synchronization-capacity report values.
+  loom_amdgpu_sanitizer_race_synchronization_capacity_report_t report_args;
+} loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t;
 
 typedef struct loom_amdgpu_sanitizer_race_report_failure_branch_t {
   // Per-site cold block that forwards canonical report values to the island.
@@ -165,6 +196,45 @@ iree_status_t loom_amdgpu_build_sanitizer_race_shadow_capacity_report_terminate(
     loom_symbol_ref_t feedback_config_symbol,
     const loom_amdgpu_feedback_packet_source_t* source,
     const loom_amdgpu_sanitizer_race_shadow_capacity_report_t* report,
+    loom_location_id_t location);
+
+// Emits the AMDGPU TSAN synchronization-capacity payload into a reserved
+// feedback packet. The check kind, flags, and reserved fields are fixed by
+// this builder; |report| contains only the meaningful capacity operands.
+iree_status_t
+loom_amdgpu_build_sanitizer_race_synchronization_capacity_report_payload(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
+    const loom_amdgpu_sanitizer_race_synchronization_capacity_report_t* report,
+    loom_location_id_t location);
+
+// Emits a terminal AMDGPU TSAN synchronization-capacity report producer from
+// the current cold block.
+iree_status_t
+loom_amdgpu_build_sanitizer_race_synchronization_capacity_report_terminate(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_symbol_ref_t feedback_config_symbol,
+    const loom_amdgpu_feedback_packet_source_t* source,
+    const loom_amdgpu_sanitizer_race_synchronization_capacity_report_t* report,
+    loom_location_id_t location);
+
+// Builds one shared cold island for synchronization-capacity failures.
+iree_status_t
+loom_amdgpu_build_sanitizer_race_synchronization_capacity_report_island(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_block_t* after_block, loom_symbol_ref_t feedback_config_symbol,
+    loom_location_id_t location,
+    loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t*
+        out_island);
+
+// Terminates the current cold block with a branch into |island|.
+iree_status_t
+loom_amdgpu_build_sanitizer_race_synchronization_capacity_report_branch(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t*
+        island,
+    const loom_amdgpu_feedback_packet_source_t* source,
+    const loom_amdgpu_sanitizer_race_synchronization_capacity_report_t* report,
     loom_location_id_t location);
 
 // Builds a shared cold report island for failed race observations.

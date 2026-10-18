@@ -130,6 +130,36 @@ class FeedbackStateTest : public ::testing::Test {
     iree_hal_amdgpu_feedback_publish(&device_state_.channel.config, packet);
   }
 
+  void PublishTsanSynchronizationCapacity() {
+    iree_hal_amdgpu_feedback_packet_t* packet = nullptr;
+    ASSERT_TRUE(iree_hal_amdgpu_feedback_try_reserve(
+        &device_state_.channel.config,
+        IREE_HAL_AMDGPU_FEEDBACK_PACKET_KIND_TSAN,
+        IREE_HAL_AMDGPU_FEEDBACK_PACKET_FLAG_ASYNC,
+        sizeof(iree_hal_amdgpu_tsan_report_t), &packet));
+    packet->source_dispatch_ptr = 0x56780000u;
+    auto* report = reinterpret_cast<iree_hal_amdgpu_tsan_report_t*>(
+        iree_hal_amdgpu_feedback_packet_payload(packet));
+    std::memset(report, 0, sizeof(*report));
+    report->record_length = sizeof(*report);
+    report->abi_version = IREE_HAL_AMDGPU_TSAN_REPORT_ABI_VERSION_0;
+    report->check_kind =
+        IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY;
+    report->flags = IREE_HAL_AMDGPU_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR;
+    auto& capacity = report->detail.synchronization_capacity;
+    capacity.current_site_id = 0x9876;
+    capacity.subgroup_epoch = 1048575;
+    capacity.subgroup_epoch_capacity = 1048576;
+    capacity.wavefront_size = 32;
+    capacity.subgroup_id = 2;
+    capacity.current_workgroup_id[0] = 16;
+    capacity.current_workgroup_id[1] = 4;
+    capacity.current_workgroup_id[2] = 1;
+    capacity.current_workitem_linear_id = 64;
+    capacity.subgroup_clock_address = 0x123456789ABCDEF0ull;
+    iree_hal_amdgpu_feedback_publish(&device_state_.channel.config, packet);
+  }
+
   void PublishUbsanAssertion(bool valid_report) {
     iree_hal_amdgpu_feedback_packet_t* packet = nullptr;
     ASSERT_TRUE(iree_hal_amdgpu_feedback_try_reserve(
@@ -232,6 +262,37 @@ TEST_F(FeedbackStateTest, TsanShadowCapacityPublishesTypedResourceError) {
   EXPECT_EQ(capacity.current_workgroup_id[1], 4u);
   EXPECT_EQ(capacity.current_workgroup_id[2], 1u);
   EXPECT_EQ(last_tsan_report_.source_dispatch_ptr, 0x12340000u);
+  EXPECT_EQ(control_.read_tail, control_.reservation_head);
+}
+
+TEST_F(FeedbackStateTest,
+       TsanSynchronizationCapacityPublishesTypedResourceError) {
+  PublishTsanSynchronizationCapacity();
+
+  iree_hal_amdgpu_feedback_state_drain_physical_device(&state_, 0);
+
+  EXPECT_EQ(IREE_STATUS_RESOURCE_EXHAUSTED, iree_status_code(error_status_));
+  EXPECT_EQ(event_count_, 1u);
+  EXPECT_EQ(last_event_type_, IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT);
+  EXPECT_EQ(last_tsan_report_.record_length, sizeof(last_tsan_report_));
+  EXPECT_EQ(last_tsan_report_.abi_version,
+            IREE_HAL_DEVICE_TSAN_REPORT_ABI_VERSION_0);
+  EXPECT_EQ(last_tsan_report_.check_kind,
+            IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY);
+  EXPECT_EQ(last_tsan_report_.flags,
+            IREE_HAL_DEVICE_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR);
+  const auto& capacity = last_tsan_report_.detail.synchronization_capacity;
+  EXPECT_EQ(capacity.current_site_id, 0x9876u);
+  EXPECT_EQ(capacity.subgroup_epoch, 1048575u);
+  EXPECT_EQ(capacity.subgroup_epoch_capacity, 1048576u);
+  EXPECT_EQ(capacity.wavefront_size, 32u);
+  EXPECT_EQ(capacity.subgroup_id, 2u);
+  EXPECT_EQ(capacity.current_workgroup_id[0], 16u);
+  EXPECT_EQ(capacity.current_workgroup_id[1], 4u);
+  EXPECT_EQ(capacity.current_workgroup_id[2], 1u);
+  EXPECT_EQ(capacity.current_workitem_linear_id, 64u);
+  EXPECT_EQ(capacity.subgroup_clock_address, 0x123456789ABCDEF0ull);
+  EXPECT_EQ(last_tsan_report_.source_dispatch_ptr, 0x56780000u);
   EXPECT_EQ(control_.read_tail, control_.reservation_head);
 }
 

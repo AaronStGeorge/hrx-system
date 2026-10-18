@@ -42,6 +42,9 @@ enum iree_hal_amdgpu_tsan_check_kind_bits_t {
   // The dispatch requires more workgroup shadow bytes than the queue arena
   // provides.
   IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY = 2u,
+  // A subgroup synchronization clock cannot advance without aliasing an
+  // earlier synchronization epoch still retained in shadow history.
+  IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY = 3u,
 };
 
 // TSAN memory space containing the observed address.
@@ -296,6 +299,32 @@ IREE_AMDGPU_STATIC_ASSERT(
     sizeof(iree_hal_amdgpu_tsan_shadow_capacity_report_t) == 104,
     "TSAN shadow-capacity report size is part of the device ABI");
 
+// TSAN subgroup synchronization-clock capacity report details.
+typedef struct IREE_AMDGPU_ALIGNAS(8)
+    iree_hal_amdgpu_tsan_synchronization_capacity_report_t {
+  // Compiler-assigned instrumentation site identifier for the sync operation.
+  uint64_t current_site_id;
+  // Last representable subgroup epoch observed at the failed sync operation.
+  uint32_t subgroup_epoch;
+  // Number of subgroup epochs representable within one workgroup epoch.
+  uint32_t subgroup_epoch_capacity;
+  // Hardware wavefront width defining one subgroup.
+  uint32_t wavefront_size;
+  // Flattened subgroup identifier within the workgroup.
+  uint32_t subgroup_id;
+  // Workgroup id that observed the capacity failure.
+  uint32_t current_workgroup_id[3];
+  // Linear workitem id of the subgroup leader that produced the report.
+  uint32_t current_workitem_linear_id;
+  // Device-visible address of the exhausted subgroup clock.
+  uint64_t subgroup_clock_address;
+  // Reserved for future synchronization-capacity fields. Must be zero.
+  uint64_t reserved[7];
+} iree_hal_amdgpu_tsan_synchronization_capacity_report_t;
+IREE_AMDGPU_STATIC_ASSERT(
+    sizeof(iree_hal_amdgpu_tsan_synchronization_capacity_report_t) == 104,
+    "TSAN synchronization-capacity report size is part of the device ABI");
+
 // TSAN diagnostic payload carried by feedback packets of kind TSAN.
 //
 // The generic feedback packet header carries common source attribution used by
@@ -315,6 +344,10 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_tsan_report_t {
     iree_hal_amdgpu_tsan_data_race_report_t data_race;
     // Details for IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY.
     iree_hal_amdgpu_tsan_shadow_capacity_report_t shadow_capacity;
+    // Details for
+    // IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY.
+    iree_hal_amdgpu_tsan_synchronization_capacity_report_t
+        synchronization_capacity;
   } detail;
 } iree_hal_amdgpu_tsan_report_t;
 IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_tsan_report_t) == 120,

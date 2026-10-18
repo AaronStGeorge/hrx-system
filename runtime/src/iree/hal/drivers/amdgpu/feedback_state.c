@@ -79,6 +79,8 @@ static const char* iree_hal_amdgpu_feedback_state_tsan_check_kind_string(
       return "data_race";
     case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY:
       return "shadow_capacity";
+    case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY:
+      return "synchronization_capacity";
     case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_UNKNOWN:
     default:
       return "unknown";
@@ -125,6 +127,8 @@ iree_hal_amdgpu_feedback_state_map_tsan_check_kind(
       return IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE;
     case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SHADOW_CAPACITY:
       return IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY;
+    case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY:
+      return IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY;
     case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_UNKNOWN:
     default:
       return IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN;
@@ -451,6 +455,22 @@ static void iree_hal_amdgpu_feedback_state_publish_tsan_event(
              sizeof(target->current_workitem_id));
       break;
     }
+    case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY: {
+      const iree_hal_amdgpu_tsan_synchronization_capacity_report_t* source =
+          &report->detail.synchronization_capacity;
+      iree_hal_device_tsan_synchronization_capacity_report_t* target =
+          &tsan_event.detail.synchronization_capacity;
+      target->current_site_id = source->current_site_id;
+      target->subgroup_epoch = source->subgroup_epoch;
+      target->subgroup_epoch_capacity = source->subgroup_epoch_capacity;
+      target->wavefront_size = source->wavefront_size;
+      target->subgroup_id = source->subgroup_id;
+      memcpy(target->current_workgroup_id, source->current_workgroup_id,
+             sizeof(target->current_workgroup_id));
+      target->current_workitem_linear_id = source->current_workitem_linear_id;
+      target->subgroup_clock_address = source->subgroup_clock_address;
+      break;
+    }
     case IREE_HAL_AMDGPU_TSAN_CHECK_KIND_UNKNOWN:
     default:
       break;
@@ -470,9 +490,16 @@ static void iree_hal_amdgpu_feedback_state_publish_tsan_event(
       iree_hal_amdgpu_feedback_state_physical_device_ordinal(
           physical_device_ordinal);
   iree_hal_device_event_site_t site;
-  if (report->check_kind == IREE_HAL_AMDGPU_TSAN_CHECK_KIND_DATA_RACE &&
+  uint64_t current_site_id = 0;
+  if (report->check_kind == IREE_HAL_AMDGPU_TSAN_CHECK_KIND_DATA_RACE) {
+    current_site_id = report->detail.data_race.current_site_id;
+  } else if (report->check_kind ==
+             IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY) {
+    current_site_id = report->detail.synchronization_capacity.current_site_id;
+  }
+  if (current_site_id != 0 &&
       iree_hal_amdgpu_source_context_try_resolve_sanitizer_site(
-          source_context, report->detail.data_race.current_site_id, &site)) {
+          source_context, current_site_id, &site)) {
     event.site = &site;
   }
   event.payload = iree_make_const_byte_span(&tsan_event, sizeof(tsan_event));
@@ -540,6 +567,22 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_tsan_packet(
         physical_device_ordinal, capacity->workgroup_ordinal,
         capacity->required_shadow_end, capacity->workgroup_shadow_stride,
         capacity->shadow_size, capacity->workgroup_local_memory_size);
+  }
+
+  if (report->check_kind ==
+      IREE_HAL_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY) {
+    const iree_hal_amdgpu_tsan_synchronization_capacity_report_t* capacity =
+        &report->detail.synchronization_capacity;
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "AMDGPU TSAN synchronization capacity exhausted on physical device "
+        "%" PRIhsz ": site_id=0x%016" PRIx64
+        ", subgroup=%u at epoch=%u of %u, wavefront=%u, "
+        "subgroup_clock_address=0x%016" PRIx64,
+        physical_device_ordinal, capacity->current_site_id,
+        capacity->subgroup_id, capacity->subgroup_epoch,
+        capacity->subgroup_epoch_capacity, capacity->wavefront_size,
+        capacity->subgroup_clock_address);
   }
 
   const iree_hal_amdgpu_tsan_data_race_report_t* data_race =

@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/lower/lower.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_race_history_layout.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_race_report.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_report.h"
 #include "loom/target/registers.h"
@@ -44,6 +45,11 @@ typedef struct loom_amdgpu_sanitizer_race_report_coordinates_t {
   loom_value_id_t workgroup_ids[LOOM_KERNEL_DIMENSION_COUNT_];
 } loom_amdgpu_sanitizer_race_report_coordinates_t;
 
+// Returns the function-owned packed access-history layout.
+iree_status_t loom_amdgpu_sanitizer_race_get_history_layout(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_sanitizer_race_history_layout_t** out_layout);
+
 // Returns the entry-dominating runtime TSAN configuration.
 iree_status_t loom_amdgpu_sanitizer_race_get_config_values(
     loom_low_lower_context_t* context,
@@ -66,6 +72,10 @@ iree_status_t loom_amdgpu_sanitizer_race_get_workgroup_shadow_record_offset(
 // bitmap.
 iree_status_t loom_amdgpu_sanitizer_race_get_workgroup_chunk_state_bitmap_size(
     loom_low_lower_context_t* context, loom_value_id_t* out_size);
+
+// Returns the byte offset of the current subgroup clock from shadow_base.
+iree_status_t loom_amdgpu_sanitizer_race_get_subgroup_clock_offset(
+    loom_low_lower_context_t* context, loom_value_id_t* out_offset);
 
 // Returns the byte offset of the current workgroup's padded history array.
 iree_status_t loom_amdgpu_sanitizer_race_get_workgroup_shadow_history_offset(
@@ -92,6 +102,13 @@ iree_status_t loom_amdgpu_sanitizer_race_branch_to_continuation(
 iree_status_t loom_amdgpu_sanitizer_race_get_report_island(
     loom_low_lower_context_t* context, loom_location_id_t location,
     const loom_amdgpu_sanitizer_race_report_island_t** out_island);
+
+// Returns the shared cold report island for exhausted subgroup clocks.
+iree_status_t
+loom_amdgpu_sanitizer_race_get_synchronization_capacity_report_island(
+    loom_low_lower_context_t* context, loom_location_id_t location,
+    const loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t**
+        out_island);
 
 // Returns the shared cold trap island for failed sanitizer checks.
 iree_status_t loom_amdgpu_sanitizer_race_get_trap_island(

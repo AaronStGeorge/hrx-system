@@ -12,6 +12,7 @@ kernel.def @workgroup_load_store_and_barrier() {
   %view = buffer.view %scratch[%base] : buffer -> view<64xi32>
   %value = view.load %view[%lane] : view<64xi32> -> i32
   view.store %value, %view[%lane] : i32, view<64xi32>
+  kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
   kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
   kernel.return
 }
@@ -31,6 +32,8 @@ kernel.def @workgroup_load_store_and_barrier() {
   %value = view.load %view[%lane] : view<64xi32> -> i32
   sanitizer.race.access<write> %view[%lane] : view<64xi32>
   view.store %value, %view[%lane] : i32, view<64xi32>
+  kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
+  sanitizer.race.sync<workgroup> scope(subgroup) ordering(acq_rel)
   kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
   sanitizer.race.sync<workgroup> scope(workgroup) ordering(acq_rel)
   kernel.return

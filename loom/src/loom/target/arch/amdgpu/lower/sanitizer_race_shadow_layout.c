@@ -196,6 +196,37 @@ iree_status_t loom_amdgpu_build_sanitizer_race_shadow_layout(
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_add_checked(
       context, source_op, header_size, layout.workgroup_chunk_state_bitmap_size,
       &layout.workgroup_history_data_offset, &history_offset_overflow));
+  layout.workgroup_lifetime_data_size =
+      layout.workgroup_chunk_state_bitmap_size;
+  if (config->subgroup_count != 0u) {
+    layout.workgroup_subgroup_clock_data_offset =
+        layout.workgroup_history_data_offset;
+    const uint64_t subgroup_clock_data_size =
+        iree_host_align((uint64_t)config->subgroup_count * sizeof(uint32_t),
+                        LOOM_AMDGPU_TSAN_SHADOW_CHUNK_STATE_BITMAP_ALIGNMENT);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(
+        context, source_op, subgroup_clock_data_size,
+        &layout.workgroup_subgroup_clock_data_size));
+    loom_value_id_t subgroup_clock_offset_overflow = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_add_checked(
+        context, source_op, layout.workgroup_history_data_offset,
+        layout.workgroup_subgroup_clock_data_size,
+        &layout.workgroup_history_data_offset,
+        &subgroup_clock_offset_overflow));
+    loom_value_id_t lifetime_data_size_overflow = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_add_checked(
+        context, source_op, layout.workgroup_chunk_state_bitmap_size,
+        layout.workgroup_subgroup_clock_data_size,
+        &layout.workgroup_lifetime_data_size, &lifetime_data_size_overflow));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_bool_binary(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B32,
+        history_offset_overflow, subgroup_clock_offset_overflow,
+        &history_offset_overflow));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_bool_binary(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B32,
+        history_offset_overflow, lifetime_data_size_overflow,
+        &history_offset_overflow));
+  }
   loom_value_id_t stride_overflow = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_add_checked(
       context, source_op, shadow_data_size,

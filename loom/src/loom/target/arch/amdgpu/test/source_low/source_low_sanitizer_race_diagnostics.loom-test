@@ -51,7 +51,7 @@ func.def target(@target) @race_sync_global_rejected() {
 amdgpu.target<gfx11-generic> @target
 
 func.def target(@target) @race_sync_device_scope_rejected() {
-  // ERROR@+1: AMDGPU/023 {constraint_key="target_contract.sanitizer_race.workgroup_scope_required"}
+  // ERROR@+1: AMDGPU/023 {constraint_key="target_contract.sanitizer_race.supported_scope_required"}
   sanitizer.race.sync<workgroup> scope(device) ordering(acq_rel)
   func.return
 }
