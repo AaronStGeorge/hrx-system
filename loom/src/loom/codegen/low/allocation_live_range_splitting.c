@@ -10,6 +10,7 @@
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/representation_binding.h"
+#include "loom/codegen/low/storage_relation.h"
 #include "loom/error/error_catalog.h"
 #include "loom/error/parameter.h"
 #include "loom/ops/low/ops.h"
@@ -66,6 +67,34 @@ static bool loom_low_allocation_fixed_value_has_only_split_transfer_use(
   const loom_op_t* user_op = loom_use_user_op(use);
   return (loom_low_copy_isa(user_op) || loom_low_move_isa(user_op)) &&
          loom_use_operand_index(use) == 0;
+}
+
+static bool loom_low_allocation_value_is_detached_transfer_result(
+    const loom_value_t* value) {
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* definition = loom_value_def_op(value);
+  return (loom_low_copy_isa(definition) &&
+          loom_low_copy_detached(definition)) ||
+         (loom_low_move_isa(definition) && loom_low_move_detached(definition));
+}
+
+static bool loom_low_allocation_use_has_hard_same_storage_successor(
+    const loom_module_t* module, loom_value_id_t value_id, loom_use_t use) {
+  const loom_op_t* user_op = loom_use_user_op(use);
+  loom_low_storage_relation_iterator_t iterator;
+  loom_low_storage_relation_iterator_initialize(module, user_op, &iterator);
+  loom_low_storage_relation_t relation;
+  while (loom_low_storage_relation_iterator_next(&iterator, &relation)) {
+    if (relation.source_value_id == value_id &&
+        relation.source_operand_index == loom_use_operand_index(use) &&
+        relation.kind == LOOM_LOW_STORAGE_RELATION_SAME_STORAGE &&
+        iree_any_bit_set(relation.flags, LOOM_LOW_STORAGE_RELATION_FLAG_HARD)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static bool loom_low_allocation_split_use_is_eligible(
@@ -587,10 +616,26 @@ static iree_status_t loom_low_allocation_try_split_fixed_value(
   }
 
   uint32_t rewritten_operand_count = 0;
+  const bool is_detached_transfer_result =
+      loom_low_allocation_value_is_detached_transfer_result(value);
   const loom_use_t* original_uses = loom_value_uses(value);
   for (uint32_t i = 0; i < value->use_count; ++i) {
-    rewritten_operand_count += loom_low_allocation_split_use_is_eligible(
-        value_id, insertion_block, insertion_anchor, original_uses[i]);
+    const loom_use_t use = original_uses[i];
+    if (!loom_low_allocation_split_use_is_eligible(value_id, insertion_block,
+                                                   insertion_anchor, use)) {
+      continue;
+    }
+    // A detached transfer is the storage boundary introduced by this repair.
+    // Moving a hard same-storage successor across another detached transfer
+    // only transfers the fixed binding to the new result. Every rewritten use
+    // remains on that fixed result, so repeating the cut cannot shorten the
+    // interfering interval.
+    if (is_detached_transfer_result &&
+        loom_low_allocation_use_has_hard_same_storage_successor(
+            module, value_id, use)) {
+      return iree_ok_status();
+    }
+    ++rewritten_operand_count;
   }
   if (rewritten_operand_count == 0) {
     return iree_ok_status();

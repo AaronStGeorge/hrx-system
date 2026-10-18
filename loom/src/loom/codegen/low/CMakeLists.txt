@@ -820,6 +820,7 @@ loom_cc_library(
     ::allocation
     ::diagnostics
     ::representation_binding
+    ::storage_relation
     iree::base
     iree::base::internal::arena
     loom::codegen::low::allocation::live_range
