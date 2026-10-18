@@ -29,13 +29,14 @@ static inline iree_latency_scope_options_t iree_latency_scope_options_default(
   return options;
 }
 
-// An application-owned request for latency-sensitive power management.
+// An application-owned request for latency-sensitive host power management.
 //
 // The scope covers a latency-sensitive activity, including time its threads
 // spend blocked on device work or I/O. For example, a server can keep one scope
 // across a busy period and its idle grace interval, then end it when idle.
 // Beginning and ending a scope can invoke the OS and wake idle CPUs; these are
 // activity boundaries, not per-operation or per-wait actions.
+// The request does not acquire device runtime power or keep a GPU/NPU awake.
 //
 // Independent scopes may overlap and end in any order. Native policies differ:
 // - Linux: a system-wide CPU idle-state latency request. Native policy requests
@@ -56,6 +57,9 @@ static inline iree_latency_scope_options_t iree_latency_scope_options_default(
 // A scope has one owner. Zero initialization produces an inactive scope. A live
 // scope must not be copied or begun again. Ownership may be transferred between
 // threads with external synchronization; no thread affinity is required.
+// The scope must end through the runtime copy that began it, before that copy
+// is unloaded. Independent runtime copies coordinate native policy ownership,
+// not the ownership of each other's scope storage.
 typedef struct iree_latency_scope_t {
   // Opaque native request ownership; zero when inactive.
   uintptr_t handle;

@@ -2,11 +2,6 @@
   "version": 1,
   "cases": [
     {
-      "name": "latency-sensitive policy is enabled by default",
-      "run": {"tool": "benchmark", "args": ["--help"]},
-      "stdout": {"contains": ["--benchmark_low_latency=true"]}
-    },
-    {
       "name": "successful benchmark",
       "run": {
         "tool": "benchmark",

@@ -11,7 +11,6 @@
 
 #include "iree/base/threading/latency.h"
 
-#include <algorithm>
 #include <thread>
 
 #include "iree/testing/gtest.h"
@@ -97,6 +96,19 @@ TEST_F(LatencyTest, NumericIdleLimitsAreUnavailable) {
 
 #if defined(IREE_PLATFORM_LINUX) || defined(IREE_PLATFORM_ANDROID)
 
+class LinuxLatencyTest : public LatencyTest {
+ protected:
+  void SetUp() override {
+    // Reading effective policy is an additional permission beyond acquiring
+    // a request. Restricted deployments may allow only write access.
+    const int descriptor = open("/dev/cpu_dma_latency", O_RDONLY | O_CLOEXEC);
+    if (descriptor < 0) {
+      GTEST_SKIP() << "CPU idle latency policy cannot be observed: " << errno;
+    }
+    close(descriptor);
+  }
+};
+
 // Read through the native interface independently of the IREE scope. Every
 // open starts a new read position and contributes only the kernel default.
 static int32_t ReadEffectiveLatency() {
@@ -106,13 +118,16 @@ static int32_t ReadEffectiveLatency() {
     return -1;
   }
   int32_t latency_us = -1;
-  const ssize_t length = read(descriptor, &latency_us, sizeof(latency_us));
+  ssize_t length;
+  do {
+    length = read(descriptor, &latency_us, sizeof(latency_us));
+  } while (length < 0 && errno == EINTR);
   close(descriptor);
   EXPECT_EQ(sizeof(latency_us), length);
   return latency_us;
 }
 
-TEST_F(LatencyTest, KernelAggregatesIndependentScopes) {
+TEST_F(LinuxLatencyTest, KernelAggregatesIndependentScopes) {
   Begin(30, &first_);
   if (IsSkipped() || HasFatalFailure()) {
     return;
@@ -137,7 +152,7 @@ TEST_F(LatencyTest, KernelAggregatesIndependentScopes) {
   EXPECT_EQ(EBADF, errno);
 }
 
-TEST_F(LatencyTest, ZeroLatency) {
+TEST_F(LinuxLatencyTest, ZeroLatency) {
   Begin(0, &first_);
   if (IsSkipped() || HasFatalFailure()) {
     return;
@@ -145,19 +160,14 @@ TEST_F(LatencyTest, ZeroLatency) {
   EXPECT_EQ(0, ReadEffectiveLatency());
 }
 
-TEST_F(LatencyTest, DefaultRequestsFiveMicroseconds) {
-  // Establish native access before inspecting the system's current request.
-  Begin(30, &first_);
+TEST_F(LinuxLatencyTest, DefaultRequestsFiveMicroseconds) {
+  Begin(-1, &first_);
   if (IsSkipped() || HasFatalFailure()) {
     return;
   }
-  IREE_ASSERT_OK(iree_latency_scope_end(&first_));
-  const int32_t before = ReadEffectiveLatency();
-  ASSERT_TRUE(
-      iree_latency_scope_begin(iree_latency_scope_options_default(), &first_));
-  EXPECT_EQ(std::min(before, 5), ReadEffectiveLatency());
-  IREE_ASSERT_OK(iree_latency_scope_end(&first_));
-  EXPECT_EQ(before, ReadEffectiveLatency());
+  // Other processes may acquire or release requests while this test runs.
+  // Our request bounds effective latency but does not own its exact value.
+  EXPECT_LE(ReadEffectiveLatency(), 5);
 }
 
 #endif  // IREE_PLATFORM_LINUX || IREE_PLATFORM_ANDROID
@@ -168,9 +178,15 @@ class WindowsLatencyTest : public LatencyTest,
                            public ::testing::WithParamInterface<DWORD> {
  protected:
   void SetUp() override {
-    ASSERT_TRUE(GetProcessInformation(GetCurrentProcess(),
-                                      ProcessPowerThrottling, &original_,
-                                      sizeof(original_)));
+    if (!GetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
+                               &original_, sizeof(original_))) {
+      GTEST_SKIP() << "Process power policy is unavailable: " << GetLastError();
+    }
+    if (!SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
+                               &original_, sizeof(original_))) {
+      GTEST_SKIP() << "Process power policy is not writable: "
+                   << GetLastError();
+    }
     restore_policy_ = true;
   }
 

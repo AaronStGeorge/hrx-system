@@ -20,14 +20,15 @@
 #include "iree/base/tooling/flags.h"
 #include "iree/testing/benchmark.h"
 
-IREE_FLAG(bool, benchmark_low_latency, true,
-          "Request native latency-sensitive power management for the entire "
-          "benchmark run (enabled by default). Use "
-          "--benchmark_low_latency=false to disable it for this run. "
-          "Unavailable policy produces a warning and the benchmark continues. "
-          "May increase power consumption; Linux's native policy requests a "
-          "5us CPU idle latency limit. Use --benchmark_cpu_latency_us to "
-          "override that limit on Linux.");
+IREE_FLAG(
+    bool, benchmark_low_latency, true,
+    "Request native latency-sensitive host power management for the entire "
+    "benchmark run (enabled by default). Use "
+    "--benchmark_low_latency=false to disable it for this run. "
+    "Unavailable policy produces a warning and the benchmark continues. "
+    "May increase power consumption; Linux's native policy requests a "
+    "5us CPU idle latency limit. Use --benchmark_cpu_latency_us to "
+    "override that limit on Linux.");
 IREE_FLAG(int32_t, benchmark_cpu_latency_us, -1,
           "Maximum CPU idle-state exit latency in microseconds during the "
           "benchmark run; a nonnegative value implies --benchmark_low_latency. "
