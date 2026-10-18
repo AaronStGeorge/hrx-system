@@ -456,12 +456,29 @@ loom_test_module(
 endif()
 
 if(LOOM_IMPORT_CXX)
+loom_module(
+  NAME
+    function_link_provider_library
+  SRCS
+    "function_link_provider.cxx"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/function_link_helpers.h"
+  MODE merge
+  OUTPUT_FORMAT bc
+  STRICT_DEPS
+)
+endif()
+
+if(LOOM_IMPORT_CXX)
 loom_test_module(
   NAME
     function_link_module
   SRCS
     "function_link_consumer.cxx"
-    "function_link_provider.cxx"
+  LIBRARIES
+    "::function_link_provider_library"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/test/function_link_helpers.h"
 )
 endif()
 

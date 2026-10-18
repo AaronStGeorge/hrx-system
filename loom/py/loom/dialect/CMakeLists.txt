@@ -52,6 +52,7 @@ iree_py_library(
     "cache.py"
     "combining.py"
     "memory.py"
+    "symbol.py"
   DEPS
     loom::py::loom::core
 )

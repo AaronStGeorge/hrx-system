@@ -1083,14 +1083,17 @@ DefinedFunction Functions::define(cxx::FunctionSymbol* symbol, Types& types,
               .subspan(configuration_identity_count),
           FunctionContractSignature::Kernel, definition);
     }
+    const bool link_once = symbol->canonical()->isInline();
     check(loom_kernel_def_build(
         builder,
         (loom_symbol_ref_is_valid(target)
              ? LOOM_KERNEL_DEF_BUILD_FLAG_HAS_TARGET
              : 0) |
+            (link_once ? LOOM_KERNEL_DEF_BUILD_FLAG_HAS_LINKAGE : 0) |
             (predicates.empty() ? 0
                                 : LOOM_KERNEL_DEF_BUILD_FLAG_HAS_PREDICATES),
-        0, target, LOOM_STRING_ID_INVALID, 0, callee,
+        link_once ? LOOM_SYMBOL_LINKAGE_LINK_ONCE : 0, /*retain=*/0, target,
+        LOOM_STRING_ID_INVALID, /*export_linkage=*/0, callee,
         configuration_arguments.data(), configuration_arguments.size(),
         arguments.data(), arguments.size(), predicates.data(),
         predicates.size(), locations.get(definition), &op));
@@ -1139,6 +1142,8 @@ DefinedFunction Functions::define(cxx::FunctionSymbol* symbol, Types& types,
         locations.get(definition), &op));
   } else {
     launches_.reject_ordinary_function(symbol);
+    const bool link_once =
+        exported_.contains(symbol) && symbol->canonical()->isInline();
     check(loom_func_def_build(
         builder,
         (annotated(symbol, "device") ? LOOM_FUNC_DEF_BUILD_FLAG_HAS_CC : 0) |
@@ -1148,9 +1153,12 @@ DefinedFunction Functions::define(cxx::FunctionSymbol* symbol, Types& types,
             (annotated(symbol, "force_inline")
                  ? LOOM_FUNC_DEF_BUILD_FLAG_HAS_INLINE_POLICY
                  : 0) |
+            (link_once ? LOOM_FUNC_DEF_BUILD_FLAG_HAS_LINKAGE : 0) |
             (predicates.empty() ? 0 : LOOM_FUNC_DEF_BUILD_FLAG_HAS_PREDICATES),
-        exported_.contains(symbol) ? LOOM_FUNC_VISIBILITY_PUBLIC : 0, 0,
-        annotated(symbol, "device") ? LOOM_FUNC_CC_DEVICE : 0, 0, 0,
+        exported_.contains(symbol) ? LOOM_FUNC_VISIBILITY_PUBLIC : 0,
+        link_once ? LOOM_SYMBOL_LINKAGE_LINK_ONCE : 0, /*retain=*/0,
+        annotated(symbol, "device") ? LOOM_FUNC_CC_DEVICE : 0,
+        /*effect_contract=*/0, /*temperature=*/0,
         annotated(symbol, "force_inline") ? LOOM_INLINE_POLICY_INLINE : 0, {},
         0, {}, 0, {}, callees_.at(symbol->canonical()), arguments.data(),
         arguments.size(), results.data(), results.size(), tied_results.data(),

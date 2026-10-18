@@ -380,13 +380,19 @@ loom_test_module(
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
 )
 
+loom_library(
+    name = "function_link_provider_library",
+    srcs = ["function_link_provider.cxx"],
+    data = ["function_link_helpers.h"],
+    target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+)
+
 loom_test_module(
     name = "function_link_module",
-    srcs = [
-        "function_link_consumer.cxx",
-        "function_link_provider.cxx",
-    ],
+    srcs = ["function_link_consumer.cxx"],
+    data = ["function_link_helpers.h"],
     target_compatible_with = loom_config_compatible_with(["//loom/config/import:cxx"]),
+    deps = [":function_link_provider_library"],
 )
 
 loom_test(
