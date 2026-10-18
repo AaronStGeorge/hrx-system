@@ -206,7 +206,6 @@ loom_scenario_test(
             "numeric/float/scalar_float64.loom:@scalar_float64_remainder_special_values": "TARGET/001",
             "numeric/float/selectors.loom:@selector_f32_values": "TARGET/001",
             "numeric/float/selectors.loom:@selector_f64_values": "TARGET/002,TARGET/003",
-            "numeric/float/trigonometry_f32.loom:@trigonometry_f32_cardinals": "EXPECT/002",
             "numeric/float/trigonometry_f8e4m3.loom:@trigonometry_f8e4m3_cardinals": "LOWERING/036",
             "numeric/float/trigonometry_f8e4m3.loom:@trigonometry_f8e4m3_special": "LOWERING/036",
             "numeric/float/trigonometry_f8e4m3.loom:@trigonometry_f8e4m3_values": "LOWERING/036",

@@ -31,6 +31,7 @@ iree_py_library(
     "packed_i8.py"
     "reduce.py"
     "sanitizer.py"
+    "trigonometry.py"
     "view.py"
   DEPS
     loom::py::loom::core

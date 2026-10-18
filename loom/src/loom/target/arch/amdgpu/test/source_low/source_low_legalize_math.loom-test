@@ -1187,7 +1187,19 @@ low.func.def target<amdgpu.gfx11.generic.core>(@target) abi(hal_kernel) @vector_
   %13 = v_sin_f32 %12
   %14 = slice %input[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %15 = v_sin_f32 %14
-  %result = concat(%9, %11, %13, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %18 = v_and_b32_lit %8, 2147483648
+  %20 = v_and_b32_lit %10, 2147483648
+  %22 = v_and_b32_lit %12, 2147483648
+  %24 = v_and_b32_lit %14, 2147483648
+  %27 = v_cmp_eq_f32_src0_inline %9 {lhs = "f32_0_0"}
+  %29 = v_cmp_eq_f32_src0_inline %11 {lhs = "f32_0_0"}
+  %31 = v_cmp_eq_f32_src0_inline %13 {lhs = "f32_0_0"}
+  %33 = v_cmp_eq_f32_src0_inline %15 {lhs = "f32_0_0"}
+  %38 = v_cndmask_b32 %9, %18, %27
+  %42 = v_cndmask_b32 %11, %20, %29
+  %46 = v_cndmask_b32 %13, %22, %31
+  %50 = v_cndmask_b32 %15, %24, %33
+  %result = concat(%38, %42, %46, %50) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   return %result
 }
 
@@ -1240,7 +1252,10 @@ low.func.def target<amdgpu.gfx11.generic.core>(@target) abi(hal_kernel) @scalar_
   %radius_base = v_mul_f32_lit %23, 1060205080
   %radius_squared = v_mul_f32_src0_inline %radius_base, "f32_n2_0"
   %radius = v_sqrt_f32 %radius_squared
-  %sine = v_sin_f32 %u2
+  %27 = v_sin_f32 %u2
+  %28 = v_and_b32_lit %u2, 2147483648
+  %29 = v_cmp_eq_f32_src0_inline %27 {lhs = "f32_0_0"}
+  %sine = v_cndmask_b32 %27, %28, %29
   %cosine = v_cos_f32 %u2
   %z0 = v_mul_f32 %radius, %cosine
   %z1 = v_mul_f32 %radius, %sine
@@ -1260,7 +1275,10 @@ func.def target(@target) @cdna3_native_turn_math(%input: f32) -> (f32, f32, f32)
 // ----
 low.func.def target<amdgpu.cdna3.core>(@target) abi(hal_kernel) @cdna3_native_turn_math(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) asm {
   %log = v_log_f32 %input
-  %sin = v_sin_f32 %input
+  %12 = v_sin_f32 %input
+  %13 = v_and_b32_lit %input, 2147483648
+  %14 = v_cmp_eq_f32_src0_inline %12 {lhs = "f32_0_0"}
+  %sin = v_cndmask_b32 %12, %13, %14
   %cos = v_cos_f32 %input
   return %log, %sin, %cos
 }
