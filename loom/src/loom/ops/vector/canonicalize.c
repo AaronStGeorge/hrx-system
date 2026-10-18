@@ -2270,6 +2270,51 @@ static iree_status_t loom_vector_canonicalize_binary_identity(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_canonicalize_rotation(
+    loom_op_t* op, loom_rewriter_t* rewriter, bool* out_changed) {
+  *out_changed = false;
+
+  loom_type_t result_type = {0};
+  if (!loom_vector_get_single_result_type(rewriter, op, &result_type)) {
+    return iree_ok_status();
+  }
+  const int32_t bit_count =
+      loom_scalar_type_bitwidth(loom_type_element_type(result_type));
+  if (bit_count <= 0) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  int64_t amount = 0;
+  if (!loom_vector_query_all_exact_i64(rewriter, operands[1], &amount)) {
+    return iree_ok_status();
+  }
+  int64_t normalized_amount = amount % bit_count;
+  if (normalized_amount < 0) {
+    normalized_amount += bit_count;
+  }
+  if (normalized_amount == 0) {
+    IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_value(
+        op, rewriter, operands[0]));
+    *out_changed = true;
+    return iree_ok_status();
+  }
+  if (normalized_amount == amount) {
+    return iree_ok_status();
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_op_t* count_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_constant_build(
+      &rewriter->builder, loom_attr_i64(normalized_amount), result_type,
+      op->location, &count_op));
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_set_operand(rewriter, op, /*operand_index=*/1,
+                                loom_vector_constant_result(count_op)));
+  *out_changed = true;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Encoding boundaries
 //===----------------------------------------------------------------------===//
@@ -3012,6 +3057,12 @@ iree_status_t loom_vector_binary_identity_canonicalize(
     loom_op_t* op, loom_rewriter_t* rewriter) {
   return loom_vector_canonicalize_uniform_then(
       op, rewriter, loom_vector_canonicalize_binary_identity);
+}
+
+iree_status_t loom_vector_rotation_canonicalize(loom_op_t* op,
+                                                loom_rewriter_t* rewriter) {
+  return loom_vector_canonicalize_uniform_then(
+      op, rewriter, loom_vector_canonicalize_rotation);
 }
 
 iree_status_t loom_vector_addf_canonicalize(loom_op_t* op,

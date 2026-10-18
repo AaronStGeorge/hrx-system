@@ -34,6 +34,7 @@ iree_py_library(
         "integer_division.py",
         "integer_float.py",
         "integer_reduction.py",
+        "integer_rotation.py",
         "lane_movement.py",
         "memory.py",
         "packed_dot.py",
@@ -225,6 +226,24 @@ iree_py_test(
         ":contracts",
         "//loom/py/loom/dialect/index",
         "//loom/py/loom/dialect/scalar",
+        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/contracts",
+    ],
+)
+
+iree_py_test(
+    name = "integer_rotation_test",
+    srcs = [
+        "integer_rotation_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.target.arch.x86.contracts.integer_rotation_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":contracts",
+        "//loom/py/loom/dialect/index",
+        "//loom/py/loom/dialect/scalar",
+        "//loom/py/loom/dialect/vector",
         "//loom/py/loom/target/arch/x86:descriptors",
         "//loom/py/loom/target/contracts",
     ],

@@ -33,6 +33,16 @@ class ScalarVariableShiftFamily:
     mandatory_prefix: int
 
 
+@dataclass(frozen=True, slots=True)
+class ScalarRotationFamily:
+    """A source rotation and its legacy destructive machine form."""
+
+    source_operation: str
+    mnemonic: str
+    semantic: str
+    opcode_extension: int
+
+
 X86_SCALAR_READ_MEMORY_FAMILIES = (
     ScalarReadMemoryFamily("addi", "add", "add", "add", 0x03),
     ScalarReadMemoryFamily("subi", "sub", "sub", "sub", 0x2B, False),
@@ -47,3 +57,19 @@ X86_SCALAR_VARIABLE_SHIFT_FAMILIES = (
     ScalarVariableShiftFamily("shrsi", "sarx", "shrs", 2),
     ScalarVariableShiftFamily("shrui", "shrx", "shru", 3),
 )
+
+X86_SCALAR_ROTATION_FAMILIES = (
+    ScalarRotationFamily("rotli", "rol", "rotl", 0),
+    ScalarRotationFamily("rotri", "ror", "rotr", 1),
+)
+
+
+def validate_scalar_families() -> None:
+    if {
+        (family.source_operation, family.semantic, family.opcode_extension)
+        for family in X86_SCALAR_ROTATION_FAMILIES
+    } != {("rotli", "rotl", 0), ("rotri", "rotr", 1)}:
+        raise ValueError("x86 scalar rotation rows must cover left and right")
+
+
+validate_scalar_families()

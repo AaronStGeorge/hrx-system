@@ -56,6 +56,12 @@ _SHIFT_IMMEDIATE_4 = vector_encoding_recipe(
 _SHIFT_IMMEDIATE_6 = vector_encoding_recipe(
     _R.FIXED_6, _R.RESULT, _R.INPUT_0, _B.IMMEDIATE
 )
+_ROTATE_IMMEDIATE_0 = vector_encoding_recipe(
+    _R.NONE, _R.RESULT, _R.INPUT_0, _B.IMMEDIATE
+)
+_ROTATE_IMMEDIATE_1 = vector_encoding_recipe(
+    _R.FIXED_1, _R.RESULT, _R.INPUT_0, _B.IMMEDIATE
+)
 _UNARY_IMMEDIATE = vector_encoding_recipe(_R.RESULT, _R.NONE, _R.INPUT_0, _B.IMMEDIATE)
 _NDS_IMMEDIATE = vector_encoding_recipe(_R.RESULT, _R.INPUT_0, _R.INPUT_1, _B.IMMEDIATE)
 _VEX_BLENDV = vector_encoding_recipe(_R.RESULT, _R.INPUT_0, _R.INPUT_1, _B.BLEND_MASK)
@@ -1625,6 +1631,31 @@ VPSHUFLW = _instruction(
     _OPERANDS_13,
     _IMMEDIATES_5,
     _encoding(_VEX, _MAP_1, 3, 0, 0x70, (128,)),
+)
+AVX512_ROTATE_IMMEDIATE = tuple(
+    _instruction(
+        f"{mnemonic}{suffix}",
+        recipe,
+        _OPERANDS_13,
+        _IMMEDIATES_5,
+        _encoding(_EVEX, _MAP_1, 1, w, 0x72, (128, 256, 512)),
+    )
+    for mnemonic, recipe in (
+        ("vprol", _ROTATE_IMMEDIATE_1),
+        ("vpror", _ROTATE_IMMEDIATE_0),
+    )
+    for suffix, w in (("d", 0), ("q", 1))
+)
+AVX512_ROTATE_VARIABLE = tuple(
+    _instruction(
+        f"{mnemonic}{suffix}",
+        _NDS,
+        _OPERANDS_16,
+        _IMMEDIATES_0,
+        _encoding(_EVEX, _MAP_2, 1, w, opcode, (128, 256, 512)),
+    )
+    for mnemonic, opcode in (("vprolv", 0x15), ("vprorv", 0x14))
+    for suffix, w in (("d", 0), ("q", 1))
 )
 VPSLLD = _instruction(
     "vpslld",

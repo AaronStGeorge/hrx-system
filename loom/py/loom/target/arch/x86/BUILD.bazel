@@ -101,6 +101,7 @@ iree_py_library(
         "descriptors/half_conversion.py",
         "descriptors/integer_bits.py",
         "descriptors/integer_float.py",
+        "descriptors/integer_rotation.py",
         "descriptors/memory.py",
         "descriptors/packed_dot.py",
         "descriptors/scalar.py",

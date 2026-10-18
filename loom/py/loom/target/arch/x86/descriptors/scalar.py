@@ -101,6 +101,7 @@ from .integer_bits import (
     X86_SCALAR_INTEGER_BIT_DESCRIPTORS,
     X86_SCALAR_NATIVE_COUNT_DESCRIPTORS,
 )
+from .integer_rotation import X86_SCALAR_ROTATION_DESCRIPTORS
 from .memory import memory_descriptors, read_memory_binary_descriptors
 
 _NON_TRAPPING_SCALAR_FORMS = frozenset(
@@ -984,6 +985,7 @@ _X86_SCALAR_PREFIX_DESCRIPTORS = (
 
 _X86_SCALAR_SUFFIX_DESCRIPTORS = (
     *X86_SCALAR_INTEGER_BIT_DESCRIPTORS,
+    *X86_SCALAR_ROTATION_DESCRIPTORS,
     Descriptor(
         key="x86.scalar.lea.symbol.gpr64",
         encoding_format_id=Form.ADDRESS_PC_RELATIVE,

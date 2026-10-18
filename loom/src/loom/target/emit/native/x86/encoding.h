@@ -117,6 +117,7 @@ typedef enum loom_x86_vector_register_selector_e {
   LOOM_X86_VECTOR_REGISTER_FIXED_3 = 6,
   LOOM_X86_VECTOR_REGISTER_FIXED_4 = 7,
   LOOM_X86_VECTOR_REGISTER_FIXED_6 = 8,
+  LOOM_X86_VECTOR_REGISTER_FIXED_1 = 9,
 } loom_x86_vector_register_selector_t;
 
 // Bits 12..14 of a packed vector recipe select bounded encoding behavior.

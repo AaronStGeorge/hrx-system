@@ -119,6 +119,7 @@ from .common import (
 from .float_conversion import float_conversion_descriptors
 from .half_conversion import half_conversion_descriptors
 from .integer_float import integer_float_descriptors
+from .integer_rotation import X86_AVX512_ROTATION_DESCRIPTORS
 from .memory import memory_descriptors
 from .scalar import X86_SCALAR_DESCRIPTOR_SET
 
@@ -573,6 +574,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     enum_domains=X86_SCALAR_DESCRIPTOR_SET.enum_domains,
     descriptors=(
         *X86_AVX2_DESCRIPTORS,
+        *X86_AVX512_ROTATION_DESCRIPTORS,
         *integer_float_descriptors(unsigned=True),
         *float_conversion_descriptors(evex=True),
         *half_conversion_descriptors(evex=True),
