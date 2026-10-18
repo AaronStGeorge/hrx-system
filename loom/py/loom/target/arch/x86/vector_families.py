@@ -62,6 +62,17 @@ class VectorBinaryFamily:
 
 
 @dataclass(frozen=True, slots=True)
+class VectorRotationFamily:
+    """One packed rotation with immediate and per-lane machine forms."""
+
+    source_operation: str
+    immediate_mnemonic: str
+    variable_mnemonic: str
+    semantic: str
+    element: VectorElement
+
+
+@dataclass(frozen=True, slots=True)
 class FloatRootFamily:
     """Square-root operation row with its source precision contract."""
 
@@ -251,6 +262,21 @@ AVX512VL_UNIFORM_SHIFT_FAMILIES = (
 AVX512_UNIFORM_SHIFT_FAMILIES = (
     *AVX2_UNIFORM_SHIFT_FAMILIES,
     *AVX512VL_UNIFORM_SHIFT_FAMILIES,
+)
+
+AVX512_ROTATION_FAMILIES = tuple(
+    VectorRotationFamily(
+        source_operation,
+        f"{immediate_mnemonic}{suffix}",
+        f"{variable_mnemonic}{suffix}",
+        semantic,
+        element,
+    )
+    for source_operation, immediate_mnemonic, variable_mnemonic, semantic in (
+        ("rotli", "vprol", "vprolv", "integer.rotl"),
+        ("rotri", "vpror", "vprorv", "integer.rotr"),
+    )
+    for element, suffix in zip(INTEGER_ELEMENTS[2:], ("d", "q"), strict=True)
 )
 
 # AVX-512BW extends the word variable shifts while AVX-512DQ completes the
@@ -582,6 +608,22 @@ def validate_vector_families() -> None:
         for family in AVX512VL_INTEGER_BINARY_FAMILIES
     } != set(avx512_keys) - _AVX2_INTEGER_BINARY_KEYS:
         raise ValueError("AVX-512VL rows must contain exactly the non-AVX2 cells")
+    if {
+        (family.source_operation, family.element.name)
+        for family in AVX512_ROTATION_FAMILIES
+    } != {
+        (operation, element)
+        for operation in ("rotli", "rotri")
+        for element in ("i32", "i64")
+    }:
+        raise ValueError("AVX-512 rotation rows must cover i32/i64 left and right")
+    rotation_mnemonics = {
+        mnemonic
+        for family in AVX512_ROTATION_FAMILIES
+        for mnemonic in (family.immediate_mnemonic, family.variable_mnemonic)
+    }
+    if len(rotation_mnemonics) != 2 * len(AVX512_ROTATION_FAMILIES):
+        raise ValueError("AVX-512 rotation rows must use unique machine mnemonics")
     if set(AVX512_INTEGER_COMPARE_MNEMONICS) != {
         element.name for element in INTEGER_ELEMENTS
     }:

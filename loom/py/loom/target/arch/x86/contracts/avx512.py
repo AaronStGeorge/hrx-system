@@ -33,6 +33,9 @@ from loom.target.arch.x86.contracts.integer_float import avx512_integer_float_ru
 from loom.target.arch.x86.contracts.integer_reduction import (
     avx512_integer_reduction_rules,
 )
+from loom.target.arch.x86.contracts.integer_rotation import (
+    avx512_vector_rotation_rules,
+)
 from loom.target.arch.x86.contracts.lane_movement import (
     avx512_lane_movement_rules,
 )
@@ -109,6 +112,7 @@ def _cases() -> Sequence[ContractCase]:
         ),
         *avx512_vector_integer_narrowing_rules(_descriptor),
         *avx512_vector_integer_count_rules(_descriptor),
+        *avx512_vector_rotation_rules(_descriptor),
         *avx512_predicate_rules(_descriptor),
         *avx512_vector_arithmetic_rules(_descriptor),
         *scalar_float_root_rules(
