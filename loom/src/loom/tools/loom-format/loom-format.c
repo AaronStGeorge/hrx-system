@@ -15,7 +15,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/target/configured/provider_set.h"
 #include "loom/target/provider.h"
-#include "loom/target/test/provider.h"
+#include "loom/target/test/ir_provider.h"
 #include "loom/testing/test_file_format.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/context/context.h"
@@ -339,7 +339,7 @@ int main(int argc, char** argv) {
         &target_provider_storage, configured_provider_set);
     if (iree_status_is_ok(status)) {
       status = loom_target_provider_set_storage_append(
-          &target_provider_storage, &loom_test_target_provider);
+          &target_provider_storage, &loom_test_ir_target_provider);
     }
     if (iree_status_is_ok(status)) {
       status = loom_target_environment_initialize(

@@ -48,7 +48,7 @@ loom_cc_binary(
     loom::error::diagnostic
     loom::target::configured::provider_set
     loom::target::provider
-    loom::target::test::provider
+    loom::target::test::ir_provider
     loom::testing::test_file_format
     loom::tooling::cli::help
     loom::tooling::context
