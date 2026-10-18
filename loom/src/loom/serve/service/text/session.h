@@ -121,6 +121,16 @@ typedef struct loom_serve_text_session_t {
   } request;
 } loom_serve_text_session_t;
 
+// Selects the named row (including an active row so the caller can report a
+// conflict), or the oldest idle row. For an untagged rendered chat, prefers the
+// longest reusable canonical completion in an idle untagged row. A null chat
+// performs identity/LRU selection only. Completion storage stays immutable
+// through selection and the caller's preparation/admission borrow. Returns
+// null when there is neither a named match nor an idle row.
+loom_serve_text_session_t* loom_serve_text_session_select(
+    iree_host_size_t count, loom_serve_text_session_t* sessions,
+    iree_string_view_t name, const loom_serve_text_chat_t* chat);
+
 // Copies only owner-published work and immutable admission metadata. Safe on
 // the serialized owner while a CPU task borrows the row's response storage;
 // request phase/output buffers are deliberately excluded. ID zero means idle.

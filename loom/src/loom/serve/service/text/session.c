@@ -24,6 +24,35 @@ bool loom_serve_text_session_name_valid(iree_string_view_t name) {
   return true;
 }
 
+loom_serve_text_session_t* loom_serve_text_session_select(
+    iree_host_size_t count, loom_serve_text_session_t* sessions,
+    iree_string_view_t name, const loom_serve_text_chat_t* chat) {
+  loom_serve_text_session_t* oldest = NULL;
+  loom_serve_text_session_t* continuation = NULL;
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    loom_serve_text_session_t* session = &sessions[i];
+    if (name.size &&
+        iree_string_view_equal(
+            name, iree_make_cstring_view(session->lifetime.name))) {
+      return session;
+    }
+    if (session->request.connection) {
+      continue;
+    }
+    if (!oldest || session->lifetime.serial < oldest->lifetime.serial) {
+      oldest = session;
+    }
+    if (!name.size && chat && !session->lifetime.name[0] &&
+        session->completion.storage && session->completion.reusable &&
+        (!continuation || session->completion.transcript.size >
+                              continuation->completion.transcript.size) &&
+        loom_serve_text_chat_completion_is_prefix(&session->completion, chat)) {
+      continuation = session;
+    }
+  }
+  return continuation ? continuation : oldest;
+}
+
 static iree_status_t loom_serve_text_session_quote(
     iree_string_builder_t* output, iree_string_view_t value) {
   loom_output_stream_t stream;

@@ -18,6 +18,164 @@ using loom_serve::testing::text::RegisteredSourceTextServiceTest;
 using loom_serve::testing::text::SourceTextServiceTest;
 using loom_serve::testing::text::StalledClient;
 
+class UntaggedTextServiceTest : public SourceTextServiceTest {
+ protected:
+  loom_serve_text_options_t ModelOptions() const override {
+    auto options = SourceTextServiceTest::ModelOptions();
+    options.checkpoint_capacity = 0;
+    return options;
+  }
+};
+
+TEST_F(UntaggedTextServiceTest,
+       InterleavedContinuationsReuseRowsWithoutCheckpointHeadroom) {
+  Start();
+  const std::vector<std::string> prompts = {"abxa", std::string(60, 'b')};
+  std::vector<std::string> replies;
+  for (const auto& prompt : prompts) {
+    const auto response = Read(Send(Request(Message("user", prompt), 2)));
+    replies.push_back(Content(response));
+    EXPECT_EQ(replies.back(), Oracle::Complete(prompt, 2));
+    EXPECT_NE(response.find(R"("cached_tokens":0})"), std::string::npos);
+  }
+  // Two never-used rows are older than either retained history. Continuations
+  // must find their exact rows, without requiring a session header or a pin.
+  for (size_t i : {1u, 0u}) {
+    const auto response = Read(Send(Request(
+        Message("user", prompts[i]) + "," + Message("assistant", replies[i]) +
+            "," + Message("user", "b"),
+        2)));
+    EXPECT_EQ(Content(response),
+              Oracle::Complete(prompts[i] + replies[i] + "#b", 2));
+    EXPECT_NE(response.find("\"cached_tokens\":" +
+                            std::to_string(prompts[i].size() + 1) + "}"),
+              std::string::npos)
+        << response;
+  }
+}
+
+TEST_F(UntaggedTextServiceTest, NamedAndUntaggedHistoriesStayIndependent) {
+  Start();
+  const std::string named_prompt = "abxa";
+  const auto named_reply = Content(Read(Send(
+      Request(Message("user", named_prompt), 2), "X-Loom-Session: named\r\n")));
+  const auto named_history =
+      Message("user", named_prompt) + "," + Message("assistant", named_reply);
+  const auto anonymous =
+      Read(Send(Request(named_history + "," + Message("user", "b"), 2)));
+  EXPECT_EQ(Content(anonymous),
+            Oracle::Complete(named_prompt + named_reply + "#b", 2));
+  EXPECT_NE(anonymous.find(R"("cached_tokens":0})"), std::string::npos);
+
+  const std::string prompt = "bxxb";
+  const auto reply = Content(Read(Send(Request(Message("user", prompt), 2))));
+  const auto adopting = Read(
+      Send(Request(Message("user", prompt) + "," + Message("assistant", reply) +
+                       "," + Message("user", "b"),
+                   2),
+           "X-Loom-Session: new\r\n"));
+  EXPECT_EQ(Content(adopting), Oracle::Complete(prompt + reply + "#b", 2));
+  EXPECT_NE(adopting.find(R"("cached_tokens":0})"), std::string::npos);
+
+  const auto continued =
+      Read(Send(Request(named_history + "," + Message("user", "x"), 2),
+                "X-Loom-Session: named\r\n"));
+  EXPECT_EQ(Content(continued),
+            Oracle::Complete(named_prompt + named_reply + "#x", 2));
+  EXPECT_NE(continued.find(R"("cached_tokens":5})"), std::string::npos);
+}
+
+TEST_F(UntaggedTextServiceTest,
+       RejectedContinuationPreservesHistoryAndEditedHistoryReplays) {
+  Start();
+  const std::string prompt = "abxa";
+  const auto reply = Content(Read(Send(Request(Message("user", prompt), 2))));
+  const auto history =
+      Message("user", prompt) + "," + Message("assistant", reply);
+  const auto rejected =
+      Read(Send(Request(history + "," + Message("user", "?"), 2)));
+  EXPECT_EQ(rejected.find("HTTP/1.1 400"), 0u) << rejected;
+  const auto edited = Read(
+      Send(Request(Message("user", "xbxa") + "," + Message("assistant", reply) +
+                       "," + Message("user", "b"),
+                   2)));
+  EXPECT_EQ(Content(edited), Oracle::Complete("xbxa" + reply + "#b", 2));
+  EXPECT_NE(edited.find(R"("cached_tokens":0})"), std::string::npos);
+  const auto continued =
+      Read(Send(Request(history + "," + Message("user", "b"), 2)));
+  EXPECT_EQ(Content(continued), Oracle::Complete(prompt + reply + "#b", 2));
+  EXPECT_NE(continued.find(R"("cached_tokens":5})"), std::string::npos);
+
+  // Advancing an idle row is not an implicit checkpoint. A sibling branch at
+  // the old endpoint replays once the previous native state has advanced.
+  const auto rewind =
+      Read(Send(Request(history + "," + Message("user", "x"), 2)));
+  EXPECT_EQ(Content(rewind), Oracle::Complete(prompt + reply + "#x", 2));
+  EXPECT_NE(rewind.find(R"("cached_tokens":0})"), std::string::npos);
+}
+
+TEST_F(UntaggedTextServiceTest, ActiveAndCancelledCompletionsCannotBeReused) {
+  Start();
+  loom_serve::testing::StalledHttpClient active;
+  const std::string prompt = "abxa";
+  const auto reply = Oracle::Complete(prompt, 1);
+  ASSERT_NO_FATAL_FAILURE(active.Send(server_, "/v1/chat/completions",
+                                      Request(Message("user", prompt), 1)));
+  WaitModel("fixture-text",
+            R"("phase":"idle","queued_requests":0,"active_requests":1)");
+  const auto history =
+      Message("user", prompt) + "," + Message("assistant", reply);
+  const auto peer =
+      Read(Send(Request(history + "," + Message("user", "b"), 2)));
+  EXPECT_EQ(Content(peer), Oracle::Complete(prompt + reply + "#b", 2));
+  EXPECT_NE(peer.find(R"("cached_tokens":0})"), std::string::npos);
+  ASSERT_NO_FATAL_FAILURE(active.Close());
+  WaitModel("fixture-text",
+            R"("phase":"idle","queued_requests":0,"active_requests":0)");
+  const auto retry =
+      Read(Send(Request(history + "," + Message("user", "x"), 2)));
+  EXPECT_EQ(Content(retry), Oracle::Complete(prompt + reply + "#x", 2));
+  EXPECT_NE(retry.find(R"("cached_tokens":0})"), std::string::npos);
+}
+
+TEST_F(UntaggedTextServiceTest, LongestCompletedHistoryWins) {
+  Start();
+  const std::string prompt = "abxa";
+  loom_serve::testing::StalledHttpClient shorter;
+  ASSERT_NO_FATAL_FAILURE(shorter.Send(server_, "/v1/chat/completions",
+                                       Request(Message("user", prompt), 1)));
+  WaitModel("fixture-text",
+            R"("phase":"idle","queued_requests":0,"active_requests":1)");
+  const auto longer = Content(Read(Send(Request(Message("user", prompt), 2))));
+  EXPECT_EQ(longer, Oracle::Complete(prompt, 2));
+  EXPECT_EQ(Content(shorter.Read()), Oracle::Complete(prompt, 1));
+  ASSERT_NO_FATAL_FAILURE(shorter.Close());
+  WaitModel("fixture-text",
+            R"("phase":"idle","queued_requests":0,"active_requests":0)");
+  const auto response = Read(Send(Request(Message("user", prompt) + "," +
+                                              Message("assistant", longer) +
+                                              "," + Message("user", "b"),
+                                          2)));
+  EXPECT_EQ(Content(response), Oracle::Complete(prompt + longer + "#b", 2));
+  EXPECT_NE(response.find(R"("cached_tokens":5})"), std::string::npos);
+}
+
+TEST_F(UntaggedTextServiceTest, DisplacedHistoryReplaysWithoutExtraCache) {
+  Start();
+  const std::string prompt = "abxa";
+  const auto reply = Content(Read(Send(Request(Message("user", prompt), 2))));
+  for (const auto& other : {"baab", "xbxa", "babb", "xxab"}) {
+    EXPECT_EQ(Content(Read(Send(Request(Message("user", other), 2)))),
+              Oracle::Complete(other, 2));
+  }
+  const auto replay = Read(
+      Send(Request(Message("user", prompt) + "," + Message("assistant", reply) +
+                       "," + Message("user", "b"),
+                   2)));
+  EXPECT_EQ(Content(replay), Oracle::Complete(prompt + reply + "#b", 2));
+  EXPECT_NE(replay.find(R"("cached_tokens":0})"), std::string::npos);
+}
+
 TEST_F(SourceTextServiceTest, StreamingBatchesReuseScratchWithoutHeapChurn) {
   const auto* policy = loom_serve_text_model_chat_policy(model_);
   const std::string body = Request(Message("user", "a"), 32);
