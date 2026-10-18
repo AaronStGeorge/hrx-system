@@ -101,6 +101,8 @@ struct loom_serve_weights_t {
   iree_host_size_t storage_count;
   // Backing and all file/preparation work were submitted for this activation.
   bool active;
+  // Owned terminal producer failure, replayed to later consumers without I/O.
+  iree_status_t activation_status;
 };
 
 static const loom_serve_weight_span_t* loom_serve_weight_find(
@@ -938,12 +940,19 @@ static iree_status_t loom_serve_weights_activate_storage(
   return status;
 }
 
-iree_status_t loom_serve_weights_activate(loom_serve_weights_t* weights,
-                                          loom_serve_execution_t* execution) {
+iree_status_t loom_serve_weights_activate(loom_serve_weights_t* weights) {
   IREE_ASSERT(!weights->deactivation);
-  if (!weights->active) {
-    IREE_RETURN_IF_ERROR(loom_serve_weights_activate_storage(weights));
+  if (!iree_status_is_ok(weights->activation_status)) {
+    return iree_status_clone(weights->activation_status);
   }
+  if (!weights->active) {
+    weights->activation_status = loom_serve_weights_activate_storage(weights);
+  }
+  return iree_status_clone(weights->activation_status);
+}
+
+iree_status_t loom_serve_weights_import_readiness(
+    loom_serve_weights_t* weights, loom_serve_execution_t* execution) {
   return loom_serve_execution_barrier(
       execution, (iree_hal_semaphore_list_t){weights->activation.count,
                                              weights->activation.semaphores,
@@ -1097,6 +1106,7 @@ iree_status_t loom_serve_weights_free(loom_serve_weights_t* weights) {
       iree_hal_command_buffer_release(weights->spans[i].prepare);
     }
     iree_io_parameter_provider_release(weights->provider);
+    iree_status_ignore(weights->activation_status);
     iree_allocator_free(weights->host_allocator, weights->storages);
     iree_allocator_free(weights->host_allocator, weights->keys);
     iree_allocator_free(weights->host_allocator, weights->spans);
