@@ -67,22 +67,6 @@ static iree_status_t iree_benchmark_loom_policy_from_benchmark(
         "scenario benchmark `%.*s` requires measure = \"dispatch_complete\"",
         (int)benchmark_plan->name.size, benchmark_plan->name.data);
   }
-  if (is_scenario &&
-      (options->profile_final_batch || options->profile_data_requested ||
-       options->profile_counters.count != 0 ||
-       !iree_string_view_is_empty(options->profile_artifacts_dir))) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "scenario benchmark `%.*s` does not yet support final-batch profiling",
-        (int)benchmark_plan->name.size, benchmark_plan->name.data);
-  }
-  if (is_scenario && (options->input_ring_min_bytes_specified ||
-                      options->input_ring_count_specified)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "scenario benchmark `%.*s` does not yet support input-ring overrides",
-        (int)benchmark_plan->name.size, benchmark_plan->name.data);
-  }
   if (measure_kind != IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE &&
       (!iree_string_view_is_empty(options->profile_artifacts_dir) ||
        options->profile_data_requested ||

@@ -6,6 +6,7 @@
 
 #include "loom/tools/iree-benchmark-loom/scenario_execution.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #include "iree/hal/api.h"
@@ -17,6 +18,8 @@
 #include "loom/tooling/testbench/scenario/values.h"
 #include "loom/tools/iree-benchmark-loom/case_execution.h"
 #include "loom/tools/iree-benchmark-loom/hal_actual.h"
+#include "loom/tools/iree-benchmark-loom/input_ring.h"
+#include "loom/tools/iree-benchmark-loom/profile_report.h"
 
 struct iree_benchmark_loom_scenario_execution_t {
   // Borrowed run dependencies shared by every scenario work item.
@@ -102,16 +105,10 @@ static iree_status_t iree_benchmark_loom_scenario_ensure_profile(
   const iree_string_view_t target = options->benchmark_options->target;
   const iree_benchmark_loom_hal_compilation_options_t* compilation =
       options->compilation;
-  const loom_run_hal_testbench_actual_provider_options_t provider_options = {
-      .context = &options->hal_context->execution,
-      .compilation = compilation->compilation,
-      .module = compilation->compilation->module,
-      .native_module = compilation->native_module,
-      .pass_program = compilation->pass_program,
-      .requested_target_profile = compilation->requested_target_profile,
-      .sanitizer = compilation->sanitizer,
-      .result_callback = compilation->result_callback,
-  };
+  loom_run_hal_testbench_actual_provider_options_t provider_options;
+  iree_benchmark_loom_hal_provider_options_initialize(
+      options->hal_context, compilation, /*invocation=*/NULL,
+      compilation->result_callback, &provider_options);
   loom_run_hal_testbench_scenario_profile_initialize(
       iree_string_view_is_empty(target)
           ? options->hal_context->execution.driver_name
@@ -205,6 +202,45 @@ void iree_benchmark_loom_scenario_execution_free(
   iree_allocator_free(host_allocator, execution);
 }
 
+typedef struct iree_benchmark_loom_scenario_layout_query_t {
+  // HAL binding layout reported for one physical call.
+  loom_run_hal_testbench_scenario_binding_layout_t layout;
+} iree_benchmark_loom_scenario_layout_query_t;
+
+static iree_status_t iree_benchmark_loom_scenario_query_layout(
+    void* user_data, const loom_testbench_prepared_product_t* product,
+    const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t call_count, loom_testbench_product_call_t* calls) {
+  iree_benchmark_loom_scenario_layout_query_t* query =
+      (iree_benchmark_loom_scenario_layout_query_t*)user_data;
+  if (call_count != 1) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "scenario layout query requires one call");
+  }
+  return loom_run_hal_testbench_query_scenario_product_binding_layout(
+      product, invocation, &calls[0], &query->layout);
+}
+
+typedef struct iree_benchmark_loom_scenario_measurement_t {
+  // Complete HAL timing and profiling policy.
+  const loom_run_hal_benchmark_options_t* options;
+  // Host allocator used for replay metadata and timing samples.
+  iree_allocator_t host_allocator;
+  // HAL benchmark and physical binding-ring evidence.
+  loom_run_hal_testbench_scenario_benchmark_result_t result;
+} iree_benchmark_loom_scenario_measurement_t;
+
+static iree_status_t iree_benchmark_loom_scenario_measure_calls(
+    void* user_data, const loom_testbench_prepared_product_t* product,
+    const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t call_count, loom_testbench_product_call_t* calls) {
+  iree_benchmark_loom_scenario_measurement_t* measurement =
+      (iree_benchmark_loom_scenario_measurement_t*)user_data;
+  return loom_run_hal_testbench_benchmark_scenario_product(
+      product, invocation, call_count, calls, measurement->options,
+      measurement->host_allocator, &measurement->result);
+}
+
 iree_status_t iree_benchmark_loom_run_scenario_work_item(
     iree_benchmark_loom_scenario_execution_t* execution,
     const iree_benchmark_loom_work_item_t* work_item,
@@ -225,25 +261,114 @@ iree_status_t iree_benchmark_loom_run_scenario_work_item(
         options->event_sink, options->run, options->hal_context));
     execution->device_emitted = true;
   }
-  const iree_host_size_t batch_capacity =
-      selection->policy.hal_options.timing.batch_size;
+  const iree_benchmark_loom_options_t* benchmark_options =
+      options->benchmark_options;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_trial_executor(
-      execution, coordinate.trial_index, batch_capacity));
+      execution, coordinate.trial_index, /*batch_capacity=*/1));
 
-  loom_run_benchmark_result_t timing_result = {0};
-  IREE_RETURN_IF_ERROR(loom_testbench_benchmark_scenario_trial(
-      &execution->trial_executor, coordinate.trial_ordinal,
-      &selection->policy.hal_options.timing, &timing_result));
-  iree_benchmark_loom_benchmark_result_t benchmark_result = {
-      .executed = true,
-      .passed = true,
-      .samples_per_iteration = 1,
-      .has_hal_benchmark = true,
-      .hal_benchmark = {.timing = timing_result},
+  iree_benchmark_loom_scenario_layout_query_t layout_query = {0};
+  IREE_RETURN_IF_ERROR(loom_testbench_scenario_trial_with_materialized_calls(
+      &execution->trial_executor, coordinate.trial_ordinal, /*call_count=*/1,
+      (loom_testbench_scenario_trial_calls_callback_t){
+          .fn = iree_benchmark_loom_scenario_query_layout,
+          .user_data = &layout_query,
+      }));
+  const iree_host_size_t ring_count =
+      iree_benchmark_loom_input_ring_select_count(
+          benchmark_options->input_ring_count,
+          (uint64_t)benchmark_options->input_ring_min_bytes,
+          layout_query.layout.binding_set_bytes,
+          selection->policy.hal_options.timing.batch_size);
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_trial_executor(
+      execution, coordinate.trial_index, ring_count));
+
+  loom_run_hal_benchmark_options_t hal_options = selection->policy.hal_options;
+  iree_string_builder_t profile_artifact_path;
+  iree_status_t status = iree_benchmark_loom_prepare_profile_artifact(
+      options->run, &selection->identity, options->hal_context,
+      (iree_benchmark_loom_profile_replay_identity_t){
+          .has_scenario_coordinate = true,
+          .scenario_coordinate = coordinate,
+      },
+      options->host_allocator, &hal_options, &profile_artifact_path);
+
+  iree_benchmark_loom_scenario_measurement_t measurement = {
+      .options = &hal_options,
+      .host_allocator = options->host_allocator,
   };
-  return iree_benchmark_loom_emit_work_item_result_aliases(
-      options->run, options->module_plan, options->work_plan, work_item,
-      &benchmark_result, /*correctness_sample_count=*/0,
-      /*correctness_failed_sample_count=*/0, options->event_sink,
-      inout_failed_benchmark_count);
+  if (iree_status_is_ok(status)) {
+    status = loom_testbench_scenario_trial_with_materialized_calls(
+        &execution->trial_executor, coordinate.trial_ordinal, ring_count,
+        (loom_testbench_scenario_trial_calls_callback_t){
+            .fn = iree_benchmark_loom_scenario_measure_calls,
+            .user_data = &measurement,
+        });
+  }
+  if (iree_status_is_ok(status) &&
+      (measurement.result.binding_count_per_call !=
+           layout_query.layout.binding_count ||
+       measurement.result.binding_set_bytes !=
+           layout_query.layout.binding_set_bytes)) {
+    status = iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "scenario binding layout changed between ring sizing and measurement");
+  }
+  uint64_t expected_ring_bytes = 0;
+  if (iree_status_is_ok(status) && layout_query.layout.binding_set_bytes != 0 &&
+      ring_count > UINT64_MAX / layout_query.layout.binding_set_bytes) {
+    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "scenario input ring byte count overflowed");
+  } else if (iree_status_is_ok(status)) {
+    expected_ring_bytes =
+        layout_query.layout.binding_set_bytes * (uint64_t)ring_count;
+  }
+  if (iree_status_is_ok(status) &&
+      measurement.result.binding_ring_bytes != expected_ring_bytes) {
+    status = iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "scenario physical calls materialized different binding byte lengths");
+  }
+
+  iree_benchmark_loom_benchmark_result_t benchmark_result = {0};
+  const loom_run_hal_testbench_actual_provider_t* provider =
+      loom_run_hal_testbench_scenario_product_provider(
+          &execution->prepared.trials[coordinate.trial_index].target);
+  if (iree_status_is_ok(status) && provider == NULL) {
+    status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "scenario target product is not a HAL product");
+  }
+  if (iree_status_is_ok(status)) {
+    benchmark_result = (iree_benchmark_loom_benchmark_result_t){
+        .compile_report = provider->artifacts.compile_report,
+        .executed = true,
+        .passed = true,
+        .samples_per_iteration = 1,
+        .has_hal_benchmark = true,
+        .hal_benchmark = measurement.result.benchmark,
+        .data_cache =
+            {
+                .populated = true,
+                .correctness_materialization =
+                    IREE_BENCHMARK_LOOM_BUFFER_MATERIALIZATION_HOST_VISIBLE,
+                .measurement_materialization =
+                    IREE_BENCHMARK_LOOM_BUFFER_MATERIALIZATION_DEVICE_LOCAL,
+                .binding_count = measurement.result.binding_count_per_call,
+                .binding_ring_count = ring_count,
+                .command_buffer_ring_count =
+                    measurement.result.benchmark.command_buffer_ring_count,
+                .dispatches_per_batch = hal_options.timing.batch_size,
+                .requested_min_ring_bytes =
+                    (uint64_t)benchmark_options->input_ring_min_bytes,
+                .binding_set_bytes = measurement.result.binding_set_bytes,
+                .binding_ring_bytes = measurement.result.binding_ring_bytes,
+            },
+    };
+    status = iree_benchmark_loom_emit_work_item_result_aliases(
+        options->run, options->module_plan, options->work_plan, work_item,
+        &benchmark_result, /*correctness_sample_count=*/0,
+        /*correctness_failed_sample_count=*/0, options->event_sink,
+        inout_failed_benchmark_count);
+  }
+  iree_string_builder_deinitialize(&profile_artifact_path);
+  return status;
 }

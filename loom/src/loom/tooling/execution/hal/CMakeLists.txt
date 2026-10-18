@@ -135,11 +135,14 @@ iree_native_test(
     "--benchmark=@scenario_scalar_results_throughput"
     "--sample=2"
     "--batch-size=2"
+    "--input-ring-count=1"
     "--iterations=1"
     "--warmup-iterations=0"
     "--min-time-ms=0"
     "--warmup-time-ms=0"
     "--max-batches=1"
+    "--profile-final-batch=true"
+    "--profile-data=dispatch-events"
   SRC
     loom::tools::iree-benchmark-loom
   DATA

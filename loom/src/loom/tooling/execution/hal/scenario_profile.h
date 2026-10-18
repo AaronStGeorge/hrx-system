@@ -46,6 +46,13 @@ typedef struct loom_run_hal_testbench_scenario_benchmark_result_t {
   uint64_t binding_ring_bytes;
 } loom_run_hal_testbench_scenario_benchmark_result_t;
 
+typedef struct loom_run_hal_testbench_scenario_binding_layout_t {
+  // Number of HAL bindings materialized for one physical call.
+  iree_host_size_t binding_count;
+  // Sum of logical binding byte lengths in the physical call.
+  uint64_t binding_set_bytes;
+} loom_run_hal_testbench_scenario_binding_layout_t;
+
 // Initializes a borrowing HAL scenario profile without compiling a product.
 void loom_run_hal_testbench_scenario_profile_initialize(
     iree_string_view_t name,
@@ -83,6 +90,14 @@ iree_status_t loom_run_hal_testbench_benchmark_scenario_product(
     const loom_run_hal_benchmark_options_t* options,
     iree_allocator_t host_allocator,
     loom_run_hal_testbench_scenario_benchmark_result_t* out_result);
+
+// Materializes one physical call and reports its HAL binding layout without
+// target-local staging or execution.
+iree_status_t loom_run_hal_testbench_query_scenario_product_binding_layout(
+    const loom_testbench_prepared_product_t* prepared_product,
+    const loom_testbench_invocation_plan_t* invocation,
+    loom_testbench_product_call_t* call,
+    loom_run_hal_testbench_scenario_binding_layout_t* out_layout);
 
 // Returns the compiled HAL provider owned by |prepared_product|, or NULL when
 // the product belongs to another execution profile.

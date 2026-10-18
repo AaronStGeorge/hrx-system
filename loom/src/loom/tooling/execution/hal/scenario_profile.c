@@ -325,6 +325,7 @@ static void loom_run_hal_testbench_scenario_product_destroy(void* user_data) {
 static iree_status_t loom_run_hal_testbench_scenario_call_ring_prepare(
     loom_run_hal_testbench_scenario_product_t* product,
     iree_host_size_t call_count, loom_testbench_product_call_t* calls,
+    bool stage_bindings,
     loom_run_hal_testbench_scenario_call_ring_t* out_ring) {
   loom_run_hal_testbench_actual_provider_t* provider = &product->provider;
   const loom_testbench_invocation_plan_t* invocation = provider->invocation;
@@ -394,7 +395,7 @@ static iree_status_t loom_run_hal_testbench_scenario_call_ring_prepare(
     }
   }
 
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && stage_bindings) {
     status = loom_run_hal_testbench_staging_initialize(
         &provider->context->runtime, binding_count, out_ring->binding_table,
         product->host_allocator, &out_ring->staging);
@@ -460,7 +461,7 @@ static iree_status_t loom_run_hal_testbench_scenario_product_execute(
 
   loom_run_hal_testbench_scenario_call_ring_t ring = {0};
   iree_status_t status = loom_run_hal_testbench_scenario_call_ring_prepare(
-      product, call_count, calls, &ring);
+      product, call_count, calls, /*stage_bindings=*/true, &ring);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_testbench_scenario_call_ring_execute(product, &ring,
                                                                call_count);
@@ -494,7 +495,7 @@ static iree_status_t loom_run_hal_testbench_scenario_benchmark_calls(
 
   loom_run_hal_testbench_scenario_call_ring_t ring = {0};
   iree_status_t status = loom_run_hal_testbench_scenario_call_ring_prepare(
-      product, call_count, calls, &ring);
+      product, call_count, calls, /*stage_bindings=*/true, &ring);
   if (iree_status_is_ok(status)) {
     const loom_run_hal_dispatch_binding_table_ring_t benchmark_ring = {
         .candidate = &product->provider.prepared_candidate,
@@ -586,6 +587,39 @@ iree_status_t loom_run_hal_testbench_benchmark_scenario_product(
       (loom_run_hal_testbench_scenario_product_t*)prepared_product->user_data;
   return loom_run_hal_testbench_scenario_benchmark_calls(
       product, call_count, calls, options, host_allocator, out_result);
+}
+
+iree_status_t loom_run_hal_testbench_query_scenario_product_binding_layout(
+    const loom_testbench_prepared_product_t* prepared_product,
+    const loom_testbench_invocation_plan_t* invocation,
+    loom_testbench_product_call_t* call,
+    loom_run_hal_testbench_scenario_binding_layout_t* out_layout) {
+  *out_layout = (loom_run_hal_testbench_scenario_binding_layout_t){0};
+  if (loom_run_hal_testbench_scenario_product_provider(prepared_product) ==
+      NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "prepared scenario product is not a HAL product");
+  }
+  if (invocation != prepared_product->invocation) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL scenario layout invocation does not match prepared product");
+  }
+  loom_run_hal_testbench_scenario_product_t* product =
+      (loom_run_hal_testbench_scenario_product_t*)prepared_product->user_data;
+  loom_run_hal_testbench_scenario_call_ring_t ring = {0};
+  iree_status_t status = loom_run_hal_testbench_scenario_call_ring_prepare(
+      product, /*call_count=*/1, call, /*stage_bindings=*/false, &ring);
+  if (iree_status_is_ok(status)) {
+    out_layout->binding_count = ring.binding_count_per_call;
+    out_layout->binding_set_bytes = ring.binding_set_bytes;
+  }
+  status = iree_status_join(
+      status, loom_run_hal_testbench_scenario_call_ring_deinitialize(&ring));
+  if (!iree_status_is_ok(status)) {
+    *out_layout = (loom_run_hal_testbench_scenario_binding_layout_t){0};
+  }
+  return status;
 }
 
 static iree_status_t loom_run_hal_testbench_scenario_symbol_name_from_ref(
