@@ -90,6 +90,7 @@ loom_cc_library(
     loom::serve::runtime::host
     loom::serve::runtime::program
     loom::serve::runtime::program::jit
+    loom::serve::runtime::program::preparation
     loom::serve::runtime::program::sources
     loom::serve::runtime::storage::memory
   PUBLIC

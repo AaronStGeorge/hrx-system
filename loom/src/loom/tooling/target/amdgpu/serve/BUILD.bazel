@@ -705,6 +705,7 @@ loom_cc_test(
     srcs = ["//loom/src/loom/serve/runtime/parameter:weights_test.cc"],
     args = ["--weight_sources=$(rootpath //loom/src/loom/serve/runtime/parameter:testdata/weights/stages.loom)"],
     data = [
+        "//loom/src/loom/serve/runtime/parameter:testdata/weights/boundaries.loom",
         "//loom/src/loom/serve/runtime/parameter:testdata/weights/policy.loom",
         "//loom/src/loom/serve/runtime/parameter:testdata/weights/stages.loom",
     ],

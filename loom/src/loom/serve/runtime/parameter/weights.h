@@ -98,12 +98,14 @@ typedef void (*loom_serve_weights_completion_fn_t)(void* user_data,
 // Absolute paths name server-local files in both cases. The environment's
 // strings/package, path list, and all paths are borrowed until completion.
 // policy_path names a text or bytecode source with the VM export:
-//   prepare_weight(buffer key) -> (buffer command_root, i64 byte_length)
-// The key is a read-only, non-NUL-terminated tensor name. Empty command_root
-// and zero byte_length preserve file bytes. Otherwise command_root names a
-// fully specified command, and byte_length equals the reflected tensor size.
+//   prepare_weight(buffer key) -> i64 byte_length
+// The key is a read-only, non-NUL-terminated tensor name. The policy declares
+// at most one command through prepare.stage and its config/config_i64 imports.
+// No declaration and zero byte_length preserve file bytes. Otherwise
+// byte_length equals the reflected final tensor size. Checkpoint declarations
+// are unavailable inside weight policies.
 // A preparer has one mutable binding, no fixed buffers, and no global scratch.
-// Each distinct root is JITed once; activation prepares each unique tensor once
+// Each distinct declaration is JITed once; activation prepares each tensor once
 // directly in final storage. The temporary VM policy is released before JIT.
 //
 // Success accepts exclusive access to weights and jit until completion, which

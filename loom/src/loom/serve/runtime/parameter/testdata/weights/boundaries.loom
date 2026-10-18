@@ -1,0 +1,49 @@
+func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
+
+func.decl import("prepare") @dispatch(%root: buffer, %tag: i64) -> (i32)
+
+func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %directory: buffer, %path: buffer, %policy: buffer)
+
+// The policy boundary rejects these declarations before native compilation.
+global.rodata.def @root = bytes("6164645f636f6e66696775726564")
+
+func.def public @prepare_weight(%key: buffer) -> (i64) {
+  %origin = index.constant 0 : offset
+  %letter = buffer.load.i8.u %key[%origin]
+  %a = scalar.constant 97 : i32
+  %m = scalar.constant 109 : i32
+  %r = scalar.constant 114 : i32
+  %s = scalar.constant 115 : i32
+  %u = scalar.constant 117 : i32
+  %checkpoint = scalar.cmpi eq, %letter, %a : i32
+  %direct = scalar.cmpi eq, %letter, %m : i32
+  %zero_length = scalar.cmpi eq, %letter, %r : i32
+  %multiple = scalar.cmpi eq, %letter, %s : i32
+  %undeclared = scalar.cmpi eq, %letter, %u : i32
+  %c0 = scalar.constant 0 : i64
+  %root = global.load @root : buffer
+  scf.if %undeclared {
+  } else {
+    %command = scf.if %direct -> (i32) {
+      %command = func.call @dispatch(%root, %c0) : (buffer, i64) -> (i32)
+      scf.yield %command : i32
+    } else {
+      %command = func.call @stage(%root, %c0) : (buffer, i64) -> (i32)
+      scf.yield %command : i32
+    }
+    scf.if %multiple {
+      %second = func.call @stage(%root, %c0) : (buffer, i64) -> (i32)
+    }
+    scf.if %checkpoint {
+      %binding = scalar.constant 0 : i32
+      func.call @parameter(%command, %binding, %root, %root, %root) : (i32, i32, buffer, buffer, buffer)
+    }
+  }
+  %bytes = scf.if %zero_length -> (i64) {
+    scf.yield %c0 : i64
+  } else {
+    %bytes = scalar.constant 32 : i64
+    scf.yield %bytes : i64
+  }
+  func.return %bytes : i64
+}

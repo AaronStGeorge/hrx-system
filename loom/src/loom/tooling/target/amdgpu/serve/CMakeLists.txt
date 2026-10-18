@@ -952,6 +952,7 @@ loom_cc_test(
   SRCS
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test.cc"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/boundaries.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/policy.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/stages.loom"
   DEPS

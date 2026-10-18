@@ -440,18 +440,20 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   iree_status_t CreateRoots(iree_host_size_t shared_count,
                             iree_host_size_t root_count,
                             const loom_serve_weight_root_t* roots,
-                            std::initializer_list<std::string> paths) {
+                            std::initializer_list<std::string> paths,
+                            const char* policy_name = "policy.loom") {
     auto** plan = &plans_[plan_count_++];
     IREE_RETURN_IF_ERROR(loom_serve_weights_allocate(
         device_, transfer_, dispatch_,
         loom_serve_device_storage_pool(device_owner_), pool_, shared_count,
         root_count, roots, host_allocator_, plan));
-    return Prepare(*plan, paths);
+    return Prepare(*plan, paths, policy_name);
   }
 
   iree_status_t Prepare(loom_serve_weights_t* plan,
-                        std::initializer_list<std::string> paths) {
-    const std::string policy = directory_ + "/policy.loom";
+                        std::initializer_list<std::string> paths,
+                        const char* policy_name = "policy.loom") {
+    const std::string policy = directory_ + "/" + policy_name;
     const auto before = loom_serve_weights_statistics(plan);
     loom_serve_test_weight_preparation_t preparation;
     preparation.weights = plan;
@@ -640,12 +642,14 @@ class WeightsTest : public ::testing::TestWithParam<bool> {
   std::array<int32_t, 8> output_ = {};
 };
 
-TEST_P(WeightsTest, MultiplePreparersAndSharedRootsPrepareEachTensorOnce) {
+TEST_P(WeightsTest, ConfiguredPreparersAndSharedRootsPrepareEachTensorOnce) {
   IREE_ASSERT_OK(Compile(0, "target"));
   IREE_ASSERT_OK(Compile(1, "target"));
   IREE_ASSERT_OK(Compile(2, "auxiliary"));
   IREE_ASSERT_OK(Load(2, 3));
-  // Three consumer commands plus exactly two distinct source preparers.
+  // Three consumers and two configurations of the same preparation root.
+  // Matching tensor policies reuse the recorded command; matching names with
+  // distinct configurations must not reuse each other's values.
   EXPECT_EQ(compilation_.commands, 5u);
   EXPECT_EQ(buffers_[0][0], buffers_[1][0]);
   Run(0, 70);
@@ -875,6 +879,52 @@ TEST_P(WeightsTest, PolicySizeMismatchRejectsBeforeFileSubmission) {
 TEST_P(WeightsTest, MissingPreparationRootFailsCompilation) {
   IREE_ASSERT_OK(Compile(0, "missing"));
   IREE_ASSERT_STATUS_IS(IREE_STATUS_NOT_FOUND, Load(0, 1));
+}
+
+TEST_P(WeightsTest, MultiplePreparationCommandsRejectBeforeCompilation) {
+  IREE_ASSERT_OK(Compile(0, "size"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      CreateRoots(0, 1, &root, {path_.path()}, "boundaries.loom"));
+  EXPECT_EQ(compilation_.commands, 1u);
+  EXPECT_EQ(loom_serve_weights_activity(plans_[0]).read_bytes, 0u);
+}
+
+TEST_P(WeightsTest, DirectPreparationStageRejectsBeforeCompilation) {
+  IREE_ASSERT_OK(Compile(0, "missing"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      CreateRoots(0, 1, &root, {path_.path()}, "boundaries.loom"));
+  EXPECT_EQ(compilation_.commands, 1u);
+}
+
+TEST_P(WeightsTest, PreparationCommandRequiresFinalExtent) {
+  IREE_ASSERT_OK(Compile(0, "raw"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      CreateRoots(0, 1, &root, {path_.path()}, "boundaries.loom"));
+  EXPECT_EQ(compilation_.commands, 1u);
+}
+
+TEST_P(WeightsTest, CanonicalPolicyRequiresZeroExtent) {
+  IREE_ASSERT_OK(Compile(0, "unavailable"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      CreateRoots(0, 1, &root, {path_.path()}, "boundaries.loom"));
+  EXPECT_EQ(compilation_.commands, 1u);
+}
+
+TEST_P(WeightsTest, WeightPolicyCannotIntroduceCheckpointDomains) {
+  IREE_ASSERT_OK(Compile(0, "target"));
+  const auto root = Root(0, 0);
+  IREE_ASSERT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      CreateRoots(0, 1, &root, {path_.path()}, "boundaries.loom"));
+  EXPECT_EQ(compilation_.commands, 1u);
 }
 
 TEST_P(WeightsTest, CheckpointIndexFailureLeavesTheSharedCompilerUsable) {

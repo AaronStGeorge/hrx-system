@@ -14,6 +14,7 @@ package(
 
 exports_files(
     [
+        "testdata/weights/boundaries.loom",
         "testdata/weights/policy.loom",
         "testdata/weights/stages.loom",
         "weights_test.cc",
@@ -77,6 +78,7 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/host",
         "//loom/src/loom/serve/runtime/program",
         "//loom/src/loom/serve/runtime/program:jit",
+        "//loom/src/loom/serve/runtime/program:preparation",
         "//loom/src/loom/serve/runtime/program:sources",
         "//loom/src/loom/serve/runtime/storage:memory",
         "//runtime/src/iree/async",

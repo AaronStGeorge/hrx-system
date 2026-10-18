@@ -361,8 +361,8 @@ static iree_status_t loom_serve_preparation_module_start(
                             LOOM_SERVE_PREPARATION_FLAG_PARAMETERS)) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
-            "request stages reuse cold checkpoint placement; parameter "
-            "declarations require cold preparation");
+            "parameter declarations are unavailable in this preparation "
+            "capture");
       }
       status = loom_serve_preparation_add_parameter(preparation, stage, call);
     } else if (params->function_ordinal == 5) {

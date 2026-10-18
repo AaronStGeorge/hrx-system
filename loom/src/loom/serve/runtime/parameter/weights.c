@@ -13,6 +13,7 @@
 #include "iree/vm/buffer.h"
 #include "iree/vm/sync.h"
 #include "loom/serve/runtime/execution/retirement.h"
+#include "loom/serve/runtime/program/preparation.h"
 #include "loom/serve/runtime/program/program.h"
 #include "loomc/iree.h"
 
@@ -192,10 +193,9 @@ static iree_status_t loom_serve_weight_resolve_root(
   return iree_ok_status();
 }
 
-// A cached preparer owns the returned VM string until cold planning completes.
 typedef struct loom_serve_weight_preparer_t {
-  // Owned VM result backing the root name, independent of the invocation.
-  iree_vm_buffer_t* root;
+  // Owned source declaration, independent of the policy invocation.
+  loom_serve_preparation_t* declaration;
   // Owned recorded command retaining its executables independently of the JIT.
   iree_hal_command_buffer_t* command;
 } loom_serve_weight_preparer_t;
@@ -224,8 +224,6 @@ typedef struct loom_serve_weight_preparation_t {
   iree_host_size_t preparer_index;
   // Owned per-span preparer ordinal; SIZE_MAX preserves canonical file bytes.
   iree_host_size_t* span_preparers;
-  // Stable source configuration borrowed by the current native compile.
-  loomc_config_options_t config;
   // CPU policy/indexing outcome, consumed by the initial task destructor.
   iree_status_t status;
   // Joins the already-queued fixed root allocation before publication.
@@ -238,9 +236,10 @@ typedef struct loom_serve_weight_preparation_t {
 
 static iree_status_t loom_serve_weight_query_preparer(
     loom_serve_program_t* program, const iree_vm_ref_types_t* types,
-    iree_vm_function_t function, loom_cmd_program_parameter_t parameter,
-    iree_allocator_t host_allocator, iree_vm_buffer_t** out_root) {
-  *out_root = NULL;
+    iree_vm_function_t function, iree_vm_module_t* library,
+    loom_cmd_program_parameter_t parameter, iree_allocator_t host_allocator,
+    loom_serve_preparation_t** out_preparation) {
+  *out_preparation = NULL;
   iree_vm_buffer_t* key = NULL;
   IREE_RETURN_IF_ERROR(iree_vm_buffer_wrap(
       IREE_VM_BUFFER_ACCESS_FLAG_READ,
@@ -248,31 +247,33 @@ static iree_status_t loom_serve_weight_query_preparer(
       iree_vm_buffer_release_callback_null(), host_allocator, &key));
   iree_vm_variant_t arguments[] = {
       iree_vm_buffer_variant_from_ptr_move(types, &key)};
-  iree_vm_variant_t results[2] = {0};
+  iree_vm_variant_t results[1] = {0};
+  loom_serve_preparation_module_begin(library, 0, 0);
   iree_status_t status =
       iree_vm_invoke(loom_serve_program_invocation(program), function,
                      iree_vm_variant_span_from_array(arguments),
                      iree_vm_variant_span_from_array(results));
-  iree_vm_buffer_t* root = NULL;
+  loom_serve_preparation_t* preparation =
+      loom_serve_preparation_module_take(library);
+  const iree_host_size_t stage_count =
+      preparation ? loom_serve_preparation_stage_count(preparation) : 0;
   int64_t byte_length = 0;
   if (iree_status_is_ok(status)) {
-    status = iree_vm_buffer_ptr_from_variant_move(types, &results[0], &root);
+    status = iree_vm_i64_from_variant(results[0], &byte_length);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_vm_i64_from_variant(results[1], &byte_length);
-  }
-  if (iree_status_is_ok(status)) {
-    if (!root || !iree_all_bits_set(iree_vm_buffer_access(root),
-                                    IREE_VM_BUFFER_ACCESS_FLAG_READ)) {
-      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "weight policy must return a readable root");
-    } else if (!iree_vm_buffer_length(root) && byte_length != 0) {
+    if (stage_count > 1 ||
+        (stage_count && loom_serve_preparation_stage(preparation, 0)->kind !=
+                            LOOM_SERVE_PREPARATION_STAGE_COMMAND)) {
+      status =
+          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                           "weight policy must declare at most one command");
+    } else if (!stage_count && byte_length != 0) {
       status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "unchanged weight policy must return zero byte length");
-    } else if (iree_vm_buffer_length(root) &&
-               (byte_length <= 0 ||
-                (uint64_t)byte_length != parameter.byte_length)) {
+    } else if (stage_count && (byte_length <= 0 || (uint64_t)byte_length !=
+                                                       parameter.byte_length)) {
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "weight policy for '%.*s' requires %" PRId64
                                 " bytes, reflected parameter has %" PRIu64,
@@ -283,17 +284,11 @@ static iree_status_t loom_serve_weight_query_preparer(
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(results));
   if (iree_status_is_ok(status)) {
-    *out_root = root;
+    *out_preparation = preparation;
   } else {
-    iree_vm_buffer_release(root);
+    loom_serve_preparation_free(preparation);
   }
   return status;
-}
-
-static iree_string_view_t loom_serve_weight_preparer_name(
-    iree_vm_buffer_t* root) {
-  return iree_make_string_view(iree_vm_buffer_const_data(root),
-                               iree_vm_buffer_length(root));
 }
 
 static iree_status_t loom_serve_weight_prepare_policy(
@@ -304,12 +299,17 @@ static iree_status_t loom_serve_weight_prepare_policy(
   IREE_RETURN_IF_ERROR(
       iree_vm_environment_allocate(host_allocator, &environment));
   loom_serve_program_t* program = NULL;
+  iree_vm_module_t* library = NULL;
   const iree_string_view_t roots[] = {IREE_SVL("prepare_weight")};
-  iree_status_t status = loom_serve_program_allocate(
-      loom_serve_jit_target_environment(job->jit), environment, &job->sources,
-      job->policy_path, IREE_ARRAYSIZE(roots), roots,
-      iree_vm_module_span_empty(), loom_serve_jit_report(job->jit),
-      host_allocator, &program);
+  iree_status_t status = loom_serve_preparation_module_create(
+      environment, host_allocator, &library);
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_program_allocate(
+        loom_serve_jit_target_environment(job->jit), environment, &job->sources,
+        job->policy_path, IREE_ARRAYSIZE(roots), roots,
+        (iree_vm_module_span_t){&library, 1}, loom_serve_jit_report(job->jit),
+        host_allocator, &program);
+  }
   iree_vm_ref_types_t types = {0};
   if (iree_status_is_ok(status)) {
     status = iree_vm_ref_types_resolve(
@@ -334,30 +334,30 @@ static iree_status_t loom_serve_weight_prepare_policy(
   }
   for (iree_host_size_t i = 0;
        i < weights->span_count && iree_status_is_ok(status); ++i) {
-    iree_vm_buffer_t* root = NULL;
-    status = loom_serve_weight_query_preparer(program, &types, function,
-                                              weights->spans[i].parameter,
-                                              host_allocator, &root);
+    loom_serve_preparation_t* declaration = NULL;
+    status = loom_serve_weight_query_preparer(
+        program, &types, function, library, weights->spans[i].parameter,
+        host_allocator, &declaration);
     job->span_preparers[i] = SIZE_MAX;
-    if (iree_status_is_ok(status) && iree_vm_buffer_length(root)) {
-      const iree_string_view_t name = loom_serve_weight_preparer_name(root);
+    if (iree_status_is_ok(status) && declaration) {
       iree_host_size_t p = 0;
       while (p < job->preparer_count &&
-             !iree_string_view_equal(name, loom_serve_weight_preparer_name(
-                                               job->preparers[p].root))) {
+             !loom_serve_preparation_equal(declaration,
+                                           job->preparers[p].declaration)) {
         ++p;
       }
       if (p == job->preparer_count) {
         loom_serve_weight_preparer_t* preparer =
             &job->preparers[job->preparer_count++];
-        preparer->root = root;
-        root = NULL;
+        preparer->declaration = declaration;
+        declaration = NULL;
       }
       job->span_preparers[i] = p;
     }
-    iree_vm_buffer_release(root);
+    loom_serve_preparation_free(declaration);
   }
   loom_serve_program_free(program);
+  iree_vm_module_release(library);
   iree_vm_environment_free(environment);
   return status;
 }
@@ -376,7 +376,7 @@ static void loom_serve_weight_preparation_finish(
     }
   }
   for (iree_host_size_t i = 0; i < job->preparer_count; ++i) {
-    iree_vm_buffer_release(job->preparers[i].root);
+    loom_serve_preparation_free(job->preparers[i].declaration);
     iree_hal_command_buffer_release(job->preparers[i].command);
   }
   iree_allocator_free(host_allocator, job->preparers);
@@ -416,10 +416,10 @@ static void loom_serve_weight_preparation_next(
     }
     return;
   }
-  const iree_string_view_t root =
-      loom_serve_weight_preparer_name(job->preparers[job->preparer_index].root);
+  const loom_serve_preparation_stage_t* stage = loom_serve_preparation_stage(
+      job->preparers[job->preparer_index].declaration, 0);
   iree_status_t status =
-      loom_serve_jit_compile_async(job->jit, root, &job->config,
+      loom_serve_jit_compile_async(job->jit, stage->root, &stage->config,
                                    loom_serve_weight_preparation_compiled, job);
   // An accepted completion may already have destroyed job. Rejection owes no
   // callback and returns the still-exclusive job to this terminal path.
@@ -440,7 +440,7 @@ static void loom_serve_weight_preparation_compiled(
         requirements->transient.required_byte_length ||
         requirements->launch_counts.required_byte_length) {
       const iree_string_view_t name =
-          loom_serve_weight_preparer_name(preparer->root);
+          loom_serve_preparation_stage(preparer->declaration, 0)->root;
       status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "weight preparer '%.*s' requires one mutable binding "
@@ -521,7 +521,6 @@ iree_status_t loom_serve_weights_prepare_async(
   job->sources = *sources;
   job->weights_paths = weights_paths;
   job->policy_path = policy_path;
-  job->config.flags = LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED;
   job->completion = completion;
   job->user_data = user_data;
   iree_status_t status = iree_status_from_loomc(
