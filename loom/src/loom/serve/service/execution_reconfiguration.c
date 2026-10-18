@@ -39,19 +39,12 @@ typedef struct loom_serve_execution_reconfiguration_job_t {
   // Owned provider locators, filesystem base and retained package, independent
   // of HTTP. Resolution stays with the source reader so relative file bases
   // and package namespaces keep their original meaning.
-  loom_serve_sources_t sources;
+  loom_serve_sources_t* sources;
 } loom_serve_execution_reconfiguration_job_t;
 
 static void loom_serve_execution_reconfiguration_job_free(
     loom_serve_execution_reconfiguration_job_t* job) {
-  for (iree_host_size_t i = 0; i < job->sources.count; ++i) {
-    iree_allocator_free(job->host_allocator,
-                        (void*)job->sources.values[i].data);
-  }
-  iree_allocator_free(job->host_allocator, (void*)job->sources.values);
-  iree_allocator_free(job->host_allocator,
-                      (void*)job->sources.base_directory.data);
-  loom_serve_package_release(job->sources.package);
+  loom_serve_sources_free(job->sources, job->host_allocator);
   iree_allocator_free(job->host_allocator, job);
 }
 
@@ -82,37 +75,8 @@ static iree_status_t loom_serve_execution_reconfiguration_stage(
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(reconfiguration->host_allocator,
                                              sizeof(*job), (void**)&job));
   job->host_allocator = reconfiguration->host_allocator;
-  job->sources.package = sources->package;
-  loom_serve_package_retain(job->sources.package);
-  iree_status_t status = iree_allocator_malloc_array(
-      job->host_allocator, sources->count, sizeof(*job->sources.values),
-      (void**)&job->sources.values);
-  if (iree_status_is_ok(status)) {
-    job->sources.count = sources->count;
-  }
-  if (iree_status_is_ok(status) && sources->base_directory.size) {
-    status = iree_allocator_clone(
-        job->host_allocator,
-        iree_make_const_byte_span(sources->base_directory.data,
-                                  sources->base_directory.size),
-        (void**)&job->sources.base_directory.data);
-    if (iree_status_is_ok(status)) {
-      job->sources.base_directory.size = sources->base_directory.size;
-    }
-  }
-  for (iree_host_size_t i = 0;
-       i < job->sources.count && iree_status_is_ok(status); ++i) {
-    char* path = NULL;
-    status =
-        iree_allocator_clone(job->host_allocator,
-                             iree_make_const_byte_span(sources->values[i].data,
-                                                       sources->values[i].size),
-                             (void**)&path);
-    if (iree_status_is_ok(status)) {
-      ((iree_string_view_t*)job->sources.values)[i] =
-          iree_make_string_view(path, sources->values[i].size);
-    }
-  }
+  iree_status_t status =
+      loom_serve_sources_clone(sources, job->host_allocator, &job->sources);
   if (iree_status_is_ok(status)) {
     status =
         loom_serve_variant_pool_begin(reconfiguration->pool, base, &job->entry);
@@ -122,7 +86,7 @@ static iree_status_t loom_serve_execution_reconfiguration_stage(
     // From here the pool owns terminal observation, including submission
     // rejection. The caller receives a stable ID for every accepted attempt.
     status = reconfiguration->update.compile(
-        reconfiguration->update.self, &job->sources,
+        reconfiguration->update.self, job->sources,
         loom_serve_execution_reconfiguration_complete, job);
     if (!iree_status_is_ok(status)) {
       loom_serve_execution_reconfiguration_complete(job, status, NULL, NULL);

@@ -6,8 +6,70 @@
 
 #include "loom/serve/runtime/program/sources.h"
 
+#include <string.h>
+
 #include "iree/base/internal/path.h"
 #include "loomc/iree.h"
+
+static iree_string_view_t loom_serve_sources_copy_string(
+    iree_string_view_t value, char** cursor) {
+  if (!value.size) {
+    return iree_string_view_empty();
+  }
+  memcpy(*cursor, value.data, value.size);
+  iree_string_view_t copy = iree_make_string_view(*cursor, value.size);
+  *cursor += value.size;
+  return copy;
+}
+
+iree_status_t loom_serve_sources_clone(const loom_serve_sources_t* sources,
+                                       iree_allocator_t host_allocator,
+                                       loom_serve_sources_t** out_sources) {
+  *out_sources = NULL;
+  iree_host_size_t size = 0;
+  bool representable = iree_host_size_checked_mul_add(
+      sizeof(*sources), sources->count, sizeof(*sources->values), &size);
+  const iree_string_view_t paths[] = {sources->base_directory, sources->prepare,
+                                      sources->control};
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(paths) && representable;
+       ++i) {
+    representable = iree_host_size_checked_add(size, paths[i].size, &size);
+  }
+  for (iree_host_size_t i = 0; i < sources->count && representable; ++i) {
+    representable =
+        iree_host_size_checked_add(size, sources->values[i].size, &size);
+  }
+  if (!representable) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "source namespace storage is not representable");
+  }
+  loom_serve_sources_t* copy = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(host_allocator, size, (void**)&copy));
+  iree_string_view_t* values = (iree_string_view_t*)(copy + 1);
+  char* cursor = (char*)(values + sources->count);
+  copy->base_directory =
+      loom_serve_sources_copy_string(sources->base_directory, &cursor);
+  copy->prepare = loom_serve_sources_copy_string(sources->prepare, &cursor);
+  copy->control = loom_serve_sources_copy_string(sources->control, &cursor);
+  copy->count = sources->count;
+  copy->values = sources->count ? values : NULL;
+  for (iree_host_size_t i = 0; i < sources->count; ++i) {
+    values[i] = loom_serve_sources_copy_string(sources->values[i], &cursor);
+  }
+  copy->package = sources->package;
+  loom_serve_package_retain(copy->package);
+  *out_sources = copy;
+  return iree_ok_status();
+}
+
+void loom_serve_sources_free(loom_serve_sources_t* sources,
+                             iree_allocator_t host_allocator) {
+  if (sources) {
+    loom_serve_package_release(sources->package);
+    iree_allocator_free(host_allocator, sources);
+  }
+}
 
 iree_status_t loom_serve_sources_open(const loom_serve_sources_t* sources,
                                       iree_string_view_t locator,

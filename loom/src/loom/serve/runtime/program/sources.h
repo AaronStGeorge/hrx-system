@@ -35,6 +35,18 @@ typedef struct loom_serve_sources_t {
   loom_serve_package_t* package;
 } loom_serve_sources_t;
 
+// Captures every locator and retains the immutable package in one allocation.
+// The result is independent of the input views. This preserves the namespace,
+// not filesystem contents; sources_open still performs the eventual read.
+// Failure publishes NULL. Release with sources_free and the same allocator.
+iree_status_t loom_serve_sources_clone(const loom_serve_sources_t* sources,
+                                       iree_allocator_t host_allocator,
+                                       loom_serve_sources_t** out_sources);
+
+// Releases a cloned namespace and its package reference. NULL is accepted.
+void loom_serve_sources_free(loom_serve_sources_t* sources,
+                             iree_allocator_t host_allocator);
+
 // Loads one source or metadata asset, retaining its bytes independently of the
 // environment. File reads belong on preparation workers, not a scheduler turn.
 iree_status_t loom_serve_sources_open(const loom_serve_sources_t* sources,

@@ -55,7 +55,6 @@ loom_cc_library(
     iree::base
     loom::serve::runtime::host::wake
     loom::serve::runtime::program::compilation
-    loom::serve::runtime::program::package
     loom::serve::runtime::program::sources
     loom::serve::runtime::program::variant_pool
   PUBLIC

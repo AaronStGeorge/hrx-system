@@ -37,7 +37,9 @@ loom_cc_test(
     name = "sources_test",
     srcs = ["sources_test.cc"],
     deps = [
+        ":package",
         ":sources",
+        "//loom/binding/c:loomc",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
