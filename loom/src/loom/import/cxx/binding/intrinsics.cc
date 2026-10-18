@@ -304,12 +304,16 @@ Intrinsics::ScalarOperation Intrinsics::resolve_scalar_operation(
     cxx::AST* owner) {
   ScalarOperation result{scalar};
   for (size_t index = 1; index < attribute.arguments.size(); ++index) {
+    const auto name = view(attribute.arguments[index]->name());
+    if (scalar->preserve_flag &&
+        iree_string_view_equal(name, IREE_SV("preserve"))) {
+      result.flags |= scalar->preserve_flag;
+      continue;
+    }
     uint8_t flag;
-    if (!scalar->has_fastmath ||
-        !loom_cxx_fastmath_flag_parse(view(attribute.arguments[index]->name()),
-                                      &flag)) {
+    if (!scalar->has_fastmath || !loom_cxx_fastmath_flag_parse(name, &flag)) {
       diagnostics_.reject(unit_, owner,
-                          "intrinsic has an unsupported fast-math flag");
+                          "intrinsic has an unsupported math flag");
     }
     result.flags |= flag;
   }

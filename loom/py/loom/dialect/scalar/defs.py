@@ -93,6 +93,21 @@ FastMathFlags = EnumDef(
     ),
 )
 
+TrigonometryMathFlags = EnumDef(
+    "TrigonometryMathFlags",
+    [
+        *FastMathFlags.cases,
+        EnumCase(
+            "preserve",
+            128,
+            doc=("Require source-defined signs of zero results, independently of AFN approximation permission. This positive requirement overrides NSZ and is not included in fast."),
+        ),
+    ],
+    doc=(
+        "Trigonometric math permissions and requirements. AFN permits native approximation with target-dependent zero signs unless preserve is requested. Other fast-math permissions retain their meanings; preserve does not require correctly rounded nonzero approximations."
+    ),
+)
+
 FloatConversionFlags = EnumDef(
     "FloatConversionFlags",
     [
