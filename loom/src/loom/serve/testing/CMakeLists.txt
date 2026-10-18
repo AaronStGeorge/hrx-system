@@ -273,6 +273,7 @@ loom_cc_binary(
     "text_request.c"
   DEPS
     iree::base
+    iree::base::internal::arena
     iree::base::tooling::flags
     iree::io::file_handle
     iree::tokenizer
