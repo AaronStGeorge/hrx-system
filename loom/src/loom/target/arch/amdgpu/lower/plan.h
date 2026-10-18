@@ -1161,14 +1161,22 @@ typedef struct loom_amdgpu_memory_mask_plan_t {
   const void* condition_plan;
 } loom_amdgpu_memory_mask_plan_t;
 
+typedef uint8_t loom_amdgpu_memory_access_plan_flags_t;
+enum loom_amdgpu_memory_access_plan_flag_bits_e {
+  // An appended mask plan preserves the source passthrough value.
+  LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_PRESERVE_INACTIVE = 1u << 0,
+  // An exact view descriptor makes every inactive packet read positive zero.
+  LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_DESCRIPTOR_ZERO_FILL = 1u << 1,
+};
+
 // Immutable function-retained direct-memory packet plan.
 typedef struct loom_amdgpu_memory_access_plan_t {
   // Canonical source access shared by all physical packet views.
   loom_low_source_memory_access_plan_t source;
   // Number of populated packet plans.
   uint32_t packet_count;
-  // A mask plan follows the packets; ordinary loads/stores allocate no tail.
-  bool has_mask;
+  // Inactive-lane semantics selected before source-storage allocation.
+  loom_amdgpu_memory_access_plan_flags_t flags;
   // Direct memory packets emitted in increasing payload-byte order. The
   // function-retained allocation contains exactly |packet_count| entries.
   loom_amdgpu_memory_packet_plan_t packets[];
@@ -1177,7 +1185,8 @@ typedef struct loom_amdgpu_memory_access_plan_t {
 static inline const loom_amdgpu_memory_mask_plan_t*
 loom_amdgpu_memory_access_mask_plan(
     const loom_amdgpu_memory_access_plan_t* plan) {
-  return plan->has_mask
+  return iree_any_bit_set(plan->flags,
+                          LOOM_AMDGPU_MEMORY_ACCESS_PLAN_FLAG_PRESERVE_INACTIVE)
              ? (const loom_amdgpu_memory_mask_plan_t*)(plan->packets +
                                                        plan->packet_count)
              : NULL;
