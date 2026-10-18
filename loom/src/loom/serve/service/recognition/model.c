@@ -737,7 +737,8 @@ static iree_status_t loom_serve_recognition_bind_parameters(
         loom_serve_device_transfer_queue(model->owner),
         loom_serve_device_dispatch_queue(model->owner),
         loom_serve_device_storage_pool(model->owner),
-        loom_serve_device_memory_pool(model->owner), 0, count, roots,
+        loom_serve_device_memory_pool(model->owner),
+        loom_serve_device_workspace(model->owner), 0, count, roots,
         host_allocator, &model->weights.plans[domain]);
   }
   iree_allocator_free(host_allocator, roots);
@@ -1003,7 +1004,7 @@ iree_status_t loom_serve_recognition_load_advance(
           iree_slim_mutex_unlock(&load->event.mutex);
           status = loom_serve_weights_prepare_async(
               model->weights.plans[i], host, model->jit, load->command_mode,
-              &load->options.sources, parameter->paths, parameter->policy,
+              &load->options.sources, parameter,
               loom_serve_recognition_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {

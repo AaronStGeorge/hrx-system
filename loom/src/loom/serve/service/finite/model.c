@@ -506,8 +506,9 @@ static iree_status_t loom_serve_finite_model_bind(
     status = loom_serve_weights_allocate(
         device, loom_serve_device_transfer_queue(model->owner), dispatch,
         loom_serve_device_storage_pool(model->owner),
-        loom_serve_device_memory_pool(model->owner), 0, 1, &root,
-        host_allocator, &model->weights.plans[i]);
+        loom_serve_device_memory_pool(model->owner),
+        loom_serve_device_workspace(model->owner), 0, 1, &root, host_allocator,
+        &model->weights.plans[i]);
   }
   return status;
 }
@@ -760,7 +761,7 @@ iree_status_t loom_serve_finite_load_advance(
           iree_slim_mutex_unlock(&load->event.mutex);
           status = loom_serve_weights_prepare_async(
               model->weights.plans[i], host, model->jit, load->command_mode,
-              &load->options.sources, parameter->paths, parameter->policy,
+              &load->options.sources, parameter,
               loom_serve_finite_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {

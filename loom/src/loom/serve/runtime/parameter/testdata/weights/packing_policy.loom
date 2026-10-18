@@ -1,0 +1,128 @@
+func.decl import("weights") @count() -> (i32)
+
+func.decl import("weights") @parameter(%source: i32, %key: buffer) -> (buffer, i64)
+
+func.decl import("weights") @input(%source: i32, %key: buffer, %offset: i64, %length: i64, %alignment: i64) -> (i64)
+
+func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
+
+func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
+
+func.decl import("input") @require(%condition: i32, %diagnostic: buffer)
+
+func.decl import("json") @members(%json: buffer) -> (buffer, i32, i64)
+
+// pack / interleaved / first_offset / second_offset
+global.rodata.def @root = bytes("7061636b")
+
+global.rodata.def @layout = bytes("696e7465726c6561766564")
+
+global.rodata.def @first_offset = bytes("66697273745f6f6666736574")
+
+global.rodata.def @second_offset = bytes("7365636f6e645f6f6666736574")
+
+// dtype / F32
+global.rodata.def @dtype = bytes("6474797065")
+
+global.rodata.def @f32 = bytes("463332")
+
+// expected two F32 factor checkpoints
+global.rodata.def @diagnostic = bytes("65787065637465642074776f2046333220666163746f7220636865636b706f696e7473")
+
+func.def @check(%valid: i1) {
+  %condition = scalar.extui %valid : i1 to i32
+  %diagnostic = global.load @diagnostic : buffer
+  func.call @require(%condition, %diagnostic) : (i32, buffer)
+  func.return
+}
+
+func.def @check_metadata(%metadata: buffer) {
+  %records, %type, %count = func.call @members(%metadata) : (buffer) -> (buffer, i32, i64)
+  %object = scalar.constant 2 : i32
+  %is_object = scalar.cmpi eq, %type, %object : i32
+  func.call @check(%is_object) : (i1)
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %origin = index.constant 0 : offset
+  %extent = index.cast %count : i64 to index
+  %record_view = buffer.view %records[%origin] : buffer -> view<[%extent]x5xi64>
+  %key_bytes = index.constant 5 : offset
+  %value_bytes = index.constant 3 : offset
+  %c0_i32 = scalar.constant 0 : i32
+  %c3_i64 = scalar.constant 3 : i64
+  %c5_i64 = scalar.constant 5 : i64
+  %c0_i64 = scalar.constant 0 : i64
+  %false = scalar.constant false : i1
+  %expected_key = global.load @dtype : buffer
+  %expected_value = global.load @f32 : buffer
+  %found = scf.for %i = [%c0 to %extent step %c1](%found = %false : i1) -> (i1) {
+    %key_offset = view.load %record_view[%i, 0] : view<[%extent]x5xi64> -> i64
+    %key_length = view.load %record_view[%i, 1] : view<[%extent]x5xi64> -> i64
+    %value_offset = view.load %record_view[%i, 2] : view<[%extent]x5xi64> -> i64
+    %value_length = view.load %record_view[%i, 3] : view<[%extent]x5xi64> -> i64
+    %value_type = view.load %record_view[%i, 4] : view<[%extent]x5xi64> -> i64
+    %key_sized = scalar.cmpi eq, %key_length, %c5_i64 : i64
+    %matches = scf.if %key_sized -> (i1) {
+      %bounded = scalar.assume %key_offset [range(%key_offset, 0, 9223372036854775807)] : i64
+      %start = index.cast %bounded : i64 to offset
+      %order = buffer.compare %metadata[%start], %expected_key[%origin], %key_bytes
+      %equal = scalar.cmpi eq, %order, %c0_i32 : i32
+      scf.yield %equal : i1
+    } else {
+      scf.yield %false : i1
+    }
+    scf.if %matches {
+      %string = scalar.cmpi eq, %value_type, %c0_i64 : i64
+      %sized = scalar.cmpi eq, %value_length, %c3_i64 : i64
+      %typed = scalar.andi %string, %sized : i1
+      func.call @check(%typed) : (i1)
+      %bounded = scalar.assume %value_offset [range(%value_offset, 0, 9223372036854775807)] : i64
+      %start = index.cast %bounded : i64 to offset
+      %order = buffer.compare %metadata[%start], %expected_value[%origin], %value_bytes
+      %equal = scalar.cmpi eq, %order, %c0_i32 : i32
+      func.call @check(%equal) : (i1)
+    }
+    %next = scalar.ori %found, %matches : i1
+    scf.yield %next : i1
+  }
+  func.call @check(%found) : (i1)
+  func.return
+}
+
+func.def public @prepare_weight(%key: buffer) -> (i64) {
+  %c0 = scalar.constant 0 : i32
+  %c1 = scalar.constant 1 : i32
+  %c2 = scalar.constant 2 : i32
+  %c0_i64 = scalar.constant 0 : i64
+  %c16 = scalar.constant 16 : i64
+  %c32 = scalar.constant 32 : i64
+  %c64 = scalar.constant 64 : i64
+  %count = func.call @count() : () -> (i32)
+  %pair = scalar.cmpi eq, %count, %c2 : i32
+  func.call @check(%pair) : (i1)
+  %first_metadata, %first_length = func.call @parameter(%c0, %key) : (i32, buffer) -> (buffer, i64)
+  %second_metadata, %second_length = func.call @parameter(%c1, %key) : (i32, buffer) -> (buffer, i64)
+  func.call @check_metadata(%first_metadata) : (buffer)
+  func.call @check_metadata(%second_metadata) : (buffer)
+  %first_sized = scalar.cmpi eq, %first_length, %c32 : i64
+  %second_sized = scalar.cmpi eq, %second_length, %c16 : i64
+  %sized = scalar.andi %first_sized, %second_sized : i1
+  func.call @check(%sized) : (i1)
+  // The padding tests that staging offsets, not checkpoint lengths, drive ABI.
+  %first = func.call @input(%c0, %key, %c0_i64, %first_length, %c64) : (i32, buffer, i64, i64, i64) -> (i64)
+  %second = func.call @input(%c1, %key, %c0_i64, %second_length, %c64) : (i32, buffer, i64, i64, i64) -> (i64)
+  %origin = index.constant 0 : offset
+  %letter = buffer.load.i8.u %key[%origin]
+  %low_bit = scalar.andi %letter, %c1 : i32
+  %interleaved = scalar.extui %low_bit : i32 to i64
+  %root = global.load @root : buffer
+  %stage = func.call @stage(%root, %c0_i64) : (buffer, i64) -> (i32)
+  %layout = global.load @layout : buffer
+  %first_key = global.load @first_offset : buffer
+  %second_key = global.load @second_offset : buffer
+  func.call @config_i64(%stage, %layout, %interleaved) : (i32, buffer, i64)
+  func.call @config_i64(%stage, %first_key, %first) : (i32, buffer, i64)
+  func.call @config_i64(%stage, %second_key, %second) : (i32, buffer, i64)
+  %bytes = scalar.constant 24 : i64
+  func.return %bytes : i64
+}
