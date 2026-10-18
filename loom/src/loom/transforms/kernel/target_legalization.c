@@ -351,9 +351,10 @@ typedef struct loom_kernel_scan_state_t {
   uint32_t selector_level_count;
 } loom_kernel_scan_state_t;
 
-static bool loom_kernel_scan_cluster_from_op(
-    const loom_target_legalization_context_t* context, const loom_op_t* op,
-    loom_kernel_scan_cluster_t* out_cluster) {
+static bool loom_kernel_scan_cluster_from_attributes(
+    const loom_target_legalization_context_t* context, bool has_cluster_size,
+    int64_t cluster_size_attr, bool has_cluster_stride,
+    int64_t cluster_stride_attr, loom_kernel_scan_cluster_t* out_cluster) {
   const loom_target_bundle_t* bundle =
       loom_target_legalization_context_bundle(context);
   if (bundle == NULL || bundle->snapshot == NULL ||
@@ -363,13 +364,9 @@ static bool loom_kernel_scan_cluster_from_op(
   }
   const uint32_t subgroup_size = bundle->snapshot->subgroup_size;
   const uint32_t cluster_size =
-      loom_kernel_subgroup_scan_has_cluster_size(op)
-          ? (uint32_t)loom_kernel_subgroup_scan_cluster_size(op)
-          : subgroup_size;
+      has_cluster_size ? (uint32_t)cluster_size_attr : subgroup_size;
   const uint32_t cluster_stride =
-      loom_kernel_subgroup_scan_has_cluster_stride(op)
-          ? (uint32_t)loom_kernel_subgroup_scan_cluster_stride(op)
-          : 1u;
+      has_cluster_stride ? (uint32_t)cluster_stride_attr : 1u;
   const uint64_t cluster_span =
       (uint64_t)cluster_size * (uint64_t)cluster_stride;
   if (cluster_size == 0 || cluster_stride == 0 ||
@@ -383,12 +380,49 @@ static bool loom_kernel_scan_cluster_from_op(
   return true;
 }
 
+static bool loom_kernel_scan_cluster_from_op(
+    const loom_target_legalization_context_t* context, const loom_op_t* op,
+    loom_kernel_scan_cluster_t* out_cluster) {
+  const bool has_cluster_size = loom_kernel_subgroup_scan_has_cluster_size(op);
+  const bool has_cluster_stride =
+      loom_kernel_subgroup_scan_has_cluster_stride(op);
+  return loom_kernel_scan_cluster_from_attributes(
+      context, has_cluster_size,
+      has_cluster_size ? loom_kernel_subgroup_scan_cluster_size(op) : 0,
+      has_cluster_stride,
+      has_cluster_stride ? loom_kernel_subgroup_scan_cluster_stride(op) : 0,
+      out_cluster);
+}
+
+static bool loom_kernel_reduce_cluster_from_op(
+    const loom_target_legalization_context_t* context, const loom_op_t* op,
+    loom_kernel_scan_cluster_t* out_cluster) {
+  const bool has_cluster_size =
+      loom_kernel_subgroup_reduce_has_cluster_size(op);
+  const bool has_cluster_stride =
+      loom_kernel_subgroup_reduce_has_cluster_stride(op);
+  return loom_kernel_scan_cluster_from_attributes(
+      context, has_cluster_size,
+      has_cluster_size ? loom_kernel_subgroup_reduce_cluster_size(op) : 0,
+      has_cluster_stride,
+      has_cluster_stride ? loom_kernel_subgroup_reduce_cluster_stride(op) : 0,
+      out_cluster);
+}
+
 static bool loom_kernel_match_subgroup_scan(
     const loom_target_legalizer_entry_t* entry,
     const loom_target_legalization_context_t* context, const loom_op_t* op) {
   (void)entry;
   loom_kernel_scan_cluster_t cluster = {0};
   return loom_kernel_scan_cluster_from_op(context, op, &cluster);
+}
+
+static bool loom_kernel_match_subgroup_reduce(
+    const loom_target_legalizer_entry_t* entry,
+    const loom_target_legalization_context_t* context, const loom_op_t* op) {
+  (void)entry;
+  loom_kernel_scan_cluster_t cluster = {0};
+  return loom_kernel_reduce_cluster_from_op(context, op, &cluster);
 }
 
 static iree_status_t loom_kernel_scan_build_integer_constant(
@@ -719,6 +753,134 @@ static iree_status_t loom_kernel_scan_build_seed(
   return iree_ok_status();
 }
 
+static bool loom_kernel_scan_math_is_supported(loom_combining_kind_t kind,
+                                               uint8_t math_flags) {
+  // Ordinary arithmetic support does not establish source-format
+  // preservation. Extrema retain their fixed semantics independently of the
+  // arithmetic mode.
+  return math_flags == 0 ||
+         (kind != LOOM_COMBINING_KIND_ADDF && kind != LOOM_COMBINING_KIND_MULF);
+}
+
+static iree_status_t loom_kernel_scan_state_initialize(
+    loom_target_legalization_context_t* context, const loom_op_t* op,
+    loom_value_id_t source_value, loom_combining_kind_t kind,
+    const loom_kernel_scan_cluster_t* cluster,
+    loom_kernel_scan_state_t* out_state) {
+  const loom_target_bundle_t* bundle =
+      loom_target_legalization_context_bundle(context);
+  const uint32_t subgroup_size = bundle->snapshot->subgroup_size;
+  *out_state = (loom_kernel_scan_state_t){
+      .builder = &context->rewriter->builder,
+      .location = op->location,
+      .result_type = loom_module_value_type(context->module, source_value),
+      .i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1),
+      .i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32),
+      .mask_type = loom_type_scalar(subgroup_size <= 32 ? LOOM_SCALAR_TYPE_I32
+                                                        : LOOM_SCALAR_TYPE_I64),
+      .kind = kind,
+      .subgroup_size = subgroup_size,
+      .mask_bit_count = subgroup_size <= 32 ? 32u : 64u,
+  };
+  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_integer_constant(
+      out_state, out_state->mask_type, 0, &out_state->zero_mask));
+  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_integer_constant(
+      out_state, out_state->mask_type, 1, &out_state->one_mask));
+  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_integer_constant(
+      out_state, out_state->i32_type, subgroup_size,
+      &out_state->subgroup_size_i32));
+  IREE_RETURN_IF_ERROR(
+      loom_kernel_scan_build_cluster_state(out_state, cluster));
+  return loom_kernel_scan_build_selector_constants(out_state);
+}
+
+static iree_status_t loom_kernel_scan_build_inclusive(
+    loom_kernel_scan_state_t* state, loom_value_id_t source_value,
+    const loom_kernel_scan_cluster_t* cluster,
+    loom_kernel_subgroup_scan_direction_t direction,
+    loom_value_id_t* out_result) {
+  loom_value_id_t accumulator = source_value;
+  for (uint32_t distance = 1; distance < cluster->size; distance <<= 1) {
+    loom_value_id_t source_rank = LOOM_VALUE_ID_INVALID;
+    loom_value_id_t source_rank_valid = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_kernel_scan_build_source_rank(
+        state, direction, distance, &source_rank, &source_rank_valid));
+    loom_value_id_t peer = LOOM_VALUE_ID_INVALID;
+    loom_value_id_t peer_valid = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_kernel_scan_build_shuffle(state, accumulator, source_rank,
+                                       source_rank_valid, &peer, &peer_valid));
+    loom_value_id_t combined = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_kernel_scan_build_combine(state, peer, accumulator, &combined));
+    IREE_RETURN_IF_ERROR(
+        loom_kernel_scan_build_select(state, peer_valid, combined, accumulator,
+                                      state->result_type, &accumulator));
+  }
+  *out_result = accumulator;
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_target_legalize_subgroup_reduce(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (context->mode != LOOM_TARGET_LEGALIZATION_MODE_FINAL &&
+      context->policy != LOOM_TARGET_LEGALIZATION_POLICY_REFERENCE_ONLY) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_DEFER;
+    return iree_ok_status();
+  }
+  const loom_combining_kind_t kind = loom_kernel_subgroup_reduce_kind(op);
+  if (!loom_kernel_scan_math_is_supported(
+          kind, loom_kernel_subgroup_reduce_math(op))) {
+    return iree_ok_status();
+  }
+  loom_kernel_scan_cluster_t cluster = {0};
+  if (!loom_kernel_reduce_cluster_from_op(context, op, &cluster)) {
+    return iree_ok_status();
+  }
+
+  loom_rewriter_t* rewriter = context->rewriter;
+  loom_builder_set_before(&rewriter->builder, op);
+  const loom_value_id_t checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  const loom_value_id_t source_value = loom_kernel_subgroup_reduce_value(op);
+  loom_kernel_scan_state_t state;
+  IREE_RETURN_IF_ERROR(loom_kernel_scan_state_initialize(
+      context, op, source_value, kind, &cluster, &state));
+  loom_value_id_t inclusive = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_inclusive(
+      &state, source_value, &cluster,
+      LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD, &inclusive));
+
+  loom_op_t* last_rank_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_subi_build(
+      state.builder, 0, state.cluster_active_count, state.one_mask,
+      state.mask_type, state.location, &last_rank_op));
+  loom_op_t* valid_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_cmpi_build(
+      state.builder, LOOM_SCALAR_CMPI_PREDICATE_UGT, state.cluster_active_count,
+      state.zero_mask, state.location, &valid_op));
+  loom_value_id_t reduction = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t reduction_valid = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_shuffle(
+      &state, inclusive, loom_scalar_subi_result(last_rank_op),
+      loom_scalar_cmpi_result(valid_op), &reduction, &reduction_valid));
+  (void)reduction_valid;
+
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, &reduction, 1, checkpoint));
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_replace_all_uses_and_erase(rewriter, op, &reduction, 1));
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
+  };
+  return iree_ok_status();
+}
+
 iree_status_t loom_kernel_target_legalize_subgroup_scan(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -736,10 +898,8 @@ iree_status_t loom_kernel_target_legalize_subgroup_scan(
     return iree_ok_status();
   }
   const loom_combining_kind_t kind = loom_kernel_subgroup_scan_kind(op);
-  // Ordinary arithmetic support does not establish source-format preservation.
-  // Extrema retain their fixed semantics independently of arithmetic mode.
-  if (loom_kernel_subgroup_scan_math(op) != 0 &&
-      (kind == LOOM_COMBINING_KIND_ADDF || kind == LOOM_COMBINING_KIND_MULF)) {
+  if (!loom_kernel_scan_math_is_supported(kind,
+                                          loom_kernel_subgroup_scan_math(op))) {
     return iree_ok_status();
   }
   loom_kernel_scan_cluster_t cluster = {0};
@@ -748,56 +908,19 @@ iree_status_t loom_kernel_target_legalize_subgroup_scan(
   if (!has_cluster) {
     return iree_ok_status();
   }
-  const loom_target_bundle_t* bundle =
-      loom_target_legalization_context_bundle(context);
-  const uint32_t subgroup_size = bundle->snapshot->subgroup_size;
-
   loom_rewriter_t* rewriter = context->rewriter;
   loom_builder_set_before(&rewriter->builder, op);
   const loom_value_id_t checkpoint = loom_rewriter_value_checkpoint(rewriter);
   const loom_value_id_t source_value = loom_kernel_subgroup_scan_value(op);
-  const loom_type_t result_type =
-      loom_module_value_type(context->module, source_value);
-  loom_kernel_scan_state_t state = {
-      .builder = &rewriter->builder,
-      .location = op->location,
-      .result_type = result_type,
-      .i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1),
-      .i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32),
-      .mask_type = loom_type_scalar(subgroup_size <= 32 ? LOOM_SCALAR_TYPE_I32
-                                                        : LOOM_SCALAR_TYPE_I64),
-      .kind = kind,
-      .subgroup_size = subgroup_size,
-      .mask_bit_count = subgroup_size <= 32 ? 32u : 64u,
-  };
-  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_integer_constant(
-      &state, state.mask_type, 0, &state.zero_mask));
-  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_integer_constant(
-      &state, state.mask_type, 1, &state.one_mask));
-  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_integer_constant(
-      &state, state.i32_type, subgroup_size, &state.subgroup_size_i32));
-  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_cluster_state(&state, &cluster));
-  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_selector_constants(&state));
+  loom_kernel_scan_state_t state;
+  IREE_RETURN_IF_ERROR(loom_kernel_scan_state_initialize(
+      context, op, source_value, kind, &cluster, &state));
 
   const loom_kernel_subgroup_scan_direction_t direction =
       loom_kernel_subgroup_scan_direction(op);
-  loom_value_id_t accumulator = source_value;
-  for (uint32_t distance = 1; distance < cluster.size; distance <<= 1) {
-    loom_value_id_t source_rank = LOOM_VALUE_ID_INVALID;
-    loom_value_id_t source_rank_valid = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_kernel_scan_build_source_rank(
-        &state, direction, distance, &source_rank, &source_rank_valid));
-    loom_value_id_t peer = LOOM_VALUE_ID_INVALID;
-    loom_value_id_t peer_valid = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_kernel_scan_build_shuffle(&state, accumulator, source_rank,
-                                       source_rank_valid, &peer, &peer_valid));
-    loom_value_id_t combined = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_kernel_scan_build_combine(&state, peer, accumulator, &combined));
-    IREE_RETURN_IF_ERROR(loom_kernel_scan_build_select(
-        &state, peer_valid, combined, accumulator, result_type, &accumulator));
-  }
+  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_kernel_scan_build_inclusive(
+      &state, source_value, &cluster, direction, &accumulator));
 
   if (loom_kernel_subgroup_scan_mode(op) ==
       LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE) {
@@ -813,7 +936,7 @@ iree_status_t loom_kernel_target_legalize_subgroup_scan(
     loom_value_id_t seed = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_kernel_scan_build_seed(&state, &seed));
     IREE_RETURN_IF_ERROR(loom_kernel_scan_build_select(
-        &state, shifted_valid, shifted, seed, result_type, &accumulator));
+        &state, shifted_valid, shifted, seed, state.result_type, &accumulator));
   }
 
   IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
@@ -834,6 +957,14 @@ static const loom_target_legalizer_rule_t kKernelLegalizerRules[] = {
             LOOM_SCALAR_TYPE_SET_INTEGER | LOOM_SCALAR_TYPE_SET_FLOAT,
         .match = loom_kernel_match_subgroup_shuffle,
         .legalize = loom_kernel_target_legalize_subgroup_shuffle,
+    },
+    {
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
+        .root_kind = LOOM_OP_KERNEL_SUBGROUP_REDUCE,
+        .first_operand_element_types =
+            LOOM_SCALAR_TYPE_SET_INTEGER | LOOM_SCALAR_TYPE_SET_FLOAT,
+        .match = loom_kernel_match_subgroup_reduce,
+        .legalize = loom_kernel_target_legalize_subgroup_reduce,
     },
     {
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_REJECTION,
