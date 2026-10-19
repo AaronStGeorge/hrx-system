@@ -20,18 +20,15 @@ iree_status_t loom_tooling_input_admit_loomc_module(
   const iree_string_view_t physical_identifier =
       loom_tooling_file_path_is_stdio(options->path) ? IREE_SV("<stdin>")
                                                      : options->path;
-  const loom_input_provider_t* provider = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_input_provider_select(options->providers, options->input.format,
-                                 physical_identifier, &provider));
+  const iree_string_view_t format = options->input.format;
   iree_string_view_t provider_options = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_input_options_for_provider(
-      options->input.provider_options, provider->name, &provider_options));
+      options->input.provider_options, format, &provider_options));
 
   loomc_source_format_t source_format = LOOMC_SOURCE_FORMAT_UNKNOWN;
-  if (provider == &loom_input_text_provider) {
+  if (iree_string_view_equal(format, loom_input_text_format.name)) {
     source_format = LOOMC_SOURCE_FORMAT_TEXT;
-  } else if (provider == &loom_input_bytecode_provider) {
+  } else if (iree_string_view_equal(format, loom_input_bytecode_format.name)) {
     source_format = LOOMC_SOURCE_FORMAT_BYTECODE;
   }
   const loomc_source_options_t source_options = {
@@ -48,12 +45,12 @@ iree_status_t loom_tooling_input_admit_loomc_module(
       &source_options, loomc_allocator_from_iree(host_allocator), &source)));
 
   iree_status_t status = iree_ok_status();
-  if (provider == &loom_input_text_provider ||
-      provider == &loom_input_bytecode_provider) {
+  if (iree_string_view_equal(format, loom_input_text_format.name) ||
+      iree_string_view_equal(format, loom_input_bytecode_format.name)) {
     if (!iree_string_view_is_empty(provider_options)) {
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "%.*s input does not accept input options",
-                                (int)provider->name.size, provider->name.data);
+                                (int)format.size, format.data);
     }
     iree_string_view_t logical_identifier = physical_identifier;
     char* logical_identifier_storage = NULL;
@@ -76,14 +73,14 @@ iree_status_t loom_tooling_input_admit_loomc_module(
     iree_allocator_free(host_allocator, logical_identifier_storage);
   } else if (options->import != NULL) {
     status = options->import(
-        options->import_user_data, provider->name, provider_options,
+        options->import_user_data, format, provider_options,
         &options->input.source_path_options, context, workspace, source,
         block_pool, host_allocator, out_module, out_result);
   } else {
     status = iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "input format '%.*s' has no LoomC importer linked into this runner",
-        (int)provider->name.size, provider->name.data);
+        (int)format.size, format.data);
   }
   loomc_source_release(source);
   return status;

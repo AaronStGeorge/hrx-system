@@ -404,8 +404,7 @@ iree_status_t iree_benchmark_loom_run_file(
     }
   }
   if (iree_status_is_ok(status)) {
-    const loom_tooling_loomc_input_options_t admission_options = {
-        .providers = options->configuration->input_providers,
+    loom_tooling_loomc_input_options_t admission_options = {
         .input = benchmark_options->input,
         .path = input_path,
         .source = source,
@@ -413,9 +412,16 @@ iree_status_t iree_benchmark_loom_run_file(
         .import_user_data = options->configuration->import_user_data,
     };
     loomc_result_t* result = NULL;
-    status = loom_tooling_input_admit_loomc_module(
-        &admission_options, compiler_context, compiler_workspace, &block_pool,
-        &module, &result, allocator);
+    const loom_input_provider_t* provider = NULL;
+    status = loom_input_provider_select(options->configuration->input_providers,
+                                        admission_options.input.format,
+                                        admission_options.path, &provider);
+    if (iree_status_is_ok(status)) {
+      admission_options.input.format = provider->format->name;
+      status = loom_tooling_input_admit_loomc_module(
+          &admission_options, compiler_context, compiler_workspace, &block_pool,
+          &module, &result, allocator);
+    }
     if (iree_status_is_ok(status)) {
       status = iree_benchmark_loom_diagnostic_capture_loomc_result(
           &source_diagnostics, result);

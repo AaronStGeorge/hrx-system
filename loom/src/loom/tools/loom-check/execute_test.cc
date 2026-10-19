@@ -227,9 +227,13 @@ iree_status_t TestForeignInputNativeLoad(const loom_input_request_t* request,
                           "foreign input bypassed public admission");
 }
 
-const loom_input_provider_t kTestForeignInputProvider = {
+const loom_input_format_t kTestForeignInputFormat = {
     .name = IREE_SVL("test-foreign"),
     .suffixes = {},
+};
+
+const loom_input_provider_t kTestForeignInputProvider = {
+    .format = &kTestForeignInputFormat,
     .load = TestForeignInputNativeLoad,
 };
 
@@ -254,7 +258,7 @@ iree_status_t TestForeignInputImport(
   TestForeignImportState* state =
       static_cast<TestForeignImportState*>(user_data);
   ++state->import_count;
-  if (!iree_string_view_equal(format, kTestForeignInputProvider.name) ||
+  if (!iree_string_view_equal(format, kTestForeignInputFormat.name) ||
       !iree_string_view_is_empty(input_options)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unexpected foreign input request");

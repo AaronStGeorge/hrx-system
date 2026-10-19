@@ -444,13 +444,13 @@ static iree_status_t loom_link_cli_read_input(
   loom_input_request_t request = {
       .source = loom_tooling_file_contents_string_view(out_input->contents),
       .path = out_input->filename,
-      .format = provider->name,
+      .format = provider->format->name,
       .parse_options = {.diagnostic_sink = {.fn = loom_diagnostic_stderr_sink},
                         .max_errors = 20},
       .source_path_options = options.source_path_options,
   };
   IREE_RETURN_IF_ERROR(loom_input_options_for_provider(
-      options.provider_options, provider->name, &request.options));
+      options.provider_options, provider->format->name, &request.options));
   const loom_target_low_descriptor_registry_t low_registry =
       loom_target_environment_low_descriptor_registry(
           loom_configured_target_environment());

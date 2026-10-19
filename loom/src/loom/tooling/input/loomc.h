@@ -11,7 +11,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
-#include "loom/tooling/input/input.h"
+#include "loom/tooling/input/format.h"
 #include "loomc/module.h"
 
 #ifdef __cplusplus
@@ -32,9 +32,8 @@ typedef iree_status_t (*loom_tooling_input_import_loomc_fn_t)(
 // One command-line source admission request. All views and providers are
 // borrowed until admission returns.
 typedef struct loom_tooling_loomc_input_options_t {
-  // Optional source providers linked by the final application.
-  loom_input_provider_list_t providers;
-  // Source format, provider options, and diagnostic path remapping.
+  // Resolved source format, provider options, and diagnostic path remapping.
+  // input.format is the nonempty name returned by format/provider selection.
   loom_input_options_t input;
   // Physical path used for provider selection and relative include lookup.
   iree_string_view_t path;

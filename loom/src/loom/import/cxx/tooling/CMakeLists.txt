@@ -65,15 +65,37 @@ iree_c_embed_data(
 if(LOOM_IMPORT_CXX)
 loom_cc_library(
   NAME
+    options
+  HDRS
+    "options.h"
+  SRCS
+    "options.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    iree::base::internal::path
+    loom::binding::c::import::cxx
+    loom::binding::c::loomc
+    loom::tooling::input::format
+    loom::tooling::io::file
+  PUBLIC
+)
+endif()
+
+if(LOOM_IMPORT_CXX)
+loom_cc_library(
+  NAME
     input
   HDRS
     "input.h"
   SRCS
     "input.c"
   DEPS
+    ::options
     iree::base
     iree::base::internal::arena
     iree::base::internal::path
+    loom::binding::c::loomc
     loom::import::cxx
     loom::import::cxx::source::options
     loom::tooling::input
@@ -91,7 +113,7 @@ loom_cc_library(
   SRCS
     "loomc_input.c"
   DEPS
-    ::input
+    ::options
     iree::base
     iree::base::internal::arena
     loom::binding::c::import::cxx

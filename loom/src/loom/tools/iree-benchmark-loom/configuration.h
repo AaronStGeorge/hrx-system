@@ -10,6 +10,7 @@
 #define LOOM_TOOLS_IREE_BENCHMARK_LOOM_CONFIGURATION_H_
 
 #include "iree/base/api.h"
+#include "loom/tooling/input/input.h"
 #include "loom/tooling/input/loomc.h"
 #include "loom/tooling/testbench/compiled_provider.h"
 #include "loom/tooling/testbench/requirements.h"

@@ -751,17 +751,23 @@ int iree_run_loom_main(int argc, char** argv,
         loom_tooling_read_input_file(input_path, allocator, &input_contents);
   }
   if (iree_status_is_ok(status)) {
-    const loom_tooling_loomc_input_options_t admission_options = {
-        .providers = configuration->input_providers,
+    loom_tooling_loomc_input_options_t admission_options = {
         .input = input_options,
         .path = input_path,
         .source = loom_tooling_file_contents_string_view(input_contents),
         .import = configuration->import,
         .import_user_data = configuration->import_user_data,
     };
-    status = loom_tooling_input_admit_loomc_module(&admission_options, context,
-                                                   workspace, &block_pool,
-                                                   &module, &result, allocator);
+    const loom_input_provider_t* provider = NULL;
+    status = loom_input_provider_select(configuration->input_providers,
+                                        admission_options.input.format,
+                                        admission_options.path, &provider);
+    if (iree_status_is_ok(status)) {
+      admission_options.input.format = provider->format->name;
+      status = loom_tooling_input_admit_loomc_module(
+          &admission_options, context, workspace, &block_pool, &module, &result,
+          allocator);
+    }
   }
   if (iree_status_is_ok(status)) {
     bool admitted = false;

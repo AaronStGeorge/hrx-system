@@ -1,18 +1,20 @@
 # Source input providers
 
-The input layer admits source text into an ordinary Loom module and retains the
-source snapshots needed by later diagnostics. `loom-check`, `loom-link`, and
-the execution tools use it before their existing compiler and runtime paths.
-The frontend finishes and releases its AST before those paths run;
-`loom_input_module_t` keeps the module, physical-to-logical source association,
-and exact admitted source bytes through that boundary.
+The input layer separates source format selection from compiler invocation.
+`format.h` owns filename suffixes, explicit language names, and per-language
+option selection. These immutable descriptors have no loader callbacks, so a
+command-line client can select C++ without linking a second compiler into its
+executable.
 
-`loom_input_text_provider` is builtin. Optional importers own immutable
-`loom_input_provider_t` descriptors beside their import implementation. Each
-descriptor names its format and filename suffixes and invokes its native
-frontend. The final binary supplies its linked provider list independently of
-target or emit providers. Generic input and check libraries have no dependency
-on an optional importer.
+`loom_tooling_input_admit_loomc_module` receives the selected format and admits
+text, bytecode, or an optional importer through LoomC. Returned modules and
+results retain their source identities and bytes after frontend teardown.
+
+Native compiler tools use `loom_input_provider_t` to pair the same format
+metadata with a native loader. `loom_input_module_t` retains the native module,
+physical-to-logical source association, and exact admitted bytes. Optional
+importers own their metadata and adapters beside their implementation; final
+binaries compose the enabled formats independently of target or emit providers.
 
 A provider receives borrowed source bytes, a physical input path, language
 options, the parser diagnostic sink, and a source-capture callback. It captures

@@ -55,6 +55,7 @@ loom_cc_library(
     loom::tooling::config::input
     loom::tooling::execution::hal::scenario_profile
     loom::tooling::execution::hal::testbench_actual
+    loom::tooling::input
     loom::tooling::input::flags
     loom::tooling::input::loomc
     loom::tooling::io::file

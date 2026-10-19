@@ -19,6 +19,9 @@ extern "C" {
 #define LOOM_TOOLING_INPUT_LOOMC_CONFIGURED_HAVE_CXX 0
 #endif  // LOOM_TOOLING_INPUT_LOOMC_CONFIGURED_HAVE_CXX
 
+// Returns configured foreign-language metadata without native loader callbacks.
+loom_input_format_list_t loom_configured_input_loomc_formats(void);
+
 // Returns the build-configured foreign-source importer, or NULL when none is
 // linked. Final applications choose this composition; shared tooling accepts
 // the optional callback.

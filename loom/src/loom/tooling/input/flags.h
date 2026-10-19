@@ -7,7 +7,7 @@
 #ifndef LOOM_TOOLING_INPUT_FLAGS_H_
 #define LOOM_TOOLING_INPUT_FLAGS_H_
 
-#include "loom/tooling/input/input.h"
+#include "loom/tooling/input/format.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -8,34 +8,9 @@
 
 #include <string.h>
 
-#include "iree/base/internal/path.h"
 #include "loom/error/source.h"
 #include "loom/format/bytecode/reader.h"
 #include "loom/ir/module.h"
-
-iree_status_t loom_input_options_for_provider(iree_string_view_list_t entries,
-                                              iree_string_view_t provider,
-                                              iree_string_view_t* out_options) {
-  *out_options = iree_string_view_empty();
-  bool matched = false;
-  for (iree_host_size_t i = 0; i < entries.count; ++i) {
-    iree_string_view_t name, options;
-    if (iree_string_view_split(entries.values[i], ':', &name, &options) < 1) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "input options require 'format:options'");
-    }
-    if (iree_string_view_equal(name, provider)) {
-      if (matched) {
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "duplicate input options for '%.*s'",
-                                (int)provider.size, provider.data);
-      }
-      matched = true;
-      *out_options = options;
-    }
-  }
-  return iree_ok_status();
-}
 
 static iree_status_t loom_input_text_load(const loom_input_request_t* request,
                                           loom_input_source_capture_t capture,
@@ -51,15 +26,8 @@ static iree_status_t loom_input_text_load(const loom_input_request_t* request,
                          &request->parse_options, out_module);
 }
 
-static const iree_string_view_t loom_input_text_suffixes[] = {
-    IREE_SVL(".loom"),
-    IREE_SVL(".loom-test"),
-};
-
 const loom_input_provider_t loom_input_text_provider = {
-    .name = IREE_SVL("loom"),
-    .suffixes = {IREE_ARRAYSIZE(loom_input_text_suffixes),
-                 loom_input_text_suffixes},
+    .format = &loom_input_text_format,
     .load = loom_input_text_load,
 };
 
@@ -83,53 +51,29 @@ static iree_status_t loom_input_bytecode_load(
       out_module, host_allocator);
 }
 
-static const iree_string_view_t loom_input_bytecode_suffixes[] = {
-    IREE_SVL(".loombc"),
-};
-
 const loom_input_provider_t loom_input_bytecode_provider = {
-    .name = IREE_SVL("loombc"),
-    .suffixes = {IREE_ARRAYSIZE(loom_input_bytecode_suffixes),
-                 loom_input_bytecode_suffixes},
+    .format = &loom_input_bytecode_format,
     .load = loom_input_bytecode_load,
 };
 
 iree_status_t loom_input_provider_select(
-    loom_input_provider_list_t providers, iree_string_view_t format,
+    loom_input_provider_list_t providers, iree_string_view_t name,
     iree_string_view_t path, const loom_input_provider_t** out_provider) {
   *out_provider = NULL;
-  const loom_input_provider_t* const builtin_providers[] = {
-      &loom_input_text_provider, &loom_input_bytecode_provider};
-  const iree_host_size_t builtin_count = IREE_ARRAYSIZE(builtin_providers);
-  for (iree_host_size_t i = 0; i < builtin_count + providers.count; ++i) {
-    const loom_input_provider_t* provider =
-        i < builtin_count ? builtin_providers[i]
-                          : providers.values[i - builtin_count];
-    if (!iree_string_view_is_empty(format)) {
-      if (iree_string_view_equal(format, provider->name)) {
-        *out_provider = provider;
-        return iree_ok_status();
-      }
-    } else {
-      for (iree_host_size_t j = 0; j < provider->suffixes.count; ++j) {
-        if (iree_string_view_ends_with(path, provider->suffixes.values[j])) {
-          *out_provider = provider;
-          return iree_ok_status();
-        }
-      }
-    }
+  // The final application supplies this small, immutable provider list.
+  const loom_input_format_t** formats =
+      iree_alloca(providers.count * sizeof(*formats));
+  for (iree_host_size_t i = 0; i < providers.count; ++i) {
+    formats[i] = providers.values[i]->format;
   }
-  if (!iree_string_view_is_empty(format)) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "input format '%.*s' is not linked into this tool",
-                            (int)format.size, format.data);
-  }
-  if (!iree_string_view_is_empty(iree_file_path_extension(path))) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "no linked input provider accepts '%.*s'",
-                            (int)path.size, path.data);
-  }
-  *out_provider = &loom_input_text_provider;
+  const loom_input_format_t* format = NULL;
+  iree_host_size_t ordinal = 0;
+  IREE_RETURN_IF_ERROR(loom_input_format_select(
+      (loom_input_format_list_t){formats, providers.count}, name, path, &format,
+      &ordinal));
+  *out_provider = ordinal == 0   ? &loom_input_text_provider
+                  : ordinal == 1 ? &loom_input_bytecode_provider
+                                 : providers.values[ordinal - 2];
   return iree_ok_status();
 }
 
