@@ -21,6 +21,7 @@
 #include "iree/hal/drivers/amd/gpu/image/hip_images.h"
 #include "iree/hal/drivers/amd/status.h"
 #include "iree/hal/slab_pool.h"
+#include "iree/hal/utils/statistics_sink.h"
 
 namespace {
 
@@ -29,6 +30,7 @@ enum class BindingMode { kDirect, kTable };
 enum class Program { kDispatch, kTransfers };
 enum class Barriers { kDefault, kExplicitEmpty };
 enum class Timing { kSubmit, kCompletion, kSampledSubmit };
+enum class Capture { kNone, kMetadata, kActive };
 
 // The allocator observes complete asynchronous device teardown so each row
 // starts after the previous row's workers and native owners have joined. Warm
@@ -51,6 +53,7 @@ class NativeQueue {
     iree_async_frontier_tracker_release(tracker_);
     iree_async_proactor_pool_release(proactors_);
     iree_hal_amd_fabric_release(fabric_);
+    iree_hal_profile_statistics_sink_release(capture_);
   }
 
   iree_status_t Initialize(size_t producer_count = 1,
@@ -201,7 +204,8 @@ class NativeQueue {
   // Includes public creation, validation, native recording, and finalization.
   // Recorded dispatches use the same kernel and dependency shape as Submit.
   iree_status_t Record(uint32_t count, BindingMode bindings, Program program,
-                       iree_hal_command_buffer_t** out_recording) {
+                       iree_hal_command_buffer_t** out_recording,
+                       iree_hal_command_buffer_mode_t mode = 0) {
     *out_recording = nullptr;
     const auto& lane = lanes_[0];
     const bool transfers = program == Program::kTransfers;
@@ -216,7 +220,7 @@ class NativeQueue {
                   : IREE_HAL_ACCESS_SCOPE_DISPATCH_READ;
     iree_hal_command_buffer_t* recording = nullptr;
     IREE_RETURN_IF_ERROR(iree_hal_command_buffer_create(
-        iree_hal_queue_family(queue_), IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+        iree_hal_queue_family(queue_), mode,
         transfers ? IREE_HAL_COMMAND_CATEGORY_TRANSFER
                   : IREE_HAL_COMMAND_CATEGORY_DISPATCH,
         bindings == BindingMode::kTable ? 1 : 0, &recording));
@@ -294,6 +298,28 @@ class NativeQueue {
     }
     return status;
   }
+
+  iree_status_t BeginCapture() {
+    IREE_RETURN_IF_ERROR(iree_hal_profile_statistics_sink_create(
+        iree_allocator_system(), &capture_));
+    const iree_hal_device_profiling_options_t options = {
+        .data_families = IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS |
+                         IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA,
+        .sink = iree_hal_profile_statistics_sink_base(capture_),
+    };
+    return iree_hal_device_profiling_begin(device_, &options);
+  }
+
+  iree_status_t FlushCapture() {
+    IREE_RETURN_IF_ERROR(iree_hal_device_profiling_flush(device_));
+    if (iree_hal_profile_statistics_sink_dropped_record_count(capture_)) {
+      return iree_make_status(IREE_STATUS_DATA_LOSS,
+                              "benchmark capture dropped dispatch records");
+    }
+    return iree_ok_status();
+  }
+
+  iree_status_t EndCapture() { return iree_hal_device_profiling_end(device_); }
 
   iree_status_t Execute(iree_hal_command_buffer_t* recording,
                         BindingMode bindings) {
@@ -512,6 +538,8 @@ class NativeQueue {
   iree_hal_queue_t* queue_ = nullptr;
   // Explicit host-readable storage for the kernel result.
   iree_hal_pool_t* pool_ = nullptr;
+  // Caller-owned aggregate consumer, flushed outside measured queue intervals.
+  iree_hal_profile_statistics_sink_t* capture_ = nullptr;
   // Independent caller-owned streams sharing the exact same HAL/native queue.
   // Separate module globals and result buffers prevent inter-stream data races.
   struct alignas(64) Lane {
@@ -677,7 +705,8 @@ BENCHMARK_CAPTURE(BM_Record, TransfersTable, BindingMode::kTable,
 // idle/wake costs cannot be mistaken for steady submission costs. No row
 // measures calibrated time to first workgroup.
 static void BM_Execute(benchmark::State& state, BindingMode bindings,
-                       Timing timing, Program program, uint32_t burst_count) {
+                       Timing timing, Program program, uint32_t burst_count,
+                       Capture capture) {
   NativeQueue queue;
   iree::Status status = queue.Initialize();
   if (!status.ok()) {
@@ -686,13 +715,23 @@ static void BM_Execute(benchmark::State& state, BindingMode bindings,
   }
   const uint32_t count = state.range(0);
   iree_hal_command_buffer_t* recording = nullptr;
-  IREE_CHECK_OK(queue.Record(count, bindings, program, &recording));
+  IREE_CHECK_OK(queue.Record(
+      count, bindings, program, &recording,
+      capture == Capture::kNone
+          ? 0
+          : IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_DISPATCH_METADATA));
+  if (capture == Capture::kActive) {
+    IREE_CHECK_OK(queue.BeginCapture());
+  }
   for (uint32_t i = 0; i < 2; ++i) {
     for (uint32_t j = 0; j < burst_count; ++j) {
       IREE_CHECK_OK(queue.Execute(recording, bindings));
     }
     IREE_CHECK_OK(queue.Complete(0));
     IREE_CHECK_OK(queue.CheckOutput(0));
+  }
+  if (capture == Capture::kActive) {
+    IREE_CHECK_OK(queue.FlushCapture());
   }
   const uint64_t allocations_before = queue.allocation_count();
   std::vector<iree_duration_t> samples;
@@ -727,6 +766,11 @@ static void BM_Execute(benchmark::State& state, BindingMode bindings,
       state.PauseTiming();
     }
     IREE_CHECK_OK(queue.CheckOutput(0));
+    if (capture == Capture::kActive) {
+      // Sink export is caller-driven and separate from submission/completion.
+      // Flush each bounded batch so this measures retained samples, not drops.
+      IREE_CHECK_OK(queue.FlushCapture());
+    }
     state.ResumeTiming();
   }
   state.SetItemsProcessed(state.iterations() * count * burst_count);
@@ -750,10 +794,13 @@ static void BM_Execute(benchmark::State& state, BindingMode bindings,
         following_samples[following_samples.size() * 99 / 100];
   }
   iree_hal_command_buffer_release(recording);
+  if (capture == Capture::kActive) {
+    IREE_CHECK_OK(queue.EndCapture());
+  }
 }
 #define EXECUTE_CASE(name, bindings, timing, program)                        \
   BENCHMARK_CAPTURE(BM_Execute, name, BindingMode::bindings, Timing::timing, \
-                    Program::program, 1)                                     \
+                    Program::program, 1, Capture::kNone)                     \
       ->Arg(1)                                                               \
       ->Arg(1000)                                                            \
       ->Arg(8000)                                                            \
@@ -777,7 +824,7 @@ EXECUTE_CASE(TransfersTableLatency, kTable, kSampledSubmit, kTransfers);
 // host retirement. Fixed ten-iteration windows bound the largest GPU workload.
 #define EXECUTE_BURST_CASE(name, bindings, timing)                           \
   BENCHMARK_CAPTURE(BM_Execute, name, BindingMode::bindings, Timing::timing, \
-                    Program::kDispatch, 8)                                   \
+                    Program::kDispatch, 8, Capture::kNone)                   \
       ->Arg(1)                                                               \
       ->Arg(1000)                                                            \
       ->Arg(8000)                                                            \
@@ -790,6 +837,25 @@ EXECUTE_BURST_CASE(TableBurstCompletion, kTable, kCompletion);
 EXECUTE_BURST_CASE(DirectBurstLatency, kDirect, kSampledSubmit);
 EXECUTE_BURST_CASE(TableBurstLatency, kTable, kSampledSubmit);
 #undef EXECUTE_BURST_CASE
+
+// Identical resident programs distinguish ordinary execution, retained but
+// disabled packet regions, and active device samples. The caller upload is
+// constant-sized in every row; device work scales with dispatch count.
+#define PROFILE_CASE(name, timing, capture)                                \
+  BENCHMARK_CAPTURE(BM_Execute, name, BindingMode::kTable, Timing::timing, \
+                    Program::kDispatch, 1, Capture::capture)               \
+      ->Arg(1)                                                             \
+      ->Arg(128)                                                           \
+      ->Arg(1000)                                                          \
+      ->Iterations(50)                                                     \
+      ->UseRealTime()
+PROFILE_CASE(ProfileBaselineSubmit, kSubmit, kNone);
+PROFILE_CASE(ProfileBaselineCompletion, kCompletion, kNone);
+PROFILE_CASE(ProfileMetadataSubmit, kSubmit, kMetadata);
+PROFILE_CASE(ProfileMetadataCompletion, kCompletion, kMetadata);
+PROFILE_CASE(ProfileCaptureSubmit, kSubmit, kActive);
+PROFILE_CASE(ProfileCaptureCompletion, kCompletion, kActive);
+#undef PROFILE_CASE
 
 static void BM_Transfer(benchmark::State& state,
                         iree_hal_transfer_operation_type_t type,

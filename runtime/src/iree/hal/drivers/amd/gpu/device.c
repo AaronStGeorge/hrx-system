@@ -1140,9 +1140,17 @@ static iree_status_t iree_hal_amd_gpu_device_profiling_begin(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "GPU profiling session is already active");
   }
+  amdf_observation_clock_info_t clock = {0};
+  if (options->data_families & IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS) {
+    IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
+        device->context->gpu->device_query_queue_clock_info(
+            device->context->device, device->memory.family.queue_family_ordinal,
+            &clock),
+        "device_query_queue_clock_info"));
+  }
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_profile_begin(
       options, ++device->next_profile_session_id, device->queue_count,
-      device->host_allocator, &device->profile));
+      clock.frequency_hz, device->host_allocator, &device->profile));
   device->memory.allocations.profile = device->profile;
   device->memory.mappings.profile = device->profile;
   for (uint32_t i = 0; i < device->queue_count; ++i) {

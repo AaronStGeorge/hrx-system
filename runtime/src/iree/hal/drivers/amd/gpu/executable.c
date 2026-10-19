@@ -72,8 +72,10 @@ typedef struct iree_hal_amd_gpu_executable_t {
   const iree_hal_amd_gpu_source_context_t* source;
   // Contracts indexed by READ/WRITE permissions; only used classes exist.
   iree_hal_memory_contract_t* contracts[4];
-  // Cold global-view publication lock; never acquired during dispatch.
+  // Cold lazy view/metadata publication lock; never acquired by native queues.
   iree_slim_mutex_t global_mutex;
+  // Optional independently owned host profile reflection, published once.
+  iree_atomic_intptr_t profile_metadata;
   // Lazy executable-owned views in image symbol order.
   iree_hal_buffer_t** globals;
   // Presecured native release; context teardown joins its terminal callback.
@@ -90,6 +92,8 @@ static void iree_hal_amd_gpu_executable_release_metadata(
     iree_hal_buffer_release(executable->globals[i]);
   }
   iree_slim_mutex_deinitialize(&executable->global_mutex);
+  iree_hal_amd_gpu_profile_executable_release((void*)iree_atomic_load(
+      &executable->profile_metadata, iree_memory_order_relaxed));
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(executable->contracts); ++i) {
     iree_hal_memory_contract_release(executable->contracts[i]);
   }
@@ -901,6 +905,32 @@ iree_status_t iree_hal_amd_gpu_executable_lookup_pm4(
 const uint64_t* iree_hal_amd_gpu_executable_queue_image_addresses(
     iree_hal_executable_t* executable) {
   return ((iree_hal_amd_gpu_executable_t*)executable)->queue_image_addresses;
+}
+
+iree_status_t iree_hal_amd_gpu_executable_profile_metadata(
+    iree_hal_executable_t* base,
+    iree_hal_amd_gpu_profile_executable_t** out_metadata) {
+  iree_hal_amd_gpu_executable_t* executable = (void*)base;
+  *out_metadata = (void*)iree_atomic_load(&executable->profile_metadata,
+                                          iree_memory_order_acquire);
+  if (*out_metadata) {
+    return iree_ok_status();
+  }
+  iree_slim_mutex_lock(&executable->global_mutex);
+  iree_hal_amd_gpu_profile_executable_t* metadata = (void*)iree_atomic_load(
+      &executable->profile_metadata, iree_memory_order_relaxed);
+  iree_status_t status = iree_ok_status();
+  if (!metadata) {
+    status = iree_hal_amd_gpu_profile_executable_create(
+        base, executable->host_allocator, &metadata);
+    if (iree_status_is_ok(status)) {
+      iree_atomic_store(&executable->profile_metadata, (intptr_t)metadata,
+                        iree_memory_order_release);
+    }
+  }
+  iree_slim_mutex_unlock(&executable->global_mutex);
+  *out_metadata = metadata;
+  return status;
 }
 
 static iree_host_size_t iree_hal_amd_gpu_executable_function_count(

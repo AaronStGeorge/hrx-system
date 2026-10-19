@@ -7,6 +7,7 @@
 #ifndef IREE_HAL_DRIVERS_AMD_GPU_QUEUE_PM4_COMMAND_BUFFER_H_
 #define IREE_HAL_DRIVERS_AMD_GPU_QUEUE_PM4_COMMAND_BUFFER_H_
 
+#include "iree/hal/drivers/amd/gpu/profile.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/barrier.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/program.h"
 
@@ -45,6 +46,9 @@ typedef struct iree_hal_amd_gpu_pm4_command_program_t {
   uint32_t scratch_wave_byte_length;
   // Encoded payload operation count used only by optional queue profiling.
   uint32_t operation_count;
+  // Optional host-only dispatch attribution, independently retainable by a
+  // sink.
+  iree_hal_amd_gpu_profile_commands_t* profile;
   // Asynchronous native copies still requiring a join at program exit.
   bool pending_dma;
 } iree_hal_amd_gpu_pm4_command_program_t;
@@ -102,7 +106,7 @@ void iree_hal_amd_gpu_pm4_command_invocation_deinitialize(
 iree_status_t iree_hal_amd_gpu_pm4_command_invocation_write(
     const iree_hal_amd_gpu_pm4_command_invocation_t* invocation,
     uint32_t queue_ordinal, uint64_t dispatch_id, uint64_t continuation,
-    void* upload);
+    uint64_t profile_address, void* upload);
 
 #ifdef __cplusplus
 }  // extern "C"

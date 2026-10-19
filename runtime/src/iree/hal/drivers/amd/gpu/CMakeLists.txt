@@ -94,6 +94,7 @@ iree_cc_library(
     ::context
     ::feedback
     ::kernarg
+    ::profile
     ::source_context
     ::tsan
     amdf::headers

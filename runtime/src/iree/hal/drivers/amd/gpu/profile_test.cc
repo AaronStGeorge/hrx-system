@@ -6,8 +6,12 @@
 
 #include "iree/hal/drivers/amd/gpu/profile.h"
 
+#include <algorithm>
 #include <array>
+#include <atomic>
+#include <cstring>
 #include <functional>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -25,6 +29,16 @@ struct ProfileSink {
   std::vector<iree_hal_profile_device_record_t> devices;
   // Successful queue metadata records.
   std::vector<iree_hal_profile_queue_record_t> queues;
+  // Completed device samples copied before the producer reuses its storage.
+  std::vector<iree_hal_profile_dispatch_event_t> dispatches;
+  // Host-only identities emitted before referring dispatch records.
+  std::vector<uint64_t> executables;
+  // Reflected function names, including names after the source is destroyed.
+  std::vector<std::string> functions;
+  // Host recording identities retained independently of native IBs.
+  std::vector<uint64_t> commands;
+  // Metadata loss with an unknown number of missing unique executables.
+  size_t incomplete_metadata = 0;
   // Optional producer work during a sink write, exercising lock separation.
   std::function<void()> during_write;
   // Successfully reported drops across all queue streams.
@@ -91,17 +105,106 @@ struct ProfileSink {
         auto* record = reinterpret_cast<const iree_hal_profile_queue_record_t*>(
             spans[i].data);
         sink.queues.push_back(*record);
+      } else if (iree_string_view_equal(
+                     metadata->content_type,
+                     IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLES)) {
+        auto* record =
+            reinterpret_cast<const iree_hal_profile_executable_record_t*>(
+                spans[i].data);
+        sink.executables.push_back(record->executable_id);
+      } else if (iree_string_view_equal(
+                     metadata->content_type,
+                     IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLE_FUNCTIONS)) {
+        size_t offset = 0;
+        while (offset < spans[i].data_length) {
+          iree_hal_profile_executable_function_record_t record;
+          std::memcpy(&record, spans[i].data + offset, sizeof(record));
+          sink.functions.emplace_back(
+              reinterpret_cast<const char*>(spans[i].data + offset +
+                                            sizeof(record)),
+              record.name_length);
+          offset += record.record_length;
+        }
+      } else if (iree_string_view_equal(
+                     metadata->content_type,
+                     IREE_HAL_PROFILE_CONTENT_TYPE_COMMAND_BUFFERS)) {
+        auto* record =
+            reinterpret_cast<const iree_hal_profile_command_buffer_record_t*>(
+                spans[i].data);
+        sink.commands.push_back(record->command_buffer_id);
+      } else if (iree_string_view_equal(
+                     metadata->content_type,
+                     IREE_HAL_PROFILE_CONTENT_TYPE_DISPATCH_EVENTS)) {
+        auto* records =
+            reinterpret_cast<const iree_hal_profile_dispatch_event_t*>(
+                spans[i].data);
+        for (size_t j = 0; j < spans[i].data_length / sizeof(*records); ++j) {
+          EXPECT_NE(std::find(sink.executables.begin(), sink.executables.end(),
+                              records[j].executable_id),
+                    sink.executables.end());
+          sink.dispatches.push_back(records[j]);
+        }
       }
     }
     sink.dropped += metadata->dropped_record_count;
-    EXPECT_EQ(metadata->dropped_record_count != 0,
-              (metadata->flags & IREE_HAL_PROFILE_CHUNK_FLAG_TRUNCATED) != 0);
+    if (iree_string_view_equal(metadata->content_type,
+                               IREE_HAL_PROFILE_CONTENT_TYPE_EXECUTABLES) &&
+        (metadata->flags & IREE_HAL_PROFILE_CHUNK_FLAG_TRUNCATED)) {
+      ++sink.incomplete_metadata;
+      EXPECT_EQ(count, 0u);
+      EXPECT_EQ(metadata->dropped_record_count, 0u);
+    } else {
+      EXPECT_EQ(metadata->dropped_record_count != 0,
+                (metadata->flags & IREE_HAL_PROFILE_CHUNK_FLAG_TRUNCATED) != 0);
+    }
     return iree_ok_status();
   }
   ProfileSink() {
     static const iree_hal_profile_sink_vtable_t vtable = {Destroy, Begin, Write,
                                                           End};
     iree_hal_resource_initialize(&vtable, &resource);
+  }
+};
+
+// Reflection dependency with an observable code-owner destruction boundary.
+// The profile implementation must copy names and retain no executable owner.
+struct ReflectionExecutable {
+  // Actual HAL resource passed through the public reflection API.
+  iree_hal_executable_t base;
+  // Source names become unavailable as soon as the executable is released.
+  std::array<std::string, 2> names = {"first", "second"};
+  // Reflection-only family identity; this dependency never executes work.
+  iree_hal_queue_family_t family = {};
+  // Confirms metadata owns no code or device resource reference.
+  bool destroyed = false;
+
+  ReflectionExecutable() {
+    static const iree_hal_executable_vtable_t vtable = {
+        .destroy =
+            [](iree_hal_executable_t* base) {
+              auto* self = reinterpret_cast<ReflectionExecutable*>(base);
+              self->destroyed = true;
+              self->names = {};
+            },
+        .function_count = [](iree_hal_executable_t*) -> iree_host_size_t {
+          return 2;
+        },
+        .function_info =
+            [](iree_hal_executable_t* base,
+               iree_hal_executable_function_t token,
+               iree_hal_executable_function_info_t* out_info) {
+              auto* self = reinterpret_cast<ReflectionExecutable*>(base);
+              *out_info = {};
+              const auto& name = self->names[token.value];
+              out_info->name = name.empty() ? iree_string_view_empty()
+                                            : iree_make_string_view(
+                                                  name.data(), name.size());
+              out_info->workgroup_size[0] = 32;
+              out_info->workgroup_size[1] = out_info->workgroup_size[2] = 1;
+              return iree_ok_status();
+            },
+    };
+    iree_hal_executable_initialize(&family, &vtable, &base);
   }
 };
 
@@ -114,9 +217,9 @@ class GpuProfileTest : public ::testing::Test {
   void TearDown() override {
     IREE_EXPECT_OK(iree_hal_amd_gpu_profile_end(profile_));
   }
-  void Begin() {
+  void Begin(uint64_t frequency = 0) {
     IREE_ASSERT_OK(iree_hal_amd_gpu_profile_begin(
-        &options_, 37, 2, iree_allocator_system(), &profile_));
+        &options_, 37, 2, frequency, iree_allocator_system(), &profile_));
   }
   void Append(uint32_t queue = 0) {
     iree_hal_amd_gpu_profile_operation_t operation;
@@ -230,21 +333,187 @@ TEST_F(GpuProfileTest, FailedMetadataClosesBegunSession) {
   sink_.fail_write = true;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_DATA_LOSS,
-      iree_hal_amd_gpu_profile_begin(&options_, 37, 2, iree_allocator_system(),
-                                     &profile_));
+      iree_hal_amd_gpu_profile_begin(&options_, 37, 2, 0,
+                                     iree_allocator_system(), &profile_));
   EXPECT_EQ(profile_, nullptr);
   EXPECT_EQ(sink_.begins, 1);
   EXPECT_EQ(sink_.ends, 1);
 }
 
 TEST_F(GpuProfileTest, UnsupportedDataDoesNotStartSinkSession) {
-  options_.data_families |= IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS;
+  options_.data_families |= IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_SAMPLES;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_UNIMPLEMENTED,
-      iree_hal_amd_gpu_profile_begin(&options_, 37, 2, iree_allocator_system(),
-                                     &profile_));
+      iree_hal_amd_gpu_profile_begin(&options_, 37, 2, 0,
+                                     iree_allocator_system(), &profile_));
   EXPECT_EQ(profile_, nullptr);
   EXPECT_EQ(sink_.begins, 0);
+}
+
+TEST_F(GpuProfileTest, DispatchClockMustBeEstablishedBeforeBeginning) {
+  options_.data_families = IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
+      iree_hal_amd_gpu_profile_begin(&options_, 37, 2, 0,
+                                     iree_allocator_system(), &profile_));
+  EXPECT_EQ(sink_.begins, 0);
+  EXPECT_EQ(profile_, nullptr);
+}
+
+TEST_F(GpuProfileTest, CompletedSamplesAndMetadataOutliveTheirOriginalOwners) {
+  options_.data_families = IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS;
+  ASSERT_NO_FATAL_FAILURE(Begin(100000000));
+  EXPECT_EQ(sink_.devices[0].timestamp_frequency_hz, 100000000u);
+  ReflectionExecutable executable;
+  iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_executable_create(
+      &executable.base, iree_allocator_system(), &metadata));
+  iree_hal_executable_release(&executable.base);
+  ASSERT_TRUE(executable.destroyed);
+  auto record = iree_hal_profile_command_buffer_record_default();
+  record.command_buffer_id = 51;
+  iree_hal_amd_gpu_profile_commands_t* commands = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_commands_create(
+      &record, iree_allocator_system(), &commands));
+  iree_hal_amd_gpu_profile_dispatch_t dispatch = {
+      .executable = metadata,
+      .event = iree_hal_profile_dispatch_event_default(),
+  };
+  dispatch.event.executable_id =
+      iree_hal_amd_gpu_profile_executable_id(metadata);
+  dispatch.event.command_buffer_id = 51;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_commands_append(commands, dispatch));
+  iree_hal_amd_gpu_profile_executable_release(metadata);
+  iree_hal_amd_gpu_profile_sample_t sample = {123, 456};
+  iree_hal_amd_gpu_profile_operation_t operation;
+  iree_hal_amd_gpu_profile_operation_initialize(
+      profile_, 0, IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_EXECUTE, 0, 1, 1,
+      &operation);
+  operation.commands = commands;
+  operation.samples = &sample;
+  operation.sample_count = 1;
+  iree_hal_amd_gpu_profile_operation_complete(profile_, &operation);
+  sample = {};
+  iree_hal_amd_gpu_profile_commands_release(commands);
+  sink_.fail_write = true;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_DATA_LOSS,
+                        iree_hal_amd_gpu_profile_flush(profile_));
+  sink_.fail_write = false;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_flush(profile_));
+  ASSERT_EQ(sink_.dispatches.size(), 1u);
+  EXPECT_EQ(sink_.dispatches[0].start_tick, 123u);
+  EXPECT_EQ(sink_.dispatches[0].end_tick, 456u);
+  EXPECT_EQ(sink_.commands, std::vector<uint64_t>({51}));
+  EXPECT_EQ(sink_.functions, std::vector<std::string>({"first", "second"}));
+  EXPECT_TRUE(sink_.events.empty());
+}
+
+TEST_F(GpuProfileTest, DispatchDropsAndConcurrentFlushKeepOwnershipBounded) {
+  options_.data_families = IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS;
+  ASSERT_NO_FATAL_FAILURE(Begin(100000000));
+  ReflectionExecutable executable;
+  iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_executable_create(
+      &executable.base, iree_allocator_system(), &metadata));
+  iree_hal_executable_release(&executable.base);
+  iree_hal_amd_gpu_profile_sample_t sample = {7, 9};
+  iree_hal_amd_gpu_profile_operation_t operation;
+  iree_hal_amd_gpu_profile_operation_initialize(
+      profile_, 0, IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_DISPATCH, 0, 1, 1,
+      &operation);
+  operation.dispatch = {metadata, iree_hal_profile_dispatch_event_default()};
+  operation.dispatch.event.executable_id =
+      iree_hal_amd_gpu_profile_executable_id(metadata);
+  operation.samples = &sample;
+  operation.sample_count = 1;
+  for (size_t i = 0; i < 8193; ++i) {
+    iree_hal_amd_gpu_profile_operation_complete(profile_, &operation);
+  }
+  sink_.during_write = [&] {
+    // This append sees the full snapshot still owned by the consumer. It is a
+    // counted drop, not an overwrite or a mutex held across the sink callback.
+    iree_hal_amd_gpu_profile_operation_complete(profile_, &operation);
+  };
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_flush(profile_));
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_flush(profile_));
+  EXPECT_EQ(sink_.dispatches.size() + sink_.dropped, 8194u);
+  for (size_t i = 0; i < 19; ++i) {
+    iree_hal_amd_gpu_profile_operation_complete(profile_, &operation);
+  }
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_flush(profile_));
+  EXPECT_EQ(sink_.dispatches.size() + sink_.dropped, 8213u);
+  EXPECT_EQ(sink_.executables.size(), 1u);
+  iree_hal_amd_gpu_profile_executable_release(metadata);
+}
+
+TEST_F(GpuProfileTest, MetadataOnlyReportsIncompleteIdentityCoverage) {
+  options_.data_families = IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA;
+  ASSERT_NO_FATAL_FAILURE(Begin());
+  ReflectionExecutable executable;
+  executable.names[1].clear();
+  iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_executable_create(
+      &executable.base, iree_allocator_system(), &metadata));
+  iree_hal_executable_release(&executable.base);
+  iree_hal_amd_gpu_profile_operation_t operation;
+  iree_hal_amd_gpu_profile_operation_initialize(
+      profile_, 0, IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_DISPATCH, 0, 1, 1,
+      &operation);
+  operation.dispatch = {metadata, iree_hal_profile_dispatch_event_default()};
+  operation.dispatch.event.executable_id =
+      iree_hal_amd_gpu_profile_executable_id(metadata);
+  for (size_t i = 0; i < 4097; ++i) {
+    iree_hal_amd_gpu_profile_operation_complete(profile_, &operation);
+  }
+  iree_hal_amd_gpu_profile_executable_release(metadata);
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_flush(profile_));
+  EXPECT_EQ(sink_.incomplete_metadata, 1u);
+  EXPECT_EQ(sink_.executables.size(), 1u);
+  EXPECT_EQ(sink_.functions, std::vector<std::string>({"first", ""}));
+  EXPECT_TRUE(sink_.dispatches.empty());
+}
+
+TEST_F(GpuProfileTest, LiveRetirementAndFlushPreserveSamplesAcrossRingWraps) {
+  options_.data_families = IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS;
+  ASSERT_NO_FATAL_FAILURE(Begin(100000000));
+  ReflectionExecutable executable;
+  iree_hal_amd_gpu_profile_executable_t* metadata = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_executable_create(
+      &executable.base, iree_allocator_system(), &metadata));
+  iree_hal_executable_release(&executable.base);
+  const uint64_t executable_id =
+      iree_hal_amd_gpu_profile_executable_id(metadata);
+  std::atomic<bool> finished = false;
+  std::thread retirement([&] {
+    for (uint32_t i = 0; i < 10000; ++i) {
+      iree_hal_amd_gpu_profile_operation_t operation;
+      iree_hal_amd_gpu_profile_operation_initialize(
+          profile_, 0, IREE_HAL_PROFILE_QUEUE_EVENT_TYPE_DISPATCH, 0, 1, 1,
+          &operation);
+      operation.dispatch = {metadata,
+                            iree_hal_profile_dispatch_event_default()};
+      operation.dispatch.event.executable_id = executable_id;
+      const iree_hal_amd_gpu_profile_sample_t sample = {
+          operation.event.submission_id * 10,
+          operation.event.submission_id * 10 + 5};
+      operation.samples = &sample;
+      operation.sample_count = 1;
+      iree_hal_amd_gpu_profile_operation_complete(profile_, &operation);
+    }
+    finished.store(true, std::memory_order_release);
+  });
+  while (!finished.load(std::memory_order_acquire)) {
+    IREE_EXPECT_OK(iree_hal_amd_gpu_profile_flush(profile_));
+  }
+  retirement.join();
+  IREE_ASSERT_OK(iree_hal_amd_gpu_profile_flush(profile_));
+  EXPECT_EQ(sink_.dispatches.size() + sink_.dropped, 10000u);
+  for (const auto& event : sink_.dispatches) {
+    EXPECT_EQ(event.start_tick, event.submission_id * 10);
+    EXPECT_EQ(event.end_tick, event.submission_id * 10 + 5);
+  }
+  EXPECT_EQ(sink_.executables.size(), 1u);
+  iree_hal_amd_gpu_profile_executable_release(metadata);
 }
 
 }  // namespace

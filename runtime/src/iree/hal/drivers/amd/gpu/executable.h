@@ -12,6 +12,7 @@
 #include "iree/hal/drivers/amd/gpu/context.h"
 #include "iree/hal/drivers/amd/gpu/feedback.h"
 #include "iree/hal/drivers/amd/gpu/kernarg.h"
+#include "iree/hal/drivers/amd/gpu/profile.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/dispatch.h"
 #include "iree/hal/drivers/amd/gpu/tsan.h"
 
@@ -86,6 +87,13 @@ iree_status_t iree_hal_amd_gpu_executable_lookup_pm4_for_queue(
 // every invocation, so no per-dispatch copy of this table is necessary.
 const uint64_t* iree_hal_amd_gpu_executable_queue_image_addresses(
     iree_hal_executable_t* executable);
+
+// Lazily prepares host-only profile reflection on the recording/submission
+// caller. Returns a borrow dominated by executable; completed profile records
+// can retain it independently without keeping native code allocations alive.
+iree_status_t iree_hal_amd_gpu_executable_profile_metadata(
+    iree_hal_executable_t* executable,
+    iree_hal_amd_gpu_profile_executable_t** out_metadata);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -226,6 +226,13 @@ TEST_F(CommandsTest, Copy32SelectsOnlyOneDestinationWord) {
          {0xc0044000, 0x00100202, 0xfffffff4, 0x00001234, 4, 0x00005678});
 }
 
+TEST_F(CommandsTest, ClockReadAfterComputeJoinConfirmsTheSampleWrite) {
+  auto* end = iree_hal_amd_gpu_pm4_emit_compute_flush(words());
+  end = iree_hal_amd_gpu_pm4_emit_clock(end, UINT64_C(0x00001234fffffff8));
+  Expect(end, {0xc0004600, 0x00000407, 0xc0044000, 0x00110509, 0, 0, 0xfffffff8,
+               0x1234});
+}
+
 TEST_F(CommandsTest, WriteCapturesOneOrSeveralWords) {
   uint32_t values[] = {0x12345678, 0x9abcdef0, 0, 0xffffffff};
   auto* end = iree_hal_amd_gpu_pm4_emit_write(

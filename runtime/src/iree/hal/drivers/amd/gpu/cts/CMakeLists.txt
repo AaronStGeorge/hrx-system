@@ -452,6 +452,7 @@ iree_cc_binary_benchmark(
     iree::hal::drivers::amd::gpu::device
     iree::hal::drivers::amd::gpu::image::hip_images
     iree::hal::drivers::amd::status
+    iree::hal::utils::statistics_sink
     iree::testing::benchmark_main
     iree::third_party::google_benchmark
   ARGS

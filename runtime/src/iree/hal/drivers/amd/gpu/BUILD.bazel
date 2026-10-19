@@ -103,6 +103,7 @@ iree_runtime_cc_library(
         ":context",
         ":feedback",
         ":kernarg",
+        ":profile",
         ":source_context",
         ":tsan",
         "//libamdf:headers",

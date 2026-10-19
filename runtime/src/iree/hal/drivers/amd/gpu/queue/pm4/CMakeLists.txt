@@ -592,6 +592,7 @@ iree_cc_library(
     iree::hal
     iree::hal::drivers::amd::gpu::executable
     iree::hal::drivers::amd::gpu::kernarg
+    iree::hal::drivers::amd::gpu::profile
     iree::hal::utils::resource_set
   PUBLIC
 )
