@@ -34,6 +34,34 @@ low.func.def target<amdgpu.rdna3.core>(@target) @counter_tracked_effect_braid(%a
   s_endpgm
 
 // ====
+// RUN: emit amdgpu-assembly @prefetch_alias_preserves_compute_overlap strategy=source fixed=%current:physical_register:0:1 fixed=%prefetched:physical_register:8:2
+
+amdgpu.target<gfx1100> @target {subgroup_size = 32}
+
+// The next iteration's alias has no read of its own. Its physical handoff
+// belongs at the backedge, after this iteration's independent arithmetic.
+low.func.def schedule(locked) target<amdgpu.rdna3.core>(@target) @prefetch_alias_preserves_compute_overlap(%base: reg<amdgpu.sgpr x2>, %offset: reg<amdgpu.vgpr>, %lds: reg<amdgpu.vgpr>, %initial: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm {
+  low.br ^loop(%initial: reg<amdgpu.vgpr>)
+^loop(%current: reg<amdgpu.vgpr>):
+  ds_write_b32 %lds, %current
+  %prefetched = global_load_b64_saddr %offset, %base
+  %next = slice %prefetched[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %product = v_mul_f32 %lhs, %rhs
+  ds_write_b32 %lds, %product {offset = 4}
+  low.br ^loop(%next: reg<amdgpu.vgpr>)
+}
+
+// ----
+.Lbb1:
+  ds_write_b32 v2, v0 offset:0
+  global_load_b64 v[8:9], v1, s[0:1] offset:0
+  v_mul_f32 v0, v3, v4
+  ds_write_b32 v2, v0 offset:4
+  s_waitcnt vmcnt(0) lgkmcnt(63)
+  v_mov_b32 v0, v9
+  s_branch .Lbb1
+
+// ====
 // RUN: emit low-schedule-json @mixed_issue_pipelines strategy=resource-stall diagnostics=resources output=none
 
 amdgpu.target<gfx1151> @target

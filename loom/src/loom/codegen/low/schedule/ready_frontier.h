@@ -31,12 +31,15 @@ typedef enum loom_low_schedule_ready_view_e {
   LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE = 2,
   // Storage compaction and alias-transfer opportunity.
   LOOM_LOW_SCHEDULE_READY_VIEW_STORAGE = 3,
-  LOOM_LOW_SCHEDULE_READY_VIEW_COUNT = 4,
+  // Critical-path nomination, independently of absolute issue readiness.
+  LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH = 4,
+  LOOM_LOW_SCHEDULE_READY_VIEW_COUNT = 5,
 } loom_low_schedule_ready_view_t;
 
 // Nomination keys for one ready node. Smaller keys have higher priority.
 typedef struct loom_low_schedule_ready_keys_t {
-  // Keys indexed by loom_low_schedule_ready_view_t.
+  // Keys indexed by loom_low_schedule_ready_view_t. Source, storage, and graph
+  // keys fit in uint32_t; pressure and schedule keys use the full width.
   uint64_t values[LOOM_LOW_SCHEDULE_READY_VIEW_COUNT];
 } loom_low_schedule_ready_keys_t;
 

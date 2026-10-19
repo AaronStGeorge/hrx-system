@@ -41,6 +41,7 @@ loom_cc_library(
     loom::codegen::low::storage_relation
     loom::ir
     loom::ops::low
+    loom::util::segmented_storage
   PUBLIC
 )
 
@@ -141,6 +142,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::analysis::liveness
     loom::codegen::low::descriptors
+    loom::util::segmented_storage
   PUBLIC
 )
 
@@ -414,6 +416,7 @@ loom_cc_library(
     ::edge_alias
     ::live_range
     ::physical_domains
+    ::placement
     ::search
     ::storage
     ::target_constraints

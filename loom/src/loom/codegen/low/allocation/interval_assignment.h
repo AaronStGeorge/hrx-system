@@ -30,6 +30,7 @@ extern "C" {
 #endif
 
 struct loom_low_schedule_table_t;
+struct loom_low_allocation_concat_affinity_t;
 
 // Concrete-location ordering used for one whole-function assignment attempt.
 typedef enum loom_low_allocation_search_strategy_e {
@@ -63,6 +64,8 @@ typedef struct loom_low_allocation_interval_assignment_context_t {
   const loom_low_placement_table_t* placement;
   // Bound instruction preferences owned by the enclosing allocation pass.
   const loom_low_placement_preference_index_t* preferences;
+  // Unique concat-chain spans retained after optional alias refinement.
+  const struct loom_low_allocation_concat_affinity_t* concat_affinity;
   // Mutable target storage budgets, fixed values, and reserved ranges.
   loom_low_allocation_target_constraints_t* target_constraints;
   // Borrowed incoming locations indexed by formal-argument ordinal.

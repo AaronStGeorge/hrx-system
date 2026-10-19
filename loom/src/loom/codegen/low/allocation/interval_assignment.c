@@ -1194,9 +1194,9 @@ loom_low_allocation_interval_assignment_initialize_result_storage(
         &state->unit_liveness, state->context->placement,
         state->scratch_arena->block_pool, &capacity));
     IREE_RETURN_IF_ERROR(loom_low_allocation_active_set_initialize(
-        state->context->target->descriptor_set, order->interval_count,
-        capacity.program_point_count, capacity.unit_count, state->scratch_arena,
-        &state->active));
+        state->context->target->descriptor_set, &state->unit_liveness,
+        order->interval_count, capacity.program_point_count,
+        capacity.unit_count, state->scratch_arena, &state->active));
     IREE_RETURN_IF_ERROR(loom_low_allocation_fixed_availability_initialize(
         state->context->target_constraints, state->scratch_arena,
         &state->fixed_availability));
@@ -1352,6 +1352,7 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
         .liveness = context->liveness,
         .schedule = context->schedule,
         .placement = context->placement,
+        .concat_affinity = context->concat_affinity,
         .target_constraints = context->target_constraints,
         .assignment_map = &state->result.assignment_map,
         .search_context = &search_context,
@@ -1368,17 +1369,6 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
         loom_low_allocation_coalescing_assign_concat_source_interval(
             &coalescing_context, interval, &assigned_concat_source_interval));
     if (assigned_concat_source_interval) {
-      continue;
-    }
-
-    // Honor an already assigned consumer before choosing an incoming source.
-    // In particular, a join feeding a loop retains the loop's storage instead
-    // of adopting a different predecessor's location and copying on backedges.
-    bool assigned_edge_source_interval = false;
-    IREE_RETURN_IF_ERROR(
-        loom_low_allocation_coalescing_assign_edge_source_interval(
-            &coalescing_context, interval, &assigned_edge_source_interval));
-    if (assigned_edge_source_interval) {
       continue;
     }
 

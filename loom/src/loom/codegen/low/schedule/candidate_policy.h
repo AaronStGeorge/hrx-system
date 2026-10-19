@@ -18,9 +18,9 @@ extern "C" {
 
 // Reusable score storage for one scheduling run's bounded nomination policy.
 typedef struct loom_low_schedule_candidate_policy_t {
-  // Number of register-debt words in each nominee's row.
+  // Number of register-debt words in each exact score's row.
   iree_host_size_t register_debt_word_count;
-  // Scratch-arena rows, borrowed by scores until the next selection.
+  // Scratch-arena rows, one per exact score until the next selection.
   loom_low_schedule_register_debt_word_t* nominee_register_debts;
 } loom_low_schedule_candidate_policy_t;
 

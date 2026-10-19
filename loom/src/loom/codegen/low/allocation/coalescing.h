@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 struct loom_low_schedule_table_t;
+struct loom_low_allocation_concat_affinity_t;
 
 // Commits an optional coalesced assignment whose location already fits its
 // register class capacity and lifetime. The callback acquires that storage,
@@ -60,6 +61,8 @@ typedef struct loom_low_allocation_coalescing_context_t {
   const struct loom_low_schedule_table_t* schedule;
   // Function-local placement relations.
   const loom_low_placement_table_t* placement;
+  // Unique concat-chain spans retained after optional alias refinement.
+  const struct loom_low_allocation_concat_affinity_t* concat_affinity;
   // Target storage budgets, fixed values, and reserved ranges.
   loom_low_allocation_target_constraints_t* target_constraints;
   // Current assignment lookup table.
@@ -82,15 +85,10 @@ iree_status_t loom_low_allocation_coalescing_assign_concat_source_interval(
     loom_low_allocation_coalescing_context_t* context,
     const loom_liveness_interval_t* interval, bool* out_assigned);
 
-// Attempts to assign an interval using result-keyed structural placement
-// relations such as low.copy, low.slice, low.concat, and low.br destinations.
+// Attempts to assign an interval using structural placement relations. Direct
+// transfers prefer their source storage; composite and control-flow results
+// prefer an already assigned edge destination before their incoming storage.
 iree_status_t loom_low_allocation_coalescing_assign_structural_interval(
-    loom_low_allocation_coalescing_context_t* context,
-    const loom_liveness_interval_t* interval, bool* out_assigned);
-
-// Attempts to assign a structural edge source interval using already-assigned
-// destination storage.
-iree_status_t loom_low_allocation_coalescing_assign_edge_source_interval(
     loom_low_allocation_coalescing_context_t* context,
     const loom_liveness_interval_t* interval, bool* out_assigned);
 

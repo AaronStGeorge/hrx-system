@@ -49,6 +49,8 @@ typedef struct loom_low_allocation_build_state_t {
   loom_low_placement_table_t placement;
   // Allocation-only instruction preferences shared by assignment attempts.
   loom_low_placement_preference_index_t preferences;
+  // Unique concat-chain preferences shared by assignment attempts.
+  loom_low_allocation_concat_affinity_t* concat_affinity;
   // Mutable per-allocation-unit live end points.
   loom_low_allocation_unit_liveness_t unit_liveness;
   // Structural content identity shared by all assignment attempts.
@@ -99,6 +101,7 @@ loom_low_allocation_make_interval_assignment_context(
       .schedule = state->options->schedule,
       .placement = &state->placement,
       .preferences = &state->preferences,
+      .concat_affinity = state->concat_affinity,
       .target_constraints = target_constraints,
       .entry_locations = state->options->entry_locations,
       .entry_location_count = state->options->entry_location_count,
@@ -718,6 +721,10 @@ static iree_status_t loom_low_allocate_function_impl(
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_refine_destructive_reuse(
         &state.unit_liveness, &state.liveness, &state.placement, arena);
+  }
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
+    status = loom_low_allocation_concat_affinity_build(
+        &state.placement, &decision_arena, &state.concat_affinity);
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_storage_identity_initialize(

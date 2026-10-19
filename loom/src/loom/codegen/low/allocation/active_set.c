@@ -34,6 +34,7 @@ static bool loom_low_allocation_active_set_scan_conflicts(
 
 iree_status_t loom_low_allocation_active_set_initialize(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_unit_liveness_t* unit_liveness,
     iree_host_size_t assignment_capacity, iree_host_size_t program_point_count,
     iree_host_size_t unit_capacity, iree_arena_allocator_t* arena,
     loom_low_allocation_active_set_t* out_active_set) {
@@ -61,9 +62,11 @@ iree_status_t loom_low_allocation_active_set_initialize(
     memset(out_active_set->expiration_heads, 0xFF,
            program_point_count * sizeof(*out_active_set->expiration_heads));
   }
-  return loom_low_allocation_active_unit_index_initialize(
+  IREE_RETURN_IF_ERROR(loom_low_allocation_active_unit_index_initialize(
       descriptor_set, assignment_capacity, unit_capacity, arena,
-      &out_active_set->units);
+      &out_active_set->units));
+  return loom_low_allocation_active_unit_index_initialize_occupancy(
+      &out_active_set->units, unit_liveness, program_point_count, arena);
 }
 
 bool loom_low_allocation_active_assignment_conflicts(
@@ -189,6 +192,8 @@ void loom_low_allocation_active_set_expire(
     const loom_low_allocation_assignment_t* assignments,
     iree_host_size_t assignment_count, uint32_t start_point) {
   IREE_ASSERT_GE(start_point, active_set->live_range_sweep.point);
+  loom_low_allocation_active_unit_index_advance(&active_set->units, assignments,
+                                                start_point);
   const iree_host_size_t end_point =
       iree_min((uint64_t)start_point + 1, active_set->program_point_count);
   while (active_set->next_expiration_point < end_point) {

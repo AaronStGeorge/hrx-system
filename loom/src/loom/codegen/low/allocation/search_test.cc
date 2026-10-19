@@ -279,8 +279,8 @@ uint32_t FindFreeLocationWithPlacement(
 
   loom_low_allocation_active_set_t active_set = {};
   IREE_CHECK_OK(loom_low_allocation_active_set_initialize(
-      &descriptor_set, /*assignment_capacity=*/1, /*program_point_count=*/9,
-      max_units, arena, &active_set));
+      &descriptor_set, &unit_liveness, /*assignment_capacity=*/1,
+      /*program_point_count=*/9, max_units, arena, &active_set));
   loom_low_allocation_storage_lease_state_t storage_leases = {};
 
   loom_low_placement_relation_range_t result_ranges[2] = {};
@@ -481,7 +481,7 @@ uint32_t FindFreeLocationWithStorageLease(
 
   loom_low_allocation_active_set_t active_set = {};
   IREE_CHECK_OK(loom_low_allocation_active_set_initialize(
-      &descriptor_set, /*assignment_capacity=*/1,
+      &descriptor_set, &unit_liveness, /*assignment_capacity=*/1,
       /*program_point_count=*/5, /*unit_capacity=*/32, arena, &active_set));
 
   loom_low_schedule_block_t schedule_blocks[] = {{}};
@@ -822,7 +822,7 @@ TEST_F(LowAllocationSearchTest,
 
   loom_low_allocation_active_set_t active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptor_set, /*assignment_capacity=*/3,
+      &descriptor_set, &unit_liveness, /*assignment_capacity=*/3,
       /*program_point_count=*/11, /*unit_capacity=*/6, &arena_, &active_set));
   loom_low_allocation_storage_lease_state_t storage_leases = {};
   loom_low_allocation_search_context_t context = {};
@@ -1181,7 +1181,7 @@ TEST_F(LowAllocationSearchTest, FindsFreeLocationAfterActiveAndReservedRanges) {
 
   loom_low_allocation_active_set_t active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptor_set, /*assignment_capacity=*/1,
+      &descriptor_set, &unit_liveness, /*assignment_capacity=*/1,
       /*program_point_count=*/13, /*unit_capacity=*/8, &arena_, &active_set));
   loom_low_allocation_active_set_insert(
       &active_set, &descriptor_set, assignments, IREE_ARRAYSIZE(assignments),
@@ -1307,7 +1307,7 @@ TEST_F(LowAllocationSearchTest,
 
   loom_low_allocation_active_set_t active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptor_set, /*assignment_capacity=*/1,
+      &descriptor_set, &unit_liveness, /*assignment_capacity=*/1,
       /*program_point_count=*/17, /*unit_capacity=*/8, &arena_, &active_set));
   loom_low_allocation_active_set_insert(
       &active_set, &descriptor_set, assignments, IREE_ARRAYSIZE(assignments),
@@ -1495,7 +1495,7 @@ TEST_F(LowAllocationSearchTest, SelectsLowerTrafficActiveSpillVictimSetTie) {
 
   loom_low_allocation_active_set_t active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptor_set, /*assignment_capacity=*/2,
+      &descriptor_set, &unit_liveness, /*assignment_capacity=*/2,
       /*program_point_count=*/25, /*unit_capacity=*/4, &arena_, &active_set));
   loom_low_allocation_active_set_insert(
       &active_set, &descriptor_set, assignments, IREE_ARRAYSIZE(assignments),
@@ -1675,7 +1675,7 @@ TEST_F(LowAllocationSearchTest, SelectsLowerTrafficOverFewerVictims) {
 
   loom_low_allocation_active_set_t active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptor_set, /*assignment_capacity=*/3,
+      &descriptor_set, &unit_liveness, /*assignment_capacity=*/3,
       /*program_point_count=*/33, /*unit_capacity=*/4, &arena_, &active_set));
   loom_low_allocation_active_set_insert(
       &active_set, &descriptor_set, assignments, IREE_ARRAYSIZE(assignments),

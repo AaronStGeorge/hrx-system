@@ -353,6 +353,81 @@ value %values: test.phys -> physical_register[0:4]
 
 // ====
 
+// RUN: emit low-allocation-query @nested_concat_backedge spill-count values=%state,%lane0,%lane1,%low,%lane2,%lane3,%high,%tuple fixed=%state:physical_register:0:4 fixed=%seed:physical_register:8:1
+
+test.target<low_core> @target
+
+// The loop state is assigned before the leaf producers. Its location reaches
+// both nested pairs. The high pair is produced first but still uses the high
+// state units instead of claiming the first free registers.
+low.func.def schedule(locked) target<test.low.core>(@target) @nested_concat_backedge(%condition: reg<test.i32>, %initial: reg<test.phys x4>, %seed: reg<test.phys>) -> (reg<test.phys x4>) asm {
+  low.br ^loop(%initial: reg<test.phys x4>)
+^loop(%state: reg<test.phys x4>):
+  low.cond_br %condition, ^produce, ^exit : reg<test.i32>
+^produce:
+  %lane2 = test.add.phys %seed, %seed
+  %lane3 = test.add.phys %seed, %seed
+  %high = concat(%lane2, %lane3) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys x2>
+  %lane0 = test.add.phys %seed, %seed
+  %lane1 = test.add.phys %seed, %seed
+  %low = concat(%lane0, %lane1) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys x2>
+  %tuple = concat(%low, %high) : (reg<test.phys x2>, reg<test.phys x2>) -> reg<test.phys x4>
+  low.br ^loop(%tuple: reg<test.phys x4>)
+^exit:
+  return %state
+}
+
+// ----
+spills: 0
+value %state: test.phys -> physical_register[0:4]
+value %lane0: test.phys -> physical_register[0:1]
+value %lane1: test.phys -> physical_register[1:1]
+value %low: test.phys -> physical_register[0:2]
+value %lane2: test.phys -> physical_register[2:1]
+value %lane3: test.phys -> physical_register[3:1]
+value %high: test.phys -> physical_register[2:2]
+value %tuple: test.phys -> physical_register[0:4]
+
+// ====
+
+// RUN: emit low-allocation-query @nested_concat_preserves_blocker spill-count values=%state,%blocker,%lane0,%lane1,%low,%lane2,%lane3,%high,%tuple fixed=%state:physical_register:0:4 fixed=%seed:physical_register:8:1
+
+test.target<low_core> @target
+
+// An independent live value already occupies the preferred first state unit.
+// A transitive preference must not relocate it to place a nested concat leaf.
+low.func.def schedule(locked) target<test.low.core>(@target) @nested_concat_preserves_blocker(%condition: reg<test.i32>, %initial: reg<test.phys x4>, %seed: reg<test.phys>) -> (reg<test.phys x4>) asm {
+  low.br ^loop(%initial: reg<test.phys x4>)
+^loop(%state: reg<test.phys x4>):
+  low.cond_br %condition, ^produce, ^exit : reg<test.i32>
+^produce:
+  %blocker = test.add.phys %seed, %seed
+  %lane0 = test.add.phys %seed, %seed
+  %lane1 = test.add.phys %seed, %seed
+  %low = concat(%lane0, %lane1) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys x2>
+  %lane2 = test.add.phys %seed, %seed
+  %lane3 = test.add.phys %blocker, %seed
+  %high = concat(%lane2, %lane3) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys x2>
+  %tuple = concat(%low, %high) : (reg<test.phys x2>, reg<test.phys x2>) -> reg<test.phys x4>
+  low.br ^loop(%tuple: reg<test.phys x4>)
+^exit:
+  return %state
+}
+
+// ----
+spills: 0
+value %state: test.phys -> physical_register[0:4]
+value %blocker: test.phys -> physical_register[0:1]
+value %lane0: test.phys -> physical_register[2:1]
+value %lane1: test.phys -> physical_register[3:1]
+value %low: test.phys -> physical_register[2:2]
+value %lane2: test.phys -> physical_register[4:1]
+value %lane3: test.phys -> physical_register[5:1]
+value %high: test.phys -> physical_register[4:2]
+value %tuple: test.phys -> physical_register[0:4]
+
+// ====
+
 // A reload result must occupy a register through its concat definition. The
 // later block's decomposed edge read keeps that physical source reservation
 // alive across a CFG boundary after its semantic SSA lifetime ends. When
