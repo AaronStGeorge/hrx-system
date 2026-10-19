@@ -103,13 +103,6 @@ iree_status_t loom_amdgpu_sanitizer_race_get_report_island(
     loom_low_lower_context_t* context, loom_location_id_t location,
     const loom_amdgpu_sanitizer_race_report_island_t** out_island);
 
-// Returns the shared cold report island for exhausted subgroup clocks.
-iree_status_t
-loom_amdgpu_sanitizer_race_get_synchronization_capacity_report_island(
-    loom_low_lower_context_t* context, loom_location_id_t location,
-    const loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t**
-        out_island);
-
 // Returns the shared cold trap island for failed sanitizer checks.
 iree_status_t loom_amdgpu_sanitizer_race_get_trap_island(
     loom_low_lower_context_t* context, loom_location_id_t location,

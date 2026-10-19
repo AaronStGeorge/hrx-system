@@ -100,14 +100,25 @@ loom_amdgpu_sanitizer_race_emit_synchronization_capacity_failure(
       context, source_op, shadow_base_vgpr, subgroup_clock_offset,
       &report.subgroup_clock_address));
 
-  const loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t*
-      island = NULL;
+  loom_value_id_t check_kind = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_sync_vgpr_u32_constant(
+      context, source_op, LOOM_AMDGPU_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY,
+      &check_kind));
+  loom_value_id_t flags = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_sync_vgpr_u32_constant(
+      context, source_op, LOOM_AMDGPU_TSAN_REPORT_FLAG_CURRENT_WORKITEM_LINEAR,
+      &flags));
+  loom_value_id_t zero_detail_qword = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr64_constant_u64(
+      context, source_op, 0, &zero_detail_qword));
+
+  const loom_amdgpu_sanitizer_race_report_island_t* island = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_sanitizer_race_get_synchronization_capacity_report_island(
-          context, location, &island));
+      loom_amdgpu_sanitizer_race_get_report_island(context, location, &island));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_build_sanitizer_race_synchronization_capacity_report_branch(
-          builder, descriptor_set, island, &source, &report, location));
+          builder, descriptor_set, island, &source, &report, check_kind, flags,
+          zero_detail_qword, location));
   loom_builder_set_block(builder, branch.continuation_block);
   return iree_ok_status();
 }

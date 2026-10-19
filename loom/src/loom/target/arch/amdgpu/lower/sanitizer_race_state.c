@@ -77,15 +77,10 @@ typedef struct loom_amdgpu_sanitizer_race_lower_state_t {
   bool has_trap_island;
   // Shared no-return cold island for trap-mode TSAN failures.
   loom_amdgpu_sanitizer_trap_island_t trap_island;
-  // True once TSAN data-race failures have a shared cold report island.
+  // True once TSAN failures have a shared cold report island.
   bool has_report_island;
-  // Shared cold island for TSAN data-race reports.
+  // Shared cold island for all TSAN report variants.
   loom_amdgpu_sanitizer_race_report_island_t report_island;
-  // True once subgroup clock exhaustion has a shared cold report island.
-  bool has_synchronization_capacity_report_island;
-  // Shared cold island for TSAN synchronization-capacity reports.
-  loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t
-      synchronization_capacity_report_island;
 } loom_amdgpu_sanitizer_race_lower_state_t;
 
 static int loom_amdgpu_sanitizer_race_lower_state_key;
@@ -597,33 +592,6 @@ iree_status_t loom_amdgpu_sanitizer_race_get_report_island(
     state->has_report_island = true;
   }
   *out_island = &state->report_island;
-  return iree_ok_status();
-}
-
-iree_status_t
-loom_amdgpu_sanitizer_race_get_synchronization_capacity_report_island(
-    loom_low_lower_context_t* context, loom_location_id_t location,
-    const loom_amdgpu_sanitizer_race_synchronization_capacity_report_island_t**
-        out_island) {
-  *out_island = NULL;
-  loom_builder_t* builder = loom_low_lower_context_builder(context);
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_low_lower_context_descriptor_set(context);
-  loom_amdgpu_sanitizer_race_lower_state_t* state = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_race_lower_state(context, &state));
-  if (!state->has_synchronization_capacity_report_island) {
-    loom_symbol_ref_t feedback_config_symbol = loom_symbol_ref_null();
-    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_feedback_config_symbol(
-        context, &feedback_config_symbol));
-    loom_builder_ip_t saved_ip = loom_builder_save(builder);
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_build_sanitizer_race_synchronization_capacity_report_island(
-            builder, descriptor_set, saved_ip.block, feedback_config_symbol,
-            location, &state->synchronization_capacity_report_island));
-    loom_builder_restore(builder, saved_ip);
-    state->has_synchronization_capacity_report_island = true;
-  }
-  *out_island = &state->synchronization_capacity_report_island;
   return iree_ok_status();
 }
 
