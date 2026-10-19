@@ -11,6 +11,7 @@
 #include "iree/vm/buffer.h"
 #include "loom/serve/runtime/program/program.h"
 #include "loom/serve/service/text/media.h"
+#include "loom/serve/service/text/tool_calls.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,10 +19,6 @@ extern "C" {
 
 // Protocol output budget bound, independent of a deployment's context limit.
 #define LOOM_SERVE_TEXT_CHAT_MAX_OUTPUT_TOKENS 16384
-
-// Protocol resource bound for declared or generated function tools. Storage is
-// allocated only for the declarations present in a request.
-#define LOOM_SERVE_TEXT_CHAT_MAX_TOOL_COUNT 4096
 
 // Protocol resource bound for ordered content parts in one message. The HTTP
 // body has an independent byte bound; this limits the compact source-policy
@@ -137,28 +134,18 @@ iree_status_t loom_serve_text_chat_prepare_input(
     loom_serve_text_media_span_t** out_media_spans,
     iree_host_size_t* out_media_span_count);
 
-// Indexed function-tool schema borrowing the request body. Names are literal
-// ASCII identifiers. The optional XML codec uses property types to recover
-// generated JSON values; the agent owns execution and full schema validation.
-typedef struct loom_serve_text_chat_tool_t {
-  // Literal function name, without JSON quotes.
-  iree_string_view_t name;
-  // JSON object mapping parameter names to schemas.
-  iree_string_view_t properties;
-  // JSON array of required parameter names, or empty when absent.
-  iree_string_view_t required;
-} loom_serve_text_chat_tool_t;
-
 enum loom_serve_text_chat_flag_bits_e {
-  // Publish incremental SSE output instead of one JSON completion.
+  // Publish incremental semantic spans; HTTP encodes them as SSE events.
   LOOM_SERVE_TEXT_CHAT_FLAG_STREAM = 1u << 0,
   // Append a final usage chunk and include usage:null on preceding chunks.
   LOOM_SERVE_TEXT_CHAT_FLAG_INCLUDE_USAGE = 1u << 1,
+  // This turn forbids tool calls, independent of its declared tool catalog.
+  LOOM_SERVE_TEXT_CHAT_FLAG_TOOL_CALLS_DISABLED = 1u << 2,
 };
 typedef uint32_t loom_serve_text_chat_flags_t;
 
 // One validated chat request. The prompt owns its canonical rendered
-// text; tool and encoded-image views borrow the HTTP body.
+// text; tool and encoded-image views borrow the consumer-owned request body.
 typedef struct loom_serve_text_chat_t {
   // Source policy borrowed from the model for the request lifetime.
   const loom_serve_text_chat_policy_t* policy;
@@ -181,18 +168,13 @@ typedef struct loom_serve_text_chat_t {
   } output;
   // Maximum selected output tokens, including a terminal EOS prediction.
   iree_host_size_t max_tokens;
-  // Validated transport and usage options; inference is independent of these.
+  // Validated transport, usage, and output-permission options.
   loom_serve_text_chat_flags_t flags;
-  // Original tool declarations borrowing the HTTP body, or the literal [].
+  // Declared tools borrowing the request body, independent of this turn's
+  // choice.
   iree_string_view_t tool_schemas;
-  // Host allocator owning the tool descriptor array.
+  // Host allocator owning request metadata and image descriptors.
   iree_allocator_t host_allocator;
-  // Number of populated tool descriptors.
-  iree_host_size_t tool_count;
-  // Allocated descriptor capacity.
-  iree_host_size_t tool_capacity;
-  // Dynamically sized validated tool descriptors sorted by literal name.
-  loom_serve_text_chat_tool_t* tools;
   // Ordered inspected image occurrences.
   struct {
     // Number of populated image descriptors.
@@ -273,8 +255,6 @@ typedef struct loom_serve_text_chat_completion_t {
   bool reusable;
   // Exact ordered media identity contributing to this completed history.
   loom_serve_text_chat_media_identity_t media;
-  // Number of validated structured tool calls.
-  iree_host_size_t tool_count;
 } loom_serve_text_chat_completion_t;
 
 // Releases a completed checkpoint; zero-initialized values are accepted.
@@ -313,26 +293,26 @@ void loom_serve_text_chat_scratch_deinitialize(
     loom_serve_text_chat_scratch_t* scratch);
 
 // Invokes source parsing of the generated suffix into typed function calls.
-// Returns the source-owned canonical completed transcript and appends an OpenAI
-// tool_calls array to tool_calls. IDs are stable across both output forms;
-// streaming calls also carry their delta indexes.
+// Returns the source-owned canonical completed transcript and replaces the
+// reusable tool_calls table with owned validated records. Transport encoding
+// consumes that table only after this entire transaction succeeds.
 // Finishes output parsing before translating the remaining structured suffix.
-// Plain text responses produce an empty array. Source parser failures never
+// Plain text responses produce an empty table. Source parser failures never
 // submit a partial executable call to the agent.
 // Replaces completion only on success, releasing its prior storage. Failure
-// leaves completion unchanged and may leave partial tool_calls bytes, which
-// the caller must not publish. The checkpoint validates subsequent client
-// history; it does not replace original generated tokens in device state.
+// leaves completion unchanged and tool_calls empty. The checkpoint validates
+// subsequent client history; it does not replace original generated tokens in
+// device state.
 // scratch_allocator owns call-local argument wrappers only. Retained history
 // uses the request's host allocator, independent of temporary formatting work.
 // scratch is reset on entry and may be reused immediately after return.
 iree_status_t loom_serve_text_chat_complete(
     loom_serve_text_chat_t* chat, iree_string_view_t response,
-    uint64_t request_id, iree_string_builder_t* tool_calls,
+    uint64_t request_id, loom_serve_text_tool_calls_t* tool_calls,
     loom_serve_text_chat_scratch_t* scratch, iree_allocator_t scratch_allocator,
     loom_serve_text_chat_completion_t* completion);
 
-// Borrowed wire metadata copied from a session at each publication. Identity
+// Borrowed output metadata copied from a session at each publication. Identity
 // and creation time remain fixed across a response; counters include only
 // committed tokens, never rejected speculative predictions.
 typedef struct loom_serve_text_chat_response_t {
@@ -367,11 +347,12 @@ iree_status_t loom_serve_text_chat_usage(
 
 // Appends a complete JSON chat response, without HTTP headers. Content is
 // decoded answer text; reasoning is independently decoded thought text and is
-// omitted from the wire when empty. tool_calls is a serialized array or empty
+// omitted from the wire when empty. tool_calls is the validated table or NULL
 // when no tools were produced. Nonstreamed completions always include usage.
 iree_status_t loom_serve_text_chat_response(
     const loom_serve_text_chat_response_t* response, iree_string_view_t content,
-    iree_string_view_t reasoning, iree_string_view_t tool_calls,
+    iree_string_view_t reasoning,
+    const loom_serve_text_tool_calls_t* tool_calls,
     iree_string_view_t finish_reason, iree_string_builder_t* output);
 
 #ifdef __cplusplus

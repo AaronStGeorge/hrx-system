@@ -40,6 +40,31 @@ iree_py_test(
 endif()
 
 if(LOOM_TARGET_ARCH_VM)
+iree_py_test(
+  NAME
+    tool_policy_test
+  MAIN
+    "tool_policy_test.py"
+  SRCS
+    "tool_policy_test.py"
+  ARGS
+    "{{$<TARGET_FILE:loom::serve::testing::text_request_check>}}"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/portable_chat.loom}}"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/portable_chat.loom"
+    "loom::serve::testing::text_request_check"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+  TIMEOUT
+    60
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
     admission
@@ -245,11 +270,24 @@ loom_cc_library(
   NAME
     source_execution_tests
   SRCS
+    "source_execution_test.cc"
+  DEPS
+    ::source_service_fixture
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_library(
+  NAME
+    source_media_tests
+  SRCS
     "managed_media_service_test.cc"
     "media_execution_test.cc"
     "media_service_test.cc"
     "projector_execution_test.cc"
-    "source_execution_test.cc"
   DEPS
     ::epoch
     ::media_projector
@@ -264,6 +302,25 @@ loom_cc_library(
     loom::serve::service::finite::embedding::protocol
     loom::serve::service::finite::model
     loom::serve::service::finite::result
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_library(
+  NAME
+    native_service_tests
+  SRCS
+    "native_service_test.cc"
+  DEPS
+    ::checkpoint_control
+    ::source_service_fixture
+    ::stream
+    iree::base::tooling::flags
+    loom::serve::runtime::device
+    loom::util::json
   TESTONLY
   ALWAYSLINK
   PUBLIC
@@ -304,10 +361,16 @@ loom_cc_library(
     chat
   HDRS
     "chat.h"
+    "chat_fields.h"
     "media.h"
+    "tool_calls.h"
+    "tool_schemas.h"
   SRCS
     "chat.c"
+    "chat_fields.c"
     "media.c"
+    "tool_calls.c"
+    "tool_schemas.c"
   DEPS
     iree::base
     iree::base::internal::json
@@ -344,6 +407,38 @@ loom_cc_test(
     chat_test
   SRCS
     "chat_test.cc"
+  DEPS
+    ::chat
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    tool_calls_test
+  SRCS
+    "tool_calls_test.cc"
+  DEPS
+    ::chat
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    tool_schemas_test
+  SRCS
+    "tool_schemas_test.cc"
   DEPS
     ::chat
     iree::base
@@ -570,6 +665,53 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    consumer
+  HDRS
+    "consumer.h"
+  DEPS
+    ::chat
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    stream
+  HDRS
+    "stream.h"
+  SRCS
+    "stream.c"
+  DEPS
+    ::chat
+    ::consumer
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    stream_test
+  SRCS
+    "stream_test.cc"
+  DEPS
+    ::chat
+    ::consumer
+    ::stream
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     session
   HDRS
     "session.h"
@@ -577,6 +719,7 @@ loom_cc_library(
     "session.c"
   DEPS
     ::chat
+    ::consumer
     ::media_projector
     ::model
     iree::base
@@ -584,9 +727,6 @@ loom_cc_library(
     loom::serve::runtime::host::clock
     loom::serve::service::inspection
     loom::serve::telemetry::record
-    loom::serve::transport::http::server
-    loom::util::json
-    loom::util::stream
   PUBLIC
 )
 endif()
@@ -727,14 +867,14 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
-    response
+    http
   HDRS
-    "response.h"
+    "http.h"
   SRCS
-    "response.c"
+    "http.c"
   DEPS
     ::chat
-    ::session
+    ::consumer
     ::telemetry
     iree::base
     loom::serve::telemetry::record
@@ -742,6 +882,102 @@ loom_cc_library(
     loom::util::json
     loom::util::stream
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_test(
+  NAME
+    http_test
+  SRCS
+    "http_test.cc"
+  DEPS
+    ::chat
+    ::consumer
+    ::http
+    ::telemetry
+    iree::async::util::proactor_pool
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::telemetry::stream
+    loom::serve::testing::http_harness
+    loom::serve::transport::http::listener
+    loom::serve::transport::http::server
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    checkpoint_control
+  HDRS
+    "checkpoint_control.h"
+  SRCS
+    "checkpoint_control.c"
+  DEPS
+    ::session
+    ::telemetry
+    iree::base
+    loom::serve::telemetry::record
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    checkpoint_http
+  HDRS
+    "checkpoint_http.h"
+  SRCS
+    "checkpoint_http.c"
+  DEPS
+    ::checkpoint_control
+    ::http
+    ::telemetry
+    iree::base
+    loom::serve::transport::http::request
+    loom::serve::transport::http::server
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    checkpoint_http_test
+  SRCS
+    "checkpoint_http_test.cc"
+  DEPS
+    ::checkpoint_control
+    ::checkpoint_http
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::transport::http::request
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    checkpoint_control_test
+  SRCS
+    "checkpoint_control_test.cc"
+  DEPS
+    ::checkpoint_control
+    ::telemetry
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::telemetry::stream
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
 )
 endif()
 
@@ -754,16 +990,14 @@ loom_cc_library(
   SRCS
     "checkpoint_request.c"
   DEPS
+    ::checkpoint_control
     ::checkpoint_registry
     ::model
-    ::response
     ::session
     ::telemetry
     iree::base
     loom::serve::runtime::execution
     loom::serve::telemetry::record
-    loom::serve::transport::http::request
-    loom::serve::transport::http::server
   PUBLIC
 )
 endif()
@@ -823,15 +1057,14 @@ loom_cc_library(
   DEPS
     ::chat
     ::checkpoint_registry
+    ::consumer
     ::input
     ::media_projector
     ::model
-    ::response
     ::schedule
     ::telemetry
     iree::base
     loom::serve::telemetry::stream
-    loom::serve::transport::http::server
   PUBLIC
 )
 endif()
@@ -848,19 +1081,17 @@ loom_cc_library(
     ::admission
     ::chat
     ::checkpoint_registry
+    ::consumer
     ::media_projector
     ::model
     ::pending_request
     ::prefix_cache
-    ::response
     ::session
     ::session_cache
     ::telemetry
     iree::base
     loom::serve::runtime::parameter::residency
     loom::serve::telemetry::stream
-    loom::serve::transport::http::request
-    loom::serve::transport::http::server
   PUBLIC
 )
 endif()
@@ -875,7 +1106,7 @@ loom_cc_library(
     "input_count.c"
   DEPS
     ::chat
-    ::response
+    ::http
     ::telemetry
     iree::base
     loom::serve::telemetry::stream
@@ -896,10 +1127,14 @@ loom_cc_library(
   DEPS
     ::admission
     ::chat
+    ::checkpoint_control
+    ::checkpoint_http
     ::checkpoint_registry
     ::checkpoint_request
+    ::consumer
     ::epoch
     ::heartbeat
+    ::http
     ::input
     ::input_count
     ::media_projector
@@ -910,10 +1145,10 @@ loom_cc_library(
     ::prefix_cache
     ::readiness
     ::reconfiguration
-    ::response
     ::schedule
     ::session
     ::session_cache
+    ::stream
     ::telemetry
     iree::async
     iree::async::util::proactor_pool

@@ -26,6 +26,12 @@ typedef struct loom_serve_speech_stream_t loom_serve_speech_stream_t;
 typedef struct loom_serve_recognition_request_t
     loom_serve_recognition_request_t;
 typedef struct loom_serve_recognition_stream_t loom_serve_recognition_stream_t;
+typedef struct loom_serve_text_request_t loom_serve_text_request_t;
+typedef struct loom_serve_text_checkpoint_request_t
+    loom_serve_text_checkpoint_request_t;
+typedef struct loom_serve_text_checkpoint_control_t
+    loom_serve_text_checkpoint_control_t;
+typedef struct loom_serve_text_stream_t loom_serve_text_stream_t;
 
 typedef enum loom_serve_service_flag_bits_e {
   // Another service in the same capacity domain has accepted work or
@@ -96,6 +102,18 @@ typedef struct loom_serve_service_t {
   iree_status_t (*try_open_recognition)(
       void* self, const loom_serve_recognition_request_t* request,
       loom_serve_recognition_stream_t** out_stream);
+  // Optional native chat admission, sharing the same pending queue, retained
+  // histories, and packed execution. Success with a stream moves the owning
+  // JSON request; pressure/failure leaves it untouched. Final semantic output
+  // belongs to the caller independently of registration retirement.
+  iree_status_t (*try_open_text)(void* self, loom_serve_text_request_t* request,
+                                 loom_serve_text_stream_t** out_stream);
+  // Optional native checkpoint control, sharing the model's existing control
+  // slot and retained-history rules. Acceptance copies identifiers. NULL means
+  // queue pressure; a returned handle retains its result beyond model removal.
+  iree_status_t (*try_open_text_checkpoint)(
+      void* self, const loom_serve_text_checkpoint_request_t* request,
+      loom_serve_text_checkpoint_control_t** out_control);
   // Advances at most one bounded model unit and reports actual progress. A
   // turn can retry admission after another service released shared capacity.
   // False means awaiting service readiness or a network event, never polling.

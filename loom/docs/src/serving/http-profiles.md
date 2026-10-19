@@ -232,7 +232,13 @@ renders the model's framing. Reasoning-aware models return `reasoning_content`
 separately from answer `content`, in both SSE deltas and complete messages.
 
 `tools` accepts up to 4096 function declarations. Omitted `tool_choice` or
-`"auto"` is supported; other choices reject. `store` may be omitted or false.
+`"auto"` allows tool calls. `"none"` disables tools for the current response,
+including when a client retains its tool catalog and prior tool calls while
+requesting a conversation summary. Supplied declarations are still validated
+and remain in the source-visible catalog, preserving the conversation prefix.
+Source sampling receives the original request, and the completion boundary
+rejects forbidden structured calls before publication.
+Required or named tool choices reject. `store` may be omitted or false.
 The source policy owns tool grammar, safe output boundaries and canonical
 history. Generated calls become structured `tool_calls`; the server never runs
 the tools. Invalid generated tool syntax fails rather than publishing a
@@ -318,6 +324,11 @@ dots or hyphens. They are identifiers, not authentication tokens.
 Absent sessions or checkpoint names return 404; busy sessions, duplicate names
 or queued borrowers preventing deletion return 409. Exhausted pin capacity
 returns 503. Fixed backing rejects suspension with 400.
+
+Deletion remains available while inference admission is drained, including
+when inference requests are waiting. It uses the normal bounded checkpoint
+control slot. An unprepared registration returns 404 without preparing the
+model. Pinning and suspension wait for inference admission to reopen.
 
 Pin completion publishes an immutable consumed frontier and the exact pending
 token. The next completion still sends full history extending the endpoint's

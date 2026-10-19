@@ -32,6 +32,20 @@ loom_py_test(
     ],
 )
 
+loom_py_test(
+    name = "tool_policy_test",
+    size = "small",
+    srcs = ["tool_policy_test.py"],
+    args = [
+        "$(rootpath //loom/src/loom/serve/testing:text_request_check)",
+        "$(rootpath //loom/src/loom/serve/fixture/text:portable_chat.loom)",
+    ],
+    data = [
+        "//loom/src/loom/serve/fixture/text:portable_chat.loom",
+        "//loom/src/loom/serve/testing:text_request_check",
+    ],
+)
+
 loom_cc_library(
     name = "admission",
     srcs = ["admission.c"],
@@ -212,12 +226,21 @@ loom_cc_library(
 loom_cc_library(
     name = "source_execution_tests",
     testonly = True,
+    srcs = ["source_execution_test.cc"],
+    target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
+    visibility = ["//loom/src/loom/serve:implementation"],
+    deps = [":source_service_fixture"],
+    alwayslink = True,
+)
+
+loom_cc_library(
+    name = "source_media_tests",
+    testonly = True,
     srcs = [
         "managed_media_service_test.cc",
         "media_execution_test.cc",
         "media_service_test.cc",
         "projector_execution_test.cc",
-        "source_execution_test.cc",
     ],
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
     visibility = ["//loom/src/loom/serve:implementation"],
@@ -235,6 +258,23 @@ loom_cc_library(
         "//loom/src/loom/serve/service/finite:result",
         "//loom/src/loom/serve/service/finite/embedding:protocol",
         "//runtime/src/iree/base/internal:json",
+    ],
+    alwayslink = True,
+)
+
+loom_cc_library(
+    name = "native_service_tests",
+    testonly = True,
+    srcs = ["native_service_test.cc"],
+    target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
+    visibility = ["//loom/src/loom/serve:implementation"],
+    deps = [
+        ":checkpoint_control",
+        ":source_service_fixture",
+        ":stream",
+        "//loom/src/loom/serve/runtime/device",
+        "//loom/src/loom/util:json",
+        "//runtime/src/iree/base/tooling:flags",
     ],
     alwayslink = True,
 )
@@ -271,11 +311,17 @@ loom_cc_library(
     name = "chat",
     srcs = [
         "chat.c",
+        "chat_fields.c",
         "media.c",
+        "tool_calls.c",
+        "tool_schemas.c",
     ],
     hdrs = [
         "chat.h",
+        "chat_fields.h",
         "media.h",
+        "tool_calls.h",
+        "tool_schemas.h",
     ],
     deps = [
         "//loom/src/loom/serve/media:digest",
@@ -304,6 +350,28 @@ loom_cc_library(
 loom_cc_test(
     name = "chat_test",
     srcs = ["chat_test.cc"],
+    deps = [
+        ":chat",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "tool_calls_test",
+    srcs = ["tool_calls_test.cc"],
+    deps = [
+        ":chat",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "tool_schemas_test",
+    srcs = ["tool_schemas_test.cc"],
     deps = [
         ":chat",
         "//runtime/src/iree/base",
@@ -497,19 +565,51 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "consumer",
+    hdrs = ["consumer.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":chat",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "stream",
+    srcs = ["stream.c"],
+    hdrs = ["stream.h"],
+    deps = [
+        ":chat",
+        ":consumer",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "stream_test",
+    srcs = ["stream_test.cc"],
+    deps = [
+        ":chat",
+        ":consumer",
+        ":stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "session",
     srcs = ["session.c"],
     hdrs = ["session.h"],
     deps = [
         ":chat",
+        ":consumer",
         ":media_projector",
         ":model",
         "//loom/src/loom/serve/runtime/host:clock",
         "//loom/src/loom/serve/service:inspection",
         "//loom/src/loom/serve/telemetry:record",
-        "//loom/src/loom/serve/transport/http:server",
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/tokenizer",
     ],
@@ -620,13 +720,13 @@ loom_cc_test(
 )
 
 loom_cc_library(
-    name = "response",
-    srcs = ["response.c"],
-    hdrs = ["response.h"],
+    name = "http",
+    srcs = ["http.c"],
+    hdrs = ["http.h"],
     visibility = ["//visibility:private"],
     deps = [
         ":chat",
-        ":session",
+        ":consumer",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:record",
         "//loom/src/loom/serve/transport/http:server",
@@ -636,21 +736,92 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "http_test",
+    srcs = ["http_test.cc"],
+    target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
+    deps = [
+        ":chat",
+        ":consumer",
+        ":http",
+        ":telemetry",
+        "//loom/src/loom/serve/telemetry:stream",
+        "//loom/src/loom/serve/testing:http_harness",
+        "//loom/src/loom/serve/transport/http:listener",
+        "//loom/src/loom/serve/transport/http:server",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "checkpoint_control",
+    srcs = ["checkpoint_control.c"],
+    hdrs = ["checkpoint_control.h"],
+    deps = [
+        ":session",
+        ":telemetry",
+        "//loom/src/loom/serve/telemetry:record",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "checkpoint_http",
+    srcs = ["checkpoint_http.c"],
+    hdrs = ["checkpoint_http.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":checkpoint_control",
+        ":http",
+        ":telemetry",
+        "//loom/src/loom/serve/transport/http:request",
+        "//loom/src/loom/serve/transport/http:server",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "checkpoint_http_test",
+    srcs = ["checkpoint_http_test.cc"],
+    deps = [
+        ":checkpoint_control",
+        ":checkpoint_http",
+        "//loom/src/loom/serve/transport/http:request",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "checkpoint_control_test",
+    srcs = ["checkpoint_control_test.cc"],
+    deps = [
+        ":checkpoint_control",
+        ":telemetry",
+        "//loom/src/loom/serve/telemetry:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "checkpoint_request",
     srcs = ["checkpoint_request.c"],
     hdrs = ["checkpoint_request.h"],
     visibility = ["//visibility:private"],
     deps = [
+        ":checkpoint_control",
         ":checkpoint_registry",
         ":model",
-        ":response",
         ":session",
         ":telemetry",
         "//loom/src/loom/serve/runtime/execution",
         "//loom/src/loom/serve/telemetry:record",
-        "//loom/src/loom/serve/transport/http:request",
-        "//loom/src/loom/serve/transport/http:server",
         "//runtime/src/iree/base",
     ],
 )
@@ -697,14 +868,13 @@ loom_cc_library(
     deps = [
         ":chat",
         ":checkpoint_registry",
+        ":consumer",
         ":input",
         ":media_projector",
         ":model",
-        ":response",
         ":schedule",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:stream",
-        "//loom/src/loom/serve/transport/http:server",
         "//runtime/src/iree/base",
     ],
 )
@@ -718,18 +888,16 @@ loom_cc_library(
         ":admission",
         ":chat",
         ":checkpoint_registry",
+        ":consumer",
         ":media_projector",
         ":model",
         ":pending_request",
         ":prefix_cache",
-        ":response",
         ":session",
         ":session_cache",
         ":telemetry",
         "//loom/src/loom/serve/runtime/parameter:residency",
         "//loom/src/loom/serve/telemetry:stream",
-        "//loom/src/loom/serve/transport/http:request",
-        "//loom/src/loom/serve/transport/http:server",
         "//runtime/src/iree/base",
     ],
 )
@@ -741,7 +909,7 @@ loom_cc_library(
     visibility = ["//visibility:private"],
     deps = [
         ":chat",
-        ":response",
+        ":http",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:stream",
         "//loom/src/loom/serve/transport/http:request",
@@ -757,10 +925,14 @@ loom_cc_library(
     deps = [
         ":admission",
         ":chat",
+        ":checkpoint_control",
+        ":checkpoint_http",
         ":checkpoint_registry",
         ":checkpoint_request",
+        ":consumer",
         ":epoch",
         ":heartbeat",
+        ":http",
         ":input",
         ":input_count",
         ":media_projector",
@@ -771,10 +943,10 @@ loom_cc_library(
         ":prefix_cache",
         ":readiness",
         ":reconfiguration",
-        ":response",
         ":schedule",
         ":session",
         ":session_cache",
+        ":stream",
         ":telemetry",
         "//loom/src/loom/serve/media:image_codec",
         "//loom/src/loom/serve/media:image_codecs",

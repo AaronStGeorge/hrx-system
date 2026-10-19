@@ -3,8 +3,8 @@
 This package executes source-defined text models with retained sessions.
 Model programs supply numerical stages, parameter preparation, storage geometry,
 tokenizer framing and chat policy. Native code supplies execution ownership,
-admission, packing, cache lifetime and HTTP output; it contains no learned model
-or model catalog.
+admission, packing, cache lifetime, and HTTP or native output; it contains no
+learned model or model catalog.
 
 ## Ownership
 
@@ -15,8 +15,8 @@ model, not separate VM instances. [Source preparation](source.h) and
 The shared [program runtime](../../runtime/program/program.h) accepts text or
 bytecode source inputs through the same compilation path.
 
-The [service](service.h) is the serialized owner of HTTP claims, admission and
-epoch completion. Finite CPU preparation/output tasks borrow its model and
+The [service](service.h) is the serialized owner of request receipts, admission,
+and epoch completion. Finite CPU preparation/output tasks borrow its model and
 session storage. Device readiness and CPU release callbacks publish completion
 and wake the owner; they do not mutate sessions or destroy the model. Input
 preparation can overlap an accepted epoch on other rows. No service creates a
@@ -102,7 +102,7 @@ cross from the host; projected features never return to it. Consumed results
 are released after consumer readiness, while queue captures protect actual
 device use on failure.
 
-Cancellation waits for an accepted codec job's HTTP-body borrow before freeing
+Cancellation waits for an accepted codec job's request-body borrow before freeing
 the request. Later cancellation detaches the request without renumbering images
 in a shared cohort or canceling peers. Stable pending-request storage preserves
 those asynchronous borrows as the admission queue changes.
@@ -124,18 +124,118 @@ The [checkpoint registry](checkpoint_registry.h) owns named immutable endpoints
 and canonical transcripts. The [checkpoint request](checkpoint_request.h) owns
 one control claim through accepted capture or suspension. The service resolves
 live-session and queued-borrow facts explicitly. Endpoint publication happens
-after successful readiness, even if the client disconnected; HTTP cancellation
-does not imply cancellation of already accepted device work. Failed readiness
-leaves native retirement with the model owner. Release and completed suspension
-request asynchronous pool trim.
+after successful readiness, including when a caller closes during accepted
+work. Failed readiness leaves native retirement with the model owner. Release
+and completed suspension request asynchronous pool trim.
 
 ## Protocol and observation
 
 [Chat policy](chat.h) calls the model's source VM to render input, classify output
 and retain canonical conversation state. [Session output](session.h) owns
-incremental decoding, bounded JSON/SSE packets and output credit. Shared error
-[responses](response.h) consume diagnostic status at the wire boundary without
-borrowing scratch used by a CPU output task.
+incremental decoding and source classification. A request's [consumer
+receipt](consumer.h) preserves input storage and owns bounded output delivery
+independently of the model row. The [HTTP adapter](http.h) encodes JSON/SSE in
+the existing CPU output task, then publishes its staged packet on the serving
+owner. An empty stage permits another epoch while the previous copied send is
+in flight; a full stage behind a stalled reader pauses only that row.
+
+Pending requests move their receipt into the admitted row without changing
+input storage. Rejection, cancellation, and completion release it only after
+accepted CPU/device borrowers and request-local views retire. HTTP rejection
+uses independent scratch and can overlap another row's output task. Translation
+failure discards the incomplete staged response, invalidates canonical reuse,
+and publishes the terminal protocol error.
+
+Generated function calls form one completed transaction. Source parsing and
+canonical history formatting must both succeed before the owned
+[tool-call table](tool_calls.h) is published. It retains decoded names,
+argument documents, and stable request-derived IDs independently of VM or
+request storage. HTTP encoders consume those records directly, adding delta
+indexes for streaming output. A later invalid record leaves no partial call
+set, and retained session/checkpoint histories do not keep this output table.
+
+## Native text consumers
+
+An in-process serving owner uses `loom_serve_registry_try_open_text` with a
+deployment name and a [native request](stream.h). The request contains the same
+supported chat JSON document as HTTP, in an owning string builder, plus optional
+session and checkpoint selectors. Acceptance moves the builder and copies the
+selectors; pressure or immediate failure leaves all caller ownership intact.
+Source validation, image preparation, canonical history, and packed model
+execution use the existing pending queue and shared workers. Constructing a
+large conversation or image payload can happen before entering the owner turn;
+admission never copies the complete JSON body.
+
+With `stream:true`, `loom_serve_text_stream_peek` borrows an ordered block of
+content and reasoning spans. `loom_serve_text_stream_block_count` and
+`loom_serve_text_stream_block_at` traverse those spans without parsing output
+JSON. Consuming the block returns delivery credit. The CPU output task may
+prepare the next block while the first is unread, then only this request waits
+for credit. An empty final block also requires consumption. With `stream:false`,
+the handle retains the complete result without incremental spans.
+
+After execution retires, `loom_serve_text_stream_result` exposes the complete
+content, reasoning, validated tool calls, finish reason, request identity, and
+committed token usage. Those allocations move from the completed source
+transaction; they do not retain a model row or its source VM. Canonical history
+remains separately owned by the session and can resume through HTTP or native
+admission. The final result remains valid through model removal, same-name
+replacement, and registry destruction until the caller closes the handle.
+
+The caller serializes handle operations with registry advancement. Closing
+immediately cancels output interest, while accepted CPU/device borrowers retain
+execution ownership until retirement. Source rejection and generation failure
+publish an owned terminal status. A stop discards undelivered publication but
+preserves previously borrowed bytes until consume or close. Holding a final
+result does not prevent graceful model removal.
+
+## Native checkpoint controls
+
+Native callers use `loom_serve_registry_try_open_text_checkpoint` with a
+[checkpoint request](checkpoint_control.h) to pin, suspend, or release retained
+history. These operations share the existing model control slot and readiness
+boundary with HTTP. Acceptance copies the identifiers and returns a control
+handle; an OK result with no handle means preparation or queue pressure. The
+owner retries after readiness or other progress, without blocking a worker.
+
+For example, after session `conversation` completes with reusable history, the
+owner can submit this request:
+
+```c
+const loom_serve_text_checkpoint_request_t request = {
+    .action = LOOM_SERVE_TEXT_CHECKPOINT_ACTION_PIN,
+    .name = IREE_SV("before-branch"),
+    .session = IREE_SV("conversation"),
+};
+loom_serve_text_checkpoint_control_t* control = NULL;
+iree_status_t status = loom_serve_registry_try_open_text_checkpoint(
+    registry, IREE_SV("chat"), &request, &control);
+```
+
+The caller handles `status`, retains an accepted `control` across owner turns,
+and checks `loom_serve_text_checkpoint_control_is_complete` before inspecting
+its status and result. Successful results report the consumed token position
+and host snapshot size. They remain valid through model removal until
+`loom_serve_text_checkpoint_control_close` consumes the caller handle.
+
+A subsequent text request can select `checkpoint = IREE_SV("before-branch")`
+and a different session name. It still supplies the full conversation extending
+the checkpoint's canonical history. An incompatible history fails explicitly;
+an interrupted or omitted generated suffix cannot silently become part of that
+history. The selected state remains owned by its original model registration.
+
+Closing a control only relinquishes that receipt. It does not release a named
+checkpoint or undo an accepted pin or suspension. A separate `RELEASE` request
+with the checkpoint name and an empty session releases the retained state.
+Release remains available while inference admission is drained, even with held
+inference requests. An unprepared registration reports `NOT_FOUND` without
+model preparation. Pin and suspend continue to obey inference admission.
+Accepted operations retain their storage through actual readiness, including
+when the caller closes before completion.
+Suspension requires elastic retained storage; fixed backing returns
+`FAILED_PRECONDITION` through the native control's status.
+
+## Source request policy
 
 Source `request_defaults(options)` validates deployment policy once. Each
 `request_options(defaults, request, nonce)` call validates overrides and returns
