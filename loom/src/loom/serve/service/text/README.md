@@ -3,8 +3,8 @@
 This package executes source-defined text models with retained sessions.
 Model programs supply numerical stages, parameter preparation, storage geometry,
 tokenizer framing and chat policy. Native code supplies execution ownership,
-admission, packing, cache lifetime and HTTP output; it contains no learned model
-or model catalog.
+admission, packing, cache lifetime, and HTTP or native output; it contains no
+learned model or model catalog.
 
 ## Ownership
 
@@ -102,7 +102,7 @@ cross from the host; projected features never return to it. Consumed results
 are released after consumer readiness, while queue captures protect actual
 device use on failure.
 
-Cancellation waits for an accepted codec job's HTTP-body borrow before freeing
+Cancellation waits for an accepted codec job's request-body borrow before freeing
 the request. Later cancellation detaches the request without renumbering images
 in a shared cohort or canceling peers. Stable pending-request storage preserves
 those asynchronous borrows as the admission queue changes.
@@ -124,10 +124,9 @@ The [checkpoint registry](checkpoint_registry.h) owns named immutable endpoints
 and canonical transcripts. The [checkpoint request](checkpoint_request.h) owns
 one control claim through accepted capture or suspension. The service resolves
 live-session and queued-borrow facts explicitly. Endpoint publication happens
-after successful readiness, even if the client disconnected; HTTP cancellation
-does not imply cancellation of already accepted device work. Failed readiness
-leaves native retirement with the model owner. Release and completed suspension
-request asynchronous pool trim.
+after successful readiness, including when a caller closes during accepted
+work. Failed readiness leaves native retirement with the model owner. Release
+and completed suspension request asynchronous pool trim.
 
 ## Protocol and observation
 
@@ -189,6 +188,52 @@ execution ownership until retirement. Source rejection and generation failure
 publish an owned terminal status. A stop discards undelivered publication but
 preserves previously borrowed bytes until consume or close. Holding a final
 result does not prevent graceful model removal.
+
+## Native checkpoint controls
+
+Native callers use `loom_serve_registry_try_open_text_checkpoint` with a
+[checkpoint request](checkpoint_control.h) to pin, suspend, or release retained
+history. These operations share the existing model control slot and readiness
+boundary with HTTP. Acceptance copies the identifiers and returns a control
+handle; an OK result with no handle means preparation or queue pressure. The
+owner retries after readiness or other progress, without blocking a worker.
+
+For example, after session `conversation` completes with reusable history, the
+owner can submit this request:
+
+```c
+const loom_serve_text_checkpoint_request_t request = {
+    .action = LOOM_SERVE_TEXT_CHECKPOINT_ACTION_PIN,
+    .name = IREE_SV("before-branch"),
+    .session = IREE_SV("conversation"),
+};
+loom_serve_text_checkpoint_control_t* control = NULL;
+iree_status_t status = loom_serve_registry_try_open_text_checkpoint(
+    registry, IREE_SV("chat"), &request, &control);
+```
+
+The caller handles `status`, retains an accepted `control` across owner turns,
+and checks `loom_serve_text_checkpoint_control_is_complete` before inspecting
+its status and result. Successful results report the consumed token position
+and host snapshot size. They remain valid through model removal until
+`loom_serve_text_checkpoint_control_close` consumes the caller handle.
+
+A subsequent text request can select `checkpoint = IREE_SV("before-branch")`
+and a different session name. It still supplies the full conversation extending
+the checkpoint's canonical history. An incompatible history fails explicitly;
+an interrupted or omitted generated suffix cannot silently become part of that
+history. The selected state remains owned by its original model registration.
+
+Closing a control only relinquishes that receipt. It does not release a named
+checkpoint or undo an accepted pin or suspension. A separate `RELEASE` request
+with the checkpoint name and an empty session releases the retained state.
+Release remains available while inference admission is drained, even with held
+inference requests. An unprepared registration reports `NOT_FOUND` without
+model preparation. Pin and suspend continue to obey inference admission.
+Accepted operations retain their storage through actual readiness, including
+when the caller closes before completion.
+Suspension requires elastic retained storage; fixed backing returns
+`FAILED_PRECONDITION` through the native control's status.
 
 ## Source request policy
 
