@@ -45,12 +45,8 @@ typedef struct iree_hal_amd_gpu_pm4_semaphore_wait_t {
   // Resolution at the instant of acquisition, including sticky failure checks.
   iree_hal_amd_gpu_pm4_semaphore_wait_state_t state;
   // Owned native reader reference, released after execution or quiescence.
+  // Retains the complete causal snapshot and producer retirement outcome.
   iree_hal_amd_gpu_pm4_signal_t* signal;
-  // Producer coordinate proven by waiting on signal. This is a causal lower
-  // bound, not the producer's complete transitive frontier. The retained
-  // signal separately owns its full native-domain publication snapshot. An
-  // epoch of zero means no topology coordinate is assigned.
-  iree_async_frontier_entry_t producer;
 } iree_hal_amd_gpu_pm4_semaphore_wait_t;
 
 // Resolves completed waits using atomic loads. An unresolved wait pins its
@@ -60,11 +56,12 @@ typedef struct iree_hal_amd_gpu_pm4_semaphore_wait_t {
 // atomic width, visibility, forward progress, and backing lifetime. Foreign
 // signals never escape the cache lock: HOST uses the ordinary completed HAL
 // timeline, never submission availability, and owns no producer storage.
-// A native result permits waiting for signal value one, or eliding that wait
-// when an already established causal frontier dominates a nonzero producer
-// epoch. The owning capture keeps the semaphore live through this call. Failure
-// leaves an empty deferred result. No allocation, native call, or retry loop
-// is performed.
+// A native result permits waiting for signal value one. Its retained snapshot
+// supplies the complete native-domain causal history; producer retirement
+// separately joins the producer's payload release and completion outcome. The
+// caller keeps the semaphore live through this call. Failure leaves an
+// empty deferred result. No allocation, native call, or retry loop is
+// performed.
 iree_status_t iree_hal_amd_gpu_pm4_semaphore_acquire_wait(
     iree_hal_semaphore_t* semaphore, uint64_t minimum_value, const void* domain,
     iree_hal_amd_gpu_pm4_semaphore_wait_t* out_wait);
@@ -81,7 +78,6 @@ iree_status_t iree_hal_amd_gpu_pm4_semaphore_acquire_wait(
 // On failure the native work still owns its references until quiescence.
 iree_status_t iree_hal_amd_gpu_pm4_semaphore_publish_signal(
     iree_hal_semaphore_t* semaphore, uint64_t value,
-    iree_async_frontier_entry_t producer,
     iree_hal_amd_gpu_pm4_signal_t* signal);
 
 // Publishes a proven native completion and returns any covered cache reference.

@@ -17,8 +17,6 @@ typedef struct iree_hal_amd_gpu_pm4_semaphore_t {
     uint64_t value;
     // Owned reference, independent of producer and consumer executions.
     iree_hal_amd_gpu_pm4_signal_t* signal;
-    // Exact producer coordinate, separate from completed frontier storage.
-    iree_async_frontier_entry_t producer;
   } submitted;
   // Optional owned host semaphore, installed once under async.mutex.
   iree_hal_semaphore_t* submission_semaphore;
@@ -140,7 +138,6 @@ iree_status_t iree_hal_amd_gpu_pm4_semaphore_acquire_wait(
       if (semaphore->submitted.signal->block->domain == domain) {
         out_wait->state = IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_NATIVE;
         out_wait->signal = semaphore->submitted.signal;
-        out_wait->producer = semaphore->submitted.producer;
         iree_hal_amd_gpu_pm4_signal_retain(out_wait->signal);
       } else {
         out_wait->state = IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_HOST;
@@ -153,7 +150,6 @@ iree_status_t iree_hal_amd_gpu_pm4_semaphore_acquire_wait(
 
 iree_status_t iree_hal_amd_gpu_pm4_semaphore_publish_signal(
     iree_hal_semaphore_t* base_semaphore, uint64_t value,
-    iree_async_frontier_entry_t producer,
     iree_hal_amd_gpu_pm4_signal_t* signal) {
   iree_hal_amd_gpu_pm4_semaphore_t* semaphore =
       iree_hal_amd_gpu_pm4_semaphore_cast(base_semaphore);
@@ -169,7 +165,6 @@ iree_status_t iree_hal_amd_gpu_pm4_semaphore_publish_signal(
     released_signal = semaphore->submitted.signal;
     semaphore->submitted.value = value;
     semaphore->submitted.signal = signal;
-    semaphore->submitted.producer = producer;
   }
   iree_hal_semaphore_t* submission_semaphore = semaphore->submission_semaphore;
   iree_slim_mutex_unlock(&semaphore->async.mutex);

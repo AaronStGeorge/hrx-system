@@ -193,8 +193,8 @@ TEST_P(SubmissionTest, RetirementOwnsNativeReadersWithoutCallerInputs) {
       &native_frontier, &signal_block);
   auto* producer = iree_hal_amd_gpu_pm4_signal_pool_try_acquire(&signal_pool);
   iree_hal_amd_gpu_pm4_signal_publish_frontier(producer, &native_frontier);
-  IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_semaphore_publish_signal(
-      semaphore, 1, {0, 1}, producer));
+  IREE_ASSERT_OK(
+      iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore, 1, producer));
   iree_hal_amd_gpu_pm4_semaphore_wait_t acquired;
   IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_semaphore_acquire_wait(semaphore, 1, this,
                                                              &acquired));

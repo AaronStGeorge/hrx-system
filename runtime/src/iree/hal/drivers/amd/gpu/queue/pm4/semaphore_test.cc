@@ -117,12 +117,12 @@ class SemaphoreTest : public ::testing::Test {
       iree_hal_amd_gpu_pm4_signal_release(available[i]);
     }
   }
-  void Publish(iree_hal_semaphore_t* semaphore, uint64_t value, Signal* signal,
-               iree_async_axis_t axis = 1) {
+  void Publish(iree_hal_semaphore_t* semaphore, uint64_t value,
+               Signal* signal) {
     const uint64_t frontier[3] = {value, 0, 0};
     iree_hal_amd_gpu_pm4_signal_publish_frontier(signal, frontier);
-    IREE_CHECK_OK(iree_hal_amd_gpu_pm4_semaphore_publish_signal(
-        semaphore, value, {axis, value}, signal));
+    IREE_CHECK_OK(iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore,
+                                                                value, signal));
   }
   Wait AcquireWait(iree_hal_semaphore_t* semaphore, uint64_t value) {
     Wait wait;
@@ -202,14 +202,17 @@ TEST_F(SemaphoreTest, SubmittedProducerDoesNotBecomeCompletedHistory) {
   IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_semaphore_publish_completed(
       semaphore, 1, iree_async_single_frontier_as_const_frontier(&frontier)));
   auto* signal = AcquireSignal();
-  Publish(semaphore, 2, signal, 9);
+  Publish(semaphore, 2, signal);
   EXPECT_EQ(Value(semaphore), 1u);
   EXPECT_EQ(AcquireWait(semaphore, 1).state,
             IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_COMPLETED);
   auto wait = AcquireWait(semaphore, 2);
   EXPECT_EQ(wait.state, IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_NATIVE);
-  EXPECT_EQ(wait.producer.axis, 9u);
-  EXPECT_EQ(wait.producer.epoch, 2u);
+  uint64_t consumer_frontier[3] = {};
+  iree_hal_amd_gpu_pm4_signal_join_frontier(wait.signal, consumer_frontier);
+  EXPECT_EQ(consumer_frontier[0], 2u);
+  EXPECT_EQ(consumer_frontier[1], 0u);
+  EXPECT_EQ(consumer_frontier[2], 0u);
   EXPECT_EQ(iree_async_semaphore_query_frontier(
                 reinterpret_cast<iree_async_semaphore_t*>(semaphore),
                 iree_async_single_frontier_as_frontier(&frontier), 1),
@@ -231,8 +234,6 @@ TEST_F(SemaphoreTest, ForeignDomainWaitDoesNotPinProducerBacking) {
       semaphore, 1, &foreign_domain, &wait));
   EXPECT_EQ(wait.state, IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_HOST);
   EXPECT_EQ(wait.signal, nullptr);
-  EXPECT_EQ(wait.producer.axis, 0u);
-  EXPECT_EQ(wait.producer.epoch, 0u);
   EXPECT_EQ(Value(semaphore), 0u);
   ExpectAvailableSignals(7);
   IREE_ASSERT_OK(
@@ -287,14 +288,14 @@ TEST_F(SemaphoreTest, ReplacingProducerPreservesRetainedCausalSnapshot) {
   auto* first = AcquireSignal();
   const uint64_t earlier[3] = {4, 2, 0};
   iree_hal_amd_gpu_pm4_signal_publish_frontier(first, earlier);
-  IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore, 1,
-                                                               {7, 4}, first));
+  IREE_ASSERT_OK(
+      iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore, 1, first));
   auto earlier_wait = AcquireWait(semaphore, 1);
   auto* second = AcquireSignal();
   const uint64_t later[3] = {8, 3, 5};
   iree_hal_amd_gpu_pm4_signal_publish_frontier(second, later);
-  IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore, 2,
-                                                               {7, 8}, second));
+  IREE_ASSERT_OK(
+      iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore, 2, second));
   iree_hal_amd_gpu_pm4_signal_release(first);
   auto later_wait = AcquireWait(semaphore, 2);
   uint64_t earlier_consumer[3] = {};
@@ -328,15 +329,21 @@ TEST_F(SemaphoreTest, ReaderOutlivesProducerAndSemaphore) {
   ExpectAvailableSignals(8);
 }
 
-TEST_F(SemaphoreTest, UnassignedTopologyStillProvidesNativeDependency) {
+TEST_F(SemaphoreTest, NativeDependencyWithoutCausalHistory) {
   auto* semaphore = Semaphore();
   auto* signal = AcquireSignal();
+  const uint64_t producer_frontier[3] = {};
+  iree_hal_amd_gpu_pm4_signal_publish_frontier(signal, producer_frontier);
   IREE_ASSERT_OK(
-      iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore, 1, {}, signal));
+      iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore, 1, signal));
   auto wait = AcquireWait(semaphore, 1);
   EXPECT_EQ(wait.state, IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_NATIVE);
-  EXPECT_EQ(wait.producer.epoch, 0u);
   EXPECT_EQ(wait.signal, signal);
+  uint64_t consumer_frontier[3] = {4, 2, 1};
+  iree_hal_amd_gpu_pm4_signal_join_frontier(wait.signal, consumer_frontier);
+  EXPECT_EQ(consumer_frontier[0], 4u);
+  EXPECT_EQ(consumer_frontier[1], 2u);
+  EXPECT_EQ(consumer_frontier[2], 1u);
   iree_hal_amd_gpu_pm4_signal_release(wait.signal);
   iree_hal_amd_gpu_pm4_signal_release(signal);
 }
@@ -347,12 +354,11 @@ TEST_F(SemaphoreTest, ReplacingCachePreservesEveryNativeReader) {
   auto* second = AcquireSignal();
   Publish(semaphore, 1, first);
   auto first_wait = AcquireWait(semaphore, 1);
-  Publish(semaphore, 2, second, 2);
+  Publish(semaphore, 2, second);
   iree_hal_amd_gpu_pm4_signal_release(first);
   auto second_wait = AcquireWait(semaphore, 1);
   EXPECT_EQ(first_wait.signal, first);
   EXPECT_EQ(second_wait.signal, second);
-  EXPECT_EQ(second_wait.producer.axis, 2u);
   ExpectAvailableSignals(6);
   iree_hal_amd_gpu_pm4_signal_release(first_wait.signal);
   ExpectAvailableSignals(7);
@@ -376,13 +382,12 @@ TEST_F(SemaphoreTest, DelayedPublicationCannotReplaceHigherProducer) {
   auto* semaphore = Semaphore();
   auto* first = AcquireSignal();
   auto* second = AcquireSignal();
-  Publish(semaphore, 2, second, 2);
+  Publish(semaphore, 2, second);
   Publish(semaphore, 1, first);
   iree_hal_amd_gpu_pm4_signal_release(first);
   ExpectAvailableSignals(7);
   auto wait = AcquireWait(semaphore, 1);
   EXPECT_EQ(wait.signal, second);
-  EXPECT_EQ(wait.producer.epoch, 2u);
   iree_hal_amd_gpu_pm4_signal_release(wait.signal);
   iree_hal_amd_gpu_pm4_signal_release(second);
 }
@@ -474,9 +479,9 @@ TEST_F(SemaphoreTest, FailureDoesNotReclaimNativeReaders) {
   EXPECT_EQ(failed_wait.signal, nullptr);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
                         iree_hal_semaphore_signal(semaphore, 2, nullptr));
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
-                        iree_hal_amd_gpu_pm4_semaphore_publish_signal(
-                            semaphore, 2, {1, 2}, signal));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      iree_hal_amd_gpu_pm4_semaphore_publish_signal(semaphore, 2, signal));
   iree_hal_amd_gpu_pm4_signal_release(signal);
   ExpectAvailableSignals(7);
   iree_hal_amd_gpu_pm4_signal_release(wait.signal);
@@ -617,7 +622,11 @@ TEST_F(SemaphoreTest, PublicationCompletionAndReaderAcquisitionRace) {
     auto wait = AcquireWait(semaphore, value);
     if (wait.signal) {
       EXPECT_EQ(wait.signal, signal);
-      EXPECT_EQ(wait.producer.epoch, value);
+      uint64_t consumer_frontier[3] = {};
+      iree_hal_amd_gpu_pm4_signal_join_frontier(wait.signal, consumer_frontier);
+      EXPECT_EQ(consumer_frontier[0], value);
+      EXPECT_EQ(consumer_frontier[1], 0u);
+      EXPECT_EQ(consumer_frontier[2], 0u);
     }
     finish.arrive_and_wait();
     iree_hal_amd_gpu_pm4_signal_release(signal);

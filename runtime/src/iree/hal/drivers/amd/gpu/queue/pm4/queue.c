@@ -411,12 +411,7 @@ iree_hal_amd_gpu_pm4_publish_accepted(
     if (iree_hal_amd_gpu_pm4_semaphore_isa(submission->signals.semaphores[i])) {
       status = iree_hal_amd_gpu_pm4_semaphore_publish_signal(
           submission->signals.semaphores[i],
-          submission->signals.payload_values[i],
-          (iree_async_frontier_entry_t){
-              .axis = queue->frontier.axis,
-              .epoch = queue->frontier.tracker ? position + 1 : 0,
-          },
-          submission->signal);
+          submission->signals.payload_values[i], submission->signal);
     }
   }
   if (!iree_status_is_ok(status)) {
