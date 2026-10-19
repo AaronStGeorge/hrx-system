@@ -53,6 +53,24 @@ TEST_F(PublisherTest, IdleCallerPublishesBeforeServiceTurn) {
   EXPECT_TRUE(iree_hal_amd_gpu_publisher_is_idle(&publisher_));
 }
 
+TEST_F(PublisherTest, BorrowedCallerHandsConcurrentCaptureToService) {
+  ASSERT_TRUE(iree_hal_amd_gpu_publisher_try_acquire(&publisher_));
+  EXPECT_FALSE(iree_hal_amd_gpu_publisher_try_acquire(&publisher_));
+  EXPECT_EQ(Next(), nullptr);
+  Entry captured;
+  std::thread caller([&] { EXPECT_FALSE(Enqueue(&captured)); });
+  caller.join();
+  // The borrowed caller can publish or fail without ever creating an entry.
+  // Its final handoff must still deliver a racing caller's captured operation.
+  ASSERT_TRUE(Handoff());
+  EXPECT_FALSE(iree_hal_amd_gpu_publisher_try_acquire(&publisher_));
+  ASSERT_TRUE(AcquireService());
+  EXPECT_EQ(Next(), &captured);
+  EXPECT_FALSE(Handoff());
+  ASSERT_TRUE(iree_hal_amd_gpu_publisher_try_acquire(&publisher_));
+  EXPECT_FALSE(Handoff());
+}
+
 TEST_F(PublisherTest, FinalEnqueueBeforeHandoffTransfersToService) {
   Entry first;
   Entry last;

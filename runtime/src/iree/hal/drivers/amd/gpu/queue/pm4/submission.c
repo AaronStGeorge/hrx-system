@@ -24,12 +24,11 @@ iree_hal_amd_gpu_pm4_submission_retirement(
 }
 
 // Captures common ownership and allocates the operation payload in one block.
-static iree_status_t iree_hal_amd_gpu_pm4_submission_acquire(
+static iree_status_t iree_hal_amd_gpu_pm4_submission_acquire_storage(
     iree_hal_amd_gpu_capture_pool_t* pool, bool profiled,
-    iree_hal_semaphore_list_t waits, iree_hal_semaphore_list_t signals,
-    iree_host_size_t payload_size,
-    const iree_hal_amd_gpu_pm4_barrier_profile_t* profile,
-    const iree_hal_queue_barriers_t* barriers,
+    iree_host_size_t wait_count, iree_hal_semaphore_list_t signals,
+    iree_host_size_t payload_size, iree_hal_amd_gpu_pm4_barrier_t before,
+    iree_hal_amd_gpu_pm4_barrier_t after,
     iree_hal_amd_gpu_pm4_submission_t** out_submission, void** out_payload) {
   const iree_host_size_t header_size =
       sizeof(iree_hal_amd_gpu_pm4_submission_t) +
@@ -37,7 +36,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_submission_acquire(
   iree_host_size_t payload_offset = header_size;
   iree_host_size_t total_size = 0;
   if (!iree_host_size_checked_mul_add(
-          payload_offset, waits.count,
+          payload_offset, wait_count,
           sizeof(iree_hal_amd_gpu_pm4_submission_wait_t), &payload_offset) ||
       !iree_host_size_checked_mul_add(
           payload_offset, signals.count,
@@ -52,26 +51,19 @@ static iree_status_t iree_hal_amd_gpu_pm4_submission_acquire(
       iree_hal_amd_gpu_capture_pool_acquire(pool, total_size, &storage));
   iree_hal_amd_gpu_pm4_submission_t* submission = (void*)storage.data;
   *submission = (iree_hal_amd_gpu_pm4_submission_t){
-      .native_wait_count = waits.count ? UINT32_MAX : 0,
+      .native_wait_count = wait_count ? UINT32_MAX : 0,
       .pool = pool,
       .allocation_size = storage.data_length,
       .capture_size = total_size,
       .profiled = profiled,
-      .wait_count = waits.count,
-      .before = iree_hal_amd_gpu_pm4_barrier_prepare(
-          profile, barriers ? barriers->before : NULL),
-      .after = iree_hal_amd_gpu_pm4_barrier_prepare(
-          profile, barriers ? barriers->after : NULL),
+      .wait_count = wait_count,
+      .before = before,
+      .after = after,
   };
   iree_atomic_ref_count_init(&submission->ref_count);
   uint8_t* cursor = (uint8_t*)submission + header_size;
   submission->waits = (iree_hal_amd_gpu_pm4_submission_wait_t*)cursor;
-  cursor += waits.count * sizeof(*submission->waits);
-  for (iree_host_size_t i = 0; i < waits.count; ++i) {
-    submission->waits[i] = (iree_hal_amd_gpu_pm4_submission_wait_t){
-        .semaphore = waits.semaphores[i], .value = waits.payload_values[i]};
-    iree_hal_semaphore_retain(waits.semaphores[i]);
-  }
+  cursor += wait_count * sizeof(*submission->waits);
   submission->signals.count = signals.count;
   // Values precede pointers so odd signal counts retain alignment on 32-bit
   // hosts. The payload begins at its independently aligned offset above.
@@ -85,6 +77,29 @@ static iree_status_t iree_hal_amd_gpu_pm4_submission_acquire(
   }
   *out_submission = submission;
   *out_payload = storage.data + payload_offset;
+  return iree_ok_status();
+}
+
+static iree_status_t iree_hal_amd_gpu_pm4_submission_acquire(
+    iree_hal_amd_gpu_capture_pool_t* pool, bool profiled,
+    iree_hal_semaphore_list_t waits, iree_hal_semaphore_list_t signals,
+    iree_host_size_t payload_size,
+    const iree_hal_amd_gpu_pm4_barrier_profile_t* profile,
+    const iree_hal_queue_barriers_t* barriers,
+    iree_hal_amd_gpu_pm4_submission_t** out_submission, void** out_payload) {
+  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_submission_acquire_storage(
+      pool, profiled, waits.count, signals, payload_size,
+      iree_hal_amd_gpu_pm4_barrier_prepare(profile,
+                                           barriers ? barriers->before : NULL),
+      iree_hal_amd_gpu_pm4_barrier_prepare(profile,
+                                           barriers ? barriers->after : NULL),
+      out_submission, out_payload));
+  iree_hal_amd_gpu_pm4_submission_t* submission = *out_submission;
+  for (iree_host_size_t i = 0; i < waits.count; ++i) {
+    submission->waits[i] = (iree_hal_amd_gpu_pm4_submission_wait_t){
+        .semaphore = waits.semaphores[i], .value = waits.payload_values[i]};
+    iree_hal_semaphore_retain(waits.semaphores[i]);
+  }
   return iree_ok_status();
 }
 
@@ -124,17 +139,20 @@ iree_status_t iree_hal_amd_gpu_pm4_submission_create(
   submission->dispatch.function = function;
   submission->dispatch.geometry = dispatch;
   submission->dispatch.flags = flags;
-  iree_hal_executable_retain(executable);
   iree_hal_buffer_ref_t* references = payload;
   submission->dispatch.bindings =
       (iree_hal_buffer_ref_list_t){bindings.count, references};
   for (iree_host_size_t i = 0; i < bindings.count; ++i) {
     references[i] = bindings.values[i];
-    iree_hal_buffer_retain(references[i].buffer);
   }
   if (indirect_parameters) {
     references[bindings.count] = parameters;
-    iree_hal_buffer_retain(parameters.buffer);
+  }
+  if (!(flags & IREE_HAL_DISPATCH_FLAG_BORROW_RESOURCE_LIFETIMES)) {
+    iree_hal_executable_retain(executable);
+    for (iree_host_size_t i = 0; i < reference_count; ++i) {
+      iree_hal_buffer_retain(references[i].buffer);
+    }
   }
   uint8_t* cursor = (uint8_t*)(references + reference_count) +
                     bindings.count * sizeof(uint64_t);
@@ -142,6 +160,65 @@ iree_status_t iree_hal_amd_gpu_pm4_submission_create(
       iree_make_const_byte_span(cursor, constants.data_length);
   if (constants.data_length) {
     memcpy(cursor, constants.data, constants.data_length);
+  }
+  *out_submission = submission;
+  return iree_ok_status();
+}
+
+iree_status_t iree_hal_amd_gpu_pm4_submission_create_retirement(
+    iree_hal_amd_gpu_capture_pool_t* pool,
+    const iree_hal_amd_gpu_pm4_dispatch_request_t* request,
+    iree_host_size_t wait_count,
+    const iree_hal_amd_gpu_pm4_submission_wait_t* waits,
+    uint32_t native_wait_count, iree_hal_semaphore_list_t signals,
+    iree_hal_amd_gpu_pm4_barrier_t before, iree_hal_amd_gpu_pm4_barrier_t after,
+    const iree_hal_amd_gpu_profile_operation_t* profile,
+    iree_hal_amd_gpu_pm4_submission_t** out_submission) {
+  *out_submission = NULL;
+  const bool indirect_parameters =
+      iree_hal_dispatch_uses_indirect_parameters(request->flags);
+  // The bounded inline caller has already admitted these counts. This payload
+  // retains resources only: neither native address scratch nor constants live
+  // beyond packet preparation.
+  const iree_host_size_t reference_count =
+      request->bindings.count + indirect_parameters;
+  iree_hal_amd_gpu_pm4_submission_t* submission = NULL;
+  void* payload = NULL;
+  IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_submission_acquire_storage(
+      pool, profile != NULL, native_wait_count, signals,
+      reference_count * sizeof(iree_hal_buffer_ref_t), before, after,
+      &submission, &payload));
+  submission->entry.kind = request->function
+                               ? IREE_HAL_AMD_GPU_PM4_ENTRY_DISPATCH
+                               : IREE_HAL_AMD_GPU_PM4_ENTRY_BARRIER;
+  submission->native_wait_count = native_wait_count;
+  for (iree_host_size_t i = 0, target = 0; i < wait_count; ++i) {
+    if (waits[i].signal) {
+      submission->waits[target++] =
+          (iree_hal_amd_gpu_pm4_submission_wait_t){.signal = waits[i].signal};
+    }
+  }
+  submission->dispatch.executable = request->executable;
+  submission->dispatch.function = request->function;
+  submission->dispatch.geometry = request->geometry;
+  submission->dispatch.flags = request->flags;
+  iree_hal_buffer_ref_t* references = payload;
+  submission->dispatch.bindings =
+      (iree_hal_buffer_ref_list_t){request->bindings.count, references};
+  for (iree_host_size_t i = 0; i < request->bindings.count; ++i) {
+    references[i] = request->bindings.values[i];
+  }
+  if (indirect_parameters) {
+    references[request->bindings.count] = request->parameters;
+  }
+  if (!(request->flags & IREE_HAL_DISPATCH_FLAG_BORROW_RESOURCE_LIFETIMES)) {
+    iree_hal_executable_retain(request->executable);
+    for (iree_host_size_t i = 0; i < reference_count; ++i) {
+      iree_hal_buffer_retain(references[i].buffer);
+    }
+  }
+  if (profile) {
+    *iree_hal_amd_gpu_pm4_submission_profile(submission) = *profile;
   }
   *out_submission = submission;
   return iree_ok_status();
@@ -373,13 +450,17 @@ bool iree_hal_amd_gpu_pm4_submission_retirement_ready(
 void iree_hal_amd_gpu_pm4_submission_release_payload(
     iree_hal_amd_gpu_pm4_submission_t* submission) {
   if (submission->entry.kind == IREE_HAL_AMD_GPU_PM4_ENTRY_DISPATCH) {
-    const iree_host_size_t reference_count =
-        submission->dispatch.bindings.count +
-        iree_hal_dispatch_uses_indirect_parameters(submission->dispatch.flags);
-    for (iree_host_size_t i = 0; i < reference_count; ++i) {
-      iree_hal_buffer_release(submission->dispatch.bindings.values[i].buffer);
+    if (!(submission->dispatch.flags &
+          IREE_HAL_DISPATCH_FLAG_BORROW_RESOURCE_LIFETIMES)) {
+      const iree_host_size_t reference_count =
+          submission->dispatch.bindings.count +
+          iree_hal_dispatch_uses_indirect_parameters(
+              submission->dispatch.flags);
+      for (iree_host_size_t i = 0; i < reference_count; ++i) {
+        iree_hal_buffer_release(submission->dispatch.bindings.values[i].buffer);
+      }
+      iree_hal_executable_release(submission->dispatch.executable);
     }
-    iree_hal_executable_release(submission->dispatch.executable);
   } else if (submission->entry.kind == IREE_HAL_AMD_GPU_PM4_ENTRY_TRANSFER) {
     iree_hal_amd_gpu_pm4_transfer_deinitialize(&submission->transfer);
   } else if (submission->entry.kind == IREE_HAL_AMD_GPU_PM4_ENTRY_EXECUTE) {

@@ -130,6 +130,33 @@ TEST_P(GpuNativeDispatchTest, DirectDispatchThroughExplicitPoolAndSealedGroup) {
         executables[t], IREE_SV("image_increment"), &functions[t]));
     CreateSemaphore(&timelines[t]);
   }
+  // An idle caller can discover failure before creating any capture. It still
+  // completes the rejected operation through its output timeline and leaves
+  // later independent dispatches runnable. Executing this dispatch by mistake
+  // would also change image_increment's global and corrupt the checks below.
+  iree_hal_semaphore_t* failed_input = nullptr;
+  iree_hal_semaphore_t* failed_output = nullptr;
+  CreateSemaphore(&failed_input);
+  CreateSemaphore(&failed_output);
+  iree_hal_semaphore_fail(
+      failed_input, iree_make_status(IREE_STATUS_ABORTED, "producer failed"));
+  uint64_t failed_value = 1;
+  uint32_t increment = 1;
+  auto failed_binding = iree_hal_make_buffer_ref(output, 0, sizeof(uint32_t));
+  auto failed_config = iree_hal_make_static_dispatch_config(1, 1, 1);
+  failed_config.workgroup_size[0] = 32;
+  failed_config.workgroup_size[1] = failed_config.workgroup_size[2] = 1;
+  IREE_ASSERT_OK(iree_hal_queue_dispatch(
+      queues_[0], {1, &failed_input, &failed_value},
+      {1, &failed_output, &failed_value}, executables[0], functions[0],
+      failed_config, iree_make_const_byte_span(&increment, sizeof(increment)),
+      {1, &failed_binding}, nullptr, 0));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
+                        iree_hal_semaphore_wait(failed_output, failed_value,
+                                                iree_infinite_timeout(),
+                                                IREE_ASYNC_WAIT_FLAG_NONE));
+  iree_hal_semaphore_release(failed_output);
+  iree_hal_semaphore_release(failed_input);
   std::array<std::thread, kThreads> threads;
   for (uint32_t t = 0; t < kThreads; ++t) {
     threads[t] = std::thread([&, t] {

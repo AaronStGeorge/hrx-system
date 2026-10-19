@@ -82,14 +82,19 @@ static iree_hal_amd_gpu_publication_entry_t* iree_hal_amd_gpu_publisher_detach(
   return head;
 }
 
+bool iree_hal_amd_gpu_publisher_try_acquire(
+    iree_hal_amd_gpu_publisher_t* publisher) {
+  int32_t expected = 0;
+  return iree_atomic_load(&publisher->state, iree_memory_order_relaxed) == 0 &&
+         iree_atomic_compare_exchange_strong(
+             &publisher->state, &expected, IREE_HAL_AMD_GPU_PUBLISHER_OWNED,
+             iree_memory_order_acquire, iree_memory_order_relaxed);
+}
+
 bool iree_hal_amd_gpu_publisher_enqueue(
     iree_hal_amd_gpu_publisher_t* publisher,
     iree_hal_amd_gpu_publication_entry_t* entry) {
-  int32_t expected = 0;
-  if (iree_atomic_load(&publisher->state, iree_memory_order_relaxed) == 0 &&
-      iree_atomic_compare_exchange_strong(
-          &publisher->state, &expected, IREE_HAL_AMD_GPU_PUBLISHER_OWNED,
-          iree_memory_order_acquire, iree_memory_order_relaxed)) {
+  if (iree_hal_amd_gpu_publisher_try_acquire(publisher)) {
     publisher->ready = entry;
     return true;
   }

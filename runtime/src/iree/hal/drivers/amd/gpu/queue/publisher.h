@@ -51,6 +51,13 @@ void iree_hal_amd_gpu_publisher_initialize(
 void iree_hal_amd_gpu_publisher_deinitialize(
     iree_hal_amd_gpu_publisher_t* publisher);
 
+// Acquires idle publication without capturing an operation. The caller can
+// consume borrowed API inputs while it owns the publisher, and must finish
+// with handoff even if preparation fails. False leaves all ownership unchanged.
+// Captured work arriving concurrently remains in the FIFO for that handoff.
+bool iree_hal_amd_gpu_publisher_try_acquire(
+    iree_hal_amd_gpu_publisher_t* publisher);
+
 // Transfers a completely captured operation. True grants exclusive publication
 // ownership: the caller consumes at most one entry with next and then calls
 // handoff. That entry may be an older capture, or NULL across an unfinished

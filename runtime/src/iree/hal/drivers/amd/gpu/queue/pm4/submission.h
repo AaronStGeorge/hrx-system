@@ -22,16 +22,38 @@
 extern "C" {
 #endif  // __cplusplus
 
-// One captured timeline edge. The semaphore is retained independently of an
-// optional native reader. A reader never borrows its producer's capture.
+// One admission/retirement edge. A deferred capture retains its semaphore;
+// ready retirement needs only an exact native reader. A reader never borrows
+// its producer's capture.
 typedef struct iree_hal_amd_gpu_pm4_submission_wait_t {
-  // Owned HAL timeline, live through admission and terminal completion.
+  // HAL timeline borrowed during inline admission, retained by a deferred
+  // capture, or NULL once only its native retirement result is needed.
   iree_hal_semaphore_t* semaphore;
   // Requested timeline value.
   uint64_t value;
   // Owned eligible native reader, or NULL for a completed/host dependency.
   iree_hal_amd_gpu_pm4_signal_t* signal;
 } iree_hal_amd_gpu_pm4_submission_wait_t;
+
+// Borrowed dispatch inputs consumed by one publication attempt. Native
+// argument packing reads caller storage directly; only a deferred attempt
+// needs a capture. No pointer to this view survives the publishing call.
+typedef struct iree_hal_amd_gpu_pm4_dispatch_request_t {
+  // Borrowed executable dominating function until retirement takes ownership.
+  iree_hal_executable_t* executable;
+  // Prepared immutable launch and argument representation.
+  const iree_hal_amd_gpu_pm4_function_t* function;
+  // Already admitted launch geometry.
+  iree_hal_amd_gpu_pm4_dispatch_t geometry;
+  // Borrowed device-time geometry, when flags select indirect parameters.
+  iree_hal_buffer_ref_t parameters;
+  // Borrowed dense or native argument bytes, copied directly to native storage.
+  iree_const_byte_span_t constants;
+  // Borrowed shader binding references, resolved after dependency admission.
+  iree_hal_buffer_ref_list_t bindings;
+  // Admitted argument and launch interpretation.
+  iree_hal_dispatch_flags_t flags;
+} iree_hal_amd_gpu_pm4_dispatch_request_t;
 
 typedef enum iree_hal_amd_gpu_pm4_entry_kind_e {
   IREE_HAL_AMD_GPU_PM4_ENTRY_BARRIER,
@@ -56,9 +78,9 @@ typedef struct iree_hal_amd_gpu_pm4_entry_t {
   iree_hal_amd_gpu_pm4_entry_kind_t kind;
 } iree_hal_amd_gpu_pm4_entry_t;
 
-// Captured public operation shared by publication and native retirement.
-// Variable arrays and captured bytes occupy the same CPU allocation. Each
-// published piece owns separate retirement credit; this capture also owns any
+// Asynchronous ownership shared by publication and native retirement. Deferred
+// operations also capture caller inputs in the same CPU allocation. Each
+// published piece owns separate retirement credit; this object also owns any
 // unpublished suffix and never stores mutable per-publication completion data.
 typedef struct iree_hal_amd_gpu_pm4_submission_t {
   // Unpublished work and nonterminal native pieces hold independent references.
@@ -73,7 +95,7 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
   iree_host_size_t allocation_size;
   // Number of captured wait edges.
   iree_host_size_t wait_count;
-  // Inline wait edges; their native readers are acquired during admission.
+  // Inline dependencies, with native readers acquired during admission.
   iree_hal_amd_gpu_pm4_submission_wait_t* waits;
   // Owned signal timelines and copied values in inline storage.
   iree_hal_semaphore_list_t signals;
@@ -93,15 +115,17 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
   union {
     // Admitted dispatch with privately captured arguments and resources.
     struct {
-      // Owned executable dominating the prepared function.
+      // Executable dominating function, retained unless flags borrow lifetime.
       iree_hal_executable_t* executable;
       // Borrowed prepared function dominated by executable.
       const iree_hal_amd_gpu_pm4_function_t* function;
-      // Copied shader references, each retained. Indirect parameters append one
-      // additional retained reference after count, followed by address scratch
-      // for shader references. The public shader binding count is unchanged.
+      // Copied shader references, retained unless flags borrow lifetimes.
+      // Indirect parameters append one additional reference after count. A
+      // deferred capture also reserves address scratch after the references.
+      // The public shader binding count is unchanged.
       iree_hal_buffer_ref_list_t bindings;
-      // Copied caller constants, in dense HAL or explicit native ABI layout.
+      // Copied deferred constants; empty once an inline call packs native
+      // bytes.
       iree_const_byte_span_t constants;
       // Admitted interpretation of constants, bindings, and launch geometry.
       iree_hal_dispatch_flags_t flags;
@@ -161,6 +185,23 @@ iree_status_t iree_hal_amd_gpu_pm4_submission_create(
     iree_const_byte_span_t constants, iree_hal_buffer_ref_list_t bindings,
     const iree_hal_amd_gpu_pm4_barrier_profile_t* profile,
     const iree_hal_queue_barriers_t* barriers, iree_hal_dispatch_flags_t flags,
+    iree_hal_amd_gpu_pm4_submission_t** out_submission);
+
+// Creates only the asynchronous ownership for a dispatch already prepared for
+// publication. Constants and wait semaphores are not captured. On success,
+// transfers the native readers in waits, retains signals, and retains resources
+// unless flags borrow their lifetimes. No borrow of request or waits survives.
+// Failure transfers nothing.
+// The prepared native command bytes, including arguments, must survive any
+// KERNEL capacity deferral; this object cannot reconstruct those bytes.
+iree_status_t iree_hal_amd_gpu_pm4_submission_create_retirement(
+    iree_hal_amd_gpu_capture_pool_t* pool,
+    const iree_hal_amd_gpu_pm4_dispatch_request_t* request,
+    iree_host_size_t wait_count,
+    const iree_hal_amd_gpu_pm4_submission_wait_t* waits,
+    uint32_t native_wait_count, iree_hal_semaphore_list_t signals,
+    iree_hal_amd_gpu_pm4_barrier_t before, iree_hal_amd_gpu_pm4_barrier_t after,
+    const iree_hal_amd_gpu_profile_operation_t* profile,
     iree_hal_amd_gpu_pm4_submission_t** out_submission);
 
 // Captures the complete public transfer transaction, including update bytes
