@@ -17,12 +17,12 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
+#include "loom/format/testdata/golden_text_corpus.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
-#include "loom/test/corpus/text/golden_text_corpus.h"
 #include "loom/testing/context.h"
 
 namespace loom {

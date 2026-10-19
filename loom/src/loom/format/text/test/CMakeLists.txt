@@ -37,6 +37,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::text_asm
     loom::error::diagnostic
+    loom::format::testdata::golden_text_corpus
     loom::format::text::parser
     loom::format::text::printer
     loom::ir
@@ -53,7 +54,6 @@ loom_cc_test(
     loom::ops::vector
     loom::ops::view
     loom::target::low_descriptor_registry_core_test
-    loom::test::corpus::text::golden_text_corpus
     loom::testing::context
 )
 

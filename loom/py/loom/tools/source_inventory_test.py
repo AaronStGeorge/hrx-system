@@ -63,7 +63,7 @@ def test_check_families_preserve_source_and_build_policy_coverage():
         root = Path(temporary)
         paths = [
             "loom/unregistered.loom-test",
-            "loom/src/loom/test/corpus/text/invalid.loom",
+            "loom/src/loom/format/testdata/invalid.loom",
             "loom/src/loom/test/corpus/authoring/example.loom",
             "loom/src/loom/target/example/BUILD.bazel",
             "loom/src/loom/target/example/CMakeLists.txt",

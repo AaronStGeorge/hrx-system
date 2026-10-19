@@ -7,7 +7,7 @@
 load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//loom/src/loom/format:__subpackages__"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
