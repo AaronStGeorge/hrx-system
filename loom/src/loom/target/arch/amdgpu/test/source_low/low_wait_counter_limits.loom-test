@@ -1,9 +1,3 @@
-// Copyright 2026 The IREE Authors
-//
-// Licensed under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
 // A load queue larger than the immediate range still requires an effective
 // wait. The all-ones encoding is reserved for leaving a counter unconstrained.
 // RUN: with-checks emit amdgpu-assembly @incoming_count_limit strategy=source

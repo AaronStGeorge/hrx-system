@@ -1,9 +1,3 @@
-// Copyright 2026 The IREE Authors
-//
-// Licensed under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
 // Volatile reads order even when their results are unused and their addresses
 // differ. The branch case carries the same completion requirement to each edge.
 // RUN: emit amdgpu-assembly @volatile_reads strategy=source
