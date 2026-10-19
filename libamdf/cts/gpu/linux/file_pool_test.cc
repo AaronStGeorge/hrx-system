@@ -56,6 +56,7 @@ class GpuFilePoolTest : public DispatchTest {
                     std::exchange(reservation_, nullptr)),
                 AMDF_STATUS_OK);
     }
+    ASSERT_TRUE(ordinary_.Release(this->api_));
     if (shared_mapping_ != nullptr) {
       ASSERT_EQ(this->api_->host_mapping_destroy(shared_mapping_),
                 AMDF_STATUS_OK);
@@ -74,14 +75,12 @@ class GpuFilePoolTest : public DispatchTest {
     }
   }
 
-  void PreparePool(bool default_address) {
+  void PreparePool(amdf_memory_flags_t access_flags) {
     const amdf_memory_device_access_t access = {
         this->device_,
         {
             .access = kReadWrite,
-            .flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE |
-                     (default_address ? AMDF_MEMORY_FLAG_DEVICE_ADDRESS
-                                      : UINT64_C(0)),
+            .flags = access_flags,
         },
     };
     const amdf_memory_flags_t flags =
@@ -161,7 +160,8 @@ class GpuFilePoolTest : public DispatchTest {
         pool_.Initialize(this->api_, this->system_scope_, create));
     EXPECT_EQ(pool_.host.cacheability, AMDF_HOST_CACHEABILITY_WRITE_BACK);
     ASSERT_NE(pool_.host.features & AMDF_HOST_MAPPING_FEATURE_FILE_IO, 0u);
-    EXPECT_EQ(pool_.device_address != 0, default_address);
+    EXPECT_EQ(pool_.device_address != 0,
+              (access_flags & AMDF_MEMORY_FLAG_DEVICE_ADDRESS) != 0);
 
     const amdf_memory_reservation_access_t projection = {this->device_, 0,
                                                          kReadWrite, 0};
@@ -185,22 +185,24 @@ class GpuFilePoolTest : public DispatchTest {
               AMDF_STATUS_OK);
     ASSERT_EQ(kUnit % view.mapping_granularity, 0u);
     alias_address_ = view.address;
-    ASSERT_NO_FATAL_FAILURE(QueryFileTransitions());
+    ASSERT_NO_FATAL_FAILURE(
+        QueryTransitions(pool_, AMDF_MEMORY_SITE_KIND_FILE_IO));
   }
 
-  void QueryFileTransitions() {
-    auto file = pool_.HostSite();
-    file.kind = AMDF_MEMORY_SITE_KIND_FILE_IO;
-    auto device = pool_.DeviceSite(this->family_.ordinal);
+  void QueryTransitions(const GpuMemory& memory,
+                        amdf_memory_site_kind_t host_kind) {
+    auto host = memory.HostSite();
+    host.kind = host_kind;
+    auto device = memory.DeviceSite(this->family_.ordinal);
     amdf_memory_profile_pair_query_t query = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE_PAIR_QUERY,
         .structure_size = sizeof(query),
-        .memory_profile_ordinal = pool_.creation.memory_profile_ordinal,
+        .memory_profile_ordinal = memory.creation.memory_profile_ordinal,
         .access_count = 1,
-        .required_flags = pool_.creation.required_flags,
-        .accesses = pool_.creation.accesses,
+        .required_flags = memory.creation.required_flags,
+        .accesses = memory.creation.accesses,
     };
-    query.producer.kind = AMDF_MEMORY_SITE_KIND_FILE_IO;
+    query.producer.kind = host_kind;
     query.producer.value.host_access =
         AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE;
     query.consumer.kind = AMDF_MEMORY_SITE_KIND_DEVICE;
@@ -214,18 +216,20 @@ class GpuFilePoolTest : public DispatchTest {
       ASSERT_EQ(this->api_->memory_scope_query_pair_info(this->system_scope_,
                                                          &query, &prospective),
                 AMDF_STATUS_OK);
-      ASSERT_EQ(this->api_->memory_query_pair_info(&file, &device, &concrete),
+      ASSERT_EQ(this->api_->memory_query_pair_info(&host, &device, &concrete),
                 AMDF_STATUS_OK);
       ASSERT_NE(concrete.flags & AMDF_MEMORY_PAIR_FLAG_SHARED_BACKING_REACHABLE,
                 0u);
       EXPECT_EQ(concrete.flags, prospective.flags);
-      EXPECT_EQ(concrete.atomic_reach.scope_32, AMDF_ATOMIC_SCOPE_NONE);
-      EXPECT_EQ(concrete.atomic_reach.scope_64, AMDF_ATOMIC_SCOPE_NONE);
+      if (host_kind == AMDF_MEMORY_SITE_KIND_FILE_IO) {
+        EXPECT_EQ(concrete.atomic_reach.scope_32, AMDF_ATOMIC_SCOPE_NONE);
+        EXPECT_EQ(concrete.atomic_reach.scope_64, AMDF_ATOMIC_SCOPE_NONE);
+      }
       for (const auto* pair : {&concrete, &prospective}) {
-        const auto& file_transition =
+        const auto& host_transition =
             direction == 0 ? pair->release : pair->acquire;
-        EXPECT_EQ(file_transition.kind, AMDF_CACHE_TRANSITION_KIND_NONE);
-        EXPECT_EQ(file_transition.executor,
+        EXPECT_EQ(host_transition.kind, AMDF_CACHE_TRANSITION_KIND_NONE);
+        EXPECT_EQ(host_transition.executor,
                   AMDF_CACHE_TRANSITION_EXECUTOR_NONE);
         const auto& gpu = direction == 0 ? pair->acquire : pair->release;
         if (gpu.kind == AMDF_CACHE_TRANSITION_KIND_NONE) {
@@ -241,7 +245,7 @@ class GpuFilePoolTest : public DispatchTest {
                   0u);
         cache_operations_ |= UINT64_C(1) << operation;
       }
-      std::swap(file, device);
+      std::swap(host, device);
       std::swap(query.producer, query.consumer);
     }
   }
@@ -354,7 +358,9 @@ class GpuFilePoolTest : public DispatchTest {
   }
 
   void Run(bool direct, bool default_address) {
-    ASSERT_NO_FATAL_FAILURE(PreparePool(default_address));
+    ASSERT_NO_FATAL_FAILURE(PreparePool(
+        AMDF_MEMORY_FLAG_MAPPING_SOURCE |
+        (default_address ? AMDF_MEMORY_FLAG_DEVICE_ADDRESS : UINT64_C(0))));
     if (this->IsSkipped()) {
       return;
     }
@@ -468,8 +474,160 @@ class GpuFilePoolTest : public DispatchTest {
     this->RecordProperty("completed_generations", kGenerationCount);
   }
 
+  void RunStaged(bool direct) {
+    // Fixed staging addresses need no alias source. Owned ordinary pages can
+    // use native registration independently of the foreign-export service.
+    ASSERT_NO_FATAL_FAILURE(PreparePool(AMDF_MEMORY_FLAG_DEVICE_ADDRESS));
+    if (this->IsSkipped()) {
+      return;
+    }
+    const amdf_memory_device_access_t access = {
+        this->device_,
+        {
+            .access = kReadWrite,
+            .flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE |
+                     AMDF_MEMORY_FLAG_HOST_COHERENT,
+        },
+    };
+    const uint32_t profile = FindGpuMemoryProfileOrdinal(
+        this->api_, this->system_scope_, this->device_,
+        AMDF_MEMORY_PROFILE_ROLE_CREATE | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP,
+        AMDF_MEMORY_FLAG_HOST_VISIBLE, access.requirements);
+    ASSERT_NE(profile, AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN);
+    const amdf_memory_create_info_t create = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_CREATE_INFO,
+        .structure_size = sizeof(create),
+        .memory_profile_ordinal = profile,
+        .access_count = 1,
+        .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
+        .byte_length = 16 * kUnit,
+        .minimum_alignment = kUnit,
+        .accesses = &access,
+    };
+    ASSERT_NO_FATAL_FAILURE(
+        ordinary_.Initialize(this->api_, this->system_scope_, create));
+    ASSERT_EQ(ordinary_.host.features & AMDF_HOST_MAPPING_FEATURE_FILE_IO, 0u);
+    ASSERT_NO_FATAL_FAILURE(
+        QueryTransitions(ordinary_, AMDF_MEMORY_SITE_KIND_HOST));
+
+    std::vector<uint32_t> expected_file(12 * kWordCount, kGuard);
+    for (uint32_t generation = 0; generation <= kGenerationCount;
+         ++generation) {
+      for (uint32_t word = 0; word < kWordCount; ++word) {
+        expected_file[(1 + generation) * kWordCount + word] =
+            0xf17b35a9u + generation * 0x01030507u + word * 0x9e3779b9u;
+      }
+    }
+    ASSERT_NO_FATAL_FAILURE(
+        io_.CreateFile(expected_file, direct, pool_.info.alignment));
+    if (this->IsSkipped()) {
+      return;
+    }
+    std::vector<uint32_t> expected_pool(8 * kWordCount, kGuard);
+    std::vector<uint32_t> expected_ordinary(16 * kWordCount, kGuard);
+    std::memcpy(pool_.host.pointer, expected_pool.data(),
+                pool_.info.byte_length);
+    std::memcpy(ordinary_.host.pointer, expected_ordinary.data(),
+                ordinary_.info.byte_length);
+    ASSERT_NO_FATAL_FAILURE(pool_.TransferHostCache(
+        this->api_, this->family_.ordinal, AMDF_HOST_CACHE_OPERATION_FLUSH));
+    ASSERT_NO_FATAL_FAILURE(ordinary_.TransferHostCache(
+        this->api_, this->family_.ordinal, AMDF_HOST_CACHE_OPERATION_FLUSH));
+    ASSERT_NO_FATAL_FAILURE(
+        io_.Register(pool_.host.pointer, pool_.info.byte_length));
+    if (this->IsSkipped()) {
+      return;
+    }
+    ASSERT_NO_FATAL_FAILURE(PrepareDispatch());
+    auto* bytes = static_cast<uint8_t*>(pool_.host.pointer);
+    ASSERT_NO_FATAL_FAILURE(io_.Begin(false, bytes + kUnit, kUnit, kUnit, 1));
+    ASSERT_NO_FATAL_FAILURE(io_.Complete(1, kUnit));
+    for (uint32_t generation = 0; generation < kGenerationCount; ++generation) {
+      SCOPED_TRACE(generation);
+      const uint32_t target_slot = 1 + 4 * generation;
+      const uint32_t count = kWordCount - 13 - generation * 11;
+      const uint32_t addend = 0x80000023u + generation * 0x01010101u;
+      const std::array<amdf_memory_mapping_update_t, 2> updates = {{
+          {
+              .byte_length = kUnit,
+              .memory = ordinary_.memory,
+              .access = kReadWrite,
+              .source_byte_offset = target_slot * kUnit,
+          },
+          {
+              .target_byte_offset = kUnit,
+              .byte_length = kUnit,
+              .memory = ordinary_.memory,
+              .access = AMDF_MEMORY_ACCESS_READ,
+              .source_byte_offset = target_slot * kUnit,
+          },
+      }};
+      ASSERT_EQ(this->api_->memory_reservation_update(
+                    reservation_, 0, updates.size(), updates.data()),
+                AMDF_STATUS_OK);
+      ASSERT_NO_FATAL_FAILURE(Publish(pool_.device_address + kUnit,
+                                      alias_address_, count, addend,
+                                      2 * generation + 1));
+      ASSERT_NO_FATAL_FAILURE(Wait(2 * generation + 1));
+
+      // Upload completion releases the file slot, independently of every
+      // reader of the retained destination. Replace the source before reading
+      // through either the CPU view or the second GPU alias.
+      ASSERT_NO_FATAL_FAILURE(io_.Begin(false, bytes + kUnit, kUnit,
+                                        (generation + 2) * kUnit,
+                                        generation + 2));
+      ASSERT_NO_FATAL_FAILURE(io_.Complete(generation + 2, kUnit));
+      std::copy_n(expected_file.data() + (generation + 2) * kWordCount,
+                  kWordCount, expected_pool.data() + kWordCount);
+      for (uint32_t word = 0; word < count; ++word) {
+        const uint32_t source =
+            expected_file[(generation + 1) * kWordCount + word];
+        expected_ordinary[target_slot * kWordCount + word] =
+            kSdma ? source
+                  : static_cast<uint32_t>(uint64_t{source} * 3 + addend);
+      }
+      ASSERT_NO_FATAL_FAILURE(
+          ordinary_.TransferHostCache(this->api_, this->family_.ordinal,
+                                      AMDF_HOST_CACHE_OPERATION_INVALIDATE));
+      ASSERT_EQ(std::memcmp(ordinary_.host.pointer, expected_ordinary.data(),
+                            ordinary_.info.byte_length),
+                0);
+
+      ASSERT_NO_FATAL_FAILURE(Publish(alias_address_ + kUnit,
+                                      pool_.device_address + 5 * kUnit, count,
+                                      addend, 2 * generation + 2));
+      ASSERT_NO_FATAL_FAILURE(Wait(2 * generation + 2));
+      ASSERT_NO_FATAL_FAILURE(io_.Begin(true, bytes + 5 * kUnit, kUnit,
+                                        (7 + generation) * kUnit,
+                                        100 + generation));
+      ASSERT_NO_FATAL_FAILURE(io_.Complete(100 + generation, kUnit));
+      for (uint32_t word = 0; word < count; ++word) {
+        const uint32_t source =
+            expected_ordinary[target_slot * kWordCount + word];
+        expected_pool[5 * kWordCount + word] =
+            kSdma ? source
+                  : static_cast<uint32_t>(uint64_t{source} * 3 + addend);
+      }
+      std::copy_n(expected_pool.data() + 5 * kWordCount, kWordCount,
+                  expected_file.data() + (7 + generation) * kWordCount);
+    }
+    ASSERT_NO_FATAL_FAILURE(
+        pool_.TransferHostCache(this->api_, this->family_.ordinal,
+                                AMDF_HOST_CACHE_OPERATION_INVALIDATE));
+    EXPECT_EQ(std::memcmp(pool_.host.pointer, expected_pool.data(),
+                          pool_.info.byte_length),
+              0);
+    ASSERT_NO_FATAL_FAILURE(io_.VerifyFile(expected_file));
+    this->RecordProperty("staging_byte_length",
+                         std::to_string(pool_.info.byte_length));
+    this->RecordProperty("destination_byte_length",
+                         std::to_string(ordinary_.info.byte_length));
+    this->RecordProperty("completed_generations", kGenerationCount);
+  }
+
   void RunSharedAttachments() {
-    ASSERT_NO_FATAL_FAILURE(PreparePool(true));
+    ASSERT_NO_FATAL_FAILURE(PreparePool(AMDF_MEMORY_FLAG_MAPPING_SOURCE |
+                                        AMDF_MEMORY_FLAG_DEVICE_ADDRESS));
     if (this->IsSkipped()) {
       return;
     }
@@ -626,13 +784,15 @@ class GpuFilePoolTest : public DispatchTest {
   amdf_host_mapping_t* shared_mapping_ = nullptr;
   // Independently owned pool survives queue, file-pin, and alias retirement.
   GpuMemory pool_;
+  // Ordinary GPU backing outlives both aliases; only pool_ is file registered.
+  GpuMemory ordinary_;
   // Native file and fixed-buffer registrations borrow the pool's original view.
   FilePoolIo io_;
   // Stable two-slot GPU projection, rebound only after the last GPU reader.
   amdf_memory_reservation_t* reservation_ = nullptr;
   // Base address of the explicit GPU projection.
   uint64_t alias_address_ = 0;
-  // Queried file/device cache operations for the chosen engine.
+  // Queried file/device and coherent host/device operations for this engine.
   amdf_cache_operations_t cache_operations_ = 0;
   // Complete signal or CP fence, separate from cached payload storage.
   GpuMemory* control_ = nullptr;
@@ -662,6 +822,12 @@ TYPED_TEST(GpuFilePoolTest, BufferedSourceOnly) { this->Run(false, false); }
 TYPED_TEST(GpuFilePoolTest, DirectSourceOnly) { this->Run(true, false); }
 TYPED_TEST(GpuFilePoolTest, BufferedDefaultAddress) { this->Run(false, true); }
 TYPED_TEST(GpuFilePoolTest, DirectDefaultAddress) { this->Run(true, true); }
+TYPED_TEST(GpuFilePoolTest, BufferedStagingIntoOrdinaryAliases) {
+  this->RunStaged(false);
+}
+TYPED_TEST(GpuFilePoolTest, DirectStagingIntoOrdinaryAliases) {
+  this->RunStaged(true);
+}
 TYPED_TEST(GpuFilePoolTest, IndependentAttachmentsSharePages) {
   this->RunSharedAttachments();
 }
