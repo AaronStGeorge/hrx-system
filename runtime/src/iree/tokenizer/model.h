@@ -49,14 +49,9 @@ typedef struct iree_tokenizer_segment_list_t {
   // Borrowed segment ranges, in the same coordinate space as buffer_offset.
   const iree_tokenizer_segment_t* values;
   // When true, the last segment in the list is incomplete — more bytes will be
-  // appended in subsequent calls. The model must use an incremental processing
-  // path (e.g., BYTE_LOOP for BPE) and must not flush/finalize the last
-  // segment. It reports segment_complete=false and preserves internal state
-  // (window, heap, byte position) for continuation.
-  //
-  // This enables streaming encode for inputs that exceed the ring buffer's
-  // capacity, such as split=false models where the entire input is one segment.
-  // The model owns the proof that an emitted prefix cannot change.
+  // appended in subsequent calls. The caller retains all unreclaimed bytes and
+  // resubmits the completed segment. A model may defer the entire incomplete
+  // segment; partial input is not a promise of immediate token output.
   bool last_is_partial;
   // Logical position of transform_buffer[0]. A segment's first byte is at
   // transform_buffer.data + (segment.start - buffer_offset). Retained/output

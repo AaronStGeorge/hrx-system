@@ -13,7 +13,7 @@ output delivery.
 
 The tokenizer object is immutable after construction and can be shared across
 threads. Each encoder owns its progress, output credit, and workspace. Callers
-provide fixed state and transform storage, plus an explicit allocator for model
+provide fixed state and transform storage, plus an explicit allocator for
 workspace that grows with unresolved input. Reset reuses that capacity, making
 pooled encoders useful for repeated requests. Bounded allocators can enforce a
 request's memory budget; exhaustion fails explicitly without changing tokens.
@@ -21,12 +21,12 @@ request's memory budget; exhaustion fails explicitly without changing tokens.
 ### Key Properties
 
 - **Streaming-first**: `encode(text)` is just `initialize() -> feed(text) ->
-  finalize()`. Exact Unigram path selection is independent of input chunk
+  finalize()`. Exact BPE and Unigram selection is independent of input chunk
   boundaries and output capacity.
-- **Explicit memory ownership**: Fixed state and transform buffers are
-  caller-provided. Exact Unigram paths and fused unknown spellings can outgrow
-  inline storage; their workspace uses the encoder's allocator and survives
-  reset. Deinitialization releases it.
+- **Explicit memory ownership**: Fixed state and initial transform buffers are
+  caller-provided. Unfinished segments, explicit BPE symbols, exact Unigram
+  paths, and fused unknown spellings can outgrow inline storage; their workspace
+  uses the encoder's allocator and survives reset. Deinitialization releases it.
 - **Stable model offsets**: Token spans use logical transformed-input bytes,
   independent of ring wrap or reclamation. Byte-fallback tokens share the span
   of the selected unknown piece. Recovering original-input coordinates through
@@ -43,55 +43,16 @@ request's memory budget; exhaustion fails explicitly without changing tokens.
   No undefined behavior on malformed UTF-8, pathological regex patterns, or
   adversarial input.
 
-## Performance
-
-Throughput in MiB/s (one-shot encode and decode, pool rotation with 64
-copies defeating cache warming, Clang `-O3 -march=native` with ThinLTO,
-AMD EPYC 5.4 GHz). Corpus: 593KB ASCII (Sherlock Holmes), 1.8MB CJK
-(Chinese classic), 1.4MB Code (concatenated C source):
-
-| Model | Algo | Vocab | ASCII Enc | CJK Enc | Code Enc | ASCII Dec | CJK Dec | Code Dec |
-|-------|------|------:|----------:|--------:|---------:|----------:|--------:|---------:|
-| GPT-2             | BPE       |  50K |  28 |  15 |  44 |   587 | 1,588 |   630 |
-| Llama 3           | BPE       | 128K |  42 |   9 |  54 |   709 | 1,236 |   781 |
-| Gemma 2B          | BPE       | 256K |  40 |  67 |  15 |   213 |   366 |   215 |
-| Qwen 2.5          | BPE       | 151K |  24 |   8 |  44 |   736 | 1,270 |   835 |
-| BLOOM             | BPE       | 250K |  24 |   7 |   2 |   621 |   984 |   762 |
-| Mistral NeMo      | BPE       | 131K |  39 |  10 |  39 |   601 | 1,221 |   780 |
-| DeepSeek V3       | BPE       | 129K |  13 |  10 |  16 |   658 | 1,667 | 2,125 |
-| Whisper           | BPE       |  51K |  26 |  11 |  43 |   588 | 1,439 |   596 |
-| BERT              | WordPiece |  30K |  44 |  36 |  40 |   814 | 3,061 |   792 |
-| T5                | Unigram   |  32K |  18 |  34 |   3 |   646 | 1,808 |   556 |
-
-Streaming encode produces bit-exact output regardless of buffer size and
-tracks one-shot throughput closely. DeepSeek V3 streaming encode on ASCII
-(same settings as above, pool rotation, Sherlock Holmes corpus):
-
-| Buffer Size | Throughput | Tokens | vs One-Shot |
-|------------:|-----------:|-------:|------------:|
-|        1 KB |  10.7 MiB/s | 143,053 | 0.82x |
-|        4 KB |  10.7 MiB/s | 143,053 | 0.82x |
-|       16 KB |  11.6 MiB/s | 143,053 | 0.89x |
-|       64 KB |  11.6 MiB/s | 143,053 | 0.89x |
-|    One-Shot |  13.1 MiB/s | 143,053 | 1.00x |
-
-Throughput is flat across all buffer sizes. The 0.82-0.89x streaming ratio is
-the cost of the pass-through probe: when a segmenter child finds no matches
-(e.g., Numbers split on English text), the pipeline probes the final child's
-DFA to determine the natural segment boundary before expanding through the
-full child chain. This avoids forcing word splits at arbitrary buffer
-boundaries.
-
-### Running Benchmarks
+## Running Benchmarks
 
 ```bash
 # Single model (HuggingFace JSON):
-iree-bazel-run --copt=-O3 --copt=-march=native --features=thin_lto \
+iree-bazel-run --config=opt \
   //runtime/src/iree/tokenizer/tools:comprehensive_benchmark -- \
   --tokenizer_json=path/to/tokenizer.json --benchmark_min_time=1s
 
 # Single model (tiktoken — encoding inferred from filename):
-iree-bazel-run --copt=-O3 --copt=-march=native --features=thin_lto \
+iree-bazel-run --config=opt \
   //runtime/src/iree/tokenizer/tools:comprehensive_benchmark -- \
   --tokenizer_json=path/to/cl100k_base.tiktoken --benchmark_min_time=1s
 
@@ -236,10 +197,13 @@ The pipeline is organized to keep working data in L1/L2 cache:
 
 ### Algorithmic Efficiency
 
-- **BPE**: Priority-queue based merge with a fixed-size heap. Processes one
-  segment at a time with O(n log n) merges where n is the segment length
-  (typically 5-20 bytes, not the full input length). The heap is embedded in
-  the encode state, not heap-allocated.
+- **BPE**: Canonical merge histories compiled once at model construction
+  validate adjacent token boundaries during complete-word backtracking.
+  Repeated words use a bounded cache. Explicit initial-symbol merging uses a
+  rank-ordered heap with stable symbol indices and O(n log n) work per segment.
+  Its workspace borrows fixed state storage for small segments and grows within
+  a per-state ceiling for larger ones. BPE waits for complete segments because
+  merge-priority chains can affect the first token from arbitrarily far away.
 - **Unigram**: F64 Viterbi paths retain one best predecessor per future end.
   Only prefixes shared by every surviving path can publish before a segment
   ends. Vocabulary width bounds the frontier and input lookahead; unresolved
@@ -254,14 +218,16 @@ The pipeline is organized to keep working data in L1/L2 cache:
 
 ### Memory Consumption
 
-Fixed storage is sized from the tokenizer configuration. Exact Unigram adds
-workspace only when retained paths or selected unknown text exceed inline space:
+Fixed storage is sized from the tokenizer configuration. Reusable workspace
+grows only when unresolved input or model state exceeds inline space:
 
 | Component | Size | Notes |
 |-----------|------|-------|
 | Encode state | Configuration-dependent | Pipeline stages, model frontier, and inline workspace |
 | Unigram workspace | Input-dependent | Live ambiguous paths and fused unknown text; caller allocator |
-| Transform buffer | 4-64 KB | Caller-provided, tunable |
+| Initial transform buffer | Caller-selected | Recommended size capped at 16 KiB by default |
+| Transform overflow | Up to 1 MiB by default | Half usable ring capacity; retained across resets |
+| BPE symbol overflow | Up to 128 MiB by default | Retained across complete segments and resets; no upfront reservation |
 | Decode state | Configuration-dependent | Token decoder state, optional text transform, and a retained edge sized from the vocabulary |
 | Tokenizer (shared) | Varies | Vocabulary + merge table + regex DFA |
 
@@ -271,6 +237,12 @@ with `a` scored -1 and `aa` scored -1.5, an odd-length run begins with `a` and a
 even-length run begins with `aa`: no fixed lookahead can settle its first token.
 The encoder retains that evidence until the segment ends. Ordinary resolved
 prefixes retire as input arrives, without retokenizing earlier text.
+
+Transform overflow is capped by `IREE_TOKENIZER_TRANSFORM_BUFFER_OVERFLOW_MAX_SIZE`
+and BPE symbol overflow by `IREE_TOKENIZER_BPE_SCRATCH_MAX_SIZE`. Exhaustion
+returns `RESOURCE_EXHAUSTED` without inventing a segment boundary or changing
+the token sequence. A ring growth temporarily retains both old and new storage
+while copying live bytes.
 
 ### Composability with Streaming Workflows
 
@@ -342,9 +314,11 @@ lists with 100% token-for-token accuracy.
 
 ### Offset Tracking
 
-Forward-propagated byte offsets through the full normalization pipeline.
-Offsets are stored as run-length encoded maps (O(discontinuities) memory, not
-O(input_length)), making them practical for arbitrarily long inputs.
+Model-level spans refer to the supplied transform buffer. The public pipeline
+accepts run-length offset-map storage, but does not populate and compose it
+through normalization and ring relocation. Original-input provenance requires
+that mapping before model spans reach the caller; token-ID correctness alone
+does not verify those offsets.
 
 ### Regex Engine
 
