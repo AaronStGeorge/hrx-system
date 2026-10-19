@@ -758,6 +758,7 @@ _BASE_DESCRIPTOR_SPECS = (
         "II_ADD_NC_mv_add_ri_eR",
         storage_overrides=(("dst", "eR"),),
         asm_mnemonic="add.nc.immediate",
+        rematerializable=True,
         flags=(DescriptorFlag.SAFE_TO_SPECULATE,),
     ),
     _DescriptorSpec(
@@ -1606,6 +1607,17 @@ _BASE_DESCRIPTOR_SPECS = (
         (("dst", "eR"),),
         DescriptorOpKind.CONST,
     ),
+    # Channel acquire deltas span the complete resident worker and are reused
+    # by every lock acquire. Keep this planner-owned materialization resident;
+    # ordinary constants remain rematerializable under register pressure.
+    _DescriptorSpec(
+        "MOV_alu_mv_mv_mv_cg",
+        f"{_TARGET_KEY}.lock.acquire-delta.i32",
+        "synchronization.lock.acquire-delta.i32",
+        "II_MOV_alu_mv_mv_mv_cg_eR",
+        (("dst", "eR"),),
+        asm_mnemonic="mov.acquire-delta",
+    ),
     _DescriptorSpec(
         "MOV_alu_mv_mv_mv_cg",
         f"{_TARGET_KEY}.constant.i32.shift",
@@ -1788,6 +1800,7 @@ _BASE_DESCRIPTOR_SPECS = (
         "II_ADD_NC_mv_add_rr_eR",
         storage_overrides=(("dst", "eR"),),
         asm_mnemonic="add.nc",
+        rematerializable=True,
         flags=(DescriptorFlag.SAFE_TO_SPECULATE,),
     ),
     _DescriptorSpec(
