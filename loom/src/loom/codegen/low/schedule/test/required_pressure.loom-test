@@ -126,3 +126,73 @@ block 0 order: 0
 block 1 order: 1, 2, 3, 4, 5
 block 2 order: 6, 7, 8
 scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
+
+// ====
+
+// A producer before a source-order fence is a live input to the later range.
+// Its outer completion must not pin the new inner required-register chains.
+// RUN: emit low-schedule-query @required_completion_after_fence strategy=resource-stall test.i32=3 required-register-values=%held,%first,%second,%third order=* scheduled-pressure=test.i32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @required_completion_after_fence() -> (reg<test.i32>) asm {
+  %held = test.const.i32 7
+  low.schedule.fence
+  %first = test.const.i32 1
+  %second = test.const.i32 2
+  %third = test.const.i32 3
+  %left = test.add.i32 %first, %third
+  %inner = test.add.i32 %left, %second
+  %done = test.add.i32 %held, %inner
+  return %done
+}
+
+// ----
+block 0 order: 0, 1, 2, 4, 5, 3, 6, 7, 8
+scheduled pressure test.i32: peak-live-units=3 peak-live-values=3
+
+// ====
+
+// The same later range has identical pressure when the held value enters as
+// a required function argument.
+// RUN: emit low-schedule-query @required_completion_from_argument strategy=resource-stall test.i32=3 required-register-values=%held,%first,%second,%third order=* scheduled-pressure=test.i32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @required_completion_from_argument(%held: reg<test.i32>) -> (reg<test.i32>) asm {
+  low.schedule.fence
+  %first = test.const.i32 1
+  %second = test.const.i32 2
+  %third = test.const.i32 3
+  %left = test.add.i32 %first, %third
+  %inner = test.add.i32 %left, %second
+  %done = test.add.i32 %held, %inner
+  return %done
+}
+
+// ----
+block 0 order: 0, 1, 3, 4, 2, 5, 6, 7
+scheduled pressure test.i32: peak-live-units=3 peak-live-values=3
+
+// ====
+
+// The held payload must survive to a later store, but each load can release
+// its required storage through arithmetic before that store becomes ready.
+// RUN: emit low-schedule-query @required_memory_completion_after_fence strategy=resource-stall test.i32=12 required-register-values=%payload,%first,%second order=* scheduled-pressure=test.i32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @required_memory_completion_after_fence(%address: reg<test.ptr>, %held: reg<test.i32 x4>, %seed: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm {
+  %payload = test.add.v4i32 %seed, %seed
+  low.schedule.fence
+  %first = test.load.v4i32 %address
+  %released = test.add.v4i32 %first, %held
+  %second = test.load.v4i32 %address
+  test.store.v4i32 %address, %payload
+  %result = test.add.v4i32 %second, %released
+  return %result
+}
+
+// ----
+block 0 order: 0, 1, 2, 3, 4, 6, 5, 7
+scheduled pressure test.i32: peak-live-units=12 peak-live-values=3

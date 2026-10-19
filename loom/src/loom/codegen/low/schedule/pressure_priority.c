@@ -483,9 +483,11 @@ void loom_low_schedule_pressure_compute_node_priorities(
     return;
   }
   uint32_t source_range_start = (uint32_t)node_count;
+  uint32_t source_range_end = (uint32_t)node_count;
   for (iree_host_size_t i = node_count; i > 0; --i) {
     const uint32_t node_index = (uint32_t)(i - 1);
     if (node_index < source_range_start) {
+      source_range_end = node_index + 1;
       source_range_start =
           loom_low_schedule_source_range_start(state, node_index);
     }
@@ -696,7 +698,11 @@ void loom_low_schedule_pressure_compute_node_priorities(
                         .sink = dependency->consumer_node,
                     };
               }
-              if (consumer_path.sink != LOOM_LOW_SCHEDULE_NODE_NONE) {
+              // The exit boundary can complete this range's transaction.
+              // A value held beyond it is an input to a later range and
+              // cannot pin that range to its earlier producer's transaction.
+              if (consumer_path.sink != LOOM_LOW_SCHEDULE_NODE_NONE &&
+                  consumer_path.sink <= source_range_end) {
                 loom_low_schedule_update_unspillable_completion_path(
                     loom_low_schedule_compute_downstream_activation_units(
                         node_result_units, consumer_operand_units,
