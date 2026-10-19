@@ -944,7 +944,7 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU)
 loom_cc_binary(
   NAME
-    stage_table_storage_benchmark
+    storage_benchmark
   SRCS
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/program/stage_table_storage_benchmark.cc"
   DEPS

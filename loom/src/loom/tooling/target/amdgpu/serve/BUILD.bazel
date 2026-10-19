@@ -697,7 +697,7 @@ loom_cc_test(
 )
 
 loom_cc_binary(
-    name = "stage_table_storage_benchmark",
+    name = "storage_benchmark",
     testonly = True,
     srcs = ["//loom/src/loom/serve/runtime/program:stage_table_storage_benchmark.cc"],
     tags = ["manual"],
