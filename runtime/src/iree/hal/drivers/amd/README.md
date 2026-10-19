@@ -114,10 +114,10 @@ Windows PM4 execution does not depend on it.
 
 ## GPU queue profiling
 
-The native GPU backend supports `IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS`
-through the ordinary device profiling API. `LIGHTWEIGHT_STATISTICS` selects this
-family. Begin and end require an idle device and external serialization with
-submission, as specified by the HAL API:
+The native GPU backend supports queue events, dispatch events, and executable
+metadata through the ordinary device profiling API. `LIGHTWEIGHT_STATISTICS`
+selects host queue events. Begin and end require an idle device and external
+serialization with submission, as specified by the HAL API:
 
 ```c
 const iree_hal_device_profiling_options_t options = {
@@ -146,8 +146,36 @@ and completion locks. End releases the session even when the sink fails.
 
 Disabled sessions allocate no event storage or per-operation profile metadata.
 Enabled captures place metadata in the existing submission allocation and use
-bounded stream storage. GPU timestamp families, hardware counters, and capture
-filters are rejected explicitly by this producer.
+bounded stream storage. Hardware counters and capture filters are rejected
+explicitly by this producer.
+
+### Dispatch timing
+
+Add `IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS` and
+`IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA` to the requested families
+for attributed device intervals. Direct dispatches supply attribution at
+submission. Recorded command buffers must retain it at recording time with
+`IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_PROFILE_METADATA` or
+`IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_DISPATCH_METADATA`.
+
+Each active dispatch uses two native timestamp words in invocation-owned
+argument storage. The normal GPU fixup pass patches their addresses into the
+resident program, so concurrent and pipelined invocations have independent
+samples without a host walk over recorded commands. Retirement copies completed
+samples into the bounded host stream before returning the argument storage.
+Export retains host reflection metadata without retaining executable code or
+model buffers until a later sink flush.
+
+Intervals join prior compute before the start sample and the dispatch's compute
+before the end sample. They measure isolated dispatch completion, including
+native issue and join costs; enabling them changes dispatch overlap. Raw ticks
+use the exact native family's timestamp frequency. They have no inferred host
+epoch and cannot establish host-request-to-first-workgroup latency.
+
+Profile-capable recordings retain optional sample packets and fixups even when
+capture is inactive; those packets become NOPs for an unprofiled invocation.
+Ordinary recordings retain neither the sample packets nor their fixups. Queue
+events remain the lighter option when device intervals are unnecessary.
 
 ## Memory construction
 
