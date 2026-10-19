@@ -1,9 +1,3 @@
-// Copyright 2026 The IREE Authors
-//
-// Licensed under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
 // RUN: emit amdgpu-assembly @vector_queue_aliases strategy=source fixed=%address:physical_register:0:1 fixed=%base:physical_register:0:2 fixed=%seed:physical_register:8:4 fixed=%future:physical_register:12:4
 
 amdgpu.target<gfx1151> @target
