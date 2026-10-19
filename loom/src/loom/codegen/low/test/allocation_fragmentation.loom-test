@@ -184,6 +184,60 @@ value %wide: test.i32 -> target_id[1:4]
 
 // ====
 
+// Ordinary aligned-first coloring places %left at [4, 8), leaving no
+// four-unit span for %right. The repair coloring must use legal dense bases so
+// that the exact nine-unit live set fits without spilling.
+// RUN: emit low-allocation-query @dense_aggregate_repair spill-count values=%condition,%left,%right,%sum test.i32=9 fixed=%condition:target_id:0:1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @dense_aggregate_repair(%pointer: reg<test.ptr>, %condition: reg<test.i32>) -> (reg<test.i32>, reg<test.i32 x4>) asm {
+  %left = test.load.v4i32 %pointer
+  %right = test.load.v4i32 %pointer
+  %sum = test.add.v4i32 %left, %right
+  return %condition, %sum
+}
+
+// ----
+spills: 0
+value %condition: test.i32 -> target_id[0:1]
+value %left: test.i32 -> target_id[1:4]
+value %right: test.i32 -> target_id[5:4]
+value %sum: test.i32 -> target_id[1:4]
+
+// ====
+
+// Reserving a future four-unit concat at its optional aligned base strands the
+// other four-unit value. The repair coloring must also make prospective
+// aggregate reservations dense, not just ordinary interval searches.
+// RUN: emit low-allocation-query @dense_concat_repair spill-count values=%condition,%lane0,%lane1,%lane2,%lane3,%tuple,%other,%sum test.i32=9 fixed=%condition:target_id:0:1
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @dense_concat_repair(%pointer: reg<test.ptr>, %condition: reg<test.i32>) -> (reg<test.i32>, reg<test.i32 x4>) asm {
+  %lane0 = test.add.i32 %condition, %condition
+  %lane1 = test.add.i32 %condition, %condition
+  %lane2 = test.add.i32 %condition, %condition
+  %lane3 = test.add.i32 %condition, %condition
+  %tuple = concat(%lane0, %lane1, %lane2, %lane3) : (reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>) -> reg<test.i32 x4>
+  %other = test.load.v4i32 %pointer
+  %sum = test.add.v4i32 %tuple, %other
+  return %condition, %sum
+}
+
+// ----
+spills: 0
+value %condition: test.i32 -> target_id[0:1]
+value %lane0: test.i32 -> target_id[1:1]
+value %lane1: test.i32 -> target_id[2:1]
+value %lane2: test.i32 -> target_id[3:1]
+value %lane3: test.i32 -> target_id[4:1]
+value %tuple: test.i32 -> target_id[1:4]
+value %other: test.i32 -> target_id[5:4]
+value %sum: test.i32 -> target_id[1:4]
+
+// ====
+
 // An earlier fixed assignment establishes register 8 and expires. Seven later
 // values occupy the low registers before %current, whose low4 use and explicit
 // store require register storage in [0, 4). Register 7 is free at the collision

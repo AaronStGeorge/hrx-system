@@ -24,6 +24,7 @@ typedef struct loom_low_allocation_scalar_packing_t {
   // Scalar intervals overlapping aggregate storage, indexed by interval index.
   iree_bitmap_t overlapping_intervals;
   // Exclusive scalar packing frontier for each descriptor register class.
+  // Null outside a fragmentation-repair assignment attempt.
   const uint32_t* frontiers_by_reg_class;
 } loom_low_allocation_scalar_packing_t;
 

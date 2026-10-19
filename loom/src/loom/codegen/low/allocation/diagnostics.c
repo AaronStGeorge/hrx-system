@@ -162,6 +162,8 @@ static iree_string_view_t loom_low_allocation_placement_cause_name(
       return IREE_SV("schedule-pair-affinity");
     case LOOM_LOW_PLACEMENT_CAUSE_DESCRIPTOR_CONSTRAINT:
       return IREE_SV("descriptor-constraint");
+    case LOOM_LOW_PLACEMENT_CAUSE_EDGE_PAIR_AFFINITY:
+      return IREE_SV("edge-pair-affinity");
     default:
       return IREE_SV("unknown");
   }

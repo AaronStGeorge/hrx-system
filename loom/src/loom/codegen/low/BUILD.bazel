@@ -778,6 +778,7 @@ loom_cc_library(
         ":allocation",
         ":diagnostics",
         ":representation_binding",
+        ":storage_relation",
         "//loom/src/loom/codegen/low/allocation:live_range",
         "//loom/src/loom/codegen/low/allocation:storage",
         "//loom/src/loom/error:emitter",
