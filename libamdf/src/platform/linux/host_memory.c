@@ -22,12 +22,15 @@
 // kernels that do not support fallible writable population.
 enum { AMDF_LINUX_MADV_POPULATE_WRITE = 23 };
 
-amdf_status_t amdf_platform_host_backing_create(
-    uint64_t byte_length, amdf_platform_host_backing_t* out_backing) {
-  int descriptor = memfd_create("libamdf", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+amdf_status_t amdf_platform_host_backing_prepare(
+    uint64_t byte_length, amdf_platform_host_backing_t* backing) {
+  *backing = (amdf_platform_host_backing_t){.handle = UINTPTR_MAX};
+  const int descriptor =
+      memfd_create("libamdf", MFD_CLOEXEC | MFD_ALLOW_SEALING);
   if (descriptor < 0) {
     return amdf_linux_error(errno);
   }
+  backing->handle = (uintptr_t)descriptor;
   amdf_status_t status = AMDF_STATUS_OK;
   void* pointer = MAP_FAILED;
   if (ftruncate(descriptor, (off_t)byte_length) != 0) {
@@ -43,26 +46,26 @@ amdf_status_t amdf_platform_host_backing_create(
     }
   }
   if (amdf_status_is_ok(status)) {
-    *out_backing = (amdf_platform_host_backing_t){
-        .handle = (uintptr_t)descriptor,
-        .pointer = pointer,
-    };
-  } else {
-    const amdf_status_t cleanup = amdf_linux_file_close(&descriptor);
-    if (!amdf_status_is_ok(cleanup)) {
-      status = cleanup;
-    }
+    backing->pointer = pointer;
   }
   return status;
 }
 
 amdf_status_t amdf_platform_host_backing_destroy(
     amdf_platform_host_backing_t* backing, uint64_t byte_length) {
-  if (munmap(backing->pointer, (size_t)byte_length) != 0) {
-    return amdf_linux_error(errno);
+  if (backing->pointer != NULL) {
+    if (munmap(backing->pointer, (size_t)byte_length) != 0) {
+      return amdf_linux_error(errno);
+    }
+    backing->pointer = NULL;
   }
-  int descriptor = (int)backing->handle;
-  return amdf_linux_file_close(&descriptor);
+  if (backing->handle != UINTPTR_MAX) {
+    int descriptor = (int)backing->handle;
+    // Linux consumes a valid descriptor even when close reports an error.
+    backing->handle = UINTPTR_MAX;
+    return amdf_linux_file_close(&descriptor);
+  }
+  return AMDF_STATUS_OK;
 }
 
 amdf_status_t amdf_platform_host_memory_allocate(uint64_t byte_length,

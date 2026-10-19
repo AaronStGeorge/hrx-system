@@ -193,6 +193,27 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND AMDF_BUILD)
 iree_cc_test(
   NAME
+    host_memory_test
+  SRCS
+    "host_memory_test.cc"
+  LINKOPTS
+    "-Wl,--wrap=mmap"
+    "-Wl,--wrap=munmap"
+    "-Wl,--wrap=close"
+  DEPS
+    ::host_memory
+    amdf::headers
+    iree::third_party::google_test
+    iree::third_party::google_test_main
+    libamdf::src::platform::host_memory
+  LABELS
+    "iree-build-requirement=libamdf"
+)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND AMDF_BUILD)
+iree_cc_test(
+  NAME
     host_export_test
   SRCS
     "host_export_test.cc"

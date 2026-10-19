@@ -111,8 +111,10 @@ static amdf_status_t amdf_host_backing_destroy_native(amdf_memory_t* memory,
   amdf_platform_host_backing_t* backing = memory->accesses[ordinal].native;
   const amdf_status_t status = amdf_platform_host_backing_destroy(
       backing, memory->info.native_allocation_byte_length);
-  amdf_free(memory->host_allocator, backing);
-  memory->accesses[ordinal].native = NULL;
+  if (amdf_status_is_ok(status)) {
+    amdf_free(memory->host_allocator, backing);
+    memory->accesses[ordinal].native = NULL;
+  }
   return status;
 }
 
@@ -227,14 +229,11 @@ amdf_status_t amdf_host_memory_prepare(
                          amdf_alignof(amdf_platform_host_backing_t),
                          (void**)&backing);
     if (amdf_status_is_ok(status)) {
-      status = amdf_platform_host_backing_create(native_length, backing);
-      if (amdf_status_is_ok(status)) {
-        memory->accesses[memory->backing_access_ordinal].vtable =
-            &amdf_host_backing_vtable;
-        memory->accesses[memory->backing_access_ordinal].native = backing;
-      } else {
-        amdf_free(memory->host_allocator, backing);
-      }
+      memory->accesses[memory->backing_access_ordinal].vtable =
+          &amdf_host_backing_vtable;
+      memory->accesses[memory->backing_access_ordinal].native = backing;
+      memory->info.native_allocation_byte_length = native_length;
+      status = amdf_platform_host_backing_prepare(native_length, backing);
     }
   } else {
     status = amdf_platform_host_memory_allocate(

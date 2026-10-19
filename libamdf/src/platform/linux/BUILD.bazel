@@ -153,6 +153,23 @@ amdf_cc_library(
 )
 
 amdf_cc_test(
+    name = "host_memory_test",
+    srcs = ["host_memory_test.cc"],
+    linkopts = [
+        "-Wl,--wrap=mmap",
+        "-Wl,--wrap=munmap",
+        "-Wl,--wrap=close",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":host_memory",
+        "//libamdf/src/platform:host_memory",
+        "//third_party:google_test",
+        "//third_party:google_test_main",
+    ],
+)
+
+amdf_cc_test(
     name = "host_export_test",
     srcs = ["host_export_test.cc"],
     linkopts = [

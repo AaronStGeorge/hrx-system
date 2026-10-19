@@ -13,21 +13,26 @@
 extern "C" {
 #endif
 
-// One prepared WRITE_BACK source and its persistent ordinary host view.
+// Owned preparation state for a WRITE_BACK source and its ordinary host view.
 typedef struct amdf_platform_host_backing_t {
-  // Native section/file handle borrowed by explicit alias updates.
+  // Native section/file handle, or UINTPTR_MAX before acquisition/after
+  // release. Explicit alias updates borrow this handle while the backing is
+  // live.
   uintptr_t handle;
   // Persistent host mapping owned alongside the native source.
   void* pointer;
 } amdf_platform_host_backing_t;
 
-// Creates remappable system backing and its persistent host view. Failure
-// leaves the output unchanged and retains no caller cleanup obligation.
-amdf_status_t amdf_platform_host_backing_create(
-    uint64_t byte_length, amdf_platform_host_backing_t* out_backing);
+// Prepares remappable system backing and its persistent host view in a live
+// owner's initially empty slot. This one-shot operation initializes both fields
+// before acquiring native resources. Failure retains partial ownership for
+// destruction; it performs no hidden rollback.
+amdf_status_t amdf_platform_host_backing_prepare(
+    uint64_t byte_length, amdf_platform_host_backing_t* backing);
 
 // Removes the persistent view before releasing its source. A failed removal
-// retains native ownership; callers may discard metadata at terminal teardown.
+// retains native ownership; completed steps clear their corresponding fields.
+// Callers may discard metadata at terminal teardown after observing that state.
 amdf_status_t amdf_platform_host_backing_destroy(
     amdf_platform_host_backing_t* backing, uint64_t byte_length);
 
