@@ -66,23 +66,27 @@ struct iree_hal_amd_gpu_sdma_queue_t {
   uint32_t publication_ordinal;
   // Exact family encoding features, captured before queue creation.
   amdf_queue_format_features_t features;
-  // Sole caller/deferred native producer.
-  iree_alignas(64) iree_hal_amd_gpu_publisher_t publisher;
-  // Publisher parks only after enrolling this native-capacity return.
-  iree_atomic_int32_t waiting;
   // First native error; it does not establish quiescence of accepted work.
   iree_atomic_int64_t failure;
-  // Joins the current completion scan before publication reports native
-  // failure.
-  iree_atomic_int32_t observer;
   // The deferred publication source has reported every unretired copy once.
   bool failure_delivered;
+  // Sole caller/deferred native producer, isolated from completion writes.
+  iree_hal_amd_gpu_publisher_t publisher;
   // Release-published retirement records, independent of native progress.
-  iree_alignas(64) iree_atomic_int64_t published;
+  iree_alignas(iree_hardware_destructive_interference_size)
+      iree_atomic_int64_t published;
   // Completion-owned prefix returning both command and record capacity.
-  iree_alignas(64) iree_atomic_int64_t retired;
-  // Constant-size SPSC records, indexed by publication sequence.
-  iree_hal_amd_gpu_sdma_record_t records[IREE_HAL_AMD_GPU_SDMA_CAPACITY];
+  iree_alignas(iree_hardware_destructive_interference_size)
+      iree_atomic_int64_t retired;
+  // Publisher parks only after enrolling this native-capacity return.
+  iree_atomic_int32_t waiting;
+  // Joins the current completion scan before publication reports native
+  // failure. Shares the completion writer's row, not the failure reader's.
+  iree_atomic_int32_t observer;
+  // Constant-size SPSC records, indexed by publication sequence. Publication
+  // of a new record does not invalidate the completion counter's row.
+  iree_alignas(iree_hardware_destructive_interference_size)
+      iree_hal_amd_gpu_sdma_record_t records[IREE_HAL_AMD_GPU_SDMA_CAPACITY];
   // Qualified control backing and KERNEL command storage, never payloads.
   iree_hal_amd_fabric_memory_t memory;
   // Stable GPU address of the completion DWORD at the end of control storage.
