@@ -47,13 +47,13 @@ static iree_status_t loom_cmd_program_hal_buffer_ref(
       (ref.byte_length != IREE_HAL_WHOLE_BUFFER &&
        ref.byte_length > binding_length - ref.byte_offset)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "command range [%" PRIdsz ", %" PRIdsz
-                            ") exceeds fixed root length %" PRIdsz,
+                            "command range [%" PRIu64 ", %" PRIu64
+                            ") exceeds fixed root length %" PRIu64,
                             ref.byte_offset,
                             ref.byte_length == IREE_HAL_WHOLE_BUFFER
-                                ? binding_length
+                                ? (uint64_t)binding_length
                                 : ref.byte_offset + ref.byte_length,
-                            binding_length);
+                            (uint64_t)binding_length);
   }
   iree_device_size_t resolved_offset = 0;
   if (!iree_device_size_checked_add(binding.offset, ref.byte_offset,
