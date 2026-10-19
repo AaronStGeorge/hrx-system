@@ -29,6 +29,8 @@ typedef struct iree_cpu_x86_64_registers_t {
 // CPUID leaves are zero. Hardware-supported XSTATE components alone never
 // establish that a feature can be used by the process.
 typedef struct iree_cpu_x86_64_capabilities_t {
+  // Maximum basic leaf and processor vendor ID from CPUID(0, 0).
+  iree_cpu_x86_64_registers_t leaf0;
   // Basic instruction features from CPUID(1, 0).
   iree_cpu_x86_64_registers_t leaf1;
   // Structured instruction features from CPUID(7, 0).
@@ -49,11 +51,18 @@ typedef struct iree_cpu_x86_64_capabilities_t {
 uint64_t iree_cpu_x86_64_decode_features(
     const iree_cpu_x86_64_capabilities_t* capabilities);
 
+// Converts architectural processor identity and usable instruction features
+// into stable x86-64 CPU data fields. This does not query hardware or OS state.
+void iree_cpu_x86_64_decode_data(
+    const iree_cpu_x86_64_capabilities_t* capabilities,
+    uint64_t out_fields[IREE_CPU_DATA_FIELD_COUNT]);
+
 #if defined(IREE_ARCH_X86_64)
-// Queries features usable by this process without enabling optional state or
-// requesting permission. Optional state permissions must be established before
-// querying; their absence leaves the corresponding feature bits unset.
-uint64_t iree_cpu_x86_64_query_features(void);
+// Queries exact processor identity and features usable by this process without
+// enabling optional state or requesting permission. Optional state permissions
+// must be established before querying; their absence leaves the corresponding
+// feature bits unset.
+void iree_cpu_x86_64_query_data(uint64_t out_fields[IREE_CPU_DATA_FIELD_COUNT]);
 #endif  // IREE_ARCH_X86_64
 
 #ifdef __cplusplus

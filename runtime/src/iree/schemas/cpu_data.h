@@ -74,4 +74,17 @@
 
 #undef IREE_CPU_FEATURE_BIT_NAME
 
+// x86-64 processor identity from CPUID leaf 0 and leaf 1. The vendor ID uses
+// CPUID's architectural EBX, EDX, ECX byte order across fields 1 and 2. The
+// processor signature is the unmodified CPUID(1).EAX value. Keeping the raw
+// architectural values lets target policy recognize new processors without a
+// runtime update. A zero component is unknown.
+#define IREE_CPU_DATA1_X86_64_VENDOR_ID_LOW_SHIFT 0
+#define IREE_CPU_DATA1_X86_64_VENDOR_ID_LOW_MASK UINT64_C(0xFFFFFFFFFFFFFFFF)
+#define IREE_CPU_DATA2_X86_64_VENDOR_ID_HIGH_SHIFT 0
+#define IREE_CPU_DATA2_X86_64_VENDOR_ID_HIGH_MASK UINT64_C(0x00000000FFFFFFFF)
+#define IREE_CPU_DATA2_X86_64_PROCESSOR_SIGNATURE_SHIFT 32
+#define IREE_CPU_DATA2_X86_64_PROCESSOR_SIGNATURE_MASK \
+  UINT64_C(0xFFFFFFFF00000000)
+
 #endif  // IREE_SCHEMAS_CPU_DATA_H_

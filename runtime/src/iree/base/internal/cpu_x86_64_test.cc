@@ -4,9 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "iree/base/internal/cpu_x86_64.h"
+#if (defined(__x86_64__) || defined(_M_X64)) && defined(__GNUC__)
+#include <cpuid.h>
+#endif  // (__x86_64__ || _M_X64) && __GNUC__
 
 #include "iree/base/internal/cpu.h"
+#include "iree/base/internal/cpu_x86_64.h"
 #include "iree/testing/gtest.h"
 
 namespace {
@@ -61,6 +64,19 @@ TEST(CpuX86_64Test, UnsupportedLeaves) {
       .permitted_xstate = UINT64_MAX,
   };
   EXPECT_EQ(iree_cpu_x86_64_decode_features(&capabilities), 0u);
+}
+
+TEST(CpuX86_64Test, ProcessorIdentityPreservesArchitecturalValues) {
+  iree_cpu_x86_64_capabilities_t capabilities = {};
+  capabilities.leaf0.ebx = 0x68747541;  // "Auth"
+  capabilities.leaf0.edx = 0x69746E65;  // "enti"
+  capabilities.leaf0.ecx = 0x444D4163;  // "cAMD"
+  capabilities.leaf1.eax = 0x00B70F00;
+
+  uint64_t fields[IREE_CPU_DATA_FIELD_COUNT] = {};
+  iree_cpu_x86_64_decode_data(&capabilities, fields);
+  EXPECT_EQ(fields[1], UINT64_C(0x69746E6568747541));
+  EXPECT_EQ(fields[2], UINT64_C(0x00B70F00444D4163));
 }
 
 TEST(CpuX86_64Test, InstructionSupportDoesNotEnableOsState) {
@@ -203,6 +219,24 @@ TEST(CpuX86_64Test, HostQueryMatchesCompilerCapabilities) {
             __builtin_cpu_supports("avx2") != 0);
   EXPECT_EQ((cpu_data.fields[0] & IREE_CPU_DATA0_X86_64_AVX512F) != 0,
             __builtin_cpu_supports("avx512f") != 0);
+
+  unsigned int max_leaf = 0;
+  unsigned int vendor_ebx = 0;
+  unsigned int vendor_ecx = 0;
+  unsigned int vendor_edx = 0;
+  ASSERT_NE(__get_cpuid(0, &max_leaf, &vendor_ebx, &vendor_ecx, &vendor_edx),
+            0);
+  ASSERT_GE(max_leaf, 1u);
+  unsigned int signature = 0;
+  unsigned int unused_ebx = 0;
+  unsigned int unused_ecx = 0;
+  unsigned int unused_edx = 0;
+  ASSERT_NE(__get_cpuid(1, &signature, &unused_ebx, &unused_ecx, &unused_edx),
+            0);
+  EXPECT_EQ(cpu_data.fields[1],
+            (uint64_t)vendor_ebx | ((uint64_t)vendor_edx << 32));
+  EXPECT_EQ(cpu_data.fields[2],
+            (uint64_t)vendor_ecx | ((uint64_t)signature << 32));
 }
 #endif  // IREE_ARCH_X86_64 && IREE_PLATFORM_LINUX && __GNUC__
 
