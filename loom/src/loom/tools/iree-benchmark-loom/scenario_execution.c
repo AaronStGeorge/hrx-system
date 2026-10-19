@@ -66,7 +66,7 @@ struct iree_benchmark_loom_scenario_execution_t {
   // Concrete trial represented by the current layout and value ring.
   loom_testbench_scenario_sample_coordinate_t prepared_coordinate;
   // HAL binding layout for one realization of |prepared_coordinate|.
-  loom_run_hal_testbench_scenario_binding_layout_t prepared_layout;
+  loom_run_hal_testbench_scenario_input_layout_t prepared_layout;
   // Physical input realizations materialized for each measurement window.
   iree_host_size_t prepared_ring_count;
 };
@@ -83,7 +83,7 @@ static void iree_benchmark_loom_scenario_reset_trial_executor(
   execution->prepared_coordinate =
       (loom_testbench_scenario_sample_coordinate_t){0};
   execution->prepared_layout =
-      (loom_run_hal_testbench_scenario_binding_layout_t){0};
+      (loom_run_hal_testbench_scenario_input_layout_t){0};
   execution->prepared_ring_count = 0;
 }
 
@@ -229,8 +229,8 @@ void iree_benchmark_loom_scenario_execution_free(
 }
 
 typedef struct iree_benchmark_loom_scenario_layout_query_t {
-  // HAL binding layout reported for one physical call.
-  loom_run_hal_testbench_scenario_binding_layout_t layout;
+  // HAL input layout reported for one physical call.
+  loom_run_hal_testbench_scenario_input_layout_t layout;
 } iree_benchmark_loom_scenario_layout_query_t;
 
 static iree_status_t iree_benchmark_loom_scenario_query_layout(
@@ -243,7 +243,7 @@ static iree_status_t iree_benchmark_loom_scenario_query_layout(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "scenario layout query requires one call");
   }
-  return loom_run_hal_testbench_query_scenario_product_binding_layout(
+  return loom_run_hal_testbench_query_scenario_product_input_layout(
       product, invocation, &calls[0], &query->layout);
 }
 
@@ -272,7 +272,7 @@ iree_status_t iree_benchmark_loom_scenario_execution_prepare(
       iree_benchmark_loom_input_ring_select_count(
           benchmark_options->input_ring_count,
           (uint64_t)benchmark_options->input_ring_min_bytes,
-          layout_query.layout.binding_set_bytes,
+          layout_query.layout.materialized_storage_set_bytes,
           selection->policy.hal_options.timing.batch_size);
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_trial_executor(
       execution, coordinate.trial_index, ring_count));
@@ -657,6 +657,10 @@ iree_status_t iree_benchmark_loom_scenario_execution_validate_equivalent(
           candidate->prepared_layout.binding_count ||
       baseline->prepared_layout.binding_set_bytes !=
           candidate->prepared_layout.binding_set_bytes ||
+      baseline->prepared_layout.materialized_storage_count !=
+          candidate->prepared_layout.materialized_storage_count ||
+      baseline->prepared_layout.materialized_storage_set_bytes !=
+          candidate->prepared_layout.materialized_storage_set_bytes ||
       baseline->prepared_ring_count != candidate->prepared_ring_count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -721,7 +725,7 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
   const iree_benchmark_loom_options_t* benchmark_options =
       options->benchmark_options;
   const iree_host_size_t ring_count = execution->prepared_ring_count;
-  const loom_run_hal_testbench_scenario_binding_layout_t layout =
+  const loom_run_hal_testbench_scenario_input_layout_t layout =
       execution->prepared_layout;
   loom_run_hal_benchmark_options_t hal_options = policy->hal_options;
   iree_string_builder_t profile_artifact_path;
@@ -747,24 +751,45 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
   }
   if (iree_status_is_ok(status) &&
       (measurement.result.binding_count_per_call != layout.binding_count ||
-       measurement.result.binding_set_bytes != layout.binding_set_bytes)) {
+       measurement.result.binding_set_bytes != layout.binding_set_bytes ||
+       measurement.result.materialized_storage_count_per_call !=
+           layout.materialized_storage_count ||
+       measurement.result.materialized_storage_set_bytes !=
+           layout.materialized_storage_set_bytes)) {
     status = iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "scenario binding layout changed between ring sizing and measurement");
+        "scenario input layout changed between ring sizing and measurement");
   }
-  uint64_t expected_ring_bytes = 0;
+  uint64_t expected_binding_ring_bytes = 0;
   if (iree_status_is_ok(status) && layout.binding_set_bytes != 0 &&
       ring_count > UINT64_MAX / layout.binding_set_bytes) {
     status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "scenario input ring byte count overflowed");
+                              "scenario binding ring byte count overflowed");
   } else if (iree_status_is_ok(status)) {
-    expected_ring_bytes = layout.binding_set_bytes * (uint64_t)ring_count;
+    expected_binding_ring_bytes =
+        layout.binding_set_bytes * (uint64_t)ring_count;
   }
   if (iree_status_is_ok(status) &&
-      measurement.result.binding_ring_bytes != expected_ring_bytes) {
+      measurement.result.binding_ring_bytes != expected_binding_ring_bytes) {
     status = iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "scenario physical calls materialized different binding byte lengths");
+  }
+  uint64_t expected_storage_ring_bytes = 0;
+  if (iree_status_is_ok(status) && layout.materialized_storage_set_bytes != 0 &&
+      ring_count > UINT64_MAX / layout.materialized_storage_set_bytes) {
+    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "scenario storage ring byte count overflowed");
+  } else if (iree_status_is_ok(status)) {
+    expected_storage_ring_bytes =
+        layout.materialized_storage_set_bytes * (uint64_t)ring_count;
+  }
+  if (iree_status_is_ok(status) &&
+      measurement.result.materialized_storage_ring_bytes !=
+          expected_storage_ring_bytes) {
+    status = iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "scenario physical calls materialized different storage byte lengths");
   }
 
   const loom_run_hal_testbench_actual_provider_t* provider =
@@ -803,6 +828,12 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
                     (uint64_t)benchmark_options->input_ring_min_bytes,
                 .binding_set_bytes = measurement.result.binding_set_bytes,
                 .binding_ring_bytes = measurement.result.binding_ring_bytes,
+                .materialized_storage_count =
+                    measurement.result.materialized_storage_count_per_call,
+                .materialized_storage_set_bytes =
+                    measurement.result.materialized_storage_set_bytes,
+                .materialized_storage_ring_bytes =
+                    measurement.result.materialized_storage_ring_bytes,
             },
     };
   }

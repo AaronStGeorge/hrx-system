@@ -248,6 +248,99 @@ TEST_F(ValueMaterializerTest, MaterializesNarrowScalarLiterals) {
   loom_module_free(module);
 }
 
+TEST_F(ValueMaterializerTest, ResolvesUniqueStorageFootprint) {
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("storage_footprint"),
+                                      &block_pool_, nullptr, host_allocator_,
+                                      &module));
+
+  const loom_type_t first_storage_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I8, 8, /*alignment=*/0);
+  const loom_type_t first_alias_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I8, 4, /*alignment=*/0);
+  const loom_type_t second_storage_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I32, 3, /*alignment=*/0);
+  const loom_type_t unused_storage_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I8, 5, /*alignment=*/0);
+  loom_value_id_t first_storage = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t first_alias = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t second_storage = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t unused_storage = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, first_storage_type, &first_storage));
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, first_alias_type, &first_alias));
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, second_storage_type, &second_storage));
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, unused_storage_type, &unused_storage));
+
+  const loom_testbench_value_source_plan_t sources[] = {
+      {
+          .kind = LOOM_TESTBENCH_VALUE_SOURCE_FILL,
+          .value_id = first_storage,
+          .type = first_storage_type,
+          .fill = {.value = loom_attr_i64(0)},
+      },
+      {
+          .kind = LOOM_TESTBENCH_VALUE_SOURCE_TENSOR_VIEW,
+          .value_id = first_alias,
+          .type = first_alias_type,
+          .tensor_view =
+              {
+                  .source_value_id = first_storage,
+                  .byte_offset = 2,
+              },
+      },
+      {
+          .kind = LOOM_TESTBENCH_VALUE_SOURCE_FILL,
+          .value_id = second_storage,
+          .type = second_storage_type,
+          .fill = {.value = loom_attr_i64(0)},
+      },
+      {
+          .kind = LOOM_TESTBENCH_VALUE_SOURCE_FILL,
+          .value_id = unused_storage,
+          .type = unused_storage_type,
+          .fill = {.value = loom_attr_i64(0)},
+      },
+  };
+  const loom_testbench_case_plan_t case_plan = {
+      .value_sources = sources,
+      .value_source_count = IREE_ARRAYSIZE(sources),
+      .cartesian_sample_count = 1,
+      .sample_count = 1,
+  };
+
+  loom_testbench_value_table_t table = {};
+  IREE_ASSERT_OK(loom_testbench_value_table_initialize_case(
+      module, &case_plan, host_allocator_, &table));
+  loom_testbench_value_materializer_options_t options = MaterializerOptions();
+  IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
+      &options, &case_plan, /*sample_ordinal=*/0, &table));
+
+  const loom_value_id_t values[] = {
+      first_alias,
+      first_alias,
+      second_storage,
+  };
+  loom_testbench_storage_footprint_t footprint = {};
+  IREE_ASSERT_OK(loom_testbench_value_table_resolve_storage_footprint(
+      &table, IREE_ARRAYSIZE(values), values, &footprint));
+  EXPECT_EQ(footprint.allocation_count, 2u);
+  EXPECT_EQ(footprint.byte_length, 8u + 3u * sizeof(int32_t));
+
+  std::vector<loom_value_id_t> many_values(65, first_alias);
+  many_values.push_back(second_storage);
+  IREE_ASSERT_OK(loom_testbench_value_table_resolve_storage_footprint(
+      &table, many_values.size(), many_values.data(), &footprint));
+  EXPECT_EQ(footprint.allocation_count, 2u);
+  EXPECT_EQ(footprint.byte_length, 8u + 3u * sizeof(int32_t));
+
+  loom_testbench_value_table_deinitialize(&table);
+  loom_module_free(module);
+}
+
 TEST_F(ValueMaterializerTest, MaterializesGeneratedValues) {
   loom_module_t* module = ParseModule(R"(
 check.case @generated {

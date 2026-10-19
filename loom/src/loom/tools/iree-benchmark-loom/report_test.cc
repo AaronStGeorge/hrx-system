@@ -527,6 +527,9 @@ TEST(BenchmarkReportTest, WritesHalTimingCountsAndWarnings) {
   result.data_cache.requested_min_ring_bytes = 4096;
   result.data_cache.binding_set_bytes = 8192;
   result.data_cache.binding_ring_bytes = 8192;
+  result.data_cache.materialized_storage_count = 2;
+  result.data_cache.materialized_storage_set_bytes = 2048;
+  result.data_cache.materialized_storage_ring_bytes = 2048;
   result.artifact_manifest_path =
       IREE_SV("bundle/artifact_manifests/run_candidate_artifact_manifest.json");
 
@@ -593,8 +596,17 @@ TEST(BenchmarkReportTest, WritesHalTimingCountsAndWarnings) {
   EXPECT_TRUE(iree_string_view_equal(
       LookupObject(data_cache, IREE_SV("binding_ring_count")), IREE_SV("1")));
   EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(data_cache, IREE_SV("materialized_storage_count")),
+      IREE_SV("2")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(data_cache, IREE_SV("materialized_storage_set_bytes")),
+      IREE_SV("2048")));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(data_cache, IREE_SV("materialized_storage_ring_bytes")),
+      IREE_SV("2048")));
+  EXPECT_TRUE(iree_string_view_equal(
       LookupObject(data_cache, IREE_SV("ring_byte_target_met")),
-      IREE_SV("true")));
+      IREE_SV("false")));
 
   iree_string_view_t timing_interpretation =
       LookupObject(measurement, IREE_SV("timing_interpretation"));

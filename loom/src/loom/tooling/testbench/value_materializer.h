@@ -98,6 +98,18 @@ typedef struct loom_testbench_value_table_t {
   iree_host_size_t slot_count;
 } loom_testbench_value_table_t;
 
+// Unique logical storage reachable from a set of materialized values.
+//
+// Buffer aliases and repeated values contribute their authored root allocation
+// once. The byte length is the complete materialized root payload rather than
+// only the referenced subrange.
+typedef struct loom_testbench_storage_footprint_t {
+  // Number of distinct authored root allocations.
+  iree_host_size_t allocation_count;
+  // Sum of complete root-allocation payload byte lengths.
+  uint64_t byte_length;
+} loom_testbench_storage_footprint_t;
+
 // Opens a stream for a check.file.* path.
 typedef iree_status_t(IREE_API_PTR* loom_testbench_file_open_fn_t)(
     void* user_data, iree_string_view_t path, iree_io_stream_t** out_stream);
@@ -211,6 +223,16 @@ iree_status_t loom_testbench_value_table_lookup_borrow(
 iree_status_t loom_testbench_value_table_lookup_retain(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
     loom_testbench_value_t* out_value);
+
+// Resolves the unique logical storage reachable from |value_ids|.
+//
+// Scalar and entropy values contribute no storage. Every buffer must retain
+// its authored allocation reference, and that root allocation must still be
+// materialized in |table|. This must be queried before the table is reset.
+iree_status_t loom_testbench_value_table_resolve_storage_footprint(
+    const loom_testbench_value_table_t* table, iree_host_size_t value_id_count,
+    const loom_value_id_t* value_ids,
+    loom_testbench_storage_footprint_t* out_footprint);
 
 // Assigns |value| to |value_id|, replacing any previous value. On success,
 // ownership moves into |table| and |value| is reset to empty.

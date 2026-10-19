@@ -7,6 +7,7 @@
 #include "loom/tooling/testbench/value_materializer.h"
 
 #include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "iree/base/internal/math.h"
@@ -15,6 +16,7 @@
 
 enum {
   LOOM_TESTBENCH_MAX_SHAPE_RANK = 15,
+  LOOM_TESTBENCH_INLINE_STORAGE_VALUE_ID_COUNT = 64,
 };
 
 typedef enum loom_testbench_generator_kind_e {
@@ -614,6 +616,103 @@ iree_status_t loom_testbench_value_table_lookup_retain(
       table, value_id, &borrowed_value));
   loom_testbench_value_retain(borrowed_value, out_value);
   return iree_ok_status();
+}
+
+static int loom_testbench_compare_value_ids(const void* lhs_ptr,
+                                            const void* rhs_ptr) {
+  const loom_value_id_t lhs = *(const loom_value_id_t*)lhs_ptr;
+  const loom_value_id_t rhs = *(const loom_value_id_t*)rhs_ptr;
+  return (lhs > rhs) - (lhs < rhs);
+}
+
+iree_status_t loom_testbench_value_table_resolve_storage_footprint(
+    const loom_testbench_value_table_t* table, iree_host_size_t value_id_count,
+    const loom_value_id_t* value_ids,
+    loom_testbench_storage_footprint_t* out_footprint) {
+  *out_footprint = (loom_testbench_storage_footprint_t){0};
+
+  loom_value_id_t
+      inline_allocation_value_ids[LOOM_TESTBENCH_INLINE_STORAGE_VALUE_ID_COUNT];
+  loom_value_id_t* allocation_value_ids = inline_allocation_value_ids;
+  bool allocation_value_ids_owned = false;
+  if (value_id_count > IREE_ARRAYSIZE(inline_allocation_value_ids)) {
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc_array_uninitialized(
+        table->host_allocator, value_id_count, sizeof(*allocation_value_ids),
+        (void**)&allocation_value_ids));
+    allocation_value_ids_owned = true;
+  }
+
+  iree_status_t status = iree_ok_status();
+  iree_host_size_t allocation_value_id_count = 0;
+  for (iree_host_size_t value_index = 0; value_index < value_id_count;
+       ++value_index) {
+    const loom_testbench_value_t* value = NULL;
+    status = loom_testbench_value_table_lookup_borrow(
+        table, value_ids[value_index], &value);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    if (!loom_testbench_value_is_buffer(value)) {
+      continue;
+    }
+    if (!value->buffer_reference.is_traceable) {
+      status = iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "materialized buffer value ID %u has no logical allocation identity",
+          (unsigned)value_ids[value_index]);
+      break;
+    }
+    allocation_value_ids[allocation_value_id_count++] =
+        value->buffer_reference.allocation_value_id;
+  }
+
+  if (iree_status_is_ok(status) && allocation_value_id_count > 1) {
+    qsort(allocation_value_ids, allocation_value_id_count,
+          sizeof(*allocation_value_ids), loom_testbench_compare_value_ids);
+  }
+  for (iree_host_size_t allocation_index = 0;
+       iree_status_is_ok(status) &&
+       allocation_index < allocation_value_id_count;
+       ++allocation_index) {
+    const loom_value_id_t allocation_value_id =
+        allocation_value_ids[allocation_index];
+    if (allocation_index != 0 &&
+        allocation_value_id == allocation_value_ids[allocation_index - 1]) {
+      continue;
+    }
+    const loom_testbench_value_t* allocation = NULL;
+    status = loom_testbench_value_table_lookup_borrow(
+        table, allocation_value_id, &allocation);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    if (!loom_testbench_value_is_buffer(allocation) ||
+        !allocation->buffer_reference.is_traceable ||
+        allocation->buffer_reference.allocation_value_id !=
+            allocation_value_id) {
+      status = iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "authored allocation value ID %u is not a traceable root buffer",
+          (unsigned)allocation_value_id);
+      break;
+    }
+    if (UINT64_MAX - out_footprint->byte_length <
+        allocation->buffer_reference.byte_length) {
+      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "materialized storage footprint overflowed "
+                                "uint64");
+      break;
+    }
+    out_footprint->byte_length += allocation->buffer_reference.byte_length;
+    ++out_footprint->allocation_count;
+  }
+  if (allocation_value_ids_owned) {
+    iree_allocator_free(table->host_allocator, allocation_value_ids);
+  }
+  if (!iree_status_is_ok(status)) {
+    *out_footprint = (loom_testbench_storage_footprint_t){0};
+  }
+  return status;
 }
 
 static bool loom_testbench_attr_as_i64(loom_attribute_t attr,
