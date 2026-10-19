@@ -273,7 +273,7 @@ TEST_F(LowAllocationCoveringSpillSearchTest,
 
   loom_low_allocation_active_set_t active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptor_set, /*assignment_capacity=*/3,
+      &descriptor_set, &unit_liveness, /*assignment_capacity=*/3,
       /*program_point_count=*/25, /*unit_capacity=*/6, &arena_, &active_set));
   loom_low_allocation_active_set_insert(
       &active_set, &descriptor_set, assignments, IREE_ARRAYSIZE(assignments),

@@ -6,6 +6,10 @@
 
 #include "loom/codegen/low/allocation/active_unit.h"
 
+#include <array>
+#include <initializer_list>
+#include <vector>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -662,6 +666,279 @@ TEST(LowAllocationActiveUnitTest, IndexesExplicitRegisterAtomicUnits) {
 
   iree_arena_deinitialize(&arena);
   iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+class LowAllocationActiveOccupancyTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(128 * 1024, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &arena_);
+  }
+  void TearDown() override {
+    iree_arena_deinitialize(&arena_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+  iree_status_t Initialize(const loom_low_descriptor_set_t* descriptors,
+                           const loom_low_allocation_unit_liveness_t* liveness,
+                           const loom_low_allocation_assignment_t* assignments,
+                           iree_host_size_t assignment_count,
+                           uint32_t unit_capacity,
+                           uint32_t program_point_count) {
+    descriptors_ = descriptors;
+    liveness_ = liveness;
+    assignments_ = assignments;
+    assignment_count_ = assignment_count;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_active_unit_index_initialize(
+        descriptors, assignment_count, unit_capacity, &arena_, &index_));
+    return loom_low_allocation_active_unit_index_initialize_occupancy(
+        &index_, liveness, program_point_count, &arena_);
+  }
+  void Insert(uint32_t ordinal) {
+    loom_low_allocation_active_unit_index_insert_assignment(
+        &index_, descriptors_, assignments_, assignment_count_, ordinal);
+  }
+  void Remove(uint32_t ordinal) {
+    loom_low_allocation_active_unit_index_remove_assignment(
+        &index_, assignments_, assignment_count_, ordinal);
+  }
+  void Advance(uint32_t point) {
+    loom_low_allocation_active_unit_index_advance(&index_, assignments_, point);
+  }
+  void ExpectProjection(const loom_low_allocation_assignment_t& candidate,
+                        std::initializer_list<uint32_t> locations) {
+    std::array<uint64_t, LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_WORD_COUNT>
+        actual{};
+    auto expected = actual;
+    for (uint32_t location : locations) {
+      expected[location / 64] |= UINT64_C(1) << (location % 64);
+    }
+    loom_low_allocation_active_unit_index_project_conflicts(&index_, &candidate,
+                                                            actual.data());
+    EXPECT_EQ(actual, expected);
+    std::vector<uint32_t> segment_starts;
+    loom_low_allocation_live_range_sweep_t sweep =
+        LiveRangeSweep(assignments_, assignment_count_, candidate.start_point,
+                       &segment_starts);
+    for (uint32_t base = 0;
+         base < LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_LOCATION_COUNT; ++base) {
+      if ((actual[base / 64] & (UINT64_C(1) << (base % 64))) == 0) {
+        continue;
+      }
+      auto placed = candidate;
+      placed.location_base = base;
+      EXPECT_TRUE(loom_low_allocation_active_unit_index_conflicts(
+          &index_, &sweep, descriptors_, liveness_, assignments_,
+          assignment_count_, &placed, nullptr, 0))
+          << "projected base=" << base;
+    }
+  }
+
+  // Pooled invocation storage, including the index's event calendar.
+  iree_arena_block_pool_t block_pool_;
+  // Arena released after each API fixture.
+  iree_arena_allocator_t arena_;
+  // Active-unit owner under test.
+  loom_low_allocation_active_unit_index_t index_ = {};
+  // Borrowed target rows from the current test.
+  const loom_low_descriptor_set_t* descriptors_ = nullptr;
+  // Borrowed producer-owned unit lifetime facts.
+  const loom_low_allocation_unit_liveness_t* liveness_ = nullptr;
+  // Borrowed assignment records, stable through each index operation.
+  const loom_low_allocation_assignment_t* assignments_ = nullptr;
+  // Number of addressable assignment records.
+  iree_host_size_t assignment_count_ = 0;
+};
+
+TEST_F(LowAllocationActiveOccupancyTest, ActivatesExpiresAndReusesUnitEntries) {
+  const loom_low_reg_class_t classes[] = {{.allocatable_count = 256}};
+  const auto descriptors = DescriptorSet(classes, IREE_ARRAYSIZE(classes));
+  uint32_t starts[] = {2, 5, 2, 2, 2, 10};
+  uint32_t ends[] = {7, 12, 9, 10, 20, 15};
+  const loom_low_allocation_unit_liveness_t liveness = {
+      .start_points = starts,
+      .end_points = ends,
+      .point_count = IREE_ARRAYSIZE(ends),
+  };
+  loom_low_allocation_assignment_t assignments[] = {
+      Assignment(1, 0, 2, 12, 63, 3, 0),
+      Assignment(2, 0, 2, 10, 64, 1, 3),
+      Assignment(3, 0, 10, 15, 128, 1, 5),
+  };
+  assignments[0].flags =
+      LOOM_LOW_ALLOCATION_ASSIGNMENT_FLAG_REFINED_UNIT_STARTS;
+  IREE_ASSERT_OK(Initialize(&descriptors, &liveness, assignments,
+                            IREE_ARRAYSIZE(assignments), 32, 21));
+  const auto initialized_bytes = arena_.used_allocation_size;
+  auto candidate = Assignment(4, 0, 2, 20, 0, 1, 4);
+  Advance(2);
+  Insert(0);
+  Insert(1);
+  ExpectProjection(candidate, {63, 64, 65});
+  candidate.start_point = 5;
+  Advance(candidate.start_point);
+  Remove(1);  // The aggregate's newly activated unit still owns register 64.
+  ExpectProjection(candidate, {63, 64, 65});
+  candidate.start_point = 7;
+  Advance(candidate.start_point);
+  ExpectProjection(candidate, {64, 65});
+  Remove(0);
+  Insert(2);  // Reuses a hash entry with two old retirement events still ahead.
+  candidate.start_point = 9;
+  Advance(candidate.start_point);
+  ExpectProjection(candidate, {});
+  candidate.start_point = 10;
+  Advance(candidate.start_point);
+  ExpectProjection(candidate, {128});
+  candidate.start_point = 12;
+  Advance(candidate.start_point);
+  ExpectProjection(candidate, {128});
+  candidate.start_point = 15;
+  Advance(candidate.start_point);
+  ExpectProjection(candidate, {});
+  EXPECT_EQ(arena_.used_allocation_size, initialized_bytes);
+}
+
+TEST_F(LowAllocationActiveOccupancyTest,
+       PreservesSparseGapsAndExpandedDefinitions) {
+  const loom_low_reg_class_t classes[] = {{.allocatable_count = 256}};
+  const auto descriptors = DescriptorSet(classes, IREE_ARRAYSIZE(classes));
+  uint32_t ends[] = {12, 12, 12, 14, 20};
+  const loom_liveness_segment_t segments[] = {{1, 3}, {5, 7}, {9, 12}};
+  loom_low_allocation_unit_liveness_t liveness = {
+      .end_points = ends,
+      .point_count = IREE_ARRAYSIZE(ends),
+  };
+  liveness.storage_segments.entries = segments;
+  loom_low_allocation_assignment_t assignments[] = {
+      Assignment(1, 0, 1, 12, 64, 1, 0),
+      Assignment(2, 0, 1, 12, 65, 2, 1),
+      Assignment(3, 0, 1, 14, 70, 1, 3),
+  };
+  assignments[0].liveness_segments = {0, 3};
+  assignments[1].liveness_segments = {0, 3};
+  IREE_ASSERT_OK(Initialize(&descriptors, &liveness, assignments,
+                            IREE_ARRAYSIZE(assignments), 32, 21));
+  Advance(1);
+  Insert(0);
+  Insert(1);
+  Insert(2);
+  auto candidate = Assignment(4, 0, 1, 20, 0, 1, 4);
+  for (uint32_t point = 1; point <= 12; ++point) {
+    SCOPED_TRACE(point);
+    candidate.start_point = point;
+    Advance(point);
+    if (point == 6 || point == 8) {
+      // Reinsertion seeks past retired spans, both within a live span and in a
+      // gap preceding the next activation.
+      Remove(0);
+      Insert(0);
+    }
+    if (point < 3 || (point >= 5 && point < 7) || (point >= 9 && point < 12)) {
+      ExpectProjection(candidate, {64, 70});
+    } else {
+      ExpectProjection(candidate, {70});
+    }
+    candidate.liveness_segments = {0, 3};
+    if (point == 3 || point == 4 || point == 7 || point == 8 || point == 12) {
+      ExpectProjection(candidate, {});
+      candidate.flags =
+          LOOM_LOW_ALLOCATION_ASSIGNMENT_FLAG_EXPANDED_EXECUTION_DEFINITION;
+      ExpectProjection(candidate, {70});
+      candidate.flags = 0;
+    }
+    candidate.liveness_segments = {};
+  }
+  Remove(0);
+  // A late reinsertion seeks past historical sparse spans without replaying
+  // them; the lifetime is already exhausted and cannot publish a stale bit.
+  Insert(0);
+  ExpectProjection(candidate, {70});
+}
+
+TEST_F(LowAllocationActiveOccupancyTest,
+       ProjectsLiveUnitsAcrossWordBoundaries) {
+  const loom_low_reg_class_t classes[] = {
+      {.allocatable_count = 512, .alias_set_id = 1},
+      {.allocatable_count = 512, .alias_set_id = 1},
+  };
+  const auto descriptors = DescriptorSet(classes, IREE_ARRAYSIZE(classes));
+  uint32_t starts[66] = {};
+  uint32_t ends[66] = {};
+  ends[0] = 10;
+  for (uint32_t i = 1; i < IREE_ARRAYSIZE(ends); ++i) {
+    starts[i] = 2;
+    ends[i] = 2;
+  }
+  starts[4] = 4;
+  ends[1] = ends[3] = ends[4] = 8;
+  const loom_low_allocation_unit_liveness_t liveness = {
+      .start_points = starts,
+      .end_points = ends,
+      .point_count = IREE_ARRAYSIZE(ends),
+  };
+  const loom_low_allocation_assignment_t assignments[] = {
+      Assignment(1, 0, 0, 10, 63, 1, 0),  Assignment(2, 0, 0, 10, 64, 1, 0),
+      Assignment(3, 0, 0, 10, 127, 1, 0), Assignment(4, 0, 0, 10, 255, 1, 0),
+      Assignment(5, 0, 0, 10, 256, 1, 0), Assignment(6, 1, 0, 10, 17, 1, 0),
+  };
+  IREE_ASSERT_OK(Initialize(&descriptors, &liveness, assignments,
+                            IREE_ARRAYSIZE(assignments), 32, 11));
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(assignments); ++i) {
+    Insert(i);
+  }
+  Advance(2);
+  auto candidate = Assignment(7, 0, 2, 8, 0, 4, 1);
+  candidate.flags = LOOM_LOW_ALLOCATION_ASSIGNMENT_FLAG_REFINED_UNIT_STARTS;
+  ExpectProjection(candidate, {61, 62, 63, 64, 125, 127, 253, 255});
+  candidate.descriptor_reg_class_id = 1;
+  ExpectProjection(candidate, {15, 17});
+  candidate.location_kind = LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
+  ExpectProjection(candidate, {});
+  // Only unit 64 is live, exercising a whole-word shift without shifting by 64.
+  ends[1] = ends[3] = ends[4] = 2;
+  ends[65] = 8;
+  candidate = Assignment(7, 0, 2, 8, 0, 65, 1);
+  ExpectProjection(candidate, {0, 63, 191});
+}
+
+TEST_F(LowAllocationActiveOccupancyTest,
+       SegmentsCalendarAndReusesPooledStorage) {
+  constexpr uint32_t kCount = 1025;
+  const loom_low_reg_class_t classes[] = {{.allocatable_count = 256}};
+  const auto descriptors = DescriptorSet(classes, IREE_ARRAYSIZE(classes));
+  std::vector<uint32_t> ends(kCount + 1, 4098);
+  std::vector<loom_low_allocation_assignment_t> assignments;
+  for (uint32_t i = 0; i < kCount; ++i) {
+    ends[i] = 4096 + i % 2;
+    assignments.push_back(Assignment(i + 1, 0, 0, ends[i], i % 256, 1, i));
+  }
+  const loom_low_allocation_unit_liveness_t liveness = {
+      .end_points = ends.data(),
+      .point_count = ends.size(),
+  };
+  IREE_ASSERT_OK(Initialize(&descriptors, &liveness, assignments.data(),
+                            assignments.size(), kCount, 4099));
+  const auto initialized_bytes = arena_.used_allocation_size;
+  for (uint32_t i = 0; i < kCount; ++i) {
+    Insert(i);
+  }
+  auto candidate = Assignment(kCount + 1, 0, 4096, 4098, 0, 1, kCount);
+  Advance(4096);
+  std::array<uint64_t, LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_WORD_COUNT>
+      conflicts{};
+  loom_low_allocation_active_unit_index_project_conflicts(&index_, &candidate,
+                                                          conflicts.data());
+  for (uint64_t word : conflicts) {
+    EXPECT_EQ(word, UINT64_C(0xAAAAAAAAAAAAAAAA));
+  }
+  candidate.start_point = 4097;
+  Advance(candidate.start_point);
+  ExpectProjection(candidate, {});
+  // A caller may drain the index past the final program point.
+  Advance(UINT32_MAX);
+  EXPECT_EQ(arena_.used_allocation_size, initialized_bytes);
+  EXPECT_EQ(arena_.allocation_head, nullptr);
 }
 
 }  // namespace

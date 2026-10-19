@@ -213,7 +213,7 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
       unit_start_points[8] = unit_start_points[9] = future_start;
       loom_low_allocation_active_set_t active_set = {};
       IREE_CHECK_OK(loom_low_allocation_active_set_initialize(
-          &descriptors, 1, 16, 16, &arena, &active_set));
+          &descriptors, &unit_liveness, 1, 16, 16, &arena, &active_set));
       loom_low_allocation_active_set_insert(&active_set, &descriptors, &future,
                                             1, 0);
       context.active_set = &active_set;
@@ -252,7 +252,7 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   high_water[0] = 4;
   loom_low_allocation_active_set_t active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptors, 1, 16, 16, &arena, &active_set));
+      &descriptors, &unit_liveness, 1, 16, 16, &arena, &active_set));
   loom_low_allocation_active_set_insert(&active_set, &descriptors, &future, 1,
                                         0);
   context.active_set = &active_set;
@@ -285,7 +285,7 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   unit_start_points[8] = unit_start_points[9] = 5;
   loom_low_allocation_active_set_t window_active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptors, 1, 16, 16, &arena, &window_active_set));
+      &descriptors, &unit_liveness, 1, 16, 16, &arena, &window_active_set));
   loom_low_allocation_active_set_insert(&window_active_set, &descriptors,
                                         &future, 1, 0);
   context.active_set = &window_active_set;
@@ -363,7 +363,7 @@ TEST(LowAllocationConcatReservationTest, ChoosesOnlyLegalAssemblies) {
   context.preference_workspace = &same_storage_workspace;
   loom_low_allocation_active_set_t swept_active_set = {};
   IREE_ASSERT_OK(loom_low_allocation_active_set_initialize(
-      &descriptors, IREE_ARRAYSIZE(sweep_assignments),
+      &descriptors, &unit_liveness, IREE_ARRAYSIZE(sweep_assignments),
       /*program_point_count=*/45, /*unit_capacity=*/16, &arena,
       &swept_active_set));
   loom_low_allocation_active_set_insert(

@@ -141,6 +141,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::analysis::liveness
     loom::codegen::low::descriptors
+    loom::util::segmented_storage
   PUBLIC
 )
 

@@ -10,6 +10,7 @@
 
 #include "loom/codegen/low/allocation/live_range.h"
 #include "loom/codegen/low/allocation/storage.h"
+#include "loom/util/segmented_storage.h"
 
 enum {
   // Tiny functions are cheaper to scan linearly than to index.
@@ -32,6 +33,370 @@ struct loom_low_allocation_active_unit_entry_t {
   // Physical register or target ID for this unit.
   uint32_t location;
 };
+
+typedef struct loom_low_allocation_active_occupancy_entry_t {
+  // Counted location, or UINT32_MAX after removal or expiration.
+  uint32_t slot;
+  // Calendar point activating or retiring this reservation.
+  uint32_t point;
+  // End after a pending activation, or zero while occupancy is active.
+  uint32_t next_point;
+  // Next sparse segment for a scalar owner, or UINT32_MAX after its last span.
+  uint32_t next_segment;
+  // Next activation or retirement at the same point.
+  uint32_t next;
+  // Previous activation or retirement at the same point.
+  uint32_t previous;
+} loom_low_allocation_active_occupancy_entry_t;
+
+// The dense window proves conflicts at the acquisition point. Counts preserve
+// tied owners; each unit has one calendar event for activation or retirement.
+// Sparse scalars consume each segment once. Sparse aggregates stay on the exact
+// query path, avoiding the product of segment count and aggregate width.
+struct loom_low_allocation_active_occupancy_t {
+  // Borrowed lifetime facts; assignments are removed before those facts change.
+  const loom_low_allocation_unit_liveness_t* unit_liveness;
+  // Bitmap word offsets by register class, followed by one terminal offset.
+  uint32_t* word_offsets;
+  // Count of active owners for each indexed class-local location.
+  uint32_t* counts;
+  // Definite occupied locations at the current acquisition point.
+  uint64_t* words;
+  // Event links indexed by the corresponding active-unit hash entry.
+  loom_segmented_storage_t entries;
+  // First event at each program point, or UINT32_MAX.
+  loom_segmented_storage_t calendar;
+  // Calendar extent; advancing beyond it drains all remaining reservations.
+  iree_host_size_t program_point_count;
+  // Current monotone acquisition point.
+  uint32_t point;
+  // First calendar point not yet consumed; may equal UINT32_MAX + 1.
+  iree_host_size_t next_point;
+};
+
+enum {
+  // 24 KiB event payloads and 16 KiB calendar payloads stay in pooled blocks.
+  LOOM_LOW_ALLOCATION_OCCUPANCY_ENTRY_SHIFT = 10,
+  LOOM_LOW_ALLOCATION_OCCUPANCY_ENTRY_CAPACITY =
+      1u << LOOM_LOW_ALLOCATION_OCCUPANCY_ENTRY_SHIFT,
+  LOOM_LOW_ALLOCATION_OCCUPANCY_POINT_SHIFT = 12,
+  LOOM_LOW_ALLOCATION_OCCUPANCY_POINT_CAPACITY =
+      1u << LOOM_LOW_ALLOCATION_OCCUPANCY_POINT_SHIFT,
+};
+
+static loom_low_allocation_active_occupancy_entry_t*
+loom_low_allocation_active_occupancy_entry(
+    loom_low_allocation_active_unit_index_t* index, uint32_t entry_index) {
+  loom_low_allocation_active_occupancy_entry_t* segment =
+      loom_segmented_storage_segment(
+          &index->occupancy->entries,
+          entry_index >> LOOM_LOW_ALLOCATION_OCCUPANCY_ENTRY_SHIFT);
+  return &segment[entry_index &
+                  (LOOM_LOW_ALLOCATION_OCCUPANCY_ENTRY_CAPACITY - 1u)];
+}
+
+static uint32_t* loom_low_allocation_active_occupancy_head(
+    loom_low_allocation_active_unit_index_t* index, uint32_t point) {
+  uint32_t* segment = loom_segmented_storage_segment(
+      &index->occupancy->calendar,
+      point >> LOOM_LOW_ALLOCATION_OCCUPANCY_POINT_SHIFT);
+  return &segment[point & (LOOM_LOW_ALLOCATION_OCCUPANCY_POINT_CAPACITY - 1u)];
+}
+
+iree_status_t loom_low_allocation_active_unit_index_initialize_occupancy(
+    loom_low_allocation_active_unit_index_t* index,
+    const loom_low_allocation_unit_liveness_t* unit_liveness,
+    iree_host_size_t program_point_count, iree_arena_allocator_t* arena) {
+  if (index->bucket_count == 0) {
+    return iree_ok_status();
+  }
+  const uint32_t class_count = index->descriptor_set->reg_class_count;
+  uint32_t word_count = 0;
+  for (uint32_t i = 0; i < class_count; ++i) {
+    const loom_low_reg_class_t* reg_class =
+        &index->descriptor_set->reg_classes[i];
+    if (!loom_low_reg_class_uses_explicit_physical_registers(reg_class)) {
+      word_count +=
+          (iree_min(reg_class->allocatable_count,
+                    LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_LOCATION_COUNT) +
+           63u) /
+          64u;
+    }
+  }
+  if (word_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(arena, sizeof(*index->occupancy),
+                                           (void**)&index->occupancy));
+  *index->occupancy = (loom_low_allocation_active_occupancy_t){
+      .unit_liveness = unit_liveness,
+      .program_point_count = program_point_count,
+  };
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, class_count + 1, sizeof(*index->occupancy->word_offsets),
+      (void**)&index->occupancy->word_offsets));
+  uint32_t word_offset = 0;
+  for (uint32_t i = 0; i < class_count; ++i) {
+    index->occupancy->word_offsets[i] = word_offset;
+    const loom_low_reg_class_t* reg_class =
+        &index->descriptor_set->reg_classes[i];
+    if (!loom_low_reg_class_uses_explicit_physical_registers(reg_class)) {
+      word_offset +=
+          (iree_min(reg_class->allocatable_count,
+                    LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_LOCATION_COUNT) +
+           63u) /
+          64u;
+    }
+  }
+  index->occupancy->word_offsets[class_count] = word_offset;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, word_count, sizeof(*index->occupancy->words),
+      (void**)&index->occupancy->words));
+  memset(index->occupancy->words, 0,
+         word_count * sizeof(*index->occupancy->words));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, word_count * 64u, sizeof(*index->occupancy->counts),
+      (void**)&index->occupancy->counts));
+  memset(index->occupancy->counts, 0,
+         word_count * 64u * sizeof(*index->occupancy->counts));
+  loom_segmented_storage_initialize(
+      iree_min(index->entry_capacity,
+               LOOM_LOW_ALLOCATION_OCCUPANCY_ENTRY_CAPACITY) *
+          sizeof(loom_low_allocation_active_occupancy_entry_t),
+      iree_alignof(loom_low_allocation_active_occupancy_entry_t),
+      &index->occupancy->entries);
+  iree_status_t status = iree_ok_status();
+  for (uint32_t base = 0;
+       base < index->entry_capacity && iree_status_is_ok(status);
+       base += LOOM_LOW_ALLOCATION_OCCUPANCY_ENTRY_CAPACITY) {
+    void* segment = NULL;
+    status = loom_segmented_storage_append(&index->occupancy->entries, arena,
+                                           &segment);
+  }
+  IREE_RETURN_IF_ERROR(status);
+  loom_segmented_storage_initialize(
+      iree_min(program_point_count,
+               LOOM_LOW_ALLOCATION_OCCUPANCY_POINT_CAPACITY) *
+          sizeof(uint32_t),
+      iree_alignof(uint32_t), &index->occupancy->calendar);
+  for (iree_host_size_t base = 0;
+       base < program_point_count && iree_status_is_ok(status);
+       base += LOOM_LOW_ALLOCATION_OCCUPANCY_POINT_CAPACITY) {
+    void* segment = NULL;
+    status = loom_segmented_storage_append(&index->occupancy->calendar, arena,
+                                           &segment);
+    if (iree_status_is_ok(status)) {
+      memset(segment, 0xFF, index->occupancy->calendar.segment_size);
+    }
+  }
+  return status;
+}
+
+static void loom_low_allocation_active_occupancy_remove(
+    loom_low_allocation_active_unit_index_t* index, uint32_t entry_index) {
+  loom_low_allocation_active_occupancy_entry_t* entry =
+      loom_low_allocation_active_occupancy_entry(index, entry_index);
+  if (entry->slot == UINT32_MAX) {
+    return;
+  }
+  if (entry->next_point == 0 && --index->occupancy->counts[entry->slot] == 0) {
+    index->occupancy->words[entry->slot / 64u] &=
+        ~(UINT64_C(1) << (entry->slot % 64u));
+  }
+  if (entry->previous == UINT32_MAX) {
+    *loom_low_allocation_active_occupancy_head(index, entry->point) =
+        entry->next;
+  } else {
+    loom_low_allocation_active_occupancy_entry(index, entry->previous)->next =
+        entry->next;
+  }
+  if (entry->next != UINT32_MAX) {
+    loom_low_allocation_active_occupancy_entry(index, entry->next)->previous =
+        entry->previous;
+  }
+  entry->slot = UINT32_MAX;
+}
+
+static void loom_low_allocation_active_occupancy_schedule(
+    loom_low_allocation_active_unit_index_t* index, uint32_t entry_index,
+    uint32_t slot, uint32_t point, uint32_t next_point, uint32_t next_segment) {
+  loom_low_allocation_active_occupancy_entry_t* entry =
+      loom_low_allocation_active_occupancy_entry(index, entry_index);
+  *entry = (loom_low_allocation_active_occupancy_entry_t){
+      .slot = slot,
+      .point = point,
+      .next_point = next_point,
+      .next_segment = next_segment,
+      .next = *loom_low_allocation_active_occupancy_head(index, point),
+      .previous = UINT32_MAX,
+  };
+  if (entry->next != UINT32_MAX) {
+    loom_low_allocation_active_occupancy_entry(index, entry->next)->previous =
+        entry_index;
+  }
+  *loom_low_allocation_active_occupancy_head(index, point) = entry_index;
+  if (next_point == 0) {
+    ++index->occupancy->counts[slot];
+    index->occupancy->words[slot / 64u] |= UINT64_C(1) << (slot % 64u);
+  }
+}
+
+static void loom_low_allocation_active_occupancy_insert(
+    loom_low_allocation_active_unit_index_t* index, uint32_t entry_index,
+    const loom_low_allocation_assignment_t* assignment, uint32_t unit,
+    uint32_t segment_cursor, uint32_t point);
+
+void loom_low_allocation_active_unit_index_advance(
+    loom_low_allocation_active_unit_index_t* index,
+    const loom_low_allocation_assignment_t* assignments, uint32_t point) {
+  if (index->occupancy == NULL) {
+    return;
+  }
+  const iree_host_size_t end_point =
+      iree_min((uint64_t)point + 1, index->occupancy->program_point_count);
+  while (index->occupancy->next_point < end_point) {
+    uint32_t* head = loom_low_allocation_active_occupancy_head(
+        index, (uint32_t)index->occupancy->next_point++);
+    while (*head != UINT32_MAX) {
+      const uint32_t entry_index = *head;
+      const loom_low_allocation_active_occupancy_entry_t entry =
+          *loom_low_allocation_active_occupancy_entry(index, entry_index);
+      loom_low_allocation_active_occupancy_remove(index, entry_index);
+      if (entry.next_point != 0) {
+        loom_low_allocation_active_occupancy_schedule(
+            index, entry_index, entry.slot, entry.next_point, 0,
+            entry.next_segment);
+      } else if (entry.next_segment != UINT32_MAX) {
+        loom_low_allocation_active_occupancy_insert(
+            index, entry_index,
+            &assignments[index->entries[entry_index].assignment_index], 0,
+            entry.next_segment, entry.point);
+      }
+    }
+  }
+  index->occupancy->point = point;
+}
+
+static void loom_low_allocation_active_occupancy_insert(
+    loom_low_allocation_active_unit_index_t* index, uint32_t entry_index,
+    const loom_low_allocation_assignment_t* assignment, uint32_t unit,
+    uint32_t segment_cursor, uint32_t point) {
+  loom_low_allocation_active_occupancy_entry_t* entry =
+      loom_low_allocation_active_occupancy_entry(index, entry_index);
+  entry->slot = UINT32_MAX;
+  const uint32_t class_id = assignment->descriptor_reg_class_id;
+  const uint32_t word_start = index->occupancy->word_offsets[class_id];
+  const uint32_t word_count =
+      index->occupancy->word_offsets[class_id + 1] - word_start;
+  const uint32_t location = assignment->location_base + unit;
+  if (assignment->location_kind !=
+          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+      location >= word_count * 64u ||
+      (assignment->liveness_segments.count > 1 &&
+       assignment->location_count != 1)) {
+    return;
+  }
+  const loom_low_allocation_unit_liveness_t* liveness =
+      index->occupancy->unit_liveness;
+  uint32_t start = loom_low_allocation_live_range_assignment_unit_start_point(
+      liveness->start_points, liveness->point_count, assignment, unit);
+  uint32_t end = loom_low_allocation_live_range_assignment_unit_end_point(
+      liveness->end_points, liveness->point_count, assignment, unit);
+  uint32_t next_segment = UINT32_MAX;
+  if (assignment->liveness_segments.count != 0) {
+    const uint32_t segment_end = assignment->liveness_segments.start +
+                                 assignment->liveness_segments.count;
+    const uint32_t first_point = iree_max(start, point);
+    if (segment_cursor < segment_end &&
+        liveness->storage_segments.entries[segment_cursor].end_point <=
+            first_point) {
+      // A relocated assignment can re-enter after a long sparse prefix. Seek
+      // directly instead of replaying its history; calendar transitions retain
+      // the next segment and normally need no seek.
+      uint32_t count = segment_end - segment_cursor;
+      while (count != 0) {
+        const uint32_t half = count / 2;
+        const uint32_t middle = segment_cursor + half;
+        if (liveness->storage_segments.entries[middle].end_point <=
+            first_point) {
+          segment_cursor = middle + 1;
+          count -= half + 1;
+        } else {
+          count = half;
+        }
+      }
+    }
+    if (segment_cursor == segment_end) {
+      return;
+    }
+    const loom_liveness_segment_t* segment =
+        &liveness->storage_segments.entries[segment_cursor];
+    start = iree_max(start, segment->start_point);
+    end = iree_min(end, segment->end_point);
+    if (segment_cursor + 1 < segment_end) {
+      next_segment = segment_cursor + 1;
+    }
+  }
+  if (start >= end || end <= point) {
+    return;
+  }
+  loom_low_allocation_active_occupancy_schedule(
+      index, entry_index, word_start * 64u + location,
+      start > point ? start : end, start > point ? end : 0, next_segment);
+}
+
+void loom_low_allocation_active_unit_index_project_conflicts(
+    const loom_low_allocation_active_unit_index_t* index,
+    const loom_low_allocation_assignment_t* candidate, uint64_t* conflicts) {
+  if (index->occupancy == NULL ||
+      candidate->location_kind !=
+          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+      candidate->start_point != index->occupancy->point) {
+    return;
+  }
+  const uint32_t class_id = candidate->descriptor_reg_class_id;
+  const uint32_t word_start = index->occupancy->word_offsets[class_id];
+  const uint32_t word_count =
+      index->occupancy->word_offsets[class_id + 1] - word_start;
+  if (word_count == 0) {
+    return;
+  }
+  const loom_low_allocation_unit_liveness_t* liveness =
+      index->occupancy->unit_liveness;
+  if (candidate->liveness_segments.count != 0 &&
+      !iree_any_bit_set(
+          candidate->flags,
+          LOOM_LOW_ALLOCATION_ASSIGNMENT_FLAG_EXPANDED_EXECUTION_DEFINITION) &&
+      !loom_liveness_segment_range_contains(liveness->storage_segments.entries,
+                                            candidate->liveness_segments,
+                                            index->occupancy->point)) {
+    return;
+  }
+  const uint32_t unit_count =
+      iree_min(candidate->location_count, word_count * 64u);
+  for (uint32_t unit = 0; unit < unit_count; ++unit) {
+    if (loom_low_allocation_live_range_assignment_unit_start_point(
+            liveness->start_points, liveness->point_count, candidate, unit) >
+            index->occupancy->point ||
+        loom_low_allocation_live_range_assignment_unit_end_point(
+            liveness->end_points, liveness->point_count, candidate, unit) <=
+            index->occupancy->point) {
+      continue;
+    }
+    const uint32_t shift_words = unit / 64u;
+    const uint32_t shift_bits = unit % 64u;
+    for (uint32_t word = 0; word + shift_words < word_count; ++word) {
+      uint64_t bits =
+          index->occupancy->words[word_start + word + shift_words] >>
+          shift_bits;
+      if (shift_bits != 0 && word + shift_words + 1 < word_count) {
+        bits |= index->occupancy->words[word_start + word + shift_words + 1]
+                << (64u - shift_bits);
+      }
+      conflicts[word] |= bits;
+    }
+  }
+}
 
 // One distinct continuously occupied scalar location in an AVL tree. Subtree
 // bounds and density let ordered searches skip contiguous runs in one step
@@ -886,6 +1251,11 @@ void loom_low_allocation_active_unit_index_insert_assignment(
     }
     index->bucket_heads[bucket_index] = entry_index;
     assignment_entry_head = entry_index;
+    if (index->occupancy != NULL) {
+      loom_low_allocation_active_occupancy_insert(
+          index, entry_index, assignment, unit_offset,
+          assignment->liveness_segments.start, index->occupancy->point);
+    }
   }
   index->entry_starts_by_assignment_index[assignment_index] =
       assignment_entry_head;
@@ -921,6 +1291,9 @@ void loom_low_allocation_active_unit_index_remove_assignment(
     IREE_ASSERT_LT(entry_index, index->entry_count);
     loom_low_allocation_active_unit_entry_t* entry =
         &index->entries[entry_index];
+    if (index->occupancy != NULL) {
+      loom_low_allocation_active_occupancy_remove(index, entry_index);
+    }
     if (entry->previous_entry != UINT32_MAX) {
       IREE_ASSERT_LT(entry->previous_entry, index->entry_count);
       index->entries[entry->previous_entry].next_entry = entry->next_entry;

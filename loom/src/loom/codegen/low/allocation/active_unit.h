@@ -24,6 +24,15 @@ typedef struct loom_low_allocation_active_unit_entry_t
     loom_low_allocation_active_unit_entry_t;
 typedef struct loom_low_allocation_active_location_node_t
     loom_low_allocation_active_location_node_t;
+typedef struct loom_low_allocation_active_occupancy_t
+    loom_low_allocation_active_occupancy_t;
+
+enum {
+  // Bounded projection window, not a limit on legal register locations.
+  LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_WORD_COUNT = 4,
+  LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_LOCATION_COUNT =
+      LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_WORD_COUNT * 64,
+};
 
 typedef enum loom_low_allocation_location_search_direction_e {
   LOOM_LOW_ALLOCATION_LOCATION_SEARCH_ASCENDING = 0,
@@ -71,6 +80,8 @@ typedef struct loom_low_allocation_active_unit_index_t {
   uint32_t active_location_count;
   // First reusable ordered-location node, or UINT32_MAX.
   uint32_t free_active_location_head;
+  // Arena-owned definite occupancy for bounded linear classes, or NULL.
+  loom_low_allocation_active_occupancy_t* occupancy;
 } loom_low_allocation_active_unit_index_t;
 
 // Initializes |out_index| for up to |assignment_capacity| assignments and
@@ -81,6 +92,35 @@ iree_status_t loom_low_allocation_active_unit_index_initialize(
     iree_host_size_t assignment_capacity, iree_host_size_t unit_capacity,
     iree_arena_allocator_t* arena,
     loom_low_allocation_active_unit_index_t* out_index);
+
+// Binds |unit_liveness| before any insertion and adds counted occupancy for
+// bounded linear register classes. The borrowed facts must outlive |index|;
+// remove an assignment before changing its lifetime facts or location. All
+// assignment endpoints must be less than |program_point_count|. Unsupported
+// class shapes need no occupancy storage and retain the exact hash queries.
+iree_status_t loom_low_allocation_active_unit_index_initialize_occupancy(
+    loom_low_allocation_active_unit_index_t* index,
+    const loom_low_allocation_unit_liveness_t* unit_liveness,
+    iree_host_size_t program_point_count, iree_arena_allocator_t* arena);
+
+// Advances definite unit occupancy through the monotone acquisition point.
+// Points beyond the calendar drain all remaining reservations.
+// Activation and retirement consume each indexed lifetime span once. Scalar
+// sparse ranges retain their next segment; aggregate sparse ranges stay on the
+// exact query path instead of expanding a unit-by-segment product.
+void loom_low_allocation_active_unit_index_advance(
+    loom_low_allocation_active_unit_index_t* index,
+    const loom_low_allocation_assignment_t* assignments, uint32_t point);
+
+// Adds definitely conflicting bases to |conflicts|, which has
+// LOOM_LOW_ALLOCATION_ACTIVE_CONFLICT_WORD_COUNT caller-owned words. The
+// candidate's location is ignored. Projection uses its units live at the
+// current acquisition point; absent bits and locations beyond the window still
+// require complete conflict queries. No ignored-storage exemption applies.
+// The result remains valid until active assignments or lifetime facts change.
+void loom_low_allocation_active_unit_index_project_conflicts(
+    const loom_low_allocation_active_unit_index_t* index,
+    const loom_low_allocation_assignment_t* candidate, uint64_t* conflicts);
 
 // Returns true when |index| has allocated storage and can answer hash queries.
 bool loom_low_allocation_active_unit_index_is_enabled(
