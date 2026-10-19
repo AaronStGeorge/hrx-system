@@ -369,7 +369,7 @@ TEST_F(FactTableComputeTest, IdentityOnlyMutationReportsChangedFacts) {
                                                              first, &changed));
   EXPECT_TRUE(changed);
   EXPECT_EQ(table_.select_dependencies.index, nullptr);
-  EXPECT_EQ(table_.select_dependencies.roots, nullptr);
+  EXPECT_EQ(table_.select_dependencies.pages, nullptr);
   const loom_value_id_t first_result = loom_op_const_results(first)[0];
   loom_op_t* second = nullptr;
   IREE_ASSERT_OK(BuildIdentity(first_result, &second));

@@ -439,8 +439,8 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
   table->layout_origins = NULL;
   table->vector_partitions = NULL;
   table->select_dependencies.index = NULL;
-  table->select_dependencies.roots = NULL;
-  table->select_dependencies.capacity = 0;
+  table->select_dependencies.pages = NULL;
+  table->select_dependencies.page_capacity = 0;
   loom_value_fact_integer_relations_clear_scope(table);
   table->exact_relations.ops = NULL;
   table->exact_relations.count = 0;

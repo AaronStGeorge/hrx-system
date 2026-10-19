@@ -395,15 +395,15 @@ struct loom_value_fact_table_t {
   loom_value_fact_vector_partitions_t* vector_partitions;
 
   // Canonical transitive select conditions keyed by SSA value ID. Both the
-  // index and dense roots have populated-scope lifetime and remain absent for
-  // scopes with no value-selecting operations.
+  // set storage and root pages have populated-scope lifetime and are absent
+  // for scopes with no value-selecting operations.
   struct {
     // Canonical set storage allocated on the first nonempty dependency.
     loom_value_set_index_t* index;
-    // Canonical set roots indexed by SSA value ID; zero is empty.
-    loom_value_set_id_t* roots;
-    // Allocated root entry count.
-    iree_host_size_t capacity;
+    // Sparse root pages; NULL entries represent empty ranges of SSA IDs.
+    loom_value_fact_select_dependency_page_t** pages;
+    // Allocated page pointer count, or zero before the first publication.
+    iree_host_size_t page_capacity;
   } select_dependencies;
 
   // Exact predicate-bearing identities awaiting path-local fact transport.

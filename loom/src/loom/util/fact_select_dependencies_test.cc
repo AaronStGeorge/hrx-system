@@ -99,7 +99,7 @@ class FactSelectDependenciesTest : public ::testing::Test {
   // Persistent fact storage and independent clones retained across scope
   // resets.
   iree_arena_allocator_t arena_;
-  // Selector sets and root entries owned by the primary populated scope.
+  // Selector sets and root pages owned by the primary populated scope.
   iree_arena_allocator_t transient_arena_;
   // Registered dialects used by the small operation fixtures.
   loom_context_t context_;
@@ -171,7 +171,20 @@ TEST_F(FactSelectDependenciesTest,
   loom_value_fact_table_clear_scope(&table_);
   EXPECT_TRUE(SelectDependencies(table_, sum).empty());
   EXPECT_EQ(table_.select_dependencies.index, nullptr);
-  EXPECT_EQ(table_.select_dependencies.roots, nullptr);
+  EXPECT_EQ(table_.select_dependencies.pages, nullptr);
+  iree_arena_reset(&transient_arena_);
+  EXPECT_EQ(SelectDependencies(clone, sum),
+            std::vector<loom_value_id_t>({second_condition}));
+  EXPECT_EQ(SelectDependencies(undefined_clone, sum),
+            std::vector<loom_value_id_t>({second_condition}));
+
+  IREE_ASSERT_OK(loom_op_set_operand(module_, select, 0, first_condition));
+  IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, select));
+  IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, add));
+  EXPECT_EQ(SelectDependencies(table_, sum),
+            std::vector<loom_value_id_t>({first_condition}));
+  EXPECT_EQ(SelectDependencies(clone, sum),
+            std::vector<loom_value_id_t>({second_condition}));
 }
 
 TEST_F(FactSelectDependenciesTest,
@@ -236,7 +249,7 @@ TEST_F(FactSelectDependenciesTest, NonBooleanSelectorDoesNotCreateDependency) {
       SelectDependencies(table_, loom_scf_lookup_results(lookup).values[0])
           .empty());
   EXPECT_EQ(table_.select_dependencies.index, nullptr);
-  EXPECT_EQ(table_.select_dependencies.roots, nullptr);
+  EXPECT_EQ(table_.select_dependencies.pages, nullptr);
 }
 
 TEST_F(FactSelectDependenciesTest,
@@ -283,6 +296,105 @@ TEST_F(FactSelectDependenciesTest,
   const loom_value_id_t shared_result = loom_index_add_result(shared);
   EXPECT_EQ(SelectDependencyRoot(table_, shared_result), shared_root);
   EXPECT_EQ(SelectDependencies(table_, shared_result), conditions);
+}
+
+TEST_F(FactSelectDependenciesTest, BorrowedSetsSurviveRootGrowthAndClearing) {
+  const loom_type_t i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  const loom_value_id_t first_condition = DefineValue(i1_type);
+  loom_op_t* first_select =
+      BuildSelect(first_condition, inputs_[0], inputs_[1]);
+  IREE_ASSERT_OK(
+      loom_value_fact_table_compute_op(&table_, module_, first_select));
+
+  // Unselected arguments separate the conditions into distinct canonical-set
+  // leaves. Resuming the cursor must read its borrowed index after growth.
+  for (unsigned i = 0; i < 64; ++i) {
+    DefineValue(type_);
+  }
+  const loom_value_id_t second_condition = DefineValue(i1_type);
+  loom_op_t* second_select = BuildSelect(
+      second_condition, loom_scf_select_result(first_select), inputs_[1]);
+  IREE_ASSERT_OK(
+      loom_value_fact_table_compute_op(&table_, module_, second_select));
+  const loom_value_id_t selected = loom_scf_select_result(second_select);
+  loom_value_set_cursor_t cursor;
+  const loom_value_set_id_t original_root =
+      loom_value_fact_table_select_dependencies_begin(&table_, selected,
+                                                      &cursor);
+  ASSERT_EQ(loom_value_set_cursor_next(&cursor), first_condition);
+
+  std::vector<loom_op_t*> aliases;
+  std::vector<loom_value_id_t> selectors;
+  std::vector<loom_value_id_t> conditions;
+  for (unsigned i = 0; i < 32; ++i) {
+    const loom_value_id_t condition = DefineValue(i1_type);
+    loom_op_t* select = BuildSelect(condition, inputs_[0], inputs_[1]);
+    IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, select));
+    const loom_value_id_t selector = loom_scf_select_result(select);
+    loom_op_t* alias = nullptr;
+    IREE_ASSERT_OK(loom_index_add_build(&builder_, selected, selector, type_,
+                                        LOOM_LOCATION_UNKNOWN, &alias));
+    IREE_ASSERT_OK(loom_value_fact_table_compute_op(&table_, module_, alias));
+    aliases.push_back(alias);
+    selectors.push_back(selector);
+    conditions.push_back(condition);
+  }
+
+  // Withdrawing one summary must preserve neighboring root slots and the
+  // immutable set borrowed before those slots and canonical sets grew.
+  IREE_ASSERT_OK(loom_op_set_operand(module_, aliases[0], 0, inputs_[0]));
+  IREE_ASSERT_OK(loom_op_set_operand(module_, aliases[0], 1, inputs_[1]));
+  bool changed = false;
+  IREE_ASSERT_OK(loom_value_fact_table_compute_op_and_report(
+      &table_, module_, aliases[0], &changed));
+  EXPECT_TRUE(changed);
+  EXPECT_TRUE(
+      SelectDependencies(table_, loom_index_add_result(aliases[0])).empty());
+  EXPECT_EQ(SelectDependencyRoot(table_, selected), original_root);
+  EXPECT_EQ(loom_value_set_cursor_next(&cursor), second_condition);
+  EXPECT_EQ(loom_value_set_cursor_next(&cursor), LOOM_VALUE_ID_INVALID);
+  for (iree_host_size_t i = 1; i < aliases.size(); ++i) {
+    EXPECT_EQ(SelectDependencies(table_, loom_index_add_result(aliases[i])),
+              std::vector<loom_value_id_t>(
+                  {first_condition, second_condition, conditions[i]}));
+  }
+
+  IREE_ASSERT_OK(loom_op_set_operand(module_, aliases[0], 0, selected));
+  IREE_ASSERT_OK(loom_op_set_operand(module_, aliases[0], 1, selectors[0]));
+  IREE_ASSERT_OK(loom_value_fact_table_compute_op_and_report(
+      &table_, module_, aliases[0], &changed));
+  EXPECT_TRUE(changed);
+  EXPECT_EQ(SelectDependencies(table_, loom_index_add_result(aliases[0])),
+            std::vector<loom_value_id_t>(
+                {first_condition, second_condition, conditions[0]}));
+}
+
+TEST_F(FactSelectDependenciesTest, PopulatingCoveredPagesRetainsDirectory) {
+  const loom_type_t i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  std::vector<loom_op_t*> selects;
+  std::vector<loom_value_id_t> conditions;
+  for (unsigned i = 0; i < 96; ++i) {
+    const loom_value_id_t condition = DefineValue(i1_type);
+    selects.push_back(BuildSelect(condition, inputs_[0], inputs_[1]));
+    conditions.push_back(condition);
+  }
+
+  // The first publication reserves the complete ID range but populates only
+  // its final page. Filling lower pages must not double that directory again.
+  IREE_ASSERT_OK(
+      loom_value_fact_table_compute_op(&table_, module_, selects.back()));
+  const auto page_capacity = table_.select_dependencies.page_capacity;
+  const auto* pages = table_.select_dependencies.pages;
+  for (iree_host_size_t i = selects.size() - 1; i > 0; --i) {
+    IREE_ASSERT_OK(
+        loom_value_fact_table_compute_op(&table_, module_, selects[i - 1]));
+  }
+  EXPECT_EQ(table_.select_dependencies.page_capacity, page_capacity);
+  EXPECT_EQ(table_.select_dependencies.pages, pages);
+  for (iree_host_size_t i = 0; i < selects.size(); ++i) {
+    EXPECT_EQ(SelectDependencies(table_, loom_scf_select_result(selects[i])),
+              std::vector<loom_value_id_t>({conditions[i]}));
+  }
 }
 
 }  // namespace

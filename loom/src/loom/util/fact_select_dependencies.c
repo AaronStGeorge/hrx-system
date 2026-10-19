@@ -12,13 +12,35 @@
 #include "loom/ops/op_defs.h"
 #include "loom/util/fact_table.h"
 
+#define LOOM_VALUE_FACT_SELECT_DEPENDENCY_PAGE_SHIFT 6u
+#define LOOM_VALUE_FACT_SELECT_DEPENDENCY_PAGE_SIZE \
+  (1u << LOOM_VALUE_FACT_SELECT_DEPENDENCY_PAGE_SHIFT)
+
+struct loom_value_fact_select_dependency_page_t {
+  // Canonical set roots for one aligned range of SSA IDs; zero is empty.
+  loom_value_set_id_t roots[LOOM_VALUE_FACT_SELECT_DEPENDENCY_PAGE_SIZE];
+};
+
+static loom_value_set_id_t* loom_value_fact_table_lookup_select_dependency(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id) {
+  const iree_host_size_t page_index =
+      value_id >> LOOM_VALUE_FACT_SELECT_DEPENDENCY_PAGE_SHIFT;
+  if (!table || page_index >= table->select_dependencies.page_capacity) {
+    return NULL;
+  }
+  loom_value_fact_select_dependency_page_t* page =
+      table->select_dependencies.pages[page_index];
+  return page ? &page->roots[value_id &
+                             (LOOM_VALUE_FACT_SELECT_DEPENDENCY_PAGE_SIZE - 1)]
+              : NULL;
+}
+
 loom_value_set_id_t loom_value_fact_table_select_dependencies_begin(
     const loom_value_fact_table_t* table, loom_value_id_t value_id,
     loom_value_set_cursor_t* out_cursor) {
-  loom_value_set_id_t root = 0;
-  if (table && value_id < table->select_dependencies.capacity) {
-    root = table->select_dependencies.roots[value_id];
-  }
+  const loom_value_set_id_t* entry =
+      loom_value_fact_table_lookup_select_dependency(table, value_id);
+  const loom_value_set_id_t root = entry ? *entry : 0;
   loom_value_set_cursor_begin(table ? table->select_dependencies.index : NULL,
                               root, out_cursor);
   return root;
@@ -26,9 +48,9 @@ loom_value_set_id_t loom_value_fact_table_select_dependencies_begin(
 
 static loom_value_set_id_t loom_value_fact_table_select_dependency_root(
     const loom_value_fact_table_t* table, loom_value_id_t value_id) {
-  return value_id < table->select_dependencies.capacity
-             ? table->select_dependencies.roots[value_id]
-             : 0;
+  const loom_value_set_id_t* entry =
+      loom_value_fact_table_lookup_select_dependency(table, value_id);
+  return entry ? *entry : 0;
 }
 
 static iree_status_t loom_value_fact_table_ensure_select_dependency_index(
@@ -40,20 +62,33 @@ static iree_status_t loom_value_fact_table_ensure_select_dependency_index(
                                        &table->select_dependencies.index);
 }
 
-static iree_status_t loom_value_fact_table_ensure_select_dependency_capacity(
-    loom_value_fact_table_t* table, iree_host_size_t capacity) {
-  if (capacity <= table->select_dependencies.capacity) {
-    return iree_ok_status();
+static iree_status_t loom_value_fact_table_ensure_select_dependency_page(
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_set_id_t** out_root) {
+  const iree_host_size_t page_index =
+      value_id >> LOOM_VALUE_FACT_SELECT_DEPENDENCY_PAGE_SHIFT;
+  const iree_host_size_t old_capacity =
+      table->select_dependencies.page_capacity;
+  if (page_index >= old_capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        table->transient_arena, old_capacity, page_index + 1,
+        sizeof(*table->select_dependencies.pages),
+        &table->select_dependencies.page_capacity,
+        (void**)&table->select_dependencies.pages));
+    memset(table->select_dependencies.pages + old_capacity, 0,
+           (table->select_dependencies.page_capacity - old_capacity) *
+               sizeof(*table->select_dependencies.pages));
   }
-  const iree_host_size_t old_capacity = table->select_dependencies.capacity;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_grow_array(table->transient_arena, old_capacity, capacity,
-                            sizeof(*table->select_dependencies.roots),
-                            &table->select_dependencies.capacity,
-                            (void**)&table->select_dependencies.roots));
-  memset(table->select_dependencies.roots + old_capacity, 0,
-         (table->select_dependencies.capacity - old_capacity) *
-             sizeof(*table->select_dependencies.roots));
+  loom_value_fact_select_dependency_page_t* page =
+      table->select_dependencies.pages[page_index];
+  if (!page) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(table->transient_arena,
+                                             sizeof(*page), (void**)&page));
+    memset(page, 0, sizeof(*page));
+    table->select_dependencies.pages[page_index] = page;
+  }
+  *out_root = &page->roots[value_id &
+                           (LOOM_VALUE_FACT_SELECT_DEPENDENCY_PAGE_SIZE - 1)];
   return iree_ok_status();
 }
 
@@ -81,15 +116,16 @@ static iree_status_t loom_value_fact_table_add_select_condition(
 static iree_status_t loom_value_fact_table_set_select_dependency_root(
     loom_value_fact_table_t* table, loom_value_id_t value_id,
     loom_value_set_id_t root, bool* inout_changed) {
-  if (loom_value_fact_table_select_dependency_root(table, value_id) == root) {
+  loom_value_set_id_t* entry =
+      loom_value_fact_table_lookup_select_dependency(table, value_id);
+  if ((entry ? *entry : 0) == root) {
     return iree_ok_status();
   }
-  if (root) {
-    IREE_RETURN_IF_ERROR(
-        loom_value_fact_table_ensure_select_dependency_capacity(
-            table, (iree_host_size_t)value_id + 1));
+  if (!entry) {
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_ensure_select_dependency_page(
+        table, value_id, &entry));
   }
-  table->select_dependencies.roots[value_id] = root;
+  *entry = root;
   if (inout_changed) {
     *inout_changed = true;
   }
@@ -157,7 +193,7 @@ iree_status_t loom_value_fact_table_propagate_select_dependencies(
     }
   }
 
-  if (!root && !table->select_dependencies.roots) {
+  if (!root && !table->select_dependencies.pages) {
     return iree_ok_status();
   }
   const loom_value_id_t* results = loom_op_const_results(op);

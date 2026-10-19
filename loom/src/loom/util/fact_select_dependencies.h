@@ -18,6 +18,8 @@ extern "C" {
 #endif
 
 typedef struct loom_value_fact_table_t loom_value_fact_table_t;
+typedef struct loom_value_fact_select_dependency_page_t
+    loom_value_fact_select_dependency_page_t;
 
 // Begins increasing-order iteration over select conditions transitively
 // controlling |value_id|. Returns the canonical set identity, or zero when
