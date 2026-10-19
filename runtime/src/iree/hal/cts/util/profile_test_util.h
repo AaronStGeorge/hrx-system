@@ -127,6 +127,9 @@ struct TestProfileSink {
   iree_hal_profile_dispatch_event_flags_t expected_dispatch_flags =
       IREE_HAL_PROFILE_DISPATCH_EVENT_FLAG_NONE;
 
+  // Function ordinal expected from the executable loaded by the test.
+  uint32_t expected_function_ordinal = 0;
+
   // Expected dispatch event command indexes. Empty means direct dispatches.
   std::vector<uint32_t> expected_dispatch_command_indices;
 

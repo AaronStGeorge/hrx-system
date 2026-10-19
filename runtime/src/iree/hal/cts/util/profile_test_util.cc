@@ -290,7 +290,8 @@ static iree_status_t TestProfileSinkWrite(
                             test_sink->function_record_executable_ids.end(),
                             records[i].executable_id));
       }
-      EXPECT_EQ(0u, records[i].function_ordinal);
+      EXPECT_EQ(test_sink->expected_function_ordinal,
+                records[i].function_ordinal);
       if (test_sink->validate_dispatch_workgroup_count) {
         EXPECT_EQ(test_sink->expected_workgroup_count[0],
                   records[i].workgroup_count[0]);

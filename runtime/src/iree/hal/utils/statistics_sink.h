@@ -206,9 +206,11 @@ IREE_API_EXPORT bool iree_hal_profile_statistics_sink_find_function_name(
 
 // Scales |duration| from |row|'s time domain to nanoseconds when possible.
 //
-// Host-time rows are already in nanoseconds. Device-tick rows require clock
-// correlation records for the row's physical device. Returns false when no
-// reliable conversion is available.
+// Host-time rows are already in nanoseconds. Device-tick rows use the declared
+// timestamp frequency or aligned clock correlation records for the row's
+// physical device. Frequency-based durations do not establish a host-clock
+// epoch or improve the source's declared accuracy. Returns false when no
+// conversion is available.
 IREE_API_EXPORT bool iree_hal_profile_statistics_sink_scale_duration_to_ns(
     const iree_hal_profile_statistics_sink_t* sink,
     const iree_hal_profile_statistics_row_t* row, uint64_t duration,
