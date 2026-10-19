@@ -29,8 +29,9 @@ typedef struct iree_hal_amd_gpu_publication_entry_t {
 //
 // Caller/service ownership protects head and ready. The permanent stub lets
 // the consumer detach the final real entry without borrowing its storage until
-// another submission arrives. The embedding queue isolates this cache line
-// from independently written native producer and completion state.
+// another submission arrives. Concurrent enqueue state and the exclusive
+// publication cursor occupy separate cache lines, also isolated from the
+// embedding queue's native producer and completion state.
 typedef struct iree_alignas(iree_hardware_destructive_interference_size)
     iree_hal_amd_gpu_publisher_t {
   // Atomic caller ownership, reserved service turn, and notification bits.
@@ -40,7 +41,9 @@ typedef struct iree_alignas(iree_hardware_destructive_interference_size)
   // Permanent link used when the FIFO is empty or its final entry detaches.
   iree_hal_amd_gpu_publication_entry_t stub;
   // Next FIFO entry to detach, accessed only by the exclusive publisher.
-  iree_hal_amd_gpu_publication_entry_t* head;
+  // Concurrent enqueues do not invalidate this cursor's cache line.
+  iree_alignas(iree_hardware_destructive_interference_size)
+      iree_hal_amd_gpu_publication_entry_t* head;
   // Detached entry awaiting publication, including capacity deferral.
   iree_hal_amd_gpu_publication_entry_t* ready;
 } iree_hal_amd_gpu_publisher_t;

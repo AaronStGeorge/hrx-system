@@ -6,8 +6,9 @@
 
 #include "iree/hal/drivers/amd/gpu/queue/publisher.h"
 
-static_assert(sizeof(iree_hal_amd_gpu_publisher_t) <= 64,
-              "publisher metadata must fit within one cache line");
+static_assert(sizeof(iree_hal_amd_gpu_publisher_t) ==
+                  2 * iree_hardware_destructive_interference_size,
+              "enqueue state and publication cursor occupy separate rows");
 
 enum {
   IREE_HAL_AMD_GPU_PUBLISHER_OWNED = 1u << 0,
