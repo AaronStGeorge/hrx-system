@@ -1194,6 +1194,7 @@ int iree_test_loom_main(int argc, char** argv,
     iree_host_size_t selected_scenario_count = 0;
     iree_host_size_t runnable_scenario_count = 0;
     const loom_testbench_compilation_t compilation = {
+        .context = compiler_context,
         .compiler = compiler,
         .workspace = compiler_workspace,
         .module = module,

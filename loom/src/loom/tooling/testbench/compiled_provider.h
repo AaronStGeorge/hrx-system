@@ -25,6 +25,8 @@ extern "C" {
 // invocation. Execution providers clone |module| before compilation. Calls
 // sharing |workspace| are serialized by the owning runner.
 typedef struct loom_testbench_compilation_t {
+  // Context owning the compiler, module, and dialect registry.
+  loomc_context_t* context;
   // Prepared compiler whose context owns |module|.
   loomc_compiler_t* compiler;
   // Invocation workspace reused after each private clone is released.
