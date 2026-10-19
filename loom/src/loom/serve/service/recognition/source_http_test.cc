@@ -7,9 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <condition_variable>
 #include <filesystem>
-#include <mutex>
 #include <string>
 #include <tuple>
 
@@ -17,74 +15,23 @@
 #include "iree/base/tooling/flags.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/serve/service/recognition/http.h"
 #include "loom/serve/service/recognition/model.h"
+#include "loom/serve/service/recognition/service.h"
 #include "loom/serve/testing/http_harness.h"
 #include "loom/serve/testing/service_application.h"
+#include "loom/serve/testing/worker_gate.h"
 
 IREE_FLAG(string, model_source, "", "Recognition fixture bootstrap source.");
+IREE_FLAG(bool, test_elastic, false, "Use elastic backing for recognition.");
 
 namespace {
 
-// Holds the application's sole worker while the owner accepts and cancels
-// real conversion/model tasks. No timer or production hook controls the cut.
-class WorkerGate {
- public:
-  explicit WorkerGate(iree_task_executor_t* executor) {
-    iree_task_process_initialize(
-        [](iree_task_process_t* process, const iree_task_worker_context_t*,
-           iree_task_process_drain_result_t* result) {
-          auto* gate = static_cast<WorkerGate*>(process->user_data);
-          std::unique_lock<std::mutex> lock(gate->mutex_);
-          gate->entered_ = true;
-          gate->condition_.notify_all();
-          gate->condition_.wait(lock, [&] { return gate->open_; });
-          result->completed = true;
-          result->did_work = true;
-          return iree_ok_status();
-        },
-        0, 1, &process_);
-    process_.user_data = this;
-    process_.completion_fn = [](iree_task_process_t*, iree_status_t status) {
-      IREE_EXPECT_OK(status);
-    };
-    process_.release_fn = [](iree_task_process_t* process) {
-      auto* gate = static_cast<WorkerGate*>(process->user_data);
-      std::lock_guard<std::mutex> lock(gate->mutex_);
-      gate->released_ = true;
-      gate->condition_.notify_all();
-    };
-    iree_task_executor_schedule_process(executor, &process_);
-    std::unique_lock<std::mutex> lock(mutex_);
-    condition_.wait(lock, [&] { return entered_; });
-  }
-  ~WorkerGate() { Open(); }
-  void Open() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    open_ = true;
-    condition_.notify_all();
-    condition_.wait(lock, [&] { return released_; });
-  }
-
- private:
-  // Intrusive process storage retained through the final release callback.
-  iree_task_process_t process_ = {};
-  // Serializes every gate publication, including final destruction.
-  std::mutex mutex_;
-  // Explicit worker-entry, gate-opening, and retirement readiness.
-  std::condition_variable condition_;
-  // The sole application worker has entered this process.
-  bool entered_ = false;
-  // The test owner has released the worker.
-  bool open_ = false;
-  // The executor has made its final process access.
-  bool released_ = false;
-};
-
-std::string Request(bool encoded) {
-  std::string pcm(19 * sizeof(int16_t), '\0');
-  for (size_t i = 0; i < 19; ++i) {
-    iree_unaligned_store_le_u16(pcm.data() + i * sizeof(int16_t), 8192);
+std::string Request(bool encoded, size_t frame_count = 19,
+                    int16_t sample = 8192) {
+  std::string pcm(frame_count * sizeof(int16_t), '\0');
+  for (size_t i = 0; i < frame_count; ++i) {
+    iree_unaligned_store_le_u16(pcm.data() + i * sizeof(int16_t),
+                                static_cast<uint16_t>(sample));
   }
   std::string content_type = "audio/pcm;rate=16000;channels=1";
   if (encoded) {
@@ -116,11 +63,13 @@ std::string Request(bool encoded) {
          std::to_string(body.size()) + "\r\n\r\n" + body;
 }
 
-class SourceRecognitionHttpTest
-    : public ::testing::TestWithParam<std::tuple<bool, bool>> {
+class SourceRecognitionHttpTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    const auto options = loom_serve_test_application_options_default();
+    auto options = loom_serve_test_application_options_default();
+    options.backing = FLAG_test_elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
+                                        : LOOM_SERVE_DEVICE_BACKING_FIXED;
+    options.slab_size = FLAG_test_elastic ? 2 * 1024 * 1024 : 0;
     loom_serve_test_application_t* application = nullptr;
     IREE_ASSERT_OK(loom_serve_test_application_acquire(
         &options, iree_allocator_system(), &application));
@@ -150,17 +99,18 @@ class SourceRecognitionHttpTest
     IREE_ASSERT_OK(loom_serve_http_listener_allocate(
         server_, &listener_options, iree_allocator_system(), &listener_));
     IREE_ASSERT_OK(http_.Initialize(server_, listener_));
-    const loom_serve_recognition_http_options_t service_options = {
+    const loom_serve_recognition_service_options_t service_options = {
         .name = IREE_SV("recognition"),
+        .kind = LOOM_SERVE_MODEL_KIND_RECOGNITION,
         .pending_capacity = 2,
         .request_limit = 1024,
         .document_limit = 4096,
         .decode_frames = 5,
     };
-    IREE_ASSERT_OK(loom_serve_recognition_http_allocate(
+    IREE_ASSERT_OK(loom_serve_recognition_service_allocate(
         host_, loom_serve_recognition_model_generator(model_), &service_options,
         nullptr, iree_allocator_system(), &service_));
-    interface_ = loom_serve_recognition_http_interface(service_);
+    interface_ = loom_serve_recognition_service_interface(service_);
     interface_.set_observer(interface_.self,
                             {[](void* self) {
                                iree_notification_post(
@@ -175,7 +125,7 @@ class SourceRecognitionHttpTest
       AdvanceUntil([&] { return !interface_.is_pending(interface_.self); },
                    true);
       interface_.set_observer(interface_.self, {});
-      loom_serve_recognition_http_free(service_);
+      loom_serve_recognition_service_free(service_);
     }
     IREE_EXPECT_OK(loom_serve_http_listener_free(listener_));
     loom_serve_http_server_free(server_);
@@ -184,7 +134,7 @@ class SourceRecognitionHttpTest
   void Advance(bool stopping) {
     bool progress = false;
     IREE_ASSERT_OK(interface_.advance(
-        interface_.self, stopping ? LOOM_SERVE_HTTP_SERVICE_FLAG_STOPPING : 0,
+        interface_.self, stopping ? LOOM_SERVE_SERVICE_FLAG_STOPPING : 0,
         &progress));
   }
   template <typename Predicate>
@@ -194,7 +144,7 @@ class SourceRecognitionHttpTest
       const auto ticket = iree_notification_prepare_wait(notification);
       bool progress = false;
       auto status = interface_.advance(
-          interface_.self, stopping ? LOOM_SERVE_HTTP_SERVICE_FLAG_STOPPING : 0,
+          interface_.self, stopping ? LOOM_SERVE_SERVICE_FLAG_STOPPING : 0,
           &progress);
       if (ready() || progress || !iree_status_is_ok(status)) {
         iree_notification_cancel_wait(notification);
@@ -221,14 +171,85 @@ class SourceRecognitionHttpTest
   // Real loopback socket listener.
   loom_serve_http_listener_t* listener_ = nullptr;
   // Adapter whose accepted conversion task borrows the claimed upload.
-  loom_serve_recognition_http_t* service_ = nullptr;
+  loom_serve_recognition_service_t* service_ = nullptr;
   // Manually driven production owner interface.
-  loom_serve_http_service_t interface_ = {};
+  loom_serve_service_t interface_ = {};
   // Readiness-aware socket client; no router thread is running.
   loom_serve::testing::HttpHarness http_;
 };
 
-TEST_P(SourceRecognitionHttpTest, CancellationRetainsAcceptedDecodeBorrow) {
+class SourceRecognitionHttpCancellationTest
+    : public SourceRecognitionHttpTest,
+      public ::testing::WithParamInterface<std::tuple<bool, bool>> {};
+
+TEST_F(SourceRecognitionHttpTest, DeploymentRoleRequiresItsDeclaredOutput) {
+  interface_.set_observer(interface_.self, {});
+  loom_serve_recognition_service_free(service_);
+  service_ = nullptr;
+  interface_ = {};
+  const struct {
+    // Deployment contract checked before the service is published.
+    loom_serve_model_kind_t kind;
+    // Capability mask supplied by the generator dependency.
+    loom_serve_recognition_output_flags_t outputs;
+    // Whether that source satisfies the deployment contract.
+    bool valid;
+    // Actual output modalities published on successful preparation.
+    size_t modality_count;
+  } cases[] = {
+      {LOOM_SERVE_MODEL_KIND_RECOGNITION,
+       LOOM_SERVE_RECOGNITION_OUTPUT_TRANSCRIPT, true, 1},
+      {LOOM_SERVE_MODEL_KIND_ACTIVITY, LOOM_SERVE_RECOGNITION_OUTPUT_ACTIVITY,
+       true, 1},
+      {LOOM_SERVE_MODEL_KIND_RECOGNITION, LOOM_SERVE_RECOGNITION_OUTPUT_ALL,
+       true, 2},
+      {LOOM_SERVE_MODEL_KIND_ACTIVITY, LOOM_SERVE_RECOGNITION_OUTPUT_ALL, true,
+       2},
+      {LOOM_SERVE_MODEL_KIND_RECOGNITION,
+       LOOM_SERVE_RECOGNITION_OUTPUT_ACTIVITY, false, 0},
+      {LOOM_SERVE_MODEL_KIND_ACTIVITY, LOOM_SERVE_RECOGNITION_OUTPUT_TRANSCRIPT,
+       false, 0},
+      {LOOM_SERVE_MODEL_KIND_TEXT, LOOM_SERVE_RECOGNITION_OUTPUT_ALL, false, 0},
+  };
+  for (const auto& row : cases) {
+    SCOPED_TRACE(row.kind);
+    SCOPED_TRACE(row.outputs);
+    auto generator = loom_serve_recognition_model_generator(model_);
+    generator.outputs = row.outputs;
+    const loom_serve_recognition_service_options_t options = {
+        .name = IREE_SV("audio"),
+        .kind = row.kind,
+        .pending_capacity = 1,
+        .request_limit = 1024,
+        .document_limit = 4096,
+        .decode_frames = 5,
+    };
+    auto status = loom_serve_recognition_service_allocate(
+        host_, generator, &options, nullptr, iree_allocator_system(),
+        &service_);
+    if (row.valid) {
+      IREE_ASSERT_OK(status);
+      interface_ = loom_serve_recognition_service_interface(service_);
+      EXPECT_EQ(interface_.kind, row.kind);
+      EXPECT_EQ(interface_.capabilities.output_modalities.count,
+                row.modality_count);
+      EXPECT_EQ(interface_.accept != nullptr,
+                row.kind == LOOM_SERVE_MODEL_KIND_RECOGNITION);
+      EXPECT_EQ(interface_.endpoint != nullptr,
+                row.kind == LOOM_SERVE_MODEL_KIND_RECOGNITION);
+      EXPECT_NE(interface_.try_open_recognition, nullptr);
+      loom_serve_recognition_service_free(service_);
+      service_ = nullptr;
+      interface_ = {};
+    } else {
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+      EXPECT_EQ(service_, nullptr);
+    }
+  }
+}
+
+TEST_P(SourceRecognitionHttpCancellationTest,
+       CancellationRetainsAcceptedDecodeBorrow) {
   const auto [stopping, encoded] = GetParam();
   loom_serve::testing::HttpClient client;
   IREE_ASSERT_OK(http_.Send(Request(encoded), client.put()));
@@ -240,7 +261,7 @@ TEST_P(SourceRecognitionHttpTest, CancellationRetainsAcceptedDecodeBorrow) {
   EXPECT_TRUE(interface_.is_pending(interface_.self));
   EXPECT_EQ(interface_.snapshot(interface_.self).queued_requests, 1u);
   const std::string body(request->body.data, request->body.size);
-  WorkerGate gate(loom_serve_host_executor(host_));
+  loom_serve::testing::WorkerGate gate(loom_serve_host_executor(host_));
   ASSERT_NO_FATAL_FAILURE(Advance(false));
   EXPECT_TRUE(interface_.is_active(interface_.self));
   ASSERT_TRUE(interface_.is_pending(interface_.self));
@@ -285,9 +306,56 @@ TEST_P(SourceRecognitionHttpTest, CancellationRetainsAcceptedDecodeBorrow) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    DisconnectAndShutdown, SourceRecognitionHttpTest,
+    DisconnectAndShutdown, SourceRecognitionHttpCancellationTest,
     ::testing::Combine(::testing::Bool(), LOOM_TEST_AUDIO_WAV
                                               ? ::testing::Bool()
                                               : ::testing::ValuesIn({false})));
+
+class SourceRecognitionHttpFailureTest
+    : public SourceRecognitionHttpTest,
+      public ::testing::WithParamInterface<std::tuple<size_t, bool>> {};
+
+TEST_P(SourceRecognitionHttpFailureTest, SourceCompletionPreservesServing) {
+  loom_serve::testing::HttpClient rejected;
+  loom_serve::testing::HttpClient peer;
+  const auto [frame_count, concurrent_peer] = GetParam();
+  IREE_ASSERT_OK(
+      http_.Send(Request(false, frame_count, -8192), rejected.put()));
+  loom_serve_http_connection_t* connection = nullptr;
+  const loom_serve_http_request_t* request = nullptr;
+  ASSERT_NO_FATAL_FAILURE(Accept(rejected.get(), &connection, &request));
+  if (concurrent_peer) {
+    IREE_ASSERT_OK(http_.Send(Request(false), peer.put()));
+    ASSERT_NO_FATAL_FAILURE(Accept(peer.get(), &connection, &request));
+  }
+  ASSERT_NO_FATAL_FAILURE(
+      AdvanceUntil([&] { return !interface_.is_pending(interface_.self); }));
+  std::string response;
+  IREE_ASSERT_OK(http_.Read(rejected.release(), false, &response));
+  EXPECT_EQ(response.find("HTTP/1.1 400 Bad Request\r\n"), 0u);
+  EXPECT_NE(response.find("recognition fixture accumulator is outside its "
+                          "unsigned index range"),
+            std::string::npos);
+  if (concurrent_peer) {
+    IREE_ASSERT_OK(http_.Read(peer.release(), false, &response));
+    EXPECT_EQ(response.find("HTTP/1.1 200 OK\r\n"), 0u);
+    EXPECT_NE(response.find(R"({"text":"E"})"), std::string::npos);
+  }
+  loom_serve::testing::HttpClient replacement;
+  IREE_ASSERT_OK(http_.Send(Request(false), replacement.put()));
+  ASSERT_NO_FATAL_FAILURE(Accept(replacement.get(), &connection, &request));
+  ASSERT_NO_FATAL_FAILURE(
+      AdvanceUntil([&] { return !interface_.is_pending(interface_.self); }));
+  IREE_ASSERT_OK(http_.Read(replacement.release(), false, &response));
+  EXPECT_EQ(response.find("HTTP/1.1 200 OK\r\n"), 0u);
+  EXPECT_NE(response.find(R"({"text":"E"})"), std::string::npos);
+}
+
+// The five-frame upload is fully staged before the source rejects it. The
+// longer upload still has input queued when that same source failure arrives.
+// A lone row releases the model's backing; a concurrent peer keeps it resident.
+INSTANTIATE_TEST_SUITE_P(QueuedInput, SourceRecognitionHttpFailureTest,
+                         ::testing::Combine(::testing::Values(5u, 19u),
+                                            ::testing::Bool()));
 
 }  // namespace

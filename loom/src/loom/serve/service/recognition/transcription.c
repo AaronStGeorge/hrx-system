@@ -155,13 +155,14 @@ iree_status_t loom_serve_transcription_parse(
   bool pcm = false;
   IREE_RETURN_IF_ERROR(
       loom_serve_transcription_audio(content_type, audio, format, &pcm));
-  *out_request =
-      (loom_serve_transcription_t){.request = {.language = values[2],
-                                               .prompt = values[3],
-                                               .temperature = temperature},
-                                   .audio = audio,
-                                   .pcm = pcm,
-                                   .text_response = text_response};
+  *out_request = (loom_serve_transcription_t){
+      .request = {.language = values[2],
+                  .prompt = values[3],
+                  .temperature = temperature,
+                  .outputs = LOOM_SERVE_RECOGNITION_OUTPUT_TRANSCRIPT},
+      .audio = audio,
+      .pcm = pcm,
+      .text_response = text_response};
   return iree_ok_status();
 }
 

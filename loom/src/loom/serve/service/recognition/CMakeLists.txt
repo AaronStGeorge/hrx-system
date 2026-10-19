@@ -34,14 +34,14 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
-    http
+    service
   HDRS
-    "http.h"
+    "service.h"
   SRCS
-    "http.c"
+    "service.c"
   DEPS
     ::generator
-    ::service
+    ::stream
     ::transcription
     iree::base
     iree::base::threading
@@ -51,6 +51,7 @@ loom_cc_library(
     loom::serve::runtime::host::wake
     loom::serve::runtime::parameter::telemetry
     loom::serve::service
+    loom::serve::service::kind
     loom::serve::telemetry::latency
     loom::serve::telemetry::record
     loom::serve::telemetry::stream
@@ -76,8 +77,8 @@ loom_cc_library(
   SRCS
     "source_http_test.cc"
   DEPS
-    ::http
     ::model
+    ::service
     iree::base
     iree::base::threading
     iree::base::tooling::flags
@@ -86,6 +87,7 @@ loom_cc_library(
     loom::serve::runtime::host
     loom::serve::testing::http_harness
     loom::serve::testing::service_application
+    loom::serve::testing::worker_gate
     loom::serve::transport::http::listener
     loom::serve::transport::http::server
   DEFINES
@@ -147,6 +149,38 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    events
+  HDRS
+    "events.h"
+  SRCS
+    "events.c"
+  DEPS
+    ::transcript
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    events_test
+  SRCS
+    "events_test.cc"
+  DEPS
+    ::events
+    ::transcript
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     document
   HDRS
     "document.h"
@@ -162,13 +196,14 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
-    service
+    stream
   HDRS
-    "service.h"
+    "stream.h"
   SRCS
-    "service.c"
+    "stream.c"
   DEPS
     ::document
+    ::events
     ::generator
     ::input
     ::request
@@ -183,6 +218,7 @@ loom_cc_library(
     loom::serve::runtime::host
     loom::serve::runtime::host::wake
     loom::serve::runtime::parameter::residency
+    loom::serve::telemetry::record
   PUBLIC
 )
 endif()
@@ -194,6 +230,7 @@ loom_cc_library(
   HDRS
     "request.h"
   DEPS
+    ::events
     iree::base
   PUBLIC
 )
@@ -206,9 +243,9 @@ loom_cc_library(
   HDRS
     "generator.h"
   DEPS
+    ::events
     ::input
     ::request
-    ::transcript
     iree::base
     iree::tokenizer
     loom::serve::runtime::execution
@@ -226,8 +263,8 @@ loom_cc_library(
   SRCS
     "model.c"
   DEPS
+    ::events
     ::generator
-    ::transcript
     iree::base
     iree::base::threading
     iree::hal
@@ -265,6 +302,7 @@ loom_cc_library(
   SRCS
     "source_model_test.cc"
   DEPS
+    ::events
     ::generator
     ::input
     ::model
@@ -303,16 +341,17 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
-    source_service_tests
+    source_stream_tests
   SRCS
-    "source_service_test.cc"
+    "source_stream_test.cc"
   DEPS
     ::document
+    ::events
     ::generator
     ::input
     ::model
     ::request
-    ::service
+    ::stream
     ::transcript
     iree::base
     iree::base::threading
@@ -323,8 +362,10 @@ loom_cc_library(
     loom::serve::runtime::execution
     loom::serve::runtime::host
     loom::serve::runtime::parameter::residency
+    loom::serve::telemetry::record
     loom::serve::testing::native_allocator
     loom::serve::testing::service_application
+    loom::serve::testing::worker_gate
   TESTONLY
   ALWAYSLINK
   PUBLIC

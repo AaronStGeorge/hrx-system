@@ -66,10 +66,31 @@ after its producer retires; cancelled partial work cannot publish a valid cache
 entry.
 
 The [generator](generator.h) carries native sample rate and channel count.
-The PCM HTTP service currently requires 24 kHz mono at registration; this wire
-format does not redefine the model ABI's geometry. Supporting a package with a
-different native geometry requires an explicit continuous audio conversion
-path, including filter history and final tail handling.
+Native streams preserve that geometry. The HTTP consumer requires 24 kHz mono
+and rejects incompatible geometry before publishing audio. This wire format
+does not redefine the model ABI's geometry.
+
+## Native consumers
+
+Applications can initialize owned text, voice, and instruction fields with
+`loom_serve_speech_request_initialize_text`, then admit the request through
+`loom_serve_registry_try_open_speech`. Native and HTTP requests share one model,
+admission queue, compatible execution cohorts, and task executor. Acceptance
+moves the request into the service; queue pressure leaves it with the caller.
+
+The returned stream exposes copied F32 waveform blocks with the source's
+sample rate, channel count, and absolute frame position. `peek` borrows the
+current block until `consume` returns its output credit. Holding a block makes
+only that request ineligible for more source work. The bounded stream storage
+is allocated once per request, and each block is copied at the existing CPU
+collection boundary. HTTP encodes directly into its own bounded response
+storage at that same boundary.
+
+The caller closes its stream handle independently of service retirement. Close
+withdraws publication interest immediately, while accepted CPU and device work
+keep their owners until completion. An unread final block and terminal status
+can outlive removal of the model registration. Caller operations run on the
+serialized serving owner and never wait for execution or transport progress.
 
 ## Scheduling and retirement
 
@@ -89,6 +110,13 @@ while preserving every original member of an accepted batch through collection.
 Pins, row storage and request handles release only after their accepted work and
 CPU borrowers retire. Failed readiness leaves ownership with the model's actual
 buffer-retirement path.
+
+A failure while interpreting retired source output or encoding one request's
+block terminates that request without publishing the partial block. Every
+original batch ordinal is still collected, including cancelled peers. Healthy
+requests continue, and failed rows become reusable after ordinary retirement.
+An HTTP failure before the first audio byte returns a JSON error; a failure
+after audio begins closes the response without appending another wire format.
 
 Dynamic registration and removal use the same constructors and teardown as
 startup model documents. Protocol rejection preserves the prepared service;
