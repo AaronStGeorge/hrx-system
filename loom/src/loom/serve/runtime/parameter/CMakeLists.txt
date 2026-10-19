@@ -24,7 +24,7 @@ loom_cc_library(
     iree::base::internal
     iree::hal
     loom::serve::runtime::device
-    loom::serve::runtime::program::command
+    loom::target::arch::cmd::program
   PUBLIC
 )
 endif()

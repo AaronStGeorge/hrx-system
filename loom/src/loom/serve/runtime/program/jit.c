@@ -11,6 +11,7 @@
 #include "iree/base/threading/mutex.h"
 #include "iree/base/threading/notification.h"
 #include "loom/serve/runtime/program/target.h"
+#include "loom/target/arch/cmd/hal_command_buffer.h"
 #include "loomc/compile.h"
 #include "loomc/emit.h"
 #include "loomc/iree.h"
@@ -151,7 +152,7 @@ struct loom_serve_jit_stage_t {
   // Parsed program borrowing image.
   loom_cmd_program_t program;
   // Loaded entries in the command program's local slot order.
-  loom_serve_command_entry_t* entries;
+  loom_cmd_program_hal_entry_t* entries;
   // Number of initialized entry slots, including null entries on failure.
   iree_host_size_t entry_count;
   // Number of initialized loaded-code owners.
@@ -857,7 +858,7 @@ struct loom_serve_jit_job_t {
   // Parsed command description borrowing product storage.
   loomc_cmd_program_t program;
   // Joined executable bindings indexed by parent requirement ordinal.
-  loom_serve_command_entry_t* requirements;
+  loom_cmd_program_hal_entry_t* requirements;
   // Number of allocated requirement slots.
   iree_host_size_t requirement_count;
   // Number of native requests submitted for the command.
@@ -1025,9 +1026,9 @@ static void loom_serve_jit_job_release(loom_serve_jit_job_t* job) {
            i < loomc_request_binding_count(node->request); ++i) {
         loomc_request_binding_t binding;
         loomc_request_binding_at(node->request, i, &binding);
-        loom_serve_command_entry_t* entry =
+        loom_cmd_program_hal_entry_t* entry =
             &job->requirements[binding.requirement_ordinal];
-        *entry = (loom_serve_command_entry_t){
+        *entry = (loom_cmd_program_hal_entry_t){
             .executable = node->native->executable->handle,
             .function =
                 node->native->executable->functions[binding.root_ordinal],
@@ -1560,7 +1561,7 @@ iree_status_t loom_serve_jit_stage_record(
     const loom_cmd_program_command_range_t* range,
     iree_hal_buffer_t* const* fixed_buffers,
     iree_hal_command_buffer_t** out_command) {
-  return loom_serve_command_create(
+  return loom_cmd_program_hal_command_buffer_create(
       queue_family, mode, &stage->program, range,
       stage->program.requirements.fixed_buffer_count, fixed_buffers,
       stage->entry_count, stage->entries, stage->host_allocator, out_command);

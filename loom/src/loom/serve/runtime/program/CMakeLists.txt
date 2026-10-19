@@ -30,23 +30,6 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
-    command
-  HDRS
-    "command.h"
-  SRCS
-    "command.c"
-  DEPS
-    iree::base
-    iree::base::core_headers
-    iree::hal
-    loom::target::arch::cmd::program
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_VM)
-loom_cc_library(
-  NAME
     variant_pool
   HDRS
     "variant_pool.h"
@@ -249,7 +232,6 @@ loom_cc_library(
   SRCS
     "jit.c"
   DEPS
-    ::command
     ::compilation
     ::sources
     ::target
@@ -262,6 +244,7 @@ loom_cc_library(
     loom::binding::c::task_pool
     loom::serve::runtime::execution::dispatch
     loom::serve::runtime::host
+    loom::target::arch::cmd::hal_command_buffer
     loom::target::arch::cmd::program
   PUBLIC
 )

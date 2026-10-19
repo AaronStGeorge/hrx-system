@@ -9,7 +9,7 @@
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/parameter/residency.h"
 #include "loom/serve/runtime/parameter/weights.h"
-#include "loom/serve/runtime/program/command.h"
+#include "loom/target/arch/cmd/program.h"
 
 #ifdef __cplusplus
 extern "C" {

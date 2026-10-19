@@ -9,9 +9,9 @@
 
 #include "loom/serve/runtime/execution/dispatch.h"
 #include "loom/serve/runtime/host/host.h"
-#include "loom/serve/runtime/program/command.h"
 #include "loom/serve/runtime/program/compilation.h"
 #include "loom/serve/runtime/program/sources.h"
+#include "loom/target/arch/cmd/program.h"
 #include "loomc/config.h"
 #include "loomc/sanitizer.h"
 
@@ -162,7 +162,8 @@ loom_serve_dispatch_t* loom_serve_jit_stage_dispatch(
 // Records the compiled stage after the model has allocated its fixed parameter
 // roots. The command retains executables and buffers, independently of stage.
 // NULL range records the whole program; otherwise it selects complete barrier
-// waves with unchanged bindings and workspace, as in command_create.
+// waves with unchanged bindings and workspace, as in the shared HAL command
+// buffer materializer.
 iree_status_t loom_serve_jit_stage_record(
     const loom_serve_jit_stage_t* stage,
     const iree_hal_queue_family_t* queue_family,
