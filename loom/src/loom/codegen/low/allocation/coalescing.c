@@ -10,6 +10,7 @@
 #include "loom/codegen/low/allocation/edge_alias.h"
 #include "loom/codegen/low/allocation/live_range.h"
 #include "loom/codegen/low/allocation/physical_domains.h"
+#include "loom/codegen/low/allocation/placement.h"
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/codegen/low/storage_relation.h"
@@ -1228,6 +1229,10 @@ loom_low_allocation_coalescing_assign_concat_source_from_edge_destination(
     const loom_liveness_interval_t* interval,
     const loom_low_placement_relation_t* concat_relation, bool* out_assigned) {
   *out_assigned = false;
+  loom_low_placement_relation_t projected = *concat_relation;
+  const bool is_projected = loom_low_allocation_concat_affinity_project(
+      context->concat_affinity, &projected);
+  concat_relation = &projected;
   const loom_low_placement_relation_range_t source_range =
       loom_low_placement_relation_range_for_source_value_ordinal(
           context->placement, concat_relation->result_ordinal);
@@ -1297,7 +1302,9 @@ loom_low_allocation_coalescing_assign_concat_source_from_edge_destination(
             interval->unit_count, ignored_value_ids, ignored_value_count,
             /*ignored_storage_lease_value_ids=*/NULL,
             /*ignored_storage_lease_value_count=*/0,
-            /*may_relocate_blocker=*/true, out_assigned));
+            // A transitive preference must not displace an existing tuple's
+            // component and disrupt the packing that already fits it.
+            /*may_relocate_blocker=*/!is_projected, out_assigned));
     if (*out_assigned) {
       return iree_ok_status();
     }

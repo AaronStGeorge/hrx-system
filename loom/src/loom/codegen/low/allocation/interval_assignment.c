@@ -1352,6 +1352,7 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
         .liveness = context->liveness,
         .schedule = context->schedule,
         .placement = context->placement,
+        .concat_affinity = context->concat_affinity,
         .target_constraints = context->target_constraints,
         .assignment_map = &state->result.assignment_map,
         .search_context = &search_context,
