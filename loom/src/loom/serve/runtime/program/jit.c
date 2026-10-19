@@ -1561,10 +1561,31 @@ iree_status_t loom_serve_jit_stage_record(
     const loom_cmd_program_command_range_t* range,
     iree_hal_buffer_t* const* fixed_buffers,
     iree_hal_command_buffer_t** out_command) {
-  return loom_cmd_program_hal_command_buffer_create(
-      queue_family, mode, &stage->program, range,
-      stage->program.requirements.fixed_buffer_count, fixed_buffers,
-      stage->entry_count, stage->entries, stage->host_allocator, out_command);
+  const iree_host_size_t fixed_buffer_count =
+      stage->program.requirements.fixed_buffer_count;
+  iree_hal_buffer_binding_t* fixed_bindings = NULL;
+  iree_status_t status = iree_ok_status();
+  if (fixed_buffer_count != 0) {
+    status = iree_allocator_malloc_array(
+        stage->host_allocator, fixed_buffer_count, sizeof(*fixed_bindings),
+        (void**)&fixed_bindings);
+  }
+  for (iree_host_size_t i = 0;
+       i < fixed_buffer_count && iree_status_is_ok(status); ++i) {
+    fixed_bindings[i] = (iree_hal_buffer_binding_t){
+        .buffer = fixed_buffers[i],
+        .offset = 0,
+        .length = IREE_HAL_WHOLE_BUFFER,
+    };
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_cmd_program_hal_command_buffer_create(
+        queue_family, mode, &stage->program, range, fixed_buffer_count,
+        fixed_bindings, stage->entry_count, stage->entries,
+        stage->host_allocator, out_command);
+  }
+  iree_allocator_free(stage->host_allocator, fixed_bindings);
+  return status;
 }
 
 iree_status_t loom_serve_jit_compile_vm(

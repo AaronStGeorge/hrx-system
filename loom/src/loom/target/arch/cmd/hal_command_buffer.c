@@ -21,14 +21,53 @@ typedef struct loom_cmd_program_hal_layout_t {
   uint8_t* constants;
 } loom_cmd_program_hal_layout_t;
 
-static iree_hal_buffer_ref_t loom_cmd_program_hal_buffer_ref(
+static iree_status_t loom_cmd_program_hal_buffer_ref(
     loom_cmd_program_buffer_ref_t ref,
-    iree_hal_buffer_t* const* fixed_buffers) {
-  return ref.role == LOOM_CMD_PROGRAM_BUFFER_ROLE_FIXED
-             ? iree_hal_make_buffer_ref(fixed_buffers[ref.root_index],
-                                        ref.byte_offset, ref.byte_length)
-             : iree_hal_make_indirect_buffer_ref(
-                   ref.root_index, ref.byte_offset, ref.byte_length);
+    const iree_hal_buffer_binding_t* fixed_bindings,
+    iree_hal_buffer_ref_t* out_ref) {
+  if (ref.role != LOOM_CMD_PROGRAM_BUFFER_ROLE_FIXED) {
+    *out_ref = iree_hal_make_indirect_buffer_ref(
+        ref.root_index, ref.byte_offset, ref.byte_length);
+    return iree_ok_status();
+  }
+
+  const iree_hal_buffer_binding_t binding = fixed_bindings[ref.root_index];
+  if (!binding.buffer) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "fixed command root requires a buffer");
+  }
+  const bool is_whole_buffer = binding.length == IREE_HAL_WHOLE_BUFFER;
+  IREE_RETURN_IF_ERROR(iree_hal_buffer_validate_range(
+      binding.buffer, binding.offset, is_whole_buffer ? 0 : binding.length));
+  const iree_device_size_t binding_length =
+      is_whole_buffer
+          ? iree_hal_buffer_byte_length(binding.buffer) - binding.offset
+          : binding.length;
+  if (ref.byte_offset > binding_length ||
+      (ref.byte_length != IREE_HAL_WHOLE_BUFFER &&
+       ref.byte_length > binding_length - ref.byte_offset)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "command range [%" PRIdsz ", %" PRIdsz
+                            ") exceeds fixed root length %" PRIdsz,
+                            ref.byte_offset,
+                            ref.byte_length == IREE_HAL_WHOLE_BUFFER
+                                ? binding_length
+                                : ref.byte_offset + ref.byte_length,
+                            binding_length);
+  }
+  iree_device_size_t resolved_offset = 0;
+  if (!iree_device_size_checked_add(binding.offset, ref.byte_offset,
+                                    &resolved_offset)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "fixed command root offset overflows device size");
+  }
+  const iree_device_size_t resolved_length =
+      ref.byte_length == IREE_HAL_WHOLE_BUFFER
+          ? binding_length - ref.byte_offset
+          : ref.byte_length;
+  *out_ref = iree_hal_make_buffer_ref(binding.buffer, resolved_offset,
+                                      resolved_length);
+  return iree_ok_status();
 }
 
 static loom_cmd_program_buffer_ref_t loom_cmd_program_hal_read_buffer_ref(
@@ -91,7 +130,7 @@ static iree_status_t loom_cmd_program_hal_pack_scalar(
 static iree_status_t loom_cmd_program_hal_record_dispatch(
     const loom_cmd_program_t* program,
     const loom_cmd_program_command_t* command,
-    iree_hal_buffer_t* const* fixed_buffers,
+    const iree_hal_buffer_binding_t* fixed_bindings,
     const loom_cmd_program_hal_entry_t* entries,
     loom_cmd_program_hal_layout_t* layouts,
     iree_hal_command_buffer_t* command_buffer) {
@@ -127,8 +166,9 @@ static iree_status_t loom_cmd_program_hal_record_dispatch(
                                   "buffer command argument requires a HAL "
                                   "binding, not a raw pointer");
       } else {
-        layout->bindings[parameter->offset] = loom_cmd_program_hal_buffer_ref(
-            loom_cmd_program_hal_read_buffer_ref(cursor), fixed_buffers);
+        status = loom_cmd_program_hal_buffer_ref(
+            loom_cmd_program_hal_read_buffer_ref(cursor), fixed_bindings,
+            &layout->bindings[parameter->offset]);
         cursor += LOOM_CMD_PROGRAM_BUFFER_REF_SIZE;
       }
     } else {
@@ -145,22 +185,24 @@ static iree_status_t loom_cmd_program_hal_record_dispatch(
           command->payload.dispatch_direct.workgroup_count_y,
           command->payload.dispatch_direct.workgroup_count_z);
     } else {
-      config.workgroup_count_ref = loom_cmd_program_hal_buffer_ref(
+      status = loom_cmd_program_hal_buffer_ref(
           loom_cmd_program_buffer_ref_at(
               program,
               command->payload.dispatch_indirect.workgroup_count_buffer_ref),
-          fixed_buffers);
+          fixed_bindings, &config.workgroup_count_ref);
       flags = kind == LOOM_CMD_PROGRAM_COMMAND_KIND_DISPATCH_INDIRECT_STATIC
                   ? IREE_HAL_DISPATCH_FLAG_STATIC_INDIRECT_PARAMETERS
                   : IREE_HAL_DISPATCH_FLAG_DYNAMIC_INDIRECT_PARAMETERS;
     }
-    const iree_hal_buffer_ref_list_t bindings = {layout->info.binding_count,
-                                                 layout->bindings};
-    status = iree_hal_command_buffer_dispatch(
-        command_buffer, entry->executable, entry->function, config,
-        iree_make_const_byte_span(layout->constants,
-                                  layout->info.constant_byte_length),
-        bindings, flags);
+    if (iree_status_is_ok(status)) {
+      const iree_hal_buffer_ref_list_t bindings = {layout->info.binding_count,
+                                                   layout->bindings};
+      status = iree_hal_command_buffer_dispatch(
+          command_buffer, entry->executable, entry->function, config,
+          iree_make_const_byte_span(layout->constants,
+                                    layout->info.constant_byte_length),
+          bindings, flags);
+    }
   }
   return status;
 }
@@ -184,7 +226,7 @@ static iree_hal_execution_stage_t loom_cmd_program_hal_wave_stages(
 
 static iree_status_t loom_cmd_program_hal_record_wave(
     const loom_cmd_program_t* program, loom_cmd_program_command_range_t range,
-    iree_hal_buffer_t* const* fixed_buffers,
+    const iree_hal_buffer_binding_t* fixed_bindings,
     const loom_cmd_program_hal_entry_t* entries,
     loom_cmd_program_hal_layout_t* layouts,
     iree_hal_command_buffer_t* command_buffer) {
@@ -197,33 +239,43 @@ static iree_status_t loom_cmd_program_hal_record_wave(
       case LOOM_CMD_PROGRAM_COMMAND_KIND_BARRIER_EXECUTION:
         break;
       case LOOM_CMD_PROGRAM_COMMAND_KIND_FILL: {
-        const iree_hal_buffer_ref_t target = loom_cmd_program_hal_buffer_ref(
+        iree_hal_buffer_ref_t target = {0};
+        status = loom_cmd_program_hal_buffer_ref(
             loom_cmd_program_buffer_ref_at(
                 program, command.payload.fill.target_buffer_ref),
-            fixed_buffers);
+            fixed_bindings, &target);
         uint8_t pattern[4];
         iree_unaligned_store_le_u32(pattern, command.payload.fill.pattern);
-        status = iree_hal_command_buffer_fill_buffer(
-            command_buffer, target, pattern,
-            command.payload.fill.pattern_length, IREE_HAL_FILL_FLAG_NONE);
+        if (iree_status_is_ok(status)) {
+          status = iree_hal_command_buffer_fill_buffer(
+              command_buffer, target, pattern,
+              command.payload.fill.pattern_length, IREE_HAL_FILL_FLAG_NONE);
+        }
         break;
       }
-      case LOOM_CMD_PROGRAM_COMMAND_KIND_COPY:
-        status = iree_hal_command_buffer_copy_buffer(
-            command_buffer,
-            loom_cmd_program_hal_buffer_ref(
-                loom_cmd_program_buffer_ref_at(
-                    program, command.payload.copy.source_buffer_ref),
-                fixed_buffers),
-            loom_cmd_program_hal_buffer_ref(
-                loom_cmd_program_buffer_ref_at(
-                    program, command.payload.copy.target_buffer_ref),
-                fixed_buffers),
-            IREE_HAL_COPY_FLAG_NONE);
+      case LOOM_CMD_PROGRAM_COMMAND_KIND_COPY: {
+        iree_hal_buffer_ref_t source = {0};
+        iree_hal_buffer_ref_t target = {0};
+        status = loom_cmd_program_hal_buffer_ref(
+            loom_cmd_program_buffer_ref_at(
+                program, command.payload.copy.source_buffer_ref),
+            fixed_bindings, &source);
+        if (iree_status_is_ok(status)) {
+          status = loom_cmd_program_hal_buffer_ref(
+              loom_cmd_program_buffer_ref_at(
+                  program, command.payload.copy.target_buffer_ref),
+              fixed_bindings, &target);
+        }
+        if (iree_status_is_ok(status)) {
+          status = iree_hal_command_buffer_copy_buffer(
+              command_buffer, source, target, IREE_HAL_COPY_FLAG_NONE);
+        }
         break;
+      }
       default:
-        status = loom_cmd_program_hal_record_dispatch(
-            program, &command, fixed_buffers, entries, layouts, command_buffer);
+        status = loom_cmd_program_hal_record_dispatch(program, &command,
+                                                      fixed_bindings, entries,
+                                                      layouts, command_buffer);
         break;
     }
   }
@@ -232,7 +284,7 @@ static iree_status_t loom_cmd_program_hal_record_wave(
 
 static iree_status_t loom_cmd_program_hal_record(
     const loom_cmd_program_t* program, loom_cmd_program_command_range_t range,
-    iree_hal_buffer_t* const* fixed_buffers,
+    const iree_hal_buffer_binding_t* fixed_bindings,
     const loom_cmd_program_hal_entry_t* entries,
     loom_cmd_program_hal_layout_t* layouts,
     iree_hal_command_buffer_t* command_buffer) {
@@ -276,8 +328,8 @@ static iree_status_t loom_cmd_program_hal_record(
     }
     if (iree_status_is_ok(status)) {
       status = loom_cmd_program_hal_record_wave(program, wave.commands,
-                                                fixed_buffers, entries, layouts,
-                                                command_buffer);
+                                                fixed_bindings, entries,
+                                                layouts, command_buffer);
     }
     source_stages = target_stages;
   }
@@ -292,8 +344,8 @@ iree_status_t loom_cmd_program_hal_command_buffer_create(
     iree_hal_command_buffer_mode_t mode, const loom_cmd_program_t* program,
     const loom_cmd_program_command_range_t* range,
     iree_host_size_t fixed_buffer_count,
-    iree_hal_buffer_t* const* fixed_buffers, iree_host_size_t entry_count,
-    const loom_cmd_program_hal_entry_t* entries,
+    const iree_hal_buffer_binding_t* fixed_bindings,
+    iree_host_size_t entry_count, const loom_cmd_program_hal_entry_t* entries,
     iree_allocator_t host_allocator,
     iree_hal_command_buffer_t** out_command_buffer) {
   if (fixed_buffer_count != program->requirements.fixed_buffer_count ||
@@ -346,7 +398,7 @@ iree_status_t loom_cmd_program_hal_command_buffer_create(
   if (iree_status_is_ok(status)) {
     status = loom_cmd_program_hal_record(
         program, range ? *range : loom_cmd_program_command_range_all(program),
-        fixed_buffers, entries, layouts, command_buffer);
+        fixed_bindings, entries, layouts, command_buffer);
   }
   for (iree_host_size_t i = 0; i < entry_count; ++i) {
     iree_allocator_free(host_allocator, layouts[i].constants);

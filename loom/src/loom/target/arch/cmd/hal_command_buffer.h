@@ -27,9 +27,11 @@ typedef struct loom_cmd_program_hal_entry_t {
 // Materializes a parsed portable program into a reusable HAL command buffer.
 // This cold path combines logical command arguments with executable reflection;
 // it does not inspect source IR or assign meanings to the program's buffer
-// slots. |fixed_buffers| and |entries| are in the program's dense requirement
-// order. Successful recording retains fixed buffers and executables. Artifact
-// bytes and input arrays may be released when this returns. Rebindable slots,
+// slots. |fixed_bindings| and |entries| are in the program's dense requirement
+// order. Fixed binding ranges are the roots against which artifact-relative
+// command ranges are resolved. Successful recording retains their buffers and
+// the executables. Artifact bytes and input arrays may be released when this
+// returns. Rebindable slots,
 // including the transient slab, must be supplied at issue time; recording
 // allocates none of their backing storage. |out_command_buffer| is untouched on
 // failure. |mode| selects HAL recording policy, including retained profiling
@@ -42,8 +44,8 @@ iree_status_t loom_cmd_program_hal_command_buffer_create(
     iree_hal_command_buffer_mode_t mode, const loom_cmd_program_t* program,
     const loom_cmd_program_command_range_t* range,
     iree_host_size_t fixed_buffer_count,
-    iree_hal_buffer_t* const* fixed_buffers, iree_host_size_t entry_count,
-    const loom_cmd_program_hal_entry_t* entries,
+    const iree_hal_buffer_binding_t* fixed_bindings,
+    iree_host_size_t entry_count, const loom_cmd_program_hal_entry_t* entries,
     iree_allocator_t host_allocator,
     iree_hal_command_buffer_t** out_command_buffer);
 
