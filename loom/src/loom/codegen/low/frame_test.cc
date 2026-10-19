@@ -1031,6 +1031,7 @@ low.func.def target<test.low.core> @feedback(%lhs: reg<test.i32>, %rhs: reg<test
   ASSERT_TRUE(frame_accepted);
   ASSERT_EQ(frame.schedule.error_count, 0u);
   ASSERT_EQ(frame.allocation.error_count, 0u);
+  EXPECT_EQ(frame.schedule.loop_nest.graph, &frame.schedule.cfg_graph);
   EXPECT_EQ(statistics.frame_build_count, 1u);
   EXPECT_EQ(statistics.allocation_run_count, 1u);
   EXPECT_GT(captured.count, 1u);
