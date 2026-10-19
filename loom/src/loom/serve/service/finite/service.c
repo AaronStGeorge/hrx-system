@@ -511,6 +511,7 @@ static bool loom_serve_finite_is_active(void* self) {
 static bool loom_serve_finite_is_pending(void* self) {
   loom_serve_finite_service_t* service = self;
   return loom_serve_finite_is_active(service) ||
+         loom_serve_finite_model_is_pending(service->model) ||
          loom_serve_execution_reconfiguration_pending(
              service->reconfiguration) ||
          loom_serve_timer_is_pending(&service->timer);
@@ -687,6 +688,8 @@ static iree_status_t loom_serve_finite_advance(
   }
   loom_serve_finite_cancel_peers(service);
   iree_status_t status = loom_serve_finite_collect(service, out_progress);
+  status = iree_status_join(
+      status, loom_serve_finite_model_query_status(service->model));
   *out_progress |= loom_serve_execution_reconfiguration_advance(
       service->reconfiguration,
       iree_status_is_ok(status) &&

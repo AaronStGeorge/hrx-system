@@ -14,6 +14,7 @@ package(
 
 exports_files(
     [
+        "bank_test.cc",
         "testdata/weights/boundaries.loom",
         "testdata/weights/policy.loom",
         "testdata/weights/packing.loom",
@@ -24,6 +25,21 @@ exports_files(
         "weights_packing_test.cc",
     ],
     visibility = ["//loom/src/loom/serve:implementation"],
+)
+
+loom_cc_library(
+    name = "bank",
+    srcs = ["bank.c"],
+    hdrs = ["bank.h"],
+    deps = [
+        ":residency",
+        ":weights",
+        "//loom/src/loom/serve/runtime/device",
+        "//loom/src/loom/serve/runtime/program:command",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/hal",
+    ],
 )
 
 loom_cc_library(

@@ -647,6 +647,44 @@ iree_host_size_t loom_serve_preparation_storage_size(
   return preparation ? preparation->storage_size : 0;
 }
 
+static bool loom_serve_preparation_stage_code_equal(
+    const loom_serve_preparation_stage_t* a,
+    const loom_serve_preparation_stage_t* b) {
+  if (a->kind != b->kind || !iree_string_view_equal(a->root, b->root) ||
+      a->config.flags != b->config.flags ||
+      a->config.binding_count != b->config.binding_count) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < a->config.binding_count; ++i) {
+    const loomc_config_binding_t* x = &a->config.bindings[i];
+    const loomc_config_binding_t* y = &b->config.bindings[i];
+    if (x->key.size != y->key.size || x->value.size != y->value.size ||
+        (x->key.size && memcmp(x->key.data, y->key.data, x->key.size)) ||
+        (x->value.size &&
+         memcmp(x->value.data, y->value.data, x->value.size))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool loom_serve_preparation_code_equal(const loom_serve_preparation_t* lhs,
+                                       const loom_serve_preparation_t* rhs) {
+  if (lhs == rhs) {
+    return true;
+  }
+  if (!lhs || !rhs || lhs->stage_count != rhs->stage_count) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < lhs->stage_count; ++i) {
+    if (!loom_serve_preparation_stage_code_equal(&lhs->stages[i].declaration,
+                                                 &rhs->stages[i].declaration)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool loom_serve_preparation_equal(const loom_serve_preparation_t* lhs,
                                   const loom_serve_preparation_t* rhs) {
   if (lhs == rhs) {
@@ -658,23 +696,10 @@ bool loom_serve_preparation_equal(const loom_serve_preparation_t* lhs,
   for (iree_host_size_t i = 0; i < lhs->stage_count; ++i) {
     const loom_serve_preparation_stage_t* a = &lhs->stages[i].declaration;
     const loom_serve_preparation_stage_t* b = &rhs->stages[i].declaration;
-    if (a->kind != b->kind || a->tag != b->tag ||
+    if (!loom_serve_preparation_stage_code_equal(a, b) || a->tag != b->tag ||
         a->workspace_limit_bytes != b->workspace_limit_bytes ||
-        !iree_string_view_equal(a->root, b->root) ||
-        a->config.flags != b->config.flags ||
-        a->config.binding_count != b->config.binding_count ||
         a->parameter_count != b->parameter_count) {
       return false;
-    }
-    for (iree_host_size_t j = 0; j < a->config.binding_count; ++j) {
-      const loomc_config_binding_t* x = &a->config.bindings[j];
-      const loomc_config_binding_t* y = &b->config.bindings[j];
-      if (x->key.size != y->key.size || x->value.size != y->value.size ||
-          (x->key.size && memcmp(x->key.data, y->key.data, x->key.size)) ||
-          (x->value.size &&
-           memcmp(x->value.data, y->value.data, x->value.size))) {
-        return false;
-      }
     }
     for (iree_host_size_t j = 0; j < a->parameter_count; ++j) {
       if (a->parameters[j].binding != b->parameters[j].binding ||

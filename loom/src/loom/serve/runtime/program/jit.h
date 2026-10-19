@@ -79,11 +79,11 @@ typedef struct loom_serve_jit_cache_storage_t {
 } loom_serve_jit_cache_storage_t;
 
 // Owner-only operations after all accepted compilations have completed.
-// Trimming removes only entries unused by compiled stages; surviving stages
-// keep exact native reuse. Recorded commands retain their HAL executables
-// independently, so a cache owner releases those consumers before interpreting
-// released bytes as a storage saving. Neither operation allocates, compiles, or
-// waits.
+// Trimming removes only entries unused by compiled stages, retained direct
+// dispatches, and HAL consumers. Recordings preserve exact native reuse after
+// their compiler stages retire. Concurrent HAL release may defer collection
+// until the next trim; no consumer can be created without an existing owner.
+// Neither operation allocates, compiles, or waits.
 loom_serve_jit_cache_storage_t loom_serve_jit_cache_storage(
     const loom_serve_jit_t* jit);
 void loom_serve_jit_trim(loom_serve_jit_t* jit);

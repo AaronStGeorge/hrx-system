@@ -16,10 +16,12 @@ loom_cc_test(
   SRCS
     "sources_test.cc"
   DEPS
+    ::package
     ::sources
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::binding::c::loomc
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

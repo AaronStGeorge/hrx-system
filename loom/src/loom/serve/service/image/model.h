@@ -171,10 +171,22 @@ iree_status_t loom_serve_image_model_free(loom_serve_image_model_t* model);
 iree_status_t loom_serve_image_model_activate(loom_serve_image_model_t* model);
 iree_status_t loom_serve_image_model_deactivate(loom_serve_image_model_t* model,
                                                 bool* out_complete);
-// Borrowed group admission/retention handle; explicit pins may span requests.
+// Borrowed admission for the selected invocation, valid until its release.
+// Without a selected invocation this returns the original cold working set.
+// Model-wide retention policy is applied with model_set_pinned below.
 loom_serve_residency_t* loom_serve_image_model_residency(
     const loom_serve_image_model_t* model);
-loom_serve_memory_statistics_t loom_serve_image_model_weight_statistics(
+
+// Model-wide checkpoint accounting and policy, including idle cached banks.
+loom_serve_residency_snapshot_t loom_serve_image_model_parameters(
+    const loom_serve_image_model_t* model);
+void loom_serve_image_model_set_pinned(loom_serve_image_model_t* model,
+                                       bool pinned);
+// Owner-side idle retirement; native failures retain ownership for teardown.
+iree_status_t loom_serve_image_model_query_status(
+    loom_serve_image_model_t* model);
+bool loom_serve_image_model_is_pending(const loom_serve_image_model_t* model);
+loom_serve_memory_usage_t loom_serve_image_model_weight_statistics(
     const loom_serve_image_model_t* model);
 // Copies cumulative submission activity across the model's parameter domains.
 loom_serve_weight_activity_t loom_serve_image_model_weight_activity(

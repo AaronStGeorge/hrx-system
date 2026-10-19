@@ -322,22 +322,23 @@ class JitCacheTest : public JitTest {
     loom_serve_jit_stage_free(stages_[0]);
     stages_[0] = nullptr;
     loom_serve_jit_trim(jit_);
-    const auto shared = loom_serve_jit_cache_storage(jit_);
-    EXPECT_EQ(shared.count, direct_dispatch ? 1u : 2u);
-    if (!direct_dispatch) {
-      EXPECT_LT(shared.host_bytes, initial.host_bytes);
-      EXPECT_LT(shared.code_bytes, initial.code_bytes);
-    }
+    EXPECT_EQ(loom_serve_jit_cache_storage(jit_).count, initial.count);
     loom_serve_jit_stage_free(stages_[1]);
     stages_[1] = nullptr;
     loom_serve_jit_trim(jit_);
-    const auto empty = loom_serve_jit_cache_storage(jit_);
-    EXPECT_EQ(empty.count, 0u);
-    EXPECT_EQ(empty.code_bytes, 0u);
-    EXPECT_LT(empty.host_bytes, shared.host_bytes);
+    EXPECT_EQ(loom_serve_jit_cache_storage(jit_).count, initial.count);
 
-    // Recorded consumers retain their loaded code after every source-key and
-    // compiled-stage owner has been evicted.
+    // Weight preparation retains recordings, not compiler stages. Another
+    // checkpoint with the same preparation code must reuse those live natives.
+    IREE_ASSERT_OK(compile(first_root, 0));
+    EXPECT_EQ(compilation_.kernels, initial.count);
+    EXPECT_EQ(compilation_.reused_kernels,
+              initial.count + (direct_dispatch ? 1u : 2u));
+    loom_serve_jit_stage_free(stages_[0]);
+    stages_[0] = nullptr;
+
+    // The independently retained consumers still execute after every compiled
+    // stage has retired.
     IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
         loom_serve_device_storage_pool(device_owner_),
         iree_hal_make_pool_reservation_request(sizeof(input_), 0),
@@ -371,6 +372,26 @@ class JitCacheTest : public JitTest {
       EXPECT_EQ(output_[i], direct_dispatch
                                 ? (i == 0 ? 110 : 100)
                                 : 105 + i + (i == 7 ? 24 : (i == 2 ? 7 : 0)));
+    }
+
+    for (size_t i = 0; i < stages_.size(); ++i) {
+      iree_hal_command_buffer_release(commands_[i]);
+      commands_[i] = nullptr;
+      loom_serve_dispatch_release(dispatches_[i]);
+      dispatches_[i] = nullptr;
+      loom_serve_jit_trim(jit_);
+      const auto remaining = loom_serve_jit_cache_storage(jit_);
+      if (i == 0) {
+        EXPECT_EQ(remaining.count, direct_dispatch ? 1u : 2u);
+        if (!direct_dispatch) {
+          EXPECT_LT(remaining.host_bytes, initial.host_bytes);
+          EXPECT_LT(remaining.code_bytes, initial.code_bytes);
+        }
+      } else {
+        EXPECT_EQ(remaining.count, 0u);
+        EXPECT_EQ(remaining.code_bytes, 0u);
+        EXPECT_LT(remaining.host_bytes, initial.host_bytes);
+      }
     }
 
     // Eviction preserves the immutable source index, so a later miss can

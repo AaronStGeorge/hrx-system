@@ -401,7 +401,7 @@ loom_serve_residency_t* loom_serve_text_model_residency(
     const loom_serve_text_model_t* model);
 
 // Parameter-only virtual/physical statistics, excluding mutable state.
-loom_serve_memory_statistics_t loom_serve_text_model_weight_statistics(
+loom_serve_memory_usage_t loom_serve_text_model_weight_statistics(
     const loom_serve_text_model_t* model);
 
 // Accepted parameter streaming/preparation work, including reactivation.

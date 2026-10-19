@@ -138,6 +138,14 @@ iree_status_t loom_serve_weights_prepare(
     const loom_serve_sources_t* sources,
     const loom_serve_preparation_parameter_t* parameter);
 
+// Borrowed placement facts retained independently of the original compiler
+// product. Rows remain in construction order; index is below parameter_count.
+// No source decoding, search, or allocation occurs in these queries.
+iree_host_size_t loom_serve_weights_parameter_count(
+    const loom_serve_weights_t* weights);
+loom_cmd_program_parameter_t loom_serve_weights_parameter_at(
+    const loom_serve_weights_t* weights, iree_host_size_t index);
+
 // Commits storage and streams/prepares directly into final roots through four
 // independent queue lanes. An already active plan does not reload or prepare
 // again. Success means producer submission, not completion or consumer

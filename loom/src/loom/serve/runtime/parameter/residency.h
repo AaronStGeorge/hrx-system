@@ -69,6 +69,19 @@ iree_status_t loom_serve_residency_group_allocate(
 // operations have retired. Does not destroy borrowed plans. NULL is accepted.
 void loom_serve_residency_group_free(loom_serve_residency_group_t* group);
 
+// Bank-owner retention, independent of invocation residency lifetimes. Applies
+// to current and future activations without loading; destruction drops policy.
+void loom_serve_residency_group_set_pinned(loom_serve_residency_group_t* group,
+                                           bool pinned);
+bool loom_serve_residency_group_is_pinned(
+    const loom_serve_residency_group_t* group);
+
+// Owner-side release of an unpinned elastic group. The caller excludes new
+// admission and has checked the complete set before releasing its first group.
+// Repeated calls collect accepted release; native failures preserve ownership.
+iree_status_t loom_serve_residency_group_deactivate(
+    loom_serve_residency_group_t* group, bool* out_complete);
+
 // Registers one invocation/cohort working set of distinct groups in this cache.
 // Copies the pointer array; groups outlive the residency. Borrows execution for
 // readiness import and synchronous outer-thread error retirement, never waiting
@@ -220,7 +233,8 @@ iree_status_t loom_serve_residency_deactivate(loom_serve_residency_t* residency,
 
 // Combined accounting for this working set. Shared groups appear in each
 // borrower's snapshot; summing borrower snapshots is not physical accounting.
-loom_serve_memory_statistics_t loom_serve_residency_statistics(
+// Independent group peaks cannot establish a simultaneous working-set peak.
+loom_serve_memory_usage_t loom_serve_residency_statistics(
     const loom_serve_residency_t* residency);
 
 // Copies cumulative submission counters across every registered weight plan.
@@ -251,7 +265,7 @@ typedef struct loom_serve_residency_snapshot_t {
     uint64_t age_ns;
   } admission;
   // Parameter-only virtual accounting, available only with elastic backing.
-  loom_serve_memory_statistics_t memory;
+  loom_serve_memory_usage_t memory;
   // Cumulative activation and preparation work, independent of current backing.
   loom_serve_weight_activity_t activity;
 } loom_serve_residency_snapshot_t;

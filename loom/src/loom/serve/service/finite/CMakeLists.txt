@@ -145,6 +145,7 @@ loom_cc_library(
     loom::serve::runtime::execution
     loom::serve::runtime::execution::dispatch
     loom::serve::runtime::host
+    loom::serve::runtime::parameter::bank
     loom::serve::runtime::parameter::residency
     loom::serve::runtime::parameter::weights
     loom::serve::runtime::program

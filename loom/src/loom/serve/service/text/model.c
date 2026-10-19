@@ -957,7 +957,7 @@ loom_serve_memory_statistics_t loom_serve_text_model_memory_statistics(
   return model->state.memory.statistics;
 }
 
-loom_serve_memory_statistics_t loom_serve_text_model_weight_statistics(
+loom_serve_memory_usage_t loom_serve_text_model_weight_statistics(
     const loom_serve_text_model_t* model) {
   return loom_serve_residency_statistics(model->residency);
 }

@@ -12,6 +12,26 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    bank
+  HDRS
+    "bank.h"
+  SRCS
+    "bank.c"
+  DEPS
+    ::residency
+    ::weights
+    iree::base
+    iree::base::internal
+    iree::hal
+    loom::serve::runtime::device
+    loom::serve::runtime::program::command
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     activation
   HDRS
     "activation.h"

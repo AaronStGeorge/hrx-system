@@ -82,7 +82,7 @@ typedef struct loom_serve_text_backing_record_t {
   // Model mutable-state backing excluding weights/workspace.
   loom_serve_memory_statistics_t state;
   // Independently reclaimable model parameter backing.
-  loom_serve_memory_statistics_t weights;
+  loom_serve_memory_usage_t weights;
 } loom_serve_text_backing_record_t;
 
 typedef struct loom_serve_text_shared_memory_record_t {
@@ -188,14 +188,13 @@ static iree_status_t loom_serve_text_backing_format(
       "}"
       ",\"elastic_parameters\":{\"reserved_bytes\":%" PRIu64
       ",\"committed_bytes\":%" PRIu64 ",\"pending_bytes\":%" PRIu64
-      ",\"releasing_bytes\":%" PRIu64 ",\"peak_bytes\":%" PRIu64
-      ",\"released_bytes\":%" PRIu64 "}",
+      ",\"releasing_bytes\":%" PRIu64 ",\"released_bytes\":%" PRIu64 "}",
       value.state.reserved_bytes, value.state.committed_bytes,
       value.state.pending_bytes, value.state.releasing_bytes,
       value.state.peak_bytes, value.state.released_bytes,
       value.weights.reserved_bytes, value.weights.committed_bytes,
       value.weights.pending_bytes, value.weights.releasing_bytes,
-      value.weights.peak_bytes, value.weights.released_bytes);
+      value.weights.released_bytes);
 }
 
 static const loom_serve_telemetry_event_t text_activity_event = {

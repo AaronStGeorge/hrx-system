@@ -48,9 +48,8 @@ static iree_status_t loom_serve_registration_activate(
 }
 
 static loom_serve_registration_parameters_t
-loom_serve_registration_prepared_parameters(loom_serve_residency_t* residency) {
-  const loom_serve_residency_snapshot_t parameters =
-      loom_serve_residency_snapshot(residency);
+loom_serve_registration_prepared_parameters(
+    loom_serve_residency_snapshot_t parameters) {
   return (loom_serve_registration_parameters_t){
       .phase = "ready",
       .prepared = true,
@@ -158,21 +157,19 @@ loom_serve_finite_registration_parameters(
     void* self, loom_serve_model_component_t component) {
   loom_serve_finite_registration_t* registration = self;
   return loom_serve_registration_prepared_parameters(
-      loom_serve_finite_model_residency(registration->model));
+      loom_serve_finite_model_parameters(registration->model));
 }
 
 static void loom_serve_finite_registration_set_pinned(
     void* self, loom_serve_model_component_t component, bool pinned) {
   loom_serve_finite_registration_t* registration = self;
-  loom_serve_residency_set_pinned(
-      loom_serve_finite_model_residency(registration->model), pinned);
+  loom_serve_finite_model_set_pinned(registration->model, pinned);
 }
 
 static iree_status_t loom_serve_finite_registration_deactivate(
     void* self, loom_serve_model_component_t component, bool* out_complete) {
   loom_serve_finite_registration_t* registration = self;
-  return loom_serve_residency_deactivate(
-      loom_serve_finite_model_residency(registration->model), out_complete);
+  return loom_serve_finite_model_deactivate(registration->model, out_complete);
 }
 
 static iree_status_t loom_serve_finite_registration_activate(
@@ -333,14 +330,13 @@ loom_serve_image_registration_parameters(
     void* self, loom_serve_model_component_t component) {
   loom_serve_image_registration_t* registration = self;
   return loom_serve_registration_prepared_parameters(
-      loom_serve_image_model_residency(registration->model));
+      loom_serve_image_model_parameters(registration->model));
 }
 
 static void loom_serve_image_registration_set_pinned(
     void* self, loom_serve_model_component_t component, bool pinned) {
   loom_serve_image_registration_t* registration = self;
-  loom_serve_residency_set_pinned(
-      loom_serve_image_model_residency(registration->model), pinned);
+  loom_serve_image_model_set_pinned(registration->model, pinned);
 }
 
 static iree_status_t loom_serve_image_registration_deactivate(
@@ -508,7 +504,8 @@ loom_serve_speech_registration_parameters(
     void* self, loom_serve_model_component_t component) {
   loom_serve_speech_registration_t* registration = self;
   return loom_serve_registration_prepared_parameters(
-      loom_serve_speech_model_residency(registration->model));
+      loom_serve_residency_snapshot(
+          loom_serve_speech_model_residency(registration->model)));
 }
 
 static void loom_serve_speech_registration_set_pinned(
@@ -679,7 +676,8 @@ loom_serve_recognition_registration_parameters(
     void* self, loom_serve_model_component_t component) {
   loom_serve_recognition_registration_t* registration = self;
   return loom_serve_registration_prepared_parameters(
-      loom_serve_recognition_model_residency(registration->model));
+      loom_serve_residency_snapshot(
+          loom_serve_recognition_model_residency(registration->model)));
 }
 
 static void loom_serve_recognition_registration_set_pinned(
@@ -875,7 +873,8 @@ loom_serve_text_registration_parameters(
     return state;
   }
   return loom_serve_registration_prepared_parameters(
-      loom_serve_text_model_residency(registration->model));
+      loom_serve_residency_snapshot(
+          loom_serve_text_model_residency(registration->model)));
 }
 
 static void loom_serve_text_registration_set_pinned(
