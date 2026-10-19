@@ -289,6 +289,31 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    workgroup_collective_legalization_test
+  SRCS
+    "workgroup_collective_legalization_test.cc"
+  DEPS
+    ::workgroup_collective_legalization
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::buffer
+    loom::ops::index
+    loom::ops::kernel
+    loom::ops::scalar
+    loom::ops::scf
+    loom::ops::test
+    loom::ops::vector
+    loom::ops::view
+    loom::rewrite::rewriter
+    loom::target::facts
+    loom::target::legalization
+    loom::verify
+)
+
 loom_cc_library(
   NAME
     target_legalization
