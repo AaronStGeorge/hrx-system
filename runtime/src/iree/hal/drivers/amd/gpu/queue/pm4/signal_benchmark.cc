@@ -26,9 +26,9 @@ struct Storage {
 
   // CPU-only stand-in for native control storage; no MMIO is timed here.
   std::array<uint64_t, 64> values;
-  // Metadata shared by benchmark producer threads.
+  // Metadata owned by this queue's exclusive publisher.
   std::array<iree_hal_amd_gpu_pm4_signal_t, 64> signals;
-  // Shared finite free list.
+  // Finite pool with one acquiring publisher and concurrent final returns.
   iree_hal_amd_gpu_pm4_signal_pool_t pool;
   // Attached native extent and its signal metadata.
   iree_hal_amd_gpu_pm4_signal_block_t block;
@@ -37,7 +37,8 @@ struct Storage {
 };
 
 void BM_Pool(benchmark::State& state) {
-  static Storage storage;
+  // Each benchmark thread models a distinct queue's exclusive publisher.
+  Storage storage;
   for (auto _ : state) {
     auto* signal = iree_hal_amd_gpu_pm4_signal_pool_try_acquire(&storage.pool);
     benchmark::DoNotOptimize(signal);
