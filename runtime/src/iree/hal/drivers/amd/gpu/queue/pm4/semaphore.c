@@ -116,9 +116,21 @@ iree_status_t iree_hal_amd_gpu_pm4_semaphore_acquire_wait(
   *out_wait = (iree_hal_amd_gpu_pm4_semaphore_wait_t){0};
   iree_hal_amd_gpu_pm4_semaphore_t* semaphore =
       iree_hal_amd_gpu_pm4_semaphore_cast(base_semaphore);
-  iree_slim_mutex_lock(&semaphore->async.mutex);
   iree_status_t failure = (iree_status_t)iree_atomic_load(
       &semaphore->async.failure_status, iree_memory_order_acquire);
+  if (IREE_UNLIKELY(!iree_status_is_ok(failure))) {
+    return iree_status_clone(failure);
+  }
+  if ((uint64_t)iree_atomic_load(&semaphore->async.timeline_value,
+                                 iree_memory_order_acquire) >= minimum_value) {
+    out_wait->state = IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_COMPLETED;
+    return iree_ok_status();
+  }
+  // Only an unresolved wait can borrow replaceable native producer storage.
+  // Recheck completion and failure while acquiring that storage's reference.
+  iree_slim_mutex_lock(&semaphore->async.mutex);
+  failure = (iree_status_t)iree_atomic_load(&semaphore->async.failure_status,
+                                            iree_memory_order_acquire);
   if (iree_status_is_ok(failure)) {
     const uint64_t current_value = (uint64_t)iree_atomic_load(
         &semaphore->async.timeline_value, iree_memory_order_acquire);

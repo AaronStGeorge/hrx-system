@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "iree/async/proactor_platform.h"
+#include "iree/base/threading/mutex.h"
 #include "iree/hal/drivers/amd/gpu/queue/host_wait.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -155,6 +156,28 @@ TEST_F(SemaphoreTest, HostTimelinePreservesStrictSignalsAndWaits) {
                                          IREE_ASYNC_WAIT_FLAG_NONE));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         iree_hal_semaphore_signal(semaphore, 3, nullptr));
+}
+
+TEST_F(SemaphoreTest, CompletedWaitDoesNotAcquireProducerCache) {
+  auto* semaphore = Semaphore(2);
+  auto* async = reinterpret_cast<iree_async_semaphore_t*>(semaphore);
+  // A cache publisher may be suspended while the completed timeline already
+  // satisfies this consumer. Its mutex cannot delay completed admission.
+  iree_slim_mutex_lock(&async->mutex);
+  auto wait = AcquireWait(semaphore, 2);
+  iree_slim_mutex_unlock(&async->mutex);
+  EXPECT_EQ(wait.state, IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_COMPLETED);
+  EXPECT_EQ(wait.signal, nullptr);
+
+  iree_hal_semaphore_fail(
+      semaphore, iree_make_status(IREE_STATUS_ABORTED, "producer failed"));
+  iree_slim_mutex_lock(&async->mutex);
+  iree_status_t status =
+      iree_hal_amd_gpu_pm4_semaphore_acquire_wait(semaphore, 2, this, &wait);
+  iree_slim_mutex_unlock(&async->mutex);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED, status);
+  EXPECT_EQ(wait.state, IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_DEFERRED);
+  EXPECT_EQ(wait.signal, nullptr);
 }
 
 TEST_F(SemaphoreTest, SubmittedProducerDoesNotBecomeCompletedHistory) {

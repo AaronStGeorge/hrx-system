@@ -138,18 +138,32 @@ iree_hal_amd_gpu_publication_entry_t* iree_hal_amd_gpu_publisher_next(
 bool iree_hal_amd_gpu_publisher_handoff(
     iree_hal_amd_gpu_publisher_t* publisher,
     iree_hal_amd_gpu_publication_entry_t* remainder) {
-  // Join notifications preceding this check. A link completed afterward either
-  // defeats the idle CAS below or acquires ownership in its enqueue operation.
-  iree_atomic_fetch_and(&publisher->state, ~IREE_HAL_AMD_GPU_PUBLISHER_NOTIFIED,
-                        iree_memory_order_acq_rel);
   publisher->ready =
       remainder ? remainder : iree_hal_amd_gpu_publisher_detach(publisher);
   if (!publisher->ready) {
+    // An uncontended owner has no notifications to consume. A producer that
+    // has linked but not notified either defeats this release or acquires the
+    // idle owner itself when it publishes its notification.
     int32_t expected = IREE_HAL_AMD_GPU_PUBLISHER_OWNED;
     if (iree_atomic_compare_exchange_strong(&publisher->state, &expected, 0,
                                             iree_memory_order_release,
                                             iree_memory_order_relaxed)) {
       return false;
+    }
+    // The failed idle release observed a producer notification. Consume it
+    // before checking its link; a later notification defeats the next release
+    // or claims the idle owner itself. A known remainder needs only SERVICE.
+    iree_atomic_fetch_and(&publisher->state,
+                          ~IREE_HAL_AMD_GPU_PUBLISHER_NOTIFIED,
+                          iree_memory_order_acq_rel);
+    publisher->ready = iree_hal_amd_gpu_publisher_detach(publisher);
+    if (!publisher->ready) {
+      expected = IREE_HAL_AMD_GPU_PUBLISHER_OWNED;
+      if (iree_atomic_compare_exchange_strong(&publisher->state, &expected, 0,
+                                              iree_memory_order_release,
+                                              iree_memory_order_relaxed)) {
+        return false;
+      }
     }
   }
   iree_atomic_store(&publisher->state, IREE_HAL_AMD_GPU_PUBLISHER_SERVICE,

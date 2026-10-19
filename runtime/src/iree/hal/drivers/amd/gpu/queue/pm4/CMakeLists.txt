@@ -855,6 +855,7 @@ iree_cc_test(
     iree::async::platform
     iree::async::util::semaphore_wait
     iree::base
+    iree::base::threading
     iree::hal
     iree::hal::drivers::amd::gpu::queue::host_wait
     iree::testing::gtest

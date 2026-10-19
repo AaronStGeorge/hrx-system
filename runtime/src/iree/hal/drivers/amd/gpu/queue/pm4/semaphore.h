@@ -53,7 +53,8 @@ typedef struct iree_hal_amd_gpu_pm4_semaphore_wait_t {
   iree_async_frontier_entry_t producer;
 } iree_hal_amd_gpu_pm4_semaphore_wait_t;
 
-// Resolves a wait and pins its native reader under the cache replacement lock.
+// Resolves completed waits using atomic loads. An unresolved wait pins its
+// native reader under the cache replacement lock.
 // The caller has established the semaphore type and retains the native domain
 // through the reader's final release. Domain identity includes addressing,
 // atomic width, visibility, forward progress, and backing lifetime. Foreign
