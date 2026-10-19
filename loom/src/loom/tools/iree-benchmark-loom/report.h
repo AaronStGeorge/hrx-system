@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/sanitizer/options.h"
+#include "loom/tooling/testbench/scenario/executor.h"
 #include "loom/tooling/testbench/testbench.h"
 #include "loom/tools/iree-benchmark-loom/model.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
@@ -221,6 +222,13 @@ iree_status_t iree_benchmark_loom_append_sample_row(
     iree_host_size_t case_sample_ordinal,
     const loom_testbench_case_sample_result_t* sample_result,
     iree_string_builder_t* sample_output);
+
+// Writes scenario correctness observations and their benchmark replay identity.
+iree_status_t iree_benchmark_loom_write_scenario_sample_fields_json(
+    const iree_benchmark_loom_selected_benchmark_t* selection,
+    iree_host_size_t work_item_index, iree_host_size_t benchmark_sample_ordinal,
+    const loom_testbench_scenario_trial_result_t* result,
+    loom_json_object_writer_t* object);
 
 // Appends the initial run row.
 iree_status_t iree_benchmark_loom_append_run_row(

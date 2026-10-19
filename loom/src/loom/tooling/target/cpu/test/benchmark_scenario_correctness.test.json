@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "one failed physical check suppresses both benchmark aliases",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/../../../testbench/testdata/benchmark_scenarios.loom", "--device=task", "--task_topology_max_group_count=2", "--case=@wrong_result", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "exit": {"nonzero": true},
+      "stdout": {
+        "contains": {"unordered": ["EXPECT/001", "\"failed_benchmark_count\":2", "\"sample_count\":1,\"failed_sample_count\":1", "\"trial_ordinal\":0,\"passed\":false"]},
+        "not_contains": ["\"state\":\"ok\"", "\"operation_timing_ns\""]
+      }
+    },
+    {
+      "name": "checks the selected configuration and trial with an authored generator",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/../../../testbench/testdata/benchmark_scenarios.loom", "--device=task", "--task_topology_max_group_count=2", "--benchmark=@selected_latency", "--sample=5", "--output-format=jsonl", "--iterations=1", "--warmup-iterations=0", "--batch-size=2", "--input-ring-count=3", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "stdout": {
+        "contains": ["\"row\":\"sample\"", "\"configuration_ordinal\":1,\"trial_index\":0,\"trial_ordinal\":2,\"passed\":true", "\"row\":\"benchmark\"", "\"sample_count\":1,\"failed_sample_count\":0"]
+      }
+    },
+    {
+      "name": "ABABA checks each candidate once before repeated timing windows",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/../../../testbench/testdata/benchmark_scenarios.loom", "--device=task", "--task_topology_max_group_count=2", "--compare=@right_latency,@right_alias_latency", "--interleave=ababa", "--repetitions=2", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "stdout": {
+        "contains": {"unordered": ["\"sample_count\":2,\"failed_sample_count\":0", "\"comparisons\":[{", "\"repetitions\":[{"]}
+      }
+    },
+    {
+      "name": "a failed candidate cannot produce a comparison or timing row",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/../../../testbench/testdata/benchmark_scenarios.loom", "--device=task", "--task_topology_max_group_count=2", "--compare=@right_latency,@wrong_latency", "--interleave=round_robin", "--repetitions=2", "--output-format=jsonl", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "exit": {"nonzero": true},
+      "stdout": {
+        "contains": {"unordered": ["EXPECT/001", "\"sample_count\":2,\"failed_sample_count\":1"]},
+        "not_contains": ["\"row\":\"comparison\"", {"regex": "\"row\":\"benchmark\\.repetition\"[^\\n]*\"candidate_index\":1"}]
+      }
+    },
+    {
+      "name": "a failed baseline cannot produce a comparison",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/../../../testbench/testdata/benchmark_scenarios.loom", "--device=task", "--task_topology_max_group_count=2", "--compare=@wrong_latency,@right_latency", "--repetitions=1", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "exit": {"nonzero": true},
+      "stdout": {
+        "contains": {"unordered": ["EXPECT/001", "\"sample_count\":2,\"failed_sample_count\":1"]},
+        "not_contains": ["\"comparisons\""]
+      }
+    },
+    {
+      "name": "correct values do not excuse a missing expected device event",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/../../../testbench/testdata/benchmark_scenarios.loom", "--device=task", "--task_topology_max_group_count=2", "--benchmark=@missing_event_latency", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "exit": {"nonzero": true},
+      "stdout": {
+        "contains": {"unordered": ["\"expectation_count\":2,\"passed_count\":1,\"failure_count\":1", "\"sample_count\":1,\"failed_sample_count\":1"]},
+        "not_contains": ["\"state\":\"ok\""]
+      }
+    },
+    {
+      "name": "invoke-only trials execute without an oracle",
+      "run": {
+        "tool": "benchmark",
+        "args": ["{srcdir}/../../../testbench/testdata/benchmark_scenarios.loom", "--device=task", "--task_topology_max_group_count=2", "--benchmark=@invoke_latency", "--output-format=jsonl", "--iterations=1", "--warmup-iterations=0", "--batch-size=1", "--min-time-ms=0", "--max-batches=1"]
+      },
+      "stdout": {
+        "contains": ["\"row\":\"sample\"", "\"action\":\"invoke\"", "\"passed\":true", "\"row\":\"benchmark\"", "\"sample_count\":1,\"failed_sample_count\":0"]
+      }
+    }
+  ]
+}

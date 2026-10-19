@@ -30,7 +30,7 @@ struct iree_benchmark_loom_scenario_execution_t {
   iree_string_view_t entropy_domain;
   // HAL profile used to prepare ordinary target products.
   loom_run_hal_testbench_scenario_profile_t profile;
-  // Benchmark-only scenario execution policy bound to |profile|.
+  // Target, independent oracle, and correctness observation dependencies.
   loom_testbench_scenario_execution_options_t scenario_options;
   // Host-visible generator materialization staged by the HAL product.
   loom_testbench_value_materializer_options_t materializer_options;
@@ -45,7 +45,7 @@ struct iree_benchmark_loom_scenario_execution_t {
   bool configuration_initialized;
   // Products prepared from |configuration| before any trial values exist.
   loom_testbench_prepared_scenario_configuration_t prepared;
-  // True when |prepared| owns prepared target products.
+  // True when |prepared| owns prepared target and oracle products.
   bool prepared_initialized;
   // Scenario owning the currently prepared configuration.
   const loom_testbench_scenario_plan_t* prepared_scenario;
@@ -141,6 +141,9 @@ static iree_status_t iree_benchmark_loom_scenario_ensure_profile(
       &execution->scenario_options);
   execution->scenario_options.target =
       loom_run_hal_testbench_scenario_execution_profile(&execution->profile);
+  execution->scenario_options.oracle = options->scenario_oracle_profile;
+  execution->scenario_options.device_event_capture =
+      options->case_execution_options->device_event_capture;
   execution->scenario_options.function_call =
       options->case_execution_options->invocation.function_call;
   execution->scenario_options.host_allocator = options->host_allocator;
@@ -173,7 +176,7 @@ static iree_status_t iree_benchmark_loom_scenario_ensure_configuration(
   if (iree_status_is_ok(status)) {
     status = loom_testbench_prepare_scenario_configuration(
         &execution->scenario_options, &execution->configuration,
-        LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK, &execution->prepared);
+        &execution->prepared);
   }
   if (iree_status_is_ok(status)) {
     execution->prepared_initialized = true;
@@ -195,8 +198,10 @@ static iree_status_t iree_benchmark_loom_scenario_ensure_trial_executor(
   }
   iree_benchmark_loom_scenario_reset_trial_executor(execution);
   IREE_RETURN_IF_ERROR(loom_testbench_scenario_trial_executor_initialize(
-      &execution->prepared, trial_index, &execution->materializer_options,
-      batch_capacity, &execution->trial_executor));
+      &execution->prepared, trial_index,
+      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK,
+      &execution->materializer_options, batch_capacity,
+      &execution->trial_executor));
   execution->trial_executor_initialized = true;
   execution->prepared_trial_index = trial_index;
   execution->prepared_batch_capacity = batch_capacity;
@@ -250,12 +255,47 @@ static iree_status_t iree_benchmark_loom_scenario_query_layout(
 iree_status_t iree_benchmark_loom_scenario_execution_prepare(
     iree_benchmark_loom_scenario_execution_t* execution,
     const iree_benchmark_loom_selected_benchmark_t* selection,
-    iree_host_size_t benchmark_sample_ordinal,
-    loom_testbench_scenario_sample_coordinate_t coordinate) {
-  execution->prepared_selection = NULL;
+    iree_host_size_t work_item_index, iree_host_size_t benchmark_sample_ordinal,
+    loom_testbench_scenario_sample_coordinate_t coordinate, bool* out_passed) {
+  *out_passed = false;
+  iree_benchmark_loom_scenario_reset_trial_executor(execution);
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_profile(execution));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_configuration(
       execution, selection->scenario_plan, coordinate.configuration_ordinal));
+
+  // Correctness owns only one target/oracle realization. Release its graphs
+  // and observations before allocating the independent target-only timing ring.
+  loom_testbench_scenario_trial_executor_t checker = {0};
+  iree_status_t status = loom_testbench_scenario_trial_executor_initialize(
+      &execution->prepared, coordinate.trial_index,
+      LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS,
+      &execution->materializer_options, /*batch_capacity=*/1, &checker);
+  loom_testbench_scenario_trial_result_list_t results = {0};
+  if (iree_status_is_ok(status)) {
+    status = loom_testbench_run_scenario_trial_batch(
+        &checker, coordinate.trial_ordinal, /*trial_count=*/1, &results);
+  }
+  if (iree_status_is_ok(status)) {
+    *out_passed = results.values[0].passed;
+    status = iree_benchmark_loom_event_sink_emit(
+        execution->options->event_sink,
+        &(iree_benchmark_loom_event_t){
+            .kind = IREE_BENCHMARK_LOOM_EVENT_SCENARIO_SAMPLE,
+            .scenario_sample =
+                {
+                    .run = execution->options->run,
+                    .selection = selection,
+                    .work_item_index = work_item_index,
+                    .benchmark_sample_ordinal = benchmark_sample_ordinal,
+                    .result = &results.values[0],
+                },
+        });
+  }
+  loom_testbench_scenario_trial_executor_deinitialize(&checker);
+  if (!iree_status_is_ok(status) || !*out_passed) {
+    return status;
+  }
+
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_trial_executor(
       execution, coordinate.trial_index, /*batch_capacity=*/1));
 
@@ -880,27 +920,42 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
 iree_status_t iree_benchmark_loom_run_scenario_work_item(
     iree_benchmark_loom_scenario_execution_t* execution,
     const iree_benchmark_loom_work_item_t* work_item,
+    iree_host_size_t* inout_correctness_sample_count,
+    iree_host_size_t* inout_correctness_failed_sample_count,
     iree_host_size_t* inout_failed_benchmark_count) {
   const iree_benchmark_loom_work_plan_execution_options_t* options =
       execution->options;
   const iree_benchmark_loom_selected_benchmark_t* selection =
       &options->work_plan
            ->selected_benchmarks[work_item->representative_selection_index];
+  bool passed = false;
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_execution_prepare(
-      execution, selection, work_item->begin_benchmark_sample,
-      work_item->scenario_coordinate));
+      execution, selection, work_item->work_item_index,
+      work_item->begin_benchmark_sample, work_item->scenario_coordinate,
+      &passed));
+  ++*inout_correctness_sample_count;
+  *inout_correctness_failed_sample_count += !passed;
   if (!execution->device_emitted) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_event_sink_emit_device(
         options->event_sink, options->run, options->hal_context));
     execution->device_emitted = true;
   }
 
-  iree_benchmark_loom_benchmark_result_t benchmark_result = {0};
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_execution_measure(
-      execution, &selection->policy, &benchmark_result));
+  iree_benchmark_loom_benchmark_result_t benchmark_result = {
+      .has_benchmark_sample_ordinal = true,
+      .benchmark_sample_ordinal = work_item->begin_benchmark_sample,
+      .has_scenario_coordinate = true,
+      .scenario_coordinate = work_item->scenario_coordinate,
+      .samples_per_iteration = 1,
+      .failed_sample_count = !passed,
+  };
+  if (passed) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_execution_measure(
+        execution, &selection->policy, &benchmark_result));
+  }
   return iree_benchmark_loom_emit_work_item_result_aliases(
       options->run, options->module_plan, options->work_plan, work_item,
-      &benchmark_result, /*correctness_sample_count=*/0,
-      /*correctness_failed_sample_count=*/0, options->event_sink,
+      &benchmark_result, /*correctness_sample_count=*/1,
+      /*correctness_failed_sample_count=*/!passed, options->event_sink,
       inout_failed_benchmark_count);
 }

@@ -40,21 +40,6 @@ typedef struct iree_test_loom_populate_requirement_providers_callback_t {
   void* user_data;
 } iree_test_loom_populate_requirement_providers_callback_t;
 
-// Binds one externally selected scenario execution profile to compiler inputs.
-typedef loom_testbench_execution_profile_t (
-    *iree_test_loom_bind_scenario_profile_fn_t)(
-    void* user_data, const loom_testbench_compilation_t* compilation,
-    const loom_source_table_resolver_t* sources,
-    loom_diagnostic_sink_t diagnostic_sink,
-    loom_testbench_compile_result_callback_t result_callback);
-
-typedef struct iree_test_loom_bind_scenario_profile_callback_t {
-  // Profile binding callback, or NULL when the profile is unavailable.
-  iree_test_loom_bind_scenario_profile_fn_t fn;
-  // Caller-owned profile state passed to |fn|.
-  void* user_data;
-} iree_test_loom_bind_scenario_profile_callback_t;
-
 typedef struct iree_test_loom_configuration_t {
   // Borrowed optional source importers selected by the final application.
   loom_input_provider_list_t input_providers;
@@ -73,9 +58,9 @@ typedef struct iree_test_loom_configuration_t {
   // Binds ordinary function calls once for all cases in the parsed module.
   loom_testbench_function_call_provider_callback_t function_call_provider;
   // Binds the product under test for check.scenario actions.
-  iree_test_loom_bind_scenario_profile_callback_t scenario_target_profile;
+  loom_testbench_bind_scenario_profile_callback_t scenario_target_profile;
   // Binds the independent oracle for check.compare actions.
-  iree_test_loom_bind_scenario_profile_callback_t scenario_oracle_profile;
+  loom_testbench_bind_scenario_profile_callback_t scenario_oracle_profile;
   // Appends target-specific requirement providers linked into this runner.
   iree_test_loom_populate_requirement_providers_callback_t
       populate_requirement_providers;

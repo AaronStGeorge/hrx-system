@@ -12,6 +12,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/tooling/testbench/executor.h"
+#include "loom/tooling/testbench/scenario/executor.h"
 #include "loom/tools/iree-benchmark-loom/context.h"
 #include "loom/tools/iree-benchmark-loom/event.h"
 #include "loom/tools/iree-benchmark-loom/model.h"
@@ -40,6 +41,8 @@ typedef struct iree_benchmark_loom_work_plan_execution_options_t {
   const iree_benchmark_loom_hal_compilation_options_t* compilation;
   // Base case execution options for correctness checks.
   const loom_testbench_case_execution_options_t* case_execution_options;
+  // Independent oracle bound to the run's immutable compiler inputs.
+  loom_testbench_execution_profile_t scenario_oracle_profile;
   // Arena reused for prepared correctness executors.
   iree_arena_allocator_t* execution_arena;
   // Host allocator used for execution-owned scratch storage.

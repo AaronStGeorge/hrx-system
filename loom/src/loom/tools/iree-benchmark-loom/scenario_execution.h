@@ -33,13 +33,14 @@ iree_status_t iree_benchmark_loom_scenario_execution_allocate(
 void iree_benchmark_loom_scenario_execution_free(
     iree_benchmark_loom_scenario_execution_t* execution);
 
-// Prepares one concrete scenario trial and selects its physical input-ring
-// shape. Values and device bindings are materialized outside each timed window.
+// Checks one concrete scenario trial and reports its untimed observations.
+// A passing trial selects its target-only physical input-ring shape. A failed
+// expectation sets |out_passed| to false without allocating a timing ring.
 iree_status_t iree_benchmark_loom_scenario_execution_prepare(
     iree_benchmark_loom_scenario_execution_t* execution,
     const iree_benchmark_loom_selected_benchmark_t* selection,
-    iree_host_size_t benchmark_sample_ordinal,
-    loom_testbench_scenario_sample_coordinate_t coordinate);
+    iree_host_size_t work_item_index, iree_host_size_t benchmark_sample_ordinal,
+    loom_testbench_scenario_sample_coordinate_t coordinate, bool* out_passed);
 
 // Verifies that two prepared trials have identical invocation layouts, values,
 // and buffer alias topology.
@@ -53,10 +54,12 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
     const iree_benchmark_loom_benchmark_policy_t* policy,
     iree_benchmark_loom_benchmark_result_t* out_result);
 
-// Measures one concrete scenario trial and emits every logical result alias.
+// Checks and measures one scenario trial and emits every logical result alias.
 iree_status_t iree_benchmark_loom_run_scenario_work_item(
     iree_benchmark_loom_scenario_execution_t* execution,
     const iree_benchmark_loom_work_item_t* work_item,
+    iree_host_size_t* inout_correctness_sample_count,
+    iree_host_size_t* inout_correctness_failed_sample_count,
     iree_host_size_t* inout_failed_benchmark_count);
 
 #ifdef __cplusplus

@@ -50,6 +50,25 @@ _GFX11_EXECUTION_COMPATIBLE_WITH = (
 )
 
 iree_execution_test_suite(
+    name = "benchmark_scenario_correctness_test",
+    data = [
+        "//loom/src/loom/tooling/testbench:testdata/benchmark_device_events.loom",
+        "//loom/src/loom/tooling/testbench:testdata/benchmark_scenarios.loom",
+    ],
+    manifests = ["benchmark_scenario_correctness.test.json"],
+    resource_group = GPU_DEVICE_RESOURCE_GROUP,
+    tags = [
+        "iree-run-requirement=runtime.resource.amd_gpu",
+        "runtime-resource=amd-gpu",
+    ],
+    target_compatible_with = loom_config_compatible_with([
+        "//loom/config/execute:amdgpu_hal",
+        "//loom/config/target/arch:vm",
+    ]),
+    tools = {"benchmark": "//loom/src/loom/tools/iree-benchmark-loom"},
+)
+
+iree_execution_test_suite(
     name = "benchmark_profile_policy_test",
     data = ["benchmark_profile_policy.loom"],
     manifests = ["benchmark_profile_policy.test.json"],

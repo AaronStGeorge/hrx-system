@@ -328,6 +328,27 @@ iree_status_t iree_benchmark_loom_append_sample_row(
   return loom_output_stream_write_char(&stream, '\n');
 }
 
+iree_status_t iree_benchmark_loom_write_scenario_sample_fields_json(
+    const iree_benchmark_loom_selected_benchmark_t* selection,
+    iree_host_size_t work_item_index, iree_host_size_t benchmark_sample_ordinal,
+    const loom_testbench_scenario_trial_result_t* result,
+    loom_json_object_writer_t* object) {
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_candidate_identity_json(
+      &selection->identity, object));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_work_item_index_field_json(
+      work_item_index, object));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
+      object, IREE_SV("benchmark"), selection->benchmark_plan->name));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
+      object, IREE_SV("scenario"), result->scenario_plan->name));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+      object, IREE_SV("benchmark_sample_index"), benchmark_sample_ordinal));
+  IREE_RETURN_IF_ERROR(
+      loom_json_object_begin_field(object, IREE_SV("trial_result")));
+  return loom_testbench_scenario_trial_result_write_json(result,
+                                                         object->stream);
+}
+
 iree_status_t iree_benchmark_loom_append_run_row(
     const iree_benchmark_loom_run_identity_t* run, bool dry_run,
     const loom_sanitizer_options_t* sanitizer, iree_string_builder_t* output) {

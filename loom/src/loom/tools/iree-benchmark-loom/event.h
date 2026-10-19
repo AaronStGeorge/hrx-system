@@ -16,6 +16,7 @@
 
 #include "iree/base/api.h"
 #include "loom/ir/module.h"
+#include "loom/tooling/testbench/scenario/executor.h"
 #include "loom/tooling/testbench/testbench.h"
 #include "loom/tools/iree-benchmark-loom/model.h"
 #include "loom/tools/iree-benchmark-loom/options.h"
@@ -53,6 +54,8 @@ typedef enum iree_benchmark_loom_event_kind_e {
   IREE_BENCHMARK_LOOM_EVENT_COMPARISON = 11,
   // Deduplicated planned work graph for dry-run/reporting sinks.
   IREE_BENCHMARK_LOOM_EVENT_WORK_PLAN = 12,
+  // One untimed scenario trial's correctness observations.
+  IREE_BENCHMARK_LOOM_EVENT_SCENARIO_SAMPLE = 13,
 } iree_benchmark_loom_event_kind_t;
 
 typedef struct iree_benchmark_loom_run_event_t {
@@ -142,6 +145,19 @@ typedef struct iree_benchmark_loom_sample_event_t {
   // Borrowed correctness result for this sample.
   const loom_testbench_case_sample_result_t* sample_result;
 } iree_benchmark_loom_sample_event_t;
+
+typedef struct iree_benchmark_loom_scenario_sample_event_t {
+  // Run identity shared by all emitted events.
+  const iree_benchmark_loom_run_identity_t* run;
+  // Logical benchmark selection that executed this correctness trial.
+  const iree_benchmark_loom_selected_benchmark_t* selection;
+  // Physical work item shared by all aliases of this trial.
+  iree_host_size_t work_item_index;
+  // Zero-based sample ordinal within the selected benchmark.
+  iree_host_size_t benchmark_sample_ordinal;
+  // Borrowed observations, valid only while the sink handles this event.
+  const loom_testbench_scenario_trial_result_t* result;
+} iree_benchmark_loom_scenario_sample_event_t;
 
 typedef struct iree_benchmark_loom_benchmark_result_event_t {
   // Run identity shared by all emitted events.
@@ -269,6 +285,8 @@ typedef struct iree_benchmark_loom_event_t {
     iree_benchmark_loom_compile_event_t compile;
     // Payload for IREE_BENCHMARK_LOOM_EVENT_SAMPLE.
     iree_benchmark_loom_sample_event_t sample;
+    // Payload for IREE_BENCHMARK_LOOM_EVENT_SCENARIO_SAMPLE.
+    iree_benchmark_loom_scenario_sample_event_t scenario_sample;
     // Payload for IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_RESULT.
     iree_benchmark_loom_benchmark_result_event_t benchmark_result;
     // Payload for IREE_BENCHMARK_LOOM_EVENT_PROFILE_REPLAY.

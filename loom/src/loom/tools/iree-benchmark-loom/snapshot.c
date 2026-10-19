@@ -317,6 +317,23 @@ static iree_status_t iree_benchmark_loom_snapshot_append_sample(
   return loom_json_object_end(&object);
 }
 
+static iree_status_t iree_benchmark_loom_snapshot_append_scenario_sample(
+    iree_benchmark_loom_snapshot_state_t* state,
+    const iree_benchmark_loom_scenario_sample_event_t* event) {
+  if (event->result->passed) {
+    return iree_ok_status();
+  }
+  loom_output_stream_t stream;
+  IREE_RETURN_IF_ERROR(
+      loom_json_value_list_begin_value(&state->failed_samples, &stream));
+  loom_json_object_writer_t object;
+  IREE_RETURN_IF_ERROR(loom_json_object_begin(&stream, &object));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_scenario_sample_fields_json(
+      event->selection, event->work_item_index, event->benchmark_sample_ordinal,
+      event->result, &object));
+  return loom_json_object_end(&object);
+}
+
 static iree_status_t iree_benchmark_loom_snapshot_append_work_item(
     iree_benchmark_loom_snapshot_state_t* state,
     const iree_benchmark_loom_benchmark_result_event_t* event) {
@@ -704,6 +721,9 @@ static iree_status_t iree_benchmark_loom_snapshot_emit_event(
       return iree_ok_status();
     case IREE_BENCHMARK_LOOM_EVENT_SAMPLE:
       return iree_benchmark_loom_snapshot_append_sample(state, &event->sample);
+    case IREE_BENCHMARK_LOOM_EVENT_SCENARIO_SAMPLE:
+      return iree_benchmark_loom_snapshot_append_scenario_sample(
+          state, &event->scenario_sample);
     case IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_RESULT:
       return iree_benchmark_loom_snapshot_append_benchmark(
           state, &event->benchmark_result);

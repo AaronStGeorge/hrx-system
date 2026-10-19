@@ -31,7 +31,6 @@ static iree_status_t loom_testbench_prepare_scenario_product(
     const loom_testbench_execution_profile_t* profile,
     const loom_testbench_invocation_plan_t* invocation,
     const loom_testbench_value_table_t* configuration,
-    loom_testbench_scenario_execution_mode_t mode,
     iree_allocator_t host_allocator,
     loom_testbench_prepared_product_t* out_product) {
   *out_product = (loom_testbench_prepared_product_t){0};
@@ -53,20 +52,11 @@ static iree_status_t loom_testbench_prepare_scenario_product(
         "scenario execution profile '%.*s' prepared no product vtable",
         (int)profile->name.size, profile->name.data);
   }
-  if (mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS &&
-      out_product->vtable->execute == NULL) {
+  if (out_product->vtable->execute == NULL) {
     loom_testbench_prepared_product_deinitialize(out_product);
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "scenario execution profile '%.*s' prepared no execution callback",
-        (int)profile->name.size, profile->name.data);
-  }
-  if (mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK &&
-      out_product->vtable->benchmark == NULL) {
-    loom_testbench_prepared_product_deinitialize(out_product);
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "scenario execution profile '%.*s' prepared no benchmark callback",
         (int)profile->name.size, profile->name.data);
   }
   out_product->profile = profile->name;
@@ -94,7 +84,6 @@ static iree_status_t loom_testbench_prepare_or_reuse_scenario_product(
     const loom_testbench_execution_profile_t* profile,
     const loom_testbench_invocation_plan_t* invocation,
     const loom_testbench_value_table_t* configuration,
-    loom_testbench_scenario_execution_mode_t mode,
     iree_allocator_t host_allocator,
     const loom_testbench_prepared_scenario_trial_t* previous_trials,
     iree_host_size_t previous_trial_count, bool use_oracle,
@@ -115,21 +104,14 @@ static iree_status_t loom_testbench_prepare_or_reuse_scenario_product(
   }
 
   return loom_testbench_prepare_scenario_product(
-      profile, invocation, configuration, mode, host_allocator, out_product);
+      profile, invocation, configuration, host_allocator, out_product);
 }
 
 iree_status_t loom_testbench_prepare_scenario_configuration(
     const loom_testbench_scenario_execution_options_t* options,
     const loom_testbench_scenario_configuration_values_t* configuration,
-    loom_testbench_scenario_execution_mode_t mode,
     loom_testbench_prepared_scenario_configuration_t* out_prepared) {
   *out_prepared = (loom_testbench_prepared_scenario_configuration_t){0};
-  if (mode != LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS &&
-      mode != LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid scenario execution mode %u",
-                            (unsigned)mode);
-  }
   if (!iree_any_bit_set(configuration->flags,
                         LOOM_TESTBENCH_SCENARIO_VALUE_FLAG_MATERIALIZED)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -148,7 +130,6 @@ iree_status_t loom_testbench_prepare_scenario_configuration(
                                                       : options->host_allocator;
   *out_prepared = (loom_testbench_prepared_scenario_configuration_t){
       .configuration = configuration,
-      .mode = mode,
       .function_call = options->function_call,
       .device_event_capture = options->device_event_capture,
       .host_allocator = host_allocator,
@@ -181,17 +162,15 @@ iree_status_t loom_testbench_prepare_scenario_configuration(
       break;
     }
     status = loom_testbench_prepare_or_reuse_scenario_product(
-        &options->target, &trial->action.target, &configuration->values, mode,
+        &options->target, &trial->action.target, &configuration->values,
         host_allocator, out_prepared->trials, trial_index,
         /*use_oracle=*/false, &prepared_trial->target);
     if (iree_status_is_ok(status) &&
-        mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS &&
         trial->action.kind == LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE) {
       status = loom_testbench_prepare_or_reuse_scenario_product(
           &options->oracle, &trial->action.oracle, &configuration->values,
-          LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS, host_allocator,
-          out_prepared->trials, trial_index, /*use_oracle=*/true,
-          &prepared_trial->oracle);
+          host_allocator, out_prepared->trials, trial_index,
+          /*use_oracle=*/true, &prepared_trial->oracle);
     }
   }
   if (!iree_status_is_ok(status)) {
@@ -366,11 +345,17 @@ static void loom_testbench_scenario_trial_executor_reset_events(
 
 iree_status_t loom_testbench_scenario_trial_executor_initialize(
     const loom_testbench_prepared_scenario_configuration_t* prepared,
-    iree_host_size_t trial_index,
+    iree_host_size_t trial_index, loom_testbench_scenario_execution_mode_t mode,
     const loom_testbench_value_materializer_options_t* materializer_options,
     iree_host_size_t batch_capacity,
     loom_testbench_scenario_trial_executor_t* out_executor) {
   *out_executor = (loom_testbench_scenario_trial_executor_t){0};
+  if (mode != LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS &&
+      mode != LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "invalid scenario execution mode %u",
+                            (unsigned)mode);
+  }
   if (trial_index >= prepared->trial_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "scenario trial index %zu exceeds count %zu",
@@ -383,10 +368,18 @@ iree_status_t loom_testbench_scenario_trial_executor_initialize(
 
   const loom_testbench_prepared_scenario_trial_t* prepared_trial =
       &prepared->trials[trial_index];
+  if (mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_BENCHMARK &&
+      prepared_trial->target.vtable->benchmark == NULL) {
+    return iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "scenario execution profile '%.*s' does not support benchmarking",
+        (int)prepared_trial->target.profile.size,
+        prepared_trial->target.profile.data);
+  }
   const loom_testbench_invocation_plan_t* target =
       &prepared_trial->trial_plan->action.target;
   const loom_testbench_invocation_plan_t* oracle =
-      prepared->mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS &&
+      mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS &&
               prepared_trial->trial_plan->action.kind ==
                   LOOM_TESTBENCH_SCENARIO_ACTION_COMPARE
           ? &prepared_trial->trial_plan->action.oracle
@@ -394,11 +387,11 @@ iree_status_t loom_testbench_scenario_trial_executor_initialize(
   *out_executor = (loom_testbench_scenario_trial_executor_t){
       .prepared_trial = prepared_trial,
       .configuration = prepared->configuration,
-      .mode = prepared->mode,
+      .mode = mode,
       .materializer_options = *materializer_options,
       .host_allocator = prepared->host_allocator,
       .device_event_capture =
-          prepared->mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS
+          mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS
               ? prepared->device_event_capture
               : NULL,
       .batch_capacity = batch_capacity,
@@ -413,7 +406,7 @@ iree_status_t loom_testbench_scenario_trial_executor_initialize(
         (void**)&out_executor->trial_values);
   }
   if (iree_status_is_ok(status) &&
-      prepared->mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS) {
+      mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS) {
     status = loom_testbench_scenario_allocate_array(
         out_executor->host_allocator, batch_capacity,
         sizeof(*out_executor->results), (void**)&out_executor->results);
@@ -425,7 +418,7 @@ iree_status_t loom_testbench_scenario_trial_executor_initialize(
         (void**)&out_executor->expectation_reports);
   }
   if (iree_status_is_ok(status) &&
-      prepared->mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS &&
+      mode == LOOM_TESTBENCH_SCENARIO_EXECUTION_MODE_CORRECTNESS &&
       out_executor->device_event_capture != NULL) {
     status = loom_testbench_scenario_allocate_array(
         out_executor->host_allocator, batch_capacity,

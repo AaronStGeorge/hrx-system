@@ -1,0 +1,103 @@
+// Deliberately mismatched products exercise the benchmark's correctness gate.
+// This is runner test data, not a numerical correctness corpus.
+kernel.def @write_wrong() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%output: buffer) {
+  %origin = index.constant 0 : offset
+  %view = buffer.view %output[%origin] : buffer -> view<1xi32>
+  %wrong = scalar.constant 41 : i32
+  view.store %wrong, %view[0] : i32, view<1xi32>
+  kernel.return
+}
+
+kernel.def @write_right() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%output: buffer) {
+  %origin = index.constant 0 : offset
+  %view = buffer.view %output[%origin] : buffer -> view<1xi32>
+  %right = scalar.constant 42 : i32
+  view.store %right, %view[0] : i32, view<1xi32>
+  kernel.return
+}
+
+func.def @oracle(%output: buffer) {
+  %origin = index.constant 0 : offset
+  %view = buffer.view %output[%origin] : buffer -> view<1xi32>
+  %expected = scalar.constant 42 : i32
+  view.store %expected, %view[0] : i32, view<1xi32>
+  func.return
+}
+
+func.def @identity(%input: i32) -> (i32) {
+  func.return %input : i32
+}
+
+func.def @trial_input(%trial: index) -> (i32) {
+  %value = index.cast %trial : index to i32
+  func.return %value : i32
+}
+
+check.scenario @wrong_result {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@write_wrong, @oracle>(%output) : (tensor<1xi32>) -> () {
+      check.expect.equal actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.benchmark<@wrong_result> @wrong_latency
+
+check.benchmark<@wrong_result> @wrong_alias_latency
+
+check.scenario @right_result {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@write_right, @oracle>(%output) : (tensor<1xi32>) -> () {
+      check.expect.equal actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.benchmark<@right_result> @right_latency
+
+check.benchmark<@right_result> @right_alias_latency
+
+check.scenario @selected_trial configure[2](%configuration: index, %configuration_entropy: check.entropy) {
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %input = check.generate<@trial_input>(%trial) : (index) -> (i32)
+    check.compare<@identity>(%input) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}
+
+check.benchmark<@selected_trial> @selected_latency
+
+check.scenario @missing_event {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@write_right, @oracle>(%output) : (tensor<1xi32>) -> () {
+      check.expect.equal actual(%output) expected(%output) : tensor<1xi32>
+      check.expect.event<device> {count = 1, type = "ubsan_report"}
+    }
+  }
+  check.return
+}
+
+check.benchmark<@missing_event> @missing_event_latency
+
+check.scenario @invoke_only {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.invoke<@write_right>(%output) : (tensor<1xi32>) -> ()
+  }
+  check.return
+}
+
+check.benchmark<@invoke_only> @invoke_latency

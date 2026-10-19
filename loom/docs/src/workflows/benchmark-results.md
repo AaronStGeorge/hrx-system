@@ -110,9 +110,10 @@ Parameterized snapshot work items retain the same concrete values under
 ## Read an event stream
 
 Every JSONL row carries `row` and `run_id`. Candidate-specific rows also carry
-`candidate_id` and `candidate_index`; sampled rows add `sample_id`,
-`sample_index`, and `sample.parameters`. These fields form the join contract
-across the stream.
+`candidate_id` and `candidate_index`. Case samples add `sample_id`,
+`sample_index`, and `sample.parameters`; scenario samples identify the
+configuration and trial inside `trial_result`. `work_item_index` connects
+physical correctness work to its logical benchmark aliases.
 
 | `row` value | Evidence |
 | --- | --- |
@@ -120,7 +121,7 @@ across the stream.
 | `plan` | Selected benchmark and case, effective policy, and command-line overrides. |
 | `device` | Selected driver, backend, and inexpensive HAL identity. |
 | `compile` | Candidate compile state, diagnostics, and requested compile evidence. |
-| `sample` | Correctness result for one concrete case sample. |
+| `sample` | Correctness result for one concrete case sample or scenario trial. |
 | `benchmark` | Correctness-gated measurement or failure evidence. |
 | `benchmark.repetition` | One interleaved candidate measurement window. |
 | `comparison` | Aggregate baseline and candidate timing ratios. |
@@ -139,6 +140,29 @@ tail -f results.jsonl | jq -c '
          .row == "comparison" or
          .row == "summary")'
 ```
+
+Scenario samples contain the selected configuration, trial domain, trial
+ordinal, entropy root, and authored expectation results. Each selected trial
+is checked before timing; interleaved comparisons check each candidate before
+their first window, not before every repetition. A failed trial produces no
+timing score, and a comparison needs passing baseline and candidate trials.
+`check.invoke` trials also execute before timing to check for unhandled device errors,
+but have no numerical oracle. A passing result establishes only the checks
+authored in the scenario.
+
+```shell
+jq 'select(.row == "sample" and .trial_result) |
+    {candidate_id, work_item_index, benchmark_sample_index, trial_result}' \
+  results.jsonl
+```
+
+The default snapshot retains failed trials in `failed_samples[].trial_result`
+and counts all observed trials under `summary.correctness`. Successful trials
+do not add verbose observation records to the snapshot. Compilation, oracle
+execution, and comparisons remain outside the measured window; timing uses
+fresh target-only inputs for the same trial. Comparison candidates share the
+baseline scenario's entropy domain, so replaying a comparison retains its
+baseline selection as well as the reported trial coordinate.
 
 Inspect terminal state and compilation rejection separately:
 
