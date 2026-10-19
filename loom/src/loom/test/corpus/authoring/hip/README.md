@@ -47,7 +47,7 @@ python dev.py bazel run //loom/src/loom/tools/loom-opt:loom-opt -- \
 | dynamic lower-bound unroll, missing facts | structured diagnostic, exact/range facts | `q8_hip_shaped_unroll_unresolved.loom` |
 | wave size, template, specialization, fallback | targetless `template.apply`, typed `template.def ... requires`, `#target.subgroup.size` | `target_provider_selection.loom` |
 | targetless template device function, `expf`, target math policy, inline | invocation specialization, then authoring expansion and math legalization | `template_math_legalization.loom` |
-| `__cluster_dims__`, cluster multicast, async-to-LDS, `s_wait_asynccnt`, b128 | static `cluster_size`, `kernel.async.cluster.gather`, async groups and waits | `cluster_b128_multicast.loom` |
+| `__cluster_dims__`, cluster multicast, async-to-LDS, `s_wait_asynccnt`, b128 | static `cluster_size`, `kernel.async.cluster.gather`, async groups and waits | [`cluster_b128_multicast.loom`](../../../../tooling/target/amdgpu/test/corpus/gfx1250/cluster_b128_multicast.loom) |
 
 ## Lane Distribution
 
@@ -831,16 +831,18 @@ lane-corresponding destination in its workgroup-owned LDS. The async wait drains
 the target's cluster-transfer counter before the ordinary workgroup barrier
 makes the populated LDS visible to consumers.
 
-`cluster_b128_multicast.loom` uses a nonuniform iota rather than a constant
-payload. Both recipients independently read their own LDS allocation and check
-all four words transferred for every lane. That shape catches wrong cluster
-identity, wrong recipient remapping, missing destination offsets, truncated
-b128 transfers, and accidental validation of only one participant.
+The target-owned
+[`cluster_b128_multicast.loom`](../../../../tooling/target/amdgpu/test/corpus/gfx1250/cluster_b128_multicast.loom)
+uses a nonuniform iota rather than a constant payload. Both recipients
+independently read their own LDS allocation and check all four words transferred
+for every lane. That shape catches wrong cluster identity, wrong recipient
+remapping, missing destination offsets, truncated b128 transfers, and accidental
+validation of only one participant.
 
 Proof command:
 
 ```bash
-loom-compile cluster_b128_multicast.loom \
+loom-compile ../../../../tooling/target/amdgpu/test/corpus/gfx1250/cluster_b128_multicast.loom \
   --format=amdgpu-hsaco \
   --target=amdgpu:gfx1250 \
   --output=/tmp/cluster-b128-multicast.hsaco \

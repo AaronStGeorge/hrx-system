@@ -71,11 +71,16 @@ class CheckTest(unittest.TestCase):
     def test_authoring_requires_scenarios_in_manifest_owned_corpus(self):
         with tempfile.TemporaryDirectory(prefix="loom hygiene ") as temporary:
             root = Path(temporary)
-            source = root / "loom/src/loom/test/corpus/numeric/example.loom"
-            source.parent.mkdir(parents=True)
+            sources = [
+                root / "loom/src/loom/test/corpus/numeric/example.loom",
+                root / "loom/src/loom/test/corpus/sanitizer/example.loom",
+            ]
+            for source in sources:
+                source.parent.mkdir(parents=True)
             manifest = root / "sources.json"
             manifest.write_text(
-                json.dumps([source.relative_to(root).as_posix()]), encoding="utf-8"
+                json.dumps([source.relative_to(root).as_posix() for source in sources]),
+                encoding="utf-8",
             )
             output = root / "passed"
             command = [
@@ -89,22 +94,86 @@ class CheckTest(unittest.TestCase):
                 str(output),
             ]
 
-            source.write_text(
-                "check.case @example {\n  check.return\n}\n", encoding="utf-8"
-            )
+            for source in sources:
+                source.write_text(
+                    "check.case @example {\n  check.return\n}\n", encoding="utf-8"
+                )
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("use check.scenario instead of check.case", result.stdout)
             self.assertFalse(output.exists())
 
-            source.write_text("func.decl @example()\n", encoding="utf-8")
+            for source in sources:
+                source.write_text("func.decl @example()\n", encoding="utf-8")
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must define at least one check.scenario", result.stdout)
             self.assertFalse(output.exists())
 
-            source.write_text(
-                "check.scenario @example {\n  check.return\n}\n", encoding="utf-8"
+            for source in sources:
+                source.write_text(
+                    "check.scenario @example {\n  check.return\n}\n", encoding="utf-8"
+                )
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(output.read_text(encoding="utf-8"), "PASS\n")
+
+    def test_authoring_keeps_target_ownership_out_of_semantic_corpus(self):
+        with tempfile.TemporaryDirectory(prefix="loom hygiene ") as temporary:
+            root = Path(temporary)
+            source = root / "loom/src/loom/test/corpus/authoring/example.loom"
+            source.parent.mkdir(parents=True)
+            manifest = root / "sources.json"
+            output = root / "passed"
+            command = [
+                self.runner,
+                "--check=authoring",
+                "--tool",
+                self.authoring,
+                "--sources",
+                str(manifest),
+                "--output",
+                str(output),
+            ]
+
+            cases = (
+                (
+                    "loom/src/loom/test/corpus/authoring/gfx1151_example.loom",
+                    "func.decl @example()\n",
+                    "paths must describe semantics",
+                ),
+                (
+                    source.relative_to(root).as_posix(),
+                    "amdgpu.target<gfx1151> @device\n",
+                    "cannot declare concrete targets",
+                ),
+                (
+                    source.relative_to(root).as_posix(),
+                    "template.def<@example> target(@device) @provider() {\n"
+                    "  template.return\n}\n",
+                    "cannot specialize operations to concrete target symbols",
+                ),
+            )
+            for path, contents, diagnostic in cases:
+                with self.subTest(path=path, diagnostic=diagnostic):
+                    case_source = root / path
+                    case_source.parent.mkdir(parents=True, exist_ok=True)
+                    case_source.write_text(contents, encoding="utf-8")
+                    manifest.write_text(json.dumps([path]), encoding="utf-8")
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(diagnostic, result.stdout + result.stderr)
+                    self.assertFalse(output.exists())
+                    case_source.unlink()
+
+            target_owned = (
+                root / "loom/src/loom/tooling/target/amdgpu/test/gfx1151_example.loom"
+            )
+            target_owned.parent.mkdir(parents=True)
+            target_owned.write_text("func.decl @example()\n", encoding="utf-8")
+            manifest.write_text(
+                json.dumps([target_owned.relative_to(root).as_posix()]),
+                encoding="utf-8",
             )
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

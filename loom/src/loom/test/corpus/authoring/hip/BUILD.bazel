@@ -4,8 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
 load("//loom/build_tools/bazel:defs.bzl", "loom_module")
 
 package(
@@ -13,19 +11,6 @@ package(
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
-
-_GFX11_CASES = [
-    "template_math_legalization.loom",
-    "wave64_reductions.loom",
-]
-
-_GFX1250_CASES = [
-    "cluster_b128_multicast.loom",
-]
-
-_AMDGPU_SELECTION_CASES = [
-    "target_provider_selection.loom",
-]
 
 _NON_EXECUTION_EXAMPLES = [
     "lane_distribution.loom",
@@ -35,7 +20,7 @@ _NON_EXECUTION_EXAMPLES = [
 
 _PORTABLE_CASES = glob(
     ["*.loom"],
-    exclude = _AMDGPU_SELECTION_CASES + _GFX11_CASES + _GFX1250_CASES + _NON_EXECUTION_EXAMPLES,
+    exclude = _NON_EXECUTION_EXAMPLES,
 )
 
 exports_files(glob(["*.loom"]))
@@ -44,49 +29,4 @@ loom_module(
     name = "portable_cases",
     srcs = _PORTABLE_CASES,
     output_format = "bc",
-)
-
-loom_module(
-    name = "amdgpu_selection_cases",
-    srcs = _AMDGPU_SELECTION_CASES,
-    output_format = "bc",
-)
-
-loom_module(
-    name = "gfx11_cases",
-    srcs = _GFX11_CASES,
-    output_format = "bc",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:amdgpu",
-    ]),
-)
-
-loom_module(
-    name = "gfx1250_cases",
-    srcs = _GFX1250_CASES,
-    output_format = "bc",
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target/arch:amdgpu",
-    ]),
-)
-
-# Authoring diagnostics and transform examples exercise CLI contracts rather
-# than physical execution. Semantic cases above are executed by target
-# providers through their normal iree-test-loom suites.
-iree_execution_test_suite(
-    name = "execution_test",
-    data = [
-        "cluster_b128_multicast.loom",
-        "shared_memory_vector_tile.loom",
-        "wave64_reductions.loom",
-    ],
-    manifests = ["hip_authoring.test.json"],
-    tags = ["hostonly"],
-    target_compatible_with = loom_config_compatible_with([
-        "//loom/config/target:amdgpu_artifacts",
-    ]),
-    tools = {
-        "loom-compile": "//loom/src/loom/tools/loom-compile",
-        "loom-opt": "//loom/src/loom/tools/loom-opt",
-    },
 )

@@ -20,7 +20,7 @@ REPOSITORY_SOURCE_ROOT = "loom/src/loom/"
 AUTHORING_CORPUS_ROOT = REPOSITORY_SOURCE_ROOT + "test/corpus/authoring/"
 # Syntax fixtures retain their exact parser/printer contract; explicit error
 # fixtures intentionally cannot pass canonical-source verification.
-FORMAT_EXCLUDED_PREFIXES = (REPOSITORY_SOURCE_ROOT + "test/corpus/text/",)
+FORMAT_EXCLUDED_PREFIXES = (REPOSITORY_SOURCE_ROOT + "format/testdata/",)
 FORMAT_EXCLUDED_PATHS = frozenset(
     {
         "loom/src/loom/serve/runtime/program/testdata/compilation/invalid.loom",

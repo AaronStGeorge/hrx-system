@@ -927,7 +927,7 @@ loom_test_module(
   NAME
     asan_test_module
   SRCS
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_asan_actual.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/access_reporting.loom"
 )
 endif()
 
@@ -968,7 +968,7 @@ loom_test_module(
   NAME
     ubsan_test_module
   SRCS
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_ubsan_actual.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/assertion_reporting.loom"
 )
 endif()
 
@@ -1271,7 +1271,7 @@ loom_test_module(
   NAME
     tsan_test_module
   SRCS
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_tsan_actual.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/race_workgroup.loom"
 )
 endif()
 
@@ -1460,7 +1460,7 @@ loom_test_module(
   NAME
     tsan_capacity_test_module
   SRCS
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/amdgpu_tsan_capacity.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/sanitizer/race_capacity.loom"
 )
 endif()
 

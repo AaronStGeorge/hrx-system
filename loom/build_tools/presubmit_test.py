@@ -505,7 +505,7 @@ class LoomPresubmitTest(unittest.TestCase):
         )
         self.assertFalse(
             self.presubmit.is_format_source_path(
-                "loom/src/loom/test/corpus/text/operations.loom"
+                "loom/src/loom/format/testdata/operations.loom"
             )
         )
         self.assertFalse(
@@ -538,7 +538,7 @@ class LoomPresubmitTest(unittest.TestCase):
             returncode=0,
             stdout=(
                 canonical_path
-                + "\0loom/src/loom/test/corpus/text/operations.loom"
+                + "\0loom/src/loom/format/testdata/operations.loom"
                 + f"\0{test_container_path}\0"
             ),
             stderr="",
