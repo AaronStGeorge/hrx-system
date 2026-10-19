@@ -17,6 +17,8 @@ extern "C" {
 // Immutable model scheduling choices. Admission and output transport credit are
 // settled by the caller before preparing an epoch.
 typedef struct loom_serve_text_epoch_options_t {
+  // Whether known spans end in prediction or independently captured output.
+  loom_serve_text_mode_t model_mode;
   // Logical context bound of every resident row.
   iree_host_size_t context_capacity;
   // Maximum known input tokens granted to one row in an epoch.
@@ -128,6 +130,7 @@ iree_status_t loom_serve_text_epoch_submit(
     loom_serve_text_model_t* model, loom_serve_text_schedule_mode_t mode,
     const loom_serve_text_epoch_t* epoch,
     const loom_serve_text_epoch_continuation_t* continuation,
+    loom_serve_text_capture_t** out_capture,
     loom_serve_execution_frontier_t* out_frontier);
 
 // Consumes successful ALL readiness and publishes authoritative model progress

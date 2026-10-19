@@ -6,6 +6,7 @@
 
 #include "loom/serve/service/text/http.h"
 
+#include "loom/serve/service/text/sequence.h"
 #include "loom/util/json.h"
 
 static iree_status_t loom_serve_text_http_quote(iree_string_builder_t* output,
@@ -205,6 +206,27 @@ static iree_status_t loom_serve_text_http_fail(
   return status;
 }
 
+static iree_status_t loom_serve_text_http_begin_sequence(
+    void* self, iree_string_view_t handle, iree_host_size_t position) {
+  loom_serve_text_http_consumer_t* consumer = self;
+  IREE_RETURN_IF_ERROR(iree_string_builder_reserve(&consumer->packet, 16384));
+  return iree_string_builder_append_format(
+      &consumer->packet,
+      "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+      "Cache-Control: no-cache\r\nConnection: close\r\n\r\n"
+      "event: attached\ndata: {\"session\":\"%.*s\",\"position\":%zu}\n\n",
+      (int)handle.size, handle.data, position);
+}
+
+static iree_status_t loom_serve_text_http_append_sequence(
+    void* self, iree_string_view_t handle, iree_host_size_t position,
+    iree_host_size_t count, const int32_t* tokens, iree_const_byte_span_t bytes,
+    bool final) {
+  loom_serve_text_http_consumer_t* consumer = self;
+  return loom_serve_text_sequence_chunk(handle, position, count, tokens, bytes,
+                                        final, &consumer->packet);
+}
+
 static iree_status_t loom_serve_text_http_publish(void* self, bool* out_ready,
                                                   bool* out_progress) {
   loom_serve_text_http_consumer_t* consumer = self;
@@ -242,6 +264,12 @@ static iree_status_t loom_serve_text_http_reject_consumer(
   } else if (iree_status_is_unimplemented(failure)) {
     code = 501;
     reason = "Not Implemented";
+  } else if (iree_status_is_not_found(failure)) {
+    code = 404;
+    reason = "Not Found";
+  } else if (iree_status_is_failed_precondition(failure)) {
+    code = 409;
+    reason = "Conflict";
   }
   const iree_status_t status = loom_serve_text_http_reply_failure(
       consumer->telemetry, consumer->connection, consumer->receipt, code,
@@ -273,10 +301,22 @@ static const loom_serve_text_consumer_vtable_t loom_serve_text_http_vtable = {
     .end = loom_serve_text_http_end,
 };
 
+static const loom_serve_text_consumer_vtable_t
+    loom_serve_text_http_sequence_vtable = {
+        .is_open = loom_serve_text_http_open,
+        .is_blocked = loom_serve_text_http_blocked,
+        .begin_sequence = loom_serve_text_http_begin_sequence,
+        .append_sequence = loom_serve_text_http_append_sequence,
+        .publish = loom_serve_text_http_publish,
+        .reject = loom_serve_text_http_reject_consumer,
+        .end = loom_serve_text_http_end,
+};
+
 iree_status_t loom_serve_text_http_consumer_allocate(
     loom_serve_http_connection_t* connection,
     loom_serve_text_telemetry_t* telemetry, loom_serve_text_receipt_t receipt,
-    iree_allocator_t host_allocator, loom_serve_text_consumer_t* out_consumer) {
+    bool sequence, iree_allocator_t host_allocator,
+    loom_serve_text_consumer_t* out_consumer) {
   *out_consumer = (loom_serve_text_consumer_t){0};
   loom_serve_text_http_consumer_t* consumer = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, sizeof(*consumer),
@@ -288,7 +328,8 @@ iree_status_t loom_serve_text_http_consumer_allocate(
   iree_string_builder_initialize(host_allocator, &consumer->packet);
   *out_consumer = (loom_serve_text_consumer_t){
       .self = consumer,
-      .vtable = &loom_serve_text_http_vtable,
+      .vtable = sequence ? &loom_serve_text_http_sequence_vtable
+                         : &loom_serve_text_http_vtable,
   };
   return iree_ok_status();
 }

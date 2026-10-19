@@ -86,6 +86,13 @@ void loom_serve_text_control_unlink(loom_serve_text_control_t* control);
 // this call. Both cleanup operations accept partial initialization.
 void loom_serve_text_control_deinitialize(loom_serve_text_control_t* control);
 
+// Resolves source-owned known-input request policy on an exclusive VM loan.
+// Source may retain the cloned body; a returned options buffer is owned.
+iree_status_t loom_serve_text_control_request_options(
+    loom_serve_text_control_t* control, const loom_serve_text_source_t* source,
+    iree_string_view_t body, uint64_t request_id,
+    iree_allocator_t host_allocator, iree_vm_buffer_t** out_options);
+
 // Evaluates the checked model source against a validated native cohort, then
 // copies and validates its output ranges before any retained row is mutated.
 iree_status_t loom_serve_text_control_capture(

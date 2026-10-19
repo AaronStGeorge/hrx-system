@@ -92,6 +92,16 @@ typedef enum loom_serve_text_mode_e {
   LOOM_SERVE_TEXT_MODE_ENCODE = 1,
 } loom_serve_text_mode_t;
 
+// Immutable source contract selected at registration.
+loom_serve_text_mode_t loom_serve_text_model_mode(
+    const loom_serve_text_model_t* model);
+
+// Source-owned known-input options, validated before row admission. The caller
+// exclusively borrows the model VM and receives one owned options reference.
+iree_status_t loom_serve_text_model_request_options(
+    loom_serve_text_model_t* model, iree_string_view_t body,
+    uint64_t request_id, iree_vm_buffer_t** out_options);
+
 typedef struct loom_serve_text_options_t {
   // Source root contract and request semantics, fixed for this residency.
   loom_serve_text_mode_t mode;

@@ -88,17 +88,23 @@ void loom_serve_text_pending_queue_push(
     loom_serve_text_pending_queue_t* queue, loom_serve_text_consumer_t consumer,
     iree_string_view_t body, iree_string_view_t name,
     loom_serve_text_checkpoint_entry_t* checkpoint,
+    const loom_serve_text_sequence_t* sequence,
     loom_serve_text_receipt_t receipt) {
   if (checkpoint) {
     ++checkpoint->pending;
   }
-  *queue->values[queue->count++] = (loom_serve_text_pending_request_t){
+  loom_serve_text_pending_request_t* pending = queue->values[queue->count++];
+  *pending = (loom_serve_text_pending_request_t){
       .consumer = consumer,
       .body = body,
       .name = name,
       .checkpoint = checkpoint,
       .receipt = receipt,
   };
+  if (sequence) {
+    pending->sequence = *sequence;
+    pending->name = iree_make_cstring_view(pending->sequence.handle);
+  }
 }
 
 // Resolves the exact completed frontier without acquiring native ownership.
@@ -118,7 +124,9 @@ loom_serve_text_input_prefix_t loom_serve_text_pending_queue_prefix(
                                             .token = endpoint->token,
                                             .boundary = endpoint->boundary};
   }
-  if (session->completion.storage &&
+  if ((session->completion.storage ||
+       (session->mode == LOOM_SERVE_TEXT_MODE_ENCODE &&
+        loom_serve_text_session_has_history(session))) &&
       iree_string_view_equal(request->name,
                              iree_make_cstring_view(session->lifetime.name))) {
     return (loom_serve_text_input_prefix_t){
@@ -146,7 +154,9 @@ iree_status_t loom_serve_text_pending_queue_prepare(
   IREE_TRACE_ZONE_APPEND_VALUE_I64(z0, pending->receipt.serial);
   const iree_time_t start = iree_time_now();
   iree_status_t status = iree_ok_status();
-  if (!pending->chat.policy) {
+  const bool encodes =
+      loom_serve_text_model_mode(queue->model) == LOOM_SERVE_TEXT_MODE_ENCODE;
+  if (!encodes && !pending->chat.policy) {
     status = loom_serve_text_chat_initialize(
         loom_serve_text_model_chat_policy(queue->model), name, pending->body,
         pending->receipt.serial, default_max_tokens, queue->host_allocator,
@@ -155,7 +165,7 @@ iree_status_t loom_serve_text_pending_queue_prepare(
   if (iree_status_is_ok(status)) {
     loom_serve_text_session_t* session = loom_serve_text_session_select(
         row_count, sessions, pending->name,
-        pending->checkpoint ? NULL : &pending->chat);
+        pending->checkpoint || encodes ? NULL : &pending->chat);
     queue->prepared.resolved_session = session;
     status = loom_serve_text_pending_request_prepare(
         pending, queue->model,
@@ -164,6 +174,104 @@ iree_status_t loom_serve_text_pending_queue_prepare(
   }
   pending->prepare_duration += iree_time_now() - start;
   IREE_RETURN_AND_END_ZONE(z0, status);
+}
+
+iree_status_t loom_serve_text_pending_queue_admit(
+    loom_serve_text_pending_queue_t* queue,
+    loom_serve_text_session_cache_t* cache, loom_serve_text_session_t* sessions,
+    iree_string_view_t model_name) {
+  loom_serve_text_pending_request_t* pending = queue->prepared.request;
+  loom_serve_text_session_t* session = queue->prepared.session;
+  loom_serve_text_prefix_entry_t* prefix = queue->prepared.prefix;
+  const iree_host_size_t input_origin = prefix ? prefix->count : 0;
+  const iree_host_size_t input_count = pending->input.count - input_origin;
+  const iree_host_size_t retained_count =
+      pending->input.retained_count + input_origin;
+  const iree_host_size_t reservation = pending->reservation;
+  const iree_host_size_t restored_bytes = queue->prepared.restored_bytes;
+  loom_serve_text_pending_request_t request = *pending;
+  if (session->mode == LOOM_SERVE_TEXT_MODE_ENCODE) {
+    request.name = iree_make_cstring_view(request.sequence.handle);
+  }
+  loom_serve_text_media_request_begin(pending->media);
+  const iree_host_size_t queue_rank = queue->admission.cursor;
+  loom_serve_text_admission_acquired(&queue->admission);
+  const iree_host_size_t overtakes = queue->admission.overtakes;
+  memcpy(session->tokens, pending->input.tokens,
+         pending->input.count * sizeof(*session->tokens));
+  const iree_duration_t prepare_duration = pending->prepare_duration;
+  loom_serve_text_session_cache_entry_t* cached = queue->prepared.cached;
+  if (cached) {
+    loom_serve_text_telemetry_session_end(queue->telemetry, &session->lifetime);
+    session->lifetime = cached->lifetime;
+    memset(&cached->lifetime, 0, sizeof(cached->lifetime));
+    loom_serve_text_session_cache_release(cache, cached, queue->telemetry);
+  }
+  loom_serve_text_input_deinitialize(&pending->input, queue->host_allocator);
+  loom_serve_text_pending_queue_remove(queue, queue->admission.cursor);
+  if (!request.name.size ||
+      !iree_string_view_equal(request.name,
+                              iree_make_cstring_view(session->lifetime.name))) {
+    loom_serve_text_telemetry_session_end(queue->telemetry, &session->lifetime);
+  }
+  if (request.name.size) {
+    memcpy(session->lifetime.name, request.name.data, request.name.size);
+  }
+  session->lifetime.name[request.name.size] = 0;
+  session->lifetime.serial = request.receipt.serial;
+  if (!session->lifetime.id) {
+    session->lifetime.id = session->lifetime.serial;
+    loom_serve_text_session_record_t value = {.session = session->lifetime.id,
+                                              .row = session - sessions};
+    memcpy(value.name, session->lifetime.name, sizeof(value.name));
+    loom_serve_text_record(queue->telemetry->stream,
+                           &LOOM_SERVE_TEXT_SESSION_BEGIN,
+                           session->lifetime.serial, &value, sizeof(value));
+  }
+  ++session->lifetime.counters.requests;
+  session->request.counters.requests = 1;
+  session->request.consumer = request.consumer;
+  session->request.chat = request.chat;
+  session->request.sequence = request.sequence;
+  session->request.media = request.media;
+  session->request.phase = LOOM_SERVE_TEXT_REQUEST_PREFILL;
+  session->request.input_count = input_count;
+  session->request.input_origin = input_origin;
+  session->request.retained_count = retained_count;
+  session->request.start_time = iree_time_now();
+  session->request.queue_duration =
+      session->request.start_time - request.receipt.arrival_time;
+  session->request.reserved_tokens = reservation;
+  iree_status_t status = loom_serve_text_row_bind_request(
+      session->row, session->mode == LOOM_SERVE_TEXT_MODE_ENCODE
+                        ? request.sequence.options
+                        : request.chat.options);
+  if (iree_status_is_ok(status)) {
+    status = loom_serve_text_session_begin(
+        session, loom_serve_text_model_tokenizer(queue->model), model_name);
+  }
+  if (iree_status_is_ok(status)) {
+    const loom_serve_text_pool_usage_t pool =
+        loom_serve_text_model_pool_usage(queue->model);
+    const loom_serve_text_admission_record_t value = {
+        .session = session->lifetime.id,
+        .row = session - sessions,
+        .retained_tokens = retained_count,
+        .appended_tokens = input_count,
+        .reservation_tokens = reservation,
+        .restored_bytes = restored_bytes,
+        .max_tokens = request.chat.max_tokens,
+        .queue_rank = queue_rank,
+        .overtakes = overtakes,
+        .overtake_budget = queue->admission.budget,
+        .prepare_ns = prepare_duration,
+        .queue_ns = session->request.queue_duration,
+        .pool_reserved_tokens = pool.pending,
+        .pool_resident_tokens = pool.capacity - pool.available - pool.pending};
+    loom_serve_text_record(queue->telemetry->stream, &LOOM_SERVE_TEXT_ADMIT,
+                           session->lifetime.serial, &value, sizeof(value));
+  }
+  return status;
 }
 
 void loom_serve_text_pending_queue_remove(

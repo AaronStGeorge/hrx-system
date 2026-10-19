@@ -27,6 +27,7 @@ TEST(ModelKindTest, DeclarationAndDiscoveryShareCanonicalRoles) {
       {LOOM_SERVE_MODEL_KIND_RECOGNITION, "recognition",
        "/v1/audio/transcriptions"},
       {LOOM_SERVE_MODEL_KIND_ACTIVITY, "activity", nullptr},
+      {LOOM_SERVE_MODEL_KIND_SEQUENCE, "sequence", "/v1/sequences"},
   };
   for (const auto& row : cases) {
     SCOPED_TRACE(row.name);

@@ -783,6 +783,19 @@ iree_tokenizer_t* loom_serve_text_model_tokenizer(
   return model->source.tokenizer;
 }
 
+loom_serve_text_mode_t loom_serve_text_model_mode(
+    const loom_serve_text_model_t* model) {
+  return model->source.mode;
+}
+
+iree_status_t loom_serve_text_model_request_options(
+    loom_serve_text_model_t* model, iree_string_view_t body,
+    uint64_t request_id, iree_vm_buffer_t** out_options) {
+  return loom_serve_text_control_request_options(
+      &model->control, &model->source, body, request_id, model->host_allocator,
+      out_options);
+}
+
 const loom_serve_text_chat_policy_t* loom_serve_text_model_chat_policy(
     const loom_serve_text_model_t* model) {
   return &model->control.chat_policy;

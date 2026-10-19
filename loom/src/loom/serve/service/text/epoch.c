@@ -120,7 +120,8 @@ void loom_serve_text_epoch_prepare(
     const bool prefill = input->input_count != 0;
     epoch->prefill[i] = prefill;
     const bool select =
-        !prefill || scheduled[i].token_count == input->input_count;
+        options->model_mode == LOOM_SERVE_TEXT_MODE_GENERATE &&
+        (!prefill || scheduled[i].token_count == input->input_count);
     positions[i] = input->position;
     if (!prefill) {
       decode_tokens[i] = input->token;
@@ -172,6 +173,7 @@ iree_status_t loom_serve_text_epoch_submit(
     loom_serve_text_model_t* model, loom_serve_text_schedule_mode_t mode,
     const loom_serve_text_epoch_t* epoch,
     const loom_serve_text_epoch_continuation_t* continuation,
+    loom_serve_text_capture_t** out_capture,
     loom_serve_execution_frontier_t* out_frontier) {
   if (mode == LOOM_SERVE_TEXT_SCHEDULE_PACKED) {
     const bool verifies = epoch->proposal_count || epoch->device_epochs == 2;
@@ -180,7 +182,7 @@ iree_status_t loom_serve_text_epoch_submit(
         verifies ? epoch->output_limits : NULL,
         continuation->continuation.span_count ? &continuation->continuation
                                               : NULL,
-        NULL, out_frontier);
+        out_capture, out_frontier);
   }
   const loom_serve_text_span_t* span = &epoch->spans[epoch->cursor];
   if (span->media) {

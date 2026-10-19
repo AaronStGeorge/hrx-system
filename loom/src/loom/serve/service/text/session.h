@@ -13,6 +13,7 @@
 #include "loom/serve/service/text/consumer.h"
 #include "loom/serve/service/text/media_projector.h"
 #include "loom/serve/service/text/model.h"
+#include "loom/serve/service/text/sequence.h"
 #include "loom/serve/telemetry/record.h"
 
 #ifdef __cplusplus
@@ -35,7 +36,7 @@ typedef enum loom_serve_text_request_phase_e {
 // value contains no row, decoder, request or device borrow. Moving it transfers
 // one lifetime; row reuse alone does not imply a new session lifetime.
 typedef struct loom_serve_text_session_lifetime_t {
-  // Local client cache key; empty means an untagged request.
+  // Chat cache key or server-issued sequence identity; empty means untagged.
   char name[65];
   // Last admitted request serial, also the idle-session LRU ordering key.
   uint64_t serial;
@@ -58,6 +59,8 @@ typedef struct loom_serve_text_session_t {
   iree_allocator_t host_allocator;
   // Borrowed private device row in the shared model residency.
   loom_serve_text_row_t* row;
+  // Immutable history/output contract shared with the owning model.
+  loom_serve_text_mode_t mode;
   // Owned logical session currently assigned to this reusable execution row.
   loom_serve_text_session_lifetime_t lifetime;
   // Canonical completed client history validating the retained raw state.
@@ -76,6 +79,8 @@ typedef struct loom_serve_text_session_t {
     loom_serve_text_consumer_t consumer;
     // Validated chat borrowing the consumer-owned request body.
     loom_serve_text_chat_t chat;
+    // Headless known-input policy, exclusive of chat and transferred at admit.
+    loom_serve_text_sequence_t sequence;
     // Owned device features, released as their consuming prefill retires.
     loom_serve_text_media_request_t* media;
     // Next completed-stage action or terminal output drain.
@@ -130,19 +135,24 @@ loom_serve_text_session_t* loom_serve_text_session_select(
     iree_host_size_t count, loom_serve_text_session_t* sessions,
     iree_string_view_t name, const loom_serve_text_chat_t* chat);
 
+// Whether this idle row has a complete continuation under its source contract.
+bool loom_serve_text_session_has_history(
+    const loom_serve_text_session_t* session);
+
 // Copies only owner-published work and immutable admission metadata. Safe on
 // the serialized owner while a CPU task borrows the row's response storage;
 // request phase/output buffers are deliberately excluded. ID zero means idle.
 loom_serve_http_request_snapshot_t loom_serve_text_session_request_snapshot(
     const loom_serve_text_session_t* session);
 
-// Allocates reusable host tokens, decoder storage and response builders. The
-// borrowed row and tokenizer outlive the session. No device storage is
-// acquired. The caller deinitializes the result on success or failure.
+// Allocates reusable host tokens and, for generation, decoder/response storage.
+// The borrowed row and tokenizer outlive the session; encoding needs no
+// tokenizer. No device storage is acquired. The caller deinitializes the result
+// on success or failure.
 iree_status_t loom_serve_text_session_initialize(
-    loom_serve_text_row_t* row, const iree_tokenizer_t* tokenizer,
-    iree_host_size_t context_capacity, iree_allocator_t host_allocator,
-    loom_serve_text_session_t* out_session);
+    loom_serve_text_row_t* row, loom_serve_text_mode_t mode,
+    const iree_tokenizer_t* tokenizer, iree_host_size_t context_capacity,
+    iree_allocator_t host_allocator, loom_serve_text_session_t* out_session);
 
 // Releases host storage only. The caller has retired CPU borrowers and released
 // every consumer receipt; native row/reservation ownership remains with the
@@ -150,8 +160,8 @@ iree_status_t loom_serve_text_session_initialize(
 void loom_serve_text_session_deinitialize(loom_serve_text_session_t* session);
 
 // Starts output for the request already transferred into session->request.
-// Discards the previous canonical completion and initializes the
-// shared-tokenizer decoder, then starts the consumer with admission metadata.
+// Discards the previous canonical completion, initializes the shared-tokenizer
+// decoder for generation, and starts the consumer with admission metadata.
 // Failure leaves request and receipt cleanup to the owner.
 iree_status_t loom_serve_text_session_begin(loom_serve_text_session_t* session,
                                             const iree_tokenizer_t* tokenizer,

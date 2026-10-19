@@ -231,6 +231,38 @@ encoding uses each request's dimensions.
 The [image source contract](https://github.com/ROCm/hrx-system/blob/main/loom/src/loom/serve/service/image/model.h)
 defines entry signatures, alignment and cancellation.
 
+## Known-token stages
+
+A `sequence` deployment uses retained rows, packed epochs, block pools, and
+checkpoints without the generative chat contract. It consumes only supplied
+known IDs and publishes source-defined opaque output. It can implement an
+encoder or another retained stage; a source may also run a head and include its
+result bytes explicitly, without asking the server to sample or feed them back.
+
+Preparation retains the text model's nine-result ABI. The terminal-token marker
+may be null. Control exports `epoch`, `encode_epoch`, `publish_epoch`,
+`encode_state`, `bind_request`, `request_defaults`, `request_options`, and
+`capture_epoch`. Isolated `step`, tokenizer/chat roots, and drafting are not
+required. Every submitted span has selection/proposal flags zero, and completed
+progress contains no native output-token selection.
+
+`capture_epoch(control_state, shape_index, span_count, plan)` returns a buffer
+of little-endian i64 triples: `[span_ordinal, residual_byte_offset, byte_length]`.
+Ranges are grouped in submitted span order, with at least one nonempty range
+per span. Multiple ranges concatenate in source order. The plan is checked and
+copied before row mutation; output bytes are copied after the producer and
+before the next epoch can overwrite the shared residual. See
+[capture ownership](https://github.com/ROCm/hrx-system/blob/main/loom/src/loom/serve/service/text/capture.h)
+for device views, readiness, and explicit host materialization.
+
+Captured output owns its pooled storage and execution domain independently of
+the model, its weights, and retained rows. A downstream device consumer imports
+readiness and retains its view through queue retirement. HTTP uses a compact
+host snapshot and the [sequence profile](http-profiles.md#known-token-sequences).
+Row IDs, request-relative input offsets, and packed activation offsets are
+different coordinates: the source must derive capture ranges from its actual
+packed layout, not treat a row or input offset as a physical output address.
+
 ## Stream speech with independent requests
 
 A speech package can share weights and numerical execution among clients while

@@ -11,6 +11,7 @@
 #include "loom/serve/service/text/consumer.h"
 #include "loom/serve/service/text/input.h"
 #include "loom/serve/service/text/media_projector.h"
+#include "loom/serve/service/text/sequence.h"
 #include "loom/serve/service/text/telemetry.h"
 
 #ifdef __cplusplus
@@ -27,6 +28,8 @@ typedef struct loom_serve_text_pending_request_t {
   iree_string_view_t body;
   // Canonical prompt/tool descriptors; null policy means not yet rendered.
   loom_serve_text_chat_t chat;
+  // Known-input identity and source policy, exclusive of chat.
+  loom_serve_text_sequence_t sequence;
   // Compact prepared tokens independent of any reusable execution row.
   loom_serve_text_input_t input;
   // Owned projected image occurrences, transferred to the admitted session.

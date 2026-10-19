@@ -21,7 +21,8 @@ extern "C" {
 iree_status_t loom_serve_text_http_consumer_allocate(
     loom_serve_http_connection_t* connection,
     loom_serve_text_telemetry_t* telemetry, loom_serve_text_receipt_t receipt,
-    iree_allocator_t host_allocator, loom_serve_text_consumer_t* out_consumer);
+    bool sequence, iree_allocator_t host_allocator,
+    loom_serve_text_consumer_t* out_consumer);
 
 // Ends a rejected protocol receipt, consumes failure and relinquishes its
 // connection claim. Independent scratch permits rejection during CPU output.

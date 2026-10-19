@@ -74,7 +74,7 @@ specifies model selection, cursors, SSE resume and inspection pagination.
 
 A prepared service supporting native updates reports
 `loom.variants:{"selected":12,"count":2}` in model discovery and status.
-Text, image, embedding and decision services enable this capability through
+Text, sequence, image, embedding and decision services enable this capability through
 nonzero `variant_capacity`. Disabled or custom services without the capability
 return 501. A registration must have a healthy prepared service; drained
 admission is permitted, removal is not.
@@ -346,6 +346,67 @@ Accepted pin/suspend work survives client disconnect through actual readiness.
 Deleting a pin does not invalidate active branches that already own independent
 references. An impossible reservation or refused restore returns overload
 without silently replacing the destination's continuation.
+
+## Known-token sequences
+
+`POST /v1/sequences` accepts a deployment with `kind:"sequence"`. The caller
+supplies exact known IDs; the server does not tokenize text, select an extra
+token, or advance beyond those IDs. Each successful request streams SSE.
+
+```bash
+curl -N http://localhost:8080/v1/sequences \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"encoder","position":0,"token_ids":[11,27,42],"options":{}}'
+```
+
+An initial request omits `session` and has `position:0`. The `attached` event
+returns a server-issued handle. Each `chunk` contains that handle, its consumed
+`position` and `next_position`, exact `token_ids`, and opaque source bytes in
+`data` with `encoding:"base64"`. Chunk boundaries follow actual execution
+cohorts, not the HTTP request's token count. A final `done` event publishes the
+completed position. For example:
+
+```text
+event: attached
+data: {"session":"0123456789abcdef0123456789abcdef","position":0}
+
+event: chunk
+data: {"session":"0123456789abcdef0123456789abcdef","position":0,"next_position":3,"token_ids":[11,27,42],"encoding":"base64","data":"AQIDBA=="}
+
+event: done
+data: {"session":"0123456789abcdef0123456789abcdef","position":3}
+```
+
+The bytes above are illustrative; their shape, dtype, and interpretation belong
+to the model package. Append with the returned `session`, the exact completed
+`position`, and only the new `token_ids`. `options` is an optional source-defined
+object. Unknown, duplicate, or wrongly typed fields reject; IDs are nonnegative
+int32 values and the array must be nonempty. Context and shared pool limits
+apply before admission. `X-Loom-Session` is not accepted on this endpoint:
+identity is the `session` body field.
+
+A stale position or concurrent use of the same handle returns 409. A handle
+that has been evicted, unregistered, or invalidated returns 404. Handles survive
+execution-row reuse while retained in the model's session cache; they are not
+durable across registration replacement or server restart.
+
+The existing [checkpoint controls](#named-checkpoints) can pin a completed
+sequence, using its handle as `X-Loom-Session`. To fork, send
+`X-Loom-Checkpoint: NAME`, omit `session`, and supply the checkpoint's consumed
+position with the new IDs. The response receives a new handle. Sequence
+checkpoints have no implicit pending prediction.
+
+Completion means local device retirement and output acceptance, not peer
+acknowledgement. A disconnected in-flight append invalidates its handle after
+accepted work retires; an independent pinned checkpoint remains usable. A
+transport failure after the final response was accepted can be ambiguous to the
+caller. The endpoint is not an exactly-once retry protocol: recover from a
+known checkpoint or replay the full known history under a new handle.
+
+Output credit is bounded per active row. A slow reader removes only its row
+from new cohorts; other credited sequences can continue. Bytes are captured
+before reusable model scratch is overwritten and downloaded asynchronously for
+HTTP encoding.
 
 ## Speech synthesis
 

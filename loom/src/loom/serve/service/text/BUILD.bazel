@@ -123,6 +123,7 @@ loom_cc_library(
     srcs = [
         "component_service_test.cc",
         "input_count_test.cc",
+        "sequence_service_test.cc",
         "source_lifecycle_test.cc",
     ],
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
@@ -130,9 +131,11 @@ loom_cc_library(
     deps = [
         ":input_count",
         ":source_service_fixture",
+        ":stream",
         ":telemetry",
         "//loom/src/loom/serve/service/finite:component",
         "//loom/src/loom/serve/telemetry:latency",
+        "//runtime/src/iree/base/internal:base64",
     ],
     alwayslink = True,
 )
@@ -639,11 +642,27 @@ loom_cc_library(
         ":consumer",
         ":media_projector",
         ":model",
+        ":sequence",
         "//loom/src/loom/serve/runtime/host:clock",
         "//loom/src/loom/serve/service:inspection",
         "//loom/src/loom/serve/telemetry:record",
         "//runtime/src/iree/base",
         "//runtime/src/iree/tokenizer",
+    ],
+)
+
+loom_cc_library(
+    name = "sequence",
+    srcs = ["sequence.c"],
+    hdrs = ["sequence.h"],
+    deps = [
+        ":input",
+        ":model",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:base64",
+        "//runtime/src/iree/base/internal:csprng",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/vm",
     ],
 )
 
@@ -759,6 +778,7 @@ loom_cc_library(
     deps = [
         ":chat",
         ":consumer",
+        ":sequence",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:record",
         "//loom/src/loom/serve/transport/http:server",
@@ -905,6 +925,7 @@ loom_cc_library(
         ":media_projector",
         ":model",
         ":schedule",
+        ":sequence",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:stream",
         "//runtime/src/iree/base",
@@ -921,10 +942,12 @@ loom_cc_library(
         ":chat",
         ":checkpoint_registry",
         ":consumer",
+        ":input",
         ":media_projector",
         ":model",
         ":pending_request",
         ":prefix_cache",
+        ":sequence",
         ":session",
         ":session_cache",
         ":telemetry",
@@ -956,6 +979,7 @@ loom_cc_library(
     hdrs = ["service.h"],
     deps = [
         ":admission",
+        ":capture",
         ":chat",
         ":checkpoint_control",
         ":checkpoint_http",
@@ -976,6 +1000,7 @@ loom_cc_library(
         ":readiness",
         ":reconfiguration",
         ":schedule",
+        ":sequence",
         ":session",
         ":session_cache",
         ":stream",

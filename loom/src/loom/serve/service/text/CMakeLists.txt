@@ -148,11 +148,14 @@ loom_cc_library(
   SRCS
     "component_service_test.cc"
     "input_count_test.cc"
+    "sequence_service_test.cc"
     "source_lifecycle_test.cc"
   DEPS
     ::input_count
     ::source_service_fixture
+    ::stream
     ::telemetry
+    iree::base::internal::base64
     loom::serve::service::finite::component
     loom::serve::telemetry::latency
   TESTONLY
@@ -760,11 +763,32 @@ loom_cc_library(
     ::consumer
     ::media_projector
     ::model
+    ::sequence
     iree::base
     iree::tokenizer
     loom::serve::runtime::host::clock
     loom::serve::service::inspection
     loom::serve::telemetry::record
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    sequence
+  HDRS
+    "sequence.h"
+  SRCS
+    "sequence.c"
+  DEPS
+    ::input
+    ::model
+    iree::base
+    iree::base::internal::base64
+    iree::base::internal::csprng
+    iree::base::internal::json
+    iree::vm
   PUBLIC
 )
 endif()
@@ -913,6 +937,7 @@ loom_cc_library(
   DEPS
     ::chat
     ::consumer
+    ::sequence
     ::telemetry
     iree::base
     loom::serve::telemetry::record
@@ -1100,6 +1125,7 @@ loom_cc_library(
     ::media_projector
     ::model
     ::schedule
+    ::sequence
     ::telemetry
     iree::base
     loom::serve::telemetry::stream
@@ -1120,10 +1146,12 @@ loom_cc_library(
     ::chat
     ::checkpoint_registry
     ::consumer
+    ::input
     ::media_projector
     ::model
     ::pending_request
     ::prefix_cache
+    ::sequence
     ::session
     ::session_cache
     ::telemetry
@@ -1164,6 +1192,7 @@ loom_cc_library(
     "service.c"
   DEPS
     ::admission
+    ::capture
     ::chat
     ::checkpoint_control
     ::checkpoint_http
@@ -1184,6 +1213,7 @@ loom_cc_library(
     ::readiness
     ::reconfiguration
     ::schedule
+    ::sequence
     ::session
     ::session_cache
     ::stream

@@ -241,6 +241,39 @@ void loom_serve_text_control_deinitialize(loom_serve_text_control_t* control) {
   memset(control, 0, sizeof(*control));
 }
 
+iree_status_t loom_serve_text_control_request_options(
+    loom_serve_text_control_t* control, const loom_serve_text_source_t* source,
+    iree_string_view_t body, uint64_t request_id,
+    iree_allocator_t host_allocator, iree_vm_buffer_t** out_options) {
+  *out_options = NULL;
+  iree_vm_buffer_t* input = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_vm_buffer_clone(IREE_VM_BUFFER_ACCESS_FLAG_READ,
+                           iree_make_const_byte_span(body.data, body.size), 1,
+                           host_allocator, &input));
+  iree_vm_variant_t arguments[] = {
+      iree_vm_buffer_variant_from_ptr_borrowed(&source->vm_types,
+                                               control->defaults),
+      iree_vm_buffer_variant_from_ptr_move(&source->vm_types, &input),
+      iree_vm_variant_from_i64((int64_t)request_id)};
+  iree_vm_variant_t result = {0};
+  iree_status_t status = iree_vm_invoke(
+      loom_serve_program_invocation(control->program), control->request_options,
+      iree_vm_variant_span_from_array(arguments),
+      iree_vm_variant_span_from_ptr(&result, 1));
+  if (iree_status_is_ok(status)) {
+    status = iree_vm_buffer_ptr_from_variant_move(&source->vm_types, &result,
+                                                  out_options);
+  }
+  if (iree_status_is_ok(status) && !*out_options) {
+    status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "source request options must not be null");
+  }
+  iree_vm_variant_reset(&result);
+  iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
+  return status;
+}
+
 iree_status_t loom_serve_text_control_capture(
     loom_serve_text_control_t* control, const loom_serve_text_source_t* source,
     iree_host_size_t shape_index, iree_host_size_t span_count,
