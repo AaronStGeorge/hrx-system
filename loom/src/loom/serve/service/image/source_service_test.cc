@@ -241,20 +241,21 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
   }
 
   static std::vector<float> Pixels(size_t tokens, uint64_t seed,
-                                   size_t count = kPixels) {
+                                   size_t count = kPixels,
+                                   float strength = 1.0f) {
     std::vector<float> pixels(count * 3);
     for (size_t i = 0; i < count; ++i) {
-      pixels[i] = seed & 1 ? 1.0f : -1.0f;
-      pixels[count + i] = tokens & 1 ? 1.0f : -1.0f;
+      pixels[i] = (seed & 1 ? 1.0f : -1.0f) * strength;
+      pixels[count + i] = (tokens & 1 ? 1.0f : -1.0f) * strength;
       pixels[2 * count + i] = i & 1 ? 1.0f : -1.0f;
     }
     return pixels;
   }
 
   std::string EncodedPixels(size_t tokens, uint64_t seed,
-                            uint32_t width = kWidth,
-                            uint32_t height = kHeight) {
-    const auto pixels = Pixels(tokens, seed, (size_t)width * height);
+                            uint32_t width = kWidth, uint32_t height = kHeight,
+                            float strength = 1.0f) {
+    const auto pixels = Pixels(tokens, seed, (size_t)width * height, strength);
     iree_byte_span_t png;
     IREE_EXPECT_OK(loom_serve_image_encode_rgb_f32_png(
         width, height,
@@ -348,40 +349,49 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
       }
     };
 
-    const int client = Send("POST", "/v1/images/generations",
-                            R"({"model":"fixture-image","prompt":"ab"})");
-    loom_serve_http_connection_t* connection = nullptr;
-    ASSERT_NO_FATAL_FAILURE(accept(client, &connection));
+    std::array<int, 2> clients;
+    std::array<loom_serve_http_connection_t*, 2> connections = {};
+    for (size_t i = 0; i < clients.size(); ++i) {
+      clients[i] = Send("POST", "/v1/images/generations",
+                        R"({"model":"fixture-image","prompt":"ab"})");
+      ASSERT_NO_FATAL_FAILURE(accept(clients[i], &connections[i]));
+    }
     ASSERT_NO_FATAL_FAILURE(advance_until([&] {
       return std::string(interface.snapshot(interface.self).phase) ==
              "generating";
     }));
+    EXPECT_EQ(interface.snapshot(interface.self).active_requests, 2u);
     if (!iree_any_bit_set(flags, LOOM_SERVE_SERVICE_FLAG_STOPPING)) {
-      const linger reset = {1, 0};
-      ASSERT_EQ(
-          setsockopt(client, SOL_SOCKET, SO_LINGER, &reset, sizeof(reset)), 0);
-      ASSERT_EQ(close(client), 0);
-      iree_notification_await(
-          notification,
-          [](void* self) {
-            return loom_serve_http_connection_failed(
-                static_cast<loom_serve_http_connection_t*>(self));
-          },
-          connection, iree_infinite_timeout());
+      for (size_t i = 0; i < clients.size(); ++i) {
+        const linger reset = {1, 0};
+        ASSERT_EQ(setsockopt(clients[i], SOL_SOCKET, SO_LINGER, &reset,
+                             sizeof(reset)),
+                  0);
+        ASSERT_EQ(close(clients[i]), 0);
+        iree_notification_await(
+            notification,
+            [](void* self) {
+              return loom_serve_http_connection_failed(
+                  static_cast<loom_serve_http_connection_t*>(self));
+            },
+            connections[i], iree_infinite_timeout());
+      }
     }
     // Retire the accepted first part and its workspace before releasing the
     // pin. Split execution must skip the second kernel and output feedback;
     // neither path needs a PNG/base64 borrower for an absent consumer.
     ASSERT_NO_FATAL_FAILURE(advance_until(
-        [&] { return interface.telemetry.counters->cancelled == 1; }, flags));
+        [&] { return interface.telemetry.counters->cancelled == 2; }, flags));
     EXPECT_EQ(interface.telemetry.counters->batches, 1u);
     EXPECT_STREQ(interface.snapshot(interface.self).phase, "idle");
     EXPECT_FALSE(interface.is_pending(interface.self));
-    EXPECT_EQ(interface.telemetry.counters->cancelled, 1u);
+    EXPECT_EQ(interface.telemetry.counters->cancelled, 2u);
     ASSERT_NO_FATAL_FAILURE(
         advance_until([&] { return !interface.is_pending(interface.self); }));
     if (iree_any_bit_set(flags, LOOM_SERVE_SERVICE_FLAG_STOPPING)) {
-      EXPECT_TRUE(Read(client, /*allow_empty=*/true).empty());
+      for (int client : clients) {
+        EXPECT_TRUE(Read(client, /*allow_empty=*/true).empty());
+      }
       interface.set_observer(interface.self, {});
       service.reset();
       ASSERT_NO_FATAL_FAILURE(create_service());
@@ -392,13 +402,147 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
     const int next =
         Send("POST", "/v1/images/generations",
              R"({"model":"fixture-image","prompt":"aba","seed":1})");
-    ASSERT_NO_FATAL_FAILURE(accept(next, &connection));
+    ASSERT_NO_FATAL_FAILURE(accept(next, &connections[0]));
     ASSERT_NO_FATAL_FAILURE(advance_until(
         [&] { return interface.telemetry.counters->completed == 1; }));
     EXPECT_NE(Read(next).find("\"b64_json\":\"" + EncodedPixels(3, 1) + "\""),
               std::string::npos);
     EXPECT_EQ(interface.telemetry.counters->failed, 0u);
     interface.set_observer(interface.self, {});
+  }
+
+  void CheckHttpCohort(const char* reset_phase) {
+    ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
+    const loom_serve_image_service_options_t options = {
+        .name = loom_serve_image_model_name(model_),
+        .width = kWidth,
+        .height = kHeight,
+        .adapter_enabled = true,
+        .pending_capacity = 3,
+    };
+    loom_serve_image_service_t* value = nullptr;
+    IREE_ASSERT_OK(loom_serve_image_service_allocate(
+        host_, loom_serve_image_model_generator(model_), &options, nullptr,
+        host_allocator_, &value));
+    const auto interface = loom_serve_image_service_interface(value);
+    auto* notification = loom_serve_http_server_notification(server_);
+    interface.set_observer(interface.self,
+                           {[](void* self) {
+                              iree_notification_post(
+                                  static_cast<iree_notification_t*>(self),
+                                  IREE_ALL_WAITERS);
+                            },
+                            notification});
+    auto advance_until = [&](auto ready, loom_serve_service_flags_t flags = 0) {
+      while (!ready()) {
+        const auto ticket = iree_notification_prepare_wait(notification);
+        bool progress = false;
+        IREE_ASSERT_OK(interface.advance(interface.self, flags, &progress));
+        if (ready() || progress) {
+          iree_notification_cancel_wait(notification);
+        } else {
+          iree_notification_commit_wait(notification, ticket,
+                                        IREE_DURATION_ZERO,
+                                        IREE_TIME_INFINITE_FUTURE);
+        }
+      }
+    };
+    auto destroy = [&](loom_serve_image_service_t* service) {
+      bool progress = false;
+      IREE_EXPECT_OK(interface.advance(
+          interface.self, LOOM_SERVE_SERVICE_FLAG_STOPPING, &progress));
+      advance_until([&] { return !interface.is_pending(interface.self); },
+                    LOOM_SERVE_SERVICE_FLAG_STOPPING);
+      interface.set_observer(interface.self, {});
+      loom_serve_image_service_free(service);
+    };
+    std::unique_ptr<loom_serve_image_service_t, decltype(destroy)> service(
+        value, destroy);
+    auto accept = [&](int client, loom_serve_http_connection_t** connection) {
+      const loom_serve_http_request_t* request = nullptr;
+      IREE_ASSERT_OK(http_.TakeRequest(client, connection, &request));
+      IREE_ASSERT_OK(interface.accept(interface.self, *connection, request, 0));
+    };
+    const std::array<std::string, 4> inputs = {
+        R"({"model":"fixture-image","prompt":"ab","seed":0,"strength":0.25})",
+        R"({"model":"fixture-image","prompt":"ab","seed":2,"size":"6x6"})",
+        R"({"model":"fixture-image","prompt":"aba","seed":1,"strength":-0.5,"size":"5x7"})",
+        "{\"model\":\"fixture-image\",\"prompt\":\"" + std::string(33, 'a') +
+            "\"}",
+    };
+    std::array<loom_serve::testing::HttpClient, 4> clients;
+    std::array<loom_serve_http_connection_t*, 4> connections = {};
+    for (size_t i = 0; i < inputs.size(); ++i) {
+      *clients[i].put() = Send("POST", "/v1/images/generations", inputs[i]);
+      ASSERT_NO_FATAL_FAILURE(accept(clients[i].get(), &connections[i]));
+    }
+    // Cohorts share the same total host credit as queued work. Overflow is
+    // rejected before any source task; it cannot grow the pending snapshot.
+    loom_serve::testing::HttpClient overflow(
+        Send("POST", "/v1/images/generations", inputs[0]));
+    loom_serve_http_connection_t* overflow_connection = nullptr;
+    ASSERT_NO_FATAL_FAILURE(accept(overflow.get(), &overflow_connection));
+    EXPECT_EQ(Read(overflow.release()).find("HTTP/1.1 503"), 0u);
+    ASSERT_NO_FATAL_FAILURE(advance_until([&] {
+      return std::string(interface.snapshot(interface.self).phase) ==
+             "generating";
+    }));
+    const auto snapshot = interface.snapshot(interface.self);
+    EXPECT_EQ(snapshot.active_requests, 2u);
+    EXPECT_EQ(snapshot.queued_requests, 1u);
+    EXPECT_EQ(interface.telemetry.counters->rejected, 2u);
+    EXPECT_EQ(Read(clients[3].release()).find("HTTP/1.1 400"), 0u);
+    // The later compatible item overtakes the incompatible geometry without
+    // changing either item's private palette or terminal image dimensions.
+    loom_serve_http_request_snapshot_t request;
+    ASSERT_TRUE(interface.inspection.request_at(interface.self, 0, &request));
+    EXPECT_EQ(request.id, 2u);
+    ASSERT_TRUE(interface.inspection.request_at(interface.self, 1, &request));
+    EXPECT_EQ(request.id, 1u);
+    ASSERT_TRUE(interface.inspection.request_at(interface.self, 2, &request));
+    EXPECT_EQ(request.id, 3u);
+    if (reset_phase) {
+      ASSERT_NO_FATAL_FAILURE(advance_until([&] {
+        return std::string(interface.snapshot(interface.self).phase) ==
+               reset_phase;
+      }));
+      const linger reset = {1, 0};
+      ASSERT_EQ(setsockopt(clients[0].get(), SOL_SOCKET, SO_LINGER, &reset,
+                           sizeof(reset)),
+                0);
+      ASSERT_EQ(close(clients[0].release()), 0);
+      iree_notification_await(
+          notification,
+          [](void* self) {
+            return loom_serve_http_connection_failed(
+                static_cast<loom_serve_http_connection_t*>(self));
+          },
+          connections[0], iree_infinite_timeout());
+    }
+    ASSERT_NO_FATAL_FAILURE(advance_until([&] {
+      return interface.telemetry.counters->completed +
+                 interface.telemetry.counters->cancelled ==
+             3;
+    }));
+    if (!reset_phase) {
+      EXPECT_NE(Read(clients[0].release())
+                    .find("\"b64_json\":\"" + EncodedPixels(2, 0, 7, 5, 0.25f) +
+                          "\""),
+                std::string::npos);
+    }
+    EXPECT_NE(
+        Read(clients[2].release())
+            .find("\"b64_json\":\"" + EncodedPixels(3, 1, 5, 7, -0.5f) + "\""),
+        std::string::npos);
+    EXPECT_NE(Read(clients[1].release())
+                  .find("\"b64_json\":\"" + EncodedPixels(2, 2, 6, 6) + "\""),
+              std::string::npos);
+    EXPECT_EQ(interface.telemetry.counters->completed, reset_phase ? 2u : 3u);
+    EXPECT_EQ(interface.telemetry.counters->cancelled, reset_phase ? 1u : 0u);
+    EXPECT_EQ(interface.telemetry.counters->failed, 0u);
+    // Two cohorts, not three serial images, each using the same source command.
+    EXPECT_EQ(interface.telemetry.counters->batches, GetParam() ? 4u : 2u);
+    EXPECT_STREQ(interface.snapshot(interface.self).phase, "idle");
   }
 
   // Allocator for model, transport and expected encoded output.
@@ -1044,17 +1188,16 @@ TEST_P(SourceImageServiceTest, IndependentLogReadersCannotBlockColdImageWork) {
                 .find("HTTP/1.1 400"),
             0u);
   drain();
+  // Arrival timing controls cohort size; image and request totals do not depend
+  // on it. Deterministic owner-driven tests check exact command-part counts.
   const std::string totals =
-      std::string(
-          R"("requests":42,"completed":40,"rejected":2,"cancelled":0,"failed":0,"input_tokens":0,"output_tokens":0,"batches":)") +
-      (GetParam() ? "80" : "40");
+      R"("requests":42,"completed":40,"rejected":2,"cancelled":0,"failed":0,"input_tokens":0,"output_tokens":0)";
   EXPECT_NE(latest.find(totals), std::string::npos);
   EXPECT_NE(events.find(R"("generated_images":40,"generated_pixels":1400)"),
             std::string::npos);
   EXPECT_NE(events.find(R"("event":"image_request_stats")"), std::string::npos);
   EXPECT_NE(events.find(R"("event":"image_prepared")"), std::string::npos);
-  EXPECT_NE(events.find(R"("stage":0,"tag":32,"input_bytes":32)"),
-            std::string::npos);
+  EXPECT_NE(events.find(R"("tag":32,"input_bytes":)"), std::string::npos);
   EXPECT_NE(events.find(R"("event":"image_generated")"), std::string::npos);
   EXPECT_NE(events.find(R"("event":"weight_activity")"), std::string::npos);
   EXPECT_NE(
@@ -1306,6 +1449,19 @@ TEST_P(SourceImageServiceTest, FailedImageSourceLeavesPeerUsable) {
 
 TEST_P(SourceImageServiceTest, CancelledDeviceImageSkipsEncoding) {
   CheckAbandonedImage(0);
+}
+
+TEST_P(SourceImageServiceTest, CompatibleCohortPreservesHttpOutputs) {
+  CheckHttpCohort(nullptr);
+}
+
+TEST_P(SourceImageServiceTest, CohortPeerResetPreservesSurvivingHttpOutput) {
+  CheckHttpCohort("generating");
+}
+
+TEST_P(SourceImageServiceTest,
+       CohortPeerResetDuringEncodingPreservesNextOutput) {
+  CheckHttpCohort("encoding");
 }
 
 TEST_P(SourceImageServiceTest, StoppingDeviceImageSkipsEncoding) {

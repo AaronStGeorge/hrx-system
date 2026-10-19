@@ -44,21 +44,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_VM)
-loom_cc_library(
-  NAME
-    prepared_request
-  HDRS
-    "prepared_request.h"
-  SRCS
-    "prepared_request.c"
-  DEPS
-    iree::base
-    iree::vm
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_VM)
 loom_cc_test(
   NAME
     kind_test
@@ -71,6 +56,21 @@ loom_cc_test(
     iree::testing::gtest_main
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    prepared_request
+  HDRS
+    "prepared_request.h"
+  SRCS
+    "prepared_request.c"
+  DEPS
+    iree::base
+    iree::vm
+  PUBLIC
 )
 endif()
 

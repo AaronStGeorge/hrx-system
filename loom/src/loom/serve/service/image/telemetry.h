@@ -15,11 +15,12 @@ extern "C" {
 #endif
 
 // Host-observed work for one image, copied only after the CPU borrower releases
-// it. These durations are not GPU timestamps or individual kernel timings.
+// it. Shared cohort work contributes to each member's latency, not additional
+// work. These durations are not GPU timestamps or individual kernel timings.
 typedef struct loom_serve_image_work_t {
-  // Time waiting for the exclusive generator, before CPU preparation.
+  // Receipt through cohort selection, excluding this request's CPU preparation.
   uint64_t queue_ns;
-  // CPU source-input preparation time.
+  // CPU source-input preparation plus shared cohort capture time.
   uint64_t prepare_ns;
   // Time awaiting parameter admission after CPU preparation.
   uint64_t admission_ns;
@@ -40,7 +41,9 @@ typedef struct loom_serve_image_totals_t {
   uint64_t generated_images;
   // Pixels in successfully completed model output, not bytes or tokens.
   uint64_t generated_pixels;
-  // Sum of completed preparation, device and encoding work across requests.
+  // Completed work; shared cohort preparation/admission/device time counts
+  // once. Queue time sums per-request waiting, and encoding counts each result
+  // once.
   loom_serve_image_work_t work;
 } loom_serve_image_totals_t;
 
