@@ -248,9 +248,9 @@ TEST_F(ValueMaterializerTest, MaterializesNarrowScalarLiterals) {
   loom_module_free(module);
 }
 
-TEST_F(ValueMaterializerTest, ResolvesUniqueStorageFootprint) {
+TEST_F(ValueMaterializerTest, ResolvesBufferFootprint) {
   loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("storage_footprint"),
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("buffer_footprint"),
                                       &block_pool_, nullptr, host_allocator_,
                                       &module));
 
@@ -258,18 +258,34 @@ TEST_F(ValueMaterializerTest, ResolvesUniqueStorageFootprint) {
       LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I8, 8, /*alignment=*/0);
   const loom_type_t first_alias_type = loom_type_shaped_1d(
       LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I8, 4, /*alignment=*/0);
+  const loom_type_t first_byte_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I8, 1, /*alignment=*/0);
+  const loom_type_t empty_alias_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I8, 0, /*alignment=*/0);
   const loom_type_t second_storage_type = loom_type_shaped_1d(
       LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I32, 3, /*alignment=*/0);
   const loom_type_t unused_storage_type = loom_type_shaped_1d(
       LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I8, 5, /*alignment=*/0);
   loom_value_id_t first_storage = LOOM_VALUE_ID_INVALID;
   loom_value_id_t first_alias = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t first_overlap = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t first_disjoint = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t first_adjacent = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t empty_alias = LOOM_VALUE_ID_INVALID;
   loom_value_id_t second_storage = LOOM_VALUE_ID_INVALID;
   loom_value_id_t unused_storage = LOOM_VALUE_ID_INVALID;
   IREE_ASSERT_OK(
       loom_module_define_value(module, first_storage_type, &first_storage));
   IREE_ASSERT_OK(
       loom_module_define_value(module, first_alias_type, &first_alias));
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, first_alias_type, &first_overlap));
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, first_byte_type, &first_disjoint));
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, first_byte_type, &first_adjacent));
+  IREE_ASSERT_OK(
+      loom_module_define_value(module, empty_alias_type, &empty_alias));
   IREE_ASSERT_OK(
       loom_module_define_value(module, second_storage_type, &second_storage));
   IREE_ASSERT_OK(
@@ -290,6 +306,46 @@ TEST_F(ValueMaterializerTest, ResolvesUniqueStorageFootprint) {
               {
                   .source_value_id = first_storage,
                   .byte_offset = 2,
+              },
+      },
+      {
+          .kind = LOOM_TESTBENCH_VALUE_SOURCE_TENSOR_VIEW,
+          .value_id = first_overlap,
+          .type = first_alias_type,
+          .tensor_view =
+              {
+                  .source_value_id = first_storage,
+                  .byte_offset = 4,
+              },
+      },
+      {
+          .kind = LOOM_TESTBENCH_VALUE_SOURCE_TENSOR_VIEW,
+          .value_id = first_disjoint,
+          .type = first_byte_type,
+          .tensor_view =
+              {
+                  .source_value_id = first_storage,
+                  .byte_offset = 0,
+              },
+      },
+      {
+          .kind = LOOM_TESTBENCH_VALUE_SOURCE_TENSOR_VIEW,
+          .value_id = first_adjacent,
+          .type = first_byte_type,
+          .tensor_view =
+              {
+                  .source_value_id = first_storage,
+                  .byte_offset = 1,
+              },
+      },
+      {
+          .kind = LOOM_TESTBENCH_VALUE_SOURCE_TENSOR_VIEW,
+          .value_id = empty_alias,
+          .type = empty_alias_type,
+          .tensor_view =
+              {
+                  .source_value_id = first_storage,
+                  .byte_offset = 8,
               },
       },
       {
@@ -320,22 +376,53 @@ TEST_F(ValueMaterializerTest, ResolvesUniqueStorageFootprint) {
       &options, &case_plan, /*sample_ordinal=*/0, &table));
 
   const loom_value_id_t values[] = {
-      first_alias,
-      first_alias,
-      second_storage,
+      first_disjoint, first_alias, first_alias,
+      first_overlap,  empty_alias, second_storage,
   };
-  loom_testbench_storage_footprint_t footprint = {};
-  IREE_ASSERT_OK(loom_testbench_value_table_resolve_storage_footprint(
+  loom_testbench_buffer_footprint_t footprint = {};
+  IREE_ASSERT_OK(loom_testbench_value_table_resolve_buffer_footprint(
       &table, IREE_ARRAYSIZE(values), values, &footprint));
-  EXPECT_EQ(footprint.allocation_count, 2u);
-  EXPECT_EQ(footprint.byte_length, 8u + 3u * sizeof(int32_t));
+  EXPECT_EQ(footprint.storage_allocation_count, 2u);
+  EXPECT_EQ(footprint.storage_byte_length, 8u + 3u * sizeof(int32_t));
+  EXPECT_EQ(footprint.binding_range_count, 3u);
+  EXPECT_EQ(footprint.binding_range_byte_length, 7u + 3u * sizeof(int32_t));
+
+  const loom_value_id_t adjacent_values[] = {
+      first_disjoint, first_adjacent, first_alias,
+      first_overlap,  second_storage,
+  };
+  IREE_ASSERT_OK(loom_testbench_value_table_resolve_buffer_footprint(
+      &table, IREE_ARRAYSIZE(adjacent_values), adjacent_values, &footprint));
+  EXPECT_EQ(footprint.storage_allocation_count, 2u);
+  EXPECT_EQ(footprint.storage_byte_length, 8u + 3u * sizeof(int32_t));
+  EXPECT_EQ(footprint.binding_range_count, 2u);
+  EXPECT_EQ(footprint.binding_range_byte_length, 8u + 3u * sizeof(int32_t));
 
   std::vector<loom_value_id_t> many_values(65, first_alias);
+  many_values.push_back(first_disjoint);
+  many_values.push_back(first_overlap);
+  many_values.push_back(empty_alias);
   many_values.push_back(second_storage);
-  IREE_ASSERT_OK(loom_testbench_value_table_resolve_storage_footprint(
+  IREE_ASSERT_OK(loom_testbench_value_table_resolve_buffer_footprint(
       &table, many_values.size(), many_values.data(), &footprint));
-  EXPECT_EQ(footprint.allocation_count, 2u);
-  EXPECT_EQ(footprint.byte_length, 8u + 3u * sizeof(int32_t));
+  EXPECT_EQ(footprint.storage_allocation_count, 2u);
+  EXPECT_EQ(footprint.storage_byte_length, 8u + 3u * sizeof(int32_t));
+  EXPECT_EQ(footprint.binding_range_count, 3u);
+  EXPECT_EQ(footprint.binding_range_byte_length, 7u + 3u * sizeof(int32_t));
+
+  IREE_ASSERT_OK(loom_testbench_value_table_resolve_buffer_footprint(
+      &table, /*value_id_count=*/0, /*value_ids=*/nullptr, &footprint));
+  EXPECT_EQ(footprint.storage_allocation_count, 0u);
+  EXPECT_EQ(footprint.storage_byte_length, 0u);
+  EXPECT_EQ(footprint.binding_range_count, 0u);
+  EXPECT_EQ(footprint.binding_range_byte_length, 0u);
+
+  IREE_ASSERT_OK(loom_testbench_value_table_resolve_buffer_footprint(
+      &table, /*value_id_count=*/1, &empty_alias, &footprint));
+  EXPECT_EQ(footprint.storage_allocation_count, 1u);
+  EXPECT_EQ(footprint.storage_byte_length, 8u);
+  EXPECT_EQ(footprint.binding_range_count, 0u);
+  EXPECT_EQ(footprint.binding_range_byte_length, 0u);
 
   loom_testbench_value_table_deinitialize(&table);
   loom_module_free(module);

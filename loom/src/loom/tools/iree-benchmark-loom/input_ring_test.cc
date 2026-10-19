@@ -12,15 +12,15 @@ namespace {
 
 constexpr uint64_t kDefaultTargetBytes = 32 * 1024 * 1024;
 
-TEST(InputRingTest, LargeStorageSetIsNotDuplicated) {
+TEST(InputRingTest, LargeBindingRangeSetIsNotDuplicated) {
   EXPECT_EQ(iree_benchmark_loom_input_ring_select_count(
                 /*requested_count=*/0, kDefaultTargetBytes,
-                /*materialized_storage_bytes=*/110729216,
+                /*binding_range_bytes=*/110729216,
                 /*input_uses_per_batch=*/64),
             1u);
   EXPECT_EQ(iree_benchmark_loom_input_ring_select_count(
                 /*requested_count=*/0, kDefaultTargetBytes,
-                /*materialized_storage_bytes=*/
+                /*binding_range_bytes=*/
                 UINT64_C(7) * 1024 * 1024 * 1024,
                 /*input_uses_per_batch=*/64),
             1u);
@@ -29,12 +29,12 @@ TEST(InputRingTest, LargeStorageSetIsNotDuplicated) {
 TEST(InputRingTest, AutomaticCountApproachesByteTargetWithinBatch) {
   EXPECT_EQ(iree_benchmark_loom_input_ring_select_count(
                 /*requested_count=*/0, kDefaultTargetBytes,
-                /*materialized_storage_bytes=*/1024 * 1024,
+                /*binding_range_bytes=*/1024 * 1024,
                 /*input_uses_per_batch=*/64),
             32u);
   EXPECT_EQ(iree_benchmark_loom_input_ring_select_count(
                 /*requested_count=*/0, kDefaultTargetBytes,
-                /*materialized_storage_bytes=*/1,
+                /*binding_range_bytes=*/1,
                 /*input_uses_per_batch=*/64),
             64u);
 }
@@ -42,12 +42,12 @@ TEST(InputRingTest, AutomaticCountApproachesByteTargetWithinBatch) {
 TEST(InputRingTest, DisabledOrEmptyAutomaticRingUsesOneSet) {
   EXPECT_EQ(iree_benchmark_loom_input_ring_select_count(
                 /*requested_count=*/0, /*requested_min_bytes=*/0,
-                /*materialized_storage_bytes=*/1024,
+                /*binding_range_bytes=*/1024,
                 /*input_uses_per_batch=*/64),
             1u);
   EXPECT_EQ(iree_benchmark_loom_input_ring_select_count(
                 /*requested_count=*/0, kDefaultTargetBytes,
-                /*materialized_storage_bytes=*/0,
+                /*binding_range_bytes=*/0,
                 /*input_uses_per_batch=*/64),
             1u);
 }
@@ -55,7 +55,7 @@ TEST(InputRingTest, DisabledOrEmptyAutomaticRingUsesOneSet) {
 TEST(InputRingTest, ExplicitCountIsExact) {
   EXPECT_EQ(iree_benchmark_loom_input_ring_select_count(
                 /*requested_count=*/96, kDefaultTargetBytes,
-                /*materialized_storage_bytes=*/110729216,
+                /*binding_range_bytes=*/110729216,
                 /*input_uses_per_batch=*/64),
             96u);
 }

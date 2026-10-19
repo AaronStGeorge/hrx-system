@@ -15,9 +15,12 @@ kernel.def @increment() {
 }
 
 check.case @shared_sequence {
-  %source = check.generate.fill value(40) : tensor<1xi32>
-  %shared = check.generate.fill value(0) : tensor<1xi32>
-  %result = check.generate.fill value(0) : tensor<1xi32>
+  %source_storage = check.generate.fill value(40) : tensor<3xi32>
+  %source = check.tensor.view %source_storage offset(4) : tensor<3xi32> -> tensor<1xi32>
+  %shared_storage = check.generate.fill value(0) : tensor<2xi32>
+  %shared = check.tensor.view %shared_storage offset(4) : tensor<2xi32> -> tensor<1xi32>
+  %result_storage = check.generate.fill value(0) : tensor<3xi32>
+  %result = check.tensor.view %result_storage offset(4) : tensor<3xi32> -> tensor<1xi32>
   %expected = check.generate.fill value(42) : tensor<1xi32>
   kernel.launch @increment(%source, %shared) : (tensor<1xi32>, tensor<1xi32>)
   kernel.launch @increment(%shared, %result) : (tensor<1xi32>, tensor<1xi32>)

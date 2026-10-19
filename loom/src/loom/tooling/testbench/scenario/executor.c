@@ -609,9 +609,9 @@ static iree_status_t loom_testbench_scenario_load_call(
     const loom_testbench_invocation_plan_t* invocation,
     const loom_testbench_value_table_t* table,
     loom_testbench_product_call_t* call) {
-  IREE_RETURN_IF_ERROR(loom_testbench_value_table_resolve_storage_footprint(
+  IREE_RETURN_IF_ERROR(loom_testbench_value_table_resolve_buffer_footprint(
       table, invocation->input_count, invocation->input_value_ids,
-      &call->input_storage));
+      &call->input_footprint));
   IREE_RETURN_IF_ERROR(loom_testbench_scenario_load_values(
       table, invocation->workload_value_ids, invocation->workload_count,
       call->call_parameters));

@@ -19,22 +19,17 @@ SEQUENCE_SOURCE = Path(sys.argv.pop(1)).resolve()
 
 
 class BenchmarkExecutionTest(unittest.TestCase):
-    def run_comparison(
-        self, candidate: str
+    def run_tool(
+        self, source: Path, *arguments: str
     ) -> tuple[subprocess.CompletedProcess[str], list[dict]]:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_path = Path(temporary_directory) / "results.jsonl"
             result = subprocess.run(
                 [
                     str(TOOL),
-                    str(SCENARIO_SOURCE),
+                    str(source),
                     "--device=task",
-                    f"--compare=@scenario_benchmark_baseline_throughput,@{candidate}",
-                    "--sample=2",
-                    "--repetitions=1",
-                    "--interleave=ABABA",
-                    "--batch-size=1",
-                    "--input-ring-count=2",
+                    *arguments,
                     "--iterations=1",
                     "--warmup-iterations=0",
                     "--min-time-ms=0",
@@ -52,6 +47,19 @@ class BenchmarkExecutionTest(unittest.TestCase):
                     json.loads(line) for line in output_path.read_text().splitlines()
                 ]
             return result, rows
+
+    def run_comparison(
+        self, candidate: str
+    ) -> tuple[subprocess.CompletedProcess[str], list[dict]]:
+        return self.run_tool(
+            SCENARIO_SOURCE,
+            f"--compare=@scenario_benchmark_baseline_throughput,@{candidate}",
+            "--sample=2",
+            "--repetitions=1",
+            "--interleave=ABABA",
+            "--batch-size=1",
+            "--input-ring-count=2",
+        )
 
     def test_equivalent_scenarios_share_one_interleaved_schedule(self):
         result, rows = self.run_comparison("scenario_benchmark_candidate_throughput")
@@ -71,6 +79,9 @@ class BenchmarkExecutionTest(unittest.TestCase):
             self.assertEqual(cache["binding_count"], 2)
             self.assertEqual(cache["binding_ring_count"], 2)
             self.assertEqual(cache["binding_ring_bytes"], 64)
+            self.assertEqual(cache["binding_range_count"], 1)
+            self.assertEqual(cache["binding_range_set_bytes"], 20)
+            self.assertEqual(cache["binding_range_ring_bytes"], 40)
             self.assertEqual(cache["materialized_storage_count"], 1)
             self.assertEqual(cache["materialized_storage_set_bytes"], 32)
             self.assertEqual(cache["materialized_storage_ring_bytes"], 64)
@@ -93,31 +104,15 @@ class BenchmarkExecutionTest(unittest.TestCase):
         )
         self.assertFalse(any(row["row"] == "benchmark.repetition" for row in rows))
 
-    def test_sequence_ring_counts_unique_materialized_storage(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            output_path = Path(temporary_directory) / "results.jsonl"
-            result = subprocess.run(
-                [
-                    str(TOOL),
-                    str(SEQUENCE_SOURCE),
-                    "--device=task",
-                    "--benchmark=@shared_sequence_throughput",
-                    "--measure=dispatch_complete",
-                    "--input-ring-min-bytes=25",
-                    "--batch-size=4",
-                    "--iterations=1",
-                    "--warmup-iterations=0",
-                    "--min-time-ms=0",
-                    "--warmup-time-ms=0",
-                    "--max-batches=1",
-                    "--output-format=jsonl",
-                    f"--output={output_path}",
-                ],
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            rows = [json.loads(line) for line in output_path.read_text().splitlines()]
+    def test_sequence_ring_counts_unique_reachable_ranges(self):
+        result, rows = self.run_tool(
+            SEQUENCE_SOURCE,
+            "--benchmark=@shared_sequence_throughput",
+            "--measure=dispatch_complete",
+            "--input-ring-min-bytes=25",
+            "--batch-size=4",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
         benchmark_rows = [row for row in rows if row["row"] == "benchmark"]
         self.assertEqual(len(benchmark_rows), 1)
@@ -131,9 +126,40 @@ class BenchmarkExecutionTest(unittest.TestCase):
         self.assertEqual(cache["binding_ring_count"], 3)
         self.assertEqual(cache["binding_set_bytes"], 16)
         self.assertEqual(cache["binding_ring_bytes"], 48)
+        self.assertEqual(cache["binding_range_count"], 3)
+        self.assertEqual(cache["binding_range_set_bytes"], 12)
+        self.assertEqual(cache["binding_range_ring_bytes"], 36)
         self.assertEqual(cache["materialized_storage_count"], 3)
-        self.assertEqual(cache["materialized_storage_set_bytes"], 12)
-        self.assertEqual(cache["materialized_storage_ring_bytes"], 36)
+        self.assertEqual(cache["materialized_storage_set_bytes"], 32)
+        self.assertEqual(cache["materialized_storage_ring_bytes"], 96)
+        self.assertTrue(cache["ring_byte_target_met"])
+
+    def test_scenario_result_binding_contributes_to_reachable_ranges(self):
+        result, rows = self.run_tool(
+            SCENARIO_SOURCE,
+            "--benchmark=@scenario_argument_free_results_throughput",
+            "--sample=1",
+            "--input-ring-min-bytes=25",
+            "--batch-size=2",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        benchmark_rows = [row for row in rows if row["row"] == "benchmark"]
+        self.assertEqual(len(benchmark_rows), 1)
+        benchmark_result = benchmark_rows[0]["benchmark_result"]
+        self.assertEqual(benchmark_result["state"], "ok")
+
+        cache = benchmark_result["data_cache"]
+        self.assertEqual(cache["binding_count"], 1)
+        self.assertEqual(cache["binding_ring_count"], 2)
+        self.assertEqual(cache["binding_set_bytes"], 16)
+        self.assertEqual(cache["binding_ring_bytes"], 32)
+        self.assertEqual(cache["binding_range_count"], 1)
+        self.assertEqual(cache["binding_range_set_bytes"], 16)
+        self.assertEqual(cache["binding_range_ring_bytes"], 32)
+        self.assertEqual(cache["materialized_storage_count"], 0)
+        self.assertEqual(cache["materialized_storage_set_bytes"], 0)
+        self.assertEqual(cache["materialized_storage_ring_bytes"], 0)
         self.assertTrue(cache["ring_byte_target_met"])
 
 

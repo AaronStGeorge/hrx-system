@@ -49,7 +49,7 @@ typedef enum iree_benchmark_loom_output_format_e {
 } iree_benchmark_loom_output_format_t;
 
 enum {
-  // Default device-buffer ring byte target used to reduce hot-cache artifacts.
+  // Default reachable binding-ring byte target for reducing hot-cache effects.
   IREE_BENCHMARK_LOOM_DEFAULT_INPUT_RING_MIN_BYTES = 32 * 1024 * 1024,
 };
 
@@ -112,7 +112,7 @@ typedef struct iree_benchmark_loom_options_t {
   iree_string_view_list_t profile_counters;
   // Explicit directory receiving raw HAL profile artifacts.
   iree_string_view_t profile_artifacts_dir;
-  // Minimum total byte size for generated dispatch input rings.
+  // Minimum total reachable byte size for generated dispatch input rings.
   int64_t input_ring_min_bytes;
   // Exact dispatch input ring count, or zero for byte-size based selection.
   iree_host_size_t input_ring_count;

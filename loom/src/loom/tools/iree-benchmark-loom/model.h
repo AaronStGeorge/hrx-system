@@ -138,12 +138,18 @@ typedef struct iree_benchmark_loom_data_cache_summary_t {
   iree_host_size_t command_buffer_ring_count;
   // Number of dispatch slots recorded in each command buffer.
   iree_host_size_t dispatches_per_batch;
-  // Requested minimum byte size for unique materialized input storage.
+  // Requested minimum byte size for unique reachable binding ranges.
   uint64_t requested_min_ring_bytes;
   // Sum of binding-reference byte lengths in the first materialized set.
   uint64_t binding_set_bytes;
   // Sum of binding-reference byte lengths across the physical ring.
   uint64_t binding_ring_bytes;
+  // Number of disjoint reachable binding ranges in one materialized set.
+  iree_host_size_t binding_range_count;
+  // Sum of reachable binding ranges in one materialized set.
+  uint64_t binding_range_set_bytes;
+  // Sum of reachable binding ranges across the physical ring.
+  uint64_t binding_range_ring_bytes;
   // Number of unique logical input allocations in one materialized set.
   iree_host_size_t materialized_storage_count;
   // Sum of unique logical input-allocation bytes in one materialized set.

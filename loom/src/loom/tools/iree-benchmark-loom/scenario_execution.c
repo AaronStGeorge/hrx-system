@@ -272,7 +272,7 @@ iree_status_t iree_benchmark_loom_scenario_execution_prepare(
       iree_benchmark_loom_input_ring_select_count(
           benchmark_options->input_ring_count,
           (uint64_t)benchmark_options->input_ring_min_bytes,
-          layout_query.layout.materialized_storage_set_bytes,
+          layout_query.layout.binding_range_set_bytes,
           selection->policy.hal_options.timing.batch_size);
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_scenario_ensure_trial_executor(
       execution, coordinate.trial_index, ring_count));
@@ -657,6 +657,10 @@ iree_status_t iree_benchmark_loom_scenario_execution_validate_equivalent(
           candidate->prepared_layout.binding_count ||
       baseline->prepared_layout.binding_set_bytes !=
           candidate->prepared_layout.binding_set_bytes ||
+      baseline->prepared_layout.binding_range_count !=
+          candidate->prepared_layout.binding_range_count ||
+      baseline->prepared_layout.binding_range_set_bytes !=
+          candidate->prepared_layout.binding_range_set_bytes ||
       baseline->prepared_layout.materialized_storage_count !=
           candidate->prepared_layout.materialized_storage_count ||
       baseline->prepared_layout.materialized_storage_set_bytes !=
@@ -752,6 +756,10 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
   if (iree_status_is_ok(status) &&
       (measurement.result.binding_count_per_call != layout.binding_count ||
        measurement.result.binding_set_bytes != layout.binding_set_bytes ||
+       measurement.result.binding_range_count_per_call !=
+           layout.binding_range_count ||
+       measurement.result.binding_range_set_bytes !=
+           layout.binding_range_set_bytes ||
        measurement.result.materialized_storage_count_per_call !=
            layout.materialized_storage_count ||
        measurement.result.materialized_storage_set_bytes !=
@@ -774,6 +782,22 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
     status = iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "scenario physical calls materialized different binding byte lengths");
+  }
+  uint64_t expected_binding_range_ring_bytes = 0;
+  if (iree_status_is_ok(status) && layout.binding_range_set_bytes != 0 &&
+      ring_count > UINT64_MAX / layout.binding_range_set_bytes) {
+    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "scenario binding range byte count overflowed");
+  } else if (iree_status_is_ok(status)) {
+    expected_binding_range_ring_bytes =
+        layout.binding_range_set_bytes * (uint64_t)ring_count;
+  }
+  if (iree_status_is_ok(status) &&
+      measurement.result.binding_range_ring_bytes !=
+          expected_binding_range_ring_bytes) {
+    status = iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "scenario physical calls materialized different binding ranges");
   }
   uint64_t expected_storage_ring_bytes = 0;
   if (iree_status_is_ok(status) && layout.materialized_storage_set_bytes != 0 &&
@@ -828,6 +852,12 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
                     (uint64_t)benchmark_options->input_ring_min_bytes,
                 .binding_set_bytes = measurement.result.binding_set_bytes,
                 .binding_ring_bytes = measurement.result.binding_ring_bytes,
+                .binding_range_count =
+                    measurement.result.binding_range_count_per_call,
+                .binding_range_set_bytes =
+                    measurement.result.binding_range_set_bytes,
+                .binding_range_ring_bytes =
+                    measurement.result.binding_range_ring_bytes,
                 .materialized_storage_count =
                     measurement.result.materialized_storage_count_per_call,
                 .materialized_storage_set_bytes =

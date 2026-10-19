@@ -159,3 +159,5 @@ check.scenario public @scenario_argument_free_results {
   }
   check.return
 }
+
+check.benchmark<@scenario_argument_free_results> @scenario_argument_free_results_throughput

@@ -44,6 +44,12 @@ typedef struct loom_run_hal_testbench_scenario_benchmark_result_t {
   uint64_t binding_set_bytes;
   // Sum of logical binding byte lengths across the physical input ring.
   uint64_t binding_ring_bytes;
+  // Number of disjoint reachable binding ranges in one physical call.
+  iree_host_size_t binding_range_count_per_call;
+  // Sum of reachable binding ranges in one physical call.
+  uint64_t binding_range_set_bytes;
+  // Sum of reachable binding ranges across the physical input ring.
+  uint64_t binding_range_ring_bytes;
   // Number of unique logical input allocations in one physical call.
   iree_host_size_t materialized_storage_count_per_call;
   // Sum of unique logical input-allocation bytes in one physical call.
@@ -57,6 +63,10 @@ typedef struct loom_run_hal_testbench_scenario_input_layout_t {
   iree_host_size_t binding_count;
   // Sum of logical binding byte lengths in the physical call.
   uint64_t binding_set_bytes;
+  // Number of disjoint reachable binding ranges in the physical call.
+  iree_host_size_t binding_range_count;
+  // Sum of reachable binding ranges in the physical call.
+  uint64_t binding_range_set_bytes;
   // Number of unique logical input allocations in the physical call.
   iree_host_size_t materialized_storage_count;
   // Sum of unique logical input-allocation bytes in the physical call.
