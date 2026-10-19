@@ -368,9 +368,9 @@ loom_test(
 
 loom_test(
     name = "tsan_subgroup_test",
-    srcs = ["//loom/src/loom/test/corpus/sanitizer:amdgpu_tsan_subgroup.loom"],
+    srcs = ["//loom/src/loom/test/corpus/sanitizer:race_subgroup.loom"],
+    compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
     execution_profiles = [AMDGPU_TSAN_PROFILE],
-    target_compatible_with = _GFX11_EXECUTION_COMPATIBLE_WITH,
 )
 
 loom_test(
