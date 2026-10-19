@@ -10,9 +10,9 @@
 #include "iree/tokenizer/tokenizer.h"
 #include "loom/serve/runtime/execution/execution.h"
 #include "loom/serve/runtime/parameter/residency.h"
+#include "loom/serve/service/recognition/events.h"
 #include "loom/serve/service/recognition/input.h"
 #include "loom/serve/service/recognition/request.h"
-#include "loom/serve/service/recognition/transcript.h"
 
 // Source-established compatibility at a retired model cut. A zero-unit offer
 // awaits input without consuming it; positive units fit the declared batch
@@ -26,13 +26,10 @@ typedef struct loom_serve_recognition_work_t {
 
 typedef struct loom_serve_recognition_result_t {
   // Acknowledged prefix of the accepted input snapshot, excluding padding.
+  // Requested activity observations partition this prefix exactly; lookahead
+  // remains unconsumed until its probability is established.
   iree_host_size_t consumed_frames;
-  // A transcript revision is present, including possibly empty replacement
-  // text.
-  bool has_transcript;
-  // Source-checked revision borrowed until release_batch.
-  loom_serve_recognition_transcript_t transcript;
-  // No further work or transcript revisions remain for this request.
+  // No further work or output events remain for this request.
   bool complete;
 } loom_serve_recognition_result_t;
 
@@ -45,12 +42,16 @@ typedef struct loom_serve_recognition_generator_t {
   void* self;
   // Fixed normalized input geometry, independent of browser/audio containers.
   loom_serve_recognition_format_t format;
-  // Maximum PCM frames in one source input snapshot.
+  // Maximum PCM frames in one source input snapshot, including lookahead.
   iree_host_size_t input_capacity;
   // Maximum total input frames in an admitted request.
   uint64_t frame_limit;
-  // Maximum bytes in one source transcript event, including alignment metadata.
-  iree_host_size_t transcript_capacity;
+  // Maximum number of source events produced by one collected ordinal.
+  iree_host_size_t event_capacity;
+  // Maximum encoded bytes in that ordinal's complete source event packet.
+  iree_host_size_t event_bytes;
+  // Output families supported by the source, selected explicitly per request.
+  loom_serve_recognition_output_flags_t outputs;
   // Stable resident rows, independent of executable batch shape.
   iree_host_size_t request_capacity;
   // Maximum sum of compatible work units in one numerical batch.
@@ -85,9 +86,15 @@ typedef struct loom_serve_recognition_generator_t {
   iree_status_t (*submit)(void* self,
                           loom_serve_execution_frontier_t* out_frontier);
   // Interprets successfully retired feedback and checks source event metadata.
-  // Every original ordinal is collected, including cancelled members. Views
-  // remain live until release_batch; no source submission occurs during copies.
+  // Every original ordinal is collected, including cancelled members. Copies
+  // into caller-owned event storage before another source call can overwrite
+  // its packet. Storage has this generator's event count and byte bounds and
+  // outlives the collected views. No source submission occurs during
+  // collection. Failure terminates only this ordinal's request; its outputs
+  // are ignored. The batch and remaining ordinals stay collectible, and the
+  // failed handle remains releasable at the retired batch cut.
   iree_status_t (*collect)(void* self, iree_host_size_t ordinal,
+                           loom_serve_recognition_events_t* events,
                            loom_serve_recognition_result_t* out_result);
   // Releases an unsubmitted plan or a retired batch after all CPU borrowers.
   void (*release_batch)(void* self);
