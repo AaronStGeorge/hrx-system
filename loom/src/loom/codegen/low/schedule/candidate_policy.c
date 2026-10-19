@@ -14,6 +14,50 @@
 #define LOOM_LOW_SCHEDULE_READY_NOMINEE_CAPACITY 24
 #define LOOM_LOW_SCHEDULE_READY_CRITICAL_PATH_BAND_CYCLES 1
 
+iree_status_t loom_low_schedule_candidate_policy_initialize(
+    const loom_low_schedule_build_state_t* state,
+    loom_low_schedule_candidate_policy_t* out_policy) {
+  *out_policy = (loom_low_schedule_candidate_policy_t){0};
+  if (!loom_low_schedule_strategy_uses_pressure(state->options->strategy)) {
+    return iree_ok_status();
+  }
+  out_policy->register_debt_word_count =
+      (state->target.descriptor_set->reg_class_count + 63) / 64;
+  return iree_arena_allocate_array(state->scratch_arena,
+                                   LOOM_LOW_SCHEDULE_READY_NOMINEE_CAPACITY *
+                                       out_policy->register_debt_word_count,
+                                   sizeof(*out_policy->nominee_register_debts),
+                                   (void**)&out_policy->nominee_register_debts);
+}
+
+static loom_low_schedule_register_debt_word_t*
+loom_low_schedule_candidate_policy_reset_register_debt(
+    const loom_low_schedule_candidate_policy_t* policy, uint8_t nominee_index) {
+  if (policy->register_debt_word_count == 0) {
+    return NULL;
+  }
+  loom_low_schedule_register_debt_word_t* row =
+      &policy->nominee_register_debts[nominee_index *
+                                      policy->register_debt_word_count];
+  memset(row, 0, policy->register_debt_word_count * sizeof(*row));
+  return row;
+}
+
+static bool loom_low_schedule_candidate_opens_other_register_debt(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_candidate_score_t* required,
+    const loom_low_schedule_candidate_score_t* alternative) {
+  const iree_host_size_t word_count =
+      (state->target.descriptor_set->reg_class_count + 63) / 64;
+  for (iree_host_size_t i = 0; i < word_count; ++i) {
+    if ((alternative->register_debt[i].banks &
+         ~required->register_debt[i].required_banks) != 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 typedef enum loom_low_schedule_candidate_compare_mode_e {
   LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT = 0,
   LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_PRESSURE_RELIEF = 1,
@@ -357,9 +401,10 @@ static bool loom_low_schedule_candidate_score_less(
       return lhs_unlocks_descriptor;
     }
   }
-  // Temporary spillable pressure can be repaired; opening another required
-  // lifetime consumes storage needed by the work that closes existing ones.
-  // Compare that obligation before favoring narrower deferred setup.
+  // Prefer repairable pressure over new required lifetimes within the same
+  // banks. Opening debt in another bank is not relief: repeatedly postponing
+  // a required reload can otherwise spill all of its consumers' setup there.
+  // Cross-bank alternatives keep the ordinary pressure/cost comparison.
   if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
       compare_mode != LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT) {
     const bool lhs_opens_required_debt = iree_any_bit_set(
@@ -369,7 +414,14 @@ static bool loom_low_schedule_candidate_score_less(
         rhs->flags,
         LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REQUIRED_REGISTER_DEBT);
     if (lhs_opens_required_debt != rhs_opens_required_debt) {
-      return !lhs_opens_required_debt;
+      const loom_low_schedule_candidate_score_t* required =
+          lhs_opens_required_debt ? lhs : rhs;
+      const loom_low_schedule_candidate_score_t* alternative =
+          lhs_opens_required_debt ? rhs : lhs;
+      if (!loom_low_schedule_candidate_opens_other_register_debt(
+              state, required, alternative)) {
+        return !lhs_opens_required_debt;
+      }
     }
   }
   if (lhs_defers_materialization &&
@@ -658,6 +710,7 @@ static void loom_low_schedule_collect_recovery_nominees(
 
 void loom_low_schedule_candidate_policy_select(
     const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_candidate_policy_t* policy,
     loom_low_schedule_pressure_state_t* pressure_state,
     const loom_low_schedule_ready_policy_t* ready_policy,
     const uint32_t* indegrees, uint32_t ready_candidate_count,
@@ -691,9 +744,10 @@ void loom_low_schedule_candidate_policy_select(
   }
   IREE_ASSERT_NE(nominee_count, 0);
   for (uint8_t i = 0; i < nominee_count; ++i) {
-    loom_low_schedule_pressure_score_candidate(state, pressure_state,
-                                               ready_policy, indegrees,
-                                               nominees[i], &nominee_scores[i]);
+    loom_low_schedule_pressure_score_candidate(
+        state, pressure_state, ready_policy, indegrees, nominees[i],
+        loom_low_schedule_candidate_policy_reset_register_debt(policy, i),
+        &nominee_scores[i]);
   }
   if (nominee_count > source_view_nominee_count) {
     // Graph ranking repairs source-window boundaries only within the current
@@ -785,9 +839,10 @@ void loom_low_schedule_candidate_policy_select(
   loom_low_schedule_collect_recovery_nominees(
       state, ready_policy, recovery_policy, nominees, &nominee_count);
   for (uint8_t i = source_nominee_count; i < nominee_count; ++i) {
-    loom_low_schedule_pressure_score_candidate(state, pressure_state,
-                                               ready_policy, indegrees,
-                                               nominees[i], &nominee_scores[i]);
+    loom_low_schedule_pressure_score_candidate(
+        state, pressure_state, ready_policy, indegrees, nominees[i],
+        loom_low_schedule_candidate_policy_reset_register_debt(policy, i),
+        &nominee_scores[i]);
     ++out_selection->scored_candidate_count;
     // Latency-window recovery must either replace the entire window that the
     // source nominee would consume or immediately expose an equally long

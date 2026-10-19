@@ -557,3 +557,25 @@ low.func.def schedule(phased) target<amd.xdna.aie2p.core> @phase_setup_boundary(
   %repeated = concat(%ready_half, %ready_half) : (reg<aie2p.vec256>, reg<aie2p.vec256>) -> reg<aie2p.vec256 x2>
   return %doubled, %repeated
 }
+
+// ====
+
+// Lock operands cannot expose the acquire until all preceding work finishes.
+// Materializing the private scalar last keeps it out of that work's live set.
+// RUN: emit low-schedule-query @private_lock_operand strategy=resource-stall per-user-placement-values=%lock_value order=* issue=*
+
+low.func.def target<amd.xdna.aie2p.core> @private_lock_operand(%lhs: reg<aie2p.er>, %rhs: reg<aie2p.er>) -> (reg<aie2p.er>) asm {
+  %lock_value = mov.short -1
+  %sum = add.rr %lhs, %rhs
+  %result = add.rr %sum, %rhs
+  acq %lock_value, 5
+  return %result
+}
+
+// ----
+block 0 order: 1, 2, 0, 3, 4
+node 0 issue-cycle: 1
+node 1 issue-cycle: 0
+node 2 issue-cycle: 1
+node 3 issue-cycle: 2
+node 4 issue-cycle: 3

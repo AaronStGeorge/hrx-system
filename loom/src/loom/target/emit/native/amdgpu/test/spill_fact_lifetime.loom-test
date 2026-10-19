@@ -47,10 +47,10 @@ low.func.def target<amdgpu.cdna2.core>(@target) @shared_loop_payload(%source: re
   scratch_load_dword v2, v2, off offset:0
   v_mov_b32 v3, 0
   scratch_store_dword v3, v1, off offset:0
-  v_mov_b32 v1, 0
   s_waitcnt vmcnt(0) lgkmcnt(15)
-  v_add_u32 v2, v2, v0
-  global_store_dword v1, v2, s[2:3] offset:0
+  v_add_u32 v1, v2, v0
+  v_mov_b32 v2, 0
+  global_store_dword v2, v1, s[2:3] offset:0
   v_mov_b32 v1, 0
   scratch_load_dword v1, v1, off offset:0
   v_mov_b32 v2, 0
@@ -135,9 +135,9 @@ low.func.def target<amdgpu.cdna2.core>(@target) @shared_wide_loop_payload(%sourc
   v_mov_b32 v2, 8
   s_waitcnt vmcnt(0) lgkmcnt(15)
   scratch_load_dwordx2 v[2:3], v2, off offset:0
-  v_mov_b32 v4, 0
   s_waitcnt vmcnt(0) lgkmcnt(15)
   v_add_f64 v[2:3], v[2:3], v[0:1]
+  v_mov_b32 v4, 0
   global_store_dwordx2 v4, v[2:3], s[2:3] offset:0
   v_mov_b32 v2, 0
   scratch_load_dwordx2 v[2:3], v2, off offset:0

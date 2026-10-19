@@ -1,0 +1,65 @@
+// Required and spillable growth in different full banks must reach the
+// ordinary pressure comparison. Equal-cost arithmetic keeps source order.
+// RUN: emit low-schedule-query @different_banks strategy=resource-stall test.i32=1 test.f32=1 required-register-values=%required order=* scheduled-pressure=test.i32
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @different_banks(%integer: reg<test.i32>, %floating: reg<test.f32>) -> (reg<test.i32>, reg<test.f32>, reg<test.i32>, reg<test.f32>) asm {
+  %required = test.add.i32 %integer, %integer
+  %spillable = test.add.f32 %floating, %floating
+  return %integer, %floating, %required, %spillable
+}
+
+// ----
+block 0 order: 0, 1, 2
+scheduled pressure test.i32: peak-live-units=2 peak-live-values=2
+
+// ====
+
+// Different views of an alias pool still identify one bank. Spillable growth
+// retains priority over another required owner in that same pool.
+// RUN: emit low-schedule-query @shared_bank strategy=resource-stall test.pressure.alias32=1 required-register-values=%required order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @shared_bank(%source: reg<test.i32>, %held: reg<test.pressure.alias32>) -> (reg<test.pressure.alias32>, reg<test.pressure.alias32>, reg<test.pressure.alias64>) asm {
+  %required = copy %source : reg<test.i32> -> reg<test.pressure.alias32>
+  %spillable = copy %source : reg<test.i32> -> reg<test.pressure.alias64>
+  return %held, %required, %spillable
+}
+
+// ----
+block 0 order: 1, 0, 2
+
+// ====
+
+// Shared alias-bank debt is distinct from debt in a direct register class.
+// Neither copy can be treated as relief for the other bank.
+// RUN: emit low-schedule-query @shared_and_direct_banks strategy=resource-stall test.pressure.alias32=1 test.i64=1 required-register-values=%required order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @shared_and_direct_banks(%source: reg<test.i32>, %held_alias: reg<test.pressure.alias64>, %held_direct: reg<test.i64>) -> (reg<test.pressure.alias64>, reg<test.i64>, reg<test.pressure.alias32>, reg<test.i64>) asm {
+  %required = copy %source : reg<test.i32> -> reg<test.pressure.alias32>
+  %spillable = copy %source : reg<test.i32> -> reg<test.i64>
+  return %held_alias, %held_direct, %required, %spillable
+}
+
+// ----
+block 0 order: 0, 1, 2
+
+// ====
+
+// An alternative with room in its bank opens no debt and still takes priority.
+// RUN: emit low-schedule-query @available_bank strategy=resource-stall test.i32=1 test.f32=2 required-register-values=%required order=*
+
+test.target<low_core> @target
+
+low.func.def target<test.low.core>(@target) @available_bank(%integer: reg<test.i32>, %floating: reg<test.f32>) -> (reg<test.i32>, reg<test.f32>, reg<test.i32>, reg<test.f32>) asm {
+  %required = test.add.i32 %integer, %integer
+  %spillable = test.add.f32 %floating, %floating
+  return %integer, %floating, %required, %spillable
+}
+
+// ----
+block 0 order: 1, 0, 2

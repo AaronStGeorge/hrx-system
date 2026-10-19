@@ -12,6 +12,7 @@
 #include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/codegen/low/schedule/call_pressure.h"
 #include "loom/codegen/low/schedule/pressure_lifetime.h"
+#include "loom/codegen/low/schedule/required_pressure.h"
 #include "loom/target/residency.h"
 
 static uint64_t loom_low_schedule_project_live_units(
@@ -255,9 +256,14 @@ static void loom_low_schedule_score_candidate_pressure_limit(
           LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_EXCEEDS_UNSPILLABLE_CAPACITY;
     } else {
       score->flags |= LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REGISTER_DEBT;
+      loom_low_schedule_register_debt_word_t* debt =
+          &score->register_debt[reg_class_id / 64];
+      const uint64_t bank = UINT64_C(1) << (reg_class_id % 64);
+      debt->banks |= bank;
       if (opens_required_lifetime) {
         score->flags |=
             LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REQUIRED_REGISTER_DEBT;
+        debt->required_banks |= bank;
       }
     }
   }
@@ -1240,6 +1246,8 @@ void loom_low_schedule_target_pressure_score_candidate(
       state, pressure_state, candidate_node_index, score);
   loom_low_schedule_score_candidate_pressure_limits(
       state, pressure_state, candidate_node_index, score);
+  loom_low_schedule_required_pressure_score_candidate(state, pressure_state,
+                                                      score);
   loom_low_schedule_score_active_unspillable_completions(
       state, pressure_state, candidate_node_index, score);
   loom_low_schedule_call_pressure_score_candidate(state, pressure_state,

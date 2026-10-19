@@ -20,6 +20,8 @@ loom_check_test_suite(
     "pressure_cfg.loom-test"
     "pressure_headroom.loom-test"
     "ready_nomination.loom-test"
+    "register_debt.loom-test"
+    "required_pressure.loom-test"
     "schedule.loom-test"
     "schedule_locked.loom-test"
     "schedule_scopes.loom-test"

@@ -978,7 +978,7 @@ static uint32_t loom_low_schedule_source_range_end(
 }
 
 static void loom_low_schedule_initialize_source_range_ready_frontier(
-    const loom_low_schedule_build_state_t* state,
+    loom_low_schedule_build_state_t* state,
     loom_low_schedule_pressure_state_t* pressure_state,
     loom_low_schedule_ready_policy_t* ready_policy, const uint32_t* indegrees,
     uint32_t range_start, uint32_t range_end) {
@@ -986,6 +986,19 @@ static void loom_low_schedule_initialize_source_range_ready_frontier(
       loom_low_schedule_ready_frontier_count(&ready_policy->frontier), 0u);
   for (uint32_t node_index = range_start; node_index < range_end;
        ++node_index) {
+    // Satisfying SSA and effect dependencies cannot unlock a consumer outside
+    // the admitted source range. Publish its remaining producer only when the
+    // range can enter the ready frontier, so setup for a later boundary does
+    // not receive credit for progress it cannot yet make.
+    if (loom_low_schedule_strategy_uses_pressure(state->options->strategy)) {
+      const uint32_t group_index =
+          loom_low_schedule_dependency_frontier_remaining_group(
+              &pressure_state->unlocks.frontier, node_index);
+      if (group_index != LOOM_LOW_SCHEDULE_DEPENDENCY_GROUP_NONE) {
+        loom_low_schedule_pressure_publish_unlock_consumer(
+            state, pressure_state, group_index);
+      }
+    }
     if (indegrees[node_index] == 0) {
       loom_low_schedule_insert_ready_node(state, pressure_state, ready_policy,
                                           node_index);
@@ -1360,6 +1373,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
   uint32_t* indegrees = NULL;
   loom_low_schedule_pressure_state_t pressure_state = {0};
   loom_low_schedule_ready_policy_t ready_policy = {0};
+  loom_low_schedule_candidate_policy_t candidate_policy = {0};
   if (state->dependencies.count > UINT32_MAX) {
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -1481,6 +1495,8 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
           : 1;
   IREE_RETURN_IF_ERROR(loom_low_schedule_ready_policy_initialize(
       state, (uint32_t)node_count, ready_view_count, &ready_policy));
+  IREE_RETURN_IF_ERROR(
+      loom_low_schedule_candidate_policy_initialize(state, &candidate_policy));
 
   for (iree_host_size_t block_index = 0; block_index < state->body->block_count;
        ++block_index) {
@@ -1524,7 +1540,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
       }
       loom_low_schedule_candidate_selection_t selection;
       loom_low_schedule_candidate_policy_select(
-          state, &pressure_state, &ready_policy, indegrees,
+          state, &candidate_policy, &pressure_state, &ready_policy, indegrees,
           ready_candidate_count, &selection);
       const uint32_t chosen_node = selection.chosen_node;
       loom_low_schedule_ready_policy_remove(state, &ready_policy, chosen_node);
@@ -1599,7 +1615,8 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
           const uint32_t remaining_group =
               loom_low_schedule_dependency_frontier_consume_group(
                   &pressure_state.unlocks.frontier, group_index, group);
-          if (remaining_group != LOOM_LOW_SCHEDULE_DEPENDENCY_GROUP_NONE) {
+          if (remaining_group != LOOM_LOW_SCHEDULE_DEPENDENCY_GROUP_NONE &&
+              consumer_node >= range_start && consumer_node < range_end) {
             loom_low_schedule_pressure_publish_unlock_consumer(
                 state, &pressure_state, remaining_group);
           }

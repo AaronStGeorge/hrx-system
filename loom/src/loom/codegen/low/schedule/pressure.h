@@ -25,11 +25,15 @@ typedef struct loom_low_schedule_resource_pressure_record_t
     loom_low_schedule_resource_pressure_record_t;
 typedef struct loom_low_schedule_unlock_record_t
     loom_low_schedule_unlock_record_t;
+typedef struct loom_low_schedule_required_pressure_t
+    loom_low_schedule_required_pressure_t;
 
 // Mutable pressure simulation state for one scheduling run.
 struct loom_low_schedule_pressure_state_t {
   // Current live register units by descriptor register-class ID.
   uint64_t* current_live_units_by_reg_class;
+  // Required ownership and instruction-phase changes by completion domain.
+  loom_low_schedule_required_pressure_t* required_pressure;
   // Block-local aligned-packing headroom by descriptor register-class ID.
   uint32_t* packing_reserve_units_by_reg_class;
   // Shared pressure state for register classes with one allocation domain.
@@ -260,8 +264,19 @@ typedef enum loom_low_schedule_pressure_risk_e {
   LOOM_LOW_SCHEDULE_PRESSURE_RISK_DEBT = 2,
 } loom_low_schedule_pressure_risk_t;
 
+// Register debt for 64 canonical register-class IDs. Shared alias pools use
+// their representative class, so all aliases identify the same physical bank.
+typedef struct loom_low_schedule_register_debt_word_t {
+  // Banks whose physical pressure grows beyond their spillable capacity.
+  uint64_t banks;
+  // Subset of banks in which the candidate opens required register lifetimes.
+  uint64_t required_banks;
+} loom_low_schedule_register_debt_word_t;
+
 // Complete bounded score for one ready scheduling candidate.
 typedef struct loom_low_schedule_candidate_score_t {
+  // Debt words borrowed from the candidate policy until its next selection.
+  loom_low_schedule_register_debt_word_t* register_debt;
   // Aggregate live register units after scheduling the candidate.
   uint64_t projected_live_units;
   // Live register units whose last use is the candidate.
@@ -448,7 +463,9 @@ iree_status_t loom_low_schedule_pressure_initialize_unlock_summaries(
     loom_low_schedule_build_state_t* state, uint32_t node_count,
     loom_low_schedule_pressure_state_t* pressure_state);
 
-// Publishes the consumer of its sole remaining unscheduled dependency group.
+// Publishes an admitted source-range consumer whose sole remaining dependency
+// group belongs to an unscheduled producer. Range admission is owned by the
+// list scheduler; dependency readiness alone cannot cross a source boundary.
 void loom_low_schedule_pressure_publish_unlock_consumer(
     loom_low_schedule_build_state_t* state,
     loom_low_schedule_pressure_state_t* pressure_state, uint32_t group_index);
@@ -468,6 +485,7 @@ void loom_low_schedule_pressure_score_candidate(
     loom_low_schedule_pressure_state_t* pressure_state,
     const loom_low_schedule_ready_policy_t* ready_policy,
     const uint32_t* indegrees, uint32_t node_index,
+    loom_low_schedule_register_debt_word_t* register_debt,
     loom_low_schedule_candidate_score_t* out_score);
 
 // Resolves a pressure source to its target descriptor-authored name.
