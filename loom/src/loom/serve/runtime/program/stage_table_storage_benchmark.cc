@@ -158,7 +158,7 @@ int main(int argc, char** argv) {
   loom_serve_host_t* host = nullptr;
   IREE_CHECK_OK(loom_serve_test_host_create(4, system, &host));
   iree_hal_driver_t* driver = nullptr;
-  IREE_CHECK_OK(loom_serve_test_driver_create(host, tracked, &driver));
+  IREE_CHECK_OK(loom_serve_test_driver_acquire(host, &driver));
   const loom_serve_device_options_t options = {
       .driver = driver,
       .uri = loom_serve_test_device()->device_uri,

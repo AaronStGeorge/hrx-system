@@ -27,7 +27,16 @@ namespace loom_serve::testing::embedding {
 
 using loom_serve::testing::StalledStderr;
 
-class ElasticEmbeddingServiceTest : public SourceEmbeddingServiceTest {};
+class ElasticEmbeddingServiceTest : public SourceEmbeddingServiceTest {
+ protected:
+  void SetUp() override {
+    ASSERT_NO_FATAL_FAILURE(SourceEmbeddingServiceTest::SetUp());
+    // Cold-allocation holds must not depend on a previous test's cached slabs.
+    auto* pool = loom_serve_device_memory_pool(device_);
+    loom_serve_memory_pool_trim(pool, 0);
+    IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  }
+};
 
 TEST_F(ElasticEmbeddingServiceTest,
        ParameterDeactivationDoesNotBlockWarmRequestsAndReloadsExactly) {
@@ -53,13 +62,12 @@ TEST_F(ElasticEmbeddingServiceTest,
     ASSERT_EQ(Read(Send(R"({"model":"cold"})", "/v1/models/deactivate"))
                   .find("HTTP/1.1 202"),
               0u);
-    gate.WaitEntered();
     const auto retired = WaitModel("cold", R"("parameter_operation":"idle")");
     EXPECT_NE(retired.find(R"("committed_bytes":0)"), std::string::npos);
-    // Model ownership can end while its native capacity remains charged.
-    EXPECT_NE(Read(Send({}, "/v1/status", "GET"))
-                  .find(R"("releasing_bytes":2097152)"),
-              std::string::npos);
+    // Deactivation returns reusable slabs without requiring a native free.
+    EXPECT_NE(
+        Read(Send({}, "/v1/status", "GET")).find(R"("cached_bytes":4096)"),
+        std::string::npos);
     EXPECT_NE(Read(Send(R"({"model":"fixture","input":"a"})"))
                   .find(R"("embedding":[1,1,1,1])"),
               std::string::npos);
@@ -77,7 +85,7 @@ TEST_F(ElasticEmbeddingServiceTest,
 }
 
 TEST_F(ElasticEmbeddingServiceTest,
-       PressureReleaseDefersAdmissionWithoutRetainingTheRetiredModel) {
+       PressureReusesBackingWithoutRetainingTheRetiredModel) {
   const std::string package =
       iree::testing::MakeTempFilePath("parameter_release_pressure");
   ASSERT_NO_FATAL_FAILURE(WriteCheckpointPackage(package));
@@ -94,17 +102,15 @@ TEST_F(ElasticEmbeddingServiceTest,
   ASSERT_NE(Read(Send(R"({"model":"fixture","input":"a"})"))
                 .find(R"("embedding":[1,1,1,1])"),
             std::string::npos);
-  int waiting = -1;
   {
-    loom_serve::testing::ScopedNativeHold gate(device_,
-                                               IREE_ALLOCATOR_COMMAND_FREE);
-    waiting = Send(R"({"model":"second","input":"a"})");
-    gate.WaitEntered();
-    ASSERT_NO_FATAL_FAILURE(WaitModel("first", R"("committed_bytes":0)"));
-    EXPECT_NE(Read(Send({}, "/v1/status", "GET"))
-                  .find(R"("releasing_bytes":2097152)"),
+    // Both models fit separately in the one-slab budget. Pressure must transfer
+    // backing without needing another native allocation or a polling request.
+    loom_serve::testing::ScopedNativeHold gate(device_);
+    EXPECT_NE(Read(Send(R"({"model":"second","input":"a"})"))
+                  .find(R"("embedding":[2,2,2,2])"),
               std::string::npos);
-    EXPECT_NE(ModelStatus("second").find(R"("committed_bytes":0)"),
+    ASSERT_NO_FATAL_FAILURE(WaitModel("first", R"("committed_bytes":0)"));
+    EXPECT_NE(ModelStatus("second").find(R"("committed_bytes":4096)"),
               std::string::npos);
     EXPECT_EQ(Read(Send(R"({"model":"first","mode":"abort"})",
                         "/v1/models/unregister"))
@@ -118,9 +124,6 @@ TEST_F(ElasticEmbeddingServiceTest,
     EXPECT_NE(ModelStatus("second").find(R"("pending_bytes":0)"),
               std::string::npos);
   }
-  // No polling request drives the server between release and final inference.
-  // The native capacity wake must resume the waiting request itself.
-  EXPECT_NE(Read(waiting).find(R"("embedding":[2,2,2,2])"), std::string::npos);
   ASSERT_NO_FATAL_FAILURE(WaitModel("first", {}));
 }
 
@@ -144,7 +147,7 @@ TEST_F(ElasticEmbeddingServiceTest,
     loom_serve::testing::ScopedNativeHold gate(device_);
     cold = Send(R"({"model":"cold","input":"a"})");
     gate.WaitEntered();
-    const auto waiting = WaitModel("cold", R"("pending_bytes":2097152)");
+    const auto waiting = WaitModel("cold", R"("pending_bytes":4096)");
     EXPECT_NE(waiting.find(R"("committed_bytes":0)"), std::string::npos);
     EXPECT_NE(Read(Send(R"({"model":"fixture","input":"a"})"))
                   .find(R"("embedding":[1,1,1,1])"),
@@ -176,7 +179,7 @@ TEST_F(ElasticEmbeddingServiceTest,
     loom_serve::testing::ScopedNativeHold gate(device_);
     cold = Send(R"({"model":"cold","input":"a"})");
     gate.WaitEntered();
-    ASSERT_NO_FATAL_FAILURE(WaitModel("cold", R"("pending_bytes":2097152)"));
+    ASSERT_NO_FATAL_FAILURE(WaitModel("cold", R"("pending_bytes":4096)"));
     EXPECT_EQ(Read(Send(R"({"model":"cold","mode":"abort"})",
                         "/v1/models/unregister"))
                   .find("HTTP/1.1 202"),
@@ -185,7 +188,7 @@ TEST_F(ElasticEmbeddingServiceTest,
     // Registration enters retirement only after that service work has drained.
     EXPECT_TRUE(Read(cold, /*allow_empty=*/true).empty());
     const auto removing = ModelStatus("cold");
-    EXPECT_NE(removing.find(R"("pending_bytes":2097152)"), std::string::npos);
+    EXPECT_NE(removing.find(R"("pending_bytes":4096)"), std::string::npos);
     EXPECT_NE(removing.find(R"("admission":"removing")"), std::string::npos);
     EXPECT_NE(Read(Send(R"({"model":"fixture","input":"a"})"))
                   .find(R"("embedding":[1,1,1,1])"),
@@ -235,7 +238,7 @@ TEST_F(ElasticEmbeddingServiceTest,
   IREE_ASSERT_OK(http_.Join());
   const auto memory = loom_serve_device_memory_statistics(device_).retained;
   EXPECT_EQ(memory.reserved_bytes, 0u);
-  EXPECT_EQ(memory.committed_bytes, 0u);
+  EXPECT_EQ(memory.committed_bytes, memory.cached_bytes);
   EXPECT_EQ(retired_counters_.completed, 3u);
 }
 
@@ -247,7 +250,7 @@ TEST_F(ElasticEmbeddingServiceTest,
   interface_.set_observer(interface_.self, {});
   loom_serve_finite_service_free(std::exchange(service_, nullptr));
   IREE_ASSERT_OK(loom_serve_finite_model_free(std::exchange(model_, nullptr)));
-  constexpr uint64_t kSlabBytes = 2 * 1024 * 1024;
+  constexpr uint64_t kSlabBytes = 4096;
   ASSERT_NO_FATAL_FAILURE(CreateModel(package));
   retained_ = std::exchange(model_, nullptr);
   ASSERT_NO_FATAL_FAILURE(CreateModel(package));
@@ -400,8 +403,8 @@ TEST_F(ElasticEmbeddingServiceTest,
             before_removal.reserved_bytes - reservation_bytes);
   EXPECT_EQ(after_removal.committed_bytes, kSlabBytes);
 
-  // Final removal returns the shared model pool to empty without tearing down
-  // its device or host executor. Only private command cache backing may remain.
+  // Final removal retains reusable physical backing without any model owning
+  // it. The same device and host executor remain available for replacements.
   loom_serve_finite_service_free(std::exchange(service_, nullptr));
   loom_serve_test_embedding_model_lifecycle_t final_removal;
   final_removal.model = std::exchange(model_, nullptr);
@@ -411,7 +414,7 @@ TEST_F(ElasticEmbeddingServiceTest,
   EXPECT_EQ(model_, nullptr);
   const auto empty = loom_serve_device_memory_statistics(device_).retained;
   EXPECT_EQ(empty.reserved_bytes, 0u);
-  EXPECT_EQ(empty.committed_bytes, 0u);
+  EXPECT_EQ(empty.committed_bytes, empty.cached_bytes);
 }
 
 }  // namespace loom_serve::testing::embedding

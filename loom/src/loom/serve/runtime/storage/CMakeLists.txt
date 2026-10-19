@@ -22,6 +22,7 @@ loom_cc_library(
     iree::base
     iree::base::threading
     iree::hal
+    iree::hal::memory::slab_cache
   PUBLIC
 )
 endif()
@@ -103,6 +104,52 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
+    memory_tests
+  SRCS
+    "memory_test.cc"
+  DEPS
+    ::memory
+    iree::base
+    iree::hal
+    iree::hal::memory::fixed_block_pool
+    iree::hal::testing::deferred_pool
+    iree::testing::gtest
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::testing::device
+    loom::serve::testing::native_allocator
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    memory_loss_test
+  SRCS
+    "memory_loss_test.cc"
+  DEPS
+    ::memory
+    iree::base
+    iree::hal
+    iree::hal::memory::cpu_slab_provider
+    iree::hal::memory::passthrough_pool
+    iree::hal::memory::slab_provider
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::serve::runtime::device
+    loom::serve::runtime::execution
+    loom::serve::runtime::host
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
 )

@@ -6,13 +6,22 @@
 
 #include "loom/serve/testing/device.h"
 
+#include "iree/base/threading/call_once.h"
 #include "iree/base/threading/mutex.h"
 #include "iree/base/threading/notification.h"
 #include "iree/hal/pool_wait.h"
 
-iree_status_t loom_serve_test_driver_create(loom_serve_host_t* host,
-                                            iree_allocator_t host_allocator,
-                                            iree_hal_driver_t** out_driver) {
+static iree_once_flag loom_serve_test_driver_once = IREE_ONCE_FLAG_INIT;
+static iree_status_t loom_serve_test_driver_registration_status = 0;
+
+static void loom_serve_test_driver_register(void) {
+  loom_serve_test_driver_registration_status =
+      loom_serve_test_device()->driver_register(
+          iree_hal_driver_registry_default());
+}
+
+iree_status_t loom_serve_test_driver_acquire(loom_serve_host_t* host,
+                                             iree_hal_driver_t** out_driver) {
   const loom_serve_test_device_t* device = loom_serve_test_device();
   *out_driver = NULL;
   if (!device->driver_register) {
@@ -20,16 +29,13 @@ iree_status_t loom_serve_test_driver_create(loom_serve_host_t* host,
     iree_hal_driver_retain(*out_driver);
     return iree_ok_status();
   }
-  iree_hal_driver_registry_t* registry = NULL;
+  // Native process contexts remain shared across independently created groups.
+  // A fixture may release every device without ending that process lifetime.
+  iree_call_once(&loom_serve_test_driver_once, loom_serve_test_driver_register);
   IREE_RETURN_IF_ERROR(
-      iree_hal_driver_registry_allocate(host_allocator, &registry));
-  iree_status_t status = device->driver_register(registry);
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_driver_registry_acquire_driver(
-        registry, device->driver_name, out_driver);
-  }
-  iree_hal_driver_registry_free(registry);
-  return status;
+      iree_status_clone(loom_serve_test_driver_registration_status));
+  return iree_hal_driver_registry_acquire_driver(
+      iree_hal_driver_registry_default(), device->driver_name, out_driver);
 }
 
 typedef struct loom_serve_test_capacity_wait_t {
@@ -65,13 +71,17 @@ iree_status_t loom_serve_test_device_trim_and_drain(loom_serve_device_t* device,
                                                     uint64_t target_bytes) {
   IREE_RETURN_IF_ERROR(loom_serve_device_trim(device, target_bytes));
   loom_serve_memory_pool_t* memory = loom_serve_device_memory_pool(device);
-  if (memory) {
-    IREE_RETURN_IF_ERROR(loom_serve_memory_pool_await(memory));
-  }
+  // A retained admission failure does not prevent already-accepted returns
+  // from retiring. Join the native source before returning either diagnosis.
+  iree_status_t status =
+      memory ? loom_serve_memory_pool_await(memory) : iree_ok_status();
   iree_hal_pool_t* pool = loom_serve_device_storage_pool(device);
   iree_hal_pool_wait_t* capacity = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_pool_wait_allocate(pool, iree_allocator_system(), &capacity));
+  iree_status_t capacity_status =
+      iree_hal_pool_wait_allocate(pool, iree_allocator_system(), &capacity);
+  if (!iree_status_is_ok(capacity_status)) {
+    return iree_status_join(status, capacity_status);
+  }
   loom_serve_test_capacity_wait_t wait = {0};
   iree_slim_mutex_initialize(&wait.mutex);
   iree_notification_initialize(&wait.notification);
@@ -79,8 +89,9 @@ iree_status_t loom_serve_test_device_trim_and_drain(loom_serve_device_t* device,
     iree_hal_pool_wait_prepare(capacity);
     iree_hal_pool_stats_t stats;
     iree_hal_pool_query_stats(pool, &stats);
-    if (stats.bytes_committed <= stats.bytes_reserved) {
+    if (stats.bytes_committed <= stats.bytes_reserved + stats.bytes_abandoned) {
       iree_hal_pool_wait_abort(capacity);
+      wait.status = iree_hal_pool_query_abandonment_status(pool);
       break;
     }
     wait.complete = false;
@@ -94,5 +105,5 @@ iree_status_t loom_serve_test_device_trim_and_drain(loom_serve_device_t* device,
   iree_notification_deinitialize(&wait.notification);
   iree_slim_mutex_deinitialize(&wait.mutex);
   iree_hal_pool_wait_free(capacity);
-  return wait.status;
+  return iree_status_join(status, wait.status);
 }

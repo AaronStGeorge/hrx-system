@@ -42,7 +42,8 @@ class SourceRecognitionStreamTest : public ::testing::Test {
     options.worker_count = FLAG_test_workers;
     options.backing = FLAG_test_elastic ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
                                         : LOOM_SERVE_DEVICE_BACKING_FIXED;
-    options.slab_size = FLAG_test_elastic ? 2 * 1024 * 1024 : 0;
+    // Cache native-page state extents so explicit trim owns physical disposal.
+    options.slab_size = FLAG_test_elastic ? 4096 : 0;
     loom_serve_test_application_t* application = nullptr;
     IREE_ASSERT_OK(loom_serve_test_application_acquire(&options, allocator_,
                                                        &application));
@@ -831,15 +832,18 @@ TEST_F(SourceRecognitionStreamTest, CloseReturnsRowBeforeNativeCapacity) {
   ASSERT_NO_FATAL_FAILURE(Write(stream, {1}, 1));
   ASSERT_NO_FATAL_FAILURE(Settle());
 
-  loom_serve::testing::ScopedNativeHold gate(device_,
-                                             IREE_ALLOCATOR_COMMAND_FREE);
   ASSERT_NO_FATAL_FAILURE(Close(stream));
   bool progress = false;
   IREE_ASSERT_OK(loom_serve_recognition_stream_service_advance(
       service_, false, false, &progress));
   EXPECT_TRUE(progress);
-  gate.WaitEntered();
   ASSERT_NO_FATAL_FAILURE(AdvanceUntil([&] { return released_[0] == 1; }));
+  auto* pool = loom_serve_device_memory_pool(device_);
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  loom_serve::testing::ScopedNativeHold gate(device_,
+                                             IREE_ALLOCATOR_COMMAND_FREE);
+  loom_serve_memory_pool_trim(pool, 0);
+  gate.WaitEntered();
   EXPECT_GT(
       loom_serve_memory_pool_statistics(loom_serve_device_memory_pool(device_))
           .releasing_bytes,

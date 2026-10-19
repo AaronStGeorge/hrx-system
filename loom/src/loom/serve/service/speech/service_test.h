@@ -16,6 +16,9 @@
 
 namespace loom_serve::testing {
 
+// Each tiny parameter or state reservation occupies one native page.
+constexpr uint64_t kSpeechSlabSize = 4096;
+
 using SpeechStream = std::unique_ptr<loom_serve_speech_stream_t,
                                      decltype(&loom_serve_speech_stream_close)>;
 

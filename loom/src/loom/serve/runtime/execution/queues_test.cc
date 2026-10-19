@@ -31,8 +31,7 @@ class ExecutionQueuesTest : public ::testing::TestWithParam<bool> {
   void SetUp() override {
     IREE_ASSERT_OK(
         loom_serve_host_create(2, nullptr, iree_allocator_system(), &host_));
-    IREE_ASSERT_OK(loom_serve_test_driver_create(host_, iree_allocator_system(),
-                                                 &driver_));
+    IREE_ASSERT_OK(loom_serve_test_driver_acquire(host_, &driver_));
     const loom_serve_device_options_t options = {
         .driver = driver_,
         .uri = FLAG_execution_device_uri[0]

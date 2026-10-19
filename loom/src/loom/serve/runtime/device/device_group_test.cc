@@ -15,11 +15,17 @@ namespace {
 
 class DeviceGroupTest : public ::testing::Test {
  protected:
-  void SetUp() override {
+  static void SetUpTestSuite() {
     IREE_ASSERT_OK(
         loom_serve_host_create(1, nullptr, iree_allocator_system(), &host_));
-    IREE_ASSERT_OK(loom_serve_test_driver_create(host_, iree_allocator_system(),
-                                                 &driver_));
+    IREE_ASSERT_OK(loom_serve_test_driver_acquire(host_, &driver_));
+  }
+
+  static void TearDownTestSuite() {
+    iree_hal_driver_release(driver_);
+    loom_serve_host_release(host_);
+    driver_ = nullptr;
+    host_ = nullptr;
   }
 
   void TearDown() override {
@@ -33,16 +39,14 @@ class DeviceGroupTest : public ::testing::Test {
       IREE_EXPECT_OK(loom_serve_virtual_buffer_free(reservation));
     }
     IREE_EXPECT_OK(loom_serve_device_group_free(group_));
-    iree_hal_driver_release(driver_);
-    loom_serve_host_release(host_);
   }
 
   // Physical granularity, independent of each device's admission budget.
   static constexpr uint64_t kSlabBytes = 2 * 1024 * 1024;
   // Shared workers and asynchronous I/O outliving all device resources.
-  loom_serve_host_t* host_ = nullptr;
+  inline static loom_serve_host_t* host_ = nullptr;
   // Exact physical driver supplied by the target-specific test leaf.
-  iree_hal_driver_t* driver_ = nullptr;
+  inline static iree_hal_driver_t* driver_ = nullptr;
   // One application group, including nullable partial construction.
   loom_serve_device_group_t* group_ = nullptr;
   // Independent model-like timelines, one per device record.
@@ -76,24 +80,64 @@ TEST_F(DeviceGroupTest, LaterDeviceFailureReleasesEarlierHandle) {
 }
 
 TEST_F(DeviceGroupTest, LaterPoolFailureReleasesSealedGroupAndEarlierPool) {
-  const loom_serve_device_options_t options[] = {
-      {
-          .driver = driver_,
-          .uri = loom_serve_test_device()->device_uri,
-          .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-          .slab_size = kSlabBytes,
-      },
-      {
-          .driver = driver_,
-          .uri = loom_serve_test_device()->device_uri,
-          .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-          .slab_size = UINT64_MAX,
-      }};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_serve_device_group_allocate(host_, IREE_ARRAYSIZE(options), options,
-                                       iree_allocator_system(), &group_));
-  EXPECT_EQ(group_, nullptr);
+  for (const uint64_t invalid_size : {UINT64_MAX, 3 * kSlabBytes}) {
+    const loom_serve_device_options_t options[] = {
+        {
+            .driver = driver_,
+            .uri = loom_serve_test_device()->device_uri,
+            .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+            .weight_slab_size = kSlabBytes,
+            .state_slab_size = kSlabBytes,
+        },
+        {
+            .driver = driver_,
+            .uri = loom_serve_test_device()->device_uri,
+            .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+            .weight_slab_size = invalid_size,
+            .state_slab_size = invalid_size,
+        }};
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          loom_serve_device_group_allocate(
+                              host_, IREE_ARRAYSIZE(options), options,
+                              iree_allocator_system(), &group_));
+    EXPECT_EQ(group_, nullptr);
+  }
+}
+
+TEST_F(DeviceGroupTest, IndependentSlabSizesPreserveShortTails) {
+  constexpr uint64_t slab_size = 128 * 1024 * 1024;
+  const loom_serve_device_options_t options = {
+      .driver = driver_,
+      .uri = loom_serve_test_device()->device_uri,
+      .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
+      .weight_slab_size = slab_size,
+      .state_slab_size = kSlabBytes,
+  };
+  IREE_ASSERT_OK(loom_serve_device_group_allocate(
+      host_, 1, &options, iree_allocator_system(), &group_));
+  auto* device = loom_serve_device_group_at(group_, 0);
+  const auto weights = loom_serve_device_weight_geometry(device);
+  const auto state = loom_serve_device_state_geometry(device);
+  EXPECT_EQ(weights.slab_size, slab_size);
+  EXPECT_EQ(state.slab_size, kSlabBytes);
+  EXPECT_EQ(weights.granularity, state.granularity);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      loom_serve_device_memory_pool(device), weights, slab_size + 1, 256,
+      &statistics_[0], &reservations_[0]));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      loom_serve_device_memory_pool(device), state, 1, 256, &statistics_[1],
+      &reservations_[1]));
+  EXPECT_EQ(loom_serve_virtual_buffer_slab_count(reservations_[0]), 2u);
+  const auto demand =
+      loom_serve_virtual_buffer_missing_demand(reservations_[0]);
+  uint64_t missing_bytes = demand.uncached_bytes;
+  for (uint64_t bytes : demand.cached_bytes) {
+    missing_bytes += bytes;
+  }
+  EXPECT_EQ(missing_bytes, slab_size + weights.minimum_size);
+  EXPECT_EQ(statistics_[0].reserved_bytes, slab_size + weights.minimum_size);
+  EXPECT_EQ(statistics_[1].reserved_bytes, state.minimum_size);
+  EXPECT_EQ(statistics_[0].committed_bytes, 0u);
 }
 
 TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
@@ -102,14 +146,16 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
           .driver = driver_,
           .uri = loom_serve_test_device()->device_uri,
           .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-          .slab_size = kSlabBytes,
+          .weight_slab_size = kSlabBytes,
+          .state_slab_size = kSlabBytes,
           .memory_limit = kSlabBytes,
       },
       {
           .driver = driver_,
           .uri = loom_serve_test_device()->device_uri,
           .backing = LOOM_SERVE_DEVICE_BACKING_ELASTIC,
-          .slab_size = kSlabBytes,
+          .weight_slab_size = kSlabBytes,
+          .state_slab_size = kSlabBytes,
           .memory_limit = 2 * kSlabBytes,
       }};
   IREE_ASSERT_OK(
@@ -123,14 +169,16 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
   EXPECT_NE(loom_serve_device_residency_cache(first),
             loom_serve_device_residency_cache(second));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      loom_serve_device_memory_pool(second), 2 * kSlabBytes, 256,
+      loom_serve_device_memory_pool(second),
+      loom_serve_device_state_geometry(second), 2 * kSlabBytes, 256,
       &statistics_[1], &reservations_[1]));
   // Only the last record has a reservation. Rejection must preserve the first
   // record's resources too; it can still admit work after the failed teardown.
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         loom_serve_device_group_free(group_));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
-      loom_serve_device_memory_pool(first), 2 * kSlabBytes, 256,
+      loom_serve_device_memory_pool(first),
+      loom_serve_device_state_geometry(first), 2 * kSlabBytes, 256,
       &statistics_[0], &reservations_[0]));
   IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(reservations_[0], 0, 4));
   IREE_ASSERT_OK(
@@ -174,8 +222,11 @@ TEST_F(DeviceGroupTest, SeparateBudgetsAndWholeGroupLifetime) {
   IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(reservations_[1]));
   EXPECT_EQ(loom_serve_device_memory_statistics(first).retained.committed_bytes,
             kSlabBytes);
-  EXPECT_EQ(
-      loom_serve_device_memory_statistics(second).retained.committed_bytes, 0u);
+  IREE_ASSERT_OK(
+      loom_serve_memory_pool_await(loom_serve_device_memory_pool(second)));
+  const auto detached = loom_serve_device_memory_statistics(second).retained;
+  EXPECT_EQ(detached.committed_bytes, 2 * kSlabBytes);
+  EXPECT_EQ(detached.cached_bytes, 2 * kSlabBytes);
 }
 
 }  // namespace

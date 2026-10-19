@@ -48,7 +48,7 @@ iree_status_t AcquireApplication(iree_allocator_t allocator,
   options.worker_count = SpeechWorkerCount();
   options.backing = SpeechElasticBacking() ? LOOM_SERVE_DEVICE_BACKING_ELASTIC
                                            : LOOM_SERVE_DEVICE_BACKING_FIXED;
-  options.slab_size = SpeechElasticBacking() ? 2 * 1024 * 1024 : 0;
+  options.slab_size = SpeechElasticBacking() ? kSpeechSlabSize : 0;
   loom_serve_test_application_t* application = nullptr;
   IREE_RETURN_IF_ERROR(
       loom_serve_test_application_acquire(&options, allocator, &application));

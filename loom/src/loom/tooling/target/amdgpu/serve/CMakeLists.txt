@@ -1169,6 +1169,7 @@ loom_cc_test(
   SRCS
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/bank_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_packing_test.cc"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_streaming_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test_base.h"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/executables_test.cc"
@@ -1178,6 +1179,7 @@ loom_cc_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/packing_policy.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/policy.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/stages.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/streaming_policy.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/testdata/executables/prepare.loom"
   DEPS
     ::test_compiler
@@ -1187,6 +1189,7 @@ loom_cc_test(
     iree::base
     iree::base::tooling::flags
     iree::hal
+    iree::hal::testing::deferred_pool
     iree::module::hal::types
     iree::task
     iree::testing::gtest
@@ -1212,6 +1215,7 @@ loom_cc_test(
     loom::serve::testing::native_allocator
   ARGS
     "--weight_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/stages.loom}}"
+    "--weight_device_uri=amdgpu:?feedback"
     "--executable_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/testdata/executables/prepare.loom}}"
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
@@ -1228,19 +1232,10 @@ if(IREE_HAL_DRIVER_AMDGPU AND LOOM_TARGET_ARCH_VM AND LOOM_TARGET_ARCH_AMDGPU AN
 loom_cc_test(
   NAME
     memory_test
-  SRCS
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/storage/memory_test.cc"
   DEPS
     ::test_device
-    iree::base
-    iree::hal
-    iree::testing::gtest
     iree::testing::gtest_main
-    loom::serve::runtime::device
-    loom::serve::runtime::execution
-    loom::serve::runtime::storage::memory
-    loom::serve::testing::device
-    loom::serve::testing::native_allocator
+    loom::serve::runtime::storage::memory_tests
   LABELS
     "iree-run-requirement=runtime.resource.amd_gpu"
     "notsan"

@@ -9,6 +9,7 @@
 #include "iree/async/semaphore.h"
 #include "iree/base/threading/mutex.h"
 #include "iree/base/threading/notification.h"
+#include "iree/hal/memory/slab_cache.h"
 #include "iree/hal/pool_wait.h"
 
 struct loom_serve_memory_pool_t {
@@ -18,6 +19,17 @@ struct loom_serve_memory_pool_t {
   iree_hal_device_group_t* group;
   // Retained mapping-source pool, used only by this physical budget.
   iree_hal_pool_t* storage_pool;
+  // Borrowed outer cache; the class records own the complete chain.
+  iree_hal_pool_t* slab_cache;
+  // Immutable physical classes, each retaining only its exact extent.
+  struct {
+    // Owned cache; null when this class duplicates an earlier class.
+    iree_hal_pool_t* cache;
+    // Exact native extent and alignment admitted by this cache.
+    iree_hal_pool_reservation_request_t request;
+    // Physical ceiling; never shrinks while source operations are outstanding.
+    uint64_t admitted_bytes;
+  } classes[LOOM_SERVE_MEMORY_CLASS_COUNT];
   // Borrowed queue accepting batched allocation and mapping operations.
   iree_hal_queue_t* queue;
   // Exact virtual-target scope; family storage trails this object.
@@ -38,18 +50,27 @@ struct loom_serve_memory_pool_t {
   iree_status_t capacity_status;
   // The capacity source failed and cannot admit another observation.
   bool capacity_failed;
-  // Common independent physical allocation size in bytes.
-  iree_device_size_t slab_size;
-  // Minimum address alignment guaranteed by virtual reservations.
-  iree_device_size_t minimum_alignment;
   // Physical admission ceiling; UINT64_MAX means unbounded.
   uint64_t limit_bytes;
   // Accounting across all buffers, with physical allocations counted once.
   loom_serve_memory_statistics_t statistics;
-  // Pending mapping bytes whose allocation completion is already published.
-  uint64_t acquired_pending_bytes;
+  // Published and accepted backing, including failed demand until a joined
+  // source observation, partitioned by physical class.
+  loom_serve_memory_demand_t demand;
+  // Exact native extents admitted since the last joined source observation.
+  uint64_t uncached_bytes;
+  // Failed accepted demand remains charged until every source operation has
+  // published; a disposed prefix cannot masquerade as reusable cached backing.
+  loom_serve_memory_demand_t failed_demand;
   // Upper bound on returned backing still charged until native disposal.
   uint64_t retiring_bytes;
+  // Explicit physical trim, reapplied until accepted detachments return.
+  struct {
+    // Total native bytes the caller wishes to retain, including live storage.
+    uint64_t target_bytes;
+    // Apply once all accepted source operations have published.
+    bool pending;
+  } trim;
   // Owner-only list of queue operations awaiting result publication.
   loom_serve_memory_operation_t* operations;
   // Owner wake copied into operations and capacity observations.
@@ -87,8 +108,18 @@ struct loom_serve_virtual_buffer_t {
   iree_hal_buffer_t* handle;
   // Owned incomplete-edit failure; only checked detach can retire this target.
   iree_status_t failure;
-  // Number of equally sized slots spanning the reservation.
+  // Validated physical geometry, independent of other reservations.
+  loom_serve_memory_geometry_t geometry;
+  // Native-aligned reservation extent, including its exact short tail.
+  iree_device_size_t byte_length;
+  // Number of slots spanning the reservation, including an optional short tail.
   iree_host_size_t slab_count;
+  // Regular slots with physical or accepted backing; excludes a short tail.
+  iree_host_size_t backed_regular_count;
+  // Physical class of regular slots, or CLASS_COUNT for exact bypass.
+  uint8_t regular_class;
+  // Physical class of the last slot, which may be shorter than a regular slab.
+  uint8_t tail_class;
   // Physical ownership and retained-range marks for each virtual slot.
   loom_serve_memory_slab_t slabs[];
 };
@@ -116,10 +147,6 @@ typedef struct loom_serve_memory_stage_t {
 struct loom_serve_memory_operation_t {
   // Submission and both private stage callbacks each own one claim.
   iree_atomic_int32_t pending;
-  // Allocation completion published once; immutable after becoming true.
-  iree_atomic_int32_t acquired;
-  // The serialized owner has included this allocation in known-live backing.
-  bool acquired_accounted;
   // Allocation/map or unmap/deallocation completion, respectively.
   loom_serve_memory_stage_t stages[2];
   // Batched source buffers in trailing storage; ownership moves into edits.
@@ -196,29 +223,76 @@ static bool loom_serve_memory_capacity_is_idle(void* user_data) {
   return idle;
 }
 
-// Native allocation becomes visible before its queue completion. Only known
-// returns can consume retirement credit; newly allocated pending bytes cannot
-// create it. In-flight returns may already have freed their native payload and
-// therefore do not establish a lower bound on still-owned native bytes.
-static uint64_t loom_serve_memory_pool_observe_retirement(
-    loom_serve_memory_pool_t* pool) {
-  iree_hal_pool_stats_t stats;
-  iree_hal_pool_query_stats(pool->storage_pool, &stats);
-  const uint64_t retained_bytes = pool->statistics.committed_bytes -
-                                  pool->statistics.releasing_bytes +
-                                  pool->acquired_pending_bytes;
-  const uint64_t retiring_bytes = stats.bytes_committed > retained_bytes
-                                      ? stats.bytes_committed - retained_bytes
-                                      : 0;
-  pool->retiring_bytes = iree_min(pool->retiring_bytes, retiring_bytes);
-  return stats.bytes_committed;
+void loom_serve_memory_demand_add(loom_serve_memory_demand_t* demand,
+                                  loom_serve_memory_demand_t additional) {
+  for (iree_host_size_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+    demand->cached_bytes[i] += additional.cached_bytes[i];
+  }
+  demand->uncached_bytes += additional.uncached_bytes;
 }
 
-static uint64_t loom_serve_memory_pool_charged_bytes(
+static uint64_t loom_serve_memory_demand_total(
+    loom_serve_memory_demand_t demand) {
+  uint64_t total = demand.uncached_bytes;
+  for (iree_host_size_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+    total += demand.cached_bytes[i];
+  }
+  return total;
+}
+
+// Only this owner can acquire, return, or trim this source. Once all captured
+// operations have published, live ownership plus each exact cache's idle
+// bytes is stable. Native bytes above it are pending return or permanent loss.
+// Concurrent acquisition snapshots cannot safely supply that subtraction.
+static void loom_serve_memory_pool_observe_retirement(
     loom_serve_memory_pool_t* pool) {
-  loom_serve_memory_pool_observe_retirement(pool);
-  return pool->statistics.committed_bytes + pool->statistics.pending_bytes +
-         pool->retiring_bytes;
+  if (!pool->operations) {
+    for (iree_host_size_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+      pool->demand.cached_bytes[i] -= pool->failed_demand.cached_bytes[i];
+    }
+    pool->demand.uncached_bytes -= pool->failed_demand.uncached_bytes;
+    pool->failed_demand = (loom_serve_memory_demand_t){0};
+  }
+  uint64_t retained_bytes = pool->demand.uncached_bytes;
+  if (!pool->operations) {
+    for (iree_host_size_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+      if (!pool->classes[i].cache) {
+        continue;
+      }
+      iree_hal_pool_stats_t cached;
+      iree_hal_pool_query_stats(pool->classes[i].cache, &cached);
+      pool->classes[i].admitted_bytes =
+          pool->demand.cached_bytes[i] + cached.bytes_free;
+      retained_bytes += pool->classes[i].admitted_bytes;
+    }
+    pool->uncached_bytes = pool->demand.uncached_bytes;
+  }
+  iree_hal_pool_stats_t native;
+  iree_hal_pool_query_stats(pool->storage_pool, &native);
+  pool->statistics.peak_bytes =
+      iree_max(pool->statistics.peak_bytes, native.bytes_committed);
+  if (!pool->operations) {
+    // Accepted constructors can lose backing before publishing their failure.
+    // Until this join, their protected demand already covers that charge.
+    pool->statistics.abandoned_bytes = native.bytes_abandoned;
+    const uint64_t settled_bytes = retained_bytes + native.bytes_abandoned;
+    pool->retiring_bytes = native.bytes_committed > settled_bytes
+                               ? native.bytes_committed - settled_bytes
+                               : 0;
+  }
+}
+
+static uint64_t loom_serve_memory_pool_projected_bytes(
+    const loom_serve_memory_pool_t* pool,
+    loom_serve_memory_demand_t additional) {
+  uint64_t total = pool->uncached_bytes + additional.uncached_bytes +
+                   pool->retiring_bytes + pool->statistics.abandoned_bytes;
+  for (iree_host_size_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+    total +=
+        iree_max(pool->classes[i].admitted_bytes,
+                 pool->demand.cached_bytes[i] + additional.cached_bytes[i]);
+  }
+  return total;
 }
 
 // Arms a one-shot capacity wake only while native retirement can make progress.
@@ -258,37 +332,70 @@ static bool loom_serve_memory_pool_observe_capacity(
   return true;
 }
 
-iree_status_t loom_serve_memory_pool_allocate(
-    iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
-    iree_hal_pool_t* storage_pool, iree_hal_queue_t* queue,
-    iree_device_size_t slab_size, uint64_t limit_bytes,
-    iree_allocator_t host_allocator, loom_serve_memory_pool_t** out_pool) {
-  *out_pool = NULL;
-  iree_hal_virtual_buffer_capabilities_t capabilities;
-  IREE_RETURN_IF_ERROR(iree_hal_virtual_buffer_query_capabilities(
-      group, scope, host_allocator, &capabilities));
+iree_status_t loom_serve_memory_pool_query_geometry(
+    const iree_hal_virtual_buffer_capabilities_t* capabilities,
+    iree_hal_pool_t* storage_pool, iree_device_size_t slab_size,
+    loom_serve_memory_geometry_t* out_geometry) {
+  *out_geometry = (loom_serve_memory_geometry_t){0};
   const iree_hal_memory_mapping_operations_t required =
       (1u << IREE_HAL_MEMORY_MAPPING_OPERATION_BIND) |
       (1u << IREE_HAL_MEMORY_MAPPING_OPERATION_UNBIND);
-  if (!capabilities.max_byte_length ||
-      !iree_all_bits_set(capabilities.operations, required)) {
+  if (!capabilities->max_byte_length ||
+      !iree_all_bits_set(capabilities->operations, required)) {
     return iree_make_status(IREE_STATUS_UNAVAILABLE,
                             "elastic backing requires bind and unbind support");
   }
   const iree_hal_pool_mapping_requirements_t requirements =
       iree_hal_pool_query_mapping_requirements(storage_pool);
   const iree_device_size_t minimum =
-      iree_max(capabilities.reservation_granularity,
-               iree_max(capabilities.mapping_granularity,
+      iree_max(capabilities->reservation_granularity,
+               iree_max(capabilities->mapping_granularity,
                         requirements.minimum_granularity));
+  iree_hal_pool_capabilities_t source_capabilities;
+  iree_hal_pool_query_capabilities(storage_pool, &source_capabilities);
+  const iree_device_size_t minimum_size = iree_device_align(
+      iree_max(minimum, source_capabilities.min_allocation_size), minimum);
   if (!slab_size) {
-    slab_size = iree_max(minimum, requirements.recommended_granularity);
+    slab_size = iree_max(minimum_size, requirements.recommended_granularity);
   }
-  if (!slab_size || slab_size > INT64_MAX || slab_size % minimum) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "slab size must be a multiple of %" PRIdsz,
-                            minimum);
+  if (!iree_device_size_is_valid_alignment(slab_size) ||
+      slab_size > INT64_MAX || slab_size % minimum) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "slab size must be a power-of-two multiple of %" PRIdsz, minimum);
   }
+  if (source_capabilities.max_allocation_size &&
+      slab_size > source_capabilities.max_allocation_size) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "slab size %" PRIdsz
+                            " exceeds backing source limit %" PRIdsz,
+                            slab_size, source_capabilities.max_allocation_size);
+  }
+  if (minimum > source_capabilities.max_allocation_alignment) {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "backing source cannot satisfy slab alignment");
+  }
+  if (slab_size < minimum_size) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "slab size is smaller than source minimum %" PRIdsz,
+                            minimum_size);
+  }
+  *out_geometry = (loom_serve_memory_geometry_t){
+      .slab_size = slab_size,
+      .granularity = minimum,
+      .minimum_size = minimum_size,
+  };
+  return iree_ok_status();
+}
+
+iree_status_t loom_serve_memory_pool_allocate(
+    iree_hal_device_group_t* group, iree_hal_pool_scope_t scope,
+    iree_hal_pool_t* storage_pool, iree_hal_queue_t* queue,
+    const loom_serve_memory_geometry_t
+        geometries[LOOM_SERVE_MEMORY_CLASS_COUNT],
+    uint64_t limit_bytes, iree_allocator_t host_allocator,
+    loom_serve_memory_pool_t** out_pool) {
+  *out_pool = NULL;
   loom_serve_memory_pool_t* pool = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_struct_array(
       host_allocator, sizeof(*pool), scope.family_count,
@@ -304,13 +411,39 @@ iree_status_t loom_serve_memory_pool_allocate(
          scope.family_count * sizeof(*scope.families));
   pool->mapping_scope = (iree_hal_memory_scope_t){
       iree_hal_device_group_memory_domain(group), IREE_HAL_MEMORY_SCOPE_ANY};
-  pool->slab_size = slab_size;
-  pool->minimum_alignment = minimum;
   pool->limit_bytes = limit_bytes ? limit_bytes : UINT64_MAX;
   iree_slim_mutex_initialize(&pool->capacity_mutex);
   iree_notification_initialize(&pool->capacity_notification);
-  iree_status_t status = iree_hal_pool_wait_allocate(
-      storage_pool, host_allocator, &pool->capacity_wait);
+  pool->slab_cache = storage_pool;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < LOOM_SERVE_MEMORY_CLASS_COUNT && iree_status_is_ok(status); ++i) {
+    const iree_hal_pool_reservation_request_t request =
+        iree_hal_make_pool_reservation_request(geometries[i].slab_size,
+                                               geometries[i].granularity);
+    if (i &&
+        request.allocation_size == pool->classes[0].request.allocation_size &&
+        request.min_alignment == pool->classes[0].request.min_alignment) {
+      continue;
+    }
+    pool->classes[i].request = request;
+    const iree_hal_slab_cache_options_t cache_options = {
+        .slab = request,
+        .minimum_cached_size = request.allocation_size,
+        .max_count = UINT32_MAX,
+        .trace_name = IREE_SVL("loom-serve-physical-slabs"),
+    };
+    status =
+        iree_hal_slab_cache_create(pool->slab_cache, &cache_options,
+                                   host_allocator, &pool->classes[i].cache);
+    if (iree_status_is_ok(status)) {
+      pool->slab_cache = pool->classes[i].cache;
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_pool_wait_allocate(pool->slab_cache, host_allocator,
+                                         &pool->capacity_wait);
+  }
   if (iree_status_is_ok(status)) {
     *out_pool = pool;
   } else {
@@ -336,6 +469,9 @@ void loom_serve_memory_pool_free(loom_serve_memory_pool_t* pool) {
   iree_status_free(pool->failure);
   iree_notification_deinitialize(&pool->capacity_notification);
   iree_slim_mutex_deinitialize(&pool->capacity_mutex);
+  for (iree_host_size_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+    iree_hal_pool_release(pool->classes[i].cache);
+  }
   iree_hal_pool_release(pool->storage_pool);
   iree_allocator_free(pool->host_allocator, pool);
 }
@@ -343,14 +479,65 @@ void loom_serve_memory_pool_free(loom_serve_memory_pool_t* pool) {
 loom_serve_memory_statistics_t loom_serve_memory_pool_statistics(
     loom_serve_memory_pool_t* pool) {
   loom_serve_memory_pool_collect(pool);
+  loom_serve_memory_pool_observe_retirement(pool);
   loom_serve_memory_statistics_t statistics = pool->statistics;
-  const uint64_t physical = loom_serve_memory_pool_observe_retirement(pool);
   const uint64_t retiring = pool->retiring_bytes;
-  statistics.committed_bytes += retiring;
+  for (iree_host_size_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+    if (!pool->classes[i].cache) {
+      continue;
+    }
+    iree_hal_pool_stats_t cached;
+    iree_hal_pool_query_stats(pool->classes[i].cache, &cached);
+    statistics.cached_bytes += cached.bytes_free;
+  }
+  statistics.committed_bytes +=
+      retiring + statistics.cached_bytes + statistics.abandoned_bytes;
   statistics.releasing_bytes += retiring;
-  statistics.released_bytes -= iree_min(statistics.released_bytes, retiring);
-  statistics.peak_bytes = iree_max(statistics.peak_bytes, physical);
   return statistics;
+}
+
+// Trims only idle capacity not required by this demand. Each cache's total
+// includes bypassed entries, so its local floor subtracts only the selected
+// class's eviction. Requery before each trim: returning an outer cached slab
+// also releases the corresponding inner bypass entry.
+static void loom_serve_memory_pool_trim_cache(
+    loom_serve_memory_pool_t* pool, uint64_t target_bytes,
+    loom_serve_memory_demand_t additional) {
+  uint64_t projected = loom_serve_memory_pool_projected_bytes(pool, additional);
+  for (iree_host_size_t i = 0;
+       i < LOOM_SERVE_MEMORY_CLASS_COUNT && projected > target_bytes; ++i) {
+    if (!pool->classes[i].cache) {
+      continue;
+    }
+    const uint64_t required =
+        pool->demand.cached_bytes[i] + additional.cached_bytes[i];
+    const uint64_t retained = pool->classes[i].admitted_bytes;
+    if (retained <= required) {
+      continue;
+    }
+    const uint64_t size = pool->classes[i].request.allocation_size;
+    const uint64_t excess = projected - target_bytes;
+    const uint64_t removable = retained - required;
+    const uint64_t count =
+        iree_min(removable / size, excess / size + (excess % size != 0));
+    if (!count) {
+      continue;
+    }
+    iree_hal_pool_stats_t cached;
+    iree_hal_pool_query_stats(pool->classes[i].cache, &cached);
+    const uint64_t bytes = count * size;
+    iree_hal_pool_trim(pool->classes[i].cache, IREE_HAL_POOL_TRIM_FLAG_ALL,
+                       cached.bytes_committed - bytes);
+    projected -= bytes;
+  }
+  loom_serve_memory_pool_observe_retirement(pool);
+}
+
+void loom_serve_memory_pool_trim(loom_serve_memory_pool_t* pool,
+                                 uint64_t target_bytes) {
+  pool->trim.target_bytes = target_bytes;
+  pool->trim.pending = true;
+  loom_serve_memory_pool_collect(pool);
 }
 
 uint64_t loom_serve_memory_pool_limit(const loom_serve_memory_pool_t* pool) {
@@ -409,11 +596,12 @@ void loom_serve_memory_pool_set_reclaimer(
 }
 
 iree_status_t loom_serve_memory_pool_prepare(
-    loom_serve_memory_pool_t* pool, uint64_t additional_bytes,
+    loom_serve_memory_pool_t* pool, loom_serve_memory_demand_t additional,
     loom_serve_memory_admission_t* out_admission) {
   *out_admission = LOOM_SERVE_MEMORY_ADMISSION_CAPACITY;
   loom_serve_memory_pool_collect(pool);
   IREE_RETURN_IF_ERROR(iree_status_clone(pool->failure));
+  const uint64_t additional_bytes = loom_serve_memory_demand_total(additional);
   if (!additional_bytes) {
     *out_admission = LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
     return iree_ok_status();
@@ -421,55 +609,119 @@ iree_status_t loom_serve_memory_pool_prepare(
   if (additional_bytes > pool->limit_bytes) {
     return iree_ok_status();
   }
-  const uint64_t target_bytes = pool->limit_bytes - additional_bytes;
-  if (pool->statistics.pending_bytes > target_bytes) {
+  // Explicit trim can change class ceilings. Resolve it before promising
+  // a complete no-yield cohort; collection midway through its streamed commits
+  // must not destroy the capacity on which that promise depends.
+  if (pool->trim.pending) {
     *out_admission = LOOM_SERVE_MEMORY_ADMISSION_DEFERRED;
     return iree_ok_status();
   }
-  if (loom_serve_memory_pool_charged_bytes(pool) > target_bytes &&
+  if (loom_serve_memory_pool_projected_bytes(pool, additional) >
+          pool->limit_bytes &&
       pool->reclaimer.fn) {
-    iree_status_t status =
-        pool->reclaimer.fn(pool->reclaimer.user_data,
-                           target_bytes - pool->statistics.pending_bytes);
+    const uint64_t target = pool->limit_bytes - additional_bytes;
+    iree_status_t status = pool->reclaimer.fn(
+        pool->reclaimer.user_data, target > pool->statistics.pending_bytes
+                                       ? target - pool->statistics.pending_bytes
+                                       : 0);
     if (!iree_status_is_ok(status)) {
       if (iree_status_is_ok(pool->failure)) {
         pool->failure = iree_status_clone(status);
       }
       return status;
     }
+    loom_serve_memory_pool_collect(pool);
+    IREE_RETURN_IF_ERROR(iree_status_clone(pool->failure));
   }
-  loom_serve_memory_pool_collect(pool);
-  IREE_RETURN_IF_ERROR(iree_status_clone(pool->failure));
-  bool deferred = false;
-  if (loom_serve_memory_pool_charged_bytes(pool) > target_bytes) {
-    deferred = loom_serve_memory_pool_observe_capacity(pool) ||
-               pool->operations != NULL;
+  // Another class's idle bytes cannot satisfy this demand. At a joined source
+  // epoch they can be returned, but native disposal must finish before those
+  // bytes become available for a different physical extent.
+  if (!pool->operations && loom_serve_memory_pool_projected_bytes(
+                               pool, additional) > pool->limit_bytes) {
+    loom_serve_memory_pool_trim_cache(pool, pool->limit_bytes, additional);
   }
-  // Capacity may have returned during observation. A committed observation
-  // remains evidence of progress even if its callback already ran.
-  if (loom_serve_memory_pool_charged_bytes(pool) <= target_bytes) {
+  // Reclamation can schedule a physical trim. Resolve that boundary before
+  // returning the same no-yield promise as an immediately available cohort.
+  bool deferred = pool->trim.pending;
+  if (loom_serve_memory_pool_projected_bytes(pool, additional) >
+      pool->limit_bytes) {
+    deferred |= loom_serve_memory_pool_observe_capacity(pool) ||
+                pool->operations != NULL;
+  }
+  if (!pool->trim.pending && loom_serve_memory_pool_projected_bytes(
+                                 pool, additional) <= pool->limit_bytes) {
     *out_admission = LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   } else if (deferred) {
     *out_admission = LOOM_SERVE_MEMORY_ADMISSION_DEFERRED;
+  } else if (pool->statistics.abandoned_bytes &&
+             loom_serve_memory_pool_projected_bytes(pool, additional) -
+                     pool->statistics.abandoned_bytes <=
+                 pool->limit_bytes) {
+    // No native return can satisfy this attempt. Report loss only when this
+    // demand would otherwise fit; surviving capacity remains usable.
+    return iree_status_annotate_f(
+        iree_hal_pool_query_abandonment_status(pool->storage_pool),
+        "physical admission is blocked by %" PRIu64
+        " bytes of abandoned backing within a %" PRIu64 " byte limit",
+        pool->statistics.abandoned_bytes, pool->limit_bytes);
   }
   return iree_ok_status();
 }
 
+// Physical matching is independent of the reservation's role. In particular,
+// a bulk root's short tail can reuse an exact sparse-storage slab.
+static uint8_t loom_serve_memory_pool_class(
+    const loom_serve_memory_pool_t* pool, iree_device_size_t size,
+    iree_device_size_t alignment) {
+  for (uint8_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+    if (pool->classes[i].cache &&
+        size == pool->classes[i].request.allocation_size &&
+        alignment <= pool->classes[i].request.min_alignment) {
+      return i;
+    }
+  }
+  return LOOM_SERVE_MEMORY_CLASS_COUNT;
+}
+
+static iree_device_size_t loom_serve_memory_slab_length(
+    const loom_serve_virtual_buffer_t* buffer, iree_host_size_t index) {
+  return iree_min(buffer->geometry.slab_size,
+                  buffer->byte_length - index * buffer->geometry.slab_size);
+}
+
+static uint64_t* loom_serve_memory_slab_demand(
+    loom_serve_memory_demand_t* demand,
+    const loom_serve_virtual_buffer_t* buffer, iree_host_size_t index) {
+  const uint8_t physical_class = index + 1 == buffer->slab_count
+                                     ? buffer->tail_class
+                                     : buffer->regular_class;
+  return physical_class == LOOM_SERVE_MEMORY_CLASS_COUNT
+             ? &demand->uncached_bytes
+             : &demand->cached_bytes[physical_class];
+}
+
 iree_status_t loom_serve_virtual_buffer_allocate(
-    loom_serve_memory_pool_t* pool, iree_device_size_t length,
-    iree_device_size_t alignment, loom_serve_memory_statistics_t* statistics,
+    loom_serve_memory_pool_t* pool, loom_serve_memory_geometry_t geometry,
+    iree_device_size_t length, iree_device_size_t alignment,
+    loom_serve_memory_statistics_t* statistics,
     loom_serve_virtual_buffer_t** out_buffer) {
   *out_buffer = NULL;
-  if (!length || length > INT64_MAX - pool->slab_size) {
+  if (!length || length > INT64_MAX - geometry.slab_size) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "invalid virtual buffer extent");
   }
-  if (!alignment || pool->minimum_alignment % alignment) {
+  if (!alignment || geometry.granularity % alignment) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "virtual reservation cannot guarantee alignment %" PRIdsz, alignment);
   }
-  const uint64_t count = (length + pool->slab_size - 1) / pool->slab_size;
+  const uint64_t count = (length + geometry.slab_size - 1) / geometry.slab_size;
+  const iree_device_size_t tail = length % geometry.slab_size;
+  const iree_device_size_t byte_length =
+      length - tail +
+      (tail ? iree_device_align(iree_max(tail, geometry.minimum_size),
+                                geometry.granularity)
+            : 0);
   if (count > (IREE_HOST_SIZE_MAX - sizeof(loom_serve_virtual_buffer_t)) /
                   sizeof(loom_serve_memory_slab_t)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -482,18 +734,25 @@ iree_status_t loom_serve_virtual_buffer_allocate(
       (void**)&buffer));
   buffer->pool = pool;
   buffer->statistics = statistics;
+  buffer->geometry = geometry;
+  buffer->byte_length = byte_length;
   buffer->slab_count = (iree_host_size_t)count;
+  buffer->regular_class = loom_serve_memory_pool_class(pool, geometry.slab_size,
+                                                       geometry.granularity);
+  buffer->tail_class = loom_serve_memory_pool_class(
+      pool, loom_serve_memory_slab_length(buffer, count - 1),
+      geometry.granularity);
   const iree_hal_virtual_buffer_options_t options = {
-      .byte_length = count * pool->slab_size,
+      .byte_length = byte_length,
       .min_alignment = alignment,
-      .mapping_granularity = pool->slab_size,
+      .mapping_granularity = geometry.slab_size,
   };
   iree_status_t status =
       iree_hal_virtual_buffer_create(pool->group, pool->scope, &options,
                                      pool->host_allocator, &buffer->handle);
   if (iree_status_is_ok(status)) {
-    pool->statistics.reserved_bytes += count * pool->slab_size;
-    statistics->reserved_bytes += count * pool->slab_size;
+    pool->statistics.reserved_bytes += byte_length;
+    statistics->reserved_bytes += byte_length;
     *out_buffer = buffer;
   } else {
     iree_allocator_free(pool->host_allocator, buffer);
@@ -506,6 +765,39 @@ iree_hal_buffer_t* loom_serve_virtual_buffer_handle(
   return buffer->handle;
 }
 
+iree_device_size_t loom_serve_virtual_buffer_slab_size(
+    const loom_serve_virtual_buffer_t* buffer) {
+  return buffer->geometry.slab_size;
+}
+
+iree_host_size_t loom_serve_virtual_buffer_slab_count(
+    const loom_serve_virtual_buffer_t* buffer) {
+  return buffer->slab_count;
+}
+
+loom_serve_memory_demand_t loom_serve_virtual_buffer_missing_demand(
+    const loom_serve_virtual_buffer_t* buffer) {
+  loom_serve_memory_demand_t demand = {0};
+  const uint64_t regular_count =
+      buffer->byte_length / buffer->geometry.slab_size;
+  const uint64_t regular_bytes =
+      (regular_count - buffer->backed_regular_count) *
+      buffer->geometry.slab_size;
+  if (buffer->regular_class == LOOM_SERVE_MEMORY_CLASS_COUNT) {
+    demand.uncached_bytes = regular_bytes;
+  } else {
+    demand.cached_bytes[buffer->regular_class] = regular_bytes;
+  }
+  if (regular_count < buffer->slab_count) {
+    const loom_serve_memory_slab_t* tail = &buffer->slabs[regular_count];
+    if (!tail->physical && !tail->in_flight) {
+      *loom_serve_memory_slab_demand(&demand, buffer, regular_count) +=
+          loom_serve_memory_slab_length(buffer, regular_count);
+    }
+  }
+  return demand;
+}
+
 // Publishes one native result on the serialized pool owner. Native work never
 // mutates this accounting or another operation's slab metadata.
 static void loom_serve_memory_slab_publish(
@@ -513,17 +805,23 @@ static void loom_serve_memory_slab_publish(
     const loom_serve_memory_slab_t* result) {
   loom_serve_memory_pool_t* pool = buffer->pool;
   loom_serve_memory_slab_t* slab = &buffer->slabs[index];
+  const uint64_t length = loom_serve_memory_slab_length(buffer, index);
+  if ((slab->physical || slab->in_flight) && !result->physical) {
+    *loom_serve_memory_slab_demand(&pool->demand, buffer, index) -= length;
+    if (length == buffer->geometry.slab_size) {
+      --buffer->backed_regular_count;
+    }
+  }
   if (slab->physical && !result->physical) {
-    pool->statistics.committed_bytes -= pool->slab_size;
-    pool->statistics.released_bytes += pool->slab_size;
-    pool->retiring_bytes += pool->slab_size;
-    buffer->statistics->committed_bytes -= pool->slab_size;
-    buffer->statistics->released_bytes += pool->slab_size;
+    pool->statistics.committed_bytes -= length;
+    pool->statistics.released_bytes += length;
+    buffer->statistics->committed_bytes -= length;
+    buffer->statistics->released_bytes += length;
   } else if (!slab->physical && result->physical) {
-    pool->statistics.committed_bytes += pool->slab_size;
+    pool->statistics.committed_bytes += length;
     pool->statistics.peak_bytes =
         iree_max(pool->statistics.peak_bytes, pool->statistics.committed_bytes);
-    buffer->statistics->committed_bytes += pool->slab_size;
+    buffer->statistics->committed_bytes += length;
     buffer->statistics->peak_bytes = iree_max(
         buffer->statistics->peak_bytes, buffer->statistics->committed_bytes);
   }
@@ -542,11 +840,6 @@ static void loom_serve_memory_pool_collect(loom_serve_memory_pool_t* pool) {
   loom_serve_memory_operation_t** link = &pool->operations;
   while (*link) {
     loom_serve_memory_operation_t* operation = *link;
-    if (!operation->acquired_accounted &&
-        iree_atomic_load(&operation->acquired, iree_memory_order_acquire)) {
-      pool->acquired_pending_bytes += operation->count * pool->slab_size;
-      operation->acquired_accounted = true;
-    }
     iree_slim_mutex_lock(&operation->mutex);
     const bool complete = operation->complete;
     iree_slim_mutex_unlock(&operation->mutex);
@@ -556,34 +849,41 @@ static void loom_serve_memory_pool_collect(loom_serve_memory_pool_t* pool) {
     }
     for (iree_host_size_t i = 0; i < operation->count; ++i) {
       const loom_serve_memory_edit_t* edit = &operation->edits[i];
+      const uint64_t length =
+          loom_serve_memory_slab_length(edit->buffer, edit->index);
       loom_serve_memory_slab_publish(edit->buffer, edit->index, &edit->result);
       if (operation->invalidates_backing &&
           iree_status_is_ok(edit->buffer->failure)) {
         edit->buffer->failure = iree_status_clone(operation->status);
       }
       if (operation->releasing) {
-        edit->buffer->statistics->releasing_bytes -= pool->slab_size;
+        edit->buffer->statistics->releasing_bytes -= length;
+        pool->statistics.releasing_bytes -= length;
       } else {
-        edit->buffer->statistics->pending_bytes -= pool->slab_size;
+        edit->buffer->statistics->pending_bytes -= length;
+        pool->statistics.pending_bytes -= length;
         if (!edit->result.physical) {
-          // Failed acquisition can leave native disposal behind its buffer
-          // return. Transfer the pending charge until native counts prove it
-          // has retired, including the case where no backing was allocated.
-          pool->retiring_bytes += pool->slab_size;
+          // Publication drops root ownership, but not accepted physical charge.
+          // A failed batch can leave cached growth or asynchronous native
+          // disposal. Retain its demand until all source work has published.
+          *loom_serve_memory_slab_demand(&pool->demand, edit->buffer,
+                                         edit->index) += length;
+          *loom_serve_memory_slab_demand(&pool->failed_demand, edit->buffer,
+                                         edit->index) += length;
         }
-      }
-    }
-    if (operation->releasing) {
-      pool->statistics.releasing_bytes -= operation->count * pool->slab_size;
-    } else {
-      pool->statistics.pending_bytes -= operation->count * pool->slab_size;
-      if (operation->acquired_accounted) {
-        pool->acquired_pending_bytes -= operation->count * pool->slab_size;
       }
     }
     operation->published = true;
     *link = operation->next;
     operation->next = NULL;
+  }
+  if (!pool->operations) {
+    loom_serve_memory_pool_observe_retirement(pool);
+    if (pool->trim.pending) {
+      loom_serve_memory_pool_trim_cache(pool, pool->trim.target_bytes,
+                                        (loom_serve_memory_demand_t){0});
+      pool->trim.pending = false;
+    }
   }
 }
 
@@ -619,6 +919,9 @@ static void loom_serve_memory_operation_complete(
   operation->stages[0].status = operation->stages[1].status = iree_ok_status();
   operation->invalidates_backing =
       !iree_status_is_ok(status) && (operation->releasing || first_ok);
+  // Readiness can wake the owner on another thread. Its completion query must
+  // join publication and our last callback access before it can free us.
+  iree_slim_mutex_lock(&operation->mutex);
   if (operation->readiness && iree_status_is_ok(status)) {
     status =
         iree_hal_semaphore_signal(operation->readiness, operation->value, NULL);
@@ -626,7 +929,6 @@ static void loom_serve_memory_operation_complete(
   if (operation->readiness && !iree_status_is_ok(status)) {
     iree_hal_semaphore_fail(operation->readiness, iree_status_clone(status));
   }
-  iree_slim_mutex_lock(&operation->mutex);
   operation->status = status;
   operation->complete = true;
   iree_notification_post(&operation->notification, IREE_ALL_WAITERS);
@@ -644,11 +946,6 @@ static void loom_serve_memory_stage_completed(
     iree_status_t status) {
   loom_serve_memory_stage_t* stage = user_data;
   stage->status = status;
-  if (stage == &stage->operation->stages[0] && !stage->operation->releasing &&
-      iree_status_is_ok(status)) {
-    iree_atomic_store(&stage->operation->acquired, 1,
-                      iree_memory_order_release);
-  }
   loom_serve_memory_operation_complete(stage->operation);
 }
 
@@ -716,15 +1013,18 @@ static void loom_serve_memory_operation_enqueue(
                                             &value};
   for (iree_host_size_t i = 0; i < operation->count; ++i) {
     loom_serve_memory_edit_t* edit = &operation->edits[i];
-    operation->requests[i] =
-        iree_hal_make_pool_reservation_request(pool->slab_size, 0);
+    const iree_device_size_t length =
+        loom_serve_memory_slab_length(edit->buffer, edit->index);
+    operation->requests[i] = iree_hal_make_pool_reservation_request(
+        length, edit->buffer->geometry.granularity);
     if (operation->releasing) {
       operation->sources[i] = edit->result.physical;
     }
     operation->mappings[i] = (iree_hal_memory_mapping_t){
         .target = edit->buffer->handle,
         .scope = pool->mapping_scope,
-        .target_range = {edit->index * pool->slab_size, pool->slab_size},
+        .target_range = {edit->index * edit->buffer->geometry.slab_size,
+                         length},
         .access = operation->releasing ? IREE_HAL_MEMORY_ACCESS_NONE
                                        : IREE_HAL_MEMORY_ACCESS_ALL,
         .operation = operation->releasing
@@ -739,8 +1039,8 @@ static void loom_serve_memory_operation_enqueue(
                                       operation->count, operation->mappings, 0)
                  : iree_hal_queue_alloca(
                        pool->queue, iree_hal_semaphore_list_empty(), first,
-                       pool->storage_pool, operation->count,
-                       operation->requests, operation->sources);
+                       pool->slab_cache, operation->count, operation->requests,
+                       operation->sources);
   }
   if (!iree_status_is_ok(status)) {
     iree_hal_semaphore_fail(operation->stages[0].semaphore,
@@ -778,22 +1078,25 @@ iree_status_t loom_serve_memory_pool_commit_async(
   }
   IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, status);
   iree_host_size_t count = 0;
+  loom_serve_memory_demand_t additional = {0};
   for (iree_host_size_t r = 0; r < range_count; ++r) {
     const loom_serve_memory_range_t* range = &ranges[r];
+    const iree_device_size_t slab_size = range->buffer->geometry.slab_size;
     const iree_host_size_t end =
-        (range->offset + range->length - 1) / pool->slab_size + 1;
-    for (iree_host_size_t i = range->offset / pool->slab_size; i < end; ++i) {
+        (range->offset + range->length - 1) / slab_size + 1;
+    for (iree_host_size_t i = range->offset / slab_size; i < end; ++i) {
       loom_serve_memory_slab_t* slab = &range->buffer->slabs[i];
       IREE_ASSERT(!slab->in_flight);
       if (!slab->physical && !slab->pending_commit) {
         slab->pending_commit = true;
         ++count;
+        *loom_serve_memory_slab_demand(&additional, range->buffer, i) +=
+            loom_serve_memory_slab_length(range->buffer, i);
       }
     }
   }
   loom_serve_memory_admission_t admission;
-  status =
-      loom_serve_memory_pool_prepare(pool, count * pool->slab_size, &admission);
+  status = loom_serve_memory_pool_prepare(pool, additional, &admission);
   const bool admitted = admission == LOOM_SERVE_MEMORY_ADMISSION_AVAILABLE;
   loom_serve_memory_operation_t* operation = NULL;
   if (iree_status_is_ok(status) && admitted && count) {
@@ -802,9 +1105,10 @@ iree_status_t loom_serve_memory_pool_commit_async(
   iree_host_size_t index = 0;
   for (iree_host_size_t r = 0; r < range_count; ++r) {
     const loom_serve_memory_range_t* range = &ranges[r];
+    const iree_device_size_t slab_size = range->buffer->geometry.slab_size;
     const iree_host_size_t end =
-        (range->offset + range->length - 1) / pool->slab_size + 1;
-    for (iree_host_size_t i = range->offset / pool->slab_size; i < end; ++i) {
+        (range->offset + range->length - 1) / slab_size + 1;
+    for (iree_host_size_t i = range->offset / slab_size; i < end; ++i) {
       loom_serve_memory_slab_t* slab = &range->buffer->slabs[i];
       if (slab->pending_commit) {
         slab->pending_commit = false;
@@ -814,7 +1118,12 @@ iree_status_t loom_serve_memory_pool_commit_async(
               .index = i,
           };
           slab->in_flight = true;
-          range->buffer->statistics->pending_bytes += pool->slab_size;
+          const uint64_t length =
+              loom_serve_memory_slab_length(range->buffer, i);
+          range->buffer->statistics->pending_bytes += length;
+          if (length == range->buffer->geometry.slab_size) {
+            ++range->buffer->backed_regular_count;
+          }
         }
       }
     }
@@ -824,7 +1133,14 @@ iree_status_t loom_serve_memory_pool_commit_async(
     operation->readiness = readiness;
     operation->value = value;
     iree_hal_semaphore_retain(readiness);
-    pool->statistics.pending_bytes += count * pool->slab_size;
+    pool->statistics.pending_bytes +=
+        loom_serve_memory_demand_total(additional);
+    loom_serve_memory_demand_add(&pool->demand, additional);
+    pool->uncached_bytes += additional.uncached_bytes;
+    for (iree_host_size_t i = 0; i < LOOM_SERVE_MEMORY_CLASS_COUNT; ++i) {
+      pool->classes[i].admitted_bytes = iree_max(
+          pool->classes[i].admitted_bytes, pool->demand.cached_bytes[i]);
+    }
     *out_operation = operation;
     loom_serve_memory_operation_enqueue(pool, operation);
   } else if (iree_status_is_ok(status) && admitted && readiness) {
@@ -883,11 +1199,12 @@ iree_status_t loom_serve_memory_pool_trim_async(
         operation->edits[index++] =
             (loom_serve_memory_edit_t){buffer, i, *slab};
         slab->in_flight = true;
-        buffer->statistics->releasing_bytes += pool->slab_size;
+        const uint64_t length = loom_serve_memory_slab_length(buffer, i);
+        buffer->statistics->releasing_bytes += length;
+        pool->statistics.releasing_bytes += length;
       }
     }
   }
-  pool->statistics.releasing_bytes += count * pool->slab_size;
   *out_operation = operation;
   loom_serve_memory_operation_enqueue(pool, operation);
   IREE_TRACE_ZONE_END(z0);
@@ -986,7 +1303,7 @@ void loom_serve_virtual_buffer_begin_trim(loom_serve_virtual_buffer_t* buffer) {
 void loom_serve_virtual_buffer_keep(loom_serve_virtual_buffer_t* buffer,
                                     iree_device_size_t offset,
                                     iree_device_size_t length) {
-  const iree_device_size_t slab_size = buffer->pool->slab_size;
+  const iree_device_size_t slab_size = buffer->geometry.slab_size;
   const iree_host_size_t end = (offset + length - 1) / slab_size + 1;
   for (iree_host_size_t i = offset / slab_size; i < end; ++i) {
     buffer->slabs[i].keep = true;
@@ -1024,8 +1341,8 @@ iree_status_t loom_serve_virtual_buffer_free(
   }
   iree_hal_buffer_release(buffer->handle);
   iree_status_free(buffer->failure);
-  pool->statistics.reserved_bytes -= buffer->slab_count * pool->slab_size;
-  buffer->statistics->reserved_bytes -= buffer->slab_count * pool->slab_size;
+  pool->statistics.reserved_bytes -= buffer->byte_length;
+  buffer->statistics->reserved_bytes -= buffer->byte_length;
   iree_allocator_free(pool->host_allocator, buffer);
   return iree_ok_status();
 }
