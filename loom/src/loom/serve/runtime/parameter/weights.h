@@ -7,7 +7,9 @@
 #define LOOM_SERVE_RUNTIME_PARAMETER_WEIGHTS_H_
 
 #include "loom/serve/runtime/execution/execution.h"
+#include "loom/serve/runtime/execution/workspace.h"
 #include "loom/serve/runtime/program/jit.h"
+#include "loom/serve/runtime/program/preparation.h"
 #include "loom/serve/runtime/storage/memory.h"
 
 #ifdef __cplusplus
@@ -25,7 +27,7 @@ typedef struct loom_serve_weight_root_t {
   iree_hal_buffer_t** buffer;
 } loom_serve_weight_root_t;
 
-// Retained checkpoint, placement, and in-place preparation plan. A single owner
+// Retained checkpoint, placement, and source preparation plan. A single owner
 // serializes activation/deactivation with all consuming models. Device, queues,
 // and optional physical pool outlive this object. The plan owns its resolved
 // parameter keys and preparations independently of the compiler.
@@ -41,7 +43,7 @@ typedef struct loom_serve_weight_activity_t {
   // Payload bytes in successful gather batches, excluding failed partial
   // batches.
   uint64_t read_bytes;
-  // Payload bytes whose in-place preparation dispatch was accepted.
+  // Final tensor bytes whose preparation dispatch was accepted.
   uint64_t prepared_bytes;
   // Gather groups accepted across all activations.
   uint64_t groups;
@@ -67,7 +69,8 @@ typedef struct loom_serve_weight_activity_t {
 // Successful source preparation is required before activation, and activation
 // before any consumer executes.
 // storage_pool supplies fixed roots, is qualified for dispatch and transfer,
-// and outlives the plan and every resolved root.
+// and outlives the plan and every resolved root. workspace supplies bounded
+// transient staging for out-of-place preparation and outlives the plan.
 //
 // On failure both populated root slots and a non-NULL *out_weights remain
 // caller-owned for teardown. Release consumer commands and root slots before
@@ -75,9 +78,10 @@ typedef struct loom_serve_weight_activity_t {
 iree_status_t loom_serve_weights_allocate(
     iree_hal_device_t* device, iree_hal_queue_t* transfer,
     iree_hal_queue_t* dispatch, iree_hal_pool_t* storage_pool,
-    loom_serve_memory_pool_t* pool, iree_host_size_t shared_root_count,
-    iree_host_size_t root_count, const loom_serve_weight_root_t* roots,
-    iree_allocator_t host_allocator, loom_serve_weights_t** out_weights);
+    loom_serve_memory_pool_t* pool, loom_serve_workspace_t* workspace,
+    iree_host_size_t shared_root_count, iree_host_size_t root_count,
+    const loom_serve_weight_root_t* roots, iree_allocator_t host_allocator,
+    loom_serve_weights_t** out_weights);
 
 // Receives terminal source preparation and fixed-root allocation status.
 // All preparation tasks/compiler accesses have retired before this callback,
@@ -92,29 +96,38 @@ typedef void (*loom_serve_weights_completion_fn_t)(void* user_data,
 // run on the shared host. Payload reads wait for activation; open checkpoint
 // handles and recorded preparers remain cached, not a second weight copy.
 //
-// The ordered weights_paths populate one parameter index; files may use any
-// supported format. Relative checkpoint paths use the source environment's
-// server-local base_directory. policy_path uses its package when present.
-// Absolute paths name server-local files in both cases. The environment's
-// strings/package, path list, and all paths are borrowed until completion.
-// policy_path names a text or bytecode source with the VM export:
-//   prepare_weight(buffer key) -> (buffer command_root, i64 byte_length)
-// The key is a read-only, non-NUL-terminated tensor name. Empty command_root
-// and zero byte_length preserve file bytes. Otherwise command_root names a
-// fully specified command, and byte_length equals the reflected tensor size.
-// A preparer has one mutable binding, no fixed buffers, and no global scratch.
-// Each distinct root is JITed once; activation prepares each unique tensor once
-// directly in final storage. The temporary VM policy is released before JIT.
+// Each declared source's ordered shards populate an independent parameter
+// index; files may use any supported format. Relative checkpoint paths use the
+// source environment's server-local base_directory. The declaration's policy
+// uses its package when present. Absolute paths name server-local files in both
+// cases. The environment and declaration are borrowed until completion.
+// The policy names a text or bytecode source with the VM export:
+//   prepare_weight(buffer key) -> i64 byte_length
+// The key is a read-only, non-NUL-terminated tensor name. The policy declares
+// at most one command through prepare.stage and its config/config_i64 imports.
+// No declaration and zero byte_length preserve file bytes. Otherwise
+// byte_length equals the reflected final tensor size. Checkpoint declarations
+// are unavailable inside weight policies.
+// The "weights" capability exposes source metadata and captures explicit input
+// ranges (see inputs.h). The standard "json" and "input" capabilities support
+// source-owned metadata interpretation and requirements. A preparer has no
+// fixed buffers or global scratch. It
+// binds final storage alone for in-place preparation, or final storage followed
+// by the captured input blob for out-of-place preparation. Each distinct
+// declaration is JITed once; activation prepares each tensor once using bounded
+// staging shared across tensors. The temporary VM policy is released before
+// JIT.
 //
 // Success accepts exclusive access to weights and jit until completion, which
-// may run before return. The caller keeps both, paths, host and user_data alive
-// through that callback. Rejection owes no callback. Preparation is attempted
-// once per plan; failure returns ownership for destruction, not activation.
+// may run before return. The caller keeps both, declaration, host and user_data
+// alive through that callback. Rejection owes no callback. Preparation is
+// attempted once per plan; failure returns ownership for destruction, not
+// activation.
 iree_status_t loom_serve_weights_prepare_async(
     loom_serve_weights_t* weights, loom_serve_host_t* host,
     loom_serve_jit_t* jit, iree_hal_command_buffer_mode_t command_mode,
-    const loom_serve_sources_t* sources, iree_string_view_list_t weights_paths,
-    iree_string_view_t policy_path,
+    const loom_serve_sources_t* sources,
+    const loom_serve_preparation_parameter_t* parameter,
     loom_serve_weights_completion_fn_t completion, void* user_data);
 
 // Cold outer-application join over the same preparation. Never called by a
@@ -122,8 +135,8 @@ iree_status_t loom_serve_weights_prepare_async(
 iree_status_t loom_serve_weights_prepare(
     loom_serve_weights_t* weights, loom_serve_host_t* host,
     loom_serve_jit_t* jit, iree_hal_command_buffer_mode_t command_mode,
-    const loom_serve_sources_t* sources, iree_string_view_list_t weights_paths,
-    iree_string_view_t policy_path);
+    const loom_serve_sources_t* sources,
+    const loom_serve_preparation_parameter_t* parameter);
 
 // Commits storage and streams/prepares directly into final roots through four
 // independent queue lanes. An already active plan does not reload or prepare

@@ -131,8 +131,9 @@ TEST_F(PreparationTest, CatalogGrowthPreservesEveryDeclaration) {
                 std::to_string(j));
       const auto& parameter = stage->parameters[j];
       EXPECT_EQ(parameter.binding, j);
-      ASSERT_EQ(parameter.paths.count, 3);
-      const auto* paths = parameter.paths.values;
+      ASSERT_EQ(parameter.source_count, 1);
+      ASSERT_EQ(parameter.sources[0].count, 3);
+      const auto* paths = parameter.sources[0].values;
       EXPECT_EQ(std::string(paths[0].data, paths[0].size),
                 "/checkpoints/model.safetensors");
       EXPECT_EQ(std::string(paths[1].data, paths[1].size),
@@ -149,24 +150,48 @@ TEST_F(PreparationTest, CatalogGrowthPreservesEveryDeclaration) {
 TEST_F(PreparationTest, CheckpointIdentityIncludesEveryFileAndPolicy) {
   const iree_string_view_t files[] = {IREE_SV("first.gguf"),
                                       IREE_SV("second.gguf")};
-  const loom_serve_preparation_parameter_t base = {
-      0, {IREE_ARRAYSIZE(files), files}, IREE_SV("weights.loom")};
+  const iree_string_view_list_t sources[] = {{IREE_ARRAYSIZE(files), files}};
+  const loom_serve_preparation_parameter_t base = {0, 1, sources,
+                                                   IREE_SV("weights.loom")};
   auto peer = base;
   peer.binding = 1;
   EXPECT_TRUE(loom_serve_preparation_parameter_equal(&base, &peer));
   const iree_string_view_t different[] = {files[0], IREE_SV("other.gguf")};
-  peer.paths.values = different;
+  iree_string_view_list_t peer_sources[] = {{2, different}, {1, files}};
+  peer.sources = peer_sources;
   EXPECT_FALSE(loom_serve_preparation_parameter_equal(&base, &peer));
-  peer = base;
-  peer.paths.count = 1;
+  peer_sources[0] = {1, files};
   EXPECT_FALSE(loom_serve_preparation_parameter_equal(&base, &peer));
   const iree_string_view_t reversed[] = {files[1], files[0]};
-  peer = base;
-  peer.paths.values = reversed;
+  peer_sources[0] = {2, reversed};
+  EXPECT_FALSE(loom_serve_preparation_parameter_equal(&base, &peer));
+  peer_sources[0] = sources[0];
+  EXPECT_TRUE(loom_serve_preparation_parameter_equal(&base, &peer));
+  peer.source_count = 2;
   EXPECT_FALSE(loom_serve_preparation_parameter_equal(&base, &peer));
   peer = base;
   peer.policy = IREE_SV("adapter.loom");
   EXPECT_FALSE(loom_serve_preparation_parameter_equal(&base, &peer));
+}
+
+TEST_F(PreparationTest, IndependentSourcesPreserveShardOrderAndDuplicateNames) {
+  IREE_ASSERT_OK(loom_serve_preparation_allocate(
+      target_environment, environment, &sources,
+      iree_make_cstring_view(FLAG_boundary_source), IREE_SV("many_sources"),
+      iree_vm_variant_span_empty(), iree_vm_variant_span_empty(),
+      iree_vm_module_span_empty(), &compilation, host_allocator, &preparation));
+  const auto* stage = loom_serve_preparation_stage(preparation, 0);
+  ASSERT_EQ(stage->parameter_count, 1);
+  const auto& parameter = stage->parameters[0];
+  ASSERT_EQ(parameter.source_count, 33);
+  for (uint32_t s = 0; s < parameter.source_count; ++s) {
+    const auto& source = parameter.sources[s];
+    ASSERT_EQ(source.count, 2);
+    EXPECT_EQ(std::string(source.values[0].data, source.values[0].size),
+              "/checkpoints/model.safetensors");
+    EXPECT_EQ(std::string(source.values[1].data, source.values[1].size),
+              "/checkpoints/weights.loom");
+  }
 }
 
 TEST_F(PreparationTest, InvalidDeclarationsReleasePartialOwnership) {
@@ -179,6 +204,8 @@ TEST_F(PreparationTest, InvalidDeclarationsReleasePartialOwnership) {
   const loom_serve_test_preparation_case_t cases[] = {
       {"missing_stage", IREE_STATUS_OUT_OF_RANGE},
       {"conflicting_parameter_policy", IREE_STATUS_INVALID_ARGUMENT},
+      {"sparse_source", IREE_STATUS_INVALID_ARGUMENT},
+      {"negative_source", IREE_STATUS_INVALID_ARGUMENT},
       {"direct_parameter", IREE_STATUS_INVALID_ARGUMENT},
       {"missing_workspace_stage", IREE_STATUS_OUT_OF_RANGE},
       {"duplicate_workspace_limit", IREE_STATUS_ALREADY_EXISTS},

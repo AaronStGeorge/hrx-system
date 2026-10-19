@@ -972,8 +972,13 @@ loom_cc_test(
   NAME
     weights_test
   SRCS
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_packing_test.cc"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test.cc"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/weights_test_base.h"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/boundaries.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/packing.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/packing_policy.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/policy.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/stages.loom"
   DEPS

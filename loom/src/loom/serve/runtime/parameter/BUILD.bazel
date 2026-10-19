@@ -14,9 +14,14 @@ package(
 
 exports_files(
     [
+        "testdata/weights/boundaries.loom",
         "testdata/weights/policy.loom",
+        "testdata/weights/packing.loom",
+        "testdata/weights/packing_policy.loom",
         "testdata/weights/stages.loom",
         "weights_test.cc",
+        "weights_test_base.h",
+        "weights_packing_test.cc",
     ],
     visibility = ["//loom/src/loom/serve:implementation"],
 )
@@ -67,26 +72,65 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "inputs",
+    srcs = ["inputs.c"],
+    hdrs = ["inputs.h"],
+    deps = [
+        "//loom/src/loom/serve/runtime/program:preparation",
+        "//loom/src/loom/serve/runtime/program:sources",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/io:parameter_index",
+        "//runtime/src/iree/io:parameter_index_provider",
+        "//runtime/src/iree/io:parameter_provider",
+        "//runtime/src/iree/tooling:parameter_util",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_library(
     name = "weights",
     srcs = ["weights.c"],
     hdrs = ["weights.h"],
     deps = [
+        ":inputs",
         "//loom/binding/c:loomc",
         "//loom/src/loom/serve/runtime/execution",
         "//loom/src/loom/serve/runtime/execution:retirement",
+        "//loom/src/loom/serve/runtime/execution:workspace",
         "//loom/src/loom/serve/runtime/host",
         "//loom/src/loom/serve/runtime/program",
+        "//loom/src/loom/serve/runtime/program:input",
         "//loom/src/loom/serve/runtime/program:jit",
+        "//loom/src/loom/serve/runtime/program:json",
+        "//loom/src/loom/serve/runtime/program:preparation",
         "//loom/src/loom/serve/runtime/program:sources",
         "//loom/src/loom/serve/runtime/storage:memory",
         "//runtime/src/iree/async",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal",
-        "//runtime/src/iree/io:parameter_index",
-        "//runtime/src/iree/io:parameter_index_provider",
         "//runtime/src/iree/io:parameter_provider",
-        "//runtime/src/iree/tooling:parameter_util",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "inputs_test",
+    srcs = ["inputs_test.cc"],
+    args = ["--input_policy=$(rootpath testdata/weights/inputs.loom)"],
+    data = ["testdata/weights/inputs.loom"],
+    deps = [
+        ":inputs",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/vm",
+        "//loom/src/loom/serve/runtime/program",
+        "//loom/src/loom/serve/runtime/program:preparation",
+        "//loom/src/loom/serve/runtime/program:sources",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
         "//runtime/src/iree/vm",
     ],
 )

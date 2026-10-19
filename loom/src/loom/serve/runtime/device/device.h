@@ -141,6 +141,9 @@ iree_hal_device_t* loom_serve_device_handle(const loom_serve_device_t* device);
 // transients use the execution workspace instead of this unbounded source.
 iree_hal_pool_t* loom_serve_device_storage_pool(
     const loom_serve_device_t* device);
+// Borrowed shared transient backing for execution and weight preparation.
+loom_serve_workspace_t* loom_serve_device_workspace(
+    const loom_serve_device_t* device);
 // Borrowed application host, which outlives this device and its models.
 loom_serve_host_t* loom_serve_device_host(const loom_serve_device_t* device);
 iree_hal_device_group_t* loom_serve_device_group(

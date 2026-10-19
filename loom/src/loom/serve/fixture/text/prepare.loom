@@ -6,7 +6,7 @@ func.decl import("prepare") @stage(%root: buffer, %tag: i64) -> (i32)
 
 func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
 
-func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %directory: buffer, %path: buffer, %policy: buffer)
+func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %source: i32, %directory: buffer, %path: buffer, %policy: buffer)
 
 global.rodata.def @root = bytes("616476616e6365")
 
@@ -42,6 +42,7 @@ func.def @allocation(%records: buffer, %slot: index, %bytes: i64, %clear: i64) {
 // One shared command handles every host token/span bucket. The cold program
 // owns storage geometry; the host owns physical page IDs and recurrent slots.
 func.def public @prepare(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %pins: i64, %draft_depth: i32, %shapes: buffer, %shape_count: i64, %weights: buffer, %options: buffer) -> (i64, i32, buffer, buffer, buffer, buffer, buffer, buffer, buffer) {
+  %c0_source = scalar.constant 0 : i32
   %origin = index.constant 0 : offset
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
@@ -80,8 +81,8 @@ func.def public @prepare(%prefill: i64, %context: i64, %pool: i64, %rows: i64, %
   func.call @config_i64(%media_stage, %media_key, %c1_i64) : (i32, buffer, i64)
   %empty = global.load @empty : buffer
   %policy = global.load @policy : buffer
-  func.call @parameter(%stage, %c0_i32, %empty, %weights, %policy) : (i32, i32, buffer, buffer, buffer)
-  func.call @parameter(%media_stage, %c0_i32, %empty, %weights, %policy) : (i32, i32, buffer, buffer, buffer)
+  func.call @parameter(%stage, %c0_i32, %c0_source, %empty, %weights, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+  func.call @parameter(%media_stage, %c0_i32, %c0_source, %empty, %weights, %policy) : (i32, i32, i32, buffer, buffer, buffer)
   %state_bytes = index.constant 8 : offset
   %state = buffer.alloca<private> align(4) %state_bytes : buffer
   %state_view = buffer.view %state[%origin] : buffer -> view<2xi32>

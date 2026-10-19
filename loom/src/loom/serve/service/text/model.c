@@ -709,8 +709,8 @@ iree_status_t loom_serve_text_load_advance(loom_serve_text_load_t* load,
           iree_slim_mutex_unlock(&load->event.mutex);
           status = loom_serve_weights_prepare_async(
               model->parameters.plans[index], host, model->jit,
-              model->command_mode, &load->options.sources, checkpoint->paths,
-              checkpoint->policy, loom_serve_text_load_complete, load);
+              model->command_mode, &load->options.sources, checkpoint,
+              loom_serve_text_load_complete, load);
           submitted = iree_status_is_ok(status);
         } else {
           load->phase = TEXT_LOAD_LINK;

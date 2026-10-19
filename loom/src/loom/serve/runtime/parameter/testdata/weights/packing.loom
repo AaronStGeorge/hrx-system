@@ -1,0 +1,103 @@
+config.decl @interleaved : i64
+
+config.decl @first_offset : i64
+
+config.decl @second_offset : i64
+
+kernel.def @pack_factors() {
+  %c1 = index.constant 1 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c1, %c1) : index
+} launch(%output: buffer, %input: buffer) {
+  %element = kernel.workitem.id<x> : index
+  %origin = index.constant 0 : offset
+  %c2 = index.constant 2 : index
+  %c4 = index.constant 4 : index
+  %c6 = index.constant 6 : index
+  %c8 = index.constant 8 : index
+  %interleaved = config.get @interleaved : i64
+  %c0_i64 = scalar.constant 0 : i64
+  %columns = scalar.cmpi ne, %interleaved, %c0_i64 : i64
+  %first_bytes = config.get @first_offset : i64
+  %second_bytes = config.get @second_offset : i64
+  %first_offset = index.cast %first_bytes : i64 to offset
+  %second_offset = index.cast %second_bytes : i64 to offset
+  %result = buffer.view %output[%origin] : buffer -> view<12xbf16>
+  %first = buffer.view %input[%first_offset] : buffer -> view<8xf32>
+  %value = view.load %first[%element] : view<8xf32> -> f32
+  %packed = scalar.fptrunc %value : f32 to bf16
+  %target = scf.if %columns -> (index) {
+    %row = index.div %element, %c4 : index
+    %column = index.rem %element, %c4 : index
+    %base = index.mul %row, %c6 : index
+    %target = index.add %base, %column : index
+    scf.yield %target : index
+  } else {
+    scf.yield %element : index
+  }
+  view.store %packed, %result[%target] : bf16, view<12xbf16>
+  %second_live = index.cmp ult, %element, %c4 : index
+  scf.if %second_live {
+    %second = buffer.view %input[%second_offset] : buffer -> view<4xf32>
+    %value = view.load %second[%element] : view<4xf32> -> f32
+    %packed = scalar.fptrunc %value : f32 to bf16
+    %target = scf.if %columns -> (index) {
+      %row = index.div %element, %c2 : index
+      %column = index.rem %element, %c2 : index
+      %base = index.mul %row, %c6 : index
+      %local = index.add %base, %column : index
+      %target = index.add %local, %c4 : index
+      scf.yield %target : index
+    } else {
+      %target = index.add %element, %c8 : index
+      scf.yield %target : index
+    }
+    view.store %packed, %result[%target] : bf16, view<12xbf16>
+  }
+  kernel.return
+}
+
+command.program.def public @pack() launch(%output: buffer, %input: buffer) {
+  kernel.launch @pack_factors(%output, %input) : (buffer, buffer)
+  command.return
+}
+
+kernel.def @packed_consumer() {
+  %c1 = index.constant 1 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c1, %c1) : index
+} launch(%a: view<12xbf16>, %b: view<12xbf16>, %c: view<12xbf16>, %d: view<12xbf16>, %e: view<12xbf16>, %f: view<12xbf16>, %output: buffer) {
+  %element = kernel.workitem.id<x> : index
+  %av = view.load %a[%element] : view<12xbf16> -> bf16
+  %bv = view.load %b[%element] : view<12xbf16> -> bf16
+  %cv = view.load %c[%element] : view<12xbf16> -> bf16
+  %dv = view.load %d[%element] : view<12xbf16> -> bf16
+  %ev = view.load %e[%element] : view<12xbf16> -> bf16
+  %fv = view.load %f[%element] : view<12xbf16> -> bf16
+  %ai = scalar.fptosi %av : bf16 to i32
+  %bi = scalar.fptosi %bv : bf16 to i32
+  %ci = scalar.fptosi %cv : bf16 to i32
+  %di = scalar.fptosi %dv : bf16 to i32
+  %ei = scalar.fptosi %ev : bf16 to i32
+  %fi = scalar.fptosi %fv : bf16 to i32
+  %ab = scalar.addi %ai, %bi : i32
+  %cd = scalar.addi %ci, %di : i32
+  %ef = scalar.addi %ei, %fi : i32
+  %abcd = scalar.addi %ab, %cd : i32
+  %sum = scalar.addi %abcd, %ef : i32
+  %origin = index.constant 0 : offset
+  %result = buffer.view %output[%origin] : buffer -> view<8xi32>
+  view.store %sum, %result[%element] : i32, view<8xi32>
+  kernel.return
+}
+
+command.program.def public @packed_target() launch(%weights: buffer, %output: buffer) {
+  %a = command.parameter %weights, "a" : view<12xbf16>
+  %b = command.parameter %weights, "b" : view<12xbf16>
+  %c = command.parameter %weights, "c" : view<12xbf16>
+  %d = command.parameter %weights, "d" : view<12xbf16>
+  %e = command.parameter %weights, "e" : view<12xbf16>
+  %f = command.parameter %weights, "f" : view<12xbf16>
+  kernel.launch @packed_consumer(%a, %b, %c, %d, %e, %f, %output) : (view<12xbf16>, view<12xbf16>, view<12xbf16>, view<12xbf16>, view<12xbf16>, view<12xbf16>, buffer)
+  command.return
+}

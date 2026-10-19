@@ -6,7 +6,7 @@ func.decl import("prepare") @config(%stage: i32, %key: buffer, %value: buffer)
 
 func.decl import("prepare") @config_i64(%stage: i32, %key: buffer, %value: i64)
 
-func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %directory: buffer, %path: buffer, %policy: buffer)
+func.decl import("prepare") @parameter(%stage: i32, %binding: i32, %source: i32, %directory: buffer, %path: buffer, %policy: buffer)
 
 func.decl import("prepare") @workspace_limit(%stage: i32, %bytes: i64)
 
@@ -110,6 +110,7 @@ func.def public @negative_workspace_limit() {
 }
 
 func.def public @direct_parameter() {
+  %c0_source = scalar.constant 0 : i32
   %root = global.load @root : buffer
   %tag = scalar.constant 0 : i64
   %stage = func.call @dispatch(%root, %tag) : (buffer, i64) -> (i32)
@@ -117,11 +118,12 @@ func.def public @direct_parameter() {
   %directory = global.load @directory : buffer
   %path = global.load @path : buffer
   %policy = global.load @policy : buffer
-  func.call @parameter(%stage, %c0, %directory, %path, %policy) : (i32, i32, buffer, buffer, buffer)
+  func.call @parameter(%stage, %c0, %c0_source, %directory, %path, %policy) : (i32, i32, i32, buffer, buffer, buffer)
   func.return
 }
 
 func.def public @conflicting_parameter_policy() {
+  %c0_source = scalar.constant 0 : i32
   %root = global.load @root : buffer
   %tag = scalar.constant 0 : i64
   %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
@@ -129,12 +131,55 @@ func.def public @conflicting_parameter_policy() {
   %directory = global.load @directory : buffer
   %path = global.load @path : buffer
   %policy = global.load @policy : buffer
-  func.call @parameter(%stage, %c0, %directory, %path, %policy) : (i32, i32, buffer, buffer, buffer)
-  func.call @parameter(%stage, %c0, %directory, %path, %path) : (i32, i32, buffer, buffer, buffer)
+  func.call @parameter(%stage, %c0, %c0_source, %directory, %path, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+  func.call @parameter(%stage, %c0, %c0_source, %directory, %path, %path) : (i32, i32, i32, buffer, buffer, buffer)
   func.return
 }
 
 func.def public @no_stages() {
+  func.return
+}
+
+func.def public @many_sources() {
+  %root = global.load @root : buffer
+  %tag = scalar.constant 0 : i64
+  %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
+  %binding = scalar.constant 0 : i32
+  %directory = global.load @directory : buffer
+  %path = global.load @path : buffer
+  %policy = global.load @policy : buffer
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %count = index.constant 33 : index
+  scf.for %i = [%c0 to %count step %c1] {
+    %source = index.cast %i : index to i32
+    func.call @parameter(%stage, %binding, %source, %directory, %path, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+    func.call @parameter(%stage, %binding, %source, %directory, %policy, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+  }
+  func.return
+}
+
+func.def @invalid_source(%source: i32) {
+  %root = global.load @root : buffer
+  %tag = scalar.constant 0 : i64
+  %stage = func.call @stage(%root, %tag) : (buffer, i64) -> (i32)
+  %binding = scalar.constant 0 : i32
+  %directory = global.load @directory : buffer
+  %path = global.load @path : buffer
+  %policy = global.load @policy : buffer
+  func.call @parameter(%stage, %binding, %source, %directory, %path, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+  func.return
+}
+
+func.def public @sparse_source() {
+  %source = scalar.constant 1 : i32
+  func.call @invalid_source(%source) : (i32)
+  func.return
+}
+
+func.def public @negative_source() {
+  %source = scalar.constant -1 : i32
+  func.call @invalid_source(%source) : (i32)
   func.return
 }
 
@@ -161,6 +206,7 @@ func.def public @configure_cold_stage() {
 // Crosses multiple growth boundaries on each independently owned array.
 // The key buffer is reused; every declaration must own its copied spelling.
 func.def public @large_catalog() {
+  %c0_source = scalar.constant 0 : i32
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
   %count = index.constant 33 : index
@@ -191,9 +237,9 @@ func.def public @large_catalog() {
       %value = index.cast %j : index to i64
       %binding = index.cast %j : index to i32
       func.call @config_i64(%stage, %key, %value) : (i32, buffer, i64)
-      func.call @parameter(%stage, %binding, %directory, %path, %policy) : (i32, i32, buffer, buffer, buffer)
-      func.call @parameter(%stage, %binding, %directory, %key, %policy) : (i32, i32, buffer, buffer, buffer)
-      func.call @parameter(%stage, %binding, %directory, %policy, %policy) : (i32, i32, buffer, buffer, buffer)
+      func.call @parameter(%stage, %binding, %c0_source, %directory, %path, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+      func.call @parameter(%stage, %binding, %c0_source, %directory, %key, %policy) : (i32, i32, i32, buffer, buffer, buffer)
+      func.call @parameter(%stage, %binding, %c0_source, %directory, %policy, %policy) : (i32, i32, i32, buffer, buffer, buffer)
     }
   }
   func.return
@@ -203,6 +249,7 @@ func.def public @large_catalog() {
 global.rodata.def @nul = bytes("610062")
 
 func.def public @nul_string(%field: i32) {
+  %c0_source = scalar.constant 0 : i32
   %nul = global.load @nul : buffer
   %root = global.load @root : buffer
   %key = global.load @key : buffer
@@ -232,6 +279,6 @@ func.def public @nul_string(%field: i32) {
   %selected_policy = scf.select %is_policy, %nul, %policy : buffer
   %stage = func.call @stage(%selected_root, %tag) : (buffer, i64) -> (i32)
   func.call @config(%stage, %selected_key, %selected_value) : (i32, buffer, buffer)
-  func.call @parameter(%stage, %c0, %selected_directory, %selected_path, %selected_policy) : (i32, i32, buffer, buffer, buffer)
+  func.call @parameter(%stage, %c0, %c0_source, %selected_directory, %selected_path, %selected_policy) : (i32, i32, i32, buffer, buffer, buffer)
   func.return
 }

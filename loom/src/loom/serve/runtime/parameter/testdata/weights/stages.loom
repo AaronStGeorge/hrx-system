@@ -1,3 +1,5 @@
+config.decl @delta : i32
+
 kernel.def @add() {
   %c1 = index.constant 1 : index
   %c8 = index.constant 8 : index
@@ -12,14 +14,8 @@ kernel.def @add() {
   kernel.return
 }
 
-command.program.def public @add3() launch(%storage: buffer) {
-  %delta = scalar.constant 3 : i32
-  kernel.launch @add(%storage, %delta) : (buffer, i32)
-  command.return
-}
-
-command.program.def public @add7() launch(%storage: buffer) {
-  %delta = scalar.constant 7 : i32
+command.program.def public @add_configured() launch(%storage: buffer) {
+  %delta = config.get @delta : i32
   kernel.launch @add(%storage, %delta) : (buffer, i32)
   command.return
 }

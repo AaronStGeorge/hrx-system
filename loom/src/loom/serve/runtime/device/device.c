@@ -324,6 +324,11 @@ loom_serve_host_t* loom_serve_device_host(const loom_serve_device_t* device) {
   return device->owner->host;
 }
 
+loom_serve_workspace_t* loom_serve_device_workspace(
+    const loom_serve_device_t* device) {
+  return device->workspace;
+}
+
 iree_hal_device_group_t* loom_serve_device_group(
     const loom_serve_device_t* device) {
   return device->owner->handle;

@@ -69,30 +69,81 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    inputs
+  HDRS
+    "inputs.h"
+  SRCS
+    "inputs.c"
+  DEPS
+    iree::base
+    iree::io::parameter_index
+    iree::io::parameter_index_provider
+    iree::io::parameter_provider
+    iree::tooling::parameter_util
+    iree::vm
+    loom::serve::runtime::program::preparation
+    loom::serve::runtime::program::sources
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     weights
   HDRS
     "weights.h"
   SRCS
     "weights.c"
   DEPS
+    ::inputs
     iree::async
     iree::base
     iree::base::threading
     iree::hal
-    iree::io::parameter_index
-    iree::io::parameter_index_provider
     iree::io::parameter_provider
-    iree::tooling::parameter_util
     iree::vm
     loom::binding::c::loomc
     loom::serve::runtime::execution
     loom::serve::runtime::execution::retirement
+    loom::serve::runtime::execution::workspace
     loom::serve::runtime::host
     loom::serve::runtime::program
+    loom::serve::runtime::program::input
     loom::serve::runtime::program::jit
+    loom::serve::runtime::program::json
+    loom::serve::runtime::program::preparation
     loom::serve::runtime::program::sources
     loom::serve::runtime::storage::memory
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    inputs_test
+  SRCS
+    "inputs_test.cc"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/inputs.loom"
+  DEPS
+    ::inputs
+    iree::base
+    iree::base::tooling::flags
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::testing::temp_file
+    iree::vm
+    loom::binding::c::loomc
+    loom::binding::c::target::vm
+    loom::serve::runtime::program
+    loom::serve::runtime::program::preparation
+    loom::serve::runtime::program::sources
+  ARGS
+    "--input_policy={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/inputs.loom}}"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
 )
 endif()
 
