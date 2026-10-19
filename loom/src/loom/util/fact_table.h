@@ -43,6 +43,7 @@
 #include "loom/util/fact_extensions.h"
 #include "loom/util/fact_identity.h"
 #include "loom/util/fact_layout.h"
+#include "loom/util/fact_range.h"
 #include "loom/util/fact_select_dependencies.h"
 
 #ifdef __cplusplus
@@ -260,10 +261,11 @@ struct loom_value_fact_table_t {
   // Canonical SSA identities retained while computing value facts. Only
   // declared identity operations populate this map; numeric equality does not.
   struct {
-    // Shared publication tokens. NULL leaves the value its own identity.
+    // Publication tokens indexed relative to range.first_value_id. NULL
+    // leaves the value its own identity.
     loom_value_fact_identity_t** entries;
-    // Allocated entry count. Storage grows lazily on the first alias.
-    iree_host_size_t capacity;
+    // Value-ID range covered by the direct entries.
+    loom_value_fact_range_t range;
     // Scope-owned tokens, released with the transient arena after clearing.
     loom_value_fact_identity_t* nodes;
   } identities;
@@ -309,10 +311,10 @@ struct loom_value_fact_table_t {
   // Uniform-element materialization origins keyed by aggregate value ID. An
   // entry with scalar_value_id == LOOM_VALUE_ID_INVALID has no known origin.
   struct {
-    // Dense origin entries indexed by aggregate value ID.
+    // Origin entries indexed relative to range.first_value_id.
     loom_value_fact_uniform_element_origin_t* entries;
-    // Allocated origin entry count.
-    iree_host_size_t capacity;
+    // Value-ID range covered by the direct entries.
+    loom_value_fact_range_t range;
     // Aggregate value IDs with origins defined in the current populated scope.
     loom_value_id_t* touched_values;
     // Number of populated entries in touched_values.
@@ -324,10 +326,10 @@ struct loom_value_fact_table_t {
   // Static logical-lane origins keyed by aggregate value ID. An entry with
   // source_value_id == LOOM_VALUE_ID_INVALID has no known lane origin.
   struct {
-    // Dense origin entries indexed by aggregate value ID.
+    // Origin entries indexed relative to range.first_value_id.
     loom_value_fact_static_lane_origin_t* entries;
-    // Allocated origin entry count.
-    iree_host_size_t capacity;
+    // Value-ID range covered by the direct entries.
+    loom_value_fact_range_t range;
     // Aggregate value IDs with origins defined in the current populated scope.
     loom_value_id_t* touched_values;
     // Number of populated entries in touched_values.
@@ -353,10 +355,10 @@ struct loom_value_fact_table_t {
   // Uniform scalar-scale origins keyed by aggregate value ID. An entry with
   // source_value_id == LOOM_VALUE_ID_INVALID has no known scaled origin.
   struct {
-    // Dense origin entries indexed by aggregate value ID.
+    // Origin entries indexed relative to range.first_value_id.
     loom_value_fact_uniform_scale_origin_t* entries;
-    // Allocated origin entry count.
-    iree_host_size_t capacity;
+    // Value-ID range covered by the direct entries.
+    loom_value_fact_range_t range;
     // Aggregate value IDs with origins defined in the current populated scope.
     loom_value_id_t* touched_values;
     // Number of populated entries in touched_values.
@@ -369,10 +371,11 @@ struct loom_value_fact_table_t {
   // one-based indexes into the sparse origin array and are allocated only when
   // a function materializes at least one contextual query.
   struct {
-    // One-based sparse origin indexes keyed by SSA value ID; zero is absent.
+    // One-based descriptor indexes relative to range.first_value_id; zero
+    // is absent.
     uint32_t* entries;
-    // Allocated dense entry count.
-    iree_host_size_t capacity;
+    // Value-ID range covered by the direct entries.
+    loom_value_fact_range_t range;
     // SSA value IDs with origins defined in the current populated scope.
     loom_value_id_t* touched_values;
     // Number of populated entries in touched_values.
@@ -757,10 +760,13 @@ static inline bool loom_value_fact_table_has_result_type_kind(
 // Replacement preserves live representatives before deferred numeric inference.
 static inline loom_value_id_t loom_value_fact_table_query_identity(
     const loom_value_fact_table_t* table, loom_value_id_t value_id) {
-  if (!table || value_id >= table->identities.capacity) {
+  if (!table ||
+      !loom_value_fact_range_contains(table->identities.range, value_id)) {
     return value_id;
   }
-  loom_value_fact_identity_t* identity = table->identities.entries[value_id];
+  loom_value_fact_identity_t* identity =
+      table->identities.entries[loom_value_fact_range_offset(
+          table->identities.range, value_id)];
   if (!identity) {
     return value_id;
   }

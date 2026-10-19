@@ -253,6 +253,7 @@ loom_cc_library(
         "fact_extensions.h",
         "fact_identity.h",
         "fact_layout.h",
+        "fact_range.h",
         "fact_select_dependencies.h",
         "fact_table.h",
     ],
@@ -288,6 +289,7 @@ loom_cc_library(
         "fact_induction.c",
         "fact_layout.c",
         "fact_loop.c",
+        "fact_range.c",
         "fact_recurrence.c",
         "fact_relation.c",
         "fact_select_dependencies.c",
@@ -303,6 +305,7 @@ loom_cc_library(
         "fact_induction.h",
         "fact_layout.h",
         "fact_loop.h",
+        "fact_range.h",
         "fact_recurrence.h",
         "fact_relation.h",
         "fact_select_dependencies.h",
@@ -338,6 +341,17 @@ loom_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "fact_range_test",
+    srcs = ["fact_range_test.cc"],
+    deps = [
+        ":fact_table",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

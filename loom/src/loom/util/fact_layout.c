@@ -11,10 +11,11 @@
 #include "loom/util/fact_table.h"
 
 struct loom_value_fact_layout_origins_t {
-  // Immutable axis bindings indexed by encoding value ID; NULL is absent.
+  // Immutable axis bindings indexed relative to range.first_value_id; NULL
+  // is absent.
   const loom_value_fact_layout_strides_t** entries;
-  // Allocated entry count.
-  iree_host_size_t capacity;
+  // Value-ID range covered by the direct entries.
+  loom_value_fact_range_t range;
 };
 
 static iree_status_t loom_value_fact_layout_origins_ensure_capacity(
@@ -26,34 +27,29 @@ static iree_status_t loom_value_fact_layout_origins_ensure_capacity(
     *table->layout_origins = (loom_value_fact_layout_origins_t){0};
   }
   loom_value_fact_layout_origins_t* origins = table->layout_origins;
-  if (value_id < origins->capacity) {
-    return iree_ok_status();
-  }
-  const iree_host_size_t old_capacity = origins->capacity;
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      table->transient_arena, old_capacity, (iree_host_size_t)value_id + 1,
-      sizeof(*origins->entries), &origins->capacity,
-      (void**)&origins->entries));
-  memset(origins->entries + old_capacity, 0,
-         (origins->capacity - old_capacity) * sizeof(*origins->entries));
-  return iree_ok_status();
+  return loom_value_fact_range_grow(table->transient_arena, value_id,
+                                    sizeof(*origins->entries), NULL,
+                                    &origins->range, (void**)&origins->entries);
 }
 
 loom_value_fact_layout_strides_t loom_value_fact_table_query_layout_strides(
     const loom_value_fact_table_t* table, loom_value_id_t value_id) {
   const loom_value_fact_layout_origins_t* origins = table->layout_origins;
-  if (!origins || value_id >= origins->capacity ||
-      !origins->entries[value_id]) {
+  if (!origins || !loom_value_fact_range_contains(origins->range, value_id) ||
+      !origins
+           ->entries[loom_value_fact_range_offset(origins->range, value_id)]) {
     return (loom_value_fact_layout_strides_t){0};
   }
-  return *origins->entries[value_id];
+  return *origins
+              ->entries[loom_value_fact_range_offset(origins->range, value_id)];
 }
 
 void loom_value_fact_table_clear_layout_strides(loom_value_fact_table_t* table,
                                                 loom_value_id_t value_id) {
   loom_value_fact_layout_origins_t* origins = table->layout_origins;
-  if (origins && value_id < origins->capacity) {
-    origins->entries[value_id] = NULL;
+  if (origins && loom_value_fact_range_contains(origins->range, value_id)) {
+    origins->entries[loom_value_fact_range_offset(origins->range, value_id)] =
+        NULL;
   }
 }
 
@@ -81,7 +77,8 @@ iree_status_t loom_value_fact_table_define_layout_strides(
   memcpy(values, strides.values, byte_length);
   *storage = (loom_value_fact_layout_strides_t){.values = values,
                                                 .count = strides.count};
-  table->layout_origins->entries[value_id] = storage;
+  table->layout_origins->entries[loom_value_fact_range_offset(
+      table->layout_origins->range, value_id)] = storage;
   return iree_ok_status();
 }
 
@@ -89,15 +86,20 @@ iree_status_t loom_value_fact_table_forward_layout_strides(
     loom_value_fact_table_t* table, loom_value_id_t source_value_id,
     loom_value_id_t result_value_id) {
   loom_value_fact_layout_origins_t* origins = table->layout_origins;
-  if (!origins || source_value_id >= origins->capacity ||
-      !origins->entries[source_value_id]) {
+  if (!origins ||
+      !loom_value_fact_range_contains(origins->range, source_value_id) ||
+      !origins->entries[loom_value_fact_range_offset(origins->range,
+                                                     source_value_id)]) {
     loom_value_fact_table_clear_layout_strides(table, result_value_id);
     return iree_ok_status();
   }
   const loom_value_fact_layout_strides_t* strides =
-      origins->entries[source_value_id];
+      origins->entries[loom_value_fact_range_offset(origins->range,
+                                                    source_value_id)];
   IREE_RETURN_IF_ERROR(
       loom_value_fact_layout_origins_ensure_capacity(table, result_value_id));
-  origins->entries[result_value_id] = strides;
+  origins
+      ->entries[loom_value_fact_range_offset(origins->range, result_value_id)] =
+      strides;
   return iree_ok_status();
 }

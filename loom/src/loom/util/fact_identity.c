@@ -6,31 +6,21 @@
 
 #include "loom/util/fact_identity.h"
 
-#include <string.h>
-
 #include "loom/util/fact_table.h"
 
 static loom_value_fact_identity_t* loom_value_fact_identity_lookup(
     const loom_value_fact_table_t* table, loom_value_id_t value_id) {
-  return value_id < table->identities.capacity
-             ? table->identities.entries[value_id]
+  return loom_value_fact_range_contains(table->identities.range, value_id)
+             ? table->identities.entries[loom_value_fact_range_offset(
+                   table->identities.range, value_id)]
              : NULL;
 }
 
 static iree_status_t loom_value_fact_identity_ensure_capacity(
     loom_value_fact_table_t* table, loom_value_id_t value_id) {
-  const iree_host_size_t old_capacity = table->identities.capacity;
-  if (value_id < old_capacity) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      table->arena, old_capacity, (iree_host_size_t)value_id + 1,
-      sizeof(*table->identities.entries), &table->identities.capacity,
-      (void**)&table->identities.entries));
-  memset(table->identities.entries + old_capacity, 0,
-         (table->identities.capacity - old_capacity) *
-             sizeof(*table->identities.entries));
-  return iree_ok_status();
+  return loom_value_fact_range_grow(
+      table->arena, value_id, sizeof(*table->identities.entries), NULL,
+      &table->identities.range, (void**)&table->identities.entries);
 }
 
 static iree_status_t loom_value_fact_identity_allocate(
@@ -46,7 +36,8 @@ static iree_status_t loom_value_fact_identity_allocate(
       .representative = value_id,
   };
   table->identities.nodes = identity;
-  table->identities.entries[value_id] = identity;
+  table->identities.entries[loom_value_fact_range_offset(
+      table->identities.range, value_id)] = identity;
   *out_identity = identity;
   return iree_ok_status();
 }
@@ -96,7 +87,9 @@ iree_status_t loom_value_fact_table_define_identity(
     IREE_RETURN_IF_ERROR(
         loom_value_fact_identity_allocate(table, canonical, &source));
   }
-  loom_value_fact_identity_t* previous = table->identities.entries[value_id];
+  loom_value_fact_identity_t* previous =
+      table->identities.entries[loom_value_fact_range_offset(
+          table->identities.range, value_id)];
   // Compare publication tokens, not their current union roots. Replacement
   // changes the representative immediately, but deferred inference still needs
   // to report that an old publication has followed the replacement source.
@@ -110,7 +103,8 @@ iree_status_t loom_value_fact_table_define_identity(
           root, loom_value_fact_identity_root(source), canonical);
     }
   }
-  table->identities.entries[value_id] = source;
+  table->identities.entries[loom_value_fact_range_offset(
+      table->identities.range, value_id)] = source;
   if (inout_changed) {
     *inout_changed = true;
   }
@@ -145,7 +139,8 @@ iree_status_t loom_value_fact_table_replace_identity_value(
   // Replacing uses does not redefine or erase the old SSA value. Existing
   // aliases keep the redirected token; subsequently created aliases of the old
   // value acquire a fresh token describing its still-independent definition.
-  table->identities.entries[old_value] = NULL;
+  table->identities.entries[loom_value_fact_range_offset(
+      table->identities.range, old_value)] = NULL;
   return iree_ok_status();
 }
 
@@ -160,7 +155,8 @@ void loom_value_fact_table_erase_identity_value(loom_value_fact_table_t* table,
   if (root->representative == value_id) {
     root->representative = LOOM_VALUE_ID_INVALID;
   }
-  table->identities.entries[value_id] = NULL;
+  table->identities.entries[loom_value_fact_range_offset(
+      table->identities.range, value_id)] = NULL;
 }
 
 void loom_value_fact_table_undefine_identity(loom_value_fact_table_t* table,
@@ -169,18 +165,20 @@ void loom_value_fact_table_undefine_identity(loom_value_fact_table_t* table,
       loom_value_fact_identity_lookup(table, value_id);
   if (identity &&
       loom_value_fact_identity_root(identity)->representative != value_id) {
-    table->identities.entries[value_id] = NULL;
+    table->identities.entries[loom_value_fact_range_offset(
+        table->identities.range, value_id)] = NULL;
   }
 }
 
 void loom_value_fact_table_clear_identities(loom_value_fact_table_t* table) {
-  if (!table->identities.capacity) {
+  if (!table->identities.range.capacity) {
     return;
   }
   for (iree_host_size_t i = 0; i < table->touched_count; ++i) {
     const loom_value_id_t value_id = table->touched_values[i];
-    if (value_id < table->identities.capacity) {
-      table->identities.entries[value_id] = NULL;
+    if (loom_value_fact_range_contains(table->identities.range, value_id)) {
+      table->identities.entries[loom_value_fact_range_offset(
+          table->identities.range, value_id)] = NULL;
     }
   }
   for (loom_value_fact_identity_t* node = table->identities.nodes; node;
@@ -188,7 +186,8 @@ void loom_value_fact_table_clear_identities(loom_value_fact_table_t* table) {
     // Sources need not have numeric entries in this scope. Non-root nodes keep
     // their prior representative IDs, covering detached publications as well.
     if (node->representative != LOOM_VALUE_ID_INVALID) {
-      table->identities.entries[node->representative] = NULL;
+      table->identities.entries[loom_value_fact_range_offset(
+          table->identities.range, node->representative)] = NULL;
     }
   }
   table->identities.nodes = NULL;

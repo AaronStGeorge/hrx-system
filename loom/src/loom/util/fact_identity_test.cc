@@ -138,7 +138,9 @@ TEST_F(FactIdentityTest, ClearsUnseededRepresentativesAndReusesEntryStorage) {
   EXPECT_EQ(table_.identities.nodes, nullptr);
   for (loom_value_id_t value : {1u, 2u, 10u, 11u}) {
     EXPECT_EQ(Identity(value), value);
-    EXPECT_EQ(table_.identities.entries[value], nullptr);
+    EXPECT_EQ(table_.identities.entries[loom_value_fact_range_offset(
+                  table_.identities.range, value)],
+              nullptr);
   }
   EXPECT_TRUE(Publish(10, 2));
   EXPECT_EQ(Identity(10), 2u);
@@ -153,7 +155,11 @@ TEST_F(FactIdentityTest, ClonesOwnIndependentPublicationStorage) {
   const loom_value_fact_table_view_t view = {&table_, selected,
                                              IREE_ARRAYSIZE(selected)};
   IREE_ASSERT_OK(loom_value_fact_table_clone_values(&clone, view, nullptr));
-  EXPECT_NE(clone.identities.entries[10], table_.identities.entries[10]);
+  EXPECT_NE(
+      clone.identities
+          .entries[loom_value_fact_range_offset(clone.identities.range, 10)],
+      table_.identities
+          .entries[loom_value_fact_range_offset(table_.identities.range, 10)]);
   IREE_ASSERT_OK(loom_value_fact_table_replace_identity_value(&table_, 1, 2));
   EXPECT_EQ(Identity(10), 2u);
   EXPECT_EQ(loom_value_fact_table_query_identity(&clone, 10), 1u);
@@ -161,6 +167,29 @@ TEST_F(FactIdentityTest, ClonesOwnIndependentPublicationStorage) {
   EXPECT_EQ(loom_value_fact_table_query_identity(&clone, 11), 1u);
   IREE_ASSERT_OK(loom_value_fact_table_replace_identity_value(&clone, 1, 3));
   EXPECT_EQ(loom_value_fact_table_query_identity(&clone, 10), 3u);
+}
+
+TEST_F(FactIdentityTest, HighValueIdsRetainAliasesAcrossBidirectionalGrowth) {
+  constexpr loom_value_id_t first = 1u << 16;
+  EXPECT_TRUE(Publish(first + 40, first + 32));
+  EXPECT_TRUE(Publish(first + 7, first + 40));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_replace_identity_value(&table_, first + 32, first));
+  EXPECT_TRUE(Publish(first + 120, first));
+  for (uint32_t offset : {7u, 40u, 120u}) {
+    EXPECT_EQ(Identity(first + offset), first);
+  }
+  EXPECT_LT(table_.identities.range.capacity, 512u);
+  EXPECT_FALSE(loom_value_fact_table_has_entry(&table_, first));
+  const auto* entries = table_.identities.entries;
+  loom_value_fact_table_clear_scope(&table_);
+  iree_arena_reset(&transient_arena_);
+  for (uint32_t offset : {0u, 7u, 32u, 40u, 120u}) {
+    EXPECT_EQ(Identity(first + offset), first + offset);
+  }
+  EXPECT_TRUE(Publish(first + 40, first + 7));
+  EXPECT_EQ(Identity(first + 40), first + 7);
+  EXPECT_EQ(table_.identities.entries, entries);
 }
 
 TEST_F(FactIdentityTest, CloningSelfIdentityRemovesPreviousAlias) {
@@ -215,8 +244,9 @@ TEST_F(FactIdentityTest, BalancedClassMergesHaveLogarithmicDepth) {
   for (uint32_t i = 0; i < count; ++i) {
     EXPECT_EQ(Identity(count + i), count - 1);
     uint32_t depth = 0;
-    for (auto* node = table_.identities.entries[count + i]; node->parent;
-         node = node->parent) {
+    for (auto* node = table_.identities.entries[loom_value_fact_range_offset(
+             table_.identities.range, count + i)];
+         node->parent; node = node->parent) {
       ++depth;
     }
     EXPECT_LE(depth, 10u);
