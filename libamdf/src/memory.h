@@ -17,12 +17,13 @@ extern "C" {
 // Obtains one scoped backing and all requested live-device accesses.
 amdf_status_t AMDF_CALL amdf_memory_create(
     amdf_memory_scope_t* scope, const amdf_memory_create_info_t* create_info,
-    amdf_memory_t** out_memory);
+    amdf_memory_t** out_memory, amdf_memory_release_info_t* out_release_info);
 
 // Imports one backing and establishes all requested live-device accesses.
 amdf_status_t AMDF_CALL amdf_memory_import(
     amdf_memory_scope_t* scope, const amdf_memory_import_info_t* import_info,
-    amdf_external_memory_t* inout_external_memory, amdf_memory_t** out_memory);
+    amdf_external_memory_t* inout_external_memory, amdf_memory_t** out_memory,
+    amdf_memory_release_info_t* out_release_info);
 
 // Copies immutable memory properties.
 amdf_status_t AMDF_CALL amdf_memory_query_info(amdf_memory_t* memory,
@@ -58,7 +59,8 @@ amdf_status_t AMDF_CALL amdf_memory_map(amdf_memory_t* memory,
 
 // Consumes memory after caller-proved last use and host-view destruction,
 // including when native release fails.
-amdf_status_t AMDF_CALL amdf_memory_destroy(amdf_memory_t* memory);
+amdf_status_t AMDF_CALL amdf_memory_destroy(
+    amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info);
 
 #ifdef __cplusplus
 }  // extern "C"

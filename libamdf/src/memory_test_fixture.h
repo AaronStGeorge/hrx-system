@@ -87,6 +87,8 @@ struct FakeMemory {
   amdf_status_t site_status;
   // Native release result injected before relinquishing backing ownership.
   amdf_status_t destroy_status;
+  // Owned native extent still present at terminal cleanup observation.
+  uint64_t remaining_backing_byte_length;
   // Number of export calls on this native object.
   uint32_t export_call_count;
   // Number of host-mapping calls on this native object.

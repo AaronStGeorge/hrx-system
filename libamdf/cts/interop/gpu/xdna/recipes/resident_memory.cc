@@ -186,8 +186,9 @@ void ResidentBuffer::CreateImported(const amdf_api_t* api,
       .minimum_alignment = plan.minimum_alignment,
       .accesses = &plan.destination.access,
   };
-  ASSERT_EQ(api->memory_import(scope, &import_info, &external, &xdna_import),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api->memory_import(scope, &import_info, &external, &xdna_import, nullptr),
+      AMDF_STATUS_OK);
   const amdf_external_memory_t empty = {};
   ASSERT_EQ(std::memcmp(&external, &empty, sizeof(empty)), 0);
   amdf_memory_info_t imported_info = {
@@ -292,7 +293,7 @@ bool ResidentBuffer::Release(const amdf_api_t* api) {
   }
   if (xdna_import) {
     const auto status =
-        api->memory_destroy(std::exchange(xdna_import, nullptr));
+        api->memory_destroy(std::exchange(xdna_import, nullptr), nullptr);
     EXPECT_EQ(status, AMDF_STATUS_OK);
     if (!amdf_status_is_ok(status)) {
       return false;

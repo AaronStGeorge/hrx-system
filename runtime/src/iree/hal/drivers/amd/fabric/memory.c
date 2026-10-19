@@ -115,7 +115,7 @@ void iree_hal_amd_fabric_memory_deinitialize(
   if (memory->handle) {
     // memory_destroy consumes its handle even on native cleanup failure; the
     // provider preserves any backing required by failed detach as a leak.
-    amdf_status_t status = api->memory_destroy(memory->handle);
+    amdf_status_t status = api->memory_destroy(memory->handle, NULL);
     if (!amdf_status_is_ok(status)) {
       iree_hal_amd_report_failure(event_sink, IREE_SV("amd"), status,
                                   "memory_destroy");
@@ -234,7 +234,7 @@ iree_status_t iree_hal_amd_fabric_memory_allocate(
   };
   iree_hal_amd_fabric_memory_t memory = {0};
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-      api->memory_create(options->scope, &create_info, &memory.handle),
+      api->memory_create(options->scope, &create_info, &memory.handle, NULL),
       "memory_create"));
   iree_status_t status =
       iree_hal_amd_fabric_memory_prepare(api, options, &memory);
@@ -300,7 +300,7 @@ iree_status_t iree_hal_amd_fabric_memory_register(
   };
   iree_hal_amd_fabric_memory_t memory = {0};
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-      api->memory_create(options->scope, &create_info, &memory.handle),
+      api->memory_create(options->scope, &create_info, &memory.handle, NULL),
       "memory_create(REGISTER)"));
   iree_status_t status =
       iree_hal_amd_fabric_memory_prepare(api, options, &memory);
@@ -366,7 +366,7 @@ iree_status_t iree_hal_amd_fabric_memory_import(
   iree_hal_amd_fabric_memory_t memory = {0};
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
       api->memory_import(options->scope, &import_info, &external,
-                         &memory.handle),
+                         &memory.handle, NULL),
       "memory_import"));
   iree_status_t status =
       iree_hal_amd_fabric_memory_prepare(api, options, &memory);

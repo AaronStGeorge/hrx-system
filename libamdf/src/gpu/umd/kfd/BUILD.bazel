@@ -343,7 +343,11 @@ amdf_cc_library(
 amdf_cc_test(
     name = "buffer_test",
     srcs = ["buffer_test.cc"],
-    linkopts = ["-Wl,--wrap=ioctl"],
+    linkopts = [
+        "-Wl,--wrap=close",
+        "-Wl,--wrap=ioctl",
+        "-Wl,--wrap=munmap",
+    ],
     target_compatible_with = KFD_COMPATIBILITY,
     deps = [
         ":buffer",

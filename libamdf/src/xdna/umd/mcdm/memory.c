@@ -37,6 +37,20 @@ struct amdf_xdna_umd_memory_t {
   uint64_t device_address;
 };
 
+uint64_t amdf_xdna_umd_memory_remaining_backing_byte_length(
+    const amdf_xdna_umd_memory_t* memory) {
+  if (memory->context != NULL) {
+    const amdf_windows_xdna_private_allocation_t* allocation =
+        &memory->private_allocation;
+    return allocation->resource != 0 || allocation->allocation != 0
+               ? allocation->descriptor.allocation_byte_length
+               : 0;
+  }
+  return memory->allocation != 0 || memory->host_reservation != NULL
+             ? memory->byte_length
+             : 0;
+}
+
 static amdf_status_t amdf_windows_xdna_memory_release_native(
     amdf_xdna_umd_memory_t* memory) {
   if (memory->context != NULL) {

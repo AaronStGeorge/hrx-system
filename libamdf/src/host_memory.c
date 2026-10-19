@@ -124,10 +124,20 @@ static void amdf_host_backing_abandon_native(amdf_memory_t* memory,
   memory->accesses[ordinal].native = NULL;
 }
 
+static uint64_t amdf_host_backing_remaining_byte_length(
+    const amdf_memory_t* memory, uint32_t ordinal) {
+  const amdf_platform_host_backing_t* backing =
+      memory->accesses[ordinal].native;
+  return backing->handle != UINTPTR_MAX || backing->pointer != NULL
+             ? memory->info.native_allocation_byte_length
+             : 0;
+}
+
 static const amdf_memory_vtable_t amdf_host_backing_vtable = {
     .map = amdf_host_memory_map,
     .host_mapping_source = amdf_host_memory_mapping_source,
     .destroy_native = amdf_host_backing_destroy_native,
+    .remaining_backing_byte_length = amdf_host_backing_remaining_byte_length,
     .abandon_native = amdf_host_backing_abandon_native,
 };
 
@@ -155,9 +165,16 @@ static void amdf_host_memory_abandon_native(amdf_memory_t* memory,
   memory->accesses[access_ordinal].native = NULL;
 }
 
+static uint64_t amdf_host_memory_remaining_byte_length(
+    const amdf_memory_t* memory, uint32_t access_ordinal) {
+  (void)access_ordinal;
+  return memory->info.native_allocation_byte_length;
+}
+
 static const amdf_memory_vtable_t amdf_host_memory_vtable = {
     .map = amdf_host_memory_map,
     .destroy_native = amdf_host_memory_destroy_native,
+    .remaining_backing_byte_length = amdf_host_memory_remaining_byte_length,
     .abandon_native = amdf_host_memory_abandon_native,
 };
 

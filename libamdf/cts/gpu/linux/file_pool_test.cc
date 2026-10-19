@@ -63,9 +63,9 @@ class GpuFilePoolTest : public DispatchTest {
       shared_mapping_ = nullptr;
     }
     if (shared_memory_ != nullptr) {
-      ASSERT_EQ(
-          this->api_->memory_destroy(std::exchange(shared_memory_, nullptr)),
-          AMDF_STATUS_OK);
+      ASSERT_EQ(this->api_->memory_destroy(
+                    std::exchange(shared_memory_, nullptr), nullptr),
+                AMDF_STATUS_OK);
     }
     ASSERT_TRUE(pool_.Release(this->api_));
     if (second_device_ != nullptr) {
@@ -130,9 +130,9 @@ class GpuFilePoolTest : public DispatchTest {
             .accesses = &access,
         };
         auto* output = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
-        EXPECT_EQ(
-            this->api_->memory_create(this->system_scope_, &create, &output),
-            profile.availability);
+        EXPECT_EQ(this->api_->memory_create(this->system_scope_, &create,
+                                            &output, nullptr),
+                  profile.availability);
         EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
         continue;
       }
@@ -666,7 +666,7 @@ class GpuFilePoolTest : public DispatchTest {
               AMDF_STATUS_OK);
     ASSERT_EQ(profile.availability, AMDF_STATUS_OK);
     ASSERT_EQ(this->api_->memory_create(this->system_scope_, &create,
-                                        &shared_memory_),
+                                        &shared_memory_, nullptr),
               AMDF_STATUS_OK);
     std::array<uint64_t, 2> addresses = {};
     for (uint32_t i = 0; i < addresses.size(); ++i) {

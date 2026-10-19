@@ -439,7 +439,9 @@ iree_cc_test(
   SRCS
     "buffer_test.cc"
   LINKOPTS
+    "-Wl,--wrap=close"
     "-Wl,--wrap=ioctl"
+    "-Wl,--wrap=munmap"
   DEPS
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_drm_uapi>
     $<BUILD_LOCAL_INTERFACE:iree::third_party::linux_kfd_uapi>

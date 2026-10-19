@@ -1369,6 +1369,8 @@ TEST_P(WindowsXdnaKernelExecutionTest,
   EXPECT_EQ(native_.opcodes, (std::vector<uint64_t>{2, 5}));
   ASSERT_NE(memory_, nullptr);
   EXPECT_EQ(amdf_xdna_umd_memory_destroy(memory_), lost);
+  EXPECT_EQ(amdf_xdna_umd_memory_remaining_backing_byte_length(memory_),
+            AMDF_WINDOWS_XDNA_PRIVATE_APERTURE_SIZE);
   EXPECT_NE(native_.allocations[2].pointer, nullptr);
   EXPECT_EQ(amdf_windows_xdna_kernel_execution_prepare_context_destroy(
                 context_.kernel_execution),
@@ -1429,6 +1431,8 @@ TEST_P(WindowsXdnaKernelExecutionTest,
       amdf_windows_xdna_kernel_execution_prepare_context_destroy(execution),
       amdf_make_api_status(AMDF_STATUS_CODE_BUSY));
   EXPECT_EQ(amdf_xdna_umd_memory_destroy(memory_), failure);
+  EXPECT_EQ(amdf_xdna_umd_memory_remaining_backing_byte_length(memory_),
+            native_.allocations[2].byte_length);
   EXPECT_NE(native_.allocations[2].pointer, nullptr);
   EXPECT_EQ(ReadU32(native_.allocations[2].pointer, 356), 0x111u);
 

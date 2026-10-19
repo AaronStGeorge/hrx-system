@@ -63,7 +63,7 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
       ASSERT_EQ(status, AMDF_STATUS_OK);
     }
     if (host_backing_ != nullptr) {
-      ASSERT_EQ(api_->memory_destroy(host_backing_), AMDF_STATUS_OK);
+      ASSERT_EQ(api_->memory_destroy(host_backing_, nullptr), AMDF_STATUS_OK);
     }
     for (auto& backing : backing_) {
       ASSERT_TRUE(backing.Release(api_));
@@ -270,8 +270,9 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
         .required_flags = kFlags,
         .byte_length = kBackingLength,
     };
-    ASSERT_EQ(api_->memory_create(system_scope_, &source, &host_backing_),
-              AMDF_STATUS_OK);
+    ASSERT_EQ(
+        api_->memory_create(system_scope_, &source, &host_backing_, nullptr),
+        AMDF_STATUS_OK);
     const amdf_memory_map_info_t map = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_MAP_INFO,
         .structure_size = sizeof(map),

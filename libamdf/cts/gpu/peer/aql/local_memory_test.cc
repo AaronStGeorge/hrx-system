@@ -84,7 +84,8 @@ struct JointMemory {
       }
     }
     if (memory) {
-      const auto status = api->memory_destroy(std::exchange(memory, nullptr));
+      const auto status =
+          api->memory_destroy(std::exchange(memory, nullptr), nullptr);
       EXPECT_EQ(status, AMDF_STATUS_OK);
       if (!amdf_status_is_ok(status)) {
         return false;
@@ -268,7 +269,7 @@ class PeerAqlMemoryTest : public GpuPeerDeviceFixture {
         }
       }
     }
-    ASSERT_EQ(api_->memory_create(scope, &creation, &memory->memory),
+    ASSERT_EQ(api_->memory_create(scope, &creation, &memory->memory, nullptr),
               AMDF_STATUS_OK);
     memory->info.type = AMDF_STRUCTURE_TYPE_MEMORY_INFO;
     memory->info.structure_size = sizeof(memory->info);

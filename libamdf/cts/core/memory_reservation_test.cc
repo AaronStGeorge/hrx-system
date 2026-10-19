@@ -93,7 +93,7 @@ class HostReservationTest : public ::testing::TestWithParam<uint64_t> {
       }
     }
     for (amdf_memory_t* memory : sources_) {
-      EXPECT_EQ(api_->memory_destroy(memory), AMDF_STATUS_OK);
+      EXPECT_EQ(api_->memory_destroy(memory, nullptr), AMDF_STATUS_OK);
     }
   }
 
@@ -134,7 +134,8 @@ class HostReservationTest : public ::testing::TestWithParam<uint64_t> {
         .byte_length = length,
     };
     amdf_memory_t* memory = nullptr;
-    ASSERT_EQ(api_->memory_create(scope_, &create, &memory), AMDF_STATUS_OK);
+    ASSERT_EQ(api_->memory_create(scope_, &create, &memory, nullptr),
+              AMDF_STATUS_OK);
     sources_.push_back(memory);
     amdf_memory_map_info_t request = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_MAP_INFO,
@@ -521,7 +522,7 @@ TEST_P(HostReservationTest, KeepsTheViewAliveAcrossBackingDestruction) {
     ASSERT_EQ(api_->memory_reservation_detach(reservation_, 0), AMDF_STATUS_OK);
     ASSERT_EQ(api_->host_mapping_destroy(views_.back()), AMDF_STATUS_OK);
     views_.pop_back();
-    const amdf_status_t released = api_->memory_destroy(memory);
+    const amdf_status_t released = api_->memory_destroy(memory, nullptr);
     sources_.pop_back();
     ASSERT_EQ(released, AMDF_STATUS_OK);
     // Both the reservation and its cache-operation handle stay unchanged.

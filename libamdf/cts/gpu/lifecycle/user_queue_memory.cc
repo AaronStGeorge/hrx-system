@@ -144,8 +144,9 @@ class UserQueueMemoryScenario {
           granularity - 1) /
          granularity) *
         granularity;
-    ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &memory),
-              AMDF_STATUS_OK);
+    ASSERT_EQ(
+        api_->memory_create(system_scope_, &create_info, &memory, nullptr),
+        AMDF_STATUS_OK);
 
     memory_info.type = AMDF_STRUCTURE_TYPE_MEMORY_INFO;
     memory_info.structure_size = sizeof(memory_info);
@@ -211,7 +212,7 @@ class UserQueueMemoryScenario {
     if (memory == nullptr) {
       return;
     }
-    const amdf_status_t status = api_->memory_destroy(memory);
+    const amdf_status_t status = api_->memory_destroy(memory, nullptr);
     memory = nullptr;
     EXPECT_EQ(status, AMDF_STATUS_OK);
   }

@@ -20,6 +20,15 @@
 #include "libamdf/src/xdna/umd/drm/memory.h"
 #include "libamdf/src/xdna/umd/drm/memory_profile.h"
 
+uint64_t amdf_xdna_umd_memory_remaining_backing_byte_length(
+    const amdf_xdna_umd_memory_t* memory) {
+  return memory->buffer.handle != 0 ||
+                 memory->buffer.mapping.byte_length != 0 ||
+                 memory->host_view.mapped_length != 0
+             ? memory->buffer.byte_length
+             : 0;
+}
+
 amdf_status_t amdf_xdna_umd_memory_destroy(amdf_xdna_umd_memory_t* memory) {
   if (memory->host_view.mapped_length) {
     if (munmap(memory->host_view.base, memory->host_view.mapped_length) != 0) {

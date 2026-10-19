@@ -14,7 +14,8 @@ void GpuMemory::Initialize(const amdf_api_t* api, amdf_memory_scope_t* scope,
   attachment = create_info.accesses[0];
   creation = create_info;
   creation.accesses = &attachment;
-  ASSERT_EQ(api->memory_create(scope, &creation, &memory), AMDF_STATUS_OK);
+  ASSERT_EQ(api->memory_create(scope, &creation, &memory, nullptr),
+            AMDF_STATUS_OK);
 
   info.type = AMDF_STRUCTURE_TYPE_MEMORY_INFO;
   info.structure_size = sizeof(info);
@@ -67,7 +68,7 @@ bool GpuMemory::Release(const amdf_api_t* api) {
     mapping = nullptr;
   }
   if (memory != nullptr) {
-    const amdf_status_t status = api->memory_destroy(memory);
+    const amdf_status_t status = api->memory_destroy(memory, nullptr);
     memory = nullptr;  // Every result consumes this handle.
     EXPECT_EQ(status, AMDF_STATUS_OK);
     if (!amdf_status_is_ok(status)) {

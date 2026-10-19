@@ -118,6 +118,13 @@ amdf_status_t amdf_gpu_umd_memory_describe_system_store_site(
 // backing; this is not a surviving public memory handle.
 amdf_status_t amdf_gpu_umd_memory_destroy(amdf_gpu_umd_memory_t* memory);
 
+// Remaining payload charge for an allocating owner, including partial
+// preparation or release. Reads retained native ownership without native calls.
+// Empty address reservations do not retain payload. The caller must not use
+// this allocation accounting query for registered or imported source storage.
+uint64_t amdf_gpu_umd_memory_remaining_backing_byte_length(
+    const amdf_gpu_umd_memory_t* memory);
+
 // Consumes remaining metadata without attempting any native operation.
 // After terminal cleanup failure, native resources and dependent backing leak;
 // the caller preserves any separately owned backing those resources can reach.

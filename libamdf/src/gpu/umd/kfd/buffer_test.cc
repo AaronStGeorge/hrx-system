@@ -23,8 +23,9 @@
 
 namespace {
 
-// Models only the KFD ioctl dependency; reservations and buffer ownership use
-// the production implementation and real host allocation/mapping operations.
+// Models native device operations and selected host cleanup failures. Buffer
+// ownership, descriptors, and address reservations use production code and real
+// host storage; a failed terminal cleanup is reclaimed directly by the fixture.
 struct NativeBufferState {
   // Shared native connection lock borrowed by every modeled device handle.
   pthread_mutex_t memory_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -68,6 +69,12 @@ struct NativeBufferState {
   int export_error = 0;
   // Number of backing identity export attempts.
   uint32_t export_count = 0;
+  // Temporary exported descriptor owned until its consuming close.
+  int export_descriptor = -1;
+  // Error after consuming the temporary export once its GEM source is acquired.
+  int export_close_error = 0;
+  // Error retaining the real host reservation during terminal destruction.
+  int munmap_error = 0;
   // Native allocation address within the real host reservation.
   uintptr_t address = 0;
   // Page-covered length expected at the native allocation boundary.
@@ -94,6 +101,31 @@ thread_local NativeBufferState* native_state = nullptr;
 }  // namespace
 
 extern "C" int __real_ioctl(int descriptor, unsigned long request, ...);
+extern "C" int __real_close(int descriptor);
+extern "C" int __real_munmap(void* address, size_t byte_length);
+
+extern "C" int __wrap_close(int descriptor) {
+  const int result = __real_close(descriptor);
+  if (native_state != nullptr &&
+      descriptor == native_state->export_descriptor) {
+    native_state->export_descriptor = -1;
+    if (result == 0 && native_state->gem_live &&
+        native_state->export_close_error != 0) {
+      errno = native_state->export_close_error;
+      return -1;
+    }
+  }
+  return result;
+}
+
+extern "C" int __wrap_munmap(void* address, size_t byte_length) {
+  if (native_state != nullptr && native_state->munmap_error != 0 &&
+      address == reinterpret_cast<void*>(native_state->address)) {
+    errno = native_state->munmap_error;
+    return -1;
+  }
+  return __real_munmap(address, byte_length);
+}
 
 extern "C" int __wrap_ioctl(int descriptor, unsigned long request, ...) {
   va_list arguments;
@@ -106,7 +138,9 @@ extern "C" int __wrap_ioctl(int descriptor, unsigned long request, ...) {
   if (request == DRM_IOCTL_PRIME_FD_TO_HANDLE) {
     auto* import = static_cast<drm_prime_handle*>(argument);
     EXPECT_EQ(descriptor, native_state->import_descriptor);
-    EXPECT_EQ(import->fd, native_state->import_descriptor);
+    EXPECT_EQ(import->fd, native_state->export_descriptor >= 0
+                              ? native_state->export_descriptor
+                              : native_state->import_descriptor);
     EXPECT_TRUE(native_state->allocation_live);
     EXPECT_FALSE(native_state->gem_live);
     if (native_state->prime_error != 0) {
@@ -245,11 +279,18 @@ extern "C" int __wrap_ioctl(int descriptor, unsigned long request, ...) {
       native_state->allocation_live = false;
       return 0;
     }
-    case AMDKFD_IOC_EXPORT_DMABUF:
+    case AMDKFD_IOC_EXPORT_DMABUF: {
       ++native_state->export_count;
-      EXPECT_NE(native_state->export_error, 0);
-      errno = native_state->export_error;
-      return -1;
+      if (native_state->export_error != 0) {
+        errno = native_state->export_error;
+        return -1;
+      }
+      native_state->export_descriptor = dup(native_state->import_descriptor);
+      EXPECT_GE(native_state->export_descriptor, 0);
+      static_cast<kfd_ioctl_export_dmabuf_args*>(argument)->dmabuf_fd =
+          native_state->export_descriptor;
+      return 0;
+    }
     default:
       ADD_FAILURE() << "unexpected KFD buffer ioctl: " << request;
       errno = ENOTTY;
@@ -750,6 +791,62 @@ TEST_F(KfdBufferNativeTest, MemoryOwnerRetainsBackingAfterIdentityQueryFails) {
   EXPECT_TRUE(native_.allocation_live);
   EXPECT_FALSE(native_.access_live);
   ReleaseLeakedReservation();
+}
+
+TEST_F(KfdBufferNativeTest, FailedTransportCloseRetainsAcquiredGemForCleanup) {
+  expected_metadata_free_count_ = 2;
+  native_.import_descriptor = device_.render_descriptor;
+  native_.export_close_error = EIO;
+  native_.gem_close_error = ENOMEM;
+  amdf_memory_native_profile_t profile;
+  ASSERT_EQ(amdf_gpu_umd_device_query_memory_profile(&device_, 0, &profile),
+            AMDF_STATUS_OK);
+  const amdf_memory_native_create_info_t create_info = {
+      .device_access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+      .required_flags = AMDF_MEMORY_FLAG_MAPPING_SOURCE,
+      .byte_length = 4096,
+      .minimum_alignment = 4096,
+  };
+  amdf_gpu_umd_memory_t* memory = nullptr;
+  amdf_gpu_umd_memory_result_t result;
+  std::memset(&result, 0xA5, sizeof(result));
+  const auto original_result = result;
+  EXPECT_EQ(amdf_gpu_umd_memory_prepare(&device_, 0, nullptr, &profile,
+                                        &create_info, &memory, &result),
+            amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, EIO));
+  ASSERT_NE(memory, nullptr);
+  EXPECT_EQ(std::memcmp(&result, &original_result, sizeof(result)), 0);
+  EXPECT_EQ(native_.export_count, 2u);
+  EXPECT_EQ(native_.export_descriptor, -1);
+  EXPECT_TRUE(native_.gem_live);
+  EXPECT_EQ(native_.gem_close_count, 0u);
+  EXPECT_EQ(amdf_gpu_umd_memory_destroy(memory),
+            amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, ENOMEM));
+  EXPECT_EQ(native_.gem_close_count, 1u);
+  EXPECT_EQ(native_.free_count, 0u);
+  EXPECT_EQ(amdf_gpu_umd_memory_remaining_backing_byte_length(memory), 4096u);
+  amdf_gpu_umd_memory_abandon(memory);
+  native_.gem_live = false;
+  ReleaseLeakedReservation();
+}
+
+TEST_F(KfdBufferNativeTest, FailedHostUnmapDistinguishesBackingFromEmptyVa) {
+  for (bool host_mapped : {false, true}) {
+    create_info_.host_access = host_mapped
+                                   ? AMDF_GPU_KFD_BUFFER_HOST_ACCESS_MAPPED
+                                   : AMDF_GPU_KFD_BUFFER_HOST_ACCESS_NONE;
+    ASSERT_EQ(Create(), AMDF_STATUS_OK);
+    native_.munmap_error = EIO;
+    EXPECT_EQ(Destroy(), amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, EIO));
+    EXPECT_FALSE(native_.allocation_live);
+    EXPECT_EQ(amdf_gpu_kfd_buffer_remaining_backing_byte_length(buffer_),
+              host_mapped ? 4096u : 0u);
+    amdf_gpu_kfd_buffer_abandon(buffer_);
+    buffer_ = nullptr;
+    native_.munmap_error = 0;
+    ReleaseLeakedReservation();
+  }
+  expected_metadata_free_count_ = 2;
 }
 
 TEST(KfdBufferTest, RejectsMalformedConstructionWithoutPublishingOutputs) {

@@ -316,9 +316,9 @@ static amdf_status_t amdf_gpu_kfd_reservation_prepare_target(
     target->transport_address = result.device_address;
     memset(result.host_pointer, 0, device->page_size);
     _mm_mfence();
-    status = amdf_gpu_kfd_buffer_export_gem(target->transport,
-                                            device->render_descriptor,
-                                            &target->transport_handle);
+    status = amdf_gpu_kfd_buffer_prepare_gem(target->transport,
+                                             device->render_descriptor,
+                                             &target->transport_handle);
   }
   if (amdf_status_is_ok(status)) {
     union drm_amdgpu_ctx context = {0};

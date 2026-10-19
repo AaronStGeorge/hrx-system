@@ -517,9 +517,10 @@ class CpuXdnaRecipeTest : public XdnaDeviceFixture {
       const uint64_t physical_offset = external_memory_.source_byte_offset;
       ASSERT_EQ(physical_offset,
                 export_source_.info.source_byte_offset + source_offset);
-      ASSERT_EQ(api_->memory_import(system_scope_, &import_info,
-                                    &external_memory_, &bindings_[i].memory),
-                AMDF_STATUS_OK);
+      ASSERT_EQ(
+          api_->memory_import(system_scope_, &import_info, &external_memory_,
+                              &bindings_[i].memory, nullptr),
+          AMDF_STATUS_OK);
       ASSERT_EQ(external_memory_.type, AMDF_EXTERNAL_MEMORY_TYPE_NONE);
       // No exporter mapping or attachment survives to supply cache maintenance
       // or preserve the native device address of this imported range.

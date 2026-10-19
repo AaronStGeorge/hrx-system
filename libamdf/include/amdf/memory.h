@@ -656,6 +656,26 @@ typedef struct amdf_memory_info_t {
   amdf_memory_placement_t placement;
 } amdf_memory_info_t;
 
+/// Cleanup outcome of memory destruction or failed construction rollback.
+/// This record owns no resource and creates no retry obligation. It is written
+/// on every call when requested, including when the operation itself fails.
+typedef struct amdf_memory_release_info_t {
+  /// First native cleanup error, or OK when cleanup succeeded or was
+  /// unnecessary. Construction returns its original error independently of this
+  /// value.
+  amdf_status_t status;
+  /// Allocation-owned native payload bytes whose relinquishment was not
+  /// established before metadata was consumed. Includes native rounding and
+  /// backing preserved after a failed consumer detach; excludes empty address
+  /// reservations and driver/library metadata. This is a conservative capacity
+  /// charge, not a measurement of resident pages or immediate OS availability.
+  /// REGISTER and IMPORT report zero because their backing belongs to another
+  /// owner. Zero does not grant permission to recycle registered/imported
+  /// source storage after a cleanup error; the source lifetime contract still
+  /// applies.
+  uint64_t abandoned_byte_length;
+} amdf_memory_release_info_t;
+
 /// Immutable facts of one established device access to a memory resource.
 typedef struct amdf_memory_access_info_t {
   /// Must be `AMDF_STRUCTURE_TYPE_MEMORY_ACCESS_INFO`.

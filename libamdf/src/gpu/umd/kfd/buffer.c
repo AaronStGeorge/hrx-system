@@ -34,6 +34,8 @@ struct amdf_gpu_kfd_buffer_t {
     void* base;
     // Complete reserved interval length, including alignment padding.
     size_t byte_length;
+    // True after a shared backing view replaced part of the empty reservation.
+    bool contains_backing;
   } reservation;
   // Immutable unique GPU IDs in owner-first native map order.
   uint32_t gpu_ids[];
@@ -92,6 +94,7 @@ static amdf_status_t amdf_gpu_kfd_buffer_release_native(
       return amdf_linux_error(errno);
     }
     buffer->reservation.base = NULL;
+    buffer->reservation.contains_backing = false;
   }
   return AMDF_STATUS_OK;
 }
@@ -254,6 +257,7 @@ amdf_status_t amdf_gpu_kfd_buffer_prepare(
       status = amdf_linux_error(errno);
     } else {
       host_pointer = mapping;
+      buffer->reservation.contains_backing = true;
     }
   }
 
@@ -314,9 +318,16 @@ size_t amdf_gpu_kfd_buffer_byte_length(const amdf_gpu_kfd_buffer_t* buffer) {
   return buffer->byte_length;
 }
 
-amdf_status_t amdf_gpu_kfd_buffer_export_gem(amdf_gpu_kfd_buffer_t* buffer,
-                                             int render_descriptor,
-                                             uint32_t* out_handle) {
+size_t amdf_gpu_kfd_buffer_remaining_backing_byte_length(
+    const amdf_gpu_kfd_buffer_t* buffer) {
+  return buffer->handle != 0 || buffer->reservation.contains_backing
+             ? buffer->byte_length
+             : 0;
+}
+
+amdf_status_t amdf_gpu_kfd_buffer_prepare_gem(amdf_gpu_kfd_buffer_t* buffer,
+                                              int render_descriptor,
+                                              uint32_t* handle) {
   struct kfd_ioctl_export_dmabuf_args export = {
       .handle = buffer->handle,
       .flags = O_CLOEXEC,
@@ -329,18 +340,12 @@ amdf_status_t amdf_gpu_kfd_buffer_export_gem(amdf_gpu_kfd_buffer_t* buffer,
   amdf_status_t status = AMDF_STATUS_OK;
   if (ioctl(render_descriptor, DRM_IOCTL_PRIME_FD_TO_HANDLE, &import) != 0) {
     status = amdf_linux_error(errno);
+  } else {
+    *handle = import.handle;
   }
   const amdf_status_t close_status = amdf_linux_file_close(&import.fd);
-  if (!amdf_status_is_ok(close_status)) {
-    status = close_status;
-  }
   if (amdf_status_is_ok(status)) {
-    *out_handle = import.handle;
-  } else if (import.handle != 0) {
-    struct drm_gem_close release = {.handle = import.handle};
-    if (ioctl(render_descriptor, DRM_IOCTL_GEM_CLOSE, &release) != 0) {
-      status = amdf_linux_error(errno);
-    }
+    status = close_status;
   }
   return status;
 }

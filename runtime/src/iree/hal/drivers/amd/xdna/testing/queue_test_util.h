@@ -289,7 +289,11 @@ struct NativeProvider {
 
   static amdf_status_t AMDF_CALL MemoryCreate(
       amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
-      amdf_memory_t** out_memory) {
+      amdf_memory_t** out_memory,
+      amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* self = reinterpret_cast<NativeProvider*>(scope);
     self->allocation_gate.Enter(info->byte_length);
     const bool is_command_memory =
@@ -318,7 +322,11 @@ struct NativeProvider {
     out_info->native_allocation_granularity = 4096;
     return AMDF_STATUS_OK;
   }
-  static amdf_status_t AMDF_CALL MemoryDestroy(amdf_memory_t* handle) {
+  static amdf_status_t AMDF_CALL MemoryDestroy(
+      amdf_memory_t* handle, amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* memory = reinterpret_cast<Memory*>(handle);
     memory->owner->release_gate.Enter(memory->contents.size());
     --memory->owner->live_memories;

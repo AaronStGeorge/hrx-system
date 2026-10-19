@@ -77,8 +77,17 @@ static amdf_status_t amdf_memory_release_native(amdf_memory_t* memory) {
 // Terminal release never creates a deferred cleanup obligation. A native
 // failure leaves required backing in place and discards library metadata;
 // no later object retries those native operations.
-amdf_status_t amdf_memory_resource_destroy(amdf_memory_t* memory) {
-  const amdf_status_t status = amdf_memory_release_native(memory);
+amdf_memory_release_info_t amdf_memory_resource_destroy(amdf_memory_t* memory) {
+  amdf_memory_release_info_t result = {
+      .status = amdf_memory_release_native(memory),
+  };
+  const amdf_memory_access_state_t* backing =
+      &memory->accesses[memory->backing_access_ordinal];
+  if (memory->allocated_backing && backing->native != NULL) {
+    result.abandoned_byte_length =
+        backing->vtable->remaining_backing_byte_length(
+            memory, memory->backing_access_ordinal);
+  }
   const size_t count =
       memory->backing_access_ordinal == memory->info.access_count
           ? (size_t)memory->info.access_count + 1
@@ -89,5 +98,5 @@ amdf_status_t amdf_memory_resource_destroy(amdf_memory_t* memory) {
     }
   }
   amdf_free(memory->host_allocator, memory);
-  return status;
+  return result;
 }

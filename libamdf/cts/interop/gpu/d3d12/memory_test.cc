@@ -93,7 +93,8 @@ class D3D12MemoryInteropTest : public GpuDeviceFixture {
 
   void DestroyImportedStorage() {
     if (imported_memory_ != nullptr) {
-      ASSERT_EQ(api_->memory_destroy(std::exchange(imported_memory_, nullptr)),
+      ASSERT_EQ(api_->memory_destroy(std::exchange(imported_memory_, nullptr),
+                                     nullptr),
                 AMDF_STATUS_OK);
     }
   }
@@ -121,7 +122,8 @@ class D3D12MemoryInteropTest : public GpuDeviceFixture {
       command_mapping_ = nullptr;
     }
     if (command_memory_ != nullptr) {
-      ASSERT_EQ(api_->memory_destroy(std::exchange(command_memory_, nullptr)),
+      ASSERT_EQ(api_->memory_destroy(std::exchange(command_memory_, nullptr),
+                                     nullptr),
                 AMDF_STATUS_OK);
     }
     ASSERT_NO_FATAL_FAILURE(DestroyImportedStorage());
@@ -171,7 +173,7 @@ class D3D12MemoryInteropTest : public GpuDeviceFixture {
     transport.release_user_data = &release_count_;
     const uint32_t releases_before = release_count_;
     const amdf_status_t status = api_->memory_import(
-        local_scope_, &import_info_, &transport, &imported_memory_);
+        local_scope_, &import_info_, &transport, &imported_memory_, nullptr);
     ASSERT_EQ(status, AMDF_STATUS_OK)
         << "domain=" << amdf_status_domain(status) << " code=" << std::hex
         << amdf_status_code(status);
@@ -302,8 +304,9 @@ class D3D12MemoryInteropTest : public GpuDeviceFixture {
         create.required_flags, access.requirements);
     ASSERT_NE(create.memory_profile_ordinal,
               AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN);
-    ASSERT_EQ(api_->memory_create(system_scope_, &create, &command_memory_),
-              AMDF_STATUS_OK);
+    ASSERT_EQ(
+        api_->memory_create(system_scope_, &create, &command_memory_, nullptr),
+        AMDF_STATUS_OK);
     amdf_memory_map_info_t map = {};
     map.type = AMDF_STRUCTURE_TYPE_MEMORY_MAP_INFO;
     map.structure_size = sizeof(map);
@@ -384,8 +387,8 @@ class D3D12MemoryInteropTest : public GpuDeviceFixture {
     const uint32_t releases_before = release_count_;
     auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
     amdf_memory_t* output = sentinel;
-    const amdf_status_t status =
-        api_->memory_import(local_scope_, &import_info_, &source, &output);
+    const amdf_status_t status = api_->memory_import(
+        local_scope_, &import_info_, &source, &output, nullptr);
     ASSERT_FALSE(amdf_status_is_ok(status));
     EXPECT_EQ(output, sentinel);
     EXPECT_EQ(std::memcmp(&source, &original, sizeof(source)), 0);
@@ -811,7 +814,7 @@ TEST_F(D3D12MemoryInteropTest, PreservesUnalignedLogicalRangeOnReexport) {
   source.source_byte_offset = 13;
   source.byte_length = 117;
   ASSERT_EQ(api_->memory_import(local_scope_, &import_info_, &source,
-                                &imported_memory_),
+                                &imported_memory_, nullptr),
             AMDF_STATUS_OK);
   amdf_memory_info_t info = {};
   info.type = AMDF_STRUCTURE_TYPE_MEMORY_INFO;

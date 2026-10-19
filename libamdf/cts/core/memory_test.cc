@@ -51,7 +51,7 @@ class HostMemoryTest : public ::testing::Test {
       EXPECT_EQ(api_->host_mapping_destroy(mapping), AMDF_STATUS_OK);
     }
     for (amdf_memory_t* memory : memories_) {
-      EXPECT_EQ(api_->memory_destroy(memory), AMDF_STATUS_OK);
+      EXPECT_EQ(api_->memory_destroy(memory, nullptr), AMDF_STATUS_OK);
     }
   }
 
@@ -156,7 +156,8 @@ TEST_F(HostMemoryTest, AllocatesOneBackingWithoutAnAccelerator) {
        granularity) *
       granularity;
   amdf_memory_t* memory = nullptr;
-  ASSERT_EQ(api_->memory_create(scope_, &create_info, &memory), AMDF_STATUS_OK);
+  ASSERT_EQ(api_->memory_create(scope_, &create_info, &memory, nullptr),
+            AMDF_STATUS_OK);
   memories_.push_back(memory);
 
   amdf_memory_info_t info = {
@@ -237,12 +238,13 @@ TEST_F(HostMemoryTest, BorrowsCallerStorageWithoutTakingOwnership) {
   create_info.byte_length = storage_.size() - 2;
   amdf_memory_t* memory = nullptr;
   create_info.required_flags |= AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(scope_, &create_info, &memory)),
-      AMDF_STATUS_CODE_UNSUPPORTED);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(scope_, &create_info, &memory, nullptr)),
+            AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(memory, nullptr);
   create_info.required_flags &= ~AMDF_MEMORY_FLAG_HOST_MAPPING_SOURCE;
-  ASSERT_EQ(api_->memory_create(scope_, &create_info, &memory), AMDF_STATUS_OK);
+  ASSERT_EQ(api_->memory_create(scope_, &create_info, &memory, nullptr),
+            AMDF_STATUS_OK);
   memories_.push_back(memory);
   amdf_host_mapping_info_t info = {};
   ASSERT_NO_FATAL_FAILURE(Map(memory, 0, create_info.byte_length, &info));
@@ -251,7 +253,7 @@ TEST_F(HostMemoryTest, BorrowsCallerStorageWithoutTakingOwnership) {
   std::memset(info.pointer, 0x19, info.byte_length);
   ASSERT_EQ(api_->host_mapping_destroy(mappings_.back()), AMDF_STATUS_OK);
   mappings_.pop_back();
-  ASSERT_EQ(api_->memory_destroy(memory), AMDF_STATUS_OK);
+  ASSERT_EQ(api_->memory_destroy(memory, nullptr), AMDF_STATUS_OK);
   memories_.pop_back();
   EXPECT_EQ(storage_.front(), 0x42);
   EXPECT_EQ(storage_.back(), 0x42);
@@ -308,7 +310,8 @@ TEST_F(HostMemoryTest, QualifiesCpuPairsAndRejectsUnestablishedRegistration) {
     create.registered_host_cacheability = cacheability;
     auto* sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
     auto* memory = sentinel;
-    EXPECT_EQ(amdf_status_code(api_->memory_create(scope_, &create, &memory)),
+    EXPECT_EQ(amdf_status_code(
+                  api_->memory_create(scope_, &create, &memory, nullptr)),
               AMDF_STATUS_CODE_UNSUPPORTED);
     EXPECT_EQ(memory, sentinel);
   }
@@ -336,38 +339,38 @@ TEST_F(HostMemoryTest, RejectsInvalidConstructionWithoutPublishingOutputs) {
   amdf_memory_t* sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   amdf_memory_t* memory = sentinel;
   create_info.access_count = 1;
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(scope_, &create_info, &memory)),
-      AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(scope_, &create_info, &memory, nullptr)),
+            AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(memory, sentinel);
   create_info.access_count = 0;
   create_info.required_flags = AMDF_MEMORY_FLAG_DEVICE_ADDRESS;
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(scope_, &create_info, &memory)),
-      AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(scope_, &create_info, &memory, nullptr)),
+            AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(memory, sentinel);
   create_info.required_flags = AMDF_MEMORY_FLAG_DEVICE_LOCAL;
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(scope_, &create_info, &memory)),
-      AMDF_STATUS_CODE_UNSUPPORTED);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(scope_, &create_info, &memory, nullptr)),
+            AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(memory, sentinel);
   create_info.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
   create_info.minimum_alignment = profile.allocation.maximum_alignment * 2;
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(scope_, &create_info, &memory)),
-      AMDF_STATUS_CODE_UNSUPPORTED);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(scope_, &create_info, &memory, nullptr)),
+            AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(memory, sentinel);
 
   create_info.minimum_alignment = 0;
   create_info.placement = {AMDF_MEMORY_PLACEMENT_KIND_NONE, 1};
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(scope_, &create_info, &memory)),
-      AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(scope_, &create_info, &memory, nullptr)),
+            AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(memory, sentinel);
   create_info.placement = {UINT32_MAX, 0};
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(scope_, &create_info, &memory)),
-      AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(scope_, &create_info, &memory, nullptr)),
+            AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(memory, sentinel);
 
   amdf_memory_profile_t output = profile;

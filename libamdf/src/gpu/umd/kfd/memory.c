@@ -108,6 +108,16 @@ static void amdf_gpu_kfd_memory_plan(
                         : device->page_size;
 }
 
+uint64_t amdf_gpu_umd_memory_remaining_backing_byte_length(
+    const amdf_gpu_umd_memory_t* memory) {
+  if (memory->host_mapping_source >= 0 || memory->source_count != 0) {
+    return memory->byte_length;
+  }
+  return memory->buffer != NULL
+             ? amdf_gpu_kfd_buffer_remaining_backing_byte_length(memory->buffer)
+             : 0;
+}
+
 amdf_status_t amdf_gpu_umd_memory_destroy(amdf_gpu_umd_memory_t* memory) {
   if (memory->default_reservation != NULL) {
     amdf_gpu_umd_memory_reservation_t* reservation =
@@ -463,12 +473,10 @@ amdf_status_t amdf_gpu_umd_memory_prepare(
     if (j != memory->source_count) {
       continue;
     }
-    uint32_t handle = 0;
-    status =
-        amdf_gpu_kfd_buffer_export_gem(memory->buffer, descriptor, &handle);
-    if (amdf_status_is_ok(status)) {
-      memory->sources[j].descriptor = descriptor;
-      memory->sources[j].handle = handle;
+    memory->sources[j].descriptor = descriptor;
+    status = amdf_gpu_kfd_buffer_prepare_gem(memory->buffer, descriptor,
+                                             &memory->sources[j].handle);
+    if (memory->sources[j].handle != 0) {
       ++memory->source_count;
     }
   }
