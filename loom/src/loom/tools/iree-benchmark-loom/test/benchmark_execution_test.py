@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Exercises controlled scenario comparison through the public CLI."""
+"""Exercises benchmark execution contracts through the public CLI."""
 
 import json
 import subprocess
@@ -14,10 +14,11 @@ import unittest
 from pathlib import Path
 
 TOOL = Path(sys.argv.pop(1)).resolve()
-SOURCE = Path(sys.argv.pop(1)).resolve()
+SCENARIO_SOURCE = Path(sys.argv.pop(1)).resolve()
+SEQUENCE_SOURCE = Path(sys.argv.pop(1)).resolve()
 
 
-class ScenarioComparisonTest(unittest.TestCase):
+class BenchmarkExecutionTest(unittest.TestCase):
     def run_comparison(
         self, candidate: str
     ) -> tuple[subprocess.CompletedProcess[str], list[dict]]:
@@ -26,7 +27,7 @@ class ScenarioComparisonTest(unittest.TestCase):
             result = subprocess.run(
                 [
                     str(TOOL),
-                    str(SOURCE),
+                    str(SCENARIO_SOURCE),
                     "--device=task",
                     f"--compare=@scenario_benchmark_baseline_throughput,@{candidate}",
                     "--sample=2",
@@ -70,6 +71,9 @@ class ScenarioComparisonTest(unittest.TestCase):
             self.assertEqual(cache["binding_count"], 2)
             self.assertEqual(cache["binding_ring_count"], 2)
             self.assertEqual(cache["binding_ring_bytes"], 64)
+            self.assertEqual(cache["materialized_storage_count"], 1)
+            self.assertEqual(cache["materialized_storage_set_bytes"], 32)
+            self.assertEqual(cache["materialized_storage_ring_bytes"], 64)
 
         comparisons = [row for row in rows if row["row"] == "comparison"]
         self.assertEqual(len(comparisons), 1)
@@ -88,6 +92,49 @@ class ScenarioComparisonTest(unittest.TestCase):
             result.stderr,
         )
         self.assertFalse(any(row["row"] == "benchmark.repetition" for row in rows))
+
+    def test_sequence_ring_counts_unique_materialized_storage(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_path = Path(temporary_directory) / "results.jsonl"
+            result = subprocess.run(
+                [
+                    str(TOOL),
+                    str(SEQUENCE_SOURCE),
+                    "--device=task",
+                    "--benchmark=@shared_sequence_throughput",
+                    "--measure=dispatch_complete",
+                    "--input-ring-min-bytes=25",
+                    "--batch-size=4",
+                    "--iterations=1",
+                    "--warmup-iterations=0",
+                    "--min-time-ms=0",
+                    "--warmup-time-ms=0",
+                    "--max-batches=1",
+                    "--output-format=jsonl",
+                    f"--output={output_path}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = [json.loads(line) for line in output_path.read_text().splitlines()]
+
+        benchmark_rows = [row for row in rows if row["row"] == "benchmark"]
+        self.assertEqual(len(benchmark_rows), 1)
+        benchmark_result = benchmark_rows[0]["benchmark_result"]
+        self.assertEqual(benchmark_result["state"], "ok")
+        self.assertEqual(benchmark_result["correctness"]["sample_count"], 1)
+        self.assertEqual(benchmark_result["correctness"]["failed_sample_count"], 0)
+
+        cache = benchmark_result["data_cache"]
+        self.assertEqual(cache["binding_count"], 4)
+        self.assertEqual(cache["binding_ring_count"], 3)
+        self.assertEqual(cache["binding_set_bytes"], 16)
+        self.assertEqual(cache["binding_ring_bytes"], 48)
+        self.assertEqual(cache["materialized_storage_count"], 3)
+        self.assertEqual(cache["materialized_storage_set_bytes"], 12)
+        self.assertEqual(cache["materialized_storage_ring_bytes"], 36)
+        self.assertTrue(cache["ring_byte_target_met"])
 
 
 if __name__ == "__main__":
