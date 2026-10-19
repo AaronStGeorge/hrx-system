@@ -463,7 +463,9 @@ iree_status_t loom_low_schedule_pressure_initialize_unlock_summaries(
     loom_low_schedule_build_state_t* state, uint32_t node_count,
     loom_low_schedule_pressure_state_t* pressure_state);
 
-// Publishes the consumer of its sole remaining unscheduled dependency group.
+// Publishes an admitted source-range consumer whose sole remaining dependency
+// group belongs to an unscheduled producer. Range admission is owned by the
+// list scheduler; dependency readiness alone cannot cross a source boundary.
 void loom_low_schedule_pressure_publish_unlock_consumer(
     loom_low_schedule_build_state_t* state,
     loom_low_schedule_pressure_state_t* pressure_state, uint32_t group_index);

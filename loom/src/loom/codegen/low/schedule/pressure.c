@@ -1505,16 +1505,6 @@ iree_status_t loom_low_schedule_pressure_initialize_unlock_summaries(
     memset(pressure_state->unlocks.descriptor_heads, 0xFF,
            node_count * sizeof(*pressure_state->unlocks.descriptor_heads));
   }
-  for (uint32_t consumer_node = 0; consumer_node < node_count;
-       ++consumer_node) {
-    const uint32_t group_index =
-        loom_low_schedule_dependency_frontier_remaining_group(
-            &pressure_state->unlocks.frontier, consumer_node);
-    if (group_index != LOOM_LOW_SCHEDULE_DEPENDENCY_GROUP_NONE) {
-      loom_low_schedule_pressure_publish_unlock_consumer(state, pressure_state,
-                                                         group_index);
-    }
-  }
   return iree_ok_status();
 }
 
