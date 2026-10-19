@@ -240,6 +240,18 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    link_options_test
+  SRCS
+    "link_options_test.cc"
+  DEPS
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::binding::c::loomc
+)
+
+loom_cc_test(
+  NAME
     link_test
   SRCS
     "link_test.cc"

@@ -106,6 +106,7 @@ iree_execution_test_suite(
         "check_cases.cxx",
         "check_cases.h",
         "check_library.cxx",
+        "dependency_input.cxx",
         "record_input.loom",
         "record_library.cxx",
         "source_input.cxx",

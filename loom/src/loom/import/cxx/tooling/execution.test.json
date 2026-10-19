@@ -271,6 +271,114 @@
           }
         }
       ]
+    },
+    {
+      "name": "checks imported component dependencies and executes linked bytecode",
+      "steps": [
+        {
+          "name": "encode-library",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{srcdir}/source_input.cxx",
+              "--input-options=cxx:D=CHECK_BIAS=1",
+              "--to=bc",
+              "--output={tmp}/library.loombc"
+            ]
+          }
+        },
+        {
+          "name": "reject-transitive-only-dependency",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{srcdir}/dependency_input.cxx",
+              "--mode=merge",
+              "--source-prefix-map={srcdir}=source",
+              "--dependency-component=//model:component",
+              "--to=bc",
+              "--transitive-library={tmp}/library.loombc",
+              "--dependency-report={tmp}/rejected.json",
+              "--output={tmp}/rejected.loombc"
+            ]
+          },
+          "exit": 1,
+          "stderr": {
+            "contains": [
+              "source/dependency_input.cxx:",
+              "LINK/DEPENDENCY/MISSING_DIRECT",
+              "source_increment"
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/rejected.json",
+              "contains": [
+                "\"succeeded\":false",
+                "\"dependency\":\"missing_direct\""
+              ]
+            },
+            {
+              "path": "{tmp}/rejected.loombc",
+              "exists": false
+            }
+          ]
+        },
+        {
+          "name": "build-relocatable-component",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{srcdir}/dependency_input.cxx",
+              "--mode=merge",
+              "--source-prefix-map={srcdir}=source",
+              "--dependency-component=//model:component",
+              "--to=bc",
+              "--library={tmp}/library.loombc",
+              "--dependency-report={tmp}/accepted.json",
+              "--output={tmp}/component.loombc"
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/accepted.json",
+              "contains": [
+                "\"succeeded\":true",
+                "\"usage\":[\"exact\"]"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "link-component",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{tmp}/component.loombc",
+              "--library={tmp}/library.loombc",
+              "--include-input-tests",
+              "--to=bc",
+              "--output={tmp}/linked.loombc"
+            ]
+          }
+        },
+        {
+          "name": "execute",
+          "run": {
+            "tool": "iree-test-loom",
+            "args": [
+              "{tmp}/linked.loombc"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "\"case_count\":1",
+              "\"failed_sample_count\":0",
+              "\"planning_issue_count\":0"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

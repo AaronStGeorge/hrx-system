@@ -9,6 +9,8 @@ executable.
 `loom_tooling_input_admit_loomc_module` receives the selected format and admits
 text, bytecode, or an optional importer through LoomC. Returned modules and
 results retain their source identities and bytes after frontend teardown.
+`loom-link` snapshots admitted text/C++ modules into its reusable link index;
+bytecode inputs retain their file buffers for metadata-first selective linking.
 
 Native compiler tools use `loom_input_provider_t` to pair the same format
 metadata with a native loader. `loom_input_module_t` retains the native module,

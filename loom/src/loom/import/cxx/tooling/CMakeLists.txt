@@ -137,6 +137,7 @@ iree_execution_test_suite(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/check_cases.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/check_cases.h"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/check_library.cxx"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/dependency_input.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/record_input.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/record_library.cxx"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/import/cxx/tooling/source_input.cxx"

@@ -20,6 +20,26 @@
 #include "target.h"
 #include "workspace.h"
 
+loomc_status_t loomc_link_materialization_validate_targets(
+    const loomc_target_profile_t* kernel_profile,
+    const loomc_target_specialization_options_t* target_specialization,
+    const loomc_target_environment_t* target_environment) {
+  if (kernel_profile == NULL) {
+    return loomc_target_specialization_options_validate_environment(
+        target_specialization, target_environment);
+  }
+  if (target_specialization != NULL &&
+      (target_specialization->specialization_count != 0 ||
+       target_specialization->target_binding_count != 0)) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "kernel_target_profile cannot be combined with explicit target "
+        "specializations or bindings");
+  }
+  return loomc_target_profile_validate_environment(kernel_profile,
+                                                   target_environment);
+}
+
 static iree_status_t loomc_link_materialization_capture_diagnostic(
     void* user_data, const loom_diagnostic_t* diagnostic) {
   loomc_link_materialization_state_t* state =
