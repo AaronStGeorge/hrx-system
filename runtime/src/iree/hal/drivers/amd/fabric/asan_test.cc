@@ -379,6 +379,24 @@ TEST_F(AsanTest, ImportedBoundariesWidenWithoutShrinkingAnotherLiveImport) {
   EXPECT_EQ(native_.Shadow(72), 0u);
 }
 
+TEST_F(AsanTest, SparseImportCommitsOnlyCoveredShadowSlab) {
+  Initialize();
+  ASSERT_FALSE(HasFatalFailure());
+  // Both application boundaries coincide with shadow slab boundaries. An
+  // adjacent shadow byte has no backing, rather than a readable poison value.
+  constexpr uint64_t kAddress = 8 * 4096;
+  constexpr uint64_t kLength = 8 * 4096;
+  IREE_ASSERT_OK(iree_hal_amd_fabric_asan_publish_imported_range(
+      &state_, kAddress, kLength));
+  const auto& pages = native_.reservations[1]->pages;
+  ASSERT_EQ(pages.size(), 1u);
+  EXPECT_EQ(pages.count(0), 0u);
+  EXPECT_EQ(pages.count(4096), 1u);
+  EXPECT_EQ(pages.count(8192), 0u);
+  EXPECT_EQ(native_.Shadow(kAddress), 0u);
+  EXPECT_EQ(native_.Shadow(kAddress + kLength - 1), 0u);
+}
+
 TEST_F(AsanTest, PremappedPoisonAliasesAreReplacedOnlyForCommittedSlabs) {
   Initialize(true);
   ASSERT_FALSE(HasFatalFailure());
