@@ -53,6 +53,7 @@ loom_cc_library(
     loom::import::cxx::binding::parameter_contracts
     loom::import::cxx::binding::target_definitions
     loom::import::cxx::binding::template_definitions
+    loom::import::cxx::control::analysis
     loom::import::cxx::source
     loom::import::cxx::source::attributes
     loom::import::cxx::source::error
@@ -87,6 +88,7 @@ loom_cc_test(
     iree::third_party::cxx_parser
     loom::import::cxx::binding::function_contracts
     loom::import::cxx::binding::template_definitions
+    loom::import::cxx::source::expressions
     loom::import::cxx::value::builder_test
     loom::import::cxx::value::vector
     loom::ops::check

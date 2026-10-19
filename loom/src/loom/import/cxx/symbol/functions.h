@@ -9,11 +9,13 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "loom/import/cxx/binding/config.h"
@@ -25,6 +27,7 @@
 #include "loom/import/cxx/binding/parameter_contracts.h"
 #include "loom/import/cxx/binding/target_definitions.h"
 #include "loom/import/cxx/binding/template_definitions.h"
+#include "loom/import/cxx/control/analysis.h"
 #include "loom/import/cxx/source/locations.h"
 #include "loom/import/cxx/symbol/names.h"
 #include "loom/import/cxx/value/signature.h"
@@ -68,17 +71,26 @@ struct ImplicitObjectParameter {
   ImplicitObjectABI abi;
   // Cv-qualified complete source object type governing member observations.
   const cxx::Type* object_type;
-  // Whether a value receiver returns its possibly replaced components.
-  bool mutable_access;
+  // Exact top-level fields replaced by a value receiver, in declaration order.
+  std::span<cxx::FieldSymbol* const> written_fields;
 };
 
-// One source lvalue-reference parameter projected through Loom's value ABI.
+enum class ReferenceABI {
+  // Nonescaping referent transported as flattened values with exact writeback.
+  Value,
+  // Durable identity transported as the existing buffer-plus-offset pointer.
+  Storage,
+};
+
+// One source lvalue-reference parameter projected through its selected ABI.
 // Parameters remain in source order and are indexed by semantic ordinal so
 // redeclarations need not share parameter symbol identities.
-struct ValueReferenceParameter {
+struct ReferenceParameter {
   // Ordinal in the source function parameter list.
   size_t ordinal;
-  // Whether the callee returns and the caller writes back the final value.
+  // Native identity transport selected by the retained callable analysis.
+  ReferenceABI abi;
+  // Whether a value ABI callee returns and the caller writes back the result.
   bool mutable_access;
 };
 
@@ -100,9 +112,11 @@ struct FunctionBody {
   // Incoming pointer contracts in source parameter order, empty when absent.
   std::span<const ParameterContract> parameter_contracts;
   // Admitted non-escaping value references in source parameter order.
-  std::span<const ValueReferenceParameter> reference_parameters;
+  std::span<const ReferenceParameter> reference_parameters;
   // Implicit object transport for a reached non-static member definition.
   std::optional<ImplicitObjectParameter> implicit_object;
+  // Retained whole-function source facts shared with body translation.
+  const ControlFlow* control;
 };
 
 // Native definition and any source-owned launch configuration body that must
@@ -143,6 +157,10 @@ class Functions {
   // Selects explicit qualified roots or externally visible concrete
   // definitions. Called once before translating the pending worklist.
   void select(std::span<const iree_string_view_t> roots);
+  // Analyzes every source definition reachable from selected roots, then
+  // propagates sparse reference and receiver effects to a fixed point before
+  // any native callable signature is emitted.
+  void analyze(Types& types);
   // Retains one identity and queues a newly reached source definition or
   // bodyless namespace declaration exactly once.
   loom_symbol_ref_t declare(
@@ -168,7 +186,12 @@ class Functions {
   DefinedFunction define(FunctionInstance instance, Types& types,
                          Locations& locations, loom_builder_t* builder);
   // Returns the retained value-reference ABI for a reached function.
-  std::span<const ValueReferenceParameter> reference_parameters(
+  std::span<const ReferenceParameter> reference_parameters(
+      cxx::FunctionSymbol* symbol) const;
+  // Whether calls must transport the implicit object as durable storage.
+  bool receiver_requires_storage(cxx::FunctionSymbol* symbol) const;
+  // Exact top-level implicit-object fields replaced by the definition.
+  std::span<cxx::FieldSymbol* const> receiver_writes(
       cxx::FunctionSymbol* symbol) const;
 
  private:
@@ -183,6 +206,18 @@ class Functions {
   loom_symbol_ref_t retain(FunctionInstance instance, cxx::AST* owner);
   void admit_reference_parameters(cxx::FunctionSymbol* symbol,
                                   cxx::AST* source);
+  struct AnalyzedCall {
+    ControlFlow* caller;
+    const DirectCall* call;
+    ControlFlow* callee;
+  };
+  using AnalyzedFunction = std::pair<cxx::FunctionSymbol*, ControlFlow*>;
+  void prepare_analysis(cxx::FunctionSymbol* symbol, Types& types,
+                        std::vector<AnalyzedFunction>& functions,
+                        std::vector<AnalyzedCall>& calls);
+  bool ordinary_analysis_call(const DirectCall& call);
+  ControlFlow* mutable_control_flow(cxx::FunctionSymbol* symbol);
+  const ControlFlow* control_flow(cxx::FunctionSymbol* symbol) const;
   BoundSignature bind_callable_signature(
       FunctionInstance instance, cxx::AST* source, Types& types,
       loom_builder_t* builder, std::vector<loom_type_t>& arguments,
@@ -274,8 +309,12 @@ class Functions {
   // Reached bodyless declarations whose names must remain stable for linking.
   std::unordered_set<cxx::FunctionSymbol*> external_;
   // Nonempty value-reference ABIs indexed by canonical declaration identity.
-  std::unordered_map<cxx::FunctionSymbol*, std::vector<ValueReferenceParameter>>
+  std::unordered_map<cxx::FunctionSymbol*, std::vector<ReferenceParameter>>
       reference_parameters_;
+  // Whole-function analyses retained by canonical semantic identity. Each body
+  // is walked once; signature construction and translation query these facts.
+  std::unordered_map<cxx::FunctionSymbol*, std::unique_ptr<ControlFlow>>
+      control_flows_;
   // Each reached source function receives one native identity.
   std::unordered_map<FunctionInstance, loom_symbol_ref_t, FunctionInstanceHash,
                      FunctionInstanceEqual>

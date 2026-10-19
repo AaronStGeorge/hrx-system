@@ -44,6 +44,6 @@ struct VolatileValue {
 };
 
 unsigned volatile_value_receiver(VolatileValue object) {
-  // ERROR@+1: LOWERING/059 "volatile member calls require a storage-backed receiver"
+  // ERROR@+1: LOWERING/059 "member call requires a storage-backed receiver"
   return object.read();
 }

@@ -21,10 +21,12 @@
 #include <array>
 #include <functional>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -104,6 +106,7 @@ class Translator final : private Initialization::Evaluation {
 
   void translate() {
     functions_.select({options_.roots, options_.root_count});
+    functions_.analyze(types_);
     for (size_t index = 0; index < functions_.pending().size(); ++index) {
       function(functions_.pending()[index]);
     }
@@ -134,6 +137,10 @@ class Translator final : private Initialization::Evaluation {
 
   [[noreturn]] void fail(cxx::AST* ast, const std::string& message) {
     diagnostics_.reject(unit_, ast, message);
+  }
+
+  Value reference(cxx::ExpressionAST* expression, cxx::AST* owner) override {
+    return reference_value(expression, owner);
   }
 
   void require_kernel_context(cxx::AST* owner) {
@@ -555,7 +562,7 @@ class Translator final : private Initialization::Evaluation {
     cxx::AST* source;
   };
 
-  const ValueReferenceParameter* reference_parameter(size_t ordinal) const {
+  const ReferenceParameter* reference_parameter(size_t ordinal) const {
     for (const auto& reference : current_function_.reference_parameters) {
       if (reference.ordinal == ordinal) {
         return &reference;
@@ -570,17 +577,22 @@ class Translator final : private Initialization::Evaluation {
   std::vector<const cxx::Type*> function_result_sources() {
     std::vector<const cxx::Type*> sources;
     if (!unit_.typeTraits().is_void(current_function_.return_type)) {
-      sources.push_back(current_function_.return_type);
+      sources.push_back(
+          unit_.typeTraits().is_lvalue_reference(current_function_.return_type)
+              ? unit_.typeTraits().add_pointer(
+                    unit_.typeTraits().remove_reference(
+                        current_function_.return_type))
+              : current_function_.return_type);
     }
     if (current_function_.implicit_object &&
-        current_function_.implicit_object->abi == ImplicitObjectABI::Value &&
-        current_function_.implicit_object->mutable_access) {
-      sources.push_back(
-          types_.unqualified(current_function_.implicit_object->object_type));
+        current_function_.implicit_object->abi == ImplicitObjectABI::Value) {
+      for (auto* field : current_function_.implicit_object->written_fields) {
+        sources.push_back(types_.unqualified_value(field->type()));
+      }
     }
     auto parameters = current_function_.source->symbol->parameters();
     for (const auto& reference : current_function_.reference_parameters) {
-      if (reference.mutable_access) {
+      if (reference.abi == ReferenceABI::Value && reference.mutable_access) {
         sources.push_back(
             types_.unqualified_value(parameters[reference.ordinal]->type()));
       }
@@ -590,13 +602,14 @@ class Translator final : private Initialization::Evaluation {
 
   Returned complete_return(Returned returned) {
     if (current_function_.implicit_object &&
-        current_function_.implicit_object->abi == ImplicitObjectABI::Value &&
-        current_function_.implicit_object->mutable_access) {
-      current_receiver_value(returned.source).append_to(returned.values);
+        current_function_.implicit_object->abi == ImplicitObjectABI::Value) {
+      for (auto* field : current_function_.implicit_object->written_fields) {
+        receiver_member(field, returned.source).append_to(returned.values);
+      }
     }
     auto parameters = current_function_.source->symbol->parameters();
     for (const auto& reference : current_function_.reference_parameters) {
-      if (reference.mutable_access) {
+      if (reference.abi == ReferenceABI::Value && reference.mutable_access) {
         values_.at(parameters[reference.ordinal]).append_to(returned.values);
       }
     }
@@ -636,10 +649,18 @@ class Translator final : private Initialization::Evaluation {
       return;
     }
     auto parameters = defined.source->symbol->parameters();
-    control_.emplace(unit_, diagnostics_, types_, body, defined.source->symbol);
+    owned_control_.reset();
+    if (defined.control) {
+      control_ = defined.control;
+    } else {
+      owned_control_.emplace(unit_, diagnostics_, types_, body,
+                             defined.source->symbol);
+      control_ = &*owned_control_;
+    }
     auto saved = loom_builder_enter_region(&builder_, op, region);
     values_.clear();
     locals_.clear();
+    references_.clear();
     receivers_.clear();
     receiver_owners_.clear();
     value_arena_.reset();
@@ -669,8 +690,12 @@ class Translator final : private Initialization::Evaluation {
     size_t parameter_index = 0;
     for (auto* parameter : parameters) {
       const auto* reference = reference_parameter(parameter_index);
-      auto* value_type = reference ? types_.unqualified_value(parameter->type())
-                                   : types_.unqualified(parameter->type());
+      auto* value_type =
+          !reference ? types_.unqualified(parameter->type())
+          : reference->abi == ReferenceABI::Storage
+              ? unit_.typeTraits().add_pointer(
+                    unit_.typeTraits().remove_reference(parameter->type()))
+              : types_.unqualified_value(parameter->type());
       const auto& partition = types_.partition(value_type, defined.source);
       bool kernel_pointer = defined.kind == FunctionKind::Kernel &&
                             partition.kind == ValueKind::Pointer;
@@ -688,10 +713,16 @@ class Translator final : private Initialization::Evaluation {
         value = storage_.root(buffer, defined.source);
       }
       value = name(value, cxx::to_string(parameter->name()));
-      if (reference && control_->addressed(parameter)) {
-        fail(defined.source,
-             "taking the address of a value-reference parameter requires "
-             "addressable reference storage");
+      if (reference && reference->abi == ReferenceABI::Storage) {
+        auto projection = storage_.project(
+            value.pointer(),
+            unit_.typeTraits().remove_reference(parameter->type()),
+            defined.source);
+        references_[parameter] = {
+            ObjectLvalue{unit_.typeTraits().remove_reference(parameter->type()),
+                         projection}};
+        ++parameter_index;
+        continue;
       }
       if (control_->addressed(parameter) ||
           unit_.typeTraits().is_volatile(parameter->type())) {
@@ -824,6 +855,24 @@ class Translator final : private Initialization::Evaluation {
                            cxx::ExpressionAST* initializer,
                            ConstexprContract constexpr_contract,
                            cxx::AST* owner) {
+    if (unit_.typeTraits().is_lvalue_reference(variable->type())) {
+      if (!initializer) {
+        fail(owner, "reference locals require an initializer");
+      }
+      cxx::Initializer source(initializer);
+      auto* referent_expression = source.singleExpression();
+      if (!referent_expression) {
+        fail(initializer,
+             "reference locals require one initializer expression");
+      }
+      auto* referent = unit_.typeTraits().remove_reference(variable->type());
+      references_.emplace(variable,
+                          reference_lvalue(referent_expression, owner,
+                                           unit_.typeTraits().is_const(referent)
+                                               ? LvalueAccess::Read
+                                               : LvalueAccess::Write));
+      return;
+    }
     if (unit_.typeTraits().is_array(variable->type()) ||
         control_->addressed(variable) ||
         unit_.typeTraits().is_volatile(variable->type())) {
@@ -945,8 +994,13 @@ class Translator final : private Initialization::Evaluation {
         fail(ast, "void return cannot carry a value");
       }
       Returned returned = {{}, ret};
-      convert(ret->expression, current_function_.return_type, ret)
-          .append_to(returned.values);
+      if (unit_.typeTraits().is_lvalue_reference(
+              current_function_.return_type)) {
+        reference_value(ret->expression, ret).append_to(returned.values);
+      } else {
+        convert(ret->expression, current_function_.return_type, ret)
+            .append_to(returned.values);
+      }
       return complete_return(std::move(returned));
     }
     if (auto* compound = cxx::ast_cast<cxx::CompoundStatementAST>(ast)) {
@@ -1014,7 +1068,8 @@ class Translator final : private Initialization::Evaluation {
 
   StorageProjection pointer_expression(cxx::ExpressionAST* ast) {
     auto* source = strip_implicit_casts(ast);
-    if (unit_.typeTraits().is_array(source->type)) {
+    auto* source_type = unit_.typeTraits().remove_reference(source->type);
+    if (unit_.typeTraits().is_array(source_type)) {
       // Direct array indexing retains its enclosing lvalue's alignment. An
       // actual pointer value, including an explicit cast or call result, starts
       // with its pointee contract and carries no hidden alignment component.
@@ -1042,8 +1097,10 @@ class Translator final : private Initialization::Evaluation {
     if (ast->symbol) {
       fail(ast, "overloaded indexing is not admitted");
     }
-    auto* base_type = ast->baseExpression->type;
-    auto* index_type = ast->indexExpression->type;
+    auto* base_type =
+        unit_.typeTraits().remove_reference(ast->baseExpression->type);
+    auto* index_type =
+        unit_.typeTraits().remove_reference(ast->indexExpression->type);
     if (types_.native_vector(base_type) || types_.native_vector(index_type)) {
       fail(ast, "vector lane subscripts require a value projection");
     }
@@ -1077,10 +1134,58 @@ class Translator final : private Initialization::Evaluation {
     return storage_.dereference(object_address(ast), ast->type, ast);
   }
 
+  std::optional<StorageProjection> reference_field_address(
+      cxx::ExpressionAST* ast) {
+    ast = strip_implicit_casts(ast);
+    cxx::FieldSymbol* field = nullptr;
+    if (auto* id = cxx::ast_cast<cxx::IdExpressionAST>(ast)) {
+      field = cxx::symbol_cast<cxx::FieldSymbol>(id->symbol);
+      if (!field || !receiver(field)) {
+        return std::nullopt;
+      }
+    } else if (auto* member = cxx::ast_cast<cxx::MemberExpressionAST>(ast)) {
+      field = cxx::symbol_cast<cxx::FieldSymbol>(member->symbol);
+      if (!field) {
+        return std::nullopt;
+      }
+      if (!unit_.typeTraits().is_lvalue_reference(field->type())) {
+        return std::nullopt;
+      }
+      if (auto* active = receiver(field);
+          active && is_current_object(member->baseExpression)) {
+        auto pointer = receiver_member(field, ast);
+        return storage_.project(
+            pointer.pointer(),
+            unit_.typeTraits().remove_reference(field->type()), ast);
+      }
+      if (control_->storage_backed(member)) {
+        fail(ast,
+             "reference-bearing records cannot be loaded from physical "
+             "object storage");
+      }
+      auto base = expression(member->baseExpression);
+      const auto& slice = types_.member(field, ast);
+      auto pointer = base.project(*slice.partition, slice.component_offset);
+      return storage_.project(
+          pointer.pointer(), unit_.typeTraits().remove_reference(field->type()),
+          ast);
+    }
+    if (!field || !unit_.typeTraits().is_lvalue_reference(field->type())) {
+      return std::nullopt;
+    }
+    auto pointer = receiver_member(field, ast);
+    return storage_.project(pointer.pointer(),
+                            unit_.typeTraits().remove_reference(field->type()),
+                            ast);
+  }
+
   StorageProjection object_address(cxx::ExpressionAST* ast) {
     ast = strip_implicit_casts(ast);
     if (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(ast)) {
       return object_address(nested->expression);
+    }
+    if (auto reference = reference_field_address(ast)) {
+      return *reference;
     }
     if (auto* field = current_receiver_field(ast)) {
       if (auto projection = receiver_storage(field, ast)) {
@@ -1091,6 +1196,20 @@ class Translator final : private Initialization::Evaluation {
            "record storage");
     }
     if (auto* id = cxx::ast_cast<cxx::IdExpressionAST>(ast)) {
+      if (auto found = references_.find(id->symbol);
+          found != references_.end()) {
+        const auto* object =
+            std::get_if<ObjectLvalue>(&found->second.projection);
+        auto* projection =
+            object ? std::get_if<StorageProjection>(&object->location)
+                   : nullptr;
+        if (!projection) {
+          fail(ast,
+               "reference identity escaped an automatic value without "
+               "addressable storage");
+        }
+        return *projection;
+      }
       if (auto found = locals_.find(id->symbol); found != locals_.end()) {
         return storage_.project(found->second.pointer, id->type, id);
       }
@@ -1109,6 +1228,21 @@ class Translator final : private Initialization::Evaluation {
       return storage_.member(base, field, ast);
     }
     if (auto* subscript = cxx::ast_cast<cxx::SubscriptExpressionAST>(ast)) {
+      if (subscript->symbol) {
+        auto* signature =
+            cxx::type_cast<cxx::FunctionType>(subscript->symbol->type());
+        if (!signature ||
+            !unit_.typeTraits().is_lvalue_reference(signature->returnType())) {
+          fail(ast, "addressed overloaded indexing must return a reference");
+        }
+        auto value = overloaded_subscript_call(subscript);
+        if (!value || !value->is_pointer()) {
+          fail(ast, "reference-returning subscript lost its object identity");
+        }
+        return storage_.project(
+            value->pointer(),
+            unit_.typeTraits().remove_reference(signature->returnType()), ast);
+      }
       auto operands = subscript_operands(subscript);
       return storage_.advance(operands.base, operands.index, operands.base_type,
                               operands.index_type, cxx::TokenKind::T_PLUS, ast);
@@ -1118,13 +1252,34 @@ class Translator final : private Initialization::Evaluation {
         return pointer_expression(unary->expression);
       }
     }
-    if (unit_.typeTraits().is_class(ast->type) &&
-        ast->valueCategory == cxx::ValueCategory::kPrValue) {
+    if (auto* call = cxx::ast_cast<cxx::CallExpressionAST>(ast)) {
+      auto* function = direct_callee(call);
+      auto* signature =
+          function ? cxx::type_cast<cxx::FunctionType>(function->type())
+                   : nullptr;
+      if (signature &&
+          unit_.typeTraits().is_lvalue_reference(signature->returnType())) {
+        auto value = ordinary_call(call, function, locations_.get(call));
+        if (!value || !value->is_pointer()) {
+          fail(ast, "reference-returning call lost its object identity");
+        }
+        return storage_.project(
+            value->pointer(),
+            unit_.typeTraits().remove_reference(signature->returnType()), ast);
+      }
+    }
+    if (ast->valueCategory == cxx::ValueCategory::kPrValue &&
+        !unit_.typeTraits().is_array(ast->type)) {
       auto value = expression(ast);
       auto allocation = storage_.allocate(
           ast->type, LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE, 0, ast);
       auto object = storage_.project(allocation.pointer, ast->type, ast);
-      objects_.store(object, value, ast->type, ast);
+      if (unit_.typeTraits().is_class(ast->type)) {
+        objects_.store(object, value, ast->type, ast);
+      } else {
+        storage_.store(storage_.dereference(object, ast->type, ast),
+                       value.ssa(), ast->type, ast);
+      }
       return object;
     }
     fail(ast, "address-of requires an existing storage-backed element");
@@ -1154,13 +1309,15 @@ class Translator final : private Initialization::Evaluation {
     std::variant<Destination, StorageAccess, StorageProjection> location;
   };
 
-  // One lane projected from a snapshot of its complete vector lvalue. The
-  // source base and index have both been evaluated exactly once.
+  // One lane projected from its complete vector lvalue. The source base and
+  // index have both been evaluated exactly once.
   struct VectorLaneLvalue {
     // Complete vector destination receiving the functional lane update.
     ObjectLvalue destination;
-    // Vector value loaded after evaluating the destination and lane selector.
-    Value value;
+    // Vector snapshot used by one immediate compound operation. A durable C++
+    // reference has no snapshot and observes the current destination value on
+    // every later use while preserving its once-evaluated lane selector.
+    std::optional<Value> value;
     // Lane selector before projection to Loom's index domain.
     loom_value_id_t index;
     // Source selector type retaining its integer width and signedness.
@@ -1168,8 +1325,8 @@ class Translator final : private Initialization::Evaluation {
   };
 
   // Resolving a source lvalue executes every address and index expression once.
-  // A lane projection retains the complete vector snapshot required to replace
-  // that lane without reloading memory during a compound update.
+  // An immediate lane operation may retain the complete vector snapshot;
+  // durable references instead reload their destination on each later use.
   struct Lvalue {
     // Complete object or one evaluated lane within a complete vector object.
     std::variant<ObjectLvalue, VectorLaneLvalue> projection;
@@ -1180,7 +1337,8 @@ class Translator final : private Initialization::Evaluation {
   ObjectLvalue object_destination(
       cxx::ExpressionAST* expression, cxx::AST* owner,
       LvalueAccess access = LvalueAccess::Write,
-      std::optional<Destination> retained_destination = std::nullopt) {
+      std::optional<Destination> retained_destination = std::nullopt,
+      bool preserve_identity = false) {
     if (access == LvalueAccess::Write) {
       types_.require_mutable(expression->type, expression);
     }
@@ -1200,7 +1358,8 @@ class Translator final : private Initialization::Evaluation {
           auto* target_type = traits.is_volatile(active->object_type)
                                   ? traits.add_volatile(expression->type)
                                   : expression->type;
-          if (traits.is_class(target_type) || traits.is_array(target_type)) {
+          if (preserve_identity || traits.is_class(target_type) ||
+              traits.is_array(target_type)) {
             return {target_type, object_address(expression)};
           }
           return {target_type, address(expression)};
@@ -1213,7 +1372,8 @@ class Translator final : private Initialization::Evaluation {
         return {expression->type, *destination};
       }
     }
-    if (unit_.typeTraits().is_class(expression->type)) {
+    if (preserve_identity || unit_.typeTraits().is_class(expression->type) ||
+        unit_.typeTraits().is_array(expression->type)) {
       return {expression->type, object_address(expression)};
     }
     return {expression->type, address(expression)};
@@ -1253,7 +1413,7 @@ class Translator final : private Initialization::Evaluation {
   Lvalue vector_lane_destination(
       cxx::SubscriptExpressionAST* subscript, cxx::AST* owner,
       std::optional<Destination> retained_destination,
-      LvalueAccess access = LvalueAccess::Write) {
+      LvalueAccess access = LvalueAccess::Write, bool retain_value = true) {
     if (subscript->symbol) {
       fail(subscript, "overloaded indexing is not admitted");
     }
@@ -1273,8 +1433,11 @@ class Translator final : private Initialization::Evaluation {
       auto vector_destination = object_destination(
           vector_expression, owner, access, retained_destination);
       auto index_value = expression(index_expression);
-      auto vector_value = read(vector_destination, vector_expression);
-      return {VectorLaneLvalue{vector_destination, vector_value,
+      std::optional<Value> vector_value;
+      if (retain_value) {
+        vector_value = read(vector_destination, vector_expression);
+      }
+      return {VectorLaneLvalue{vector_destination, std::move(vector_value),
                                index_value.ssa(), index_expression->type}};
     }
 
@@ -1283,16 +1446,44 @@ class Translator final : private Initialization::Evaluation {
     auto index_value = expression(index_expression);
     auto vector_destination = object_destination(vector_expression, owner,
                                                  access, retained_destination);
-    auto vector_value = read(vector_destination, vector_expression);
-    return {VectorLaneLvalue{vector_destination, vector_value,
+    std::optional<Value> vector_value;
+    if (retain_value) {
+      vector_value = read(vector_destination, vector_expression);
+    }
+    return {VectorLaneLvalue{vector_destination, std::move(vector_value),
                              index_value.ssa(), index_expression->type}};
   }
 
   Lvalue destination(cxx::ExpressionAST* expression, cxx::AST* owner,
-                     LvalueAccess access = LvalueAccess::Write) {
+                     LvalueAccess access = LvalueAccess::Write,
+                     bool preserve_identity = false) {
     auto* projected = strip_implicit_casts(expression);
     while (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(projected)) {
       projected = strip_implicit_casts(nested->expression);
+    }
+    if (auto* id = cxx::ast_cast<cxx::IdExpressionAST>(projected)) {
+      if (auto found = references_.find(id->symbol);
+          found != references_.end()) {
+        if (access == LvalueAccess::Write) {
+          types_.require_mutable(projected->type, owner);
+        }
+        return found->second;
+      }
+    }
+    if (auto reference = reference_field_address(projected)) {
+      if (access == LvalueAccess::Write) {
+        types_.require_mutable(projected->type, owner);
+      }
+      return {ObjectLvalue{projected->type, *reference}};
+    }
+    if ((cxx::ast_cast<cxx::CallExpressionAST>(projected) ||
+         (cxx::ast_cast<cxx::SubscriptExpressionAST>(projected) &&
+          cxx::ast_cast<cxx::SubscriptExpressionAST>(projected)->symbol)) &&
+        projected->valueCategory == cxx::ValueCategory::kLValue) {
+      if (access == LvalueAccess::Write) {
+        types_.require_mutable(projected->type, owner);
+      }
+      return {ObjectLvalue{projected->type, object_address(projected)}};
     }
     if (auto* subscript = cxx::ast_cast<cxx::SubscriptExpressionAST>(projected);
         subscript && (types_.native_vector(subscript->baseExpression->type) ||
@@ -1300,7 +1491,82 @@ class Translator final : private Initialization::Evaluation {
       return vector_lane_destination(subscript, owner,
                                      control_->destination(expression), access);
     }
-    return {object_destination(expression, owner, access)};
+    return {object_destination(expression, owner, access, std::nullopt,
+                               preserve_identity)};
+  }
+
+  Lvalue reference_lvalue(cxx::ExpressionAST* expression, cxx::AST* owner,
+                          LvalueAccess access) {
+    auto* projected = unwrap_expression(expression);
+    if (auto* conditional =
+            cxx::ast_cast<cxx::ConditionalExpressionAST>(projected)) {
+      auto condition = this->expression(conditional->condition).ssa();
+      auto select = conditional_reference(conditional, condition);
+      return {ObjectLvalue{
+          projected->type,
+          storage_.project(select.pointer(), projected->type, owner)}};
+    }
+    auto* subscript = cxx::ast_cast<cxx::SubscriptExpressionAST>(projected);
+    const bool vector_lane =
+        subscript && (types_.native_vector(subscript->baseExpression->type) ||
+                      types_.native_vector(subscript->indexExpression->type));
+    auto target =
+        vector_lane ? vector_lane_destination(subscript, owner,
+                                              control_->destination(projected),
+                                              access, false)
+                    : destination(projected, owner, access, true);
+    return target;
+  }
+
+  Value reference_value(cxx::ExpressionAST* expression, cxx::AST* owner) {
+    auto target = reference_lvalue(expression, owner, LvalueAccess::Read);
+    auto* object = std::get_if<ObjectLvalue>(&target.projection);
+    auto* projection =
+        object ? std::get_if<StorageProjection>(&object->location) : nullptr;
+    if (!projection) {
+      fail(owner,
+           "reference identity escaped an automatic value without "
+           "addressable storage");
+    }
+    return Value(projection->pointer);
+  }
+
+  Value conditional_reference(cxx::ConditionalExpressionAST* ast,
+                              loom_value_id_t condition) {
+    auto written = live_mutations(ast);
+    auto* pointer_type = unit_.typeTraits().add_pointer(ast->type);
+    std::vector<const cxx::Type*> sources = {pointer_type};
+    sources.reserve(1 + written.size());
+    for (auto* symbol : written) {
+      sources.push_back(types_.unqualified_value(symbol->type()));
+    }
+    auto initial = current(written);
+    auto source = locations_.get(ast);
+    auto outputs = bind_signature(types_, sources, ast, &builder_);
+    loom_op_t* op;
+    check(loom_scf_if_build(&builder_, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+                            condition, outputs.types.data(),
+                            outputs.types.size(), nullptr, 0, source, &op));
+    auto build_arm = [&](loom_region_t* region,
+                         cxx::ExpressionAST* expression) {
+      auto saved = loom_builder_enter_region(&builder_, op, region);
+      std::vector<loom_value_id_t> yielded;
+      Value(object_address(expression).pointer).append_to(yielded);
+      auto mutations = current(written);
+      yielded.insert(yielded.end(), mutations.begin(), mutations.end());
+      loom_op_t* yield;
+      check(loom_scf_yield_build(&builder_, yielded.data(), yielded.size(),
+                                 source, &yield));
+      loom_builder_restore(&builder_, saved);
+    };
+    build_arm(loom_scf_if_then_region(op), ast->iftrueExpression);
+    bind_values(written, initial.data());
+    build_arm(loom_scf_if_else_region(op), ast->iffalseExpression);
+    bind_values(written,
+                loom_op_results(op) + kPointerPartition.component_count);
+    return value_arena_.capture(
+        kPointerPartition,
+        {loom_op_results(op), kPointerPartition.component_count});
   }
 
   Value read(const Lvalue& target, cxx::AST* owner) {
@@ -1308,7 +1574,8 @@ class Translator final : private Initialization::Evaluation {
       return read(*object, owner);
     }
     const auto& lane = std::get<VectorLaneLvalue>(target.projection);
-    return Value(vectors_.extract(lane.value.ssa(), lane.index,
+    auto vector = lane.value ? *lane.value : read(lane.destination, owner);
+    return Value(vectors_.extract(vector.ssa(), lane.index,
                                   lane.destination.type, lane.index_type,
                                   owner));
   }
@@ -1319,8 +1586,9 @@ class Translator final : private Initialization::Evaluation {
       return;
     }
     const auto& lane = std::get<VectorLaneLvalue>(target.projection);
+    auto vector = lane.value ? *lane.value : read(lane.destination, owner);
     auto updated =
-        vectors_.insert(lane.value.ssa(), value.ssa(), lane.index,
+        vectors_.insert(vector.ssa(), value.ssa(), lane.index,
                         lane.destination.type, lane.index_type, owner);
     write(lane.destination, Value(updated), owner);
   }
@@ -1418,15 +1686,15 @@ class Translator final : private Initialization::Evaluation {
     std::optional<Lvalue> target;
     // Whether mutable results replace the active value receiver.
     bool current;
-    // Whether this method may replace receiver value components.
-    bool mutable_access;
+    // Exact top-level fields returned by a value receiver call.
+    std::span<cxx::FieldSymbol* const> written_fields;
     // Automatic receiver slices participating in reference overlap checks.
     std::vector<ReferenceOrigin> origins;
   };
 
-  ReceiverArgument current_receiver_argument(const RecordPartition& record,
-                                             bool mutable_access,
-                                             cxx::AST* owner) {
+  ReceiverArgument current_receiver_argument(
+      const RecordPartition& record, bool requires_storage,
+      std::span<cxx::FieldSymbol* const> written_fields, cxx::AST* owner) {
     if (receivers_.empty() || receivers_.back().record != &record) {
       fail(owner,
            "implicit member call requires a matching current source object");
@@ -1438,55 +1706,71 @@ class Translator final : private Initialization::Evaluation {
               &record,
               std::nullopt,
               true,
-              mutable_access,
+              written_fields,
               {}};
+    }
+    if (requires_storage) {
+      fail(owner, "member function requires a storage-backed receiver");
     }
     return {ImplicitObjectABI::Value,
             std::nullopt,
             &record,
             std::nullopt,
             true,
-            mutable_access,
+            written_fields,
             {}};
   }
 
-  ReceiverArgument receiver_argument(cxx::CallExpressionAST* call,
-                                     cxx::FunctionSymbol* function) {
+  ReceiverArgument receiver_argument(cxx::FunctionSymbol* function,
+                                     cxx::ExpressionAST* receiver,
+                                     cxx::TokenKind access_op,
+                                     cxx::AST* owner) {
     auto* object_type = implicit_object_type(unit_, function);
     auto* record = object_type
-                       ? types_.record(types_.unqualified(object_type), call)
+                       ? types_.record(types_.unqualified(object_type), owner)
                        : nullptr;
     if (!record) {
-      fail(call, "non-static member call requires an admitted record object");
+      fail(owner, "non-static member call requires an admitted record object");
     }
-    const bool mutable_access = implicit_object_may_mutate(function);
-    const bool requires_storage = unit_.typeTraits().is_volatile(object_type);
+    auto written_fields = functions_.receiver_writes(function);
+    const bool mutable_access = !written_fields.empty();
+    const bool requires_storage =
+        unit_.typeTraits().is_volatile(object_type) ||
+        functions_.receiver_requires_storage(function);
     auto admit = [&](ReceiverArgument argument) {
       if (requires_storage && argument.abi == ImplicitObjectABI::Value) {
-        fail(call, "volatile member calls require a storage-backed receiver");
+        fail(owner, "member call requires a storage-backed receiver");
       }
       return argument;
     };
-    auto* base = unwrap_expression(call->baseExpression);
-    auto* member = cxx::ast_cast<cxx::MemberExpressionAST>(base);
-    if (!member || is_current_object(member->baseExpression)) {
-      return admit(current_receiver_argument(*record, mutable_access, call));
+    if (!receiver || is_current_object(receiver)) {
+      return admit(current_receiver_argument(*record, requires_storage,
+                                             written_fields, owner));
     }
-    auto* receiver = member->baseExpression;
-    if (member->accessOp == cxx::TokenKind::T_MINUS_GREATER) {
+    if (access_op == cxx::TokenKind::T_MINUS_GREATER) {
       auto projection = pointer_expression(receiver);
       return admit({ImplicitObjectABI::Storage,
                     Value(projection.pointer),
                     record,
                     std::nullopt,
                     false,
-                    mutable_access,
+                    written_fields,
                     {}});
     }
-    if (member->accessOp != cxx::TokenKind::T_DOT) {
-      fail(member, "member call requires a dot or arrow receiver");
+    if (access_op != cxx::TokenKind::T_DOT) {
+      fail(owner, "member call requires a dot or arrow receiver");
     }
     if (receiver->valueCategory == cxx::ValueCategory::kPrValue) {
+      if (requires_storage) {
+        auto projection = object_address(receiver);
+        return {ImplicitObjectABI::Storage,
+                Value(projection.pointer),
+                record,
+                std::nullopt,
+                false,
+                written_fields,
+                {}};
+      }
       auto value = expression(receiver);
       if (&value.partition() != record) {
         fail(receiver,
@@ -1497,12 +1781,12 @@ class Translator final : private Initialization::Evaluation {
                     record,
                     std::nullopt,
                     false,
-                    mutable_access,
+                    written_fields,
                     {}});
     }
 
     auto target =
-        destination(receiver, call,
+        destination(receiver, owner,
                     mutable_access ? LvalueAccess::Write : LvalueAccess::Read);
     auto* object = std::get_if<ObjectLvalue>(&target.projection);
     if (!object) {
@@ -1514,7 +1798,7 @@ class Translator final : private Initialization::Evaluation {
                     record,
                     std::nullopt,
                     false,
-                    mutable_access,
+                    written_fields,
                     {}});
     }
     return admit({ImplicitObjectABI::Value,
@@ -1522,8 +1806,23 @@ class Translator final : private Initialization::Evaluation {
                   record,
                   std::move(target),
                   false,
-                  mutable_access,
+                  written_fields,
                   {}});
+  }
+
+  ReceiverArgument receiver_argument(cxx::CallExpressionAST* call,
+                                     cxx::FunctionSymbol* function) {
+    auto* base = unwrap_expression(call->baseExpression);
+    auto* member = cxx::ast_cast<cxx::MemberExpressionAST>(base);
+    return receiver_argument(
+        function, member ? member->baseExpression : nullptr,
+        member ? member->accessOp : cxx::TokenKind::T_DOT, call);
+  }
+
+  ReceiverArgument receiver_argument(cxx::SubscriptExpressionAST* call,
+                                     cxx::FunctionSymbol* function) {
+    return receiver_argument(function, call->baseExpression,
+                             cxx::TokenKind::T_DOT, call);
   }
 
   Value materialize_receiver(ReceiverArgument& receiver, cxx::AST* owner) {
@@ -1537,15 +1836,15 @@ class Translator final : private Initialization::Evaluation {
            "member call receiver must preserve its admitted record type");
     }
     if (receiver.current) {
-      receiver.origins.reserve(receiver.record->members.size());
-      for (const auto& member : receiver.record->members) {
-        receiver.origins.push_back({member.field, 0,
-                                    member.partition->component_count,
-                                    receiver.mutable_access});
+      receiver.origins.reserve(receiver.written_fields.size());
+      for (auto* field : receiver.written_fields) {
+        const auto& member = types_.member(field, owner);
+        receiver.origins.push_back(
+            {field, 0, member.partition->component_count, true});
       }
     } else {
       receiver.origins.push_back(reference_origin(
-          *receiver.target, value, receiver.mutable_access, owner));
+          *receiver.target, value, !receiver.written_fields.empty(), owner));
     }
     receiver.value = value;
     return value;
@@ -1563,8 +1862,6 @@ class Translator final : private Initialization::Evaluation {
   std::optional<Value> ordinary_call(cxx::CallExpressionAST* call,
                                      cxx::FunctionSymbol* function,
                                      loom_location_id_t source) {
-    auto* signature = cxx::type_cast<cxx::FunctionType>(function->type());
-    IREE_ASSERT(signature);
     if (call->isVirtualDispatch) {
       fail(call, "virtual member dispatch is not admitted");
     }
@@ -1580,13 +1877,78 @@ class Translator final : private Initialization::Evaluation {
       // static function. Preserve that sequencing before explicit arguments.
       effect(member->baseExpression);
     }
+    return emit_ordinary_call(call, function, {call->expressionList, nullptr},
+                              std::move(receiver), source);
+  }
+
+  std::optional<Value> ordinary_call(cxx::SubscriptExpressionAST* call,
+                                     cxx::FunctionSymbol* function,
+                                     loom_location_id_t source) {
+    if (call->isVirtualDispatch) {
+      fail(call, "virtual member dispatch is not admitted");
+    }
+    if (function->hasExplicitObjectParameter()) {
+      fail(call, "explicit object member functions are not admitted");
+    }
+    std::optional<ReceiverArgument> receiver;
+    if (function->isImplicitObjectMemberFunction()) {
+      receiver = receiver_argument(call, function);
+    } else {
+      // A static overloaded subscript still evaluates its written object
+      // expression before the explicit index argument.
+      effect(call->baseExpression);
+    }
+    return emit_ordinary_call(call, function, {nullptr, call->indexExpression},
+                              std::move(receiver), source);
+  }
+
+  std::optional<Value> overloaded_subscript_call(
+      cxx::SubscriptExpressionAST* call) {
+    auto* function = call->symbol;
+    IREE_ASSERT(function);
+    if (intrinsics_.check_binding(function, call) ||
+        functions_.is_check_case(function) ||
+        annotated(function, "check_benchmark")) {
+      fail(call, "check declarations cannot be used as overloaded subscripts");
+    }
+    if (intrinsics_.lookup(function, call)) {
+      fail(call, "intrinsics cannot be used as overloaded subscripts");
+    }
+    if (annotated(function, "kernel")) {
+      fail(call, "kernels require an explicit launch operation");
+    }
+    return ordinary_call(call, function, locations_.get(call));
+  }
+
+  struct SourceArguments {
+    // Remaining arguments owned by an ordinary call's frontend list.
+    cxx::List<cxx::ExpressionAST*>* remaining;
+    // Single argument supplied by overloaded subscript syntax.
+    cxx::ExpressionAST* single;
+
+    cxx::ExpressionAST* next() {
+      if (remaining) {
+        auto* argument = remaining->value;
+        remaining = remaining->next;
+        return argument;
+      }
+      return std::exchange(single, nullptr);
+    }
+  };
+
+  std::optional<Value> emit_ordinary_call(
+      cxx::ExpressionAST* call, cxx::FunctionSymbol* function,
+      SourceArguments source_arguments,
+      std::optional<ReceiverArgument> receiver, loom_location_id_t source) {
+    auto* signature = cxx::type_cast<cxx::FunctionType>(function->type());
+    IREE_ASSERT(signature);
     auto parameters = function->parameters();
     auto receiver_abi = receiver ? receiver->abi : ImplicitObjectABI::None;
     auto callee = functions_.declare(function, call, receiver_abi);
     auto references = functions_.reference_parameters(function);
     if (references.empty() && !receiver) {
       std::vector<loom_value_id_t> arguments;
-      for (auto* argument : cxx::ListView{call->expressionList}) {
+      while (auto* argument = source_arguments.next()) {
         expression(argument).append_to(arguments);
       }
       loom_op_t* op;
@@ -1596,13 +1958,20 @@ class Translator final : private Initialization::Evaluation {
                                    0, nullptr, 0, source, &op));
         return std::nullopt;
       }
+      const bool returns_reference =
+          unit_.typeTraits().is_lvalue_reference(signature->returnType());
       std::array<const cxx::Type*, 1> result_sources = {
-          signature->returnType()};
+          returns_reference ? unit_.typeTraits().add_pointer(
+                                  unit_.typeTraits().remove_reference(
+                                      signature->returnType()))
+                            : signature->returnType()};
       auto results = bind_signature(types_, result_sources, call, &builder_);
       check(loom_func_call_build(
           &builder_, 0, 0, 0, 0, callee, arguments.data(), arguments.size(),
           results.types.data(), results.types.size(), nullptr, 0, source, &op));
-      return value_arena_.capture(types_.partition(call->type, call),
+      return value_arena_.capture(returns_reference
+                                      ? kPointerPartition
+                                      : types_.partition(call->type, call),
                                   {loom_op_results(op), results.types.size()});
     }
     std::vector<loom_value_id_t> arguments;
@@ -1620,40 +1989,46 @@ class Translator final : private Initialization::Evaluation {
             : kPointerPartition.component_count;
 
     size_t reference_index = 0;
-    auto* argument = call->expressionList;
     for (size_t ordinal = 0; ordinal < parameters.size(); ++ordinal) {
+      auto* argument = source_arguments.next();
       IREE_ASSERT(argument);
       const bool is_reference = reference_index < references.size() &&
                                 references[reference_index].ordinal == ordinal;
       if (!is_reference) {
-        expression(argument->value).append_to(arguments);
-        argument = argument->next;
+        expression(argument).append_to(arguments);
         continue;
       }
 
       const auto reference = references[reference_index++];
       auto* expected_type =
           types_.unqualified_value(parameters[ordinal]->type());
-      const auto& expected_partition = types_.partition(expected_type, call);
+      const auto& expected_partition =
+          reference.abi == ReferenceABI::Storage
+              ? kPointerPartition
+              : types_.partition(expected_type, call);
       const size_t argument_offset = receiver_argument_count + arguments.size();
       std::optional<Lvalue> target;
       Value value;
-      if (argument->value->valueCategory == cxx::ValueCategory::kLValue) {
-        target = destination(argument->value, call,
+      if (reference.abi == ReferenceABI::Storage) {
+        value = reference_value(argument, argument);
+        value.append_to(arguments);
+        continue;
+      }
+      if (argument->valueCategory == cxx::ValueCategory::kLValue) {
+        target = destination(argument, call,
                              reference.mutable_access ? LvalueAccess::Write
                                                       : LvalueAccess::Read);
-        value = read(*target, argument->value);
-        origins.push_back(reference_origin(
-            *target, value, reference.mutable_access, argument->value));
+        value = read(*target, argument);
+        origins.push_back(reference_origin(*target, value,
+                                           reference.mutable_access, argument));
       } else {
         if (reference.mutable_access) {
-          fail(argument->value,
-               "mutable value references require an lvalue argument");
+          fail(argument, "mutable value references require an lvalue argument");
         }
-        value = expression(argument->value);
+        value = expression(argument);
       }
       if (&value.partition() != &expected_partition) {
-        fail(argument->value,
+        fail(argument,
              "runtime value-reference binding must preserve the admitted "
              "source value type");
       }
@@ -1662,10 +2037,9 @@ class Translator final : private Initialization::Evaluation {
         writebacks.push_back({std::move(*target), &expected_partition,
                               expected_type, argument_offset});
       }
-      argument = argument->next;
     }
-    for (; argument; argument = argument->next) {
-      expression(argument->value).append_to(arguments);
+    while (auto* argument = source_arguments.next()) {
+      expression(argument).append_to(arguments);
     }
     if (receiver) {
       auto receiver_value = materialize_receiver(*receiver, call);
@@ -1679,21 +2053,30 @@ class Translator final : private Initialization::Evaluation {
 
     const bool returns_void =
         unit_.typeTraits().is_void(signature->returnType());
+    const bool returns_reference =
+        unit_.typeTraits().is_lvalue_reference(signature->returnType());
     std::vector<const cxx::Type*> result_sources;
     const bool receiver_writeback = receiver &&
                                     receiver->abi == ImplicitObjectABI::Value &&
-                                    receiver->mutable_access;
-    result_sources.reserve(!returns_void + receiver_writeback +
+                                    !receiver->written_fields.empty();
+    result_sources.reserve(!returns_void +
+                           (receiver ? receiver->written_fields.size() : 0) +
                            writebacks.size());
     size_t ordinary_result_count = 0;
     if (!returns_void) {
-      result_sources.push_back(signature->returnType());
+      auto* result_type = returns_reference
+                              ? unit_.typeTraits().add_pointer(
+                                    unit_.typeTraits().remove_reference(
+                                        signature->returnType()))
+                              : signature->returnType();
+      result_sources.push_back(result_type);
       ordinary_result_count =
-          types_.partition(signature->returnType(), call).component_count;
+          types_.partition(result_type, call).component_count;
     }
     if (receiver_writeback) {
-      result_sources.push_back(
-          types_.unqualified(implicit_object_type(unit_, function)));
+      for (auto* field : receiver->written_fields) {
+        result_sources.push_back(types_.unqualified_value(field->type()));
+      }
     }
     for (const auto& writeback : writebacks) {
       result_sources.push_back(writeback.value_type);
@@ -1705,22 +2088,26 @@ class Translator final : private Initialization::Evaluation {
     std::vector<loom_tied_result_t> tied_results;
     size_t result_offset = ordinary_result_count;
     if (receiver_writeback) {
-      const size_t component_count = receiver->record->component_count;
-      if (component_count > UINT16_MAX ||
-          result_offset + component_count > UINT16_MAX) {
-        fail(call,
-             "implicit object call exceeds native operand or result limits");
+      for (auto* field : receiver->written_fields) {
+        const auto& member = types_.member(field, call);
+        const size_t component_count = member.partition->component_count;
+        if (member.component_offset + component_count > UINT16_MAX ||
+            result_offset + component_count > UINT16_MAX) {
+          fail(call,
+               "implicit object call exceeds native operand or result limits");
+        }
+        for (size_t component = 0; component < component_count; ++component) {
+          const size_t operand = member.component_offset + component;
+          tied_results.push_back({
+              .result_index = static_cast<uint16_t>(result_offset + component),
+              .operand_index = static_cast<uint16_t>(operand),
+              .has_type_change = !loom_type_equal(
+                  loom_module_value_type(module_, arguments[operand]),
+                  results.types[result_offset + component]),
+          });
+        }
+        result_offset += component_count;
       }
-      for (size_t component = 0; component < component_count; ++component) {
-        tied_results.push_back({
-            .result_index = static_cast<uint16_t>(result_offset + component),
-            .operand_index = static_cast<uint16_t>(component),
-            .has_type_change = !loom_type_equal(
-                loom_module_value_type(module_, arguments[component]),
-                results.types[result_offset + component]),
-        });
-      }
-      result_offset += component_count;
     }
     for (const auto& writeback : writebacks) {
       const size_t component_count = writeback.partition->component_count;
@@ -1751,12 +2138,18 @@ class Translator final : private Initialization::Evaluation {
 
     result_offset = ordinary_result_count;
     if (receiver_writeback) {
-      const size_t component_count = receiver->record->component_count;
-      auto updated = value_arena_.capture(
-          *receiver->record,
-          {loom_op_results(op) + result_offset, component_count});
+      auto updated = *receiver->value;
+      for (auto* field : receiver->written_fields) {
+        const auto& member = types_.member(field, call);
+        const size_t component_count = member.partition->component_count;
+        auto field_value = value_arena_.capture(
+            *member.partition,
+            {loom_op_results(op) + result_offset, component_count});
+        updated =
+            value_arena_.replace(updated, member.component_offset, field_value);
+        result_offset += component_count;
+      }
       write_receiver(*receiver, updated, call);
-      result_offset += component_count;
     }
     for (const auto& writeback : writebacks) {
       const size_t component_count = writeback.partition->component_count;
@@ -1769,8 +2162,10 @@ class Translator final : private Initialization::Evaluation {
     if (returns_void) {
       return std::nullopt;
     }
-    return value_arena_.capture(types_.partition(signature->returnType(), call),
-                                {loom_op_results(op), ordinary_result_count});
+    return value_arena_.capture(
+        returns_reference ? kPointerPartition
+                          : types_.partition(signature->returnType(), call),
+        {loom_op_results(op), ordinary_result_count});
   }
 
   Value increment(cxx::ExpressionAST* destination, cxx::TokenKind token,
@@ -2162,6 +2557,11 @@ class Translator final : private Initialization::Evaluation {
       return binding(decision->symbol, ast);
     }
     if (auto* id = cxx::ast_cast<cxx::IdExpressionAST>(ast)) {
+      if (auto found = references_.find(id->symbol);
+          found != references_.end()) {
+        return name(read(found->second, ast),
+                    cxx::to_string(id->symbol->name()));
+      }
       if (auto found = values_.find(id->symbol); found != values_.end()) {
         return found->second;
       }
@@ -2170,6 +2570,9 @@ class Translator final : private Initialization::Evaluation {
       }
       if (auto* field = cxx::symbol_cast<cxx::FieldSymbol>(id->symbol);
           field && receiver(field)) {
+        if (unit_.typeTraits().is_lvalue_reference(field->type())) {
+          return name(load(ast), cxx::to_string(field->name()));
+        }
         return name(receiver_member(field, ast), cxx::to_string(field->name()));
       }
       if (auto* enumerator =
@@ -2229,6 +2632,9 @@ class Translator final : private Initialization::Evaluation {
     }
     if (auto* member = cxx::ast_cast<cxx::MemberExpressionAST>(ast)) {
       if (auto* field = current_receiver_field(member)) {
+        if (unit_.typeTraits().is_lvalue_reference(field->type())) {
+          return name(load(ast), cxx::to_string(field->name()));
+        }
         return name(receiver_member(field, ast), cxx::to_string(field->name()));
       }
       auto* base = cxx::ast_cast<cxx::IdExpressionAST>(member->baseExpression);
@@ -2259,6 +2665,9 @@ class Translator final : private Initialization::Evaluation {
         auto* field = cxx::symbol_cast<cxx::FieldSymbol>(member->symbol);
         if (!field || field->isStatic()) {
           fail(ast, "record value access requires a non-static data member");
+        }
+        if (unit_.typeTraits().is_lvalue_reference(field->type())) {
+          return name(load(ast), cxx::to_string(field->name()));
         }
         auto value = expression(member->baseExpression);
         const auto& slice = types_.member(field, ast);
@@ -2458,12 +2867,30 @@ class Translator final : private Initialization::Evaluation {
       fail(ast, "unsupported unary value expression");
     }
     if (auto* subscript = cxx::ast_cast<cxx::SubscriptExpressionAST>(ast)) {
+      if (subscript->symbol) {
+        auto called = overloaded_subscript_call(subscript);
+        if (!called) {
+          fail(ast, "void overloaded subscript cannot be used as a value");
+        }
+        auto* signature =
+            cxx::type_cast<cxx::FunctionType>(subscript->symbol->type());
+        if (signature &&
+            unit_.typeTraits().is_lvalue_reference(signature->returnType())) {
+          auto projection = storage_.project(
+              called->pointer(),
+              unit_.typeTraits().remove_reference(signature->returnType()),
+              ast);
+          if (unit_.typeTraits().is_class(ast->type)) {
+            return objects_.load(projection, ast->type, ast);
+          }
+          return storage_.load(storage_.dereference(projection, ast->type, ast),
+                               ast->type, ast);
+        }
+        return *called;
+      }
       auto* base_type = subscript->baseExpression->type;
       auto* index_type = subscript->indexExpression->type;
       if (types_.native_vector(base_type) || types_.native_vector(index_type)) {
-        if (subscript->symbol) {
-          fail(ast, "overloaded indexing is not admitted");
-        }
         auto base = expression(subscript->baseExpression);
         auto index = expression(subscript->indexExpression);
         if (!types_.native_vector(base_type)) {
@@ -2509,6 +2936,19 @@ class Translator final : private Initialization::Evaluation {
         auto called = ordinary_call(call, function, source);
         if (!called) {
           fail(ast, "void function cannot be used as a value");
+        }
+        auto* signature = cxx::type_cast<cxx::FunctionType>(function->type());
+        if (signature &&
+            unit_.typeTraits().is_lvalue_reference(signature->returnType())) {
+          auto projection = storage_.project(
+              called->pointer(),
+              unit_.typeTraits().remove_reference(signature->returnType()),
+              ast);
+          if (unit_.typeTraits().is_class(ast->type)) {
+            return objects_.load(projection, ast->type, ast);
+          }
+          return storage_.load(storage_.dereference(projection, ast->type, ast),
+                               ast->type, ast);
         }
         return *called;
       }
@@ -3558,13 +3998,20 @@ class Translator final : private Initialization::Evaluation {
   // Storage-backed automatic objects retain one allocation across direct and
   // aliased accesses. They are not mutable SSA bindings at region edges.
   std::unordered_map<cxx::Symbol*, StorageAllocation> locals_;
+  // Runtime C++ reference bindings retain one resolved lvalue and never
+  // rebind. Storage references therefore preserve their root and byte offset
+  // without re-evaluating a source address expression.
+  std::unordered_map<cxx::Symbol*, Lvalue> references_;
   // Nested source current objects retain declaration identity independently of
   // spelling. The direct index avoids rediscovering an owning receiver through
   // the active stack for every member expression.
   std::vector<ActiveReceiver> receivers_;
   std::unordered_map<cxx::FieldSymbol*, ReceiverOwner> receiver_owners_;
+  // Launch configurations not owned by the ordinary reachable-call analysis
+  // retain a function-local analysis here.
+  std::optional<ControlFlow> owned_control_;
   // Immutable control facts for the function currently being translated.
-  std::optional<ControlFlow> control_;
+  const ControlFlow* control_ = nullptr;
 };
 }  // namespace
 
