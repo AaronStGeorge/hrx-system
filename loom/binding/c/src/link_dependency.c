@@ -13,6 +13,7 @@
 #include "loom/link/dependency_report.h"
 #include "loom/util/stream.h"
 #include "loomc/iree.h"
+#include "module.h"
 #include "result.h"
 #include "workspace.h"
 
@@ -76,10 +77,14 @@ static loomc_status_t loomc_link_dependency_validate_options(
   return loomc_ok_status();
 }
 
-static const loomc_source_t* loomc_link_dependency_requirement_source(
+static loomc_status_t loomc_link_dependency_requirement_range(
     const loomc_link_index_t* link_index,
     const loom_link_dependency_analysis_t* analysis,
-    const loom_link_dependency_requirement_t* requirement) {
+    const loom_link_dependency_requirement_t* requirement,
+    loomc_allocator_t allocator, loomc_source_t** out_source,
+    loomc_source_range_t* out_range) {
+  *out_source = NULL;
+  *out_range = (loomc_source_range_t){0};
   const loom_link_module_index_symbol_t* source_symbol = NULL;
   if (requirement->first_source_symbol_ordinal !=
       LOOM_LINK_MODULE_INDEX_INVALID_ORDINAL) {
@@ -91,11 +96,47 @@ static const loomc_source_t* loomc_link_dependency_requirement_source(
         analysis->index, requirement->target.symbol_ordinal);
   }
   if (source_symbol == NULL) {
-    return NULL;
+    return loomc_ok_status();
   }
   const loom_link_module_index_provider_t* provider =
       loom_link_module_index_symbol_provider(analysis->index, source_symbol);
-  return loomc_link_index_source_for_provider(link_index, provider->ordinal);
+  const loomc_module_t* snapshot =
+      loomc_link_index_module_for_provider(link_index, provider->ordinal);
+  if (snapshot == NULL) {
+    *out_source = (loomc_source_t*)loomc_link_index_source_for_provider(
+        link_index, provider->ordinal);
+    loomc_source_retain(*out_source);
+    out_range->source = *out_source;
+    return loomc_ok_status();
+  }
+
+  const loom_module_t* module = loomc_module_const_loom_module(snapshot);
+  const loom_op_t* defining_op =
+      module->symbols.entries[source_symbol->module_symbol_ordinal].defining_op;
+  loom_source_range_t range = {0};
+  if (defining_op == NULL ||
+      !loom_source_resolve(loomc_module_source_resolver(snapshot), module,
+                           defining_op->location, &range)) {
+    return loomc_ok_status();
+  }
+  const loomc_source_options_t source_options = {
+      .format = LOOMC_SOURCE_FORMAT_TEXT,
+      .identifier = loomc_string_view_from_iree(range.filename),
+      .contents = loomc_make_byte_span(range.source.data, range.source.size),
+      .storage = LOOMC_SOURCE_STORAGE_COPY,
+  };
+  LOOMC_RETURN_IF_ERROR(
+      loomc_source_create(&source_options, allocator, out_source));
+  *out_range = (loomc_source_range_t){
+      .source = *out_source,
+      .start = range.start,
+      .end = range.end,
+      .start_line = range.start_line,
+      .start_column = range.start_column,
+      .end_line = range.end_line,
+      .end_column = range.end_column,
+  };
+  return loomc_ok_status();
 }
 
 static loomc_status_t loomc_link_dependency_add_diagnostics(
@@ -124,19 +165,23 @@ static loomc_status_t loomc_link_dependency_add_diagnostics(
     if (!loomc_status_is_ok(status)) {
       break;
     }
+    loomc_source_t* source = NULL;
+    loomc_source_range_t range = {0};
+    status = loomc_link_dependency_requirement_range(
+        link_index, analysis, requirement, loomc_result_allocator(result),
+        &source, &range);
     const loomc_diagnostic_t diagnostic = {
         .severity = LOOMC_DIAGNOSTIC_SEVERITY_ERROR,
         .code = loomc_string_view_from_iree(
             loom_link_dependency_diagnostic_code(requirement)),
         .message = loomc_string_view_from_iree(
             iree_string_builder_view(&message_builder)),
-        .range =
-            {
-                .source = loomc_link_dependency_requirement_source(
-                    link_index, analysis, requirement),
-            },
+        .range = range,
     };
-    status = loomc_result_add_diagnostic(result, &diagnostic);
+    if (loomc_status_is_ok(status)) {
+      status = loomc_result_add_diagnostic(result, &diagnostic);
+    }
+    loomc_source_release(source);
   }
 
   iree_string_builder_deinitialize(&message_builder);

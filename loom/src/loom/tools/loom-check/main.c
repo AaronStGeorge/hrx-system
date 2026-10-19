@@ -375,9 +375,10 @@ int loom_check_main(
           i < builtin_count
               ? builtin_providers[i]
               : base_environment->input_providers.values[i - builtin_count];
-      printf("%.*s:", (int)provider->name.size, provider->name.data);
-      for (iree_host_size_t j = 0; j < provider->suffixes.count; ++j) {
-        iree_string_view_t suffix = provider->suffixes.values[j];
+      printf("%.*s:", (int)provider->format->name.size,
+             provider->format->name.data);
+      for (iree_host_size_t j = 0; j < provider->format->suffixes.count; ++j) {
+        iree_string_view_t suffix = provider->format->suffixes.values[j];
         printf(" %.*s", (int)suffix.size, suffix.data);
       }
       printf("\n");

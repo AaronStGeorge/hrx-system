@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-loom_cc_binary(
+loomc_cc_binary(
   NAME
     loom-link
   SRCS
@@ -18,38 +18,20 @@ loom_cc_binary(
     iree::base
     iree::base::internal::arena
     iree::base::tooling::flags
-    iree::io::file_handle
-    iree::io::stream
-    loom::codegen::low::repr
-    loom::codegen::low::text_asm
-    loom::config::application
-    loom::config::schema
-    loom::config::text
+    loom::binding::c::loomc
+    loom::binding::c::target::configured::target
     loom::config::text_binding
-    loom::error::diagnostic
-    loom::error::source
-    loom::format::bytecode::writer
-    loom::format::text::printer
-    loom::ir
-    loom::link::dependency_analysis
-    loom::link::dependency_report
-    loom::link::index_materializer
-    loom::link::module_index
-    loom::link::planner
-    loom::target::configured::provider
-    loom::target::entry_selection
-    loom::target::module_specialization
-    loom::target::provider
-    loom::target::selection
+    loom::testing::target_environment
     loom::tooling::cli::help
+    loom::tooling::cli::loomc_options
+    loom::tooling::cli::loomc_result
     loom::tooling::config::input
-    loom::tooling::context
-    loom::tooling::input::configured
     loom::tooling::input::flags
+    loom::tooling::input::format
+    loom::tooling::input::loomc_configured
     loom::tooling::io::file
-    loom::tools::loom-format::convert
+    loom::tooling::io::module_format
     loom::util::stream
-    loom::verify
 )
 
 iree_execution_test_suite(

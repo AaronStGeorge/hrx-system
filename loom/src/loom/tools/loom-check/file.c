@@ -63,7 +63,7 @@ static iree_status_t loom_check_process_file(
       iree_string_view_is_empty(options->input_format)
           ? iree_string_view_ends_with(path, IREE_SV(".loombc"))
           : iree_string_view_equal(options->input_format,
-                                   loom_input_bytecode_provider.name);
+                                   loom_input_bytecode_provider.format->name);
   iree_status_t status = iree_ok_status();
   loom_test_case_t bytecode_case = {.input = source};
   if (bytecode) {

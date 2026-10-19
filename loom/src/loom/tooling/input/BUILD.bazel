@@ -9,10 +9,22 @@ package(
 exports_files(["testdata/duplicate_symbols.loom-test"])
 
 loom_cc_library(
+    name = "format",
+    srcs = ["format.c"],
+    hdrs = ["format.h"],
+    deps = [
+        "//loom/src/loom/tooling/io:source_path",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:path",
+    ],
+)
+
+loom_cc_library(
     name = "input",
     srcs = ["input.c"],
     hdrs = ["input.h"],
     deps = [
+        ":format",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:source",
         "//loom/src/loom/format:low_repr",
@@ -22,7 +34,6 @@ loom_cc_library(
         "//loom/src/loom/tooling/io:source_path",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/base/internal:path",
     ],
 )
 
@@ -45,7 +56,7 @@ loom_cc_library(
     srcs = ["flags.c"],
     hdrs = ["flags.h"],
     deps = [
-        ":input",
+        ":format",
         "//runtime/src/iree/base/tooling:flags",
     ],
 )
@@ -55,7 +66,7 @@ loom_cc_library(
     srcs = ["loomc.c"],
     hdrs = ["loomc.h"],
     deps = [
-        ":input",
+        ":format",
         "//loom/binding/c:loomc",
         "//loom/src/loom/tooling/io:file",
         "//loom/src/loom/tooling/io:source_path",
@@ -75,10 +86,22 @@ loom_cc_library(
     deps = [":loomc"] + iree_select({
         "//loom/config/import:cxx": [
             "//loom/src/loom/import/cxx/tooling:loomc_input",
+            "//loom/src/loom/import/cxx/tooling:options",
             "//runtime/src/iree/base",
         ],
         "//conditions:default": [],
     }),
+)
+
+loom_cc_test(
+    name = "format_test",
+    srcs = ["format_test.cc"],
+    deps = [
+        ":format",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
 )
 
 loom_cc_test(

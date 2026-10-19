@@ -86,6 +86,13 @@ typedef struct loomc_link_materialization_state_t {
   loomc_allocator_t allocator;
 } loomc_link_materialization_state_t;
 
+// Validates the mutually exclusive homogeneous and explicit target policies at
+// the public invocation boundary, including profile/environment compatibility.
+LOOMC_API_PRIVATE loomc_status_t loomc_link_materialization_validate_targets(
+    const loomc_target_profile_t* kernel_profile,
+    const loomc_target_specialization_options_t* target_specialization,
+    const loomc_target_environment_t* target_environment);
+
 // Initializes borrowed state shared by one selective materialization.
 LOOMC_API_PRIVATE void loomc_link_materialization_state_initialize(
     loomc_context_t* context, loomc_workspace_t* workspace,

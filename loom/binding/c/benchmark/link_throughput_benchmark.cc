@@ -183,6 +183,20 @@ class LinkCatalogFixture {
     return iree_ok_status();
   }
 
+  iree_status_t MaterializeInput() {
+    WorkspacePtr workspace;
+    IREE_RETURN_IF_ERROR(CreateWorkspace(&workspace));
+    loomc_module_t* module = nullptr;
+    loomc_result_t* result = nullptr;
+    iree_status_t status = to_iree_status(loomc_module_deserialize_from_source(
+        context_.get(), workspace.get(), source_.get(), nullptr,
+        loom_allocator(), &module, &result));
+    module_.reset(module);
+    ResultPtr result_owner(result);
+    IREE_RETURN_IF_ERROR(status);
+    return RequireSucceededResult(result, "catalog parsing");
+  }
+
   iree_status_t BuildIndex(LinkIndexPtr* out_index) const {
     out_index->reset();
     loomc_link_index_builder_t* builder = nullptr;
@@ -194,9 +208,13 @@ class LinkCatalogFixture {
         .provider_name = loomc_make_cstring_view("catalog"),
         .role = LOOMC_LINK_PROVIDER_ROLE_INPUT,
     };
-    IREE_RETURN_IF_ERROR(to_iree_status(loomc_link_index_builder_add_source(
-        builder_ptr.get(), source_.get(), &source_options,
-        /*out_slot=*/nullptr)));
+    if (module_) {
+      IREE_RETURN_IF_ERROR(to_iree_status(loomc_link_index_builder_add_module(
+          builder, module_.get(), &source_options, /*out_slot=*/nullptr)));
+    } else {
+      IREE_RETURN_IF_ERROR(to_iree_status(loomc_link_index_builder_add_source(
+          builder, source_.get(), &source_options, /*out_slot=*/nullptr)));
+    }
 
     loomc_link_index_t* index = nullptr;
     loomc_result_t* result = nullptr;
@@ -328,6 +346,8 @@ class LinkCatalogFixture {
   size_t source_size_ = 0;
   ContextPtr context_;
   SourcePtr source_;
+  // Materialized catalog when measuring native snapshot admission.
+  ModulePtr module_;
   LinkerPtr linker_;
   std::vector<std::string> root_names_;
 };
@@ -434,6 +454,32 @@ static void BM_LinkIndexBuild(benchmark::State& state) {
 
 static void BM_LinkIndexBuildBytecode(benchmark::State& state) {
   BM_LinkIndexBuildForFormat(state, LOOMC_SOURCE_FORMAT_BYTECODE);
+}
+
+static void BM_LinkIndexBuildModule(benchmark::State& state) {
+  LinkCatalogFixture fixture((uint32_t)state.range(0), (uint32_t)state.range(1),
+                             LOOMC_SOURCE_FORMAT_TEXT);
+  if (SkipOnError(state, fixture.Initialize()) ||
+      SkipOnError(state, fixture.MaterializeInput())) {
+    return;
+  }
+  int64_t index_count = 0;
+  for (auto _ : state) {
+    LinkIndexPtr index;
+    if (SkipOnError(state, fixture.BuildIndex(&index))) {
+      break;
+    }
+    benchmark::DoNotOptimize(index.get());
+    ++index_count;
+    state.PauseTiming();
+    index.reset();
+    state.ResumeTiming();
+  }
+  SetCatalogCounters(state, fixture);
+  state.SetItemsProcessed(index_count * (fixture.root_count() + 1));
+  state.SetBytesProcessed(index_count * (int64_t)fixture.source_size());
+  state.counters["indexes/s"] =
+      benchmark::Counter(index_count, benchmark::Counter::kIsRate);
 }
 
 static void BM_LinkBatchForFormat(benchmark::State& state,
@@ -570,6 +616,10 @@ static void BM_LinkIndexBuild_Smoke(benchmark::State& state) {
   BM_LinkIndexBuild(state);
 }
 
+static void BM_LinkIndexBuildModule_Smoke(benchmark::State& state) {
+  BM_LinkIndexBuildModule(state);
+}
+
 static void BM_LinkIndexBuildBytecode_Smoke(benchmark::State& state) {
   BM_LinkIndexBuildBytecode(state);
 }
@@ -581,6 +631,9 @@ static void BM_LinkBatchBytecode_Smoke(benchmark::State& state) {
 }
 
 BENCHMARK(BM_LinkIndexBuild)
+    ->Apply(CatalogScales)
+    ->ArgNames({"catalog_roots", "values_per_root"});
+BENCHMARK(BM_LinkIndexBuildModule)
     ->Apply(CatalogScales)
     ->ArgNames({"catalog_roots", "values_per_root"});
 BENCHMARK(BM_LinkIndexBuildBytecode)
@@ -604,6 +657,9 @@ BENCHMARK(BM_IndexOnceAndLinkBatchBytecode)
     ->ArgNames({"catalog_roots", "values_per_root", "links_per_batch"});
 
 BENCHMARK(BM_LinkIndexBuild_Smoke)
+    ->Args({16, 16})
+    ->ArgNames({"catalog_roots", "values_per_root"});
+BENCHMARK(BM_LinkIndexBuildModule_Smoke)
     ->Args({16, 16})
     ->ArgNames({"catalog_roots", "values_per_root"});
 BENCHMARK(BM_LinkIndexBuildBytecode_Smoke)

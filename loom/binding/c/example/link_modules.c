@@ -206,8 +206,21 @@ static loomc_status_t build_link_index(link_modules_state_t* state) {
       .provider_name = loomc_make_cstring_view("harness"),
       .role = LOOMC_LINK_PROVIDER_ROLE_INPUT,
   };
-  loomc_status_t status = loomc_link_index_builder_add_source(
-      state->index_builder, state->harness_source, &harness_options, NULL);
+  loomc_module_t* harness_module = NULL;
+  loomc_status_t status = loomc_module_deserialize_text_from_source(
+      state->context, state->workspace, state->harness_source, NULL,
+      loomc_allocator_system(), &harness_module, &state->result);
+  if (loomc_status_is_ok(status)) {
+    status = require_successful_result(state->result, "harness parsing failed");
+  }
+  if (loomc_status_is_ok(status)) {
+    link_modules_state_reset_result(state);
+    status = loomc_link_index_builder_add_module(
+        state->index_builder, harness_module, &harness_options, NULL);
+  }
+  // The builder owns a snapshot, so later analysis and linking do not depend
+  // on the original module remaining alive or unchanged.
+  loomc_module_release(harness_module);
   if (loomc_status_is_ok(status)) {
     // --8<-- [start:library-source]
     const loomc_link_index_source_options_t library_options = {

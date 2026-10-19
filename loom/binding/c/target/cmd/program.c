@@ -97,26 +97,6 @@ static bool loomc_cmd_program_product_any_flag_set(
   return (flags & bits) != 0;
 }
 
-static loomc_status_t loomc_cmd_program_product_validate_targets(
-    const loomc_target_profile_t* kernel_profile,
-    const loomc_target_specialization_options_t* target_specialization,
-    const loomc_target_environment_t* target_environment) {
-  if (kernel_profile == NULL) {
-    return loomc_target_specialization_options_validate_environment(
-        target_specialization, target_environment);
-  }
-  if (target_specialization != NULL &&
-      (target_specialization->specialization_count != 0 ||
-       target_specialization->target_binding_count != 0)) {
-    return loomc_make_status(
-        LOOMC_STATUS_INVALID_ARGUMENT,
-        "kernel_target_profile cannot be combined with explicit target "
-        "specializations or bindings");
-  }
-  return loomc_target_profile_validate_environment(kernel_profile,
-                                                   target_environment);
-}
-
 static loomc_status_t loomc_cmd_program_product_validate_options(
     loomc_workspace_t* workspace,
     const loomc_cmd_program_product_options_t* options,
@@ -167,7 +147,7 @@ static loomc_status_t loomc_cmd_program_product_validate_options(
         LOOMC_STATUS_INVALID_ARGUMENT,
         "command product construction requires an explicit or INPUT root");
   }
-  LOOMC_RETURN_IF_ERROR(loomc_cmd_program_product_validate_targets(
+  LOOMC_RETURN_IF_ERROR(loomc_link_materialization_validate_targets(
       options->kernel_target_profile, *out_target_specialization,
       loomc_context_target_environment(
           loomc_link_index_context(options->link_index))));
@@ -235,7 +215,7 @@ static loomc_status_t loomc_cmd_program_product_validate_request_options(
           "command request library index contains INPUT providers");
     }
   }
-  LOOMC_RETURN_IF_ERROR(loomc_cmd_program_product_validate_targets(
+  LOOMC_RETURN_IF_ERROR(loomc_link_materialization_validate_targets(
       options->kernel_target_profile, *out_target_specialization,
       loomc_context_target_environment(context)));
   return loomc_config_validate_text_options(&options->config);

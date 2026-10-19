@@ -29,8 +29,14 @@ loomc_link_index_allocator(const loomc_link_index_t* link_index);
 LOOMC_API_PRIVATE const loom_link_module_index_t* loomc_link_index_module_index(
     const loomc_link_index_t* link_index);
 
-// Returns the retained source for provider_ordinal, or NULL if out of range.
+// Returns the retained source, or NULL for a module snapshot or invalid
+// ordinal.
 LOOMC_API_PRIVATE const loomc_source_t* loomc_link_index_source_for_provider(
+    const loomc_link_index_t* link_index, loomc_host_size_t provider_ordinal);
+
+// Returns the immutable module snapshot, or NULL for a source or invalid
+// ordinal.
+LOOMC_API_PRIVATE const loomc_module_t* loomc_link_index_module_for_provider(
     const loomc_link_index_t* link_index, loomc_host_size_t provider_ordinal);
 
 // Indexes one public source with required |options| into a mutable internal

@@ -9,6 +9,7 @@
 
 #include "loomc/config.h"
 #include "loomc/context.h"
+#include "loomc/module.h"
 #include "loomc/result.h"
 
 /// @file
@@ -17,12 +18,12 @@
 /// A frozen link index records source/provider identity and symbol metadata so
 /// link operations can resolve live roots without rebuilding reusable library
 /// indexes. Builders reserve deterministic source slots, accept source handles
-/// in any slot order, and finish into an immutable, shareable index whose
-/// provider order is independent of scheduling order.
+/// or module snapshots in any slot order, and finish into an immutable,
+/// shareable index whose provider order is independent of scheduling order.
 ///
-/// The first indexing contract is intentionally explicit about lifetimes:
-/// source handles are retained by the builder, and a frozen index owns the
-/// persistent storage needed for provider/module/symbol metadata. Resetting a
+/// Source handles are retained and modules are independently cloned at
+/// admission. A frozen index owns the persistent storage needed for
+/// provider/module/symbol metadata. Resetting a
 /// caller workspace never invalidates a frozen link index.
 ///
 /// INPUT providers jointly own requester definitions and may contribute output
@@ -190,7 +191,7 @@ typedef struct loomc_link_index_source_slot_t {
   loomc_host_size_t ordinal;
 } loomc_link_index_source_slot_t;
 
-/// Source provider options used when adding sources to a link index.
+/// Provider options used when adding sources or modules to a link index.
 ///
 /// @lifetime
 /// String views are borrowed for the duration of the builder call that consumes
@@ -350,6 +351,42 @@ LOOMC_API_EXPORT loomc_status_t loomc_link_index_builder_fill_source_slot(
 /// @return OK when the source was queued for indexing.
 LOOMC_API_EXPORT loomc_status_t loomc_link_index_builder_add_source(
     loomc_link_index_builder_t* builder, loomc_source_t* source,
+    const loomc_link_index_source_options_t* options,
+    loomc_link_index_source_slot_t* out_slot);
+
+/// Fills a reserved slot with an independent snapshot of a module.
+///
+/// @param builder Builder that owns `slot`.
+/// @param slot Slot previously reserved with
+/// `loomc_link_index_builder_reserve_source_slot`.
+/// @param module Module in the builder's context, read only during this call.
+/// @return OK when the snapshot was captured. Failure leaves the slot
+/// unchanged.
+///
+/// @ownership
+/// The builder clones the module before returning. The snapshot preserves
+/// resolved target selections and diagnostic sources according to the context's
+/// source-retention policy. It uses native IR cloning without serialization.
+/// Finish transfers ownership to the frozen index. The caller may immediately
+/// mutate or release the original module and its workspace after this call.
+///
+/// @thread_safety
+/// Distinct reserved slots may be filled concurrently when no thread calls
+/// reserve or finish concurrently. The source module must not be mutated during
+/// this call; concurrent reads of it are allowed.
+LOOMC_API_EXPORT loomc_status_t loomc_link_index_builder_fill_module_slot(
+    loomc_link_index_builder_t* builder, loomc_link_index_source_slot_t slot,
+    const loomc_module_t* module);
+
+/// Reserves and fills the next slot with an independent module snapshot.
+///
+/// @param builder Builder to mutate exclusively during this call.
+/// @param module Module to snapshot as in `fill_module_slot`.
+/// @param options Provider options copied by this call, or `NULL` for defaults.
+/// @param out_slot Receives the slot, or `NULL` if not needed.
+/// @return OK when the snapshot was captured. Failure reserves no slot.
+LOOMC_API_EXPORT loomc_status_t loomc_link_index_builder_add_module(
+    loomc_link_index_builder_t* builder, const loomc_module_t* module,
     const loomc_link_index_source_options_t* options,
     loomc_link_index_source_slot_t* out_slot);
 

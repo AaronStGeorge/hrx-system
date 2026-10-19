@@ -10,6 +10,7 @@
 #define LOOM_TOOLS_IREE_RUN_LOOM_MAIN_H_
 
 #include "iree/base/api.h"
+#include "loom/tooling/input/input.h"
 #include "loom/tooling/input/loomc.h"
 #include "loomc/iree.h"
 #include "loomc/target/iree_hal.h"

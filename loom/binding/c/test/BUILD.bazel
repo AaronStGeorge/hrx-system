@@ -180,6 +180,17 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "link_index_module_test",
+    srcs = ["link_index_module_test.cc"],
+    deps = [
+        ":test_util",
+        "//loom/binding/c:loomc",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "link_dependency_test",
     srcs = ["link_dependency_test.cc"],
     deps = [
@@ -215,6 +226,17 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/link/testdata:template_selection",
         "//runtime/src/iree/base:core_headers",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "link_options_test",
+    srcs = ["link_options_test.cc"],
+    deps = [
+        ":test_util",
+        "//loom/binding/c:loomc",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

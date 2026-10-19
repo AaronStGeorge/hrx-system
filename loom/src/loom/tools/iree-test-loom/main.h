@@ -10,6 +10,7 @@
 #define LOOM_TOOLS_IREE_TEST_LOOM_MAIN_H_
 
 #include "iree/base/api.h"
+#include "loom/tooling/input/input.h"
 #include "loom/tooling/input/loomc.h"
 #include "loom/tooling/testbench/compiled_provider.h"
 #include "loom/tooling/testbench/requirements.h"

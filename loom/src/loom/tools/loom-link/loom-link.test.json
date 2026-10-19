@@ -529,6 +529,100 @@
           }
         }
       ]
+    },
+    {
+      "name": "preserves unresolved config until explicit final resolution",
+      "steps": [
+        {
+          "name": "write-component",
+          "write": {
+            "path": "{tmp}/config.loom",
+            "text": "config.decl @tuning.factor : index\nfunc.def public @configured() -> (index) {\n  %value = config.get @tuning.factor : index\n  func.return %value : index\n}\nfunc.def public @plain() {\n  func.return\n}\n"
+          }
+        },
+        {
+          "name": "merge-relocatable-component",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{tmp}/config.loom",
+              "--to=bc",
+              "--output={tmp}/config.loombc"
+            ]
+          }
+        },
+        {
+          "name": "inspect-relocatable-config",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{tmp}/config.loombc"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "config.decl @tuning.factor",
+              "config.get @tuning.factor"
+            ]
+          }
+        },
+        {
+          "name": "reject-unresolved-final-config",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{tmp}/config.loombc",
+              "--require-resolved-config"
+            ]
+          },
+          "exit": 1,
+          "stderr": {
+            "contains": [
+              "unresolved config '@tuning.factor'"
+            ]
+          }
+        },
+        {
+          "name": "resolve-final-config",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{tmp}/config.loombc",
+              "--require-resolved-config",
+              "--config=tuning.factor=16"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "config.def @tuning.factor = 16 : index"
+            ],
+            "not_contains": [
+              "config.decl"
+            ]
+          }
+        },
+        {
+          "name": "resolve-after-root-selection",
+          "run": {
+            "tool": "loom-link",
+            "args": [
+              "{tmp}/config.loombc",
+              "--root=@plain",
+              "--require-resolved-config"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "@plain"
+            ],
+            "not_contains": [
+              "@configured",
+              "config.decl",
+              "config.get"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

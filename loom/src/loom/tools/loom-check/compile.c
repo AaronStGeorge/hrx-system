@@ -173,15 +173,15 @@ iree_status_t loom_check_compile_admit_module(
           loomc_allocator_from_iree(host_allocator), &module, &result));
     } else if (session->provider != NULL && session->provider->import != NULL) {
       status = session->provider->import(
-          session->provider->import_user_data, provider->name, input_options,
-          &input_request->source_path_options, session->context,
+          session->provider->import_user_data, provider->format->name,
+          input_options, &input_request->source_path_options, session->context,
           session->workspace, source, block_pool, host_allocator, &module,
           &result);
     } else {
       status = iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
           "input format '%.*s' has no LoomC importer linked into this runner",
-          (int)provider->name.size, provider->name.data);
+          (int)provider->format->name.size, provider->format->name.data);
     }
   }
   bool admitted = false;

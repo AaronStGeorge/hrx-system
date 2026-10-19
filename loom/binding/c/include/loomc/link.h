@@ -12,6 +12,7 @@
 #include "loomc/module.h"
 #include "loomc/product.h"
 #include "loomc/result.h"
+#include "loomc/target.h"
 #include "loomc/workspace.h"
 
 /// @file
@@ -119,10 +120,28 @@ typedef enum loomc_link_flag_bits_e {
 
   /// Strip symbols used only by test or benchmark tooling.
   LOOMC_LINK_FLAG_STRIP_TEST_SYMBOLS = 1u << 2,
+
+  /// Select test/benchmark-only INPUT symbols as link roots. Library tests are
+  /// not selected. With STRIP_TEST_SYMBOLS, retain their callable subjects
+  /// instead of the test or benchmark wrappers.
+  LOOMC_LINK_FLAG_INCLUDE_INPUT_TESTS = 1u << 3,
 } loomc_link_flag_bits_t;
 
 /// Bitmask of `loomc_link_flag_bits_t` values.
 typedef uint32_t loomc_link_flags_t;
+
+/// Human-readable explanation of the completed link plan.
+#define LOOMC_ARTIFACT_FORMAT_LINK_PLAN_TEXT "loom-link-plan-text"
+
+/// Optional link-result artifact flags.
+typedef enum loomc_link_artifact_flag_bits_e {
+  /// Attach a REPORT artifact named `link-plan.txt` containing the selected
+  /// symbols, their providers, and why they are live. Produced only on success.
+  LOOMC_LINK_ARTIFACT_FLAG_PLAN_TEXT = 1u << 0,
+} loomc_link_artifact_flag_bits_t;
+
+/// Bitmask of `loomc_link_artifact_flag_bits_t` values.
+typedef uint32_t loomc_link_artifact_flags_t;
 
 /// Link product selection mode.
 typedef enum loomc_link_mode_e {
@@ -166,8 +185,9 @@ typedef struct loomc_link_module_provider_t {
 /// modules, or both and returns either a retained module or a failed result
 /// with diagnostics. Merge mode materializes only primary INPUT providers and
 /// preserves unresolved contracts. Link mode selects a dependency closure from
-/// explicit roots or exported primary roots plus the exports of selected root
-/// providers across the complete supplied library universe. Linking preserves
+/// explicit roots, exported primary roots, or primary test/benchmark roots,
+/// plus the exports of selected root providers across the complete supplied
+/// library universe. Linking preserves
 /// every target carried by the selected symbols. Target-specialization
 /// extensions participate in template-provider selection and project exact
 /// target facts into the standalone linked output. Config options materialize
@@ -226,6 +246,18 @@ typedef struct loomc_link_options_t {
 
   /// Number of entries in `module_providers`.
   loomc_host_size_t module_provider_count;
+
+  /// Optional homogeneous profile applied to every linked kernel entry before
+  /// dependency and template selection. Borrowed for the call. NULL preserves
+  /// authored targets. Cannot be combined with nonempty explicit target
+  /// specializations or declaration bindings in `next`.
+  /// Requires `structure_size` to include this field.
+  const loomc_target_profile_t* kernel_target_profile;
+
+  /// Optional reports owned by the returned result, independently of the
+  /// module, index, and workspace. Zero performs no report formatting.
+  /// Requires `structure_size` to include this field.
+  loomc_link_artifact_flags_t artifact_flags;
 } loomc_link_options_t;
 
 /// Request-linking options.

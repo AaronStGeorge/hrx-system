@@ -10,27 +10,11 @@
 #include "loom/error/source.h"
 #include "loom/format/low_repr.h"
 #include "loom/format/text/parser.h"
-#include "loom/tooling/io/source_path.h"
+#include "loom/tooling/input/format.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Shared source selection and per-provider options for multi-input tools.
-typedef struct loom_input_options_t {
-  // Explicit source format, or empty to select from each filename.
-  iree_string_view_t format;
-  // Borrowed entries spelled "format:options", at most one per format.
-  iree_string_view_list_t provider_options;
-  // Display remapping for diagnostics and retained module source names.
-  loom_tooling_source_path_options_t source_path_options;
-} loom_input_options_t;
-
-// Resolves the option string for |provider|. Malformed entries and duplicate
-// entries for this provider fail. Entries for other providers are independent.
-iree_status_t loom_input_options_for_provider(iree_string_view_list_t entries,
-                                              iree_string_view_t provider,
-                                              iree_string_view_t* out_options);
 
 // One source admission request. All views are borrowed until loading returns.
 typedef struct loom_input_request_t {
@@ -62,10 +46,8 @@ typedef struct loom_input_source_capture_t {
 // Immutable input provider linked by the final tool binary. Providers own
 // language options and frontend invocation; modules use ordinary Loom lifetime.
 typedef struct loom_input_provider_t {
-  // Explicit input-format name, such as "loom" or "cxx".
-  iree_string_view_t name;
-  // Recognized filename suffixes including the leading dot.
-  iree_string_view_list_t suffixes;
+  // Shared format spelling and filename suffixes; immutable process lifetime.
+  const loom_input_format_t* format;
   // Loads a module and captures admitted sources. Source rejection emits
   // diagnostics and returns OK with a NULL module. Other failures return a
   // status. A successful module is owned by the caller; context and pool

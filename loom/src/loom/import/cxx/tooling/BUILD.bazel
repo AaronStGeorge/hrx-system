@@ -55,10 +55,27 @@ iree_c_embed_data(
 )
 
 loom_cc_library(
+    name = "options",
+    srcs = ["options.c"],
+    hdrs = ["options.h"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/import/cxx",
+        "//loom/src/loom/tooling/input:format",
+        "//loom/src/loom/tooling/io:file",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:path",
+    ],
+)
+
+loom_cc_library(
     name = "input",
     srcs = ["input.c"],
     hdrs = ["input.h"],
     deps = [
+        ":options",
+        "//loom/binding/c:loomc",
         "//loom/src/loom/import/cxx",
         "//loom/src/loom/import/cxx/source:options",
         "//loom/src/loom/tooling/input",
@@ -74,7 +91,7 @@ loom_cc_library(
     srcs = ["loomc_input.c"],
     hdrs = ["loomc_input.h"],
     deps = [
-        ":input",
+        ":options",
         "//loom/binding/c:loomc",
         "//loom/binding/c/import/cxx",
         "//loom/src/loom/tooling/io:source_path",
@@ -89,6 +106,7 @@ iree_execution_test_suite(
         "check_cases.cxx",
         "check_cases.h",
         "check_library.cxx",
+        "dependency_input.cxx",
         "record_input.loom",
         "record_library.cxx",
         "source_input.cxx",
