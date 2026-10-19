@@ -130,13 +130,13 @@ uint32_t* iree_hal_amd_gpu_pm4_emit_wait32(
     uint32_t* words, uint64_t address, uint32_t reference, uint32_t mask,
     iree_hal_amd_gpu_pm4_comparison_t comparison) {
   words[0] = UINT32_C(0xc0053c00);
-  // Ordinary MEC memory wait, default cache policy.
+  // Ordinary MEC memory wait, default cache policy, with ACE polling offload.
   words[1] = (uint32_t)comparison | (1 << 4);
   words[2] = (uint32_t)address;
   words[3] = (uint32_t)(address >> 32);
   words[4] = reference;
   words[5] = mask;
-  words[6] = 4;
+  words[6] = UINT32_C(0x80000004);
   return words + 7;
 }
 

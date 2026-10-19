@@ -104,7 +104,8 @@ typedef enum iree_hal_amd_gpu_pm4_comparison_e {
   IREE_HAL_AMD_GPU_PM4_COMPARISON_GREATER = 6,
 } iree_hal_amd_gpu_pm4_comparison_t;
 
-// Emits seven DWORDs of MEC WAIT_REG_MEM against a DWORD-aligned address.
+// Emits seven DWORDs of MEC WAIT_REG_MEM with ACE polling offload against a
+// DWORD-aligned address.
 // The target's visibility and atomicity are already qualified for this queue.
 // The backing and its expected generation remain valid through the last native
 // reader, independently of producer completion. A wait establishes control

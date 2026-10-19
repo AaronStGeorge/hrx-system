@@ -169,8 +169,8 @@ TEST_F(CommandsTest, WaitsPreserveEveryComparisonWidthAndMask) {
       Expect(
           end,
           {0xc0053c00, comparison.control, 0xfffffffc, 0x1234,
-           static_cast<uint32_t>(reference), static_cast<uint32_t>(mask), 4,
-           0xc0079300, comparison.control, 8, 0x5678,
+           static_cast<uint32_t>(reference), static_cast<uint32_t>(mask),
+           0x80000004, 0xc0079300, comparison.control, 8, 0x5678,
            static_cast<uint32_t>(reference),
            static_cast<uint32_t>(reference >> 32), static_cast<uint32_t>(mask),
            static_cast<uint32_t>(mask >> 32), 4});
