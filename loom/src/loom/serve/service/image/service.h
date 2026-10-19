@@ -53,10 +53,10 @@ iree_status_t loom_serve_image_service_allocate(
 // that can release shared capacity. Successful model readiness releases pins
 // before CPU encoding, whose borrowed output remains exclusive until
 // retirement. POST /v1/images/generations returns one base64 PNG selected by
-// its model field. Peer reset removes queued work or discards an active result
-// at the complete-image boundary. Slow readers own copied response bytes, never
-// model output or workspace. Bounded observation records omit prompts and
-// never wait on log sinks.
+// its model field. Peer reset removes queued work or stops further submissions
+// after the active command part retires. Slow readers own copied response
+// bytes, never model output or workspace. Bounded observation records omit
+// prompts and never wait on log sinks.
 loom_serve_service_t loom_serve_image_service_interface(
     loom_serve_image_service_t* service);
 

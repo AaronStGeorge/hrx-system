@@ -112,7 +112,8 @@ iree_status_t loom_serve_finite_load_free(loom_serve_finite_load_t* load);
 // Commands may additionally have compiler-reflected private workspace; direct
 // stages use their compiled launch configuration without a command buffer or
 // runner workspace.
-// Command stages share the same fixed placement for checkpoint parameters.
+// Command stages declared by one request share a parameter binding map;
+// retained request choices can bind different checkpoint banks.
 // Direct stages have no checkpoint parameters. Source run uses runner.execute_2
 // for both kinds and publishes device results. Native consumers choose whether
 // to compose device work or explicitly download a host snapshot.

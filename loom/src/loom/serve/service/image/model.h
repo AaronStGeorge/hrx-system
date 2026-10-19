@@ -98,8 +98,7 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // live. control.loom:
 //   prepare_request(buffer state, buffer i64_stage_tags, i32 stage_count,
 //                   i64 height, i64 width, buffer prompt, i64 seed,
-//                   f32 strength) -> (i32 stage,
-//                                                             buffer payload)
+//                   f32 strength) -> (i32 stage, buffer payload)
 //   generate(i32 first_part, i32 part_count, i32 cursor, i64 output_bytes,
 //            hal.buffer payload, hal.buffer rgb, hal.buffer workspace) -> i32
 // The cursor starts at zero. Each invocation submits its next part and returns
@@ -107,21 +106,22 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // owner invokes it again only after both accepted frontiers retire.
 // The warm program imports input/JSON capabilities, invocation-only prepare
 // declarations, and runner.execute_N/feedback. Request stage ordinals follow
-// the immutable cold table; request declarations cannot introduce parameters.
-// Each command has shared reflected fixed parameter domains and three dynamic
-// bindings: opaque request bytes, output F32 CHW RGB [-1,1], and workspace.
-// External input/output roots promise only byte alignment; stronger private
-// storage and parameter alignments come from their compiler-reflected
-// contracts. All retained stages have identical parameter placement. Input
-// capacity comes from source; workspace extent/alignment comes from compiler
-// reflection. One queue allocation contains the RGB prefix and aligned private
-// workspace; execute_3 receives distinct views. Final output or cancellation
-// releases those views; queue captures retain the allocation through actual
-// feedback retirement. Private storage belongs to the shared
-// workspace pool, not this model's residency. This model owns independent work
-// and feedback timelines over the device queues. The cold constructor drives
-// the asynchronous load and joins on its outer application caller, never a
-// shared worker. Live registration uses
+// the immutable cold table. Explicit checkpoint declarations select retained
+// domains or prepare independent banks on demand; omitted declarations preserve
+// the cold layout. Stages declared by one request share a parameter binding
+// map, while retained request choices can bind different checkpoint banks. Each
+// command has three dynamic bindings: opaque request bytes, output F32 CHW RGB
+// [-1,1], and workspace. External input/output roots promise only byte
+// alignment; stronger private storage and parameter alignments come from their
+// compiler-reflected contracts. Input capacity comes from source; compiler
+// reflection supplies the workspace extent and alignment. One queue allocation
+// contains the RGB prefix and aligned private workspace; execute_3 receives
+// distinct views. Final output or cancellation releases those views; queue
+// captures retain the allocation through actual feedback retirement. Private
+// storage belongs to the shared workspace pool, not this model's residency.
+// This model owns independent work and feedback timelines over the device
+// queues. The cold constructor drives the asynchronous load and joins on its
+// outer application caller, never a shared worker. Live registration uses
 // load_advance. Creation indexes parameters and records commands without
 // reading weight payloads. The device owner outlives the model and serializes
 // all model calls. Its physical pool backs parameter roots independently of
