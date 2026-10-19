@@ -113,29 +113,82 @@ low.kernel.def target<amdgpu.gfx11.generic.core>(@target) abi_layout({constant_c
   %41 = global_load_b64_saddr %31, %40
   %42 = slice %41[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %43 = v_cvt_f32_f16 %42
-  %45 = v_lshrrev_b32_src0_inline %42, 16
-  %46 = v_cvt_f32_f16 %45
-  %47 = slice %41[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %48 = v_cvt_f32_f16 %47
-  %50 = v_lshrrev_b32_src0_inline %47, 16
-  %51 = v_cvt_f32_f16 %50
-  %52 = concat(%43, %46, %48, %51) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %54 = s_lshl_b32_rhs_inline %24, 2
-  %55 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %56 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %58, %59 = s_add_co_u32 %55, %54
-  %60, %61 = s_addc_u32 %56, %27, %59
-  %62 = concat(%58, %60) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  global_store_b128_saddr %31, %52, %62
-  %63 = s_add_u32 %24, %29
-  low.br ^_bb1(%63: reg<amdgpu.sgpr>)
+  %45 = v_cvt_f32_f16_input_high %42
+  %46 = slice %41[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %47 = v_cvt_f32_f16 %46
+  %49 = v_cvt_f32_f16_input_high %46
+  %50 = concat(%43, %45, %47, %49) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %52 = s_lshl_b32_rhs_inline %24, 2
+  %53 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %54 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %56, %57 = s_add_co_u32 %53, %52
+  %58, %59 = s_addc_u32 %54, %27, %57
+  %60 = concat(%56, %58) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  global_store_b128_saddr %31, %50, %60
+  %61 = s_add_u32 %24, %29
+  low.br ^_bb1(%61: reg<amdgpu.sgpr>)
 ^_bb3:
-  %64 = v_mov_b32 0
-  %65 = global_load_b32_saddr %64, %input_view {offset = 64}
-  %66 = v_cvt_f32_f16 %65
-  %67 = v_lshrrev_b32_src0_inline %65, 16
-  %68 = v_cvt_f32_f16 %67
-  %69 = concat(%66, %68) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  global_store_b64_saddr %64, %69, %output_view {offset = 128}
+  %62 = v_mov_b32 0
+  %63 = global_load_b32_saddr %62, %input_view {offset = 64}
+  %64 = v_cvt_f32_f16 %63
+  %65 = v_cvt_f32_f16_input_high %63
+  %66 = concat(%64, %65) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  global_store_b64_saddr %62, %66, %output_view {offset = 128}
   return
+}
+
+// ====
+
+amdgpu.target<gfx11-generic> @target
+
+func.def target(@target) @vector_extf_f16_slice_origin(%input: vector<4xf16>) -> (vector<1xf32>) {
+  %slice = vector.slice %input[1] : vector<4xf16> -> vector<1xf16>
+  %result = vector.extf %slice : vector<1xf16> to vector<1xf32>
+  func.return %result : vector<1xf32>
+}
+
+// ----
+low.func.def target<amdgpu.gfx11.generic.core>(@target) abi(hal_kernel) @vector_extf_f16_slice_origin(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr>) asm {
+  %6 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %result = v_cvt_f32_f16_input_high %6
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx11-generic> @target
+
+func.def target(@target) @vector_extf_f16_deinterleaved_odd(%input: vector<4xf16>) -> (vector<2xf32>) {
+  %even, %odd = vector.deinterleave<0> %input : vector<4xf16> -> vector<2xf16>, vector<2xf16>
+  %result = vector.extf %odd : vector<2xf16> to vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ----
+low.func.def target<amdgpu.gfx11.generic.core>(@target) abi(hal_kernel) @vector_extf_f16_deinterleaved_odd(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm {
+  %7 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %8 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %odd = v_perm_b32_src2_lit %7, %8, 50464518
+  %11 = v_cvt_f32_f16 %odd
+  %12 = v_cvt_f32_f16_input_high %odd
+  %result = concat(%11, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx942> @target
+
+func.def target(@target) @vector_extf_f16_cdna_fallback(%input: vector<2xf16>) -> (vector<2xf32>) {
+  %result = vector.extf %input : vector<2xf16> to vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ----
+low.func.def target<amdgpu.cdna3.core>(@target) abi(hal_kernel) @vector_extf_f16_cdna_fallback(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm {
+  %5 = v_cvt_f32_f16 %input
+  %6 = v_lshrrev_b32_src0_inline %input, 16
+  %7 = v_cvt_f32_f16 %6
+  %result = concat(%5, %7) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
 }

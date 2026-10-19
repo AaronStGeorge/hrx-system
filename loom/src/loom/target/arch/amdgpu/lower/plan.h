@@ -394,6 +394,8 @@ typedef struct loom_amdgpu_vector_16bit_float_conversion_plan_t {
   uint8_t result_register_count;
   // Target-side scale representation selected for conversion emission.
   loom_amdgpu_vector_scale_materialization_kind_t scale_materialization_kind;
+  // Native descriptor widening the high F16 lane, or NONE for shift fallback.
+  loom_amdgpu_descriptor_ref_t f16_high_widen_descriptor_ref;
   // Strategy-specific data selected before emission.
   union {
     // Selected F32-to-BF16 pack action.
