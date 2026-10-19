@@ -5896,6 +5896,28 @@ def _v_cvt_f32_f16_overlay(
     )
 
 
+def _v_cvt_f32_f16_input_high_overlay(
+    *, op_sel_field: str = "OP_SEL"
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_cvt_f32_f16.input_high",
+        instruction_name="V_CVT_F32_F16",
+        mnemonic="v_cvt_f32_f16_input_high",
+        encoding_name="ENC_VOP3",
+        semantic_tag="convert.float.f16.high.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                "SRC0", _vgpr_operand("input", register_part=_REG_PART_VGPR_HIGH16)
+            ),
+        ),
+        fixed_encoding_fields=((op_sel_field, 1),),
+        constraints=_REMATERIALIZABLE_RESULT_CONSTRAINTS,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_cvt_f16_f32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_cvt_f16_f32",
@@ -8197,6 +8219,7 @@ __all__ = (
     "_v_cndmask_b32_vcc_overlay",
     "_v_cvt_f16_f32_overlay",
     "_v_cvt_f32_f16_overlay",
+    "_v_cvt_f32_f16_input_high_overlay",
     "_v_cvt_f32_i32_overlay",
     "_v_cvt_f64_integer_overlays",
     "_v_cvt_integer_f64_overlays",

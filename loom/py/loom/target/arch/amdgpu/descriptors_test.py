@@ -118,6 +118,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _gfx11_core_overlays,
     _gfx12_5_generic_core_overlays,
     _gfx12_core_overlays,
+    _gfx90a_core_overlays,
     _gfx115x_core_overlays,
     _gfx125x_core_overlays,
     _gfx125x_reg_classes,
@@ -1864,21 +1865,33 @@ def test_scc_free_scalar_integer_results_are_rematerializable() -> None:
 
 
 def test_rdna_f16_to_f32_convert_uses_wide_encoding() -> None:
-    for overlays in (
-        _gfx11_core_overlays(),
-        _gfx12_core_overlays(),
-        _gfx125x_core_overlays(),
+    for overlays, op_sel_field in (
+        (_gfx11_core_overlays(), "OP_SEL"),
+        (_gfx115x_core_overlays(), "OP_SEL"),
+        (_rdna4m_core_overlays(), "OP_SEL"),
+        (_gfx12_core_overlays(), "OPSEL"),
+        (_gfx125x_core_overlays(), "OPSEL"),
     ):
         descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
-        descriptor = descriptors["amdgpu.v_cvt_f32_f16"]
-        assert descriptor.encoding_name == "ENC_VOP3"
+        low_descriptor = descriptors["amdgpu.v_cvt_f32_f16"]
+        high_descriptor = descriptors["amdgpu.v_cvt_f32_f16.input_high"]
+        assert low_descriptor.encoding_name == "ENC_VOP3"
+        assert high_descriptor.encoding_name == "ENC_VOP3"
+        high_input = high_descriptor.operands[1].descriptor_operand
+        assert high_input.reg_alts[0].register_part == _REG_PART_VGPR_HIGH16
+        assert high_descriptor.fixed_encoding_fields == ((op_sel_field, 1),)
 
 
 def test_cdna_f16_to_f32_convert_keeps_compact_encoding() -> None:
-    for overlays in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+    for overlays in (
+        _gfx90a_core_overlays(),
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+    ):
         descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
         descriptor = descriptors["amdgpu.v_cvt_f32_f16"]
         assert descriptor.encoding_name == "ENC_VOP1"
+        assert "amdgpu.v_cvt_f32_f16.input_high" not in descriptors
 
 
 def test_f32_to_f16_convert_results_use_d16_low_window() -> None:
