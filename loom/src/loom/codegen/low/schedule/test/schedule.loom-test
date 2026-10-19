@@ -888,25 +888,31 @@ node 0 <- 3
 node 1 <- 4
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_fills_unconstrained_issue_gap strategy=resource-stall diagnostics=candidates output=none
+// RUN: emit low-schedule-query @resource_stall_fills_unconstrained_issue_gap strategy=resource-stall order=* issue=*
 
 test.target<low_core> @test_target
 
 low.func.def target<test.low.core>(@test_target) @resource_stall_fills_unconstrained_issue_gap(%lhs0: reg<test.i32>, %rhs0: reg<test.i32>, %lhs1: reg<test.i32>, %rhs1: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
-  // REMARK@+1: BACKEND/015
   %prepared0 = test.mul.i32 %lhs0, %rhs0
   %prepared1 = test.mul.i32 %lhs1, %rhs1
-  // REMARK@+1: BACKEND/015
   %constant0 = test.const.i32 1
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="3", chosen_packet="test.add.i32", rejected_packet="test.mul.i32"}
   %result0 = test.add.i32 %prepared0, %constant0
   // With no physical pressure limit, issue the ready constant while the
   // first result waits on its multiply instead of introducing a data stall.
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="2", chosen_packet="test.const.i32", rejected_packet="test.add.i32", chosen_data_ready_stall_cycles="0", rejected_data_ready_stall_cycles="1"}
   %constant1 = test.const.i32 2
   %result1 = test.add.i32 %prepared1, %constant1
   return %result0, %result1
 }
+
+// ----
+block 0 order: 0, 2, 4, 1, 5, 3, 6
+node 0 issue-cycle: 0
+node 1 issue-cycle: 1
+node 2 issue-cycle: 0
+node 3 issue-cycle: 3
+node 4 issue-cycle: 0
+node 5 issue-cycle: 2
+node 6 issue-cycle: 4
 
 // ====
 // RUN: emit low-schedule-json @resource_stall_extends_ready_latency_window strategy=resource-stall diagnostics=candidates output=none
@@ -951,7 +957,7 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_extends_ready_l
   // REMARK@+1: BACKEND/015
   %lane14 = test.extract_lane.i32 %load0, 2
   %lane15 = test.extract_lane.i32 %load0, 3
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="4", ready_candidate_count="18", scored_candidate_count="18", chosen_packet="test.load.index.v4i32", rejected_packet="test.add.i32", rejected_dependency_latency_cycles="0", chosen_data_ready_stall_cycles="1", rejected_resource_stall_cycles="1"}
+  // REMARK@+1: BACKEND/015 {chosen_packet="test.load.index.v4i32", rejected_packet="test.add.i32", chosen_effective_stall_cycles="0", rejected_effective_stall_cycles="1"}
   %load1 = test.load.index.v4i32 %ptr1, %gap1
   // This longer critical path is visible through the schedule view, but its
   // one-cycle head cannot replenish the four-cycle window consumed by a lane.
@@ -1105,24 +1111,61 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_rejects_pressur
 }
 
 // ====
-// RUN: emit low-schedule-json @resource_stall_completes_long_path_on_equal_stall strategy=resource-stall diagnostics=candidates output=none
+// A dependent operation waiting for data and an independent chain root waiting
+// for the vector resource can reach the same issue cycle. Start the independent
+// chain with the longer remaining path instead of draining the first chain.
+// RUN: emit low-schedule-query @resource_stall_prioritizes_long_path_on_equal_issue strategy=resource-stall order=* issue=*
 
 test.target<low_core> @test_target
 
-low.func.def target<test.low.core>(@test_target) @resource_stall_completes_long_path_on_equal_stall(%short_lhs: reg<test.i32>, %short_rhs: reg<test.i32>, %long_lhs: reg<test.i32>, %long_rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm {
-  %short = test.mul.i32 %short_lhs, %short_rhs
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="0", scored_candidate_count="2", chosen_packet="test.add.i32", rejected_packet="test.mul.i32"}
-  %long0 = test.add.i32 %long_lhs, %long_rhs
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="1", scored_candidate_count="2", chosen_packet="test.add.i32", rejected_packet="test.mul.i32"}
-  %long1 = test.add.i32 %long0, %long_rhs
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="2", scored_candidate_count="2", chosen_packet="test.add.i32", rejected_packet="test.mul.i32"}
-  %long2 = test.add.i32 %long1, %long_rhs
-  // Equal one-cycle data and resource stalls favor the remaining critical
-  // path packet over the independent scalar packet.
-  // REMARK@+1: BACKEND/015 {scheduled_ordinal="3", scored_candidate_count="2", chosen_packet="test.add.i32", rejected_packet="test.mul.i32", chosen_data_ready_stall_cycles="1", rejected_resource_stall_cycles="1", chosen_effective_stall_cycles="1", rejected_effective_stall_cycles="1"}
-  %long3 = test.add.i32 %long2, %long_rhs
-  return %short, %long3
+low.func.def target<test.low.core>(@test_target) @resource_stall_prioritizes_long_path_on_equal_issue(%a: reg<test.i32 x4>, %b: reg<test.i32 x4>, %c: reg<test.i32 x4>) -> (reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>) asm {
+  %a0 = test.add.v4i32 %a, %a
+  %a1 = test.add.v4i32 %a0, %a0
+  %b0 = test.add.v4i32 %b, %b
+  %b1 = test.add.v4i32 %b0, %b0
+  %c0 = test.add.v4i32 %c, %c
+  %c1 = test.add.v4i32 %c0, %c0
+  return %a1, %b1, %c1
 }
+
+// ----
+block 0 order: 0, 2, 4, 3, 5, 1, 6
+node 0 issue-cycle: 0
+node 1 issue-cycle: 5
+node 2 issue-cycle: 1
+node 3 issue-cycle: 3
+node 4 issue-cycle: 2
+node 5 issue-cycle: 4
+node 6 issue-cycle: 7
+
+// ====
+// Once two roots are open, a longer independent third chain cannot outrank
+// the established stall ordering when both paths reach bounded unspillable
+// storage. Keep the dependent chain moving before opening every root.
+// RUN: emit low-schedule-query @resource_stall_preserves_unspillable_chain_on_equal_issue strategy=resource-stall order=1,8 issue=1,8
+
+test.target<low_core> @test_target
+
+low.func.def target<test.low.core>(@test_target) @resource_stall_preserves_unspillable_chain_on_equal_issue(%a: reg<test.i32 x4>, %b: reg<test.i32 x4>, %c: reg<test.i32 x4>) -> (reg<test.i32 x4>, reg<test.i32 x4>, reg<test.i32 x4>) asm {
+  %a0 = test.add.v4i32 %a, %a
+  %a1 = test.add.v4i32 %a0, %a0
+  %a2 = copy %a1 : reg<test.i32 x4> -> reg<test.explicit32 x4>
+  %a3 = copy %a2 : reg<test.explicit32 x4> -> reg<test.i32 x4>
+  %b0 = test.add.v4i32 %b, %b
+  %b1 = test.add.v4i32 %b0, %b0
+  %b2 = copy %b1 : reg<test.i32 x4> -> reg<test.explicit32 x4>
+  %b3 = copy %b2 : reg<test.explicit32 x4> -> reg<test.i32 x4>
+  %c0 = test.add.v4i32 %c, %c
+  %c1 = test.add.v4i32 %c0, %c0
+  %c2 = copy %c1 : reg<test.i32 x4> -> reg<test.explicit32 x4>
+  %c3 = copy %c2 : reg<test.explicit32 x4> -> reg<test.i32 x4>
+  return %a3, %b3, %c3
+}
+
+// ----
+block 0 order: 1, 8
+node 1 issue-cycle: 2
+node 8 issue-cycle: 3
 
 // ====
 // RUN: emit low-schedule-json @resource_stall_preserves_source_order_without_pressure_progress strategy=resource-stall diagnostics=candidates test.i32=6 output=none

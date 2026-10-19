@@ -382,6 +382,9 @@ enum loom_low_schedule_candidate_flag_bits_e {
   // Candidate grows a spillable bank beyond its capacity, independently of
   // whether its new values require physical registers across later repairs.
   LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REGISTER_DEBT = 1u << 11,
+  // Candidate's transitive downstream activation reaches a bounded
+  // unspillable completion domain.
+  LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION = 1u << 12,
   // Candidate establishes storage for a later operation. Storage setup is
   // actionable only when it also advances storage or unlocks a descriptor.
   LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_STORAGE_SETUP = 1u << 7,
@@ -399,7 +402,7 @@ enum loom_low_schedule_candidate_flag_bits_e {
       LOOM_LOW_SCHEDULE_NODE_FLAG_DESCRIPTOR_SETUP,
 };
 static_assert(
-    LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_OPENS_REGISTER_DEBT <= UINT16_MAX,
+    LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION <= UINT16_MAX,
     "candidate flags must fit in loom_low_schedule_candidate_score_t");
 static_assert(
     (LOOM_LOW_SCHEDULE_NODE_FLAG_PAIR_TRANSPARENT << 1u) ==

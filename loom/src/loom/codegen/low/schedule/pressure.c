@@ -54,7 +54,7 @@ typedef struct loom_low_schedule_pressure_demand_t {
   // candidate opens, or UINT32_MAX when it opens none.
   uint32_t opened_unspillable_completion_capacity;
   // Candidate properties discovered while traversing the ready frontier.
-  uint8_t candidate_flags;
+  uint16_t candidate_flags;
 } loom_low_schedule_pressure_demand_t;
 
 static uint32_t loom_low_schedule_positive_delta_u32(uint32_t lhs,
@@ -1567,9 +1567,15 @@ loom_low_schedule_score_candidate_pressure_demand(
           ->candidate_unspillable_activation_units[completion_domain_id] =
           iree_max(node_activation[completion_domain_id],
                    unlock_activation[completion_domain_id]);
+      if (pressure_state
+              ->candidate_unspillable_activation_units[completion_domain_id] !=
+          0) {
+        demand.candidate_flags |=
+            LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION;
+      }
     }
   }
-  demand.candidate_flags = unlock_record->candidate_flags;
+  demand.candidate_flags |= unlock_record->candidate_flags;
   if (pressure_state->unlocks.descriptor_heads != NULL &&
       unlock_record->descriptor_count != 0 &&
       unlock_record->descriptor_count <=
