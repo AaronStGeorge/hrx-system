@@ -1126,6 +1126,34 @@ TEST_F(GpuNativeTest, LastReleaseFromCallerWithAcceptedWork) {
   allocator_.reclaimed.acquire();
 }
 
+TEST_F(GpuNativeTest, LastReleaseFromCallerWithFailedAcceptedWait) {
+  Create();
+  if (HasFatalFailure()) {
+    return;
+  }
+  iree_hal_semaphore_t* done = nullptr;
+  iree_hal_semaphore_t* gate = nullptr;
+  CreateSemaphore(&done);
+  CreateSemaphore(&gate);
+  uint64_t value = 1;
+  IREE_ASSERT_OK(iree_hal_queue_barrier(queues_[0], {1, &gate, &value},
+                                        {1, &done, &value}, nullptr, 0));
+  iree_hal_device_group_release(group_);
+  group_ = nullptr;
+  iree_hal_device_release(device_);
+  device_ = nullptr;
+  // Failure abandons accepted work on this signaling thread. Asynchronous
+  // device cleanup must join its final queue and notification accesses.
+  iree_hal_semaphore_fail(gate, iree_make_status(IREE_STATUS_ABORTED,
+                                                 "accepted dependency failed"));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      iree_hal_semaphore_wait(done, value, iree_infinite_timeout(), 0));
+  iree_hal_semaphore_release(gate);
+  iree_hal_semaphore_release(done);
+  allocator_.reclaimed.acquire();
+}
+
 TEST_F(GpuNativeTest, FailedQueueConstructionReleasesWorkersAndKeepsContext) {
   options_.pm4.argument_capacity = 0;
   auto params = iree_hal_device_create_params_default();
@@ -1254,6 +1282,41 @@ TEST_F(GpuNativeTest, LastReleaseFromCompletionCallback) {
   device_ = nullptr;
   iree_hal_semaphore_release(done);
   IREE_ASSERT_OK(iree_hal_semaphore_signal(gate, value, nullptr));
+  iree_hal_semaphore_release(gate);
+  allocator_.reclaimed.acquire();
+}
+
+TEST_F(GpuNativeTest, LastReleaseFromFailedDependencyCallback) {
+  Create();
+  if (HasFatalFailure()) {
+    return;
+  }
+  iree_hal_semaphore_t* gate = nullptr;
+  iree_hal_semaphore_t* done = nullptr;
+  CreateSemaphore(&gate);
+  CreateSemaphore(&done);
+  uint64_t value = 1;
+  iree_async_semaphore_timepoint_t timepoint = {
+      .callback =
+          [](void* user_data, iree_async_semaphore_timepoint_t*,
+             iree_status_t status) {
+            IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED, status);
+            iree_hal_device_release(static_cast<iree_hal_device_t*>(user_data));
+          },
+      .user_data = device_,
+  };
+  IREE_ASSERT_OK(iree_async_semaphore_acquire_timepoint(
+      reinterpret_cast<iree_async_semaphore_t*>(done), value, &timepoint));
+  IREE_ASSERT_OK(iree_hal_queue_barrier(queues_[0], {1, &gate, &value},
+                                        {1, &done, &value}, nullptr, 0));
+  iree_hal_device_group_release(group_);
+  group_ = nullptr;
+  device_ = nullptr;
+  iree_hal_semaphore_release(done);
+  // Closing reenters from public failure delivery while the queue still owns
+  // its deferred capture and callback. Neither owns native execution credit.
+  iree_hal_semaphore_fail(gate, iree_make_status(IREE_STATUS_ABORTED,
+                                                 "accepted dependency failed"));
   iree_hal_semaphore_release(gate);
   allocator_.reclaimed.acquire();
 }

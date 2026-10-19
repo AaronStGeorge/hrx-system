@@ -8,6 +8,7 @@
 
 #include "iree/async/frontier_tracker.h"
 #include "iree/base/cpu_data.h"
+#include "iree/base/threading/mutex.h"
 #include "iree/hal/drivers/amd/gpu/executable.h"
 #include "iree/hal/drivers/amd/gpu/queue/capture_pool.h"
 #include "iree/hal/drivers/amd/gpu/queue/file_transfer.h"
@@ -117,8 +118,8 @@ struct iree_hal_amd_gpu_pm4_queue_t {
     // One while the trim entry is enqueued or executing.
     iree_atomic_int32_t pending;
   } trim;
-  // Accepted operations awaiting execution retirement or abandonment. The
-  // publisher independently owns any trailing host publication bookkeeping.
+  // Accepted operations and pending callbacks awaiting their final access.
+  // The publisher independently owns trailing host publication bookkeeping.
   iree_atomic_int64_t outstanding;
   // Parent has closed public acceptance; accepted dependencies remain live.
   iree_atomic_int32_t closed;
@@ -126,8 +127,14 @@ struct iree_hal_amd_gpu_pm4_queue_t {
   iree_atomic_int64_t native_failure;
   // Tracker associations shared by cold waits on this queue.
   iree_async_semaphore_wait_context_t wait_context;
-  // Failure-cancellable admission waits, independent of publication ownership.
-  iree_hal_amd_gpu_host_wait_set_t pending;
+  // Deferred admission and its independent callback-return lifetime.
+  struct {
+    // Failure-cancellable waits, independent of publication ownership.
+    iree_hal_amd_gpu_host_wait_set_t waits;
+    // Joins each callback's final count drop and shutdown notification. Neither
+    // wait registration nor resumed publication holds this cold mutex.
+    iree_slim_mutex_t completion_mutex;
+  } pending;
   // Service has failed every published operation after native failure and
   // the last publishing caller's handoff. Their GPU ownership stays retained.
   bool issued_failure_delivered;
@@ -1253,6 +1260,18 @@ static void iree_hal_amd_gpu_pm4_pending_release(
   }
 }
 
+// The capture may retire inline or be abandoned before its resuming callback
+// finishes using the queue. Its separate callback borrower includes the final
+// shutdown notification; idle observation joins that notification under the
+// same mutex before reclaiming the queue and native event.
+static void iree_hal_amd_gpu_pm4_pending_end(
+    iree_hal_amd_gpu_pm4_queue_t* queue) {
+  iree_slim_mutex_lock(&queue->pending.completion_mutex);
+  iree_atomic_fetch_sub(&queue->outstanding, 1, iree_memory_order_release);
+  iree_hal_amd_gpu_pm4_wake_shutdown(queue);
+  iree_slim_mutex_unlock(&queue->pending.completion_mutex);
+}
+
 // Wait completion reenters the publication owner only after registration and
 // every cancellation borrower have relinquished the captured sidecar.
 static void iree_hal_amd_gpu_pm4_enqueue(
@@ -1271,6 +1290,7 @@ static void iree_hal_amd_gpu_pm4_pending_resume(void* user_data,
   } else {
     iree_hal_amd_gpu_pm4_abandon(queue, submission, status);
   }
+  iree_hal_amd_gpu_pm4_pending_end(queue);
 }
 
 static void iree_hal_amd_gpu_pm4_pending_begin(
@@ -1291,7 +1311,7 @@ static void iree_hal_amd_gpu_pm4_pending_begin(
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amd_gpu_host_wait_set_begin(
-        &queue->pending,
+        &queue->pending.waits,
         (iree_hal_semaphore_list_t){1, &pending->semaphore, &pending->value},
         iree_hal_amd_gpu_pm4_pending_resume, pending,
         iree_allocator_inline_arena(&pending->tracker_storage),
@@ -1303,6 +1323,7 @@ static void iree_hal_amd_gpu_pm4_pending_begin(
   iree_hal_semaphore_release(pending->semaphore);
   iree_hal_amd_gpu_pm4_pending_release(pending);
   iree_hal_amd_gpu_pm4_abandon(queue, submission, status);
+  iree_hal_amd_gpu_pm4_pending_end(queue);
 }
 
 static iree_status_t iree_hal_amd_gpu_pm4_pending_allocate(
@@ -1334,6 +1355,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_pending_allocate(
               .buffer = storage.data + prefix_size,
           },
   };
+  iree_atomic_fetch_add(&queue->outstanding, 1, iree_memory_order_relaxed);
   *out_pending = pending;
   return iree_ok_status();
 }
@@ -1605,7 +1627,7 @@ static bool iree_hal_amd_gpu_pm4_progress(void* user_data) {
   }
   iree_status_t failure = iree_hal_amd_gpu_pm4_check_failure(queue);
   if (!iree_status_is_ok(failure)) {
-    iree_hal_amd_gpu_host_wait_set_cancel(&queue->pending);
+    iree_hal_amd_gpu_host_wait_set_cancel(&queue->pending.waits);
     if (!queue->issued_failure_delivered &&
         iree_atomic_load(&queue->native_failure, iree_memory_order_acquire) &&
         iree_hal_amd_gpu_publisher_is_idle(&queue->publisher)) {
@@ -1839,10 +1861,14 @@ void iree_hal_amd_gpu_pm4_queue_close(iree_hal_queue_t* base) {
 
 bool iree_hal_amd_gpu_pm4_queue_is_idle(iree_hal_queue_t* base) {
   iree_hal_amd_gpu_pm4_queue_t* queue = (void*)base;
-  return !iree_atomic_load(&queue->outstanding, iree_memory_order_acquire) &&
-         !iree_atomic_load(&queue->growth.pending_count,
-                           iree_memory_order_acquire) &&
-         iree_hal_amd_gpu_publisher_is_idle(&queue->publisher);
+  iree_slim_mutex_lock(&queue->pending.completion_mutex);
+  const bool idle =
+      !iree_atomic_load(&queue->outstanding, iree_memory_order_acquire) &&
+      !iree_atomic_load(&queue->growth.pending_count,
+                        iree_memory_order_acquire) &&
+      iree_hal_amd_gpu_publisher_is_idle(&queue->publisher);
+  iree_slim_mutex_unlock(&queue->pending.completion_mutex);
+  return idle;
 }
 
 static void iree_hal_amd_gpu_pm4_clear_frontier(
@@ -2273,7 +2299,8 @@ static void iree_hal_amd_gpu_pm4_queue_destroy(iree_hal_queue_t* base) {
               "parent must join native ownership before final queue release");
   iree_hal_amd_gpu_publisher_deinitialize(&queue->publisher);
   iree_hal_amd_gpu_pm4_signal_pool_deinitialize(&queue->signals);
-  iree_hal_amd_gpu_host_wait_set_deinitialize(&queue->pending);
+  iree_hal_amd_gpu_host_wait_set_deinitialize(&queue->pending.waits);
+  iree_slim_mutex_deinitialize(&queue->pending.completion_mutex);
   iree_async_semaphore_wait_context_deinitialize(&queue->wait_context);
   iree_hal_amd_gpu_capture_pool_deinitialize(&queue->captures);
   iree_hal_amd_gpu_pm4_clear_frontier(queue);
@@ -2424,7 +2451,8 @@ iree_status_t iree_hal_amd_gpu_pm4_queue_create(
   iree_hal_amd_gpu_publisher_initialize(&queue->publisher);
   iree_async_semaphore_wait_context_initialize(&queue->wait_context);
   iree_hal_amd_gpu_host_wait_set_initialize(&queue->wait_context,
-                                            &queue->pending);
+                                            &queue->pending.waits);
+  iree_slim_mutex_initialize(&queue->pending.completion_mutex);
   queue->growth = (iree_hal_amd_gpu_pm4_growth_context_t){
       .context = context,
       .memory = options->memory,
