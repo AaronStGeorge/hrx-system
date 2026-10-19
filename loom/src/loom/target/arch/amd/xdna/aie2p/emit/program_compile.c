@@ -108,6 +108,18 @@ static iree_host_size_t loom_aie2p_program_clobber_count(
   return count;
 }
 
+static iree_host_size_t loom_aie2p_program_transport_clobber_count(
+    const loom_aie2p_program_callable_t* callable) {
+  iree_host_size_t count = 0;
+  const iree_host_size_t location_count =
+      (iree_host_size_t)callable->argument_count + callable->result_count;
+  for (iree_host_size_t i = 0; i < location_count; ++i) {
+    count += callable->locations[i].location_kind ==
+             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  }
+  return count;
+}
+
 static int loom_aie2p_program_compare_clobbers(const void* lhs_ptr,
                                                const void* rhs_ptr) {
   const loom_low_call_clobber_t* lhs = lhs_ptr;
@@ -124,11 +136,13 @@ static int loom_aie2p_program_compare_clobbers(const void* lhs_ptr,
 static iree_status_t loom_aie2p_program_prepare_clobbers(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_arena_allocator_t* arena, loom_aie2p_program_callable_t* callable) {
-  callable->clobber_count = loom_aie2p_program_clobber_count(
-      descriptor_set, &callable->contribution.realization);
-  if (callable->clobber_count != 0) {
+  const iree_host_size_t clobber_capacity =
+      loom_aie2p_program_clobber_count(descriptor_set,
+                                       &callable->contribution.realization) +
+      loom_aie2p_program_transport_clobber_count(callable);
+  if (clobber_capacity != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, callable->clobber_count, sizeof(*callable->clobbers),
+        arena, clobber_capacity, sizeof(*callable->clobbers),
         (void**)&callable->clobbers));
   }
   iree_host_size_t clobber_index = 0;
@@ -154,10 +168,38 @@ static iree_status_t loom_aie2p_program_prepare_clobbers(
       };
     }
   }
-  IREE_ASSERT_EQ(clobber_index, callable->clobber_count);
-  if (callable->clobber_count != 0) {
-    qsort(callable->clobbers, callable->clobber_count,
-          sizeof(*callable->clobbers), loom_aie2p_program_compare_clobbers);
+  // Argument transport overwrites ABI carriers before the helper starts, and
+  // result transport overwrites them before caller values resume. These writes
+  // belong to the call boundary rather than the helper body.
+  const iree_host_size_t location_count =
+      (iree_host_size_t)callable->argument_count + callable->result_count;
+  for (iree_host_size_t i = 0; i < location_count; ++i) {
+    const loom_low_allocation_abi_location_t* location =
+        &callable->locations[i];
+    if (location->location_kind !=
+        LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+      continue;
+    }
+    callable->clobbers[clobber_index++] = (loom_low_call_clobber_t){
+        .register_class = location->descriptor_reg_class_id,
+        .location = location->location_base,
+        .count = 1,
+    };
+  }
+  IREE_ASSERT_EQ(clobber_index, clobber_capacity);
+  if (clobber_index != 0) {
+    qsort(callable->clobbers, clobber_index, sizeof(*callable->clobbers),
+          loom_aie2p_program_compare_clobbers);
+  }
+  callable->clobber_count = 0;
+  for (iree_host_size_t i = 0; i < clobber_index; ++i) {
+    if (callable->clobber_count != 0 &&
+        loom_aie2p_program_compare_clobbers(
+            &callable->clobbers[callable->clobber_count - 1],
+            &callable->clobbers[i]) == 0) {
+      continue;
+    }
+    callable->clobbers[callable->clobber_count++] = callable->clobbers[i];
   }
   callable->call_contract.clobbers = (loom_low_call_clobber_list_t){
       .values = callable->clobbers,

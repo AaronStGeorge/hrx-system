@@ -43,6 +43,11 @@ typedef enum loom_aie2p_block_alignment_e {
   LOOM_AIE2P_BLOCK_ALIGNMENT_DIRECT = 2,
 } loom_aie2p_block_alignment_t;
 
+// Native control transfers after a returned JL require two intervening issue
+// positions. Ordinary caller work may occupy them; otherwise they encode as
+// NOPs. This is distinct from JL's five architectural delay positions.
+enum { LOOM_AIE2P_RETURN_CONTROL_GAP_CYCLES = 2 };
+
 typedef struct loom_aie2p_block_analysis_t {
   // Structural terminator packet ending this block.
   uint32_t terminator_packet_index;
@@ -480,7 +485,8 @@ static iree_status_t loom_aie2p_bundle_plan_analyze(
       arena, frame->schedule.block_count, sizeof(*blocks), (void**)&blocks));
   memset(blocks, 0,
          frame->schedule.block_count * sizeof(loom_aie2p_block_analysis_t));
-  blocks[0].alignment = LOOM_AIE2P_BLOCK_ALIGNMENT_DIRECT;
+  out_analysis->move_slot_count = loom_aie2p_bundle_plan_move_slot_count(
+      frame, frame->allocation.entry_moves.moves);
   // Destination marks may be set before a block's own analysis. Each iteration
   // preserves those marks in the once-initialized table.
   for (iree_host_size_t block_index = 0;
@@ -1784,7 +1790,15 @@ static iree_status_t loom_aie2p_bundle_plan_append_call(
   // allocation; caller-side timing history therefore restarts at continuation.
   loom_low_physical_issue_reset_execution_state(&builder->issue);
   builder->execution_bundle_start = builder->bundle_count;
-  builder->execution_issue_cycle = builder->next_issue_cycle;
+  if (builder->next_issue_cycle >
+      UINT32_MAX - LOOM_AIE2P_RETURN_CONTROL_GAP_CYCLES) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AIE2P call continuation exceeds cycle domain");
+  }
+  // Keep ordinary continuation work available to fill the required gap, but
+  // prevent a following call, branch, or return from entering it.
+  builder->execution_issue_cycle =
+      builder->next_issue_cycle + LOOM_AIE2P_RETURN_CONTROL_GAP_CYCLES;
   builder->pending.minimum_issue_cycle = builder->next_issue_cycle;
   builder->pending.end_cycle = builder->next_issue_cycle;
   const uint32_t result_move_start_cycle = builder->next_issue_cycle;
@@ -1865,7 +1879,7 @@ static iree_status_t loom_aie2p_bundle_plan_append_control(
           (loom_aie2p_slot_realization_t){.descriptor_ordinal =
                                               descriptor_ordinal});
   IREE_RETURN_IF_ERROR(
-      loom_aie2p_bundle_plan_advance(builder, earliest_control_cycle));
+      loom_aie2p_bundle_plan_advance(builder, candidate_cycle));
   *out_bundle_index = (uint32_t)builder->bundle_count;
   IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_append_single_slot(
       builder, logical_issue_cycle, control_slot_start));
@@ -2185,30 +2199,45 @@ static iree_status_t loom_aie2p_bundle_plan_build_impl(
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, builder.block_count, sizeof(*builder.block_byte_offsets),
       (void**)&builder.block_byte_offsets));
+
+  // Invocation transport and the caller link save execute once, before the
+  // body CFG. A branch to the first body block must not replay either one.
+  builder.current_block_index = 0;
+  builder.pending.minimum_issue_cycle = 0;
+  builder.pending.end_cycle = 0;
+  if (options->preserve_link_register) {
+    IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_append_link_move(
+        &builder, /*save_link=*/true, /*logical_issue_cycle=*/0));
+  }
+  IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_append_move_range(
+      &builder, frame->allocation.entry_moves.moves,
+      /*logical_issue_cycle=*/0));
+  IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_flush_pending(
+      &builder, builder.pending.end_cycle));
+
   for (uint32_t block_index = 0;
        block_index < (uint32_t)frame->schedule.block_count; ++block_index) {
     const loom_aie2p_block_analysis_t* block_analysis =
         &analysis.blocks[block_index];
     uint32_t block_byte_offset = (uint32_t)builder.encoded_byte_length;
-    if (block_index != 0 &&
-        block_analysis->alignment != LOOM_AIE2P_BLOCK_ALIGNMENT_NONE) {
+    if (block_analysis->alignment != LOOM_AIE2P_BLOCK_ALIGNMENT_NONE) {
       IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_align_next_block(
-          &builder, analysis.blocks[block_index - 1u].terminator_issue_cycle,
+          &builder,
+          block_index == 0
+              ? 0
+              : analysis.blocks[block_index - 1u].terminator_issue_cycle,
           block_analysis->alignment, &block_byte_offset));
     }
     builder.current_block_index = block_index;
     builder.block_issue_cycle = builder.next_issue_cycle;
     builder.execution_bundle_start = builder.bundle_count;
-    builder.execution_issue_cycle = builder.next_issue_cycle;
+    builder.execution_issue_cycle =
+        iree_max(builder.execution_issue_cycle, builder.next_issue_cycle);
     builder.block_byte_offsets[block_index] = block_byte_offset;
     const loom_low_schedule_block_t* block =
         &frame->schedule.blocks[block_index];
     builder.pending.minimum_issue_cycle = builder.next_issue_cycle;
     builder.pending.end_cycle = builder.next_issue_cycle;
-    if (block_index == 0 && options->preserve_link_register) {
-      IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_append_link_move(
-          &builder, /*save_link=*/true, /*logical_issue_cycle=*/0));
-    }
     for (uint32_t ordinal = 0; ordinal < block->scheduled_node_count;
          ++ordinal) {
       const loom_low_packet_view_t packet = loom_low_packet_at_block_ordinal(
