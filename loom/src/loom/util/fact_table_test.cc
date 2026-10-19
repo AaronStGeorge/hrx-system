@@ -624,6 +624,45 @@ TEST_F(FactTableTest, RangeGrowthRetainsUndefinedMembershipAndScopeReuse) {
   EXPECT_EQ(loom_value_fact_table_lookup(&table, 320).range_lo, 29);
 }
 
+TEST_F(FactTableTest, DescendingGrowthBoundsStorageAndPreservesMembership) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+  constexpr loom_value_id_t kLast = (1u << 20) + 7;
+  constexpr uint32_t kCount = 16;
+  for (uint32_t i = 0; i < kCount; ++i) {
+    IREE_ASSERT_OK(loom_value_fact_table_define(
+        &table, kLast - 64 * i, loom_value_facts_exact_i64(i + 1)));
+    // Stop on excessive growth before a broken implementation can exhaust
+    // memory. Each definition adds one touched-membership word to the span.
+    ASSERT_LE(table.capacity, 2u * (i + 1) * 64);
+    if (i == 1) {
+      loom_value_fact_table_undefine(&table, kLast - 64);
+    }
+  }
+  EXPECT_FALSE(loom_value_fact_table_has_entry(&table, kLast - 64));
+  for (uint32_t i = 0; i < kCount; ++i) {
+    if (i == 1) {
+      continue;
+    }
+    EXPECT_EQ(loom_value_fact_table_lookup(&table, kLast - 64 * i).range_lo,
+              i + 1);
+  }
+  IREE_ASSERT_OK(loom_value_fact_table_define(&table, kLast - 64,
+                                              loom_value_facts_exact_i64(42)));
+  EXPECT_EQ(table.touched_count, kCount);
+
+  loom_value_facts_t* entries = table.entries;
+  loom_value_fact_table_clear_scope(&table);
+  for (uint32_t i = 0; i < kCount; ++i) {
+    EXPECT_FALSE(loom_value_fact_table_has_entry(&table, kLast - 64 * i));
+  }
+  IREE_ASSERT_OK(loom_value_fact_table_define(&table, kLast - 64,
+                                              loom_value_facts_exact_i64(7)));
+  EXPECT_EQ(table.entries, entries);
+  EXPECT_EQ(table.touched_count, 1u);
+  EXPECT_EQ(loom_value_fact_table_lookup(&table, kLast - 64).range_lo, 7);
+}
+
 TEST_F(FactTableTest, DefineBeyondCapacityGrowsAndPreservesEntries) {
   loom_value_fact_table_t table = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 2));

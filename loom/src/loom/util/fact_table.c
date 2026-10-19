@@ -80,13 +80,21 @@ static iree_status_t loom_value_fact_table_ensure_range(
     first_value_id = iree_min(first_value_id, table->first_value_id);
     end_value_id = iree_max(end_value_id, table->first_value_id + old_capacity);
   }
-  const iree_host_size_t prefix_count =
-      old_capacity ? table->first_value_id - first_value_id : 0;
   iree_host_size_t new_capacity = old_capacity;
   loom_value_facts_t* entries = table->entries;
   IREE_RETURN_IF_ERROR(iree_arena_grow_array(
       table->arena, 0, end_value_id - first_value_id,
       sizeof(loom_value_facts_t), &new_capacity, (void**)&entries));
+  // Prepending reserves headroom before the old range. Round upward to retain
+  // the old suffix while moving touched membership by whole words.
+  if (old_capacity && first_value_id < table->first_value_id) {
+    first_value_id =
+        end_value_id > new_capacity
+            ? (loom_value_id_t)iree_host_align(end_value_id - new_capacity, 64)
+            : 0;
+  }
+  const iree_host_size_t prefix_count =
+      old_capacity ? table->first_value_id - first_value_id : 0;
   memset(entries, 0, prefix_count * sizeof(*entries));
   if (old_capacity) {
     memcpy(entries + prefix_count, table->entries,
