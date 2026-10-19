@@ -381,7 +381,8 @@ static iree_status_t loom_amdgpu_loom_check_build_schedule_models(
     loom_symbol_fact_table_t* symbol_facts,
     iree_string_view_t function_symbol_name,
     loom_low_schedule_pair_affinity_list_t* out_affinities,
-    loom_low_schedule_structural_state_read_list_t* out_state_reads) {
+    loom_low_schedule_structural_state_read_list_t* out_state_reads,
+    loom_low_schedule_structural_model_t* out_storage_address_model) {
   *out_affinities = loom_low_schedule_pair_affinity_list_empty();
   *out_state_reads = loom_low_schedule_structural_state_read_list_empty();
   loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
@@ -420,6 +421,8 @@ static iree_status_t loom_amdgpu_loom_check_build_schedule_models(
   IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_build_schedule_pair_affinities(
       &target, request->case_arena, out_affinities));
   *out_state_reads = loom_amdgpu_descriptor_structural_state_reads();
+  *out_storage_address_model =
+      loom_amdgpu_descriptor_storage_address_model(target.descriptor_set);
   return iree_ok_status();
 }
 
@@ -523,9 +526,11 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
       loom_low_schedule_pair_affinity_list_empty();
   loom_low_schedule_structural_state_read_list_t schedule_state_reads =
       loom_low_schedule_structural_state_read_list_empty();
+  loom_low_schedule_structural_model_t storage_address_model = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_loom_check_build_schedule_models(
       request, native_module, &symbol_facts, options.function_symbol_name,
-      &schedule_pair_affinities, &schedule_state_reads));
+      &schedule_pair_affinities, &schedule_state_reads,
+      &storage_address_model));
   if (request->diagnostic_collector != NULL &&
       loom_check_diagnostic_collector_has_error(
           request->diagnostic_collector)) {
@@ -546,6 +551,8 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
       .residency_query = loom_amdgpu_occupancy_residency_view,
       .schedule_pair_affinities = schedule_pair_affinities,
       .schedule_structural_state_reads = schedule_state_reads,
+      .schedule_structural_models = {.values = &storage_address_model,
+                                     .count = 1},
       .storage_lease_provider = selected_storage_lease_provider,
   };
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(

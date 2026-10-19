@@ -21,6 +21,11 @@ extern "C" {
 loom_low_schedule_structural_state_read_list_t
 loom_amdgpu_descriptor_structural_state_reads(void);
 
+// Models storage-address materialization with the target's immediate VGPR move.
+loom_low_schedule_structural_model_t
+loom_amdgpu_descriptor_storage_address_model(
+    const loom_low_descriptor_set_t* descriptor_set);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

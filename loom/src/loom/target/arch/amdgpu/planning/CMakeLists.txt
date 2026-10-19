@@ -104,6 +104,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::codegen::low::schedule
+    loom::ops::op_defs
     loom::target::arch::amdgpu::refs::target_refs
   PUBLIC
 )

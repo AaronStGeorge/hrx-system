@@ -112,6 +112,7 @@ loom_cc_library(
     visibility = _AMDGPU_NATIVE_PLANNING_VISIBILITY,
     deps = [
         "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base",
     ],
