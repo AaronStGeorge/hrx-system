@@ -23,7 +23,7 @@ kernel.def target(@fragment_repack_gfx11_wave32) @fragment_repack_roundtrip_bf16
   %init = vector.fragment<init> %zero_accumulator shape [%tile_extent, %tile_extent] : vector<8xf32>
   %result = vector.fragment.load<result> %input_view[%fragment_origin, %fragment_origin] shape [%tile_extent, %tile_extent] : view<16x16xf32> -> vector<8xf32>
   vector.fragment.store<result> %result, %scratch_view[%fragment_origin, %fragment_origin] shape [%tile_extent, %tile_extent] : vector<8xf32>, view<16x16xbf16>
-  kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+  kernel.barrier<workgroup> scope(subgroup) ordering(acq_rel)
   %lhs = vector.fragment.load<lhs> %scratch_view[%fragment_origin, %fragment_origin] shape [%tile_extent, %tile_extent] : view<16x16xbf16> -> vector<16xbf16>
   %rhs_fragment = vector.fragment.load<rhs> %rhs_view[%fragment_origin, %fragment_origin] shape [%tile_extent, %tile_extent] : view<16x16xbf16, %rhs_layout> -> vector<16xbf16>
   %product = vector.mma %lhs, %rhs_fragment, %init : vector<16xbf16>, vector<16xbf16>, vector<8xf32>

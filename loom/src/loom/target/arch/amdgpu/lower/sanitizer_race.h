@@ -52,7 +52,11 @@ typedef struct loom_amdgpu_sanitizer_race_fragment_access_plan_t {
 } loom_amdgpu_sanitizer_race_fragment_access_plan_t;
 
 typedef struct loom_amdgpu_sanitizer_race_sync_plan_t {
-  // Workgroup barrier emitted after the epoch update.
+  // Synchronization scope whose detector clock is advanced.
+  loom_atomic_scope_t scope;
+  // Module-wide sanitizer site identifier used by capacity diagnostics.
+  loom_sanitizer_site_id_t site_id;
+  // Workgroup barrier emitted after a workgroup epoch update.
   loom_amdgpu_kernel_barrier_plan_t barrier;
 } loom_amdgpu_sanitizer_race_sync_plan_t;
 
@@ -88,7 +92,7 @@ iree_status_t loom_amdgpu_select_sanitizer_race_sync_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_sanitizer_race_sync_plan_t* out_plan, bool* out_selected);
 
-// Lowers a sanitizer.race.sync op into a per-workgroup detector epoch update.
+// Lowers a sanitizer.race.sync op into its scope-owned detector epoch update.
 iree_status_t loom_amdgpu_lower_sanitizer_race_sync(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_race_sync_plan_t* plan);

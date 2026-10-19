@@ -384,6 +384,13 @@ loom_test(
 )
 
 loom_test(
+    name = "tsan_subgroup_test",
+    srcs = ["//loom/src/loom/test/corpus/sanitizer:race_subgroup.loom"],
+    compile_targets = ["//loom/target/amdgpu:" + target for target in LOOM_AMDGPU_SUPPORTED_TARGETS],
+    execution_profiles = [AMDGPU_TSAN_PROFILE],
+)
+
+loom_test(
     name = "tsan_capacity_test",
     srcs = ["//loom/src/loom/test/corpus/sanitizer:amdgpu_tsan_capacity.loom"],
     execution_profiles = [AMDGPU_TSAN_CAPACITY_PROFILE],

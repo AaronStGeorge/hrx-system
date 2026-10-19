@@ -495,9 +495,18 @@ iree_status_t loom_amdgpu_select_sanitizer_race_sync_plan(
     return iree_ok_status();
   }
   if (loom_sanitizer_race_sync_memory_space(source_op) !=
-          LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP ||
-      loom_sanitizer_race_sync_scope(source_op) !=
-          LOOM_ATOMIC_SCOPE_WORKGROUP) {
+      LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    return iree_ok_status();
+  }
+  const loom_atomic_scope_t scope = loom_sanitizer_race_sync_scope(source_op);
+  if (scope != LOOM_ATOMIC_SCOPE_WORKGROUP &&
+      scope != LOOM_ATOMIC_SCOPE_SUBGROUP) {
+    return iree_ok_status();
+  }
+  if (scope == LOOM_ATOMIC_SCOPE_SUBGROUP &&
+      !loom_amdgpu_descriptor_set_has_ref(
+          loom_low_lower_context_descriptor_set(context),
+          LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR)) {
     return iree_ok_status();
   }
   const loom_atomic_ordering_t ordering =
@@ -513,10 +522,20 @@ iree_status_t loom_amdgpu_select_sanitizer_race_sync_plan(
       LOOM_AMDGPU_SANITIZER_RACE_WORKGROUP_SUPPORTED) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_select_workgroup_barrier_plan(context, &out_plan->barrier));
-  if (out_plan->barrier.kind == LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_NONE) {
-    return iree_ok_status();
+  out_plan->scope = scope;
+  if (scope == LOOM_ATOMIC_SCOPE_SUBGROUP) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_site_id_for_op(
+        context, source_op, &out_plan->site_id));
+    if (out_plan->site_id == LOOM_SANITIZER_SITE_ID_INVALID) {
+      return iree_ok_status();
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_select_workgroup_barrier_plan(context, &out_plan->barrier));
+    if (out_plan->barrier.kind ==
+        LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_NONE) {
+      return iree_ok_status();
+    }
   }
   *out_selected = true;
   return iree_ok_status();
@@ -569,10 +588,12 @@ iree_status_t loom_amdgpu_low_legality_verify_sanitizer_race_sync(
         context, op,
         IREE_SV("target_contract.sanitizer_race.workgroup_memory_required"));
   }
-  if (loom_sanitizer_race_sync_scope(op) != LOOM_ATOMIC_SCOPE_WORKGROUP) {
+  const loom_atomic_scope_t scope = loom_sanitizer_race_sync_scope(op);
+  if (scope != LOOM_ATOMIC_SCOPE_WORKGROUP &&
+      scope != LOOM_ATOMIC_SCOPE_SUBGROUP) {
     return loom_amdgpu_low_legality_reject(
         context, op,
-        IREE_SV("target_contract.sanitizer_race.workgroup_scope_required"));
+        IREE_SV("target_contract.sanitizer_race.supported_scope_required"));
   }
 
   switch (loom_sanitizer_race_sync_ordering(op)) {
@@ -590,7 +611,8 @@ iree_status_t loom_amdgpu_low_legality_verify_sanitizer_race_sync(
   }
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_sanitizer_race_verify_workgroup(context, op));
-  if (!loom_amdgpu_workgroup_barrier_lowering_available(
+  if (scope == LOOM_ATOMIC_SCOPE_WORKGROUP &&
+      !loom_amdgpu_workgroup_barrier_lowering_available(
           loom_target_low_legality_descriptor_set(context))) {
     return loom_amdgpu_low_legality_reject(
         context, op, IREE_SV("descriptor.workgroup_barrier"));

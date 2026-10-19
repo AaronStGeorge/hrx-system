@@ -692,11 +692,12 @@ static iree_status_t loom_sanitizer_try_instrument_race_sync_op(
   if (memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     return iree_ok_status();
   }
-  if (scope != LOOM_ATOMIC_SCOPE_WORKGROUP) {
+  if (scope != LOOM_ATOMIC_SCOPE_WORKGROUP &&
+      scope != LOOM_ATOMIC_SCOPE_SUBGROUP) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
-        "sanitizer race observation does not yet support non-workgroup "
-        "kernel.barrier scope");
+        "sanitizer race observation does not support kernel.barrier scope %u",
+        (unsigned)scope);
   }
   if (loom_sanitizer_followed_by_matching_race_sync(op, memory_space, ordering,
                                                     scope)) {

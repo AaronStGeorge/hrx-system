@@ -1000,6 +1000,33 @@ ERR_AMDGPU_045 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_046: AMDGPU TSAN history layout is not representable.
+ERR_AMDGPU_046 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=46,
+    severity=Severity.ERROR,
+    summary="AMDGPU TSAN history layout is not representable.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected subgroup race instrumentation for "
+        "'{op_name}' in '@{function_name}': fixed workgroup size "
+        "{workgroup_size}, {function_site_count} function sanitizer site(s), "
+        "and wavefront size {wavefront_size} cannot fit the 64-bit history "
+        "format for reason '{reason_key}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("workgroup_size", ParamKind.U32),
+        ErrorParam("function_site_count", ParamKind.U32),
+        ErrorParam("wavefront_size", ParamKind.U32),
+        ErrorParam("reason_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use a supported wavefront width, reduce the fixed workgroup size, "
+        "or split the sanitizer-instrumented function"
+    ),
+)
+
 # ERR_AMDGPU_047: target instruction constraint requires legalization.
 ERR_AMDGPU_047 = ErrorDef(
     domain=ErrorDomain.AMDGPU,
@@ -1182,6 +1209,7 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_043,
     ERR_AMDGPU_044,
     ERR_AMDGPU_045,
+    ERR_AMDGPU_046,
     ERR_AMDGPU_047,
     ERR_AMDGPU_048,
     ERR_AMDGPU_049,

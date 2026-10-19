@@ -300,6 +300,7 @@ enum iree_hal_device_tsan_check_kind_bits_t {
   IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN = 0u,
   IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE = 1u,
   IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY = 2u,
+  IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY = 3u,
 };
 
 // TSAN memory space containing the observed address.
@@ -400,6 +401,31 @@ typedef struct iree_hal_device_tsan_shadow_capacity_report_t {
 static_assert(sizeof(iree_hal_device_tsan_shadow_capacity_report_t) == 104,
               "TSAN shadow-capacity report size is part of the HAL event ABI");
 
+// HAL-level TSAN subgroup synchronization-clock capacity report details.
+typedef struct iree_hal_device_tsan_synchronization_capacity_report_t {
+  // Compiler-assigned instrumentation site identifier for the sync operation.
+  uint64_t current_site_id;
+  // Last representable subgroup epoch observed at the failed sync operation.
+  uint32_t subgroup_epoch;
+  // Number of subgroup epochs representable within one workgroup epoch.
+  uint32_t subgroup_epoch_capacity;
+  // Hardware wavefront width defining one subgroup.
+  uint32_t wavefront_size;
+  // Flattened subgroup identifier within the workgroup.
+  uint32_t subgroup_id;
+  // Workgroup id that observed the capacity failure.
+  uint32_t current_workgroup_id[3];
+  // Linear workitem id of the subgroup leader that produced the report.
+  uint32_t current_workitem_linear_id;
+  // Device-visible address of the exhausted subgroup clock.
+  uint64_t subgroup_clock_address;
+  // Reserved for future synchronization-capacity fields. Must be zero.
+  uint64_t reserved[7];
+} iree_hal_device_tsan_synchronization_capacity_report_t;
+static_assert(
+    sizeof(iree_hal_device_tsan_synchronization_capacity_report_t) == 104,
+    "TSAN synchronization-capacity report size is part of the HAL event ABI");
+
 // HAL-level TSAN report payload.
 typedef struct iree_hal_device_tsan_report_t {
   // Size of this record in bytes.
@@ -416,6 +442,10 @@ typedef struct iree_hal_device_tsan_report_t {
     iree_hal_device_tsan_data_race_report_t data_race;
     // Details for IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY.
     iree_hal_device_tsan_shadow_capacity_report_t shadow_capacity;
+    // Details for
+    // IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY.
+    iree_hal_device_tsan_synchronization_capacity_report_t
+        synchronization_capacity;
   } detail;
   // Device-visible dispatch packet pointer, or 0 when unavailable.
   uint64_t source_dispatch_ptr;

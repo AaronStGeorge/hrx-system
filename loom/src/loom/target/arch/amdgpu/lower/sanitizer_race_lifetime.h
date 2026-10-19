@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/lower/lower.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_race_history_layout.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_race_shadow_layout.h"
 
 typedef struct loom_amdgpu_sanitizer_race_config_values_t
@@ -27,6 +28,7 @@ iree_status_t loom_amdgpu_sanitizer_race_establish_workgroup_lifetime(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_race_config_values_t* config,
     const loom_amdgpu_sanitizer_race_shadow_layout_t* layout,
+    const loom_amdgpu_sanitizer_race_history_layout_t* history_layout,
     loom_value_id_t workitem_linear_id, loom_value_id_t dispatch_id);
 
 // Advances the workgroup barrier epoch. When the compact history epoch wraps,
@@ -39,6 +41,25 @@ iree_status_t loom_amdgpu_sanitizer_race_advance_barrier_epoch(
     loom_value_id_t workgroup_shadow_record_offset,
     loom_value_id_t workgroup_chunk_state_bitmap_size,
     loom_value_id_t workitem_linear_id);
+
+// Advances the current subgroup's clock and returns a lane mask identifying
+// exhaustion of the compact subgroup-epoch field. The sole subgroup leader
+// publishes the new clock with release ordering; exhaustion leaves the clock
+// unchanged so the caller can terminate with an explicit capacity event.
+iree_status_t loom_amdgpu_sanitizer_race_advance_subgroup_epoch(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_sanitizer_race_config_values_t* config,
+    const loom_amdgpu_sanitizer_race_history_layout_t* history_layout,
+    loom_value_id_t subgroup_clock_offset, loom_value_id_t workitem_linear_id,
+    loom_value_id_t* out_capacity_mask, loom_value_id_t* out_observed_epoch);
+
+// Release-publishes zero to the current subgroup clock. A following workgroup
+// barrier must rendezvous every subgroup before later observations execute.
+iree_status_t loom_amdgpu_sanitizer_race_reset_subgroup_epoch(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_sanitizer_race_config_values_t* config,
+    const loom_amdgpu_sanitizer_race_history_layout_t* history_layout,
+    loom_value_id_t subgroup_clock_offset, loom_value_id_t workitem_linear_id);
 
 // Establishes every fixed history chunk intersecting an application-memory
 // access. Concurrent first accesses elect one retiring lane per chunk and wait

@@ -101,16 +101,51 @@ typedef struct loom_amdgpu_sanitizer_race_shadow_capacity_report_t {
   loom_value_id_t current_workitem_ids[3];
 } loom_amdgpu_sanitizer_race_shadow_capacity_report_t;
 
+typedef struct loom_amdgpu_sanitizer_race_synchronization_capacity_report_t {
+  // Compiler-assigned instrumentation site identifier for the sync operation.
+  loom_value_id_t current_site_id;
+  // Last representable subgroup epoch observed at the failed sync operation.
+  loom_value_id_t subgroup_epoch;
+  // Number of subgroup epochs representable within one workgroup epoch.
+  loom_value_id_t subgroup_epoch_capacity;
+  // Hardware wavefront width defining one subgroup.
+  loom_value_id_t wavefront_size;
+  // Flattened subgroup identifier within the workgroup.
+  loom_value_id_t subgroup_id;
+  // Three-dimensional workgroup coordinates that observed the failure.
+  loom_value_id_t current_workgroup_ids[3];
+  // Linear workitem identifier of the reporting subgroup leader.
+  loom_value_id_t current_workitem_linear_id;
+  // Device-visible address of the exhausted subgroup clock.
+  loom_value_id_t subgroup_clock_address;
+} loom_amdgpu_sanitizer_race_synchronization_capacity_report_t;
+
+enum loom_amdgpu_sanitizer_race_report_constant_e {
+  // Number of 64-bit words in the check-specific TSAN report detail union.
+  LOOM_AMDGPU_SANITIZER_RACE_REPORT_DETAIL_QWORD_COUNT =
+      (LOOM_AMDGPU_TSAN_REPORT_BYTE_LENGTH - 16u) / 8u,
+};
+
+typedef struct loom_amdgpu_sanitizer_race_packed_report_t {
+  // TSAN check kind selecting the interpretation of |detail_qwords|.
+  loom_value_id_t check_kind;
+  // Report flags describing optional fields in the selected detail variant.
+  loom_value_id_t flags;
+  // Complete check-specific detail payload in physical ABI order.
+  loom_value_id_t
+      detail_qwords[LOOM_AMDGPU_SANITIZER_RACE_REPORT_DETAIL_QWORD_COUNT];
+} loom_amdgpu_sanitizer_race_packed_report_t;
+
 typedef struct loom_amdgpu_sanitizer_race_report_island_t {
-  // Entry block accepting the source/report tuple for one failed race site.
+  // Entry block accepting the source/report tuple for one failed TSAN check.
   loom_block_t* entry_block;
   // Terminal block reached after optional reporting or when reporting is not
   // available.
   loom_block_t* terminal_block;
   // Block arguments carrying current source coordinates in |entry_block|.
   loom_amdgpu_feedback_packet_source_t source_args;
-  // Block arguments carrying race report values in |entry_block|.
-  loom_amdgpu_sanitizer_race_report_t report_args;
+  // Block arguments carrying one complete packed report in |entry_block|.
+  loom_amdgpu_sanitizer_race_packed_report_t report_args;
 } loom_amdgpu_sanitizer_race_report_island_t;
 
 typedef struct loom_amdgpu_sanitizer_race_report_failure_branch_t {
@@ -120,33 +155,16 @@ typedef struct loom_amdgpu_sanitizer_race_report_failure_branch_t {
   loom_block_t* continuation_block;
 } loom_amdgpu_sanitizer_race_report_failure_branch_t;
 
-// Emits the AMDGPU sanitizer race report payload into a reserved feedback
-// packet.
+// Emits one physical TSAN report payload into a reserved feedback packet.
 //
 // The generic feedback packet header must be emitted separately with kind
 // LOOM_AMDGPU_FEEDBACK_PACKET_KIND_TSAN and a payload length of
 // LOOM_AMDGPU_TSAN_REPORT_BYTE_LENGTH. This helper writes only the payload
 // bytes beginning at LOOM_AMDGPU_FEEDBACK_PACKET_BYTE_LENGTH.
-iree_status_t loom_amdgpu_build_sanitizer_race_report_payload(
+iree_status_t loom_amdgpu_build_sanitizer_race_packed_report_payload(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_feedback_packet_address_t* packet_address,
-    const loom_amdgpu_sanitizer_race_report_t* report,
-    loom_location_id_t location);
-
-// Emits a terminal AMDGPU sanitizer race report producer.
-//
-// The builder must be positioned at the end of a target-low block. This helper
-// emits a cold CFG that loads the runtime feedback config, branches around
-// feedback channel dereferences when feedback is disabled, reserves packet
-// storage when possible, writes and publishes one TSAN-kind feedback packet on
-// successful reservation, and terminates the current wave on all paths. The
-// builder is left in the terminal block after the return terminator has been
-// emitted.
-iree_status_t loom_amdgpu_build_sanitizer_race_report_terminate(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_symbol_ref_t feedback_config_symbol,
-    const loom_amdgpu_feedback_packet_source_t* source,
-    const loom_amdgpu_sanitizer_race_report_t* report,
+    const loom_amdgpu_sanitizer_race_packed_report_t* report,
     loom_location_id_t location);
 
 // Emits the AMDGPU TSAN shadow-capacity payload into a reserved feedback
@@ -167,7 +185,18 @@ iree_status_t loom_amdgpu_build_sanitizer_race_shadow_capacity_report_terminate(
     const loom_amdgpu_sanitizer_race_shadow_capacity_report_t* report,
     loom_location_id_t location);
 
-// Builds a shared cold report island for failed race observations.
+// Packs a synchronization-capacity report and branches into the shared TSAN
+// report island. |zero_detail_qword| supplies the reserved report tail.
+iree_status_t
+loom_amdgpu_build_sanitizer_race_synchronization_capacity_report_branch(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_race_report_island_t* island,
+    const loom_amdgpu_feedback_packet_source_t* source,
+    const loom_amdgpu_sanitizer_race_synchronization_capacity_report_t* report,
+    loom_value_id_t check_kind, loom_value_id_t flags,
+    loom_value_id_t zero_detail_qword, loom_location_id_t location);
+
+// Builds a shared cold report island for failed TSAN checks.
 //
 // The island accepts one failed race site's report tuple as block arguments,
 // attempts to enqueue a feedback packet, and terminates the current wave

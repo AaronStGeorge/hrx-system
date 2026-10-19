@@ -434,6 +434,25 @@ iree_status_t loom_amdgpu_sanitizer_site_id_for_op(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_sanitizer_site_range(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_sanitizer_site_range_t* out_range) {
+  *out_range = (loom_amdgpu_sanitizer_site_range_t){0};
+  loom_amdgpu_sanitizer_lower_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_lower_state(context, &state));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_ensure_site_collection(context, state));
+  if (!state->has_site_collection || state->site_collection.row_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_ASSERT_LE(state->site_collection.row_count, UINT32_MAX);
+  *out_range = (loom_amdgpu_sanitizer_site_range_t){
+      .base = state->site_collection.rows[0].site_id,
+      .count = (uint32_t)state->site_collection.row_count,
+  };
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_select_kernel_assert_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_kernel_assert_plan_t* out_plan, bool* out_selected) {
