@@ -229,3 +229,78 @@ check.scenario @subgroup_ballot_helper_loop_results {
   }
   check.return
 }
+
+// Each lane leaves on a different iteration. Its integer masks must retain
+// that iteration's bits after the entire subgroup reconverges. Runtime input
+// supplies the exit order; this scenario uses ascending lane indices.
+kernel.def @subgroup_mask_loop_observations() {
+  %unit = index.constant 1 : index
+  %size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%size, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %base = index.constant 0 : offset
+  %lane = kernel.subgroup.lane.id : index
+  %item = kernel.workitem.id<x> : index
+  %width = kernel.subgroup.size : index
+  %input_view = buffer.view %input[%base] : buffer -> view<64xi32>
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32>
+  %order = view.load %input_view[%lane] : view<64xi32> -> i32
+  %exit_iteration = index.cast %order : i32 to index
+  %parity = index.andi %lane, %step : index
+  %even = index.cmp eq, %parity, %begin : index
+  %end = index.add %exit_iteration, %step : index
+  %zero_mask = scalar.constant 0 : i64
+  %active, %ballot = scf.for %counter = [%begin to %end step %step](%last_active = %zero_mask : i64, %last_ballot = %zero_mask : i64) -> (i64, i64) {
+    %observed_active = kernel.subgroup.active.mask : i64
+    %observed_ballot = kernel.subgroup.vote.ballot %even : i1 -> i64
+    scf.yield %observed_active, %observed_ballot : i64, i64
+  }
+  %maximum_width = scalar.constant 64 : i64
+  %width_i64 = index.cast %width : index to i64
+  %unused_bits = scalar.subi %maximum_width, %width_i64 : i64
+  %all_bits = scalar.constant -1 : i64
+  %full = scalar.shrui %all_bits, %unused_bits : i64
+  %exit_shift = index.cast %exit_iteration : index to i64
+  %lower_removed = scalar.shli %all_bits, %exit_shift : i64
+  %expected_active = scalar.andi %full, %lower_removed : i64
+  %alternating_bits = scalar.constant 6148914691236517205 : i64
+  %expected_ballot = scalar.andi %expected_active, %alternating_bits : i64
+  %active_matches = scalar.cmpi eq, %active, %expected_active : i64
+  %ballot_matches = scalar.cmpi eq, %ballot, %expected_ballot : i64
+  %matches = scalar.andi %active_matches, %ballot_matches : i1
+  %result = scalar.extui %matches : i1 to i32
+  view.store %result, %output_view[%item] : i32, view<64xi32>
+  kernel.return
+}
+
+func.def @subgroup_mask_loop_observations_oracle(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %begin = index.constant 0 : index
+  %end = index.constant 64 : index
+  %step = index.constant 1 : index
+  %true = scalar.constant 1 : i32
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32>
+  scf.for %position = [%begin to %end step %step] {
+    view.store %true, %output_view[%position] : i32, view<64xi32>
+  }
+  func.return
+}
+
+check.scenario @subgroup_mask_temporal_results {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(0) step(1) : tensor<64xi32>
+    %storage = check.generate.fill value(95) : tensor<72xi32>
+    %prefix = check.tensor.view %storage offset(0) : tensor<72xi32> -> tensor<4xi32>
+    %output = check.tensor.view %storage offset(16) : tensor<72xi32> -> tensor<64xi32>
+    %suffix = check.tensor.view %storage offset(272) : tensor<72xi32> -> tensor<4xi32>
+    check.compare<@subgroup_mask_loop_observations, @subgroup_mask_loop_observations_oracle>(%input, %output) : (tensor<64xi32>, tensor<64xi32>) -> () {
+      check.expect.bitwise actual(%input) expected(%input) : tensor<64xi32>
+      check.expect.bitwise actual(%output) expected(%output) : tensor<64xi32>
+      check.expect.bitwise actual(%prefix) expected(%prefix) : tensor<4xi32>
+      check.expect.bitwise actual(%suffix) expected(%suffix) : tensor<4xi32>
+    }
+  }
+  check.return
+}

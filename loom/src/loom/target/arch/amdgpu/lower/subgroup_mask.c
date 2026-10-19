@@ -240,12 +240,16 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
   out_plan->mask = mask;
   out_plan->mask_bit_count = mask_bit_count;
   out_plan->wavefront_size = wavefront_size;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_context_value_prefers_vgpr(
+      context, mask, &out_plan->result_in_vgpr));
   *out_selected = true;
   return loom_low_lower_plan_value_type(
       context, mask,
       loom_low_register_type(
           loom_low_lower_context_descriptor_set(context)->stable_id,
-          LOOM_AMDGPU_REG_CLASS_ID_SGPR, mask_bit_count / 32));
+          out_plan->result_in_vgpr ? LOOM_AMDGPU_REG_CLASS_ID_VGPR
+                                   : LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+          mask_bit_count / 32));
 }
 
 iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
@@ -285,12 +289,16 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
   out_plan->mask = mask;
   out_plan->mask_bit_count = mask_bit_count;
   out_plan->wavefront_size = wavefront_size;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_context_value_prefers_vgpr(
+      context, mask, &out_plan->result_in_vgpr));
   *out_selected = true;
   return loom_low_lower_plan_value_type(
       context, mask,
       loom_low_register_type(
           loom_low_lower_context_descriptor_set(context)->stable_id,
-          LOOM_AMDGPU_REG_CLASS_ID_SGPR, mask_bit_count / 32));
+          out_plan->result_in_vgpr ? LOOM_AMDGPU_REG_CLASS_ID_VGPR
+                                   : LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+          mask_bit_count / 32));
 }
 
 iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
@@ -415,41 +423,32 @@ static iree_status_t loom_amdgpu_emit_subgroup_active_predicate(
 static iree_status_t loom_amdgpu_bind_subgroup_lane_mask_result(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_mask, uint32_t mask_bit_count,
-    uint32_t wavefront_size, loom_value_id_t low_mask) {
-  if (mask_bit_count == 64) {
-    if (loom_amdgpu_subgroup_mask_requires_wave32_zero_extend(mask_bit_count,
-                                                              wavefront_size)) {
-      loom_type_t sgpr_type = loom_type_none();
-      IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
-
-      loom_value_id_t low_half = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
-          context, source_op, low_mask, /*offset=*/0, sgpr_type, &low_half));
-      loom_value_id_t zero_high = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 0,
-          sgpr_type, &zero_high));
-
-      loom_type_t source_mask_type = loom_type_none();
-      IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_range_type(
-          context, /*unit_count=*/2, &source_mask_type));
-      loom_value_id_t zero_extended_halves[] = {low_half, zero_high};
-      loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_build_low_register_range(
-          context, source_op, zero_extended_halves,
-          IREE_ARRAYSIZE(zero_extended_halves), source_mask_type, &low_result));
-      return loom_low_lower_bind_value(context, source_mask, low_result);
-    }
+    uint32_t wavefront_size, bool result_in_vgpr, loom_value_id_t low_mask) {
+  if (mask_bit_count == 64 && wavefront_size == 64 && !result_in_vgpr) {
     return loom_low_lower_bind_value(context, source_mask, low_mask);
   }
-  IREE_ASSERT_EQ(mask_bit_count, 32);
-
-  loom_type_t low_mask_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &low_mask_type));
-  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
-      context, source_op, low_mask, /*offset=*/0, low_mask_type, &low_result));
-  return loom_low_lower_bind_value(context, source_mask, low_result);
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
+  const uint32_t register_count = mask_bit_count / 32;
+  loom_value_id_t registers[2];
+  for (uint32_t i = 0; i < register_count; ++i) {
+    if (i == 1 && wavefront_size == 32) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 0,
+          sgpr_type, &registers[i]));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
+          context, source_op, low_mask, i, sgpr_type, &registers[i]));
+    }
+    if (result_in_vgpr) {
+      // EXEC masks the copy so lanes that leave a loop retain their own
+      // observation while later iterations update the remaining lanes.
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_b32_copy(
+          context, source_op, registers[i], &registers[i]));
+    }
+  }
+  return loom_amdgpu_bind_low_register_range(context, source_op, source_mask,
+                                             registers, register_count);
 }
 
 static iree_status_t loom_amdgpu_emit_subgroup_zero_lane_mask(
@@ -508,7 +507,7 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_active_mask(
       context, source_op, &plan->exec_read_descriptor, &low_mask));
   return loom_amdgpu_bind_subgroup_lane_mask_result(
       context, source_op, plan->mask, plan->mask_bit_count,
-      plan->wavefront_size, low_mask);
+      plan->wavefront_size, plan->result_in_vgpr, low_mask);
 }
 
 iree_status_t loom_amdgpu_lower_kernel_subgroup_ballot(
@@ -522,7 +521,7 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_ballot(
       &exec_mask));
   return loom_amdgpu_bind_subgroup_lane_mask_result(
       context, source_op, plan->mask, plan->mask_bit_count,
-      plan->wavefront_size, low_predicate);
+      plan->wavefront_size, plan->result_in_vgpr, low_predicate);
 }
 
 iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_any(
@@ -600,11 +599,6 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_mask_result(
                                                   wavefront_size)) {
     return loom_amdgpu_low_legality_reject(
         context, op, IREE_SV("subgroup_mask.wavefront_coverage"));
-  }
-  if (!loom_amdgpu_source_value_is_uniform_subgroup_lane_mask(
-          module, loom_target_low_legality_fact_table(context), mask)) {
-    return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("subgroup_mask.uniform_lane_mask"));
   }
   return iree_ok_status();
 }

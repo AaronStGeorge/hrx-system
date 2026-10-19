@@ -60,32 +60,6 @@ static bool loom_amdgpu_select_has_uniform_i1_inputs(
              module, fact_table, loom_scf_select_false_value(op));
 }
 
-static bool loom_amdgpu_source_value_facts_are_subgroup_lane_mask(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t source_value_id, loom_value_facts_t* out_facts) {
-  if (out_facts != NULL) {
-    *out_facts = loom_value_facts_unknown();
-  }
-  if (fact_table == NULL || source_value_id >= module->values.count) {
-    return false;
-  }
-  const loom_type_t source_type =
-      loom_module_value_type(module, source_value_id);
-  if (!loom_amdgpu_type_is_i32(source_type) &&
-      !loom_amdgpu_type_is_i64(source_type)) {
-    return false;
-  }
-  const loom_value_facts_t facts =
-      loom_value_fact_table_lookup(fact_table, source_value_id);
-  if (!loom_value_facts_is_subgroup_lane_mask(facts)) {
-    return false;
-  }
-  if (out_facts != NULL) {
-    *out_facts = facts;
-  }
-  return true;
-}
-
 static bool loom_amdgpu_block_branches_to_with_arg(
     const loom_block_t* source_block, const loom_block_t* target_block,
     uint16_t target_arg_index, loom_value_id_t* out_arg) {
@@ -1142,24 +1116,6 @@ bool loom_amdgpu_source_value_is_native_i1_mask(
   return loom_amdgpu_source_value_is_native_i1_mask_excluding(
       module, fact_table, view_regions, /*analysis=*/NULL, source_value_id,
       LOOM_VALUE_ID_INVALID);
-}
-
-bool loom_amdgpu_source_value_is_uniform_subgroup_lane_mask(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t source_value_id) {
-  loom_value_facts_t facts = loom_value_facts_unknown();
-  return loom_amdgpu_source_value_facts_are_subgroup_lane_mask(
-             module, fact_table, source_value_id, &facts) &&
-         loom_value_facts_is_subgroup_uniform(facts);
-}
-
-bool loom_amdgpu_source_value_is_divergent_subgroup_lane_mask(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t source_value_id) {
-  loom_value_facts_t facts = loom_value_facts_unknown();
-  return loom_amdgpu_source_value_facts_are_subgroup_lane_mask(
-             module, fact_table, source_value_id, &facts) &&
-         loom_value_facts_is_lane_varying(facts);
 }
 
 static bool loom_amdgpu_source_value_dependency_is_native_i1_mask(

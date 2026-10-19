@@ -302,18 +302,6 @@ iree_status_t loom_amdgpu_target_low_legality_value_is_native_i1_mask(
     loom_target_low_legality_context_t* context,
     loom_value_id_t source_value_id, bool* out_is_native_mask);
 
-// Returns true when the source value is a subgroup lane-mask integer and every
-// active lane observes the same mask payload.
-bool loom_amdgpu_source_value_is_uniform_subgroup_lane_mask(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t source_value_id);
-
-// Returns true when the source value is a subgroup lane-mask integer whose
-// payload may differ per active lane.
-bool loom_amdgpu_source_value_is_divergent_subgroup_lane_mask(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t source_value_id);
-
 // Maps a source type to the default AMDGPU low register type.
 iree_status_t loom_amdgpu_map_type(void* user_data,
                                    loom_low_lower_context_t* context,
