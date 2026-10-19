@@ -89,9 +89,10 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
   uint32_t native_wait_count;
   // Captured-work link; the publisher parks unresolved operations separately.
   iree_hal_amd_gpu_pm4_entry_t entry;
-  // Borrowed allocation owner, live through the capture's final release.
+  // Borrowed allocation owner, or NULL for storage borrowed from a retirement
+  // slot. Either owner keeps the bytes live through the final release.
   iree_hal_amd_gpu_capture_pool_t* pool;
-  // Complete owned extent, including unused tail storage, in bytes.
+  // Complete provided extent, including unused tail storage, in bytes.
   iree_host_size_t allocation_size;
   // Number of captured wait edges.
   iree_host_size_t wait_count;
@@ -196,10 +197,14 @@ iree_status_t iree_hal_amd_gpu_pm4_submission_create(
 // transfers the native readers in waits, retains signals, and retains resources
 // unless flags borrow their lifetimes. No borrow of request or waits survives.
 // Failure transfers nothing.
+// Uses inline_storage when the complete capture fits, otherwise acquires pool
+// storage. The span must be aligned for submission_t and remain exclusively
+// owned through final release. Final release returns resources but does not
+// free the borrowed span; its owner reclaims those bytes afterward.
 // The prepared native command bytes, including arguments, must survive any
 // KERNEL capacity deferral; this object cannot reconstruct those bytes.
 iree_status_t iree_hal_amd_gpu_pm4_submission_create_retirement(
-    iree_hal_amd_gpu_capture_pool_t* pool,
+    iree_hal_amd_gpu_capture_pool_t* pool, iree_byte_span_t inline_storage,
     const iree_hal_amd_gpu_pm4_dispatch_request_t* request,
     iree_host_size_t wait_count,
     const iree_hal_amd_gpu_pm4_submission_wait_t* waits,

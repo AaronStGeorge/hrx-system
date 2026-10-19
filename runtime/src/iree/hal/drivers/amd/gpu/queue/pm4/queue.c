@@ -76,6 +76,20 @@ typedef struct iree_hal_amd_gpu_pm4_retirement_t {
 static_assert(sizeof(iree_hal_amd_gpu_pm4_retirement_t) == 64,
               "retirement records occupy one cache line");
 
+// A ready single-piece dispatch borrows its capture from the reserved native
+// retirement slot. Deferred or larger captures retain independent pool storage.
+// Reuse follows completed.count, published only after final resource release.
+typedef struct iree_hal_amd_gpu_pm4_retirement_slot_t {
+  // Native retirement action, initialized without overwriting capture storage.
+  iree_hal_amd_gpu_pm4_retirement_t action;
+  // Exclusively held through publication, including KERNEL capacity deferral,
+  // and final retirement. The action's alignment also aligns this span.
+  iree_alignas(
+      iree_alignof(iree_hal_amd_gpu_pm4_submission_t)) uint8_t capture[448];
+} iree_hal_amd_gpu_pm4_retirement_slot_t;
+static_assert(sizeof(iree_hal_amd_gpu_pm4_retirement_slot_t) == 512,
+              "retirement slots have a power-of-two stride");
+
 struct iree_hal_amd_gpu_pm4_queue_t {
   // Refcounted exact HAL queue; its family/device remain borrowed.
   iree_hal_queue_t base;
@@ -197,9 +211,9 @@ struct iree_hal_amd_gpu_pm4_queue_t {
   iree_hal_amd_fabric_memory_t control;
   // Indexed native record geometry shared by publisher and observer.
   iree_hal_amd_gpu_pm4_retirement_ring_t retirement;
-  // Fixed host actions parallel to native slots; no per-piece allocation.
+  // Fixed host actions and inline captures parallel to native slots.
   // GPU-carried pointers name these actions directly on normal retirement.
-  iree_hal_amd_gpu_pm4_retirement_t* issued;
+  iree_hal_amd_gpu_pm4_retirement_slot_t* issued;
 };
 
 static_assert(
@@ -385,7 +399,7 @@ iree_hal_amd_gpu_pm4_publish_accepted(
   if (!terminal) {
     iree_hal_amd_gpu_pm4_submission_retain(submission);
   }
-  queue->issued[position & queue->retirement.capacity_mask].scratch =
+  queue->issued[position & queue->retirement.capacity_mask].action.scratch =
       iree_hal_amd_gpu_pm4_scratch_publish(
           &queue->producer.scratch, position + 1,
           iree_hal_amd_gpu_pm4_submission_scratch_required(submission));
@@ -447,7 +461,7 @@ iree_hal_amd_gpu_pm4_publish_kernel(iree_hal_amd_gpu_pm4_queue_t* queue,
                                     uint64_t position) {
   iree_hal_amd_gpu_pm4_kmq_storage_t* kernel = queue->kernel;
   iree_hal_amd_gpu_pm4_retirement_t* action =
-      &queue->issued[position & queue->retirement.capacity_mask];
+      &queue->issued[position & queue->retirement.capacity_mask].action;
   const amdf_status_t status =
       iree_hal_amd_gpu_pm4_kmq_storage_submit(kernel, position);
   if (status == amdf_make_api_status(AMDF_STATUS_CODE_BUSY) &&
@@ -479,7 +493,7 @@ iree_hal_amd_gpu_pm4_publish_commit(
     iree_hal_amd_gpu_pm4_barrier_t after, uint64_t argument_end,
     iree_hal_amd_gpu_pm4_download_t download, bool terminal) {
   iree_hal_amd_gpu_pm4_retirement_t* action =
-      &queue->issued[position & queue->retirement.capacity_mask];
+      &queue->issued[position & queue->retirement.capacity_mask].action;
   *action = (iree_hal_amd_gpu_pm4_retirement_t){
       .submission = submission,
       .consumed_arguments = argument_end,
@@ -1011,8 +1025,12 @@ iree_hal_amd_gpu_pm4_publish_dispatch(
   }
   iree_hal_amd_gpu_pm4_submission_t* submission = *inout_submission;
   if (!submission) {
+    iree_hal_amd_gpu_pm4_retirement_slot_t* slot =
+        &queue->issued[position & queue->retirement.capacity_mask];
     status = iree_hal_amd_gpu_pm4_submission_create_retirement(
-        &queue->captures, dispatch_request, request->wait_count, request->waits,
+        &queue->captures,
+        iree_make_byte_span(slot->capture, sizeof(slot->capture)),
+        dispatch_request, request->wait_count, request->waits,
         request->native_wait_count, request->signals, request->before,
         request->after, profile, &submission);
     if (!iree_status_is_ok(status)) {
@@ -1658,7 +1676,8 @@ static bool iree_hal_amd_gpu_pm4_progress(void* user_data) {
           &queue->producer.count, iree_memory_order_acquire);
       for (uint64_t i = begin; i != end; ++i) {
         iree_hal_amd_gpu_pm4_submission_t* submission =
-            queue->issued[i & queue->retirement.capacity_mask].submission;
+            queue->issued[i & queue->retirement.capacity_mask]
+                .action.submission;
         iree_hal_amd_gpu_pm4_fail_submission(queue, submission,
                                              iree_status_clone(failure));
       }
@@ -1709,7 +1728,7 @@ static bool iree_hal_amd_gpu_pm4_retire(
     // them during a logical failure because native retirement keeps running.
     for (uint64_t i = position; i != published; ++i) {
       iree_hal_amd_gpu_pm4_submission_t* submission =
-          queue->issued[i & queue->retirement.capacity_mask].submission;
+          queue->issued[i & queue->retirement.capacity_mask].action.submission;
       iree_hal_amd_gpu_pm4_fail_submission(
           queue, submission,
           iree_make_status(feedback_failure, "GPU sanitizer failure"));
@@ -2414,9 +2433,9 @@ iree_status_t iree_hal_amd_gpu_pm4_queue_create(
   }
   iree_host_size_t total_size = sizeof(iree_hal_amd_gpu_pm4_queue_t);
   const uint32_t queue_count = family->spec->provisioned_queue_count;
-  if (!iree_host_size_checked_mul_add(total_size, options->retirement_capacity,
-                                      sizeof(iree_hal_amd_gpu_pm4_retirement_t),
-                                      &total_size) ||
+  if (!iree_host_size_checked_mul_add(
+          total_size, options->retirement_capacity,
+          sizeof(iree_hal_amd_gpu_pm4_retirement_slot_t), &total_size) ||
       !iree_host_size_checked_mul_add(total_size, 2 * queue_count,
                                       sizeof(uint64_t), &total_size) ||
       !iree_host_size_checked_mul_add(
@@ -2456,7 +2475,7 @@ iree_status_t iree_hal_amd_gpu_pm4_queue_create(
       .barrier_size = sizeof(iree_hal_amd_gpu_pm4_barrier_t),
       .add_effects = iree_hal_amd_gpu_pm4_file_add_effects,
       .submit = iree_hal_amd_gpu_pm4_file_submit};
-  queue->issued = (iree_hal_amd_gpu_pm4_retirement_t*)(queue + 1);
+  queue->issued = (iree_hal_amd_gpu_pm4_retirement_slot_t*)(queue + 1);
   queue->producer.frontier.count = queue_count;
   queue->producer.frontier.published =
       (uint64_t*)(queue->issued + options->retirement_capacity);

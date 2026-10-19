@@ -217,9 +217,13 @@ TEST_P(SubmissionTest, RetirementOwnsNativeReadersWithoutCallerInputs) {
   };
   iree_hal_amd_gpu_profile_operation_t profile = {};
   iree_hal_amd_gpu_pm4_submission_t* retirement = nullptr;
+  alignas(iree_hal_amd_gpu_pm4_submission_t) std::array<uint8_t, 512> storage;
   IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_submission_create_retirement(
-      &pool_, &request, IREE_ARRAYSIZE(waits), waits, 1, {}, {}, {},
+      &pool_, iree_make_byte_span(storage.data(), storage.size()), &request,
+      IREE_ARRAYSIZE(waits), waits, 1, {}, {}, {},
       GetParam() ? &profile : nullptr, &retirement));
+  EXPECT_EQ(static_cast<void*>(retirement), storage.data());
+  EXPECT_EQ(retirement->pool, nullptr);
   // Admission has consumed the semaphore objects and argument bytes. Only the
   // exact producer point and asynchronously used resources remain owned.
   EXPECT_EQ(retirement->wait_count, 1u);
@@ -243,6 +247,82 @@ TEST_P(SubmissionTest, RetirementOwnsNativeReadersWithoutCallerInputs) {
   iree_hal_amd_gpu_pm4_signal_block_deinitialize(&signal_block);
   iree_hal_amd_gpu_pm4_signal_pool_deinitialize(&signal_pool);
   iree_async_proactor_release(proactor);
+}
+
+TEST_P(SubmissionTest, InlineRetirementStorageReusesAfterLastOwner) {
+  alignas(iree_hal_amd_gpu_pm4_submission_t) std::array<uint8_t, 512> storage;
+  for (int iteration = 0; iteration < 2; ++iteration) {
+    const iree_hal_queue_family_t family = {};
+    const iree_hal_executable_vtable_t vtable = {
+        .destroy = Executable::Destroy,
+    };
+    Executable executable;
+    iree_hal_executable_initialize(&family, &vtable, &executable.base);
+    const iree_hal_amd_gpu_pm4_dispatch_request_t request = {
+        .executable = &executable.base,
+        .function = &function_,
+    };
+    iree_hal_amd_gpu_profile_operation_t profile = {};
+    iree_hal_amd_gpu_pm4_submission_t* submission = nullptr;
+    IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_submission_create_retirement(
+        &pool_, iree_make_byte_span(storage.data(), storage.size()), &request,
+        0, nullptr, 0, {}, {}, {}, GetParam() ? &profile : nullptr,
+        &submission));
+    ASSERT_EQ(static_cast<void*>(submission), storage.data());
+    EXPECT_EQ(submission->pool, nullptr);
+    EXPECT_EQ(submission->allocation_size, storage.size());
+    iree_hal_executable_release(&executable.base);
+    iree_hal_amd_gpu_pm4_submission_retain(submission);
+    iree_hal_amd_gpu_pm4_submission_release(submission);
+    EXPECT_FALSE(executable.destroyed);
+    // Returning the final capture reference releases resources, after which
+    // the owner can reuse exactly the same bytes for the next native slot.
+    iree_hal_amd_gpu_pm4_submission_release(submission);
+    EXPECT_TRUE(executable.destroyed);
+  }
+}
+
+TEST_P(SubmissionTest, RetirementSpillsWhenInlineExtentIsTooSmall) {
+  alignas(iree_hal_amd_gpu_pm4_submission_t) std::array<uint8_t, 448> storage;
+  storage.fill(0xA5);
+  const auto original = storage;
+  std::array<uint8_t, 16> buffer_storage = {};
+  bool buffer_destroyed = false;
+  iree_hal_buffer_t* buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_heap_buffer_wrap(
+      {}, IREE_HAL_MEMORY_TYPE_HOST_LOCAL, IREE_HAL_MEMORY_ACCESS_ALL,
+      IREE_HAL_BUFFER_USAGE_STORAGE, buffer_storage.size(),
+      iree_make_byte_span(buffer_storage.data(), buffer_storage.size()),
+      {[](void* data, iree_hal_buffer_t*) { *static_cast<bool*>(data) = true; },
+       &buffer_destroyed},
+      iree_allocator_system(), &buffer));
+  std::array<iree_hal_buffer_ref_t, 16> references;
+  references.fill(iree_hal_make_buffer_ref(buffer, 0, buffer_storage.size()));
+  const iree_hal_queue_family_t family = {};
+  const iree_hal_executable_vtable_t vtable = {.destroy = Executable::Destroy};
+  Executable executable;
+  iree_hal_executable_initialize(&family, &vtable, &executable.base);
+  const iree_hal_amd_gpu_pm4_dispatch_request_t request = {
+      .executable = &executable.base,
+      .function = &function_,
+      .bindings = {references.size(), references.data()},
+  };
+  iree_hal_amd_gpu_profile_operation_t profile = {};
+  iree_hal_amd_gpu_pm4_submission_t* submission = nullptr;
+  IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_submission_create_retirement(
+      &pool_, iree_make_byte_span(storage.data(), storage.size()), &request, 0,
+      nullptr, 0, {}, {}, {}, GetParam() ? &profile : nullptr, &submission));
+  EXPECT_NE(static_cast<void*>(submission), storage.data());
+  EXPECT_EQ(submission->pool, &pool_);
+  EXPECT_GT(submission->capture_size, storage.size());
+  iree_hal_executable_release(&executable.base);
+  iree_hal_buffer_release(buffer);
+  EXPECT_FALSE(executable.destroyed);
+  EXPECT_FALSE(buffer_destroyed);
+  iree_hal_amd_gpu_pm4_submission_release(submission);
+  EXPECT_TRUE(executable.destroyed);
+  EXPECT_TRUE(buffer_destroyed);
+  EXPECT_EQ(storage, original);
 }
 
 TEST_P(SubmissionTest, CallerManagedResourcesStayBorrowedThroughRetirement) {
@@ -276,6 +356,8 @@ TEST_P(SubmissionTest, CallerManagedResourcesStayBorrowedThroughRetirement) {
       const iree_hal_dispatch_flags_t flags =
           IREE_HAL_DISPATCH_FLAG_BORROW_RESOURCE_LIFETIMES | parameters;
       iree_hal_amd_gpu_pm4_submission_t* submission = nullptr;
+      alignas(iree_hal_amd_gpu_pm4_submission_t) std::array<uint8_t, 512>
+          retirement_storage;
       if (deferred) {
         IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_submission_create(
             &pool_, GetParam(), {}, {}, &executable.base, &function_, {},
@@ -291,7 +373,10 @@ TEST_P(SubmissionTest, CallerManagedResourcesStayBorrowedThroughRetirement) {
         };
         iree_hal_amd_gpu_profile_operation_t profile = {};
         IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_submission_create_retirement(
-            &pool_, &request, 0, nullptr, 0, {}, {}, {},
+            &pool_,
+            iree_make_byte_span(retirement_storage.data(),
+                                retirement_storage.size()),
+            &request, 0, nullptr, 0, {}, {}, {},
             GetParam() ? &profile : nullptr, &submission));
       }
       EXPECT_EQ(iree_atomic_ref_count_load(&executable_resource->ref_count), 1);
