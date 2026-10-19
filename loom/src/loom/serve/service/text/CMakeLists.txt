@@ -40,6 +40,31 @@ iree_py_test(
 endif()
 
 if(LOOM_TARGET_ARCH_VM)
+iree_py_test(
+  NAME
+    tool_policy_test
+  MAIN
+    "tool_policy_test.py"
+  SRCS
+    "tool_policy_test.py"
+  ARGS
+    "{{$<TARGET_FILE:loom::serve::testing::text_request_check>}}"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/portable_chat.loom}}"
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/serve/fixture/text/portable_chat.loom"
+    "loom::serve::testing::text_request_check"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+  TIMEOUT
+    60
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
     admission
@@ -304,10 +329,16 @@ loom_cc_library(
     chat
   HDRS
     "chat.h"
+    "chat_fields.h"
     "media.h"
+    "tool_calls.h"
+    "tool_schemas.h"
   SRCS
     "chat.c"
+    "chat_fields.c"
     "media.c"
+    "tool_calls.c"
+    "tool_schemas.c"
   DEPS
     iree::base
     iree::base::internal::json
@@ -344,6 +375,38 @@ loom_cc_test(
     chat_test
   SRCS
     "chat_test.cc"
+  DEPS
+    ::chat
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    tool_calls_test
+  SRCS
+    "tool_calls_test.cc"
+  DEPS
+    ::chat
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    tool_schemas_test
+  SRCS
+    "tool_schemas_test.cc"
   DEPS
     ::chat
     iree::base
