@@ -55,8 +55,8 @@
               "unordered": [
                 "kernel.def retain export(\"scale_i32_buffer\") @scale_i32_buffer",
                 "template.def<@authoring.link.scale_i32> priority(1) @scale_i32_fallback",
-                "@scale_i32_gfx1100",
-                "@scale_i32_gfx1200"
+                "@scale_i32_subgroup_32",
+                "@scale_i32_subgroup_64"
               ]
             },
             "not_contains": [

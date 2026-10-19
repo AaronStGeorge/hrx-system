@@ -54,7 +54,6 @@ kernel.def @q8_load_widths() {
 
 // HIP concept: behavioral equivalence test for both source shapes.
 // Loom spelling: `check.case` proves both paths copy the same packed storage.
-// The transform proof in hip_authoring.test.json checks the memory op shape.
 check.case @case_q8_load_widths {
   %input = check.generate.iota offset(1) step(1) : tensor<4xi32>
   %scalar_output = check.generate.fill value(0) : tensor<4xi32>
