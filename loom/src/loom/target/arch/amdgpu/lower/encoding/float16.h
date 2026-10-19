@@ -16,6 +16,7 @@
 #include <stdint.h>
 
 #include "loom/codegen/low/lower/lower.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -202,6 +203,16 @@ iree_status_t loom_amdgpu_extract_f16_lane_as_low_bits(
     loom_value_id_t low_source, uint32_t source_register_count,
     uint32_t lane_index, loom_type_t source_lane_type,
     loom_value_id_t* out_lane);
+
+// Widens one lane from a packed F16 register range to F32. Odd lanes use
+// |high_descriptor_ref| directly when available and otherwise align the lane
+// with a shift before applying the ordinary low-half conversion.
+iree_status_t loom_amdgpu_widen_f16_range_lane_to_f32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_descriptor_ref_t high_descriptor_ref,
+    loom_value_id_t low_source, uint32_t source_register_count,
+    uint32_t lane_index, loom_type_t source_lane_type,
+    loom_type_t result_lane_type, loom_value_id_t* out_lane);
 
 // Converts one F32 lane to F16 and packs it into one half of |inout_packed|.
 iree_status_t loom_amdgpu_pack_f32_lane_to_f16_register(

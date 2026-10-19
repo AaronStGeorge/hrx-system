@@ -128,23 +128,21 @@ low.kernel.def target<amdgpu.rdna3_5.core> abi_layout({constant_count = 0, direc
   %113 = global_load_b64_saddr %100, %112
   %114 = slice %113[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %115 = v_cvt_f32_f16 %114
-  %117 = v_lshrrev_b32_src0_inline %114, 16
-  %118 = v_cvt_f32_f16 %117
-  %119 = slice %113[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %120 = v_cvt_f32_f16 %119
-  %122 = v_lshrrev_b32_src0_inline %119, 16
-  %123 = v_cvt_f32_f16 %122
-  %124 = concat(%115, %118, %120, %123) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %132 = v_lshlrev_b32_src0_inline %workitem_id_x, 4
-  %133 = s_mov_b32 12288
-  %134 = s_mul_i32 %row, %133
-  %135 = s_lshl_b32_rhs_inline %workgroup_id_x, 12
-  %136 = s_add_u32 %134, %135
-  %137 = slice %output[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %138 = slice %output[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %140, %141 = s_add_co_u32 %137, %136
-  %142, %143 = s_addc_u32 %138, %107, %141
-  %144 = concat(%140, %142) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  global_store_b128_saddr %132, %124, %144
+  %117 = v_cvt_f32_f16_input_high %114
+  %118 = slice %113[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %119 = v_cvt_f32_f16 %118
+  %121 = v_cvt_f32_f16_input_high %118
+  %122 = concat(%115, %117, %119, %121) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %130 = v_lshlrev_b32_src0_inline %workitem_id_x, 4
+  %131 = s_mov_b32 12288
+  %132 = s_mul_i32 %row, %131
+  %133 = s_lshl_b32_rhs_inline %workgroup_id_x, 12
+  %134 = s_add_u32 %132, %133
+  %135 = slice %output[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %136 = slice %output[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %138, %139 = s_add_co_u32 %135, %134
+  %140, %141 = s_addc_u32 %136, %107, %139
+  %142 = concat(%138, %140) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  global_store_b128_saddr %130, %122, %142
   return
 }

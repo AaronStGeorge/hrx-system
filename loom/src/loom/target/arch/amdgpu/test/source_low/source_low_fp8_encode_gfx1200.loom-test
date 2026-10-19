@@ -58,21 +58,20 @@ func.def target(@target) @vector_fptrunc_f16x3_to_bf8(%input: vector<3xf16>) -> 
 low.func.def target<amdgpu.rdna4.core>(@target) abi(hal_kernel) @vector_fptrunc_f16x3_to_bf8(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr>) asm {
   %5 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %6 = v_cvt_f32_f16 %5
-  %8 = v_lshrrev_b32_src0_inline %5, 16
-  %9 = v_cvt_f32_f16 %8
-  %10 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %11 = v_cvt_f32_f16 %10
-  %12 = v_cvt_pk_bf8_f32_low %6, %9
-  %13 = v_cvt_pk_bf8_f32_high %12, %11, %11
-  %14 = v_and_b32_lit %13, 2139062143
-  %15 = v_add_u32_lit %14, 50529027
-  %16 = v_and_b32_lit %15, 2155905152
-  %17 = v_lshrrev_b32_src0_inline %16, 7
-  %18 = v_or_b32 %14, %17
-  %19 = v_perm_b32_src2_lit %6, %9, 775
-  %20 = v_bfi_b32_src0_lit %19, %18, 32896
-  %21 = v_perm_b32_src2_lit %11, %11, 50790400
-  %converted = v_bfi_b32_src0_lit %21, %20, 2155872256
+  %8 = v_cvt_f32_f16_input_high %5
+  %9 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %10 = v_cvt_f32_f16 %9
+  %11 = v_cvt_pk_bf8_f32_low %6, %8
+  %12 = v_cvt_pk_bf8_f32_high %11, %10, %10
+  %13 = v_and_b32_lit %12, 2139062143
+  %14 = v_add_u32_lit %13, 50529027
+  %15 = v_and_b32_lit %14, 2155905152
+  %16 = v_lshrrev_b32_src0_inline %15, 7
+  %17 = v_or_b32 %13, %16
+  %18 = v_perm_b32_src2_lit %6, %8, 775
+  %19 = v_bfi_b32_src0_lit %18, %17, 32896
+  %20 = v_perm_b32_src2_lit %10, %10, 50790400
+  %converted = v_bfi_b32_src0_lit %20, %19, 2155872256
   return %converted
 }
 
