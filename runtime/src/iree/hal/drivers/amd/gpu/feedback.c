@@ -292,7 +292,8 @@ static iree_status_t iree_hal_amd_gpu_feedback_publish(
         .record_length = sizeof(tsan),
         .abi_version = IREE_HAL_DEVICE_TSAN_REPORT_ABI_VERSION_0,
         .check_kind =
-            check_kind <= IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY
+            check_kind <=
+                    IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY
                 ? check_kind
                 : IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN,
         .flags = iree_unaligned_load_le_u32(payload + 12),
@@ -355,6 +356,25 @@ static iree_status_t iree_hal_amd_gpu_feedback_publish(
         capacity->current_workitem_id[i] =
             iree_unaligned_load_le_u32(payload + 76 + i * 4);
       }
+    } else if (tsan.check_kind ==
+               IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY) {
+      iree_hal_device_tsan_synchronization_capacity_report_t* capacity =
+          &tsan.detail.synchronization_capacity;
+      *capacity = (iree_hal_device_tsan_synchronization_capacity_report_t){
+          .current_site_id = iree_unaligned_load_le_u64(payload + 16),
+          .subgroup_epoch = iree_unaligned_load_le_u32(payload + 24),
+          .subgroup_epoch_capacity = iree_unaligned_load_le_u32(payload + 28),
+          .wavefront_size = iree_unaligned_load_le_u32(payload + 32),
+          .subgroup_id = iree_unaligned_load_le_u32(payload + 36),
+          .current_workitem_linear_id =
+              iree_unaligned_load_le_u32(payload + 52),
+          .subgroup_clock_address = iree_unaligned_load_le_u64(payload + 56),
+      };
+      for (uint32_t i = 0; i < 3; ++i) {
+        capacity->current_workgroup_id[i] =
+            iree_unaligned_load_le_u32(payload + 40 + i * 4);
+      }
+      site_id = capacity->current_site_id;
     }
     report = iree_make_const_byte_span(&tsan, sizeof(tsan));
   } else {
@@ -404,7 +424,9 @@ static iree_status_t iree_hal_amd_gpu_feedback_publish(
            IREE_HAL_AMD_GPU_SANITIZER_REPORT_POLICY_FAIL_DEVICE)) {
     const iree_status_code_t code =
         packet->kind != 4 ? IREE_STATUS_ABORTED
-        : tsan.check_kind == IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY
+        : (tsan.check_kind == IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY ||
+           tsan.check_kind ==
+               IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY)
             ? IREE_STATUS_RESOURCE_EXHAUSTED
             : IREE_STATUS_DATA_LOSS;
     iree_hal_amd_gpu_feedback_fail(feedback, code);

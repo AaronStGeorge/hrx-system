@@ -53,10 +53,16 @@ class FeedbackTest : public ::testing::Test {
     } else if (event->type == IREE_HAL_DEVICE_EVENT_TYPE_TSAN_REPORT) {
       EXPECT_EQ(event->source.executable_id,
                 iree_hal_amd_gpu_source_context_executable_id(self.source_));
-      if (reinterpret_cast<const iree_hal_device_tsan_report_t*>(
+      const auto check_kind =
+          reinterpret_cast<const iree_hal_device_tsan_report_t*>(
               event->payload.data)
-              ->check_kind != IREE_HAL_DEVICE_TSAN_CHECK_KIND_DATA_RACE) {
+              ->check_kind;
+      if (check_kind == IREE_HAL_DEVICE_TSAN_CHECK_KIND_SHADOW_CAPACITY ||
+          check_kind == IREE_HAL_DEVICE_TSAN_CHECK_KIND_UNKNOWN) {
         EXPECT_EQ(event->site, nullptr);
+      }
+      if (event->site) {
+        self.tsan_sites_.push_back(event->site->site_id);
       }
       self.tsan_reports_.push_back(
           *reinterpret_cast<const iree_hal_device_tsan_report_t*>(
@@ -68,6 +74,21 @@ class FeedbackTest : public ::testing::Test {
               event->payload.data)
               ->status_code);
     }
+  }
+  void RegisterSiteZero() {
+    std::array<uint8_t, 80> sites = {};
+    iree_unaligned_store_le_u32(sites.data(), 0x5449534C);
+    sites[4] = 1;
+    sites[5] = 32;
+    iree_unaligned_store_le_u16(sites.data() + 6, 48);
+    iree_unaligned_store_le_u32(sites.data() + 8, 1);
+    iree_unaligned_store_le_u32(sites.data() + 12, 80);
+    iree_unaligned_store_le_u32(sites.data() + 20, 80);
+    IREE_ASSERT_OK(iree_hal_amd_gpu_source_context_registry_register(
+        &feedback_.sources,
+        iree_make_const_byte_span(sites.data(), sites.size()), &source_));
+    iree_hal_device_event_site_t site;
+    ASSERT_TRUE(iree_hal_amd_gpu_source_context_resolve(source_, 0, &site));
   }
   iree_hal_amd_gpu_feedback_packet_t* Packet(uint64_t position) {
     auto* packet = reinterpret_cast<iree_hal_amd_gpu_feedback_packet_t*>(
@@ -119,6 +140,8 @@ class FeedbackTest : public ::testing::Test {
   std::vector<iree_hal_device_asan_report_t> asan_reports_;
   // Race reports copied before the native packet storage is reclaimed.
   std::vector<iree_hal_device_tsan_report_t> tsan_reports_;
+  // Resolved TSAN source identities copied during event delivery.
+  std::vector<uint64_t> tsan_sites_;
   // Channel errors, distinct from authored diagnostic events.
   std::vector<iree_status_code_t> failures_;
 };
@@ -181,19 +204,7 @@ TEST_F(FeedbackTest, TsanReportsPreserveBothAccessesAndWorkitemCoordinates) {
 TEST_F(FeedbackTest, TsanShadowCapacityPreservesGeometryAndCoordinates) {
   // A valid site zero ensures dispatch-wide reports do not accidentally resolve
   // to the first instrumentation site of the executable.
-  std::array<uint8_t, 80> sites = {};
-  iree_unaligned_store_le_u32(sites.data(), 0x5449534C);
-  sites[4] = 1;
-  sites[5] = 32;
-  iree_unaligned_store_le_u16(sites.data() + 6, 48);
-  iree_unaligned_store_le_u32(sites.data() + 8, 1);
-  iree_unaligned_store_le_u32(sites.data() + 12, 80);
-  iree_unaligned_store_le_u32(sites.data() + 20, 80);
-  IREE_ASSERT_OK(iree_hal_amd_gpu_source_context_registry_register(
-      &feedback_.sources, iree_make_const_byte_span(sites.data(), sites.size()),
-      &source_));
-  iree_hal_device_event_site_t site;
-  ASSERT_TRUE(iree_hal_amd_gpu_source_context_resolve(source_, 0, &site));
+  ASSERT_NO_FATAL_FAILURE(RegisterSiteZero());
 
   auto* packet = TsanPacket(0);
   auto* payload = reinterpret_cast<uint8_t*>(packet + 1);
@@ -255,6 +266,67 @@ TEST_F(FeedbackTest, TsanCapacityFailureReportsResourceExhaustion) {
       iree_atomic_load(&feedback_.failure_code, iree_memory_order_acquire),
       IREE_STATUS_RESOURCE_EXHAUSTED);
 }
+
+class TsanSynchronizationCapacityTest
+    : public FeedbackTest,
+      public ::testing::WithParamInterface<
+          iree_hal_amd_gpu_sanitizer_report_policy_t> {};
+
+TEST_P(TsanSynchronizationCapacityTest, PreservesClockCoordinatesAndSource) {
+  ASSERT_NO_FATAL_FAILURE(RegisterSiteZero());
+  feedback_.tsan_report_policy = GetParam();
+  auto* packet = TsanPacket(0);
+  auto* payload = reinterpret_cast<uint8_t*>(packet + 1);
+  iree_unaligned_store_le_u32(
+      payload + 8, IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY);
+  iree_unaligned_store_le_u64(payload + 16, 0);
+  iree_unaligned_store_le_u32(payload + 24, 15);
+  iree_unaligned_store_le_u32(payload + 28, 16);
+  iree_unaligned_store_le_u32(payload + 32, 64);
+  iree_unaligned_store_le_u32(payload + 36, 3);
+  for (uint32_t i = 0; i < 3; ++i) {
+    iree_unaligned_store_le_u32(payload + 40 + i * 4, 31 + i);
+  }
+  iree_unaligned_store_le_u32(payload + 52, 192);
+  iree_unaligned_store_le_u64(payload + 56, UINT64_C(0x123400000000));
+  std::memset(payload + 64, 0xff, 56);
+  control_.reservation_head = 192;
+  iree_hal_amd_gpu_feedback_drain(&feedback_);
+  ASSERT_EQ(tsan_reports_.size(), 1u);
+  const auto& report = tsan_reports_[0];
+  EXPECT_EQ(report.record_length, 128u);
+  EXPECT_EQ(report.abi_version, 0u);
+  EXPECT_EQ(report.check_kind,
+            IREE_HAL_DEVICE_TSAN_CHECK_KIND_SYNCHRONIZATION_CAPACITY);
+  const auto& capacity = report.detail.synchronization_capacity;
+  EXPECT_EQ(capacity.current_site_id, 0u);
+  EXPECT_EQ(capacity.subgroup_epoch, 15u);
+  EXPECT_EQ(capacity.subgroup_epoch_capacity, 16u);
+  EXPECT_EQ(capacity.wavefront_size, 64u);
+  EXPECT_EQ(capacity.subgroup_id, 3u);
+  for (uint32_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(capacity.current_workgroup_id[i], 31 + i);
+  }
+  EXPECT_EQ(capacity.current_workitem_linear_id, 192u);
+  EXPECT_EQ(capacity.subgroup_clock_address, UINT64_C(0x123400000000));
+  for (auto value : capacity.reserved) {
+    EXPECT_EQ(value, 0u);
+  }
+  ASSERT_EQ(tsan_sites_.size(), 1u);
+  EXPECT_EQ(tsan_sites_[0], 0u);
+  EXPECT_EQ(report.source_dispatch_ptr, 0x1200000040u);
+  EXPECT_EQ(control_.read_tail, 192u);
+  EXPECT_EQ(
+      iree_atomic_load(&feedback_.failure_code, iree_memory_order_acquire),
+      GetParam() == IREE_HAL_AMD_GPU_SANITIZER_REPORT_POLICY_FAIL_DEVICE
+          ? IREE_STATUS_RESOURCE_EXHAUSTED
+          : IREE_STATUS_OK);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ReportPolicy, TsanSynchronizationCapacityTest,
+    ::testing::Values(IREE_HAL_AMD_GPU_SANITIZER_REPORT_POLICY_REPORT_ONLY,
+                      IREE_HAL_AMD_GPU_SANITIZER_REPORT_POLICY_FAIL_DEVICE));
 
 TEST_F(FeedbackTest, TsanUnknownKindLeavesDetailUninterpreted) {
   auto* packet = TsanPacket(0);
