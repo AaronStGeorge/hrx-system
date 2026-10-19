@@ -370,6 +370,8 @@ iree_status_t loom_run_hal_testbench_materialize_invocation_from_table(
     loom_run_hal_binding_list_t* out_bindings);
 
 // Materializes one case sample's invocation as geometry and HAL bindings.
+// When non-NULL, |out_input_footprint| reports retained authored storage and
+// reachable binding ranges before the sample value table is released.
 iree_status_t loom_run_hal_testbench_materialize_invocation_for_sample(
     const loom_module_t* module,
     const loom_testbench_value_materializer_options_t* materializer_options,
@@ -377,7 +379,8 @@ iree_status_t loom_run_hal_testbench_materialize_invocation_for_sample(
     loom_run_hal_testbench_actual_provider_t* provider,
     iree_host_size_t sample_ordinal, iree_allocator_t allocator,
     loom_run_hal_invocation_options_t* out_options,
-    loom_run_hal_binding_list_t* out_bindings);
+    loom_run_hal_binding_list_t* out_bindings,
+    loom_testbench_buffer_footprint_t* out_input_footprint);
 
 // Prepares a reusable HAL invocation plan for one testbench sample.
 iree_status_t loom_run_hal_testbench_prepare_invocation_plan_for_sample(

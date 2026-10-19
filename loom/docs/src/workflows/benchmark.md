@@ -139,9 +139,14 @@ jq '.work_items[] | {benchmark, case, launches}' results.json
 
 ## Control data reuse
 
-Dispatch measurements rotate through physical device-buffer binding sets. The
-default ring targets at least 32 MiB and at least one binding set per dispatch
-in the batch, reducing accidental hot-cache results.
+Dispatch measurements rotate through physical device-buffer storage sets. The
+default ring approaches 32 MiB without using more distinct sets than input uses
+in one batch, reducing accidental hot-cache results. The byte target unions
+reachable binding ranges within each authored allocation, so repeated,
+overlapping, and producer/consumer bindings count the same bytes once. Summed
+binding-reference bytes and complete retained authored-input allocations remain
+separate report evidence. Scenario-generated result buffers contribute their
+owned reachable ranges without being reported as authored input storage.
 `--input-ring-min-bytes=BYTES` changes the byte target without fixing the ring
 count. A deliberate hot-reuse experiment states that choice directly:
 
@@ -154,9 +159,10 @@ iree-benchmark-loom program.loom \
   --output=hot-reuse.json
 ```
 
-The result records the effective ring count and bytes under
-`benchmark_result.data_cache`. Comparisons are meaningful when candidates use
-the same data-reuse policy.
+The result records the effective ring count, binding-reference bytes, unique
+reachable bytes, and complete retained-input-storage bytes under
+`benchmark_result.data_cache`.
+Comparisons are meaningful when candidates use the same data-reuse policy.
 
 ## Collect instrumented device timing outside the score
 

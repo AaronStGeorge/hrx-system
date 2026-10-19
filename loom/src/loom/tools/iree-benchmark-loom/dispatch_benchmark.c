@@ -36,14 +36,15 @@ static iree_status_t iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
     iree_benchmark_loom_hal_actual_provider_t* provider,
     const loom_testbench_value_materializer_options_t* materializer_options,
     iree_host_size_t sample_ordinal, iree_allocator_t allocator,
-    loom_run_hal_invocation_plan_t* out_plan) {
+    loom_run_hal_invocation_plan_t* out_plan,
+    loom_testbench_buffer_footprint_t* out_input_footprint) {
   loom_run_hal_invocation_options_t invocation_options = {0};
   loom_run_hal_binding_list_t bindings = {0};
   iree_status_t status =
       loom_run_hal_testbench_materialize_invocation_for_sample(
           module_plan->module, materializer_options, case_plan,
           &provider->execution, sample_ordinal, allocator, &invocation_options,
-          &bindings);
+          &bindings, out_input_footprint);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_invocation_plan_prepare_from_lists(
         &invocation_options, &bindings, /*expected_bindings=*/NULL,
@@ -67,10 +68,11 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
   };
 
   loom_run_hal_invocation_plan_t first_plan = {0};
+  loom_testbench_buffer_footprint_t first_input_footprint = {0};
   iree_status_t status =
       iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
           module_plan, case_plan, provider, materializer_options,
-          sample_ordinal, allocator, &first_plan);
+          sample_ordinal, allocator, &first_plan, &first_input_footprint);
   uint64_t first_binding_set_bytes = 0;
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_binding_list_total_byte_length(
@@ -81,7 +83,8 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
   if (iree_status_is_ok(status)) {
     ring_count = iree_benchmark_loom_input_ring_select_count(
         options->input_ring_count, (uint64_t)options->input_ring_min_bytes,
-        first_binding_set_bytes, policy->hal_options.timing.batch_size);
+        first_input_footprint.binding_range_byte_length,
+        policy->hal_options.timing.batch_size);
   }
   if (iree_status_is_ok(status)) {
     status = iree_allocator_malloc_array(allocator, ring_count,
@@ -111,13 +114,25 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
         .requested_min_ring_bytes = (uint64_t)options->input_ring_min_bytes,
         .binding_set_bytes = first_binding_set_bytes,
         .binding_ring_bytes = first_binding_set_bytes,
+        .binding_range_count = first_input_footprint.binding_range_count,
+        .binding_range_set_bytes =
+            first_input_footprint.binding_range_byte_length,
+        .binding_range_ring_bytes =
+            first_input_footprint.binding_range_byte_length,
+        .materialized_storage_count =
+            first_input_footprint.storage_allocation_count,
+        .materialized_storage_set_bytes =
+            first_input_footprint.storage_byte_length,
+        .materialized_storage_ring_bytes =
+            first_input_footprint.storage_byte_length,
     };
   }
   for (iree_host_size_t i = 1; iree_status_is_ok(status) && i < ring_count;
        ++i) {
+    loom_testbench_buffer_footprint_t input_footprint = {0};
     status = iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
         module_plan, case_plan, provider, materializer_options, sample_ordinal,
-        allocator, &out_ring->plans[i]);
+        allocator, &out_ring->plans[i], &input_footprint);
     if (iree_status_is_ok(status) &&
         !loom_run_hal_invocation_options_equal(&out_ring->plans[0].options,
                                                &out_ring->plans[i].options)) {
@@ -127,6 +142,15 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
           "or geometry for sample %" PRIhsz,
           sample_ordinal);
     }
+    if (iree_status_is_ok(status) &&
+        !loom_testbench_buffer_footprint_equal(&input_footprint,
+                                               &first_input_footprint)) {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "HAL benchmark input ring materialization changed input buffer "
+          "footprint for sample %" PRIhsz,
+          sample_ordinal);
+    }
     uint64_t binding_set_bytes = 0;
     if (iree_status_is_ok(status)) {
       status = loom_run_hal_binding_list_total_byte_length(
@@ -134,13 +158,21 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
     }
     if (iree_status_is_ok(status)) {
       if (UINT64_MAX - out_ring->summary.binding_ring_bytes <
-          binding_set_bytes) {
+              binding_set_bytes ||
+          UINT64_MAX - out_ring->summary.binding_range_ring_bytes <
+              input_footprint.binding_range_byte_length ||
+          UINT64_MAX - out_ring->summary.materialized_storage_ring_bytes <
+              input_footprint.storage_byte_length) {
         status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                  "HAL benchmark input ring byte count "
+                                  "HAL benchmark input ring byte accounting "
                                   "overflowed uint64");
       } else {
         out_ring->binding_lists[i] = out_ring->plans[i].bindings;
         out_ring->summary.binding_ring_bytes += binding_set_bytes;
+        out_ring->summary.binding_range_ring_bytes +=
+            input_footprint.binding_range_byte_length;
+        out_ring->summary.materialized_storage_ring_bytes +=
+            input_footprint.storage_byte_length;
       }
     }
   }
@@ -217,13 +249,56 @@ static iree_host_size_t iree_benchmark_loom_hal_sequence_binding_count(
   return binding_count;
 }
 
+static iree_status_t iree_benchmark_loom_hal_sequence_resolve_input_footprint(
+    const loom_testbench_value_table_t* table,
+    const iree_benchmark_loom_hal_actual_sequence_t* sequence,
+    iree_allocator_t allocator,
+    loom_testbench_buffer_footprint_t* out_footprint) {
+  *out_footprint = (loom_testbench_buffer_footprint_t){0};
+  iree_host_size_t input_count = 0;
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    if (!iree_host_size_checked_add(
+            input_count,
+            sequence->providers[i].execution.invocation->input_count,
+            &input_count)) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HAL benchmark sequence input count overflowed host size limits");
+    }
+  }
+
+  loom_value_id_t* input_value_ids = NULL;
+  if (input_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(allocator, input_count,
+                                                     sizeof(*input_value_ids),
+                                                     (void**)&input_value_ids));
+  }
+  iree_host_size_t input_offset = 0;
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    const loom_testbench_invocation_plan_t* invocation =
+        sequence->providers[i].execution.invocation;
+    if (invocation->input_count != 0) {
+      memcpy(&input_value_ids[input_offset], invocation->input_value_ids,
+             invocation->input_count * sizeof(*input_value_ids));
+      input_offset += invocation->input_count;
+    }
+  }
+  IREE_ASSERT(input_offset == input_count);
+  iree_status_t status = loom_testbench_value_table_resolve_buffer_footprint(
+      table, input_count, input_value_ids, out_footprint);
+  iree_allocator_free(allocator, input_value_ids);
+  return status;
+}
+
 static iree_status_t iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
     const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_case_plan_t* case_plan,
     iree_benchmark_loom_hal_actual_sequence_t* sequence,
     const loom_testbench_value_materializer_options_t* materializer_options,
     iree_host_size_t sample_ordinal, iree_allocator_t allocator,
-    loom_run_hal_invocation_plan_t* out_plans) {
+    loom_run_hal_invocation_plan_t* out_plans,
+    loom_testbench_buffer_footprint_t* out_input_footprint) {
+  *out_input_footprint = (loom_testbench_buffer_footprint_t){0};
   loom_testbench_value_table_t table = {0};
   iree_status_t status = loom_testbench_value_table_initialize_case(
       module_plan->module, case_plan, allocator, &table);
@@ -246,6 +321,10 @@ static iree_status_t iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
     }
     loom_run_hal_binding_list_deinitialize(&bindings);
   }
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_hal_sequence_resolve_input_footprint(
+        &table, sequence, allocator, out_input_footprint);
+  }
   loom_testbench_value_table_deinitialize(&table);
   return status;
 }
@@ -265,6 +344,7 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
   };
 
   loom_run_hal_invocation_plan_t* first_plans = NULL;
+  loom_testbench_buffer_footprint_t first_input_footprint = {0};
   iree_host_size_t first_plan_count = 0;
   iree_status_t status =
       iree_allocator_malloc_array(allocator, sequence->provider_count,
@@ -274,7 +354,7 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
     first_plan_count = sequence->provider_count;
     status = iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
         module_plan, case_plan, sequence, materializer_options, sample_ordinal,
-        allocator, first_plans);
+        allocator, first_plans, &first_input_footprint);
   }
   uint64_t first_binding_set_bytes = 0;
   if (iree_status_is_ok(status)) {
@@ -286,7 +366,8 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
   if (iree_status_is_ok(status)) {
     ring_count = iree_benchmark_loom_input_ring_select_count(
         options->input_ring_count, (uint64_t)options->input_ring_min_bytes,
-        first_binding_set_bytes, policy->hal_options.timing.batch_size);
+        first_input_footprint.binding_range_byte_length,
+        policy->hal_options.timing.batch_size);
   }
   iree_host_size_t plan_count = 0;
   if (iree_status_is_ok(status) &&
@@ -349,6 +430,17 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
           .requested_min_ring_bytes = (uint64_t)options->input_ring_min_bytes,
           .binding_set_bytes = first_binding_set_bytes,
           .binding_ring_bytes = first_binding_set_bytes,
+          .binding_range_count = first_input_footprint.binding_range_count,
+          .binding_range_set_bytes =
+              first_input_footprint.binding_range_byte_length,
+          .binding_range_ring_bytes =
+              first_input_footprint.binding_range_byte_length,
+          .materialized_storage_count =
+              first_input_footprint.storage_allocation_count,
+          .materialized_storage_set_bytes =
+              first_input_footprint.storage_byte_length,
+          .materialized_storage_ring_bytes =
+              first_input_footprint.storage_byte_length,
       };
     }
   }
@@ -356,9 +448,10 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
        iree_status_is_ok(status) && ring_index < ring_count; ++ring_index) {
     loom_run_hal_invocation_plan_t* ring_plans =
         &out_ring->plans[ring_index * sequence->provider_count];
+    loom_testbench_buffer_footprint_t input_footprint = {0};
     status = iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
         module_plan, case_plan, sequence, materializer_options, sample_ordinal,
-        allocator, ring_plans);
+        allocator, ring_plans, &input_footprint);
     for (iree_host_size_t step_index = 0;
          iree_status_is_ok(status) && step_index < sequence->provider_count;
          ++step_index) {
@@ -373,6 +466,15 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
             sample_ordinal, step_index);
       }
     }
+    if (iree_status_is_ok(status) &&
+        !loom_testbench_buffer_footprint_equal(&input_footprint,
+                                               &first_input_footprint)) {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "HAL benchmark sequence input ring materialization changed input "
+          "buffer footprint for sample %" PRIhsz,
+          sample_ordinal);
+    }
     uint64_t binding_set_bytes = 0;
     if (iree_status_is_ok(status)) {
       status = iree_benchmark_loom_hal_sequence_plans_total_byte_length(
@@ -380,12 +482,20 @@ static iree_status_t iree_benchmark_loom_hal_sequence_input_ring_initialize(
     }
     if (iree_status_is_ok(status)) {
       if (UINT64_MAX - out_ring->summary.binding_ring_bytes <
-          binding_set_bytes) {
+              binding_set_bytes ||
+          UINT64_MAX - out_ring->summary.binding_range_ring_bytes <
+              input_footprint.binding_range_byte_length ||
+          UINT64_MAX - out_ring->summary.materialized_storage_ring_bytes <
+              input_footprint.storage_byte_length) {
         status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                                   "HAL benchmark sequence input ring byte "
-                                  "count overflowed uint64");
+                                  "accounting overflowed uint64");
       } else {
         out_ring->summary.binding_ring_bytes += binding_set_bytes;
+        out_ring->summary.binding_range_ring_bytes +=
+            input_footprint.binding_range_byte_length;
+        out_ring->summary.materialized_storage_ring_bytes +=
+            input_footprint.storage_byte_length;
       }
     }
     for (iree_host_size_t step_index = 0;

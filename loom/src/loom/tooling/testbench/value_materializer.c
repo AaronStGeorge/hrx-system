@@ -7,6 +7,7 @@
 #include "loom/tooling/testbench/value_materializer.h"
 
 #include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "iree/base/internal/math.h"
@@ -15,6 +16,7 @@
 
 enum {
   LOOM_TESTBENCH_MAX_SHAPE_RANK = 15,
+  LOOM_TESTBENCH_INLINE_BUFFER_REFERENCE_COUNT = 64,
 };
 
 typedef enum loom_testbench_generator_kind_e {
@@ -614,6 +616,153 @@ iree_status_t loom_testbench_value_table_lookup_retain(
       table, value_id, &borrowed_value));
   loom_testbench_value_retain(borrowed_value, out_value);
   return iree_ok_status();
+}
+
+static int loom_testbench_compare_buffer_references(const void* lhs_ptr,
+                                                    const void* rhs_ptr) {
+  const loom_testbench_buffer_reference_t* lhs =
+      (const loom_testbench_buffer_reference_t*)lhs_ptr;
+  const loom_testbench_buffer_reference_t* rhs =
+      (const loom_testbench_buffer_reference_t*)rhs_ptr;
+  if (lhs->allocation_value_id != rhs->allocation_value_id) {
+    return (lhs->allocation_value_id > rhs->allocation_value_id) -
+           (lhs->allocation_value_id < rhs->allocation_value_id);
+  }
+  if (lhs->byte_offset != rhs->byte_offset) {
+    return (lhs->byte_offset > rhs->byte_offset) -
+           (lhs->byte_offset < rhs->byte_offset);
+  }
+  return (lhs->byte_length > rhs->byte_length) -
+         (lhs->byte_length < rhs->byte_length);
+}
+
+bool loom_testbench_buffer_footprint_equal(
+    const loom_testbench_buffer_footprint_t* lhs,
+    const loom_testbench_buffer_footprint_t* rhs) {
+  return lhs->storage_allocation_count == rhs->storage_allocation_count &&
+         lhs->storage_byte_length == rhs->storage_byte_length &&
+         lhs->binding_range_count == rhs->binding_range_count &&
+         lhs->binding_range_byte_length == rhs->binding_range_byte_length;
+}
+
+iree_status_t loom_testbench_value_table_resolve_buffer_footprint(
+    const loom_testbench_value_table_t* table, iree_host_size_t value_id_count,
+    const loom_value_id_t* value_ids,
+    loom_testbench_buffer_footprint_t* out_footprint) {
+  *out_footprint = (loom_testbench_buffer_footprint_t){0};
+
+  loom_testbench_buffer_reference_t
+      inline_buffer_references[LOOM_TESTBENCH_INLINE_BUFFER_REFERENCE_COUNT];
+  loom_testbench_buffer_reference_t* buffer_references =
+      inline_buffer_references;
+  bool buffer_references_owned = false;
+  if (value_id_count > IREE_ARRAYSIZE(inline_buffer_references)) {
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc_array_uninitialized(
+        table->host_allocator, value_id_count, sizeof(*buffer_references),
+        (void**)&buffer_references));
+    buffer_references_owned = true;
+  }
+
+  iree_status_t status = iree_ok_status();
+  iree_host_size_t buffer_reference_count = 0;
+  for (iree_host_size_t value_index = 0; value_index < value_id_count;
+       ++value_index) {
+    const loom_testbench_value_t* value = NULL;
+    status = loom_testbench_value_table_lookup_borrow(
+        table, value_ids[value_index], &value);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    if (!loom_testbench_value_is_buffer(value)) {
+      continue;
+    }
+    if (!value->buffer_reference.is_traceable) {
+      status = iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "materialized buffer value ID %u has no logical allocation identity",
+          (unsigned)value_ids[value_index]);
+      break;
+    }
+    buffer_references[buffer_reference_count++] = value->buffer_reference;
+  }
+
+  if (iree_status_is_ok(status) && buffer_reference_count > 1) {
+    qsort(buffer_references, buffer_reference_count, sizeof(*buffer_references),
+          loom_testbench_compare_buffer_references);
+  }
+  loom_value_id_t current_allocation_value_id = LOOM_VALUE_ID_INVALID;
+  iree_device_size_t current_range_end = 0;
+  bool has_current_range = false;
+  for (iree_host_size_t reference_index = 0;
+       iree_status_is_ok(status) && reference_index < buffer_reference_count;
+       ++reference_index) {
+    const loom_testbench_buffer_reference_t* reference =
+        &buffer_references[reference_index];
+    if (reference->allocation_value_id != current_allocation_value_id) {
+      current_allocation_value_id = reference->allocation_value_id;
+      current_range_end = 0;
+      has_current_range = false;
+
+      const loom_testbench_value_t* allocation = NULL;
+      status = loom_testbench_value_table_lookup_borrow(
+          table, current_allocation_value_id, &allocation);
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
+      if (!loom_testbench_value_is_buffer(allocation) ||
+          !allocation->buffer_reference.is_traceable ||
+          allocation->buffer_reference.allocation_value_id !=
+              current_allocation_value_id) {
+        status = iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "authored allocation value ID %u is not a traceable root buffer",
+            (unsigned)current_allocation_value_id);
+        break;
+      }
+      if (UINT64_MAX - out_footprint->storage_byte_length <
+          allocation->buffer_reference.byte_length) {
+        status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                  "materialized storage footprint overflowed "
+                                  "uint64");
+        break;
+      }
+      out_footprint->storage_byte_length +=
+          allocation->buffer_reference.byte_length;
+      ++out_footprint->storage_allocation_count;
+    }
+
+    if (reference->byte_length == 0) {
+      continue;
+    }
+    const iree_device_size_t range_end =
+        reference->byte_offset + reference->byte_length;
+    uint64_t additional_byte_length = 0;
+    if (!has_current_range || reference->byte_offset > current_range_end) {
+      ++out_footprint->binding_range_count;
+      additional_byte_length = reference->byte_length;
+      has_current_range = true;
+    } else if (range_end > current_range_end) {
+      additional_byte_length = range_end - current_range_end;
+    }
+    if (UINT64_MAX - out_footprint->binding_range_byte_length <
+        additional_byte_length) {
+      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "reachable binding footprint overflowed "
+                                "uint64");
+      break;
+    }
+    out_footprint->binding_range_byte_length += additional_byte_length;
+    if (range_end > current_range_end) {
+      current_range_end = range_end;
+    }
+  }
+  if (buffer_references_owned) {
+    iree_allocator_free(table->host_allocator, buffer_references);
+  }
+  if (!iree_status_is_ok(status)) {
+    *out_footprint = (loom_testbench_buffer_footprint_t){0};
+  }
+  return status;
 }
 
 static bool loom_testbench_attr_as_i64(loom_attribute_t attr,

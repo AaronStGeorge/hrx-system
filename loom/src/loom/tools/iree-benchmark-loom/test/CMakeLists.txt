@@ -12,16 +12,18 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_X86 AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND IREE_ARCH STREQUAL "x86_64")
 iree_py_test(
   NAME
-    scenario_comparison_test
+    benchmark_execution_test
   MAIN
-    "scenario_comparison_test.py"
+    "benchmark_execution_test.py"
   SRCS
-    "scenario_comparison_test.py"
+    "benchmark_execution_test.py"
   ARGS
     "{{$<TARGET_FILE:loom::tools::iree-benchmark-loom::iree-benchmark-loom>}}"
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/scenario_compare_hal_vm.loom}}"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-benchmark-loom/test/sequence_storage.loom}}"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/scenario_compare_hal_vm.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-benchmark-loom/test/sequence_storage.loom"
     "loom::tools::iree-benchmark-loom::iree-benchmark-loom"
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"

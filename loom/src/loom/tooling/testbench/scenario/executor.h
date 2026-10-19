@@ -23,6 +23,8 @@ extern "C" {
 typedef struct loom_testbench_product_call_t {
   // Exact scenario coordinate represented by this call.
   const loom_testbench_scenario_trial_identity_t* identity;
+  // Retained storage and reachable ranges for this call's ordinary inputs.
+  loom_testbench_buffer_footprint_t input_footprint;
   // Retained workload or specialization values in signature order.
   loom_testbench_value_t* call_parameters;
   // Retained ordinary input values in signature order.

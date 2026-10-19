@@ -73,11 +73,30 @@ typedef struct loom_run_hal_testbench_scenario_call_ring_t {
   uint64_t binding_set_bytes;
   // Sum of logical binding bytes across the complete ring.
   uint64_t binding_ring_bytes;
+  // Number of disjoint reachable binding ranges in the first call.
+  iree_host_size_t binding_range_count_per_call;
+  // Sum of reachable binding ranges in the first call.
+  uint64_t binding_range_set_bytes;
+  // Sum of reachable binding ranges across the complete ring.
+  uint64_t binding_range_ring_bytes;
+  // Number of unique logical input allocations in the first call.
+  iree_host_size_t materialized_storage_count_per_call;
+  // Sum of unique logical input-allocation bytes in the first call.
+  uint64_t materialized_storage_set_bytes;
+  // Sum of unique logical input-allocation bytes across the complete ring.
+  uint64_t materialized_storage_ring_bytes;
   // Alias-preserving host-to-device staging for the flat binding table.
   loom_run_hal_testbench_staging_t staging;
   // Scalar result storage retained across every timed replay of the batch.
   loom_run_hal_testbench_scenario_results_t results;
 } loom_run_hal_testbench_scenario_call_ring_t;
+
+typedef uint32_t loom_run_hal_scenario_ring_flags_t;
+enum loom_run_hal_scenario_ring_flag_bits_e {
+  LOOM_RUN_HAL_SCENARIO_RING_FLAG_NONE = 0u,
+  LOOM_RUN_HAL_SCENARIO_RING_FLAG_STAGE_BINDINGS = 1u << 0,
+  LOOM_RUN_HAL_SCENARIO_RING_FLAG_REQUIRE_UNIFORM_FOOTPRINT = 1u << 1,
+};
 
 static iree_status_t loom_run_hal_testbench_scenario_emit_unsupported_results(
     const loom_run_hal_testbench_scenario_profile_t* profile,
@@ -325,7 +344,7 @@ static void loom_run_hal_testbench_scenario_product_destroy(void* user_data) {
 static iree_status_t loom_run_hal_testbench_scenario_call_ring_prepare(
     loom_run_hal_testbench_scenario_product_t* product,
     iree_host_size_t call_count, loom_testbench_product_call_t* calls,
-    bool stage_bindings,
+    loom_run_hal_scenario_ring_flags_t flags,
     loom_run_hal_testbench_scenario_call_ring_t* out_ring) {
   loom_run_hal_testbench_actual_provider_t* provider = &product->provider;
   const loom_testbench_invocation_plan_t* invocation = provider->invocation;
@@ -367,6 +386,48 @@ static iree_status_t loom_run_hal_testbench_scenario_call_ring_prepare(
           call_index, bindings->count, out_ring->binding_count_per_call);
       break;
     }
+    uint64_t call_binding_range_bytes =
+        call->input_footprint.binding_range_byte_length;
+    if (UINT64_MAX - call_binding_range_bytes < out_ring->results.stride) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HAL scenario reachable binding byte accounting overflowed");
+      break;
+    }
+    call_binding_range_bytes += out_ring->results.stride;
+    if (call_index == 0) {
+      out_ring->binding_range_count_per_call =
+          call->input_footprint.binding_range_count +
+          (out_ring->results.stride == 0 ? 0 : 1);
+      out_ring->binding_range_set_bytes = call_binding_range_bytes;
+      out_ring->materialized_storage_count_per_call =
+          call->input_footprint.storage_allocation_count;
+      out_ring->materialized_storage_set_bytes =
+          call->input_footprint.storage_byte_length;
+    } else if (iree_all_bits_set(
+                   flags,
+                   LOOM_RUN_HAL_SCENARIO_RING_FLAG_REQUIRE_UNIFORM_FOOTPRINT) &&
+               !loom_testbench_buffer_footprint_equal(
+                   &call->input_footprint, &calls[0].input_footprint)) {
+      status =
+          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                           "HAL scenario call %" PRIhsz
+                           " materialized a different input buffer footprint",
+                           call_index);
+      break;
+    }
+    if (UINT64_MAX - out_ring->binding_range_ring_bytes <
+            call_binding_range_bytes ||
+        UINT64_MAX - out_ring->materialized_storage_ring_bytes <
+            call->input_footprint.storage_byte_length) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HAL scenario input footprint byte accounting overflowed");
+      break;
+    }
+    out_ring->binding_range_ring_bytes += call_binding_range_bytes;
+    out_ring->materialized_storage_ring_bytes +=
+        call->input_footprint.storage_byte_length;
     IREE_ASSERT(binding_count + bindings->count <= out_ring->binding_capacity);
     uint64_t call_bytes = 0;
     for (iree_host_size_t binding_index = 0; binding_index < bindings->count;
@@ -395,7 +456,9 @@ static iree_status_t loom_run_hal_testbench_scenario_call_ring_prepare(
     }
   }
 
-  if (iree_status_is_ok(status) && stage_bindings) {
+  if (iree_status_is_ok(status) &&
+      iree_all_bits_set(flags,
+                        LOOM_RUN_HAL_SCENARIO_RING_FLAG_STAGE_BINDINGS)) {
     status = loom_run_hal_testbench_staging_initialize(
         &provider->context->runtime, binding_count, out_ring->binding_table,
         product->host_allocator, &out_ring->staging);
@@ -461,7 +524,8 @@ static iree_status_t loom_run_hal_testbench_scenario_product_execute(
 
   loom_run_hal_testbench_scenario_call_ring_t ring = {0};
   iree_status_t status = loom_run_hal_testbench_scenario_call_ring_prepare(
-      product, call_count, calls, /*stage_bindings=*/true, &ring);
+      product, call_count, calls,
+      LOOM_RUN_HAL_SCENARIO_RING_FLAG_STAGE_BINDINGS, &ring);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_testbench_scenario_call_ring_execute(product, &ring,
                                                                call_count);
@@ -495,7 +559,10 @@ static iree_status_t loom_run_hal_testbench_scenario_benchmark_calls(
 
   loom_run_hal_testbench_scenario_call_ring_t ring = {0};
   iree_status_t status = loom_run_hal_testbench_scenario_call_ring_prepare(
-      product, call_count, calls, /*stage_bindings=*/true, &ring);
+      product, call_count, calls,
+      LOOM_RUN_HAL_SCENARIO_RING_FLAG_STAGE_BINDINGS |
+          LOOM_RUN_HAL_SCENARIO_RING_FLAG_REQUIRE_UNIFORM_FOOTPRINT,
+      &ring);
   if (iree_status_is_ok(status)) {
     const loom_run_hal_dispatch_binding_table_ring_t benchmark_ring = {
         .candidate = &product->provider.prepared_candidate,
@@ -514,6 +581,16 @@ static iree_status_t loom_run_hal_testbench_scenario_benchmark_calls(
     out_result->binding_count_per_call = ring.binding_count_per_call;
     out_result->binding_set_bytes = ring.binding_set_bytes;
     out_result->binding_ring_bytes = ring.binding_ring_bytes;
+    out_result->binding_range_count_per_call =
+        ring.binding_range_count_per_call;
+    out_result->binding_range_set_bytes = ring.binding_range_set_bytes;
+    out_result->binding_range_ring_bytes = ring.binding_range_ring_bytes;
+    out_result->materialized_storage_count_per_call =
+        ring.materialized_storage_count_per_call;
+    out_result->materialized_storage_set_bytes =
+        ring.materialized_storage_set_bytes;
+    out_result->materialized_storage_ring_bytes =
+        ring.materialized_storage_ring_bytes;
   }
   status = iree_status_join(
       status, loom_run_hal_testbench_scenario_call_ring_deinitialize(&ring));
@@ -589,12 +666,12 @@ iree_status_t loom_run_hal_testbench_benchmark_scenario_product(
       product, call_count, calls, options, host_allocator, out_result);
 }
 
-iree_status_t loom_run_hal_testbench_query_scenario_product_binding_layout(
+iree_status_t loom_run_hal_testbench_query_scenario_product_input_layout(
     const loom_testbench_prepared_product_t* prepared_product,
     const loom_testbench_invocation_plan_t* invocation,
     loom_testbench_product_call_t* call,
-    loom_run_hal_testbench_scenario_binding_layout_t* out_layout) {
-  *out_layout = (loom_run_hal_testbench_scenario_binding_layout_t){0};
+    loom_run_hal_testbench_scenario_input_layout_t* out_layout) {
+  *out_layout = (loom_run_hal_testbench_scenario_input_layout_t){0};
   if (loom_run_hal_testbench_scenario_product_provider(prepared_product) ==
       NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -609,15 +686,22 @@ iree_status_t loom_run_hal_testbench_query_scenario_product_binding_layout(
       (loom_run_hal_testbench_scenario_product_t*)prepared_product->user_data;
   loom_run_hal_testbench_scenario_call_ring_t ring = {0};
   iree_status_t status = loom_run_hal_testbench_scenario_call_ring_prepare(
-      product, /*call_count=*/1, call, /*stage_bindings=*/false, &ring);
+      product, /*call_count=*/1, call, LOOM_RUN_HAL_SCENARIO_RING_FLAG_NONE,
+      &ring);
   if (iree_status_is_ok(status)) {
     out_layout->binding_count = ring.binding_count_per_call;
     out_layout->binding_set_bytes = ring.binding_set_bytes;
+    out_layout->binding_range_count = ring.binding_range_count_per_call;
+    out_layout->binding_range_set_bytes = ring.binding_range_set_bytes;
+    out_layout->materialized_storage_count =
+        ring.materialized_storage_count_per_call;
+    out_layout->materialized_storage_set_bytes =
+        ring.materialized_storage_set_bytes;
   }
   status = iree_status_join(
       status, loom_run_hal_testbench_scenario_call_ring_deinitialize(&ring));
   if (!iree_status_is_ok(status)) {
-    *out_layout = (loom_run_hal_testbench_scenario_binding_layout_t){0};
+    *out_layout = (loom_run_hal_testbench_scenario_input_layout_t){0};
   }
   return status;
 }

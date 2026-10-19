@@ -13,18 +13,20 @@ package(
 )
 
 loom_py_test(
-    name = "scenario_comparison_test",
+    name = "benchmark_execution_test",
     size = "small",
-    srcs = ["scenario_comparison_test.py"],
+    srcs = ["benchmark_execution_test.py"],
     args = [
         "$(rootpath //loom/src/loom/tools/iree-benchmark-loom)",
         "$(rootpath //loom/src/loom/tooling/execution/hal:testdata/scenario_compare_hal_vm.loom)",
+        "$(rootpath :sequence_storage.loom)",
     ],
     data = [
+        ":sequence_storage.loom",
         "//loom/src/loom/tooling/execution/hal:testdata/scenario_compare_hal_vm.loom",
         "//loom/src/loom/tools/iree-benchmark-loom",
     ],
-    main = "scenario_comparison_test.py",
+    main = "benchmark_execution_test.py",
     target_compatible_with = loom_config_compatible_with([
         "//loom/config/target/arch:x86",
         "//loom/config/execute:task_hal",

@@ -1,0 +1,31 @@
+kernel.def @increment() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
+  %output_aligned = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
+  %input_view = buffer.view %input_aligned[%origin] : buffer -> view<1xi32>
+  %output_view = buffer.view %output_aligned[%origin] : buffer -> view<1xi32>
+  %value = view.load %input_view[0] : view<1xi32> -> i32
+  %c1 = scalar.constant 1 : i32
+  %result = scalar.addi %value, %c1 : i32
+  view.store %result, %output_view[0] : i32, view<1xi32>
+  kernel.return
+}
+
+check.case @shared_sequence {
+  %source_storage = check.generate.fill value(40) : tensor<3xi32>
+  %source = check.tensor.view %source_storage offset(4) : tensor<3xi32> -> tensor<1xi32>
+  %shared_storage = check.generate.fill value(0) : tensor<2xi32>
+  %shared = check.tensor.view %shared_storage offset(4) : tensor<2xi32> -> tensor<1xi32>
+  %result_storage = check.generate.fill value(0) : tensor<3xi32>
+  %result = check.tensor.view %result_storage offset(4) : tensor<3xi32> -> tensor<1xi32>
+  %expected = check.generate.fill value(42) : tensor<1xi32>
+  kernel.launch @increment(%source, %shared) : (tensor<1xi32>, tensor<1xi32>)
+  kernel.launch @increment(%shared, %result) : (tensor<1xi32>, tensor<1xi32>)
+  check.expect.equal actual(%result) expected(%expected) : tensor<1xi32>
+  check.return
+}
+
+check.benchmark<@shared_sequence> @shared_sequence_throughput
