@@ -117,7 +117,7 @@ class MediaExecutionTest : public SourceTextServiceTest {
   // HTTP protocol and source input storage retained through producer work.
   std::array<loom_serve_embedding_request_t, 3> requests_ = {};
   // Source-prepared request bytes, independent of cohort result ownership.
-  std::array<loom_serve_finite_prepared_t, 3> prepared_ = {};
+  std::array<loom_serve_prepared_request_t, 3> prepared_ = {};
   // Explicitly gated consumer for delayed-capture retirement coverage.
   loom_serve_execution_t* consumer_ = nullptr;
   // Owner-signalled readiness; no sleep or deadline models queue retirement.

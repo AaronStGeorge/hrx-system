@@ -438,7 +438,7 @@ class DeviceResultTest : public SourceEmbeddingServiceTest {
   // Source input ownership through successful completion or failed teardown.
   std::vector<loom_serve_embedding_request_t> requests_;
   // Per-request source preparation, with the same lifetime as requests_.
-  std::vector<loom_serve_finite_prepared_t> prepared_;
+  std::vector<loom_serve_prepared_request_t> prepared_;
   // Only the final consumer output crosses to the host for the oracle.
   std::array<float, 14> output_ = {};
   // Explicit result downloads advance the producer's separate transfer queue.

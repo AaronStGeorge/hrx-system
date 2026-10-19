@@ -198,7 +198,7 @@ class FiniteComponentTest : public ::testing::Test {
       iree_unaligned_store_le_f32(bytes.data + i * 4,
                                   static_cast<float>(i + 1 + ordinal * 4));
     }
-    loom_serve_finite_prepared_t prepared = {};
+    loom_serve_prepared_request_t prepared = {};
     IREE_ASSERT_OK(
         loom_serve_finite_model_prepare_request(model, input, &prepared));
     const iree_host_size_t rows = 1;

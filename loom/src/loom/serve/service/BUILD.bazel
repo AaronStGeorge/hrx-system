@@ -55,12 +55,34 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "prepared_request",
+    srcs = ["prepared_request.c"],
+    hdrs = ["prepared_request.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_library(
     name = "reconfiguration",
     hdrs = ["reconfiguration.h"],
     deps = [
         "//loom/src/loom/serve/runtime/program:sources",
         "//loom/src/loom/serve/runtime/program:variant_pool",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "prepared_request_test",
+    srcs = ["prepared_request_test.cc"],
+    deps = [
+        ":prepared_request",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
     ],
 )
 

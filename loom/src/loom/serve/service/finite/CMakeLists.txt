@@ -164,6 +164,7 @@ loom_cc_library(
     loom::serve::runtime::program::variant_pool
     loom::serve::service::executables
     loom::serve::service::execution_reconfiguration
+    loom::serve::service::prepared_request
     loom::util::stream
   PUBLIC
 )

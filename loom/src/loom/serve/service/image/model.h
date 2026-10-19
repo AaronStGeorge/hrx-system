@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-// One source-defined diffusion image residency with serialized request storage.
+// One source-defined diffusion residency with serialized cohort storage.
 // The application owns serialization; simultaneous generate calls are invalid.
 typedef struct loom_serve_image_model_t loom_serve_image_model_t;
 
@@ -90,26 +90,32 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // Source ABI:
 // prepare.loom: prepare(i64 height, i64 width, i64 text_capacity,
 //                      buffer checkpoint, buffer adapter, buffer options)
-//   -> (i64 request_capacity, buffer tokenizer_asset, buffer name, buffer
-//   state)
+//   -> (i64 batch_units, i64 request_capacity, buffer tokenizer_asset,
+//       buffer name, buffer state)
 // The source declares commands/configuration/parameter domains through prepare
 // imports. tokenizer_asset is relative to checkpoint. Returned state is opaque
 // and retained independently of the cold program; its VM environment stays
 // live. control.loom:
-//   prepare_request(buffer state, buffer i64_stage_tags, i32 stage_count,
-//                   i64 height, i64 width, buffer prompt, i64 seed,
-//                   f32 strength) -> (i32 stage, buffer payload)
+//   prepare_request(buffer state, i64 height, i64 width, buffer prompt,
+//                   i64 seed, f32 strength) -> (buffer bytes, i64 units, i64
+//                   tag)
+//   prepare_batch(buffer state, buffer i64_stage_tags, buffer ranges,
+//                 buffer bytes) -> (i32 stage, buffer payload)
 //   generate(i32 first_part, i32 part_count, i32 cursor, i64 output_bytes,
 //            hal.buffer payload, hal.buffer rgb, hal.buffer workspace) -> i32
 // The cursor starts at zero. Each invocation submits its next part and returns
 // a cursor for continuation, or a negative value after final feedback. The
-// owner invokes it again only after both accepted frontiers retire.
-// The warm program imports input/JSON capabilities, invocation-only prepare
+// owner invokes it again only after both accepted frontiers retire. State is
+// immutable across requests. Positive units bound cohort work/storage; equal
+// tags permit batching. Ranges are little-endian [offset, length] i64 pairs
+// into concatenated prepared bytes. Output is concatenated F32 CHW RGB in that
+// same stable request order. A cancelled peer never changes this layout. The
+// warm program imports input/JSON capabilities, invocation-only prepare
 // declarations, and runner.execute_N/feedback. Request stage ordinals follow
 // the immutable cold table. Explicit checkpoint declarations select retained
 // domains or prepare independent banks on demand; omitted declarations preserve
-// the cold layout. Stages declared by one request share a parameter binding
-// map, while retained request choices can bind different checkpoint banks. Each
+// the cold layout. Stages declared by one cohort share a parameter binding
+// map, while retained cohort choices can bind different checkpoint banks. Each
 // command has three dynamic bindings: opaque request bytes, output F32 CHW RGB
 // [-1,1], and workspace. External input/output roots promise only byte
 // alignment; stronger private storage and parameter alignments come from their
@@ -203,16 +209,28 @@ loom_serve_image_generator_t loom_serve_image_model_generator(
 
 // CPU-only source preparation, serialized with other model calls. Suitable for
 // a CPU task: no device submission, wait or shared residency mutation occurs.
-// Retains the resulting payload until successful completion or destruction.
-// INVALID_ARGUMENT rejects the request with no retained payload. No prepared
-// request may already be outstanding; prepare is serialized with submission.
+// Success transfers opaque prepared bytes to the caller. These may borrow the
+// prompt, which remains live through batch preparation. Multiple prepared
+// requests may coexist without capturing executables or checkpoint banks.
+// INVALID_ARGUMENT rejects the request without retaining ownership.
 // Width/height are positive and their F32 RGB extent fits host storage and i64;
 // the public request parser establishes this representational boundary. Source
 // preparation validates model-specific geometry before any output allocation.
-// Returns copied invocation facts on success and zeros them on rejection.
+// Returns source work/compatibility facts and owned bytes, or zeros on failure.
 iree_status_t loom_serve_image_model_prepare_request(
     loom_serve_image_model_t* model, iree_string_view_t prompt, uint64_t seed,
     float strength, uint32_t width, uint32_t height,
+    loom_serve_prepared_request_t* out_prepared);
+
+// CPU-only preparation of one compatible cohort in stable client order. The
+// caller supplies protocol-validated F32 RGB byte lengths in the same order.
+// Captures one executable generation and the complete checkpoint bank union;
+// there must be no preceding invocation. Failure leaves no prepared cohort.
+// Prepared request bytes remain caller-owned and can be released on return.
+iree_status_t loom_serve_image_model_prepare_batch(
+    loom_serve_image_model_t* model, iree_host_size_t count,
+    const loom_serve_prepared_request_t* requests,
+    const iree_host_size_t* output_lengths,
     loom_serve_image_prepared_t* out_prepared);
 
 // Installs the serialized owner's nonblocking compilation wake. Detachment
@@ -222,18 +240,17 @@ void loom_serve_image_model_set_observer(loom_serve_image_model_t* model,
 
 // Resolves the prepared invocation's captured executables before admission.
 // Cancellation retires accepted compilation but submits no device work. The
-// owner calls until complete, then admits or discards the prepared request.
-iree_status_t loom_serve_image_model_advance_request(
+// owner calls until complete, then admits or discards the prepared cohort.
+iree_status_t loom_serve_image_model_advance_batch(
     loom_serve_image_model_t* model, bool cancel, bool* out_complete);
 
-// Releases a successfully prepared request that has not been submitted. This
+// Releases a successfully prepared cohort that has not been submitted. This
 // does not release residency pins or retire device work. The model is reusable.
-void loom_serve_image_model_discard_prepared_request(
-    loom_serve_image_model_t* model);
+void loom_serve_image_model_discard_batch(loom_serve_image_model_t* model);
 
 // Queues one part and returns its work/feedback frontiers and terminal state.
 // The first call follows residency acquisition; continuation or cancellation
-// follows successful retirement of both previous frontiers. Only one request
+// follows successful retirement of both previous frontiers. Only one cohort
 // may be outstanding. Failure preserves payload and residency protection for
 // outer-owner destruction; no host wait occurs.
 iree_status_t loom_serve_image_model_submit(

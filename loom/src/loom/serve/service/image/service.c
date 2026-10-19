@@ -12,6 +12,7 @@
 #include "iree/async/operations/semaphore.h"
 #include "iree/base/internal/base64.h"
 #include "iree/base/threading/mutex.h"
+#include "iree/vm/buffer.h"
 #include "loom/serve/runtime/host/clock.h"
 #include "loom/serve/runtime/host/timer.h"
 #include "loom/serve/runtime/host/wake.h"
@@ -323,8 +324,18 @@ static iree_status_t loom_serve_image_cpu_run(
   result->did_work = true;
   if (service->cpu.phase == IMAGE_PHASE_PREPARING) {
     const iree_time_t begin = iree_time_now();
-    const iree_status_t status = service->generator.prepare(
-        service->generator.self, &service->job.request, &service->job.prepared);
+    loom_serve_prepared_request_t prepared = {0};
+    iree_status_t status = service->generator.prepare(
+        service->generator.self, &service->job.request, &prepared);
+    if (iree_status_is_ok(status)) {
+      const iree_host_size_t output_length =
+          (iree_host_size_t)service->job.request.width *
+          service->job.request.height * 12;
+      status = service->generator.prepare_batch(service->generator.self, 1,
+                                                &prepared, &output_length,
+                                                &service->job.prepared);
+    }
+    iree_vm_buffer_release(prepared.bytes);
     service->job.work.prepare_ns = iree_time_now() - begin;
     IREE_RETURN_AND_END_ZONE(z0, status);
   }
@@ -481,7 +492,7 @@ static void loom_serve_image_prepared(loom_serve_image_service_t* service,
                                       loom_serve_service_flags_t flags,
                                       bool* progress) {
   if (service->stopping || !service->connection) {
-    service->generator.discard_prepared_request(service->generator.self);
+    service->generator.discard_batch(service->generator.self);
     loom_serve_image_finish(service, service->telemetry.failure_code
                                          ? LOOM_SERVE_TELEMETRY_FAILED
                                          : LOOM_SERVE_TELEMETRY_CANCELLED);
@@ -502,7 +513,7 @@ static void loom_serve_image_prepared(loom_serve_image_service_t* service,
     }
     // No accepted producer can release capacity; waiting on queued peers
     // would deadlock mutually inadmissible requests.
-    service->generator.discard_prepared_request(service->generator.self);
+    service->generator.discard_batch(service->generator.self);
     service->status = loom_serve_image_rejection_response(
         service, service->connection, service->active,
         "503 Service Unavailable",
@@ -858,10 +869,10 @@ static iree_status_t loom_serve_image_advance(void* self,
   if (service->phase == IMAGE_PHASE_SPECIALIZING) {
     const bool cancel = service->stopping || !service->connection;
     bool complete = false;
-    iree_status_t status = service->generator.advance_prepared_request(
+    iree_status_t status = service->generator.advance_batch(
         service->generator.self, cancel, &complete);
     if (!iree_status_is_ok(status)) {
-      service->generator.discard_prepared_request(service->generator.self);
+      service->generator.discard_batch(service->generator.self);
       loom_serve_image_diagnose(service, service->active, status);
       if (service->connection) {
         service->status = iree_status_join(
@@ -879,7 +890,7 @@ static iree_status_t loom_serve_image_advance(void* self,
       *out_progress = true;
     } else if (complete) {
       if (cancel) {
-        service->generator.discard_prepared_request(service->generator.self);
+        service->generator.discard_batch(service->generator.self);
         loom_serve_image_finish(service, LOOM_SERVE_TELEMETRY_CANCELLED);
       } else {
         service->phase = IMAGE_PHASE_WAITING;
@@ -970,7 +981,7 @@ void loom_serve_image_service_free(loom_serve_image_service_t* service) {
     loom_serve_image_stop(service);
   }
   if (service->phase == IMAGE_PHASE_WAITING) {
-    service->generator.discard_prepared_request(service->generator.self);
+    service->generator.discard_batch(service->generator.self);
     loom_serve_image_finish(service, service->telemetry.failure_code
                                          ? LOOM_SERVE_TELEMETRY_FAILED
                                          : LOOM_SERVE_TELEMETRY_CANCELLED);
@@ -998,11 +1009,11 @@ iree_status_t loom_serve_image_service_allocate(
     loom_serve_telemetry_stream_t* stream, iree_allocator_t host_allocator,
     loom_serve_image_service_t** out_service) {
   *out_service = NULL;
-  if (!generator.try_admit || !generator.prepare || !generator.set_observer ||
-      !generator.advance_prepared_request ||
-      !generator.discard_prepared_request || !generator.submit ||
-      !generator.complete || !options->width || !options->height ||
-      !options->name.size || !options->pending_capacity ||
+  if (!generator.try_admit || !generator.batch_limit || !generator.prepare ||
+      !generator.prepare_batch || !generator.set_observer ||
+      !generator.advance_batch || !generator.discard_batch ||
+      !generator.submit || !generator.complete || !options->width ||
+      !options->height || !options->name.size || !options->pending_capacity ||
       options->heartbeat_interval < 0 ||
       options->pending_capacity >
           IREE_HOST_SIZE_MAX / sizeof(loom_serve_image_pending_t)) {

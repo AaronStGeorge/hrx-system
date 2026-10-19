@@ -1,1 +1,3 @@
 config.def @fixture.pixels = 16 : index
+
+config.def @fixture.batch = 1 : index

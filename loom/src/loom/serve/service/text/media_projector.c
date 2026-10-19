@@ -168,7 +168,7 @@ typedef struct loom_serve_text_media_job_t {
   // Owned decoded packet retained through producer completion.
   iree_vm_buffer_t* packet;
   // Owned source input, possibly aliasing packet.
-  loom_serve_finite_prepared_t prepared;
+  loom_serve_prepared_request_t prepared;
   // CPU-produced per-image status, consumed after the CPU borrow retires.
   iree_status_t status;
 } loom_serve_text_media_job_t;
@@ -212,7 +212,7 @@ struct loom_serve_text_media_projector_t {
   // Per-image realization results transferred into jobs.
   iree_status_t* statuses;
   // Contiguous borrowed source arguments for the selected device cohort.
-  loom_serve_finite_prepared_t* prepared;
+  loom_serve_prepared_request_t* prepared;
   // Expected feature counts for the selected device cohort.
   iree_host_size_t* rows;
 };
@@ -237,7 +237,7 @@ iree_status_t loom_serve_text_media_projector_allocate(
                         &requests_offset),
       IREE_STRUCT_FIELD(capacity, iree_vm_buffer_t*, &packets_offset),
       IREE_STRUCT_FIELD(capacity, iree_status_t, &statuses_offset),
-      IREE_STRUCT_FIELD(capacity, loom_serve_finite_prepared_t,
+      IREE_STRUCT_FIELD(capacity, loom_serve_prepared_request_t,
                         &prepared_offset),
       IREE_STRUCT_FIELD(capacity, iree_host_size_t, &rows_offset)));
   uint8_t* storage = NULL;

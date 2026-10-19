@@ -1034,6 +1034,7 @@ loom_cc_test(
     iree::hal
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::vm
     loom::serve::runtime::device
     loom::serve::runtime::execution
     loom::serve::runtime::host

@@ -12,6 +12,8 @@ global.rodata.def @root = bytes("67656e65726174655f696d616765")
 
 global.rodata.def @pixels = bytes("666978747572652e706978656c73")
 
+global.rodata.def @batch = bytes("666978747572652e6261746368")
+
 global.rodata.def @tokenizer = bytes("746f6b656e697a65722e6a736f6e")
 
 global.rodata.def @name = bytes("666978747572652d696d616765")
@@ -20,7 +22,7 @@ global.rodata.def @invalid = bytes("6669787475726520726571756972657320312d363420
 
 // A real source bootstrap with no immutable parameter roots. The two kernels
 // communicate through compiler-reflected private command workspace.
-func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buffer, %adapter: buffer, %options: buffer) -> (i64, buffer, buffer, buffer) {
+func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buffer, %adapter: buffer, %options: buffer) -> (i64, i64, buffer, buffer, buffer) {
   %c0 = scalar.constant 0 : i64
   %maximum = scalar.constant 64 : i64
   %text_maximum = scalar.constant 4096 : i64
@@ -57,13 +59,17 @@ func.def public @prepare(%height: i64, %width: i64, %text: i64, %directory: buff
   %key = global.load @pixels : buffer
   %pixels = scalar.muli %height, %width : i64
   func.call @config_i64(%stage, %key, %pixels) : (i32, buffer, i64)
+  %batch_key = global.load @batch : buffer
+  %single = scalar.constant 1 : i64
+  func.call @config_i64(%stage, %batch_key, %single) : (i32, buffer, i64)
   %length = index.constant 16 : offset
   %state = buffer.alloca<private> align(8) %length : buffer
   %view = buffer.view %state[%origin] : buffer -> view<2xi64>
   view.store %text, %view[0] : i64, view<2xi64>
   view.store %pixels, %view[1] : i64, view<2xi64>
-  %capacity = scalar.constant 16 : i64
+  %batch_units = scalar.constant 4 : i64
+  %capacity = scalar.constant 128 : i64
   %tokenizer = global.load @tokenizer : buffer
   %name = global.load @name : buffer
-  func.return %capacity, %tokenizer, %name, %state : i64, buffer, buffer, buffer
+  func.return %batch_units, %capacity, %tokenizer, %name, %state : i64, i64, buffer, buffer, buffer
 }

@@ -26,6 +26,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "iree/testing/temp_file.h"
+#include "iree/vm/buffer.h"
 #include "loom/serve/runtime/program/package.h"
 #include "loom/serve/runtime/program/variant_pool.h"
 #include "loom/serve/server/model_registration.h"
@@ -160,6 +161,20 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
           host_allocator_);
       return iree_status_join(status, loom_serve_registry_free(registry));
     });
+  }
+
+  iree_status_t PrepareSingle(iree_string_view_t prompt, uint64_t seed,
+                              float strength, uint32_t width, uint32_t height,
+                              loom_serve_image_prepared_t* out_prepared) {
+    loom_serve_prepared_request_t request = {};
+    IREE_RETURN_IF_ERROR(loom_serve_image_model_prepare_request(
+        model_, prompt, seed, strength, width, height, &request));
+    const iree_host_size_t output_length =
+        (iree_host_size_t)width * height * 12;
+    const iree_status_t status = loom_serve_image_model_prepare_batch(
+        model_, 1, &request, &output_length, out_prepared);
+    iree_vm_buffer_release(request.bytes);
+    return status;
   }
 
   std::string Declaration(const std::string& name, const std::string& source,
@@ -607,8 +622,7 @@ TEST_P(SourceImageServiceTest, PreparedShapePinsCodeAcrossSelectionAndRemoval) {
         std::lock_guard<std::mutex> lock(compilation.mutex);
         before = compilation.wakes;
       }
-      IREE_ASSERT_OK(
-          generator.advance_prepared_request(generator.self, false, &resolved));
+      IREE_ASSERT_OK(generator.advance_batch(generator.self, false, &resolved));
       if (!resolved) {
         std::unique_lock<std::mutex> lock(compilation.mutex);
         compilation.condition.wait(lock,
@@ -637,19 +651,16 @@ TEST_P(SourceImageServiceTest, PreparedShapePinsCodeAcrossSelectionAndRemoval) {
     }
   };
   loom_serve_image_prepared_t prepared;
-  IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
-      model_, IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
+  IREE_ASSERT_OK(PrepareSingle(IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
   IREE_ASSERT_OK(update.select(update.self, candidate.get()));
   ASSERT_NO_FATAL_FAILURE(complete(1, GetParam() ? 2 : 1));
 
-  IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
-      model_, IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
+  IREE_ASSERT_OK(PrepareSingle(IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
   IREE_ASSERT_OK(update.select(update.self, nullptr));
   candidate.reset();
   ASSERT_NO_FATAL_FAILURE(complete(0, GetParam() ? 3 : 1));
 
-  IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
-      model_, IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
+  IREE_ASSERT_OK(PrepareSingle(IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
   ASSERT_NO_FATAL_FAILURE(complete(1, GetParam() ? 2 : 1));
   generator.set_observer(generator.self, {});
 }
@@ -753,12 +764,12 @@ TEST_P(SourceImageServiceTest, SelectionWaitsForWholeImageAndEncoderRelease) {
 TEST_P(SourceImageServiceTest, SourcePixelsAndHttpPngPreserveRequestIdentity) {
   ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
   loom_serve_image_prepared_t prepared;
-  IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
-      model_, IREE_SV("x"), 0, 1.0f, kWidth, kHeight, &prepared));
+  IREE_ASSERT_OK(
+      PrepareSingle(IREE_SV("x"), 0, 1.0f, kWidth, kHeight, &prepared));
   EXPECT_EQ(prepared.stage, 0u);
   EXPECT_EQ(prepared.tag, 32);
-  EXPECT_EQ(prepared.input_bytes, 16u);
-  loom_serve_image_model_discard_prepared_request(model_);
+  EXPECT_EQ(prepared.input_bytes, 32u);
+  loom_serve_image_model_discard_batch(model_);
   // Verify source arithmetic independently of the image encoder.
   for (uint64_t seed : {0u, 1u}) {
     iree_const_byte_span_t rgb;
@@ -766,7 +777,7 @@ TEST_P(SourceImageServiceTest, SourcePixelsAndHttpPngPreserveRequestIdentity) {
         model_, IREE_SV("aba"), seed, 1.0f, kWidth, kHeight, &prepared, &rgb));
     EXPECT_EQ(prepared.stage, 0u);
     EXPECT_EQ(prepared.tag, 32);
-    EXPECT_EQ(prepared.input_bytes, 16u);
+    EXPECT_EQ(prepared.input_bytes, 32u);
     const auto expected = Pixels(3, seed);
     ASSERT_EQ(rgb.data_length, expected.size() * sizeof(float));
     for (size_t i = 0; i < expected.size(); ++i) {
@@ -1042,7 +1053,7 @@ TEST_P(SourceImageServiceTest, IndependentLogReadersCannotBlockColdImageWork) {
             std::string::npos);
   EXPECT_NE(events.find(R"("event":"image_request_stats")"), std::string::npos);
   EXPECT_NE(events.find(R"("event":"image_prepared")"), std::string::npos);
-  EXPECT_NE(events.find(R"("stage":0,"tag":32,"input_bytes":16)"),
+  EXPECT_NE(events.find(R"("stage":0,"tag":32,"input_bytes":32)"),
             std::string::npos);
   EXPECT_NE(events.find(R"("event":"image_generated")"), std::string::npos);
   EXPECT_NE(events.find(R"("event":"weight_activity")"), std::string::npos);
@@ -1304,12 +1315,11 @@ TEST_P(SourceImageServiceTest, StoppingDeviceImageSkipsEncoding) {
 TEST_P(SourceImageServiceTest, FailedPartReadinessPreservesActualRetirement) {
   ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
   loom_serve_image_prepared_t prepared;
-  IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
-      model_, IREE_SV("aba"), 1, 1.0f, kWidth, kHeight, &prepared));
+  IREE_ASSERT_OK(
+      PrepareSingle(IREE_SV("aba"), 1, 1.0f, kWidth, kHeight, &prepared));
   const auto generator = loom_serve_image_model_generator(model_);
   bool resolved = false;
-  IREE_ASSERT_OK(
-      generator.advance_prepared_request(generator.self, false, &resolved));
+  IREE_ASSERT_OK(generator.advance_batch(generator.self, false, &resolved));
   ASSERT_TRUE(resolved);
   loom_serve_residency_admission_t admission;
   IREE_ASSERT_OK(generator.try_admit(generator.self, &admission));
@@ -1337,7 +1347,7 @@ class ImageSpecializationTest : public SourceImageServiceTest {
     ReleaseCompiler();
     if (prepared_) {
       IREE_EXPECT_OK(Resolve(true));
-      loom_serve_image_model_discard_prepared_request(model_);
+      loom_serve_image_model_discard_batch(model_);
     }
     SourceImageServiceTest::TearDown();
   }
@@ -1371,7 +1381,7 @@ class ImageSpecializationTest : public SourceImageServiceTest {
     while (!complete) {
       const auto before = wakes_.load();
       IREE_RETURN_IF_ERROR(
-          loom_serve_image_model_advance_request(model_, cancel, &complete));
+          loom_serve_image_model_advance_batch(model_, cancel, &complete));
       if (!complete) {
         std::unique_lock<std::mutex> lock(mutex_);
         condition_.wait(lock, [&] { return wakes_.load() != before; });
@@ -1392,6 +1402,83 @@ class ImageSpecializationTest : public SourceImageServiceTest {
     for (size_t i = 0; i < expected.size(); ++i) {
       EXPECT_EQ(iree_unaligned_load_le_f32(rgb.data + i * sizeof(float)),
                 expected[i]);
+    }
+  }
+
+  void RunCohort(float first_strength, bool cancel, bool reuse) {
+    const auto before = compiler_allocations_.load();
+    struct Prepared {
+      ~Prepared() {
+        for (const auto& request : requests) {
+          iree_vm_buffer_release(request.bytes);
+        }
+      }
+      // Independent CPU payloads retained until the batch captures its copy.
+      std::array<loom_serve_prepared_request_t, 2> requests = {};
+    } prepared;
+    IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
+        model_, IREE_SV("ab"), 0, first_strength, kWidth, kHeight,
+        &prepared.requests[0]));
+    // Rejection of another request cannot release or replace a prepared peer.
+    loom_serve_prepared_request_t rejected = {};
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_INVALID_ARGUMENT,
+        loom_serve_image_model_prepare_request(model_, IREE_SV("ab"), 0, 1.0f,
+                                               65, kHeight, &rejected));
+    EXPECT_EQ(rejected.bytes, nullptr);
+    iree_vm_buffer_release(rejected.bytes);
+    IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
+        model_, IREE_SV("aba"), 1, -0.5f, kWidth, kHeight,
+        &prepared.requests[1]));
+    EXPECT_EQ(prepared.requests[0].units, 1u);
+    EXPECT_EQ(prepared.requests[0].tag, prepared.requests[1].tag);
+    const iree_host_size_t lengths[] = {kPixels * 12, kPixels * 12};
+    loom_serve_image_prepared_t batch;
+    IREE_ASSERT_OK(loom_serve_image_model_prepare_batch(
+        model_, prepared.requests.size(), prepared.requests.data(), lengths,
+        &batch));
+    prepared_ = true;
+    EXPECT_EQ(batch.input_bytes, 64u);
+    loom_serve_image_model_set_observer(model_, {Wake, this});
+    IREE_ASSERT_OK(Resolve(false));
+    EXPECT_EQ(compiler_allocations_.load() == before, reuse);
+    const auto generator = loom_serve_image_model_generator(model_);
+    IREE_ASSERT_OK(loom_serve_residency_acquire_wait(
+        loom_serve_image_model_residency(model_)));
+    // From admission onward, teardown joins the model's accepted ownership.
+    prepared_ = false;
+    uint32_t parts = 0;
+    bool complete = false;
+    while (!complete) {
+      loom_serve_execution_frontier_t frontier;
+      IREE_ASSERT_OK(generator.submit(
+          generator.self,
+          cancel && parts ? LOOM_SERVE_IMAGE_SUBMIT_FLAG_CANCEL : 0, &frontier,
+          &complete));
+      IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
+          {2, frontier.semaphores, frontier.values}, iree_infinite_timeout(),
+          IREE_ASYNC_WAIT_FLAG_NONE));
+      ++parts;
+    }
+    EXPECT_EQ(parts, GetParam() ? 2u : 1u);
+    const auto rgb = generator.complete(generator.self);
+    prepared_ = false;
+    loom_serve_image_model_set_observer(model_, {});
+    if (cancel && GetParam()) {
+      return;
+    }
+    ASSERT_EQ(rgb.data_length, 2 * kPixels * 12);
+    for (size_t item = 0; item < 2; ++item) {
+      auto expected = Pixels(item ? 3 : 2, item, kPixels);
+      const float strength = item ? -0.5f : first_strength;
+      for (size_t i = 0; i < kPixels * 2; ++i) {
+        expected[i] *= strength;
+      }
+      for (size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_EQ(iree_unaligned_load_le_f32(rgb.data + item * lengths[item] +
+                                             i * sizeof(float)),
+                  expected[i]);
+      }
     }
   }
 
@@ -1432,6 +1519,15 @@ TEST_P(ImageSpecializationTest, ExactReuseAndLruEvictionPreserveOutput) {
   ASSERT_NO_FATAL_FAILURE(Run(kWidth, kHeight, true));
 }
 
+TEST_P(ImageSpecializationTest, CohortPrivateValuesSurvivePartsAndReuse) {
+  ASSERT_NO_FATAL_FAILURE(
+      CreateStandaloneModel({2, 16 * 1024 * 1024}, {this, Allocate}));
+  ASSERT_NO_FATAL_FAILURE(RunCohort(0.25f, false, false));
+  ASSERT_NO_FATAL_FAILURE(RunCohort(0.75f, false, true));
+  ASSERT_NO_FATAL_FAILURE(RunCohort(0.0f, true, true));
+  ASSERT_NO_FATAL_FAILURE(RunCohort(-0.25f, false, true));
+}
+
 TEST_P(ImageSpecializationTest, DisabledReuseStillAllowsLargerRequests) {
   ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel({0, 0}, {this, Allocate}));
   ASSERT_NO_FATAL_FAILURE(Run(15, 9, false));
@@ -1444,8 +1540,7 @@ TEST_P(ImageSpecializationTest, CancellationJoinsAcceptedCompilerBeforeReuse) {
       CreateStandaloneModel({2, 16 * 1024 * 1024}, {this, Allocate}));
   loom_serve_image_model_set_observer(model_, {Wake, this});
   loom_serve_image_prepared_t prepared;
-  IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
-      model_, IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
+  IREE_ASSERT_OK(PrepareSingle(IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
   prepared_ = true;
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -1453,18 +1548,17 @@ TEST_P(ImageSpecializationTest, CancellationJoinsAcceptedCompilerBeforeReuse) {
   }
   bool complete = true;
   IREE_ASSERT_OK(
-      loom_serve_image_model_advance_request(model_, false, &complete));
+      loom_serve_image_model_advance_batch(model_, false, &complete));
   EXPECT_FALSE(complete);
   {
     std::unique_lock<std::mutex> lock(mutex_);
     condition_.wait(lock, [&] { return entered_; });
   }
-  IREE_ASSERT_OK(
-      loom_serve_image_model_advance_request(model_, true, &complete));
+  IREE_ASSERT_OK(loom_serve_image_model_advance_batch(model_, true, &complete));
   EXPECT_FALSE(complete);
   ReleaseCompiler();
   IREE_ASSERT_OK(Resolve(true));
-  loom_serve_image_model_discard_prepared_request(model_);
+  loom_serve_image_model_discard_batch(model_);
   prepared_ = false;
   loom_serve_image_model_set_observer(model_, {});
   ASSERT_NO_FATAL_FAILURE(Run(15, 9, true));

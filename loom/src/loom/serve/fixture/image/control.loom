@@ -21,12 +21,13 @@ global.rodata.def @root = bytes("67656e65726174655f696d616765")
 
 global.rodata.def @pixels = bytes("666978747572652e706978656c73")
 
+global.rodata.def @batch = bytes("666978747572652e6261746368")
+
 // The payload carries request-derived facts, not host-rendered pixels.
-func.def public @prepare_request(%state: buffer, %tags: buffer, %stage_count: i32, %height: i64, %width: i64, %prompt: buffer, %seed: i64, %strength: f32) -> (i32, buffer) {
+func.def public @prepare_request(%state: buffer, %height: i64, %width: i64, %prompt: buffer, %seed: i64, %strength: f32) -> (buffer, i64, i64) {
   %origin = index.constant 0 : offset
   %state_view = buffer.view %state[%origin] : buffer -> view<2xi64>
   %capacity = view.load %state_view[0] : view<2xi64> -> i64
-  %cold_pixels = view.load %state_view[1] : view<2xi64> -> i64
   %minimum = scalar.constant 0 : i64
   %maximum = scalar.constant 64 : i64
   %h0 = scalar.cmpi ugt, %height, %minimum : i64
@@ -47,13 +48,39 @@ func.def public @prepare_request(%state: buffer, %tags: buffer, %stage_count: i3
   %fits32 = scalar.extui %fits : i1 to i32
   %error = global.load @invalid : buffer
   func.call @require(%fits32, %error) : (i32, buffer)
-  %length = index.constant 16 : offset
+  %length = index.constant 32 : offset
   %payload = buffer.alloca<private> align(8) %length : buffer
-  %header = buffer.view %payload[%origin] : buffer -> view<2xi64>
-  view.store %seed, %header[0] : i64, view<2xi64>
-  view.store %count, %header[1] : i64, view<2xi64>
+  %header = buffer.view %payload[%origin] : buffer -> view<3xi64>
+  view.store %seed, %header[0] : i64, view<3xi64>
+  view.store %count, %header[1] : i64, view<3xi64>
   %pixels = scalar.muli %height, %width : i64
-  %cold = scalar.cmpi eq, %pixels, %cold_pixels : i64
+  view.store %pixels, %header[2] : i64, view<3xi64>
+  %strength_offset = index.constant 24 : offset
+  %values = buffer.view %payload[%strength_offset] : buffer -> view<2xf32>
+  view.store %strength, %values[0] : f32, view<2xf32>
+  %padding = scalar.constant 0.0 : f32
+  view.store %padding, %values[1] : f32, view<2xf32>
+  func.return %payload, %c1, %pixels : buffer, i64, i64
+}
+
+// Source requests have a fixed packet layout. A cohort shares the pixel count
+// but keeps independent request values and private palette slots.
+func.def public @prepare_batch(%state: buffer, %tags: buffer, %ranges: buffer, %payload: buffer) -> (i32, buffer) {
+  %origin = index.constant 0 : offset
+  %state_view = buffer.view %state[%origin] : buffer -> view<2xi64>
+  %capacity = view.load %state_view[0] : view<2xi64> -> i64
+  %cold_pixels = view.load %state_view[1] : view<2xi64> -> i64
+  %header = buffer.view %payload[%origin] : buffer -> view<3xi64>
+  %pixels = view.load %header[2] : view<3xi64> -> i64
+  %range_bytes = buffer.length %ranges
+  %range_length = index.cast %range_bytes : offset to i64
+  %c16 = scalar.constant 16 : i64
+  %count = scalar.divui %range_length, %c16 : i64
+  %c1 = scalar.constant 1 : i64
+  %single = scalar.cmpi eq, %count, %c1 : i64
+  %same_pixels = scalar.cmpi eq, %pixels, %cold_pixels : i64
+  %cold = scalar.andi %single, %same_pixels : i1
+  %c0 = scalar.constant 0 : i32
   %selected = scf.if %cold -> (i32) {
     scf.yield %c0 : i32
   } else {
@@ -63,6 +90,8 @@ func.def public @prepare_request(%state: buffer, %tags: buffer, %stage_count: i3
     func.call @workspace_limit(%stage, %workspace_limit) : (i32, i64)
     %key = global.load @pixels : buffer
     func.call @config_i64(%stage, %key, %pixels) : (i32, buffer, i64)
+    %batch_key = global.load @batch : buffer
+    func.call @config_i64(%stage, %batch_key, %count) : (i32, buffer, i64)
     scf.yield %stage : i32
   }
   func.return %selected, %payload : i32, buffer

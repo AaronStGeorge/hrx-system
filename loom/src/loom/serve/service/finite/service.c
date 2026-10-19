@@ -35,7 +35,7 @@ typedef struct loom_serve_finite_job_t {
   loom_serve_finite_request_t* request;
   // Source preparation retained across admission waits and incompatible
   // cohorts.
-  loom_serve_finite_prepared_t prepared;
+  loom_serve_prepared_request_t prepared;
   // Request-scoped parsing/source rejection, consumed after CPU release.
   iree_status_t status;
   // Original device-cohort ordinal, preserved when cancelled peers are removed.
@@ -92,7 +92,7 @@ struct loom_serve_finite_service_t {
   // Number of live entries in cohort.
   iree_host_size_t cohort_count;
   // Contiguous source request arguments captured for batch preparation.
-  loom_serve_finite_prepared_t* prepared;
+  loom_serve_prepared_request_t* prepared;
   // Protocol result row counts captured alongside the cohort.
   iree_host_size_t* rows;
   // Explicit host materialization retained through CPU encoding release.
@@ -930,7 +930,7 @@ iree_status_t loom_serve_finite_service_allocate(
     loom_serve_finite_service_t** out_service) {
   *out_service = NULL;
   if (!name.size || !capacity || heartbeat_interval < 0 ||
-      capacity > SIZE_MAX / sizeof(loom_serve_finite_prepared_t)) {
+      capacity > SIZE_MAX / sizeof(loom_serve_prepared_request_t)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "finite service requires a name and queue capacity");

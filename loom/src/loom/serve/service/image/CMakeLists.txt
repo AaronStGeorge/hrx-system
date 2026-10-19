@@ -85,6 +85,7 @@ loom_cc_library(
     loom::serve::runtime::execution
     loom::serve::runtime::parameter::residency
     loom::serve::service::execution_reconfiguration
+    loom::serve::service::prepared_request
   PUBLIC
 )
 endif()
@@ -125,6 +126,7 @@ loom_cc_library(
     iree::base::internal::base64
     iree::base::threading
     iree::task
+    iree::vm
     loom::serve::runtime::execution
     loom::serve::runtime::host
     loom::serve::runtime::host::clock
@@ -182,6 +184,7 @@ loom_cc_library(
     loom::serve::runtime::program::tokenizer_load
     loom::serve::runtime::program::variant_pool
     loom::serve::service::executables
+    loom::serve::service::prepared_request
     loom::util::stream
   PUBLIC
 )
@@ -201,6 +204,7 @@ loom_cc_library(
     iree::hal
     iree::testing::gtest
     iree::testing::temp_file
+    iree::vm
     loom::serve::runtime::device
     loom::serve::runtime::execution
     loom::serve::runtime::host

@@ -875,7 +875,7 @@ bool loom_serve_finite_model_is_pending(
 
 iree_status_t loom_serve_finite_model_prepare_request(
     loom_serve_finite_model_t* model, iree_vm_buffer_t* input,
-    loom_serve_finite_prepared_t* out_prepared) {
+    loom_serve_prepared_request_t* out_prepared) {
   memset(out_prepared, 0, sizeof(*out_prepared));
   iree_vm_variant_t arguments[] = {
       iree_vm_buffer_variant_from_ptr_borrowed(&model->control.vm_types,
@@ -909,7 +909,7 @@ iree_status_t loom_serve_finite_model_prepare_request(
   if (iree_status_is_ok(status)) {
     iree_vm_buffer_retain(bytes);
     *out_prepared =
-        (loom_serve_finite_prepared_t){bytes, (uint64_t)units, (uint64_t)tag};
+        (loom_serve_prepared_request_t){bytes, (uint64_t)units, (uint64_t)tag};
   }
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(arguments));
   iree_vm_variant_span_reset(iree_vm_variant_span_from_array(results));
@@ -925,47 +925,16 @@ void loom_serve_finite_model_release_batch(loom_serve_finite_model_t* model) {
 
 iree_status_t loom_serve_finite_model_prepare_batch(
     loom_serve_finite_model_t* model, iree_host_size_t count,
-    const loom_serve_finite_prepared_t* requests,
+    const loom_serve_prepared_request_t* requests,
     const iree_host_size_t* expected_rows) {
-  iree_host_size_t length = 0;
-  for (iree_host_size_t i = 0; i < count; ++i) {
-    const iree_host_size_t size = iree_vm_buffer_length(requests[i].bytes);
-    if (size > SIZE_MAX - length) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "prepared cohort exceeds host address space");
-    }
-    length += size;
-  }
   iree_vm_buffer_t* ranges = NULL;
   iree_vm_buffer_t* packed = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_vm_buffer_create(count * 16, 8, model->host_allocator, &ranges));
+  IREE_RETURN_IF_ERROR(loom_serve_prepared_requests_pack(
+      count, requests, model->host_allocator, &ranges, &packed));
   loom_serve_executables_capture(model->executables);
   loom_serve_preparation_module_begin(model->control.preparation,
                                       model->stages.count,
                                       LOOM_SERVE_PREPARATION_FLAG_PARAMETERS);
-  iree_status_t status =
-      iree_vm_buffer_create(length, 8, model->host_allocator, &packed);
-  iree_byte_span_t records = iree_byte_span_empty();
-  iree_byte_span_t target = iree_byte_span_empty();
-  if (iree_status_is_ok(status)) {
-    status = iree_vm_buffer_map_write(ranges, 0, count * 16, &records);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_vm_buffer_map_write(packed, 0, length, &target);
-  }
-  iree_host_size_t offset = 0;
-  for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
-    iree_const_byte_span_t input;
-    status = iree_vm_buffer_map_read(
-        requests[i].bytes, 0, iree_vm_buffer_length(requests[i].bytes), &input);
-    if (iree_status_is_ok(status)) {
-      iree_unaligned_store_le_u64(records.data + i * 16, offset);
-      iree_unaligned_store_le_u64(records.data + i * 16 + 8, input.data_length);
-      memcpy(target.data + offset, input.data, input.data_length);
-      offset += input.data_length;
-    }
-  }
   iree_vm_variant_t arguments[] = {
       iree_vm_buffer_variant_from_ptr_borrowed(&model->control.vm_types,
                                                model->control.state),
@@ -975,13 +944,10 @@ iree_status_t loom_serve_finite_model_prepare_batch(
       iree_vm_buffer_variant_from_ptr_move(&model->control.vm_types, &packed)};
   iree_vm_variant_t results[3] = {0};
   iree_vm_buffer_t* plan = NULL;
-  if (iree_status_is_ok(status)) {
-    status =
-        iree_vm_invoke(loom_serve_program_invocation(model->control.program),
-                       model->control.prepare_batch,
-                       iree_vm_variant_span_from_array(arguments),
-                       iree_vm_variant_span_from_array(results));
-  }
+  iree_status_t status = iree_vm_invoke(
+      loom_serve_program_invocation(model->control.program),
+      model->control.prepare_batch, iree_vm_variant_span_from_array(arguments),
+      iree_vm_variant_span_from_array(results));
   int32_t stage = 0;
   loom_serve_preparation_t* declarations =
       loom_serve_preparation_module_take(model->control.preparation);
