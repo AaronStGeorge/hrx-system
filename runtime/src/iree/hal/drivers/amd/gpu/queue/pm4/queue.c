@@ -333,9 +333,11 @@ typedef enum iree_hal_amd_gpu_pm4_publication_result_e {
   IREE_HAL_AMD_GPU_PM4_PUBLICATION_GROW_SCRATCH,
 } iree_hal_amd_gpu_pm4_publication_result_t;
 
-// Acceptance publishes host retirement state before either waking the observer
-// or ringing MMIO. The retained capture pins the publication tail even if the
-// GPU and completion worker retire the entire piece before this caller returns.
+// Native acceptance is irrevocable here. Finish every capture access before
+// exposing the retirement record, transferring the final publication reference
+// directly to completion. Only a piece with an unpublished suffix needs another
+// reference. No capture access follows count publication or native
+// notification.
 static iree_hal_amd_gpu_pm4_publication_result_t
 iree_hal_amd_gpu_pm4_publish_accepted(
     iree_hal_amd_gpu_pm4_queue_t* queue,
@@ -364,31 +366,14 @@ iree_hal_amd_gpu_pm4_publish_accepted(
         queue->profile, iree_hal_amd_gpu_pm4_submission_profile(submission),
         true, submission->native_wait_count);
   }
-  iree_hal_amd_gpu_pm4_submission_retain(submission);
   if (!terminal) {
+    iree_hal_amd_gpu_pm4_submission_retain(submission);
     iree_atomic_fetch_add(&queue->outstanding, 1, iree_memory_order_relaxed);
   }
   queue->issued[position & queue->retirement.capacity_mask].scratch =
       iree_hal_amd_gpu_pm4_scratch_publish(
           &queue->producer.scratch, position + 1,
           iree_hal_amd_gpu_pm4_submission_scratch_required(submission));
-  iree_atomic_store(&queue->producer.count, position + 1,
-                    iree_memory_order_release);
-  if (queue->kernel) {
-    if (iree_atomic_exchange(&queue->kernel->wake_required, 0,
-                             iree_memory_order_acq_rel)) {
-      iree_async_event_native_set(&queue->context->kernel_event);
-    }
-  } else {
-    const uint64_t published_words = queue->producer.ring.reserved_words;
-    iree_atomic_store(queue->producer.write_index, published_words,
-                      iree_memory_order_release);
-    const iree_hal_memory_transition_recipe_info_t publication_fence = {
-        .host = {.fence_after = IREE_HAL_HOST_CACHE_FENCE_X86_SFENCE},
-    };
-    iree_hal_memory_transition_execute_host_direct(&publication_fence, NULL, 1);
-    *queue->producer.doorbell = published_words;
-  }
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0;
        terminal && submission->signal && i < submission->signals.count &&
@@ -408,8 +393,22 @@ iree_hal_amd_gpu_pm4_publish_accepted(
   if (!iree_status_is_ok(status)) {
     iree_hal_amd_gpu_pm4_fail_submission(queue, submission, status);
   }
-  if (terminal) {
-    iree_hal_amd_gpu_pm4_submission_release(submission);
+  iree_atomic_store(&queue->producer.count, position + 1,
+                    iree_memory_order_release);
+  if (queue->kernel) {
+    if (iree_atomic_exchange(&queue->kernel->wake_required, 0,
+                             iree_memory_order_acq_rel)) {
+      iree_async_event_native_set(&queue->context->kernel_event);
+    }
+  } else {
+    const uint64_t published_words = queue->producer.ring.reserved_words;
+    iree_atomic_store(queue->producer.write_index, published_words,
+                      iree_memory_order_release);
+    const iree_hal_memory_transition_recipe_info_t publication_fence = {
+        .host = {.fence_after = IREE_HAL_HOST_CACHE_FENCE_X86_SFENCE},
+    };
+    iree_hal_memory_transition_execute_host_direct(&publication_fence, NULL, 1);
+    *queue->producer.doorbell = published_words;
   }
   return terminal ? IREE_HAL_AMD_GPU_PM4_PUBLICATION_FINISHED
                   : IREE_HAL_AMD_GPU_PM4_PUBLICATION_MORE;

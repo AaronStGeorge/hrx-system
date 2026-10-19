@@ -61,7 +61,7 @@ typedef struct iree_hal_amd_gpu_pm4_entry_t {
 // published piece owns separate retirement credit; this capture also owns any
 // unpublished suffix and never stores mutable per-publication completion data.
 typedef struct iree_hal_amd_gpu_pm4_submission_t {
-  // Host publication and native retirement may finish in either order.
+  // Unpublished work and nonterminal native pieces hold independent references.
   iree_atomic_ref_count_t ref_count;
   // Number of retained native readers, or UINT32_MAX before admission.
   uint32_t native_wait_count;
@@ -230,8 +230,8 @@ void iree_hal_amd_gpu_pm4_submission_profile_transfer(
 iree_byte_span_t iree_hal_amd_gpu_pm4_submission_tail_storage(
     iree_hal_amd_gpu_pm4_submission_t* submission);
 
-// Pins publication bookkeeping independently of a possibly earlier GPU
-// completion. Existing ownership is required to acquire a reference.
+// Pins one nonterminal native piece independently of its unpublished suffix.
+// The final publication transfers the suffix reference directly to retirement.
 void iree_hal_amd_gpu_pm4_submission_retain(
     iree_hal_amd_gpu_pm4_submission_t* submission);
 
@@ -247,12 +247,11 @@ bool iree_hal_amd_gpu_pm4_submission_retirement_ready(
     iree_status_code_t* out_status_code);
 
 // Releases payload resources after terminal native completion, before public
-// completion signals. Publication may still retain the capture for its signal
-// bookkeeping, but never accesses the payload after publishing the final piece.
+// completion signals. The final publisher has transferred its reference and
+// no longer accesses this capture; earlier native pieces have already retired.
 // Does not publish signal retirement: the completion owner must first finish
 // its public signal effects and then publish their outcome. Idempotent for
-// terminal retirement and final capture release; only terminal retirement
-// calls this while another capture reference exists.
+// terminal retirement and final capture release.
 void iree_hal_amd_gpu_pm4_submission_release_payload(
     iree_hal_amd_gpu_pm4_submission_t* submission);
 

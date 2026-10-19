@@ -56,7 +56,7 @@ struct Executable {
   }
 };
 
-TEST_P(SubmissionTest, PayloadRetiresBeforePublicationBookkeeping) {
+TEST_P(SubmissionTest, PayloadRetiresBeforePublicCompletion) {
   iree_async_proactor_t* proactor = nullptr;
   IREE_ASSERT_OK(
       iree_async_proactor_create_platform(iree_async_proactor_options_default(),
@@ -143,7 +143,7 @@ TEST_P(SubmissionTest, PayloadRetiresBeforePublicationBookkeeping) {
   EXPECT_FALSE(executable.destroyed);
   EXPECT_FALSE(buffer_destroyed);
   // Native completion must release payloads before exposing its public
-  // signal, even when the publisher still owns the capture's bookkeeping.
+  // signal. The remaining reference now belongs exclusively to retirement.
   iree_hal_amd_gpu_pm4_submission_release_payload(capture);
   EXPECT_TRUE(executable.destroyed);
   EXPECT_TRUE(buffer_destroyed);
@@ -489,7 +489,7 @@ struct FileRetirement {
   }
 };
 
-TEST_P(SubmissionTest, FileRetirementJoinsNativeAndPublicationReferences) {
+TEST_P(SubmissionTest, FileRetirementTransfersTheFinalPublicationReference) {
   FileRetirement owner;
   iree_hal_amd_gpu_pm4_submission_t* capture = nullptr;
   const iree_hal_amd_gpu_pm4_barrier_t before = {.cache_control = 17};
@@ -503,20 +503,20 @@ TEST_P(SubmissionTest, FileRetirementJoinsNativeAndPublicationReferences) {
   EXPECT_EQ(capture->after.cache_control, 29u);
   const auto tail = iree_hal_amd_gpu_pm4_submission_tail_storage(capture);
   std::memset(tail.data, 0xA5, tail.data_length);
-  iree_hal_amd_gpu_pm4_submission_retain(capture);
-  const bool native_first = GetParam();
+  // Each nonterminal piece has a reference in addition to the unpublished
+  // suffix. Retirement is ordered, so these pieces finish before the final
+  // piece releases the payload and completes the file operation.
+  if (GetParam()) {
+    iree_hal_amd_gpu_pm4_submission_retain(capture);
+    iree_hal_amd_gpu_pm4_submission_release(capture);
+  }
+  EXPECT_EQ(owner.retirements, 0u);
+  // Final publication transfers the original reference to retirement without
+  // another retain/release pair. Terminal retirement owns the capture alone.
   iree_async_single_frontier_t frontier;
   iree_async_single_frontier_initialize(&frontier, 7, 42);
-  if (native_first) {
-    iree_hal_amd_gpu_pm4_submission_release_payload(capture);
-    iree_hal_amd_gpu_pm4_submission_set_frontier(capture, &frontier);
-  }
-  iree_hal_amd_gpu_pm4_submission_release(capture);
-  EXPECT_EQ(owner.retirements, 0u);
-  if (!native_first) {
-    iree_hal_amd_gpu_pm4_submission_release_payload(capture);
-    iree_hal_amd_gpu_pm4_submission_set_frontier(capture, &frontier);
-  }
+  iree_hal_amd_gpu_pm4_submission_release_payload(capture);
+  iree_hal_amd_gpu_pm4_submission_set_frontier(capture, &frontier);
   iree_hal_amd_gpu_pm4_submission_release(capture);
   EXPECT_EQ(owner.failures, 0u);
   EXPECT_EQ(owner.retirements, 1u);

@@ -69,11 +69,12 @@ iree_status_t iree_hal_amd_gpu_pm4_semaphore_acquire_wait(
     iree_hal_semaphore_t* semaphore, uint64_t minimum_value, const void* domain,
     iree_hal_amd_gpu_pm4_semaphore_wait_t* out_wait);
 
-// Publishes an already admitted native producer. Its commands, including the
-// release of signal, must be visible to the hardware before this call. Merely
-// captured work with unresolved dependencies is not an eligible producer.
+// Publishes an irrevocably accepted native producer. KERNEL publication has
+// succeeded; a USER publisher has committed the complete command sequence and
+// must publish its write index and doorbell without another fallible step.
+// Captured work with unresolved dependencies is not an eligible producer.
 // Borrows signal and retains it only if it becomes the cached producer. A
-// publication reference must keep signal live if execution finishes first.
+// publication reference keeps signal live until retirement ownership transfers.
 // Higher values replace older cached values; existing readers remain retained.
 // Completion racing publication cannot reinstall an already completed point.
 // Submission publication does not advance the completed timeline or frontier.
