@@ -180,3 +180,43 @@ low.func.def target<test.low.core>(@test_target) @resource_stall_rejects_risky_g
 
 // ----
 block 0 order: 32, 0, 33
+
+// ====
+// RUN: emit low-schedule-query @critical_alias_after_pending_producer strategy=resource-stall order=* issue=19,20
+
+test.target<low_core> @target
+
+// Older independent work fills the source window and the ready-time view.
+// The unary alias is dependency-ready but retains its local producer's later
+// payload readiness. Graph nomination must still expose its longer chain
+// without growing the live frontier; ready-time nomination alone hides it.
+low.func.def target<test.low.core>(@target) @critical_alias_after_pending_producer(%lhs: reg<test.i32>, %rhs: reg<test.i32>, %vector: reg<test.i32 x4>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>) asm {
+  %producer = test.add.v4i32 %vector, %vector
+  low.schedule.fence
+  %independent0 = test.mul.i32 %lhs, %rhs
+  %independent1 = test.mul.i32 %lhs, %rhs
+  %independent2 = test.mul.i32 %lhs, %rhs
+  %independent3 = test.mul.i32 %lhs, %rhs
+  %independent4 = test.mul.i32 %lhs, %rhs
+  %independent5 = test.mul.i32 %lhs, %rhs
+  %independent6 = test.mul.i32 %lhs, %rhs
+  %independent7 = test.mul.i32 %lhs, %rhs
+  %independent8 = test.mul.i32 %lhs, %rhs
+  %independent9 = test.mul.i32 %lhs, %rhs
+  %independent10 = test.mul.i32 %lhs, %rhs
+  %independent11 = test.mul.i32 %lhs, %rhs
+  %independent12 = test.mul.i32 %lhs, %rhs
+  %independent13 = test.mul.i32 %lhs, %rhs
+  %independent14 = test.mul.i32 %lhs, %rhs
+  %independent15 = test.mul.i32 %lhs, %rhs
+  %independent16 = test.mul.i32 %lhs, %rhs
+  %lane = slice %producer[0] : reg<test.i32 x4> -> reg<test.i32>
+  %first = test.event.fast.i32 %lane, %lhs
+  %second = test.add.i32 %first, %rhs
+  return %second, %independent0, %independent1, %independent2, %independent3, %independent4, %independent5, %independent6, %independent7, %independent8, %independent9, %independent10, %independent11, %independent12, %independent13, %independent14, %independent15, %independent16
+}
+
+// ----
+block 0 order: 0, 1, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9, 21, 10, 11, 12, 13, 14, 15, 16, 17, 18, 22
+node 19 issue-cycle: 1
+node 20 issue-cycle: 2

@@ -32,12 +32,12 @@ iree_status_t loom_low_schedule_candidate_policy_initialize(
 
 static loom_low_schedule_register_debt_word_t*
 loom_low_schedule_candidate_policy_reset_register_debt(
-    const loom_low_schedule_candidate_policy_t* policy, uint8_t nominee_index) {
+    const loom_low_schedule_candidate_policy_t* policy, uint8_t score_index) {
   if (policy->register_debt_word_count == 0) {
     return NULL;
   }
   loom_low_schedule_register_debt_word_t* row =
-      &policy->nominee_register_debts[nominee_index *
+      &policy->nominee_register_debts[score_index *
                                       policy->register_debt_word_count];
   memset(row, 0, policy->register_debt_word_count * sizeof(*row));
   return row;
@@ -696,12 +696,19 @@ static void loom_low_schedule_collect_recovery_nominees(
     const loom_low_schedule_build_state_t* state,
     const loom_low_schedule_ready_policy_t* ready_policy,
     const loom_low_schedule_recovery_policy_t* recovery_policy,
-    uint32_t* nominees, uint8_t* nominee_count) {
+    uint8_t nominee_capacity, uint32_t* nominees, uint8_t* nominee_count) {
   for (uint8_t i = 0; i < recovery_policy->ready_view_count; ++i) {
+    // Keep one slot for the pair nominee within the fixed scoring budget.
+    const uint8_t nominee_limit =
+        iree_min(LOOM_LOW_SCHEDULE_READY_VIEW_NOMINEE_COUNT,
+                 nominee_capacity - 1 - *nominee_count);
+    if (nominee_limit == 0) {
+      break;
+    }
     loom_low_schedule_add_ready_view_nominees(
         ready_policy, recovery_policy->ready_views[i],
-        LOOM_LOW_SCHEDULE_READY_VIEW_SEARCH_COUNT,
-        LOOM_LOW_SCHEDULE_READY_VIEW_NOMINEE_COUNT, nominees, nominee_count);
+        LOOM_LOW_SCHEDULE_READY_VIEW_SEARCH_COUNT, nominee_limit, nominees,
+        nominee_count);
   }
   (void)loom_low_schedule_add_ready_nominee(
       loom_low_schedule_ready_policy_pair_nominee(state, ready_policy),
@@ -735,12 +742,22 @@ void loom_low_schedule_candidate_policy_select(
   const uint8_t source_view_nominee_count =
       loom_low_schedule_collect_source_nominees(ready_policy, nominees);
   uint8_t nominee_count = source_view_nominee_count;
+  uint32_t graph_nominee = LOOM_LOW_SCHEDULE_NODE_NONE;
   if (ready_candidate_count > nominee_count) {
     // Add the best graph-ranked candidate to the bounded source nominees so
     // equivalent dependency graphs do not select entirely from source order.
     loom_low_schedule_add_ready_view_nominees(
         ready_policy, LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE,
         /*search_count=*/1, /*nominee_limit=*/1, nominees, &nominee_count);
+    if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
+      const uint8_t before_graph_count = nominee_count;
+      loom_low_schedule_add_ready_view_nominees(
+          ready_policy, LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH,
+          /*search_count=*/1, /*nominee_limit=*/1, nominees, &nominee_count);
+      if (nominee_count > before_graph_count) {
+        graph_nominee = nominees[before_graph_count];
+      }
+    }
   }
   IREE_ASSERT_NE(nominee_count, 0);
   for (uint8_t i = 0; i < nominee_count; ++i) {
@@ -749,6 +766,8 @@ void loom_low_schedule_candidate_policy_select(
         loom_low_schedule_candidate_policy_reset_register_debt(policy, i),
         &nominee_scores[i]);
   }
+  out_selection->scored_candidate_count = nominee_count;
+  uint8_t rejected_nominee_count = 0;
   if (nominee_count > source_view_nominee_count) {
     // Graph ranking repairs source-window boundaries only within the current
     // critical-path band. A growing path can remain graph ranked at each
@@ -761,23 +780,36 @@ void loom_low_schedule_candidate_policy_select(
           iree_max(maximum_source_critical_path_cycles,
                    nominee_scores[i].critical_path_cycles);
     }
-    const loom_low_schedule_candidate_score_t* graph_score =
-        &nominee_scores[source_view_nominee_count];
-    const bool grows_live_frontier =
-        graph_score->produced_live_units > graph_score->killed_live_units;
-    const bool exceeds_critical_path_band =
-        graph_score->critical_path_cycles >
-            maximum_source_critical_path_cycles &&
-        graph_score->critical_path_cycles -
-                maximum_source_critical_path_cycles >
-            LOOM_LOW_SCHEDULE_READY_CRITICAL_PATH_BAND_CYCLES;
-    if (grows_live_frontier &&
-        (graph_score->pressure_risk != LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE ||
-         exceeds_critical_path_band)) {
-      nominee_count = source_view_nominee_count;
+    uint8_t admitted_count = source_view_nominee_count;
+    for (uint8_t i = source_view_nominee_count; i < nominee_count; ++i) {
+      const loom_low_schedule_candidate_score_t* nominee_score =
+          &nominee_scores[i];
+      const bool grows_live_frontier =
+          nominee_score->produced_live_units > nominee_score->killed_live_units;
+      const bool exceeds_critical_path_band =
+          nominee_score->critical_path_cycles >
+              maximum_source_critical_path_cycles &&
+          nominee_score->critical_path_cycles -
+                  maximum_source_critical_path_cycles >
+              LOOM_LOW_SCHEDULE_READY_CRITICAL_PATH_BAND_CYCLES;
+      if (grows_live_frontier && (nominees[i] == graph_nominee ||
+                                  nominee_score->pressure_risk !=
+                                      LOOM_LOW_SCHEDULE_PRESSURE_RISK_NONE ||
+                                  exceeds_critical_path_band)) {
+        // Keep the two possible rejected ordinary scores beyond recovery's
+        // array budget. A recovery view may nominate the same node under a
+        // different admission rule; its exact score has not changed.
+        const uint8_t cached_index = LOOM_LOW_SCHEDULE_READY_NOMINEE_CAPACITY -
+                                     1 - rejected_nominee_count++;
+        nominees[cached_index] = nominees[i];
+        nominee_scores[cached_index] = nominee_scores[i];
+        continue;
+      }
+      nominees[admitted_count] = nominees[i];
+      nominee_scores[admitted_count++] = nominee_scores[i];
     }
+    nominee_count = admitted_count;
   }
-  out_selection->scored_candidate_count = nominee_count;
   const loom_low_schedule_candidate_compare_mode_t compare_mode =
       loom_low_schedule_choose_candidate_compare_mode(
           nominee_scores, nominee_count,
@@ -836,14 +868,31 @@ void loom_low_schedule_candidate_policy_select(
           [compare_mode == LOOM_LOW_SCHEDULE_CANDIDATE_COMPARE_DEFAULT
                ? LOOM_LOW_SCHEDULE_RECOVERY_POLICY_DEFAULT
                : LOOM_LOW_SCHEDULE_RECOVERY_POLICY_PRESSURE];
+  // Admission rejects candidates after scoring. Their work still consumes
+  // the fixed scoring budget even though their array slots can be reused.
+  const uint8_t recovery_nominee_capacity =
+      LOOM_LOW_SCHEDULE_READY_NOMINEE_CAPACITY - rejected_nominee_count;
   loom_low_schedule_collect_recovery_nominees(
-      state, ready_policy, recovery_policy, nominees, &nominee_count);
+      state, ready_policy, recovery_policy, recovery_nominee_capacity, nominees,
+      &nominee_count);
   for (uint8_t i = source_nominee_count; i < nominee_count; ++i) {
-    loom_low_schedule_pressure_score_candidate(
-        state, pressure_state, ready_policy, indegrees, nominees[i],
-        loom_low_schedule_candidate_policy_reset_register_debt(policy, i),
-        &nominee_scores[i]);
-    ++out_selection->scored_candidate_count;
+    uint8_t cached_index = recovery_nominee_capacity;
+    while (cached_index < LOOM_LOW_SCHEDULE_READY_NOMINEE_CAPACITY &&
+           nominees[cached_index] != nominees[i]) {
+      ++cached_index;
+    }
+    if (cached_index < LOOM_LOW_SCHEDULE_READY_NOMINEE_CAPACITY) {
+      nominee_scores[i] = nominee_scores[cached_index];
+    } else {
+      // Scores move when nominees are compacted or cached. Their debt rows
+      // remain owned by the original scoring ordinal until selection ends.
+      loom_low_schedule_pressure_score_candidate(
+          state, pressure_state, ready_policy, indegrees, nominees[i],
+          loom_low_schedule_candidate_policy_reset_register_debt(
+              policy, out_selection->scored_candidate_count),
+          &nominee_scores[i]);
+      ++out_selection->scored_candidate_count;
+    }
     // Latency-window recovery must either replace the entire window that the
     // source nominee would consume or immediately expose an equally long
     // descriptor without growing its live frontier. Other cheap operations let

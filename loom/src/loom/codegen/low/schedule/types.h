@@ -87,6 +87,8 @@ enum loom_low_schedule_node_flag_bits_e {
   LOOM_LOW_SCHEDULE_NODE_FLAG_LATE_READS = 1u << 9,
   // Descriptor-free node may emit target packets that materialize results.
   LOOM_LOW_SCHEDULE_NODE_FLAG_STRUCTURAL_MATERIALIZATION = 1u << 10,
+  // At least one SSA operand is produced inside this block.
+  LOOM_LOW_SCHEDULE_NODE_FLAG_LOCAL_SSA_INPUT = 1u << 11,
 };
 typedef uint16_t loom_low_schedule_node_flags_t;
 

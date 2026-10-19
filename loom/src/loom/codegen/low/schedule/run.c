@@ -1491,7 +1491,10 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
   }
   const uint8_t ready_view_count =
       loom_low_schedule_strategy_uses_pressure(state->options->strategy)
-          ? LOOM_LOW_SCHEDULE_READY_VIEW_COUNT
+          ? (state->options->strategy ==
+                     LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL
+                 ? LOOM_LOW_SCHEDULE_READY_VIEW_COUNT
+                 : LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH)
           : 1;
   IREE_RETURN_IF_ERROR(loom_low_schedule_ready_policy_initialize(
       state, (uint32_t)node_count, ready_view_count, &ready_policy));

@@ -33,11 +33,12 @@ class ScheduleReadyFrontierTest : public ::testing::Test {
   iree_arena_allocator_t arena_;
 };
 
-static loom_low_schedule_ready_keys_t MakeKeys(uint64_t source,
+static loom_low_schedule_ready_keys_t MakeKeys(uint32_t source,
                                                uint64_t pressure,
                                                uint64_t schedule,
-                                               uint64_t storage) {
-  return {{source, pressure, schedule, storage}};
+                                               uint32_t storage,
+                                               uint32_t graph = 0) {
+  return {{source, pressure, schedule, storage, graph}};
 }
 
 TEST_F(ScheduleReadyFrontierTest, InitializesEveryNodeAfterWorkspaceReuse) {
@@ -175,6 +176,48 @@ TEST_F(ScheduleReadyFrontierTest, UsesNodeIndexAsStableKeyTieBreaker) {
   EXPECT_EQ(best_node, 2u);
 }
 
+TEST_F(ScheduleReadyFrontierTest, KeepsIndependentKeyWidthsAndViews) {
+  loom_low_schedule_ready_frontier_t frontier;
+  IREE_ASSERT_OK(loom_low_schedule_ready_frontier_initialize(
+      /*node_capacity=*/2, /*descriptor_count=*/0,
+      LOOM_LOW_SCHEDULE_READY_VIEW_COUNT, &arena_, &frontier));
+  const auto first =
+      MakeKeys(UINT32_MAX, UINT64_MAX, UINT64_C(1) << 32, UINT32_MAX, 0);
+  const auto second = MakeKeys(0, UINT64_C(1) << 32, UINT64_MAX, 0, UINT32_MAX);
+  loom_low_schedule_ready_frontier_insert(&frontier, 0, &first,
+                                          LOOM_LOW_SCHEDULE_READY_NODE_NONE);
+  loom_low_schedule_ready_frontier_insert(&frontier, 1, &second,
+                                          LOOM_LOW_SCHEDULE_READY_NODE_NONE);
+
+  const auto expect_order = [&](loom_low_schedule_ready_view_t view,
+                                uint32_t first_node) {
+    uint32_t nodes[2];
+    ASSERT_EQ(
+        loom_low_schedule_ready_frontier_copy_best(&frontier, view, 2, nodes),
+        2u);
+    EXPECT_EQ(nodes[0], first_node);
+    EXPECT_EQ(nodes[1], 1u - first_node);
+  };
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_SOURCE, 1);
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_PRESSURE, 1);
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE, 0);
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_STORAGE, 1);
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH, 0);
+
+  loom_low_schedule_ready_frontier_update_key(
+      &frontier, LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH, 0, UINT32_MAX);
+  loom_low_schedule_ready_frontier_update_key(
+      &frontier, LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH, 1, 0);
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH, 1);
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE, 0);
+  loom_low_schedule_ready_frontier_update_key(
+      &frontier, LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE, 0, UINT64_MAX);
+  loom_low_schedule_ready_frontier_update_key(
+      &frontier, LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE, 1, UINT64_C(1) << 32);
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_SCHEDULE, 1);
+  expect_order(LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH, 1);
+}
+
 TEST_F(ScheduleReadyFrontierTest, MatchesSortedOracleUnderMutations) {
   static constexpr uint32_t kNodeCapacity = 5000;
   static constexpr uint32_t kDescriptorCount = 7;
@@ -235,7 +278,8 @@ TEST_F(ScheduleReadyFrontierTest, MatchesSortedOracleUnderMutations) {
 
   for (uint32_t node = 0; node < 4200; ++node) {
     keys[node] = MakeKeys(next_random() % 257u, next_random() % 257u,
-                          next_random() % 257u, next_random() % 257u);
+                          next_random() % 257u, next_random() % 257u,
+                          next_random() % 257u);
     descriptors[node] = next_random() % (kDescriptorCount + 1u);
     if (descriptors[node] == kDescriptorCount) {
       descriptors[node] = LOOM_LOW_SCHEDULE_READY_NODE_NONE;
@@ -250,7 +294,8 @@ TEST_F(ScheduleReadyFrontierTest, MatchesSortedOracleUnderMutations) {
     const uint32_t node = next_random() % kNodeCapacity;
     if (!active[node]) {
       keys[node] = MakeKeys(next_random() % 257u, next_random() % 257u,
-                            next_random() % 257u, next_random() % 257u);
+                            next_random() % 257u, next_random() % 257u,
+                            next_random() % 257u);
       descriptors[node] = next_random() % (kDescriptorCount + 1u);
       if (descriptors[node] == kDescriptorCount) {
         descriptors[node] = LOOM_LOW_SCHEDULE_READY_NODE_NONE;

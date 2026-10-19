@@ -110,8 +110,20 @@ static uint64_t loom_low_schedule_ready_schedule_key(
       // critical path to break ties. Saturation affects only the nomination
       // rank; candidate scoring retains the full critical-path value.
       const uint32_t maximum_path = (UINT32_C(1) << 30) - 1;
-      return materialization_key |
-             ((uint64_t)state->node_ready_issue_cycles[node_index] << 30) |
+      // Entry aliases and aggregate assembly expose already-owned storage.
+      // Local unary decomposition retains payload readiness so pending loads
+      // do not expose their entire lane frontier before the data is available.
+      // Dependency release and exact scoring still own execution readiness.
+      const uint32_t ready_cycle =
+          iree_any_bit_set(node->flags,
+                           LOOM_LOW_SCHEDULE_NODE_FLAG_STORAGE_SETUP) &&
+                  (!iree_any_bit_set(
+                       node->flags,
+                       LOOM_LOW_SCHEDULE_NODE_FLAG_LOCAL_SSA_INPUT) ||
+                   node->storage_relation_count > 1)
+              ? 0
+              : state->node_ready_issue_cycles[node_index];
+      return materialization_key | ((uint64_t)ready_cycle << 30) |
              (maximum_path - iree_min(critical_path, maximum_path));
     }
     case LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING: {
@@ -148,7 +160,7 @@ static uint64_t loom_low_schedule_ready_storage_key(
     }
   }
   const uint16_t relation_count = node->storage_relation_count;
-  return relation_count == 0 ? UINT64_MAX
+  return relation_count == 0 ? UINT32_MAX
                              : 1u + (uint64_t)(UINT16_MAX - relation_count);
 }
 
@@ -167,6 +179,16 @@ loom_low_schedule_ready_keys_t loom_low_schedule_pressure_ready_keys(
                   loom_low_schedule_ready_schedule_key(state, node_index),
               [LOOM_LOW_SCHEDULE_READY_VIEW_STORAGE] =
                   loom_low_schedule_ready_storage_key(state, node_index),
+              [LOOM_LOW_SCHEDULE_READY_VIEW_GRAPH] =
+                  state->node_critical_path_cycles != NULL
+                      ? (loom_low_schedule_node_materialization_key(state,
+                                                                    node) >>
+                         32) |
+                            (((UINT32_C(1) << 30) - 1) -
+                             iree_min(
+                                 state->node_critical_path_cycles[node_index],
+                                 (UINT32_C(1) << 30) - 1))
+                      : 0,
           },
   };
 }
