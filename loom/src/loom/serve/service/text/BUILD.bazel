@@ -226,12 +226,21 @@ loom_cc_library(
 loom_cc_library(
     name = "source_execution_tests",
     testonly = True,
+    srcs = ["source_execution_test.cc"],
+    target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
+    visibility = ["//loom/src/loom/serve:implementation"],
+    deps = [":source_service_fixture"],
+    alwayslink = True,
+)
+
+loom_cc_library(
+    name = "source_media_tests",
+    testonly = True,
     srcs = [
         "managed_media_service_test.cc",
         "media_execution_test.cc",
         "media_service_test.cc",
         "projector_execution_test.cc",
-        "source_execution_test.cc",
     ],
     target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
     visibility = ["//loom/src/loom/serve:implementation"],
@@ -249,6 +258,21 @@ loom_cc_library(
         "//loom/src/loom/serve/service/finite:result",
         "//loom/src/loom/serve/service/finite/embedding:protocol",
         "//runtime/src/iree/base/internal:json",
+    ],
+    alwayslink = True,
+)
+
+loom_cc_library(
+    name = "native_service_tests",
+    testonly = True,
+    srcs = ["native_service_test.cc"],
+    target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
+    visibility = ["//loom/src/loom/serve:implementation"],
+    deps = [
+        ":source_service_fixture",
+        ":stream",
+        "//loom/src/loom/util:json",
+        "//runtime/src/iree/base/tooling:flags",
     ],
     alwayslink = True,
 )
@@ -539,19 +563,51 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "consumer",
+    hdrs = ["consumer.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":chat",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "stream",
+    srcs = ["stream.c"],
+    hdrs = ["stream.h"],
+    deps = [
+        ":chat",
+        ":consumer",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "stream_test",
+    srcs = ["stream_test.cc"],
+    deps = [
+        ":chat",
+        ":consumer",
+        ":stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "session",
     srcs = ["session.c"],
     hdrs = ["session.h"],
     deps = [
         ":chat",
+        ":consumer",
         ":media_projector",
         ":model",
         "//loom/src/loom/serve/runtime/host:clock",
         "//loom/src/loom/serve/service:inspection",
         "//loom/src/loom/serve/telemetry:record",
-        "//loom/src/loom/serve/transport/http:server",
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/tokenizer",
     ],
@@ -662,19 +718,39 @@ loom_cc_test(
 )
 
 loom_cc_library(
-    name = "response",
-    srcs = ["response.c"],
-    hdrs = ["response.h"],
+    name = "http",
+    srcs = ["http.c"],
+    hdrs = ["http.h"],
     visibility = ["//visibility:private"],
     deps = [
         ":chat",
-        ":session",
+        ":consumer",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:record",
         "//loom/src/loom/serve/transport/http:server",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "http_test",
+    srcs = ["http_test.cc"],
+    target_compatible_with = _SOURCE_TEST_COMPATIBILITY,
+    deps = [
+        ":chat",
+        ":consumer",
+        ":http",
+        ":telemetry",
+        "//loom/src/loom/serve/telemetry:stream",
+        "//loom/src/loom/serve/testing:http_harness",
+        "//loom/src/loom/serve/transport/http:listener",
+        "//loom/src/loom/serve/transport/http:server",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -685,8 +761,8 @@ loom_cc_library(
     visibility = ["//visibility:private"],
     deps = [
         ":checkpoint_registry",
+        ":http",
         ":model",
-        ":response",
         ":session",
         ":telemetry",
         "//loom/src/loom/serve/runtime/execution",
@@ -739,14 +815,13 @@ loom_cc_library(
     deps = [
         ":chat",
         ":checkpoint_registry",
+        ":consumer",
         ":input",
         ":media_projector",
         ":model",
-        ":response",
         ":schedule",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:stream",
-        "//loom/src/loom/serve/transport/http:server",
         "//runtime/src/iree/base",
     ],
 )
@@ -760,18 +835,16 @@ loom_cc_library(
         ":admission",
         ":chat",
         ":checkpoint_registry",
+        ":consumer",
         ":media_projector",
         ":model",
         ":pending_request",
         ":prefix_cache",
-        ":response",
         ":session",
         ":session_cache",
         ":telemetry",
         "//loom/src/loom/serve/runtime/parameter:residency",
         "//loom/src/loom/serve/telemetry:stream",
-        "//loom/src/loom/serve/transport/http:request",
-        "//loom/src/loom/serve/transport/http:server",
         "//runtime/src/iree/base",
     ],
 )
@@ -783,7 +856,7 @@ loom_cc_library(
     visibility = ["//visibility:private"],
     deps = [
         ":chat",
-        ":response",
+        ":http",
         ":telemetry",
         "//loom/src/loom/serve/telemetry:stream",
         "//loom/src/loom/serve/transport/http:request",
@@ -801,8 +874,10 @@ loom_cc_library(
         ":chat",
         ":checkpoint_registry",
         ":checkpoint_request",
+        ":consumer",
         ":epoch",
         ":heartbeat",
+        ":http",
         ":input",
         ":input_count",
         ":media_projector",
@@ -813,10 +888,10 @@ loom_cc_library(
         ":prefix_cache",
         ":readiness",
         ":reconfiguration",
-        ":response",
         ":schedule",
         ":session",
         ":session_cache",
+        ":stream",
         ":telemetry",
         "//loom/src/loom/serve/media:image_codec",
         "//loom/src/loom/serve/media:image_codecs",
