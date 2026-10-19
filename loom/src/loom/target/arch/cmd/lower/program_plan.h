@@ -132,6 +132,12 @@ typedef struct loom_cmd_program_root_t {
   // External resource-table shape carried through command lowering.
   loom_cmd_abi_layout_t abi_layout;
 
+  // Owned launch-buffer placements in source signature order.
+  loom_cmd_program_launch_binding_t* launch_bindings;
+
+  // Number of entries in |launch_bindings|.
+  uint32_t launch_binding_count;
+
   // Plan-wide requirement for each root-local executable/entry slot.
   uint32_t* entry_requirement_indices;
 

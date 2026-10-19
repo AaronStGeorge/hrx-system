@@ -1305,6 +1305,13 @@ command.program.def public @parameterized() launch(%parameters: buffer, %target:
 
   ASSERT_EQ(plan.root_count, 1u);
   const loom_cmd_program_root_t& root = plan.roots[0];
+  ASSERT_EQ(root.launch_binding_count, 2u);
+  ASSERT_NE(root.launch_bindings, nullptr);
+  EXPECT_EQ(root.launch_bindings[0].role, LOOM_CMD_PROGRAM_BUFFER_ROLE_FIXED);
+  EXPECT_EQ(root.launch_bindings[0].root_index, 0u);
+  EXPECT_EQ(root.launch_bindings[1].role,
+            LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE);
+  EXPECT_EQ(root.launch_bindings[1].root_index, 0u);
   ASSERT_EQ(root.parameters.root_count, 1u);
   ASSERT_NE(root.parameters.roots, nullptr);
   EXPECT_EQ(root.parameters.roots[0].source_binding_ordinal, 0u);
@@ -1331,6 +1338,23 @@ command.program.def public @parameterized() launch(%parameters: buffer, %target:
   EXPECT_EQ(root.transient.binding_index, UINT32_MAX);
   EXPECT_EQ(root.transient.required_byte_length, 0u);
   EXPECT_EQ(root.transient.minimum_alignment, 0u);
+
+  iree_byte_span_t data = iree_byte_span_empty();
+  IREE_ASSERT_OK(loom_cmd_program_plan_serialize_root(&plan, 0, &data,
+                                                      iree_allocator_system()));
+  loom_cmd_program_t program = {};
+  IREE_ASSERT_OK(loom_cmd_program_parse(
+      iree_make_const_byte_span(data.data, data.data_length), &program));
+  ASSERT_EQ(program.launch_bindings.count, 2u);
+  const loom_cmd_program_launch_binding_t parameter_binding =
+      loom_cmd_program_launch_binding_at(&program, 0);
+  EXPECT_EQ(parameter_binding.role, LOOM_CMD_PROGRAM_BUFFER_ROLE_FIXED);
+  EXPECT_EQ(parameter_binding.root_index, 0u);
+  const loom_cmd_program_launch_binding_t target_binding =
+      loom_cmd_program_launch_binding_at(&program, 1);
+  EXPECT_EQ(target_binding.role, LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE);
+  EXPECT_EQ(target_binding.root_index, 0u);
+  iree_allocator_free(iree_allocator_system(), data.data);
 
   loom_cmd_program_plan_deinitialize(&plan);
 }

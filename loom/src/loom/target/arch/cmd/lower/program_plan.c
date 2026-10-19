@@ -928,6 +928,33 @@ iree_status_t loom_cmd_program_plan_build_from_materialization(
       root->program_op = lowered_root_function;
     }
   }
+  for (iree_host_size_t i = 0;
+       valid && i < program_count && iree_status_is_ok(status); ++i) {
+    const loom_cmd_lower_plan_t* lower_plan = &root_builds[i].lower_plan;
+    loom_cmd_program_root_t* root = &plan.roots[i];
+    if (lower_plan->binding_count > UINT32_MAX) {
+      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "command root has too many launch bindings");
+      break;
+    }
+    root->launch_binding_count = (uint32_t)lower_plan->binding_count;
+    if (lower_plan->binding_count != 0) {
+      status = iree_allocator_malloc_array(
+          host_allocator, lower_plan->binding_count,
+          sizeof(*root->launch_bindings), (void**)&root->launch_bindings);
+      if (iree_status_is_ok(status)) {
+        for (iree_host_size_t j = 0; j < lower_plan->binding_count; ++j) {
+          const loom_cmd_buffer_binding_t source = lower_plan->bindings[j];
+          IREE_ASSERT_EQ(source.byte_offset, 0u);
+          IREE_ASSERT_EQ(source.byte_length, UINT64_MAX);
+          root->launch_bindings[j] = (loom_cmd_program_launch_binding_t){
+              .role = (loom_cmd_program_buffer_role_t)source.role,
+              .root_index = source.resource_index,
+          };
+        }
+      }
+    }
+  }
   if (valid && iree_status_is_ok(status)) {
     plan.root_module = plan_module;
     plan_module = NULL;
@@ -978,6 +1005,7 @@ void loom_cmd_program_plan_deinitialize(loom_cmd_program_plan_t* plan) {
   for (iree_host_size_t i = 0; i < plan->root_count; ++i) {
     loom_cmd_parameter_requirement_table_deinitialize(
         &plan->roots[i].parameters, plan->host_allocator);
+    iree_allocator_free(plan->host_allocator, plan->roots[i].launch_bindings);
     iree_allocator_free(plan->host_allocator,
                         plan->roots[i].entry_requirement_indices);
   }
