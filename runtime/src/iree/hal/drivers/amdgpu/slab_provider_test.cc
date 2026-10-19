@@ -145,7 +145,7 @@ TEST_F(SlabProviderTest, CapturesAccessBeforeNativeAcquisition) {
     memset(&options, 0, sizeof(options));
     iree_hal_slab_t slab = {};
     IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
-        provider, 128, /*min_alignment=*/1, &slab));
+        provider, 128, /*min_alignment=*/1, &slab, nullptr));
     std::array<uint32_t, 32> values;
     values.fill(0xA5A5A5A5u);
     IREE_ASSERT_OK(iree_hsa_memory_copy(IREE_LIBHSA(&libhsa_), slab.base_ptr,
@@ -168,7 +168,7 @@ TEST_F(SlabProviderTest, CapturesAccessBeforeNativeAcquisition) {
       EXPECT_EQ(values[i], i >= 8 && i < 24 ? pattern : 0xA5A5A5A5u);
     }
     view.reset();
-    iree_hal_slab_provider_release_slab_sync(provider, &slab);
+    iree_hal_slab_provider_release_slab_sync(provider, &slab, nullptr);
     iree_hal_slab_provider_release(provider);
   }
 }
@@ -229,7 +229,7 @@ TEST_F(SlabProviderTest, NativeReleaseCanDestroySanitizedDevice) {
   std::array<iree_hal_slab_t, 2> slabs = {};
   for (auto& slab : slabs) {
     IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
-        provider, 128, /*min_alignment=*/1, &slab));
+        provider, 128, /*min_alignment=*/1, &slab, nullptr));
   }
 
   struct ReleaseState {
@@ -254,7 +254,10 @@ TEST_F(SlabProviderTest, NativeReleaseCanDestroySanitizedDevice) {
       .completion =
           {
               .fn =
-                  [](void* user_data) {
+                  [](void* user_data,
+                     iree_hal_slab_release_info_t release_info) {
+                    IREE_EXPECT_OK(release_info.status);
+                    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
                     static_cast<ReleaseState*>(user_data)->followup_completed =
                         true;
                   },
@@ -267,7 +270,10 @@ TEST_F(SlabProviderTest, NativeReleaseCanDestroySanitizedDevice) {
       .completion =
           {
               .fn =
-                  [](void* user_data) {
+                  [](void* user_data,
+                     iree_hal_slab_release_info_t release_info) {
+                    IREE_EXPECT_OK(release_info.status);
+                    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
                     auto& state = *static_cast<ReleaseState*>(user_data);
                     // One worker owns both releases. The second cannot run
                     // before Reset: closing the native queue during destruction

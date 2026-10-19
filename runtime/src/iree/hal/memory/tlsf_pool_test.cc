@@ -255,7 +255,9 @@ static void iree_hal_test_opaque_slab_provider_destroy(
 
 static iree_status_t iree_hal_test_opaque_slab_provider_acquire_slab(
     iree_hal_slab_provider_t* base_provider, iree_device_size_t min_length,
-    iree_device_size_t alignment, iree_hal_slab_t* out_slab) {
+    iree_device_size_t alignment, iree_hal_slab_t* out_slab,
+    iree_hal_slab_release_info_t* out_release_info) {
+  *out_release_info = (iree_hal_slab_release_info_t){0};
   (void)alignment;
   iree_hal_test_opaque_slab_provider_t* provider =
       (iree_hal_test_opaque_slab_provider_t*)base_provider;
@@ -275,12 +277,14 @@ static iree_status_t iree_hal_test_opaque_slab_provider_acquire_slab(
   return iree_ok_status();
 }
 
-static void iree_hal_test_opaque_slab_provider_release_slab(
+static iree_hal_slab_release_info_t
+iree_hal_test_opaque_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   iree_hal_test_opaque_slab_provider_t* provider =
       (iree_hal_test_opaque_slab_provider_t*)base_provider;
   iree_allocator_free_aligned(provider->base.host_allocator,
                               (void*)(uintptr_t)slab->provider_handle);
+  return (iree_hal_slab_release_info_t){0};
 }
 
 static iree_status_t iree_hal_test_opaque_slab_provider_wrap_buffer(

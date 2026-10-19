@@ -342,6 +342,12 @@ typedef struct iree_hal_pool_stats_t {
   // are not additive across a backing-pool chain or imported aliases.
   iree_device_size_t bytes_committed;
 
+  // Subset of committed bytes whose native owners were consumed without
+  // establishing backing return. Monotonic for this pool's lifetime. These
+  // bytes are neither reusable nor pending return; parent losses are not
+  // duplicated in child pools.
+  iree_device_size_t bytes_abandoned;
+
   // Budget limit in bytes (0 = unlimited).
   iree_device_size_t budget_limit;
 
@@ -761,6 +767,13 @@ IREE_API_EXPORT iree_status_t iree_hal_pool_validate_asan_options(
 IREE_API_EXPORT void iree_hal_pool_query_stats(
     const iree_hal_pool_t* pool, iree_hal_pool_stats_t* out_stats);
 
+// Clones the first cleanup cause associated with this pool's abandoned backing,
+// or returns OK if this pool has no recorded abandonment. This is a diagnostic
+// query, not an acquisition-health check: requests fitting surviving capacity
+// may still proceed. The cause remains available for the pool's lifetime.
+IREE_API_EXPORT iree_status_t
+iree_hal_pool_query_abandonment_status(const iree_hal_pool_t* pool);
+
 // Returns unused backing while retaining at least |min_bytes_to_keep| of the
 // pool's committed backing, subject to the retention policy selected by
 // |flags|. The floor applies to total committed backing, including live
@@ -882,6 +895,11 @@ typedef struct iree_hal_pool_vtable_t {
   // Queries running pool statistics.
   void(IREE_API_PTR* query_stats)(const iree_hal_pool_t* pool,
                                   iree_hal_pool_stats_t* out_stats);
+
+  // Clones this pool's first positive-loss cause. NULL for pools which do not
+  // own native abandonment accounting, including child allocation layers.
+  iree_status_t(IREE_API_PTR* query_abandonment_status)(
+      const iree_hal_pool_t* pool);
 
   // Trims reclaimable backing subject to policy and the retained-byte floor.
   void(IREE_API_PTR* trim)(iree_hal_pool_t* pool,

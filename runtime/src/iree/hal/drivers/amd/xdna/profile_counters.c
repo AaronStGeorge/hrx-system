@@ -197,7 +197,7 @@ static iree_status_t iree_hal_amd_xdna_profile_counters_allocate_result(
     };
     IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
         context->api, &options, length, info.byte_offset_alignment,
-        context->event_sink, &counters->memory));
+        context->event_sink, &counters->memory, NULL));
     counters->binding.memory = counters->memory.handle;
     counters->mapping = counters->memory.mapping;
     counters->contents = counters->memory.contents;

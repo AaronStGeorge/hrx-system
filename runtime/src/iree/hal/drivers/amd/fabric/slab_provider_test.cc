@@ -12,6 +12,12 @@
 #include <utility>
 #include <vector>
 
+#include "iree/async/frontier_tracker.h"
+#include "iree/async/notification.h"
+#include "iree/async/proactor_platform.h"
+#include "iree/async/util/proactor_thread.h"
+#include "iree/hal/memory/passthrough_pool.h"
+#include "iree/hal/pool_wait.h"
 #include "iree/hal/testing/mock_device.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -31,6 +37,8 @@ struct FakeMemory {
   uint64_t byte_length = 0;
   // Achieved alignment returned by the native attachment.
   uint64_t alignment = 64;
+  // True only for CREATE backing, independent of imported source extents.
+  bool allocated_backing = false;
 
   void* data() {
     return registered_pointer ? registered_pointer : bytes.data();
@@ -77,6 +85,7 @@ struct FakeNative {
       *out_release_info = {};
     }
     auto* self = reinterpret_cast<FakeNative*>(scope);
+    *out_memory = nullptr;
     const bool registered = info->registered_host_pointer != nullptr;
     EXPECT_EQ(info->memory_profile_ordinal, registered ? 8u : 7u);
     EXPECT_EQ(info->access_count, 2u);
@@ -95,9 +104,17 @@ struct FakeNative {
     self->created_lengths.push_back(info->byte_length);
     self->created_alignments.push_back(info->minimum_alignment);
     auto* memory = new FakeMemory{
-        self, std::vector<uint8_t>(registered ? 0 : info->byte_length),
-        info->registered_host_pointer, info->byte_length,
-        info->minimum_alignment};
+        self,
+        std::vector<uint8_t>(
+            registered ? 0 : iree_host_align(info->byte_length, 4096)),
+        info->registered_host_pointer,
+        info->byte_length,
+        info->minimum_alignment,
+        !registered};
+    if (++self->create_attempt_count == self->fail_create_at) {
+      MemoryDestroy(reinterpret_cast<amdf_memory_t*>(memory), out_release_info);
+      return amdf_make_api_status(AMDF_STATUS_CODE_RESOURCE_EXHAUSTED);
+    }
     ++self->create_count;
     *out_memory = reinterpret_cast<amdf_memory_t*>(memory);
     return AMDF_STATUS_OK;
@@ -231,13 +248,26 @@ struct FakeNative {
     ++self->destroy_count;
     self->destroy_threads.emplace_back(memory->registered_pointer != nullptr,
                                        std::this_thread::get_id());
+    if (self->hold_destroy) {
+      self->hold_destroy = false;
+      self->destroy_entered.set_value();
+      self->destroy_resume.wait();
+    }
+    const uint64_t abandoned_byte_length = self->fail_memory_destroy &&
+                                                   self->abandon_backing &&
+                                                   memory->allocated_backing
+                                               ? memory->bytes.size()
+                                               : 0;
+    if (abandoned_byte_length) {
+      self->abandoned_backing.push_back(std::move(memory->bytes));
+    }
     delete memory;
     const amdf_status_t status =
         self->fail_memory_destroy
             ? amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL)
             : AMDF_STATUS_OK;
     if (out_release_info) {
-      *out_release_info = {status, 0};
+      *out_release_info = {status, abandoned_byte_length};
     }
     return status;
   }
@@ -267,6 +297,10 @@ struct FakeNative {
   std::vector<CacheOperation> cache_operations;
   // Successful native allocation count.
   int create_count = 0;
+  // Number of native construction attempts, including unpublished failures.
+  int create_attempt_count = 0;
+  // One-based construction attempt to fail after acquiring backing, or zero.
+  int fail_create_at = 0;
   // Successful native external attachment count.
   int import_count = 0;
   // Successful independent transport export count.
@@ -289,6 +323,16 @@ struct FakeNative {
   std::vector<std::pair<bool, std::thread::id>> destroy_threads;
   // Whether consuming cleanup reports a native failure.
   bool fail_memory_destroy = false;
+  // Whether failed native release retains allocation-owned payload.
+  bool abandon_backing = false;
+  // Payload retained independently after the native handle was consumed.
+  std::vector<std::vector<uint8_t>> abandoned_backing;
+  // Holds the next native release at its physical ownership boundary.
+  bool hold_destroy = false;
+  // Publishes that the native worker has entered the held destruction.
+  std::promise<void> destroy_entered;
+  // Caller-controlled continuation for that destruction, with no deadline.
+  std::shared_future<void> destroy_resume;
   // Expected backing requirements for the active provider.
   amdf_memory_flags_t required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
   // Native address failure injected after memory and mapping acquisition.
@@ -447,14 +491,20 @@ TEST_F(SlabProviderTest, MixedReleaseDetachesImportsAndQueuesOwnedFrees) {
     IREE_ASSERT_OK(
         iree_hal_slab_provider_import_slab(provider_, &storage, &imported));
     slabs[2 * i] = imported.slab;
-    IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(provider_, 256, 64,
-                                                            &slabs[2 * i + 1]));
+    IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
+        provider_, 256, 64, &slabs[2 * i + 1], nullptr));
   }
   auto completion = release_completed_.get_future();
+  native_.fail_memory_destroy = true;
+  native_.abandon_backing = true;
   iree_hal_slab_release_request_t release = {
       .count = IREE_ARRAYSIZE(slabs),
       .slabs = slabs,
-      .completion = {[](void* user_data) {
+      .completion = {[](void* user_data,
+                        iree_hal_slab_release_info_t release_info) {
+                       IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL,
+                                             release_info.status);
+                       EXPECT_EQ(release_info.abandoned_byte_length, 8192u);
                        static_cast<std::promise<void>*>(user_data)->set_value();
                      },
                      &release_completed_},
@@ -471,6 +521,7 @@ TEST_F(SlabProviderTest, MixedReleaseDetachesImportsAndQueuesOwnedFrees) {
   }
   EXPECT_EQ(native_.destroy_threads[2].second,
             native_.destroy_threads[3].second);
+  EXPECT_EQ(native_.abandoned_backing.size(), 2u);
 }
 
 TEST_F(SlabProviderTest, PublishesRangedBindingsAndCacheControl) {
@@ -482,7 +533,7 @@ TEST_F(SlabProviderTest, PublishesRangedBindingsAndCacheControl) {
 
   iree_hal_slab_t slab = {};
   IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
-      provider_, 100, /*min_alignment=*/256, &slab));
+      provider_, 100, /*min_alignment=*/256, &slab, nullptr));
   EXPECT_EQ(slab.length, 100u);
   ASSERT_NE(slab.base_ptr, nullptr);
   EXPECT_EQ(native_.create_count, 1);
@@ -541,7 +592,7 @@ TEST_F(SlabProviderTest, PublishesRangedBindingsAndCacheControl) {
   iree_hal_buffer_release(buffer);
   EXPECT_EQ(release_count, 1);
   EXPECT_EQ(native_.destroy_count, 0);
-  iree_hal_slab_provider_release_slab_sync(provider_, &slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &slab, nullptr);
   EXPECT_EQ(native_.unmap_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
 
@@ -552,25 +603,36 @@ TEST_F(SlabProviderTest, PublishesRangedBindingsAndCacheControl) {
   EXPECT_EQ(stats.total_released, 1u);
 }
 
-TEST_F(SlabProviderTest, NativeDestroyFailureLeaksWithoutAborting) {
+TEST_F(SlabProviderTest, CleanupErrorDistinguishesReturnedAndAbandonedBacking) {
   native_.fail_memory_destroy = true;
-  iree_hal_slab_t slab = {};
-  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
-      provider_, 64, /*min_alignment=*/1, &slab));
-  ASSERT_EQ(native_.created_lengths.size(), 1u);
-  EXPECT_EQ(native_.created_lengths[0], 64u);
-  ASSERT_EQ(native_.created_alignments.size(), 1u);
-  EXPECT_EQ(native_.created_alignments[0], 64u);
-  iree_hal_slab_provider_release_slab_sync(provider_, &slab);
-  EXPECT_EQ(native_.unmap_count, 1);
-  EXPECT_EQ(native_.destroy_count, 1);
+  for (bool abandon : {false, true}) {
+    SCOPED_TRACE(abandon);
+    native_.abandon_backing = abandon;
+    iree_hal_slab_t slab = {};
+    IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
+        provider_, 64, /*min_alignment=*/1, &slab, nullptr));
+    EXPECT_EQ(slab.native_allocation.byte_length, 4096u);
+    iree_hal_slab_release_info_t released = {};
+    iree_hal_slab_provider_release_slab_sync(provider_, &slab, &released);
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, released.status);
+    EXPECT_EQ(released.abandoned_byte_length, abandon ? 4096u : 0u);
+  }
+  EXPECT_EQ(native_.unmap_count, 2);
+  EXPECT_EQ(native_.destroy_count, 2);
+  ASSERT_EQ(native_.abandoned_backing.size(), 1u);
+  EXPECT_EQ(native_.abandoned_backing[0].size(), 4096u);
+  iree_hal_slab_provider_visited_set_t visited = {};
+  iree_hal_slab_provider_stats_t stats = {};
+  iree_hal_slab_provider_query_stats(provider_, &visited, &stats);
+  EXPECT_EQ(stats.total_acquired, 2u);
+  EXPECT_EQ(stats.total_released, 1u);
 }
 
 TEST_F(SlabProviderTest, DeviceOnlyBackingHasNoHostMappingOrSlot) {
   CreateProvider(0);
   iree_hal_slab_t slab = {};
-  IREE_ASSERT_OK(
-      iree_hal_slab_provider_acquire_slab_sync(provider_, 64, 64, &slab));
+  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(provider_, 64, 64,
+                                                          &slab, nullptr));
   EXPECT_EQ(slab.base_ptr, nullptr);
   EXPECT_EQ(native_.map_count, 0);
   iree_hal_buffer_t* buffer = nullptr;
@@ -589,7 +651,7 @@ TEST_F(SlabProviderTest, DeviceOnlyBackingHasNoHostMappingOrSlot) {
                 .device_address,
             UINT64_C(0x110000) + 64 + 8);
   iree_hal_buffer_release(buffer);
-  iree_hal_slab_provider_release_slab_sync(provider_, &slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &slab, nullptr);
   EXPECT_EQ(native_.unmap_count, 0);
   EXPECT_EQ(native_.destroy_count, 1);
 }
@@ -597,13 +659,240 @@ TEST_F(SlabProviderTest, DeviceOnlyBackingHasNoHostMappingOrSlot) {
 TEST_F(SlabProviderTest, FailedBindingReleasesMappingAndBacking) {
   native_.fail_second_address = true;
   iree_hal_slab_t slab = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_RESOURCE_EXHAUSTED,
-      iree_hal_slab_provider_acquire_slab_sync(provider_, 64, 64, &slab));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        iree_hal_slab_provider_acquire_slab_sync(
+                            provider_, 64, 64, &slab, nullptr));
   EXPECT_EQ(slab.provider_handle, 0u);
   EXPECT_EQ(native_.map_count, 1);
   EXPECT_EQ(native_.unmap_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
+}
+
+TEST_F(SlabProviderTest, FailedBindingReportsUnpublishedBackingLoss) {
+  native_.fail_second_address = true;
+  native_.fail_memory_destroy = true;
+  native_.abandon_backing = true;
+  iree_hal_slab_t slab = {};
+  iree_hal_slab_release_info_t released = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        iree_hal_slab_provider_acquire_slab_sync(
+                            provider_, 64, 64, &slab, &released));
+  EXPECT_EQ(slab.provider_handle, 0u);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, released.status);
+  EXPECT_EQ(released.abandoned_byte_length, 4096u);
+  EXPECT_EQ(native_.abandoned_backing.size(), 1u);
+}
+
+// Real provider, allocation worker, source pools, notifications, and waiters.
+// Only the native dependency controls whether consumed handles return backing.
+class SlabPoolTest : public SlabProviderTest {
+ protected:
+  void SetUp() override {
+    SlabProviderTest::SetUp();
+    auto options = iree_async_proactor_options_default();
+    options.threading_mode = IREE_ASYNC_PROACTOR_THREADING_CROSS_THREAD;
+    IREE_ASSERT_OK(iree_async_proactor_create_platform(
+        options, iree_allocator_system(), &proactor_));
+    IREE_ASSERT_OK(iree_async_proactor_thread_create(
+        proactor_, iree_async_proactor_thread_options_default(),
+        iree_allocator_system(), &thread_));
+    IREE_ASSERT_OK(iree_async_notification_create(
+        proactor_, IREE_ASYNC_NOTIFICATION_FLAG_NONE, &notification_));
+    IREE_ASSERT_OK(iree_async_frontier_tracker_create(
+        iree_async_frontier_tracker_options_default(), iree_allocator_system(),
+        &tracker_));
+    for (auto& pool : pools_) {
+      IREE_ASSERT_OK(iree_hal_passthrough_pool_create(
+          {}, provider_, notification_, tracker_, iree_allocator_system(),
+          &pool));
+    }
+  }
+
+  void TearDown() override {
+    for (auto* pool : pools_) {
+      AwaitNativeReturns(pool);
+      iree_hal_pool_release(pool);
+    }
+    SlabProviderTest::TearDown();
+    iree_async_frontier_tracker_release(tracker_);
+    iree_async_notification_release(notification_);
+    iree_async_proactor_thread_request_stop(thread_);
+    IREE_ASSERT_OK(
+        iree_async_proactor_thread_join(thread_, IREE_DURATION_INFINITE));
+    IREE_EXPECT_OK(iree_async_proactor_thread_consume_status(thread_));
+    iree_async_proactor_thread_release(thread_);
+    iree_async_proactor_release(proactor_);
+  }
+
+  static void CompleteWait(void* user_data, iree_status_t status) {
+    static_cast<std::promise<iree_status_t>*>(user_data)->set_value(
+        std::move(status));
+  }
+
+  void AwaitNativeReturns(iree_hal_pool_t* pool) {
+    iree_hal_pool_wait_t* wait = nullptr;
+    IREE_ASSERT_OK(
+        iree_hal_pool_wait_allocate(pool, iree_allocator_system(), &wait));
+    for (;;) {
+      iree_hal_pool_wait_prepare(wait);
+      const auto stats = Stats(pool);
+      EXPECT_EQ(stats.reservation_count, 0u);
+      if (!stats.slab_count) {
+        iree_hal_pool_wait_abort(wait);
+        break;
+      }
+      std::promise<iree_status_t> completed;
+      auto completion = completed.get_future();
+      iree_hal_pool_wait_commit(wait, iree_infinite_timeout(),
+                                {CompleteWait, &completed});
+      IREE_ASSERT_OK(completion.get());
+    }
+    iree_hal_pool_wait_free(wait);
+  }
+
+  static iree_hal_pool_stats_t Stats(iree_hal_pool_t* pool) {
+    iree_hal_pool_stats_t stats = {};
+    iree_hal_pool_query_stats(pool, &stats);
+    return stats;
+  }
+
+  static void Acquire(iree_hal_pool_t* pool,
+                      iree_hal_pool_reservation_t* reservation) {
+    const auto request = iree_hal_make_pool_reservation_request(64, 64);
+    iree_hal_pool_acquire_info_t info = {};
+    iree_hal_pool_acquire_result_t result;
+    IREE_ASSERT_OK(iree_hal_pool_acquire_reservations_sync(
+        pool, 1, &request, nullptr, reservation, &info, &result,
+        IREE_HAL_POOL_RESERVE_FLAG_NONE));
+    EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  }
+
+  static void Release(iree_hal_pool_t* pool,
+                      const iree_hal_pool_reservation_t* reservation) {
+    iree_hal_pool_release_reservations(pool, 1, reservation, nullptr);
+  }
+
+  // Independent capacity owners sharing the same native allocation provider.
+  iree_hal_pool_t* pools_[2] = {};
+  // Shared advisory wake source does not imply a shared budget or failure.
+  iree_async_notification_t* notification_ = nullptr;
+  // Execution retirement owner for both source pools.
+  iree_async_frontier_tracker_t* tracker_ = nullptr;
+  // Platform notification progress owner, retained until waits are joined.
+  iree_async_proactor_t* proactor_ = nullptr;
+  // Polling thread servicing accepted capacity waits.
+  iree_async_proactor_thread_t* thread_ = nullptr;
+};
+
+TEST_F(SlabPoolTest, ConstructorAndPrefixLossesStayWithOriginatingPool) {
+  native_.fail_create_at = 2;
+  native_.fail_memory_destroy = true;
+  native_.abandon_backing = true;
+  const iree_hal_pool_reservation_request_t requests[] = {
+      iree_hal_make_pool_reservation_request(64, 64),
+      iree_hal_make_pool_reservation_request(64, 64),
+      iree_hal_make_pool_reservation_request(64, 64),
+  };
+  iree_hal_pool_reservation_t reservations[3] = {};
+  iree_hal_pool_acquire_info_t infos[3] = {};
+  iree_hal_pool_acquire_result_t result;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        iree_hal_pool_acquire_reservations_sync(
+                            pools_[0], 3, requests, nullptr, reservations,
+                            infos, &result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  for (const auto& reservation : reservations) {
+    EXPECT_EQ(reservation.block_handle, 0u);
+  }
+  EXPECT_EQ(native_.create_count, 1);
+  EXPECT_EQ(native_.destroy_count, 2);
+  EXPECT_EQ(native_.abandoned_backing.size(), 2u);
+  auto stats = Stats(pools_[0]);
+  EXPECT_EQ(stats.bytes_committed, 8192u);
+  EXPECT_EQ(stats.bytes_abandoned, 8192u);
+  EXPECT_EQ(stats.bytes_reserved, 0u);
+  EXPECT_EQ(stats.slab_count, 0u);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL,
+                        iree_hal_pool_query_abandonment_status(pools_[0]));
+  EXPECT_EQ(Stats(pools_[1]).bytes_committed, 0u);
+  EXPECT_EQ(Stats(pools_[1]).bytes_abandoned, 0u);
+  IREE_EXPECT_OK(iree_hal_pool_query_abandonment_status(pools_[1]));
+
+  native_.fail_create_at = 0;
+  native_.fail_memory_destroy = false;
+  for (auto* pool : pools_) {
+    iree_hal_pool_reservation_t reservation = {};
+    Acquire(pool, &reservation);
+    Release(pool, &reservation);
+    AwaitNativeReturns(pool);
+  }
+  EXPECT_EQ(Stats(pools_[0]).bytes_committed, 8192u);
+  EXPECT_EQ(Stats(pools_[1]).bytes_committed, 0u);
+}
+
+TEST_F(SlabPoolTest, CleanRollbackPreservesRecoverableAllocationFailure) {
+  native_.fail_create_at = 2;
+  const iree_hal_pool_reservation_request_t requests[] = {
+      iree_hal_make_pool_reservation_request(64, 64),
+      iree_hal_make_pool_reservation_request(64, 64),
+  };
+  iree_hal_pool_reservation_t reservations[2] = {};
+  iree_hal_pool_acquire_info_t infos[2] = {};
+  iree_hal_pool_acquire_result_t result;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        iree_hal_pool_acquire_reservations_sync(
+                            pools_[0], 2, requests, nullptr, reservations,
+                            infos, &result, IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  EXPECT_EQ(Stats(pools_[0]).bytes_committed, 0u);
+  EXPECT_EQ(Stats(pools_[0]).bytes_abandoned, 0u);
+  IREE_EXPECT_OK(iree_hal_pool_query_abandonment_status(pools_[0]));
+  iree_hal_pool_reservation_t reservation = {};
+  Acquire(pools_[0], &reservation);
+  Release(pools_[0], &reservation);
+}
+
+TEST_F(SlabPoolTest, NativeLossWakesAcceptedWaitAndPreservesFullCause) {
+  iree_hal_pool_reservation_t reservation = {};
+  Acquire(pools_[0], &reservation);
+  native_.fail_memory_destroy = true;
+  native_.abandon_backing = true;
+  native_.hold_destroy = true;
+  std::promise<void> resume;
+  native_.destroy_resume = resume.get_future().share();
+  auto entered = native_.destroy_entered.get_future();
+  Release(pools_[0], &reservation);
+  entered.get();
+
+  iree_hal_pool_wait_t* wait = nullptr;
+  IREE_ASSERT_OK(
+      iree_hal_pool_wait_allocate(pools_[0], iree_allocator_system(), &wait));
+  iree_hal_pool_wait_prepare(wait);
+  EXPECT_EQ(Stats(pools_[0]).bytes_reserved, 0u);
+  EXPECT_EQ(Stats(pools_[0]).bytes_committed, 4096u);
+  EXPECT_EQ(Stats(pools_[0]).bytes_abandoned, 0u);
+  std::promise<iree_status_t> completed;
+  auto completion = completed.get_future();
+  iree_hal_pool_wait_commit(wait, iree_infinite_timeout(),
+                            {CompleteWait, &completed});
+  resume.set_value();
+  IREE_EXPECT_OK(completion.get());
+  iree_hal_pool_wait_free(wait);
+
+  EXPECT_EQ(Stats(pools_[0]).bytes_committed, 4096u);
+  EXPECT_EQ(Stats(pools_[0]).bytes_abandoned, 4096u);
+  EXPECT_EQ(Stats(pools_[0]).slab_count, 0u);
+  iree_status_t cause = iree_hal_pool_query_abandonment_status(pools_[0]);
+  char diagnostic[1024];
+  iree_host_size_t diagnostic_length = 0;
+  EXPECT_TRUE(iree_status_format(cause, sizeof(diagnostic), diagnostic,
+                                 &diagnostic_length));
+  EXPECT_NE(
+      std::string(diagnostic, diagnostic_length).find("native slab release"),
+      std::string::npos);
+  EXPECT_NE(std::string(diagnostic, diagnostic_length).find("libamdf API"),
+            std::string::npos);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, cause);
+  EXPECT_EQ(Stats(pools_[1]).bytes_abandoned, 0u);
+  IREE_EXPECT_OK(iree_hal_pool_query_abandonment_status(pools_[1]));
 }
 
 TEST_F(SlabProviderTest, RegisteredStorageUsesOnlyAuthorizedEnvelope) {
@@ -656,7 +945,7 @@ TEST_F(SlabProviderTest, RegisteredStorageUsesOnlyAuthorizedEnvelope) {
   EXPECT_EQ(native_.destroy_count, 0);
   iree_hal_buffer_release(subspan);
   iree_hal_buffer_release(buffer);
-  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab, nullptr);
   EXPECT_EQ(native_.unmap_count, 1);
   EXPECT_EQ(native_.destroy_count, 1);
   bytes[88] = 123;
@@ -717,7 +1006,7 @@ TEST_F(SlabProviderTest, FailedRegistrationPublicationPreservesCallerStorage) {
   native_.fail_second_address = false;
   IREE_ASSERT_OK(
       iree_hal_slab_provider_import_slab(provider_, &storage, &imported));
-  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab, nullptr);
   EXPECT_EQ(release_count, 0);
   iree_hal_external_storage_release(&storage);
   EXPECT_EQ(release_count, 1);
@@ -813,7 +1102,7 @@ TEST_P(NativeTransportTest, TransactionalImportAndIndependentExport) {
   ASSERT_NE(exported.release, nullptr);
   iree_hal_buffer_release(subspan);
   iree_hal_buffer_release(buffer);
-  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab);
+  iree_hal_slab_provider_release_slab_sync(provider_, &imported.slab, nullptr);
   EXPECT_EQ(native_.destroy_count, 2);
   EXPECT_EQ(native_.export_count, 1);
   EXPECT_EQ(native_.release_export_count, 0);

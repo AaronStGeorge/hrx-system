@@ -288,7 +288,9 @@ static void iree_hal_amd_fabric_slab_initialize(
 
 static iree_status_t iree_hal_amd_fabric_slab_provider_acquire_slab(
     iree_hal_slab_provider_t* base_provider, iree_device_size_t min_length,
-    iree_device_size_t min_alignment, iree_hal_slab_t* out_slab) {
+    iree_device_size_t min_alignment, iree_hal_slab_t* out_slab,
+    iree_hal_slab_release_info_t* out_release_info) {
+  *out_release_info = (iree_hal_slab_release_info_t){0};
   iree_hal_amd_fabric_slab_provider_t* provider =
       iree_hal_amd_fabric_slab_provider_cast(base_provider);
   memset(out_slab, 0, sizeof(*out_slab));
@@ -304,11 +306,16 @@ static iree_status_t iree_hal_amd_fabric_slab_provider_acquire_slab(
   iree_hal_amd_fabric_slab_handle_t* handle = NULL;
   IREE_RETURN_IF_ERROR(
       iree_hal_amd_fabric_slab_handle_allocate(provider, &handle));
+  amdf_memory_release_info_t release_info = {0};
   iree_status_t status = iree_hal_amd_fabric_memory_allocate(
       provider->api, &provider->options.memory, min_length, min_alignment,
-      provider->event_sink, &handle->memory);
+      provider->event_sink, &handle->memory, &release_info);
   if (iree_status_is_ok(status)) {
     status = iree_hal_amd_fabric_slab_handle_bind(provider, handle);
+    if (!iree_status_is_ok(status)) {
+      release_info = iree_hal_amd_fabric_memory_deinitialize(
+          provider->api, provider->event_sink, &handle->memory);
+    }
   }
   if (iree_status_is_ok(status)) {
     iree_hal_amd_fabric_slab_initialize(handle, min_length, out_slab);
@@ -318,10 +325,13 @@ static iree_status_t iree_hal_amd_fabric_slab_provider_acquire_slab(
     iree_atomic_fetch_add(&provider->total_acquired, 1,
                           iree_memory_order_relaxed);
   } else {
-    iree_hal_amd_fabric_memory_deinitialize(provider->api, provider->event_sink,
-                                            &handle->memory);
     iree_allocator_free(provider->base.host_allocator, handle);
   }
+  *out_release_info = (iree_hal_slab_release_info_t){
+      .status = IREE_HAL_AMD_STATUS_FROM_AMDF(release_info.status,
+                                              "native allocation cleanup"),
+      .abandoned_byte_length = release_info.abandoned_byte_length,
+  };
   return status;
 }
 
@@ -429,23 +439,32 @@ static bool iree_hal_amd_fabric_slab_provider_query_import_requirements(
   return true;
 }
 
-static void iree_hal_amd_fabric_slab_provider_release_slab(
+static iree_hal_slab_release_info_t
+iree_hal_amd_fabric_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   iree_hal_amd_fabric_slab_provider_t* provider =
       iree_hal_amd_fabric_slab_provider_cast(base_provider);
   iree_hal_amd_fabric_slab_handle_t* handle =
       (iree_hal_amd_fabric_slab_handle_t*)(uintptr_t)slab->provider_handle;
   if (!handle) {
-    return;
+    return (iree_hal_slab_release_info_t){0};
   }
-  iree_hal_amd_fabric_memory_deinitialize(provider->api, provider->event_sink,
-                                          &handle->memory);
+  const amdf_memory_release_info_t release_info =
+      iree_hal_amd_fabric_memory_deinitialize(
+          provider->api, provider->event_sink, &handle->memory);
   if (!handle->imported) {
     iree_hal_memory_trace_free(&provider->trace, handle);
   }
   iree_allocator_free(provider->base.host_allocator, handle);
-  iree_atomic_fetch_add(&provider->total_released, 1,
-                        iree_memory_order_relaxed);
+  if (!release_info.abandoned_byte_length) {
+    iree_atomic_fetch_add(&provider->total_released, 1,
+                          iree_memory_order_relaxed);
+  }
+  return (iree_hal_slab_release_info_t){
+      .status = IREE_HAL_AMD_STATUS_FROM_AMDF(release_info.status,
+                                              "native slab release"),
+      .abandoned_byte_length = release_info.abandoned_byte_length,
+  };
 }
 
 static iree_status_t iree_hal_amd_fabric_slab_provider_wrap_buffer(
@@ -556,7 +575,9 @@ static void iree_hal_amd_fabric_slab_provider_release_slabs(
         (const iree_hal_amd_fabric_slab_handle_t*)(uintptr_t)request->slabs[i]
             .provider_handle;
     if (handle && handle->imported) {
-      iree_hal_amd_fabric_slab_provider_release_slab(base, &request->slabs[i]);
+      request->release_info = iree_hal_slab_release_info_join(
+          request->release_info, iree_hal_amd_fabric_slab_provider_release_slab(
+                                     base, &request->slabs[i]));
     } else {
       if (owned_count != i) {
         request->slabs[owned_count] = request->slabs[i];
@@ -566,7 +587,8 @@ static void iree_hal_amd_fabric_slab_provider_release_slabs(
   }
   request->count = owned_count;
   if (!owned_count) {
-    request->completion.fn(request->completion.user_data);
+    request->completion.fn(request->completion.user_data,
+                           request->release_info);
     return;
   }
   iree_hal_amd_fabric_slab_provider_t* provider =

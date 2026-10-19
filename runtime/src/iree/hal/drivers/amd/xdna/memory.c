@@ -31,7 +31,7 @@ iree_status_t iree_hal_amd_xdna_memory_allocate(
   iree_hal_amd_xdna_memory_t memory = {0};
   IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
       context->api, &options, byte_length, alignment, context->event_sink,
-      &memory.storage));
+      &memory.storage, NULL));
   iree_status_t status = IREE_HAL_AMD_STATUS_FROM_AMDF(
       context->api->memory_query_address(memory.storage.handle, 0,
                                          source->address_kind,

@@ -94,11 +94,14 @@ bool iree_hal_amd_fabric_memory_constrain_profile(
 // Allocates native backing, rounding the extent to the profile granularity.
 // A nonzero host_access creates the requested view before publication. Failure
 // leaves out_memory empty; native cleanup failures are reported to event_sink.
+// Optional out_release_info receives unpublished backing loss independently
+// of the returned construction status and is initialized on every path.
 iree_status_t iree_hal_amd_fabric_memory_allocate(
     const amdf_api_t* api, const iree_hal_amd_fabric_memory_options_t* options,
     uint64_t byte_length, uint64_t alignment,
     iree_hal_device_event_sink_t event_sink,
-    iree_hal_amd_fabric_memory_t* out_memory);
+    iree_hal_amd_fabric_memory_t* out_memory,
+    amdf_memory_release_info_t* out_release_info);
 
 // Registers caller-owned host storage using a qualified REGISTER profile.
 // The provider supplies a borrowed registration view of the source's
@@ -124,7 +127,8 @@ iree_status_t iree_hal_amd_fabric_memory_import(
 
 // Releases native ownership after all uses retire, without waiting for them.
 // Native release failures are diagnosed; consumed handles are never retried.
-void iree_hal_amd_fabric_memory_deinitialize(
+// The result distinguishes consumed metadata from relinquished owned backing.
+amdf_memory_release_info_t iree_hal_amd_fabric_memory_deinitialize(
     const amdf_api_t* api, iree_hal_device_event_sink_t event_sink,
     iree_hal_amd_fabric_memory_t* memory);
 

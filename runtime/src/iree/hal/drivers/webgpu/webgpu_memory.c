@@ -106,7 +106,9 @@ static void iree_hal_webgpu_slab_provider_destroy(
 
 static iree_status_t iree_hal_webgpu_slab_provider_acquire_slab(
     iree_hal_slab_provider_t* base_provider, iree_device_size_t min_length,
-    iree_device_size_t min_alignment, iree_hal_slab_t* out_slab) {
+    iree_device_size_t min_alignment, iree_hal_slab_t* out_slab,
+    iree_hal_slab_release_info_t* out_release_info) {
+  *out_release_info = (iree_hal_slab_release_info_t){0};
   iree_hal_webgpu_slab_provider_t* provider =
       (iree_hal_webgpu_slab_provider_t*)base_provider;
   memset(out_slab, 0, sizeof(*out_slab));
@@ -165,12 +167,12 @@ static iree_status_t iree_hal_webgpu_slab_provider_acquire_slab(
   return status;
 }
 
-static void iree_hal_webgpu_slab_provider_release_slab(
+static iree_hal_slab_release_info_t iree_hal_webgpu_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   iree_hal_webgpu_slab_provider_t* provider =
       (iree_hal_webgpu_slab_provider_t*)base_provider;
   if (!slab->provider_handle) {
-    return;
+    return (iree_hal_slab_release_info_t){0};
   }
   iree_hal_buffer_t* buffer =
       (iree_hal_buffer_t*)(uintptr_t)slab->provider_handle;
@@ -180,6 +182,7 @@ static void iree_hal_webgpu_slab_provider_release_slab(
   iree_hal_buffer_release(buffer);
   iree_atomic_fetch_add(&provider->total_released, 1,
                         iree_memory_order_relaxed);
+  return (iree_hal_slab_release_info_t){0};
 }
 
 static iree_status_t iree_hal_webgpu_slab_provider_wrap_buffer(
