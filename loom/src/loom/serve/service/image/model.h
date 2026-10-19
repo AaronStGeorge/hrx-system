@@ -97,7 +97,7 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // and retained independently of the cold program; its VM environment stays
 // live. control.loom:
 //   prepare_request(buffer state, i64 height, i64 width, buffer prompt,
-//                   i64 seed, f32 strength) -> (buffer bytes, i64 units, i64
+//                   i64 seed, buffer loras) -> (buffer bytes, i64 units, i64
 //                   tag)
 //   prepare_batch(buffer state, buffer i64_stage_tags, buffer ranges,
 //                 buffer bytes) -> (i32 stage, buffer payload)
@@ -106,8 +106,11 @@ iree_status_t loom_serve_image_load_free(loom_serve_image_load_t* load);
 // The cursor starts at zero. Each invocation submits its next part and returns
 // a cursor for continuation, or a negative value after final feedback. The
 // owner invokes it again only after both accepted frontiers retire. State is
-// immutable across requests. Positive units bound cohort work/storage; equal
-// tags permit batching. Ranges are little-endian [offset, length] i64 pairs
+// immutable across requests. loras contains the validated records documented
+// by loom_serve_image_request_t; source policy resolves registered identities
+// and rejects unsupported selections before publishing prepared bytes.
+// Positive units bound cohort work/storage; equal tags permit batching.
+// Ranges are little-endian [offset, length] i64 pairs
 // into concatenated prepared bytes. Output is concatenated F32 CHW RGB in that
 // same stable request order. A cancelled peer never changes this layout. The
 // warm program imports input/JSON capabilities, invocation-only prepare
@@ -210,16 +213,15 @@ loom_serve_image_generator_t loom_serve_image_model_generator(
 // CPU-only source preparation, serialized with other model calls. Suitable for
 // a CPU task: no device submission, wait or shared residency mutation occurs.
 // Success transfers opaque prepared bytes to the caller. These may borrow the
-// prompt, which remains live through batch preparation. Multiple prepared
-// requests may coexist without capturing executables or checkpoint banks.
-// INVALID_ARGUMENT rejects the request without retaining ownership.
+// request storage, which remains live through batch preparation. Multiple
+// prepared requests may coexist without capturing executables or checkpoint
+// banks. INVALID_ARGUMENT rejects the request without retaining ownership.
 // Width/height are positive and their F32 RGB extent fits host storage and i64;
 // the public request parser establishes this representational boundary. Source
 // preparation validates model-specific geometry before any output allocation.
 // Returns source work/compatibility facts and owned bytes, or zeros on failure.
 iree_status_t loom_serve_image_model_prepare_request(
-    loom_serve_image_model_t* model, iree_string_view_t prompt, uint64_t seed,
-    float strength, uint32_t width, uint32_t height,
+    loom_serve_image_model_t* model, const loom_serve_image_request_t* request,
     loom_serve_prepared_request_t* out_prepared);
 
 // CPU-only preparation of one compatible cohort in stable client order. The
@@ -269,14 +271,13 @@ iree_const_byte_span_t loom_serve_image_model_complete(
 // Source prepares one opaque payload and selects a retained command. Its
 // payload is kept alive through both accepted execution frontiers, including
 // failures after partial submission. Request errors before submission leave
-// the model reusable; execution failure is terminal. Prompt is borrowed only
+// the model reusable; execution failure is terminal. Request is borrowed only
 // for this call. Success returns little-endian F32 CHW RGB, borrowed until the
 // next generate call or destruction. Failure leaves *out_rgb empty.
 // out_prepared retains source-selected facts if preparation succeeded, even
 // when subsequent admission or device work fails.
 iree_status_t loom_serve_image_model_generate(
-    loom_serve_image_model_t* model, iree_string_view_t prompt, uint64_t seed,
-    float strength, uint32_t width, uint32_t height,
+    loom_serve_image_model_t* model, const loom_serve_image_request_t* request,
     loom_serve_image_prepared_t* out_prepared, iree_const_byte_span_t* out_rgb);
 
 #ifdef __cplusplus

@@ -17,7 +17,8 @@ kernel.def target(@fixture_target) @colors() {
   %output = buffer.view %colors[%origin] : buffer -> view<[%batch]x2xf32>
   %seed = view.load %header[%item, 0] : view<[%batch]x8xi32> -> i32
   %count = view.load %header[%item, 2] : view<[%batch]x8xi32> -> i32
-  %strength = view.load %values[%item, 6] : view<[%batch]x8xf32> -> f32
+  %red_scale = view.load %values[%item, 6] : view<[%batch]x8xf32> -> f32
+  %green_scale = view.load %values[%item, 7] : view<[%batch]x8xf32> -> f32
   %c1 = scalar.constant 1 : i32
   %c0 = scalar.constant 0 : i32
   %seed_bit = scalar.andi %seed, %c1 : i32
@@ -28,8 +29,10 @@ kernel.def target(@fixture_target) @colors() {
   %high = scalar.constant 1.0 : f32
   %red = scf.select %odd_seed, %high, %low : f32
   %green = scf.select %odd_count, %high, %low : f32
-  %scaled_red = scalar.mulf %red, %strength : f32
-  %scaled_green = scalar.mulf %green, %strength : f32
+  %red_delta = scalar.mulf %red, %red_scale : f32
+  %green_delta = scalar.mulf %green, %green_scale : f32
+  %scaled_red = scalar.addf %red, %red_delta : f32
+  %scaled_green = scalar.addf %green, %green_delta : f32
   view.store %scaled_red, %output[%item, 0] : f32, view<[%batch]x2xf32>
   view.store %scaled_green, %output[%item, 1] : f32, view<[%batch]x2xf32>
   kernel.return

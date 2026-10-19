@@ -23,8 +23,82 @@ global.rodata.def @pixels = bytes("666978747572652e706978656c73")
 
 global.rodata.def @batch = bytes("666978747572652e6261746368")
 
+// The fixture registers two scalar adapters with unit factors: one updates
+// the red projection and one the green projection. Their IDs are model data.
+global.rodata.def @red_lora = bytes("726564")
+
+global.rodata.def @green_lora = bytes("677265656e")
+
+// unknown or duplicate fixture LoRA ID
+global.rodata.def @invalid_lora = bytes("756e6b6e6f776e206f72206475706c69636174652066697874757265204c6f5241204944")
+
+func.def @lora_id_equal(%records: buffer, %offset: offset, %length: offset, %name: buffer) -> (i1) {
+  %name_length = buffer.length %name
+  %same_length = index.cmp eq, %length, %name_length : offset
+  %equal = scf.if %same_length -> (i1) {
+    %origin = index.constant 0 : offset
+    %order = buffer.compare %records[%offset], %name[%origin], %length
+    %c0 = scalar.constant 0 : i32
+    %matches = scalar.cmpi eq, %order, %c0 : i32
+    scf.yield %matches : i1
+  } else {
+    %false = scalar.constant false : i1
+    scf.yield %false : i1
+  }
+  func.return %equal : i1
+}
+
+// Native ingress owns record bounds, UTF-8 decoding, and finite F32 conversion.
+// The source resolves model identities once, before a cohort is captured.
+func.def @select_loras(%loras: buffer) -> (f32, f32) {
+  %origin = index.constant 0 : offset
+  %length = buffer.length %loras
+  %unselected = scalar.constant 0.0 : f32
+  %false = scalar.constant false : i1
+  %red_name = global.load @red_lora : buffer
+  %green_name = global.load @green_lora : buffer
+  %error = global.load @invalid_lora : buffer
+  %end, %red, %green, %red_seen, %green_seen = scf.while(%position = %origin : offset, %red = %unselected : f32, %green = %unselected : f32, %red_seen = %false : i1, %green_seen = %false : i1) -> (offset, f32, f32, i1, i1) {
+    %more = index.cmp ult, %position, %length : offset
+    scf.condition %more, %position, %red, %green, %red_seen, %green_seen : i1, offset, f32, f32, i1, i1
+  } do(%position: offset, %red: f32, %green: f32, %red_seen: i1, %green_seen: i1) {
+    %header = buffer.view %loras[%position] : buffer -> view<1xi64>
+    %loaded_length = view.load %header[0] : view<1xi64> -> i64
+    %name_length64 = scalar.assume %loaded_length [range(%loaded_length, 1, 9223372036854775784)] : i64
+    %name_length = index.cast %name_length64 : i64 to offset
+    %scale_field = index.constant 8 : offset
+    %header_bytes = index.constant 16 : offset
+    %scale_offset = index.add %position, %scale_field : offset
+    %scale_view = buffer.view %loras[%scale_offset] : buffer -> view<1xf32>
+    %scale = view.load %scale_view[0] : view<1xf32> -> f32
+    %name_offset = index.add %position, %header_bytes : offset
+    %is_red = func.call @lora_id_equal(%loras, %name_offset, %name_length, %red_name) : (buffer, offset, offset, buffer) -> (i1)
+    %is_green = func.call @lora_id_equal(%loras, %name_offset, %name_length, %green_name) : (buffer, offset, offset, buffer) -> (i1)
+    %known = scalar.ori %is_red, %is_green : i1
+    %duplicate_red = scalar.andi %is_red, %red_seen : i1
+    %duplicate_green = scalar.andi %is_green, %green_seen : i1
+    %duplicate = scalar.ori %duplicate_red, %duplicate_green : i1
+    %unique = scalar.cmpi eq, %duplicate, %false : i1
+    %valid = scalar.andi %known, %unique : i1
+    %valid32 = scalar.extui %valid : i1 to i32
+    func.call @require(%valid32, %error) : (i32, buffer)
+    %next_red = scf.select %is_red, %scale, %red : f32
+    %next_green = scf.select %is_green, %scale, %green : f32
+    %next_red_seen = scalar.ori %red_seen, %is_red : i1
+    %next_green_seen = scalar.ori %green_seen, %is_green : i1
+    %padding = scalar.constant 7 : i64
+    %mask = scalar.constant -8 : i64
+    %rounded = scalar.addi %name_length64, %padding : i64
+    %padded64 = scalar.andi %rounded, %mask : i64
+    %padded = index.cast %padded64 : i64 to offset
+    %next = index.add %name_offset, %padded : offset
+    scf.yield %next, %next_red, %next_green, %next_red_seen, %next_green_seen : offset, f32, f32, i1, i1
+  }
+  func.return %red, %green : f32, f32
+}
+
 // The payload carries request-derived facts, not host-rendered pixels.
-func.def public @prepare_request(%state: buffer, %height: i64, %width: i64, %prompt: buffer, %seed: i64, %strength: f32) -> (buffer, i64, i64) {
+func.def public @prepare_request(%state: buffer, %height: i64, %width: i64, %prompt: buffer, %seed: i64, %loras: buffer) -> (buffer, i64, i64) {
   %origin = index.constant 0 : offset
   %state_view = buffer.view %state[%origin] : buffer -> view<2xi64>
   %capacity = view.load %state_view[0] : view<2xi64> -> i64
@@ -55,11 +129,11 @@ func.def public @prepare_request(%state: buffer, %height: i64, %width: i64, %pro
   view.store %count, %header[1] : i64, view<3xi64>
   %pixels = scalar.muli %height, %width : i64
   view.store %pixels, %header[2] : i64, view<3xi64>
-  %strength_offset = index.constant 24 : offset
-  %values = buffer.view %payload[%strength_offset] : buffer -> view<2xf32>
-  view.store %strength, %values[0] : f32, view<2xf32>
-  %padding = scalar.constant 0.0 : f32
-  view.store %padding, %values[1] : f32, view<2xf32>
+  %red, %green = func.call @select_loras(%loras) : (buffer) -> (f32, f32)
+  %scales_offset = index.constant 24 : offset
+  %values = buffer.view %payload[%scales_offset] : buffer -> view<2xf32>
+  view.store %red, %values[0] : f32, view<2xf32>
+  view.store %green, %values[1] : f32, view<2xf32>
   func.return %payload, %c1, %pixels : buffer, i64, i64
 }
 

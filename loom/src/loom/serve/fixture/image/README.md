@@ -11,13 +11,19 @@ depends on seed parity, green on token-count parity, and blue on pixel parity.
 Pixel extents are independently configurable from 1 through 64. The output is
 a transport/ownership oracle, not a neural quality or throughput benchmark.
 The source rejects prompts beyond the configured token limit, exercising
-request validation in the VM rather than in the HTTP parser.
+request validation in the VM rather than in the HTTP parser. Its `red` and
+`green` scalar adapters add independently scaled copies of those channels.
+For example, `"loras":[{"id":"red","scale":-0.75}]` leaves the red channel
+at one quarter of its base value without changing green or blue. Unknown and
+repeated IDs reject during source preparation.
 
 The integration test runs real source JIT, VM control, command submission and
 HTTP responses with one and four shared CPU workers, both whole-command and
 one-command-per-part execution. The latter preserves the palette across queue
 submissions and exercises cancellation before the pixel consumer. CPU task,
-AMDGPU and Vulkan use the same source and output oracle:
+AMDGPU and Vulkan use the same source and output oracle. Compatible requests
+share one cohort command while retaining independent adapter selections and
+private palettes. Cancelling a peer preserves surviving output slots:
 
 ```sh
 iree-bazel-test --config=asan \

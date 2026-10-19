@@ -448,11 +448,8 @@ static iree_status_t loom_serve_image_create_control(
   const iree_vm_signature_type_t i64 = {
       .kind = IREE_VM_SIGNATURE_TYPE_KIND_SCALAR,
       .value.scalar = IREE_VM_SCALAR_TYPE_I64};
-  const iree_vm_signature_type_t f32 = {
-      .kind = IREE_VM_SIGNATURE_TYPE_KIND_SCALAR,
-      .value.scalar = IREE_VM_SCALAR_TYPE_F32};
   const iree_vm_signature_type_t request_arguments[] = {buffer, i64, i64,
-                                                        buffer, i64, f32};
+                                                        buffer, i64, buffer};
   const iree_vm_signature_type_t request_results[] = {buffer, i64, i64};
   const iree_vm_signature_type_t batch_arguments[] = {buffer, buffer, buffer,
                                                       buffer};
@@ -881,30 +878,40 @@ iree_string_view_t loom_serve_image_model_name(
 }
 
 iree_status_t loom_serve_image_model_prepare_request(
-    loom_serve_image_model_t* model, iree_string_view_t prompt, uint64_t seed,
-    float strength, uint32_t width, uint32_t height,
+    loom_serve_image_model_t* model, const loom_serve_image_request_t* request,
     loom_serve_prepared_request_t* out_prepared) {
   *out_prepared = (loom_serve_prepared_request_t){0};
+  const iree_string_view_t prompt = iree_string_builder_view(&request->prompt);
+  const iree_string_view_t selections =
+      iree_string_builder_view(&request->loras);
   iree_vm_buffer_t* text = NULL;
   IREE_RETURN_IF_ERROR(iree_vm_buffer_wrap(
       IREE_VM_BUFFER_ACCESS_FLAG_READ,
       iree_make_byte_span((void*)prompt.data, prompt.size),
       iree_vm_buffer_release_callback_null(), model->host_allocator, &text));
+  iree_vm_buffer_t* loras = NULL;
+  iree_status_t status = iree_vm_buffer_wrap(
+      IREE_VM_BUFFER_ACCESS_FLAG_READ,
+      iree_make_byte_span((void*)selections.data, selections.size),
+      iree_vm_buffer_release_callback_null(), model->host_allocator, &loras);
+  if (!iree_status_is_ok(status)) {
+    iree_vm_buffer_release(text);
+    return status;
+  }
   iree_vm_variant_t arguments[] = {
       iree_vm_buffer_variant_from_ptr_borrowed(&model->control.vm_types,
                                                model->control.state),
-      iree_vm_variant_from_i64(height),
-      iree_vm_variant_from_i64(width),
+      iree_vm_variant_from_i64(request->height),
+      iree_vm_variant_from_i64(request->width),
       iree_vm_buffer_variant_from_ptr_move(&model->control.vm_types, &text),
-      iree_vm_variant_from_i64((int64_t)seed),
-      iree_vm_variant_from_f32(strength),
+      iree_vm_variant_from_i64((int64_t)request->seed),
+      iree_vm_buffer_variant_from_ptr_move(&model->control.vm_types, &loras),
   };
   iree_vm_variant_t results[3] = {0};
-  iree_status_t status =
-      iree_vm_invoke(loom_serve_program_invocation(model->control.program),
-                     model->control.prepare_request,
-                     iree_vm_variant_span_from_array(arguments),
-                     iree_vm_variant_span_from_array(results));
+  status = iree_vm_invoke(loom_serve_program_invocation(model->control.program),
+                          model->control.prepare_request,
+                          iree_vm_variant_span_from_array(arguments),
+                          iree_vm_variant_span_from_array(results));
   iree_vm_buffer_t* bytes = NULL;
   int64_t units = 0;
   int64_t tag = 0;
@@ -1227,19 +1234,19 @@ iree_const_byte_span_t loom_serve_image_model_complete(
 }
 
 iree_status_t loom_serve_image_model_generate(
-    loom_serve_image_model_t* model, iree_string_view_t prompt, uint64_t seed,
-    float strength, uint32_t width, uint32_t height,
+    loom_serve_image_model_t* model, const loom_serve_image_request_t* request,
     loom_serve_image_prepared_t* out_prepared,
     iree_const_byte_span_t* out_rgb) {
   *out_rgb = iree_const_byte_span_empty();
   *out_prepared = (loom_serve_image_prepared_t){0};
-  loom_serve_prepared_request_t request = {0};
+  loom_serve_prepared_request_t prepared_request = {0};
   IREE_RETURN_IF_ERROR(loom_serve_image_model_prepare_request(
-      model, prompt, seed, strength, width, height, &request));
-  const iree_host_size_t output_length = (iree_host_size_t)width * height * 12;
+      model, request, &prepared_request));
+  const iree_host_size_t output_length =
+      (iree_host_size_t)request->width * request->height * 12;
   iree_status_t status = loom_serve_image_model_prepare_batch(
-      model, 1, &request, &output_length, out_prepared);
-  iree_vm_buffer_release(request.bytes);
+      model, 1, &prepared_request, &output_length, out_prepared);
+  iree_vm_buffer_release(prepared_request.bytes);
   IREE_RETURN_IF_ERROR(status);
   iree_notification_t notification;
   iree_notification_initialize(&notification);
@@ -1302,9 +1309,7 @@ static iree_status_t loom_serve_image_generator_admit(
 static iree_status_t loom_serve_image_generator_prepare(
     void* self, const loom_serve_image_request_t* request,
     loom_serve_prepared_request_t* out_prepared) {
-  return loom_serve_image_model_prepare_request(
-      self, iree_string_builder_view(&request->prompt), request->seed,
-      request->strength, request->width, request->height, out_prepared);
+  return loom_serve_image_model_prepare_request(self, request, out_prepared);
 }
 
 static iree_status_t loom_serve_image_generator_prepare_batch(

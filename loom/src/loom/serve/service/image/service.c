@@ -884,12 +884,6 @@ static iree_status_t loom_serve_image_accept(
     iree_status_free(status);
     return response_status;
   }
-  if (!service->options.adapter_enabled && receipt.request.strength != 1.0f) {
-    loom_serve_image_request_deinitialize(&receipt.request);
-    return loom_serve_image_reject(
-        service, connection, &receipt, "400 Bad Request",
-        IREE_SV("strength requires a loaded adapter"));
-  }
   if (service->count == service->capacity) {
     loom_serve_image_request_deinitialize(&receipt.request);
     return loom_serve_image_reject(service, connection, &receipt,

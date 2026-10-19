@@ -23,8 +23,6 @@ typedef struct loom_serve_image_service_options_t {
   uint32_t width;
   // Default output pixel height for requests omitting size.
   uint32_t height;
-  // Whether the retained generator accepts an adapter strength other than one.
-  bool adapter_enabled;
   // Positive additional host request credit beyond the first admitted image.
   // Queued and active cohort items share the total pending_capacity + 1 bound.
   iree_host_size_t pending_capacity;

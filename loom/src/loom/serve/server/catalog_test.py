@@ -932,13 +932,14 @@ def check_control_contracts(server_command, directory, catalog):
             "image",
             [
                 (
-                    "%strength: f32) -> (buffer, i64, i64) {",
-                    "%wrong_strength: i32) -> (buffer, i64, i64) {\n"
-                    "  %strength = scalar.constant 1.0 : f32",
+                    "%loras: buffer) -> (buffer, i64, i64) {",
+                    "%wrong_loras: hal.buffer) -> (buffer, i64, i64) {\n"
+                    "  %empty = index.constant 0 : offset\n"
+                    "  %loras = buffer.alloca<private> align(1) %empty : buffer",
                 )
             ],
             "model export 'prepare_request' argument 5 type mismatch: "
-            "host expects f32, source declares i32",
+            "host expects vm.buffer, source declares hal.buffer",
         ),
         (
             "embedding",

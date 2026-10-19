@@ -43,6 +43,20 @@
 
 namespace {
 
+struct ImageRequest {
+  ~ImageRequest() { loom_serve_image_request_deinitialize(&value); }
+
+  iree_status_t Initialize(iree_string_view_t body, uint32_t width,
+                           uint32_t height) {
+    return loom_serve_image_request_initialize(body, IREE_SV("fixture-image"),
+                                               width, height,
+                                               iree_allocator_system(), &value);
+  }
+
+  // Decoded input remains live until source cohort capture has finished.
+  loom_serve_image_request_t value = {};
+};
+
 class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
  protected:
   static constexpr uint32_t kWidth = 7;
@@ -163,12 +177,14 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
     });
   }
 
-  iree_status_t PrepareSingle(iree_string_view_t prompt, uint64_t seed,
-                              float strength, uint32_t width, uint32_t height,
+  iree_status_t PrepareSingle(iree_string_view_t body, uint32_t width,
+                              uint32_t height,
                               loom_serve_image_prepared_t* out_prepared) {
+    ImageRequest input;
+    IREE_RETURN_IF_ERROR(input.Initialize(body, width, height));
     loom_serve_prepared_request_t request = {};
-    IREE_RETURN_IF_ERROR(loom_serve_image_model_prepare_request(
-        model_, prompt, seed, strength, width, height, &request));
+    IREE_RETURN_IF_ERROR(
+        loom_serve_image_model_prepare_request(model_, &input.value, &request));
     const iree_host_size_t output_length =
         (iree_host_size_t)width * height * 12;
     const iree_status_t status = loom_serve_image_model_prepare_batch(
@@ -242,11 +258,12 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
 
   static std::vector<float> Pixels(size_t tokens, uint64_t seed,
                                    size_t count = kPixels,
-                                   float strength = 1.0f) {
+                                   float red_strength = 1.0f,
+                                   float green_strength = 1.0f) {
     std::vector<float> pixels(count * 3);
     for (size_t i = 0; i < count; ++i) {
-      pixels[i] = (seed & 1 ? 1.0f : -1.0f) * strength;
-      pixels[count + i] = (tokens & 1 ? 1.0f : -1.0f) * strength;
+      pixels[i] = (seed & 1 ? 1.0f : -1.0f) * red_strength;
+      pixels[count + i] = (tokens & 1 ? 1.0f : -1.0f) * green_strength;
       pixels[2 * count + i] = i & 1 ? 1.0f : -1.0f;
     }
     return pixels;
@@ -254,8 +271,10 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
 
   std::string EncodedPixels(size_t tokens, uint64_t seed,
                             uint32_t width = kWidth, uint32_t height = kHeight,
-                            float strength = 1.0f) {
-    const auto pixels = Pixels(tokens, seed, (size_t)width * height, strength);
+                            float red_strength = 1.0f,
+                            float green_strength = 1.0f) {
+    const auto pixels = Pixels(tokens, seed, (size_t)width * height,
+                               red_strength, green_strength);
     iree_byte_span_t png;
     IREE_EXPECT_OK(loom_serve_image_encode_rgb_f32_png(
         width, height,
@@ -417,7 +436,6 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
         .name = loom_serve_image_model_name(model_),
         .width = kWidth,
         .height = kHeight,
-        .adapter_enabled = true,
         .pending_capacity = 3,
     };
     loom_serve_image_service_t* value = nullptr;
@@ -464,11 +482,10 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
       IREE_ASSERT_OK(interface.accept(interface.self, *connection, request, 0));
     };
     const std::array<std::string, 4> inputs = {
-        R"({"model":"fixture-image","prompt":"ab","seed":0,"strength":0.25})",
+        R"({"model":"fixture-image","prompt":"ab","seed":0,"loras":[{"id":"red","scale":-0.75},{"id":"green","scale":-0.5}]})",
         R"({"model":"fixture-image","prompt":"ab","seed":2,"size":"6x6"})",
-        R"({"model":"fixture-image","prompt":"aba","seed":1,"strength":-0.5,"size":"5x7"})",
-        "{\"model\":\"fixture-image\",\"prompt\":\"" + std::string(33, 'a') +
-            "\"}",
+        R"({"model":"fixture-image","prompt":"aba","seed":1,"loras":[{"id":"green","scale":-0.25},{"id":"red","scale":-1.5}],"size":"5x7"})",
+        R"({"model":"fixture-image","prompt":"ab","loras":[{"id":"red"},{"id":"\u0072ed","scale":0}]})",
     };
     std::array<loom_serve::testing::HttpClient, 4> clients;
     std::array<loom_serve_http_connection_t*, 4> connections = {};
@@ -526,14 +543,14 @@ class SourceImageServiceTest : public ::testing::TestWithParam<uint32_t> {
     }));
     if (!reset_phase) {
       EXPECT_NE(Read(clients[0].release())
-                    .find("\"b64_json\":\"" + EncodedPixels(2, 0, 7, 5, 0.25f) +
-                          "\""),
+                    .find("\"b64_json\":\"" +
+                          EncodedPixels(2, 0, 7, 5, 0.25f, 0.5f) + "\""),
                 std::string::npos);
     }
-    EXPECT_NE(
-        Read(clients[2].release())
-            .find("\"b64_json\":\"" + EncodedPixels(3, 1, 5, 7, -0.5f) + "\""),
-        std::string::npos);
+    EXPECT_NE(Read(clients[2].release())
+                  .find("\"b64_json\":\"" +
+                        EncodedPixels(3, 1, 5, 7, -0.5f, 0.75f) + "\""),
+              std::string::npos);
     EXPECT_NE(Read(clients[1].release())
                   .find("\"b64_json\":\"" + EncodedPixels(2, 2, 6, 6) + "\""),
               std::string::npos);
@@ -795,16 +812,19 @@ TEST_P(SourceImageServiceTest, PreparedShapePinsCodeAcrossSelectionAndRemoval) {
     }
   };
   loom_serve_image_prepared_t prepared;
-  IREE_ASSERT_OK(PrepareSingle(IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
+  IREE_ASSERT_OK(
+      PrepareSingle(IREE_SV(R"({"prompt":"aba","seed":1})"), 15, 9, &prepared));
   IREE_ASSERT_OK(update.select(update.self, candidate.get()));
   ASSERT_NO_FATAL_FAILURE(complete(1, GetParam() ? 2 : 1));
 
-  IREE_ASSERT_OK(PrepareSingle(IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
+  IREE_ASSERT_OK(
+      PrepareSingle(IREE_SV(R"({"prompt":"aba","seed":1})"), 15, 9, &prepared));
   IREE_ASSERT_OK(update.select(update.self, nullptr));
   candidate.reset();
   ASSERT_NO_FATAL_FAILURE(complete(0, GetParam() ? 3 : 1));
 
-  IREE_ASSERT_OK(PrepareSingle(IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
+  IREE_ASSERT_OK(
+      PrepareSingle(IREE_SV(R"({"prompt":"aba","seed":1})"), 15, 9, &prepared));
   ASSERT_NO_FATAL_FAILURE(complete(1, GetParam() ? 2 : 1));
   generator.set_observer(generator.self, {});
 }
@@ -909,16 +929,21 @@ TEST_P(SourceImageServiceTest, SourcePixelsAndHttpPngPreserveRequestIdentity) {
   ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
   loom_serve_image_prepared_t prepared;
   IREE_ASSERT_OK(
-      PrepareSingle(IREE_SV("x"), 0, 1.0f, kWidth, kHeight, &prepared));
+      PrepareSingle(IREE_SV(R"({"prompt":"x"})"), kWidth, kHeight, &prepared));
   EXPECT_EQ(prepared.stage, 0u);
   EXPECT_EQ(prepared.tag, 32);
   EXPECT_EQ(prepared.input_bytes, 32u);
   loom_serve_image_model_discard_batch(model_);
   // Verify source arithmetic independently of the image encoder.
   for (uint64_t seed : {0u, 1u}) {
+    const std::string body =
+        R"({"prompt":"aba","seed":)" + std::to_string(seed) + "}";
+    ImageRequest input;
+    IREE_ASSERT_OK(input.Initialize(
+        iree_make_string_view(body.data(), body.size()), kWidth, kHeight));
     iree_const_byte_span_t rgb;
-    IREE_ASSERT_OK(loom_serve_image_model_generate(
-        model_, IREE_SV("aba"), seed, 1.0f, kWidth, kHeight, &prepared, &rgb));
+    IREE_ASSERT_OK(
+        loom_serve_image_model_generate(model_, &input.value, &prepared, &rgb));
     EXPECT_EQ(prepared.stage, 0u);
     EXPECT_EQ(prepared.tag, 32);
     EXPECT_EQ(prepared.input_bytes, 32u);
@@ -961,6 +986,12 @@ TEST_P(SourceImageServiceTest, SourcePixelsAndHttpPngPreserveRequestIdentity) {
                     std::string(33, 'a') + "\"}"));
   ASSERT_EQ(too_long.find("HTTP/1.1 400"), 0u);
   EXPECT_NE(too_long.find("prompt exceeds fixture text capacity"),
+            std::string::npos);
+  const auto unknown_lora = Read(Send(
+      "POST", "/v1/images/generations",
+      R"({"model":"fixture-image","prompt":"ab","loras":[{"id":"missing"}]})"));
+  EXPECT_EQ(unknown_lora.find("HTTP/1.1 400"), 0u) << unknown_lora;
+  EXPECT_NE(unknown_lora.find("unknown or duplicate fixture LoRA ID"),
             std::string::npos);
   const char* prompts[] = {"ab", "aba", "b", "abba"};
   std::vector<int> clients;
@@ -1471,8 +1502,8 @@ TEST_P(SourceImageServiceTest, StoppingDeviceImageSkipsEncoding) {
 TEST_P(SourceImageServiceTest, FailedPartReadinessPreservesActualRetirement) {
   ASSERT_NO_FATAL_FAILURE(CreateStandaloneModel());
   loom_serve_image_prepared_t prepared;
-  IREE_ASSERT_OK(
-      PrepareSingle(IREE_SV("aba"), 1, 1.0f, kWidth, kHeight, &prepared));
+  IREE_ASSERT_OK(PrepareSingle(IREE_SV(R"({"prompt":"aba","seed":1})"), kWidth,
+                               kHeight, &prepared));
   const auto generator = loom_serve_image_model_generator(model_);
   bool resolved = false;
   IREE_ASSERT_OK(generator.advance_batch(generator.self, false, &resolved));
@@ -1550,8 +1581,11 @@ class ImageSpecializationTest : public SourceImageServiceTest {
     const auto before = compiler_allocations_.load();
     loom_serve_image_prepared_t prepared;
     iree_const_byte_span_t rgb;
-    IREE_ASSERT_OK(loom_serve_image_model_generate(
-        model_, IREE_SV("aba"), 1, 1.0f, width, height, &prepared, &rgb));
+    ImageRequest input;
+    IREE_ASSERT_OK(input.Initialize(IREE_SV(R"({"prompt":"aba","seed":1})"),
+                                    width, height));
+    IREE_ASSERT_OK(
+        loom_serve_image_model_generate(model_, &input.value, &prepared, &rgb));
     EXPECT_EQ(compiler_allocations_.load() == before, reuse);
     const auto expected = Pixels(3, 1, (size_t)width * height);
     ASSERT_EQ(rgb.data_length, expected.size() * sizeof(float));
@@ -1563,6 +1597,18 @@ class ImageSpecializationTest : public SourceImageServiceTest {
 
   void RunCohort(float first_strength, bool cancel, bool reuse) {
     const auto before = compiler_allocations_.load();
+    const std::string first_body =
+        R"({"prompt":"ab","loras":[{"id":"red","scale":)" +
+        std::to_string(first_strength - 1.0f) +
+        R"(},{"id":"green","scale":-0.5}]})";
+    std::array<ImageRequest, 2> inputs;
+    IREE_ASSERT_OK(inputs[0].Initialize(
+        iree_make_string_view(first_body.data(), first_body.size()), kWidth,
+        kHeight));
+    IREE_ASSERT_OK(inputs[1].Initialize(
+        IREE_SV(
+            R"({"prompt":"aba","seed":1,"loras":[{"id":"green","scale":-0.25},{"id":"red","scale":-1.5}]})"),
+        kWidth, kHeight));
     struct Prepared {
       ~Prepared() {
         for (const auto& request : requests) {
@@ -1573,19 +1619,27 @@ class ImageSpecializationTest : public SourceImageServiceTest {
       std::array<loom_serve_prepared_request_t, 2> requests = {};
     } prepared;
     IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
-        model_, IREE_SV("ab"), 0, first_strength, kWidth, kHeight,
-        &prepared.requests[0]));
+        model_, &inputs[0].value, &prepared.requests[0]));
     // Rejection of another request cannot release or replace a prepared peer.
-    loom_serve_prepared_request_t rejected = {};
-    IREE_EXPECT_STATUS_IS(
-        IREE_STATUS_INVALID_ARGUMENT,
-        loom_serve_image_model_prepare_request(model_, IREE_SV("ab"), 0, 1.0f,
-                                               65, kHeight, &rejected));
-    EXPECT_EQ(rejected.bytes, nullptr);
-    iree_vm_buffer_release(rejected.bytes);
+    for (
+        const char* body : {
+            R"({"prompt":"ab","size":"65x5"})",
+            R"({"prompt":"ab","loras":[{"id":"missing"}]})",
+            R"({"prompt":"ab","loras":[{"id":"red","scale":0},{"id":"\u0072ed"}]})",
+        }) {
+      SCOPED_TRACE(body);
+      ImageRequest input;
+      IREE_ASSERT_OK(
+          input.Initialize(iree_make_cstring_view(body), kWidth, kHeight));
+      loom_serve_prepared_request_t rejected = {};
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                            loom_serve_image_model_prepare_request(
+                                model_, &input.value, &rejected));
+      EXPECT_EQ(rejected.bytes, nullptr);
+      iree_vm_buffer_release(rejected.bytes);
+    }
     IREE_ASSERT_OK(loom_serve_image_model_prepare_request(
-        model_, IREE_SV("aba"), 1, -0.5f, kWidth, kHeight,
-        &prepared.requests[1]));
+        model_, &inputs[1].value, &prepared.requests[1]));
     EXPECT_EQ(prepared.requests[0].units, 1u);
     EXPECT_EQ(prepared.requests[0].tag, prepared.requests[1].tag);
     const iree_host_size_t lengths[] = {kPixels * 12, kPixels * 12};
@@ -1625,11 +1679,9 @@ class ImageSpecializationTest : public SourceImageServiceTest {
     }
     ASSERT_EQ(rgb.data_length, 2 * kPixels * 12);
     for (size_t item = 0; item < 2; ++item) {
-      auto expected = Pixels(item ? 3 : 2, item, kPixels);
-      const float strength = item ? -0.5f : first_strength;
-      for (size_t i = 0; i < kPixels * 2; ++i) {
-        expected[i] *= strength;
-      }
+      const auto expected =
+          Pixels(item ? 3 : 2, item, kPixels, item ? -0.5f : first_strength,
+                 item ? 0.75f : 0.5f);
       for (size_t i = 0; i < expected.size(); ++i) {
         EXPECT_EQ(iree_unaligned_load_le_f32(rgb.data + item * lengths[item] +
                                              i * sizeof(float)),
@@ -1696,7 +1748,8 @@ TEST_P(ImageSpecializationTest, CancellationJoinsAcceptedCompilerBeforeReuse) {
       CreateStandaloneModel({2, 16 * 1024 * 1024}, {this, Allocate}));
   loom_serve_image_model_set_observer(model_, {Wake, this});
   loom_serve_image_prepared_t prepared;
-  IREE_ASSERT_OK(PrepareSingle(IREE_SV("aba"), 1, 1.0f, 15, 9, &prepared));
+  IREE_ASSERT_OK(
+      PrepareSingle(IREE_SV(R"({"prompt":"aba","seed":1})"), 15, 9, &prepared));
   prepared_ = true;
   {
     std::lock_guard<std::mutex> lock(mutex_);
