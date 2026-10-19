@@ -354,8 +354,10 @@ loom_cc_library(
     loom::analysis::liveness_dataflow
     loom::error::emitter
     loom::ir
+    loom::util::cfg_dominance
     loom::util::cfg_graph
     loom::util::cfg_loop
+    loom::util::cfg_loop_nest
   PUBLIC
 )
 

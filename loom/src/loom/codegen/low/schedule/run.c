@@ -1978,6 +1978,7 @@ static iree_status_t loom_low_schedule_build(
             },
         .cfg_graph = model->cfg_graph,
         .loop_forest = model->loop_forest,
+        .loop_nest = model->loop_nest,
         .nodes = state.nodes,
         .node_count = node_count,
         .scopes = state.scopes,
@@ -2022,6 +2023,7 @@ static iree_status_t loom_low_schedule_build(
         .resource_summaries = state.resource_summaries,
         .resource_summary_count = state.resource_summary_count,
     };
+    out_table->loop_nest.graph = &out_table->cfg_graph;
     if (state.error_count == 0 &&
         iree_any_bit_set(options->flags,
                          LOOM_LOW_SCHEDULE_FLAG_RETAIN_SOURCE_SUFFIX_BOUNDS)) {

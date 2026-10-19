@@ -346,6 +346,47 @@ TEST_F(LowEmissionFrameTest, LoopPlacementMultipliesCrossedLoopCounts) {
   expect_plan(true, UINT64_MAX, 0, 1, 1);
 }
 
+TEST_F(LowEmissionFrameTest, ScheduleRetainsCrossingNaturalLoops) {
+  ModulePtr module = ParseModule(R"(
+low.func.def target<test.low.core> @crossing_loops(%condition: reg<test.i32>) asm {
+  low.br ^first
+^first:
+  low.cond_br %condition, ^first_latch, ^second : reg<test.i32>
+^second:
+  low.cond_br %condition, ^second_latch, ^exit : reg<test.i32>
+^first_latch:
+  low.br ^first
+^second_latch:
+  low.br ^second
+^exit:
+  return
+}
+)");
+  loom_low_emission_frame_t frame = {};
+  IREE_ASSERT_OK(BuildFrame(module.get(), {}, &frame));
+
+  // The source-order ranges [first, first_latch] and
+  // [second, second_latch] cross, so they cannot form layout intervals.
+  EXPECT_EQ(frame.schedule.loop_forest.interval_count, 0u);
+  EXPECT_EQ(frame.schedule.loop_forest.reachable_backward_edge_count, 2u);
+
+  const loom_cfg_loop_nest_t& loops = frame.schedule.loop_nest;
+  EXPECT_EQ(loops.graph, &frame.schedule.cfg_graph);
+  EXPECT_TRUE(loops.reducible);
+  ASSERT_EQ(loops.loop_count, 2u);
+  const uint16_t first = loom_cfg_loop_nest_innermost(&loops, 1);
+  const uint16_t second = loom_cfg_loop_nest_innermost(&loops, 2);
+  ASSERT_LT(first, loops.loop_count);
+  ASSERT_LT(second, loops.loop_count);
+  EXPECT_NE(first, second);
+  EXPECT_TRUE(loom_cfg_loop_nest_contains(&loops, first, 3));
+  EXPECT_FALSE(loom_cfg_loop_nest_contains(&loops, first, 2));
+  EXPECT_TRUE(loom_cfg_loop_nest_contains(&loops, second, 4));
+  EXPECT_FALSE(loom_cfg_loop_nest_contains(&loops, second, 3));
+  EXPECT_EQ(loops.loops[first].backedges.count, 1u);
+  EXPECT_EQ(loops.loops[second].backedges.count, 1u);
+}
+
 TEST_F(LowEmissionFrameTest, LoopPlacementRestoresRejectedTrial) {
   ModulePtr module = ParseModule(kLoopPlacementSource);
   loom_op_t* function = loom_block_op(loom_module_block(module.get()), 0);

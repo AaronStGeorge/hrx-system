@@ -33,6 +33,7 @@
 #include "loom/target/residency.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/cfg_loop.h"
+#include "loom/util/cfg_loop_nest.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -840,6 +841,8 @@ typedef struct loom_low_schedule_table_t {
   loom_cfg_graph_t cfg_graph;
   // Canonical loop intervals shared by target planning overlays.
   loom_cfg_loop_forest_t loop_forest;
+  // Semantic natural loops shared by target planning overlays.
+  loom_cfg_loop_nest_t loop_nest;
   // Per-op schedule nodes in source order.
   const loom_low_schedule_node_t* nodes;
   // Number of schedule nodes.

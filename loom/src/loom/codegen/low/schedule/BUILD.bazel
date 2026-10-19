@@ -187,6 +187,7 @@ loom_cc_library(
         "//loom/src/loom/target:residency",
         "//loom/src/loom/util:cfg_graph",
         "//loom/src/loom/util:cfg_loop",
+        "//loom/src/loom/util:cfg_loop_nest",
         "//loom/src/loom/util:index_set",
         "//loom/src/loom/util:segmented_storage",
         "//runtime/src/iree/base",

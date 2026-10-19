@@ -204,6 +204,7 @@ loom_cc_library(
     loom::target::residency
     loom::util::cfg_graph
     loom::util::cfg_loop
+    loom::util::cfg_loop_nest
     loom::util::index_set
     loom::util::segmented_storage
   PUBLIC
