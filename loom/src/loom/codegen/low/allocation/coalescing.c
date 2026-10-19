@@ -1687,6 +1687,11 @@ iree_status_t loom_low_allocation_coalescing_assign_concat_source_interval(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_coalescing_assign_edge_source_interval(
+    loom_low_allocation_coalescing_context_t* context,
+    const loom_liveness_interval_t* interval,
+    loom_value_ordinal_t source_ordinal, bool* out_assigned);
+
 iree_status_t loom_low_allocation_coalescing_assign_structural_interval(
     loom_low_allocation_coalescing_context_t* context,
     const loom_liveness_interval_t* interval, bool* out_assigned) {
@@ -1698,11 +1703,27 @@ iree_status_t loom_low_allocation_coalescing_assign_structural_interval(
   const loom_low_placement_relation_range_t range =
       loom_low_placement_relation_range_for_value_ordinal(context->placement,
                                                           result_ordinal);
+  bool considered_edge_source = false;
   for (uint32_t i = 0; i < range.count; ++i) {
     const loom_low_placement_relation_t* relation =
         &context->placement->relations[range.start + i];
     if (!loom_low_placement_relation_can_alias(relation)) {
       continue;
+    }
+    // A direct transfer can preserve its input without reading it. Choosing
+    // a later edge destination instead may force an early move and completion
+    // wait. Composites and joins retain downstream affinity: it avoids
+    // assembling an intermediate tuple or moving loop storage on a backedge.
+    if (!considered_edge_source &&
+        (relation->cause == LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT ||
+         loom_low_placement_cause_is_edge(relation->cause))) {
+      considered_edge_source = true;
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_coalescing_assign_edge_source_interval(
+              context, interval, result_ordinal, out_assigned));
+      if (*out_assigned) {
+        return iree_ok_status();
+      }
     }
     switch (relation->cause) {
       case LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY: {
@@ -1762,17 +1783,18 @@ iree_status_t loom_low_allocation_coalescing_assign_structural_interval(
         break;
     }
   }
-  return iree_ok_status();
+  if (considered_edge_source) {
+    return iree_ok_status();
+  }
+  return loom_low_allocation_coalescing_assign_edge_source_interval(
+      context, interval, result_ordinal, out_assigned);
 }
 
-iree_status_t loom_low_allocation_coalescing_assign_edge_source_interval(
+static iree_status_t loom_low_allocation_coalescing_assign_edge_source_interval(
     loom_low_allocation_coalescing_context_t* context,
-    const loom_liveness_interval_t* interval, bool* out_assigned) {
+    const loom_liveness_interval_t* interval,
+    loom_value_ordinal_t source_ordinal, bool* out_assigned) {
   *out_assigned = false;
-  loom_value_ordinal_t source_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_allocation_coalescing_value_ordinal_for_interval(
-          context, interval, &source_ordinal));
   const loom_low_placement_relation_range_t source_range =
       loom_low_placement_relation_range_for_source_value_ordinal(
           context->placement, source_ordinal);

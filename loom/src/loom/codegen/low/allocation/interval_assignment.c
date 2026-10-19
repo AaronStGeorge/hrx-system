@@ -1371,17 +1371,6 @@ static iree_status_t loom_low_allocation_interval_assignment_assign(
       continue;
     }
 
-    // Honor an already assigned consumer before choosing an incoming source.
-    // In particular, a join feeding a loop retains the loop's storage instead
-    // of adopting a different predecessor's location and copying on backedges.
-    bool assigned_edge_source_interval = false;
-    IREE_RETURN_IF_ERROR(
-        loom_low_allocation_coalescing_assign_edge_source_interval(
-            &coalescing_context, interval, &assigned_edge_source_interval));
-    if (assigned_edge_source_interval) {
-      continue;
-    }
-
     bool assigned_structural_interval = false;
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_coalescing_assign_structural_interval(
