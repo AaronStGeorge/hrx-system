@@ -80,6 +80,7 @@ loom_cc_library(
     loom::codegen::low::packet_json
     loom::codegen::low::pipeline::legalizer_registry
     loom::codegen::low::schedule
+    loom::codegen::low::schedule::json
     loom::codegen::low::target_binding
     loom::codegen::low::text_asm
     loom::codegen::low::verify

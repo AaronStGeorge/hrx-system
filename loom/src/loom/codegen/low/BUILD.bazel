@@ -1055,6 +1055,7 @@ loom_cc_library(
         ":packet",
         ":text_asm",
         "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/codegen/low/schedule:json",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
