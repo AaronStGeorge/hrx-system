@@ -265,6 +265,83 @@ TEST_F(GpuNativeDispatchProfileTest, DirectSamplesSurviveExecutableRelease) {
 }
 
 TEST_F(GpuNativeDispatchProfileTest,
+       ResidentTransferExitJoinsBeforePublishingSamples) {
+  Ref<iree_hal_buffer_t> output;
+  IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
+      pool_, iree_hal_make_pool_reservation_request(8192, 4),
+      iree_infinite_timeout(), output.out()));
+  Ref<iree_hal_executable_t> executable;
+  iree_hal_executable_function_t function;
+  ASSERT_NO_FATAL_FAILURE(Load(executable, function));
+  Ref<iree_hal_semaphore_t> done;
+  CreateSemaphore(done.out());
+  auto* timeline = done.get();
+  uint64_t value = 1;
+  uint32_t zero = 0;
+  IREE_ASSERT_OK(iree_hal_queue_fill(queues_[0], {}, {1, &timeline, &value},
+                                     output, 0, 8192, &zero, 4, nullptr, 0));
+
+  Ref<iree_hal_command_buffer_t> recording;
+  IREE_ASSERT_OK(iree_hal_command_buffer_create(
+      iree_hal_queue_family(queues_[0]),
+      IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_DISPATCH_METADATA,
+      IREE_HAL_COMMAND_CATEGORY_DISPATCH | IREE_HAL_COMMAND_CATEGORY_TRANSFER,
+      0, recording.out()));
+  IREE_ASSERT_OK(iree_hal_command_buffer_begin(recording));
+  const iree_hal_barrier_t acquire = {
+      .source_stage_mask = IREE_HAL_EXECUTION_STAGE_COMMAND_ISSUE,
+      .target_stage_mask = IREE_HAL_EXECUTION_STAGE_DISPATCH,
+      .flags = IREE_HAL_BARRIER_FLAG_ACQUIRE_SYSTEM_SCOPE,
+  };
+  IREE_ASSERT_OK(iree_hal_command_buffer_barrier(recording, &acquire));
+  auto config = iree_hal_make_static_dispatch_config(1, 1, 1);
+  config.workgroup_size[0] = 32;
+  config.workgroup_size[1] = config.workgroup_size[2] = 1;
+  auto reference = iree_hal_make_buffer_ref(output, 0, 4);
+  uint32_t increment = 1;
+  IREE_ASSERT_OK(iree_hal_command_buffer_dispatch(
+      recording, executable, function, config,
+      iree_make_const_byte_span(&increment, sizeof(increment)), {1, &reference},
+      0));
+  const iree_hal_barrier_t release = {
+      .source_stage_mask = IREE_HAL_EXECUTION_STAGE_DISPATCH,
+      .target_stage_mask = IREE_HAL_EXECUTION_STAGE_TRANSFER,
+      .flags = IREE_HAL_BARRIER_FLAG_RELEASE_SYSTEM_SCOPE,
+  };
+  IREE_ASSERT_OK(iree_hal_command_buffer_barrier(recording, &release));
+  IREE_ASSERT_OK(iree_hal_command_buffer_copy_buffer(
+      recording, iree_hal_make_buffer_ref(output, 0, 4096),
+      iree_hal_make_buffer_ref(output, 4096, 4096), 0));
+  // Program exit owns the final asynchronous copy join, including when the
+  // invocation also publishes dispatch samples through its continuation.
+  IREE_ASSERT_OK(iree_hal_command_buffer_end(recording));
+  for (size_t i = 0; i < 8; ++i) {
+    uint64_t previous = value++;
+    IREE_ASSERT_OK(iree_hal_queue_execute(queues_[0], {1, &timeline, &previous},
+                                          {1, &timeline, &value}, recording, {},
+                                          0));
+  }
+  std::array<uint32_t, 1024> observed;
+  uint64_t previous = value++;
+  IREE_ASSERT_OK(iree_hal_queue_download(
+      queues_[0], {1, &timeline, &previous}, {1, &timeline, &value}, output,
+      4096, observed.data(), sizeof(observed), nullptr));
+  ASSERT_NO_FATAL_FAILURE(Wait(done, value));
+  EXPECT_EQ(observed[0], 8u);
+  EXPECT_TRUE(std::all_of(observed.begin() + 1, observed.end(),
+                          [](uint32_t word) { return word == 0; }));
+  sink_.expected_dispatch_flags =
+      IREE_HAL_PROFILE_DISPATCH_EVENT_FLAG_COMMAND_BUFFER;
+  sink_.expected_dispatch_command_indices.assign(8, 1);
+  ASSERT_NO_FATAL_FAILURE(End());
+  ASSERT_EQ(sink_.dispatch_events.size(), 8u);
+  for (const auto& event : sink_.dispatch_events) {
+    EXPECT_GT(event.start_tick, 0u);
+    EXPECT_GE(event.end_tick, event.start_tick);
+  }
+}
+
+TEST_F(GpuNativeDispatchProfileTest,
        ResidentReplaysKeepInvocationPrivateSamples) {
   Ref<iree_hal_executable_t> executable;
   iree_hal_executable_function_t function;

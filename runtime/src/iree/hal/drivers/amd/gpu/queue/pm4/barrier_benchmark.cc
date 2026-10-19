@@ -54,10 +54,7 @@ static void BM_Emit(benchmark::State& state) {
   std::array<uint32_t, 17> words;
   for (auto _ : state) {
     if (state.range(1)) {
-      uint32_t cache_control;
-      auto* end = iree_hal_amd_gpu_pm4_barrier_emit_tail(words.data(), barrier,
-                                                         &cache_control);
-      benchmark::DoNotOptimize(cache_control);
+      auto* end = iree_hal_amd_gpu_pm4_barrier_emit_tail(words.data(), barrier);
       benchmark::DoNotOptimize(end);
     } else {
       auto* end = iree_hal_amd_gpu_pm4_barrier_emit(words.data(), barrier);

@@ -551,7 +551,6 @@ TEST_F(GpuNativeRecordingTest, TransferBarriersJoinOnlyPendingCopies) {
     iree_hal_amd_gpu_pm4_command_invocation_t invocation;
     IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_command_invocation_initialize(
         recording, {}, nullptr, 0, &invocation));
-    EXPECT_EQ(invocation.program->pending_dma, copy_at_exit);
     const auto& program = *invocation.program;
     const auto* words = reinterpret_cast<const uint32_t*>(
         program.resident.contents.data + program.entry.offset);
@@ -563,9 +562,9 @@ TEST_F(GpuNativeRecordingTest, TransferBarriersJoinOnlyPendingCopies) {
       }
       offset += ((header >> 16) & 0x3fff) + 2;
     }
-    // The leading transfer barrier has no producer. Only the barrier after
-    // the first fill emits a zero-length DMA drain; exit retains any new debt.
-    EXPECT_EQ(dma_lengths, copy_at_exit ? (std::vector<uint32_t>{64, 0, 64})
+    // The leading transfer barrier has no producer. The barrier after the first
+    // fill drains its copy, and program exit drains any subsequent copy.
+    EXPECT_EQ(dma_lengths, copy_at_exit ? (std::vector<uint32_t>{64, 0, 64, 0})
                                         : (std::vector<uint32_t>{64, 0}));
     iree_hal_amd_gpu_pm4_command_invocation_deinitialize(&invocation);
 

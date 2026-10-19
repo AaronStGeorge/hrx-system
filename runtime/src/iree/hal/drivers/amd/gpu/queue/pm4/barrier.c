@@ -176,20 +176,12 @@ uint32_t* iree_hal_amd_gpu_pm4_barrier_emit(
 }
 
 uint32_t* iree_hal_amd_gpu_pm4_barrier_emit_tail(
-    uint32_t* words, iree_hal_amd_gpu_pm4_barrier_t barrier,
-    uint32_t* out_cache_control) {
-  // RELEASE_MEM cannot represent instruction invalidation. Only an ordinary
-  // emission may combine mandatory instruction publication with payload work.
-  IREE_ASSERT(!(barrier.cache_control & 3u));
-  if (barrier.execution & IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_DMA) {
-    words = iree_hal_amd_gpu_pm4_emit_dma_flush(words);
+    uint32_t* words, iree_hal_amd_gpu_pm4_barrier_t barrier) {
+  // The completion release always joins compute. Synchronous cache work must
+  // perform that join first, including for visibility-only payload records.
+  barrier.execution &= ~IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_COMPUTE;
+  if (barrier.cache_control) {
+    barrier.execution |= IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_COMPUTE;
   }
-  const uint32_t acquire = barrier.cache_control;
-  // GCR's middle fields retain their relative order in the release layout.
-  // Low metadata/scope bits, lower writeback, and scalar invalidation move
-  // separately. These mappings also preserve GFX12.5's repurposed fields.
-  *out_cache_control = ((acquire >> 4) & 3u) | ((acquire >> 6) & 0xffcu) |
-                       ((acquire & (1u << 6)) << 6) |
-                       ((acquire & (1u << 7)) << 11);
-  return words;
+  return iree_hal_amd_gpu_pm4_barrier_emit(words, barrier);
 }

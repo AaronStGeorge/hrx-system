@@ -26,8 +26,6 @@ struct ProfileCase {
   uint32_t release;
   // System acquire in ACQUIRE_MEM layout.
   uint32_t acquire;
-  // Whole system boundary in RELEASE_MEM layout.
-  uint32_t tail;
 };
 
 class BarrierTest : public ::testing::TestWithParam<ProfileCase> {
@@ -249,33 +247,80 @@ TEST_P(BarrierTest, OrdinaryEmissionJoinsBeforeMaintenance) {
                                    0xa, GetParam().acquire, 0x12345678}));
 }
 
-TEST_P(BarrierTest, TailFoldsComputeAndCachesIntoExistingRelease) {
+TEST_P(BarrierTest, TailCompletesCachesBeforePublishingCompletion) {
   const auto barrier = iree_hal_amd_gpu_pm4_barrier_prepare(&profile_, nullptr);
-  std::array<uint32_t, 16> words = {};
+  std::array<uint32_t, 26> words = {};
   words.back() = 0x12345678;
-  uint32_t cache_control = 0;
-  auto* end = iree_hal_amd_gpu_pm4_barrier_emit_tail(words.data(), barrier,
-                                                     &cache_control);
-  ASSERT_EQ(end, words.data() + 7);
-  EXPECT_EQ(cache_control, GetParam().tail);
-  end = iree_hal_amd_gpu_pm4_emit_release32(end, cache_control, 0x100000040, 9);
-  EXPECT_EQ(end, words.data() + 15);
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_barrier_tail_word_count(barrier), 17u);
+  auto* end = iree_hal_amd_gpu_pm4_barrier_emit_tail(words.data(), barrier);
+  ASSERT_EQ(end, words.data() + 17);
+  end = iree_hal_amd_gpu_pm4_emit_release32(end, 0, 0x100000040, 9);
+  EXPECT_EQ(end, words.data() + 25);
   EXPECT_EQ((std::vector<uint32_t>(words.begin(), words.end())),
-            (std::vector<uint32_t>{0xc0055000, 0, 0, 0, 0, 0, 0, 0xc0064900,
-                                   0x528u | (GetParam().tail << 12), 0x23010000,
-                                   0x40, 1, 9, 0, 0, 0x12345678}));
+            (std::vector<uint32_t>{0xc0004600,
+                                   0x407,
+                                   0xc0055000,
+                                   0,
+                                   0,
+                                   0,
+                                   0,
+                                   0,
+                                   0,
+                                   0xc0065800,
+                                   0,
+                                   0xffffffff,
+                                   0xff,
+                                   0,
+                                   0,
+                                   0xa,
+                                   GetParam().acquire,
+                                   0xc0064900,
+                                   0x528,
+                                   0x23010000,
+                                   0x40,
+                                   1,
+                                   9,
+                                   0,
+                                   0,
+                                   0x12345678}));
+}
+
+TEST_P(BarrierTest, VisibilityOnlyTailJoinsComputeBeforeWriteback) {
+  const iree_hal_amd_gpu_pm4_barrier_t barrier = {
+      .cache_control = GetParam().release,
+  };
+  std::array<uint32_t, 11> words = {};
+  words.back() = 0x12345678;
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_barrier_tail_word_count(barrier), 10u);
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_barrier_emit_tail(words.data(), barrier),
+            words.data() + 10);
+  EXPECT_EQ(words, (std::array<uint32_t, 11>{0xc0004600, 0x407, 0xc0065800, 0,
+                                             0xffffffff, 0xff, 0, 0, 0xa,
+                                             GetParam().release, 0x12345678}));
+}
+
+TEST_P(BarrierTest, ExecutionOnlyTailLeavesComputeJoinToRelease) {
+  const iree_hal_amd_gpu_pm4_barrier_t barrier = {
+      .execution = IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_COMPUTE |
+                   IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_DMA,
+  };
+  std::array<uint32_t, 8> words = {};
+  words.back() = 0x12345678;
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_barrier_tail_word_count(barrier), 7u);
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_barrier_emit_tail(words.data(), barrier),
+            words.data() + 7);
+  EXPECT_EQ(words, (std::array<uint32_t, 8>{0xc0055000, 0, 0, 0, 0, 0, 0,
+                                            0x12345678}));
 }
 
 TEST_P(BarrierTest, EmptyTailPreservesMandatoryCompletion) {
   const iree_hal_barrier_list_t empty = {};
   const auto barrier = iree_hal_amd_gpu_pm4_barrier_prepare(&profile_, &empty);
   std::array<uint32_t, 8> words = {};
-  uint32_t cache_control = UINT32_MAX;
-  auto* end = iree_hal_amd_gpu_pm4_barrier_emit_tail(words.data(), barrier,
-                                                     &cache_control);
+  EXPECT_EQ(iree_hal_amd_gpu_pm4_barrier_tail_word_count(barrier), 0u);
+  auto* end = iree_hal_amd_gpu_pm4_barrier_emit_tail(words.data(), barrier);
   EXPECT_EQ(end, words.data());
-  EXPECT_EQ(cache_control, 0u);
-  end = iree_hal_amd_gpu_pm4_emit_release64(end, cache_control, 0x100000040, 9);
+  end = iree_hal_amd_gpu_pm4_emit_release64(end, 0, 0x100000040, 9);
   EXPECT_EQ(end, words.data() + words.size());
   EXPECT_EQ(words[1], 0x528u);
 }
@@ -293,12 +338,11 @@ TEST_P(BarrierTest, InstructionPublicationSurvivesEmptyPayload) {
 
 INSTANTIATE_TEST_SUITE_P(
     PhysicalTargets, BarrierTest,
-    ::testing::Values(
-        ProfileCase{{11, 0, 0}, 0x103e0, 0x18040, 0x1c3e0, 0x4170e},
-        ProfileCase{{11, 5, 1}, 0x103e0, 0x18040, 0x1c3e0, 0x4170e},
-        ProfileCase{{11, 7, 2}, 0x103e0, 0x18040, 0x1c3e0, 0x4170e},
-        ProfileCase{{12, 0, 1}, 0x101c0, 0x18040, 0x1c1c0, 0x41704},
-        ProfileCase{{12, 5, 0}, 0x101c0, 0x18060, 0x1c1e0, 0x41706}));
+    ::testing::Values(ProfileCase{{11, 0, 0}, 0x103e0, 0x18040, 0x1c3e0},
+                      ProfileCase{{11, 5, 1}, 0x103e0, 0x18040, 0x1c3e0},
+                      ProfileCase{{11, 7, 2}, 0x103e0, 0x18040, 0x1c3e0},
+                      ProfileCase{{12, 0, 1}, 0x101c0, 0x18040, 0x1c1c0},
+                      ProfileCase{{12, 5, 0}, 0x101c0, 0x18060, 0x1c1e0}));
 
 TEST(BarrierProfileTest, UnqualifiedIsaFailsDuringFamilyConstruction) {
   for (auto gfxip : {iree_hal_amd_gpu_gfxip_version_t{9, 4, 2},

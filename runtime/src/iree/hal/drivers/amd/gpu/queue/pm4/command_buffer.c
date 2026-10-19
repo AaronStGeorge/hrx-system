@@ -96,6 +96,8 @@ typedef struct iree_hal_amd_gpu_pm4_command_buffer_t {
   iree_status_t recording_status;
   // Adjacent public barriers are combined before the next native command.
   iree_hal_amd_gpu_pm4_barrier_t pending_barrier;
+  // Copies recorded since the last join; drained before the program exits.
+  bool pending_dma;
   // Blocks backing direct-resource ownership.
   iree_arena_block_pool_t resource_blocks;
   // Retained buffers/executables, or NULL for explicitly unretained recordings.
@@ -422,7 +424,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_flush_barrier(
     iree_hal_amd_gpu_pm4_command_buffer_t* buffer) {
   // Primary publications join their own CP DMA before entering this program.
   // Only copies recorded since the last join can leave a DMA dependency here.
-  if (!buffer->program.pending_dma) {
+  if (!buffer->pending_dma) {
     buffer->pending_barrier.execution &=
         ~IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_DMA;
   }
@@ -438,7 +440,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_flush_barrier(
   iree_hal_amd_gpu_pm4_barrier_emit(words, buffer->pending_barrier);
   if (buffer->pending_barrier.execution &
       IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_DMA) {
-    buffer->program.pending_dma = false;
+    buffer->pending_dma = false;
   }
   buffer->pending_barrier = (iree_hal_amd_gpu_pm4_barrier_t){0};
   ++buffer->program.operation_count;
@@ -482,6 +484,10 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_buffer_begin(
 static iree_status_t iree_hal_amd_gpu_pm4_command_end(
     iree_hal_command_buffer_t* base) {
   iree_hal_amd_gpu_pm4_command_buffer_t* buffer = (void*)base;
+  if (buffer->pending_dma) {
+    buffer->pending_barrier.execution |=
+        IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_DMA;
+  }
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_command_flush_barrier(buffer));
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_recording_end(
       &buffer->recording, IREE_HAL_AMD_GPU_PM4_VALUE_CONTINUATION,
@@ -665,7 +671,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_transfer(
       position += part;
     }
     IREE_RETURN_IF_ERROR(status);
-    buffer->program.pending_dma = true;
+    buffer->pending_dma = true;
   } else {
     uint32_t argument_offset = 0;
     iree_hal_amd_gpu_pm4_blit_arguments_t* arguments = NULL;
@@ -1002,7 +1008,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_dispatch(
     }
     IREE_RETURN_IF_ERROR(status);
     if (copy_count) {
-      buffer->program.pending_dma = false;
+      buffer->pending_dma = false;
     }
     if (prepare_packet) {
       IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_command_pointer(

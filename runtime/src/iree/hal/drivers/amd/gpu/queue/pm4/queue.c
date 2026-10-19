@@ -462,22 +462,22 @@ iree_hal_amd_gpu_pm4_publish_commit(
       .download = download,
       .terminal = terminal,
   };
-  uint32_t release_control;
-  words =
-      iree_hal_amd_gpu_pm4_barrier_emit_tail(words, after, &release_control);
+  words = iree_hal_amd_gpu_pm4_barrier_emit_tail(words, after);
   if (submission->signal) {
     words = iree_hal_amd_gpu_pm4_emit_release32(
-        words, release_control, submission->signal->device_address, 1);
-    release_control = 0;
+        words, 0, submission->signal->device_address, 1);
   }
-  words = iree_hal_amd_gpu_pm4_retirement_emit(
-      words, &queue->retirement, position, action, release_control);
+  words = iree_hal_amd_gpu_pm4_retirement_emit(words, &queue->retirement,
+                                               position, action, 0);
   if (queue->kernel) {
     if (entry_word_count) {
       // The resident IB chains into this fixed 32-DWORD continuation. Root
       // padding precedes its terminal CHAIN; only continuation padding is here.
-      words = iree_hal_amd_gpu_pm4_emit_nop(
-          words, body_words - (uint32_t)(words - reservation->words));
+      const uint32_t padding =
+          body_words - (uint32_t)(words - reservation->words);
+      if (padding) {
+        words = iree_hal_amd_gpu_pm4_emit_nop(words, padding);
+      }
     }
     IREE_ASSERT_EQ(words - reservation->words, body_words);
     action->consumed_words = queue->producer.ring.reserved_words;
@@ -573,10 +573,11 @@ iree_hal_amd_gpu_pm4_publish_transfer(
     native_signal |=
         iree_hal_amd_gpu_pm4_semaphore_isa(submission->signals.semaphores[i]);
   }
-  const uint32_t body_words = wait_words + chunk.word_count +
-                              iree_hal_amd_gpu_pm4_barrier_word_count(before) +
-                              7 + (native_signal ? 8 : 0) + 14 +
-                              (queue->kernel ? 0 : 8);
+  const uint32_t body_words =
+      wait_words + chunk.word_count +
+      iree_hal_amd_gpu_pm4_barrier_word_count(before) +
+      iree_hal_amd_gpu_pm4_barrier_tail_word_count(after) +
+      (native_signal ? 8 : 0) + 14 + (queue->kernel ? 0 : 8);
   iree_hal_amd_gpu_pm4_ring_t candidate = queue->producer.ring;
   iree_hal_amd_gpu_pm4_ring_reservation_t reservation;
   if (!iree_hal_amd_gpu_pm4_ring_try_reserve(
@@ -672,8 +673,12 @@ iree_hal_amd_gpu_pm4_publish_execute(
     native_signal |=
         iree_hal_amd_gpu_pm4_semaphore_isa(submission->signals.semaphores[i]);
   }
+  const iree_hal_amd_gpu_pm4_barrier_t after = {
+      .cache_control = sample_length ? queue->options.barriers.release : 0,
+  };
   const uint32_t tail_words =
-      (command->pending_dma ? 7 : 0) + (native_signal ? 8 : 0) + 14;
+      iree_hal_amd_gpu_pm4_barrier_tail_word_count(after) +
+      (native_signal ? 8 : 0) + 14;
   uint32_t root_padding = 0;
   if (queue->kernel) {
     root_padding = (0u - prefix_words - 4) & 7u;
@@ -738,11 +743,6 @@ iree_hal_amd_gpu_pm4_publish_execute(
   words = iree_hal_amd_gpu_pm4_program_emit(
       program, instance, command->entry, &queue->options.barriers,
       arguments->address + offset, (void*)upload, root_padding, words);
-  const iree_hal_amd_gpu_pm4_barrier_t after = {
-      .execution =
-          command->pending_dma ? IREE_HAL_AMD_GPU_PM4_BARRIER_EXECUTION_DMA : 0,
-      .cache_control = sample_length ? queue->options.barriers.release : 0,
-  };
   return iree_hal_amd_gpu_pm4_publish_commit(
       queue, submission, position, &reservation, body_words, entry_words, words,
       after, arguments->end, (iree_hal_amd_gpu_pm4_download_t){0}, true);
@@ -947,11 +947,12 @@ static iree_hal_amd_gpu_pm4_publication_result_t iree_hal_amd_gpu_pm4_publish(
   }
   const uint32_t scratch_words = iree_hal_amd_gpu_pm4_scratch_word_count(
       &queue->producer.scratch, scratch_required, queue->kernel != NULL);
-  const uint32_t body_words = submission->native_wait_count * 7 + launch_words +
-                              scratch_words + (sample_length ? 16 : 0) +
-                              iree_hal_amd_gpu_pm4_barrier_word_count(before) +
-                              (native_signal ? 8 : 0) + 14 +
-                              (queue->kernel ? 0 : 8);
+  const uint32_t body_words =
+      submission->native_wait_count * 7 + launch_words + scratch_words +
+      (sample_length ? 16 : 0) +
+      iree_hal_amd_gpu_pm4_barrier_word_count(before) +
+      iree_hal_amd_gpu_pm4_barrier_tail_word_count(after) +
+      (native_signal ? 8 : 0) + 14 + (queue->kernel ? 0 : 8);
   iree_hal_amd_gpu_pm4_ring_t candidate = queue->producer.ring;
   iree_hal_amd_gpu_pm4_ring_reservation_t reservation;
   if (!iree_hal_amd_gpu_pm4_ring_try_reserve(

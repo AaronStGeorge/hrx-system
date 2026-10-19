@@ -49,8 +49,6 @@ typedef struct iree_hal_amd_gpu_pm4_command_program_t {
   // Optional host-only dispatch attribution, independently retainable by a
   // sink.
   iree_hal_amd_gpu_profile_commands_t* profile;
-  // Asynchronous native copies still requiring a join at program exit.
-  bool pending_dma;
 } iree_hal_amd_gpu_pm4_command_program_t;
 
 iree_host_size_t iree_hal_amd_gpu_pm4_command_buffer_operation_count(
