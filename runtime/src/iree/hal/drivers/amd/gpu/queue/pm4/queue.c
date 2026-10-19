@@ -1717,9 +1717,10 @@ static bool iree_hal_amd_gpu_pm4_retire(
       return true;
     }
   }
-  if (!queue->kernel && !waiting_for_producer) {
-    // The next generation also observes a future publication without touching
-    // the publisher's count on every active-wait iteration. Capacity credit
+  if (!queue->kernel && position != published && !waiting_for_producer) {
+    // Observe already-published work without touching the publisher's count
+    // on every active-wait iteration. An idle queue waits on the native event;
+    // a later publication signals that event when it completes. Capacity credit
     // prevents record reuse until this consumer advances it.
     out_wait->address =
         &queue->retirement.records[position & queue->retirement.capacity_mask]

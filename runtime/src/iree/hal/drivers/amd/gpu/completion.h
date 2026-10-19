@@ -32,8 +32,9 @@ typedef struct iree_hal_amd_gpu_retirement_callback_t {
   void* user_data;
 } iree_hal_amd_gpu_retirement_callback_t;
 
-// A coherent host word whose change may make a source ready. This is only a
-// wake hint: the source still establishes native retirement before releasing
+// A coherent host word whose change may retire already-published work. Idle
+// sources leave this empty and rely on native completion events. This is only
+// a wake hint: the source still establishes native retirement before releasing
 // resources. No driver call or MMIO read is permitted to observe this word.
 typedef struct iree_hal_amd_gpu_completion_wait_t {
   // Borrowed CPU-cacheable atomic word, or NULL for event-only observation.
