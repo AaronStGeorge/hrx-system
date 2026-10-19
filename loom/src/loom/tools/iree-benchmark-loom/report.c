@@ -1237,11 +1237,6 @@ iree_status_t iree_benchmark_loom_hal_physical_dispatches_per_batch(
   *out_dispatch_count = benchmark_result->data_cache.populated
                             ? benchmark_result->data_cache.dispatches_per_batch
                             : timing->batch_size;
-  if (*out_dispatch_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "HAL benchmark physical dispatch count per batch "
-                            "must be positive");
-  }
   return iree_ok_status();
 }
 

@@ -579,6 +579,7 @@ static iree_status_t loom_run_hal_testbench_scenario_benchmark_calls(
         host_allocator, &out_result->benchmark);
   }
   if (iree_status_is_ok(status)) {
+    out_result->dispatch_count_per_call = 1;
     out_result->binding_count_per_call = ring.binding_count_per_call;
     out_result->binding_set_bytes = ring.binding_set_bytes;
     out_result->binding_ring_bytes = ring.binding_ring_bytes;
@@ -651,6 +652,11 @@ iree_status_t loom_run_hal_testbench_benchmark_scenario_product(
     const loom_run_hal_benchmark_options_t* options,
     iree_allocator_t host_allocator,
     loom_run_hal_testbench_scenario_benchmark_result_t* out_result) {
+  if (loom_run_hal_testbench_is_command_scenario_product(prepared_product)) {
+    return loom_run_hal_testbench_benchmark_command_scenario_product(
+        prepared_product, invocation, call_count, calls, options,
+        host_allocator, out_result);
+  }
   if (loom_run_hal_testbench_scenario_product_provider(prepared_product) ==
       NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

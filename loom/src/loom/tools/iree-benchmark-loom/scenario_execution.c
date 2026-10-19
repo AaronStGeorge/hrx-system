@@ -819,13 +819,19 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
   const loom_run_hal_testbench_actual_provider_t* provider =
       loom_run_hal_testbench_scenario_product_provider(
           &execution->prepared.trials[coordinate.trial_index].target);
-  if (iree_status_is_ok(status) && provider == NULL) {
-    status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "scenario target product is not a HAL product");
+  iree_host_size_t dispatches_per_batch = 0;
+  if (iree_status_is_ok(status)) {
+    if (!iree_host_size_checked_mul(hal_options.timing.batch_size,
+                                    measurement.result.dispatch_count_per_call,
+                                    &dispatches_per_batch)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "scenario physical dispatch count overflowed host size limits");
+    }
   }
   if (iree_status_is_ok(status)) {
     *out_result = (iree_benchmark_loom_benchmark_result_t){
-        .compile_report = provider->artifacts.compile_report,
+        .compile_report = provider ? provider->artifacts.compile_report : NULL,
         .executed = true,
         .passed = true,
         .has_benchmark_sample_ordinal = true,
@@ -847,7 +853,7 @@ iree_status_t iree_benchmark_loom_scenario_execution_measure(
                 .binding_ring_count = ring_count,
                 .command_buffer_ring_count =
                     measurement.result.benchmark.command_buffer_ring_count,
-                .dispatches_per_batch = hal_options.timing.batch_size,
+                .dispatches_per_batch = dispatches_per_batch,
                 .requested_min_ring_bytes =
                     (uint64_t)benchmark_options->input_ring_min_bytes,
                 .binding_set_bytes = measurement.result.binding_set_bytes,

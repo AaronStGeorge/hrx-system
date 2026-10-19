@@ -649,6 +649,35 @@ TEST(BenchmarkReportTest, WritesHalTimingCountsAndWarnings) {
   iree_string_builder_deinitialize(&builder);
 }
 
+TEST(BenchmarkReportTest, TransferOnlyHalBatchesHaveNoPhysicalDispatches) {
+  iree_benchmark_loom_benchmark_result_t result = {
+      .has_hal_benchmark = true,
+  };
+  result.hal_benchmark.timing.batch_size = 4;
+  result.hal_benchmark.timing.measured_batch_count = 3;
+  result.hal_benchmark.timing.measured_operation_count = 12;
+  result.hal_benchmark.timing.measured_duration_ns = 900;
+  result.data_cache.populated = true;
+  result.data_cache.dispatches_per_batch = 0;
+
+  iree_host_size_t dispatch_count = IREE_HOST_SIZE_MAX;
+  IREE_ASSERT_OK(iree_benchmark_loom_hal_physical_dispatches_per_batch(
+      &result, &dispatch_count));
+  EXPECT_EQ(dispatch_count, 0u);
+  IREE_ASSERT_OK(
+      iree_benchmark_loom_hal_physical_dispatches_per_logical_operation(
+          &result, &dispatch_count));
+  EXPECT_EQ(dispatch_count, 0u);
+  IREE_ASSERT_OK(iree_benchmark_loom_hal_measured_physical_dispatch_count(
+      &result, &dispatch_count));
+  EXPECT_EQ(dispatch_count, 0u);
+
+  double mean_dispatch_duration_ns = -1.0;
+  IREE_ASSERT_OK(iree_benchmark_loom_hal_mean_physical_dispatch_duration_ns(
+      &result, &mean_dispatch_duration_ns));
+  EXPECT_EQ(mean_dispatch_duration_ns, 0.0);
+}
+
 TEST(BenchmarkReportTest, WritesExactWorkloadAndResolvedLaunchConfig) {
   loom_testbench_benchmark_plan_t benchmark_plan = {
       .name = IREE_SV("dynamic_latency"),

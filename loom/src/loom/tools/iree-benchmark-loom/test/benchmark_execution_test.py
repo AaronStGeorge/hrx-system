@@ -15,6 +15,7 @@ from pathlib import Path
 
 TOOL = Path(sys.argv.pop(1)).resolve()
 SCENARIO_SOURCE = Path(sys.argv.pop(1)).resolve()
+COMMAND_SOURCE = Path(sys.argv.pop(1)).resolve()
 SEQUENCE_SOURCE = Path(sys.argv.pop(1)).resolve()
 
 
@@ -161,6 +162,39 @@ class BenchmarkExecutionTest(unittest.TestCase):
         self.assertEqual(cache["materialized_storage_set_bytes"], 0)
         self.assertEqual(cache["materialized_storage_ring_bytes"], 0)
         self.assertTrue(cache["ring_byte_target_met"])
+
+    def test_command_scenario_replays_complete_programs(self):
+        result, rows = self.run_tool(
+            COMMAND_SOURCE,
+            "--benchmark=@dependent_stage_values_throughput",
+            "--sample=5",
+            "--input-ring-count=2",
+            "--batch-size=4",
+            "--profile-final-batch=true",
+            "--profile-data=dispatch-events",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        benchmark_rows = [row for row in rows if row["row"] == "benchmark"]
+        self.assertEqual(len(benchmark_rows), 1)
+        benchmark_result = benchmark_rows[0]["benchmark_result"]
+        self.assertEqual(benchmark_result["state"], "ok")
+        self.assertEqual(benchmark_result["configuration_ordinal"], 2)
+        self.assertEqual(benchmark_result["trial_ordinal"], 1)
+
+        measurement = benchmark_result["measurement"]
+        self.assertEqual(measurement["logical_operations_per_batch"], 4)
+        self.assertEqual(measurement["physical_dispatches_per_batch"], 20)
+        self.assertEqual(measurement["physical_dispatches_per_logical_operation"], 5)
+
+        cache = benchmark_result["data_cache"]
+        self.assertEqual(cache["binding_count"], 3)
+        self.assertEqual(cache["binding_ring_count"], 2)
+        self.assertEqual(cache["command_buffer_ring_count"], 2)
+        self.assertEqual(cache["binding_set_bytes"], 384)
+        self.assertEqual(cache["binding_ring_bytes"], 768)
+        self.assertEqual(cache["materialized_storage_count"], 3)
+        self.assertEqual(cache["materialized_storage_ring_bytes"], 1504)
 
 
 if __name__ == "__main__":

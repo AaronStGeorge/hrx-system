@@ -63,6 +63,8 @@ typedef struct loom_run_hal_command_scenario_product_t {
   iree_host_size_t executable_count;
   // Allocated entry count in |executables|.
   iree_host_size_t executable_capacity;
+  // Number of physical kernel dispatches in one complete program execution.
+  iree_host_size_t dispatch_count;
 } loom_run_hal_command_scenario_product_t;
 
 static iree_status_t loom_run_hal_command_scenario_allocate_array(
@@ -746,6 +748,8 @@ typedef struct loom_run_hal_command_scenario_calls_t {
   iree_hal_buffer_t** transient_buffers;
   // Per-call command buffers recorded with concrete fixed roots.
   iree_hal_command_buffer_t** command_buffers;
+  // Optional per-call command buffers retaining final-profile metadata.
+  iree_hal_command_buffer_t** profile_command_buffers;
   // Per-call completion semaphores avoiding queue-order assumptions.
   iree_hal_semaphore_t** completion_semaphores;
   // Per-call flags identifying successfully accepted submissions.
@@ -754,23 +758,56 @@ typedef struct loom_run_hal_command_scenario_calls_t {
   loom_run_hal_testbench_staging_t staging;
   // Number of physical calls represented by the arrays.
   iree_host_size_t call_count;
+  // Number of authored bindings materialized for each physical call.
+  iree_host_size_t binding_count_per_call;
+  // Sum of authored binding byte lengths in the first physical call.
+  uint64_t binding_set_bytes;
+  // Sum of authored binding byte lengths across all physical calls.
+  uint64_t binding_ring_bytes;
+  // Number of disjoint reachable ranges in the first physical call.
+  iree_host_size_t binding_range_count_per_call;
+  // Sum of reachable range bytes in the first physical call.
+  uint64_t binding_range_set_bytes;
+  // Sum of reachable range bytes across all physical calls.
+  uint64_t binding_range_ring_bytes;
+  // Number of unique input allocations in the first physical call.
+  iree_host_size_t materialized_storage_count_per_call;
+  // Sum of unique input-allocation bytes in the first physical call.
+  uint64_t materialized_storage_set_bytes;
+  // Sum of unique input-allocation bytes across all physical calls.
+  uint64_t materialized_storage_ring_bytes;
 } loom_run_hal_command_scenario_calls_t;
+
+typedef uint32_t loom_run_hal_command_scenario_call_flags_t;
+enum loom_run_hal_command_scenario_call_flag_bits_e {
+  LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_NONE = 0u,
+  // Creates one correctness completion semaphore per physical call.
+  LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_COMPLETION_SEMAPHORES = 1u << 0,
+  // Records an equivalent metadata-retaining command buffer per call.
+  LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_PROFILE_COMMAND_BUFFERS = 1u << 1,
+  // Requires every physical call to have the first call's input footprint.
+  LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_UNIFORM_FOOTPRINT = 1u << 2,
+};
 
 static iree_status_t loom_run_hal_command_scenario_calls_deinitialize(
     loom_run_hal_command_scenario_calls_t* calls) {
-  iree_status_t status =
-      loom_run_hal_testbench_staging_deinitialize(&calls->staging);
   for (iree_host_size_t i = calls->call_count; i > 0; --i) {
     iree_hal_semaphore_release(calls->completion_semaphores
                                    ? calls->completion_semaphores[i - 1]
                                    : NULL);
     iree_hal_command_buffer_release(
         calls->command_buffers ? calls->command_buffers[i - 1] : NULL);
+    iree_hal_command_buffer_release(calls->profile_command_buffers
+                                        ? calls->profile_command_buffers[i - 1]
+                                        : NULL);
     iree_hal_buffer_release(
         calls->transient_buffers ? calls->transient_buffers[i - 1] : NULL);
   }
+  iree_status_t status =
+      loom_run_hal_testbench_staging_deinitialize(&calls->staging);
   iree_allocator_free(calls->host_allocator, calls->submitted);
   iree_allocator_free(calls->host_allocator, calls->completion_semaphores);
+  iree_allocator_free(calls->host_allocator, calls->profile_command_buffers);
   iree_allocator_free(calls->host_allocator, calls->command_buffers);
   iree_allocator_free(calls->host_allocator, calls->transient_buffers);
   iree_allocator_free(calls->host_allocator, calls->rebindable_bindings);
@@ -804,10 +841,13 @@ static iree_status_t loom_run_hal_command_scenario_validate_call(
 static iree_status_t loom_run_hal_command_scenario_calls_initialize(
     loom_run_hal_command_scenario_product_t* product,
     iree_host_size_t call_count, loom_testbench_product_call_t* product_calls,
+    iree_hal_command_buffer_mode_t command_buffer_mode,
+    loom_run_hal_command_scenario_call_flags_t flags,
     loom_run_hal_command_scenario_calls_t* out_calls) {
   *out_calls = (loom_run_hal_command_scenario_calls_t){
       .host_allocator = product->host_allocator,
       .call_count = call_count,
+      .binding_count_per_call = product->subject->input_count,
   };
   const loom_testbench_invocation_plan_t* invocation = product->subject;
   const loom_cmd_program_requirements_t* requirements =
@@ -864,13 +904,28 @@ static iree_status_t loom_run_hal_command_scenario_calls_initialize(
         sizeof(*out_calls->command_buffers),
         (void**)&out_calls->command_buffers);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) &&
+      iree_all_bits_set(
+          flags,
+          LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_PROFILE_COMMAND_BUFFERS)) {
+    status = loom_run_hal_command_scenario_allocate_array(
+        product->host_allocator, call_count,
+        sizeof(*out_calls->profile_command_buffers),
+        (void**)&out_calls->profile_command_buffers);
+  }
+  if (iree_status_is_ok(status) &&
+      iree_all_bits_set(
+          flags,
+          LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_COMPLETION_SEMAPHORES)) {
     status = loom_run_hal_command_scenario_allocate_array(
         product->host_allocator, call_count,
         sizeof(*out_calls->completion_semaphores),
         (void**)&out_calls->completion_semaphores);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) &&
+      iree_all_bits_set(
+          flags,
+          LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_COMPLETION_SEMAPHORES)) {
     status = loom_run_hal_command_scenario_allocate_array(
         product->host_allocator, call_count, sizeof(*out_calls->submitted),
         (void**)&out_calls->submitted);
@@ -878,9 +933,48 @@ static iree_status_t loom_run_hal_command_scenario_calls_initialize(
 
   for (iree_host_size_t call_index = 0;
        iree_status_is_ok(status) && call_index < call_count; ++call_index) {
-    uint64_t ignored_binding_bytes = 0;
+    uint64_t call_binding_bytes = 0;
     status = loom_run_hal_command_scenario_validate_call(
-        invocation, &product_calls[call_index], &ignored_binding_bytes);
+        invocation, &product_calls[call_index], &call_binding_bytes);
+    const loom_testbench_buffer_footprint_t* footprint =
+        &product_calls[call_index].input_footprint;
+    if (iree_status_is_ok(status) && call_index == 0) {
+      out_calls->binding_set_bytes = call_binding_bytes;
+      out_calls->binding_range_count_per_call = footprint->binding_range_count;
+      out_calls->binding_range_set_bytes = footprint->binding_range_byte_length;
+      out_calls->materialized_storage_count_per_call =
+          footprint->storage_allocation_count;
+      out_calls->materialized_storage_set_bytes =
+          footprint->storage_byte_length;
+    } else if (iree_status_is_ok(status) &&
+               iree_all_bits_set(
+                   flags,
+                   LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_UNIFORM_FOOTPRINT) &&
+               !loom_testbench_buffer_footprint_equal(
+                   footprint, &product_calls[0].input_footprint)) {
+      status =
+          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                           "command scenario call %" PRIhsz
+                           " materialized a different input buffer footprint",
+                           call_index);
+    }
+    if (iree_status_is_ok(status) &&
+        (UINT64_MAX - out_calls->binding_ring_bytes < call_binding_bytes ||
+         UINT64_MAX - out_calls->binding_range_ring_bytes <
+             footprint->binding_range_byte_length ||
+         UINT64_MAX - out_calls->materialized_storage_ring_bytes <
+             footprint->storage_byte_length)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "command scenario input footprint byte accounting overflowed");
+    }
+    if (iree_status_is_ok(status)) {
+      out_calls->binding_ring_bytes += call_binding_bytes;
+      out_calls->binding_range_ring_bytes +=
+          footprint->binding_range_byte_length;
+      out_calls->materialized_storage_ring_bytes +=
+          footprint->storage_byte_length;
+    }
     for (iree_host_size_t input_index = 0;
          iree_status_is_ok(status) && input_index < invocation->input_count;
          ++input_index) {
@@ -946,12 +1040,30 @@ static iree_status_t loom_run_hal_command_scenario_calls_initialize(
     if (iree_status_is_ok(status)) {
       status = loom_cmd_program_hal_command_buffer_create(
           iree_hal_queue_family(context->runtime.dispatch_queue),
-          IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT, &product->program,
+          command_buffer_mode, &product->program,
           /*range=*/NULL, requirements->fixed_buffer_count, fixed_bindings,
           product->entry_count, product->entries, product->host_allocator,
           &out_calls->command_buffers[call_index]);
     }
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) &&
+        iree_all_bits_set(
+            flags,
+            LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_PROFILE_COMMAND_BUFFERS)) {
+      const iree_hal_command_buffer_mode_t profile_mode =
+          (command_buffer_mode |
+           IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_PROFILE_METADATA) &
+          ~IREE_HAL_COMMAND_BUFFER_MODE_UNRETAINED;
+      status = loom_cmd_program_hal_command_buffer_create(
+          iree_hal_queue_family(context->runtime.dispatch_queue), profile_mode,
+          &product->program,
+          /*range=*/NULL, requirements->fixed_buffer_count, fixed_bindings,
+          product->entry_count, product->entries, product->host_allocator,
+          &out_calls->profile_command_buffers[call_index]);
+    }
+    if (iree_status_is_ok(status) &&
+        iree_all_bits_set(
+            flags,
+            LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_COMPLETION_SEMAPHORES)) {
       status = iree_hal_semaphore_create(
           context->runtime.device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
           IREE_HAL_SEMAPHORE_FLAG_DEFAULT,
@@ -1028,7 +1140,9 @@ static iree_status_t loom_run_hal_command_scenario_product_execute(
   }
   loom_run_hal_command_scenario_calls_t prepared_calls = {0};
   iree_status_t status = loom_run_hal_command_scenario_calls_initialize(
-      product, call_count, calls, &prepared_calls);
+      product, call_count, calls, IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+      LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_COMPLETION_SEMAPHORES,
+      &prepared_calls);
   if (iree_status_is_ok(status)) {
     status =
         loom_run_hal_command_scenario_calls_execute(product, &prepared_calls);
@@ -1038,10 +1152,100 @@ static iree_status_t loom_run_hal_command_scenario_product_execute(
       loom_run_hal_command_scenario_calls_deinitialize(&prepared_calls));
 }
 
+static iree_status_t loom_run_hal_command_scenario_benchmark_calls(
+    loom_run_hal_command_scenario_product_t* product,
+    iree_host_size_t call_count, loom_testbench_product_call_t* calls,
+    const loom_run_hal_benchmark_options_t* options,
+    iree_allocator_t host_allocator,
+    loom_run_hal_testbench_scenario_benchmark_result_t* out_result) {
+  *out_result = (loom_run_hal_testbench_scenario_benchmark_result_t){0};
+  if (call_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL command scenario benchmark requires a physical call ring");
+  }
+
+  loom_run_hal_command_scenario_call_flags_t call_flags =
+      LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_UNIFORM_FOOTPRINT;
+  if (iree_all_bits_set(options->flags,
+                        LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH)) {
+    call_flags |=
+        LOOM_RUN_HAL_COMMAND_SCENARIO_CALL_FLAG_PROFILE_COMMAND_BUFFERS;
+  }
+  loom_run_hal_command_scenario_calls_t prepared_calls = {0};
+  iree_status_t status = loom_run_hal_command_scenario_calls_initialize(
+      product, call_count, calls, options->dispatch_batch.command_buffer_mode,
+      call_flags, &prepared_calls);
+  if (iree_status_is_ok(status)) {
+    const loom_run_hal_command_buffer_ring_t ring = {
+        .command_buffers = prepared_calls.command_buffers,
+        .profile_command_buffers = prepared_calls.profile_command_buffers,
+        .binding_table = prepared_calls.rebindable_bindings,
+        .ring_count = call_count,
+        .binding_count = product->program.requirements.rebindable_binding_count,
+        .execute_flags = options->dispatch_batch.execute_flags,
+    };
+    status = loom_run_hal_benchmark_command_buffer_ring(
+        &product->profile->provider_options.context->runtime, &ring, options,
+        host_allocator, &out_result->benchmark);
+  }
+  if (iree_status_is_ok(status)) {
+    out_result->dispatch_count_per_call = product->dispatch_count;
+    out_result->binding_count_per_call = prepared_calls.binding_count_per_call;
+    out_result->binding_set_bytes = prepared_calls.binding_set_bytes;
+    out_result->binding_ring_bytes = prepared_calls.binding_ring_bytes;
+    out_result->binding_range_count_per_call =
+        prepared_calls.binding_range_count_per_call;
+    out_result->binding_range_set_bytes =
+        prepared_calls.binding_range_set_bytes;
+    out_result->binding_range_ring_bytes =
+        prepared_calls.binding_range_ring_bytes;
+    out_result->materialized_storage_count_per_call =
+        prepared_calls.materialized_storage_count_per_call;
+    out_result->materialized_storage_set_bytes =
+        prepared_calls.materialized_storage_set_bytes;
+    out_result->materialized_storage_ring_bytes =
+        prepared_calls.materialized_storage_ring_bytes;
+  }
+  status = iree_status_join(
+      status,
+      loom_run_hal_command_scenario_calls_deinitialize(&prepared_calls));
+  if (!iree_status_is_ok(status)) {
+    *out_result = (loom_run_hal_testbench_scenario_benchmark_result_t){0};
+  }
+  return status;
+}
+
+static iree_status_t loom_run_hal_command_scenario_product_benchmark(
+    void* user_data, const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t call_count, loom_testbench_product_call_t* calls,
+    const loom_run_benchmark_options_t* options,
+    iree_allocator_t host_allocator, loom_run_benchmark_result_t* out_result) {
+  loom_run_benchmark_result_initialize(out_result);
+  loom_run_hal_command_scenario_product_t* product =
+      (loom_run_hal_command_scenario_product_t*)user_data;
+  if (invocation != product->subject) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "command scenario benchmark does not match its prepared product");
+  }
+  loom_run_hal_benchmark_options_t hal_options;
+  loom_run_hal_benchmark_options_initialize(&hal_options);
+  hal_options.timing = *options;
+  hal_options.dispatch_batch.dispatch_count = options->batch_size;
+  loom_run_hal_testbench_scenario_benchmark_result_t result;
+  iree_status_t status = loom_run_hal_command_scenario_benchmark_calls(
+      product, call_count, calls, &hal_options, host_allocator, &result);
+  if (iree_status_is_ok(status)) {
+    *out_result = result.benchmark.timing;
+  }
+  return status;
+}
+
 static const loom_testbench_product_vtable_t
     loom_run_hal_command_scenario_product_vtable = {
         .execute = loom_run_hal_command_scenario_product_execute,
-        .benchmark = NULL,
+        .benchmark = loom_run_hal_command_scenario_product_benchmark,
 };
 
 static iree_status_t loom_run_hal_command_scenario_select_target(
@@ -1073,6 +1277,22 @@ static iree_status_t loom_run_hal_command_scenario_select_target(
   return status;
 }
 
+static iree_host_size_t loom_run_hal_command_scenario_dispatch_count(
+    const loom_cmd_program_t* program) {
+  iree_host_size_t dispatch_count = 0;
+  for (uint32_t i = 0; i < program->commands.count; ++i) {
+    const loom_cmd_program_command_kind_t kind =
+        loom_cmd_program_command_kind_base(
+            loom_cmd_program_command_at(program, i).kind);
+    if (kind == LOOM_CMD_PROGRAM_COMMAND_KIND_DISPATCH_DIRECT ||
+        kind == LOOM_CMD_PROGRAM_COMMAND_KIND_DISPATCH_INDIRECT_STATIC ||
+        kind == LOOM_CMD_PROGRAM_COMMAND_KIND_DISPATCH_INDIRECT_DYNAMIC) {
+      ++dispatch_count;
+    }
+  }
+  return dispatch_count;
+}
+
 static iree_status_t loom_run_hal_command_scenario_resolve_program(
     loom_run_hal_command_scenario_product_t* product,
     const loomc_product_t* command_product) {
@@ -1092,6 +1312,8 @@ static iree_status_t loom_run_hal_command_scenario_resolve_program(
       product->host_allocator, &product->program_image));
   IREE_RETURN_IF_ERROR(loom_cmd_program_parse(
       iree_const_cast_byte_span(product->program_image), &product->program));
+  product->dispatch_count =
+      loom_run_hal_command_scenario_dispatch_count(&product->program);
 
   const loomc_host_size_t requirement_count =
       loomc_cmd_program_product_entry_requirement_count(command_product);
@@ -1244,6 +1466,25 @@ bool loom_run_hal_testbench_is_command_scenario_product(
          prepared_product->vtable ==
              &loom_run_hal_command_scenario_product_vtable &&
          prepared_product->user_data != NULL;
+}
+
+iree_status_t loom_run_hal_testbench_benchmark_command_scenario_product(
+    const loom_testbench_prepared_product_t* prepared_product,
+    const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t call_count, loom_testbench_product_call_t* calls,
+    const loom_run_hal_benchmark_options_t* options,
+    iree_allocator_t host_allocator,
+    loom_run_hal_testbench_scenario_benchmark_result_t* out_result) {
+  if (!loom_run_hal_testbench_is_command_scenario_product(prepared_product) ||
+      invocation != prepared_product->invocation) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "command scenario benchmark does not match its prepared product");
+  }
+  loom_run_hal_command_scenario_product_t* product =
+      (loom_run_hal_command_scenario_product_t*)prepared_product->user_data;
+  return loom_run_hal_command_scenario_benchmark_calls(
+      product, call_count, calls, options, host_allocator, out_result);
 }
 
 iree_status_t loom_run_hal_testbench_query_command_scenario_input_layout(

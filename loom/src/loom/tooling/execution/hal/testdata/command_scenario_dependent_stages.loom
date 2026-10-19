@@ -126,3 +126,5 @@ check.scenario public @dependent_stage_values configure[3](%configuration: index
   }
   check.return
 }
+
+check.benchmark<@dependent_stage_values> @dependent_stage_values_throughput

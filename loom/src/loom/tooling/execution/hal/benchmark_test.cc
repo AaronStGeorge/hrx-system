@@ -99,5 +99,37 @@ TEST(HalBenchmarkTest, BindingTableRingRequiresInvocationOptions) {
           &runtime, &ring, &options, iree_allocator_system(), &result));
 }
 
+TEST(HalBenchmarkTest, CommandBufferRingRequiresPhysicalSlots) {
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_command_buffer_ring_t ring = {};
+  loom_run_hal_benchmark_options_t options = {};
+  loom_run_hal_benchmark_options_initialize(&options);
+
+  loom_run_hal_benchmark_result_t result = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_hal_benchmark_command_buffer_ring(
+          &runtime, &ring, &options, iree_allocator_system(), &result));
+}
+
+TEST(HalBenchmarkTest, CommandBufferRingRequiresProfileRecordings) {
+  loom_run_hal_runtime_t runtime = {};
+  iree_hal_command_buffer_t* command_buffer =
+      reinterpret_cast<iree_hal_command_buffer_t*>(uintptr_t{1});
+  loom_run_hal_command_buffer_ring_t ring = {
+      .command_buffers = &command_buffer,
+      .ring_count = 1,
+  };
+  loom_run_hal_benchmark_options_t options = {};
+  loom_run_hal_benchmark_options_initialize(&options);
+  options.flags = LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH;
+
+  loom_run_hal_benchmark_result_t result = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_hal_benchmark_command_buffer_ring(
+          &runtime, &ring, &options, iree_allocator_system(), &result));
+}
+
 }  // namespace
 }  // namespace loom

@@ -19,10 +19,12 @@ loom_py_test(
     args = [
         "$(rootpath //loom/src/loom/tools/iree-benchmark-loom)",
         "$(rootpath //loom/src/loom/tooling/execution/hal:testdata/scenario_compare_hal_vm.loom)",
+        "$(rootpath //loom/src/loom/tooling/execution/hal:testdata/command_scenario_dependent_stages.loom)",
         "$(rootpath :sequence_storage.loom)",
     ],
     data = [
         ":sequence_storage.loom",
+        "//loom/src/loom/tooling/execution/hal:testdata/command_scenario_dependent_stages.loom",
         "//loom/src/loom/tooling/execution/hal:testdata/scenario_compare_hal_vm.loom",
         "//loom/src/loom/tools/iree-benchmark-loom",
     ],

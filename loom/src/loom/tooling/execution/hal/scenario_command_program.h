@@ -27,6 +27,15 @@ iree_status_t loom_run_hal_testbench_command_scenario_product_prepare(
 bool loom_run_hal_testbench_is_command_scenario_product(
     const loom_testbench_prepared_product_t* prepared_product);
 
+// Benchmarks complete command-program calls over independent physical slots.
+iree_status_t loom_run_hal_testbench_benchmark_command_scenario_product(
+    const loom_testbench_prepared_product_t* prepared_product,
+    const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t call_count, loom_testbench_product_call_t* calls,
+    const loom_run_hal_benchmark_options_t* options,
+    iree_allocator_t host_allocator,
+    loom_run_hal_testbench_scenario_benchmark_result_t* out_result);
+
 // Reports the authored input layout of one command-program call.
 iree_status_t loom_run_hal_testbench_query_command_scenario_input_layout(
     const loom_testbench_prepared_product_t* prepared_product,

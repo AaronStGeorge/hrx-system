@@ -1098,6 +1098,260 @@ iree_status_t loom_run_hal_benchmark_dispatch_binding_table_ring(
   return status;
 }
 
+typedef struct loom_run_hal_command_buffer_ring_slot_t {
+  // Timeline semaphore ordering repeated use of this physical slot.
+  iree_hal_semaphore_t* semaphore;
+  // Payload reserved for the next accepted submission.
+  uint64_t next_signal_value;
+} loom_run_hal_command_buffer_ring_slot_t;
+
+typedef struct loom_run_hal_command_buffer_ring_context_t {
+  // HAL runtime owning the queue and slot semaphores.
+  const loom_run_hal_runtime_t* runtime;
+  // Borrowed physical command-buffer and binding ring.
+  const loom_run_hal_command_buffer_ring_t* ring;
+  // Command-buffer family used by the active timing or profile phase.
+  iree_hal_command_buffer_t* const* command_buffers;
+  // Queue execution policy used by the active phase.
+  iree_hal_queue_execute_flags_t execute_flags;
+  // Host allocator owning all context arrays.
+  iree_allocator_t host_allocator;
+  // Per-slot reusable completion timelines.
+  loom_run_hal_command_buffer_ring_slot_t* slots;
+  // Number of initialized entries in |slots|.
+  iree_host_size_t initialized_slot_count;
+  // Terminal accepted payload for each slot touched by the active batch.
+  uint64_t* terminal_values;
+  // Slot ordinals first touched by the active batch.
+  iree_host_size_t* touched_slots;
+  // Maximum number of entries in |touched_slots|.
+  iree_host_size_t touched_slot_capacity;
+  // Number of logical operations submitted by each benchmark callback.
+  iree_host_size_t batch_size;
+  // Physical slot selected by the next logical operation.
+  iree_host_size_t next_slot_index;
+} loom_run_hal_command_buffer_ring_context_t;
+
+static void loom_run_hal_command_buffer_ring_context_deinitialize(
+    loom_run_hal_command_buffer_ring_context_t* context) {
+  for (iree_host_size_t i = context->initialized_slot_count; i > 0; --i) {
+    iree_hal_semaphore_release(context->slots[i - 1].semaphore);
+  }
+  iree_allocator_free(context->host_allocator, context->touched_slots);
+  iree_allocator_free(context->host_allocator, context->terminal_values);
+  iree_allocator_free(context->host_allocator, context->slots);
+  *context = (loom_run_hal_command_buffer_ring_context_t){0};
+}
+
+static iree_status_t loom_run_hal_command_buffer_ring_context_initialize(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_command_buffer_ring_t* ring, iree_host_size_t batch_size,
+    iree_allocator_t host_allocator,
+    loom_run_hal_command_buffer_ring_context_t* out_context) {
+  *out_context = (loom_run_hal_command_buffer_ring_context_t){
+      .runtime = runtime,
+      .ring = ring,
+      .command_buffers = ring->command_buffers,
+      .execute_flags = ring->execute_flags,
+      .host_allocator = host_allocator,
+      .touched_slot_capacity = iree_min(ring->ring_count, batch_size),
+      .batch_size = batch_size,
+  };
+  iree_status_t status = iree_allocator_malloc_array(
+      host_allocator, ring->ring_count, sizeof(*out_context->slots),
+      (void**)&out_context->slots);
+  if (iree_status_is_ok(status)) {
+    memset(out_context->slots, 0,
+           ring->ring_count * sizeof(*out_context->slots));
+    status = iree_allocator_malloc_array(host_allocator, ring->ring_count,
+                                         sizeof(*out_context->terminal_values),
+                                         (void**)&out_context->terminal_values);
+  }
+  if (iree_status_is_ok(status)) {
+    memset(out_context->terminal_values, 0,
+           ring->ring_count * sizeof(*out_context->terminal_values));
+    status = iree_allocator_malloc_array(host_allocator,
+                                         out_context->touched_slot_capacity,
+                                         sizeof(*out_context->touched_slots),
+                                         (void**)&out_context->touched_slots);
+  }
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < ring->ring_count; ++i) {
+    status = iree_hal_semaphore_create(
+        runtime->device, IREE_HAL_QUEUE_FAMILY_AFFINITY_ANY, 0,
+        IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &out_context->slots[i].semaphore);
+    if (iree_status_is_ok(status)) {
+      out_context->slots[i].next_signal_value = 1;
+      out_context->initialized_slot_count = i + 1;
+    }
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_run_hal_command_buffer_ring_context_deinitialize(out_context);
+  }
+  return status;
+}
+
+static iree_status_t loom_run_hal_benchmark_execute_command_buffer_ring(
+    void* user_data) {
+  loom_run_hal_command_buffer_ring_context_t* context =
+      (loom_run_hal_command_buffer_ring_context_t*)user_data;
+  const loom_run_hal_command_buffer_ring_t* ring = context->ring;
+  iree_host_size_t touched_slot_count = 0;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t operation_index = 0;
+       iree_status_is_ok(status) && operation_index < context->batch_size;
+       ++operation_index) {
+    const iree_host_size_t slot_index = context->next_slot_index;
+    context->next_slot_index = (slot_index + 1) % ring->ring_count;
+    loom_run_hal_command_buffer_ring_slot_t* slot = &context->slots[slot_index];
+    if (slot->next_signal_value == IREE_HAL_SEMAPHORE_MAX_VALUE) {
+      status = iree_make_status(
+          IREE_STATUS_RESOURCE_EXHAUSTED,
+          "HAL command-buffer ring exhausted reusable timeline payloads");
+      break;
+    }
+
+    uint64_t signal_value = slot->next_signal_value;
+    uint64_t wait_value = signal_value - 1;
+    const iree_hal_semaphore_list_t wait_semaphores =
+        signal_value == 1 ? iree_hal_semaphore_list_empty()
+                          : (iree_hal_semaphore_list_t){
+                                .count = 1,
+                                .semaphores = &slot->semaphore,
+                                .payload_values = &wait_value,
+                            };
+    const iree_hal_semaphore_list_t signal_semaphores = {
+        .count = 1,
+        .semaphores = &slot->semaphore,
+        .payload_values = &signal_value,
+    };
+    const iree_hal_buffer_binding_table_t binding_table = {
+        .count = ring->binding_count,
+        .bindings =
+            ring->binding_count == 0
+                ? NULL
+                : &ring->binding_table[slot_index * ring->binding_count],
+    };
+    status = iree_hal_queue_execute(context->runtime->dispatch_queue,
+                                    wait_semaphores, signal_semaphores,
+                                    context->command_buffers[slot_index],
+                                    binding_table, context->execute_flags);
+    if (iree_status_is_ok(status)) {
+      if (context->terminal_values[slot_index] == 0) {
+        IREE_ASSERT_LT(touched_slot_count, context->touched_slot_capacity);
+        context->touched_slots[touched_slot_count++] = slot_index;
+      }
+      context->terminal_values[slot_index] = signal_value;
+      ++slot->next_signal_value;
+    }
+  }
+  for (iree_host_size_t i = 0; i < touched_slot_count; ++i) {
+    const iree_host_size_t slot_index = context->touched_slots[i];
+    status = iree_status_join(
+        status, loom_run_hal_semaphore_wait(
+                    context->slots[slot_index].semaphore,
+                    context->terminal_values[slot_index],
+                    iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+    context->terminal_values[slot_index] = 0;
+  }
+  return status;
+}
+
+iree_status_t loom_run_hal_benchmark_command_buffer_ring(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_command_buffer_ring_t* ring,
+    const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
+    loom_run_hal_benchmark_result_t* out_result) {
+  loom_run_hal_benchmark_result_initialize(out_result);
+  IREE_RETURN_IF_ERROR(loom_run_hal_benchmark_options_validate(options));
+  if (ring == NULL || ring->ring_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL benchmark command-buffer ring must contain at least one slot");
+  }
+  if (ring->command_buffers == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL benchmark command-buffer ring requires recorded commands");
+  }
+  iree_host_size_t flat_binding_count = 0;
+  if (!iree_host_size_checked_mul(ring->ring_count, ring->binding_count,
+                                  &flat_binding_count)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "HAL command-buffer ring binding table overflowed");
+  }
+  if (flat_binding_count != 0 && ring->binding_table == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL benchmark command-buffer ring requires deferred bindings");
+  }
+  for (iree_host_size_t i = 0; i < ring->ring_count; ++i) {
+    if (ring->command_buffers[i] == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "HAL benchmark command-buffer ring slot %" PRIhsz
+                              " has no recorded commands",
+                              i);
+    }
+  }
+  if (iree_all_bits_set(options->flags,
+                        LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH)) {
+    if (ring->profile_command_buffers == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "HAL command-buffer profiling requires metadata-retaining commands");
+    }
+    for (iree_host_size_t i = 0; i < ring->ring_count; ++i) {
+      if (ring->profile_command_buffers[i] == NULL) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "HAL command-buffer profile ring slot %" PRIhsz
+                                " has no recorded commands",
+                                i);
+      }
+    }
+  }
+  if (runtime == NULL || runtime->device == NULL ||
+      runtime->dispatch_queue == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL runtime is not initialized");
+  }
+
+  loom_run_hal_command_buffer_ring_context_t context = {0};
+  iree_status_t status = loom_run_hal_command_buffer_ring_context_initialize(
+      runtime, ring, options->timing.batch_size, allocator, &context);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_benchmark_run_batches(
+        (loom_run_benchmark_batch_callback_t){
+            .fn = loom_run_hal_benchmark_execute_command_buffer_ring,
+            .user_data = &context,
+        },
+        &options->timing, allocator, &out_result->timing);
+  }
+  if (iree_status_is_ok(status) &&
+      iree_all_bits_set(options->flags,
+                        LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH)) {
+    context.command_buffers = ring->profile_command_buffers;
+    context.execute_flags &=
+        ~IREE_HAL_QUEUE_EXECUTE_FLAG_BORROW_BINDING_TABLE_LIFETIME;
+    context.next_slot_index = 0;
+    status = loom_run_hal_benchmark_run_profiled_batch(
+        runtime,
+        (loom_run_benchmark_batch_callback_t){
+            .fn = loom_run_hal_benchmark_execute_command_buffer_ring,
+            .user_data = &context,
+        },
+        options, allocator, &out_result->profile_replay);
+  }
+  if (iree_status_is_ok(status)) {
+    out_result->binding_ring_count = ring->ring_count;
+    out_result->command_buffer_ring_count = ring->ring_count;
+  }
+  loom_run_hal_command_buffer_ring_context_deinitialize(&context);
+  if (!iree_status_is_ok(status)) {
+    loom_run_hal_benchmark_result_initialize(out_result);
+  }
+  return status;
+}
+
 iree_status_t loom_run_hal_benchmark_dispatch_sequence_plan_ring(
     const loom_run_hal_runtime_t* runtime, iree_host_size_t sequence_count,
     const loom_run_hal_prepared_candidate_t* const* candidates,
