@@ -160,9 +160,13 @@ void Pm4CommandWriter::AcquireMemory(uint32_t gcr) {
 }
 
 void Pm4CommandWriter::SystemBarrier() {
+  WaitCompute();
+  AcquireMemory(profile_.system_acquire_gcr);
+}
+
+void Pm4CommandWriter::WaitCompute() {
   words_[word_count_++] = MakeHeader(0x46, 2);
   words_[word_count_++] = 7 | (4 << 8);  // CS_PARTIAL_FLUSH.
-  AcquireMemory(profile_.system_acquire_gcr);
 }
 
 void Pm4CommandWriter::AcquireFromSystem() {
@@ -241,6 +245,15 @@ void Pm4CommandWriter::WaitEndOfPipeAndWriteback(uint64_t fence_address,
   // GL2_WB is bit 15; the selected profile also supplies its scope. The high
   // size preserves only defined MEC bits rather than the wider ME layout.
   AcquireMemory(profile_.gl2_writeback_gcr);
+}
+
+void Pm4CommandWriter::BindScratch(uint64_t base, uint32_t waves_per_engine,
+                                   uint32_t wave_byte_length) {
+  const uint32_t address[] = {static_cast<uint32_t>(base >> 8),
+                              static_cast<uint32_t>(base >> 40)};
+  SetComputeRegisters(0x2e10, address, 2);
+  const uint32_t size = waves_per_engine | ((wave_byte_length >> 8) << 12);
+  SetComputeRegisters(profile_.scratch_size_register, &size, 1);
 }
 
 void Pm4CommandWriter::CopyData32(uint64_t source_address,

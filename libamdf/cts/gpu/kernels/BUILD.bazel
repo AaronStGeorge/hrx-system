@@ -667,7 +667,23 @@ amdf_cts_gpu_kernel_set(
     srcs = ["private_roundtrip.loom"],
     entry_point = "private_roundtrip",
     namespace = "kernels::private_roundtrip",
+    target_srcs = {
+        target: "targets/" + target + "/default.loom"
+        for target in AMDF_CTS_GPU_KERNEL_TARGETS
+    },
     targets = AMDF_CTS_GPU_KERNEL_TARGETS,
+)
+
+amdf_cts_gpu_kernel_set(
+    name = "private_roundtrip_wave64_kernels",
+    srcs = ["private_roundtrip.loom"],
+    entry_point = "private_roundtrip",
+    namespace = "kernels::private_roundtrip_wave64",
+    target_srcs = {
+        target: "targets/" + target + "/wave64.loom"
+        for target in AMDF_CTS_GPU_DUAL_WAVE_TARGETS
+    },
+    targets = AMDF_CTS_GPU_DUAL_WAVE_TARGETS,
 )
 
 _KERNEL_POLICY = apply_amdf_target_policy({})

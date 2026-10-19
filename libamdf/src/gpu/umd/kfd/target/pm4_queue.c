@@ -39,6 +39,12 @@ amdf_gpu_kfd_pm4_queue_family_properties(
     const amdf_gpu_kfd_topology_t* topology) {
   amdf_queue_format_features_t format_features =
       AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR;
+  if (topology->properties.topology.xcc_count == 1 &&
+      topology->properties.topology.shader_engine_count_per_xcc != 0 &&
+      topology->properties.compute
+              .maximum_scratch_wave_count_per_compute_unit != 0) {
+    format_features |= AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH;
+  }
   if (topology->properties.gfx_ip.major < 12) {
     // Raw PM4 replaces the compiler descriptor's runtime-owned trap bit.
     format_features |= AMDF_GPU_PM4_FORMAT_FEATURE_COMPUTE_TRAP_PRESENT;

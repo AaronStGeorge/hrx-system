@@ -172,6 +172,25 @@ TEST(Pm4EncodingTest, ComputeBindingAppliesOnlyTheNativeQueueTrapRequirements) {
   }
 }
 
+TEST(Pm4EncodingTest, ScratchBindingPreservesTheNativeAddressAndWaveLayout) {
+  for (const auto& version :
+       std::array<std::array<uint32_t, 2>, 3>{{{11, 5}, {12, 0}, {12, 5}}}) {
+    std::array<uint32_t, 9> words;
+    words.fill(0x759bf13d);
+    Pm4CommandWriter commands(words.data() + 1,
+                              Profile(version[0], version[1]));
+    commands.BindScratch(UINT64_C(0x123456789a00), 128, 2048);
+    ASSERT_EQ(commands.word_count(), 7u);
+    const uint32_t size_offset =
+        version[1] == 5 && version[0] == 12 ? 0x216u : 0x218u;
+    ExpectWords(words.data() + 1,
+                std::array<uint32_t, 7>{0xc0027602, 0x210, 0x3456789a, 0x12,
+                                        0xc0017602, size_offset, 0x8080});
+    EXPECT_EQ(words.front(), 0x759bf13du);
+    EXPECT_EQ(words.back(), 0x759bf13du);
+  }
+}
+
 TEST(Pm4EncodingTest, SystemReleaseInterruptPreservesTargetCachePolicy) {
   const struct {
     // Target family selecting the native release representation.

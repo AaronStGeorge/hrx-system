@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -14,6 +15,9 @@
 #include "libamdf/cts/gpu/kernels/lds_exchange.h"
 #include "libamdf/cts/gpu/kernels/lds_exchange_kernels.h"
 #include "libamdf/cts/gpu/kernels/lds_exchange_wave64_kernels.h"
+#include "libamdf/cts/gpu/kernels/private_roundtrip.h"
+#include "libamdf/cts/gpu/kernels/private_roundtrip_kernels.h"
+#include "libamdf/cts/gpu/kernels/private_roundtrip_wave64_kernels.h"
 #include "libamdf/cts/gpu/pm4/dispatch_fixture.h"
 
 namespace {
@@ -231,6 +235,104 @@ TEST_F(Pm4WaveModeTest, DirectLdsDispatchRestoresWave32AfterWave64) {
 
 TEST_F(Pm4WaveModeTest, IndirectLdsDispatchRestoresWave32AfterWave64) {
   Execute(LaunchKind::kIndirect);
+}
+
+TEST_F(Pm4WaveModeTest, PrivateStorageSpansWave32AndWave64) {
+  if (!pm4_profile_->supports_wave64 ||
+      !(family_.format_features &
+        AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH)) {
+    GTEST_SKIP() << "command-owned scratch in both wave widths is unavailable";
+  }
+  const std::array<const kernels::Kernel*, 2> selected_kernels = {
+      kernels::private_roundtrip::kKernels.Find(gpu_endpoint_info_),
+      kernels::private_roundtrip_wave64::kKernels.Find(gpu_endpoint_info_)};
+  std::array<Pm4ComputeProgram, 2> programs = {};
+  uint32_t wave_byte_length = 0;
+  for (size_t index = 0; index < selected_kernels.size(); ++index) {
+    ASSERT_NE(selected_kernels[index], nullptr);
+    const auto& kernel = *selected_kernels[index];
+    ASSERT_EQ(kernel.wavefront_size, index ? 64u : 32u);
+    ASSERT_NE(kernel.program.resource2 & 1u, 0u);
+    wave_byte_length = std::max(
+        wave_byte_length,
+        (kernel.private_segment_byte_length * kernel.wavefront_size + 255u) &
+            ~255u);
+    programs[index] = {0,
+                       kernel.program.resource1,
+                       kernel.program.resource2,
+                       kernel.program.resource3,
+                       kernel.group_segment_byte_length,
+                       kernel.wavefront_size,
+                       {kernel.workgroup_size(), 1, 1}};
+    const std::string name =
+        "private_wave" + std::to_string(kernel.wavefront_size);
+    ASSERT_NO_FATAL_FAILURE(PrepareProgram(kernel.executable,
+                                           kernel.entry_byte_offset,
+                                           &programs[index], name.c_str()));
+  }
+  const uint32_t engine_count =
+      gpu_endpoint_info_.topology.shader_engine_count_per_xcc;
+  const uint32_t waves_per_engine =
+      ((gpu_endpoint_info_.compute.compute_unit_count + engine_count - 1) /
+       engine_count) *
+      gpu_endpoint_info_.compute.maximum_scratch_wave_count_per_compute_unit;
+  constexpr uint32_t kWorkitems = 4096;
+  constexpr uint32_t kWords = kWorkitems * 9;
+  constexpr uint32_t kEpochs = 3;
+  GpuMemory* scratch = nullptr;
+  GpuMemory* output = nullptr;
+  GpuMemory* inputs = nullptr;
+  GpuMemory* completion = nullptr;
+  ASSERT_NO_FATAL_FAILURE(
+      CreateMemory(AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+                   uint64_t{engine_count} * waves_per_engine * wave_byte_length,
+                   &scratch, AMDF_MEMORY_FLAG_HOST_COHERENT));
+  ASSERT_NO_FATAL_FAILURE(
+      CreateMemory(AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+                   kEpochs * kWords * sizeof(uint32_t), &output));
+  ASSERT_NO_FATAL_FAILURE(CreateMemory(AMDF_MEMORY_ACCESS_READ, 4096, &inputs));
+  ASSERT_NO_FATAL_FAILURE(CreateMemory(
+      AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE, 4096, &completion));
+  std::memset(output->host.pointer, 0, kEpochs * kWords * sizeof(uint32_t));
+  std::memset(completion->host.pointer, 0, 4096);
+  for (uint32_t epoch = 0; epoch < kEpochs; ++epoch) {
+    const kernels::private_roundtrip::Arguments arguments = {
+        output->device_address + epoch * kWords * sizeof(uint32_t),
+        0x13579bdfu + epoch, epoch + 1};
+    std::memcpy(static_cast<uint8_t*>(inputs->host.pointer) + epoch * 256,
+                &arguments, sizeof(arguments));
+  }
+  GpuCommandQueue* queue = nullptr;
+  ASSERT_NO_FATAL_FAILURE(CreateQueue(&queue));
+  Pm4CommandWriter commands(queue->words().data(), *pm4_profile_);
+  commands.SystemBarrier();
+  commands.BindScratch(scratch->device_address, waves_per_engine,
+                       wave_byte_length);
+  for (uint32_t epoch = 0; epoch < kEpochs; ++epoch) {
+    const auto& program = programs[epoch == 1 ? 1 : 0];
+    commands.BindCompute(program, inputs->device_address + epoch * 256,
+                         family_.format_features);
+    commands.Dispatch(program, kWorkitems, 1, 1);
+  }
+  commands.ReleaseSystem32(completion->device_address, 1);
+  commands.PadToEightWords();
+  ASSERT_NO_FATAL_FAILURE(
+      queue->Publish(api_, gpu_api_, commands.word_count()));
+  ASSERT_TRUE(GpuWaitEqual<uint32_t>(
+      reinterpret_cast<uintptr_t>(completion->host.pointer), 1));
+  const auto* observed = static_cast<const uint32_t*>(output->host.pointer);
+  for (uint32_t epoch = 0; epoch < kEpochs; ++epoch) {
+    for (uint32_t workitem = 0; workitem < kWorkitems; ++workitem) {
+      const auto expected = kernels::private_roundtrip::ExpectedRecord(
+          workitem, 0x13579bdfu + epoch, epoch + 1);
+      for (uint32_t word = 0; word < expected.size(); ++word) {
+        EXPECT_EQ(observed[epoch * kWords + workitem * 9 + word],
+                  expected[word])
+            << "epoch=" << epoch << " workitem=" << workitem;
+      }
+    }
+  }
+  ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
 }
 
 }  // namespace

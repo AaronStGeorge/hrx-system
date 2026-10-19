@@ -57,13 +57,25 @@ bool amdf_gpu_wddm_wkmi_endpoint_properties_translate(
           },
   };
   if (provider_properties->supports_pm4_kernel_queue != 0) {
+    amdf_queue_format_features_t format_features =
+        provider_properties->gfx_ip_major >= 10
+            ? AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR
+            : 0;
+    const bool rdna_scratch =
+        (properties.gfx_ip.major == 11 &&
+         (properties.gfx_ip.minor == 0 || properties.gfx_ip.minor == 5 ||
+          properties.gfx_ip.minor == 7)) ||
+        (properties.gfx_ip.major == 12 &&
+         (properties.gfx_ip.minor == 0 || properties.gfx_ip.minor == 5));
+    if (rdna_scratch && xcc_count == 1 && shader_engine_count != 0 &&
+        properties.compute.maximum_scratch_wave_count_per_compute_unit != 0) {
+      format_features |= AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH;
+    }
     properties.queue_families[properties.queue_family_count++] =
         (amdf_gpu_queue_family_properties_t){
             .command_type = AMDF_QUEUE_COMMAND_TYPE_GPU_PM4,
             .format_version = AMDF_GPU_PM4_QUEUE_FORMAT_VERSION_1,
-            .format_features = provider_properties->gfx_ip_major >= 10
-                                   ? AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR
-                                   : 0,
+            .format_features = format_features,
             .publication_modes = AMDF_QUEUE_PUBLICATION_MODE_KERNEL,
             .roles = AMDF_QUEUE_ROLE_COMPUTE | AMDF_QUEUE_ROLE_TRANSFER |
                      AMDF_QUEUE_ROLE_ATOMIC | AMDF_QUEUE_ROLE_CACHE_CONTROL,

@@ -57,6 +57,9 @@ TEST(WkmiEndpointPropertiesTest, NormalizesMultiXccTopology) {
             AMDF_QUEUE_COMMAND_TYPE_GPU_PM4);
   EXPECT_EQ(properties.queue_families[0].publication_modes,
             AMDF_QUEUE_PUBLICATION_MODE_KERNEL);
+  EXPECT_EQ(properties.queue_families[0].format_features &
+                AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH,
+            0u);
   EXPECT_EQ(properties.queue_families[1].command_type,
             AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
   EXPECT_EQ(properties.queue_families[1].publication_modes,
@@ -106,6 +109,8 @@ TEST(WkmiEndpointPropertiesTest, RdnaExposesPm4AndSdmaPacketFeatures) {
     provider.gfx_ip_major = target / 10000;
     provider.gfx_ip_minor = (target / 100) % 100;
     provider.gfx_ip_stepping = target % 100;
+    provider.xcc_count = 1;
+    provider.shader_engine_count = 4;
     amdf_gpu_endpoint_properties_t properties = {};
     ASSERT_TRUE(amdf_gpu_wddm_wkmi_endpoint_properties_translate(&provider,
                                                                  &properties));
@@ -113,7 +118,8 @@ TEST(WkmiEndpointPropertiesTest, RdnaExposesPm4AndSdmaPacketFeatures) {
     EXPECT_EQ(properties.queue_families[0].command_type,
               AMDF_QUEUE_COMMAND_TYPE_GPU_PM4);
     EXPECT_EQ(properties.queue_families[0].format_features,
-              AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR);
+              AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR |
+                  AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH);
     const auto& sdma = properties.queue_families[1];
     EXPECT_EQ(sdma.command_type, AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
     const amdf_queue_format_features_t fence =
@@ -192,6 +198,9 @@ TEST(WkmiEndpointPropertiesTest, UnknownFamiliesDoNotInferRectangularLayout) {
                   (AMDF_GPU_SDMA_FORMAT_FEATURE_COPY_LINEAR_RECT |
                    AMDF_GPU_SDMA_FORMAT_FEATURE_COPY_LINEAR_RECT_EXTENDED_Z |
                    AMDF_GPU_SDMA_FORMAT_FEATURE_COPY_LINEAR_RECT_WIDE),
+              0u);
+    EXPECT_EQ(properties.queue_families[0].format_features &
+                  AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH,
               0u);
   }
 }

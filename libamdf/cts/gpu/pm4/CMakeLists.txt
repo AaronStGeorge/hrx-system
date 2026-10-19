@@ -72,6 +72,9 @@ iree_cc_library(
     libamdf::cts::gpu::kernels::lds_exchange
     libamdf::cts::gpu::kernels::lds_exchange_kernels
     libamdf::cts::gpu::kernels::lds_exchange_wave64_kernels
+    libamdf::cts::gpu::kernels::private_roundtrip
+    libamdf::cts::gpu::kernels::private_roundtrip_kernels
+    libamdf::cts::gpu::kernels::private_roundtrip_wave64_kernels
   TESTONLY
   ALWAYSLINK
   PUBLIC
@@ -107,6 +110,7 @@ iree_cc_library(
     "lds_test.cc"
     "mapping_test.cc"
     "observation_stream_test.cc"
+    "private_test.cc"
     "program_atomic_test.cc"
     "queued_mapping_test.cc"
     "resource_test.cc"
@@ -125,6 +129,8 @@ iree_cc_library(
     libamdf::cts::gpu::kernels::byte_copy_unaligned_kernels
     libamdf::cts::gpu::kernels::lds_exchange
     libamdf::cts::gpu::kernels::lds_exchange_kernels
+    libamdf::cts::gpu::kernels::private_roundtrip
+    libamdf::cts::gpu::kernels::private_roundtrip_kernels
     libamdf::cts::gpu::kernels::shader_event
     libamdf::cts::gpu::kernels::shader_event_kernels
     libamdf::cts::gpu::kernels::transform

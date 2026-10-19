@@ -1,7 +1,9 @@
+target.decl @cts_kernel_target
+
 // Each workitem initializes all nine private words before reading a dynamic
 // permutation. Volatile accesses preserve the private-memory roundtrip.
 // Workgroup count is a host workload input; token arithmetic wraps at 32 bits.
-kernel.def export("private_roundtrip") @private_roundtrip(%groups_x: index) {
+kernel.def target(@cts_kernel_target) export("private_roundtrip") @private_roundtrip(%groups_x: index) {
   %unit = index.constant 1 : index
   %width = index.constant 64 : index
   kernel.launch.config workgroups(%groups_x, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
