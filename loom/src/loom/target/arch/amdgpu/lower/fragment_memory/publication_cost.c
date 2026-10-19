@@ -33,7 +33,8 @@ loom_amdgpu_fragment_publication_schedule_class(
   }
   const loom_low_descriptor_view_t* descriptor_view =
       loom_low_descriptor_set_descriptor_view(descriptor_set, descriptor);
-  return &descriptor_set->schedule_classes[descriptor_view->schedule_class_id];
+  return loom_low_descriptor_set_schedule_class(descriptor_set,
+                                                descriptor_view);
 }
 
 IREE_ATTRIBUTE_NOINLINE static bool

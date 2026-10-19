@@ -396,6 +396,7 @@ loom_cc_test(
 
 loom_cc_test(
     name = "source_text_service_test",
+    size = "medium",
     data = EMBEDDING_SOURCES + PROJECTOR_SOURCES + TEXT_SOURCES,
     env = {
         "LOOM_SERVE_TEST_MEDIA_SOURCE": "$(rootpath //loom/src/loom/serve/fixture/embedding:model.json)",

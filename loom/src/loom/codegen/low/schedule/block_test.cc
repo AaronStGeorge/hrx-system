@@ -53,11 +53,11 @@ TEST(ScheduleBlockTest, RetainsOwnedRowsWithShiftedNodeIndices) {
     if (i < IREE_ARRAYSIZE(descriptor_ordinals)) {
       const uint32_t ordinal = descriptor_ordinals[i];
       node.descriptor = &descriptors->descriptors[ordinal];
-      node.schedule_class_id =
-          loom_low_descriptor_set_descriptor_view_at(descriptors, ordinal)
-              ->schedule_class_id;
+      const loom_low_descriptor_view_t* descriptor_view =
+          loom_low_descriptor_set_descriptor_view_at(descriptors, ordinal);
+      node.schedule_class_id = descriptor_view->schedule_class_id;
       node.schedule_class =
-          &descriptors->schedule_classes[node.schedule_class_id];
+          loom_low_descriptor_set_schedule_class(descriptors, descriptor_view);
     }
   }
   previous_nodes[3].issue_cycle = 8;

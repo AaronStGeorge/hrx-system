@@ -172,6 +172,8 @@ void InitializeRequirementTables(RequirementTables* tables) {
   tables->set.reg_class_alt_count = IREE_ARRAYSIZE(tables->reg_class_alts);
   tables->set.schedule_classes = tables->schedule_classes;
   tables->set.schedule_class_count = IREE_ARRAYSIZE(tables->schedule_classes);
+  tables->set.schedule_class_row_count =
+      IREE_ARRAYSIZE(tables->schedule_classes);
   tables->set.issue_uses = tables->issue_uses;
   tables->set.issue_use_count = IREE_ARRAYSIZE(tables->issue_uses);
   tables->set.resources = tables->resources;

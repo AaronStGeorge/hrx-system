@@ -1,0 +1,44 @@
+// RUN: emit low-schedule-json @scalar_load_capacity strategy=resource-stall diagnostics=resources output=none
+
+x86.target<scalar> @target
+
+// Four independent scalar loads require four cycles on the scalar model's
+// single load unit.
+// REMARK@+1: BACKEND/013 {resource_name="x86.load", use_count="4", total_unit_cycles="4", estimated_min_cycles="4"}
+low.func.def target<x86.scalar.core>(@target) abi(object_function) @scalar_load_capacity(%base: reg<x86.gpr64>) -> (reg<x86.gpr32>, reg<x86.gpr32>, reg<x86.gpr32>, reg<x86.gpr32>) asm {
+  %a = mov.load.gpr32 %base {disp32 = 0}
+  %b = mov.load.gpr32 %base {disp32 = 4}
+  %c = mov.load.gpr32 %base {disp32 = 8}
+  %d = mov.load.gpr32 %base {disp32 = 12}
+  return %a, %b, %c, %d
+}
+
+// ====
+// RUN: emit low-schedule-json @avx2_vector_capacity strategy=resource-stall diagnostics=resources output=none
+
+x86.target<avx2> @target
+
+// Each YMM operation consumes both units in the AVX2 vector model.
+// REMARK@+1: BACKEND/013 {resource_name="x86.vector", use_count="4", total_unit_cycles="8", estimated_min_cycles="4"}
+low.func.def target<x86.avx2.core>(@target) abi(object_function) @avx2_vector_capacity(%a: reg<x86.ymm>, %b: reg<x86.ymm>, %c: reg<x86.ymm>, %d: reg<x86.ymm>) -> (reg<x86.ymm>, reg<x86.ymm>, reg<x86.ymm>, reg<x86.ymm>) asm {
+  %a0 = vaddps.ymm %a, %a
+  %b0 = vaddps.ymm %b, %b
+  %c0 = vaddps.ymm %c, %c
+  %d0 = vaddps.ymm %d, %d
+  return %a0, %b0, %c0, %d0
+}
+
+// ====
+// RUN: emit low-schedule-json @avx512_vector_capacity strategy=resource-stall diagnostics=resources output=none
+
+x86.target<avx512> @target
+
+// Each ZMM operation consumes all four units in the AVX-512 vector model.
+// REMARK@+1: BACKEND/013 {resource_name="x86.vector", use_count="4", total_unit_cycles="16", estimated_min_cycles="4"}
+low.func.def target<x86.avx512.core>(@target) abi(object_function) @avx512_vector_capacity(%a: reg<x86.zmm>, %b: reg<x86.zmm>, %c: reg<x86.zmm>, %d: reg<x86.zmm>) -> (reg<x86.zmm>, reg<x86.zmm>, reg<x86.zmm>, reg<x86.zmm>) asm {
+  %a0 = vaddps %a, %a
+  %b0 = vaddps %b, %b
+  %c0 = vaddps %c, %c
+  %d0 = vaddps %d, %d
+  return %a0, %b0, %c0, %d0
+}

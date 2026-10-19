@@ -18,13 +18,33 @@ typedef struct loom_low_schedule_table_t loom_low_schedule_table_t;
 
 // A concrete instruction, including helpers that have no source descriptor
 // packet. Bindings describe the selected native instruction, not the semantic
-// register class of a source SSA value. The view is borrowed for one query.
+// register class of a source SSA value. Bindings are borrowed for one physical
+// issue group.
 typedef struct loom_low_physical_instruction_t {
   // Selected descriptor in the issue model's descriptor set.
   uint32_t descriptor_ordinal;
+  // Physical schedule-class row resolved for the selected descriptor set.
+  uint16_t schedule_class_row_id;
   // One physical-register ID per descriptor operand, including implicit state.
   const uint16_t* physical_registers;
 } loom_low_physical_instruction_t;
+
+// Forms one physical instruction and resolves its model row once before the
+// admission queries that consume it.
+static inline loom_low_physical_instruction_t
+loom_low_physical_instruction_make(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t descriptor_ordinal, const uint16_t* physical_registers) {
+  const loom_low_descriptor_view_t* descriptor_view =
+      loom_low_descriptor_set_descriptor_view_at(descriptor_set,
+                                                 descriptor_ordinal);
+  return (loom_low_physical_instruction_t){
+      .descriptor_ordinal = descriptor_ordinal,
+      .schedule_class_row_id = loom_low_descriptor_set_schedule_class_row_id(
+          descriptor_set, descriptor_view->schedule_class_id),
+      .physical_registers = physical_registers,
+  };
+}
 
 // Final issue admission for software-timed register machines. Logical ordering
 // has already established semantic dependencies. This owner carries their

@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from loom.target.arch.x86 import native_vector as native
@@ -1387,7 +1388,12 @@ X86_AVX2_DESCRIPTOR_SET = DescriptorSet(
     ),
     register_packing_resources=X86_SCALAR_DESCRIPTOR_SET.register_packing_resources,
     resources=(
-        *X86_SCALAR_DESCRIPTOR_SET.resources,
+        *(
+            replace(resource, capacity_per_cycle=2)
+            if resource.name in (_RESOURCE_LOAD, _RESOURCE_STORE)
+            else resource
+            for resource in X86_SCALAR_DESCRIPTOR_SET.resources
+        ),
         Resource(
             _RESOURCE_VECTOR,
             capacity_per_cycle=2,

@@ -31,6 +31,7 @@ from loom.gen.target.low.compiled import (
     CompiledRegisterPackingResource,
     CompiledRegisterPackingResourceMember,
     CompiledResourceCalendar,
+    CompiledScheduleClassTable,
     DescriptorAllowlist,
     append_interned_sequence,
 )
@@ -379,7 +380,7 @@ def derive_instruction_classes(
     return tuple(instruction_class for instruction_class in InstructionClass if instruction_class in classes)
 
 
-def _compile_resource_calendars(
+def compile_resource_calendars(
     resources: Sequence[Resource],
     schedule_classes: Sequence[ScheduleClass],
     lookback_cycles: int,
@@ -1134,6 +1135,7 @@ def compile_descriptor_set(
     *,
     allow_ambiguous_asm_mnemonics: bool = False,
     required_schedule_class_names: Sequence[str] = (),
+    required_resource_names: Sequence[str] = (),
 ) -> CompiledDescriptorSet:
     if spec.generator_version == 0:
         raise ValueError(f"descriptor set '{spec.key}' has zero generator version")
@@ -1222,9 +1224,12 @@ def compile_descriptor_set(
     # that a tiny allowlisted descriptor slice does not happen to use.
     used_reg_class_names: set[str] = set(reg_class_inputs)
     used_register_part_names: set[str] = set()
-    used_resource_names: set[str] = set()
+    used_resource_names = set(required_resource_names)
     used_schedule_names = set(required_schedule_class_names)
     used_timing_event_names: set[str] = set()
+    unknown_required_resource_names = sorted(used_resource_names - resource_inputs.keys())
+    if unknown_required_resource_names:
+        raise ValueError(f"descriptor set '{spec.key}' requires unknown resources: {', '.join(unknown_required_resource_names)}")
     unknown_required_schedule_names = sorted(used_schedule_names - schedule_inputs.keys())
     if unknown_required_schedule_names:
         raise ValueError(f"descriptor set '{spec.key}' requires unknown schedule classes: {', '.join(unknown_required_schedule_names)}")
@@ -1357,37 +1362,9 @@ def compile_descriptor_set(
         for issue_use in schedule_class.issue_uses:
             used_resource_names.add(issue_use.resource)
         for hazard in schedule_class.hazards:
-            if validation.hazard_reference_count(hazard) != 1:
-                raise ValueError(f"schedule class '{schedule_name}' hazard must reference exactly one resource, counter, or target id")
             if hazard.resource is not None:
-                if hazard.resource not in resource_inputs:
-                    raise ValueError(f"schedule class '{schedule_name}' hazard references unknown resource '{hazard.resource}'")
                 used_resource_names.add(hazard.resource)
-            if hazard.counter_id is not None:
-                validation.validate_u16(
-                    hazard.counter_id,
-                    f"schedule class '{schedule_name}' hazard counter id",
-                )
-            if hazard.target_id is not None:
-                validation.validate_u16(
-                    hazard.target_id,
-                    f"schedule class '{schedule_name}' hazard target id",
-                )
-            validation.validate_u16(
-                hazard.producer_stage,
-                f"schedule class '{schedule_name}' hazard producer stage",
-            )
-            validation.validate_u16(
-                hazard.consumer_stage,
-                f"schedule class '{schedule_name}' hazard consumer stage",
-            )
-            validation.validate_u16(
-                hazard.distance,
-                f"schedule class '{schedule_name}' hazard distance",
-            )
         for pressure_delta in schedule_class.pressure_deltas:
-            if pressure_delta.reg_class not in reg_class_inputs:
-                raise ValueError(f"schedule class '{schedule_name}' references unknown pressure register class '{pressure_delta.reg_class}'")
             used_reg_class_names.add(pressure_delta.reg_class)
 
     instruction_classes = [
@@ -1916,7 +1893,7 @@ def compile_descriptor_set(
     descriptor_refs = [ordinals_by_stable_id[stable_id] for stable_id in sorted(ordinals_by_stable_id)]
 
     resource_calendar_lookback_cycles = max((max(0, -row.minimum_issue_separation_cycles) for row in event_separations), default=0)
-    resource_calendars, resource_calendar_slot_count = _compile_resource_calendars(resources, schedule_classes, resource_calendar_lookback_cycles)
+    resource_calendars, resource_calendar_slot_count = compile_resource_calendars(resources, schedule_classes, resource_calendar_lookback_cycles)
     return CompiledDescriptorSet(
         spec=spec,
         source_descriptors=source_descriptors,
@@ -1944,6 +1921,11 @@ def compile_descriptor_set(
         resource_calendar_slot_count=resource_calendar_slot_count,
         resource_calendar_lookback_cycles=resource_calendar_lookback_cycles,
         schedule_classes=schedule_classes,
+        schedule_class_table=CompiledScheduleClassTable(
+            schedule_classes=tuple(schedule_classes),
+            schedule_rows=tuple(schedule_rows),
+            canonical_count=len(schedule_classes),
+        ),
         timing_events=timing_events,
         event_separations=event_separations,
         enum_domains=enum_domains,

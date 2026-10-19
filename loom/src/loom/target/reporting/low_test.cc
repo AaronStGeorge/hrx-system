@@ -318,6 +318,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       .reg_class_count = IREE_ARRAYSIZE(reg_classes),
       .schedule_classes = schedule_classes,
       .schedule_class_count = IREE_ARRAYSIZE(schedule_classes),
+      .schedule_class_row_count = IREE_ARRAYSIZE(schedule_classes),
       .string_pool = {{kDescriptorStringPool},
                       {sizeof(kDescriptorStringPool) - 1}},
   };
@@ -647,8 +648,8 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
   };
   for (uint32_t i = 0; i < IREE_ARRAYSIZE(descriptors); ++i) {
     schedule_nodes[i].descriptor = &descriptors[i];
-    schedule_nodes[i].schedule_class =
-        &schedule_classes[descriptor_views[i].schedule_class_id];
+    schedule_nodes[i].schedule_class = loom_low_descriptor_set_schedule_class(
+        &descriptor_set, &descriptor_views[i]);
     schedule_nodes[i].source_ordinal = i;
     schedule_nodes[i].scheduled_ordinal = i;
     schedule_nodes[i].kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;

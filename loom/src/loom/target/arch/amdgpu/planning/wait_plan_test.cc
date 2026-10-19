@@ -366,7 +366,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
         loom_low_descriptor_set_descriptor_ordinal(descriptors_, descriptor);
     node.schedule_class_id = view->schedule_class_id;
     node.schedule_class =
-        &descriptors_->schedule_classes[view->schedule_class_id];
+        loom_low_descriptor_set_schedule_class(descriptors_, view);
     node.operand_count = layout->minimum_packet_operand_count;
     for (uint16_t i = 0; i < node.operand_count; ++i) {
       loom_low_schedule_node_operand_ordinals(&node)[i] = i;

@@ -74,8 +74,8 @@ class AmdgpuAddressStateTest : public ::testing::Test {
     node.descriptor = descriptor_;
     const loom_low_descriptor_view_t* descriptor_view =
         loom_low_descriptor_set_descriptor_view(descriptor_set_, descriptor_);
-    node.schedule_class =
-        &descriptor_set_->schedule_classes[descriptor_view->schedule_class_id];
+    node.schedule_class = loom_low_descriptor_set_schedule_class(
+        descriptor_set_, descriptor_view);
     node.block_index = 0;
     node.source_ordinal = node_index;
     node.scheduled_ordinal = node_index;
