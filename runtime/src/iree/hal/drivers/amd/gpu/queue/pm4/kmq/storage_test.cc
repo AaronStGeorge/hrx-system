@@ -247,6 +247,8 @@ class KernelStorageTest : public ::testing::Test {
 
 TEST_F(KernelStorageTest, CapturesOpaquePointsWithoutInferringProgress) {
   IREE_ASSERT_OK(Allocate());
+  EXPECT_TRUE(iree_host_ptr_has_alignment(
+      storage_, iree_hardware_destructive_interference_size));
   EXPECT_EQ(ring_.words, native_.words.data());
   EXPECT_EQ(ring_.capacity, native_.words.size());
   EXPECT_EQ(storage_->address, UINT64_C(0x1234560000));

@@ -7,6 +7,7 @@
 #ifndef IREE_HAL_DRIVERS_AMD_GPU_QUEUE_PM4_KMQ_STORAGE_H_
 #define IREE_HAL_DRIVERS_AMD_GPU_QUEUE_PM4_KMQ_STORAGE_H_
 
+#include "iree/base/internal/atomics.h"
 #include "iree/hal/drivers/amd/fabric/memory.h"
 #include "iree/hal/drivers/amd/gpu/context.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/ring.h"
@@ -34,9 +35,17 @@ typedef struct iree_hal_amd_gpu_pm4_kmq_storage_t {
   iree_hal_amd_gpu_memory_release_t release;
   // Native command byte zero, used by resident-program continuations.
   uint64_t address;
+  // Opaque native points indexed by the enclosing queue's publication slots.
+  uint64_t* points;
+  // Power-of-two point-array capacity minus one.
+  uint32_t capacity_mask;
+  // Sticky failed removal after the native queue handle was consumed.
+  amdf_status_t removal_status;
   // Prepared immutable command that has not yet been accepted. A zero length
-  // means no prepared publication. BUSY retains the complete byte range.
-  amdf_gpu_kernel_command_t pending;
+  // means no prepared publication. BUSY retains the complete byte range. The
+  // publisher's mutable state stays separate from the completion observer.
+  iree_alignas(iree_hardware_destructive_interference_size)
+      amdf_gpu_kernel_command_t pending;
   // Reservation positions restored if native publication rejects this piece.
   struct {
     // Command cursor before preparing the pending piece, including wrap.
@@ -44,19 +53,20 @@ typedef struct iree_hal_amd_gpu_pm4_kmq_storage_t {
     // Argument cursor before preparing the pending piece.
     uint64_t arguments;
   } rollback;
-  // Opaque native points indexed by the enclosing queue's publication slots.
-  uint64_t* points;
-  // Power-of-two point-array capacity minus one.
-  uint32_t capacity_mask;
   // Last accepted native point, owned by the publisher until joined cleanup.
   uint64_t last_submission;
   // Point armed by the single completion observer, or zero before any arm.
-  uint64_t armed_submission;
+  // Wake enrollment never invalidates the publisher's command/cursor state.
+  iree_alignas(iree_hardware_destructive_interference_size) uint64_t
+      armed_submission;
   // Idle observer requests one host wake from the next successful publisher.
   iree_atomic_int32_t wake_required;
-  // Sticky failed removal after the native queue handle was consumed.
-  amdf_status_t removal_status;
 } iree_hal_amd_gpu_pm4_kmq_storage_t;
+
+static_assert(offsetof(iree_hal_amd_gpu_pm4_kmq_storage_t, armed_submission) -
+                      offsetof(iree_hal_amd_gpu_pm4_kmq_storage_t, pending) ==
+                  iree_hardware_destructive_interference_size,
+              "native command cursors occupy one publisher cache line");
 
 // Allocates a partial owner before acquiring native resources. The caller
 // always frees a non-NULL output, including after failed preparation. Failure

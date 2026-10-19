@@ -8,6 +8,7 @@
 #define IREE_HAL_DRIVERS_AMD_GPU_QUEUE_CAPTURE_POOL_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/atomics.h"
 #include "iree/base/threading/mutex.h"
 
 #ifdef __cplusplus
@@ -31,14 +32,14 @@ typedef struct iree_hal_amd_gpu_capture_pool_t {
   // Thread-safe allocator for empty-pool misses and oversized captures.
   iree_allocator_t host_allocator;
   // Caller-owned available blocks, isolated from concurrent returns.
-  struct iree_alignas(64) {
+  struct iree_alignas(iree_hardware_destructive_interference_size) {
     // Protects head and the transfer from returned, never system allocation.
     iree_slim_mutex_t mutex;
     // Unowned blocks available to callers, or NULL before the next transfer.
     struct iree_hal_amd_gpu_capture_block_t* head;
   } available;
   // Final releases accumulate here without modifying caller-owned metadata.
-  struct iree_alignas(64) {
+  struct iree_alignas(iree_hardware_destructive_interference_size) {
     // Protects head; nested locking always takes available.mutex first.
     iree_slim_mutex_t mutex;
     // Unowned blocks returned by any final-release thread.

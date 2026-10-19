@@ -18,9 +18,9 @@ iree_status_t iree_hal_amd_gpu_pm4_kmq_storage_allocate(
     iree_hal_amd_gpu_pm4_ring_t* out_ring) {
   *out_storage = NULL;
   iree_hal_amd_gpu_pm4_kmq_storage_t* storage = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_aligned(
       host_allocator, sizeof(*storage) + submission_capacity * sizeof(uint64_t),
-      (void**)&storage));
+      iree_alignof(*storage), 0, (void**)&storage));
   *out_storage = storage;
   storage->context = context;
   storage->host_allocator = host_allocator;
@@ -108,7 +108,7 @@ amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_arm(
 
 static void iree_hal_amd_gpu_pm4_kmq_storage_released(void* user_data) {
   iree_hal_amd_gpu_pm4_kmq_storage_t* storage = user_data;
-  iree_allocator_free(storage->host_allocator, storage);
+  iree_allocator_free_aligned(storage->host_allocator, storage);
 }
 
 amdf_status_t iree_hal_amd_gpu_pm4_kmq_storage_free(

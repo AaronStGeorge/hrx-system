@@ -292,6 +292,7 @@ iree_cc_library(
     "capture_pool.c"
   DEPS
     iree::base
+    iree::base::internal
     iree::base::threading
   PUBLIC
 )

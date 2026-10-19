@@ -110,6 +110,10 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
   bool profiled;
   // File owner callback occupies the end of the initialized capture extent.
   bool has_retirement_callback;
+  // Deferred acceptance owns one queue host count until terminal publication
+  // or abandonment. Only the publisher or detached admission owner accesses
+  // this bit; native retirement uses its published prefix instead.
+  bool has_host_owner;
   // Exact initialized extent, computed once by the capture constructor.
   iree_host_size_t capture_size;
   union {

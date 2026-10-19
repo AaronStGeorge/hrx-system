@@ -31,7 +31,8 @@ typedef struct iree_hal_amd_gpu_publication_entry_t {
 // the consumer detach the final real entry without borrowing its storage until
 // another submission arrives. The embedding queue isolates this cache line
 // from independently written native producer and completion state.
-typedef struct iree_alignas(64) iree_hal_amd_gpu_publisher_t {
+typedef struct iree_alignas(iree_hardware_destructive_interference_size)
+    iree_hal_amd_gpu_publisher_t {
   // Atomic caller ownership, reserved service turn, and notification bits.
   iree_atomic_int32_t state;
   // Last reserved FIFO link; producers exchange it before linking successors.

@@ -278,6 +278,7 @@ iree_runtime_cc_library(
     hdrs = ["capture_pool.h"],
     deps = [
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/threading",
     ],
 )

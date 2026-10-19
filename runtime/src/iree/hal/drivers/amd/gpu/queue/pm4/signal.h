@@ -72,7 +72,8 @@ typedef struct iree_hal_amd_gpu_pm4_signal_pool_t {
   uint32_t block_count;
   // Concurrent last releases push here. Separate from publisher-local metadata
   // so returning cells does not invalidate the ordinary acquisition cache line.
-  iree_alignas(64) iree_atomic_intptr_t returned;
+  iree_alignas(iree_hardware_destructive_interference_size)
+      iree_atomic_intptr_t returned;
   // Immutable wake target, sharing the return line and copied before a final
   // release exposes its cell. Final releases never access publisher-local
   // state.
