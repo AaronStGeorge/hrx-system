@@ -1162,6 +1162,40 @@ kernel.def @wave64_root() {
   ModulePtr clone(raw_clone);
   EXPECT_EQ(SerializeModuleToText(clone.get()), module_text);
 
+  loomc_link_index_builder_t* builder = nullptr;
+  LOOMC_ASSERT_OK(loomc_link_index_builder_allocate(
+      context.get(), nullptr, loomc_allocator_system(), &builder));
+  LinkIndexBuilderPtr builder_owner(builder);
+  LOOMC_ASSERT_OK(loomc_link_index_builder_add_module(builder, module.get(),
+                                                      nullptr, nullptr));
+  clone.reset();
+  clone_workspace.reset();
+  loomc_link_index_t* index = nullptr;
+  loomc_result_t* index_result = nullptr;
+  LOOMC_ASSERT_OK(
+      loomc_link_index_builder_finish(builder, &index, &index_result));
+  LinkIndexPtr index_owner(index);
+  ResultPtr index_result_owner(index_result);
+  ASSERT_TRUE(loomc_result_succeeded(index_result));
+  builder_owner.reset();
+  loomc_linker_t* linker = nullptr;
+  LOOMC_ASSERT_OK(loomc_linker_create(context.get(), nullptr,
+                                      loomc_allocator_system(), &linker));
+  LinkerPtr linker_owner(linker);
+  const loomc_link_options_t link_options = {
+      .link_index = index,
+      .mode = LOOMC_LINK_MODE_MERGE,
+  };
+  loomc_module_t* linked = nullptr;
+  loomc_result_t* link_result = nullptr;
+  LOOMC_ASSERT_OK(loomc_link_module(linker, workspace.get(), &link_options,
+                                    &linked, &link_result));
+  ModulePtr linked_owner(linked);
+  ResultPtr link_result_owner(link_result);
+  ASSERT_TRUE(loomc_result_succeeded(link_result));
+  index_owner.reset();
+  EXPECT_EQ(SerializeModuleToText(linked), module_text);
+
   SourcePtr bytecode =
       SerializeModule(module.get(), LOOMC_SOURCE_FORMAT_BYTECODE);
   WorkspacePtr round_trip_workspace = CreateWorkspace();

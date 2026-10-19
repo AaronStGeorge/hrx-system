@@ -46,7 +46,7 @@ std::string ToString(const loomc_byte_sequence_t* value) {
   return result;
 }
 
-class LinkDependencyTest : public ::testing::Test {
+class LinkDependencyTest : public ::testing::TestWithParam<bool> {
  protected:
   void SetUp() override {
     loomc_context_t* context = nullptr;
@@ -121,8 +121,21 @@ class LinkDependencyTest : public ::testing::Test {
         .role = role,
     };
     loomc_link_index_source_slot_t slot = {};
-    LOOMC_ASSERT_OK(loomc_link_index_builder_add_source(
-        builder, source_ptr.get(), &index_options, &slot));
+    if (GetParam() && role == LOOMC_LINK_PROVIDER_ROLE_INPUT) {
+      loomc_module_t* module = nullptr;
+      loomc_result_t* result = nullptr;
+      LOOMC_ASSERT_OK(loomc_module_deserialize_text_from_source(
+          context_.get(), workspace_.get(), source_ptr.get(), nullptr,
+          loomc_allocator_system(), &module, &result));
+      HandlePtr<loomc_module_t, loomc_module_release> module_owner(module);
+      ResultPtr result_owner(result);
+      ASSERT_TRUE(loomc_result_succeeded(result));
+      LOOMC_ASSERT_OK(loomc_link_index_builder_add_module(
+          builder, module, &index_options, &slot));
+    } else {
+      LOOMC_ASSERT_OK(loomc_link_index_builder_add_source(
+          builder, source_ptr.get(), &index_options, &slot));
+    }
     *out_provider_ordinal = slot.ordinal;
   }
 
@@ -156,7 +169,7 @@ class LinkDependencyTest : public ::testing::Test {
   loomc_host_size_t unused_provider_ordinal_ = 0;
 };
 
-TEST_F(LinkDependencyTest, ReportsMissingDirectDependencyAndJsonArtifact) {
+TEST_P(LinkDependencyTest, ReportsMissingDirectDependencyAndJsonArtifact) {
   const std::array<loomc_host_size_t, 2> direct_providers = {
       direct_provider_ordinal_, unused_provider_ordinal_};
   ResultPtr result = Analyze(direct_providers.data(), direct_providers.size(),
@@ -194,7 +207,7 @@ TEST_F(LinkDependencyTest, ReportsMissingDirectDependencyAndJsonArtifact) {
                         R"({"provider":"//kernel:unused","usage":[]})"));
 }
 
-TEST_F(LinkDependencyTest, SucceedsWhenEveryExactDependencyIsDirect) {
+TEST_P(LinkDependencyTest, SucceedsWhenEveryExactDependencyIsDirect) {
   const std::array<loomc_host_size_t, 3> direct_providers = {
       direct_provider_ordinal_, transitive_provider_ordinal_,
       unused_provider_ordinal_};
@@ -214,7 +227,7 @@ TEST_F(LinkDependencyTest, SucceedsWhenEveryExactDependencyIsDirect) {
                   R"({"provider":"//kernel:transitive","usage":["exact"]})"));
 }
 
-TEST_F(LinkDependencyTest, OmitsReportWhenItIsNotRequested) {
+TEST_P(LinkDependencyTest, OmitsReportWhenItIsNotRequested) {
   const std::array<loomc_host_size_t, 2> direct_providers = {
       direct_provider_ordinal_, unused_provider_ordinal_};
   const loomc_link_dependency_analysis_options_t options = {
@@ -233,7 +246,7 @@ TEST_F(LinkDependencyTest, OmitsReportWhenItIsNotRequested) {
   EXPECT_EQ(loomc_result_artifact_count(result_ptr.get()), 0u);
 }
 
-TEST_F(LinkDependencyTest, RejectsInvalidDirectProviderSelection) {
+TEST_P(LinkDependencyTest, RejectsInvalidDirectProviderSelection) {
   const loomc_link_dependency_analysis_options_t options = {
       .type = LOOMC_STRUCTURE_TYPE_LINK_DEPENDENCY_ANALYSIS_OPTIONS,
       .structure_size = sizeof(options),
@@ -249,7 +262,7 @@ TEST_F(LinkDependencyTest, RejectsInvalidDirectProviderSelection) {
   EXPECT_EQ(result, nullptr);
 }
 
-TEST_F(LinkDependencyTest, RejectsReportIdentifierWithoutReportArtifact) {
+TEST_P(LinkDependencyTest, RejectsReportIdentifierWithoutReportArtifact) {
   const loomc_link_dependency_analysis_options_t options = {
       .type = LOOMC_STRUCTURE_TYPE_LINK_DEPENDENCY_ANALYSIS_OPTIONS,
       .structure_size = sizeof(options),
@@ -267,5 +280,8 @@ TEST_F(LinkDependencyTest, RejectsReportIdentifierWithoutReportArtifact) {
                                       &options, &result));
   EXPECT_EQ(result, nullptr);
 }
+
+INSTANTIATE_TEST_SUITE_P(SourceAndSnapshot, LinkDependencyTest,
+                         ::testing::Bool());
 
 }  // namespace

@@ -184,6 +184,18 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    link_index_module_test
+  SRCS
+    "link_index_module_test.cc"
+  DEPS
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::binding::c::loomc
+)
+
+loom_cc_test(
+  NAME
     link_dependency_test
   SRCS
     "link_dependency_test.cc"

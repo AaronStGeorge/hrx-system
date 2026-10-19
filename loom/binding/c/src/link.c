@@ -467,6 +467,14 @@ static loomc_status_t loomc_link_capture_source_snapshots(
       continue;
     }
 
+    const loomc_module_t* snapshot = loomc_link_index_module_for_provider(
+        link_index, indexed_module->provider_ordinal);
+    if (snapshot != NULL) {
+      LOOMC_RETURN_IF_ERROR(loomc_link_capture_source_table(
+          loomc_module_source_table(snapshot), projection, target_module));
+      continue;
+    }
+
     const loomc_source_t* source = loomc_link_index_source_for_provider(
         link_index, indexed_module->provider_ordinal);
     if (source == NULL) {
