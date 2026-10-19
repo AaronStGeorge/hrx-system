@@ -780,19 +780,27 @@ const RecordPartition* Types::record(const cxx::Type* input, cxx::AST* owner) {
     if (!field || field->isStatic()) {
       continue;
     }
-    if (field->isBitField() || traits.is_reference(field->type())) {
+    if (field->isBitField()) {
+      diagnostics_.reject(unit_, owner,
+                          "record value fields cannot be bitfields");
+    }
+    if (traits.is_rvalue_reference(field->type())) {
       diagnostics_.reject(
           unit_, owner,
-          "record value fields cannot be bitfields or references");
+          "rvalue-reference fields require consuming object identity");
     }
-    auto& member_partition = partition(field->type(), owner);
+    const auto& member_partition = traits.is_lvalue_reference(field->type())
+                                       ? kPointerPartition
+                                       : partition(field->type(), owner);
     MemberPartition member{field, &member_partition, result->component_count};
     result->members.push_back(member);
     members_.emplace(field, member);
     auto name = cxx::to_string(field->name());
     append_component_names(member_partition, name, result->component_names);
     result->component_count += member_partition.component_count;
-    result->requires_binding |= requires_binding(field->type(), owner);
+    if (!traits.is_reference(field->type())) {
+      result->requires_binding |= requires_binding(field->type(), owner);
+    }
   }
   auto* admitted = result.get();
   records_.emplace(source, std::move(result));
@@ -1230,8 +1238,12 @@ void Types::append_bound(const cxx::Type* input, cxx::AST* owner,
                 ? std::span<const loom_value_id_t>{}
                 : identities.subspan(member.component_offset,
                                      member.partition->component_count);
-        append_bound(member.field->type(), owner, member_identities, storage,
-                     output);
+        auto* member_type = member.field->type();
+        if (unit_.typeTraits().is_lvalue_reference(member_type)) {
+          member_type = unit_.typeTraits().add_pointer(
+              unit_.typeTraits().remove_reference(member_type));
+        }
+        append_bound(member_type, owner, member_identities, storage, output);
       }
       return;
     }

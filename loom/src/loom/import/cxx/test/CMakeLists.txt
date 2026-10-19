@@ -150,6 +150,7 @@ loom_check_test_suite(
     "record_memory_invalid.cxx-test"
     "records.cxx-test"
     "records_invalid.cxx-test"
+    "reference_accessors.cxx-test"
     "reference_parameters.cxx-test"
     "reference_parameters_invalid.cxx-test"
     "scalar.cxx-test"
@@ -402,6 +403,32 @@ loom_execution_test(
     local_arrays_test_execute_vm_reference_test
   MODULE
     "::local_arrays_test_module"
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
+    "loom-execution-profile=vm_reference"
+    "loom-target-family=vm"
+    "loom-target-class=cpu"
+    "loom-executor=reference"
+)
+endif()
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+loom_test_module(
+  NAME
+    reference_accessors_test_module
+  SRCS
+    "reference_accessors.cxx"
+)
+endif()
+
+if(LOOM_IMPORT_CXX AND LOOM_TARGET_ARCH_VM)
+if(LOOM_TARGET_ARCH_VM)
+loom_execution_test(
+  NAME
+    reference_accessors_test_execute_vm_reference_test
+  MODULE
+    "::reference_accessors_test_module"
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
     "loom-execution-profile=vm_reference"

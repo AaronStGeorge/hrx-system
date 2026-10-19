@@ -12,6 +12,7 @@
 #include <cxx/symbols.h>
 #include <cxx/types.h>
 
+#include "loom/import/cxx/source/expressions.h"
 #include "loom/import/cxx/value/builder_test.h"
 #include "loom/import/cxx/value/vector.h"
 #include "loom/ops/check/ops.h"
@@ -25,13 +26,46 @@ using FunctionsTest = ValueBuilderTest;
 class Calls : public cxx::ASTVisitor {
  public:
   void visit(cxx::CallExpressionAST* call) override {
-    auto* id = cxx::ast_cast<cxx::IdExpressionAST>(call->baseExpression);
-    symbols.push_back(cxx::symbol_cast<cxx::FunctionSymbol>(id->symbol));
+    symbols.push_back(direct_callee(call));
     cxx::ASTVisitor::visit(call);
   }
   // Resolved direct calls in the selected source body.
   std::vector<cxx::FunctionSymbol*> symbols;
 };
+
+TEST_F(FunctionsTest, FrontendPreservesCvQualifiedOverloadIdentity) {
+  Source source(IREE_SV(R"(
+    struct Matrix {
+      double& operator()(unsigned row, unsigned column) {
+        return values[row][column];
+      }
+      const double& operator()(unsigned row, unsigned column) const {
+        return values[0][0];
+      }
+      double values[3][4];
+    };
+    double entry(Matrix& matrix, unsigned row, unsigned column) {
+      matrix(row, column) = 1.0;
+      const Matrix& observed = matrix;
+      return observed(row, column);
+    }
+  )"),
+                IREE_SV("overloads.cxx"), options());
+  Calls calls;
+  calls.accept(source.unit().ast());
+  ASSERT_EQ(calls.symbols.size(), 2u);
+  ASSERT_NE(calls.symbols[0], nullptr);
+  ASSERT_NE(calls.symbols[1], nullptr);
+  EXPECT_NE(calls.symbols[0]->canonical(), calls.symbols[1]->canonical());
+  auto* mutable_type =
+      cxx::type_cast<cxx::FunctionType>(calls.symbols[0]->type());
+  auto* const_type =
+      cxx::type_cast<cxx::FunctionType>(calls.symbols[1]->type());
+  ASSERT_NE(mutable_type, nullptr);
+  ASSERT_NE(const_type, nullptr);
+  EXPECT_FALSE(cxx::has_const(mutable_type->cvQualifiers()));
+  EXPECT_TRUE(cxx::has_const(const_type->cvQualifiers()));
+}
 
 TEST_F(FunctionsTest, RootsQueueEachConcreteHelperOnceWithPrivateVisibility) {
   Source source(IREE_SV(R"(

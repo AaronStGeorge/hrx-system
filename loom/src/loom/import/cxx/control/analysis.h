@@ -35,6 +35,47 @@ struct Destination {
   const Partition* member;
 };
 
+// One source lvalue's retained identity and write provenance at a call edge.
+// The producer classifies the expression once; fixed-point propagation uses
+// only these indexed facts.
+struct CallArgument {
+  // Source expression retained for diagnostics and parameter correspondence.
+  cxx::ExpressionAST* source;
+  // Automatic or reference bindings that become addressable when durable
+  // identity is required. Conditional lvalues may contribute several.
+  std::vector<cxx::Symbol*> identity_bindings;
+  // Binding whose callable write effect reaches the enclosing function.
+  cxx::Symbol* write_binding;
+  // Whether the expression's identity is the current implicit object.
+  bool current_receiver;
+  // Whether the expression already denotes durable storage independently of
+  // any caller fact, as with dereferences and reference-returning accessors.
+  bool inherent_storage;
+};
+
+// One directly selected source call retained during the owning function walk.
+// Callable propagation never traverses the frontend AST again.
+struct DirectCall {
+  // Concrete semantic callable selected by overload resolution.
+  cxx::FunctionSymbol* function;
+  // Call or overloaded operator expression owning diagnostics.
+  cxx::AST* source;
+  // Explicit argument facts in parameter order.
+  std::vector<CallArgument> arguments;
+  // Implicit object facts, absent for non-members and current-object calls.
+  std::optional<CallArgument> receiver;
+  // Whether the implicit object is the caller's own current object.
+  bool current_receiver;
+  // Whether source syntax already reaches the object through a pointer.
+  bool storage_receiver;
+};
+
+// Monotone facts grown while propagating one retained call edge.
+struct CallPropagation {
+  bool caller_changed;
+  bool callee_changed;
+};
+
 // Retained proof that a source loop has a stable, nonwrapping counted interval.
 struct CountedLoop {
   struct Bound {
@@ -116,6 +157,25 @@ class ControlFlow final : private cxx::ASTVisitor {
   // distinguishes a branch whose arms take different iteration exits from one
   // that can fall through.
   ExitFlow iteration_exits(cxx::StatementAST* statement) const;
+  // Calls retained by the same source walk for sparse interprocedural effect
+  // propagation before callable signatures are frozen.
+  std::span<const DirectCall> calls() const { return calls_; }
+  // Whether a reference parameter must carry durable storage identity.
+  bool reference_requires_storage(cxx::Symbol* parameter) const;
+  // Whether execution may modify the object named by a reference parameter.
+  bool reference_written(cxx::Symbol* parameter) const;
+  // Whether the implicit object itself must be addressable.
+  bool receiver_requires_storage() const { return receiver_requires_storage_; }
+  // Exact top-level current-object fields whose values may be replaced.
+  std::span<cxx::FieldSymbol* const> receiver_writes() const {
+    return receiver_writes_;
+  }
+  // Propagates reference and receiver facts in both directions across one
+  // retained call edge.
+  CallPropagation propagate_call(const DirectCall& call, ControlFlow& callee);
+  // Normalizes exact receiver writes to declaration order after the monotone
+  // propagation reaches a fixed point.
+  void finalize_callable_effects();
 
  private:
   enum Path : unsigned {
@@ -132,7 +192,9 @@ class ControlFlow final : private cxx::ASTVisitor {
   void visit(cxx::CompoundAssignmentExpressionAST* ast) override;
   void visit(cxx::PostIncrExpressionAST* ast) override;
   void visit(cxx::UnaryExpressionAST* ast) override;
+  void visit(cxx::ReturnStatementAST* ast) override;
   void visit(cxx::CallExpressionAST* ast) override;
+  void visit(cxx::SubscriptExpressionAST* ast) override;
   void visit(cxx::InitDeclaratorAST* ast) override;
   void visit(cxx::ConditionExpressionAST* ast) override;
   void visit(cxx::BracedInitListAST* ast) override;
@@ -147,6 +209,21 @@ class ControlFlow final : private cxx::ASTVisitor {
   void record(cxx::Symbol* binding);
   void record_implicit_object_call(cxx::CallExpressionAST* call,
                                    cxx::FunctionSymbol* callee);
+  bool require_identity(cxx::ExpressionAST* expression);
+  bool require_identity(const CallArgument& argument);
+  bool argument_requires_storage(const CallArgument& argument) const;
+  bool record_callable_write(cxx::ExpressionAST* expression);
+  bool record_callable_write(cxx::Symbol* binding);
+  bool require_reference_storage(cxx::Symbol* parameter);
+  bool add_receiver_write(cxx::FieldSymbol* field);
+  CallArgument retain_call_argument(cxx::ExpressionAST* expression);
+  void collect_identity(cxx::ExpressionAST* expression, CallArgument& argument);
+  void retain_call(cxx::CallExpressionAST* call, cxx::FunctionSymbol* function);
+  void retain_call(cxx::SubscriptExpressionAST* call,
+                   cxx::FunctionSymbol* function);
+  void retain_reference_initializers(cxx::VariableSymbol* variable,
+                                     cxx::ExpressionAST* initializer,
+                                     cxx::AST* owner);
   std::optional<Destination> classify_destination(
       cxx::ExpressionAST* expression);
   bool classify_storage(cxx::ExpressionAST* expression) const;
@@ -177,6 +254,19 @@ class ControlFlow final : private cxx::ASTVisitor {
   std::unordered_map<cxx::AST*, std::vector<cxx::Symbol*>> writes_;
   // Automatic bindings whose addresses occur in evaluated source expressions.
   std::unordered_set<cxx::Symbol*> addressed_;
+  // Reference locals retain their once-evaluated source destination shape for
+  // effect and identity classification during this same walk.
+  std::unordered_map<cxx::Symbol*, cxx::ExpressionAST*> reference_aliases_;
+  // Reference parameters requiring buffer-plus-offset transport.
+  std::unordered_set<cxx::Symbol*> storage_references_;
+  // Reference parameters whose referents may be modified.
+  std::unordered_set<cxx::Symbol*> written_references_;
+  // Exact current-object field replacements in declaration encounter order.
+  std::vector<cxx::FieldSymbol*> receiver_writes_;
+  // Calls retained once for sparse fixed-point propagation.
+  std::vector<DirectCall> calls_;
+  // True when a direct or transitive use requires current-object identity.
+  bool receiver_requires_storage_ = false;
   // Nested lvalue ownership and transitive component offsets computed once.
   std::unordered_map<cxx::ExpressionAST*, Destination> destinations_;
   // Memory record objects and member projections, including nested fields.

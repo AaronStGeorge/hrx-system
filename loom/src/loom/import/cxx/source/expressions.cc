@@ -24,10 +24,18 @@ cxx::ExpressionAST* strip_implicit_casts(cxx::ExpressionAST* expression) {
 
 cxx::ExpressionAST* unwrap_expression(cxx::ExpressionAST* expression) {
   expression = strip_implicit_casts(expression);
-  while (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(expression)) {
-    expression = strip_implicit_casts(nested->expression);
+  for (;;) {
+    if (auto* nested = cxx::ast_cast<cxx::NestedExpressionAST>(expression)) {
+      expression = strip_implicit_casts(nested->expression);
+      continue;
+    }
+    if (auto* initializer =
+            cxx::ast_cast<cxx::DefaultInitializerExpressionAST>(expression)) {
+      expression = strip_implicit_casts(initializer->expression);
+      continue;
+    }
+    return expression;
   }
-  return expression;
 }
 
 bool is_current_object(cxx::ExpressionAST* expression) {

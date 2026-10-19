@@ -16,8 +16,8 @@ namespace loom::cxx_import {
 // Returns the source expression beneath any implicit conversion sequence.
 cxx::ExpressionAST* strip_implicit_casts(cxx::ExpressionAST* expression);
 
-// Returns the semantic expression beneath implicit conversions and redundant
-// parenthesized nesting.
+// Returns the semantic expression beneath implicit conversions, redundant
+// parentheses, and frontend wrappers around selected member initializers.
 cxx::ExpressionAST* unwrap_expression(cxx::ExpressionAST* expression);
 
 // Whether an expression denotes the implicit object parameter, including

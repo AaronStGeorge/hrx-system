@@ -21,6 +21,7 @@
 
 #include <array>
 #include <cctype>
+#include <deque>
 #include <limits>
 
 #include "loom/import/cxx/source/attributes.h"
@@ -148,6 +149,125 @@ void Functions::select(std::span<const iree_string_view_t> roots) {
       exported_.insert(benchmark.function);
       create_symbol({benchmark.function->canonical(), ImplicitObjectABI::None},
                     benchmark.source);
+    }
+  }
+}
+
+bool Functions::ordinary_analysis_call(const DirectCall& call) {
+  auto* function = call.function;
+  if (!function || annotated(function, "kernel") ||
+      launches_.is_configuration(function) || is_check_record(function) ||
+      annotated(function, "check_benchmark") ||
+      intrinsics_.lookup(function, call.source)) {
+    return false;
+  }
+  return definition(function) != nullptr;
+}
+
+void Functions::prepare_analysis(cxx::FunctionSymbol* function, Types& types,
+                                 std::vector<AnalyzedFunction>& functions,
+                                 std::vector<AnalyzedCall>& calls) {
+  auto* canonical = function->canonical();
+  if (control_flows_.contains(canonical)) {
+    return;
+  }
+  auto* concrete = definition(function);
+  if (!concrete || !concrete->declaration()) {
+    return;
+  }
+  if (concrete->hasPendingBody()) {
+    cxx::ASTRewriter::completePendingBodyFor(&unit_, concrete);
+    diagnostics_.finish();
+  }
+  auto* definition_ast = concrete->declaration();
+  auto* body = cxx::ast_cast<cxx::CompoundStatementFunctionBodyAST>(
+      definition_ast->functionBody);
+  if (!body) {
+    return;
+  }
+  auto analysis = std::make_unique<ControlFlow>(unit_, diagnostics_, types,
+                                                body->statement, concrete);
+  auto* retained = analysis.get();
+  control_flows_.emplace(canonical, std::move(analysis));
+  functions.emplace_back(canonical, retained);
+  for (const auto& call : retained->calls()) {
+    if (ordinary_analysis_call(call)) {
+      prepare_analysis(call.function, types, functions, calls);
+      if (auto* callee = mutable_control_flow(call.function)) {
+        calls.push_back({retained, &call, callee});
+      }
+    }
+  }
+}
+
+void Functions::analyze(Types& types) {
+  std::vector<AnalyzedFunction> analyzed_functions;
+  std::vector<AnalyzedCall> analyzed_calls;
+  for (const auto& instance : pending_) {
+    prepare_analysis(instance.symbol, types, analyzed_functions,
+                     analyzed_calls);
+  }
+
+  std::unordered_map<ControlFlow*, std::vector<size_t>> incident_calls;
+  std::deque<size_t> pending_calls;
+  std::vector<bool> queued(analyzed_calls.size(), true);
+  for (size_t index = 0; index < analyzed_calls.size(); ++index) {
+    const auto& edge = analyzed_calls[index];
+    incident_calls[edge.caller].push_back(index);
+    if (edge.callee != edge.caller) {
+      incident_calls[edge.callee].push_back(index);
+    }
+    pending_calls.push_back(index);
+  }
+  auto enqueue_incident = [&](ControlFlow* function) {
+    for (size_t index : incident_calls.at(function)) {
+      if (!queued[index]) {
+        queued[index] = true;
+        pending_calls.push_back(index);
+      }
+    }
+  };
+  while (!pending_calls.empty()) {
+    const size_t index = pending_calls.front();
+    pending_calls.pop_front();
+    queued[index] = false;
+    const auto& edge = analyzed_calls[index];
+    auto changed = edge.caller->propagate_call(*edge.call, *edge.callee);
+    if (changed.caller_changed) {
+      enqueue_incident(edge.caller);
+    }
+    if (changed.callee_changed) {
+      enqueue_incident(edge.callee);
+    }
+  }
+
+  reference_parameters_.clear();
+  for (const auto& [canonical, analysis] : analyzed_functions) {
+    analysis->finalize_callable_effects();
+    auto* function = definition(canonical);
+    if (!function) {
+      continue;
+    }
+    std::vector<ReferenceParameter> references;
+    auto parameters = function->parameters();
+    for (size_t ordinal = 0; ordinal < parameters.size(); ++ordinal) {
+      auto* parameter = parameters[ordinal];
+      if (!unit_.typeTraits().is_lvalue_reference(parameter->type())) {
+        continue;
+      }
+      references.push_back(
+          {ordinal,
+           (analysis->reference_requires_storage(parameter) ||
+            unit_.typeTraits().is_volatile(
+                unit_.typeTraits().remove_reference(parameter->type())) ||
+            unit_.typeTraits().is_array(
+                unit_.typeTraits().remove_reference(parameter->type())))
+               ? ReferenceABI::Storage
+               : ReferenceABI::Value,
+           analysis->reference_written(parameter)});
+    }
+    if (!references.empty()) {
+      reference_parameters_.emplace(canonical, std::move(references));
     }
   }
 }
@@ -739,14 +859,19 @@ void Functions::admit_reference_parameters(cxx::FunctionSymbol* symbol,
                         "value references require a function type");
   }
   auto traits = unit_.typeTraits();
-  if (traits.is_reference(signature->returnType())) {
-    diagnostics_.reject(
-        unit_, source,
-        "runtime reference returns require object identity; return an "
-        "admitted value instead");
+  if (traits.is_rvalue_reference(signature->returnType())) {
+    diagnostics_.reject(unit_, source,
+                        "rvalue-reference returns require consuming object "
+                        "identity");
+  }
+  if (traits.is_lvalue_reference(signature->returnType()) &&
+      traits.is_function(traits.remove_reference(signature->returnType()))) {
+    diagnostics_.reject(unit_, source,
+                        "function reference returns require callable values");
   }
 
-  std::vector<ValueReferenceParameter> references;
+  bool has_runtime_reference =
+      traits.is_lvalue_reference(signature->returnType());
   auto parameters = symbol->parameters();
   for (size_t ordinal = 0; ordinal < parameters.size(); ++ordinal) {
     auto* parameter_type = parameters[ordinal]->type();
@@ -759,27 +884,15 @@ void Functions::admit_reference_parameters(cxx::FunctionSymbol* symbol,
       continue;
     }
     auto* value_type = traits.remove_reference(parameter_type);
-    if (traits.is_volatile(value_type)) {
-      diagnostics_.reject(unit_, source,
-                          "volatile reference parameters require addressable "
-                          "storage");
-    }
-    if (traits.is_array(value_type)) {
-      diagnostics_.reject(
-          unit_, source,
-          "array reference parameters require addressable storage; pass a "
-          "view or pointer instead");
-    }
     if (traits.is_function(value_type)) {
       diagnostics_.reject(unit_, source,
                           "function reference parameters are not callable "
                           "value references");
     }
-    references.push_back(
-        {ordinal, !traits.is_const(traits.remove_reference(parameter_type))});
+    has_runtime_reference = true;
   }
 
-  if (!references.empty()) {
+  if (has_runtime_reference) {
     auto* body = definition(symbol);
     if (!body || exported_.contains(body) || external_.contains(canonical) ||
         annotated(body, "kernel") || is_check_record(body) ||
@@ -787,19 +900,42 @@ void Functions::admit_reference_parameters(cxx::FunctionSymbol* symbol,
         template_definitions_.lookup(body)) {
       diagnostics_.reject(
           unit_, source,
-          "runtime reference parameters require an internal ordinary "
+          "runtime reference signatures require an internal ordinary "
           "function definition");
     }
-    reference_parameters_.emplace(canonical, std::move(references));
   }
 }
 
-std::span<const ValueReferenceParameter> Functions::reference_parameters(
+std::span<const ReferenceParameter> Functions::reference_parameters(
     cxx::FunctionSymbol* symbol) const {
   auto found = reference_parameters_.find(symbol->canonical());
   return found == reference_parameters_.end()
-             ? std::span<const ValueReferenceParameter>{}
-             : std::span<const ValueReferenceParameter>{found->second};
+             ? std::span<const ReferenceParameter>{}
+             : std::span<const ReferenceParameter>{found->second};
+}
+
+const ControlFlow* Functions::control_flow(cxx::FunctionSymbol* symbol) const {
+  auto found = control_flows_.find(symbol->canonical());
+  return found == control_flows_.end() ? nullptr : found->second.get();
+}
+
+ControlFlow* Functions::mutable_control_flow(cxx::FunctionSymbol* symbol) {
+  auto* concrete = definition(symbol);
+  auto found = concrete ? control_flows_.find(concrete->canonical())
+                        : control_flows_.end();
+  return found == control_flows_.end() ? nullptr : found->second.get();
+}
+
+bool Functions::receiver_requires_storage(cxx::FunctionSymbol* symbol) const {
+  auto* analysis = control_flow(symbol);
+  return analysis && analysis->receiver_requires_storage();
+}
+
+std::span<cxx::FieldSymbol* const> Functions::receiver_writes(
+    cxx::FunctionSymbol* symbol) const {
+  auto* analysis = control_flow(symbol);
+  return analysis ? analysis->receiver_writes()
+                  : std::span<cxx::FieldSymbol* const>{};
 }
 
 std::optional<ImplicitObjectParameter> Functions::implicit_object(
@@ -814,8 +950,21 @@ std::optional<ImplicitObjectParameter> Functions::implicit_object(
                         "implicit object receiver requires a non-static "
                         "member function of a class");
   }
-  return ImplicitObjectParameter{instance.receiver_abi, object_type,
-                                 implicit_object_may_mutate(symbol)};
+  auto* analysis = control_flow(symbol);
+  if (!analysis) {
+    diagnostics_.reject(unit_, source,
+                        "implicit object requires retained callable analysis");
+  }
+  if (instance.receiver_abi == ImplicitObjectABI::Value &&
+      analysis->receiver_requires_storage()) {
+    diagnostics_.reject(unit_, source,
+                        "member function requires a storage-backed receiver");
+  }
+  return ImplicitObjectParameter{
+      instance.receiver_abi, object_type,
+      instance.receiver_abi == ImplicitObjectABI::Value
+          ? analysis->receiver_writes()
+          : std::span<cxx::FieldSymbol* const>{}};
 }
 
 BoundSignature Functions::bind_callable_signature(
@@ -848,10 +997,11 @@ BoundSignature Functions::bind_callable_signature(
   auto references = reference_parameters(symbol);
   auto receiver = implicit_object(instance, source);
   const bool returns_void = unit_.typeTraits().is_void(signature->returnType());
+  const bool returns_reference =
+      unit_.typeTraits().is_lvalue_reference(signature->returnType());
   sources.reserve(receiver.has_value() + parameters.size() + !returns_void +
                   references.size() +
-                  (receiver && receiver->abi == ImplicitObjectABI::Value &&
-                   receiver->mutable_access));
+                  (receiver ? receiver->written_fields.size() : 0));
   size_t argument_count = 0;
   size_t receiver_argument_count = 0;
   if (receiver) {
@@ -873,8 +1023,12 @@ BoundSignature Functions::bind_callable_signature(
     auto* parameter = parameters[ordinal];
     const bool is_reference = reference_index < references.size() &&
                               references[reference_index].ordinal == ordinal;
-    auto* value_type = is_reference ? types.unqualified_value(parameter->type())
-                                    : types.unqualified(parameter->type());
+    auto* value_type =
+        !is_reference ? types.unqualified(parameter->type())
+        : references[reference_index].abi == ReferenceABI::Storage
+            ? unit_.typeTraits().add_pointer(
+                  unit_.typeTraits().remove_reference(parameter->type()))
+            : types.unqualified_value(parameter->type());
     if (!references.empty()) {
       argument_offsets[ordinal] = argument_count;
     }
@@ -884,16 +1038,22 @@ BoundSignature Functions::bind_callable_signature(
   }
   size_t ordinary_result_count = 0;
   if (!returns_void) {
-    sources.push_back(signature->returnType());
+    auto* result_type =
+        returns_reference
+            ? unit_.typeTraits().add_pointer(
+                  unit_.typeTraits().remove_reference(signature->returnType()))
+            : signature->returnType();
+    sources.push_back(result_type);
     ordinary_result_count =
-        types.partition(signature->returnType(), source).component_count;
+        types.partition(result_type, source).component_count;
   }
-  if (receiver && receiver->abi == ImplicitObjectABI::Value &&
-      receiver->mutable_access) {
-    sources.push_back(types.unqualified(receiver->object_type));
+  if (receiver && receiver->abi == ImplicitObjectABI::Value) {
+    for (auto* field : receiver->written_fields) {
+      sources.push_back(types.unqualified_value(field->type()));
+    }
   }
   for (const auto& reference : references) {
-    if (reference.mutable_access) {
+    if (reference.abi == ReferenceABI::Value && reference.mutable_access) {
       sources.push_back(
           types.unqualified_value(parameters[reference.ordinal]->type()));
     }
@@ -907,27 +1067,30 @@ BoundSignature Functions::bind_callable_signature(
                    callable.types.begin() + argument_count);
   results.assign(callable.types.begin() + argument_count, callable.types.end());
   size_t result_offset = ordinary_result_count;
-  if (receiver && receiver->abi == ImplicitObjectABI::Value &&
-      receiver->mutable_access) {
-    const size_t component_count = receiver_argument_count;
-    if (component_count > UINT16_MAX ||
-        result_offset + component_count > UINT16_MAX) {
-      diagnostics_.reject(unit_, source,
-                          "implicit object signature exceeds native operand "
-                          "or result limits");
+  if (receiver && receiver->abi == ImplicitObjectABI::Value) {
+    for (auto* field : receiver->written_fields) {
+      const auto& member = types.member(field, source);
+      const size_t component_count = member.partition->component_count;
+      if (member.component_offset + component_count > UINT16_MAX ||
+          result_offset + component_count > UINT16_MAX) {
+        diagnostics_.reject(unit_, source,
+                            "implicit object signature exceeds native operand "
+                            "or result limits");
+      }
+      for (size_t component = 0; component < component_count; ++component) {
+        const size_t operand = member.component_offset + component;
+        tied_results.push_back({
+            .result_index = static_cast<uint16_t>(result_offset + component),
+            .operand_index = static_cast<uint16_t>(operand),
+            .has_type_change = !loom_type_equal(
+                arguments[operand], results[result_offset + component]),
+        });
+      }
+      result_offset += component_count;
     }
-    for (size_t component = 0; component < component_count; ++component) {
-      tied_results.push_back({
-          .result_index = static_cast<uint16_t>(result_offset + component),
-          .operand_index = static_cast<uint16_t>(component),
-          .has_type_change = !loom_type_equal(
-              arguments[component], results[result_offset + component]),
-      });
-    }
-    result_offset += component_count;
   }
   for (const auto& reference : references) {
-    if (!reference.mutable_access) {
+    if (reference.abi != ReferenceABI::Value || !reference.mutable_access) {
       continue;
     }
     const auto component_count =
@@ -1295,6 +1458,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
       parameter_contracts,
       reference_parameters(symbol),
       implicit_object(instance, definition),
+      control_flow(symbol),
   };
   std::optional<FunctionBody> configuration;
   if (launch_configuration) {
@@ -1310,6 +1474,7 @@ DefinedFunction Functions::define(FunctionInstance instance, Types& types,
         {},
         {},
         std::nullopt,
+        nullptr,
     };
   }
   return {function_body, configuration};

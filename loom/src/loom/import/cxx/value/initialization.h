@@ -33,6 +33,10 @@ class Initialization {
     virtual Value expression(cxx::ExpressionAST* expression) = 0;
     virtual Value convert(cxx::ExpressionAST* expression, const cxx::Type* type,
                           cxx::AST* owner) = 0;
+    // Captures the durable storage identity selected by one reference
+    // initializer as the existing buffer-plus-offset pointer value.
+    virtual Value reference(cxx::ExpressionAST* expression,
+                            cxx::AST* owner) = 0;
     virtual void effect(cxx::ExpressionAST* expression) = 0;
     // Installs one source current-object scope. Value receivers publish each
     // completed field into the ordinary symbol environment; storage receivers

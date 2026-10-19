@@ -159,6 +159,10 @@ Value Initialization::zero(const cxx::Type* type, cxx::AST* owner) {
     std::vector<loom_value_id_t> components;
     components.reserve(record->component_count);
     for (const auto& member : record->members) {
+      if (unit_.typeTraits().is_reference(member.field->type())) {
+        diagnostics_.reject(unit_, owner,
+                            "reference members require an initializer");
+      }
       zero(member.field->type(), owner).append_to(components);
     }
     return arena_.capture(*record, components);
@@ -204,6 +208,9 @@ Value Initialization::default_record(const RecordPartition& record,
     }
   } else if (zero_initialize) {
     for (const auto& member : record.members) {
+      if (unit_.typeTraits().is_lvalue_reference(member.field->type())) {
+        continue;
+      }
       evaluation_.publish_receiver_member(member.field,
                                           zero(member.field->type(), owner));
     }
@@ -213,13 +220,27 @@ Value Initialization::default_record(const RecordPartition& record,
       unit_, diagnostics_, constructor, owner,
       [&](cxx::FieldSymbol* field, cxx::ExpressionAST* source,
           cxx::MemInitializerAST* initializer) {
+        const bool is_reference =
+            unit_.typeTraits().is_lvalue_reference(field->type());
         std::optional<Value> prior;
-        if (retained || zero_initialize) {
+        if (!is_reference && (retained || zero_initialize)) {
           prior = evaluation_.receiver_member(field, initializer);
         }
+        cxx::ExpressionAST* referent = nullptr;
+        if (is_reference) {
+          cxx::Initializer reference(source);
+          referent = reference.singleExpression();
+          if (!referent) {
+            diagnostics_.reject(unit_, source,
+                                "reference members require one initializer "
+                                "expression");
+          }
+        }
         evaluation_.publish_receiver_member(
-            field, value(field->type(), source, initializer->constructor,
-                         initializer, prior));
+            field, referent
+                       ? evaluation_.reference(referent, initializer)
+                       : value(field->type(), source, initializer->constructor,
+                               initializer, prior));
       });
   return finish_value_receiver(record, owner);
 }
@@ -270,10 +291,19 @@ Value Initialization::from_elements(const cxx::Type* type,
     }
     ReceiverScope receiver(evaluation_, *record);
     for (const auto& member : record->members) {
-      auto initialized = elements
-                             ? evaluation_.convert(elements->value,
-                                                   member.field->type(), owner)
-                             : zero(member.field->type(), owner);
+      Value initialized;
+      if (unit_.typeTraits().is_lvalue_reference(member.field->type())) {
+        if (!elements) {
+          diagnostics_.reject(unit_, owner,
+                              "reference members require an initializer");
+        }
+        initialized = evaluation_.reference(elements->value, owner);
+      } else {
+        initialized = elements
+                          ? evaluation_.convert(elements->value,
+                                                member.field->type(), owner)
+                          : zero(member.field->type(), owner);
+      }
       evaluation_.publish_receiver_member(member.field, initialized);
       if (elements) {
         elements = elements->next;
