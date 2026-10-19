@@ -7,9 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <condition_variable>
 #include <filesystem>
-#include <mutex>
 #include <string>
 #include <tuple>
 
@@ -21,65 +19,11 @@
 #include "loom/serve/service/recognition/model.h"
 #include "loom/serve/testing/http_harness.h"
 #include "loom/serve/testing/service_application.h"
+#include "loom/serve/testing/worker_gate.h"
 
 IREE_FLAG(string, model_source, "", "Recognition fixture bootstrap source.");
 
 namespace {
-
-// Holds the application's sole worker while the owner accepts and cancels
-// real conversion/model tasks. No timer or production hook controls the cut.
-class WorkerGate {
- public:
-  explicit WorkerGate(iree_task_executor_t* executor) {
-    iree_task_process_initialize(
-        [](iree_task_process_t* process, const iree_task_worker_context_t*,
-           iree_task_process_drain_result_t* result) {
-          auto* gate = static_cast<WorkerGate*>(process->user_data);
-          std::unique_lock<std::mutex> lock(gate->mutex_);
-          gate->entered_ = true;
-          gate->condition_.notify_all();
-          gate->condition_.wait(lock, [&] { return gate->open_; });
-          result->completed = true;
-          result->did_work = true;
-          return iree_ok_status();
-        },
-        0, 1, &process_);
-    process_.user_data = this;
-    process_.completion_fn = [](iree_task_process_t*, iree_status_t status) {
-      IREE_EXPECT_OK(status);
-    };
-    process_.release_fn = [](iree_task_process_t* process) {
-      auto* gate = static_cast<WorkerGate*>(process->user_data);
-      std::lock_guard<std::mutex> lock(gate->mutex_);
-      gate->released_ = true;
-      gate->condition_.notify_all();
-    };
-    iree_task_executor_schedule_process(executor, &process_);
-    std::unique_lock<std::mutex> lock(mutex_);
-    condition_.wait(lock, [&] { return entered_; });
-  }
-  ~WorkerGate() { Open(); }
-  void Open() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    open_ = true;
-    condition_.notify_all();
-    condition_.wait(lock, [&] { return released_; });
-  }
-
- private:
-  // Intrusive process storage retained through the final release callback.
-  iree_task_process_t process_ = {};
-  // Serializes every gate publication, including final destruction.
-  std::mutex mutex_;
-  // Explicit worker-entry, gate-opening, and retirement readiness.
-  std::condition_variable condition_;
-  // The sole application worker has entered this process.
-  bool entered_ = false;
-  // The test owner has released the worker.
-  bool open_ = false;
-  // The executor has made its final process access.
-  bool released_ = false;
-};
 
 std::string Request(bool encoded) {
   std::string pcm(19 * sizeof(int16_t), '\0');
@@ -184,7 +128,7 @@ class SourceRecognitionHttpTest
   void Advance(bool stopping) {
     bool progress = false;
     IREE_ASSERT_OK(interface_.advance(
-        interface_.self, stopping ? LOOM_SERVE_HTTP_SERVICE_FLAG_STOPPING : 0,
+        interface_.self, stopping ? LOOM_SERVE_SERVICE_FLAG_STOPPING : 0,
         &progress));
   }
   template <typename Predicate>
@@ -194,7 +138,7 @@ class SourceRecognitionHttpTest
       const auto ticket = iree_notification_prepare_wait(notification);
       bool progress = false;
       auto status = interface_.advance(
-          interface_.self, stopping ? LOOM_SERVE_HTTP_SERVICE_FLAG_STOPPING : 0,
+          interface_.self, stopping ? LOOM_SERVE_SERVICE_FLAG_STOPPING : 0,
           &progress);
       if (ready() || progress || !iree_status_is_ok(status)) {
         iree_notification_cancel_wait(notification);
@@ -223,7 +167,7 @@ class SourceRecognitionHttpTest
   // Adapter whose accepted conversion task borrows the claimed upload.
   loom_serve_recognition_http_t* service_ = nullptr;
   // Manually driven production owner interface.
-  loom_serve_http_service_t interface_ = {};
+  loom_serve_service_t interface_ = {};
   // Readiness-aware socket client; no router thread is running.
   loom_serve::testing::HttpHarness http_;
 };
@@ -240,7 +184,7 @@ TEST_P(SourceRecognitionHttpTest, CancellationRetainsAcceptedDecodeBorrow) {
   EXPECT_TRUE(interface_.is_pending(interface_.self));
   EXPECT_EQ(interface_.snapshot(interface_.self).queued_requests, 1u);
   const std::string body(request->body.data, request->body.size);
-  WorkerGate gate(loom_serve_host_executor(host_));
+  loom_serve::testing::WorkerGate gate(loom_serve_host_executor(host_));
   ASSERT_NO_FATAL_FAILURE(Advance(false));
   EXPECT_TRUE(interface_.is_active(interface_.self));
   ASSERT_TRUE(interface_.is_pending(interface_.self));

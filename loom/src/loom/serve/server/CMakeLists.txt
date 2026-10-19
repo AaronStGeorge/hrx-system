@@ -276,8 +276,43 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     iree::testing::temp_file
+    loom::serve::service
+    loom::serve::service::speech::request
   LABELS
     "iree-build-requirement=loom.target.arch.vm"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+loom_cc_library(
+  NAME
+    registry_speech_tests
+  SRCS
+    "registry_speech_test.cc"
+  DEPS
+    ::configuration
+    ::model_registration
+    ::registry
+    iree::base
+    iree::base::threading
+    iree::base::tooling::flags
+    iree::testing::gtest
+    loom::serve::runtime::host
+    loom::serve::service
+    loom::serve::service::speech::output
+    loom::serve::service::speech::request
+    loom::serve::service::speech::stream
+    loom::serve::telemetry::record
+    loom::serve::telemetry::stream
+    loom::serve::testing::http_harness
+    loom::serve::testing::service_application
+    loom::serve::transport::http::listener
+    loom::serve::transport::http::server
+    loom::util::json
+    loom::util::stream
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
 )
 endif()
 
