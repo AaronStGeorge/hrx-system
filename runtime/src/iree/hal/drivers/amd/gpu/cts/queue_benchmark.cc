@@ -841,20 +841,28 @@ EXECUTE_BURST_CASE(TableBurstLatency, kTable, kSampledSubmit);
 // Identical resident programs distinguish ordinary execution, retained but
 // disabled packet regions, and active device samples. The caller upload is
 // constant-sized in every row; device work scales with dispatch count.
-#define PROFILE_CASE(name, timing, capture)                                \
+#define PROFILE_CASE(name, timing, capture, burst_count)                   \
   BENCHMARK_CAPTURE(BM_Execute, name, BindingMode::kTable, Timing::timing, \
-                    Program::kDispatch, 1, Capture::capture)               \
+                    Program::kDispatch, burst_count, Capture::capture)     \
       ->Arg(1)                                                             \
       ->Arg(128)                                                           \
       ->Arg(1000)                                                          \
       ->Iterations(50)                                                     \
       ->UseRealTime()
-PROFILE_CASE(ProfileBaselineSubmit, kSubmit, kNone);
-PROFILE_CASE(ProfileBaselineCompletion, kCompletion, kNone);
-PROFILE_CASE(ProfileMetadataSubmit, kSubmit, kMetadata);
-PROFILE_CASE(ProfileMetadataCompletion, kCompletion, kMetadata);
-PROFILE_CASE(ProfileCaptureSubmit, kSubmit, kActive);
-PROFILE_CASE(ProfileCaptureCompletion, kCompletion, kActive);
+PROFILE_CASE(ProfileBaselineSubmit, kSubmit, kNone, 1);
+PROFILE_CASE(ProfileBaselineLatency, kSampledSubmit, kNone, 1);
+PROFILE_CASE(ProfileBaselineCompletion, kCompletion, kNone, 1);
+PROFILE_CASE(ProfileMetadataSubmit, kSubmit, kMetadata, 1);
+PROFILE_CASE(ProfileMetadataLatency, kSampledSubmit, kMetadata, 1);
+PROFILE_CASE(ProfileMetadataCompletion, kCompletion, kMetadata, 1);
+PROFILE_CASE(ProfileCaptureSubmit, kSubmit, kActive, 1);
+PROFILE_CASE(ProfileCaptureLatency, kSampledSubmit, kActive, 1);
+PROFILE_CASE(ProfileCaptureCompletion, kCompletion, kActive, 1);
+// Two invocations separate the first call after completion/export from a
+// following call, while keeping all 2000 samples within the capture ring.
+PROFILE_CASE(ProfileBaselineBurstLatency, kSampledSubmit, kNone, 2);
+PROFILE_CASE(ProfileMetadataBurstLatency, kSampledSubmit, kMetadata, 2);
+PROFILE_CASE(ProfileCaptureBurstLatency, kSampledSubmit, kActive, 2);
 #undef PROFILE_CASE
 
 static void BM_Transfer(benchmark::State& state,
