@@ -1536,6 +1536,7 @@ loom_cc_test(
     loom::serve::testing::native_allocator
   ARGS
     "--weight_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/runtime/parameter/testdata/weights/stages.loom}}"
+    "--weight_device_uri=rdna:?feedback"
     "--executable_sources={{${PROJECT_SOURCE_DIR}/loom/src/loom/serve/service/testdata/executables/prepare.loom}}"
   LABELS
     "iree-run-requirement=libamdf.resource.amd_gpu"

@@ -994,6 +994,7 @@ loom_cc_binary(
         ],
         args = [
             "--weight_sources=$(rootpath //loom/src/loom/serve/runtime/parameter:testdata/weights/stages.loom)",
+            "--weight_device_uri=" + ("rdna" if prefix else "amdgpu") + ":?feedback",
             "--executable_sources=$(rootpath //loom/src/loom/serve/service:testdata/executables/prepare.loom)",
         ],
         data = [
