@@ -55,6 +55,7 @@ loom_cc_library(
         "//loom/binding/c/test/target/amdgpu:__pkg__",
         "//loom/src/loom/serve:implementation",
         "//loom/src/loom/target/arch/cmd:__subpackages__",
+        "//loom/src/loom/tooling/execution/hal:__pkg__",
     ],
     deps = [
         "//runtime/src/iree/base",

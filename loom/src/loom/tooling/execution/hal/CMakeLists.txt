@@ -9,11 +9,40 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
+iree_native_test(
+  NAME
+    "command_scenario_execution_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom}}"
+    "--device=task"
+  SRC
+    loom::tools::iree-test-loom
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_X86 AND IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_TASK AND LOOM_TARGET_ARCH_VM AND IREE_ARCH STREQUAL "x86_64")
+iree_native_test(
+  NAME
+    "command_scenario_specialization_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_specializations.loom}}"
+    "--device=task"
+  SRC
+    loom::tools::iree-test-loom
+  DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_specializations.loom"
+)
+endif()
+
 loom_test_module(
   NAME
     hardware_test_module
   SRCS
     "testdata/buffer_bulk_hal_actual.loom"
+    "testdata/command_scenario_dependent_stages.loom"
     "testdata/dynamic_workgroup_hal_actual.loom"
     "testdata/launch_schedule_hal_actual.loom"
     "testdata/scenario_batch_hal_actual.loom"
@@ -280,29 +309,37 @@ loom_cc_library(
   NAME
     scenario_profile
   HDRS
+    "scenario_command_program.h"
     "scenario_profile.h"
   SRCS
+    "scenario_command_program.c"
     "scenario_profile.c"
   DEPS
+    ::artifact
     ::benchmark
     ::invocation
     ::testbench_actual
     ::testbench_staging
     iree::base
+    iree::base::internal
     iree::hal
     loom::binding::c::interop
     loom::binding::c::loomc
+    loom::binding::c::target::cmd
     loom::error::diagnostic
     loom::error::error_defs
     loom::error::source
     loom::ir
     loom::ops::buffer
+    loom::ops::command
     loom::ops::func
     loom::ops::index
     loom::ops::kernel
     loom::ops::op_defs
     loom::ops::scalar
     loom::ops::view
+    loom::target::arch::cmd::hal_command_buffer
+    loom::target::arch::cmd::program
     loom::tooling::execution::benchmark
     loom::tooling::testbench::scenario::executor
   PUBLIC

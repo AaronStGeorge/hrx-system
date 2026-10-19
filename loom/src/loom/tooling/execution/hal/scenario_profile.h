@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Prepared HAL execution profile for check.scenario kernel and function
-// subjects.
+// Prepared HAL execution profile for check.scenario kernel, function, pipeline,
+// and command-program subjects.
 
 #ifndef LOOM_TOOLING_EXECUTION_HAL_SCENARIO_PROFILE_H_
 #define LOOM_TOOLING_EXECUTION_HAL_SCENARIO_PROFILE_H_
@@ -88,8 +88,11 @@ void loom_run_hal_testbench_scenario_profile_initialize(
 // subject share that product while retaining their own value IDs and source
 // identity. An ordinary function with scalar and buffer arguments and scalar
 // results is privately adapted to a fixed 1x1 kernel; the authored module
-// remains unchanged for oracle execution. Returned values occupy typed slots
-// in a private output binding, separate from mutable input buffers.
+// remains unchanged for oracle execution. A command program is privately
+// wrapped with configuration specializations frozen to exact scalar values,
+// and its published kernel requests are compiled for the same live target.
+// Returned function values occupy typed slots in a private output binding,
+// separate from mutable input buffers.
 // Correctness stages and executes bounded batches, reads back once, and decodes
 // each disjoint result record. Product benchmarking stages a bounded batch once
 // and replays one command sequence without allocation or readback.
