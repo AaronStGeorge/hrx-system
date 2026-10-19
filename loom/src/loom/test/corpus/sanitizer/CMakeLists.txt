@@ -9,4 +9,17 @@
 
 iree_add_all_subdirs()
 
+loom_corpus_sources(
+  NAME
+    "sources"
+  MANIFEST
+    "sanitizer"
+  SRCS
+    "access_reporting.loom"
+    "assertion_reporting.loom"
+    "race_capacity.loom"
+    "race_subgroup.loom"
+    "race_workgroup.loom"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

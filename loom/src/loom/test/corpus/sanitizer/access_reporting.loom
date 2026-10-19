@@ -1,0 +1,240 @@
+global.rodata.def @asan_lookup_words = align(8) bytes("070000000a0000000d00000010000000")
+
+global.rodata.def @asan_fallback_words = align(8) bytes("1300000016000000190000001c0000001f000000220000002500000028000000")
+
+kernel.def @asan_global_store_valid() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%output: buffer) {
+  %base = index.constant 0 : offset
+  %output_index = index.constant 0 : index
+  %value = scalar.constant 7 : i32
+  %global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %global[%base] : buffer -> view<1xi32>
+  view.store %value, %output_view[%output_index] : i32, view<1xi32>
+  kernel.return
+}
+
+kernel.def @asan_rodata_load_valid() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%position: index, %output: buffer) {
+  %base = index.constant 0 : offset
+  %output_index = index.constant 0 : index
+  %bounded_position = index.assume %position [range(%position, 0, 3)] : index
+  %table = global.load @asan_lookup_words : buffer
+  %table_view = buffer.view %table[%base] : buffer -> view<4xi32>
+  %output_view = buffer.view %output[%base] : buffer -> view<1xi32>
+  %value = view.load %table_view[%bounded_position] : view<4xi32> -> i32
+  view.store %value, %output_view[%output_index] : i32, view<1xi32>
+  kernel.return
+}
+
+// A runtime root selection keeps the intentionally invalid access
+// source-verifiable and exercises the same immutable-object redzone for every
+// selected target profile.
+kernel.def @asan_rodata_load_redzone() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%select_table: i1, %output: buffer) {
+  %base = index.constant 0 : offset
+  %redzone_offset = index.constant 16 : offset
+  %output_index = index.constant 0 : index
+  %table = global.load @asan_lookup_words : buffer
+  %constant_table = buffer.assume.memory_space<constant> %table : buffer
+  %fallback = global.load @asan_fallback_words : buffer
+  %constant_fallback = buffer.assume.memory_space<constant> %fallback : buffer
+  %selected = scf.select %select_table, %constant_table, %constant_fallback : buffer
+  %table_redzone = buffer.view %selected[%redzone_offset] : buffer -> view<1xi32>
+  %output_view = buffer.view %output[%base] : buffer -> view<1xi32>
+  %value = view.load %table_redzone[%output_index] : view<1xi32> -> i32
+  view.store %value, %output_view[%output_index] : i32, view<1xi32>
+  kernel.return
+}
+
+kernel.def @asan_global_store_redzone() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%output: buffer) {
+  %base = index.constant 0 : offset
+  %valid_index = index.constant 0 : index
+  %redzone_index = index.constant 1 : index
+  %value = scalar.constant 11 : i32
+  %continued_value = scalar.constant 99 : i32
+  %global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %global[%base] : buffer -> view<2xi32>
+  view.store %value, %output_view[%redzone_index] : i32, view<2xi32>
+  view.store %continued_value, %output_view[%valid_index] : i32, view<2xi32>
+  kernel.return
+}
+
+config.decl @asan_launch_bound.tile_capacity : %value: index where [range(%value, 1, 65535)]
+
+// A checked relational bound supplies the target-legal byte-offset range used
+// by the access sanitizer after value instrumentation replaces the assume.
+kernel.def @asan_relational_launch_bound(%tile_count: index) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%tile_count, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%output: buffer) {
+  %c0 = index.constant 0 : index
+  %tile_bytes = index.constant 32768 : offset
+  %value = scalar.constant 42 : i32
+  %tile_capacity = config.get @asan_launch_bound.tile_capacity : index
+  %workgroup_raw = kernel.workgroup.id<x> : index
+  %workgroup = index.assume %workgroup_raw [lt(%workgroup_raw, %tile_capacity)] : index
+  %tile_offset = index.scale %workgroup, %tile_bytes : index, offset -> offset
+  %output_view = buffer.view %output[%tile_offset] : buffer -> view<1xi32>
+  view.store %value, %output_view[%c0] : i32, view<1xi32>
+  kernel.return
+}
+
+// A relational bound on the complete view base remains valid when canonical
+// address planning separates the two runtime terms and the static suffix.
+kernel.def @asan_coupled_view_base() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%base: index, %local: index, %output: buffer) {
+  %c0 = index.constant 0 : index
+  %byte_stride = index.constant 4 : offset
+  %header_bytes = index.constant 4 : offset
+  %value = scalar.constant 42 : i32
+  %sum = index.add %base, %local : index
+  %bounded_sum = index.assume %sum [range(%sum, 0, 0)] : index
+  %dynamic_bytes = index.scale %bounded_sum, %byte_stride : index, offset -> offset
+  %payload_bytes = index.add %dynamic_bytes, %header_bytes : offset
+  %output_view = buffer.view %output[%payload_bytes] : buffer -> view<1xi32>
+  view.store %value, %output_view[%c0] : i32, view<1xi32>
+  kernel.return
+}
+
+func.def @asan_global_store_valid_oracle(%output: buffer) {
+  %base = index.constant 0 : offset
+  %value = scalar.constant 7 : i32
+  %view = buffer.view %output[%base] : buffer -> view<1xi32>
+  view.store %value, %view[0] : i32, view<1xi32>
+  func.return
+}
+
+func.def @asan_global_store_redzone_oracle(%output: buffer) {
+  func.return
+}
+
+func.def @asan_rodata_load_valid_oracle(%position: index, %output: buffer) {
+  %base = index.constant 0 : offset
+  %position_i32 = index.cast %position : index to i32
+  %stride = scalar.constant 3 : i32
+  %initial = scalar.constant 7 : i32
+  %scaled = scalar.muli %position_i32, %stride : i32
+  %value = scalar.addi %initial, %scaled : i32
+  %view = buffer.view %output[%base] : buffer -> view<1xi32>
+  view.store %value, %view[0] : i32, view<1xi32>
+  func.return
+}
+
+func.def @asan_rodata_load_redzone_oracle(%select_table: i1, %output: buffer) {
+  scf.if %select_table {
+  } else {
+    %base = index.constant 0 : offset
+    %value = scalar.constant 31 : i32
+    %view = buffer.view %output[%base] : buffer -> view<1xi32>
+    view.store %value, %view[0] : i32, view<1xi32>
+  }
+  func.return
+}
+
+func.def @asan_relational_launch_bound_oracle(%output: buffer) {
+  %base = index.constant 0 : offset
+  %value = scalar.constant 42 : i32
+  %view = buffer.view %output[%base] : buffer -> view<1xi32>
+  view.store %value, %view[0] : i32, view<1xi32>
+  func.return
+}
+
+func.def @asan_coupled_view_base_oracle(%base: index, %local: index, %output: buffer) {
+  %origin = index.constant 0 : offset
+  %value = scalar.constant 42 : i32
+  %view = buffer.view %output[%origin] : buffer -> view<2xi32>
+  view.store %value, %view[1] : i32, view<2xi32>
+  func.return
+}
+
+check.scenario @asan_global_store_valid_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@asan_global_store_valid, @asan_global_store_valid_oracle>(%output) : (tensor<1xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @asan_global_store_redzone_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@asan_global_store_redzone, @asan_global_store_redzone_oracle>(%output) : (tensor<1xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
+      check.expect.event<device> {asan = {access = "write", access_length = 4}, count = 1, severity = "error", type = "asan_report"}
+    }
+  }
+  check.return
+}
+
+check.scenario @asan_rodata_load_valid_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %position = check.literal value(0) : index
+    %output = check.generate.fill value(-1) : tensor<1xi32>
+    check.compare<@asan_rodata_load_valid, @asan_rodata_load_valid_oracle>(%position, %output) : (index, tensor<1xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %position = check.literal value(3) : index
+    %output = check.generate.fill value(-1) : tensor<1xi32>
+    check.compare<@asan_rodata_load_valid, @asan_rodata_load_valid_oracle>(%position, %output) : (index, tensor<1xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @asan_rodata_load_redzone_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %select_table = check.literal value(true) : i1
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@asan_rodata_load_redzone, @asan_rodata_load_redzone_oracle>(%select_table, %output) : (i1, tensor<1xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
+      check.expect.event<device> {asan = {access = "read", access_length = 4}, count = 1, severity = "error", type = "asan_report"}
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %select_table = check.literal value(false) : i1
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@asan_rodata_load_redzone, @asan_rodata_load_redzone_oracle>(%select_table, %output) : (i1, tensor<1xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @asan_relational_launch_bound_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %tile_count = check.literal value(1) : index
+    %output = check.generate.fill value(0) : tensor<1xi32>
+    check.compare<@asan_relational_launch_bound, @asan_relational_launch_bound_oracle>[%tile_count](%output) : [index](tensor<1xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<1xi32>
+    }
+  }
+  check.return
+}
+
+check.scenario @asan_coupled_view_base_scenario {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %base = check.literal value(0) : index
+    %local = check.literal value(0) : index
+    %output = check.generate.fill value(0) : tensor<2xi32>
+    check.compare<@asan_coupled_view_base, @asan_coupled_view_base_oracle>(%base, %local, %output) : (index, index, tensor<2xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<2xi32>
+    }
+  }
+  check.return
+}

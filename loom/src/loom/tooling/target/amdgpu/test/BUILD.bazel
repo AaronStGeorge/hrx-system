@@ -281,14 +281,14 @@ loom_test(
 
 loom_test(
     name = "asan_test",
-    srcs = ["//loom/src/loom/test/corpus/sanitizer:amdgpu_asan_actual.loom"],
+    srcs = ["//loom/src/loom/test/corpus/sanitizer:access_reporting.loom"],
     configs = {"asan_launch_bound.tile_capacity": "1"},
     execution_profiles = [AMDGPU_ASAN_PROFILE],
 )
 
 loom_test(
     name = "ubsan_test",
-    srcs = ["//loom/src/loom/test/corpus/sanitizer:amdgpu_ubsan_actual.loom"],
+    srcs = ["//loom/src/loom/test/corpus/sanitizer:assertion_reporting.loom"],
     # Authored assertions must provision feedback without insertion options.
     execution_profiles = [AMDGPU_HARDWARE_PROFILE],
 )
@@ -366,7 +366,7 @@ loom_test(
 
 loom_test(
     name = "tsan_test",
-    srcs = ["//loom/src/loom/test/corpus/sanitizer:amdgpu_tsan_actual.loom"],
+    srcs = ["//loom/src/loom/test/corpus/sanitizer:race_workgroup.loom"],
     execution_profiles = [AMDGPU_TSAN_PROFILE],
 )
 
@@ -392,7 +392,7 @@ loom_test(
 
 loom_test(
     name = "tsan_capacity_test",
-    srcs = ["//loom/src/loom/test/corpus/sanitizer:amdgpu_tsan_capacity.loom"],
+    srcs = ["//loom/src/loom/test/corpus/sanitizer:race_capacity.loom"],
     execution_profiles = [AMDGPU_TSAN_CAPACITY_PROFILE],
 )
 
