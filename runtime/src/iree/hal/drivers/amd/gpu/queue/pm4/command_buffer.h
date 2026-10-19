@@ -24,6 +24,7 @@ iree_status_t iree_hal_amd_gpu_pm4_command_buffer_create(
     iree_hal_command_buffer_mode_t mode, iree_hal_command_category_t categories,
     iree_host_size_t binding_capacity,
     uint32_t maximum_group_segment_byte_length,
+    uint32_t maximum_scratch_wave_byte_length,
     const iree_hal_amd_gpu_pm4_barrier_profile_t* profile,
     iree_allocator_t host_allocator, iree_hal_command_buffer_t** out_buffer);
 
@@ -40,6 +41,8 @@ typedef struct iree_hal_amd_gpu_pm4_command_program_t {
   uint32_t argument_length;
   // Number of public dispatch IDs consumed by one complete execution.
   uint32_t dispatch_count;
+  // Maximum admitted private bytes per hardware wave across all dispatches.
+  uint32_t scratch_wave_byte_length;
   // Encoded payload operation count used only by optional queue profiling.
   uint32_t operation_count;
   // Asynchronous native copies still requiring a join at program exit.

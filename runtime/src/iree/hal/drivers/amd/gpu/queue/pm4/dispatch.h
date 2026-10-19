@@ -109,6 +109,8 @@ typedef struct iree_hal_amd_gpu_pm4_dispatch_t {
   uint32_t partial_size[3];
   // Fixed and dynamic LDS allocation in bytes.
   uint32_t group_segment_byte_length;
+  // Admitted private storage per hardware wave slot, rounded to 256 bytes.
+  uint32_t scratch_wave_byte_length;
 } iree_hal_amd_gpu_pm4_dispatch_t;
 
 // One launch, including any device-side ABI copies, fits the smallest queue's
@@ -135,6 +137,7 @@ static inline uint32_t iree_hal_amd_gpu_pm4_dispatch_indirect_word_count(
 iree_status_t iree_hal_amd_gpu_pm4_dispatch_prepare(
     const iree_hal_amd_gpu_pm4_function_t* function,
     uint32_t maximum_group_segment_byte_length,
+    uint32_t maximum_scratch_wave_byte_length,
     iree_hal_dispatch_config_t config, iree_const_byte_span_t constants,
     iree_host_size_t binding_count, iree_hal_dispatch_flags_t flags,
     iree_hal_amd_gpu_pm4_dispatch_t* out_dispatch);

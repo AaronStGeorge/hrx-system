@@ -107,16 +107,33 @@ iree_hal_amd_gpu_pm4_dispatch_storage_t iree_hal_amd_gpu_pm4_dispatch_storage(
 iree_status_t iree_hal_amd_gpu_pm4_dispatch_prepare(
     const iree_hal_amd_gpu_pm4_function_t* function,
     uint32_t maximum_group_segment_byte_length,
+    uint32_t maximum_scratch_wave_byte_length,
     iree_hal_dispatch_config_t config, iree_const_byte_span_t constants,
     iree_host_size_t binding_count, iree_hal_dispatch_flags_t flags,
     iree_hal_amd_gpu_pm4_dispatch_t* out_dispatch) {
   const bool indirect_parameters =
       iree_hal_dispatch_uses_indirect_parameters(flags);
   const iree_hal_amd_gpu_metadata_kernel_t* metadata = function->metadata;
-  const uint16_t launch_requirements =
+  uint16_t launch_requirements =
       function->launch.requirements &
       ~(IREE_HAL_AMD_GPU_PM4_LAUNCH_REQUIREMENT_DISPATCH_POINTER |
         IREE_HAL_AMD_GPU_PM4_LAUNCH_REQUIREMENT_TSAN);
+  uint32_t scratch_wave_byte_length = 0;
+  if (maximum_scratch_wave_byte_length &&
+      (launch_requirements & IREE_HAL_AMD_GPU_PM4_LAUNCH_REQUIREMENT_SCRATCH)) {
+    const uint64_t required =
+        iree_align_uint64((uint64_t)metadata->private_segment_fixed_size
+                              << function->launch.wavefront_size_log2,
+                          256);
+    if (!required || required > maximum_scratch_wave_byte_length) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "kernel private storage requires %" PRIu64
+                              " bytes per wave; native capacity is %u",
+                              required, maximum_scratch_wave_byte_length);
+    }
+    scratch_wave_byte_length = (uint32_t)required;
+    launch_requirements &= ~IREE_HAL_AMD_GPU_PM4_LAUNCH_REQUIREMENT_SCRATCH;
+  }
   if (launch_requirements || function->kernarg->requirements) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
@@ -159,7 +176,8 @@ iree_status_t iree_hal_amd_gpu_pm4_dispatch_prepare(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "dense arguments do not match function reflection");
   }
-  iree_hal_amd_gpu_pm4_dispatch_t dispatch = {0};
+  iree_hal_amd_gpu_pm4_dispatch_t dispatch = {.scratch_wave_byte_length =
+                                                  scratch_wave_byte_length};
   const bool default_size =
       !(config.workgroup_size[0] | config.workgroup_size[1] |
         config.workgroup_size[2]);

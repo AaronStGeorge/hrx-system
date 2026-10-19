@@ -1,0 +1,71 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Dynamic reads after a complete initialization retain real per-workitem
+// private storage. Both entry points use the same permutation and oracle.
+func.def inline @roundtrip(%scratch: buffer, %output: buffer, %count: index, %seed: i32, %rotation: i32) {
+  %group = kernel.workgroup.id<x> : index
+  %lane = kernel.workitem.id<x> : index
+  %width = index.constant 64 : index
+  %global = index.madd %group, %width, %lane : index
+  %global_i32 = index.cast %global : index to i32
+  %lane_i32 = index.cast %lane : index to i32
+  %count_i32 = index.cast %count : index to i32
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  %word_bytes = index.constant 4 : offset
+  %global_multiplier = scalar.constant 16909063 : i32
+  %slot_multiplier = scalar.constant 4129 : i32
+  %global_product = scalar.muli %global_i32, %global_multiplier : i32
+  %base_value = scalar.addi %seed, %global_product : i32
+  scf.for %slot = [%zero to %count step %one] {
+    %slot_i32 = index.cast %slot : index to i32
+    %slot_product = scalar.muli %slot_i32, %slot_multiplier : i32
+    %value = scalar.addi %base_value, %slot_product : i32
+    %offset = index.scale %slot, %word_bytes : index, offset -> offset
+    %word = buffer.view %scratch[%offset] : buffer -> view<1xi32>
+    view.store<volatile> %value, %word[0] : i32, view<1xi32>
+  }
+  scf.for %slot = [%zero to %count step %one] {
+    %slot_i32 = index.cast %slot : index to i32
+    %slot_lane = scalar.addi %slot_i32, %lane_i32 : i32
+    %permutation = scalar.addi %slot_lane, %rotation : i32
+    %selected_i32 = scalar.remui %permutation, %count_i32 : i32
+    %selected = index.cast %selected_i32 : i32 to index
+    %source_offset = index.scale %selected, %word_bytes : index, offset -> offset
+    %source = buffer.view %scratch[%source_offset] : buffer -> view<1xi32>
+    %value = view.load<volatile> %source[0] : view<1xi32> -> i32
+    %output_index = index.madd %global, %count, %slot : index
+    %output_offset = index.scale %output_index, %word_bytes : index, offset -> offset
+    %target = buffer.view %output[%output_offset] : buffer -> view<1xi32>
+    view.store %value, %target[0] : i32, view<1xi32>
+  }
+  func.return
+}
+
+kernel.def export("private_small") @private_small(%groups_x: index) {
+  %one = index.constant 1 : index
+  %width = index.constant 64 : index
+  kernel.launch.config workgroups(%groups_x, %one, %one) workgroup_size(%width, %one, %one) : index
+} launch(%output: buffer, %seed: i32, %rotation: i32) {
+  %bytes = index.constant 64 : offset
+  %count = index.constant 16 : index
+  %scratch = buffer.alloca<private> align(4) %bytes : buffer
+  func.call @roundtrip(%scratch, %output, %count, %seed, %rotation) : (buffer, buffer, index, i32, i32)
+  kernel.return
+}
+
+kernel.def export("private_large") @private_large(%groups_x: index) {
+  %one = index.constant 1 : index
+  %width = index.constant 64 : index
+  kernel.launch.config workgroups(%groups_x, %one, %one) workgroup_size(%width, %one, %one) : index
+} launch(%output: buffer, %seed: i32, %rotation: i32) {
+  %bytes = index.constant 256 : offset
+  %count = index.constant 64 : index
+  %scratch = buffer.alloca<private> align(4) %bytes : buffer
+  func.call @roundtrip(%scratch, %output, %count, %seed, %rotation) : (buffer, buffer, index, i32, i32)
+  kernel.return
+}

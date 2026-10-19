@@ -74,6 +74,45 @@ iree_runtime_cc_test(
     ],
 )
 
+[
+    loom_kernel_binary(
+        name = "scratch_" + target,
+        testonly = True,
+        srcs = ["scratch.loom"],
+        out = "scratch_" + target + ".hsaco",
+        target = ":feedback_profile_" + target,
+        target_compatible_with = _FEEDBACK_COMPATIBLE_WITH,
+    )
+    for target in _FEEDBACK_TARGETS
+]
+
+iree_c_embed_data(
+    name = "scratch_images",
+    testonly = True,
+    srcs = [":scratch_" + target for target in _FEEDBACK_TARGETS],
+    c_file_output = "scratch_images.c",
+    h_file_output = "scratch_images.h",
+    identifier = "iree_hal_amd_gpu_scratch_images",
+    target_compatible_with = _FEEDBACK_COMPATIBLE_WITH,
+)
+
+iree_runtime_cc_test(
+    name = "scratch_test",
+    srcs = ["scratch_test.cc"],
+    target_compatible_with = _FEEDBACK_COMPATIBLE_WITH,
+    deps = [
+        ":scratch_images",
+        ":test_device",
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/cts/util:pool_test_util",
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 iree_runtime_cc_test(
     name = "asan_test",
     srcs = ["asan_test.cc"],

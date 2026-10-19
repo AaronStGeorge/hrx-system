@@ -118,6 +118,8 @@ class GrowthTest : public ::testing::Test {
     memory_.profile.allocation.minimum_alignment = 8;
     memory_.profile.allocation.byte_length_granularity = 8;
     memory_.profile.allocation.maximum_byte_length = UINT32_MAX;
+    scratch_memory_ = memory_;
+    scratch_memory_.host_access = 0;
     iree_hal_amd_gpu_capture_pool_initialize(4096, iree_allocator_system(),
                                              &captures_);
     iree_hal_amd_gpu_publisher_initialize(&publisher_);
@@ -126,6 +128,8 @@ class GrowthTest : public ::testing::Test {
     growth_ = {
         .context = &context_,
         .memory = &memory_,
+        .scratch_memory = &scratch_memory_,
+        .scratch_profile = &scratch_profile_,
         .captures = &captures_,
         .publisher = &publisher_,
         .publication = &publication_,
@@ -151,6 +155,7 @@ class GrowthTest : public ::testing::Test {
     iree_hal_amd_gpu_publication_deinitialize(&publication_);
     EXPECT_EQ(growth_.arguments, nullptr);
     EXPECT_EQ(growth_.signals, nullptr);
+    EXPECT_EQ(growth_.scratch, nullptr);
     EXPECT_EQ(
         iree_atomic_load(&growth_.pending_count, iree_memory_order_acquire), 0);
     iree_hal_amd_gpu_pm4_signal_pool_deinitialize(&signals_);
@@ -248,6 +253,16 @@ class GrowthTest : public ::testing::Test {
             EXPECT_NE(signal, nullptr);
             iree_hal_amd_gpu_pm4_signal_release(signal);
             iree_hal_amd_gpu_pm4_signal_storage_free(&context_, result.signals);
+          }
+          if (result.scratch) {
+            EXPECT_EQ(result.scratch->wave_byte_length, 4096u);
+            auto* memory =
+                reinterpret_cast<Memory*>(result.scratch->memory.handle);
+            EXPECT_EQ(memory->bytes.size(), 4096u * 32 * 2);
+            EXPECT_EQ(result.scratch->address, memory->address);
+            EXPECT_EQ(result.scratch->memory.mapping, nullptr);
+            iree_hal_amd_gpu_pm4_scratch_storage_free(&context_,
+                                                      result.scratch);
           }
           if (result.first) {
             EXPECT_FALSE(iree_hal_amd_gpu_publisher_enqueue_batch(
@@ -348,6 +363,13 @@ class GrowthTest : public ::testing::Test {
   iree_hal_amd_gpu_context_t context_ = {};
   // Coherent memory policy borrowed through each acquisition.
   iree_hal_amd_fabric_memory_options_t memory_ = {};
+  // Physical scratch policy with no host mapping request.
+  iree_hal_amd_fabric_memory_options_t scratch_memory_ = {};
+  // Two native shader engines, each with 32 resident wave slots.
+  iree_hal_amd_gpu_pm4_scratch_profile_t scratch_profile_ = {
+      .waves_per_engine = 32,
+      .engine_count = 2,
+  };
   // Production reusable capture owner.
   iree_hal_amd_gpu_capture_pool_t captures_ = {};
   // Actual queue publication ownership and FIFO.
@@ -467,8 +489,8 @@ class ProgramGrowthTest : public GrowthTest {
     IREE_ASSERT_OK(
         iree_hal_amd_gpu_pm4_barrier_profile_initialize({11, 0, 0}, &profile));
     IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_command_buffer_create(
-        &family_, &programs_, 0, IREE_HAL_COMMAND_CATEGORY_ANY, 0, 0, &profile,
-        iree_allocator_system(), &command_buffer_));
+        &family_, &programs_, 0, IREE_HAL_COMMAND_CATEGORY_ANY, 0, 0, 0,
+        &profile, iree_allocator_system(), &command_buffer_));
     IREE_ASSERT_OK(iree_hal_command_buffer_begin(command_buffer_));
     IREE_ASSERT_OK(iree_hal_command_buffer_end(command_buffer_));
     iree_hal_amd_gpu_pm4_submission_t* capture = nullptr;
@@ -643,6 +665,30 @@ TEST_F(GrowthTest, FailedNativeAcquisitionReturnsEveryCapturedOwner) {
   }
   EXPECT_EQ(failed_, 1660u);
   EXPECT_EQ(completed_, 1660u);
+}
+
+TEST_F(GrowthTest, ScratchCohortRetiresOnNativeSuccessOrFailure) {
+  for (bool fail : {false, true}) {
+    SCOPED_TRACE(fail);
+    hold_ = true;
+    fail_ = fail;
+    Park(IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_SCRATCH);
+    entered_.acquire();
+    for (uint32_t i = 1; i < 16; ++i) {
+      Park(IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_SCRATCH);
+    }
+    EXPECT_TRUE(iree_hal_amd_gpu_publisher_is_idle(&publisher_));
+    resume_.release();
+    for (uint32_t i = 0; i < 16; ++i) {
+      consumed_.acquire();
+    }
+    iree_hal_amd_gpu_context_join_memory(&context_);
+    JoinPublication();
+    EXPECT_EQ(live_, 0u);
+    EXPECT_EQ(allocations_, fail ? 2u : 1u);
+    EXPECT_EQ(completed_, fail ? 32u : 16u);
+    EXPECT_EQ(failed_, fail ? 16u : 0u);
+  }
 }
 
 TEST_F(GrowthTest, ReturnedSignalResumesParkedWorkWhileAllocationIsHeld) {

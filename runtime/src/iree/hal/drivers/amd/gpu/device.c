@@ -22,6 +22,7 @@
 #include "iree/hal/drivers/amd/gpu/queue/pm4/command_buffer.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/program.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/queue.h"
+#include "iree/hal/drivers/amd/gpu/queue/pm4/scratch.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/semaphore.h"
 #include "iree/hal/drivers/amd/gpu/queue/sdma/queue.h"
 #include "iree/hal/drivers/amd/status.h"
@@ -57,6 +58,15 @@ typedef struct iree_hal_amd_gpu_device_t {
   iree_hal_amd_gpu_publication_t publication;
   // Resident command programs, shared builtins, and idle-instance trimming.
   iree_hal_amd_gpu_pm4_program_pool_t programs;
+  // Lazy queue-local private storage shares immutable placement/geometry facts.
+  struct {
+    // Native scratch slot capacity and register layout.
+    iree_hal_amd_gpu_pm4_scratch_profile_t profile;
+    // Read/write GPU address requirements borrowed by the placement policy.
+    amdf_memory_device_access_t access;
+    // Resident placement without an unnecessary host mapping or execute access.
+    iree_hal_amd_fabric_memory_options_t memory;
+  } scratch;
   // Required file copies share one native transfer queue and reusable backing.
   struct {
     // Native publication/retirement source, absent without an admitted family.
@@ -821,11 +831,26 @@ iree_status_t iree_hal_amd_gpu_device_create(
     device->memory.allocations.failure = &device->feedback.failure_code;
     device->memory.mappings.failure = &device->feedback.failure_code;
   }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amd_gpu_pm4_scratch_profile_initialize(
+        &context->target_info,
+        context->families[family_ordinal].format_features,
+        &device->scratch.profile);
+    device->scratch.access = device->programs.access;
+    device->scratch.access.requirements.access =
+        AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE;
+    device->scratch.memory = device->programs.resident;
+    device->scratch.memory.accesses = &device->scratch.access;
+    device->scratch.memory.required_flags &= ~AMDF_MEMORY_FLAG_HOST_VISIBLE;
+    device->scratch.memory.host_access = 0;
+  }
   iree_hal_amd_gpu_pm4_queue_options_t queue_options = {
       .family_ordinal = family_ordinal,
       .publication_mode = publication_mode,
       .command_byte_capacity = options->pm4.ring_byte_length,
       .memory = &device->memory.control,
+      .scratch_memory = &device->scratch.memory,
+      .scratch_profile = device->scratch.profile,
       .publication = &device->publication,
       .allocations = &device->memory.allocations,
       .mappings = &device->memory.mappings,
@@ -1091,7 +1116,8 @@ static iree_status_t iree_hal_amd_gpu_device_create_command_buffer(
       family, &device->programs, mode, categories, binding_capacity,
       (uint32_t)
           device->context->target_info.compute.local_data_share_byte_length,
-      &profile, device->host_allocator, out_command_buffer);
+      device->scratch.profile.maximum_wave_byte_length, &profile,
+      device->host_allocator, out_command_buffer);
 }
 
 static iree_status_t iree_hal_amd_gpu_device_import_file(

@@ -27,8 +27,11 @@ class DispatchTest : public ::testing::Test {
       iree_const_byte_span_t constants = iree_const_byte_span_empty(),
       iree_host_size_t binding_count = 0) {
     return iree_hal_amd_gpu_pm4_dispatch_prepare(
-        &function_, 65536, config, constants, binding_count, flags, &dispatch_);
+        &function_, 65536, maximum_scratch_wave_byte_length_, config, constants,
+        binding_count, flags, &dispatch_);
   }
+  // Zero unless the fixture explicitly provisions native private storage.
+  uint32_t maximum_scratch_wave_byte_length_ = 0;
   // Normalized image metadata; launch inputs remain public caller values.
   iree_hal_amd_gpu_metadata_kernel_t metadata_ = {};
   // Argument representation used by launch admission.
@@ -55,6 +58,29 @@ TEST_F(DispatchTest, DefaultGeometryUsesRequiredMetadata) {
   config.workgroup_size[1] = 2;
   config.workgroup_size[2] = 1;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Prepare(config));
+}
+
+TEST_F(DispatchTest, PrivateStorageUsesCompiledWaveWidthAndNativeCapacity) {
+  const auto config = iree_hal_make_static_dispatch_config(1, 1, 1);
+  function_.launch.requirements =
+      IREE_HAL_AMD_GPU_PM4_LAUNCH_REQUIREMENT_SCRATCH;
+  metadata_.private_segment_fixed_size = 36;
+  function_.launch.wavefront_size_log2 = 5;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, Prepare(config));
+  maximum_scratch_wave_byte_length_ = 8192;
+  IREE_ASSERT_OK(Prepare(config));
+  EXPECT_EQ(dispatch_.scratch_wave_byte_length, 1280u);
+  function_.launch.wavefront_size_log2 = 6;
+  IREE_ASSERT_OK(Prepare(config));
+  EXPECT_EQ(dispatch_.scratch_wave_byte_length, 2304u);
+  metadata_.private_segment_fixed_size = 129;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, Prepare(config));
+  metadata_.private_segment_fixed_size = UINT32_MAX;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, Prepare(config));
+  metadata_.private_segment_fixed_size = 64;
+  function_.launch.requirements |=
+      IREE_HAL_AMD_GPU_PM4_LAUNCH_REQUIREMENT_DYNAMIC_STACK;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, Prepare(config));
 }
 
 TEST_F(DispatchTest, ExactItemsAdmitPartialGroupsAndUniformRequirements) {

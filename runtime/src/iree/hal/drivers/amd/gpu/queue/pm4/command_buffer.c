@@ -86,6 +86,8 @@ typedef struct iree_hal_amd_gpu_pm4_command_buffer_t {
   iree_hal_amd_gpu_pm4_binding_requirement_t* requirements;
   // Device-local LDS capacity for public dispatch admission.
   uint32_t maximum_group_segment_byte_length;
+  // Native per-wave private capacity; zero when the service is unavailable.
+  uint32_t maximum_scratch_wave_byte_length;
   // Captured physical cache behavior; no topology is retained.
   iree_hal_amd_gpu_pm4_barrier_profile_t profile;
   // First failed native recording mutation; prevents sealing partial packets.
@@ -127,6 +129,7 @@ iree_status_t iree_hal_amd_gpu_pm4_command_buffer_create(
     iree_hal_command_buffer_mode_t mode, iree_hal_command_category_t categories,
     iree_host_size_t binding_capacity,
     uint32_t maximum_group_segment_byte_length,
+    uint32_t maximum_scratch_wave_byte_length,
     const iree_hal_amd_gpu_pm4_barrier_profile_t* profile,
     iree_allocator_t host_allocator, iree_hal_command_buffer_t** out_buffer) {
   *out_buffer = NULL;
@@ -154,6 +157,7 @@ iree_status_t iree_hal_amd_gpu_pm4_command_buffer_create(
   buffer->host_allocator = host_allocator;
   buffer->pool = pool;
   buffer->maximum_group_segment_byte_length = maximum_group_segment_byte_length;
+  buffer->maximum_scratch_wave_byte_length = maximum_scratch_wave_byte_length;
   buffer->profile = *profile;
   buffer->requirements = (void*)((uint8_t*)buffer + requirements_offset);
   for (uint32_t i = 0; i <= binding_capacity; ++i) {
@@ -754,7 +758,8 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_dispatch(
       iree_hal_amd_gpu_executable_lookup_pm4(executable, token, &function));
   iree_hal_amd_gpu_pm4_dispatch_t dispatch;
   IREE_RETURN_IF_ERROR(iree_hal_amd_gpu_pm4_dispatch_prepare(
-      function, buffer->maximum_group_segment_byte_length, config, constants,
+      function, buffer->maximum_group_segment_byte_length,
+      buffer->maximum_scratch_wave_byte_length, config, constants,
       bindings.count, flags, &dispatch));
   const bool indirect_parameters =
       iree_hal_dispatch_uses_indirect_parameters(flags);
@@ -817,7 +822,9 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_dispatch(
         cursor, function->packet->prepare, 0, buffer->profile.shader);
   }
   const uint32_t launch_offset = command_offset + prepare_words * 4;
-  const iree_hal_amd_gpu_pm4_launch_inputs_t inputs = {0};
+  const iree_hal_amd_gpu_pm4_launch_inputs_t inputs = {
+      .private_segment_size =
+          (function->metadata->private_segment_fixed_size + 3u) & ~3u};
   cursor = iree_hal_amd_gpu_pm4_launch_emit(
       cursor, &function->launch, dispatch.workgroup_size, dispatch.partial_size,
       dispatch.group_segment_byte_length, &inputs);
@@ -954,6 +961,9 @@ static iree_status_t iree_hal_amd_gpu_pm4_command_dispatch(
       }
     }
   }
+  buffer->program.scratch_wave_byte_length =
+      iree_max(buffer->program.scratch_wave_byte_length,
+               dispatch.scratch_wave_byte_length);
   ++buffer->program.dispatch_count;
   ++buffer->program.operation_count;
   return iree_ok_status();

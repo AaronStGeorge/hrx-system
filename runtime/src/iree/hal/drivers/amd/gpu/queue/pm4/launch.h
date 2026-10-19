@@ -131,8 +131,9 @@ static inline uint16_t iree_hal_amd_gpu_pm4_launch_user_data_word_offset(
 // allocation.
 //
 // Every binding replaces prior program/LDS state. The following dispatch uses
-// the prepared wave mode. Scratch-base, scheduler, trap-handler-address,
-// profiling and dispatch-pointer context registers remain native-owned.
+// the prepared wave mode. Scratch backing is bound by the queue around the
+// invocation. Scheduler, trap-handler-address, profiling, and dispatch-pointer
+// context registers remain native-owned.
 // Binding does not issue a dispatch or establish an execution/cache dependency.
 uint32_t* iree_hal_amd_gpu_pm4_launch_emit(
     uint32_t* words, const iree_hal_amd_gpu_pm4_launch_t* launch,

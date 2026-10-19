@@ -44,6 +44,7 @@ typedef enum iree_hal_amd_gpu_pm4_entry_kind_e {
   IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_ARGUMENTS,
   IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_SIGNALS,
   IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_PROGRAM,
+  IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_SCRATCH,
 } iree_hal_amd_gpu_pm4_entry_kind_t;
 
 // Typed publication record. Commands and completed native acquisitions use the
@@ -113,6 +114,26 @@ typedef struct iree_hal_amd_gpu_pm4_submission_t {
     iree_hal_amd_gpu_pm4_command_invocation_t execute;
   };
 } iree_hal_amd_gpu_pm4_submission_t;
+
+// Reads retained admission facts in constant time; empty dispatches need no
+// private backing. Recorded programs already aggregate all their dispatches.
+static inline uint32_t iree_hal_amd_gpu_pm4_submission_scratch_required(
+    const iree_hal_amd_gpu_pm4_submission_t* submission) {
+  if (submission->entry.kind == IREE_HAL_AMD_GPU_PM4_ENTRY_EXECUTE) {
+    return submission->execute.program->scratch_wave_byte_length;
+  }
+  if (submission->entry.kind != IREE_HAL_AMD_GPU_PM4_ENTRY_DISPATCH) {
+    return 0;
+  }
+  const iree_hal_amd_gpu_pm4_dispatch_t* geometry =
+      &submission->dispatch.geometry;
+  return iree_hal_dispatch_uses_indirect_parameters(
+             submission->dispatch.flags) ||
+                 (geometry->workgroup_count[0] &&
+                  geometry->workgroup_count[1] && geometry->workgroup_count[2])
+             ? geometry->scratch_wave_byte_length
+             : 0;
+}
 
 // Borrows optional metadata owned by the capture. Its publication owner is the
 // sole writer; completion never modifies it.

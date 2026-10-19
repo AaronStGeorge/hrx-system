@@ -10,6 +10,7 @@
 #include "iree/hal/drivers/amd/gpu/publication.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/backing.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/program.h"
+#include "iree/hal/drivers/amd/gpu/queue/pm4/scratch.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/submission.h"
 
 #ifdef __cplusplus
@@ -27,6 +28,10 @@ typedef struct iree_hal_amd_gpu_pm4_growth_context_t {
   iree_hal_amd_gpu_context_t* context;
   // Borrowed immutable coherent argument/signal memory policy.
   const iree_hal_amd_fabric_memory_options_t* memory;
+  // Borrowed physical-local read/write scratch policy, with no host mapping.
+  const iree_hal_amd_fabric_memory_options_t* scratch_memory;
+  // Borrowed exact publisher's immutable scratch slot geometry.
+  const iree_hal_amd_gpu_pm4_scratch_profile_t* scratch_profile;
   // Borrowed reusable host captures, live through every completed request.
   iree_hal_amd_gpu_capture_pool_t* captures;
   // Queue's sole publication FIFO and ownership transfer.
@@ -54,6 +59,8 @@ typedef struct iree_hal_amd_gpu_pm4_growth_context_t {
   iree_hal_amd_gpu_pm4_growth_t* arguments;
   // One coalesced signal acquisition, or NULL without pending growth.
   iree_hal_amd_gpu_pm4_growth_t* signals;
+  // One coalesced scratch acquisition, or NULL without pending growth.
+  iree_hal_amd_gpu_pm4_growth_t* scratch;
   // Live growth records, including native requests and queued reuse hints after
   // their entire waiting cohort has resumed. Part of cold queue idle.
   iree_atomic_int32_t pending_count;
@@ -61,15 +68,15 @@ typedef struct iree_hal_amd_gpu_pm4_growth_context_t {
 
 // Transfers a detached capture to a coalesced growth request. The caller owns
 // the queue publisher and has released any unpublished program reservation.
-// kind is one of the three GROW variants. argument_capacity is the admitted
-// power-of-two requested extent for argument growth and is ignored otherwise.
+// kind is a GROW variant. capacity is the admitted power-of-two argument
+// extent or per-wave scratch extent, and is ignored for other kinds.
 // Success parks the capture outside the ready FIFO. Failure leaves ownership
 // with the caller and starts no callback for this capture. Pending program
 // requests are indexed directly by program and queue, without a registry walk.
 iree_status_t iree_hal_amd_gpu_pm4_growth_begin(
     iree_hal_amd_gpu_pm4_growth_context_t* context,
     iree_hal_amd_gpu_pm4_entry_kind_t kind,
-    iree_hal_amd_gpu_pm4_submission_t* submission, uint64_t argument_capacity);
+    iree_hal_amd_gpu_pm4_submission_t* submission, uint64_t capacity);
 
 // Acquired backing and the detached waiting cohort. The publisher installs
 // successful backing, then batch-splices first..last into its ready FIFO. On
@@ -81,6 +88,8 @@ typedef struct iree_hal_amd_gpu_pm4_growth_result_t {
   iree_hal_amd_gpu_publication_entry_t* last;
   // Owned acquired arguments, or NULL for another kind or failure.
   iree_hal_amd_gpu_pm4_argument_storage_t* arguments;
+  // Owned acquired scratch generation, or NULL for another kind or failure.
+  iree_hal_amd_gpu_pm4_scratch_storage_t* scratch;
   // Owned acquired signal block, or NULL for another kind or failure.
   iree_hal_amd_gpu_pm4_signal_storage_t* signals;
 } iree_hal_amd_gpu_pm4_growth_result_t;

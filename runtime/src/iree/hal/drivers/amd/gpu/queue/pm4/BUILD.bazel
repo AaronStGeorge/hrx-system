@@ -359,6 +359,35 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "scratch",
+    srcs = ["scratch.c"],
+    hdrs = ["scratch.h"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    deps = [
+        ":commands",
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amd:status",
+        "//runtime/src/iree/hal/drivers/amd/fabric:memory",
+        "//runtime/src/iree/hal/drivers/amd/gpu:context",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "scratch_test",
+    srcs = ["scratch_test.cc"],
+    target_compatible_with = _NATIVE_DEVICE_COMPATIBLE_WITH,
+    deps = [
+        ":scratch",
+        "//libamdf:headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "growth",
     srcs = ["growth.c"],
     hdrs = ["growth.h"],
@@ -366,6 +395,7 @@ iree_runtime_cc_library(
     deps = [
         ":backing",
         ":program",
+        ":scratch",
         ":submission",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
@@ -643,6 +673,7 @@ iree_runtime_cc_library(
         ":program",
         ":retirement",
         ":ring",
+        ":scratch",
         ":semaphore",
         ":signal",
         ":submission",

@@ -16,6 +16,7 @@
 #include "iree/hal/drivers/amd/gpu/queue/file_staging.h"
 #include "iree/hal/drivers/amd/gpu/queue/memory_mapping.h"
 #include "iree/hal/drivers/amd/gpu/queue/pm4/barrier.h"
+#include "iree/hal/drivers/amd/gpu/queue/pm4/scratch.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,6 +38,10 @@ typedef struct iree_hal_amd_gpu_pm4_queue_options_t {
   // device at access ordinal zero, with coherent host read/write and GPU
   // access. All pointed-to storage remains live through final queue cleanup.
   const iree_hal_amd_fabric_memory_options_t* memory;
+  // Borrowed read/write resident policy for lazy private storage, no host map.
+  const iree_hal_amd_fabric_memory_options_t* scratch_memory;
+  // Native private-storage geometry, captured before accepting dispatches.
+  iree_hal_amd_gpu_pm4_scratch_profile_t scratch_profile;
   // Borrowed device publisher, independent of native allocation and retirement.
   iree_hal_amd_gpu_publication_t* publication;
   // Borrowed device-shared allocation executor, independent of publication.

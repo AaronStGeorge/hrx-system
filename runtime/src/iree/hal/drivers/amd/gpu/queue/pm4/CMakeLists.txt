@@ -655,6 +655,41 @@ endif()
 if(AMDF_BUILD)
 iree_cc_library(
   NAME
+    scratch
+  HDRS
+    "scratch.h"
+  SRCS
+    "scratch.c"
+  DEPS
+    ::commands
+    amdf::headers
+    iree::base
+    iree::hal
+    iree::hal::drivers::amd::fabric::memory
+    iree::hal::drivers::amd::gpu::context
+    iree::hal::drivers::amd::status
+  PUBLIC
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_test(
+  NAME
+    scratch_test
+  SRCS
+    "scratch_test.cc"
+  DEPS
+    ::scratch
+    amdf::headers
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+endif()
+
+if(AMDF_BUILD)
+iree_cc_library(
+  NAME
     growth
   HDRS
     "growth.h"
@@ -663,6 +698,7 @@ iree_cc_library(
   DEPS
     ::backing
     ::program
+    ::scratch
     ::submission
     iree::base
     iree::base::internal
@@ -983,6 +1019,7 @@ iree_cc_library(
     ::program
     ::retirement
     ::ring
+    ::scratch
     ::semaphore
     ::signal
     ::submission

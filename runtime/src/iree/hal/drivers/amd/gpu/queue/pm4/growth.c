@@ -39,6 +39,8 @@ struct iree_hal_amd_gpu_pm4_growth_t {
       union {
         // Owned argument generation for GROW_ARGUMENTS.
         iree_hal_amd_gpu_pm4_argument_storage_t* arguments;
+        // Owned private-storage generation for GROW_SCRATCH.
+        iree_hal_amd_gpu_pm4_scratch_storage_t* scratch;
         // Owned signal generation for GROW_SIGNALS.
         iree_hal_amd_gpu_pm4_signal_storage_t* signals;
       };
@@ -131,7 +133,7 @@ static void iree_hal_amd_gpu_pm4_growth_await_signals(
 iree_status_t iree_hal_amd_gpu_pm4_growth_begin(
     iree_hal_amd_gpu_pm4_growth_context_t* context,
     iree_hal_amd_gpu_pm4_entry_kind_t kind,
-    iree_hal_amd_gpu_pm4_submission_t* submission, uint64_t argument_capacity) {
+    iree_hal_amd_gpu_pm4_submission_t* submission, uint64_t capacity) {
   iree_hal_amd_gpu_pm4_growth_t* pending = NULL;
   iree_hal_amd_gpu_pm4_program_t* program = NULL;
   switch (kind) {
@@ -140,6 +142,9 @@ iree_status_t iree_hal_amd_gpu_pm4_growth_begin(
       break;
     case IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_SIGNALS:
       pending = context->signals;
+      break;
+    case IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_SCRATCH:
+      pending = context->scratch;
       break;
     case IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_PROGRAM:
       program = &submission->execute.program->resident;
@@ -189,15 +194,29 @@ iree_status_t iree_hal_amd_gpu_pm4_growth_begin(
     iree_hal_amd_fabric_memory_t* memory = NULL;
     if (kind == IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_ARGUMENTS) {
       status = iree_hal_amd_gpu_pm4_argument_storage_prepare(
-          argument_capacity, context->captures->host_allocator,
+          capacity, context->captures->host_allocator,
           &growth->backing.arguments);
       if (iree_status_is_ok(status)) {
         memory = &growth->backing.arguments->memory;
-        growth->backing.request = (iree_hal_amd_fabric_memory_request_t){
-            .options = context->memory,
-            .byte_length = argument_capacity,
-            .alignment = argument_capacity};
+        growth->backing.request =
+            (iree_hal_amd_fabric_memory_request_t){.options = context->memory,
+                                                   .byte_length = capacity,
+                                                   .alignment = capacity};
         context->arguments = growth;
+      }
+    } else if (kind == IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_SCRATCH) {
+      status = iree_hal_amd_gpu_pm4_scratch_storage_prepare(
+          (uint32_t)capacity, context->captures->host_allocator,
+          &growth->backing.scratch);
+      if (iree_status_is_ok(status)) {
+        memory = &growth->backing.scratch->memory;
+        growth->backing.request = (iree_hal_amd_fabric_memory_request_t){
+            .options = context->scratch_memory,
+            .byte_length = capacity *
+                           context->scratch_profile->waves_per_engine *
+                           context->scratch_profile->engine_count,
+            .alignment = 256};
+        context->scratch = growth;
       }
     } else {
       status = iree_hal_amd_gpu_pm4_signal_storage_prepare(
@@ -267,6 +286,19 @@ iree_status_t iree_hal_amd_gpu_pm4_growth_end(
       } else {
         iree_hal_amd_gpu_pm4_signal_storage_free(context->context,
                                                  growth->backing.signals);
+      }
+      break;
+    case IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_SCRATCH:
+      context->scratch = NULL;
+      if (iree_status_is_ok(status)) {
+        status = iree_hal_amd_gpu_pm4_scratch_storage_initialize(
+            context->context, growth->backing.scratch);
+      }
+      if (iree_status_is_ok(status)) {
+        out_result->scratch = growth->backing.scratch;
+      } else {
+        iree_hal_amd_gpu_pm4_scratch_storage_free(context->context,
+                                                  growth->backing.scratch);
       }
       break;
     case IREE_HAL_AMD_GPU_PM4_ENTRY_GROW_PROGRAM:
