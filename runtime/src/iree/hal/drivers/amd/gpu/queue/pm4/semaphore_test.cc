@@ -102,6 +102,21 @@ class SemaphoreTest : public ::testing::Test {
   Signal* AcquireSignal() {
     return iree_hal_amd_gpu_pm4_signal_pool_try_acquire(&pool_);
   }
+  void ExpectAvailableSignals(size_t expected_count) {
+    std::array<Signal*, 8> available;
+    size_t count = 0;
+    while (count < available.size()) {
+      auto* signal = AcquireSignal();
+      if (!signal) {
+        break;
+      }
+      available[count++] = signal;
+    }
+    EXPECT_EQ(count, expected_count);
+    for (size_t i = 0; i < count; ++i) {
+      iree_hal_amd_gpu_pm4_signal_release(available[i]);
+    }
+  }
   void Publish(iree_hal_semaphore_t* semaphore, uint64_t value, Signal* signal,
                iree_async_axis_t axis = 1) {
     const uint64_t frontier[3] = {value, 0, 0};
@@ -219,7 +234,7 @@ TEST_F(SemaphoreTest, ForeignDomainWaitDoesNotPinProducerBacking) {
   EXPECT_EQ(wait.producer.axis, 0u);
   EXPECT_EQ(wait.producer.epoch, 0u);
   EXPECT_EQ(Value(semaphore), 0u);
-  EXPECT_EQ(block_.live_count, 1u);
+  ExpectAvailableSignals(7);
   IREE_ASSERT_OK(
       iree_hal_amd_gpu_pm4_semaphore_publish_completed(semaphore, 1, nullptr));
   EXPECT_EQ(Value(semaphore), 1u);
@@ -307,10 +322,10 @@ TEST_F(SemaphoreTest, ReaderOutlivesProducerAndSemaphore) {
   iree_hal_amd_gpu_pm4_signal_release(signal);
   iree_hal_semaphore_release(semaphores_.back());
   semaphores_.pop_back();
-  EXPECT_EQ(block_.live_count, 1u);
+  ExpectAvailableSignals(7);
   EXPECT_EQ(wait.signal->device_address, 0x1000u);
   iree_hal_amd_gpu_pm4_signal_release(wait.signal);
-  EXPECT_EQ(block_.live_count, 0u);
+  ExpectAvailableSignals(8);
 }
 
 TEST_F(SemaphoreTest, UnassignedTopologyStillProvidesNativeDependency) {
@@ -338,9 +353,9 @@ TEST_F(SemaphoreTest, ReplacingCachePreservesEveryNativeReader) {
   EXPECT_EQ(first_wait.signal, first);
   EXPECT_EQ(second_wait.signal, second);
   EXPECT_EQ(second_wait.producer.axis, 2u);
-  EXPECT_EQ(block_.live_count, 2u);
+  ExpectAvailableSignals(6);
   iree_hal_amd_gpu_pm4_signal_release(first_wait.signal);
-  EXPECT_EQ(block_.live_count, 1u);
+  ExpectAvailableSignals(7);
   iree_hal_amd_gpu_pm4_signal_release(second_wait.signal);
   iree_hal_amd_gpu_pm4_signal_release(second);
 }
@@ -354,7 +369,7 @@ TEST_F(SemaphoreTest, CompletionBeforePublicationCannotInstallStaleCache) {
   EXPECT_EQ(AcquireWait(semaphore, 1).state,
             IREE_HAL_AMD_GPU_PM4_SEMAPHORE_WAIT_COMPLETED);
   iree_hal_amd_gpu_pm4_signal_release(signal);
-  EXPECT_EQ(block_.live_count, 0u);
+  ExpectAvailableSignals(8);
 }
 
 TEST_F(SemaphoreTest, DelayedPublicationCannotReplaceHigherProducer) {
@@ -364,7 +379,7 @@ TEST_F(SemaphoreTest, DelayedPublicationCannotReplaceHigherProducer) {
   Publish(semaphore, 2, second, 2);
   Publish(semaphore, 1, first);
   iree_hal_amd_gpu_pm4_signal_release(first);
-  EXPECT_EQ(block_.live_count, 1u);
+  ExpectAvailableSignals(7);
   auto wait = AcquireWait(semaphore, 1);
   EXPECT_EQ(wait.signal, second);
   EXPECT_EQ(wait.producer.epoch, 2u);
@@ -382,7 +397,7 @@ TEST_F(SemaphoreTest, CompletionObserversCanArriveInReverseOrder) {
       iree_hal_amd_gpu_pm4_semaphore_publish_completed(semaphore, 1, nullptr));
   EXPECT_EQ(Value(semaphore), 2u);
   iree_hal_amd_gpu_pm4_signal_release(signal);
-  EXPECT_EQ(block_.live_count, 0u);
+  ExpectAvailableSignals(8);
 }
 
 TEST_F(SemaphoreTest, HostSignalClearsOnlyCoveredCache) {
@@ -395,7 +410,7 @@ TEST_F(SemaphoreTest, HostSignalClearsOnlyCoveredCache) {
   iree_hal_amd_gpu_pm4_signal_release(wait.signal);
   IREE_ASSERT_OK(iree_hal_semaphore_signal(semaphore, 2, nullptr));
   iree_hal_amd_gpu_pm4_signal_release(signal);
-  EXPECT_EQ(block_.live_count, 0u);
+  ExpectAvailableSignals(8);
 }
 
 TEST_F(SemaphoreTest, ColdTimelineStartsFromPublishedOrCompletedValue) {
@@ -463,9 +478,9 @@ TEST_F(SemaphoreTest, FailureDoesNotReclaimNativeReaders) {
                         iree_hal_amd_gpu_pm4_semaphore_publish_signal(
                             semaphore, 2, {1, 2}, signal));
   iree_hal_amd_gpu_pm4_signal_release(signal);
-  EXPECT_EQ(block_.live_count, 1u);
+  ExpectAvailableSignals(7);
   iree_hal_amd_gpu_pm4_signal_release(wait.signal);
-  EXPECT_EQ(block_.live_count, 0u);
+  ExpectAvailableSignals(8);
 }
 
 TEST_F(SemaphoreTest, ColdAllocationFailureLeavesReadyPathUsable) {
@@ -607,7 +622,7 @@ TEST_F(SemaphoreTest, PublicationCompletionAndReaderAcquisitionRace) {
     finish.arrive_and_wait();
     iree_hal_amd_gpu_pm4_signal_release(signal);
     iree_hal_amd_gpu_pm4_signal_release(wait.signal);
-    EXPECT_EQ(block_.live_count, 0u);
+    ExpectAvailableSignals(8);
   }
   publisher.join();
   observer.join();

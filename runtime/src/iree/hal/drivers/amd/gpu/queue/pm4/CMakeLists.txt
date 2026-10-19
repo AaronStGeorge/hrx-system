@@ -92,7 +92,6 @@ iree_cc_library(
   DEPS
     iree::base
     iree::base::internal
-    iree::base::threading
   PUBLIC
 )
 

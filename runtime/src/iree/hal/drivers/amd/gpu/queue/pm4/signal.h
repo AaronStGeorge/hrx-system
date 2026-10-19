@@ -9,7 +9,6 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/atomics.h"
-#include "iree/base/threading/mutex.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,7 +34,7 @@ typedef struct iree_hal_amd_gpu_pm4_signal_t {
       // one plus the terminal status code. Independent of the GPU-written cell.
       iree_atomic_int32_t retirement;
     } live;
-    // Link accessed only under the pool mutex after the last use has joined.
+    // Link owned by the final releaser, then by the pool's exclusive publisher.
     struct iree_hal_amd_gpu_pm4_signal_t* next;
   } state;
   // Borrowed block owning this slot, live until every reference is returned.
@@ -47,29 +46,36 @@ typedef struct iree_hal_amd_gpu_pm4_signal_t {
   uint64_t* host_value;
 } iree_hal_amd_gpu_pm4_signal_t;
 
-// Coalescible capacity hint, invoked after returning a slot and releasing the
-// pool mutex. The callback notifies the enclosing owner's existing progress
-// mechanism; it does not wait or destroy the pool. Another acquisition may
+// Coalescible capacity hint, invoked after publishing returned capacity. The
+// callback notifies the enclosing owner's existing progress mechanism; it
+// does not wait or destroy the pool. Another acquisition may
 // consume the available slot before the callback runs.
 typedef struct iree_hal_amd_gpu_pm4_signal_pool_notification_t {
-  // Optional callback for exhausted-to-available transitions.
+  // Optional callback when the shared return list becomes nonempty.
   void (*fn)(void* user_data);
   // Borrowed callback state, live through all external pool calls.
   void* user_data;
 } iree_hal_amd_gpu_pm4_signal_pool_notification_t;
 
-// Available cells across independently allocated blocks. Acquisition and last
-// release take one short metadata lock and perform constant-time list updates.
-// A pending native allocation is independent of returned capacity. This object
-// performs no allocation or native call and owns no worker.
+// Available cells across independently allocated blocks. The queue's exclusive
+// publisher owns acquisition, block attachment/detachment, and capacity
+// queries. Arbitrary readers may return cells concurrently. Acquisition pops
+// one local cell, detaching a batch of returned cells only when local capacity
+// is empty. Pending native allocation is independent of returned capacity. This
+// object performs no allocation or native call and owns no worker.
 typedef struct iree_hal_amd_gpu_pm4_signal_pool_t {
-  // Protects block membership, free lists, and each block's live_count.
-  iree_slim_mutex_t mutex;
   // Blocks with at least one free cell, linked without an availability scan.
   iree_hal_amd_gpu_pm4_signal_block_t* available;
+  // Returned cells detached by the publisher; still counted as live by blocks.
+  iree_hal_amd_gpu_pm4_signal_t* recycled;
   // Number of attached blocks, including exhausted and zero-capacity blocks.
   uint32_t block_count;
-  // Immutable wake target for exhausted-to-available transitions.
+  // Concurrent last releases push here. Separate from publisher-local metadata
+  // so returning cells does not invalidate the ordinary acquisition cache line.
+  iree_alignas(64) iree_atomic_intptr_t returned;
+  // Immutable wake target, sharing the return line and copied before a final
+  // release exposes its cell. Final releases never access publisher-local
+  // state.
   iree_hal_amd_gpu_pm4_signal_pool_notification_t notification;
 } iree_hal_amd_gpu_pm4_signal_pool_t;
 
@@ -79,11 +85,11 @@ typedef struct iree_hal_amd_gpu_pm4_signal_pool_t {
 typedef struct iree_hal_amd_gpu_pm4_signal_block_t {
   // Borrowed pool, or NULL after successful detachment.
   iree_hal_amd_gpu_pm4_signal_pool_t* pool;
-  // Number of slots with at least one live use, protected by mutex.
+  // Checked-out or pending-return cells; modified only by the publisher.
   uint32_t live_count;
   // Complete immutable native-domain queue count, including inactive queues.
   uint32_t queue_count;
-  // Available metadata slots, protected by mutex.
+  // Available metadata slots, owned by the publisher.
   iree_hal_amd_gpu_pm4_signal_t* free_head;
   // Previous available block, or NULL at the list head or while exhausted.
   iree_hal_amd_gpu_pm4_signal_block_t* available_previous;
@@ -115,8 +121,8 @@ void iree_hal_amd_gpu_pm4_signal_pool_deinitialize(
 // Metadata, values, and frontiers do not overlap. Frontiers has
 // capacity * queue_count entries; publication initializes a complete vector
 // before exposing a signal. A zero capacity attaches an empty block.
-// Attaches the initialized block under the pool mutex. The attaching publisher
-// already owns its waiting work; attachment does not invoke the notification.
+// The exclusive publisher attaches the block and already owns its waiting
+// work; attachment does not invoke the notification.
 void iree_hal_amd_gpu_pm4_signal_block_initialize(
     iree_hal_amd_gpu_pm4_signal_pool_t* pool, const void* domain,
     uint64_t* values, uint64_t device_address,
@@ -124,9 +130,10 @@ void iree_hal_amd_gpu_pm4_signal_block_initialize(
     uint32_t queue_count, uint64_t* frontiers,
     iree_hal_amd_gpu_pm4_signal_block_t* out_block);
 
-// Detaches an entirely unused block from acquisition in constant time. False
+// Reconciles pending returns, then detaches an entirely unused block. False
 // leaves it attached with live readers. True joins the last release's block
-// access and permits reclamation of its metadata and native extent. A copied
+// access and permits reclamation of its metadata and native extent. This cold
+// publisher operation walks only returned cells, never live cells. A copied
 // notification may still run; its target belongs to the enclosing owner.
 bool iree_hal_amd_gpu_pm4_signal_block_try_deinitialize(
     iree_hal_amd_gpu_pm4_signal_block_t* block);
@@ -135,17 +142,20 @@ bool iree_hal_amd_gpu_pm4_signal_block_try_deinitialize(
 void iree_hal_amd_gpu_pm4_signal_block_deinitialize(
     iree_hal_amd_gpu_pm4_signal_block_t* block);
 
-// Constant-time capacity observation used to close a miss/enrollment race.
+// Constant-time publisher query used after capacity enrollment. An empty local
+// pool exchanges the shared return head even when empty, ordering enrollment
+// against final-return notifications. Returned cells become publisher-local.
 bool iree_hal_amd_gpu_pm4_signal_pool_has_available(
     iree_hal_amd_gpu_pm4_signal_pool_t* pool);
 
 // Returns one owning reference, or NULL for ordinary capacity pressure. Clears
-// the exclusively owned cell to zero outside the metadata lock. The caller's
-// native publication barrier orders this store before any GPU access. Release
-// writes one and dependent queues wait for equality with one. An abandoned
-// unpublished signal can return without a write; there is no generation wrap
-// or dependency on a previous producer having executed. The caller transfers
-// or retains a reference before exposing the signal to another owner.
+// the exclusively owned cell to zero without shared metadata access. The
+// caller's native publication barrier orders this store before any GPU access.
+// Release writes one and dependent queues wait for equality with one. An
+// abandoned unpublished signal can return without a write; there is no
+// generation wrap or dependency on a previous producer having executed. The
+// caller transfers or retains a reference before exposing the signal to another
+// owner.
 iree_hal_amd_gpu_pm4_signal_t* iree_hal_amd_gpu_pm4_signal_pool_try_acquire(
     iree_hal_amd_gpu_pm4_signal_pool_t* pool);
 
@@ -199,10 +209,10 @@ static inline bool iree_hal_amd_gpu_pm4_signal_query_retirement(
 // Returns one use, making the cell reusable only after the last use joins.
 // A native use ends at proven execution completion or native quiescence, never
 // from failure alone. All accesses finish before this call; even its return
-// does not permit another read of the signal. Last release takes the pool's
-// short metadata lock, with no allocation or native destruction. Only an
-// exhausted-to-available transition invokes the pool's notification, outside
-// the mutex. NULL is ignored.
+// does not permit another read of the signal. Last release atomically pushes
+// the cell onto the pool's return list, with no allocation or native
+// destruction. Only an empty-to-nonempty return list transition invokes the
+// copied pool notification. NULL is ignored.
 void iree_hal_amd_gpu_pm4_signal_release(iree_hal_amd_gpu_pm4_signal_t* signal);
 
 #ifdef __cplusplus

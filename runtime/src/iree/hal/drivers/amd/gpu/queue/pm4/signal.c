@@ -8,10 +8,10 @@
 
 static_assert(sizeof(iree_hal_amd_gpu_pm4_signal_t) <= 32,
               "two signal owners must fit in one cache line");
-static_assert(sizeof(iree_hal_amd_gpu_pm4_signal_pool_t) -
-                      offsetof(iree_hal_amd_gpu_pm4_signal_pool_t, available) <=
-                  64,
-              "non-mutex pool bookkeeping fits in one cache line");
+static_assert(offsetof(iree_hal_amd_gpu_pm4_signal_pool_t, returned) == 64,
+              "publisher-local bookkeeping fits in one cache line");
+static_assert(sizeof(iree_hal_amd_gpu_pm4_signal_pool_t) == 128,
+              "concurrent returns have their own cache line");
 static_assert(sizeof(iree_hal_amd_gpu_pm4_signal_block_t) <= 64,
               "signal block bookkeeping fits in one cache line");
 
@@ -20,16 +20,14 @@ void iree_hal_amd_gpu_pm4_signal_pool_initialize(
     iree_hal_amd_gpu_pm4_signal_pool_t* out_pool) {
   *out_pool =
       (iree_hal_amd_gpu_pm4_signal_pool_t){.notification = notification};
-  iree_slim_mutex_initialize(&out_pool->mutex);
 }
 
 void iree_hal_amd_gpu_pm4_signal_pool_deinitialize(
     iree_hal_amd_gpu_pm4_signal_pool_t* pool) {
   IREE_ASSERT_EQ(pool->block_count, 0, "native signal blocks remain attached");
-  iree_slim_mutex_deinitialize(&pool->mutex);
 }
 
-// The pool mutex serializes availability with acquisition, release, and trim.
+// Only the exclusive publisher changes block membership and free cells.
 static void iree_hal_amd_gpu_pm4_signal_block_link(
     iree_hal_amd_gpu_pm4_signal_block_t* block) {
   iree_hal_amd_gpu_pm4_signal_pool_t* pool = block->pool;
@@ -51,6 +49,31 @@ static void iree_hal_amd_gpu_pm4_signal_block_unlink(
     block->available_next->available_previous = block->available_previous;
   }
   block->available_previous = block->available_next = NULL;
+}
+
+// Pending returns keep their blocks live until the publisher either reuses the
+// cell or reconciles its free-list membership here. Only cold trim drains a
+// complete batch; ordinary acquisition pops a single cell in constant work.
+static void iree_hal_amd_gpu_pm4_signal_pool_reconcile(
+    iree_hal_amd_gpu_pm4_signal_pool_t* pool) {
+  iree_hal_amd_gpu_pm4_signal_t* batches[] = {
+      pool->recycled, (iree_hal_amd_gpu_pm4_signal_t*)iree_atomic_exchange(
+                          &pool->returned, 0, iree_memory_order_acq_rel)};
+  pool->recycled = NULL;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(batches); ++i) {
+    iree_hal_amd_gpu_pm4_signal_t* signal = batches[i];
+    while (signal) {
+      iree_hal_amd_gpu_pm4_signal_t* next = signal->state.next;
+      iree_hal_amd_gpu_pm4_signal_block_t* block = signal->block;
+      if (!block->free_head) {
+        iree_hal_amd_gpu_pm4_signal_block_link(block);
+      }
+      signal->state.next = block->free_head;
+      block->free_head = signal;
+      --block->live_count;
+      signal = next;
+    }
+  }
 }
 
 void iree_hal_amd_gpu_pm4_signal_block_initialize(
@@ -76,18 +99,16 @@ void iree_hal_amd_gpu_pm4_signal_block_initialize(
         .state.next = i + 1 < capacity ? &signals[i + 1] : NULL,
     };
   }
-  iree_slim_mutex_lock(&pool->mutex);
   ++pool->block_count;
   if (capacity) {
     iree_hal_amd_gpu_pm4_signal_block_link(out_block);
   }
-  iree_slim_mutex_unlock(&pool->mutex);
 }
 
 bool iree_hal_amd_gpu_pm4_signal_block_try_deinitialize(
     iree_hal_amd_gpu_pm4_signal_block_t* block) {
   iree_hal_amd_gpu_pm4_signal_pool_t* pool = block->pool;
-  iree_slim_mutex_lock(&pool->mutex);
+  iree_hal_amd_gpu_pm4_signal_pool_reconcile(pool);
   const bool unused = block->live_count == 0;
   if (unused) {
     if (block->free_head) {
@@ -96,7 +117,6 @@ bool iree_hal_amd_gpu_pm4_signal_block_try_deinitialize(
     --pool->block_count;
     block->pool = NULL;
   }
-  iree_slim_mutex_unlock(&pool->mutex);
   return unused;
 }
 
@@ -109,15 +129,19 @@ void iree_hal_amd_gpu_pm4_signal_block_deinitialize(
 
 bool iree_hal_amd_gpu_pm4_signal_pool_has_available(
     iree_hal_amd_gpu_pm4_signal_pool_t* pool) {
-  iree_slim_mutex_lock(&pool->mutex);
-  const bool available = pool->available != NULL;
-  iree_slim_mutex_unlock(&pool->mutex);
-  return available;
+  if (pool->available || pool->recycled) {
+    return true;
+  }
+  // This RMW also publishes the caller's capacity enrollment. A later return
+  // acquires it before checking the notification predicate; an earlier return
+  // is consumed here. A plain load would leave a store/load missed-wake race.
+  pool->recycled = (iree_hal_amd_gpu_pm4_signal_t*)iree_atomic_exchange(
+      &pool->returned, 0, iree_memory_order_acq_rel);
+  return pool->recycled != NULL;
 }
 
 iree_hal_amd_gpu_pm4_signal_t* iree_hal_amd_gpu_pm4_signal_pool_try_acquire(
     iree_hal_amd_gpu_pm4_signal_pool_t* pool) {
-  iree_slim_mutex_lock(&pool->mutex);
   iree_hal_amd_gpu_pm4_signal_block_t* block = pool->available;
   iree_hal_amd_gpu_pm4_signal_t* signal = NULL;
   if (block) {
@@ -127,12 +151,22 @@ iree_hal_amd_gpu_pm4_signal_t* iree_hal_amd_gpu_pm4_signal_pool_try_acquire(
       iree_hal_amd_gpu_pm4_signal_block_unlink(block);
     }
     ++block->live_count;
+  } else {
+    if (!pool->recycled) {
+      pool->recycled = (iree_hal_amd_gpu_pm4_signal_t*)iree_atomic_exchange(
+          &pool->returned, 0, iree_memory_order_acq_rel);
+    }
+    signal = pool->recycled;
+    if (signal) {
+      pool->recycled = signal->state.next;
+      // A returned cell never left its block's live_count. Reuse only changes
+      // its exclusive owner; there is no block-list update to perform.
+    }
+  }
+  if (signal) {
     iree_atomic_ref_count_init(&signal->state.live.ref_count);
     iree_atomic_store(&signal->state.live.retirement, 0,
                       iree_memory_order_relaxed);
-  }
-  iree_slim_mutex_unlock(&pool->mutex);
-  if (signal) {
     *signal->host_value = 0;
   }
   return signal;
@@ -165,22 +199,20 @@ void iree_hal_amd_gpu_pm4_signal_retain(iree_hal_amd_gpu_pm4_signal_t* signal) {
 void iree_hal_amd_gpu_pm4_signal_release(
     iree_hal_amd_gpu_pm4_signal_t* signal) {
   if (signal && iree_atomic_ref_count_dec(&signal->state.live.ref_count) == 1) {
-    iree_hal_amd_gpu_pm4_signal_block_t* block = signal->block;
-    iree_hal_amd_gpu_pm4_signal_pool_t* pool = block->pool;
-    iree_slim_mutex_lock(&pool->mutex);
-    const bool became_available = pool->available == NULL;
-    if (!block->free_head) {
-      iree_hal_amd_gpu_pm4_signal_block_link(block);
-    }
-    signal->state.next = block->free_head;
-    block->free_head = signal;
-    --block->live_count;
+    iree_hal_amd_gpu_pm4_signal_pool_t* pool = signal->block->pool;
     const iree_hal_amd_gpu_pm4_signal_pool_notification_t notification =
         pool->notification;
-    iree_slim_mutex_unlock(&pool->mutex);
+    intptr_t previous =
+        iree_atomic_load(&pool->returned, iree_memory_order_relaxed);
+    do {
+      signal->state.next = (iree_hal_amd_gpu_pm4_signal_t*)previous;
+    } while (!iree_atomic_compare_exchange_weak(
+        &pool->returned, &previous, (intptr_t)signal, iree_memory_order_acq_rel,
+        iree_memory_order_relaxed));
     // A block can be reclaimed as soon as its last slot returns. The enclosing
-    // progress owner, not this block, owns the copied wake target.
-    if (became_available && notification.fn) {
+    // progress owner, not this block, owns the copied wake target. Neither the
+    // signal nor pool may be accessed after the successful publication above.
+    if (!previous && notification.fn) {
       notification.fn(notification.user_data);
     }
   }

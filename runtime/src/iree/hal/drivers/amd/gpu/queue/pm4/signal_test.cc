@@ -45,7 +45,7 @@ struct Storage {
   std::array<Signal, Capacity> signals;
   // Immutable native-domain vectors belonging to retained signals.
   std::array<uint64_t, Capacity * QueueCount> frontiers;
-  // Available blocks and their shared metadata lock.
+  // Publisher-owned free cells and concurrent final returns.
   Pool pool;
   // Finite bookkeeping borrowing all extents.
   iree_hal_amd_gpu_pm4_signal_block_t block;
@@ -256,7 +256,7 @@ TEST(SignalTest, LastReaderDoesNotPinUnrelatedCells) {
   iree_hal_amd_gpu_pm4_signal_release(held);
 }
 
-TEST(SignalTest, NotifyOnlyOnExhaustedToAvailableTransition) {
+TEST(SignalTest, NotifyOnlyWhenReturnListBecomesNonempty) {
   uint32_t notification_count = 0;
   Storage<2> storage(
       {[](void* user_data) { ++*static_cast<uint32_t*>(user_data); },
@@ -391,7 +391,7 @@ TEST(SignalTest, SimultaneousLastReleasesJoinBeforeReuse) {
   }
 }
 
-TEST(SignalTest, ConcurrentProducerAndReaderOwnership) {
+TEST(SignalTest, SinglePublisherAndConcurrentReaderOwnership) {
   constexpr size_t kLaneCount = 4;
   constexpr uint32_t kIterations = 4096;
   Storage<kLaneCount * 2 + 1> storage;
@@ -408,28 +408,9 @@ TEST(SignalTest, ConcurrentProducerAndReaderOwnership) {
     std::binary_semaphore ready{0};
   };
   std::array<Lane, kLaneCount> lanes;
-  std::array<std::thread, kLaneCount * 2> workers;
+  std::array<std::thread, kLaneCount> readers;
   for (size_t i = 0; i < lanes.size(); ++i) {
-    workers[i * 2] = std::thread([&, i] {
-      auto& lane = lanes[i];
-      for (uint32_t j = 0; j < kIterations; ++j) {
-        lane.available.acquire();
-        auto* signal =
-            iree_hal_amd_gpu_pm4_signal_pool_try_acquire(&storage.pool);
-        if (!signal) {
-          std::abort();
-        }
-        EXPECT_NE(signal, held);
-        EXPECT_EQ(*signal->host_value, 0u);
-        *signal->host_value = 1;
-        iree_hal_amd_gpu_pm4_signal_retain(signal);
-        lane.signal = signal;
-        lane.ready.release();
-        // The reader can win this race and drop its reference first.
-        iree_hal_amd_gpu_pm4_signal_release(signal);
-      }
-    });
-    workers[i * 2 + 1] = std::thread([&, i] {
+    readers[i] = std::thread([&, i] {
       auto& lane = lanes[i];
       for (uint32_t j = 0; j < kIterations; ++j) {
         lane.ready.acquire();
@@ -440,8 +421,28 @@ TEST(SignalTest, ConcurrentProducerAndReaderOwnership) {
       }
     });
   }
-  for (auto& worker : workers) {
-    worker.join();
+  // The real queue has one exclusive publisher even when callers arrive on
+  // many threads. Independent readers return capacity while it keeps issuing.
+  for (uint32_t j = 0; j < kIterations; ++j) {
+    for (auto& lane : lanes) {
+      lane.available.acquire();
+      auto* signal =
+          iree_hal_amd_gpu_pm4_signal_pool_try_acquire(&storage.pool);
+      if (!signal) {
+        std::abort();
+      }
+      EXPECT_NE(signal, held);
+      EXPECT_EQ(*signal->host_value, 0u);
+      *signal->host_value = 1;
+      iree_hal_amd_gpu_pm4_signal_retain(signal);
+      lane.signal = signal;
+      lane.ready.release();
+      // The reader can win this race and drop its reference first.
+      iree_hal_amd_gpu_pm4_signal_release(signal);
+    }
+  }
+  for (auto& reader : readers) {
+    reader.join();
   }
   EXPECT_EQ(*held->host_value, 1u);
   iree_hal_amd_gpu_pm4_signal_release(held);
