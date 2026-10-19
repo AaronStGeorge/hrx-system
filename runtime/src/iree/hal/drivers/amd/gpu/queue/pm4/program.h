@@ -268,7 +268,7 @@ struct iree_hal_amd_gpu_pm4_program_growth_t {
 // to the requesting queue; it never emits GPU work on the allocation worker.
 iree_status_t iree_hal_amd_gpu_pm4_program_grow_begin(
     iree_hal_amd_gpu_pm4_program_t* program, uint32_t queue_ordinal,
-    iree_hal_slab_acquire_callback_t callback,
+    iree_hal_amd_fabric_memory_callback_t callback,
     iree_hal_amd_gpu_pm4_program_growth_t* operation);
 
 // Arms one reuse hint after a failed acquisition. Epoch comparison closes the

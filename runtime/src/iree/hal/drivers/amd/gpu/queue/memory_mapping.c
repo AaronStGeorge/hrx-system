@@ -145,7 +145,7 @@ static void iree_hal_amd_gpu_memory_mapping_ready(void* user_data,
   }
   iree_hal_amd_gpu_context_map_memory(
       operation->context->context, operation->batch,
-      (iree_hal_slab_acquire_callback_t){
+      (iree_hal_amd_fabric_memory_callback_t){
           .fn = iree_hal_amd_gpu_memory_mapping_mapped, .user_data = operation},
       &operation->native);
 }

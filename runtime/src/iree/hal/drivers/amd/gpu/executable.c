@@ -125,8 +125,8 @@ static void iree_hal_amd_gpu_executable_destroy(
   iree_hal_amd_gpu_executable_release_metadata(executable);
   iree_hal_amd_gpu_context_release_memory(
       executable->context, executable->variant_count, executable->memories,
-      (iree_hal_slab_release_callback_t){.fn = iree_hal_amd_gpu_executable_free,
-                                         .user_data = executable},
+      (iree_hal_amd_fabric_memory_release_callback_t){
+          .fn = iree_hal_amd_gpu_executable_free, .user_data = executable},
       &executable->release);
 }
 

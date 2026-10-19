@@ -180,7 +180,7 @@ static void iree_hal_amd_gpu_pm4_program_instance_free(
   }
   iree_hal_amd_gpu_context_release_memory(
       program->pool->context, 1, &instance->memory,
-      (iree_hal_slab_release_callback_t){
+      (iree_hal_amd_fabric_memory_release_callback_t){
           .fn = iree_hal_amd_gpu_pm4_program_instance_released,
           .user_data = instance},
       &instance->release);
@@ -208,7 +208,7 @@ static void iree_hal_amd_gpu_pm4_program_upload_free(
   }
   iree_hal_amd_gpu_context_release_memory(
       pool->context, 1, &upload->memory,
-      (iree_hal_slab_release_callback_t){
+      (iree_hal_amd_fabric_memory_release_callback_t){
           .fn = iree_hal_amd_gpu_pm4_program_upload_released,
           .user_data = upload},
       &upload->release);
@@ -560,7 +560,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_program_reserve_instance(
 
 iree_status_t iree_hal_amd_gpu_pm4_program_grow_begin(
     iree_hal_amd_gpu_pm4_program_t* program, uint32_t queue_ordinal,
-    iree_hal_slab_acquire_callback_t callback,
+    iree_hal_amd_fabric_memory_callback_t callback,
     iree_hal_amd_gpu_pm4_program_growth_t* operation) {
   iree_hal_amd_gpu_pm4_program_instance_t* instance = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(

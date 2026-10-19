@@ -181,7 +181,11 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<bool> {
         };
     api_.memory_create = [](amdf_memory_scope_t* handle,
                             const amdf_memory_create_info_t* info,
-                            amdf_memory_t** out_memory) {
+                            amdf_memory_t** out_memory,
+                            amdf_memory_release_info_t* out_release_info) {
+      if (out_release_info) {
+        *out_release_info = {};
+      }
       auto* scope = reinterpret_cast<Scope*>(handle);
       auto* self = scope->owner;
       if (self->allocate_entered_) {
@@ -242,7 +246,11 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<bool> {
     api_.host_mapping_destroy = [](amdf_host_mapping_t*) {
       return AMDF_STATUS_OK;
     };
-    api_.memory_destroy = [](amdf_memory_t* handle) {
+    api_.memory_destroy = [](amdf_memory_t* handle,
+                             amdf_memory_release_info_t* out_release_info) {
+      if (out_release_info) {
+        *out_release_info = {};
+      }
       auto* memory = reinterpret_cast<Memory*>(handle);
       auto* self = memory->scope->owner;
       if (self->free_entered_) {
@@ -291,7 +299,7 @@ class ProgramLifetimeTest : public ::testing::TestWithParam<bool> {
     IREE_ASSERT_OK(iree_hal_amd_gpu_pm4_program_seal(program));
   }
 
-  static iree_hal_slab_acquire_callback_t Completion(
+  static iree_hal_amd_fabric_memory_callback_t Completion(
       std::promise<iree::Status>* result) {
     return {
         .fn =

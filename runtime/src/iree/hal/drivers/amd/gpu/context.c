@@ -42,7 +42,8 @@ static void iree_hal_amd_gpu_context_memory_acquired(void* user_data,
                                                      iree_status_t status) {
   iree_hal_amd_gpu_memory_acquire_t* operation = user_data;
   iree_hal_amd_gpu_context_t* context = operation->context;
-  const iree_hal_slab_acquire_callback_t completion = operation->completion;
+  const iree_hal_amd_fabric_memory_callback_t completion =
+      operation->completion;
   completion.fn(completion.user_data, status);
   iree_hal_amd_gpu_context_memory_end(context);
 }
@@ -50,7 +51,8 @@ static void iree_hal_amd_gpu_context_memory_acquired(void* user_data,
 static void iree_hal_amd_gpu_context_memory_released(void* user_data) {
   iree_hal_amd_gpu_memory_release_t* operation = user_data;
   iree_hal_amd_gpu_context_t* context = operation->context;
-  const iree_hal_slab_release_callback_t completion = operation->completion;
+  const iree_hal_amd_fabric_memory_release_callback_t completion =
+      operation->completion;
   completion.fn(completion.user_data);
   iree_hal_amd_gpu_context_memory_end(context);
 }
@@ -59,7 +61,7 @@ void iree_hal_amd_gpu_context_acquire_memory(
     iree_hal_amd_gpu_context_t* context, iree_host_size_t count,
     const iree_hal_amd_fabric_memory_request_t* requests,
     iree_hal_amd_fabric_memory_t* memories,
-    iree_hal_slab_acquire_callback_t completion,
+    iree_hal_amd_fabric_memory_callback_t completion,
     iree_hal_amd_gpu_memory_acquire_t* operation) {
   *operation = (iree_hal_amd_gpu_memory_acquire_t){
       .request =
@@ -83,7 +85,7 @@ void iree_hal_amd_gpu_context_acquire_memory(
 void iree_hal_amd_gpu_context_release_memory(
     iree_hal_amd_gpu_context_t* context, iree_host_size_t count,
     iree_hal_amd_fabric_memory_t* memories,
-    iree_hal_slab_release_callback_t completion,
+    iree_hal_amd_fabric_memory_release_callback_t completion,
     iree_hal_amd_gpu_memory_release_t* operation) {
   *operation = (iree_hal_amd_gpu_memory_release_t){
       .request =
@@ -115,14 +117,15 @@ static void iree_hal_amd_gpu_context_memory_mapped(void* user_data,
                                                    iree_status_t status) {
   iree_hal_amd_gpu_memory_map_t* operation = user_data;
   iree_hal_amd_gpu_context_t* context = operation->context;
-  const iree_hal_slab_acquire_callback_t completion = operation->completion;
+  const iree_hal_amd_fabric_memory_callback_t completion =
+      operation->completion;
   completion.fn(completion.user_data, status);
   iree_hal_amd_gpu_context_memory_end(context);
 }
 
 void iree_hal_amd_gpu_context_map_memory(
     iree_hal_amd_gpu_context_t* context, iree_hal_memory_mapping_batch_t* batch,
-    iree_hal_slab_acquire_callback_t completion,
+    iree_hal_amd_fabric_memory_callback_t completion,
     iree_hal_amd_gpu_memory_map_t* operation) {
   *operation = (iree_hal_amd_gpu_memory_map_t){
       .request = {.batch = batch,
@@ -218,7 +221,7 @@ iree_status_t iree_hal_amd_gpu_context_acquire_memory_sync(
   iree_hal_amd_gpu_memory_acquire_t operation;
   iree_hal_amd_gpu_context_acquire_memory(
       context, count, requests, memories,
-      (iree_hal_slab_acquire_callback_t){
+      (iree_hal_amd_fabric_memory_callback_t){
           .fn = iree_hal_amd_gpu_memory_wait_complete, .user_data = &wait},
       &operation);
   return iree_hal_amd_gpu_memory_wait_join(&wait);
@@ -232,7 +235,7 @@ void iree_hal_amd_gpu_context_release_memory_sync(
   iree_hal_amd_gpu_memory_release_t operation;
   iree_hal_amd_gpu_context_release_memory(
       context, count, memories,
-      (iree_hal_slab_release_callback_t){
+      (iree_hal_amd_fabric_memory_release_callback_t){
           .fn = iree_hal_amd_gpu_memory_wait_released, .user_data = &wait},
       &operation);
   iree_status_ignore(iree_hal_amd_gpu_memory_wait_join(&wait));

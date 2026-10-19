@@ -120,10 +120,14 @@ amdf_status_t AMDF_CALL NativeMemoryGate::QueryDeviceProfile(
 
 amdf_status_t AMDF_CALL NativeMemoryGate::CreateMemory(
     amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
-    amdf_memory_t** out_memory) {
+    amdf_memory_t** out_memory, amdf_memory_release_info_t* out_release_info) {
+  if (out_release_info) {
+    *out_release_info = {};
+  }
   auto* self = active_;
   if (!self) {
-    return native_api_->memory_create(scope, info, out_memory);
+    return native_api_->memory_create(scope, info, out_memory,
+                                      out_release_info);
   }
   if (info->byte_length > self->maximum_byte_length_) {
     return amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE);
@@ -134,8 +138,8 @@ amdf_status_t AMDF_CALL NativeMemoryGate::CreateMemory(
     self->entered_.release();
     self->resume_.acquire();
   }
-  amdf_status_t status =
-      self->native_api_->memory_create(scope, info, out_memory);
+  amdf_status_t status = self->native_api_->memory_create(
+      scope, info, out_memory, out_release_info);
   if (amdf_status_is_ok(status)) {
     amdf_memory_info_t native = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_INFO,
@@ -152,7 +156,9 @@ amdf_status_t AMDF_CALL NativeMemoryGate::CreateMemory(
       ++self->usage_.allocation_count;
       self->usage_.last_allocation = native;
     } else {
-      EXPECT_EQ(self->native_api_->memory_destroy(*out_memory), AMDF_STATUS_OK);
+      EXPECT_EQ(
+          self->native_api_->memory_destroy(*out_memory, out_release_info),
+          AMDF_STATUS_OK);
       *out_memory = nullptr;
     }
   }
@@ -162,10 +168,11 @@ amdf_status_t AMDF_CALL NativeMemoryGate::CreateMemory(
   return status;
 }
 
-amdf_status_t AMDF_CALL NativeMemoryGate::DestroyMemory(amdf_memory_t* memory) {
+amdf_status_t AMDF_CALL NativeMemoryGate::DestroyMemory(
+    amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info) {
   auto* self = active_;
   if (!self) {
-    return native_api_->memory_destroy(memory);
+    return native_api_->memory_destroy(memory, out_release_info);
   }
   uint64_t native_bytes = 0;
   {
@@ -176,12 +183,20 @@ amdf_status_t AMDF_CALL NativeMemoryGate::DestroyMemory(amdf_memory_t* memory) {
       self->allocations_.erase(entry);
     }
   }
-  const amdf_status_t status = self->native_api_->memory_destroy(memory);
+  amdf_memory_release_info_t release_info = {};
+  const amdf_status_t status =
+      self->native_api_->memory_destroy(memory, &release_info);
+  if (out_release_info) {
+    *out_release_info = release_info;
+  }
   {
     std::lock_guard<std::mutex> lock(self->usage_mutex_);
-    if (amdf_status_is_ok(status)) {
-      self->usage_.live_bytes -= native_bytes;
-    } else {
+    if (native_bytes) {
+      EXPECT_LE(release_info.abandoned_byte_length, native_bytes);
+      self->usage_.live_bytes -=
+          native_bytes - release_info.abandoned_byte_length;
+    }
+    if (!amdf_status_is_ok(status)) {
       ++self->usage_.destroy_failures;
     }
     self->usage_changed_.notify_all();

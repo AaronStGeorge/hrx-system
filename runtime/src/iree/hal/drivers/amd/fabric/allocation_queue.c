@@ -37,6 +37,8 @@ typedef struct iree_hal_amd_fabric_allocation_bucket_t {
   iree_hal_amd_fabric_allocation_link_t tail;
   // Completed prefix of head, accessed only by the native worker.
   iree_host_size_t completed_count;
+  // Cleanup of the head's completed prefix, owned by the native worker.
+  iree_hal_slab_release_info_t release_info;
 } iree_hal_amd_fabric_allocation_bucket_t;
 
 struct iree_hal_amd_fabric_allocation_queue_t {
@@ -62,6 +64,8 @@ struct iree_hal_amd_fabric_allocation_queue_t {
   iree_status_t rollback_status;
   // Acquired prefix of that failed batch, consumed at release priority.
   iree_host_size_t rollback_count;
+  // Failed construction's cleanup, joined with the acquired prefix's release.
+  iree_hal_slab_release_info_t rollback_release_info;
   // Final public release has requested worker exit.
   bool closing;
 };
@@ -182,7 +186,7 @@ static iree_status_t iree_hal_amd_fabric_allocation_memory_step(
           &request->requests[index];
       status = iree_hal_amd_fabric_memory_allocate(
           operation->api, geometry->options, geometry->byte_length,
-          geometry->alignment, operation->event_sink, &memories[index]);
+          geometry->alignment, operation->event_sink, &memories[index], NULL);
     }
   } else {
     iree_hal_amd_fabric_memory_release_request_t* request = (void*)operation;
@@ -204,7 +208,7 @@ static iree_status_t iree_hal_amd_fabric_allocation_memory_step(
 static iree_status_t iree_hal_amd_fabric_allocation_slab_step(
     iree_hal_slab_operation_t* operation, bool release,
     iree_host_size_t rollback_count, iree_host_size_t* completed_count,
-    bool* out_complete) {
+    iree_hal_slab_release_info_t* release_info, bool* out_complete) {
   const iree_host_size_t index = *completed_count;
   iree_status_t status = iree_ok_status();
   iree_host_size_t count = 0;
@@ -219,16 +223,20 @@ static iree_status_t iree_hal_amd_fabric_allocation_slab_step(
     if (!release && index < count) {
       status = iree_hal_amd_fabric_slab_provider_acquire_slab(
           operation->provider, request->requests[index].min_length,
-          request->requests[index].min_alignment, &slabs[index]);
+          request->requests[index].min_alignment, &slabs[index], release_info);
     }
   } else {
     iree_hal_slab_release_request_t* request = (void*)operation;
     count = request->count;
     slabs = request->slabs;
+    if (index == 0) {
+      *release_info = request->release_info;
+    }
   }
   if (release && index < count) {
-    iree_hal_amd_fabric_slab_provider_release_slab(operation->provider,
-                                                   &slabs[index]);
+    *release_info = iree_hal_slab_release_info_join(
+        *release_info, iree_hal_amd_fabric_slab_provider_release_slab(
+                           operation->provider, &slabs[index]));
     memset(&slabs[index], 0, sizeof(slabs[index]));
   }
   if (index < count && iree_status_is_ok(status)) {
@@ -242,7 +250,8 @@ static iree_status_t iree_hal_amd_fabric_allocation_slab_step(
 // free or reuse its request. The retained provider keeps its native owners live
 // through the callback. Accepted raw requests separately retain the queue.
 static void iree_hal_amd_fabric_allocation_complete(
-    iree_hal_amd_fabric_allocation_link_t link, iree_status_t status) {
+    iree_hal_amd_fabric_allocation_link_t link, iree_status_t status,
+    iree_hal_slab_release_info_t release_info) {
   if (link & IREE_HAL_AMD_FABRIC_ALLOCATION_LINK_MEMORY) {
     iree_hal_amd_fabric_memory_operation_t* operation =
         iree_hal_amd_fabric_allocation_memory(link);
@@ -270,10 +279,11 @@ static void iree_hal_amd_fabric_allocation_complete(
     iree_hal_slab_provider_t* provider = operation->provider;
     if (operation->type == IREE_HAL_SLAB_OPERATION_ACQUIRE) {
       iree_hal_slab_acquire_request_t* request = (void*)operation;
-      request->completion.fn(request->completion.user_data, status);
+      request->completion.fn(request->completion.user_data, status,
+                             release_info);
     } else {
       iree_hal_slab_release_request_t* request = (void*)operation;
-      request->completion.fn(request->completion.user_data);
+      request->completion.fn(request->completion.user_data, release_info);
     }
     iree_hal_slab_provider_release(provider);
   }
@@ -325,7 +335,7 @@ static int iree_hal_amd_fabric_allocation_queue_main(void* user_data) {
       acquisition = operation->type == IREE_HAL_SLAB_OPERATION_ACQUIRE;
       status = iree_hal_amd_fabric_allocation_slab_step(
           operation, release, queue->rollback_count, &bucket->completed_count,
-          &complete);
+          &bucket->release_info, &complete);
     }
     IREE_TRACE_ZONE_END(z0);
     if (!complete) {
@@ -342,11 +352,14 @@ static int iree_hal_amd_fabric_allocation_queue_main(void* user_data) {
     }
     const iree_host_size_t completed_count = bucket->completed_count;
     bucket->completed_count = 0;
+    iree_hal_slab_release_info_t release_info = bucket->release_info;
+    bucket->release_info = (iree_hal_slab_release_info_t){0};
     const bool rollback = !release && acquisition && completed_count &&
                           !iree_status_is_ok(status);
     if (rollback) {
       queue->rollback_count = completed_count;
       queue->rollback_status = status;
+      queue->rollback_release_info = release_info;
       iree_hal_amd_fabric_allocation_append(
           queue, IREE_HAL_AMD_FABRIC_ALLOCATION_PRIORITY_RELEASE, link);
     }
@@ -358,8 +371,11 @@ static int iree_hal_amd_fabric_allocation_queue_main(void* user_data) {
       status = queue->rollback_status;
       queue->rollback_status = iree_ok_status();
       queue->rollback_count = 0;
+      release_info = iree_hal_slab_release_info_join(
+          queue->rollback_release_info, release_info);
+      queue->rollback_release_info = (iree_hal_slab_release_info_t){0};
     }
-    iree_hal_amd_fabric_allocation_complete(link, status);
+    iree_hal_amd_fabric_allocation_complete(link, status, release_info);
     iree_hal_amd_fabric_allocation_queue_release(queue);
   }
   iree_hal_amd_fabric_allocation_queue_release_body(queue);

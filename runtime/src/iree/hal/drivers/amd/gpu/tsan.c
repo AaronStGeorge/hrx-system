@@ -121,7 +121,7 @@ iree_status_t iree_hal_amd_gpu_tsan_initialize(
       iree_hal_amd_gpu_tsan_select_memory(context, &access, &memory_options));
   IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
       context->api, &memory_options, out_tsan->config.shadow_size, 64,
-      context->event_sink, &out_tsan->memory));
+      context->event_sink, &out_tsan->memory, NULL));
   uint64_t address = 0;
   IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
       context->api->memory_query_address(out_tsan->memory.handle, 0,

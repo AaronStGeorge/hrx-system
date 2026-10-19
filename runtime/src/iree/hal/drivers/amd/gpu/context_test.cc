@@ -476,9 +476,13 @@ struct NativeBacking {
     uint64_t length;
   };
 
-  static amdf_status_t AMDF_CALL Allocate(amdf_memory_scope_t* scope,
-                                          const amdf_memory_create_info_t* info,
-                                          amdf_memory_t** out_memory) {
+  static amdf_status_t AMDF_CALL
+  Allocate(amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
+           amdf_memory_t** out_memory,
+           amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* self = reinterpret_cast<NativeBacking*>(scope);
     EXPECT_TRUE(self->native->device_live);
     self->threads.push_back(std::this_thread::get_id());
@@ -501,7 +505,11 @@ struct NativeBacking {
     return AMDF_STATUS_OK;
   }
 
-  static amdf_status_t AMDF_CALL Free(amdf_memory_t* handle) {
+  static amdf_status_t AMDF_CALL
+  Free(amdf_memory_t* handle, amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* memory = reinterpret_cast<Memory*>(handle);
     auto* self = memory->owner;
     EXPECT_TRUE(self->native->device_live);
@@ -635,7 +643,7 @@ TEST_F(ContextMemoryTest, CallbackCanReuseAndFreeItsCapture) {
         .operation = {},
         .completed = &completed,
     };
-    const iree_hal_slab_acquire_callback_t acquired = {
+    const iree_hal_amd_fabric_memory_callback_t acquired = {
         .fn =
             [](void* user_data, iree_status_t status) {
               auto* capture = static_cast<Capture*>(user_data);
@@ -645,7 +653,7 @@ TEST_F(ContextMemoryTest, CallbackCanReuseAndFreeItsCapture) {
                 completed->set_value(iree::Status(std::move(status)));
                 return;
               }
-              const iree_hal_slab_release_callback_t released = {
+              const iree_hal_amd_fabric_memory_release_callback_t released = {
                   .fn =
                       [](void* user_data) {
                         auto* capture = static_cast<Capture*>(user_data);

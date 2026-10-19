@@ -71,6 +71,23 @@ typedef struct iree_hal_amd_fabric_memory_request_t {
   uint64_t alignment;
 } iree_hal_amd_fabric_memory_request_t;
 
+// Internal backing has no source-pool charge. Native cleanup failures are
+// reported to the operation's diagnostic sink before terminal completion.
+// Mapping and acquisition transfer their primary status to the consumer.
+typedef struct iree_hal_amd_fabric_memory_callback_t {
+  // Takes ownership of the result and may reclaim the request immediately.
+  void(IREE_API_PTR* fn)(void* user_data, iree_status_t status);
+  // Borrowed callback state.
+  void* user_data;
+} iree_hal_amd_fabric_memory_callback_t;
+
+typedef struct iree_hal_amd_fabric_memory_release_callback_t {
+  // Runs after the native owners are consumed and any failures diagnosed.
+  void(IREE_API_PTR* fn)(void* user_data);
+  // Borrowed callback state.
+  void* user_data;
+} iree_hal_amd_fabric_memory_release_callback_t;
+
 typedef struct iree_hal_amd_fabric_memory_acquire_request_t {
   // Queue linkage and borrowed native API/diagnostics.
   iree_hal_amd_fabric_memory_operation_t operation;
@@ -81,7 +98,7 @@ typedef struct iree_hal_amd_fabric_memory_acquire_request_t {
   // Private output array, published only by terminal completion.
   iree_hal_amd_fabric_memory_t* memories;
   // Receives the whole batch result; failure rolls back every output.
-  iree_hal_slab_acquire_callback_t completion;
+  iree_hal_amd_fabric_memory_callback_t completion;
 } iree_hal_amd_fabric_memory_acquire_request_t;
 
 typedef struct iree_hal_amd_fabric_memory_release_request_t {
@@ -92,7 +109,7 @@ typedef struct iree_hal_amd_fabric_memory_release_request_t {
   // Retired native owners; release storage was secured during acquisition.
   iree_hal_amd_fabric_memory_t* memories;
   // Runs after every native release attempt, including diagnosed failures.
-  iree_hal_slab_release_callback_t completion;
+  iree_hal_amd_fabric_memory_release_callback_t completion;
 } iree_hal_amd_fabric_memory_release_request_t;
 
 typedef struct iree_hal_amd_fabric_memory_map_request_t {
@@ -101,7 +118,7 @@ typedef struct iree_hal_amd_fabric_memory_map_request_t {
   // Resolved transaction, borrowed through completion; NULL is an empty batch.
   iree_hal_memory_mapping_batch_t* batch;
   // Receives the native publication result, without executing dependent work.
-  iree_hal_slab_acquire_callback_t completion;
+  iree_hal_amd_fabric_memory_callback_t completion;
 } iree_hal_amd_fabric_memory_map_request_t;
 
 // Submits a ready native acquisition without allocating or calling the driver.

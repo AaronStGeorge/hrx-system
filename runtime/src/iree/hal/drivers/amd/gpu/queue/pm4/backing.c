@@ -95,7 +95,7 @@ void iree_hal_amd_gpu_pm4_argument_storage_free(
     iree_hal_amd_gpu_pm4_argument_storage_t* storage) {
   iree_hal_amd_gpu_context_release_memory(
       context, 1, &storage->memory,
-      (iree_hal_slab_release_callback_t){
+      (iree_hal_amd_fabric_memory_release_callback_t){
           .fn = iree_hal_amd_gpu_pm4_argument_storage_released,
           .user_data = storage},
       &storage->release);
@@ -179,7 +179,7 @@ void iree_hal_amd_gpu_pm4_signal_storage_free(
   }
   iree_hal_amd_gpu_context_release_memory(
       context, 1, &storage->memory,
-      (iree_hal_slab_release_callback_t){
+      (iree_hal_amd_fabric_memory_release_callback_t){
           .fn = iree_hal_amd_gpu_pm4_signal_storage_released,
           .user_data = storage},
       &storage->release);

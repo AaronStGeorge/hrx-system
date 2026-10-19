@@ -55,7 +55,7 @@ typedef struct iree_hal_amd_fabric_slab_io_batch_t {
   // First failed transition, owned until terminal delivery.
   iree_atomic_intptr_t failure_status;
   // Terminal consumer; may immediately reclaim or reuse this batch.
-  iree_hal_slab_acquire_callback_t completion;
+  iree_async_buffer_registration_callback_t completion;
   // True for attachment; false for detachment before rollback or release.
   bool attaching;
 } iree_hal_amd_fabric_slab_io_batch_t;
@@ -425,8 +425,12 @@ static bool iree_hal_amd_fabric_slab_handle_free(
         // A failed detachment leaves native table references live. Its
         // terminal callback already diagnosed the failure; retain backing.
         *out_release_info = (amdf_memory_release_info_t){
-            .status = amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION),
-            .abandoned_byte_length = handle->imported ? 0 : handle->memory.info.native_allocation_byte_length,
+            .status =
+                amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION),
+            .abandoned_byte_length =
+                handle->imported
+                    ? 0
+                    : handle->memory.info.native_allocation_byte_length,
         };
         return false;
       }
@@ -438,9 +442,10 @@ static bool iree_hal_amd_fabric_slab_handle_free(
                                                     asan->application_range)) {
       *out_release_info = (amdf_memory_release_info_t){
           .status = amdf_make_api_status(AMDF_STATUS_CODE_FAILED_PRECONDITION),
-          .abandoned_byte_length = handle->imported
-                                       ? 0
-                                       : handle->memory.info.native_allocation_byte_length,
+          .abandoned_byte_length =
+              handle->imported
+                  ? 0
+                  : handle->memory.info.native_allocation_byte_length,
       };
       return false;
     }
@@ -635,7 +640,8 @@ iree_status_t iree_hal_amd_fabric_slab_provider_acquire_slab(
                           iree_memory_order_relaxed);
   } else {
     if (handle->memory.handle) {
-      if (!iree_hal_amd_fabric_slab_handle_free(provider, handle, &release_info)) {
+      if (!iree_hal_amd_fabric_slab_handle_free(provider, handle,
+                                                &release_info)) {
         // Failed native removal leaves backing borrowing the provider's facts.
         iree_hal_slab_provider_retain(&provider->base);
       }
@@ -732,7 +738,8 @@ static iree_status_t iree_hal_amd_fabric_slab_provider_import_slab(
                           iree_memory_order_relaxed);
   } else {
     amdf_memory_release_info_t release_info = {0};
-    if (!iree_hal_amd_fabric_slab_handle_free(provider, handle, &release_info)) {
+    if (!iree_hal_amd_fabric_slab_handle_free(provider, handle,
+                                              &release_info)) {
       // Failed native removal leaves backing borrowing the provider's facts.
       iree_hal_slab_provider_retain(&provider->base);
     }
@@ -775,8 +782,7 @@ static void iree_hal_amd_fabric_slab_quarantine_release(void* user_data) {
   }
 }
 
-iree_hal_slab_release_info_t
-iree_hal_amd_fabric_slab_provider_release_slab(
+iree_hal_slab_release_info_t iree_hal_amd_fabric_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   iree_hal_amd_fabric_slab_provider_t* provider =
       iree_hal_amd_fabric_slab_provider_cast(base_provider);
@@ -935,7 +941,8 @@ static void iree_hal_amd_fabric_slab_io_batch_complete_one(
                             iree_memory_order_acq_rel) != 1) {
     return;
   }
-  const iree_hal_slab_acquire_callback_t completion = batch->completion;
+  const iree_async_buffer_registration_callback_t completion =
+      batch->completion;
   iree_status_t status = (iree_status_t)iree_atomic_load(
       &batch->failure_status, iree_memory_order_acquire);
   completion.fn(completion.user_data, status);
@@ -961,7 +968,7 @@ static void iree_hal_amd_fabric_slab_io_transition_completed(
 static void iree_hal_amd_fabric_slab_io_transition(
     iree_hal_amd_fabric_slab_io_batch_t* batch, bool attaching,
     iree_host_size_t count, const iree_hal_slab_t* slabs,
-    iree_hal_slab_acquire_callback_t completion) {
+    iree_async_buffer_registration_callback_t completion) {
   iree_atomic_store(&batch->pending_count, 1, iree_memory_order_relaxed);
   iree_atomic_store(&batch->failure_status, 0, iree_memory_order_relaxed);
   batch->completion = completion;
@@ -1008,24 +1015,26 @@ typedef struct iree_hal_amd_fabric_slab_io_acquire_t {
 } iree_hal_amd_fabric_slab_io_acquire_t;
 
 static void iree_hal_amd_fabric_slab_io_acquire_finish(
-    iree_hal_amd_fabric_slab_io_acquire_t* acquire, iree_status_t status) {
+    iree_hal_amd_fabric_slab_io_acquire_t* acquire, iree_status_t status,
+    iree_hal_slab_release_info_t release_info) {
   iree_hal_amd_fabric_slab_provider_t* provider = acquire->provider;
   const iree_hal_slab_acquire_callback_t completion =
       acquire->request->completion;
   iree_allocator_free(provider->base.host_allocator, acquire);
-  completion.fn(completion.user_data, status);
+  completion.fn(completion.user_data, status, release_info);
   iree_hal_slab_provider_release(&provider->base);
 }
 
-static void iree_hal_amd_fabric_slab_io_rollback_released(void* user_data) {
+static void iree_hal_amd_fabric_slab_io_rollback_released(
+    void* user_data, iree_hal_slab_release_info_t release_info) {
   iree_hal_amd_fabric_slab_io_acquire_t* acquire = user_data;
-  iree_hal_amd_fabric_slab_io_acquire_finish(acquire, acquire->failure);
+  iree_hal_amd_fabric_slab_io_acquire_finish(acquire, acquire->failure,
+                                             release_info);
 }
 
 static void iree_hal_amd_fabric_slab_io_rollback_detached(
     void* user_data, iree_status_t status) {
   iree_hal_amd_fabric_slab_io_acquire_t* acquire = user_data;
-  acquire->failure = iree_status_join(acquire->failure, status);
   acquire->rollback = (iree_hal_slab_release_request_t){
       .operation = {.provider = &acquire->provider->base,
                     .type = IREE_HAL_SLAB_OPERATION_RELEASE},
@@ -1033,6 +1042,7 @@ static void iree_hal_amd_fabric_slab_io_rollback_detached(
       .slabs = acquire->request->slabs,
       .completion = {iree_hal_amd_fabric_slab_io_rollback_released, acquire},
   };
+  acquire->rollback.release_info.status = status;
   iree_hal_amd_fabric_allocation_queue_enqueue(
       acquire->provider->allocation_queue, &acquire->rollback.operation);
 }
@@ -1041,27 +1051,29 @@ static void iree_hal_amd_fabric_slab_io_acquire_attached(void* user_data,
                                                          iree_status_t status) {
   iree_hal_amd_fabric_slab_io_acquire_t* acquire = user_data;
   if (iree_status_is_ok(status)) {
-    iree_hal_amd_fabric_slab_io_acquire_finish(acquire, status);
+    iree_hal_amd_fabric_slab_io_acquire_finish(
+        acquire, status, (iree_hal_slab_release_info_t){0});
     return;
   }
   acquire->failure = status;
   iree_hal_amd_fabric_slab_io_transition(
       &acquire->batch, false, acquire->request->count, acquire->request->slabs,
-      (iree_hal_slab_acquire_callback_t){
+      (iree_async_buffer_registration_callback_t){
           iree_hal_amd_fabric_slab_io_rollback_detached, acquire});
 }
 
-static void iree_hal_amd_fabric_slab_io_acquire_prepared(void* user_data,
-                                                         iree_status_t status) {
+static void iree_hal_amd_fabric_slab_io_acquire_prepared(
+    void* user_data, iree_status_t status,
+    iree_hal_slab_release_info_t release_info) {
   iree_hal_amd_fabric_slab_io_acquire_t* acquire = user_data;
   if (!iree_status_is_ok(status)) {
     // The native queue already rolled back every prepared slab.
-    iree_hal_amd_fabric_slab_io_acquire_finish(acquire, status);
+    iree_hal_amd_fabric_slab_io_acquire_finish(acquire, status, release_info);
     return;
   }
   iree_hal_amd_fabric_slab_io_transition(
       &acquire->batch, true, acquire->request->count, acquire->request->slabs,
-      (iree_hal_slab_acquire_callback_t){
+      (iree_async_buffer_registration_callback_t){
           iree_hal_amd_fabric_slab_io_acquire_attached, acquire});
 }
 
@@ -1084,8 +1096,9 @@ static void iree_hal_amd_fabric_slab_io_release_detached(void* user_data,
     event.source.driver_id = IREE_SV("amd");
     event.payload = iree_make_const_byte_span(&payload, sizeof(payload));
     iree_hal_device_event_sink_publish(provider->event_sink, &event);
-    iree_status_free(status);
   }
+  request->release_info.status =
+      iree_status_join(request->release_info.status, status);
   // No further access to release: it lives inside a slab the worker may free
   // before enqueue returns. The explicit provider claim spans this handoff.
   iree_hal_amd_fabric_allocation_queue_enqueue(provider->allocation_queue,
@@ -1103,7 +1116,8 @@ static void iree_hal_amd_fabric_slab_provider_acquire_slabs(
         base->host_allocator, sizeof(*acquire), (void**)&acquire);
     if (!iree_status_is_ok(status)) {
       memset(request->slabs, 0, request->count * sizeof(*request->slabs));
-      request->completion.fn(request->completion.user_data, status);
+      request->completion.fn(request->completion.user_data, status,
+                             (iree_hal_slab_release_info_t){0});
       return;
     }
     acquire->provider = provider;
@@ -1161,7 +1175,7 @@ static void iree_hal_amd_fabric_slab_provider_release_slabs(
     release->request = request;
     iree_hal_amd_fabric_slab_io_transition(
         &release->batch, false, request->count, request->slabs,
-        (iree_hal_slab_acquire_callback_t){
+        (iree_async_buffer_registration_callback_t){
             iree_hal_amd_fabric_slab_io_release_detached, release});
     return;
   }

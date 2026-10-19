@@ -69,7 +69,7 @@ static iree_status_t iree_hal_amd_gpu_feedback_initialize_ring(
       "feedback ring memory profile"));
   IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
       api, &ring_options, capacity, capacity, context->event_sink,
-      &feedback->ring_memory));
+      &feedback->ring_memory, NULL));
   const amdf_memory_reservation_access_t accesses[2] = {
       {.address_domain_ordinal = AMDF_ADDRESS_DOMAIN_ORDINAL_NONE,
        .access = permissions,
@@ -156,7 +156,7 @@ iree_status_t iree_hal_amd_gpu_feedback_initialize(
                                                       &out_feedback->sources);
   iree_status_t status = iree_hal_amd_fabric_memory_allocate(
       context->api, memory, 128, 64, context->event_sink,
-      &out_feedback->control_memory);
+      &out_feedback->control_memory, NULL);
   uint64_t control_address = 0;
   if (iree_status_is_ok(status)) {
     if (out_feedback->control_memory.host_cacheability !=

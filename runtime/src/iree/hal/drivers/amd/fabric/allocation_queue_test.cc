@@ -41,12 +41,13 @@ struct NativeAllocator {
     options.profile.allocation.maximum_byte_length = 4096;
   }
 
-  static amdf_status_t AMDF_CALL Allocate(amdf_memory_scope_t* scope,
-                                          const amdf_memory_create_info_t* info,
-                                          amdf_memory_t** out_memory);
+  static amdf_status_t AMDF_CALL Allocate(
+      amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
+      amdf_memory_t** out_memory, amdf_memory_release_info_t* out_release_info);
   static amdf_status_t AMDF_CALL Query(amdf_memory_t* memory,
                                        amdf_memory_info_t* out_info);
-  static amdf_status_t AMDF_CALL Free(amdf_memory_t* memory);
+  static amdf_status_t AMDF_CALL
+  Free(amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info);
   static amdf_status_t AMDF_CALL Map(amdf_memory_t* memory,
                                      const amdf_memory_map_info_t* info,
                                      amdf_host_mapping_t** out_mapping);
@@ -89,7 +90,10 @@ struct NativeMemory {
 
 amdf_status_t AMDF_CALL NativeAllocator::Allocate(
     amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
-    amdf_memory_t** out_memory) {
+    amdf_memory_t** out_memory, amdf_memory_release_info_t* out_release_info) {
+  if (out_release_info) {
+    *out_release_info = {};
+  }
   auto* self = reinterpret_cast<NativeAllocator*>(scope);
   self->threads.push_back(std::this_thread::get_id());
   ++self->allocate_count;
@@ -123,7 +127,11 @@ amdf_status_t AMDF_CALL NativeAllocator::Query(amdf_memory_t* handle,
   return AMDF_STATUS_OK;
 }
 
-amdf_status_t AMDF_CALL NativeAllocator::Free(amdf_memory_t* handle) {
+amdf_status_t AMDF_CALL NativeAllocator::Free(
+    amdf_memory_t* handle, amdf_memory_release_info_t* out_release_info) {
+  if (out_release_info) {
+    *out_release_info = {};
+  }
   auto* memory = reinterpret_cast<NativeMemory*>(handle);
   ++memory->allocator->free_count;
   memory->allocator->operations.push_back('R');
@@ -544,7 +552,11 @@ TEST_F(AllocationQueueTest, SlabsAndPrivateBackingShareOneNativeWorker) {
       .completion =
           {
               .fn =
-                  [](void* user_data, iree_status_t status) {
+                  [](void* user_data, iree_status_t status,
+                     iree_hal_slab_release_info_t release_info) {
+                    IREE_EXPECT_OK(
+                        iree::Status(std::move(release_info.status)));
+                    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
                     static_cast<std::promise<iree::Status>*>(user_data)
                         ->set_value(iree::Status(std::move(status)));
                   },
@@ -565,7 +577,11 @@ TEST_F(AllocationQueueTest, SlabsAndPrivateBackingShareOneNativeWorker) {
       .completion =
           {
               .fn =
-                  [](void* user_data) {
+                  [](void* user_data,
+                     iree_hal_slab_release_info_t release_info) {
+                    IREE_EXPECT_OK(
+                        iree::Status(std::move(release_info.status)));
+                    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
                     static_cast<std::promise<void>*>(user_data)->set_value();
                   },
               .user_data = &released,

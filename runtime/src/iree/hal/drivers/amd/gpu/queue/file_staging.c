@@ -932,7 +932,7 @@ static void iree_hal_amd_gpu_file_staging_detach_join(
   }
   iree_hal_amd_gpu_context_release_memory(
       block->staging->context, 1, &block->memory,
-      (iree_hal_slab_release_callback_t){
+      (iree_hal_amd_fabric_memory_release_callback_t){
           iree_hal_amd_gpu_file_staging_native_released, block},
       &block->release);
 }
@@ -1096,8 +1096,8 @@ static void iree_hal_amd_gpu_file_staging_block_allocate(
   iree_hal_device_retain(staging->device);
   iree_hal_amd_gpu_context_acquire_memory(
       staging->context, 1, &block->allocation, &block->memory,
-      (iree_hal_slab_acquire_callback_t){iree_hal_amd_gpu_file_staging_acquired,
-                                         block},
+      (iree_hal_amd_fabric_memory_callback_t){
+          iree_hal_amd_gpu_file_staging_acquired, block},
       &block->acquire);
 }
 

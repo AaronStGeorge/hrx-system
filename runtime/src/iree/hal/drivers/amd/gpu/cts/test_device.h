@@ -99,9 +99,10 @@ class NativeMemoryGate {
 
   static amdf_status_t AMDF_CALL CreateMemory(
       amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
-      amdf_memory_t** out_memory);
+      amdf_memory_t** out_memory, amdf_memory_release_info_t* out_release_info);
 
-  static amdf_status_t AMDF_CALL DestroyMemory(amdf_memory_t* memory);
+  static amdf_status_t AMDF_CALL DestroyMemory(
+      amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info);
 
   // Exact native API table, borrowed for all forwarded calls.
   inline static const amdf_api_t* native_api_ = nullptr;

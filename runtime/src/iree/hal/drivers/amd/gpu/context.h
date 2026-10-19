@@ -106,7 +106,7 @@ typedef struct iree_hal_amd_gpu_memory_acquire_t {
   // Native owner borrowed through the callback's final access.
   iree_hal_amd_gpu_context_t* context;
   // Publishes the acquired backing or failure to its actual consumer.
-  iree_hal_slab_acquire_callback_t completion;
+  iree_hal_amd_fabric_memory_callback_t completion;
 } iree_hal_amd_gpu_memory_acquire_t;
 
 // Release storage secured alongside acquisition, never allocated at retirement.
@@ -116,7 +116,7 @@ typedef struct iree_hal_amd_gpu_memory_release_t {
   // Native owner borrowed through the callback's final access.
   iree_hal_amd_gpu_context_t* context;
   // Reclaims retired host metadata after native release has finished.
-  iree_hal_slab_release_callback_t completion;
+  iree_hal_amd_fabric_memory_release_callback_t completion;
 } iree_hal_amd_gpu_memory_release_t;
 
 // A resolved mapping batch borrows its targets until native publication ends.
@@ -126,14 +126,14 @@ typedef struct iree_hal_amd_gpu_memory_map_t {
   // Native owner joined after the callback's final publication access.
   iree_hal_amd_gpu_context_t* context;
   // Transfers the native result to the device's mapping completion source.
-  iree_hal_slab_acquire_callback_t completion;
+  iree_hal_amd_fabric_memory_callback_t completion;
 } iree_hal_amd_gpu_memory_map_t;
 
 // Submits dependency-ready native mapping. The caller owns the resolved batch
 // through completion; final context teardown joins the callback's final access.
 void iree_hal_amd_gpu_context_map_memory(
     iree_hal_amd_gpu_context_t* context, iree_hal_memory_mapping_batch_t* batch,
-    iree_hal_slab_acquire_callback_t completion,
+    iree_hal_amd_fabric_memory_callback_t completion,
     iree_hal_amd_gpu_memory_map_t* operation);
 
 // Submits only a ready native backing batch. All options and output storage
@@ -145,7 +145,7 @@ void iree_hal_amd_gpu_context_acquire_memory(
     iree_hal_amd_gpu_context_t* context, iree_host_size_t count,
     const iree_hal_amd_fabric_memory_request_t* requests,
     iree_hal_amd_fabric_memory_t* memories,
-    iree_hal_slab_acquire_callback_t completion,
+    iree_hal_amd_fabric_memory_callback_t completion,
     iree_hal_amd_gpu_memory_acquire_t* operation);
 
 // Consumes fully retired backing without allocation or native calls on the
@@ -153,7 +153,7 @@ void iree_hal_amd_gpu_context_acquire_memory(
 void iree_hal_amd_gpu_context_release_memory(
     iree_hal_amd_gpu_context_t* context, iree_host_size_t count,
     iree_hal_amd_fabric_memory_t* memories,
-    iree_hal_slab_release_callback_t completion,
+    iree_hal_amd_fabric_memory_release_callback_t completion,
     iree_hal_amd_gpu_memory_release_t* operation);
 
 // Cold construction/destruction adapters. These wait only for their own native

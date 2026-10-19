@@ -80,9 +80,13 @@ struct NativeMemory {
                ? amdf_make_api_status(AMDF_STATUS_CODE_RESOURCE_EXHAUSTED)
                : AMDF_STATUS_OK;
   }
-  static amdf_status_t AMDF_CALL Create(amdf_memory_scope_t* scope,
-                                        const amdf_memory_create_info_t* info,
-                                        amdf_memory_t** out_memory) {
+  static amdf_status_t AMDF_CALL
+  Create(amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
+         amdf_memory_t** out_memory,
+         amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto& self = *reinterpret_cast<NativeMemory*>(scope);
     const auto status = self.Step();
     if (!amdf_status_is_ok(status)) {
@@ -209,7 +213,11 @@ struct NativeMemory {
     --self.mappings;
     return AMDF_STATUS_OK;
   }
-  static amdf_status_t AMDF_CALL Destroy(amdf_memory_t* memory) {
+  static amdf_status_t AMDF_CALL
+  Destroy(amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto& self = *reinterpret_cast<NativeMemory*>(memory);
     self.destruction_thread = std::this_thread::get_id();
     if (self.cleanup.entered) {

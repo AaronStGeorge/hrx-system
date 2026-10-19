@@ -80,7 +80,7 @@ void iree_hal_amd_gpu_pm4_scratch_storage_free(
     iree_hal_amd_gpu_pm4_scratch_storage_t* next = storage->next;
     iree_hal_amd_gpu_context_release_memory(
         context, 1, &storage->memory,
-        (iree_hal_slab_release_callback_t){
+        (iree_hal_amd_fabric_memory_release_callback_t){
             .fn = iree_hal_amd_gpu_pm4_scratch_storage_released,
             .user_data = storage},
         &storage->release);

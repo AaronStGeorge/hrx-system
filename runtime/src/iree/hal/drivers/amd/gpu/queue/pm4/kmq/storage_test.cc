@@ -116,9 +116,12 @@ struct NativeQueue {
   static amdf_status_t AMDF_CALL Destroy(amdf_kernel_queue_t* queue) {
     return From(queue)->Call("destroy");
   }
-  static amdf_status_t AMDF_CALL Allocate(amdf_memory_scope_t* scope,
-                                          const amdf_memory_create_info_t* info,
-                                          amdf_memory_t** memory) {
+  static amdf_status_t AMDF_CALL Allocate(
+      amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
+      amdf_memory_t** memory, amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* self = reinterpret_cast<NativeQueue*>(scope);
     EXPECT_EQ(info->byte_length, sizeof(self->words));
     amdf_status_t status = self->Call("allocate");
@@ -160,7 +163,11 @@ struct NativeQueue {
   static amdf_status_t AMDF_CALL Unmap(amdf_host_mapping_t* mapping) {
     return reinterpret_cast<NativeQueue*>(mapping)->Call("unmap");
   }
-  static amdf_status_t AMDF_CALL Free(amdf_memory_t* memory) {
+  static amdf_status_t AMDF_CALL
+  Free(amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     return reinterpret_cast<NativeQueue*>(memory)->Call("free");
   }
 };

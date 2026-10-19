@@ -185,7 +185,8 @@ class GpuProgramTest : public GpuNativeTest {
                 uint64_t length, iree_hal_amd_fabric_memory_t* memory,
                 uint64_t* address) {
     IREE_ASSERT_OK(iree_hal_amd_fabric_memory_allocate(
-        context_->api, &policy, length, 256, context_->event_sink, memory));
+        context_->api, &policy, length, 256, context_->event_sink, memory,
+        nullptr));
     IREE_ASSERT_OK(IREE_HAL_AMD_STATUS_FROM_AMDF(
         context_->api->memory_query_address(memory->handle, 0,
                                             AMDF_MEMORY_ADDRESS_GPU, address),
@@ -460,7 +461,7 @@ TEST_F(GpuProgramTest, PipelinedFixupsCloneAndCausalReuse) {
   ASSERT_NE(reservation, nullptr);
   iree_hal_amd_gpu_pm4_program_growth_t growth = {};
   std::promise<iree::Status> grown;
-  const iree_hal_slab_acquire_callback_t completion = {
+  const iree_hal_amd_fabric_memory_callback_t completion = {
       .fn =
           [](void* user_data, iree_status_t status) {
             static_cast<std::promise<iree::Status>*>(user_data)->set_value(

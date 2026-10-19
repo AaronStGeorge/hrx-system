@@ -126,15 +126,18 @@ struct Native {
       delete reservation;
       return AMDF_STATUS_OK;
     };
-    api.memory_create = [](amdf_memory_scope_t* scope,
-                           const amdf_memory_create_info_t* info,
-                           amdf_memory_t** out) {
-      auto* self = reinterpret_cast<Native*>(scope);
-      ++self->live_memory;
-      *out = reinterpret_cast<amdf_memory_t*>(
-          new Memory{self, std::vector<uint8_t>(info->byte_length, 0xcc)});
-      return AMDF_STATUS_OK;
-    };
+    api.memory_create =
+        [](amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
+           amdf_memory_t** out, amdf_memory_release_info_t* out_release_info) {
+          if (out_release_info) {
+            *out_release_info = {};
+          }
+          auto* self = reinterpret_cast<Native*>(scope);
+          ++self->live_memory;
+          *out = reinterpret_cast<amdf_memory_t*>(
+              new Memory{self, std::vector<uint8_t>(info->byte_length, 0xcc)});
+          return AMDF_STATUS_OK;
+        };
     api.memory_query_info = [](amdf_memory_t* handle, amdf_memory_info_t* out) {
       out->byte_length = reinterpret_cast<Memory*>(handle)->bytes.size();
       out->alignment = 4096;
@@ -163,7 +166,11 @@ struct Native {
     api.host_mapping_destroy = [](amdf_host_mapping_t*) {
       return AMDF_STATUS_OK;
     };
-    api.memory_destroy = [](amdf_memory_t* handle) {
+    api.memory_destroy = [](amdf_memory_t* handle,
+                            amdf_memory_release_info_t* out_release_info) {
+      if (out_release_info) {
+        *out_release_info = {};
+      }
       auto* memory = reinterpret_cast<Memory*>(handle);
       for (auto* reservation : memory->owner->reservations) {
         if (!reservation) {
@@ -211,7 +218,7 @@ class AsanTest : public ::testing::Test {
   void TearDown() override {
     EXPECT_TRUE(iree_hal_amd_fabric_asan_deinitialize(&state_));
     if (application_backing_) {
-      native_.api.memory_destroy(application_backing_);
+      native_.api.memory_destroy(application_backing_, nullptr);
     }
     EXPECT_EQ(native_.live_memory, 0u);
     for (auto* reservation : native_.reservations) {
@@ -302,8 +309,8 @@ TEST_P(QuarantineLifetimeTest, ReleasesOwningDeviceAndRetainsPeerUntilCleanup) {
       iree_allocator_system(), &provider));
 
   iree_hal_slab_t slab = {};
-  IREE_ASSERT_OK(
-      iree_hal_slab_provider_acquire_slab_sync(provider, 4096, 4096, &slab));
+  IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(provider, 4096, 4096,
+                                                          &slab, nullptr));
   native_.reservations[0]->pages.begin()->second->released = &backing_released;
   const iree_hal_asan_allocation_layout_t layout = {
       .backing_offset_alignment = 4096,
@@ -312,7 +319,7 @@ TEST_P(QuarantineLifetimeTest, ReleasesOwningDeviceAndRetainsPeerUntilCleanup) {
   };
   iree_hal_slab_provider_advise_asan_range(
       provider, &slab, 0, IREE_HAL_ASAN_RANGE_ADVICE_FLAG_RELEASED, &layout);
-  iree_hal_slab_provider_release_slab_sync(provider, &slab);
+  iree_hal_slab_provider_release_slab_sync(provider, &slab, nullptr);
   iree_hal_device_asan_observation_t observation;
   iree_hal_amd_fabric_asan_query_statistics(&state_, &observation);
   EXPECT_EQ(observation.quarantine_size, 4096u);
@@ -420,7 +427,7 @@ TEST_F(AsanTest, ApplicationAliasesRespectAlignmentAndCoalesceAfterRelease) {
   };
   ASSERT_EQ(native_.api.memory_create(
                 reinterpret_cast<amdf_memory_scope_t*>(&native_), &info,
-                &application_backing_),
+                &application_backing_, nullptr),
             AMDF_STATUS_OK);
   iree_hal_amd_fabric_asan_application_range_t* ranges[3] = {};
   IREE_ASSERT_OK(iree_hal_amd_fabric_asan_map_application(

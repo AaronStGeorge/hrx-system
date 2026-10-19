@@ -130,7 +130,7 @@ static iree_status_t iree_hal_amd_fabric_asan_allocate_shadow(
     iree_hal_amd_fabric_memory_t* out_memory) {
   IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
       state->api, &state->memory, state->config.shadow_slab_size,
-      state->config.shadow_slab_size, state->event_sink, out_memory));
+      state->config.shadow_slab_size, state->event_sink, out_memory, NULL));
   memset(out_memory->contents.data, IREE_HAL_AMD_ASAN_POISON,
          state->config.shadow_slab_size);
   return IREE_HAL_AMD_STATUS_FROM_AMDF(

@@ -38,7 +38,11 @@ class GrowthTest : public ::testing::Test {
   void SetUp() override {
     api_.memory_create = [](amdf_memory_scope_t* scope,
                             const amdf_memory_create_info_t* info,
-                            amdf_memory_t** out_memory) {
+                            amdf_memory_t** out_memory,
+                            amdf_memory_release_info_t* out_release_info) {
+      if (out_release_info) {
+        *out_release_info = {};
+      }
       auto* self = reinterpret_cast<GrowthTest*>(scope);
       ++self->allocations_;
       if (self->hold_.exchange(false)) {
@@ -94,7 +98,11 @@ class GrowthTest : public ::testing::Test {
     api_.host_mapping_destroy = [](amdf_host_mapping_t*) {
       return AMDF_STATUS_OK;
     };
-    api_.memory_destroy = [](amdf_memory_t* handle) {
+    api_.memory_destroy = [](amdf_memory_t* handle,
+                             amdf_memory_release_info_t* out_release_info) {
+      if (out_release_info) {
+        *out_release_info = {};
+      }
       auto* memory = reinterpret_cast<Memory*>(handle);
       --memory->owner->live_;
       delete memory;

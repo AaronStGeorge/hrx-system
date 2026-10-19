@@ -55,7 +55,11 @@ class QueueTest : public ::testing::Test {
   void SetUp() override {
     api_.memory_create = [](amdf_memory_scope_t* scope,
                             const amdf_memory_create_info_t* info,
-                            amdf_memory_t** out_memory) {
+                            amdf_memory_t** out_memory,
+                            amdf_memory_release_info_t* out_release_info) {
+      if (out_release_info) {
+        *out_release_info = {};
+      }
       auto* self = reinterpret_cast<QueueTest*>(scope);
       self->storage_.resize((info->byte_length + 7) / 8);
       *out_memory = reinterpret_cast<amdf_memory_t*>(self);
@@ -90,7 +94,11 @@ class QueueTest : public ::testing::Test {
     api_.host_mapping_destroy = [](amdf_host_mapping_t*) {
       return AMDF_STATUS_OK;
     };
-    api_.memory_destroy = [](amdf_memory_t* memory) {
+    api_.memory_destroy = [](amdf_memory_t* memory,
+                             amdf_memory_release_info_t* out_release_info) {
+      if (out_release_info) {
+        *out_release_info = {};
+      }
       ++reinterpret_cast<QueueTest*>(memory)->destroyed_;
       return AMDF_STATUS_OK;
     };

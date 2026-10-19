@@ -182,7 +182,7 @@ iree_status_t iree_hal_amd_gpu_pm4_growth_begin(
   iree_atomic_ref_count_init(&growth->ref_count);
   iree_hal_amd_gpu_pm4_growth_append(growth, submission);
   iree_atomic_fetch_add(&context->pending_count, 1, iree_memory_order_relaxed);
-  const iree_hal_slab_acquire_callback_t completion = {
+  const iree_hal_amd_fabric_memory_callback_t completion = {
       .fn = iree_hal_amd_gpu_pm4_growth_completed, .user_data = growth};
   iree_status_t status = iree_ok_status();
   if (program) {
