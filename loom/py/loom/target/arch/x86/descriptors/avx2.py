@@ -786,19 +786,27 @@ _X86_AVX2_VECTOR_DESCRIPTORS = (
         ),
         native.VBROADCASTSS,
     ),
-    *(
-        _vex_descriptor(
-            _vector_splat_descriptor(
-                vector_bit_width=vector_bit_width,
-                key=f"x86.avx2.vbroadcastsd.{_VECTOR_REGISTER_SUFFIXES[vector_bit_width]}",
-                mnemonic="vbroadcastsd",
-                semantic_tag=f"float.splat.f64x{vector_bit_width // 64}",
-                operand=_xmm_operand("value"),
-                schedule_class=_VECTOR_FLOAT_SCHEDULE_CLASSES[vector_bit_width],
-            ),
-            native.VBROADCASTSD,
-        )
-        for vector_bit_width in AVX2_VECTOR_BIT_WIDTHS
+    _vex_descriptor(
+        _vector_splat_descriptor(
+            vector_bit_width=128,
+            key="x86.avx2.vmovddup.xmm",
+            mnemonic="vmovddup",
+            semantic_tag="float.splat.f64x2",
+            operand=_xmm_operand("value"),
+            schedule_class=_SCHEDULE_VECTOR_F32_XMM,
+        ),
+        native.VMOVDDUP,
+    ),
+    _vex_descriptor(
+        _vector_splat_descriptor(
+            vector_bit_width=256,
+            key="x86.avx2.vbroadcastsd.ymm",
+            mnemonic="vbroadcastsd",
+            semantic_tag="float.splat.f64x4",
+            operand=_xmm_operand("value"),
+            schedule_class=_SCHEDULE_VECTOR_F32_YMM,
+        ),
+        native.VBROADCASTSD,
     ),
     _vex_descriptor(
         _vector_splat_descriptor(
