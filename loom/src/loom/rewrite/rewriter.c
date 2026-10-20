@@ -21,16 +21,11 @@
 #define LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY 64
 #define LOOM_REWRITER_INITIAL_REGION_STACK_CAPACITY 8
 
-loom_op_t* loom_rewriter_value_defining_op(const loom_rewriter_t* rewriter,
-                                           loom_value_id_t value_id) {
-  const loom_value_id_t identity =
-      loom_rewriter_value_identity(rewriter, value_id);
-  if (identity != value_id &&
-      !loom_type_equal(loom_module_value_type(rewriter->module, identity),
-                       loom_module_value_type(rewriter->module, value_id))) {
-    return NULL;
-  }
-  const loom_value_t* value = loom_module_value(rewriter->module, identity);
+// Share the paged-value lookup across rewrite callbacks instead of duplicating
+// it in every producer-matching pattern.
+IREE_ATTRIBUTE_NOINLINE loom_op_t* loom_rewriter_value_defining_op(
+    const loom_rewriter_t* rewriter, loom_value_id_t value_id) {
+  const loom_value_t* value = loom_module_value(rewriter->module, value_id);
   if (loom_value_is_block_arg(value)) {
     return NULL;
   }

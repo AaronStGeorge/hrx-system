@@ -1104,7 +1104,7 @@ iree_status_t loom_scalar_absi_canonicalize(loom_op_t* op,
 static iree_status_t loom_scalar_signed_minmax_canonicalize(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t lhs,
     loom_value_id_t rhs, bool is_minimum) {
-  if (loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+  if (lhs == rhs) {
     return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
   }
 
@@ -1153,7 +1153,7 @@ iree_status_t loom_scalar_maxsi_canonicalize(loom_op_t* op,
 static iree_status_t loom_scalar_unsigned_minmax_canonicalize(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t lhs,
     loom_value_id_t rhs, bool is_minimum) {
-  if (loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+  if (lhs == rhs) {
     return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
   }
 
@@ -1389,7 +1389,7 @@ iree_status_t loom_scalar_copysignf_canonicalize(loom_op_t* op,
                                                  loom_rewriter_t* rewriter) {
   loom_value_id_t lhs = loom_scalar_copysignf_lhs(op);
   loom_value_id_t rhs = loom_scalar_copysignf_rhs(op);
-  if (loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+  if (lhs == rhs) {
     return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
   }
   return iree_ok_status();
@@ -1568,7 +1568,7 @@ iree_status_t loom_scalar_andi_canonicalize(loom_op_t* op,
                                             loom_rewriter_t* rewriter) {
   loom_value_id_t lhs = loom_scalar_andi_lhs(op);
   loom_value_id_t rhs = loom_scalar_andi_rhs(op);
-  if (loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+  if (lhs == rhs) {
     return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
   }
   if (loom_scalar_value_facts_are_exact_i64(rewriter, lhs, 0) ||
@@ -1622,7 +1622,7 @@ iree_status_t loom_scalar_ori_canonicalize(loom_op_t* op,
                                            loom_rewriter_t* rewriter) {
   loom_value_id_t lhs = loom_scalar_ori_lhs(op);
   loom_value_id_t rhs = loom_scalar_ori_rhs(op);
-  if (loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+  if (lhs == rhs) {
     return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
   }
   if (loom_scalar_value_facts_are_exact_i64(rewriter, lhs, 0)) {

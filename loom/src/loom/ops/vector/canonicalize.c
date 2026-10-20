@@ -927,8 +927,7 @@ static iree_status_t loom_vector_canonicalize_from_elements(
   loom_value_id_t first_element = elements.values[0];
   bool all_elements_equal = true;
   for (uint16_t i = 1; i < elements.count; ++i) {
-    if (!loom_rewriter_values_equal(rewriter, elements.values[i],
-                                    first_element)) {
+    if (elements.values[i] != first_element) {
       all_elements_equal = false;
       break;
     }
@@ -1674,8 +1673,7 @@ static iree_status_t loom_vector_canonicalize_insert(loom_op_t* op,
           loom_module_value_type(rewriter->module,
                                  loom_vector_extract_source(value_def_op)),
           result_type) &&
-      loom_rewriter_values_equal(
-          rewriter, loom_vector_extract_source(value_def_op), dest) &&
+      loom_vector_extract_source(value_def_op) == dest &&
       loom_vector_classify_static_indices(
           static_indices, indices,
           loom_vector_extract_static_indices(value_def_op),
@@ -1739,7 +1737,7 @@ static iree_status_t loom_vector_canonicalize_select(loom_op_t* op,
   *out_changed = false;
   loom_value_id_t true_value = loom_vector_select_true_value(op);
   loom_value_id_t false_value = loom_vector_select_false_value(op);
-  if (loom_rewriter_values_equal(rewriter, true_value, false_value)) {
+  if (true_value == false_value) {
     IREE_RETURN_IF_ERROR(
         loom_vector_replace_single_result_with_value(op, rewriter, true_value));
     *out_changed = true;
@@ -2188,7 +2186,7 @@ static iree_status_t loom_vector_canonicalize_binary_identity(
   if ((op->kind == LOOM_OP_VECTOR_ANDI || op->kind == LOOM_OP_VECTOR_ORI ||
        op->kind == LOOM_OP_VECTOR_MINSI || op->kind == LOOM_OP_VECTOR_MAXSI ||
        op->kind == LOOM_OP_VECTOR_MINUI || op->kind == LOOM_OP_VECTOR_MAXUI) &&
-      loom_rewriter_values_equal(rewriter, lhs, rhs)) {
+      lhs == rhs) {
     IREE_RETURN_IF_ERROR(
         loom_vector_replace_single_result_with_value(op, rewriter, lhs));
     *out_changed = true;

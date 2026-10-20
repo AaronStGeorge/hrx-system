@@ -1,7 +1,7 @@
 // RUN: pass canonicalize
 
 // A local refinement preserves bits, but leaves the original facts unchanged.
-func.def @scalar_equalities(%value: i16, %take: i1) -> (i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16) {
+func.def @scalar_equalities(%value: i16, %take: i1) -> (i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16) {
   %refined = scalar.assume %value [ne(%value, 0)] : i16
   %difference = scalar.subi %refined, %value : i16
   %exclusive = scalar.xori %refined, %value : i16
@@ -14,19 +14,28 @@ func.def @scalar_equalities(%value: i16, %take: i1) -> (i16, i16, i16, i16, i16,
   %signed_remainder = scalar.remsi %refined, %value : i16
   %unsigned_remainder = scalar.remui %value, %refined : i16
   %selected = scf.select %take, %value, %refined : i16
-  func.return %difference, %exclusive, %both, %either, %low, %high, %signed_quotient, %unsigned_quotient, %signed_remainder, %unsigned_remainder, %selected : i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16
+  %other_low = scalar.minui %refined, %value : i16
+  %other_high = scalar.maxsi %value, %refined : i16
+  func.return %difference, %exclusive, %both, %either, %low, %high, %signed_quotient, %unsigned_quotient, %signed_remainder, %unsigned_remainder, %selected, %other_low, %other_high : i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16
 }
 
 // ----
-func.def @scalar_equalities(%value: i16, %take: i1) -> (i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16) {
+func.def @scalar_equalities(%value: i16, %take: i1) -> (i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16) {
   %refined = scalar.assume %value [ne(%value, 0)] : i16
   %difference = scalar.constant 0 : i16
   %exclusive = scalar.constant 0 : i16
+  %both = scalar.andi %refined, %value : i16
+  %either = scalar.ori %value, %refined : i16
+  %low = scalar.minsi %value, %refined : i16
+  %high = scalar.maxui %refined, %value : i16
   %signed_quotient = scalar.constant 1 : i16
   %unsigned_quotient = scalar.constant 1 : i16
   %signed_remainder = scalar.constant 0 : i16
   %unsigned_remainder = scalar.constant 0 : i16
-  func.return %difference, %exclusive, %refined, %value, %value, %refined, %signed_quotient, %unsigned_quotient, %signed_remainder, %unsigned_remainder, %value : i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16
+  %selected = scf.select %take, %value, %refined : i16
+  %other_low = scalar.minui %refined, %value : i16
+  %other_high = scalar.maxsi %value, %refined : i16
+  func.return %difference, %exclusive, %both, %either, %low, %high, %signed_quotient, %unsigned_quotient, %signed_remainder, %unsigned_remainder, %selected, %other_low, %other_high : i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16, i16
 }
 
 // ====
@@ -59,7 +68,7 @@ func.def @cancel_refined_terms(%value: i64, %other: i64) -> (i64, i64, i64) {
 
 // ====
 
-func.def @index_equalities(%value: index, %take: i1) -> (index, index, index, index, index, index, index) {
+func.def @index_equalities(%value: index, %take: i1) -> (index, index, index, index, index, index, index, index, index) {
   %refined = index.assume %value [range(%value, 1, 1023)] : index
   %difference = index.sub %refined, %value : index
   %exclusive = index.xori %value, %refined : index
@@ -68,17 +77,24 @@ func.def @index_equalities(%value: index, %take: i1) -> (index, index, index, in
   %quotient = index.div %value, %refined : index
   %remainder = index.rem %refined, %value : index
   %selected = scf.select %take, %refined, %value : index
-  func.return %difference, %exclusive, %both, %either, %quotient, %remainder, %selected : index, index, index, index, index, index, index
+  %low = index.min %value, %refined : index
+  %high = index.max %refined, %value : index
+  func.return %difference, %exclusive, %both, %either, %quotient, %remainder, %selected, %low, %high : index, index, index, index, index, index, index, index, index
 }
 
 // ----
-func.def @index_equalities(%value: index, %take: i1) -> (index, index, index, index, index, index, index) {
+func.def @index_equalities(%value: index, %take: i1) -> (index, index, index, index, index, index, index, index, index) {
   %refined = index.assume %value [range(%value, 1, 1023)] : index
   %difference = index.constant 0 : index
   %exclusive = index.constant 0 : index
+  %both = index.andi %value, %refined : index
+  %either = index.ori %refined, %value : index
   %quotient = index.constant 1 : index
   %remainder = index.constant 0 : index
-  func.return %difference, %exclusive, %value, %refined, %quotient, %remainder, %refined : index, index, index, index, index, index, index
+  %selected = scf.select %take, %refined, %value : index
+  %low = index.min %value, %refined : index
+  %high = index.max %refined, %value : index
+  func.return %difference, %exclusive, %both, %either, %quotient, %remainder, %selected, %low, %high : index, index, index, index, index, index, index, index, index
 }
 
 // ====
@@ -117,13 +133,15 @@ func.def @float_identity(%value: f32, %take: i1) -> (i1, i1, i1, i1, i1, i1, f32
   %unordered_not_equal = scalar.cmpf une, %value, %refined : f32
   %ordered = scalar.cmpf ord, %value, %refined : f32
   %finite_equal = scalar.constant true : i1
+  %sign = scalar.copysignf %value, %refined : f32
+  %selected = scf.select %take, %value, %refined : f32
   %difference = scalar.subf %value, %refined : f32
-  func.return %ordered_equal, %unordered_equal, %ordered_not_equal, %unordered_not_equal, %ordered, %finite_equal, %value, %value, %difference : i1, i1, i1, i1, i1, i1, f32, f32, f32
+  func.return %ordered_equal, %unordered_equal, %ordered_not_equal, %unordered_not_equal, %ordered, %finite_equal, %sign, %selected, %difference : i1, i1, i1, i1, i1, i1, f32, f32, f32
 }
 
 // ====
 
-func.def @vector_integer_identity(%value: vector<4xi32>, %take: vector<4xi1>) -> (vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi1>) {
+func.def @vector_integer_identity(%value: vector<4xi32>, %take: vector<4xi1>) -> (vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi1>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>) {
   %extent = index.constant 2 : index
   %fragment = vector.fragment<lhs> %value shape [%extent, %extent] : vector<4xi32>
   %difference = vector.subi %fragment, %value : vector<4xi32>
@@ -131,17 +149,29 @@ func.def @vector_integer_identity(%value: vector<4xi32>, %take: vector<4xi1>) ->
   %both = vector.andi %fragment, %value : vector<4xi32>
   %selected = vector.select %take, %value, %fragment : vector<4xi32>
   %equal = vector.cmpi eq, %fragment, %value : vector<4xi32> -> vector<4xi1>
-  func.return %difference, %exclusive, %both, %selected, %equal : vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi1>
+  %either = vector.ori %value, %fragment : vector<4xi32>
+  %signed_low = vector.minsi %value, %fragment : vector<4xi32>
+  %signed_high = vector.maxsi %fragment, %value : vector<4xi32>
+  %unsigned_low = vector.minui %fragment, %value : vector<4xi32>
+  %unsigned_high = vector.maxui %value, %fragment : vector<4xi32>
+  func.return %difference, %exclusive, %both, %selected, %equal, %either, %signed_low, %signed_high, %unsigned_low, %unsigned_high : vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi1>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>
 }
 
 // ----
-func.def @vector_integer_identity(%value: vector<4xi32>, %take: vector<4xi1>) -> (vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi1>) {
+func.def @vector_integer_identity(%value: vector<4xi32>, %take: vector<4xi1>) -> (vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi1>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>) {
   %extent = index.constant 2 : index
   %fragment = vector.fragment<lhs> %value shape [%extent, %extent] : vector<4xi32>
   %difference = vector.constant 0 : vector<4xi32>
   %exclusive = vector.constant 0 : vector<4xi32>
+  %both = vector.andi %fragment, %value : vector<4xi32>
+  %selected = vector.select %take, %value, %fragment : vector<4xi32>
   %equal = vector.constant true : vector<4xi1>
-  func.return %difference, %exclusive, %fragment, %value, %equal : vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi1>
+  %either = vector.ori %value, %fragment : vector<4xi32>
+  %signed_low = vector.minsi %value, %fragment : vector<4xi32>
+  %signed_high = vector.maxsi %fragment, %value : vector<4xi32>
+  %unsigned_low = vector.minui %fragment, %value : vector<4xi32>
+  %unsigned_high = vector.maxui %value, %fragment : vector<4xi32>
+  func.return %difference, %exclusive, %both, %selected, %equal, %either, %signed_low, %signed_high, %unsigned_low, %unsigned_high : vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi1>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<4xi32>
 }
 
 // ====
@@ -188,7 +218,8 @@ func.def @lookup_aliases(%selector: index, %value: index, %other: index) -> (ind
 
 // ====
 
-// An alias can make a constructed vector uniform without an exact scalar value.
+// Equal bits can still carry different lane facts. Splatting the first value
+// would discard the second element's floating-point refinement.
 func.def @uniform_elements(%value: f64) -> (vector<2xf64>) {
   %refined = scalar.assume %value [not_inf(%value)] : f64
   %result = vector.from_elements %value, %refined : vector<2xf64>
@@ -197,7 +228,8 @@ func.def @uniform_elements(%value: f64) -> (vector<2xf64>) {
 
 // ----
 func.def @uniform_elements(%value: f64) -> (vector<2xf64>) {
-  %result = vector.splat %value : vector<2xf64>
+  %refined = scalar.assume %value [not_inf(%value)] : f64
+  %result = vector.from_elements %value, %refined : vector<2xf64>
   func.return %result : vector<2xf64>
 }
 
@@ -213,7 +245,11 @@ func.def @insert_roundtrip(%value: vector<4xi8>) -> (vector<4xi8>) {
 
 // ----
 func.def @insert_roundtrip(%value: vector<4xi8>) -> (vector<4xi8>) {
-  func.return %value : vector<4xi8>
+  %extent = index.constant 2 : index
+  %fragment = vector.fragment<lhs> %value shape [%extent, %extent] : vector<4xi8>
+  %element = vector.extract %fragment[1] : vector<4xi8> -> i8
+  %result = vector.insert %element into %value[1] : i8, vector<4xi8>
+  func.return %result : vector<4xi8>
 }
 
 // ====
@@ -233,5 +269,6 @@ func.def @byte_and_offset(%value: i8, %position: offset, %take: i1) -> (i8, offs
   %bounded = index.assume %position [range(%position, 1, 127)] : offset
   %exclusive = scalar.constant 0 : i8
   %difference = index.constant 0 : offset
-  func.return %exclusive, %difference, %bounded : i8, offset, offset
+  %selected = scf.select %take, %bounded, %position : offset
+  func.return %exclusive, %difference, %selected : i8, offset, offset
 }

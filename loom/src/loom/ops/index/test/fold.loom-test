@@ -734,8 +734,8 @@ func.def @add_scaled_shift_mask_reconstruction(%lane: index) -> (index) {
 
 // ====
 
-// index.madd recognizes the same reconstruction after source normalization has
-// bounded each view axis with identity assumptions.
+// Bounds on the individual axes constrain the reconstructed coordinate more
+// tightly than its source. Reconstruction must retain those assumptions.
 func.def @madd_scaled_shift_mask_reconstruction_with_assumes(%lane: index) -> (index) {
   %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
   %shift = index.constant 1 : index
@@ -753,8 +753,16 @@ func.def @madd_scaled_shift_mask_reconstruction_with_assumes(%lane: index) -> (i
 // ----
 func.def @madd_scaled_shift_mask_reconstruction_with_assumes(%lane: index) -> (index) {
   %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
+  %shift = index.constant 1 : index
+  %mask = index.constant 1 : index
   %c8 = index.constant 8 : index
-  %linear = index.mul %bounded, %c8 : index
+  %c16 = index.constant 16 : index
+  %quotient = index.shrui %bounded, %shift : index
+  %remainder = index.andi %bounded, %mask : index
+  %quotient_bounded = index.assume %quotient [range(%quotient, 0, 15)] : index
+  %remainder_scaled = index.mul %remainder, %c8 : index
+  %remainder_bounded = index.assume %remainder_scaled [range(%remainder_scaled, 0, 15)] : index
+  %linear = index.madd %quotient_bounded, %c16, %remainder_bounded : index
   func.return %linear : index
 }
 
