@@ -330,11 +330,10 @@ static iree_status_t loom_low_cfg_tuple_eliminate(
     const loom_boundary_projection_rule_t* rule,
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
-    loom_boundary_projection_slot_t* slot, loom_type_t logical_type,
-    loom_location_id_t location) {
+    loom_boundary_projection_slot_t* slot,
+    loom_boundary_projection_elimination_t* out_elimination) {
+  (void)out_elimination;
   (void)function;
-  (void)logical_type;
-  (void)location;
   IREE_ASSERT(slot->schema.rule == rule);
   const loom_low_cfg_tuple_slot_plan_t* slot_plan =
       (const loom_low_cfg_tuple_slot_plan_t*)slot->schema.rule_plan;

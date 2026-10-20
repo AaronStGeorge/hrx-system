@@ -12,25 +12,6 @@
 #include "loom/ir/module.h"
 #include "loom/rewrite/remap.h"
 
-struct loom_boundary_projection_branch_t {
-  // Original structured branch whose regions retain their operations.
-  loom_region_branch_t branch;
-  // Original terminators in physical region order.
-  loom_op_t** terminators;
-  // Result-column candidate indices, or IREE_HOST_SIZE_MAX when unclaimed.
-  iree_host_size_t* candidates;
-  // Incoming recipes in region-major, original-result order.
-  loom_boundary_projection_source_t* sources;
-  // Prefix offsets from original results to their physical components.
-  uint16_t* offsets;
-  // Preallocated physical results, shared by every incoming yield.
-  loom_value_id_t* result_ids;
-  // Final result arity after projection.
-  uint16_t result_count;
-  // Whether at least one result column remains projected.
-  bool selected;
-};
-
 static loom_boundary_projection_slot_t* loom_boundary_projection_branch_slot(
     loom_boundary_projection_function_t* function,
     const loom_boundary_projection_branch_t* branch, uint16_t result_index) {
@@ -84,7 +65,19 @@ iree_status_t loom_boundary_projection_collect_branch(
   return iree_ok_status();
 }
 
-iree_status_t loom_boundary_projection_plan_branches(
+void loom_boundary_projection_index_branches(
+    loom_boundary_projection_function_t* function) {
+  for (iree_host_size_t b = 0; b < function->branch_count; ++b) {
+    loom_boundary_projection_branch_t* branch = &function->branches[b];
+    const loom_op_t* op = branch->branch.op;
+    for (uint16_t i = 0; i < op->result_count; ++i) {
+      branch->candidates[i] = loom_boundary_projection_slot_index(
+          function, loom_op_const_results(op)[i]);
+    }
+  }
+}
+
+iree_status_t loom_boundary_projection_select_branches(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function) {
   // Select every result before planning yields so nested branches transport
@@ -95,9 +88,7 @@ iree_status_t loom_boundary_projection_plan_branches(
     uint32_t result_count = 0;
     for (uint16_t i = 0; i < op->result_count; ++i) {
       const loom_value_id_t value = loom_op_const_results(op)[i];
-      const iree_host_size_t index =
-          loom_boundary_projection_slot_index(function, value);
-      branch->candidates[i] = index;
+      const iree_host_size_t index = branch->candidates[i];
       loom_boundary_projection_schema_t schema = {0};
       bool claimed = false;
       if (index != IREE_HOST_SIZE_MAX) {
@@ -121,6 +112,12 @@ iree_status_t loom_boundary_projection_plan_branches(
       }
     }
   }
+  return iree_ok_status();
+}
+
+iree_status_t loom_boundary_projection_plan_branches(
+    loom_boundary_projection_plan_t* plan,
+    loom_boundary_projection_function_t* function) {
   for (iree_host_size_t b = 0; b < function->branch_count; ++b) {
     loom_boundary_projection_branch_t* branch = &function->branches[b];
     const loom_op_t* op = branch->branch.op;
@@ -370,14 +367,9 @@ static iree_status_t loom_boundary_projection_apply_branch(
           source->location, &slot->replacement_value_id));
       IREE_RETURN_IF_ERROR(loom_boundary_projection_replace_definition(
           plan, function, slot->value_id, slot->replacement_value_id));
-    } else {
-      IREE_RETURN_IF_ERROR(slot->schema.rule->transport.eliminate(
-          slot->schema.rule, plan, function, slot, logical_type,
-          source->location));
-      IREE_ASSERT(!loom_module_value_has_uses(plan->module, slot->value_id));
     }
   }
-  return loom_rewriter_erase(&plan->rewriter, source);
+  return iree_ok_status();
 }
 
 iree_status_t loom_boundary_projection_apply_branches(

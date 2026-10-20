@@ -77,10 +77,8 @@ enum loom_scf_pipeline_loop_flag_bits_e {
   LOOM_SCF_PIPELINE_LOOP_READ_AHEAD = 1u << 1,
   // This unroll-only descendant has a selected finite full-linear plan.
   LOOM_SCF_PIPELINE_LOOP_PREPARE = 1u << 2,
-  // Exact bounds preserve participants across the main/drain split.
-  LOOM_SCF_PIPELINE_LOOP_STATIC_BOUNDS = 1u << 3,
   // Cloned startup indices require explicit branch-local domain refinements.
-  LOOM_SCF_PIPELINE_LOOP_REFINE_STARTUP_DOMAIN = 1u << 4,
+  LOOM_SCF_PIPELINE_LOOP_REFINE_STARTUP_DOMAIN = 1u << 3,
 };
 
 typedef struct loom_scf_pipeline_loop_t {
@@ -96,6 +94,8 @@ typedef struct loom_scf_pipeline_loop_t {
   loom_scf_pipeline_loop_flags_t flags;
   // Source effects that must remain in the ordered consumer.
   loom_scf_body_effect_flags_t consumer_effects;
+  // Original loop-bound agreement, retained before nested reconstruction.
+  loom_scf_pipeline_participation_t participation;
   // Original scalar facts, selected by the source loop's pipeline policy.
   union {
     // Full linear domain for an unroll-only preparation candidate.
@@ -278,11 +278,16 @@ static iree_status_t loom_scf_pipeline_resolve_facts(
         facts, loom_scf_for_lower_bound(loop->source));
     const loom_value_facts_t upper_bound = loom_value_fact_table_lookup(
         facts, loom_scf_for_upper_bound(loop->source));
-    if (loom_value_facts_is_exact(loop->plan.pipeline.lower_bound)) {
-      if (loom_value_facts_is_exact(upper_bound)) {
-        loop->flags |= LOOM_SCF_PIPELINE_LOOP_STATIC_BOUNDS;
-      }
-    } else if (depth > 1) {
+    loop->participation = (loom_scf_pipeline_participation_t){
+        .exact_bounds =
+            loom_value_facts_is_exact(loop->plan.pipeline.lower_bound) &&
+            loom_value_facts_is_exact(upper_bound),
+        .uniform_scope = iree_min(
+            loom_value_facts_uniform_scope(loop->plan.pipeline.lower_bound),
+            loom_value_facts_uniform_scope(upper_bound)),
+    };
+    if (!loom_value_facts_is_exact(loop->plan.pipeline.lower_bound) &&
+        depth > 1) {
       int64_t step = 0;
       int64_t last_startup_offset = 0;
       int64_t last_startup = 0;
@@ -306,8 +311,8 @@ static iree_status_t loom_scf_pipeline_resolve_facts(
                                               ? (int64_t)maximum
                                               : (int64_t)(maximum >> 1);
     }
-    // Only scalar ranges and exactness are consumed. Table-local extension
-    // identities do not cross the invalidation boundary.
+    // Only scalar ranges, distribution, and exactness are consumed. Table-local
+    // extension identities do not cross the invalidation boundary.
     loop->plan.pipeline.depth.extension_id = 0;
     loop->plan.pipeline.step.extension_id = 0;
     loop->plan.pipeline.lower_bound.extension_id = 0;
@@ -1234,8 +1239,8 @@ static iree_status_t loom_scf_pipeline_process_loop(
     loom_scf_pipeline_rejection_t rejection = {0};
     IREE_RETURN_IF_ERROR(loom_scf_pipeline_plan_build(
         context->module, loom_region_entry_block(loom_scf_for_body(source)),
-        iree_any_bit_set(loop->flags, LOOM_SCF_PIPELINE_LOOP_STATIC_BOUNDS),
-        context->spaces, context->arena, &plan, &rejection));
+        loop->participation, context->spaces, context->arena, &plan,
+        &rejection));
     if (rejection.op) {
       return loom_scf_pipeline_reject(context->pass, rejection.op, depth,
                                       rejection.constraint);

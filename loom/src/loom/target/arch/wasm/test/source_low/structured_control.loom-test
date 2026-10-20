@@ -112,19 +112,11 @@ func.def target(@target) @for_with_partial_integer_iter_arg(%lo: index, %hi: ind
 
 // ----
 low.func.def target<wasm.core.simd128>(@target) abi(wasm_function) @for_with_partial_integer_iter_arg(%lo: reg<wasm.i32>, %hi: reg<wasm.i32>, %step: reg<wasm.i32>, %a: reg<wasm.i32>, %b: reg<wasm.i32>) -> (reg<wasm.i32>, reg<wasm.i32>) asm {
-  %28 = i32x4.splat %a
-  %initial = i32x4.replace_lane %28, %b, 1
-  %result = low.scf.for signed [%lo to %hi step %step] iter_args(%initial: reg<wasm.v128>) -> (reg<wasm.v128>) do(%iv: reg<wasm.i32>, %state: reg<wasm.v128>) {
-    %x = i32x4.extract_lane %state, 0
-    %y = i32x4.extract_lane %state, 1
-    %sum = i32.add %x, %y
-    %36 = i32x4.splat %y
-    %next = i32x4.replace_lane %36, %sum, 1
-    low.scf.yield %next : reg<wasm.v128>
+  %result_slot_0, %result_slot_1 = low.scf.for signed [%lo to %hi step %step] iter_args(%a: reg<wasm.i32>, %b: reg<wasm.i32>) -> (reg<wasm.i32>, reg<wasm.i32>) do(%iv: reg<wasm.i32>, %state_slot_0: reg<wasm.i32>, %state_slot_1: reg<wasm.i32>) {
+    %sum = i32.add %state_slot_0, %state_slot_1
+    low.scf.yield %state_slot_1, %sum : reg<wasm.i32>, reg<wasm.i32>
   }
-  %x = i32x4.extract_lane %result, 0
-  %y = i32x4.extract_lane %result, 1
-  return %x, %y
+  return %result_slot_0, %result_slot_1
 }
 
 // ====

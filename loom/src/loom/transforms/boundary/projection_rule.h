@@ -51,8 +51,8 @@ typedef enum loom_boundary_projection_destination_mode_e {
   // Reconstructs one logical value consumed by the original body uses.
   LOOM_BOUNDARY_PROJECTION_DESTINATION_RECONSTRUCT = 0,
   // Rewrites admitted body uses to consume components directly and removes the
-  // original logical definition. Supported for CFG block arguments and all
-  // definitions of a LoopLike recurrence column.
+  // original logical definition. Supported for CFG block arguments, structured
+  // branch results, and all definitions of a LoopLike recurrence column.
   LOOM_BOUNDARY_PROJECTION_DESTINATION_ELIMINATE = 1,
 } loom_boundary_projection_destination_mode_t;
 
@@ -154,15 +154,25 @@ typedef iree_status_t (*loom_boundary_projection_reconstruct_fn_t)(
     loom_boundary_projection_slot_t* slot, loom_type_t logical_type,
     loom_location_id_t location, loom_value_id_t* out_logical_value);
 
-// Rewrites the rule-owned uses of one logical destination to consume its
-// physical components directly. The callback must remove every remaining use
-// of the logical value; the engine then removes its boundary definition.
+// Source operations retired with their rewritten boundary definitions. The
+// owning rule proves that their remaining uses are confined to that closed set.
+typedef struct loom_boundary_projection_elimination_t {
+  // Borrowed retained operations, each occurring once in the retirement set.
+  loom_op_t* const* operations;
+  // Number of entries in operations.
+  iree_host_size_t count;
+} loom_boundary_projection_elimination_t;
+
+// Rewrites retained destination uses to consume physical components after all
+// incoming boundary transfers exist. Returns source operations whose remaining
+// uses belong to the replaced boundaries; the engine retires that closed set.
+// The output starts empty and borrows rule-owned storage through retirement.
 typedef iree_status_t (*loom_boundary_projection_eliminate_fn_t)(
     const loom_boundary_projection_rule_t* rule,
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
-    loom_boundary_projection_slot_t* slot, loom_type_t logical_type,
-    loom_location_id_t location);
+    loom_boundary_projection_slot_t* slot,
+    loom_boundary_projection_elimination_t* out_elimination);
 
 // Coherent source and destination behavior for a compiler-owned rule.
 typedef struct loom_boundary_projection_transport_vtable_t {

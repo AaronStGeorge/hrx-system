@@ -66,7 +66,7 @@ func.def @dynamic_upper_bound(%input: view<8xi32>, %initial: i32, %end: index) -
   %depth = index.constant 2 : index
   %result = scf.for %i = [%begin to %end step %step](%sum = %initial : i32) -> (i32) pipeline(%depth) {
     %value = view.load %input[%i] : view<8xi32> -> i32
-    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve convergent consumer participation"}
+    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
     %collective = test.convergent %value : i32
     %next = scalar.addi %sum, %collective : i32
     scf.yield %next : i32
@@ -83,7 +83,7 @@ func.def @dynamic_lower_bound(%input: view<8xi32>, %initial: i32, %begin: index)
   %depth = index.constant 2 : index
   %result = scf.for %i = [%begin to %end step %step](%sum = %initial : i32) -> (i32) pipeline(%depth) {
     %value = view.load %input[%i] : view<8xi32> -> i32
-    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve convergent consumer participation"}
+    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
     %collective = test.convergent %value : i32
     %next = scalar.addi %sum, %collective : i32
     scf.yield %next : i32
@@ -177,7 +177,7 @@ func.def @dynamic_mixed_load_and_collective(%input: view<8xi32>, %initial: i32, 
   %step = index.constant 1 : index
   %depth = index.constant 2 : index
   %result = scf.for %i = [%begin to %end step %step](%sum = %initial : i32) -> (i32) pipeline(%depth) {
-    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve convergent consumer participation"}
+    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
     %next = scf.if %condition -> (i32) {
       %loaded = view.load %input[%i] : view<8xi32> -> i32
       %collective = test.convergent %loaded : i32
@@ -278,7 +278,7 @@ func.def @condition_region_does_not_see_success(%input: view<8xi32>, %initial: i
     %tile_end = index.min %before_remaining, %tile_size : index
     %sum = scf.for %i = [%begin to %tile_end step %step](%acc = %initial : i32) -> (i32) pipeline(%depth) {
       %value = view.load %input[%i] : view<8xi32> -> i32
-      // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve convergent consumer participation"}
+      // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
       %collective = test.convergent %value : i32
       %next = scalar.addi %acc, %collective : i32
       scf.yield %next : i32
@@ -310,7 +310,7 @@ func.def @disjunction_does_not_prove_full_tile(%input: view<8xi32>, %initial: i3
     %tile_end = index.min %active_remaining, %tile_size : index
     %sum = scf.for %i = [%begin to %tile_end step %step](%acc = %initial : i32) -> (i32) pipeline(%depth) {
       %value = view.load %input[%i] : view<8xi32> -> i32
-      // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve convergent consumer participation"}
+      // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
       %collective = test.convergent %value : i32
       %next = scalar.addi %acc, %collective : i32
       scf.yield %next : i32
@@ -339,7 +339,7 @@ func.def @unforwarded_value_does_not_refine_payload(%input: view<8xi32>, %initia
     %tile_end = index.min %active_payload, %tile_size : index
     %sum = scf.for %i = [%begin to %tile_end step %step](%acc = %initial : i32) -> (i32) pipeline(%depth) {
       %value = view.load %input[%i] : view<8xi32> -> i32
-      // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve convergent consumer participation"}
+      // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
       %collective = test.convergent %value : i32
       %next = scalar.addi %acc, %collective : i32
       scf.yield %next : i32
@@ -370,7 +370,7 @@ func.def @exit_does_not_retain_success(%input: view<8xi32>, %initial: i32, %rema
   %tail_end = index.min %terminal, %tile_size : index
   %sum = scf.for %i = [%begin to %tail_end step %step](%acc = %initial : i32) -> (i32) pipeline(%depth) {
     %value = view.load %input[%i] : view<8xi32> -> i32
-    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve convergent consumer participation"}
+    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
     %collective = test.convergent %value : i32
     %next = scalar.addi %acc, %collective : i32
     scf.yield %next : i32

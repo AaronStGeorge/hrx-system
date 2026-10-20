@@ -267,7 +267,7 @@ func.def @partial_tile_pipeline_remains_dynamic(%input: view<8xi32>, %initial: i
     %tile_end = index.min %remaining, %tile_size : index
     %sum = scf.for %i = [%begin to %tile_end step %step](%acc = %initial : i32) -> (i32) pipeline(%depth) {
       %value = view.load %input[%i] : view<8xi32> -> i32
-      // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve convergent consumer participation"}
+      // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
       %collective = test.convergent %value : i32
       %next = scalar.addi %acc, %collective : i32
       scf.yield %next : i32

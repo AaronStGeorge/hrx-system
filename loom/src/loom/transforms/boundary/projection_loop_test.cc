@@ -289,11 +289,10 @@ static iree_status_t EliminateWithFirstComponent(
     const loom_boundary_projection_rule_t* rule,
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function,
-    loom_boundary_projection_slot_t* slot, loom_type_t logical_type,
-    loom_location_id_t location) {
+    loom_boundary_projection_slot_t* slot,
+    loom_boundary_projection_elimination_t* out_elimination) {
+  (void)out_elimination;
   (void)function;
-  (void)logical_type;
-  (void)location;
   IREE_ASSERT(slot->schema.rule == rule);
   IREE_ASSERT_EQ(slot->schema.component_count, 2);
   const int64_t use_count =

@@ -374,7 +374,7 @@ static iree_status_t loom_boundary_projection_plan_loop_source(
       out_planned);
 }
 
-iree_status_t loom_boundary_projection_plan_loops(
+iree_status_t loom_boundary_projection_select_loops(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function) {
   for (iree_host_size_t loop_index = 0; loop_index < function->loop_count;
@@ -400,6 +400,12 @@ iree_status_t loom_boundary_projection_plan_loops(
     }
   }
 
+  return iree_ok_status();
+}
+
+iree_status_t loom_boundary_projection_plan_loops(
+    loom_boundary_projection_plan_t* plan,
+    loom_boundary_projection_function_t* function) {
   for (iree_host_size_t loop_index = 0; loop_index < function->loop_count;
        ++loop_index) {
     loom_boundary_projection_loop_t* loop = &function->loops[loop_index];
@@ -1144,10 +1150,6 @@ static iree_status_t loom_boundary_projection_realize_loop_candidate(
     return loom_boundary_projection_replace_definition(
         plan, function, candidate->value_id, candidate->replacement_value_id);
   }
-  IREE_RETURN_IF_ERROR(candidate->schema.rule->transport.eliminate(
-      candidate->schema.rule, plan, function, candidate, logical_type,
-      location));
-  IREE_ASSERT(!loom_module_value_has_uses(plan->module, candidate->value_id));
   return iree_ok_status();
 }
 
@@ -1248,12 +1250,6 @@ static iree_status_t loom_boundary_projection_realize_loop_results(
       IREE_RETURN_IF_ERROR(loom_boundary_projection_replace_definition(
           plan, function, candidate->value_id,
           candidate->replacement_value_id));
-    } else {
-      IREE_RETURN_IF_ERROR(candidate->schema.rule->transport.eliminate(
-          candidate->schema.rule, plan, function, candidate, logical_type,
-          replacement->loop.op->location));
-      IREE_ASSERT(
-          !loom_module_value_has_uses(plan->module, candidate->value_id));
     }
   }
   return iree_ok_status();
@@ -1405,7 +1401,6 @@ static iree_status_t loom_boundary_projection_open_loop(
 
   IREE_RETURN_IF_ERROR(loom_boundary_projection_realize_loop_results(
       plan, function, loop, out_replacement));
-  IREE_RETURN_IF_ERROR(loom_rewriter_erase(&plan->rewriter, loop->loop.op));
   return iree_ok_status();
 }
 

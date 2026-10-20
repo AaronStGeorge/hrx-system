@@ -73,6 +73,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::ir
+    loom::ir::facts
     loom::ops::kernel
     loom::ops::op_defs
     loom::ops::scf
@@ -91,6 +92,7 @@ loom_cc_library(
     ::scf_body
     iree::base
     loom::ir
+    loom::ir::facts
     loom::ops::index
     loom::ops::op_defs
     loom::ops::scf

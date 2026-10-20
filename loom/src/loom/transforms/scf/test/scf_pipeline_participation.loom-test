@@ -1,0 +1,212 @@
+// RUN: pass pipeline-scf-for
+
+// Both bounds are runtime values, including empty and short intervals. All
+// workgroup participants take the same serial/steady/drain path at depth three.
+kernel.def @runtime_workgroup_interval() {
+  %unit = index.constant 1 : index
+  %width = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %begin_arg: index, %end_arg: index) {
+  %begin = index.assume %begin_arg [range(%begin_arg, 0, 8)] : index
+  %end = index.assume %end_arg [range(%end_arg, 0, 8)] : index
+  %step = index.constant 2 : index
+  %depth = index.constant 3 : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<8xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<128xi32>
+  %lane = kernel.workitem.id<x> : index
+  %initial = scalar.constant 0 : i32
+  %result = scf.for %i = [%begin to %end step %step](%sum = %initial : i32) -> (i32) pipeline(%depth) {
+    %value = view.load %source[%i] : view<8xi32> -> i32
+    %collective = kernel.workgroup.reduce<addi> %value : i32
+    %next = scalar.addi %sum, %collective : i32
+    scf.yield %next : i32
+  }
+  view.store %result, %destination[%lane] : i32, view<128xi32>
+  kernel.return
+}
+
+// ----
+kernel.def @runtime_workgroup_interval() {
+  %unit = index.constant 1 : index
+  %width = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %begin_arg: index, %end_arg: index) {
+  %begin = index.assume %begin_arg [range(%begin_arg, 0, 8)] : index
+  %end = index.assume %end_arg [range(%end_arg, 0, 8)] : index
+  %step = index.constant 2 : index
+  %depth = index.constant 3 : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<8xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<128xi32>
+  %lane = kernel.workitem.id<x> : index
+  %initial = scalar.constant 0 : i32
+  %21 = index.constant 4 : index
+  %22 = index.add %begin, %21 : index
+  %23 = index.cmp slt, %22, %end : index
+  %result = scf.if %23 -> (i32) {
+    %25 = index.assume %begin [lt(%begin, %end)] : index
+    %value$26 = view.load %source[%25] : view<8xi32> -> i32
+    %27 = index.constant 2 : index
+    %28 = index.add %begin, %27 : index
+    %29 = index.assume %28 [lt(%28, %end)] : index
+    %value$30 = view.load %source[%29] : view<8xi32> -> i32
+    %35, %36, %37 = scf.for %31 = [%22 to %end step %step](%32 = %initial : i32, %33 = %value$26 : i32, %34 = %value$30 : i32) -> (i32, i32, i32) {
+      %value = view.load %source[%31] : view<8xi32> -> i32
+      %collective = kernel.workgroup.reduce<addi> %33 : i32
+      %next = scalar.addi %32, %collective : i32
+      scf.yield %next, %34, %value : i32, i32, i32
+    }
+    %collective$41 = kernel.workgroup.reduce<addi> %36 : i32
+    %next$42 = scalar.addi %35, %collective$41 : i32
+    %collective$43 = kernel.workgroup.reduce<addi> %37 : i32
+    %next$44 = scalar.addi %next$42, %collective$43 : i32
+    scf.yield %next$44 : i32
+  } else {
+    %47 = scf.for %45 = [%begin to %end step %step](%46 = %initial : i32) -> (i32) {
+      %value = view.load %source[%45] : view<8xi32> -> i32
+      %collective = kernel.workgroup.reduce<addi> %value : i32
+      %next = scalar.addi %46, %collective : i32
+      scf.yield %next : i32
+    }
+    scf.yield %47 : i32
+  }
+  view.store %result, %destination[%lane] : i32, view<128xi32>
+  kernel.return
+}
+
+// ====
+
+// Subgroups may execute different numbers of iterations while their own lanes
+// agree. The scope proof does not require agreement across the workgroup.
+kernel.def @subgroup_interval() {
+  %unit = index.constant 1 : index
+  %width = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %depth = index.constant 2 : index
+  %maximum = index.constant 7 : index
+  %subgroup = kernel.subgroup.id : index
+  %bounded_subgroup = index.min %subgroup, %maximum : index
+  %end = index.add %bounded_subgroup, %step : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<8xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<128xi32>
+  %lane = kernel.workitem.id<x> : index
+  %initial = scalar.constant 0 : i32
+  %result = scf.for %i = [%begin to %end step %step](%sum = %initial : i32) -> (i32) pipeline(%depth) {
+    %value = view.load %source[%i] : view<8xi32> -> i32
+    %collective = kernel.subgroup.reduce<addi> %value : i32
+    %next = scalar.addi %sum, %collective : i32
+    scf.yield %next : i32
+  }
+  view.store %result, %destination[%lane] : i32, view<128xi32>
+  kernel.return
+}
+
+// ----
+kernel.def @subgroup_interval() {
+  %unit = index.constant 1 : index
+  %width = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %depth = index.constant 2 : index
+  %maximum = index.constant 7 : index
+  %subgroup = kernel.subgroup.id : index
+  %bounded_subgroup = index.min %subgroup, %maximum : index
+  %end = index.add %bounded_subgroup, %step : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<8xi32>
+  %destination = buffer.view %output[%origin] : buffer -> view<128xi32>
+  %lane = kernel.workitem.id<x> : index
+  %initial = scalar.constant 0 : i32
+  %22 = index.constant 1 : index
+  %23 = index.cmp slt, %22, %end : index
+  %result = scf.if %23 -> (i32) {
+    %value = view.load %source[%begin] : view<8xi32> -> i32
+    %29, %30 = scf.for %26 = [%22 to %end step %step](%27 = %initial : i32, %28 = %value : i32) -> (i32, i32) {
+      %value = view.load %source[%26] : view<8xi32> -> i32
+      %collective = kernel.subgroup.reduce<addi> %28 : i32
+      %next = scalar.addi %27, %collective : i32
+      scf.yield %next, %value : i32, i32
+    }
+    %collective = kernel.subgroup.reduce<addi> %30 : i32
+    %next = scalar.addi %29, %collective : i32
+    scf.yield %next : i32
+  } else {
+    %38 = scf.for %36 = [%begin to %end step %step](%37 = %initial : i32) -> (i32) {
+      %value = view.load %source[%36] : view<8xi32> -> i32
+      %collective = kernel.subgroup.reduce<addi> %value : i32
+      %next = scalar.addi %37, %collective : i32
+      scf.yield %next : i32
+    }
+    scf.yield %38 : i32
+  }
+  view.store %result, %destination[%lane] : i32, view<128xi32>
+  kernel.return
+}
+
+// ====
+
+kernel.def @subgroup_bounds_cannot_split_workgroup() {
+  %unit = index.constant 1 : index
+  %width = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %depth = index.constant 2 : index
+  %end = kernel.subgroup.id : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<8xi32>
+  %initial = scalar.constant 0 : i32
+  %result = scf.for %i = [%begin to %end step %step](%sum = %initial : i32) -> (i32) pipeline(%depth) {
+    %value = view.load %source[%i] : view<8xi32> -> i32
+    // ERROR@+1: STRUCTURE/014 {expected_constraint="workgroup-uniform loop bounds to preserve convergent consumer participation"}
+    %collective = kernel.workgroup.reduce<addi> %value : i32
+    %next = scalar.addi %sum, %collective : i32
+    scf.yield %next : i32
+  }
+  kernel.return
+}
+
+// ====
+
+// Even cluster-uniform arguments do not prove an opaque participant set.
+// Aggregating nested units must retain the unknown scope after a known one.
+kernel.def @opaque_nested_participants() {
+  %unit = index.constant 1 : index
+  %width = index.constant 128 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %end: index, %enabled: i1) {
+  %begin = index.constant 0 : index
+  %step = index.constant 1 : index
+  %depth = index.constant 2 : index
+  %origin = index.constant 0 : offset
+  %source = buffer.view %input[%origin] : buffer -> view<8xi32>
+  %scratch_bytes = index.constant 512 : offset
+  %scratch = buffer.alloca<workgroup> align(4) %scratch_bytes : buffer
+  %staged = buffer.view %scratch[%origin] : buffer -> view<128xi32>
+  %lane = kernel.workitem.id<x> : index
+  %initial = scalar.constant 0 : i32
+  %result = scf.for %i = [%begin to %end step %step](%sum = %initial : i32) -> (i32) pipeline(%depth) {
+    %value = view.load %source[%i] : view<8xi32> -> i32
+    // ERROR@+1: STRUCTURE/014 {expected_constraint="compile-time exact loop bounds to preserve unscoped convergent consumer participation"}
+    %next = scf.if %enabled -> (i32) {
+      %known = kernel.subgroup.reduce<addi> %value : i32
+      %unknown = test.convergent %known : i32
+      view.store %unknown, %staged[%lane] : i32, view<128xi32>
+      %added = scalar.addi %sum, %unknown : i32
+      scf.yield %added : i32
+    } else {
+      %known = kernel.subgroup.reduce<addi> %sum : i32
+      scf.yield %known : i32
+    }
+    scf.yield %next : i32
+  }
+  kernel.return
+}

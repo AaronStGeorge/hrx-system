@@ -80,8 +80,13 @@ iree_status_t loom_boundary_projection_collect_loop(
 void loom_boundary_projection_index_loops(
     loom_boundary_projection_function_t* function);
 
-// Selects recurrence schemas and plans all initial, condition, and backedge
-// source coordinates after function-local rule preparation.
+// Selects every recurrence schema before structured source planning.
+iree_status_t loom_boundary_projection_select_loops(
+    loom_boundary_projection_plan_t* plan,
+    loom_boundary_projection_function_t* function);
+
+// Plans all initial, condition, and backedge source coordinates after every
+// loop and branch has selected its schema.
 iree_status_t loom_boundary_projection_plan_loops(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function);

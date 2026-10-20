@@ -18,7 +18,7 @@
   V(statistics_type, loops_scalarized, "loops-scalarized",          \
     "Number of LoopLike operations rebuilt with scalarized banks.") \
   V(statistics_type, banks_scalarized, "banks-scalarized",          \
-    "Number of loop-carried vector banks scalarized.")              \
+    "Number of structured vector banks scalarized.")                \
   V(statistics_type, slots_materialized, "slots-materialized",      \
     "Number of scalar or tail-vector bank slots materialized.")     \
   V(statistics_type, extracts_eliminated, "extracts-eliminated",    \
@@ -33,7 +33,7 @@ LOOM_PASS_STATISTICS_DEFINE(loom_vector_bank_sroa_statistics,
 static const loom_pass_info_t kPassInfo = {
     .name = IREE_SVL("sroa-vector-banks"),
     .description = IREE_SVL(
-        "Split statically addressed loop-carried vector banks into slots."),
+        "Split statically addressed vector banks across loops and branches."),
     .kind = LOOM_PASS_MODULE,
     .statistic_layout = &loom_vector_bank_sroa_statistics_layout,
 };

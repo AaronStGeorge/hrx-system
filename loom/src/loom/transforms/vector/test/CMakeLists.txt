@@ -14,6 +14,7 @@ loom_check_test_suite(
     test
   SRCS
     "bank_sroa.loom-test"
+    "bank_sroa_branches.loom-test"
     "bitwise_legalization.loom-test"
     "dynamic_extract.loom-test"
     "integer_cast.loom-test"

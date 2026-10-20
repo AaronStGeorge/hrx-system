@@ -13,12 +13,40 @@
 extern "C" {
 #endif
 
+struct loom_boundary_projection_branch_t {
+  // Original structured branch whose regions retain their operations.
+  loom_region_branch_t branch;
+  // Original terminators in physical region order.
+  loom_op_t** terminators;
+  // Result-column candidate indices, or IREE_HOST_SIZE_MAX when unclaimed.
+  iree_host_size_t* candidates;
+  // Incoming recipes in region-major, original-result order.
+  loom_boundary_projection_source_t* sources;
+  // Prefix offsets from original results to their physical components.
+  uint16_t* offsets;
+  // Preallocated physical results, shared by every incoming yield.
+  loom_value_id_t* result_ids;
+  // Final result arity after projection.
+  uint16_t result_count;
+  // Whether at least one result column remains projected.
+  bool selected;
+};
+
+// Resolves retained branch result identities after candidate sorting.
+void loom_boundary_projection_index_branches(
+    loom_boundary_projection_function_t* function);
+
+// Selects every branch result schema before structured source planning.
+iree_status_t loom_boundary_projection_select_branches(
+    loom_boundary_projection_plan_t* plan,
+    loom_boundary_projection_function_t* function);
+
 // Retains RegionBranch results and their yield edges in dominance preorder.
 iree_status_t loom_boundary_projection_collect_branch(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function, loom_region_branch_t branch);
 
-// Selects result schemas and retains every incoming projection recipe.
+// Retains every incoming projection recipe after all structured schemas exist.
 iree_status_t loom_boundary_projection_plan_branches(
     loom_boundary_projection_plan_t* plan,
     loom_boundary_projection_function_t* function);

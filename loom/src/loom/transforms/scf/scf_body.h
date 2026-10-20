@@ -70,9 +70,18 @@ typedef struct loom_scf_body_operation_t {
   iree_host_size_t reference_count;
   // Combined effects governing whether different iterations may commute.
   loom_scf_body_effect_flags_t effects;
+  // Common enclosing loom_value_fact_uniform_scope_t of nested collectives.
+  // NONE with CONVERGENT means at least one participant set is unscoped.
+  uint8_t convergence_scope;
   // Number of ordinary load operations, including loads inside nested regions.
   uint32_t load_count;
 } loom_scf_body_operation_t;
+
+// Merges a nested operation's effects into its indivisible scheduling unit.
+// An unscoped participant set dominates every known execution scope.
+void loom_scf_body_operation_add_effects(loom_scf_body_operation_t* operation,
+                                         loom_scf_body_effect_flags_t effects,
+                                         uint8_t convergence_scope);
 
 // Optional memory projection of one scheduling unit. Ordinary unroll planning
 // allocates neither this array nor the operation correspondence.
