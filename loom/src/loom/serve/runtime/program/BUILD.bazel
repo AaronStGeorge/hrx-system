@@ -47,18 +47,6 @@ loom_cc_test(
 )
 
 loom_cc_library(
-    name = "command",
-    srcs = ["command.c"],
-    hdrs = ["command.h"],
-    deps = [
-        "//loom/src/loom/target/arch/cmd:program",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base:core_headers",
-        "//runtime/src/iree/hal",
-    ],
-)
-
-loom_cc_library(
     name = "variant_pool",
     srcs = ["variant_pool.c"],
     hdrs = ["variant_pool.h"],
@@ -204,7 +192,6 @@ loom_cc_library(
     srcs = ["jit.c"],
     hdrs = ["jit.h"],
     deps = [
-        ":command",
         ":compilation",
         ":sources",
         ":target",
@@ -214,6 +201,7 @@ loom_cc_library(
         "//loom/binding/c/target/vm",
         "//loom/src/loom/serve/runtime/execution:dispatch",
         "//loom/src/loom/serve/runtime/host",
+        "//loom/src/loom/target/arch/cmd:hal_command_buffer",
         "//loom/src/loom/target/arch/cmd:program",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",

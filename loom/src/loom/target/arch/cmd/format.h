@@ -26,14 +26,14 @@ extern "C" {
 
 enum {
   LOOM_CMD_PROGRAM_FORMAT_MAGIC_LENGTH = 8,
-  LOOM_CMD_PROGRAM_FORMAT_VERSION = 1,
+  LOOM_CMD_PROGRAM_FORMAT_VERSION = 2,
 
   LOOM_CMD_PROGRAM_HEADER_MAGIC_OFFSET = 0,
   LOOM_CMD_PROGRAM_HEADER_VERSION_OFFSET = 8,
   LOOM_CMD_PROGRAM_HEADER_SIZE_OFFSET = 10,
   LOOM_CMD_PROGRAM_HEADER_TOTAL_LENGTH_OFFSET = 12,
   LOOM_CMD_PROGRAM_HEADER_FIXED_BUFFER_COUNT_OFFSET = 16,
-  LOOM_CMD_PROGRAM_HEADER_BINDING_COUNT_OFFSET = 20,
+  LOOM_CMD_PROGRAM_HEADER_REBINDABLE_BINDING_COUNT_OFFSET = 20,
   LOOM_CMD_PROGRAM_HEADER_EXECUTABLE_COUNT_OFFSET = 24,
   LOOM_CMD_PROGRAM_HEADER_ENTRY_COUNT_OFFSET = 28,
   LOOM_CMD_PROGRAM_HEADER_BUFFER_REF_COUNT_OFFSET = 32,
@@ -60,7 +60,13 @@ enum {
   LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_RESERVED_OFFSET = 124,
   LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_BYTE_LENGTH_OFFSET = 128,
   LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_MINIMUM_ALIGNMENT_OFFSET = 136,
-  LOOM_CMD_PROGRAM_HEADER_SIZE = 144,
+  LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_COUNT_OFFSET = 144,
+  LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_TABLE_OFFSET = 148,
+  LOOM_CMD_PROGRAM_HEADER_SIZE = 152,
+
+  LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROLE_OFFSET = 0,
+  LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROOT_INDEX_OFFSET = 4,
+  LOOM_CMD_PROGRAM_LAUNCH_BINDING_SIZE = 8,
 
   LOOM_CMD_PROGRAM_BUFFER_REF_ROLE_OFFSET = 0,
   LOOM_CMD_PROGRAM_BUFFER_REF_ROOT_INDEX_OFFSET = 4,
@@ -102,6 +108,8 @@ enum {
 
 // Canonical byte offsets derived from artifact table counts.
 typedef struct loom_cmd_program_format_layout_t {
+  // First byte of the source launch-binding placement table.
+  uint32_t launch_binding_offset;
   // First byte of the operational buffer-range table.
   uint32_t buffer_ref_offset;
   // First byte of the executable-entry schema table.
@@ -124,10 +132,11 @@ typedef struct loom_cmd_program_format_layout_t {
 
 // Calculates the canonical table layout for one program artifact.
 iree_status_t loom_cmd_program_format_calculate_layout(
-    uint32_t buffer_ref_count, uint32_t entry_schema_count,
-    uint32_t entry_schema_kind_count, uint32_t argument_data_length,
-    uint32_t command_count, uint32_t parameter_root_count,
-    uint32_t parameter_count, uint32_t parameter_key_length,
+    uint32_t launch_binding_count, uint32_t buffer_ref_count,
+    uint32_t entry_schema_count, uint32_t entry_schema_kind_count,
+    uint32_t argument_data_length, uint32_t command_count,
+    uint32_t parameter_root_count, uint32_t parameter_count,
+    uint32_t parameter_key_length,
     loom_cmd_program_format_layout_t* out_layout);
 
 #ifdef __cplusplus

@@ -12,6 +12,20 @@
 #include "iree/base/alignment.h"
 #include "loom/target/arch/cmd/format.h"
 
+loom_cmd_program_launch_binding_t loom_cmd_program_launch_binding_at(
+    const loom_cmd_program_t* program, uint32_t index) {
+  IREE_ASSERT_ARGUMENT(program);
+  IREE_ASSERT_LT(index, program->launch_bindings.count);
+  const uint8_t* record = program->launch_bindings.data +
+                          index * LOOM_CMD_PROGRAM_LAUNCH_BINDING_SIZE;
+  return (loom_cmd_program_launch_binding_t){
+      .role = (loom_cmd_program_buffer_role_t)iree_unaligned_load_le_u32(
+          record + LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROLE_OFFSET),
+      .root_index = iree_unaligned_load_le_u32(
+          record + LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROOT_INDEX_OFFSET),
+  };
+}
+
 static loom_cmd_program_buffer_ref_t loom_cmd_program_decode_buffer_ref(
     const uint8_t* record) {
   return (loom_cmd_program_buffer_ref_t){
@@ -233,6 +247,57 @@ loom_cmd_program_parameter_t loom_cmd_program_parameter_at(
       .minimum_alignment = iree_unaligned_load_le_u64(
           record + LOOM_CMD_PROGRAM_PARAMETER_MINIMUM_ALIGNMENT_OFFSET),
   };
+}
+
+static iree_status_t loom_cmd_program_validate_launch_bindings(
+    const loom_cmd_program_t* program) {
+  uint32_t next_fixed_index = 0;
+  uint32_t next_rebindable_index = 0;
+  for (uint32_t i = 0; i < program->launch_bindings.count; ++i) {
+    const loom_cmd_program_launch_binding_t binding =
+        loom_cmd_program_launch_binding_at(program, i);
+    uint32_t expected_index = 0;
+    if (binding.role == LOOM_CMD_PROGRAM_BUFFER_ROLE_FIXED) {
+      expected_index = next_fixed_index++;
+    } else if (binding.role == LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE) {
+      expected_index = next_rebindable_index++;
+    } else {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "command launch binding %" PRIu32
+                              " has unknown role %u",
+                              i, (unsigned)binding.role);
+    }
+    if (binding.root_index != expected_index) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "command launch binding %" PRIu32
+                              " selects noncanonical role-local root %" PRIu32
+                              " instead of %" PRIu32,
+                              i, binding.root_index, expected_index);
+    }
+  }
+  if (next_fixed_index != program->requirements.fixed_buffer_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "command launch bindings cover %" PRIu32 " of %" PRIu32 " fixed roots",
+        next_fixed_index, program->requirements.fixed_buffer_count);
+  }
+  if (next_rebindable_index > program->requirements.rebindable_binding_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "command launch bindings require %" PRIu32
+                            " roots from a %" PRIu32 "-entry rebindable table",
+                            next_rebindable_index,
+                            program->requirements.rebindable_binding_count);
+  }
+  if ((program->requirements.transient.binding_index != UINT32_MAX &&
+       program->requirements.transient.binding_index < next_rebindable_index) ||
+      (program->requirements.launch_counts.binding_index != UINT32_MAX &&
+       program->requirements.launch_counts.binding_index <
+           next_rebindable_index)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "command internal storage overlaps an authored launch binding");
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_cmd_program_validate_buffer_refs(
@@ -831,7 +896,8 @@ iree_status_t loom_cmd_program_parse(iree_const_byte_span_t data,
                   data.data +
                   LOOM_CMD_PROGRAM_HEADER_FIXED_BUFFER_COUNT_OFFSET),
               .rebindable_binding_count = iree_unaligned_load_le_u32(
-                  data.data + LOOM_CMD_PROGRAM_HEADER_BINDING_COUNT_OFFSET),
+                  data.data +
+                  LOOM_CMD_PROGRAM_HEADER_REBINDABLE_BINDING_COUNT_OFFSET),
               .executable_count = iree_unaligned_load_le_u32(
                   data.data + LOOM_CMD_PROGRAM_HEADER_EXECUTABLE_COUNT_OFFSET),
               .entry_count = iree_unaligned_load_le_u32(
@@ -860,6 +926,12 @@ iree_status_t loom_cmd_program_parse(iree_const_byte_span_t data,
                           data.data +
                           LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_MINIMUM_ALIGNMENT_OFFSET),
                   },
+          },
+      .launch_bindings =
+          {
+              .count = iree_unaligned_load_le_u32(
+                  data.data +
+                  LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_COUNT_OFFSET),
           },
       .buffer_refs =
           {
@@ -901,11 +973,16 @@ iree_status_t loom_cmd_program_parse(iree_const_byte_span_t data,
       data.data + LOOM_CMD_PROGRAM_HEADER_ARGUMENT_DATA_LENGTH_OFFSET);
   loom_cmd_program_format_layout_t layout = {0};
   IREE_RETURN_IF_ERROR(loom_cmd_program_format_calculate_layout(
-      program.buffer_refs.count, program.entry_schemas.count,
-      program.entry_schema_kinds.count, argument_data_length,
-      program.commands.count, program.parameter_roots.count,
-      program.parameters.count, parameter_key_length, &layout));
+      program.launch_bindings.count, program.buffer_refs.count,
+      program.entry_schemas.count, program.entry_schema_kinds.count,
+      argument_data_length, program.commands.count,
+      program.parameter_roots.count, program.parameters.count,
+      parameter_key_length, &layout));
   if (layout.total_length != total_length ||
+      layout.launch_binding_offset !=
+          iree_unaligned_load_le_u32(
+              data.data +
+              LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_TABLE_OFFSET) ||
       layout.buffer_ref_offset !=
           iree_unaligned_load_le_u32(
               data.data + LOOM_CMD_PROGRAM_HEADER_BUFFER_REF_TABLE_OFFSET) ||
@@ -935,6 +1012,7 @@ iree_status_t loom_cmd_program_parse(iree_const_byte_span_t data,
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "command program table layout is not canonical");
   }
+  program.launch_bindings.data = data.data + layout.launch_binding_offset;
   program.buffer_refs.data = data.data + layout.buffer_ref_offset;
   program.entry_schemas.data = data.data + layout.entry_schema_offset;
   program.entry_schema_kinds.data = data.data + layout.entry_schema_kind_offset;
@@ -946,6 +1024,7 @@ iree_status_t loom_cmd_program_parse(iree_const_byte_span_t data,
   program.parameter_keys = iree_make_const_byte_span(
       data.data + layout.parameter_key_offset, parameter_key_length);
 
+  IREE_RETURN_IF_ERROR(loom_cmd_program_validate_launch_bindings(&program));
   IREE_RETURN_IF_ERROR(loom_cmd_program_validate_transient(&program));
   IREE_RETURN_IF_ERROR(loom_cmd_program_validate_buffer_refs(&program));
   IREE_RETURN_IF_ERROR(loom_cmd_program_validate_entry_schemas(&program));

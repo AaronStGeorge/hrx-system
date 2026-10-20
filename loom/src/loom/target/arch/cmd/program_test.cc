@@ -18,6 +18,18 @@
 namespace loom {
 namespace {
 
+static void StoreLaunchBinding(std::vector<uint8_t>& data,
+                               uint32_t table_offset, uint32_t index,
+                               loom_cmd_program_buffer_role_t role,
+                               uint32_t root_index) {
+  uint8_t* record =
+      data.data() + table_offset + index * LOOM_CMD_PROGRAM_LAUNCH_BINDING_SIZE;
+  iree_unaligned_store_le_u32(
+      record + LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROLE_OFFSET, role);
+  iree_unaligned_store_le_u32(
+      record + LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROOT_INDEX_OFFSET, root_index);
+}
+
 static void StoreBufferRef(std::vector<uint8_t>& data, uint32_t table_offset,
                            uint32_t index, loom_cmd_program_buffer_role_t role,
                            uint32_t root_index, uint64_t byte_offset,
@@ -126,6 +138,7 @@ static constexpr uint32_t kValidArgumentByteLength =
     kValidArgumentBufferOffset + LOOM_CMD_PROGRAM_BUFFER_REF_SIZE;
 
 static std::vector<uint8_t> BuildValidProgram() {
+  static constexpr uint32_t kLaunchBindingCount = 2;
   static constexpr uint32_t kBufferRefCount = 2;
   static constexpr uint32_t kEntrySchemaCount = 1;
   static constexpr uint32_t kEntrySchemaKindCount = 5;
@@ -141,9 +154,9 @@ static std::vector<uint8_t> BuildValidProgram() {
       kFirstKeyLength + kSecondKeyLength;
   loom_cmd_program_format_layout_t layout = {};
   IREE_CHECK_OK(loom_cmd_program_format_calculate_layout(
-      kBufferRefCount, kEntrySchemaCount, kEntrySchemaKindCount,
-      kArgumentDataLength, kCommandCount, kParameterRootCount, kParameterCount,
-      kParameterKeyLength, &layout));
+      kLaunchBindingCount, kBufferRefCount, kEntrySchemaCount,
+      kEntrySchemaKindCount, kArgumentDataLength, kCommandCount,
+      kParameterRootCount, kParameterCount, kParameterKeyLength, &layout));
   std::vector<uint8_t> data(layout.total_length, 0);
 
   memcpy(data.data() + LOOM_CMD_PROGRAM_HEADER_MAGIC_OFFSET,
@@ -159,7 +172,7 @@ static std::vector<uint8_t> BuildValidProgram() {
   iree_unaligned_store_le_u32(
       data.data() + LOOM_CMD_PROGRAM_HEADER_FIXED_BUFFER_COUNT_OFFSET, 1);
   iree_unaligned_store_le_u32(
-      data.data() + LOOM_CMD_PROGRAM_HEADER_BINDING_COUNT_OFFSET, 1);
+      data.data() + LOOM_CMD_PROGRAM_HEADER_REBINDABLE_BINDING_COUNT_OFFSET, 2);
   iree_unaligned_store_le_u32(
       data.data() + LOOM_CMD_PROGRAM_HEADER_EXECUTABLE_COUNT_OFFSET, 1);
   iree_unaligned_store_le_u32(
@@ -189,6 +202,12 @@ static std::vector<uint8_t> BuildValidProgram() {
       data.data() + LOOM_CMD_PROGRAM_HEADER_ENTRY_SCHEMA_KIND_COUNT_OFFSET,
       kEntrySchemaKindCount);
   iree_unaligned_store_le_u32(
+      data.data() + LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_COUNT_OFFSET,
+      kLaunchBindingCount);
+  iree_unaligned_store_le_u32(
+      data.data() + LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_TABLE_OFFSET,
+      layout.launch_binding_offset);
+  iree_unaligned_store_le_u32(
       data.data() + LOOM_CMD_PROGRAM_HEADER_BUFFER_REF_TABLE_OFFSET,
       layout.buffer_ref_offset);
   iree_unaligned_store_le_u32(
@@ -217,7 +236,7 @@ static std::vector<uint8_t> BuildValidProgram() {
       UINT32_MAX);
   iree_unaligned_store_le_u32(
       data.data() + LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_BINDING_INDEX_OFFSET,
-      0);
+      1);
   iree_unaligned_store_le_u64(
       data.data() + LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_BYTE_LENGTH_OFFSET,
       12);
@@ -226,10 +245,14 @@ static std::vector<uint8_t> BuildValidProgram() {
           LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_MINIMUM_ALIGNMENT_OFFSET,
       4);
 
+  StoreLaunchBinding(data, layout.launch_binding_offset, 0,
+                     LOOM_CMD_PROGRAM_BUFFER_ROLE_FIXED, 0);
+  StoreLaunchBinding(data, layout.launch_binding_offset, 1,
+                     LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE, 0);
   StoreBufferRef(data, layout.buffer_ref_offset, 0,
                  LOOM_CMD_PROGRAM_BUFFER_ROLE_FIXED, 0, 0, 256);
   StoreBufferRef(data, layout.buffer_ref_offset, 1,
-                 LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE, 0, 0, 12);
+                 LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE, 1, 0, 12);
   StoreEntrySchema(data, layout.entry_schema_offset, 0, /*entry_index=*/0,
                    /*kind_offset=*/0, /*argument_count=*/5,
                    kValidArgumentByteLength);
@@ -309,15 +332,25 @@ TEST(CmdProgramTest, ParsesCanonicalProgram) {
   IREE_ASSERT_OK(loom_cmd_program_parse(AsByteSpan(data), &program));
 
   EXPECT_EQ(program.requirements.fixed_buffer_count, 1u);
-  EXPECT_EQ(program.requirements.rebindable_binding_count, 1u);
+  EXPECT_EQ(program.requirements.rebindable_binding_count, 2u);
   EXPECT_EQ(program.requirements.transient.binding_index, UINT32_MAX);
   EXPECT_EQ(program.requirements.transient.required_byte_length, 0u);
   EXPECT_EQ(program.requirements.transient.minimum_alignment, 0u);
-  EXPECT_EQ(program.requirements.launch_counts.binding_index, 0u);
+  EXPECT_EQ(program.requirements.launch_counts.binding_index, 1u);
   EXPECT_EQ(program.requirements.launch_counts.required_byte_length, 12u);
   EXPECT_EQ(program.requirements.launch_counts.minimum_alignment, 4u);
   EXPECT_EQ(program.requirements.executable_count, 1u);
   EXPECT_EQ(program.requirements.entry_count, 1u);
+  ASSERT_EQ(program.launch_bindings.count, 2u);
+  const loom_cmd_program_launch_binding_t fixed_launch_binding =
+      loom_cmd_program_launch_binding_at(&program, 0);
+  EXPECT_EQ(fixed_launch_binding.role, LOOM_CMD_PROGRAM_BUFFER_ROLE_FIXED);
+  EXPECT_EQ(fixed_launch_binding.root_index, 0u);
+  const loom_cmd_program_launch_binding_t rebindable_launch_binding =
+      loom_cmd_program_launch_binding_at(&program, 1);
+  EXPECT_EQ(rebindable_launch_binding.role,
+            LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE);
+  EXPECT_EQ(rebindable_launch_binding.root_index, 0u);
   EXPECT_EQ(program.buffer_refs.count, 2u);
   ASSERT_EQ(program.entry_schemas.count, 1u);
   EXPECT_EQ(program.entry_schema_kinds.count, 5u);
@@ -328,7 +361,7 @@ TEST(CmdProgramTest, ParsesCanonicalProgram) {
   const loom_cmd_program_buffer_ref_t binding =
       loom_cmd_program_buffer_ref_at(&program, 1);
   EXPECT_EQ(binding.role, LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE);
-  EXPECT_EQ(binding.root_index, 0u);
+  EXPECT_EQ(binding.root_index, 1u);
   EXPECT_EQ(binding.byte_offset, 0u);
   EXPECT_EQ(binding.byte_length, 12u);
   const loom_cmd_program_entry_schema_t schema =
@@ -420,9 +453,9 @@ TEST(CmdProgramTest, IteratesCanonicalBarrierWavesOnce) {
 TEST(CmdProgramTest, ParsesTransientRequirement) {
   std::vector<uint8_t> data = BuildValidProgram();
   iree_unaligned_store_le_u32(
-      data.data() + LOOM_CMD_PROGRAM_HEADER_BINDING_COUNT_OFFSET, 2);
+      data.data() + LOOM_CMD_PROGRAM_HEADER_REBINDABLE_BINDING_COUNT_OFFSET, 3);
   iree_unaligned_store_le_u32(
-      data.data() + LOOM_CMD_PROGRAM_HEADER_TRANSIENT_BINDING_INDEX_OFFSET, 1);
+      data.data() + LOOM_CMD_PROGRAM_HEADER_TRANSIENT_BINDING_INDEX_OFFSET, 2);
   iree_unaligned_store_le_u64(
       data.data() + LOOM_CMD_PROGRAM_HEADER_TRANSIENT_BYTE_LENGTH_OFFSET, 4096);
   iree_unaligned_store_le_u64(
@@ -431,7 +464,7 @@ TEST(CmdProgramTest, ParsesTransientRequirement) {
 
   loom_cmd_program_t program = {};
   IREE_ASSERT_OK(loom_cmd_program_parse(AsByteSpan(data), &program));
-  EXPECT_EQ(program.requirements.transient.binding_index, 1u);
+  EXPECT_EQ(program.requirements.transient.binding_index, 2u);
   EXPECT_EQ(program.requirements.transient.required_byte_length, 4096u);
   EXPECT_EQ(program.requirements.transient.minimum_alignment, 256u);
 }
@@ -440,6 +473,33 @@ TEST(CmdProgramTest, RejectsMalformedLaunchCountRequirement) {
   std::vector<uint8_t> data = BuildValidProgram();
   iree_unaligned_store_le_u32(
       data.data() + LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_BINDING_INDEX_OFFSET,
+      0);
+
+  loom_cmd_program_t program = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_cmd_program_parse(AsByteSpan(data), &program));
+}
+
+TEST(CmdProgramTest, RejectsUnknownLaunchBindingRole) {
+  std::vector<uint8_t> data = BuildValidProgram();
+  const uint32_t table_offset = iree_unaligned_load_le_u32(
+      data.data() + LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_TABLE_OFFSET);
+  iree_unaligned_store_le_u32(
+      data.data() + table_offset + LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROLE_OFFSET,
+      0xFF);
+
+  loom_cmd_program_t program = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_cmd_program_parse(AsByteSpan(data), &program));
+}
+
+TEST(CmdProgramTest, RejectsNoncanonicalLaunchBindingIndex) {
+  std::vector<uint8_t> data = BuildValidProgram();
+  const uint32_t table_offset = iree_unaligned_load_le_u32(
+      data.data() + LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_TABLE_OFFSET);
+  iree_unaligned_store_le_u32(
+      data.data() + table_offset + LOOM_CMD_PROGRAM_LAUNCH_BINDING_SIZE +
+          LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROOT_INDEX_OFFSET,
       1);
 
   loom_cmd_program_t program = {};

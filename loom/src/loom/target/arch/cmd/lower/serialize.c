@@ -119,6 +119,10 @@ typedef struct loom_cmd_serialize_build_t {
   iree_host_size_t value_count;
   // Immutable external resource counts declared by the function ABI.
   loom_cmd_program_requirements_t requirements;
+  // Source launch-buffer placements in signature order.
+  const loom_cmd_program_launch_binding_t* launch_bindings;
+  // Number of entries in |launch_bindings|.
+  uint32_t launch_binding_count;
   // Buffer ranges used by fills, copies, and indirect launch counts.
   loom_cmd_serialize_buffer_ref_table_t buffer_refs;
   // Executable-entry logical argument schemas.
@@ -874,7 +878,7 @@ static void loom_cmd_serialize_write_header(
       data.data + LOOM_CMD_PROGRAM_HEADER_FIXED_BUFFER_COUNT_OFFSET,
       build->requirements.fixed_buffer_count);
   iree_unaligned_store_le_u32(
-      data.data + LOOM_CMD_PROGRAM_HEADER_BINDING_COUNT_OFFSET,
+      data.data + LOOM_CMD_PROGRAM_HEADER_REBINDABLE_BINDING_COUNT_OFFSET,
       build->requirements.rebindable_binding_count);
   iree_unaligned_store_le_u32(
       data.data + LOOM_CMD_PROGRAM_HEADER_EXECUTABLE_COUNT_OFFSET,
@@ -910,6 +914,12 @@ static void loom_cmd_serialize_write_header(
   iree_unaligned_store_le_u32(
       data.data + LOOM_CMD_PROGRAM_HEADER_ENTRY_SCHEMA_KIND_COUNT_OFFSET,
       (uint32_t)build->entry_schema_kinds.count);
+  iree_unaligned_store_le_u32(
+      data.data + LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_COUNT_OFFSET,
+      build->launch_binding_count);
+  iree_unaligned_store_le_u32(
+      data.data + LOOM_CMD_PROGRAM_HEADER_LAUNCH_BINDING_TABLE_OFFSET,
+      layout->launch_binding_offset);
   iree_unaligned_store_le_u32(
       data.data + LOOM_CMD_PROGRAM_HEADER_BUFFER_REF_TABLE_OFFSET,
       layout->buffer_ref_offset);
@@ -957,6 +967,21 @@ static void loom_cmd_serialize_write_header(
   iree_unaligned_store_le_u64(
       data.data + LOOM_CMD_PROGRAM_HEADER_LAUNCH_COUNT_MINIMUM_ALIGNMENT_OFFSET,
       build->requirements.launch_counts.minimum_alignment);
+}
+
+static void loom_cmd_serialize_write_launch_bindings(
+    const loom_cmd_serialize_build_t* build,
+    const loom_cmd_program_format_layout_t* layout, iree_byte_span_t data) {
+  for (uint32_t i = 0; i < build->launch_binding_count; ++i) {
+    uint8_t* record = data.data + layout->launch_binding_offset +
+                      i * LOOM_CMD_PROGRAM_LAUNCH_BINDING_SIZE;
+    const loom_cmd_program_launch_binding_t binding = build->launch_bindings[i];
+    iree_unaligned_store_le_u32(
+        record + LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROLE_OFFSET, binding.role);
+    iree_unaligned_store_le_u32(
+        record + LOOM_CMD_PROGRAM_LAUNCH_BINDING_ROOT_INDEX_OFFSET,
+        binding.root_index);
+  }
 }
 
 static void loom_cmd_serialize_write_buffer_refs(
@@ -1123,6 +1148,7 @@ static void loom_cmd_serialize_write_program(
   IREE_ASSERT_EQ(data.data_length, layout->total_length);
   memset(data.data, 0, data.data_length);
   loom_cmd_serialize_write_header(build, layout, data);
+  loom_cmd_serialize_write_launch_bindings(build, layout, data);
   loom_cmd_serialize_write_buffer_refs(build, layout, data);
   loom_cmd_serialize_write_entry_schemas(build, layout, data);
   loom_cmd_serialize_write_commands(build, layout, data);
@@ -1174,6 +1200,8 @@ iree_status_t loom_cmd_program_plan_serialize_root(
               .entry_count = root->abi_layout.entry_count,
               .launch_counts = root->launch_counts,
           },
+      .launch_bindings = root->launch_bindings,
+      .launch_binding_count = root->launch_binding_count,
       .parameter_requirements = parameter_requirements,
       .transient_requirement = transient_requirement,
   };
@@ -1223,7 +1251,8 @@ iree_status_t loom_cmd_program_plan_serialize_root(
   loom_cmd_program_format_layout_t layout = {0};
   if (iree_status_is_ok(status)) {
     status = loom_cmd_program_format_calculate_layout(
-        (uint32_t)build.buffer_refs.count, (uint32_t)build.entry_schemas.count,
+        build.launch_binding_count, (uint32_t)build.buffer_refs.count,
+        (uint32_t)build.entry_schemas.count,
         (uint32_t)build.entry_schema_kinds.count,
         (uint32_t)build.argument_data.count, (uint32_t)build.commands.count,
         parameter_requirements ? (uint32_t)parameter_requirements->root_count

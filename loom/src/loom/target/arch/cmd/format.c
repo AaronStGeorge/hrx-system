@@ -9,15 +9,24 @@
 #include "iree/base/alignment.h"
 
 iree_status_t loom_cmd_program_format_calculate_layout(
-    uint32_t buffer_ref_count, uint32_t entry_schema_count,
-    uint32_t entry_schema_kind_count, uint32_t argument_data_length,
-    uint32_t command_count, uint32_t parameter_root_count,
-    uint32_t parameter_count, uint32_t parameter_key_length,
+    uint32_t launch_binding_count, uint32_t buffer_ref_count,
+    uint32_t entry_schema_count, uint32_t entry_schema_kind_count,
+    uint32_t argument_data_length, uint32_t command_count,
+    uint32_t parameter_root_count, uint32_t parameter_count,
+    uint32_t parameter_key_length,
     loom_cmd_program_format_layout_t* out_layout) {
   IREE_ASSERT_ARGUMENT(out_layout);
   uint64_t offset = LOOM_CMD_PROGRAM_HEADER_SIZE;
-  const uint64_t buffer_ref_offset = offset;
+  const uint64_t launch_binding_offset = offset;
   uint64_t table_length = 0;
+  if (!iree_checked_mul_u64(launch_binding_count,
+                            LOOM_CMD_PROGRAM_LAUNCH_BINDING_SIZE,
+                            &table_length) ||
+      !iree_checked_add_u64(offset, table_length, &offset)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "command launch-binding table is too large");
+  }
+  const uint64_t buffer_ref_offset = offset;
   if (!iree_checked_mul_u64(buffer_ref_count, LOOM_CMD_PROGRAM_BUFFER_REF_SIZE,
                             &table_length) ||
       !iree_checked_add_u64(offset, table_length, &offset)) {
@@ -71,6 +80,7 @@ iree_status_t loom_cmd_program_format_calculate_layout(
                             "command parameter keys are too large");
   }
   *out_layout = (loom_cmd_program_format_layout_t){
+      .launch_binding_offset = (uint32_t)launch_binding_offset,
       .buffer_ref_offset = (uint32_t)buffer_ref_offset,
       .entry_schema_offset = (uint32_t)entry_schema_offset,
       .entry_schema_kind_offset = (uint32_t)entry_schema_kind_offset,

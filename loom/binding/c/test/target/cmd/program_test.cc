@@ -170,6 +170,74 @@ loomc_status_t RejectRequest(void* user_data, loomc_request_t* request) {
                            "embedding rejected kernel request");
 }
 
+TEST(TargetCmdProgramTest, BuildsNamedRootsDirectlyFromOneMaterializedModule) {
+  ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
+  SourcePtr source = CreateTextSource("materialized.loom", R"(
+kernel.def @first() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%storage: buffer) {
+  kernel.return
+}
+
+kernel.def @second() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%storage: buffer) {
+  kernel.return
+}
+
+command.program.def @private_root() launch(%storage: buffer) {
+  kernel.launch @first(%storage) : (buffer)
+  command.return
+}
+
+command.program.def public @public_root() launch(%storage: buffer) {
+  kernel.launch @first(%storage) : (buffer)
+  kernel.launch @second(%storage) : (buffer)
+  command.return
+}
+)");
+  ModulePtr module =
+      DeserializeModule(context.get(), workspace.get(), source.get());
+
+  RequestCapture capture;
+  const loomc_string_view_t roots[] = {
+      loomc_make_cstring_view("@private_root"),
+  };
+  const loomc_cmd_program_module_options_t options = {
+      .type = LOOMC_STRUCTURE_TYPE_CMD_PROGRAM_MODULE_OPTIONS,
+      .structure_size = sizeof(options),
+      .provider_name = loomc_make_cstring_view("materialized"),
+      .root_symbols = roots,
+      .root_symbol_count = std::size(roots),
+      .flags = LOOMC_CMD_PROGRAM_PRODUCT_FLAG_INCLUDE_INPUT_EXPORTS,
+      .request_sink = {.publish = CaptureRequest, .user_data = &capture},
+  };
+  loomc_product_t* product_raw = nullptr;
+  loomc_result_t* result_raw = nullptr;
+  LOOMC_ASSERT_OK(loomc_cmd_program_product_build_module(
+      workspace.get(), module.get(), &options, loomc_allocator_system(),
+      &product_raw, &result_raw));
+  ProductPtr product(product_raw);
+  ResultPtr result(result_raw);
+  ExpectSucceededResult(result.get());
+
+  ASSERT_EQ(loomc_cmd_program_product_program_count(product.get()), 2u);
+  loomc_cmd_program_t private_program = {};
+  ASSERT_TRUE(
+      loomc_cmd_program_product_program_at(product.get(), 0, &private_program));
+  EXPECT_EQ(ToString(private_program.symbol), "private_root");
+  EXPECT_EQ(private_program.entry_requirement_count, 1u);
+  loomc_cmd_program_t public_program = {};
+  ASSERT_TRUE(
+      loomc_cmd_program_product_program_at(product.get(), 1, &public_program));
+  EXPECT_EQ(ToString(public_program.symbol), "public_root");
+  EXPECT_EQ(public_program.entry_requirement_count, 2u);
+  EXPECT_EQ(capture.requests.size(), 2u);
+}
+
 TEST(TargetCmdProgramTest,
      ComposesMixedProvidersAndPublishesDurableKernelRequests) {
   ContextPtr context = CreateContext();

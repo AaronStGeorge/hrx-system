@@ -458,7 +458,6 @@ loom_cc_library(
         "//loom/src/loom/serve/runtime/parameter:residency",
         "//loom/src/loom/serve/runtime/parameter:weights",
         "//loom/src/loom/serve/runtime/program",
-        "//loom/src/loom/serve/runtime/program:command",
         "//loom/src/loom/serve/runtime/program:compilation",
         "//loom/src/loom/serve/runtime/program:input",
         "//loom/src/loom/serve/runtime/program:jit",

@@ -11,6 +11,7 @@
 #include "loomc/config.h"
 #include "loomc/context.h"
 #include "loomc/link_index.h"
+#include "loomc/module.h"
 #include "loomc/product.h"
 #include "loomc/result.h"
 #include "loomc/target.h"
@@ -172,6 +173,62 @@ typedef struct loomc_cmd_program_request_options_t {
   loomc_request_sink_t request_sink;
 } loomc_cmd_program_request_options_t;
 
+/// Command-product options for one invocation-local materialized module.
+///
+/// The module is indexed as one INPUT provider over an optional immutable
+/// library prefix. Named roots resolve in that exact module, including private
+/// command definitions, without serializing or reparsing its IR.
+typedef struct loomc_cmd_program_module_options_t {
+  /// Structure type. Must be
+  /// `LOOMC_STRUCTURE_TYPE_CMD_PROGRAM_MODULE_OPTIONS` when nonzero.
+  loomc_structure_type_t type;
+
+  /// Size of this structure in bytes.
+  loomc_host_size_t structure_size;
+
+  /// Optional invocation extensions such as
+  /// `loomc_target_specialization_options_t`.
+  const void* next;
+
+  /// Optional frozen library-only index used to resolve module declarations.
+  /// Passing NULL plans against the materialized module alone.
+  const loomc_link_index_t* library_index;
+
+  /// Stable provider label for diagnostics and private-name determinism. Empty
+  /// uses the module name.
+  loomc_string_view_t provider_name;
+
+  /// Command symbols in the materialized module, with or without a leading
+  /// `@`. Root order and duplicates are retained in the returned product.
+  const loomc_string_view_t* root_symbols;
+
+  /// Number of entries in `root_symbols`.
+  loomc_host_size_t root_symbol_count;
+
+  /// Product construction flags. INPUT exports selected by the include flag
+  /// are appended after explicit roots that do not already name them.
+  loomc_cmd_program_product_flags_t flags;
+
+  /// Per-invocation config bindings applied during selective materialization.
+  loomc_config_options_t config;
+
+  /// Optional profile for every selected kernel entry and launch
+  /// configuration. Command roots remain target-neutral.
+  ///
+  /// Borrowed synchronously from the module context's target environment.
+  /// Published requests own their concrete target definitions. NULL preserves
+  /// source target selection and explicit invocation specializations. A
+  /// non-NULL profile cannot be combined with nonempty per-function
+  /// specializations or target-declaration bindings in `next`.
+  const loomc_target_profile_t* kernel_target_profile;
+
+  /// Optional sink enabling source-backed kernel request publication.
+  ///
+  /// A NULL callback leaves kernel implementation bodies unopened and returns
+  /// only executable-entry requirements.
+  loomc_request_sink_t request_sink;
+} loomc_cmd_program_module_options_t;
+
 /// One serialized command root and its executable-entry projection.
 ///
 /// @lifetime
@@ -283,6 +340,44 @@ LOOMC_API_EXPORT loomc_status_t loomc_cmd_program_product_build_request(
     loomc_context_t* context, loomc_workspace_t* workspace,
     const loomc_request_t* request,
     const loomc_cmd_program_request_options_t* options,
+    loomc_allocator_t allocator, loomc_product_t** out_product,
+    loomc_result_t** out_result);
+
+/// Builds portable command programs from a materialized module.
+///
+/// The operation creates an invocation-local index over `module`, resolves
+/// named roots in that exact provider, and directly plans the command product.
+/// It does not print, serialize, or reparse the module. An optional frozen
+/// library index supplies dependencies without being traversed or copied.
+///
+/// @param workspace Invocation-local compiler workspace.
+/// @param module Immutable materialized INPUT module.
+/// @param options Product selection and specialization options.
+/// @param allocator Host allocator used for returned product and result state.
+/// @param out_product Receives one retained product when the result succeeds;
+/// receives NULL when the result fails.
+/// @param out_result Receives one retained result for the operation.
+/// @return OK when the operation ran to a result. Non-OK statuses represent
+/// structural API misuse, callback failure, or infrastructure failure.
+///
+/// @ownership
+/// The caller owns `out_product` when non-NULL and releases it with
+/// `loomc_product_release`. The caller owns `out_result` on an OK return and
+/// releases it with `loomc_result_release`. Each request is transferred
+/// independently to `options->request_sink`.
+///
+/// @lifetime
+/// The operation borrows `workspace`, `module`, `options`, and the optional
+/// library index synchronously. The product and published requests retain none
+/// of them.
+///
+/// @thread_safety
+/// Calls may share an immutable module and frozen library index. Each
+/// concurrent call requires a distinct workspace. Callback synchronization is
+/// owned by the embedding.
+LOOMC_API_EXPORT loomc_status_t loomc_cmd_program_product_build_module(
+    loomc_workspace_t* workspace, const loomc_module_t* module,
+    const loomc_cmd_program_module_options_t* options,
     loomc_allocator_t allocator, loomc_product_t** out_product,
     loomc_result_t** out_result);
 

@@ -40,6 +40,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    hal_command_buffer
+  HDRS
+    "hal_command_buffer.h"
+  SRCS
+    "hal_command_buffer.c"
+  DEPS
+    ::program
+    iree::base
+    iree::base::core_headers
+    iree::hal
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     artifact_set
   HDRS
     "artifact_set.h"

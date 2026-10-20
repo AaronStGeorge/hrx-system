@@ -18,7 +18,6 @@
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/execution.h"
 #include "loom/serve/runtime/parameter/weights.h"
-#include "loom/serve/runtime/program/command.h"
 #include "loom/serve/runtime/program/input.h"
 #include "loom/serve/runtime/program/jit.h"
 #include "loom/serve/runtime/program/json.h"

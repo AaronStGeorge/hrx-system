@@ -25,6 +25,13 @@ _TASK_DRIVER_COMPATIBLE_WITH = loom_config_compatible_with([
     "//runtime/config/hal:driver_task",
 ])
 
+_TASK_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/target/arch:x86",
+    "//runtime/config/hal:executable_loader_embedded_elf",
+    "//loom/config/execute:task_hal",
+    "//loom/config/target/arch:vm",
+]) + ["@platforms//cpu:x86_64"]
+
 _AMDGPU_EXECUTION_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:amdgpu_hal",
 ])
@@ -37,16 +44,41 @@ _AMDGPU_EXECUTION_TAGS = [
 
 exports_files([
     "testdata/buffer_bulk_hal_actual.loom",
+    "testdata/command_scenario_dependent_stages.loom",
+    "testdata/command_scenario_specializations.loom",
     "testdata/dynamic_workgroup_hal_actual.loom",
     "testdata/launch_schedule_hal_actual.loom",
     "testdata/scenario_batch_hal_actual.loom",
     "testdata/scenario_compare_hal_vm.loom",
 ])
 
+iree_executable_test(
+    name = "command_scenario_execution_test",
+    src = "//loom/src/loom/tools/iree-test-loom",
+    args = [
+        "$(rootpath testdata/command_scenario_dependent_stages.loom)",
+        "--device=task",
+    ],
+    data = ["testdata/command_scenario_dependent_stages.loom"],
+    target_compatible_with = _TASK_EXECUTION_COMPATIBLE_WITH,
+)
+
+iree_executable_test(
+    name = "command_scenario_specialization_test",
+    src = "//loom/src/loom/tools/iree-test-loom",
+    args = [
+        "$(rootpath testdata/command_scenario_specializations.loom)",
+        "--device=task",
+    ],
+    data = ["testdata/command_scenario_specializations.loom"],
+    target_compatible_with = _TASK_EXECUTION_COMPATIBLE_WITH,
+)
+
 loom_test(
     name = "hardware_test",
     srcs = [
         "testdata/buffer_bulk_hal_actual.loom",
+        "testdata/command_scenario_dependent_stages.loom",
         "testdata/dynamic_workgroup_hal_actual.loom",
         "testdata/launch_schedule_hal_actual.loom",
         "testdata/scenario_batch_hal_actual.loom",
@@ -186,29 +218,41 @@ loom_cc_library(
 
 loom_cc_library(
     name = "scenario_profile",
-    srcs = ["scenario_profile.c"],
-    hdrs = ["scenario_profile.h"],
+    srcs = [
+        "scenario_command_program.c",
+        "scenario_profile.c",
+    ],
+    hdrs = [
+        "scenario_command_program.h",
+        "scenario_profile.h",
+    ],
     deps = [
+        ":artifact",
         ":benchmark",
         ":invocation",
         ":testbench_actual",
         ":testbench_staging",
         "//loom/binding/c:interop",
         "//loom/binding/c:loomc",
+        "//loom/binding/c/target/cmd",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:source",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/command",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/kernel",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/view",
+        "//loom/src/loom/target/arch/cmd:hal_command_buffer",
+        "//loom/src/loom/target/arch/cmd:program",
         "//loom/src/loom/tooling/execution:benchmark",
         "//loom/src/loom/tooling/testbench/scenario:executor",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
         "//runtime/src/iree/hal",
     ],
 )

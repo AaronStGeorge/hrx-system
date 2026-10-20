@@ -162,7 +162,8 @@ iree_status_t iree_benchmark_loom_write_planning_issue_fields_json(
     const loom_testbench_issue_t* planning_issues,
     iree_host_size_t planning_issue_count, loom_json_object_writer_t* object);
 
-// Returns the number of physical dispatches recorded in one measured HAL batch.
+// Returns the number of physical kernel dispatches in one measured HAL batch.
+// Transfer-only command programs report zero.
 iree_status_t iree_benchmark_loom_hal_physical_dispatches_per_batch(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
     iree_host_size_t* out_dispatch_count);

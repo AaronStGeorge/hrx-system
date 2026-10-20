@@ -1,0 +1,130 @@
+// Writes the scenario configuration into a fixed parameter root. The root is
+// a subview in the scenario so command recording must retain its byte origin.
+func.def @initialize_stage_bias(%configuration: index, %parameters: buffer) {
+  %origin = index.constant 0 : offset
+  %c0 = index.constant 0 : index
+  %value = index.cast %configuration : index to i32
+  %view = buffer.view %parameters[%origin] : buffer -> view<64xi32>
+  view.store %value, %view[%c0] : i32, view<64xi32>
+  func.return
+}
+
+kernel.def @add_stage_bias() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%parameter: view<1xi32>, %source: buffer, %target: buffer) {
+  %origin = index.constant 0 : offset
+  %source_view = buffer.view %source[%origin] : buffer -> view<16xi32>
+  %target_view = buffer.view %target[%origin] : buffer -> view<16xi32>
+  %bias = view.load %parameter[0] : view<1xi32> -> i32
+  %begin = index.constant 0 : index
+  %end = index.constant 16 : index
+  %step = index.constant 1 : index
+  scf.for %position = [%begin to %end step %step] {
+    %value = view.load %source_view[%position] : view<16xi32> -> i32
+    %result = scalar.addi %value, %bias : i32
+    view.store %result, %target_view[%position] : i32, view<16xi32>
+  }
+  kernel.return
+}
+
+kernel.def @scale_stage_values() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%storage: buffer) {
+  %origin = index.constant 0 : offset
+  %view = buffer.view %storage[%origin] : buffer -> view<16xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 16 : index
+  %step = index.constant 1 : index
+  %c2 = scalar.constant 2 : i32
+  scf.for %position = [%begin to %end step %step] {
+    %value = view.load %view[%position] : view<16xi32> -> i32
+    %result = scalar.muli %value, %c2 : i32
+    view.store %result, %view[%position] : i32, view<16xi32>
+  }
+  kernel.return
+}
+
+kernel.def @copy_stage_values() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%source: buffer, %target: buffer) {
+  %origin = index.constant 0 : offset
+  %source_view = buffer.view %source[%origin] : buffer -> view<16xi32>
+  %target_view = buffer.view %target[%origin] : buffer -> view<16xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 16 : index
+  %step = index.constant 1 : index
+  scf.for %position = [%begin to %end step %step] {
+    %value = view.load %source_view[%position] : view<16xi32> -> i32
+    view.store %value, %target_view[%position] : i32, view<16xi32>
+  }
+  kernel.return
+}
+
+// Each stage consumes the prior stage's result. The configuration changes the
+// number of dependent dispatches while all configurations share one scenario.
+command.program.def @dependent_stages(%configuration: index) launch(%parameters: buffer, %source: buffer, %target: buffer) where [range(%configuration, 0, 2)] {
+  %scratch_bytes = index.constant 64 : offset
+  %scratch = buffer.alloca<global> align(16) %scratch_bytes : buffer
+  %bias = command.parameter %parameters, "bias" : view<1xi32>
+  kernel.launch @add_stage_bias(%bias, %source, %scratch) : (view<1xi32>, buffer, buffer)
+  %begin = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %scale_count = index.add %configuration, %c1 : index
+  scf.for %iteration = [%begin to %scale_count step %c1] unroll {
+    kernel.launch @scale_stage_values(%scratch) : (buffer)
+  }
+  kernel.launch @copy_stage_values(%scratch, %target) : (buffer, buffer)
+  command.return
+}
+
+// Computes the complete staged result in one serial function without command
+// storage, parameter lookup, dispatch boundaries, or unrolled stage creation.
+func.def @dependent_stages_oracle(%parameters: buffer, %source: buffer, %target: buffer) {
+  %origin = index.constant 0 : offset
+  %c0 = index.constant 0 : index
+  %begin = index.constant 0 : index
+  %end = index.constant 16 : index
+  %step = index.constant 1 : index
+  %parameter_view = buffer.view %parameters[%origin] : buffer -> view<64xi32>
+  %source_view = buffer.view %source[%origin] : buffer -> view<16xi32>
+  %target_view = buffer.view %target[%origin] : buffer -> view<16xi32>
+  %configuration = view.load %parameter_view[%c0] : view<64xi32> -> i32
+  %c2 = scalar.constant 2 : i32
+  scf.for %position = [%begin to %end step %step] {
+    %value = view.load %source_view[%position] : view<16xi32> -> i32
+    %biased = scalar.addi %value, %configuration : i32
+    %configuration_index = index.cast %configuration : i32 to index
+    %c1 = index.constant 1 : index
+    %scale_count = index.add %configuration_index, %c1 : index
+    %scaled = scf.for %iteration = [%begin to %scale_count step %step](%current = %biased : i32) -> (i32) {
+      %next = scalar.muli %current, %c2 : i32
+      scf.yield %next : i32
+    }
+    view.store %scaled, %target_view[%position] : i32, view<16xi32>
+  }
+  func.return
+}
+
+check.scenario public @dependent_stage_values configure[3](%configuration: index, %configuration_entropy: check.entropy) {
+  check.trial[2](%trial: index, %entropy: check.entropy) {
+    %parameter_owner = check.generate.fill value(-1) : tensor<144xi32>
+    %parameters = check.tensor.view %parameter_owner offset(256) : tensor<144xi32> -> tensor<64xi32>
+    check.generate<@initialize_stage_bias>(%configuration, %parameters) : (index, tensor<64xi32>) -> ()
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %source_owner = check.generate.random.uniform seed(%seed) range(-100 to 100) : tensor<20xi32>
+    %source = check.tensor.view %source_owner offset(8) : tensor<20xi32> -> tensor<16xi32>
+    %target_owner = check.generate.fill value(-12345) : tensor<24xi32>
+    %target = check.tensor.view %target_owner offset(16) : tensor<24xi32> -> tensor<16xi32>
+    check.compare<@dependent_stages, @dependent_stages_oracle>[%configuration](%parameters, %source, %target) : [index](tensor<64xi32>, tensor<16xi32>, tensor<16xi32>) -> () {
+      check.expect.bitwise actual(%parameter_owner) expected(%parameter_owner) : tensor<144xi32>
+      check.expect.bitwise actual(%source_owner) expected(%source_owner) : tensor<20xi32>
+      check.expect.bitwise actual(%target_owner) expected(%target_owner) : tensor<24xi32>
+    }
+  }
+  check.return
+}
+
+check.benchmark<@dependent_stage_values> @dependent_stage_values_throughput

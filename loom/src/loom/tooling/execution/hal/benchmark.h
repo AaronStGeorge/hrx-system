@@ -215,6 +215,29 @@ typedef struct loom_run_hal_dispatch_binding_table_ring_t {
   iree_host_size_t binding_count;
 } loom_run_hal_dispatch_binding_table_ring_t;
 
+// One physical ring of complete reusable HAL command buffers.
+//
+// Each slot owns an independent realization of the same logical operation.
+// Timed batches rotate across slots and serialize only repeated use of one
+// slot, allowing disjoint slots to overlap. |binding_table| is flattened in
+// slot-major order and remains live for the benchmark call. When final-batch
+// profiling is requested, |profile_command_buffers| contains equivalent
+// commands recorded with retained profile metadata.
+typedef struct loom_run_hal_command_buffer_ring_t {
+  // Borrowed reusable command buffers in physical slot order.
+  iree_hal_command_buffer_t* const* command_buffers;
+  // Optional metadata-retaining command buffers in physical slot order.
+  iree_hal_command_buffer_t* const* profile_command_buffers;
+  // Flattened deferred bindings in physical slot and binding ordinal order.
+  const iree_hal_buffer_binding_t* binding_table;
+  // Number of independent physical slots.
+  iree_host_size_t ring_count;
+  // Number of deferred bindings supplied for each command buffer.
+  iree_host_size_t binding_count;
+  // Queue execution policy used by timed command-buffer submissions.
+  iree_hal_queue_execute_flags_t execute_flags;
+} loom_run_hal_command_buffer_ring_t;
+
 // Initializes HAL benchmark options for rigorous batched dispatch timing.
 void loom_run_hal_benchmark_options_initialize(
     loom_run_hal_benchmark_options_t* out_options);
@@ -256,6 +279,19 @@ iree_status_t loom_run_hal_benchmark_dispatch_binding_ring(
 iree_status_t loom_run_hal_benchmark_dispatch_binding_table_ring(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_dispatch_binding_table_ring_t* ring,
+    const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
+    loom_run_hal_benchmark_result_t* out_result);
+
+// Times complete pre-recorded command buffers over a physical slot ring.
+//
+// Each measured batch submits exactly |options->timing.batch_size| logical
+// operations. Reusing a slot waits on its prior submission while distinct
+// slots have no artificial dependency. Every accepted submission completes
+// before the batch callback returns. Optional final profiling replays the
+// equivalent metadata-retaining buffers supplied by |ring|.
+iree_status_t loom_run_hal_benchmark_command_buffer_ring(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_command_buffer_ring_t* ring,
     const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
     loom_run_hal_benchmark_result_t* out_result);
 

@@ -539,7 +539,6 @@ loom_cc_library(
     loom::serve::runtime::parameter::residency
     loom::serve::runtime::parameter::weights
     loom::serve::runtime::program
-    loom::serve::runtime::program::command
     loom::serve::runtime::program::compilation
     loom::serve::runtime::program::input
     loom::serve::runtime::program::jit

@@ -564,6 +564,7 @@ iree_status_t iree_benchmark_loom_run_file(
     }
 
     const loom_testbench_compilation_t compilation = {
+        .context = compiler_context,
         .compiler = compiler,
         .workspace = compiler_workspace,
         .module = module,

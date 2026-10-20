@@ -136,7 +136,8 @@ typedef struct iree_benchmark_loom_data_cache_summary_t {
   iree_host_size_t binding_ring_count;
   // Number of pre-recorded command buffers rotated across benchmark batches.
   iree_host_size_t command_buffer_ring_count;
-  // Number of dispatch slots recorded in each command buffer.
+  // Number of physical kernel dispatches in each timed logical batch. This is
+  // zero for command programs containing only transfer operations.
   iree_host_size_t dispatches_per_batch;
   // Requested minimum byte size for unique reachable binding ranges.
   uint64_t requested_min_ring_bytes;

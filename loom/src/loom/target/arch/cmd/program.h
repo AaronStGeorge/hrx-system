@@ -33,6 +33,17 @@ typedef enum loom_cmd_program_buffer_role_e {
   LOOM_CMD_PROGRAM_BUFFER_ROLE_REBINDABLE = 2,
 } loom_cmd_program_buffer_role_t;
 
+// Placement of one authored command-program launch buffer.
+//
+// Rows retain source signature order. |root_index| selects the fixed or
+// rebindable resource table according to |role|.
+typedef struct loom_cmd_program_launch_binding_t {
+  // Materialization role of the launch buffer.
+  loom_cmd_program_buffer_role_t role;
+  // Dense root index in the table selected by |role|.
+  uint32_t root_index;
+} loom_cmd_program_launch_binding_t;
+
 // One resolved range within a fixed or rebindable buffer root.
 typedef struct loom_cmd_program_buffer_ref_t {
   // Root materialization role.
@@ -277,6 +288,8 @@ typedef struct loom_cmd_program_t {
   iree_const_byte_span_t storage;
   // External resources required by the program.
   loom_cmd_program_requirements_t requirements;
+  // Authored launch buffers in source signature order.
+  loom_cmd_program_table_t launch_bindings;
   // Buffer ranges used by fills, copies, and indirect launch counts.
   loom_cmd_program_table_t buffer_refs;
   // Executable-entry logical argument schemas.
@@ -328,6 +341,10 @@ typedef struct loom_cmd_program_barrier_wave_iterator_t {
 // canonical format. |out_program| borrows |data| without allocating.
 iree_status_t loom_cmd_program_parse(iree_const_byte_span_t data,
                                      loom_cmd_program_t* out_program);
+
+// Returns one validated source launch-buffer placement.
+loom_cmd_program_launch_binding_t loom_cmd_program_launch_binding_at(
+    const loom_cmd_program_t* program, uint32_t index);
 
 // Returns one validated buffer-reference table entry.
 loom_cmd_program_buffer_ref_t loom_cmd_program_buffer_ref_at(

@@ -20,6 +20,14 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+package_group(
+    name = "hal_command_buffer_consumers",
+    packages = [
+        "//loom/src/loom/serve/runtime/program",
+        "//loom/src/loom/tooling/execution/hal",
+    ],
+)
+
 loom_cc_library(
     name = "abi_layout",
     srcs = ["abi_layout.c"],
@@ -45,12 +53,26 @@ loom_cc_library(
     tags = ["LINKABLE_MORE_THAN_ONCE"],
     visibility = [
         "//loom/binding/c/test/target/amdgpu:__pkg__",
-        "//loom/src/loom/serve/runtime/program:__pkg__",
+        "//loom/src/loom/serve:implementation",
         "//loom/src/loom/target/arch/cmd:__subpackages__",
+        "//loom/src/loom/tooling/execution/hal:__pkg__",
     ],
     deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/base:core_headers",
+    ],
+)
+
+loom_cc_library(
+    name = "hal_command_buffer",
+    srcs = ["hal_command_buffer.c"],
+    hdrs = ["hal_command_buffer.h"],
+    visibility = [":hal_command_buffer_consumers"],
+    deps = [
+        ":program",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base:core_headers",
+        "//runtime/src/iree/hal",
     ],
 )
 

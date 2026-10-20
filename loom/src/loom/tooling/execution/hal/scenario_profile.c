@@ -20,6 +20,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/tooling/execution/hal/benchmark.h"
+#include "loom/tooling/execution/hal/scenario_command_program.h"
 #include "loom/tooling/execution/hal/testbench_staging.h"
 #include "loomc/interop.h"
 #include "loomc/iree.h"
@@ -578,6 +579,7 @@ static iree_status_t loom_run_hal_testbench_scenario_benchmark_calls(
         host_allocator, &out_result->benchmark);
   }
   if (iree_status_is_ok(status)) {
+    out_result->dispatch_count_per_call = 1;
     out_result->binding_count_per_call = ring.binding_count_per_call;
     out_result->binding_set_bytes = ring.binding_set_bytes;
     out_result->binding_ring_bytes = ring.binding_ring_bytes;
@@ -650,6 +652,11 @@ iree_status_t loom_run_hal_testbench_benchmark_scenario_product(
     const loom_run_hal_benchmark_options_t* options,
     iree_allocator_t host_allocator,
     loom_run_hal_testbench_scenario_benchmark_result_t* out_result) {
+  if (loom_run_hal_testbench_is_command_scenario_product(prepared_product)) {
+    return loom_run_hal_testbench_benchmark_command_scenario_product(
+        prepared_product, invocation, call_count, calls, options,
+        host_allocator, out_result);
+  }
   if (loom_run_hal_testbench_scenario_product_provider(prepared_product) ==
       NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -672,6 +679,10 @@ iree_status_t loom_run_hal_testbench_query_scenario_product_input_layout(
     loom_testbench_product_call_t* call,
     loom_run_hal_testbench_scenario_input_layout_t* out_layout) {
   *out_layout = (loom_run_hal_testbench_scenario_input_layout_t){0};
+  if (loom_run_hal_testbench_is_command_scenario_product(prepared_product)) {
+    return loom_run_hal_testbench_query_command_scenario_input_layout(
+        prepared_product, invocation, call, out_layout);
+  }
   if (loom_run_hal_testbench_scenario_product_provider(prepared_product) ==
       NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1044,6 +1055,14 @@ static iree_status_t loom_run_hal_testbench_scenario_product_prepare(
   *out_product = (loom_testbench_prepared_product_t){0};
   loom_run_hal_testbench_scenario_profile_t* profile =
       (loom_run_hal_testbench_scenario_profile_t*)user_data;
+  if (invocation->kind == LOOM_TESTBENCH_INVOCATION_COMMAND_PROGRAM) {
+    if (invocation->result_count != 0) {
+      return loom_run_hal_testbench_scenario_emit_unsupported_results(
+          profile, invocation);
+    }
+    return loom_run_hal_testbench_command_scenario_product_prepare(
+        profile, invocation, configuration, host_allocator, out_product);
+  }
   if (invocation->kind != LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH &&
       invocation->kind != LOOM_TESTBENCH_INVOCATION_FUNCTION_CALL &&
       invocation->kind != LOOM_TESTBENCH_INVOCATION_PIPELINE) {

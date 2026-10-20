@@ -20,8 +20,10 @@ iree_py_test(
   ARGS
     "{{$<TARGET_FILE:loom::tools::iree-benchmark-loom::iree-benchmark-loom>}}"
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/scenario_compare_hal_vm.loom}}"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom}}"
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-benchmark-loom/test/sequence_storage.loom}}"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/command_scenario_dependent_stages.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/execution/hal/testdata/scenario_compare_hal_vm.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-benchmark-loom/test/sequence_storage.loom"
     "loom::tools::iree-benchmark-loom::iree-benchmark-loom"
