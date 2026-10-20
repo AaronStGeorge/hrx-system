@@ -373,7 +373,8 @@ class CxxRenderer(CxxExpressionRenderer):
             self._declare(
                 operation.results[0],
                 expression,
-                declaration_type="unsigned",
+                declaration_type="auto",
+                expression_type=KERNEL_COORDINATE_CPP_TYPE,
                 inlineable=True,
             )
             return ()

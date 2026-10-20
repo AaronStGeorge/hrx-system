@@ -488,7 +488,7 @@ IntrinsicCallResult Intrinsics::call(const Binding& admitted,
     return {std::nullopt};
   }
   if (auto* collective = std::get_if<KernelCollectiveIntrinsic>(binding)) {
-    return {Value(collective->call(arguments, builder, location))};
+    return {collective->call(arguments, arena, builder, location)};
   }
   if (auto* shuffle = std::get_if<SubgroupShuffleIntrinsic>(binding)) {
     return {shuffle->call(arguments, arena, builder, location)};

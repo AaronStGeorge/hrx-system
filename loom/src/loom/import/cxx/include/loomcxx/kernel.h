@@ -508,17 +508,17 @@ namespace workgroup {
 namespace subgroup {
 
 // Reads this subgroup's zero-based coordinate within the workgroup.
-[[loom::op("kernel.subgroup.id")]] unsigned id();
+[[loom::op("kernel.subgroup.id")]] coordinate id();
 
 // Counts subgroups in the workgroup, including a partially occupied subgroup.
-[[loom::op("kernel.subgroup.count")]] unsigned count();
+[[loom::op("kernel.subgroup.count")]] coordinate count();
 
 // Reads this invocation's physical lane, without compacting inactive lanes.
-[[loom::op("kernel.subgroup.lane.id")]] unsigned lane_id();
+[[loom::op("kernel.subgroup.lane.id")]] coordinate lane_id();
 
 // Reads the target-selected execution width, including inactive lanes. It may
 // exceed the workgroup size; no fixed wave size is implied.
-[[loom::op("kernel.subgroup.size")]] unsigned size();
+[[loom::op("kernel.subgroup.size")]] coordinate size();
 
 // Votes over the active invocations at this convergent call. These operations
 // do not synchronize memory or rendezvous with other subgroups.

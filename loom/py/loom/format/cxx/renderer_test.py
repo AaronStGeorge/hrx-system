@@ -169,9 +169,17 @@ def test_projects_exposed_kernel_topology_family() -> None:
         "unsigned workgroup_size = "
         "static_cast<unsigned>(loom::kernel::workgroup::size.y);"
     ) in result
-    assert ("unsigned subgroup_count = loom::kernel::subgroup::count();") in result
-    assert ("unsigned subgroup_size = loom::kernel::subgroup::size();") in result
-    assert "unsigned lane = loom::kernel::subgroup::lane_id();" in result
+    assert (
+        "unsigned subgroup_count = "
+        "static_cast<unsigned>(loom::kernel::subgroup::count());"
+    ) in result
+    assert (
+        "unsigned subgroup_size = "
+        "static_cast<unsigned>(loom::kernel::subgroup::size());"
+    ) in result
+    assert (
+        "unsigned lane = static_cast<unsigned>(loom::kernel::subgroup::lane_id());"
+    ) in result
 
 
 def test_projects_loop_carried_ssa_as_mutable_cxx_state() -> None:

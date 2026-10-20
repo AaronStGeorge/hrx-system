@@ -167,6 +167,11 @@ func.def device inline @exchange(%value: f32) -> (f32) {
 void topology_identity(unsigned* output) {
   auto coordinate = loom::kernel::workitem::id.x;
   loom::assume(loom::predicate::range(coordinate, 0, 3));
+  auto subgroup = loom::kernel::subgroup::id();
+  auto subgroup_count = loom::kernel::subgroup::count();
+  auto subgroup_size = loom::kernel::subgroup::size();
+  auto subgroup_lane = loom::kernel::subgroup::lane_id();
+  loom::assume(loom::predicate::range(subgroup_lane, 0, 3));
   unsigned lane = coordinate;
   unsigned values[4];
   values[coordinate] = lane;
@@ -176,6 +181,9 @@ void topology_identity(unsigned* output) {
   auto shifted = logical + loom::type::index{0};
   auto output_view = loom::buffer::view<4>(output, {}, loom::encoding::layout::dense<1>());
   loom::view::store(lane, output_view, shifted);
+  auto subgroup_topology = static_cast<loom::type::index>(subgroup) + static_cast<loom::type::index>(subgroup_count) + static_cast<loom::type::index>(subgroup_size);
+  auto subgroup_value = loom::index::cast<unsigned>(subgroup_topology);
+  loom::view::store(subgroup_value, output_view, subgroup_lane);
 }
 
 // ----
@@ -187,25 +195,34 @@ kernel.def @topology_identity() {
   %output_byte_offset = index.constant 0 : offset
   %workitem_id_x = kernel.workitem.id<x> : index
   %coordinate = index.assume %workitem_id_x [range(%workitem_id_x, 0, 3)] : index
+  %subgroup = kernel.subgroup.id : index
+  %subgroup_count = kernel.subgroup.count : index
+  %subgroup_size = kernel.subgroup.size : index
+  %subgroup_lane$13 = kernel.subgroup.lane.id : index
+  %subgroup_lane$14 = index.assume %subgroup_lane$13 [range(%subgroup_lane$13, 0, 3)] : index
   %lane = index.cast %coordinate : index to i32
-  %11 = index.constant 16 : offset
-  %values_storage = buffer.alloca<private> align(4) %11 : buffer
+  %16 = index.constant 16 : offset
+  %values_storage = buffer.alloca<private> align(4) %16 : buffer
   %values_view = buffer.view %values_storage[%output_byte_offset] : buffer -> view<4xi32>
-  %16 = scalar.extui %lane : i32 to i64
-  %17 = scalar.assume %16 [range(%16, 0, 3)] : i64
-  %18 = index.cast %17 : i64 to index
-  view.store %lane, %values_view[%18] : i32, view<4xi32>
-  %20 = index.cast %workitem_id_x : index to i32
-  %28 = view.load %values_view[%18] : view<4xi32> -> i32
-  %50 = scalar.addi %20, %28 : i32
-  %47 = scalar.constant 2 : i32
-  %48 = scalar.shli %lane, %47 : i32
-  %49 = scalar.extui %48 : i32 to i64
-  %36 = scalar.assume %49 [range(%49, 0, 9223372036854775807)] : i64
-  %37 = index.cast %36 : i64 to offset
-  %38 = buffer.view %output[%37] : buffer -> view<1xi32>
-  view.store %50, %38[0] : i32, view<1xi32>
+  %21 = scalar.extui %lane : i32 to i64
+  %22 = scalar.assume %21 [range(%21, 0, 3)] : i64
+  %23 = index.cast %22 : i64 to index
+  view.store %lane, %values_view[%23] : i32, view<4xi32>
+  %25 = index.cast %workitem_id_x : index to i32
+  %33 = view.load %values_view[%23] : view<4xi32> -> i32
+  %58 = scalar.addi %25, %33 : i32
+  %55 = scalar.constant 2 : i32
+  %56 = scalar.shli %lane, %55 : i32
+  %57 = scalar.extui %56 : i32 to i64
+  %41 = scalar.assume %57 [range(%57, 0, 9223372036854775807)] : i64
+  %42 = index.cast %41 : i64 to offset
+  %43 = buffer.view %output[%42] : buffer -> view<1xi32>
+  view.store %58, %43[0] : i32, view<1xi32>
   %output_view = buffer.view %output[%output_byte_offset] : buffer -> view<4xi32>
   view.store %lane, %output_view[%coordinate] : i32, view<4xi32>
+  %50 = index.add %subgroup, %subgroup_count : index
+  %subgroup_topology = index.add %50, %subgroup_size : index
+  %subgroup_value = index.cast %subgroup_topology : index to i32
+  view.store %subgroup_value, %output_view[%subgroup_lane$14] : i32, view<4xi32>
   kernel.return
 }
