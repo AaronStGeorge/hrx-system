@@ -507,11 +507,15 @@ static void iree_benchmark_loom_deduplicate_work_items(
       .keys = keys,
   };
   iree_benchmark_loom_sort_work_items(&index, order, plan->work_item_count);
+  // Equal candidates sort by logical ordinal, so linking each group preserves
+  // report order without changing the logical sample array.
   iree_host_size_t representative = 0;
   for (iree_host_size_t i = 0; i < plan->work_item_count; ++i) {
     if (i == 0 || iree_benchmark_loom_compare_work_items(&index, representative,
                                                          order[i]) != 0) {
       representative = order[i];
+    } else {
+      plan->logical_samples[order[i - 1]].next_alias_index = order[i];
     }
     plan->logical_samples[order[i]].work_item_index = representative;
   }
@@ -528,6 +532,7 @@ static void iree_benchmark_loom_deduplicate_work_items(
       const iree_host_size_t work_item_index = plan->work_item_count++;
       plan->work_items[work_item_index] = plan->work_items[i];
       plan->work_items[work_item_index].work_item_index = work_item_index;
+      plan->work_items[work_item_index].first_logical_sample_index = i;
       logical->work_item_index = work_item_index;
     } else {
       logical->work_item_index =
@@ -567,6 +572,7 @@ static void iree_benchmark_loom_append_logical_sample(
           .end_benchmark_sample = end_sample,
           .scenario_coordinate = scenario_coordinate,
           .work_item_index = work_item_index,
+          .next_alias_index = IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID,
       };
 }
 

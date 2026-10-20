@@ -122,6 +122,7 @@ TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {
   iree_benchmark_loom_candidate_identity_t candidate = {
       .candidate_id = IREE_SV("c0"),
   };
+  const iree_benchmark_loom_work_item_t work_item = {.work_item_index = 7};
   loom_module_t module = {};
   loom_testbench_benchmark_plan_t benchmark_plan = {};
   loom_testbench_case_plan_t case_plan = {};
@@ -150,8 +151,8 @@ TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {
       &sink, &run, &candidate, /*work_item_index=*/7, &module, &benchmark_plan,
       &case_plan, /*benchmark_sample_ordinal=*/1, &sample_result));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
-      &sink, &run, &candidate, /*work_item_index=*/7, &module, &benchmark_plan,
-      &case_plan, /*scenario_plan=*/nullptr, &policy, &benchmark_result,
+      &sink, &run, &candidate, &work_item, &module, &benchmark_plan, &case_plan,
+      /*scenario_plan=*/nullptr, &policy, &benchmark_result,
       /*correctness_sample_count=*/3,
       /*correctness_failed_sample_count=*/4));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_profile_replay(
@@ -177,7 +178,7 @@ TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {
   EXPECT_EQ(collector.events[2].sample.benchmark_sample_ordinal, 1u);
   EXPECT_EQ(collector.events[3].kind,
             IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_RESULT);
-  EXPECT_EQ(collector.events[3].benchmark_result.work_item_index, 7u);
+  EXPECT_EQ(collector.events[3].benchmark_result.work_item, &work_item);
   EXPECT_EQ(collector.events[3].benchmark_result.correctness_sample_count, 3u);
   EXPECT_EQ(
       collector.events[3].benchmark_result.correctness_failed_sample_count, 4u);

@@ -52,6 +52,9 @@ typedef struct iree_benchmark_loom_logical_sample_t {
   loom_testbench_scenario_sample_coordinate_t scenario_coordinate;
   // Deduplicated physical work item index satisfying this logical sample.
   iree_host_size_t work_item_index;
+  // Next logical sample sharing the physical work item, in report order, or
+  // INDEX_INVALID for the last alias.
+  iree_host_size_t next_alias_index;
 } iree_benchmark_loom_logical_sample_t;
 
 typedef struct iree_benchmark_loom_work_item_t {
@@ -61,6 +64,8 @@ typedef struct iree_benchmark_loom_work_item_t {
   iree_host_size_t work_item_index;
   // Representative selected benchmark ordinal used for execution.
   iree_host_size_t representative_selection_index;
+  // First logical sample in the nonempty, report-ordered alias chain.
+  iree_host_size_t first_logical_sample_index;
   // HAL compile item index, or INDEX_INVALID when compilation is owned by the
   // work item or the subject has no actual call.
   iree_host_size_t hal_compile_item_index;
