@@ -22,9 +22,17 @@ class Pm4MappingTest : public Pm4MappingFixture {
     if (IsSkipped()) {
       return;
     }
-    const uint64_t page = reservation_info_.mapping_granularity;
+    amdf_memory_reservation_capabilities_t capabilities = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_RESERVATION_CAPABILITIES,
+        .structure_size = sizeof(capabilities),
+    };
+    ASSERT_EQ(api_->device_query_memory_reservation_capabilities(device_, 0,
+                                                                 &capabilities),
+              AMDF_STATUS_OK);
+    const uint64_t page = std::max(capabilities.reservation_granularity,
+                                   capabilities.mapping_granularity);
     ASSERT_LT(kPayloadByteOffset, page);
-    ASSERT_LE(page, kSlabByteLength);
+    ASSERT_LT(page, kSlabByteLength);
     ASSERT_NO_FATAL_FAILURE(ReleaseReservation(&reservation_));
     const amdf_memory_reservation_access_t access = {device_, 0, access_,
                                                      kSlabByteLength};
