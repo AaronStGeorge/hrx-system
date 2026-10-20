@@ -1,0 +1,125 @@
+// RUN: pass target=wasm:simd128 legalize-math
+
+func.def @f8e4m3_scalar_rounding(%input: f8E4M3) -> (f8E4M3, f8E4M3) {
+  %ceil = scalar.ceilf %input : f8E4M3
+  %round = scalar.roundf %input : f8E4M3
+  func.return %ceil, %round : f8E4M3, f8E4M3
+}
+
+// ----
+func.def @f8e4m3_scalar_rounding(%input: f8E4M3) -> (f8E4M3, f8E4M3) {
+  %16 = scalar.extf %input : f8E4M3 to f32
+  %17 = scalar.ceilf %16 : f32
+  %ceil = scalar.fptrunc %17 : f32 to f8E4M3
+  %5 = scalar.extf %input : f8E4M3 to f32
+  %6 = scalar.constant 0.5 : f32
+  %7 = scalar.constant 1.0 : f32
+  %8 = scalar.truncf %5 : f32
+  %9 = scalar.subf %5, %8 : f32
+  %10 = scalar.absf %9 : f32
+  %11 = scalar.cmpf oge, %10, %6 : f32
+  %12 = scalar.copysignf %7, %5 : f32
+  %13 = scalar.addf %8, %12 : f32
+  %14 = scf.select %11, %13, %8 : f32
+  %round = scalar.fptrunc %14 : f32 to f8E4M3
+  func.return %ceil, %round : f8E4M3, f8E4M3
+}
+
+// ====
+
+func.def @f8e5m2_vector_rounding(%input: vector<3xf8E5M2>) -> (vector<3xf8E5M2>, vector<3xf8E5M2>) {
+  %floor = vector.floorf %input : vector<3xf8E5M2>
+  %round = vector.roundf %input : vector<3xf8E5M2>
+  func.return %floor, %round : vector<3xf8E5M2>, vector<3xf8E5M2>
+}
+
+// ----
+func.def @f8e5m2_vector_rounding(%input: vector<3xf8E5M2>) -> (vector<3xf8E5M2>, vector<3xf8E5M2>) {
+  %16 = vector.extf %input : vector<3xf8E5M2> to vector<3xf32>
+  %17 = vector.floorf %16 : vector<3xf32>
+  %floor = vector.fptrunc %17 : vector<3xf32> to vector<3xf8E5M2>
+  %5 = vector.extf %input : vector<3xf8E5M2> to vector<3xf32>
+  %6 = vector.constant 0.5 : vector<3xf32>
+  %7 = vector.constant 1.0 : vector<3xf32>
+  %8 = vector.truncf %5 : vector<3xf32>
+  %9 = vector.subf %5, %8 : vector<3xf32>
+  %10 = vector.absf %9 : vector<3xf32>
+  %11 = vector.cmpf oge, %10, %6 : vector<3xf32> -> vector<3xi1>
+  %12 = vector.copysignf %7, %5 : vector<3xf32>
+  %13 = vector.addf %8, %12 : vector<3xf32>
+  %14 = vector.select %11, %13, %8 : vector<3xf32>
+  %round = vector.fptrunc %14 : vector<3xf32> to vector<3xf8E5M2>
+  func.return %floor, %round : vector<3xf8E5M2>, vector<3xf8E5M2>
+}
+
+// ====
+
+func.def @f16_scalar_roundeven(%input: f16) -> (f16) {
+  %result = scalar.roundevenf %input : f16
+  func.return %result : f16
+}
+
+// ----
+func.def @f16_scalar_roundeven(%input: f16) -> (f16) {
+  %3 = scalar.extf %input : f16 to f32
+  %4 = scalar.roundevenf %3 : f32
+  %result = scalar.fptrunc %4 : f32 to f16
+  func.return %result : f16
+}
+
+// ====
+
+func.def @bf16_vector_trunc(%input: vector<3xbf16>) -> (vector<3xbf16>) {
+  %result = vector.truncf %input : vector<3xbf16>
+  func.return %result : vector<3xbf16>
+}
+
+// ----
+func.def @bf16_vector_trunc(%input: vector<3xbf16>) -> (vector<3xbf16>) {
+  %3 = vector.extf %input : vector<3xbf16> to vector<3xf32>
+  %4 = vector.truncf %3 : vector<3xf32>
+  %result = vector.fptrunc %4 : vector<3xf32> to vector<3xbf16>
+  func.return %result : vector<3xbf16>
+}
+
+// ====
+
+func.def @f32_scalar_round(%input: f32) -> (f32) {
+  %result = scalar.roundf %input : f32
+  func.return %result : f32
+}
+
+// ----
+func.def @f32_scalar_round(%input: f32) -> (f32) {
+  %3 = scalar.constant 0.5 : f32
+  %4 = scalar.constant 1.0 : f32
+  %5 = scalar.truncf %input : f32
+  %6 = scalar.subf %input, %5 : f32
+  %7 = scalar.absf %6 : f32
+  %8 = scalar.cmpf oge, %7, %3 : f32
+  %9 = scalar.copysignf %4, %input : f32
+  %10 = scalar.addf %5, %9 : f32
+  %result = scf.select %8, %10, %5 : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @f64_vector_round(%input: vector<2xf64>) -> (vector<2xf64>) {
+  %result = vector.roundf %input : vector<2xf64>
+  func.return %result : vector<2xf64>
+}
+
+// ----
+func.def @f64_vector_round(%input: vector<2xf64>) -> (vector<2xf64>) {
+  %3 = vector.constant 0.5 : vector<2xf64>
+  %4 = vector.constant 1.0 : vector<2xf64>
+  %5 = vector.truncf %input : vector<2xf64>
+  %6 = vector.subf %input, %5 : vector<2xf64>
+  %7 = vector.absf %6 : vector<2xf64>
+  %8 = vector.cmpf oge, %7, %3 : vector<2xf64> -> vector<2xi1>
+  %9 = vector.copysignf %4, %input : vector<2xf64>
+  %10 = vector.addf %5, %9 : vector<2xf64>
+  %result = vector.select %8, %10, %5 : vector<2xf64>
+  func.return %result : vector<2xf64>
+}

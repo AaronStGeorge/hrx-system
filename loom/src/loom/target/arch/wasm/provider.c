@@ -380,6 +380,33 @@ static iree_status_t loom_wasm_legalize_vector_transpose(
   return iree_ok_status();
 }
 
+static iree_status_t loom_wasm_legalize_vector_reduce(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (!loom_wasm_legalizer_descriptor_set_is_simd128(context->descriptor_set)) {
+    return iree_ok_status();
+  }
+
+  loom_vector_packet_reduce_result_t packet_result =
+      LOOM_VECTOR_PACKET_REDUCE_RESULT_NONE;
+  IREE_RETURN_IF_ERROR(loom_vector_packet_legalize_reduce(
+      context, op, context->vector_packet_policy, &packet_result));
+  bool rewritten = packet_result == LOOM_VECTOR_PACKET_REDUCE_RESULT_REWRITTEN;
+  if (packet_result == LOOM_VECTOR_PACKET_REDUCE_RESULT_CAPTURE_INPUT) {
+    IREE_RETURN_IF_ERROR(loom_vector_reduce_captured_to_scalar_rewrite_op(
+        context->pass, context->rewriter, op, &rewritten));
+  }
+  if (rewritten) {
+    out_result->action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN;
+  }
+  return iree_ok_status();
+}
+
 static const loom_target_legalizer_rule_t kLoomWasmLegalizerRules[] = {
     {
         .root_kind = LOOM_OP_SCALAR_EXTF,
@@ -389,6 +416,31 @@ static const loom_target_legalizer_rule_t kLoomWasmLegalizerRules[] = {
         .legalize = loom_wasm_legalize_float8_to_bfloat_extension,
     },
     {
+        .root_kind = LOOM_OP_SCALAR_MINIMUMF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_wasm_legalize_scalar_float_extrema,
+    },
+    {
+        .root_kind = LOOM_OP_SCALAR_MAXIMUMF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_wasm_legalize_scalar_float_extrema,
+    },
+    {
+        .root_kind = LOOM_OP_SCALAR_MINNUMF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_wasm_legalize_scalar_float_extrema,
+    },
+    {
+        .root_kind = LOOM_OP_SCALAR_MAXNUMF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_wasm_legalize_scalar_float_extrema,
+    },
+    {
+        .root_kind = LOOM_OP_SCALAR_CLAMPF,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .legalize = loom_wasm_legalize_scalar_float_extrema,
+    },
+    {
         .root_kind = LOOM_OP_VECTOR_CMPF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
         .legalize = loom_wasm_legalize_vector_cmpf,
@@ -396,26 +448,31 @@ static const loom_target_legalizer_rule_t kLoomWasmLegalizerRules[] = {
     {
         .root_kind = LOOM_OP_VECTOR_MINIMUMF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REWRITE_LEGAL,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
         .root_kind = LOOM_OP_VECTOR_MAXIMUMF,
         .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REWRITE_LEGAL,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
         .root_kind = LOOM_OP_VECTOR_MINNUMF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REWRITE_LEGAL,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
         .root_kind = LOOM_OP_VECTOR_MAXNUMF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REWRITE_LEGAL,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
         .root_kind = LOOM_OP_VECTOR_CLAMPF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REWRITE_LEGAL,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
@@ -447,6 +504,11 @@ static const loom_target_legalizer_rule_t kLoomWasmLegalizerRules[] = {
     {
         .root_kind = LOOM_OP_VECTOR_TRANSPOSE,
         .legalize = loom_wasm_legalize_vector_transpose,
+    },
+    {
+        .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REWRITE_LEGAL,
+        .root_kind = LOOM_OP_VECTOR_REDUCE,
+        .legalize = loom_wasm_legalize_vector_reduce,
     },
 };
 

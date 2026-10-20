@@ -17,6 +17,7 @@ iree_py_library(
     "contracts.py"
     "float_extension.py"
     "float_narrowing.py"
+    "packed_i32.py"
     "predicate.py"
     "vector_integer_arithmetic.py"
     "vector_integer_extension.py"
@@ -115,6 +116,24 @@ iree_py_test(
     "../../../tools/pytest_style_runner.py"
   ARGS
     "loom.target.emit.wasm.float_extension_test"
+  DEPS
+    loom::py::loom::target::emit::wasm::contracts
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+    "${PROJECT_SOURCE_DIR}"
+)
+
+iree_py_test(
+  NAME
+    float_narrowing_test
+  MAIN
+    "../../../tools/pytest_style_runner.py"
+  SRCS
+    "float_narrowing_test.py"
+    "../../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.target.emit.wasm.float_narrowing_test"
   DEPS
     loom::py::loom::target::emit::wasm::contracts
   PACKAGE_DIRS

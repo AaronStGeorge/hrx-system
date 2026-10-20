@@ -22,77 +22,83 @@ func.def target(@target) @floating_atomic_extrema_attributes(%input: buffer, %in
   %bounded_index = index.assume %index [range(%index, 0, 15)] : index
   %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%base] : buffer -> view<16xf32>
-  %78 = scalar.constant 0.0 : f32
-  %81 = scf.while(%79 = %78 : f32) -> (f32) {
-    %91 = scalar.bitcast %79 : f32 to i32
-    %92 = scalar.bitcast %value : f32 to i32
-    %93 = scalar.ori %91, %92 : i32
-    %94 = scalar.bitcast %93 : i32 to f32
-    %95 = scalar.cmpf olt, %79, %value : f32
-    %96 = scalar.cmpf olt, %value, %79 : f32
-    %97 = scf.select %96, %value, %94 : f32
-    %98 = scf.select %95, %79, %97 : f32
-    %99 = scalar.cmpf une, %79, %79 : f32
-    %100 = scalar.cmpf une, %value, %value : f32
-    %101 = scf.select %100, %79, %98 : f32
-    %102 = scf.select %99, %value, %101 : f32
-    %88 = scalar.cmpf uno, %79, %value : f32
-    %89 = scalar.constant nan : f32
-    %90 = scf.select %88, %89, %102 : f32
-    %83 = view.atomic.cmpxchg %79, %90, %view[%bounded_index] {cache_scope = system, cache_temporal = non_temporal, failure_ordering = relaxed, scope = system, success_ordering = release} : f32, view<16xf32> -> f32
-    %84 = scalar.bitcast %79 : f32 to i32
-    %85 = scalar.bitcast %83 : f32 to i32
-    %86 = scalar.cmpi ne, %85, %84 : i32
-    scf.condition %86, %83 : i1, f32
-  } do(%80: f32) {
-    scf.yield %80 : f32
+  %84 = scalar.constant 0.0 : f32
+  %87 = scf.while(%85 = %84 : f32) -> (f32) {
+    %97 = scalar.bitcast %85 : f32 to i32
+    %98 = scalar.bitcast %value : f32 to i32
+    %99 = scalar.ori %97, %98 : i32
+    %100 = scalar.bitcast %99 : i32 to f32
+    %101 = scalar.cmpf olt, %85, %value : f32
+    %102 = scalar.cmpf olt, %value, %85 : f32
+    %103 = scf.select %102, %value, %100 : f32
+    %104 = scf.select %101, %85, %103 : f32
+    %105 = scalar.cmpf une, %85, %85 : f32
+    %106 = scalar.cmpf une, %value, %value : f32
+    %107 = scalar.constant nan : f32
+    %108 = scf.select %106, %107, %value : f32
+    %109 = scf.select %106, %85, %104 : f32
+    %110 = scf.select %105, %108, %109 : f32
+    %94 = scalar.cmpf uno, %85, %value : f32
+    %95 = scalar.constant nan : f32
+    %96 = scf.select %94, %95, %110 : f32
+    %89 = view.atomic.cmpxchg %85, %96, %view[%bounded_index] {cache_scope = system, cache_temporal = non_temporal, failure_ordering = relaxed, scope = system, success_ordering = release} : f32, view<16xf32> -> f32
+    %90 = scalar.bitcast %85 : f32 to i32
+    %91 = scalar.bitcast %89 : f32 to i32
+    %92 = scalar.cmpi ne, %91, %90 : i32
+    scf.condition %92, %89 : i1, f32
+  } do(%86: f32) {
+    scf.yield %86 : f32
   }
-  %53 = scalar.constant 0.0 : f32
-  %56 = scf.while(%54 = %53 : f32) -> (f32) {
-    %66 = scalar.bitcast %54 : f32 to i32
-    %67 = scalar.bitcast %value : f32 to i32
-    %68 = scalar.andi %66, %67 : i32
-    %69 = scalar.bitcast %68 : i32 to f32
-    %70 = scalar.cmpf ogt, %54, %value : f32
-    %71 = scalar.cmpf ogt, %value, %54 : f32
-    %72 = scf.select %71, %value, %69 : f32
-    %73 = scf.select %70, %54, %72 : f32
-    %74 = scalar.cmpf une, %54, %54 : f32
-    %75 = scalar.cmpf une, %value, %value : f32
-    %76 = scf.select %75, %54, %73 : f32
-    %77 = scf.select %74, %value, %76 : f32
-    %63 = scalar.cmpf uno, %54, %value : f32
-    %64 = scalar.constant nan : f32
-    %65 = scf.select %63, %64, %77 : f32
-    %58 = view.atomic.cmpxchg %54, %65, %view[1] {failure_ordering = acquire, scope = device, success_ordering = acquire} : f32, view<16xf32> -> f32
-    %59 = scalar.bitcast %54 : f32 to i32
-    %60 = scalar.bitcast %58 : f32 to i32
-    %61 = scalar.cmpi ne, %60, %59 : i32
-    scf.condition %61, %58 : i1, f32
-  } do(%55: f32) {
-    scf.yield %55 : f32
+  %57 = scalar.constant 0.0 : f32
+  %60 = scf.while(%58 = %57 : f32) -> (f32) {
+    %70 = scalar.bitcast %58 : f32 to i32
+    %71 = scalar.bitcast %value : f32 to i32
+    %72 = scalar.andi %70, %71 : i32
+    %73 = scalar.bitcast %72 : i32 to f32
+    %74 = scalar.cmpf ogt, %58, %value : f32
+    %75 = scalar.cmpf ogt, %value, %58 : f32
+    %76 = scf.select %75, %value, %73 : f32
+    %77 = scf.select %74, %58, %76 : f32
+    %78 = scalar.cmpf une, %58, %58 : f32
+    %79 = scalar.cmpf une, %value, %value : f32
+    %80 = scalar.constant nan : f32
+    %81 = scf.select %79, %80, %value : f32
+    %82 = scf.select %79, %58, %77 : f32
+    %83 = scf.select %78, %81, %82 : f32
+    %67 = scalar.cmpf uno, %58, %value : f32
+    %68 = scalar.constant nan : f32
+    %69 = scf.select %67, %68, %83 : f32
+    %62 = view.atomic.cmpxchg %58, %69, %view[1] {failure_ordering = acquire, scope = device, success_ordering = acquire} : f32, view<16xf32> -> f32
+    %63 = scalar.bitcast %58 : f32 to i32
+    %64 = scalar.bitcast %62 : f32 to i32
+    %65 = scalar.cmpi ne, %64, %63 : i32
+    scf.condition %65, %62 : i1, f32
+  } do(%59: f32) {
+    scf.yield %59 : f32
   }
-  %32 = scalar.constant 0.0 : f32
-  %number_min = scf.while(%33 = %32 : f32) -> (f32) {
-    %41 = scalar.bitcast %33 : f32 to i32
-    %42 = scalar.bitcast %value : f32 to i32
-    %43 = scalar.ori %41, %42 : i32
-    %44 = scalar.bitcast %43 : i32 to f32
-    %45 = scalar.cmpf olt, %33, %value : f32
-    %46 = scalar.cmpf olt, %value, %33 : f32
-    %47 = scf.select %46, %value, %44 : f32
-    %48 = scf.select %45, %33, %47 : f32
-    %49 = scalar.cmpf une, %33, %33 : f32
-    %50 = scalar.cmpf une, %value, %value : f32
-    %51 = scf.select %50, %33, %48 : f32
-    %52 = scf.select %49, %value, %51 : f32
-    %37 = view.atomic.cmpxchg %33, %52, %view[2] {failure_ordering = acquire, scope = device, success_ordering = acq_rel} : f32, view<16xf32> -> f32
-    %38 = scalar.bitcast %33 : f32 to i32
-    %39 = scalar.bitcast %37 : f32 to i32
-    %40 = scalar.cmpi ne, %39, %38 : i32
-    scf.condition %40, %37 : i1, f32
-  } do(%34: f32) {
-    scf.yield %34 : f32
+  %34 = scalar.constant 0.0 : f32
+  %number_min = scf.while(%35 = %34 : f32) -> (f32) {
+    %43 = scalar.bitcast %35 : f32 to i32
+    %44 = scalar.bitcast %value : f32 to i32
+    %45 = scalar.ori %43, %44 : i32
+    %46 = scalar.bitcast %45 : i32 to f32
+    %47 = scalar.cmpf olt, %35, %value : f32
+    %48 = scalar.cmpf olt, %value, %35 : f32
+    %49 = scf.select %48, %value, %46 : f32
+    %50 = scf.select %47, %35, %49 : f32
+    %51 = scalar.cmpf une, %35, %35 : f32
+    %52 = scalar.cmpf une, %value, %value : f32
+    %53 = scalar.constant nan : f32
+    %54 = scf.select %52, %53, %value : f32
+    %55 = scf.select %52, %35, %50 : f32
+    %56 = scf.select %51, %54, %55 : f32
+    %39 = view.atomic.cmpxchg %35, %56, %view[2] {failure_ordering = acquire, scope = device, success_ordering = acq_rel} : f32, view<16xf32> -> f32
+    %40 = scalar.bitcast %35 : f32 to i32
+    %41 = scalar.bitcast %39 : f32 to i32
+    %42 = scalar.cmpi ne, %41, %40 : i32
+    scf.condition %42, %39 : i1, f32
+  } do(%36: f32) {
+    scf.yield %36 : f32
   }
   %11 = scalar.constant 0.0 : f32
   %number_max = scf.while(%12 = %11 : f32) -> (f32) {
@@ -106,9 +112,11 @@ func.def target(@target) @floating_atomic_extrema_attributes(%input: buffer, %in
     %27 = scf.select %24, %12, %26 : f32
     %28 = scalar.cmpf une, %12, %12 : f32
     %29 = scalar.cmpf une, %value, %value : f32
-    %30 = scf.select %29, %12, %27 : f32
-    %31 = scf.select %28, %value, %30 : f32
-    %16 = view.atomic.cmpxchg %12, %31, %view[3] {failure_ordering = seq_cst, scope = system, success_ordering = seq_cst} : f32, view<16xf32> -> f32
+    %30 = scalar.constant nan : f32
+    %31 = scf.select %29, %30, %value : f32
+    %32 = scf.select %29, %12, %27 : f32
+    %33 = scf.select %28, %31, %32 : f32
+    %16 = view.atomic.cmpxchg %12, %33, %view[3] {failure_ordering = seq_cst, scope = system, success_ordering = seq_cst} : f32, view<16xf32> -> f32
     %17 = scalar.bitcast %12 : f32 to i32
     %18 = scalar.bitcast %16 : f32 to i32
     %19 = scalar.cmpi ne, %18, %17 : i32

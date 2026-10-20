@@ -204,6 +204,126 @@ func.def @compare_double_sources(%ordinal: index, %lhs: buffer, %rhs: buffer, %f
   func.return
 }
 
+// Ordinary-memory roots isolate scalar predicate execution from constant and
+// uniform source classification.
+func.def @compare_half_ordinary(%ordinal: index, %lhs: buffer, %rhs: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %position = index.assume %ordinal [range(%ordinal, 0, 3)] : index
+  %left_view = buffer.view %lhs[%base] : buffer -> view<4xi16>
+  %right_view = buffer.view %rhs[%base] : buffer -> view<4xi16>
+  %left_bits = view.load %left_view[%position] : view<4xi16> -> i16
+  %right_bits = view.load %right_view[%position] : view<4xi16> -> i16
+  %left = scalar.bitcast %left_bits : i16 to f16
+  %right = scalar.bitcast %right_bits : i16 to f16
+  func.call @compare_half_predicates(%left, %right, %output) : (f16, f16, buffer)
+  func.return
+}
+
+func.def @compare_float_ordinary(%ordinal: index, %lhs: buffer, %rhs: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %position = index.assume %ordinal [range(%ordinal, 0, 3)] : index
+  %left_view = buffer.view %lhs[%base] : buffer -> view<4xi32>
+  %right_view = buffer.view %rhs[%base] : buffer -> view<4xi32>
+  %left_bits = view.load %left_view[%position] : view<4xi32> -> i32
+  %right_bits = view.load %right_view[%position] : view<4xi32> -> i32
+  %left = scalar.bitcast %left_bits : i32 to f32
+  %right = scalar.bitcast %right_bits : i32 to f32
+  func.call @compare_float_predicates(%left, %right, %output) : (f32, f32, buffer)
+  func.return
+}
+
+func.def @compare_double_ordinary(%ordinal: index, %lhs: buffer, %rhs: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %position = index.assume %ordinal [range(%ordinal, 0, 3)] : index
+  %left_view = buffer.view %lhs[%base] : buffer -> view<4xi64>
+  %right_view = buffer.view %rhs[%base] : buffer -> view<4xi64>
+  %left_bits = view.load %left_view[%position] : view<4xi64> -> i64
+  %right_bits = view.load %right_view[%position] : view<4xi64> -> i64
+  %left = scalar.bitcast %left_bits : i64 to f64
+  %right = scalar.bitcast %right_bits : i64 to f64
+  func.call @compare_double_predicates(%left, %right, %output) : (f64, f64, buffer)
+  func.return
+}
+
+// Each width covers signed-zero equality, both ordered directions, the
+// finite/infinity boundary, and unordered inputs while evaluating all fourteen
+// predicates on every trial.
+check.scenario @scalar_comparison_ordinary_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.fill value(-32768) : tensor<4xi16>
+    %rhs = check.generate.fill value(0) : tensor<4xi16>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_half_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi16>, tensor<4xi16>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.trial[4](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(15360) step(1024) : tensor<4xi16>
+    %rhs = check.generate.iota offset(17408) step(-1024) : tensor<4xi16>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_half_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi16>, tensor<4xi16>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.trial[4](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(31743) step(1) : tensor<4xi16>
+    %rhs = check.generate.fill value(31744) : tensor<4xi16>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_half_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi16>, tensor<4xi16>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.fill value(-2147483648) : tensor<4xi32>
+    %rhs = check.generate.fill value(0) : tensor<4xi32>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_float_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi32>, tensor<4xi32>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.trial[4](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(1065353216) step(8388608) : tensor<4xi32>
+    %rhs = check.generate.iota offset(1082130432) step(-8388608) : tensor<4xi32>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_float_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi32>, tensor<4xi32>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.trial[4](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(2139095039) step(1) : tensor<4xi32>
+    %rhs = check.generate.fill value(2139095040) : tensor<4xi32>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_float_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi32>, tensor<4xi32>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.fill value(-9223372036854775808) : tensor<4xi64>
+    %rhs = check.generate.fill value(0) : tensor<4xi64>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_double_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi64>, tensor<4xi64>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.trial[4](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(4607182418800017408) step(4503599627370496) : tensor<4xi64>
+    %rhs = check.generate.iota offset(4616189618054758400) step(-4503599627370496) : tensor<4xi64>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_double_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi64>, tensor<4xi64>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.trial[4](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(9218868437227405311) step(1) : tensor<4xi64>
+    %rhs = check.generate.fill value(9218868437227405312) : tensor<4xi64>
+    %output = check.generate.fill value(1515870810) : tensor<14xi32>
+    check.compare<@compare_double_ordinary>(%trial, %lhs, %rhs, %output) : (index, tensor<4xi64>, tensor<4xi64>, tensor<14xi32>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<14xi32>
+    }
+  }
+  check.return
+}
+
 // Directed groups cover signed zero, subnormal signs, adjacent negatives,
 // finite/infinite boundaries, and signaling/quiet NaNs of both signs.
 check.scenario @scalar_half_comparison_sources {

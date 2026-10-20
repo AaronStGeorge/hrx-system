@@ -124,6 +124,68 @@ func.def target(@math_target) @vector_uniform_source_extension(%x: f8E4M3, %scal
 
 test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
 
+func.def target(@math_target) @scalar_integral_rounding(%input: f8E4M3) -> (f8E4M3, f8E4M3, f8E4M3, f8E4M3) {
+  %ceil = scalar.ceilf %input : f8E4M3
+  %floor = scalar.floorf %input : f8E4M3
+  %roundeven = scalar.roundevenf %input : f8E4M3
+  %trunc = scalar.truncf %input : f8E4M3
+  func.return %ceil, %floor, %roundeven, %trunc : f8E4M3, f8E4M3, f8E4M3, f8E4M3
+}
+
+// ----
+test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
+
+func.def target(@math_target) @scalar_integral_rounding(%input: f8E4M3) -> (f8E4M3, f8E4M3, f8E4M3, f8E4M3) {
+  %18 = scalar.extf %input : f8E4M3 to f32
+  %19 = scalar.ceilf %18 : f32
+  %ceil = scalar.fptrunc %19 : f32 to f8E4M3
+  %15 = scalar.extf %input : f8E4M3 to f32
+  %16 = scalar.floorf %15 : f32
+  %floor = scalar.fptrunc %16 : f32 to f8E4M3
+  %12 = scalar.extf %input : f8E4M3 to f32
+  %13 = scalar.roundevenf %12 : f32
+  %roundeven = scalar.fptrunc %13 : f32 to f8E4M3
+  %9 = scalar.extf %input : f8E4M3 to f32
+  %10 = scalar.truncf %9 : f32
+  %trunc = scalar.fptrunc %10 : f32 to f8E4M3
+  func.return %ceil, %floor, %roundeven, %trunc : f8E4M3, f8E4M3, f8E4M3, f8E4M3
+}
+
+// ====
+
+test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
+
+func.def target(@math_target) @vector_integral_rounding(%input: vector<3xbf16>) -> (vector<3xbf16>, vector<3xbf16>, vector<3xbf16>, vector<3xbf16>) {
+  %ceil = vector.ceilf %input : vector<3xbf16>
+  %floor = vector.floorf %input : vector<3xbf16>
+  %roundeven = vector.roundevenf %input : vector<3xbf16>
+  %trunc = vector.truncf %input : vector<3xbf16>
+  func.return %ceil, %floor, %roundeven, %trunc : vector<3xbf16>, vector<3xbf16>, vector<3xbf16>, vector<3xbf16>
+}
+
+// ----
+test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
+
+func.def target(@math_target) @vector_integral_rounding(%input: vector<3xbf16>) -> (vector<3xbf16>, vector<3xbf16>, vector<3xbf16>, vector<3xbf16>) {
+  %18 = vector.extf %input : vector<3xbf16> to vector<3xf32>
+  %19 = vector.ceilf %18 : vector<3xf32>
+  %ceil = vector.fptrunc %19 : vector<3xf32> to vector<3xbf16>
+  %15 = vector.extf %input : vector<3xbf16> to vector<3xf32>
+  %16 = vector.floorf %15 : vector<3xf32>
+  %floor = vector.fptrunc %16 : vector<3xf32> to vector<3xbf16>
+  %12 = vector.extf %input : vector<3xbf16> to vector<3xf32>
+  %13 = vector.roundevenf %12 : vector<3xf32>
+  %roundeven = vector.fptrunc %13 : vector<3xf32> to vector<3xbf16>
+  %9 = vector.extf %input : vector<3xbf16> to vector<3xf32>
+  %10 = vector.truncf %9 : vector<3xf32>
+  %trunc = vector.fptrunc %10 : vector<3xf32> to vector<3xbf16>
+  func.return %ceil, %floor, %roundeven, %trunc : vector<3xbf16>, vector<3xbf16>, vector<3xbf16>, vector<3xbf16>
+}
+
+// ====
+
+test.target<low_core> @math_target {contract_set_key = "test.math.widen_f32_round"}
+
 // Widening preserves reciprocal permission, including its absence.
 func.def target(@math_target) @scalar_division(%x: f16, %y: f16) -> (f16, f16) {
   %strict = scalar.divf %x, %y : f16

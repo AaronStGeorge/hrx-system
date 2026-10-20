@@ -479,7 +479,7 @@ loom_corpus_test(
     "TARGET/001"
     "numeric/float/selectors.loom"
     "@selector_f64_values"
-    "TARGET/002,TARGET/003"
+    "TARGET/001"
     "numeric/float/trigonometry_f8e4m3.loom"
     "@trigonometry_f8e4m3_cardinals"
     "LOWERING/036"

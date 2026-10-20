@@ -1,0 +1,103 @@
+// RUN: pass target=wasm:simd128 legalize-math
+
+func.def @f8e4m3_scalar_arithmetic(%lhs: f8E4M3, %rhs: f8E4M3) -> (f8E4M3, f8E4M3, f8E4M3) {
+  %sum = scalar.addf %lhs, %rhs : f8E4M3
+  %difference = scalar.subf %lhs, %rhs : f8E4M3
+  %product = scalar.mulf %lhs, %rhs : f8E4M3
+  func.return %sum, %difference, %product : f8E4M3, f8E4M3, f8E4M3
+}
+
+// ----
+func.def @f8e4m3_scalar_arithmetic(%lhs: f8E4M3, %rhs: f8E4M3) -> (f8E4M3, f8E4M3, f8E4M3) {
+  %16 = scalar.extf %lhs : f8E4M3 to f32
+  %17 = scalar.extf %rhs : f8E4M3 to f32
+  %18 = scalar.addf %16, %17 : f32
+  %sum = scalar.fptrunc %18 : f32 to f8E4M3
+  %12 = scalar.extf %lhs : f8E4M3 to f32
+  %13 = scalar.extf %rhs : f8E4M3 to f32
+  %14 = scalar.subf %12, %13 : f32
+  %difference = scalar.fptrunc %14 : f32 to f8E4M3
+  %8 = scalar.extf %lhs : f8E4M3 to f32
+  %9 = scalar.extf %rhs : f8E4M3 to f32
+  %10 = scalar.mulf %8, %9 : f32
+  %product = scalar.fptrunc %10 : f32 to f8E4M3
+  func.return %sum, %difference, %product : f8E4M3, f8E4M3, f8E4M3
+}
+
+// ====
+
+func.def @f8e5m2_vector_arithmetic(%lhs: vector<3xf8E5M2>, %rhs: vector<3xf8E5M2>) -> (vector<3xf8E5M2>, vector<3xf8E5M2>, vector<3xf8E5M2>) {
+  %sum = vector.addf %lhs, %rhs : vector<3xf8E5M2>
+  %difference = vector.subf %lhs, %rhs : vector<3xf8E5M2>
+  %product = vector.mulf %lhs, %rhs : vector<3xf8E5M2>
+  func.return %sum, %difference, %product : vector<3xf8E5M2>, vector<3xf8E5M2>, vector<3xf8E5M2>
+}
+
+// ----
+func.def @f8e5m2_vector_arithmetic(%lhs: vector<3xf8E5M2>, %rhs: vector<3xf8E5M2>) -> (vector<3xf8E5M2>, vector<3xf8E5M2>, vector<3xf8E5M2>) {
+  %16 = vector.extf %lhs : vector<3xf8E5M2> to vector<3xf32>
+  %17 = vector.extf %rhs : vector<3xf8E5M2> to vector<3xf32>
+  %18 = vector.addf %16, %17 : vector<3xf32>
+  %sum = vector.fptrunc %18 : vector<3xf32> to vector<3xf8E5M2>
+  %12 = vector.extf %lhs : vector<3xf8E5M2> to vector<3xf32>
+  %13 = vector.extf %rhs : vector<3xf8E5M2> to vector<3xf32>
+  %14 = vector.subf %12, %13 : vector<3xf32>
+  %difference = vector.fptrunc %14 : vector<3xf32> to vector<3xf8E5M2>
+  %8 = vector.extf %lhs : vector<3xf8E5M2> to vector<3xf32>
+  %9 = vector.extf %rhs : vector<3xf8E5M2> to vector<3xf32>
+  %10 = vector.mulf %8, %9 : vector<3xf32>
+  %product = vector.fptrunc %10 : vector<3xf32> to vector<3xf8E5M2>
+  func.return %sum, %difference, %product : vector<3xf8E5M2>, vector<3xf8E5M2>, vector<3xf8E5M2>
+}
+
+// ====
+
+func.def @f16_scalar_arithmetic(%lhs: f16, %rhs: f16) -> (f16, f16, f16) {
+  %sum = scalar.addf %lhs, %rhs : f16
+  %difference = scalar.subf %lhs, %rhs : f16
+  %product = scalar.mulf %lhs, %rhs : f16
+  func.return %sum, %difference, %product : f16, f16, f16
+}
+
+// ----
+func.def @f16_scalar_arithmetic(%lhs: f16, %rhs: f16) -> (f16, f16, f16) {
+  %16 = scalar.extf %lhs : f16 to f32
+  %17 = scalar.extf %rhs : f16 to f32
+  %18 = scalar.addf %16, %17 : f32
+  %sum = scalar.fptrunc %18 : f32 to f16
+  %12 = scalar.extf %lhs : f16 to f32
+  %13 = scalar.extf %rhs : f16 to f32
+  %14 = scalar.subf %12, %13 : f32
+  %difference = scalar.fptrunc %14 : f32 to f16
+  %8 = scalar.extf %lhs : f16 to f32
+  %9 = scalar.extf %rhs : f16 to f32
+  %10 = scalar.mulf %8, %9 : f32
+  %product = scalar.fptrunc %10 : f32 to f16
+  func.return %sum, %difference, %product : f16, f16, f16
+}
+
+// ====
+
+func.def @bf16_vector_arithmetic(%lhs: vector<3xbf16>, %rhs: vector<3xbf16>) -> (vector<3xbf16>, vector<3xbf16>, vector<3xbf16>) {
+  %sum = vector.addf<nnan|ninf> %lhs, %rhs : vector<3xbf16>
+  %difference = vector.subf %lhs, %rhs : vector<3xbf16>
+  %product = vector.mulf %lhs, %rhs : vector<3xbf16>
+  func.return %sum, %difference, %product : vector<3xbf16>, vector<3xbf16>, vector<3xbf16>
+}
+
+// ----
+func.def @bf16_vector_arithmetic(%lhs: vector<3xbf16>, %rhs: vector<3xbf16>) -> (vector<3xbf16>, vector<3xbf16>, vector<3xbf16>) {
+  %16 = vector.extf %lhs : vector<3xbf16> to vector<3xf32>
+  %17 = vector.extf %rhs : vector<3xbf16> to vector<3xf32>
+  %18 = vector.addf<nnan|ninf> %16, %17 : vector<3xf32>
+  %sum = vector.fptrunc %18 : vector<3xf32> to vector<3xbf16>
+  %12 = vector.extf %lhs : vector<3xbf16> to vector<3xf32>
+  %13 = vector.extf %rhs : vector<3xbf16> to vector<3xf32>
+  %14 = vector.subf %12, %13 : vector<3xf32>
+  %difference = vector.fptrunc %14 : vector<3xf32> to vector<3xbf16>
+  %8 = vector.extf %lhs : vector<3xbf16> to vector<3xf32>
+  %9 = vector.extf %rhs : vector<3xbf16> to vector<3xf32>
+  %10 = vector.mulf %8, %9 : vector<3xf32>
+  %product = vector.fptrunc %10 : vector<3xf32> to vector<3xbf16>
+  func.return %sum, %difference, %product : vector<3xbf16>, vector<3xbf16>, vector<3xbf16>
+}

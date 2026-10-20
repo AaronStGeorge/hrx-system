@@ -11,34 +11,38 @@ func.def @scalar_f32_reference_extrema(%value: f32, %lhs: f32, %rhs: f32) -> (f3
 
 // ----
 func.def @scalar_f32_reference_extrema(%value: f32, %lhs: f32, %rhs: f32) -> (f32, f32, f32, f32, f32) {
-  %55 = scalar.bitcast %lhs : f32 to i32
-  %56 = scalar.bitcast %rhs : f32 to i32
-  %57 = scalar.ori %55, %56 : i32
-  %58 = scalar.bitcast %57 : i32 to f32
-  %59 = scalar.cmpf olt, %lhs, %rhs : f32
-  %60 = scalar.cmpf olt, %rhs, %lhs : f32
-  %61 = scf.select %60, %rhs, %58 : f32
-  %62 = scf.select %59, %lhs, %61 : f32
-  %63 = scalar.cmpf une, %lhs, %lhs : f32
-  %64 = scalar.cmpf une, %rhs, %rhs : f32
-  %65 = scf.select %64, %lhs, %62 : f32
-  %minnum = scf.select %63, %rhs, %65 : f32
-  %43 = scalar.bitcast %lhs : f32 to i32
-  %44 = scalar.bitcast %rhs : f32 to i32
-  %45 = scalar.andi %43, %44 : i32
-  %46 = scalar.bitcast %45 : i32 to f32
-  %47 = scalar.cmpf ogt, %lhs, %rhs : f32
-  %48 = scalar.cmpf ogt, %rhs, %lhs : f32
-  %49 = scf.select %48, %rhs, %46 : f32
-  %50 = scf.select %47, %lhs, %49 : f32
-  %51 = scalar.cmpf une, %lhs, %lhs : f32
-  %52 = scalar.cmpf une, %rhs, %rhs : f32
-  %53 = scf.select %52, %lhs, %50 : f32
-  %maxnum = scf.select %51, %rhs, %53 : f32
-  %39 = scalar.cmpf olt, %value, %lhs : f32
-  %40 = scf.select %39, %lhs, %value : f32
-  %41 = scalar.cmpf ogt, %40, %rhs : f32
-  %ordered = scf.select %41, %rhs, %40 : f32
+  %61 = scalar.bitcast %lhs : f32 to i32
+  %62 = scalar.bitcast %rhs : f32 to i32
+  %63 = scalar.ori %61, %62 : i32
+  %64 = scalar.bitcast %63 : i32 to f32
+  %65 = scalar.cmpf olt, %lhs, %rhs : f32
+  %66 = scalar.cmpf olt, %rhs, %lhs : f32
+  %67 = scf.select %66, %rhs, %64 : f32
+  %68 = scf.select %65, %lhs, %67 : f32
+  %69 = scalar.cmpf une, %lhs, %lhs : f32
+  %70 = scalar.cmpf une, %rhs, %rhs : f32
+  %71 = scalar.constant nan : f32
+  %72 = scf.select %70, %71, %rhs : f32
+  %73 = scf.select %70, %lhs, %68 : f32
+  %minnum = scf.select %69, %72, %73 : f32
+  %47 = scalar.bitcast %lhs : f32 to i32
+  %48 = scalar.bitcast %rhs : f32 to i32
+  %49 = scalar.andi %47, %48 : i32
+  %50 = scalar.bitcast %49 : i32 to f32
+  %51 = scalar.cmpf ogt, %lhs, %rhs : f32
+  %52 = scalar.cmpf ogt, %rhs, %lhs : f32
+  %53 = scf.select %52, %rhs, %50 : f32
+  %54 = scf.select %51, %lhs, %53 : f32
+  %55 = scalar.cmpf une, %lhs, %lhs : f32
+  %56 = scalar.cmpf une, %rhs, %rhs : f32
+  %57 = scalar.constant nan : f32
+  %58 = scf.select %56, %57, %rhs : f32
+  %59 = scf.select %56, %lhs, %54 : f32
+  %maxnum = scf.select %55, %58, %59 : f32
+  %43 = scalar.cmpf olt, %value, %lhs : f32
+  %44 = scf.select %43, %lhs, %value : f32
+  %45 = scalar.cmpf ogt, %44, %rhs : f32
+  %ordered = scf.select %45, %rhs, %44 : f32
   %15 = scalar.bitcast %value : f32 to i32
   %16 = scalar.bitcast %lhs : f32 to i32
   %17 = scalar.andi %15, %16 : i32
@@ -49,23 +53,107 @@ func.def @scalar_f32_reference_extrema(%value: f32, %lhs: f32, %rhs: f32) -> (f3
   %22 = scf.select %19, %value, %21 : f32
   %23 = scalar.cmpf une, %value, %value : f32
   %24 = scalar.cmpf une, %lhs, %lhs : f32
-  %25 = scf.select %24, %value, %22 : f32
-  %26 = scf.select %23, %lhs, %25 : f32
-  %27 = scalar.bitcast %26 : f32 to i32
-  %28 = scalar.bitcast %rhs : f32 to i32
-  %29 = scalar.ori %27, %28 : i32
-  %30 = scalar.bitcast %29 : i32 to f32
-  %31 = scalar.cmpf olt, %26, %rhs : f32
-  %32 = scalar.cmpf olt, %rhs, %26 : f32
-  %33 = scf.select %32, %rhs, %30 : f32
-  %34 = scf.select %31, %26, %33 : f32
-  %35 = scalar.cmpf une, %26, %26 : f32
-  %36 = scalar.cmpf une, %rhs, %rhs : f32
-  %37 = scf.select %36, %26, %34 : f32
-  %number = scf.select %35, %rhs, %37 : f32
+  %25 = scalar.constant nan : f32
+  %26 = scf.select %24, %25, %lhs : f32
+  %27 = scf.select %24, %value, %22 : f32
+  %28 = scf.select %23, %26, %27 : f32
+  %29 = scalar.bitcast %28 : f32 to i32
+  %30 = scalar.bitcast %rhs : f32 to i32
+  %31 = scalar.ori %29, %30 : i32
+  %32 = scalar.bitcast %31 : i32 to f32
+  %33 = scalar.cmpf olt, %28, %rhs : f32
+  %34 = scalar.cmpf olt, %rhs, %28 : f32
+  %35 = scf.select %34, %rhs, %32 : f32
+  %36 = scf.select %33, %28, %35 : f32
+  %37 = scalar.cmpf une, %28, %28 : f32
+  %38 = scalar.cmpf une, %rhs, %rhs : f32
+  %39 = scalar.constant nan : f32
+  %40 = scf.select %38, %39, %rhs : f32
+  %41 = scf.select %38, %28, %36 : f32
+  %number = scf.select %37, %40, %41 : f32
   %13 = scalar.maximumf %value, %lhs : f32
   %ieee = scalar.minimumf %13, %rhs : f32
   func.return %minnum, %maxnum, %ordered, %number, %ieee : f32, f32, f32, f32, f32
+}
+
+// ====
+// RUN: pass target=wasm:simd128 target-legalize{mode=final}
+
+// F64 extrema use the same exact scalar recipe with an I64 tie carrier.
+func.def @scalar_f64_reference_extrema(%value: f64, %lhs: f64, %rhs: f64) -> (f64, f64, f64, f64, f64) {
+  %minnum = scalar.minnumf %lhs, %rhs : f64
+  %maxnum = scalar.maxnumf %lhs, %rhs : f64
+  %ordered = scalar.clampf<ordered> %value, %lhs, %rhs : f64
+  %number = scalar.clampf<number> %value, %lhs, %rhs : f64
+  %ieee = scalar.clampf<ieee> %value, %lhs, %rhs : f64
+  func.return %minnum, %maxnum, %ordered, %number, %ieee : f64, f64, f64, f64, f64
+}
+
+// ----
+func.def @scalar_f64_reference_extrema(%value: f64, %lhs: f64, %rhs: f64) -> (f64, f64, f64, f64, f64) {
+  %61 = scalar.bitcast %lhs : f64 to i64
+  %62 = scalar.bitcast %rhs : f64 to i64
+  %63 = scalar.ori %61, %62 : i64
+  %64 = scalar.bitcast %63 : i64 to f64
+  %65 = scalar.cmpf olt, %lhs, %rhs : f64
+  %66 = scalar.cmpf olt, %rhs, %lhs : f64
+  %67 = scf.select %66, %rhs, %64 : f64
+  %68 = scf.select %65, %lhs, %67 : f64
+  %69 = scalar.cmpf une, %lhs, %lhs : f64
+  %70 = scalar.cmpf une, %rhs, %rhs : f64
+  %71 = scalar.constant nan : f64
+  %72 = scf.select %70, %71, %rhs : f64
+  %73 = scf.select %70, %lhs, %68 : f64
+  %minnum = scf.select %69, %72, %73 : f64
+  %47 = scalar.bitcast %lhs : f64 to i64
+  %48 = scalar.bitcast %rhs : f64 to i64
+  %49 = scalar.andi %47, %48 : i64
+  %50 = scalar.bitcast %49 : i64 to f64
+  %51 = scalar.cmpf ogt, %lhs, %rhs : f64
+  %52 = scalar.cmpf ogt, %rhs, %lhs : f64
+  %53 = scf.select %52, %rhs, %50 : f64
+  %54 = scf.select %51, %lhs, %53 : f64
+  %55 = scalar.cmpf une, %lhs, %lhs : f64
+  %56 = scalar.cmpf une, %rhs, %rhs : f64
+  %57 = scalar.constant nan : f64
+  %58 = scf.select %56, %57, %rhs : f64
+  %59 = scf.select %56, %lhs, %54 : f64
+  %maxnum = scf.select %55, %58, %59 : f64
+  %43 = scalar.cmpf olt, %value, %lhs : f64
+  %44 = scf.select %43, %lhs, %value : f64
+  %45 = scalar.cmpf ogt, %44, %rhs : f64
+  %ordered = scf.select %45, %rhs, %44 : f64
+  %15 = scalar.bitcast %value : f64 to i64
+  %16 = scalar.bitcast %lhs : f64 to i64
+  %17 = scalar.andi %15, %16 : i64
+  %18 = scalar.bitcast %17 : i64 to f64
+  %19 = scalar.cmpf ogt, %value, %lhs : f64
+  %20 = scalar.cmpf ogt, %lhs, %value : f64
+  %21 = scf.select %20, %lhs, %18 : f64
+  %22 = scf.select %19, %value, %21 : f64
+  %23 = scalar.cmpf une, %value, %value : f64
+  %24 = scalar.cmpf une, %lhs, %lhs : f64
+  %25 = scalar.constant nan : f64
+  %26 = scf.select %24, %25, %lhs : f64
+  %27 = scf.select %24, %value, %22 : f64
+  %28 = scf.select %23, %26, %27 : f64
+  %29 = scalar.bitcast %28 : f64 to i64
+  %30 = scalar.bitcast %rhs : f64 to i64
+  %31 = scalar.ori %29, %30 : i64
+  %32 = scalar.bitcast %31 : i64 to f64
+  %33 = scalar.cmpf olt, %28, %rhs : f64
+  %34 = scalar.cmpf olt, %rhs, %28 : f64
+  %35 = scf.select %34, %rhs, %32 : f64
+  %36 = scf.select %33, %28, %35 : f64
+  %37 = scalar.cmpf une, %28, %28 : f64
+  %38 = scalar.cmpf une, %rhs, %rhs : f64
+  %39 = scalar.constant nan : f64
+  %40 = scf.select %38, %39, %rhs : f64
+  %41 = scf.select %38, %28, %36 : f64
+  %number = scf.select %37, %40, %41 : f64
+  %13 = scalar.maximumf %value, %lhs : f64
+  %ieee = scalar.minimumf %13, %rhs : f64
+  func.return %minnum, %maxnum, %ordered, %number, %ieee : f64, f64, f64, f64, f64
 }
 
 // ====
@@ -82,34 +170,38 @@ func.def @vector_f32_reference_extrema(%value: vector<4xf32>, %lhs: vector<4xf32
 
 // ----
 func.def @vector_f32_reference_extrema(%value: vector<4xf32>, %lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>) {
-  %55 = vector.bitcast %lhs : vector<4xf32> to vector<4xi32>
-  %56 = vector.bitcast %rhs : vector<4xf32> to vector<4xi32>
-  %57 = vector.ori %55, %56 : vector<4xi32>
-  %58 = vector.bitcast %57 : vector<4xi32> to vector<4xf32>
-  %59 = vector.cmpf olt, %lhs, %rhs : vector<4xf32> -> vector<4xi1>
-  %60 = vector.cmpf olt, %rhs, %lhs : vector<4xf32> -> vector<4xi1>
-  %61 = vector.select %60, %rhs, %58 : vector<4xf32>
-  %62 = vector.select %59, %lhs, %61 : vector<4xf32>
-  %63 = vector.cmpf une, %lhs, %lhs : vector<4xf32> -> vector<4xi1>
-  %64 = vector.cmpf une, %rhs, %rhs : vector<4xf32> -> vector<4xi1>
-  %65 = vector.select %64, %lhs, %62 : vector<4xf32>
-  %minnum = vector.select %63, %rhs, %65 : vector<4xf32>
-  %43 = vector.bitcast %lhs : vector<4xf32> to vector<4xi32>
-  %44 = vector.bitcast %rhs : vector<4xf32> to vector<4xi32>
-  %45 = vector.andi %43, %44 : vector<4xi32>
-  %46 = vector.bitcast %45 : vector<4xi32> to vector<4xf32>
-  %47 = vector.cmpf ogt, %lhs, %rhs : vector<4xf32> -> vector<4xi1>
-  %48 = vector.cmpf ogt, %rhs, %lhs : vector<4xf32> -> vector<4xi1>
-  %49 = vector.select %48, %rhs, %46 : vector<4xf32>
-  %50 = vector.select %47, %lhs, %49 : vector<4xf32>
-  %51 = vector.cmpf une, %lhs, %lhs : vector<4xf32> -> vector<4xi1>
-  %52 = vector.cmpf une, %rhs, %rhs : vector<4xf32> -> vector<4xi1>
-  %53 = vector.select %52, %lhs, %50 : vector<4xf32>
-  %maxnum = vector.select %51, %rhs, %53 : vector<4xf32>
-  %39 = vector.cmpf olt, %value, %lhs : vector<4xf32> -> vector<4xi1>
-  %40 = vector.select %39, %lhs, %value : vector<4xf32>
-  %41 = vector.cmpf ogt, %40, %rhs : vector<4xf32> -> vector<4xi1>
-  %ordered = vector.select %41, %rhs, %40 : vector<4xf32>
+  %61 = vector.bitcast %lhs : vector<4xf32> to vector<4xi32>
+  %62 = vector.bitcast %rhs : vector<4xf32> to vector<4xi32>
+  %63 = vector.ori %61, %62 : vector<4xi32>
+  %64 = vector.bitcast %63 : vector<4xi32> to vector<4xf32>
+  %65 = vector.cmpf olt, %lhs, %rhs : vector<4xf32> -> vector<4xi1>
+  %66 = vector.cmpf olt, %rhs, %lhs : vector<4xf32> -> vector<4xi1>
+  %67 = vector.select %66, %rhs, %64 : vector<4xf32>
+  %68 = vector.select %65, %lhs, %67 : vector<4xf32>
+  %69 = vector.cmpf une, %lhs, %lhs : vector<4xf32> -> vector<4xi1>
+  %70 = vector.cmpf une, %rhs, %rhs : vector<4xf32> -> vector<4xi1>
+  %71 = vector.constant nan : vector<4xf32>
+  %72 = vector.select %70, %71, %rhs : vector<4xf32>
+  %73 = vector.select %70, %lhs, %68 : vector<4xf32>
+  %minnum = vector.select %69, %72, %73 : vector<4xf32>
+  %47 = vector.bitcast %lhs : vector<4xf32> to vector<4xi32>
+  %48 = vector.bitcast %rhs : vector<4xf32> to vector<4xi32>
+  %49 = vector.andi %47, %48 : vector<4xi32>
+  %50 = vector.bitcast %49 : vector<4xi32> to vector<4xf32>
+  %51 = vector.cmpf ogt, %lhs, %rhs : vector<4xf32> -> vector<4xi1>
+  %52 = vector.cmpf ogt, %rhs, %lhs : vector<4xf32> -> vector<4xi1>
+  %53 = vector.select %52, %rhs, %50 : vector<4xf32>
+  %54 = vector.select %51, %lhs, %53 : vector<4xf32>
+  %55 = vector.cmpf une, %lhs, %lhs : vector<4xf32> -> vector<4xi1>
+  %56 = vector.cmpf une, %rhs, %rhs : vector<4xf32> -> vector<4xi1>
+  %57 = vector.constant nan : vector<4xf32>
+  %58 = vector.select %56, %57, %rhs : vector<4xf32>
+  %59 = vector.select %56, %lhs, %54 : vector<4xf32>
+  %maxnum = vector.select %55, %58, %59 : vector<4xf32>
+  %43 = vector.cmpf olt, %value, %lhs : vector<4xf32> -> vector<4xi1>
+  %44 = vector.select %43, %lhs, %value : vector<4xf32>
+  %45 = vector.cmpf ogt, %44, %rhs : vector<4xf32> -> vector<4xi1>
+  %ordered = vector.select %45, %rhs, %44 : vector<4xf32>
   %15 = vector.bitcast %value : vector<4xf32> to vector<4xi32>
   %16 = vector.bitcast %lhs : vector<4xf32> to vector<4xi32>
   %17 = vector.andi %15, %16 : vector<4xi32>
@@ -120,26 +212,132 @@ func.def @vector_f32_reference_extrema(%value: vector<4xf32>, %lhs: vector<4xf32
   %22 = vector.select %19, %value, %21 : vector<4xf32>
   %23 = vector.cmpf une, %value, %value : vector<4xf32> -> vector<4xi1>
   %24 = vector.cmpf une, %lhs, %lhs : vector<4xf32> -> vector<4xi1>
-  %25 = vector.select %24, %value, %22 : vector<4xf32>
-  %26 = vector.select %23, %lhs, %25 : vector<4xf32>
-  %27 = vector.bitcast %26 : vector<4xf32> to vector<4xi32>
-  %28 = vector.bitcast %rhs : vector<4xf32> to vector<4xi32>
-  %29 = vector.ori %27, %28 : vector<4xi32>
-  %30 = vector.bitcast %29 : vector<4xi32> to vector<4xf32>
-  %31 = vector.cmpf olt, %26, %rhs : vector<4xf32> -> vector<4xi1>
-  %32 = vector.cmpf olt, %rhs, %26 : vector<4xf32> -> vector<4xi1>
-  %33 = vector.select %32, %rhs, %30 : vector<4xf32>
-  %34 = vector.select %31, %26, %33 : vector<4xf32>
-  %35 = vector.cmpf une, %26, %26 : vector<4xf32> -> vector<4xi1>
-  %36 = vector.cmpf une, %rhs, %rhs : vector<4xf32> -> vector<4xi1>
-  %37 = vector.select %36, %26, %34 : vector<4xf32>
-  %number = vector.select %35, %rhs, %37 : vector<4xf32>
+  %25 = vector.constant nan : vector<4xf32>
+  %26 = vector.select %24, %25, %lhs : vector<4xf32>
+  %27 = vector.select %24, %value, %22 : vector<4xf32>
+  %28 = vector.select %23, %26, %27 : vector<4xf32>
+  %29 = vector.bitcast %28 : vector<4xf32> to vector<4xi32>
+  %30 = vector.bitcast %rhs : vector<4xf32> to vector<4xi32>
+  %31 = vector.ori %29, %30 : vector<4xi32>
+  %32 = vector.bitcast %31 : vector<4xi32> to vector<4xf32>
+  %33 = vector.cmpf olt, %28, %rhs : vector<4xf32> -> vector<4xi1>
+  %34 = vector.cmpf olt, %rhs, %28 : vector<4xf32> -> vector<4xi1>
+  %35 = vector.select %34, %rhs, %32 : vector<4xf32>
+  %36 = vector.select %33, %28, %35 : vector<4xf32>
+  %37 = vector.cmpf une, %28, %28 : vector<4xf32> -> vector<4xi1>
+  %38 = vector.cmpf une, %rhs, %rhs : vector<4xf32> -> vector<4xi1>
+  %39 = vector.constant nan : vector<4xf32>
+  %40 = vector.select %38, %39, %rhs : vector<4xf32>
+  %41 = vector.select %38, %28, %36 : vector<4xf32>
+  %number = vector.select %37, %40, %41 : vector<4xf32>
   %13 = vector.maximumf %value, %lhs : vector<4xf32>
   %ieee = vector.minimumf %13, %rhs : vector<4xf32>
   func.return %minnum, %maxnum, %ordered, %number, %ieee : vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>
 }
 
 // ====
+// RUN: pass target=wasm:simd128 target-legalize{mode=final}
+
+// F64 extrema use the same exact recipe on Wasm's two-lane native carrier.
+// Wider authored vectors reach this shape through ordinary packetization.
+func.def @vector_f64_reference_extrema(%value: vector<2xf64>, %lhs: vector<2xf64>, %rhs: vector<2xf64>) -> (vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>) {
+  %minnum = vector.minnumf %lhs, %rhs : vector<2xf64>
+  %maxnum = vector.maxnumf %lhs, %rhs : vector<2xf64>
+  %ordered = vector.clampf<ordered> %value, %lhs, %rhs : vector<2xf64>
+  %number = vector.clampf<number> %value, %lhs, %rhs : vector<2xf64>
+  %ieee = vector.clampf<ieee> %value, %lhs, %rhs : vector<2xf64>
+  func.return %minnum, %maxnum, %ordered, %number, %ieee : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>
+}
+
+// ----
+func.def @vector_f64_reference_extrema(%value: vector<2xf64>, %lhs: vector<2xf64>, %rhs: vector<2xf64>) -> (vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>) {
+  %61 = vector.bitcast %lhs : vector<2xf64> to vector<2xi64>
+  %62 = vector.bitcast %rhs : vector<2xf64> to vector<2xi64>
+  %63 = vector.ori %61, %62 : vector<2xi64>
+  %64 = vector.bitcast %63 : vector<2xi64> to vector<2xf64>
+  %65 = vector.cmpf olt, %lhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %66 = vector.cmpf olt, %rhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %67 = vector.select %66, %rhs, %64 : vector<2xf64>
+  %68 = vector.select %65, %lhs, %67 : vector<2xf64>
+  %69 = vector.cmpf une, %lhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %70 = vector.cmpf une, %rhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %71 = vector.constant nan : vector<2xf64>
+  %72 = vector.select %70, %71, %rhs : vector<2xf64>
+  %73 = vector.select %70, %lhs, %68 : vector<2xf64>
+  %minnum = vector.select %69, %72, %73 : vector<2xf64>
+  %47 = vector.bitcast %lhs : vector<2xf64> to vector<2xi64>
+  %48 = vector.bitcast %rhs : vector<2xf64> to vector<2xi64>
+  %49 = vector.andi %47, %48 : vector<2xi64>
+  %50 = vector.bitcast %49 : vector<2xi64> to vector<2xf64>
+  %51 = vector.cmpf ogt, %lhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %52 = vector.cmpf ogt, %rhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %53 = vector.select %52, %rhs, %50 : vector<2xf64>
+  %54 = vector.select %51, %lhs, %53 : vector<2xf64>
+  %55 = vector.cmpf une, %lhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %56 = vector.cmpf une, %rhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %57 = vector.constant nan : vector<2xf64>
+  %58 = vector.select %56, %57, %rhs : vector<2xf64>
+  %59 = vector.select %56, %lhs, %54 : vector<2xf64>
+  %maxnum = vector.select %55, %58, %59 : vector<2xf64>
+  %43 = vector.cmpf olt, %value, %lhs : vector<2xf64> -> vector<2xi1>
+  %44 = vector.select %43, %lhs, %value : vector<2xf64>
+  %45 = vector.cmpf ogt, %44, %rhs : vector<2xf64> -> vector<2xi1>
+  %ordered = vector.select %45, %rhs, %44 : vector<2xf64>
+  %15 = vector.bitcast %value : vector<2xf64> to vector<2xi64>
+  %16 = vector.bitcast %lhs : vector<2xf64> to vector<2xi64>
+  %17 = vector.andi %15, %16 : vector<2xi64>
+  %18 = vector.bitcast %17 : vector<2xi64> to vector<2xf64>
+  %19 = vector.cmpf ogt, %value, %lhs : vector<2xf64> -> vector<2xi1>
+  %20 = vector.cmpf ogt, %lhs, %value : vector<2xf64> -> vector<2xi1>
+  %21 = vector.select %20, %lhs, %18 : vector<2xf64>
+  %22 = vector.select %19, %value, %21 : vector<2xf64>
+  %23 = vector.cmpf une, %value, %value : vector<2xf64> -> vector<2xi1>
+  %24 = vector.cmpf une, %lhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %25 = vector.constant nan : vector<2xf64>
+  %26 = vector.select %24, %25, %lhs : vector<2xf64>
+  %27 = vector.select %24, %value, %22 : vector<2xf64>
+  %28 = vector.select %23, %26, %27 : vector<2xf64>
+  %29 = vector.bitcast %28 : vector<2xf64> to vector<2xi64>
+  %30 = vector.bitcast %rhs : vector<2xf64> to vector<2xi64>
+  %31 = vector.ori %29, %30 : vector<2xi64>
+  %32 = vector.bitcast %31 : vector<2xi64> to vector<2xf64>
+  %33 = vector.cmpf olt, %28, %rhs : vector<2xf64> -> vector<2xi1>
+  %34 = vector.cmpf olt, %rhs, %28 : vector<2xf64> -> vector<2xi1>
+  %35 = vector.select %34, %rhs, %32 : vector<2xf64>
+  %36 = vector.select %33, %28, %35 : vector<2xf64>
+  %37 = vector.cmpf une, %28, %28 : vector<2xf64> -> vector<2xi1>
+  %38 = vector.cmpf une, %rhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %39 = vector.constant nan : vector<2xf64>
+  %40 = vector.select %38, %39, %rhs : vector<2xf64>
+  %41 = vector.select %38, %28, %36 : vector<2xf64>
+  %number = vector.select %37, %40, %41 : vector<2xf64>
+  %13 = vector.maximumf %value, %lhs : vector<2xf64>
+  %ieee = vector.minimumf %13, %rhs : vector<2xf64>
+  func.return %minnum, %maxnum, %ordered, %number, %ieee : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>
+}
+
+// ====
+
+// RUN: with-checks pass target=wasm:simd128 target-legalize{mode=final}
+
+// Every narrow scalar encoding shares the exact widen-to-F32 comparison path.
+func.def @scalar_narrow_reference_comparisons(%e4_lhs: f8E4M3, %e4_rhs: f8E4M3, %e5_lhs: f8E5M2, %e5_rhs: f8E5M2, %f16_lhs: f16, %f16_rhs: f16, %bf16_lhs: bf16, %bf16_rhs: bf16) -> (i1, i1, i1, i1) {
+  %e4_one = scalar.cmpf one, %e4_lhs, %e4_rhs : f8E4M3
+  %e5_ord = scalar.cmpf ord, %e5_lhs, %e5_rhs : f8E5M2
+  %f16_ueq = scalar.cmpf ueq, %f16_lhs, %f16_rhs : f16
+  %bf16_uno = scalar.cmpf uno, %bf16_lhs, %bf16_rhs : bf16
+  func.return %e4_one, %e5_ord, %f16_ueq, %bf16_uno : i1, i1, i1, i1
+}
+
+// ----
+CHECK: %e4_one = scalar.cmpf one, *, * : f32
+CHECK: %e5_ord = scalar.cmpf ord, *, * : f32
+CHECK: %f16_ueq = scalar.cmpf ueq, *, * : f32
+CHECK: %bf16_uno = scalar.cmpf uno, *, * : f32
+
+// ====
+
+// RUN: pass target=wasm:simd128 target-legalize{mode=final}
 
 // Narrow comparisons widen exactly to F32 while retaining the canonical
 // four-lane Wasm predicate carrier. Full-width arguments keep the authored
@@ -193,83 +391,91 @@ func.def @vector_f16_reference_extrema(%value_packet: vector<8xf16>, %lhs_packet
   %value = vector.slice %value_packet[0] : vector<8xf16> -> vector<4xf16>
   %lhs = vector.slice %lhs_packet[0] : vector<8xf16> -> vector<4xf16>
   %rhs = vector.slice %rhs_packet[0] : vector<8xf16> -> vector<4xf16>
-  %88 = vector.bitcast %lhs : vector<4xf16> to vector<4xi16>
-  %89 = vector.bitcast %rhs : vector<4xf16> to vector<4xi16>
-  %90 = vector.ori %88, %89 : vector<4xi16>
-  %91 = vector.bitcast %90 : vector<4xi16> to vector<4xf16>
-  %107 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %94 = vector.bitcast %lhs : vector<4xf16> to vector<4xi16>
+  %95 = vector.bitcast %rhs : vector<4xf16> to vector<4xi16>
+  %96 = vector.ori %94, %95 : vector<4xi16>
+  %97 = vector.bitcast %96 : vector<4xi16> to vector<4xf16>
+  %115 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %116 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
+  %117 = vector.cmpf olt, %115, %116 : vector<4xf32> -> vector<4xi1>
+  %112 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
+  %113 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %114 = vector.cmpf olt, %112, %113 : vector<4xf32> -> vector<4xi1>
+  %100 = vector.select %114, %rhs, %97 : vector<4xf16>
+  %101 = vector.select %117, %lhs, %100 : vector<4xf16>
+  %110 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %111 = vector.cmpf une, %110, %110 : vector<4xf32> -> vector<4xi1>
   %108 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %109 = vector.cmpf olt, %107, %108 : vector<4xf32> -> vector<4xi1>
-  %104 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %105 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %106 = vector.cmpf olt, %104, %105 : vector<4xf32> -> vector<4xi1>
-  %94 = vector.select %106, %rhs, %91 : vector<4xf16>
-  %95 = vector.select %109, %lhs, %94 : vector<4xf16>
-  %102 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %103 = vector.cmpf une, %102, %102 : vector<4xf32> -> vector<4xi1>
-  %100 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %101 = vector.cmpf une, %100, %100 : vector<4xf32> -> vector<4xi1>
-  %98 = vector.select %101, %lhs, %95 : vector<4xf16>
-  %minnum = vector.select %103, %rhs, %98 : vector<4xf16>
-  %66 = vector.bitcast %lhs : vector<4xf16> to vector<4xi16>
-  %67 = vector.bitcast %rhs : vector<4xf16> to vector<4xi16>
-  %68 = vector.ori %66, %67 : vector<4xi16>
-  %69 = vector.bitcast %68 : vector<4xi16> to vector<4xf16>
-  %85 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %86 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %87 = vector.cmpf olt, %85, %86 : vector<4xf32> -> vector<4xi1>
-  %82 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %83 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %84 = vector.cmpf olt, %82, %83 : vector<4xf32> -> vector<4xi1>
-  %72 = vector.select %84, %rhs, %69 : vector<4xf16>
-  %73 = vector.select %87, %lhs, %72 : vector<4xf16>
-  %80 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %81 = vector.cmpf une, %80, %80 : vector<4xf32> -> vector<4xi1>
-  %78 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %79 = vector.cmpf une, %78, %78 : vector<4xf32> -> vector<4xi1>
-  %76 = vector.select %79, %lhs, %73 : vector<4xf16>
-  %77 = vector.select %81, %rhs, %76 : vector<4xf16>
-  %63 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %64 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %65 = vector.cmpf uno, %63, %64 : vector<4xf32> -> vector<4xi1>
-  %61 = vector.constant nan : vector<4xf16>
-  %minimum = vector.select %65, %61, %77 : vector<4xf16>
+  %109 = vector.cmpf une, %108, %108 : vector<4xf32> -> vector<4xi1>
+  %104 = vector.constant nan : vector<4xf16>
+  %105 = vector.select %109, %104, %rhs : vector<4xf16>
+  %106 = vector.select %109, %lhs, %101 : vector<4xf16>
+  %minnum = vector.select %111, %105, %106 : vector<4xf16>
+  %70 = vector.bitcast %lhs : vector<4xf16> to vector<4xi16>
+  %71 = vector.bitcast %rhs : vector<4xf16> to vector<4xi16>
+  %72 = vector.ori %70, %71 : vector<4xi16>
+  %73 = vector.bitcast %72 : vector<4xi16> to vector<4xf16>
+  %91 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %92 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
+  %93 = vector.cmpf olt, %91, %92 : vector<4xf32> -> vector<4xi1>
+  %88 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
+  %89 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %90 = vector.cmpf olt, %88, %89 : vector<4xf32> -> vector<4xi1>
+  %76 = vector.select %90, %rhs, %73 : vector<4xf16>
+  %77 = vector.select %93, %lhs, %76 : vector<4xf16>
+  %86 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %87 = vector.cmpf une, %86, %86 : vector<4xf32> -> vector<4xi1>
+  %84 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
+  %85 = vector.cmpf une, %84, %84 : vector<4xf32> -> vector<4xi1>
+  %80 = vector.constant nan : vector<4xf16>
+  %81 = vector.select %85, %80, %rhs : vector<4xf16>
+  %82 = vector.select %85, %lhs, %77 : vector<4xf16>
+  %83 = vector.select %87, %81, %82 : vector<4xf16>
+  %67 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %68 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
+  %69 = vector.cmpf uno, %67, %68 : vector<4xf32> -> vector<4xi1>
+  %65 = vector.constant nan : vector<4xf16>
+  %minimum = vector.select %69, %65, %83 : vector<4xf16>
   %15 = vector.bitcast %value : vector<4xf16> to vector<4xi16>
   %16 = vector.bitcast %lhs : vector<4xf16> to vector<4xi16>
   %17 = vector.andi %15, %16 : vector<4xi16>
   %18 = vector.bitcast %17 : vector<4xi16> to vector<4xf16>
-  %56 = vector.extf %value : vector<4xf16> to vector<4xf32>
+  %60 = vector.extf %value : vector<4xf16> to vector<4xf32>
+  %61 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
+  %62 = vector.cmpf ogt, %60, %61 : vector<4xf32> -> vector<4xi1>
   %57 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %58 = vector.cmpf ogt, %56, %57 : vector<4xf32> -> vector<4xi1>
+  %58 = vector.extf %value : vector<4xf16> to vector<4xf32>
+  %59 = vector.cmpf ogt, %57, %58 : vector<4xf32> -> vector<4xi1>
+  %21 = vector.select %59, %lhs, %18 : vector<4xf16>
+  %22 = vector.select %62, %value, %21 : vector<4xf16>
+  %55 = vector.extf %value : vector<4xf16> to vector<4xf32>
+  %56 = vector.cmpf une, %55, %55 : vector<4xf32> -> vector<4xi1>
   %53 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %54 = vector.extf %value : vector<4xf16> to vector<4xf32>
-  %55 = vector.cmpf ogt, %53, %54 : vector<4xf32> -> vector<4xi1>
-  %21 = vector.select %55, %lhs, %18 : vector<4xf16>
-  %22 = vector.select %58, %value, %21 : vector<4xf16>
-  %51 = vector.extf %value : vector<4xf16> to vector<4xf32>
-  %52 = vector.cmpf une, %51, %51 : vector<4xf32> -> vector<4xi1>
-  %49 = vector.extf %lhs : vector<4xf16> to vector<4xf32>
-  %50 = vector.cmpf une, %49, %49 : vector<4xf32> -> vector<4xi1>
-  %25 = vector.select %50, %value, %22 : vector<4xf16>
-  %26 = vector.select %52, %lhs, %25 : vector<4xf16>
-  %27 = vector.bitcast %26 : vector<4xf16> to vector<4xi16>
-  %28 = vector.bitcast %rhs : vector<4xf16> to vector<4xi16>
-  %29 = vector.ori %27, %28 : vector<4xi16>
-  %30 = vector.bitcast %29 : vector<4xi16> to vector<4xf16>
-  %46 = vector.extf %26 : vector<4xf16> to vector<4xf32>
+  %54 = vector.cmpf une, %53, %53 : vector<4xf32> -> vector<4xi1>
+  %25 = vector.constant nan : vector<4xf16>
+  %26 = vector.select %54, %25, %lhs : vector<4xf16>
+  %27 = vector.select %54, %value, %22 : vector<4xf16>
+  %28 = vector.select %56, %26, %27 : vector<4xf16>
+  %29 = vector.bitcast %28 : vector<4xf16> to vector<4xi16>
+  %30 = vector.bitcast %rhs : vector<4xf16> to vector<4xi16>
+  %31 = vector.ori %29, %30 : vector<4xi16>
+  %32 = vector.bitcast %31 : vector<4xi16> to vector<4xf16>
+  %50 = vector.extf %28 : vector<4xf16> to vector<4xf32>
+  %51 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
+  %52 = vector.cmpf olt, %50, %51 : vector<4xf32> -> vector<4xi1>
   %47 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %48 = vector.cmpf olt, %46, %47 : vector<4xf32> -> vector<4xi1>
+  %48 = vector.extf %28 : vector<4xf16> to vector<4xf32>
+  %49 = vector.cmpf olt, %47, %48 : vector<4xf32> -> vector<4xi1>
+  %35 = vector.select %49, %rhs, %32 : vector<4xf16>
+  %36 = vector.select %52, %28, %35 : vector<4xf16>
+  %45 = vector.extf %28 : vector<4xf16> to vector<4xf32>
+  %46 = vector.cmpf une, %45, %45 : vector<4xf32> -> vector<4xi1>
   %43 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %44 = vector.extf %26 : vector<4xf16> to vector<4xf32>
-  %45 = vector.cmpf olt, %43, %44 : vector<4xf32> -> vector<4xi1>
-  %33 = vector.select %45, %rhs, %30 : vector<4xf16>
-  %34 = vector.select %48, %26, %33 : vector<4xf16>
-  %41 = vector.extf %26 : vector<4xf16> to vector<4xf32>
-  %42 = vector.cmpf une, %41, %41 : vector<4xf32> -> vector<4xi1>
-  %39 = vector.extf %rhs : vector<4xf16> to vector<4xf32>
-  %40 = vector.cmpf une, %39, %39 : vector<4xf32> -> vector<4xi1>
-  %37 = vector.select %40, %26, %34 : vector<4xf16>
-  %number = vector.select %42, %rhs, %37 : vector<4xf16>
+  %44 = vector.cmpf une, %43, %43 : vector<4xf32> -> vector<4xi1>
+  %39 = vector.constant nan : vector<4xf16>
+  %40 = vector.select %44, %39, %rhs : vector<4xf16>
+  %41 = vector.select %44, %28, %36 : vector<4xf16>
+  %number = vector.select %46, %40, %41 : vector<4xf16>
   %minnum_packet = vector.concat<0> %minnum, %minnum : vector<4xf16>, vector<4xf16> -> vector<8xf16>
   %minimum_packet = vector.concat<0> %minimum, %minimum : vector<4xf16>, vector<4xf16> -> vector<8xf16>
   %number_packet = vector.concat<0> %number, %number : vector<4xf16>, vector<4xf16> -> vector<8xf16>
@@ -297,27 +503,29 @@ func.def @vector_f16_tail_ordering(%lhs_packet: vector<8xf16>, %rhs_packet: vect
 func.def @vector_f16_tail_ordering(%lhs_packet: vector<8xf16>, %rhs_packet: vector<8xf16>) -> (vector<4xi1>, vector<8xf16>) {
   %lhs = vector.slice %lhs_packet[4] : vector<8xf16> -> vector<3xf16>
   %rhs = vector.slice %rhs_packet[4] : vector<8xf16> -> vector<3xf16>
-  %35 = vector.extf %lhs : vector<3xf16> to vector<3xf32>
-  %36 = vector.extf %rhs : vector<3xf16> to vector<3xf32>
-  %unordered = vector.cmpf uno, %35, %36 : vector<3xf32> -> vector<3xi1>
+  %37 = vector.extf %lhs : vector<3xf16> to vector<3xf32>
+  %38 = vector.extf %rhs : vector<3xf16> to vector<3xf32>
+  %unordered = vector.cmpf uno, %37, %38 : vector<3xf32> -> vector<3xi1>
   %13 = vector.bitcast %lhs : vector<3xf16> to vector<3xi16>
   %14 = vector.bitcast %rhs : vector<3xf16> to vector<3xi16>
   %15 = vector.ori %13, %14 : vector<3xi16>
   %16 = vector.bitcast %15 : vector<3xi16> to vector<3xf16>
+  %34 = vector.extf %lhs : vector<3xf16> to vector<3xf32>
+  %35 = vector.extf %rhs : vector<3xf16> to vector<3xf32>
+  %36 = vector.cmpf olt, %34, %35 : vector<3xf32> -> vector<3xi1>
+  %31 = vector.extf %rhs : vector<3xf16> to vector<3xf32>
   %32 = vector.extf %lhs : vector<3xf16> to vector<3xf32>
-  %33 = vector.extf %rhs : vector<3xf16> to vector<3xf32>
-  %34 = vector.cmpf olt, %32, %33 : vector<3xf32> -> vector<3xi1>
-  %29 = vector.extf %rhs : vector<3xf16> to vector<3xf32>
-  %30 = vector.extf %lhs : vector<3xf16> to vector<3xf32>
-  %31 = vector.cmpf olt, %29, %30 : vector<3xf32> -> vector<3xi1>
-  %19 = vector.select %31, %rhs, %16 : vector<3xf16>
-  %20 = vector.select %34, %lhs, %19 : vector<3xf16>
-  %27 = vector.extf %lhs : vector<3xf16> to vector<3xf32>
+  %33 = vector.cmpf olt, %31, %32 : vector<3xf32> -> vector<3xi1>
+  %19 = vector.select %33, %rhs, %16 : vector<3xf16>
+  %20 = vector.select %36, %lhs, %19 : vector<3xf16>
+  %29 = vector.extf %lhs : vector<3xf16> to vector<3xf32>
+  %30 = vector.cmpf une, %29, %29 : vector<3xf32> -> vector<3xi1>
+  %27 = vector.extf %rhs : vector<3xf16> to vector<3xf32>
   %28 = vector.cmpf une, %27, %27 : vector<3xf32> -> vector<3xi1>
-  %25 = vector.extf %rhs : vector<3xf16> to vector<3xf32>
-  %26 = vector.cmpf une, %25, %25 : vector<3xf32> -> vector<3xi1>
-  %23 = vector.select %26, %lhs, %20 : vector<3xf16>
-  %minnum = vector.select %28, %rhs, %23 : vector<3xf16>
+  %23 = vector.constant nan : vector<3xf16>
+  %24 = vector.select %28, %23, %rhs : vector<3xf16>
+  %25 = vector.select %28, %lhs, %20 : vector<3xf16>
+  %minnum = vector.select %30, %24, %25 : vector<3xf16>
   %false = vector.constant 0 : vector<1xi1>
   %unordered_packet = vector.concat<0> %unordered, %false : vector<3xi1>, vector<1xi1> -> vector<4xi1>
   %preserved = vector.slice %lhs_packet[7] : vector<8xf16> -> vector<1xf16>
@@ -350,3 +558,89 @@ low.func.def target<wasm.core.simd128> abi(wasm_function) @vector_f32_tail_compa
   %result = i8x16.shuffle %selected, %tail, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19
   return %result
 }
+
+// ====
+// RUN: pass target=wasm:simd128 target-legalize{mode=final}
+
+// Relaxed extrema preserve narrow vector carriers through signed-order keys.
+// Native-width values use one ordered comparison per selected extremum.
+func.def @relaxed_extrema_carriers(%bf16_lhs: bf16, %bf16_rhs: bf16, %bf16_value: vector<8xbf16>, %bf16_lower: vector<8xbf16>, %bf16_upper: vector<8xbf16>, %f64_value: f64, %f64_lower: f64, %f64_upper: f64, %f64_lhs: vector<2xf64>, %f64_rhs: vector<2xf64>) -> (bf16, vector<8xbf16>, f64, vector<2xf64>) {
+  %bf16_maximum = scalar.maxnumf<nnan|nsz> %bf16_lhs, %bf16_rhs : bf16
+  %bf16_clamped = vector.clampf<number, nnan|nsz> %bf16_value, %bf16_lower, %bf16_upper : vector<8xbf16>
+  %f64_clamped = scalar.clampf<number, nnan|nsz> %f64_value, %f64_lower, %f64_upper : f64
+  %f64_maximum = vector.maxnumf<nnan|nsz> %f64_lhs, %f64_rhs : vector<2xf64>
+  func.return %bf16_maximum, %bf16_clamped, %f64_clamped, %f64_maximum : bf16, vector<8xbf16>, f64, vector<2xf64>
+}
+
+// ----
+func.def @relaxed_extrema_carriers(%bf16_lhs: bf16, %bf16_rhs: bf16, %bf16_value: vector<8xbf16>, %bf16_lower: vector<8xbf16>, %bf16_upper: vector<8xbf16>, %f64_value: f64, %f64_lower: f64, %f64_upper: f64, %f64_lhs: vector<2xf64>, %f64_rhs: vector<2xf64>) -> (bf16, vector<8xbf16>, f64, vector<2xf64>) {
+  %48 = scalar.constant 32767 : i32
+  %49 = scalar.constant 31 : i32
+  %50 = scalar.bitcast %bf16_lhs : bf16 to i16
+  %66 = scalar.extui %50 : i16 to i32
+  %67 = scalar.constant 16 : i32
+  %68 = scalar.shli %66, %67 : i32
+  %69 = scalar.shrsi %68, %67 : i32
+  %52 = scalar.shrsi %69, %49 : i32
+  %53 = scalar.andi %52, %48 : i32
+  %54 = scalar.xori %69, %53 : i32
+  %55 = scalar.bitcast %bf16_rhs : bf16 to i16
+  %62 = scalar.extui %55 : i16 to i32
+  %63 = scalar.constant 16 : i32
+  %64 = scalar.shli %62, %63 : i32
+  %65 = scalar.shrsi %64, %63 : i32
+  %57 = scalar.shrsi %65, %49 : i32
+  %58 = scalar.andi %57, %48 : i32
+  %59 = scalar.xori %65, %58 : i32
+  %60 = scalar.cmpi sgt, %54, %59 : i32
+  %bf16_maximum = scf.select %60, %bf16_lhs, %bf16_rhs : bf16
+  %24 = vector.constant 32767 : vector<8xi16>
+  %25 = vector.constant 15 : vector<8xi16>
+  %26 = vector.bitcast %bf16_value : vector<8xbf16> to vector<8xi16>
+  %27 = vector.shrsi %26, %25 : vector<8xi16>
+  %28 = vector.andi %27, %24 : vector<8xi16>
+  %29 = vector.xori %26, %28 : vector<8xi16>
+  %30 = vector.bitcast %bf16_lower : vector<8xbf16> to vector<8xi16>
+  %31 = vector.shrsi %30, %25 : vector<8xi16>
+  %32 = vector.andi %31, %24 : vector<8xi16>
+  %33 = vector.xori %30, %32 : vector<8xi16>
+  %34 = vector.cmpi sgt, %29, %33 : vector<8xi16> -> vector<8xi1>
+  %35 = vector.select %34, %bf16_value, %bf16_lower : vector<8xbf16>
+  %36 = vector.constant 32767 : vector<8xi16>
+  %37 = vector.constant 15 : vector<8xi16>
+  %38 = vector.bitcast %35 : vector<8xbf16> to vector<8xi16>
+  %39 = vector.shrsi %38, %37 : vector<8xi16>
+  %40 = vector.andi %39, %36 : vector<8xi16>
+  %41 = vector.xori %38, %40 : vector<8xi16>
+  %42 = vector.bitcast %bf16_upper : vector<8xbf16> to vector<8xi16>
+  %43 = vector.shrsi %42, %37 : vector<8xi16>
+  %44 = vector.andi %43, %36 : vector<8xi16>
+  %45 = vector.xori %42, %44 : vector<8xi16>
+  %46 = vector.cmpi slt, %41, %45 : vector<8xi16> -> vector<8xi1>
+  %bf16_clamped = vector.select %46, %35, %bf16_upper : vector<8xbf16>
+  %20 = scalar.cmpf<nnan|nsz> ogt, %f64_value, %f64_lower : f64
+  %21 = scf.select %20, %f64_value, %f64_lower : f64
+  %22 = scalar.cmpf<nnan|nsz> olt, %21, %f64_upper : f64
+  %f64_clamped = scf.select %22, %21, %f64_upper : f64
+  %18 = vector.cmpf<nnan|nsz> ogt, %f64_lhs, %f64_rhs : vector<2xf64> -> vector<2xi1>
+  %f64_maximum = vector.select %18, %f64_lhs, %f64_rhs : vector<2xf64>
+  func.return %bf16_maximum, %bf16_clamped, %f64_clamped, %f64_maximum : bf16, vector<8xbf16>, f64, vector<2xf64>
+}
+
+// ====
+// RUN: with-checks compile-report target=wasm:simd128 target-legalize{mode=eager}
+
+// A non-native reduction stays in SIMD packets. Relaxed extrema compare packed
+// signed-order keys and cross to scalar form only for the final pair.
+func.def @bfloat_extrema_reduce_packet(%input: buffer) -> (bf16) {
+  %origin = index.constant 0 : offset
+  %view = buffer.view %input[%origin] : buffer -> view<33xbf16>
+  %values = vector.load %view[0] : view<33xbf16> -> vector<33xbf16>
+  %initial = scalar.constant -20.0 : bf16
+  %result = vector.reduce<maxnumf, reassoc|nnan|nsz> %values, %initial : vector<33xbf16>, bf16
+  func.return %result : bf16
+}
+
+// ----
+CHECK: COMPILE-REPORT: target_legalization * scalarized=0 * rows=1 *
+CHECK: COMPILE-REPORT: target_legalization[0] function=bfloat_extrema_reduce_packet source_op=vector.reduce * action=rewritten * legalizer=wasm strategy=target * scalarized=false *

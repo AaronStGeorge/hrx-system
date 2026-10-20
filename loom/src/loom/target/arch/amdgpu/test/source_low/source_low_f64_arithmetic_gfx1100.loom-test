@@ -95,8 +95,54 @@ low.func.def target<amdgpu.rdna3.core> abi(hal_kernel) @f64_rounding_and_integer
 
 // ====
 
-func.def @unsupported_f64_clamp(%value: f64, %lower: f64, %upper: f64) -> (f64) {
-  // ERROR@+1: TARGET/002 {field_name="value", actual_type="f64"}
+func.def @f64_number_clamp(%value: f64, %lower: f64, %upper: f64) -> (f64) {
   %result = scalar.clampf<number> %value, %lower, %upper : f64
   func.return %result : f64
+}
+
+// ----
+low.func.def target<amdgpu.rdna3.core> abi(hal_kernel) @f64_number_clamp(%value: reg<amdgpu.vgpr x2>, %lower: reg<amdgpu.vgpr x2>, %upper: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm {
+  %37 = slice %value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %38 = slice %lower[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %39 = v_and_b32 %37, %38
+  %40 = slice %value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %41 = slice %lower[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %42 = v_and_b32 %40, %41
+  %44 = v_cmp_gt_f64 %value, %lower
+  %45 = v_cmp_gt_f64 %lower, %value
+  %48 = v_cndmask_b32 %39, %38, %45
+  %51 = v_cndmask_b32 %42, %41, %45
+  %55 = v_cndmask_b32 %48, %37, %44
+  %58 = v_cndmask_b32 %51, %40, %44
+  %60 = v_cmp_neq_f64 %value, %value
+  %61 = v_cmp_neq_f64 %lower, %lower
+  %62 = v_mov_b32 0
+  %63 = v_mov_b32 2146959360
+  %67 = v_cndmask_b32 %38, %62, %61
+  %70 = v_cndmask_b32 %41, %63, %61
+  %74 = v_cndmask_b32 %55, %37, %61
+  %77 = v_cndmask_b32 %58, %40, %61
+  %81 = v_cndmask_b32 %74, %67, %60
+  %84 = v_cndmask_b32 %77, %70, %60
+  %85 = concat(%81, %84) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %87 = slice %upper[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %88 = v_or_b32 %81, %87
+  %90 = slice %upper[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %91 = v_or_b32 %84, %90
+  %93 = v_cmp_lt_f64 %85, %upper
+  %94 = v_cmp_lt_f64 %upper, %85
+  %97 = v_cndmask_b32 %88, %87, %94
+  %100 = v_cndmask_b32 %91, %90, %94
+  %104 = v_cndmask_b32 %97, %81, %93
+  %107 = v_cndmask_b32 %100, %84, %93
+  %109 = v_cmp_neq_f64 %85, %85
+  %110 = v_cmp_neq_f64 %upper, %upper
+  %113 = v_cndmask_b32 %87, %62, %110
+  %116 = v_cndmask_b32 %90, %63, %110
+  %120 = v_cndmask_b32 %104, %81, %110
+  %123 = v_cndmask_b32 %107, %84, %110
+  %127 = v_cndmask_b32 %120, %113, %109
+  %130 = v_cndmask_b32 %123, %116, %109
+  %result = concat(%127, %130) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
 }

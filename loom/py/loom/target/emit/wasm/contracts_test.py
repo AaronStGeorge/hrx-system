@@ -16,10 +16,12 @@ from loom.target.contracts import (
     DescriptorEmitForm,
     DescriptorRule,
     GuardKind,
+    RecipeRule,
     UnsupportedRule,
     ValueAliasRule,
     ValueProject,
     ValueRef,
+    Vector,
 )
 from loom.target.emit.wasm.contracts import WASM_CORE_SIMD128_CONTRACT_FRAGMENT
 
@@ -513,23 +515,7 @@ def test_native_scalar_float_contracts_cover_both_widths() -> None:
         for type_name in ("f32", "f64")
     }
 
-    direct_predicates = {
-        "oeq": "eq",
-        "ogt": "gt",
-        "oge": "ge",
-        "olt": "lt",
-        "ole": "le",
-        "une": "ne",
-    }
-    no_nan_predicates = {
-        "one": "ne",
-        "ueq": "eq",
-        "ugt": "gt",
-        "uge": "ge",
-        "ult": "lt",
-        "ule": "le",
-    }
-    actual_comparisons = set()
+    actual_comparisons = {}
     for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
         if (
             not isinstance(rule, DescriptorRule)
@@ -548,18 +534,54 @@ def test_native_scalar_float_contracts_cover_both_widths() -> None:
             guard.kind is GuardKind.INSTANCE_FLAGS_HAS_ALL and guard.field == "fastmath"
             for guard in rule.guards
         )
-        actual_comparisons.add(
-            (operand_type.elements[0], predicate, no_nan, rule.descriptor.key)
+        key = (operand_type.elements[0], predicate, no_nan)
+        assert key not in actual_comparisons
+        actual_comparisons[key] = tuple(emit.descriptor.key for emit in rule.emit)
+        mechanism = "native" if len(rule.emit) == 1 else "composed"
+        assert rule.report_key == (
+            f"wasm.scalar_float_compare.{mechanism}" + (".nnan" if no_nan else "")
         )
-    assert actual_comparisons == {
-        (type_name, predicate, no_nan, f"wasm.{type_name}.{operation}")
-        for type_name in ("f32", "f64")
-        for no_nan, predicates in (
-            (False, direct_predicates),
-            (True, no_nan_predicates),
-        )
-        for predicate, operation in predicates.items()
-    }
+        assert rule.priority == (1 if no_nan else 0)
+
+    expected_comparisons = {}
+    for type_name in ("f32", "f64"):
+        native_prefix = f"wasm.{type_name}."
+
+        strict = {
+            "oeq": (native_prefix + "eq",),
+            "ogt": (native_prefix + "gt",),
+            "oge": (native_prefix + "ge",),
+            "olt": (native_prefix + "lt",),
+            "ole": (native_prefix + "le",),
+            "one": (native_prefix + "lt", native_prefix + "gt", "wasm.i32.or"),
+            "ord": (native_prefix + "eq", native_prefix + "eq", "wasm.i32.and"),
+            "ueq": (
+                native_prefix + "lt",
+                native_prefix + "gt",
+                "wasm.i32.or",
+                "wasm.i32.eqz",
+            ),
+            "ugt": (native_prefix + "le", "wasm.i32.eqz"),
+            "uge": (native_prefix + "lt", "wasm.i32.eqz"),
+            "ult": (native_prefix + "ge", "wasm.i32.eqz"),
+            "ule": (native_prefix + "gt", "wasm.i32.eqz"),
+            "une": (native_prefix + "ne",),
+            "uno": (native_prefix + "ne", native_prefix + "ne", "wasm.i32.or"),
+        }
+        for predicate, descriptors in strict.items():
+            expected_comparisons[(type_name, predicate, False)] = descriptors
+        for predicate, operation in {
+            "one": "ne",
+            "ueq": "eq",
+            "ugt": "gt",
+            "uge": "ge",
+            "ult": "lt",
+            "ule": "le",
+        }.items():
+            expected_comparisons[(type_name, predicate, True)] = (
+                native_prefix + operation,
+            )
+    assert actual_comparisons == expected_comparisons
 
 
 def test_native_vector_float_contracts_cover_every_carrier_lane() -> None:
@@ -804,12 +826,58 @@ def test_structural_planner_exclusively_owns_bitcast_and_numeric_select() -> Non
         assert result_type.kind != "vector" or result_type.elements == ("i1",)
 
 
-def test_vector_cast_family_explicitly_rejects_every_unmatched_native_case() -> None:
+def test_reference_fallback_families_explicitly_reject_unmatched_native_cases() -> None:
     assert {
         rule.source_op
         for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
         if isinstance(rule, UnsupportedRule)
-    } == set(vector.VECTOR_CAST_OPS)
+    } == set(vector.VECTOR_CAST_OPS) | {
+        arithmetic.scalar_minnumf,
+        arithmetic.scalar_maxnumf,
+        arithmetic.scalar_clampf,
+    }
+
+
+def test_float_extrema_recipes_cover_every_source_vector_carrier() -> None:
+    actual = {
+        (rule.source_op, guard.type_pattern)
+        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
+        if isinstance(rule, RecipeRule)
+        and rule.source_op
+        in {
+            vector.vector_minimumf,
+            vector.vector_maximumf,
+            vector.vector_minnumf,
+            vector.vector_maxnumf,
+            vector.vector_clampf,
+        }
+        for guard in rule.guards
+        if guard.kind is GuardKind.VALUE_TYPE and guard.field == "result"
+    }
+    narrow_types = {
+        Vector(("f8E4M3", "f8E5M2"), minimum_lanes=1, maximum_lanes=16),
+        Vector(("f16", "bf16"), minimum_lanes=1, maximum_lanes=8),
+    }
+    all_types = narrow_types | {
+        Vector("f32", minimum_lanes=1, maximum_lanes=4),
+        Vector("f64", minimum_lanes=1, maximum_lanes=2),
+    }
+    assert actual == {
+        *(
+            (source_op, value_type)
+            for source_op in (vector.vector_minimumf, vector.vector_maximumf)
+            for value_type in narrow_types
+        ),
+        *(
+            (source_op, value_type)
+            for source_op in (
+                vector.vector_minnumf,
+                vector.vector_maxnumf,
+                vector.vector_clampf,
+            )
+            for value_type in all_types
+        ),
+    }
 
 
 def test_narrow_scalar_selection_uses_integer_payloads() -> None:

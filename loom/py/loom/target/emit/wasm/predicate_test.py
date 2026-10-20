@@ -11,8 +11,10 @@ from loom.dialect.vector import defs as vector
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.contracts import DescriptorRule, Guard, GuardKind, TypePattern
 from loom.target.emit.wasm.predicate import (
+    FLOAT_PREDICATE_RECIPES,
     FLOAT_PREDICATES,
     INTEGER_PREDICATES,
+    NATIVE_FLOAT_PREDICATE_OPERATIONS,
     NNAN_FLOAT_PREDICATES,
     PREDICATE_LANE_TYPE,
     PREDICATE_PAYLOAD_FAMILIES,
@@ -72,6 +74,34 @@ def _has_nnan_guard(rule: DescriptorRule) -> bool:
         guard.kind is GuardKind.INSTANCE_FLAGS_HAS_ALL and guard.field == "fastmath"
         for guard in rule.guards
     )
+
+
+def test_float_predicate_recipes_cover_the_complete_ieee_family():
+    assert tuple(FLOAT_PREDICATE_RECIPES) == (
+        "oeq",
+        "ogt",
+        "oge",
+        "olt",
+        "ole",
+        "one",
+        "ord",
+        "ueq",
+        "ugt",
+        "uge",
+        "ult",
+        "ule",
+        "une",
+        "uno",
+    )
+    assert FLOAT_PREDICATES == tuple(FLOAT_PREDICATE_RECIPES)
+    for recipe in FLOAT_PREDICATE_RECIPES.values():
+        assert len(recipe.terms) in (1, 2)
+        assert (recipe.combine is None) == (len(recipe.terms) == 1)
+        assert recipe.combine in (None, "and", "or")
+        for term in recipe.terms:
+            assert term.native_predicate in NATIVE_FLOAT_PREDICATE_OPERATIONS
+            assert term.lhs in ("lhs", "rhs")
+            assert term.rhs in ("lhs", "rhs")
 
 
 def test_conversion_shuffle_preserves_each_live_lane_across_every_width_pair():
@@ -191,7 +221,7 @@ def test_float_predicates_have_exact_ieee_compositions_and_nnan_fast_paths():
         "uge": ("lt", "v128.not"),
         "ult": ("ge", "v128.not"),
         "ule": ("gt", "v128.not"),
-        "uno": ("eq", "eq", "v128.and", "v128.not"),
+        "uno": ("ne", "ne", "v128.or"),
     }
     for element, native_width, shape in (
         ("f32", 32, "f32x4"),

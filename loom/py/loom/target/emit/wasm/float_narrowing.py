@@ -4,11 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Exact scalar float-narrowing Wasm contract rules."""
+"""Exact scalar and SIMD float-narrowing Wasm contract rules."""
 
 from collections.abc import Callable
 
 from loom.dialect.scalar import conversion as scalar_conversion
+from loom.dialect.vector import defs as vector
 from loom.target.contracts import (
     DescriptorResultType,
     DescriptorRule,
@@ -17,6 +18,7 @@ from loom.target.contracts import (
     Scalar,
     TypePattern,
     ValueRef,
+    Vector,
 )
 from loom.target.emit.float_narrowing import (
     BF16_FORMAT,
@@ -32,11 +34,14 @@ from loom.target.emit.float_narrowing import (
     IntegerNarrowingDescriptors,
     NarrowFloatFormat,
     NarrowFloatSubnormalRounding,
+    build_f32_bits_to_bf16_with_recipe,
     build_f32_to_bf16_emits,
+    build_float_bits_to_narrow_float_with_recipe,
     build_float_to_narrow_float_emits,
     build_integer_bits_to_narrow_float_emits,
     build_representable_f32_to_bf16_emits,
 )
+from loom.target.emit.wasm.packed_i32 import PackedI32Program
 from loom.target.low_descriptors import Descriptor
 
 _F8E4M3 = Scalar("f8E4M3")
@@ -45,6 +50,164 @@ _F16 = Scalar("f16")
 _BF16 = Scalar("bf16")
 _F32 = Scalar("f32")
 _F64 = Scalar("f64")
+_F32_PACKET = Vector("f32", minimum_lanes=1, maximum_lanes=4)
+
+
+class _PackedNarrowingRecipe(PackedI32Program):
+    """Builds exact narrowing payloads in four parallel i32 lanes."""
+
+    def __init__(self, descriptor_lookup: Callable[[str], Descriptor]) -> None:
+        super().__init__(descriptor_lookup)
+        self.descriptors = IntegerNarrowingDescriptors(
+            integer_bit_width=32,
+            integer_constant=descriptor_lookup("wasm.v128.const"),
+            integer_add=descriptor_lookup("wasm.i32x4.add"),
+            integer_subtract=descriptor_lookup("wasm.i32x4.sub"),
+            integer_shift_left=descriptor_lookup("wasm.i32x4.shl"),
+            integer_shift_right_logical=descriptor_lookup("wasm.i32x4.shr_u"),
+            integer_bitwise_and=descriptor_lookup("wasm.v128.and"),
+            integer_bitwise_or=descriptor_lookup("wasm.v128.or"),
+            integer_less_than_nonnegative=descriptor_lookup("wasm.i32x4.lt_u"),
+            integer_greater_than_equal_nonnegative=descriptor_lookup("wasm.i32x4.ge_u"),
+            integer_greater_than_nonnegative=descriptor_lookup("wasm.i32x4.gt_u"),
+            integer_select=descriptor_lookup("wasm.v128.bitselect"),
+        )
+
+    def finish(self) -> tuple[EmitDescriptorOp, ...]:
+        return tuple(self.emits)
+
+    def integer_constant(self, result_name: str, value: int) -> ValueRef:
+        return self.constant(result_name, value)
+
+    def float_constant(
+        self, result_name: str, bits: int, descriptor: Descriptor
+    ) -> ValueRef:
+        if descriptor.key != "wasm.v128.const":
+            raise ValueError("packed float constants require wasm.v128.const")
+        return self.constant(result_name, bits)
+
+    def _integer_operands(
+        self,
+        result_name: str,
+        descriptor: Descriptor,
+        lhs: ValueRef,
+        rhs: ValueRef,
+    ) -> dict[str, ValueRef]:
+        if descriptor.key not in (
+            self.descriptors.integer_shift_left.key,
+            self.descriptors.integer_shift_right_logical.key,
+        ):
+            return {"lhs": lhs, "rhs": rhs}
+        count_value = self.constant_value(rhs)
+        count = self.scalar_constant(f"{result_name}_count", count_value)
+        return {"value": lhs, "count": count}
+
+    def integer_binary(
+        self,
+        result_name: str,
+        descriptor: Descriptor,
+        lhs: ValueRef,
+        rhs: ValueRef,
+    ) -> ValueRef:
+        return self.operation(
+            result_name,
+            descriptor.key,
+            self._integer_operands(result_name, descriptor, lhs, rhs),
+        )
+
+    def integer_binary_to(
+        self,
+        result: ValueRef,
+        descriptor: Descriptor,
+        lhs: ValueRef,
+        rhs: ValueRef,
+    ) -> ValueRef:
+        return self.operation_to(
+            result,
+            descriptor.key,
+            self._integer_operands(result.field, descriptor, lhs, rhs),
+        )
+
+    def float_add(
+        self,
+        result_name: str,
+        descriptor: Descriptor,
+        lhs: ValueRef,
+        rhs: ValueRef,
+    ) -> ValueRef:
+        return self.binary(result_name, descriptor.key, lhs, rhs)
+
+    @staticmethod
+    def reinterpret_float_as_integer(
+        result_name: str, descriptor: Descriptor | None, value: ValueRef
+    ) -> ValueRef:
+        if descriptor is not None:
+            raise ValueError(
+                "packed float and integer lanes must alias one v128 carrier"
+            )
+        return value
+
+    @staticmethod
+    def reinterpret_integer_as_float(
+        result_name: str, descriptor: Descriptor | None, value: ValueRef
+    ) -> ValueRef:
+        if descriptor is not None:
+            raise ValueError(
+                "packed integer and float lanes must alias one v128 carrier"
+            )
+        return value
+
+    def integer_select(
+        self,
+        result_name: str,
+        true_value: ValueRef,
+        false_value: ValueRef,
+        condition: ValueRef,
+    ) -> ValueRef:
+        return self.select(
+            result_name,
+            true_value,
+            false_value,
+            condition,
+        )
+
+    def integer_select_to(
+        self,
+        result: ValueRef,
+        true_value: ValueRef,
+        false_value: ValueRef,
+        condition: ValueRef,
+    ) -> ValueRef:
+        return self.operation_to(
+            result,
+            "wasm.v128.bitselect",
+            {
+                "true_value": true_value,
+                "false_value": false_value,
+                "condition": condition,
+            },
+        )
+
+    def pack(
+        self,
+        payloads: ValueRef,
+        result: ValueRef,
+        element_bit_count: int,
+    ) -> None:
+        zero = self.constant("pack_zero", 0)
+        packed_i16 = self.operation_to(
+            result if element_bit_count == 16 else ValueRef.temporary("packed_i16"),
+            "wasm.i16x8.narrow_i32x4_u",
+            {"low": payloads, "high": zero},
+        )
+        if element_bit_count == 8:
+            self.operation_to(
+                result,
+                "wasm.i8x16.narrow_i16x8_u",
+                {"low": packed_i16, "high": zero},
+            )
+        elif element_bit_count != 16:
+            raise ValueError("packed float narrowing requires 8- or 16-bit results")
 
 
 def _integer_narrowing_descriptors(
@@ -243,11 +406,60 @@ def _integer_carrier_to_float8_rule(
     )
 
 
+def _f32_packet_to_narrow_float_rule(
+    descriptor_lookup: Callable[[str], Descriptor],
+    type_guard: Callable[[str, TypePattern], Guard],
+    result_element: str,
+    narrow_format: NarrowFloatFormat,
+) -> DescriptorRule:
+    recipe = _PackedNarrowingRecipe(descriptor_lookup)
+    payloads = ValueRef.temporary("narrow_payloads")
+    float_descriptors = FloatNarrowingDescriptors(
+        integer=recipe.descriptors,
+        float_constant=descriptor_lookup("wasm.v128.const"),
+        float_add=descriptor_lookup("wasm.f32x4.add"),
+        reinterpret_float_as_integer=None,
+        reinterpret_integer_as_float=None,
+    )
+    if result_element == "bf16":
+        build_f32_bits_to_bf16_with_recipe(
+            recipe,
+            ValueRef.operand("input"),
+            payloads,
+            exact_finite_values=False,
+            preserve_nan=True,
+        )
+    else:
+        build_float_bits_to_narrow_float_with_recipe(
+            recipe,
+            F32_FORMAT,
+            narrow_format,
+            ValueRef.operand("input"),
+            payloads,
+            subnormal_rounding=NarrowFloatSubnormalRounding.RNE_FLOAT_ADD,
+            preserve_nan=True,
+            float_descriptors=float_descriptors,
+        )
+    recipe.pack(payloads, ValueRef.result("result"), narrow_format.bit_width)
+    result_type = Vector(result_element, minimum_lanes=1, maximum_lanes=4)
+    return DescriptorRule(
+        source_op=vector.vector_fptrunc,
+        descriptor=recipe.emits[-1].descriptor,
+        guards=(
+            type_guard("input", _F32_PACKET),
+            type_guard("result", result_type),
+            Guard.value_static_element_count_eq("input", "result"),
+        ),
+        emit=recipe.finish(),
+        report_key=f"wasm.float_narrowing.exact_f32_to_{result_element.lower()}",
+    )
+
+
 def float_narrowing_rules(
     descriptor_lookup: Callable[[str], Descriptor],
     type_guard: Callable[[str, TypePattern], Guard],
 ) -> tuple[DescriptorRule, ...]:
-    """Returns the complete exact scalar float-narrowing matrix for Wasm."""
+    """Returns the complete exact scalar and SIMD float-narrowing matrix."""
 
     f32_descriptors = _f32_narrowing_descriptors(descriptor_lookup)
     i32_descriptors = f32_descriptors.integer
@@ -314,6 +526,20 @@ def float_narrowing_rules(
         for result_type, narrow_format, result_name in (
             (_F8E4M3, F8E4M3_FORMAT, "f8e4m3"),
             (_F8E5M2, F8E5M2_FORMAT, "f8e5m2"),
+        )
+    )
+    rules.extend(
+        _f32_packet_to_narrow_float_rule(
+            descriptor_lookup,
+            type_guard,
+            result_element,
+            narrow_format,
+        )
+        for result_element, narrow_format in (
+            ("f8E4M3", F8E4M3_FORMAT),
+            ("f8E5M2", F8E5M2_FORMAT),
+            ("f16", F16_FORMAT),
+            ("bf16", BF16_FORMAT),
         )
     )
     return tuple(rules)

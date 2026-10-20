@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from loom.dialect.scf import defs as scf
 from loom.dialect.vector import defs as vector
@@ -32,6 +33,25 @@ from loom.target.low_descriptors import Descriptor
 DescriptorLookup = Callable[[str], Descriptor]
 ValueTypeGuard = Callable[[str, TypePattern], Guard]
 
+
+@dataclass(frozen=True)
+class FloatPredicateTerm:
+    """One native IEEE comparison in a source predicate recipe."""
+
+    native_predicate: str
+    lhs: str
+    rhs: str
+
+
+@dataclass(frozen=True)
+class FloatPredicateRecipe:
+    """Exact Boolean composition of native IEEE comparisons."""
+
+    terms: tuple[FloatPredicateTerm, ...]
+    combine: str | None = None
+    negate: bool = False
+
+
 PREDICATE_REPRESENTATIONS = (8, 16, 32, 64)
 PREDICATE_TYPE = Vector("i1", minimum_static_elements=1, maximum_static_elements=16)
 PREDICATE_LANE_TYPE = Vector("i1", minimum_lanes=1, maximum_lanes=16)
@@ -53,22 +73,64 @@ INTEGER_PREDICATES = (
     "ugt",
     "uge",
 )
-FLOAT_PREDICATES = (
-    "oeq",
-    "ogt",
-    "oge",
-    "olt",
-    "ole",
-    "one",
-    "ord",
-    "ueq",
-    "ugt",
-    "uge",
-    "ult",
-    "ule",
-    "une",
-    "uno",
-)
+NATIVE_FLOAT_PREDICATE_OPERATIONS = {
+    "oeq": "eq",
+    "ogt": "gt",
+    "oge": "ge",
+    "olt": "lt",
+    "ole": "le",
+    "une": "ne",
+}
+FLOAT_PREDICATE_RECIPES = {
+    "oeq": FloatPredicateRecipe((FloatPredicateTerm("oeq", "lhs", "rhs"),)),
+    "ogt": FloatPredicateRecipe((FloatPredicateTerm("ogt", "lhs", "rhs"),)),
+    "oge": FloatPredicateRecipe((FloatPredicateTerm("oge", "lhs", "rhs"),)),
+    "olt": FloatPredicateRecipe((FloatPredicateTerm("olt", "lhs", "rhs"),)),
+    "ole": FloatPredicateRecipe((FloatPredicateTerm("ole", "lhs", "rhs"),)),
+    "one": FloatPredicateRecipe(
+        (
+            FloatPredicateTerm("olt", "lhs", "rhs"),
+            FloatPredicateTerm("ogt", "lhs", "rhs"),
+        ),
+        combine="or",
+    ),
+    "ord": FloatPredicateRecipe(
+        (
+            FloatPredicateTerm("oeq", "lhs", "lhs"),
+            FloatPredicateTerm("oeq", "rhs", "rhs"),
+        ),
+        combine="and",
+    ),
+    "ueq": FloatPredicateRecipe(
+        (
+            FloatPredicateTerm("olt", "lhs", "rhs"),
+            FloatPredicateTerm("ogt", "lhs", "rhs"),
+        ),
+        combine="or",
+        negate=True,
+    ),
+    "ugt": FloatPredicateRecipe(
+        (FloatPredicateTerm("ole", "lhs", "rhs"),), negate=True
+    ),
+    "uge": FloatPredicateRecipe(
+        (FloatPredicateTerm("olt", "lhs", "rhs"),), negate=True
+    ),
+    "ult": FloatPredicateRecipe(
+        (FloatPredicateTerm("oge", "lhs", "rhs"),), negate=True
+    ),
+    "ule": FloatPredicateRecipe(
+        (FloatPredicateTerm("ogt", "lhs", "rhs"),), negate=True
+    ),
+    "une": FloatPredicateRecipe((FloatPredicateTerm("une", "lhs", "rhs"),)),
+    "uno": FloatPredicateRecipe(
+        (
+            FloatPredicateTerm("une", "lhs", "lhs"),
+            FloatPredicateTerm("une", "rhs", "rhs"),
+        ),
+        combine="or",
+    ),
+}
+FLOAT_PREDICATES = tuple(FLOAT_PREDICATE_RECIPES)
 NNAN_FLOAT_PREDICATES = {
     "one": "une",
     "ueq": "oeq",
@@ -624,8 +686,10 @@ def _float_compare_program(
     result: ValueRef,
     result_type: TypePattern | None,
 ) -> tuple[EmitDescriptorOp, ...]:
-    lhs = ValueRef.operand("lhs")
-    rhs = ValueRef.operand("rhs")
+    operands = {
+        "lhs": ValueRef.operand("lhs"),
+        "rhs": ValueRef.operand("rhs"),
+    }
 
     def compare(
         native_predicate: str,
@@ -641,50 +705,38 @@ def _float_compare_program(
             result_type=compare_result_type,
         )
 
-    if predicate in ("oeq", "ogt", "oge", "olt", "ole", "une"):
-        return (compare(predicate, lhs, rhs, result, result_type),)
+    recipe = FLOAT_PREDICATE_RECIPES[predicate]
+    emits = []
+    term_values = []
+    direct = len(recipe.terms) == 1 and recipe.combine is None and not recipe.negate
+    for term_index, term in enumerate(recipe.terms):
+        term_result = (
+            result if direct else ValueRef.temporary(f"predicate_term_{term_index}")
+        )
+        emits.append(
+            compare(
+                term.native_predicate,
+                operands[term.lhs],
+                operands[term.rhs],
+                term_result,
+                result_type if direct else _V16I8,
+            )
+        )
+        term_values.append(term_result)
 
-    first = ValueRef.temporary("predicate_first")
-    second = ValueRef.temporary("predicate_second")
-    combined = result
-    combined_type = result_type
-    negate = predicate in ("ueq", "ugt", "uge", "ult", "ule", "uno")
-    if negate:
-        combined = ValueRef.temporary("predicate_combined")
-        combined_type = _V16I8
-
-    if predicate in ("one", "ueq"):
-        emits = [
-            compare("olt", lhs, rhs, first, _V16I8),
-            compare("ogt", lhs, rhs, second, _V16I8),
+    combined = term_values[0]
+    if recipe.combine is not None:
+        combined = ValueRef.temporary("predicate_combined") if recipe.negate else result
+        emits.append(
             _op_emit(
-                descriptor_lookup("wasm.v128.or"),
-                {"lhs": first, "rhs": second},
+                descriptor_lookup(f"wasm.v128.{recipe.combine}"),
+                {"lhs": term_values[0], "rhs": term_values[1]},
                 combined,
-                result_type=combined_type,
-            ),
-        ]
-    elif predicate in ("ord", "uno"):
-        emits = [
-            compare("oeq", lhs, lhs, first, _V16I8),
-            compare("oeq", rhs, rhs, second, _V16I8),
-            _op_emit(
-                descriptor_lookup("wasm.v128.and"),
-                {"lhs": first, "rhs": second},
-                combined,
-                result_type=combined_type,
-            ),
-        ]
-    else:
-        inverse = {
-            "ugt": "ole",
-            "uge": "olt",
-            "ult": "oge",
-            "ule": "ogt",
-        }[predicate]
-        emits = [compare(inverse, lhs, rhs, combined, combined_type)]
+                result_type=_V16I8 if recipe.negate else result_type,
+            )
+        )
 
-    if negate:
+    if recipe.negate:
         emits.append(
             _op_emit(
                 descriptor_lookup("wasm.v128.not"),

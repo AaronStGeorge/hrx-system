@@ -21,6 +21,10 @@ typedef iree_status_t (*loom_math_legalize_binary_build_fn_t)(
     loom_value_id_t rhs, loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 
+typedef iree_status_t (*loom_math_legalize_unary_build_fn_t)(
+    loom_builder_t* builder, uint8_t instance_flags, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location, loom_op_t** out_op);
+
 typedef iree_status_t (*loom_math_legalize_cast_build_fn_t)(
     loom_builder_t* builder, uint8_t instance_flags, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
@@ -698,26 +702,42 @@ static iree_status_t loom_math_legalize_build_gelu_erf(
                                          &half_input, &one_plus_erf, out_value);
 }
 
-typedef struct loom_math_legalize_binary_source_t {
-  // Source left-hand operand.
-  loom_value_id_t lhs;
-  // Source right-hand operand.
-  loom_value_id_t rhs;
+typedef struct loom_math_legalize_widen_source_t {
   // Source result type preserved by the replacement expression.
   loom_type_t result_type;
-  // Intermediate f32 scalar or vector type used for arithmetic.
+  // Intermediate f32 scalar or vector type used for evaluation.
   loom_type_t widened_type;
-  // Source fast-math flags forwarded to replacement arithmetic.
-  uint8_t fastmath_flags;
   // Source location copied to replacement ops.
   loom_location_id_t location;
-  // Builds the widened arithmetic op.
-  loom_math_legalize_binary_build_fn_t binary_build;
   // Builds the source-domain extension to f32.
   loom_math_legalize_cast_build_fn_t extf_build;
   // Builds the source-domain truncation from f32.
   loom_math_legalize_cast_build_fn_t fptrunc_build;
+} loom_math_legalize_widen_source_t;
+
+typedef struct loom_math_legalize_binary_source_t {
+  // Representation boundary shared by the binary widening recipe.
+  loom_math_legalize_widen_source_t widen;
+  // Source left-hand operand.
+  loom_value_id_t lhs;
+  // Source right-hand operand.
+  loom_value_id_t rhs;
+  // Source fast-math flags forwarded to replacement arithmetic.
+  uint8_t fastmath_flags;
+  // Builds the widened arithmetic op.
+  loom_math_legalize_binary_build_fn_t binary_build;
 } loom_math_legalize_binary_source_t;
+
+typedef struct loom_math_legalize_unary_source_t {
+  // Representation boundary shared by the unary widening recipe.
+  loom_math_legalize_widen_source_t widen;
+  // Source operand.
+  loom_value_id_t input;
+  // Source fast-math flags forwarded to replacement rounding.
+  uint8_t fastmath_flags;
+  // Builds the widened rounding op.
+  loom_math_legalize_unary_build_fn_t unary_build;
+} loom_math_legalize_unary_source_t;
 
 static loom_type_t loom_math_legalize_type_with_element(
     loom_type_t source_type, loom_scalar_type_t element_type) {
@@ -787,10 +807,10 @@ static iree_status_t loom_math_legalize_build_round_away(
                                          &rounded, &truncated, out_value);
 }
 
-static void loom_math_legalize_binary_source_initialize(
+static void loom_math_legalize_widen_source_initialize(
     const loom_math_legalize_recipe_context_t* context, const loom_op_t* op,
-    loom_math_legalize_binary_source_t* out_source) {
-  *out_source = (loom_math_legalize_binary_source_t){
+    loom_math_legalize_widen_source_t* out_source) {
+  *out_source = (loom_math_legalize_widen_source_t){
       .result_type =
           loom_module_value_type(context->module, loom_op_results(op)[0]),
       .location = op->location,
@@ -804,59 +824,71 @@ static void loom_math_legalize_binary_source_initialize(
     out_source->extf_build = loom_vector_extf_build;
     out_source->fptrunc_build = loom_vector_fptrunc_build;
   }
-  switch (op->kind) {
-    case LOOM_OP_SCALAR_ADDF:
-      out_source->lhs = loom_scalar_addf_lhs(op);
-      out_source->rhs = loom_scalar_addf_rhs(op);
-      out_source->fastmath_flags = loom_scalar_addf_fastmath(op);
-      out_source->binary_build = loom_scalar_addf_build;
+}
+
+static void loom_math_legalize_binary_source_initialize(
+    const loom_math_legalize_recipe_context_t* context, const loom_op_t* op,
+    loom_math_legalize_binary_source_t* out_source) {
+  *out_source = (loom_math_legalize_binary_source_t){0};
+  loom_math_legalize_widen_source_initialize(context, op, &out_source->widen);
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  out_source->lhs = operands[0];
+  out_source->rhs = operands[1];
+  out_source->fastmath_flags = op->instance_flags;
+  const bool is_scalar = loom_type_is_scalar(out_source->widen.result_type);
+  switch (context->query.math_op) {
+    case LOOM_TARGET_MATH_OP_ADDF:
+      out_source->binary_build =
+          is_scalar ? loom_scalar_addf_build : loom_vector_addf_build;
       return;
-    case LOOM_OP_SCALAR_SUBF:
-      out_source->lhs = loom_scalar_subf_lhs(op);
-      out_source->rhs = loom_scalar_subf_rhs(op);
-      out_source->fastmath_flags = loom_scalar_subf_fastmath(op);
-      out_source->binary_build = loom_scalar_subf_build;
+    case LOOM_TARGET_MATH_OP_SUBF:
+      out_source->binary_build =
+          is_scalar ? loom_scalar_subf_build : loom_vector_subf_build;
       return;
-    case LOOM_OP_SCALAR_MULF:
-      out_source->lhs = loom_scalar_mulf_lhs(op);
-      out_source->rhs = loom_scalar_mulf_rhs(op);
-      out_source->fastmath_flags = loom_scalar_mulf_fastmath(op);
-      out_source->binary_build = loom_scalar_mulf_build;
+    case LOOM_TARGET_MATH_OP_MULF:
+      out_source->binary_build =
+          is_scalar ? loom_scalar_mulf_build : loom_vector_mulf_build;
       return;
-    case LOOM_OP_SCALAR_DIVF:
-      out_source->lhs = loom_scalar_divf_lhs(op);
-      out_source->rhs = loom_scalar_divf_rhs(op);
-      out_source->fastmath_flags = loom_scalar_divf_fastmath(op);
-      out_source->binary_build = loom_scalar_divf_build;
-      return;
-    case LOOM_OP_VECTOR_ADDF:
-      out_source->lhs = loom_vector_addf_lhs(op);
-      out_source->rhs = loom_vector_addf_rhs(op);
-      out_source->fastmath_flags = loom_vector_addf_fastmath(op);
-      out_source->binary_build = loom_vector_addf_build;
-      return;
-    case LOOM_OP_VECTOR_SUBF:
-      out_source->lhs = loom_vector_subf_lhs(op);
-      out_source->rhs = loom_vector_subf_rhs(op);
-      out_source->fastmath_flags = loom_vector_subf_fastmath(op);
-      out_source->binary_build = loom_vector_subf_build;
-      return;
-    case LOOM_OP_VECTOR_MULF:
-      out_source->lhs = loom_vector_mulf_lhs(op);
-      out_source->rhs = loom_vector_mulf_rhs(op);
-      out_source->fastmath_flags = loom_vector_mulf_fastmath(op);
-      out_source->binary_build = loom_vector_mulf_build;
-      return;
-    case LOOM_OP_VECTOR_DIVF:
-      out_source->lhs = loom_vector_divf_lhs(op);
-      out_source->rhs = loom_vector_divf_rhs(op);
-      out_source->fastmath_flags = loom_vector_divf_fastmath(op);
-      out_source->binary_build = loom_vector_divf_build;
+    case LOOM_TARGET_MATH_OP_DIVF:
+      out_source->binary_build =
+          is_scalar ? loom_scalar_divf_build : loom_vector_divf_build;
       return;
     default:
       break;
   }
   IREE_ASSERT_UNREACHABLE("math recipe selected unsupported binary op");
+  IREE_BUILTIN_UNREACHABLE();
+}
+
+static void loom_math_legalize_unary_source_initialize(
+    const loom_math_legalize_recipe_context_t* context, const loom_op_t* op,
+    loom_math_legalize_unary_source_t* out_source) {
+  *out_source = (loom_math_legalize_unary_source_t){0};
+  loom_math_legalize_widen_source_initialize(context, op, &out_source->widen);
+  out_source->input = loom_op_const_operands(op)[0];
+  out_source->fastmath_flags = op->instance_flags;
+  const bool is_scalar = loom_type_is_scalar(out_source->widen.result_type);
+  switch (context->query.math_op) {
+    case LOOM_TARGET_MATH_OP_CEILF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_ceilf_build : loom_vector_ceilf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_FLOORF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_floorf_build : loom_vector_floorf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_ROUNDEVENF:
+      out_source->unary_build = is_scalar ? loom_scalar_roundevenf_build
+                                          : loom_vector_roundevenf_build;
+      return;
+    case LOOM_TARGET_MATH_OP_TRUNCF:
+      out_source->unary_build =
+          is_scalar ? loom_scalar_truncf_build : loom_vector_truncf_build;
+      return;
+    default:
+      break;
+  }
+  IREE_ASSERT_UNREACHABLE("math recipe selected unsupported unary op");
   IREE_BUILTIN_UNREACHABLE();
 }
 
@@ -894,7 +926,7 @@ static void loom_math_legalize_project_exact_float_extension(
 // scalar conversion followed by a splat instead of a lane-wise conversion.
 static iree_status_t loom_math_legalize_build_widen_f32_operand(
     loom_builder_t* builder, const loom_math_legalize_recipe_context_t* context,
-    const loom_math_legalize_binary_source_t* source, loom_value_id_t input,
+    const loom_math_legalize_widen_source_t* source, loom_value_id_t input,
     loom_value_id_t* out_value) {
   loom_type_t input_type = source->result_type;
   const loom_value_t* input_value = loom_module_value(context->module, input);
@@ -928,10 +960,7 @@ static iree_status_t loom_math_legalize_build_widen_f32_operand(
                                        source->location, out_value);
 }
 
-// Addition, subtraction and multiplication of FP8, f16 and bf16 operands round
-// correctly through IEEE f32 arithmetic with gradual underflow.
-// Other arithmetic requires its own proof against intermediate rounding.
-static iree_status_t loom_math_legalize_build_widen_f32_round(
+static iree_status_t loom_math_legalize_build_widen_f32_round_binary(
     loom_builder_t* builder, const loom_math_legalize_recipe_context_t* context,
     const loom_op_t* op, loom_value_id_t* out_value) {
   loom_math_legalize_binary_source_t source;
@@ -939,20 +968,71 @@ static iree_status_t loom_math_legalize_build_widen_f32_round(
 
   loom_value_id_t wide_lhs = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_math_legalize_build_widen_f32_operand(
-      builder, context, &source, source.lhs, &wide_lhs));
+      builder, context, &source.widen, source.lhs, &wide_lhs));
   loom_value_id_t wide_rhs = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_math_legalize_build_widen_f32_operand(
-      builder, context, &source, source.rhs, &wide_rhs));
+      builder, context, &source.widen, source.rhs, &wide_rhs));
 
   loom_op_t* wide_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      source.binary_build(builder, source.fastmath_flags, wide_lhs, wide_rhs,
-                          source.widened_type, source.location, &wide_op));
+  IREE_RETURN_IF_ERROR(source.binary_build(
+      builder, source.fastmath_flags, wide_lhs, wide_rhs,
+      source.widen.widened_type, source.widen.location, &wide_op));
   const loom_value_id_t wide_result = loom_op_results(wide_op)[0];
 
-  return loom_math_legalize_build_cast(
-      builder, source.fptrunc_build, wide_result, source.widened_type,
-      source.result_type, source.location, out_value);
+  return loom_math_legalize_build_cast(builder, source.widen.fptrunc_build,
+                                       wide_result, source.widen.widened_type,
+                                       source.widen.result_type,
+                                       source.widen.location, out_value);
+}
+
+static iree_status_t loom_math_legalize_build_widen_f32_round_unary(
+    loom_builder_t* builder, const loom_math_legalize_recipe_context_t* context,
+    const loom_op_t* op, loom_value_id_t* out_value) {
+  loom_math_legalize_unary_source_t source;
+  loom_math_legalize_unary_source_initialize(context, op, &source);
+
+  loom_value_id_t wide_input = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_widen_f32_operand(
+      builder, context, &source.widen, source.input, &wide_input));
+
+  loom_op_t* wide_op = NULL;
+  IREE_RETURN_IF_ERROR(source.unary_build(builder, source.fastmath_flags,
+                                          wide_input, source.widen.widened_type,
+                                          source.widen.location, &wide_op));
+  const loom_value_id_t wide_result = loom_op_results(wide_op)[0];
+
+  return loom_math_legalize_build_cast(builder, source.widen.fptrunc_build,
+                                       wide_result, source.widen.widened_type,
+                                       source.widen.result_type,
+                                       source.widen.location, out_value);
+}
+
+// The target policy selects binary operations whose round-through-F32 semantics
+// have been proved for FP8, f16, and bf16. Integral rounding also commutes with
+// exact widening because every rounded result remains exactly representable in
+// the source format. Other arithmetic requires its own proof against
+// intermediate rounding.
+static iree_status_t loom_math_legalize_build_widen_f32_round(
+    loom_builder_t* builder, const loom_math_legalize_recipe_context_t* context,
+    const loom_op_t* op, loom_value_id_t* out_value) {
+  switch (context->query.math_op) {
+    case LOOM_TARGET_MATH_OP_ADDF:
+    case LOOM_TARGET_MATH_OP_SUBF:
+    case LOOM_TARGET_MATH_OP_MULF:
+    case LOOM_TARGET_MATH_OP_DIVF:
+      return loom_math_legalize_build_widen_f32_round_binary(builder, context,
+                                                             op, out_value);
+    case LOOM_TARGET_MATH_OP_CEILF:
+    case LOOM_TARGET_MATH_OP_FLOORF:
+    case LOOM_TARGET_MATH_OP_ROUNDEVENF:
+    case LOOM_TARGET_MATH_OP_TRUNCF:
+      return loom_math_legalize_build_widen_f32_round_unary(builder, context,
+                                                            op, out_value);
+    default:
+      break;
+  }
+  IREE_ASSERT_UNREACHABLE("math recipe selected unsupported operation");
+  IREE_BUILTIN_UNREACHABLE();
 }
 
 static iree_status_t loom_math_legalize_build_gelu_logistic(

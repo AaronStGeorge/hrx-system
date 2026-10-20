@@ -82,6 +82,7 @@ loom_cc_library(
     iree::base
     loom::ir
     loom::ops::scalar
+    loom::ops::scf
     loom::ops::vector
     loom::ops::view
     loom::target::arch::wasm::descriptors
@@ -96,6 +97,7 @@ loom_cc_library(
     loom::transforms::vector::shape_legalization
     loom::transforms::vector::target_legalization
     loom::transforms::vector::to_scalar
+    loom::util::numeric_format
   PUBLIC
 )
 endif()
@@ -144,8 +146,10 @@ loom_check_test_suite(
     "test/source_low/numeric_bit_operations.loom-test"
     "test/source_low/numeric_f32_narrowing.loom-test"
     "test/source_low/numeric_float_extensions.loom-test"
+    "test/source_low/numeric_float_narrow_arithmetic.loom-test"
     "test/source_low/numeric_float_native.loom-test"
     "test/source_low/numeric_float_ordering_reference.loom-test"
+    "test/source_low/numeric_float_rounding.loom-test"
     "test/source_low/numeric_float_to_integer.loom-test"
     "test/source_low/numeric_index_extrema.loom-test"
     "test/source_low/numeric_index_operands.loom-test"

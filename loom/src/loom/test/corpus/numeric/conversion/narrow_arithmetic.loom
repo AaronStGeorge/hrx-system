@@ -2,6 +2,98 @@
 // distinct lowering shapes. The wider oracle evaluates every lane independently;
 // f64 represents each source value and each binary result exactly before the
 // final narrowing step.
+func.def @arithmetic_f8e4m3(%lhs: buffer, %rhs: buffer, %sum: buffer, %difference: buffer, %product: buffer) {
+  %base = index.constant 0 : offset
+  %left = buffer.view %lhs[%base] : buffer -> view<4xf8E4M3>
+  %right = buffer.view %rhs[%base] : buffer -> view<4xf8E4M3>
+  %sum_result = buffer.view %sum[%base] : buffer -> view<4xf8E4M3>
+  %difference_result = buffer.view %difference[%base] : buffer -> view<4xf8E4M3>
+  %product_result = buffer.view %product[%base] : buffer -> view<4xf8E4M3>
+  %left_values = vector.load %left[0] : view<4xf8E4M3> -> vector<4xf8E4M3>
+  %right_values = vector.load %right[0] : view<4xf8E4M3> -> vector<4xf8E4M3>
+  %sum_values = vector.addf %left_values, %right_values : vector<4xf8E4M3>
+  %difference_values = vector.subf %left_values, %right_values : vector<4xf8E4M3>
+  %product_values = vector.mulf %left_values, %right_values : vector<4xf8E4M3>
+  vector.store %sum_values, %sum_result[0] : vector<4xf8E4M3>, view<4xf8E4M3>
+  vector.store %difference_values, %difference_result[0] : vector<4xf8E4M3>, view<4xf8E4M3>
+  vector.store %product_values, %product_result[0] : vector<4xf8E4M3>, view<4xf8E4M3>
+  func.return
+}
+
+func.def @arithmetic_f8e4m3_oracle(%lhs: buffer, %rhs: buffer, %sum: buffer, %difference: buffer, %product: buffer) {
+  %base = index.constant 0 : offset
+  %left = buffer.view %lhs[%base] : buffer -> view<4xf8E4M3>
+  %right = buffer.view %rhs[%base] : buffer -> view<4xf8E4M3>
+  %sum_result = buffer.view %sum[%base] : buffer -> view<4xf8E4M3>
+  %difference_result = buffer.view %difference[%base] : buffer -> view<4xf8E4M3>
+  %product_result = buffer.view %product[%base] : buffer -> view<4xf8E4M3>
+  %begin = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%begin to %end step %step] {
+    %left_value = view.load %left[%i] : view<4xf8E4M3> -> f8E4M3
+    %right_value = view.load %right[%i] : view<4xf8E4M3> -> f8E4M3
+    %wide_left = scalar.extf %left_value : f8E4M3 to f64
+    %wide_right = scalar.extf %right_value : f8E4M3 to f64
+    %wide_sum = scalar.addf %wide_left, %wide_right : f64
+    %wide_difference = scalar.subf %wide_left, %wide_right : f64
+    %wide_product = scalar.mulf %wide_left, %wide_right : f64
+    %sum_value = scalar.fptrunc %wide_sum : f64 to f8E4M3
+    %difference_value = scalar.fptrunc %wide_difference : f64 to f8E4M3
+    %product_value = scalar.fptrunc %wide_product : f64 to f8E4M3
+    view.store %sum_value, %sum_result[%i] : f8E4M3, view<4xf8E4M3>
+    view.store %difference_value, %difference_result[%i] : f8E4M3, view<4xf8E4M3>
+    view.store %product_value, %product_result[%i] : f8E4M3, view<4xf8E4M3>
+  }
+  func.return
+}
+
+func.def @arithmetic_f8e5m2(%lhs: buffer, %rhs: buffer, %sum: buffer, %difference: buffer, %product: buffer) {
+  %base = index.constant 0 : offset
+  %left = buffer.view %lhs[%base] : buffer -> view<4xf8E5M2>
+  %right = buffer.view %rhs[%base] : buffer -> view<4xf8E5M2>
+  %sum_result = buffer.view %sum[%base] : buffer -> view<4xf8E5M2>
+  %difference_result = buffer.view %difference[%base] : buffer -> view<4xf8E5M2>
+  %product_result = buffer.view %product[%base] : buffer -> view<4xf8E5M2>
+  %left_values = vector.load %left[0] : view<4xf8E5M2> -> vector<4xf8E5M2>
+  %right_values = vector.load %right[0] : view<4xf8E5M2> -> vector<4xf8E5M2>
+  %sum_values = vector.addf %left_values, %right_values : vector<4xf8E5M2>
+  %difference_values = vector.subf %left_values, %right_values : vector<4xf8E5M2>
+  %product_values = vector.mulf %left_values, %right_values : vector<4xf8E5M2>
+  vector.store %sum_values, %sum_result[0] : vector<4xf8E5M2>, view<4xf8E5M2>
+  vector.store %difference_values, %difference_result[0] : vector<4xf8E5M2>, view<4xf8E5M2>
+  vector.store %product_values, %product_result[0] : vector<4xf8E5M2>, view<4xf8E5M2>
+  func.return
+}
+
+func.def @arithmetic_f8e5m2_oracle(%lhs: buffer, %rhs: buffer, %sum: buffer, %difference: buffer, %product: buffer) {
+  %base = index.constant 0 : offset
+  %left = buffer.view %lhs[%base] : buffer -> view<4xf8E5M2>
+  %right = buffer.view %rhs[%base] : buffer -> view<4xf8E5M2>
+  %sum_result = buffer.view %sum[%base] : buffer -> view<4xf8E5M2>
+  %difference_result = buffer.view %difference[%base] : buffer -> view<4xf8E5M2>
+  %product_result = buffer.view %product[%base] : buffer -> view<4xf8E5M2>
+  %begin = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%begin to %end step %step] {
+    %left_value = view.load %left[%i] : view<4xf8E5M2> -> f8E5M2
+    %right_value = view.load %right[%i] : view<4xf8E5M2> -> f8E5M2
+    %wide_left = scalar.extf %left_value : f8E5M2 to f64
+    %wide_right = scalar.extf %right_value : f8E5M2 to f64
+    %wide_sum = scalar.addf %wide_left, %wide_right : f64
+    %wide_difference = scalar.subf %wide_left, %wide_right : f64
+    %wide_product = scalar.mulf %wide_left, %wide_right : f64
+    %sum_value = scalar.fptrunc %wide_sum : f64 to f8E5M2
+    %difference_value = scalar.fptrunc %wide_difference : f64 to f8E5M2
+    %product_value = scalar.fptrunc %wide_product : f64 to f8E5M2
+    view.store %sum_value, %sum_result[%i] : f8E5M2, view<4xf8E5M2>
+    view.store %difference_value, %difference_result[%i] : f8E5M2, view<4xf8E5M2>
+    view.store %product_value, %product_result[%i] : f8E5M2, view<4xf8E5M2>
+  }
+  func.return
+}
+
 func.def @arithmetic_f16(%lhs: buffer, %rhs: buffer, %sum: buffer, %difference: buffer, %product: buffer) {
   %base = index.constant 0 : offset
   %left = buffer.view %lhs[%base] : buffer -> view<14xf16>
@@ -132,6 +224,62 @@ func.def @arithmetic_bf16_oracle(%lhs: buffer, %rhs: buffer, %sum: buffer, %diff
     view.store %difference_value, %difference_result[%i] : bf16, view<14xbf16>
   }
   func.return
+}
+
+check.scenario @arithmetic_f8e4m3_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(0) step(1) : tensor<4xi8>
+    %rhs = check.generate.iota offset(-128) step(1) : tensor<4xi8>
+    %sum = check.generate.fill value(1.0) : tensor<4xf8E4M3>
+    %difference = check.generate.fill value(1.0) : tensor<4xf8E4M3>
+    %product = check.generate.fill value(1.0) : tensor<4xf8E4M3>
+    check.compare<@arithmetic_f8e4m3, @arithmetic_f8e4m3_oracle>(%lhs, %rhs, %sum, %difference, %product) : (tensor<4xi8>, tensor<4xi8>, tensor<4xf8E4M3>, tensor<4xf8E4M3>, tensor<4xf8E4M3>) -> () {
+      check.expect.bitwise actual(%sum) expected(%sum) : tensor<4xf8E4M3>
+      check.expect.bitwise actual(%difference) expected(%difference) : tensor<4xf8E4M3>
+      check.expect.bitwise actual(%product) expected(%product) : tensor<4xf8E4M3>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(123) step(1) : tensor<4xi8>
+    %rhs = check.generate.iota offset(-5) step(1) : tensor<4xi8>
+    %sum = check.generate.fill value(0.0) : tensor<4xf8E4M3>
+    %difference = check.generate.fill value(0.0) : tensor<4xf8E4M3>
+    %product = check.generate.fill value(0.0) : tensor<4xf8E4M3>
+    check.compare<@arithmetic_f8e4m3, @arithmetic_f8e4m3_oracle>(%lhs, %rhs, %sum, %difference, %product) : (tensor<4xi8>, tensor<4xi8>, tensor<4xf8E4M3>, tensor<4xf8E4M3>, tensor<4xf8E4M3>) -> () {
+      check.expect.bitwise actual(%sum) expected(%sum) : tensor<4xf8E4M3>
+      check.expect.bitwise actual(%difference) expected(%difference) : tensor<4xf8E4M3>
+      check.expect.bitwise actual(%product) expected(%product) : tensor<4xf8E4M3>
+    }
+  }
+  check.return
+}
+
+check.scenario @arithmetic_f8e5m2_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(0) step(1) : tensor<4xi8>
+    %rhs = check.generate.iota offset(-128) step(1) : tensor<4xi8>
+    %sum = check.generate.fill value(1.0) : tensor<4xf8E5M2>
+    %difference = check.generate.fill value(1.0) : tensor<4xf8E5M2>
+    %product = check.generate.fill value(1.0) : tensor<4xf8E5M2>
+    check.compare<@arithmetic_f8e5m2, @arithmetic_f8e5m2_oracle>(%lhs, %rhs, %sum, %difference, %product) : (tensor<4xi8>, tensor<4xi8>, tensor<4xf8E5M2>, tensor<4xf8E5M2>, tensor<4xf8E5M2>) -> () {
+      check.expect.bitwise actual(%sum) expected(%sum) : tensor<4xf8E5M2>
+      check.expect.bitwise actual(%difference) expected(%difference) : tensor<4xf8E5M2>
+      check.expect.bitwise actual(%product) expected(%product) : tensor<4xf8E5M2>
+    }
+  }
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %lhs = check.generate.iota offset(120) step(1) : tensor<4xi8>
+    %rhs = check.generate.iota offset(-8) step(1) : tensor<4xi8>
+    %sum = check.generate.fill value(0.0) : tensor<4xf8E5M2>
+    %difference = check.generate.fill value(0.0) : tensor<4xf8E5M2>
+    %product = check.generate.fill value(0.0) : tensor<4xf8E5M2>
+    check.compare<@arithmetic_f8e5m2, @arithmetic_f8e5m2_oracle>(%lhs, %rhs, %sum, %difference, %product) : (tensor<4xi8>, tensor<4xi8>, tensor<4xf8E5M2>, tensor<4xf8E5M2>, tensor<4xf8E5M2>) -> () {
+      check.expect.bitwise actual(%sum) expected(%sum) : tensor<4xf8E5M2>
+      check.expect.bitwise actual(%difference) expected(%difference) : tensor<4xf8E5M2>
+      check.expect.bitwise actual(%product) expected(%product) : tensor<4xf8E5M2>
+    }
+  }
+  check.return
 }
 
 check.scenario @arithmetic_f16_values {
