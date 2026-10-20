@@ -8,7 +8,7 @@ execution.
 | Target | Participants | Contract |
 | --- | --- | --- |
 | `cpu_xdna_test` | Task and XDNA HAL | Consumer-first CPU→NPU→CPU arithmetic through one backing, changing-input replay, default and explicit transitions, recorded direct and indirect bindings, deferred allocation, host registration, and public mapping permissions. |
-| `execution_test` | Task, XDNA, and RDNA HAL | Consumer-first CPU→NPU→GPU→CPU and CPU→GPU→NPU→CPU arithmetic through one allocation, independent device semaphores, default queue transitions, changing-input replay, and untouched guard ranges. |
+| `execution_test` | Task, XDNA, and RDNA HAL | Consumer-first CPU→NPU→GPU→CPU and CPU→GPU→NPU→CPU arithmetic through one allocation, independent device semaphores, default and table-resolved transitions, reusable indirect recordings, changing-input replay, and untouched guard ranges. |
 | `virtual_buffer_test` | Task and XDNA HAL, native GPU SDMA | Stable addresses across backing replacement, independently resolved mapping groups, host aliases and device-only reservations, and native process/instance lifetimes. |
 
 The virtual-buffer suite submits GPU work through libamdf. It isolates the

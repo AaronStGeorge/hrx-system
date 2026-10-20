@@ -7,6 +7,7 @@
 #include <array>
 #include <cstring>
 #include <string>
+#include <tuple>
 
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/test_base.h"
@@ -28,6 +29,29 @@ using ::iree::hal::cts::Ref;
 
 enum Engine { kCpu, kNpu, kGpu, kEngineCount };
 
+enum class SubmissionMode { kDefaults, kExplicit, kRecordedIndirect };
+
+struct Boundary {
+  // Combined queue-local execution and visibility actions.
+  iree_hal_barrier_t barrier = {
+      .source_stage_mask =
+          IREE_HAL_EXECUTION_STAGE_DISPATCH | IREE_HAL_EXECUTION_STAGE_TRANSFER,
+      .target_stage_mask =
+          IREE_HAL_EXECUTION_STAGE_DISPATCH | IREE_HAL_EXECUTION_STAGE_TRANSFER,
+  };
+  // Per-edge range recipes captured alongside their combined global effects.
+  std::array<iree_hal_buffer_barrier_t, kEngineCount> ranges = {};
+};
+
+struct Invocation {
+  // Acquires from the actual producers of the invocation's inputs.
+  Boundary before;
+  // Releases to subsequent native and CPU consumers.
+  Boundary after;
+  // Optional reusable recording with only indirect buffer references.
+  Ref<iree_hal_command_buffer_t> commands;
+};
+
 struct Participant {
   // Independently created device retained by this fixture and the sealed group.
   Ref<iree_hal_device_t> device;
@@ -42,7 +66,8 @@ struct Participant {
       iree_hal_executable_function_invalid();
 };
 
-class ExecutionTest : public ::testing::TestWithParam<bool> {
+class ExecutionTest
+    : public ::testing::TestWithParam<std::tuple<bool, SubmissionMode>> {
  protected:
   static constexpr size_t kElementCount = 16;
   static constexpr size_t kBytes = kElementCount * sizeof(uint32_t);
@@ -232,22 +257,95 @@ class ExecutionTest : public ::testing::TestWithParam<bool> {
     ASSERT_TRUE(participants_[kGpu].executable);
   }
 
-  void Dispatch(Engine engine, iree_hal_semaphore_t* wait, uint64_t wait_value,
-                uint64_t signal_value, iree_hal_buffer_ref_list_t bindings,
-                uint32_t addend = 0) {
-    auto& participant = participants_[engine];
-    auto* signal = participant.timeline.get();
+  static iree_hal_dispatch_config_t Config(Engine engine) {
     auto config = iree_hal_make_static_dispatch_config(
         engine == kCpu ? kElementCount : 1, 1, 1);
     config.workgroup_size[0] = engine == kGpu ? 32 : 1;
     config.workgroup_size[1] = config.workgroup_size[2] = 1;
+    return config;
+  }
+
+  void AddTransition(Engine producer, Engine consumer,
+                     iree_hal_memory_transition_action_t action,
+                     iree_hal_buffer_ref_t reference, Boundary* boundary) {
+    auto table = iree_hal_pool_transition_table(pool_);
+    iree_hal_memory_scope_t scopes[2];
+    const Engine engines[] = {producer, consumer};
+    for (size_t i = 0; i < IREE_ARRAYSIZE(engines); ++i) {
+      const iree_hal_memory_site_t site = {
+          .kind = IREE_HAL_MEMORY_SITE_QUEUE,
+          .family = iree_hal_queue_family(participants_[engines[i]].queue),
+      };
+      IREE_ASSERT_OK(
+          iree_hal_device_group_resolve_memory_scope(group_, site, &scopes[i]));
+    }
+    iree_hal_memory_transition_pair_t pair;
+    IREE_ASSERT_OK(iree_hal_memory_transition_prepare_pair(
+        table, scopes[0], scopes[1], action, &pair));
+    const auto transition = iree_hal_memory_transition_query(table, pair);
+    const auto effects = action == IREE_HAL_MEMORY_TRANSITION_RELEASE
+                             ? transition.release
+                             : transition.acquire;
+    ASSERT_TRUE(iree_hal_memory_effects_is_supported(effects));
+    boundary->barrier.effects =
+        iree_hal_memory_effects_combine(boundary->barrier.effects, effects);
+    const auto* recipe = iree_hal_memory_transition_recipe(table, pair, action);
+    if (recipe) {
+      auto& count = boundary->barrier.buffer_barrier_count;
+      ASSERT_LT(count, boundary->ranges.size());
+      boundary->ranges[count++] = {.buffer_ref = reference, .recipe = recipe};
+      boundary->barrier.buffer_barriers = boundary->ranges.data();
+    }
+  }
+
+  void Record(Engine engine, iree_hal_buffer_ref_list_t bindings,
+              uint32_t addend, Invocation* invocation) {
+    auto& participant = participants_[engine];
+    IREE_ASSERT_OK(iree_hal_command_buffer_create(
+        iree_hal_queue_family(participant.queue),
+        IREE_HAL_COMMAND_BUFFER_MODE_DEFAULT,
+        IREE_HAL_COMMAND_CATEGORY_DISPATCH,
+        /*binding_capacity=*/4, invocation->commands.out()));
+    IREE_ASSERT_OK(iree_hal_command_buffer_begin(invocation->commands));
+    IREE_ASSERT_OK(iree_hal_command_buffer_barrier(
+        invocation->commands, &invocation->before.barrier));
+    const auto constants =
+        engine == kNpu ? iree_const_byte_span_empty()
+                       : iree_make_const_byte_span(&addend, sizeof(addend));
+    IREE_ASSERT_OK(iree_hal_command_buffer_dispatch(
+        invocation->commands, participant.executable, participant.function,
+        Config(engine), constants, bindings, IREE_HAL_DISPATCH_FLAG_NONE));
+    IREE_ASSERT_OK(iree_hal_command_buffer_barrier(invocation->commands,
+                                                   &invocation->after.barrier));
+    IREE_ASSERT_OK(iree_hal_command_buffer_end(invocation->commands));
+  }
+
+  void Dispatch(Engine engine, iree_hal_semaphore_t* wait, uint64_t wait_value,
+                uint64_t signal_value, iree_hal_buffer_ref_list_t bindings,
+                uint32_t addend, const Invocation& invocation,
+                iree_hal_buffer_binding_table_t binding_table) {
+    auto& participant = participants_[engine];
+    auto* signal = participant.timeline.get();
+    if (invocation.commands) {
+      IREE_ASSERT_OK(iree_hal_queue_execute(
+          participant.queue, {1, &wait, &wait_value},
+          {1, &signal, &signal_value}, invocation.commands, binding_table,
+          IREE_HAL_QUEUE_EXECUTE_FLAG_NONE));
+      return;
+    }
+    const iree_hal_barrier_list_t before = {1, &invocation.before.barrier};
+    const iree_hal_barrier_list_t after = {1, &invocation.after.barrier};
+    const iree_hal_queue_barriers_t barriers = {&before, &after};
     const auto constants =
         engine == kNpu ? iree_const_byte_span_empty()
                        : iree_make_const_byte_span(&addend, sizeof(addend));
     IREE_ASSERT_OK(iree_hal_queue_dispatch(
         participant.queue, {1, &wait, &wait_value}, {1, &signal, &signal_value},
-        participant.executable, participant.function, config, constants,
-        bindings, /*barriers=*/nullptr, IREE_HAL_DISPATCH_FLAG_NONE));
+        participant.executable, participant.function, Config(engine), constants,
+        bindings,
+        std::get<1>(GetParam()) == SubmissionMode::kDefaults ? nullptr
+                                                             : &barriers,
+        IREE_HAL_DISPATCH_FLAG_NONE));
   }
 
   // CPU worker resources outlive the Task device using them.
@@ -283,9 +381,94 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
                                            views[i].out()));
     bindings[i] = iree_hal_make_buffer_ref(views[i], 0, kBytes);
   }
-  const Engine first = GetParam() ? kNpu : kGpu;
-  const Engine second = GetParam() ? kGpu : kNpu;
-  const auto* gpu_binding = &bindings[GetParam() ? 2 : 0];
+  const bool npu_first = std::get<0>(GetParam());
+  const auto mode = std::get<1>(GetParam());
+  const bool recorded = mode == SubmissionMode::kRecordedIndirect;
+  const Engine first = npu_first ? kNpu : kGpu;
+  const Engine second = npu_first ? kGpu : kNpu;
+  const auto* gpu_binding = &bindings[npu_first ? 2 : 0];
+  const iree_hal_buffer_binding_t table_bindings[] = {
+      {views[0], 0, kBytes},
+      {views[1], 0, kBytes},
+      {views[2], 0, kBytes},
+      {root, 0, sizeof(Payload)},
+  };
+  const iree_hal_buffer_binding_table_t binding_table = {
+      IREE_ARRAYSIZE(table_bindings), table_bindings};
+  Invocation producer, native_first, native_second, consumer;
+  Boundary upload_release, download_acquire;
+  const auto root_ref = iree_hal_make_buffer_ref(root, 0, sizeof(Payload));
+  const auto recorded_root_ref =
+      recorded ? iree_hal_make_indirect_buffer_ref(3, 0, sizeof(Payload))
+               : root_ref;
+  if (mode != SubmissionMode::kDefaults) {
+    // Upload also produces the unchanged RHS that the NPU reads in either
+    // engine order, independently of the producer's later LHS update.
+    for (Engine engine : {kNpu, kGpu}) {
+      ASSERT_NO_FATAL_FAILURE(AddTransition(kCpu, engine,
+                                            IREE_HAL_MEMORY_TRANSITION_RELEASE,
+                                            root_ref, &upload_release));
+    }
+    ASSERT_NO_FATAL_FAILURE(AddTransition(kCpu, first,
+                                          IREE_HAL_MEMORY_TRANSITION_RELEASE,
+                                          recorded_root_ref, &producer.after));
+    ASSERT_NO_FATAL_FAILURE(
+        AddTransition(kCpu, first, IREE_HAL_MEMORY_TRANSITION_ACQUIRE,
+                      recorded_root_ref, &native_first.before));
+    ASSERT_NO_FATAL_FAILURE(
+        AddTransition(first, second, IREE_HAL_MEMORY_TRANSITION_RELEASE,
+                      recorded_root_ref, &native_first.after));
+    ASSERT_NO_FATAL_FAILURE(
+        AddTransition(first, second, IREE_HAL_MEMORY_TRANSITION_ACQUIRE,
+                      recorded_root_ref, &native_second.before));
+    if (first == kGpu) {
+      ASSERT_NO_FATAL_FAILURE(
+          AddTransition(kCpu, kNpu, IREE_HAL_MEMORY_TRANSITION_ACQUIRE,
+                        recorded_root_ref, &native_second.before));
+      // Final CPU verification reads the GPU-modified LHS as well as the NPU
+      // result; the NPU's output release cannot publish somebody else's writes.
+      ASSERT_NO_FATAL_FAILURE(
+          AddTransition(kGpu, kCpu, IREE_HAL_MEMORY_TRANSITION_RELEASE,
+                        recorded_root_ref, &native_first.after));
+      ASSERT_NO_FATAL_FAILURE(AddTransition(kGpu, kCpu,
+                                            IREE_HAL_MEMORY_TRANSITION_ACQUIRE,
+                                            root_ref, &download_acquire));
+    }
+    ASSERT_NO_FATAL_FAILURE(
+        AddTransition(second, kCpu, IREE_HAL_MEMORY_TRANSITION_RELEASE,
+                      recorded_root_ref, &native_second.after));
+    ASSERT_NO_FATAL_FAILURE(AddTransition(second, kCpu,
+                                          IREE_HAL_MEMORY_TRANSITION_ACQUIRE,
+                                          recorded_root_ref, &consumer.before));
+  }
+  const iree_hal_barrier_list_t empty = {};
+  const iree_hal_barrier_list_t upload_after = {1, &upload_release.barrier};
+  const iree_hal_barrier_list_t download_before = {1,
+                                                   &download_acquire.barrier};
+  const iree_hal_queue_barriers_t upload_barriers = {&empty, &upload_after};
+  const iree_hal_queue_barriers_t download_barriers = {&download_before,
+                                                       &empty};
+  if (recorded) {
+    std::array<iree_hal_buffer_ref_t, 3> references;
+    for (size_t i = 0; i < references.size(); ++i) {
+      references[i] = iree_hal_make_indirect_buffer_ref(i, 0, kBytes);
+    }
+    const auto gpu_reference = references[npu_first ? 2 : 0];
+    ASSERT_NO_FATAL_FAILURE(Record(kCpu, {1, &references[0]}, 7, &producer));
+    ASSERT_NO_FATAL_FAILURE(Record(
+        first,
+        first == kNpu
+            ? iree_hal_buffer_ref_list_t{references.size(), references.data()}
+            : iree_hal_buffer_ref_list_t{1, &gpu_reference},
+        29, &native_first));
+    ASSERT_NO_FATAL_FAILURE(Record(
+        second,
+        second == kNpu
+            ? iree_hal_buffer_ref_list_t{references.size(), references.data()}
+            : iree_hal_buffer_ref_list_t{1, &gpu_reference},
+        29, &native_second));
+    ASSERT_NO_FATAL_FAILURE(Record(kCpu, {1, &references[2]}, 100, &consumer));
+  }
   auto* cpu_timeline = participants_[kCpu].timeline.get();
   auto* start = start_.get();
   for (uint32_t replay = 0; replay < 3; ++replay) {
@@ -310,9 +493,11 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
     download.download.length = sizeof(result);
     IREE_ASSERT_OK(iree_hal_queue_transfer(
         participants_[kCpu].queue, {1, &cpu_timeline, &consumed},
-        {1, &cpu_timeline, &downloaded}, 1, &download, /*barriers=*/nullptr));
+        {1, &cpu_timeline, &downloaded}, 1, &download,
+        mode == SubmissionMode::kDefaults ? nullptr : &download_barriers));
     ASSERT_NO_FATAL_FAILURE(Dispatch(kCpu, participants_[second].timeline, gate,
-                                     consumed, {1, &bindings[2]}, 100));
+                                     consumed, {1, &bindings[2]}, 100, consumer,
+                                     binding_table));
     // Submit every consumer before its producer. Each native engine signals its
     // own semaphore, so both native-to-foreign admission directions are
     // required.
@@ -321,15 +506,16 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
         second == kNpu
             ? iree_hal_buffer_ref_list_t{bindings.size(), bindings.data()}
             : iree_hal_buffer_ref_list_t{1, gpu_binding},
-        29));
+        29, native_second, binding_table));
     ASSERT_NO_FATAL_FAILURE(Dispatch(
         first, cpu_timeline, produced, gate,
         first == kNpu
             ? iree_hal_buffer_ref_list_t{bindings.size(), bindings.data()}
             : iree_hal_buffer_ref_list_t{1, gpu_binding},
-        29));
+        29, native_first, binding_table));
     ASSERT_NO_FATAL_FAILURE(Dispatch(kCpu, cpu_timeline, initialized, produced,
-                                     {1, &bindings[0]}, 7));
+                                     {1, &bindings[0]}, 7, producer,
+                                     binding_table));
     iree_hal_transfer_operation_t upload = {
         .type = IREE_HAL_TRANSFER_OPERATION_TYPE_UPDATE,
     };
@@ -338,7 +524,8 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
     upload.update.length = sizeof(initial);
     IREE_ASSERT_OK(iree_hal_queue_transfer(
         participants_[kCpu].queue, {1, &start, &gate},
-        {1, &cpu_timeline, &initialized}, 1, &upload, /*barriers=*/nullptr));
+        {1, &cpu_timeline, &initialized}, 1, &upload,
+        mode == SubmissionMode::kDefaults ? nullptr : &upload_barriers));
     IREE_ASSERT_OK(iree_hal_semaphore_signal(start, gate, nullptr));
     IREE_ASSERT_OK(iree_hal_semaphore_wait(cpu_timeline, downloaded,
                                            iree_infinite_timeout(), 0));
@@ -359,10 +546,25 @@ TEST_P(ExecutionTest, ConsumerFirstKernelsShareOneBacking) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(SharedBacking, ExecutionTest, ::testing::Bool(),
-                         [](const ::testing::TestParamInfo<bool>& info) {
-                           return info.param ? "CpuNpuGpuCpu" : "CpuGpuNpuCpu";
-                         });
+INSTANTIATE_TEST_SUITE_P(
+    SharedBacking, ExecutionTest,
+    ::testing::Combine(::testing::Bool(),
+                       ::testing::Values(SubmissionMode::kDefaults,
+                                         SubmissionMode::kExplicit,
+                                         SubmissionMode::kRecordedIndirect)),
+    [](const ::testing::TestParamInfo<ExecutionTest::ParamType>& info) {
+      std::string name =
+          std::get<0>(info.param) ? "CpuNpuGpuCpu" : "CpuGpuNpuCpu";
+      switch (std::get<1>(info.param)) {
+        case SubmissionMode::kDefaults:
+          return name + "Defaults";
+        case SubmissionMode::kExplicit:
+          return name + "Explicit";
+        case SubmissionMode::kRecordedIndirect:
+          return name + "RecordedIndirect";
+      }
+      return name;
+    });
 
 }  // namespace
 }  // namespace iree::hal::amd::cts
