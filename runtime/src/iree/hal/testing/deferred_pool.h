@@ -7,7 +7,7 @@
 #ifndef IREE_HAL_TESTING_DEFERRED_POOL_H_
 #define IREE_HAL_TESTING_DEFERRED_POOL_H_
 
-#include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <cstring>
 #include <mutex>
@@ -27,10 +27,11 @@ struct DeferredBackingPool : iree_hal_pool_t {
   iree_hal_pool_t* backing = nullptr;
   // Whether subsequent acquisitions wait for the test's explicit completion.
   bool defer = false;
-  // Parent submission depth, checked for bounded inline continuation stacks.
-  size_t depth = 0;
-  // Maximum simultaneously active parent submissions.
-  size_t maximum_depth = 0;
+  // Active parent calls, including asynchronous callbacks before submit
+  // returns.
+  std::atomic<size_t> depth{0};
+  // Peak active calls; measures inline stack depth for single-threaded parents.
+  std::atomic<size_t> maximum_depth{0};
   // Publishes a held request between the queue owner and the test thread.
   std::mutex acquire_mutex;
   // Signals that a real consumer has handed off its borrowed request.
@@ -167,12 +168,17 @@ struct DeferredBackingPool : iree_hal_pool_t {
   }
 
   iree_status_t Forward(Pending call) {
-    ++depth;
-    maximum_depth = std::max(maximum_depth, depth);
+    const size_t current_depth =
+        depth.fetch_add(1, std::memory_order_relaxed) + 1;
+    size_t previous_maximum = maximum_depth.load(std::memory_order_relaxed);
+    while (previous_maximum < current_depth &&
+           !maximum_depth.compare_exchange_weak(previous_maximum, current_depth,
+                                                std::memory_order_relaxed)) {
+    }
     iree_status_t status = iree_hal_pool_acquire_reservations(
         backing, call.count, call.requests, call.frontier, call.reservations,
         call.infos, call.completion, call.flags);
-    --depth;
+    depth.fetch_sub(1, std::memory_order_relaxed);
     return status;
   }
 
