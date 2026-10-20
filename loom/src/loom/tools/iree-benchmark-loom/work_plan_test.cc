@@ -28,6 +28,26 @@ namespace {
 using ::iree::testing::status::StatusIs;
 using ::testing::HasSubstr;
 
+// Check the reverse chains against the independently tested forward mapping.
+// Bound traversal by the expected sequence so a broken link cannot hang a test.
+static void ExpectAliasChains(const iree_benchmark_loom_work_plan_t& plan) {
+  std::vector<std::vector<size_t>> aliases(plan.work_item_count);
+  for (size_t i = 0; i < plan.logical_sample_count; ++i) {
+    ASSERT_LT(plan.logical_samples[i].work_item_index, plan.work_item_count);
+    aliases[plan.logical_samples[i].work_item_index].push_back(i);
+  }
+  for (size_t i = 0; i < plan.work_item_count; ++i) {
+    SCOPED_TRACE(i);
+    ASSERT_FALSE(aliases[i].empty());
+    size_t actual = plan.work_items[i].first_logical_sample_index;
+    for (size_t expected : aliases[i]) {
+      ASSERT_EQ(actual, expected);
+      actual = plan.logical_samples[actual].next_alias_index;
+    }
+    EXPECT_EQ(actual, IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID);
+  }
+}
+
 TEST(BenchmarkWorkPlanApiTest, EmptyModuleNeedsNoSelectionStorage) {
   const loom_testbench_module_plan_t module_plan = {};
   iree_benchmark_loom_options_t options = {};
@@ -39,6 +59,7 @@ TEST(BenchmarkWorkPlanApiTest, EmptyModuleNeedsNoSelectionStorage) {
   EXPECT_EQ(plan.logical_sample_count, 0u);
   EXPECT_EQ(plan.work_item_count, 0u);
   EXPECT_EQ(plan.hal_compile_item_count, 0u);
+  ExpectAliasChains(plan);
   iree_benchmark_loom_work_plan_deinitialize(&plan);
 }
 
@@ -84,6 +105,7 @@ TEST(BenchmarkWorkPlanApiTest, ExecutionSlotsCoverOnlySelectedPhysicalWork) {
     EXPECT_EQ(plan.work_items[0].execution_sample_base, 0u);
     EXPECT_EQ(plan.work_items[1].execution_sample_base, 1u);
     EXPECT_EQ(plan.logical_samples[2].work_item_index, 0u);
+    ExpectAliasChains(plan);
     iree_benchmark_loom_work_plan_deinitialize(&plan);
   }
 }
@@ -151,6 +173,7 @@ TEST(BenchmarkWorkPlanApiTest, DistinguishesSamplesBeyondFlatOrdinalCapacity) {
     EXPECT_EQ(plan.logical_samples[3 * windows].work_item_index, 2 * windows);
     EXPECT_EQ(plan.logical_samples[3 * windows + 1].work_item_index,
               2 * windows + 1);
+    ExpectAliasChains(plan);
     iree_benchmark_loom_work_plan_deinitialize(&plan);
   }
 }
@@ -219,6 +242,7 @@ TEST(BenchmarkWorkPlanApiTest, CompareLookupPreservesRequestsAndDiagnostics) {
       EXPECT_EQ(plan.logical_samples[i].selection_index, i);
       EXPECT_EQ(plan.logical_samples[i].work_item_index, 0u);
     }
+    ExpectAliasChains(plan);
     iree_benchmark_loom_work_plan_deinitialize(&plan);
 
     // Parsing and name failures retain request order even after indexing.
@@ -322,6 +346,7 @@ TEST(BenchmarkWorkPlanApiTest, PreservesScenarioOrderAcrossAliasesAndDomains) {
       EXPECT_EQ(work.scenario_coordinate.trial_ordinal,
                 coordinate.trial_ordinal);
     }
+    ExpectAliasChains(plan);
     iree_benchmark_loom_work_plan_deinitialize(&plan);
   }
 }
@@ -439,6 +464,7 @@ TEST(BenchmarkWorkPlanApiTest, CasePrefixIdentityMatchesEnumeratedSamples) {
         EXPECT_EQ(plan.hal_compile_items[0].execution_sample_count,
                   execution_sample_count);
       }
+      ExpectAliasChains(plan);
       iree_benchmark_loom_work_plan_deinitialize(&plan);
     }
   }
@@ -515,6 +541,7 @@ TEST(BenchmarkWorkPlanApiTest, PreservesCaseCompileAndDispatchOwnerOrder) {
       EXPECT_EQ(work.begin_benchmark_sample, logical.begin_benchmark_sample);
     }
   }
+  ExpectAliasChains(plan);
   iree_benchmark_loom_work_plan_deinitialize(&plan);
 }
 

@@ -120,14 +120,13 @@ static iree_status_t iree_benchmark_loom_emit_work_item_sample_aliases(
     iree_host_size_t sample_offset,
     const loom_testbench_case_sample_result_t* sample_result,
     const iree_benchmark_loom_event_sink_t* event_sink) {
-  for (iree_host_size_t logical_sample_index = 0;
-       logical_sample_index < work_plan->logical_sample_count;
-       ++logical_sample_index) {
+  for (iree_host_size_t logical_sample_index =
+           work_item->first_logical_sample_index;
+       logical_sample_index != IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID;
+       logical_sample_index =
+           work_plan->logical_samples[logical_sample_index].next_alias_index) {
     const iree_benchmark_loom_logical_sample_t* logical_sample =
         &work_plan->logical_samples[logical_sample_index];
-    if (logical_sample->work_item_index != work_item->work_item_index) {
-      continue;
-    }
     const iree_benchmark_loom_selected_benchmark_t* selection =
         &work_plan->selected_benchmarks[logical_sample->selection_index];
     const iree_host_size_t benchmark_sample_ordinal =
@@ -161,14 +160,13 @@ iree_status_t iree_benchmark_loom_emit_work_item_result_aliases(
     iree_host_size_t correctness_failed_sample_count,
     const iree_benchmark_loom_event_sink_t* event_sink,
     iree_host_size_t* inout_failed_benchmark_count) {
-  for (iree_host_size_t logical_sample_index = 0;
-       logical_sample_index < work_plan->logical_sample_count;
-       ++logical_sample_index) {
+  for (iree_host_size_t logical_sample_index =
+           work_item->first_logical_sample_index;
+       logical_sample_index != IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID;
+       logical_sample_index =
+           work_plan->logical_samples[logical_sample_index].next_alias_index) {
     const iree_benchmark_loom_logical_sample_t* logical_sample =
         &work_plan->logical_samples[logical_sample_index];
-    if (logical_sample->work_item_index != work_item->work_item_index) {
-      continue;
-    }
     const iree_benchmark_loom_selected_benchmark_t* selection =
         &work_plan->selected_benchmarks[logical_sample->selection_index];
     iree_benchmark_loom_benchmark_result_t alias_result = *benchmark_result;

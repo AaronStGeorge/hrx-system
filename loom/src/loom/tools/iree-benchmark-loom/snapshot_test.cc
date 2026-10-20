@@ -811,10 +811,13 @@ TEST(BenchmarkSnapshotSinkTest, DryRunReportsPlannedWorkAliases) {
   logical_samples[0].begin_benchmark_sample = 0;
   logical_samples[0].end_benchmark_sample = 1;
   logical_samples[0].work_item_index = 7;
+  logical_samples[0].next_alias_index = 1;
   logical_samples[1].selection_index = 1;
   logical_samples[1].begin_benchmark_sample = 0;
   logical_samples[1].end_benchmark_sample = 1;
   logical_samples[1].work_item_index = 7;
+  logical_samples[1].next_alias_index =
+      IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID;
   iree_benchmark_loom_work_item_t work_item = {
       .kind = IREE_BENCHMARK_LOOM_WORK_ITEM_DISPATCH_SAMPLE,
       .work_item_index = 7,
@@ -939,6 +942,7 @@ TEST(BenchmarkSnapshotSinkTest, DryRunReportsScenarioTrialCoordinates) {
       .end_benchmark_sample = 8,
       .scenario_coordinate = coordinate,
       .work_item_index = 4,
+      .next_alias_index = IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID,
   };
   iree_benchmark_loom_work_item_t work_item = {
       .kind = IREE_BENCHMARK_LOOM_WORK_ITEM_SCENARIO_TRIAL,
