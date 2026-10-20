@@ -15,6 +15,7 @@ from .alu import *
 from .bitwise import *
 from .categories import *
 from .common import *
+from .exponent import floating_exponent_overlays
 from .integer_multiply import *
 from .matrix import *
 from .scalar_carry import *
@@ -180,8 +181,7 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_sqrt_f32": _v_sqrt_f32_overlay,
     "amdgpu.v_sqrt_f64": _v_sqrt_f64_overlay,
     "amdgpu.v_rsq_f64": _v_rsq_f64_overlay,
-    "amdgpu.v_ldexp_f32": _v_ldexp_f32_overlay,
-    "amdgpu.v_ldexp_f64": _v_ldexp_f64_overlay,
+    **_contract_overlay_builders_from_overlays(floating_exponent_overlays()),
     "amdgpu.v_rsq_f32": _v_rsq_f32_overlay,
     "amdgpu.v_rcp_f32": _v_rcp_f32_overlay,
     "amdgpu.v_rcp_f64": _v_rcp_f64_overlay,

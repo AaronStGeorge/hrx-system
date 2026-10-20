@@ -36,6 +36,7 @@ from .bitwise import *
 from .cdna import *
 from .common import *
 from .control import *
+from .exponent import floating_exponent_overlays
 from .integer_multiply import *
 from .matrix import *
 from .memory import *
@@ -335,7 +336,7 @@ def _rdna_scalar_domain_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 
 def _floating_arithmetic_support_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
-        _v_ldexp_f32_overlay(),
+        *floating_exponent_overlays(),
         _v_ceil_f64_overlay(),
         _v_floor_f64_overlay(),
         _v_rndne_f64_overlay(),
@@ -343,7 +344,6 @@ def _floating_arithmetic_support_overlays() -> tuple[AmdgpuDescriptorOverlay, ..
         _v_sub_f64_overlay(),
         _v_sqrt_f64_overlay(),
         _v_rsq_f64_overlay(),
-        _v_ldexp_f64_overlay(),
         _v_rcp_f64_overlay(),
         _v_div_scale_f64_overlay(),
         _v_div_fmas_f64_overlay(),

@@ -141,9 +141,9 @@ func.def inline @exponent_input(%ordinal: index, %seed: i64, %precision: i64, %b
   %incremented = scalar.addi %boundary_zero, %lane : i64
   %magnitude = scalar.andi %incremented, %magnitude_mask : i64
   %bits = scalar.ori %magnitude, %sign : i64
-  %one_bit = scalar.cmpi eq, %lane, %c0 : i64
+  %single_bit_shift = scalar.cmpi eq, %lane, %c0 : i64
   %full_precision = scalar.addi %precision, %c1 : i64
-  %small_magnitude = scf.select %one_bit, %c1, %full_precision : i64
+  %small_magnitude = scf.select %single_bit_shift, %c1, %full_precision : i64
   %large = scalar.cmpi ugt, %index, %c31 : i64
   %power_magnitude = scf.select %large, %twice_bias, %small_magnitude : i64
   %negative_power = scalar.subi %c0, %power_magnitude : i64
@@ -451,6 +451,170 @@ check.scenario @exponent_f8e5m2_values {
     %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
     %output = check.generate.fill value(-1) : tensor<96x3xi64>
     check.compare<@exponent_f8e5m2, @exponent_f8e5m2_reference>(%seed, %output) : (i64, tensor<96x3xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<96x3xi64>
+    }
+  }
+  check.return
+}
+
+// Odd lane counts exercise packed tails and differently sized exponent lanes.
+func.def @exponent_vector_f16(%seed: i64, %output: buffer) {
+  %precision = scalar.constant 10 : i64
+  %bias = scalar.constant 15 : i64
+  %sign_mask = scalar.constant 32768 : i64
+  %infinity = scalar.constant 31744 : i64
+  %finite_only = scalar.constant false : i1
+  %begin = index.constant 0 : index
+  %end = index.constant 96 : index
+  %lane_step = index.constant 1 : index
+  %last_lane = index.constant 2 : index
+  %step = index.constant 3 : index
+  scf.for %row = [%begin to %end step %step] {
+    %next = index.add %row, %lane_step : index
+    %last = index.add %row, %last_lane : index
+    %bits0, %power0 = func.call @exponent_input(%row, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %narrow0 = scalar.trunci %bits0 : i64 to i16
+    %input0 = scalar.bitcast %narrow0 : i16 to f16
+    %bits1, %power1 = func.call @exponent_input(%next, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %narrow1 = scalar.trunci %bits1 : i64 to i16
+    %input1 = scalar.bitcast %narrow1 : i16 to f16
+    %bits2, %power2 = func.call @exponent_input(%last, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %narrow2 = scalar.trunci %bits2 : i64 to i16
+    %input2 = scalar.bitcast %narrow2 : i16 to f16
+    %inputs = vector.from_elements %input0, %input1, %input2 : vector<3xf16>
+    %powers = vector.from_elements %power0, %power1, %power2 : vector<3xi32>
+    %fractions, %exponents = vector.frexpf %inputs : vector<3xf16>, vector<3xi32>
+    %scaled = vector.ldexpf %inputs, %powers : vector<3xf16>, vector<3xi32>
+    scf.for %lane = [%begin to %step step %lane_step] {
+      %fraction = vector.extract %fractions[%lane] : vector<3xf16> -> f16
+      %exponent = vector.extract %exponents[%lane] : vector<3xi32> -> i32
+      %value = vector.extract %scaled[%lane] : vector<3xf16> -> f16
+      %fraction_bits = scalar.bitcast %fraction : f16 to i16
+      %scaled_bits = scalar.bitcast %value : f16 to i16
+      %wide_fraction = scalar.extui %fraction_bits : i16 to i64
+      %wide_scaled = scalar.extui %scaled_bits : i16 to i64
+      %observed_fraction = func.call @observe_exponent_bits(%wide_fraction, %sign_mask, %infinity, %finite_only) : (i64, i64, i64, i1) -> (i64)
+      %observed_scaled = func.call @observe_exponent_bits(%wide_scaled, %sign_mask, %infinity, %finite_only) : (i64, i64, i64, i1) -> (i64)
+      %wide_exponent = scalar.extsi %exponent : i32 to i64
+      %output_row = index.add %row, %lane : index
+      func.call @store_exponent_observations(%output, %output_row, %observed_fraction, %wide_exponent, %observed_scaled) : (buffer, index, i64, i64, i64)
+    }
+  }
+  func.return
+}
+
+check.scenario @exponent_vector_f16_values {
+  check.trial[16](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %output = check.generate.fill value(-1) : tensor<96x3xi64>
+    check.compare<@exponent_vector_f16, @exponent_f16_reference>(%seed, %output) : (i64, tensor<96x3xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<96x3xi64>
+    }
+  }
+  check.return
+}
+
+func.def @exponent_vector_f32(%seed: i64, %output: buffer) {
+  %precision = scalar.constant 23 : i64
+  %bias = scalar.constant 127 : i64
+  %sign_mask = scalar.constant 2147483648 : i64
+  %infinity = scalar.constant 2139095040 : i64
+  %finite_only = scalar.constant false : i1
+  %begin = index.constant 0 : index
+  %end = index.constant 96 : index
+  %lane_step = index.constant 1 : index
+  %last_lane = index.constant 2 : index
+  %step = index.constant 3 : index
+  scf.for %row = [%begin to %end step %step] {
+    %next = index.add %row, %lane_step : index
+    %last = index.add %row, %last_lane : index
+    %bits0, %power0 = func.call @exponent_input(%row, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %narrow0 = scalar.trunci %bits0 : i64 to i32
+    %input0 = scalar.bitcast %narrow0 : i32 to f32
+    %bits1, %power1 = func.call @exponent_input(%next, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %narrow1 = scalar.trunci %bits1 : i64 to i32
+    %input1 = scalar.bitcast %narrow1 : i32 to f32
+    %bits2, %power2 = func.call @exponent_input(%last, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %narrow2 = scalar.trunci %bits2 : i64 to i32
+    %input2 = scalar.bitcast %narrow2 : i32 to f32
+    %inputs = vector.from_elements %input0, %input1, %input2 : vector<3xf32>
+    %powers = vector.from_elements %power0, %power1, %power2 : vector<3xi32>
+    %fractions, %exponents = vector.frexpf %inputs : vector<3xf32>, vector<3xi32>
+    %scaled = vector.ldexpf %inputs, %powers : vector<3xf32>, vector<3xi32>
+    scf.for %lane = [%begin to %step step %lane_step] {
+      %fraction = vector.extract %fractions[%lane] : vector<3xf32> -> f32
+      %exponent = vector.extract %exponents[%lane] : vector<3xi32> -> i32
+      %value = vector.extract %scaled[%lane] : vector<3xf32> -> f32
+      %fraction_bits = scalar.bitcast %fraction : f32 to i32
+      %scaled_bits = scalar.bitcast %value : f32 to i32
+      %wide_fraction = scalar.extui %fraction_bits : i32 to i64
+      %wide_scaled = scalar.extui %scaled_bits : i32 to i64
+      %observed_fraction = func.call @observe_exponent_bits(%wide_fraction, %sign_mask, %infinity, %finite_only) : (i64, i64, i64, i1) -> (i64)
+      %observed_scaled = func.call @observe_exponent_bits(%wide_scaled, %sign_mask, %infinity, %finite_only) : (i64, i64, i64, i1) -> (i64)
+      %wide_exponent = scalar.extsi %exponent : i32 to i64
+      %output_row = index.add %row, %lane : index
+      func.call @store_exponent_observations(%output, %output_row, %observed_fraction, %wide_exponent, %observed_scaled) : (buffer, index, i64, i64, i64)
+    }
+  }
+  func.return
+}
+
+check.scenario @exponent_vector_f32_values {
+  check.trial[16](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %output = check.generate.fill value(-1) : tensor<96x3xi64>
+    check.compare<@exponent_vector_f32, @exponent_f32_reference>(%seed, %output) : (i64, tensor<96x3xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<96x3xi64>
+    }
+  }
+  check.return
+}
+
+func.def @exponent_vector_f64(%seed: i64, %output: buffer) {
+  %precision = scalar.constant 52 : i64
+  %bias = scalar.constant 1023 : i64
+  %sign_mask = scalar.constant -9223372036854775808 : i64
+  %infinity = scalar.constant 9218868437227405312 : i64
+  %finite_only = scalar.constant false : i1
+  %begin = index.constant 0 : index
+  %end = index.constant 96 : index
+  %lane_step = index.constant 1 : index
+  %last_lane = index.constant 2 : index
+  %step = index.constant 3 : index
+  scf.for %row = [%begin to %end step %step] {
+    %next = index.add %row, %lane_step : index
+    %last = index.add %row, %last_lane : index
+    %bits0, %power0 = func.call @exponent_input(%row, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %input0 = scalar.bitcast %bits0 : i64 to f64
+    %bits1, %power1 = func.call @exponent_input(%next, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %input1 = scalar.bitcast %bits1 : i64 to f64
+    %bits2, %power2 = func.call @exponent_input(%last, %seed, %precision, %bias, %sign_mask, %finite_only) : (index, i64, i64, i64, i64, i1) -> (i64, i32)
+    %input2 = scalar.bitcast %bits2 : i64 to f64
+    %inputs = vector.from_elements %input0, %input1, %input2 : vector<3xf64>
+    %powers = vector.from_elements %power0, %power1, %power2 : vector<3xi32>
+    %fractions, %exponents = vector.frexpf %inputs : vector<3xf64>, vector<3xi32>
+    %scaled = vector.ldexpf %inputs, %powers : vector<3xf64>, vector<3xi32>
+    scf.for %lane = [%begin to %step step %lane_step] {
+      %fraction = vector.extract %fractions[%lane] : vector<3xf64> -> f64
+      %exponent = vector.extract %exponents[%lane] : vector<3xi32> -> i32
+      %value = vector.extract %scaled[%lane] : vector<3xf64> -> f64
+      %fraction_bits = scalar.bitcast %fraction : f64 to i64
+      %scaled_bits = scalar.bitcast %value : f64 to i64
+      %observed_fraction = func.call @observe_exponent_bits(%fraction_bits, %sign_mask, %infinity, %finite_only) : (i64, i64, i64, i1) -> (i64)
+      %observed_scaled = func.call @observe_exponent_bits(%scaled_bits, %sign_mask, %infinity, %finite_only) : (i64, i64, i64, i1) -> (i64)
+      %wide_exponent = scalar.extsi %exponent : i32 to i64
+      %output_row = index.add %row, %lane : index
+      func.call @store_exponent_observations(%output, %output_row, %observed_fraction, %wide_exponent, %observed_scaled) : (buffer, index, i64, i64, i64)
+    }
+  }
+  func.return
+}
+
+check.scenario @exponent_vector_f64_values {
+  check.trial[16](%trial: index, %entropy: check.entropy) {
+    %seed = check.entropy.read %entropy[%trial] : check.entropy -> i64
+    %output = check.generate.fill value(-1) : tensor<96x3xi64>
+    check.compare<@exponent_vector_f64, @exponent_f64_reference>(%seed, %output) : (i64, tensor<96x3xi64>) -> () {
       check.expect.bitwise actual(%output) expected(%output) : tensor<96x3xi64>
     }
   }

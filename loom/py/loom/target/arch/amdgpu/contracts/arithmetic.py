@@ -21,6 +21,10 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.arch.amdgpu.contracts.bfloat import bfloat_narrow_rules
+from loom.target.arch.amdgpu.contracts.exponent import (
+    EXPONENT_DESCRIPTOR_KEYS,
+    exponent_rules,
+)
 from loom.target.arch.amdgpu.contracts.materializers import (
     ADDRESS_SGPR_MATERIALIZER,
     ADDRESS_VGPR_MATERIALIZER,
@@ -159,8 +163,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_sqrt_f32",
     "amdgpu.v_sqrt_f64",
     "amdgpu.v_rsq_f64",
-    "amdgpu.v_ldexp_f32",
-    "amdgpu.v_ldexp_f64",
+    *EXPONENT_DESCRIPTOR_KEYS,
     "amdgpu.v_cmp_class_f64",
     "amdgpu.v_cmp_olt_f64",
     "amdgpu.v_cvt_f64_i32",
@@ -4545,7 +4548,7 @@ def _minmax_family_rules() -> tuple[DescriptorRule | RecipeRule, ...]:
 
 
 def _rules() -> tuple[ContractCase, ...]:
-    rules: list[ContractCase] = []
+    rules: list[ContractCase] = list(exponent_rules(_DESCRIPTOR_SET))
     for type_pattern, type_suffix in ((_F16, "f16"), (_F32, "f32")):
         for source_op, instruction in (
             (scalar_arithmetic.scalar_addf, "add"),
