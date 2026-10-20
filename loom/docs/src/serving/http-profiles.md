@@ -491,10 +491,22 @@ limits. Larger images require more work and memory, and a first request can
 include compilation time. Request sizes do not change the deployment default.
 `seed` defaults to zero and accepts an unsigned integer or decimal string.
 
-`strength` is a finite adapter multiplier, default one. With a loaded adapter,
-zero selects base weights. Without an adapter only the default strength is
-accepted. This endpoint is text-to-image; it does not accept reference-image
-uploads or imply image-editing support. Unknown fields reject.
+Optional `loras` selects adapters registered with the deployment, with an
+independent strength for each:
+
+```json
+{"model":"illustrator","prompt":"a red fox in the snow","loras":[{"id":"watercolor","scale":0.3},{"id":"ink","scale":0.7}]}
+```
+
+This example requires registered `watercolor` and `ink` adapters. Each `id` is
+a nonempty string, not a path or URL to load. `scale` is a finite F32 number,
+defaults to one, and may be negative or zero. Omitting `loras`, or supplying an
+empty list, selects the base model. Unknown or repeated IDs reject the request.
+Selections affect only that request, including when it shares a batch with
+other requests.
+
+This endpoint is text-to-image; it does not accept reference-image uploads or
+imply image-editing support. Unknown fields reject.
 
 ## Finite decisions
 

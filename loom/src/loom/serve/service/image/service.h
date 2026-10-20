@@ -23,9 +23,8 @@ typedef struct loom_serve_image_service_options_t {
   uint32_t width;
   // Default output pixel height for requests omitting size.
   uint32_t height;
-  // Whether the retained generator accepts an adapter strength other than one.
-  bool adapter_enabled;
-  // Positive bound on requests queued behind the single active image.
+  // Positive additional host request credit beyond the first admitted image.
+  // Queued and active cohort items share the total pending_capacity + 1 bound.
   iree_host_size_t pending_capacity;
   // Retained execution choices including original/pending/failed candidates;
   // zero disables reconfiguration independently of request admission.
@@ -38,9 +37,9 @@ typedef struct loom_serve_image_service_options_t {
 typedef struct loom_serve_image_service_t loom_serve_image_service_t;
 
 // Creates bounded image admission without accepting asynchronous work.
-// Model calls are serialized by the router; finite preparation and encoding
-// share the host executor. The generator and deployment name outlive this
-// object. A supplied telemetry stream is borrowed through destruction and
+// Model calls are serialized by the router; request/cohort preparation and
+// encoding share the host executor. The generator and deployment name outlive
+// this object. A supplied telemetry stream is borrowed through destruction and
 // preserves the registration's history; NULL creates a service-owned stream.
 iree_status_t loom_serve_image_service_allocate(
     loom_serve_host_t* host, loom_serve_image_generator_t generator,
@@ -53,10 +52,12 @@ iree_status_t loom_serve_image_service_allocate(
 // that can release shared capacity. Successful model readiness releases pins
 // before CPU encoding, whose borrowed output remains exclusive until
 // retirement. POST /v1/images/generations returns one base64 PNG selected by
-// its model field. Peer reset removes queued work or discards an active result
-// at the complete-image boundary. Slow readers own copied response bytes, never
-// model output or workspace. Bounded observation records omit prompts and
-// never wait on log sinks.
+// its model field. Compatible prepared requests share one command cohort.
+// Peer reset removes queued work but preserves captured slots until retirement;
+// only loss of all peers stops submissions after the active part retires.
+// One PNG encoder borrows each surviving RGB range in turn. Slow readers own
+// copied response bytes, never model output or workspace. Bounded observation
+// records omit prompts and never wait on log sinks.
 loom_serve_service_t loom_serve_image_service_interface(
     loom_serve_image_service_t* service);
 

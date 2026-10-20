@@ -62,6 +62,21 @@ endif()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    prepared_request
+  HDRS
+    "prepared_request.h"
+  SRCS
+    "prepared_request.c"
+  DEPS
+    iree::base
+    iree::vm
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     reconfiguration
   HDRS
     "reconfiguration.h"
@@ -70,6 +85,23 @@ loom_cc_library(
     loom::serve::runtime::program::sources
     loom::serve::runtime::program::variant_pool
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_test(
+  NAME
+    prepared_request_test
+  SRCS
+    "prepared_request_test.cc"
+  DEPS
+    ::prepared_request
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm
+  LABELS
+    "iree-build-requirement=loom.target.arch.vm"
 )
 endif()
 

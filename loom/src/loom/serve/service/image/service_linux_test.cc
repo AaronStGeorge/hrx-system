@@ -16,6 +16,7 @@
 #include "iree/async/proactor.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/vm/buffer.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/server/router.h"
 #include "loom/serve/service/image/service.h"
@@ -79,9 +80,22 @@ struct loom_serve_test_image_gate_t {
   }
   static iree_status_t Prepare(void* self,
                                const loom_serve_image_request_t* request,
-                               loom_serve_image_prepared_t* out_prepared) {
-    static_cast<loom_serve_test_image_gate_t*>(self)->admission_available =
+                               loom_serve_prepared_request_t* out_prepared) {
+    *out_prepared = {.units = 1, .tag = 17};
+    IREE_RETURN_IF_ERROR(iree_vm_buffer_create(16, 8, iree_allocator_system(),
+                                               &out_prepared->bytes));
+    static_cast<uint8_t*>(iree_vm_buffer_data(out_prepared->bytes))[0] =
         request->seed == 0;
+    return iree_ok_status();
+  }
+  static iree_status_t PrepareBatch(
+      void* self, iree_host_size_t count,
+      const loom_serve_prepared_request_t* requests, const iree_host_size_t*,
+      loom_serve_image_prepared_t* out_prepared) {
+    EXPECT_EQ(count, 1u);
+    static_cast<loom_serve_test_image_gate_t*>(self)->admission_available =
+        static_cast<const uint8_t*>(
+            iree_vm_buffer_data(requests[0].bytes))[0] != 0;
     *out_prepared = {.stage = 0, .tag = 17, .input_bytes = 16};
     return iree_ok_status();
   }
@@ -218,15 +232,16 @@ class ImageServiceFixture : public ::testing::Test {
     gates_[index].http = &http_;
     const loom_serve_image_generator_t generator = {
         .self = &gates_[index],
+        .batch_limit = 1,
         .prepare = loom_serve_test_image_gate_t::Prepare,
+        .prepare_batch = loom_serve_test_image_gate_t::PrepareBatch,
         .set_observer = [](void*, loom_serve_wake_callback_t) {},
-        .advance_prepared_request =
+        .advance_batch =
             [](void*, bool, bool* out_complete) {
               *out_complete = true;
               return iree_ok_status();
             },
-        .discard_prepared_request =
-            loom_serve_test_image_gate_t::DiscardPreparedRequest,
+        .discard_batch = loom_serve_test_image_gate_t::DiscardPreparedRequest,
         .try_admit = loom_serve_test_image_gate_t::Admit,
         .submit = loom_serve_test_image_gate_t::Submit,
         .complete = loom_serve_test_image_gate_t::Complete,

@@ -14,6 +14,7 @@
 #include "loom/serve/runtime/program/sources.h"
 #include "loom/serve/service/execution_reconfiguration.h"
 #include "loom/serve/service/finite/result.h"
+#include "loom/serve/service/prepared_request.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -112,7 +113,8 @@ iree_status_t loom_serve_finite_load_free(loom_serve_finite_load_t* load);
 // Commands may additionally have compiler-reflected private workspace; direct
 // stages use their compiled launch configuration without a command buffer or
 // runner workspace.
-// Command stages share the same fixed placement for checkpoint parameters.
+// Command stages declared by one request share a parameter binding map;
+// retained request choices can bind different checkpoint banks.
 // Direct stages have no checkpoint parameters. Source run uses runner.execute_2
 // for both kinds and publishes device results. Native consumers choose whether
 // to compose device work or explicitly download a host snapshot.
@@ -175,23 +177,13 @@ iree_status_t loom_serve_finite_model_query_status(
     loom_serve_finite_model_t* model);
 bool loom_serve_finite_model_is_pending(const loom_serve_finite_model_t* model);
 
-typedef struct loom_serve_finite_prepared_t {
-  // Owned source bytes. The input buffer remains retained by the request owner
-  // through batch completion, including when bytes alias it.
-  iree_vm_buffer_t* bytes;
-  // Positive additive source cost, at most the model's declared batch limit.
-  uint64_t units;
-  // Source-defined compatibility class; no native geometry interpretation.
-  uint64_t tag;
-} loom_serve_finite_prepared_t;
-
 // CPU-only calls, serialized with other model calls; suitable for finite task
 // processes. Input errors originate in source input.require. Preparation does
 // not acquire residency or submit device work. Successful requests are retained
 // by their owner while admission waits, without repeated preparation.
 iree_status_t loom_serve_finite_model_prepare_request(
     loom_serve_finite_model_t* model, iree_vm_buffer_t* input,
-    loom_serve_finite_prepared_t* out_prepared);
+    loom_serve_prepared_request_t* out_prepared);
 
 // Builds one retained cohort from prepared requests in stable client order.
 // expected_rows is protocol-derived, one count per request. The source result
@@ -203,7 +195,7 @@ iree_status_t loom_serve_finite_model_prepare_request(
 // cohort.
 iree_status_t loom_serve_finite_model_prepare_batch(
     loom_serve_finite_model_t* model, iree_host_size_t count,
-    const loom_serve_finite_prepared_t* requests,
+    const loom_serve_prepared_request_t* requests,
     const iree_host_size_t* expected_rows);
 
 // Observer used by request compilation only, installed before advance_batch.

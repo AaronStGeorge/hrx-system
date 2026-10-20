@@ -924,15 +924,22 @@ def check_control_contracts(server_command, directory, catalog):
         ),
         (
             "image",
-            [("%tags: buffer, %stage_count", "%tags: hal.buffer, %stage_count")],
-            "model export 'prepare_request' argument 1 type mismatch: "
+            [("%tags: buffer, %ranges", "%tags: hal.buffer, %ranges")],
+            "model export 'prepare_batch' argument 1 type mismatch: "
             "host expects vm.buffer, source declares hal.buffer",
         ),
         (
             "image",
-            [("%strength: f32", "%strength: i32")],
-            "model export 'prepare_request' argument 7 type mismatch: "
-            "host expects f32, source declares i32",
+            [
+                (
+                    "%loras: buffer) -> (buffer, i64, i64) {",
+                    "%wrong_loras: hal.buffer) -> (buffer, i64, i64) {\n"
+                    "  %empty = index.constant 0 : offset\n"
+                    "  %loras = buffer.alloca<private> align(1) %empty : buffer",
+                )
+            ],
+            "model export 'prepare_request' argument 5 type mismatch: "
+            "host expects vm.buffer, source declares hal.buffer",
         ),
         (
             "embedding",

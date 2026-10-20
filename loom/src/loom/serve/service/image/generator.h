@@ -12,13 +12,15 @@
 #include "loom/serve/runtime/parameter/residency.h"
 #include "loom/serve/service/execution_reconfiguration.h"
 #include "loom/serve/service/image/request.h"
+#include "loom/serve/service/prepared_request.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Copied source-selected invocation facts, valid after successful preparation.
-// No pointer into the source VM or its request payload escapes in this value.
+// Copied source-selected cohort facts, valid after successful batch
+// preparation. No pointer into the source VM or its request payload escapes in
+// this value.
 typedef struct loom_serve_image_prepared_t {
   // Retained command index selected by the source program.
   uint64_t stage;
@@ -44,23 +46,31 @@ typedef uint32_t loom_serve_image_submit_flags_t;
 typedef struct loom_serve_image_generator_t {
   // Borrowed model owner, outliving the service and every accepted task/wait.
   void* self;
+  // Positive source-declared work limit for one cohort.
+  uint64_t batch_limit;
   // CPU source preparation, with no shared admission-policy mutation. Returns
   // INVALID_ARGUMENT for rejected input with no retained payload; other errors
-  // are terminal. Success retains a payload until discard or completion and
-  // returns copied invocation facts through out_prepared.
+  // are terminal. Success transfers opaque bytes to the request owner; this
+  // does not capture executables, parameters, or an invocation.
   iree_status_t (*prepare)(void* self,
                            const loom_serve_image_request_t* request,
-                           loom_serve_image_prepared_t* out_prepared);
+                           loom_serve_prepared_request_t* out_prepared);
+  // Captures one cohort from compatible requests in stable client order.
+  // Output lengths are the protocol-validated F32 CHW extents in that order.
+  // The source packs one upload and command; failure retains no invocation.
+  iree_status_t (*prepare_batch)(void* self, iree_host_size_t count,
+                                 const loom_serve_prepared_request_t* requests,
+                                 const iree_host_size_t* output_lengths,
+                                 loom_serve_image_prepared_t* out_prepared);
   // Installs the serialized owner's nonblocking wake before preparation. The
   // owner detaches it only after every accepted compilation has retired.
   void (*set_observer)(void* self, loom_serve_wake_callback_t observer);
   // Resolves prepared code before residency admission. A miss progresses
   // asynchronously; cancellation joins accepted producers before completion.
-  iree_status_t (*advance_prepared_request)(void* self, bool cancel,
-                                            bool* out_complete);
+  iree_status_t (*advance_batch)(void* self, bool cancel, bool* out_complete);
   // Releases prepared CPU payload and withdraws any unsubmitted admission
   // interest. Runs on the owner, never concurrently with other services.
-  void (*discard_prepared_request)(void* self);
+  void (*discard_batch)(void* self);
   // New-work admission on the shared owner; policy deferral differs from
   // physical denial. ACQUIRED pins and enqueues parameter activation.
   iree_status_t (*try_admit)(void* self,

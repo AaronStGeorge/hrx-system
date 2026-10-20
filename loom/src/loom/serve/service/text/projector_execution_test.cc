@@ -93,7 +93,7 @@ class PixelProjectorExecutionTest : public SourceTextServiceTest {
   // Real source input packets, not test-authored decoded pixel arrays.
   std::array<iree_vm_buffer_t*, 2> packets_ = {};
   // Source-produced batch inputs retaining original image ordinals.
-  std::array<loom_serve_finite_prepared_t, 2> prepared_ = {};
+  std::array<loom_serve_prepared_request_t, 2> prepared_ = {};
   // Device-only output supplied directly to the language consumer.
   loom_serve_finite_result_t* result_ = nullptr;
   // Final test observation, allocated only after the language result exists.

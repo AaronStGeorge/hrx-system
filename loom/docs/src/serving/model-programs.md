@@ -210,19 +210,24 @@ links the storage, epoch and chat-policy declarations beside their owners.
 
 Cold image preparation selects stages and parameter domains for default geometry.
 Warm source receives the requested height and width alongside prompt, seed, and
-adapter strength. It validates the geometry, prepares opaque request bytes, and
-selects a cold stage or declares request stages through the same invocation-only
-`prepare` capability as finite cohorts. Exact declaration sets reuse code within
-the selected source generation; misses compile before parameter admission.
-Request stages share the cold parameter layout and cannot declare new parameters.
+decoded adapter ID/scale records. It resolves IDs against its registrations,
+validates geometry, and returns opaque request bytes with work and compatibility
+facts. Compatible requests form one cohort; source batch preparation selects a
+cold stage or declares stages through the same invocation-only `prepare`
+capability as finite cohorts. Exact declaration sets reuse code within the
+selected source generation; misses compile before parameter admission. Explicit
+checkpoint declarations select retained banks or prepare independent banks on
+demand; omitted declarations preserve the cold parameter layout. Stages within
+one cohort share a parameter binding map.
 
 Image control then drives command parts to final RGB. It returns a continuation
 cursor; another invocation occurs only after the previous accepted frontiers
 retire. Compiler-reflected workspace remains live across barrier-aligned parts.
-RGB and compiler-aligned workspace share one request-sized pool allocation,
-retained through final feedback. Neither storage nor pixel geometry belongs to
-the executable cache. Final output is F32 CHW RGB in `[-1,1]` before native image
-encoding uses that request's dimensions.
+RGB and compiler-aligned workspace share one cohort-sized pool allocation,
+retained through final feedback. Each request keeps a stable output slice even
+if a peer is cancelled. Neither storage nor pixel geometry belongs to the
+executable cache. Final output is F32 CHW RGB in `[-1,1]` before native image
+encoding uses each request's dimensions.
 The [image source contract](https://github.com/ROCm/hrx-system/blob/main/loom/src/loom/serve/service/image/model.h)
 defines entry signatures, alignment and cancellation.
 
