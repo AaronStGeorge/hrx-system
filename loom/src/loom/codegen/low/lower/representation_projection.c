@@ -526,7 +526,7 @@ iree_status_t loom_low_plan_function_representation(
   IREE_RETURN_IF_ERROR(
       loom_low_representation_plan_op(module, function.op, &projection, plan));
   IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(module, bundle->config->contract_set_key,
+      loom_module_intern_string(module, bundle->config->contract_set.spelling,
                                 &plan->target_descriptor_set_key));
   *out_plan = plan;
   return iree_ok_status();

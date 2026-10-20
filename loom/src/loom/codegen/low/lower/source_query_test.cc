@@ -79,12 +79,11 @@ class LowLowerSourceQueryTest : public ::testing::Test {
     mapping_context_.policy = options_.policy;
     mapping_context_.result = &mapping_result_;
     mapping_context_.fact_table = &fact_table_;
-    loom_target_low_source_binding_t binding = {};
     IREE_ASSERT_OK(loom_target_low_source_binding_select(
         options_.descriptor_registry, loom_target_facts_bundle(&target_facts_),
-        &binding));
-    mapping_context_.descriptor_set = binding.descriptor_set;
-    mapping_context_.schedule_model = binding.schedule_model;
+        &source_binding_));
+    mapping_context_.descriptor_set = source_binding_.descriptor_set;
+    mapping_context_.schedule_model = source_binding_.schedule_model;
     mapping_context_.function_arena = &function_arena_;
     mapping_context_.lowering = &frame_;
     iree_arena_initialize(&block_pool_, &function_arena_);
@@ -179,7 +178,8 @@ class LowLowerSourceQueryTest : public ::testing::Test {
 
   void CreateQueryScope() {
     IREE_ASSERT_OK(loom_low_lower_source_query_scope_allocate(
-        module_, function_, &options_, &query_scope_arena_, &query_scope_));
+        module_, function_, &options_, source_binding_, &query_scope_arena_,
+        &query_scope_));
   }
 
   iree_status_t QueryContract(const loom_op_t* source_op,
@@ -251,6 +251,7 @@ class LowLowerSourceQueryTest : public ::testing::Test {
                                       LOOM_VALUE_ID_INVALID};
   loom_value_id_t result_id_ = LOOM_VALUE_ID_INVALID;
   loom_target_low_descriptor_registry_t descriptor_registry_ = {};
+  loom_target_low_source_binding_t source_binding_ = {};
   loom_target_facts_t target_facts_ = {};
   loom_value_fact_table_t fact_table_ = {};
   loom_low_lower_options_t options_ = {};

@@ -163,11 +163,16 @@ TEST_F(TargetFactsTest, ProjectionBorrowsStringsWithoutRetainingSourceAccess) {
   }
   EXPECT_EQ(first.storage.export_plan.export_symbol.data,
             first_strings[1].data);
-  EXPECT_EQ(first.storage.config.contract_set_key.data, first_strings[0].data);
+  EXPECT_EQ(first.storage.config.contract_set.spelling.data,
+            first_strings[0].data);
+  EXPECT_NE(first.storage.config.contract_set.stable_id, 0u);
   EXPECT_EQ(second.storage.export_plan.export_symbol.data,
             second_strings[1].data);
-  EXPECT_EQ(second.storage.config.contract_set_key.data,
+  EXPECT_EQ(second.storage.config.contract_set.spelling.data,
             second_strings[0].data);
+  EXPECT_NE(second.storage.config.contract_set.stable_id, 0u);
+  EXPECT_NE(first.storage.config.contract_set.stable_id,
+            second.storage.config.contract_set.stable_id);
   EXPECT_TRUE(loom_target_facts_field_is_explicit(
       &first, LOOM_TARGET_FACT_FIELD_EXPORT_SYMBOL));
   EXPECT_TRUE(loom_target_facts_field_is_explicit(

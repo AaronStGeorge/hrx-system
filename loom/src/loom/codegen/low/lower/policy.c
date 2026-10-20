@@ -18,11 +18,10 @@ void loom_low_lower_policy_registry_initialize_from_entries(
 
 const loom_low_lower_policy_t* loom_low_lower_policy_registry_lookup(
     const loom_low_lower_policy_registry_t* registry,
-    iree_string_view_t contract_set_key) {
-  contract_set_key = iree_string_view_trim(contract_set_key);
+    uint64_t contract_set_stable_id) {
   for (iree_host_size_t i = 0; i < registry->entry_count; ++i) {
     const loom_low_lower_policy_registry_entry_t* entry = &registry->entries[i];
-    if (!iree_string_view_equal(entry->contract_set_key, contract_set_key)) {
+    if (entry->contract_set_stable_id != contract_set_stable_id) {
       continue;
     }
     return entry->policy;
@@ -34,5 +33,5 @@ const loom_low_lower_policy_t* loom_low_lower_policy_registry_lookup_for_bundle(
     const loom_low_lower_policy_registry_t* registry,
     const loom_target_bundle_t* bundle) {
   return loom_low_lower_policy_registry_lookup(
-      registry, bundle->config->contract_set_key);
+      registry, bundle->config->contract_set.stable_id);
 }

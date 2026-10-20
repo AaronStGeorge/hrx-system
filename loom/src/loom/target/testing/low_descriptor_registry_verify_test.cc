@@ -103,8 +103,14 @@ TEST(LowDescriptorRegistryTest, BundleSelectionBindsExactScheduleModel) {
 
   const loom_target_config_t config = {
       .name = IREE_SVL("test.low.core"),
-      .schedule_model_key = IREE_SVL("test.low.core"),
-      .contract_set_key = IREE_SVL("test.low.core"),
+      .schedule_model_stable_id =
+          loom_low_descriptor_stable_id_from_key(IREE_SV("test.low.core")),
+      .contract_set =
+          {
+              .stable_id = loom_low_descriptor_stable_id_from_key(
+                  IREE_SV("test.low.core")),
+              .spelling = IREE_SVL("test.low.core"),
+          },
   };
   const loom_target_bundle_t bundle = {
       .name = IREE_SVL("test-low"),
@@ -117,8 +123,8 @@ TEST(LowDescriptorRegistryTest, BundleSelectionBindsExactScheduleModel) {
                                                        &bundle, &binding));
   ASSERT_NE(binding.descriptor_set, nullptr);
   EXPECT_EQ(binding.schedule_model,
-            loom_low_descriptor_set_lookup_schedule_model(
-                binding.descriptor_set, config.schedule_model_key));
+            loom_low_descriptor_set_lookup_schedule_model_by_id(
+                binding.descriptor_set, config.schedule_model_stable_id));
 }
 
 TEST(LowDescriptorRegistryTest, BundleSelectionFailsWhenLinkedSetIsMissing) {
@@ -127,8 +133,14 @@ TEST(LowDescriptorRegistryTest, BundleSelectionFailsWhenLinkedSetIsMissing) {
 
   const loom_target_config_t missing_config = {
       .name = IREE_SVL("missing"),
-      .schedule_model_key = IREE_SVL("test.low.core"),
-      .contract_set_key = IREE_SVL("target.missing"),
+      .schedule_model_stable_id =
+          loom_low_descriptor_stable_id_from_key(IREE_SV("test.low.core")),
+      .contract_set =
+          {
+              .stable_id = loom_low_descriptor_stable_id_from_key(
+                  IREE_SV("target.missing")),
+              .spelling = IREE_SVL("target.missing"),
+          },
   };
   const loom_target_bundle_t missing_bundle = {
       .name = IREE_SVL("missing-bundle"),
@@ -149,12 +161,18 @@ TEST(LowDescriptorRegistryTest,
   loom_target_low_descriptor_registry_t registry = {};
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
-  for (iree_string_view_t model_key :
-       {iree_string_view_empty(), IREE_SV("test.model.missing")}) {
+  for (uint64_t schedule_model_stable_id :
+       {UINT64_C(0), loom_low_descriptor_stable_id_from_key(
+                         IREE_SV("test.model.missing"))}) {
     const loom_target_config_t config = {
         .name = IREE_SVL("missing-model"),
-        .schedule_model_key = model_key,
-        .contract_set_key = IREE_SVL("test.low.core"),
+        .schedule_model_stable_id = schedule_model_stable_id,
+        .contract_set =
+            {
+                .stable_id = loom_low_descriptor_stable_id_from_key(
+                    IREE_SV("test.low.core")),
+                .spelling = IREE_SVL("test.low.core"),
+            },
     };
     const loom_target_bundle_t bundle = {
         .name = IREE_SVL("missing-model-bundle"),

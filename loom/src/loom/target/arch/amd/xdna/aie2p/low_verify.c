@@ -391,7 +391,7 @@ static iree_string_view_t loom_aie2p_low_function_contract_name(
       (uint32_t)loom_attr_as_enum(loom_target_like_selector(target));
   const loom_target_bundle_t* bundle =
       loom_target_bundle_table_lookup(descriptor->bundle_table, selector);
-  return bundle ? bundle->config->contract_set_key
+  return bundle ? bundle->config->contract_set.spelling
                 : IREE_SV("<unresolved-target>");
 }
 

@@ -23,14 +23,14 @@ extern "C" {
 #define LOOM_X86_TARGET_STABLE_ID UINT64_C(0x3f1e78197f70e441)
 
 // Explicit baseline model used without a calibrated processor tune.
-#define LOOM_X86_GENERIC_SCHEDULE_MODEL_KEY "x86.generic"
+#define LOOM_X86_GENERIC_SCHEDULE_MODEL_STABLE_ID UINT64_C(0x037ef8ad209f4f82)
 
 // Stable processor scheduling-model identity.
 typedef uint8_t loom_x86_target_tune_t;
 enum loom_x86_target_tune_e {
   LOOM_X86_TARGET_TUNE_NONE = 0,
-#define LOOM_X86_TARGET_TUNE(enum_suffix, stable_value, tune_spelling, \
-                             schedule_model_key)                       \
+#define LOOM_X86_TARGET_TUNE(enum_suffix, stable_value, \
+                             schedule_model_stable_id)  \
   LOOM_X86_TARGET_TUNE_##enum_suffix = stable_value,
 #include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_TARGET_TUNE
@@ -39,8 +39,8 @@ enum loom_x86_target_tune_e {
 
 // Schedule-model catalog identity for one processor tune.
 typedef struct loom_x86_target_tune_info_t {
-  // Stable descriptor schedule-model key.
-  iree_string_view_t schedule_model_key;
+  // Stable descriptor schedule-model identity.
+  uint64_t schedule_model_stable_id;
 } loom_x86_target_tune_info_t;
 
 // Returns the generated metadata for a verified |tune|, including NONE.
@@ -55,7 +55,8 @@ loom_x86_target_tune_t loom_x86_target_tune_select_cpu(
 // Native bundle constants shared by authored records and named profiles.
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
     symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,            \
+    feature_contract_set_key, feature_contract_set_stable_id,               \
     default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
     automatic_priority)                                                     \
   extern const loom_target_bundle_t kX86LowTargetBundle##symbol_suffix;
@@ -67,7 +68,7 @@ extern const loom_target_bundle_table_t loom_x86_target_bundles;
 // Generated execution and optional-feature policy for one x86 selector.
 typedef struct loom_x86_target_policy_t {
   // Descriptor contract selected when semantic features are present.
-  iree_string_view_t feature_contract_set_key;
+  loom_target_contract_set_t feature_contract_set;
 
   // Optional feature assertions this selector can enable.
   loom_x86_feature_bits_t supported_feature_bits;

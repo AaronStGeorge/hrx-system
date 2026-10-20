@@ -48,6 +48,7 @@ loom_generated_cc_library(
     loom::target::projection
     loom::target::types
     loom::util::fact_table
+    loom::util::stable_id
 )
 
 loom_cc_test(

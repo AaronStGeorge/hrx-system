@@ -44,15 +44,17 @@ loom_target_contract_query_callback_t loom_low_lower_source_query_callback(
 // Creates a read-only target contract query scope for |source_function|.
 //
 // The scope uses the same generated rules, policy callbacks, descriptor
-// resolution, and function analyses as source-to-Low lowering. It borrows
-// |module| and |options| and allocates its object storage from |arena|. Callers
-// must deinitialize the scope before releasing those inputs or resetting
-// |arena|. Reference/access discovery may reach source callees. All queries in
-// the scope finish before mutating represented source; a rewrite retires the
-// scope's analyses before another query can observe the changed program.
+// binding, and function analyses as source-to-Low lowering. It borrows
+// |module|, |options|, and |binding| and allocates its object storage from
+// |arena|. Callers must deinitialize the scope before releasing those inputs or
+// resetting |arena|. Reference/access discovery may reach source callees. All
+// queries in the scope finish before mutating represented source; a rewrite
+// retires the scope's analyses before another query can observe the changed
+// program.
 iree_status_t loom_low_lower_source_query_scope_allocate(
     loom_module_t* module, loom_func_like_t source_function,
-    const loom_low_lower_options_t* options, iree_arena_allocator_t* arena,
+    const loom_low_lower_options_t* options,
+    loom_target_low_source_binding_t binding, iree_arena_allocator_t* arena,
     loom_low_lower_source_query_scope_t** out_scope);
 
 // Releases analyses owned by |scope|. The scope object remains arena-owned.

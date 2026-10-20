@@ -425,10 +425,10 @@ static const loom_target_math_policy_t kAmdgpuNativePackedBf16MathPolicy = {
 static const loom_target_math_policy_registry_entry_t
     kAmdgpuMathPolicyEntries[] = {
 #define LOOM_AMDGPU_TARGET_DESCRIPTOR_SET(                                      \
-    symbol_suffix, bundle_name, snapshot_name, key, descriptor_set_flags,       \
-    wavefront_size, workgroup_storage_byte_limit)                               \
+    symbol_suffix, bundle_name, snapshot_name, key, stable_id,                  \
+    descriptor_set_flags, wavefront_size, workgroup_storage_byte_limit)         \
   {                                                                             \
-      .contract_set_key = IREE_SVL(key),                                        \
+      .contract_set_stable_id = stable_id,                                      \
       .policy =                                                                 \
           ((descriptor_set_flags &                                              \
             LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_NATIVE_PACKED_BF16_ARITHMETIC) \

@@ -8,6 +8,15 @@
 
 #include <stdint.h>
 
+#define LOOM_AIE2P_CORE_SCHEDULE_MODEL_STABLE_ID UINT64_C(0x25ed3c7d25a1452a)
+#define LOOM_AIE2P_ARRAY_SCHEDULE_MODEL_STABLE_ID UINT64_C(0x6c585109318fc07a)
+#define LOOM_AIE2P_CONFIGURATION_SCHEDULE_MODEL_STABLE_ID \
+  UINT64_C(0x562c9d43fef5386d)
+#define LOOM_AIE2P_CORE_CONTRACT_SET_STABLE_ID UINT64_C(0x25ed3c7d25a1452a)
+#define LOOM_AIE2P_ARRAY_CONTRACT_SET_STABLE_ID UINT64_C(0x6c585109318fc07a)
+#define LOOM_AIE2P_CONFIGURATION_CONTRACT_SET_STABLE_ID \
+  UINT64_C(0x562c9d43fef5386d)
+
 static const loom_target_snapshot_t kAie2pCoreSnapshot = {
     .name = IREE_SVL("amd-xdna-aie2p-core"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
@@ -35,8 +44,12 @@ static const loom_target_export_plan_t kAie2pCoreExportPlan = {
 
 static const loom_target_config_t kAie2pCoreConfig = {
     .name = IREE_SVL("amd.xdna.aie2p.core"),
-    .schedule_model_key = IREE_SVL("amd.xdna.aie2p.core"),
-    .contract_set_key = IREE_SVL("amd.xdna.aie2p.core"),
+    .schedule_model_stable_id = LOOM_AIE2P_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_AIE2P_CORE_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("amd.xdna.aie2p.core"),
+        },
     .contract_feature_bits = 0,
 };
 
@@ -74,8 +87,12 @@ static const loom_target_export_plan_t kAie2pArrayExportPlan = {
 
 static const loom_target_config_t kAie2pArrayConfig = {
     .name = IREE_SVL("amd.xdna.aie2p.array"),
-    .schedule_model_key = IREE_SVL("amd.xdna.aie2p.array"),
-    .contract_set_key = IREE_SVL("amd.xdna.aie2p.array"),
+    .schedule_model_stable_id = LOOM_AIE2P_ARRAY_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_AIE2P_ARRAY_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("amd.xdna.aie2p.array"),
+        },
     .contract_feature_bits = 0,
 };
 
@@ -88,8 +105,13 @@ const loom_target_bundle_t loom_aie2p_array_target_bundle = {
 
 static const loom_target_config_t kAie2pConfigurationConfig = {
     .name = IREE_SVL("amd.xdna.aie2p.configuration"),
-    .schedule_model_key = IREE_SVL("amd.xdna.aie2p.configuration"),
-    .contract_set_key = IREE_SVL("amd.xdna.aie2p.configuration"),
+    .schedule_model_stable_id =
+        LOOM_AIE2P_CONFIGURATION_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_AIE2P_CONFIGURATION_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("amd.xdna.aie2p.configuration"),
+        },
 };
 
 const loom_target_bundle_t loom_aie2p_configuration_target_bundle = {

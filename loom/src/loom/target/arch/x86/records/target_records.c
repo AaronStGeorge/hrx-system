@@ -31,12 +31,13 @@ enum {
 static const loom_x86_target_tune_info_t kX86TargetTuneInfos[] = {
     [LOOM_X86_TARGET_TUNE_NONE] =
         {
-            .schedule_model_key = IREE_SVL(LOOM_X86_GENERIC_SCHEDULE_MODEL_KEY),
+            .schedule_model_stable_id =
+                LOOM_X86_GENERIC_SCHEDULE_MODEL_STABLE_ID,
         },
-#define LOOM_X86_TARGET_TUNE(enum_suffix, stable_value, tune_spelling, \
-                             schedule_model_key_arg)                   \
-  [LOOM_X86_TARGET_TUNE_##enum_suffix] = {                             \
-      .schedule_model_key = IREE_SVL(schedule_model_key_arg),          \
+#define LOOM_X86_TARGET_TUNE(enum_suffix, stable_value,         \
+                             schedule_model_stable_id_arg)      \
+  [LOOM_X86_TARGET_TUNE_##enum_suffix] = {                      \
+      .schedule_model_stable_id = schedule_model_stable_id_arg, \
   },
 #include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_TARGET_TUNE
@@ -142,7 +143,8 @@ loom_x86_target_tune_t loom_x86_target_tune_select_cpu(
 
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
     symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,            \
+    feature_contract_set_key, feature_contract_set_stable_id,               \
     default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
     automatic_priority)                                                     \
   LOOM_X86_LOW_SNAPSHOT(kX86##symbol_suffix##Snapshot, snapshot_name);
@@ -157,23 +159,29 @@ static const loom_target_export_plan_t kX86_64ObjectExportPlan = {
     .linkage = LOOM_TARGET_LINKAGE_DSO_LOCAL,
 };
 
-#define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
-    symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
-    default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
-    automatic_priority)                                                     \
-  static const loom_target_config_t kX86##symbol_suffix##Config = {         \
-      .name = IREE_SVL(descriptor_set_key),                                 \
-      .schedule_model_key = IREE_SVL(LOOM_X86_GENERIC_SCHEDULE_MODEL_KEY),  \
-      .contract_set_key = IREE_SVL(descriptor_set_key),                     \
-      .contract_feature_bits = default_feature_bits,                        \
+#define LOOM_X86_NATIVE_TARGET_PROFILE(                                      \
+    symbol_suffix, target_kind, selector_name, native_bundle_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,             \
+    feature_contract_set_key, feature_contract_set_stable_id,                \
+    default_feature_bits, supported_feature_bits, required_cpu_field0_bits,  \
+    automatic_priority)                                                      \
+  static const loom_target_config_t kX86##symbol_suffix##Config = {          \
+      .name = IREE_SVL(descriptor_set_key),                                  \
+      .schedule_model_stable_id = LOOM_X86_GENERIC_SCHEDULE_MODEL_STABLE_ID, \
+      .contract_set =                                                        \
+          {                                                                  \
+              .stable_id = descriptor_set_stable_id,                         \
+              .spelling = IREE_SVL(descriptor_set_key),                      \
+          },                                                                 \
+      .contract_feature_bits = default_feature_bits,                         \
   };
 #include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_NATIVE_TARGET_PROFILE
 
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
     symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,            \
+    feature_contract_set_key, feature_contract_set_stable_id,               \
     default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
     automatic_priority)                                                     \
   const loom_target_bundle_t kX86LowTargetBundle##symbol_suffix = {         \
@@ -189,7 +197,8 @@ static const loom_target_bundle_t* const kX86TargetBundleValues[] = {
     NULL,
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
     symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,            \
+    feature_contract_set_key, feature_contract_set_stable_id,               \
     default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
     automatic_priority)                                                     \
   &kX86LowTargetBundle##symbol_suffix,
@@ -203,14 +212,19 @@ const loom_target_bundle_table_t loom_x86_target_bundles = {
 };
 
 static const loom_x86_target_policy_t kX86TargetPolicies[] = {
-    {.feature_contract_set_key = {0}},
+    {.feature_contract_set = {0}},
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                  \
     symbol_suffix, target_kind, selector_name, native_bundle_key,        \
-    snapshot_name, descriptor_set_key, feature_contract_key_arg,         \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,         \
+    feature_contract_key_arg, feature_contract_stable_id_arg,            \
     default_feature_bits, supported_features_arg, required_cpu_bits_arg, \
     automatic_priority_arg)                                              \
   [target_kind] = {                                                      \
-      .feature_contract_set_key = IREE_SVL(feature_contract_key_arg),    \
+      .feature_contract_set =                                            \
+          {                                                              \
+              .stable_id = feature_contract_stable_id_arg,               \
+              .spelling = IREE_SVL(feature_contract_key_arg),            \
+          },                                                             \
       .supported_feature_bits = supported_features_arg,                  \
       .required_cpu_field0_bits = required_cpu_bits_arg,                 \
       .automatic_priority = automatic_priority_arg,                      \

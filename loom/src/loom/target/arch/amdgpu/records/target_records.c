@@ -10,6 +10,9 @@
 
 #include "loom/target/arch/amdgpu/target_info.h"
 
+#define LOOM_AMDGPU_GENERIC_SCHEDULE_MODEL_STABLE_ID \
+  UINT64_C(0x2a42ccc9fb04b34e)
+
 // clang-format off
 #define LOOM_AMDGPU_LOW_SNAPSHOT(symbol, snapshot_name, wavefront_size,      \
                                   workgroup_storage_byte_limit)             \
@@ -40,8 +43,8 @@
   }
 
 #define LOOM_AMDGPU_TARGET_DESCRIPTOR_SET(                                  \
-    symbol_suffix, bundle_name, snapshot_name, key, descriptor_set_flags,   \
-    wavefront_size, workgroup_storage_byte_limit)                           \
+    symbol_suffix, bundle_name, snapshot_name, key, stable_id,              \
+    descriptor_set_flags, wavefront_size, workgroup_storage_byte_limit)     \
   LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpu##symbol_suffix##Snapshot, snapshot_name, \
                            wavefront_size, workgroup_storage_byte_limit);
 #include "loom/target/arch/amdgpu/target_records_tables.inl"
@@ -58,23 +61,27 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
   },
 };
 
-#define LOOM_AMDGPU_LOW_CONFIG(symbol, key) \
+#define LOOM_AMDGPU_LOW_CONFIG(symbol, key, contract_stable_id) \
   static const loom_target_config_t symbol = { \
       .name = IREE_SVL(key), \
-      .schedule_model_key = IREE_SVL("amdgpu.generic"), \
-      .contract_set_key = IREE_SVL(key), \
+      .schedule_model_stable_id = \
+          LOOM_AMDGPU_GENERIC_SCHEDULE_MODEL_STABLE_ID, \
+      .contract_set = { \
+          .stable_id = contract_stable_id, \
+          .spelling = IREE_SVL(key), \
+      }, \
   }
 
 #define LOOM_AMDGPU_TARGET_DESCRIPTOR_SET(                                  \
-    symbol_suffix, bundle_name, snapshot_name, key, descriptor_set_flags,   \
-    wavefront_size, workgroup_storage_byte_limit)                           \
-  LOOM_AMDGPU_LOW_CONFIG(kAmdgpu##symbol_suffix##Config, key);
+    symbol_suffix, bundle_name, snapshot_name, key, stable_id,              \
+    descriptor_set_flags, wavefront_size, workgroup_storage_byte_limit)     \
+  LOOM_AMDGPU_LOW_CONFIG(kAmdgpu##symbol_suffix##Config, key, stable_id);
 #include "loom/target/arch/amdgpu/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_DESCRIPTOR_SET
 
 #define LOOM_AMDGPU_TARGET_DESCRIPTOR_SET(                                  \
-    symbol_suffix, bundle_name, snapshot_name, key, descriptor_set_flags,   \
-    wavefront_size, workgroup_storage_byte_limit)                           \
+    symbol_suffix, bundle_name, snapshot_name, key, stable_id,              \
+    descriptor_set_flags, wavefront_size, workgroup_storage_byte_limit)     \
   const loom_target_bundle_t kAmdgpuLowTargetBundle##symbol_suffix##Core = { \
     .name = IREE_SVL(bundle_name), \
     .snapshot = &kAmdgpu##symbol_suffix##Snapshot, \

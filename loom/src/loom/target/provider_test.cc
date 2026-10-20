@@ -32,9 +32,9 @@ TEST(TargetArtifactTest, AbsentMetadataDoesNotAllocate) {
 }
 
 TEST(TargetArtifactTest, MetadataOutlivesItsSourceStorage) {
-  char strings[][16] = {"bundle",     "snapshot",   "export", "entry",
-                        "sysv",       "config",     "model",  "contract",
-                        "first.json", "second.json"};
+  char strings[][16] = {"bundle",   "snapshot",   "export",
+                        "entry",    "sysv",       "config",
+                        "contract", "first.json", "second.json"};
   loom_target_bundle_storage_t target = {};
   target.bundle.name = iree_make_cstring_view(strings[0]);
   target.snapshot.name = iree_make_cstring_view(strings[1]);
@@ -45,8 +45,11 @@ TEST(TargetArtifactTest, MetadataOutlivesItsSourceStorage) {
   target.export_plan.abi_kind = LOOM_TARGET_ABI_HAL_KERNEL;
   target.export_plan.hal_kernel.required_workgroup_size = {1, 1, 1};
   target.config.name = iree_make_cstring_view(strings[5]);
-  target.config.schedule_model_key = iree_make_cstring_view(strings[6]);
-  target.config.contract_set_key = iree_make_cstring_view(strings[7]);
+  target.config.schedule_model_stable_id = UINT64_C(0x123456789abcdef0);
+  target.config.contract_set = {
+      .stable_id = UINT64_C(0x23456789abcdef01),
+      .spelling = iree_make_cstring_view(strings[6]),
+  };
   target.config.contract_feature_bits = 7;
   loom_target_bundle_storage_rebind(&target);
 
@@ -61,7 +64,7 @@ TEST(TargetArtifactTest, MetadataOutlivesItsSourceStorage) {
   loom_target_emit_sidecar_artifact_t sidecars[2] = {};
   for (size_t i = 0; i < IREE_ARRAYSIZE(sidecars); ++i) {
     sidecars[i].kind = LOOM_TARGET_EMIT_SIDECAR_ARTIFACT_KIND_ARTIFACT_MANIFEST;
-    sidecars[i].identifier = iree_make_cstring_view(strings[8 + i]);
+    sidecars[i].identifier = iree_make_cstring_view(strings[7 + i]);
     sidecars[i].contents = sequence;
   }
   loom_target_emit_artifact_t artifact = {};
@@ -79,6 +82,10 @@ TEST(TargetArtifactTest, MetadataOutlivesItsSourceStorage) {
   EXPECT_EQ(retained->export_plan->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
   EXPECT_EQ(retained->export_plan->hal_kernel.required_workgroup_size.x, 1u);
   EXPECT_EQ(retained->config->contract_feature_bits, 7u);
+  EXPECT_EQ(retained->config->schedule_model_stable_id,
+            UINT64_C(0x123456789abcdef0));
+  EXPECT_EQ(retained->config->contract_set.stable_id,
+            UINT64_C(0x23456789abcdef01));
   ASSERT_EQ(artifact.sidecar_count, 2u);
   const iree_string_view_t retained_strings[] = {
       retained->name,
@@ -87,14 +94,13 @@ TEST(TargetArtifactTest, MetadataOutlivesItsSourceStorage) {
       retained->export_plan->export_symbol,
       retained->export_plan->calling_convention,
       retained->config->name,
-      retained->config->schedule_model_key,
-      retained->config->contract_set_key,
+      retained->config->contract_set.spelling,
       artifact.sidecars[0].identifier,
       artifact.sidecars[1].identifier,
   };
-  const char* expected[] = {"bundle",     "snapshot",   "export", "entry",
-                            "sysv",       "config",     "model",  "contract",
-                            "first.json", "second.json"};
+  const char* expected[] = {"bundle",   "snapshot",   "export",
+                            "entry",    "sysv",       "config",
+                            "contract", "first.json", "second.json"};
   for (size_t i = 0; i < IREE_ARRAYSIZE(expected); ++i) {
     EXPECT_TRUE(iree_string_view_equal(retained_strings[i],
                                        iree_make_cstring_view(expected[i])));

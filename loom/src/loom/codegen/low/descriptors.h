@@ -2052,6 +2052,14 @@ const loom_low_descriptor_set_t* loom_low_descriptor_registry_descriptor_set_at(
 const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup(
     const loom_low_descriptor_registry_t* registry, iree_string_view_t key);
 
+// Looks up |identity| in |registry|, or returns NULL when no set matches both
+// its stable ID and spelling. Use this at textual target-contract boundaries;
+// trusted compiled identities can use the ID-only lookup below.
+const loom_low_descriptor_set_t*
+loom_low_descriptor_registry_lookup_contract_set(
+    const loom_low_descriptor_registry_t* registry,
+    loom_target_contract_set_t identity);
+
 // Looks up |stable_id| in |registry|, or returns NULL when no set matches. The
 // registry table is target-owned static data; production lookup trusts its row
 // ordering and returns the first matching entry.
@@ -2105,11 +2113,6 @@ uint32_t loom_low_descriptor_set_descriptor_ordinal(
 // Returns the durable descriptor identity derived from a descriptor key.
 uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key);
 
-// Finds a machine schedule model by authored catalog key, or NULL when this
-// descriptor-set view does not provide it.
-const loom_low_schedule_model_t* loom_low_descriptor_set_lookup_schedule_model(
-    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key);
-
 // Finds a named machine schedule model by durable identity, or NULL when this
 // descriptor-set view does not provide it.
 const loom_low_schedule_model_t*
@@ -2117,14 +2120,14 @@ loom_low_descriptor_set_lookup_schedule_model_by_id(
     const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id);
 
 // Returns whether |descriptor_set| can represent low IR for the native target
-// descriptor contract named by |target_contract_key|.
+// descriptor contract identified by |target_contract_stable_id|.
 //
 // Every descriptor set supports its own key. Portable representation
 // contracts additionally carry a generated, directional set of native target
 // contracts whose encodings and semantics they conservatively represent.
-bool loom_low_descriptor_set_supports_target_contract(
+bool loom_low_descriptor_set_supports_target_contract_id(
     const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_view_t target_contract_key);
+    uint64_t target_contract_stable_id);
 
 // Returns true if |lhs_operand_index| and |rhs_operand_index| form a tied
 // result/packet-operand pair in |descriptor|. Callers must pass a verified

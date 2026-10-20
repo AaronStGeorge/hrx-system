@@ -689,12 +689,15 @@ TEST(LowDescriptorsTest, RepresentationSupportsOwnAndDeclaredTargetContracts) {
   tables.set.supported_target_contract_count =
       IREE_ARRAYSIZE(supported_target_contract_stable_ids);
 
-  EXPECT_TRUE(loom_low_descriptor_set_supports_target_contract(
-      &tables.set, IREE_SV("test.core")));
-  EXPECT_TRUE(loom_low_descriptor_set_supports_target_contract(
-      &tables.set, IREE_SV("test.exact")));
-  EXPECT_FALSE(loom_low_descriptor_set_supports_target_contract(
-      &tables.set, IREE_SV("test.other")));
+  EXPECT_TRUE(loom_low_descriptor_set_supports_target_contract_id(
+      &tables.set,
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.core"))));
+  EXPECT_TRUE(loom_low_descriptor_set_supports_target_contract_id(
+      &tables.set,
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.exact"))));
+  EXPECT_FALSE(loom_low_descriptor_set_supports_target_contract_id(
+      &tables.set,
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.other"))));
 }
 
 TEST(LowDescriptorsTest, ProviderBackedRegistryVerifiesAndLooksUpDescriptors) {
@@ -724,6 +727,13 @@ TEST(LowDescriptorsTest, ProviderBackedRegistryVerifiesAndLooksUpDescriptors) {
   descriptor_set = loom_low_descriptor_registry_lookup_by_id(
       &registry, tables.set.stable_id);
   EXPECT_EQ(descriptor_set, &tables.set);
+  const loom_target_contract_set_t mismatched_identity = {
+      .stable_id = tables.set.stable_id,
+      .spelling = IREE_SV("different.key"),
+  };
+  descriptor_set = loom_low_descriptor_registry_lookup_contract_set(
+      &registry, mismatched_identity);
+  EXPECT_EQ(descriptor_set, nullptr);
   gProvidedDescriptorSet = nullptr;
 }
 

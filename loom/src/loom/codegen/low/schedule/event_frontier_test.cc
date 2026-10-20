@@ -19,8 +19,8 @@ class ScheduleEventFrontierTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(), &pool_);
     iree_arena_initialize(&pool_, &arena_);
     descriptors_ = loom_test_low_core_descriptor_set();
-    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model(
-        descriptors_, IREE_SV("test.low.core"));
+    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model_by_id(
+        descriptors_, UINT64_C(0x235c515ddcc8fd92));
     ASSERT_NE(schedule_model_, nullptr);
     IREE_ASSERT_OK(loom_low_schedule_event_frontier_initialize(
         descriptors_, schedule_model_, &arena_, &frontier_));

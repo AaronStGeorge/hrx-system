@@ -52,7 +52,7 @@ class LowAllocationTargetConstraintsTest : public ::testing::Test {
     target_ = loom_low_resolved_target_t{
         .target_facts = &target_facts_,
         .target_name = target_bundle->name,
-        .descriptor_set_key = target_bundle->config->contract_set_key,
+        .descriptor_set_key = target_bundle->config->contract_set.spelling,
         .feature_bits = target_bundle->config->contract_feature_bits,
         .descriptor_set = loom_test_low_core_descriptor_set(),
     };

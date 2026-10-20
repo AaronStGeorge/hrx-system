@@ -1677,8 +1677,8 @@ TEST_F(LowEmissionFrameTest, StructuralModelCarriesNativePacketTiming) {
   const uint16_t expected_schedule_class_id =
       schedule_descriptor_view->schedule_class_id;
   const loom_low_schedule_model_t* schedule_model =
-      loom_low_descriptor_set_lookup_schedule_model(descriptor_set,
-                                                    IREE_SV("test.low.core"));
+      loom_low_descriptor_set_lookup_schedule_model_by_id(
+          descriptor_set, UINT64_C(0x235c515ddcc8fd92));
   ASSERT_NE(schedule_model, nullptr);
   const loom_low_schedule_class_t* expected_schedule_class =
       loom_low_schedule_model_schedule_class(schedule_model,

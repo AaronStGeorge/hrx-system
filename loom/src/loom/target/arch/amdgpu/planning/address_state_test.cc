@@ -28,8 +28,8 @@ class AmdgpuAddressStateTest : public ::testing::Test {
     descriptor_set_ = loom_low_descriptor_registry_lookup(
         &low_registry_.registry, IREE_SV("amdgpu.rdna4.gfx125x.core"));
     ASSERT_NE(descriptor_set_, nullptr);
-    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model(
-        descriptor_set_, IREE_SV("amdgpu.generic"));
+    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model_by_id(
+        descriptor_set_, UINT64_C(0x2a42ccc9fb04b34e));
     ASSERT_NE(schedule_model_, nullptr);
     descriptor_ = loom_amdgpu_descriptor_ref_descriptor(
         descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32);

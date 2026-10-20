@@ -468,8 +468,8 @@ TEST(SpirvModuleBuilderTest, EmitsRawBdaHalKernelPreamble) {
   };
   const loom_target_config_t config = {
       .name = IREE_SVL("spirv.logical.core"),
-      .schedule_model_key = IREE_SVL("spirv.logical.core"),
-      .contract_set_key = {},
+      .schedule_model_stable_id = UINT64_C(0x5b86e123b2b92ba9),
+      .contract_set = {},
       .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA,
   };
   const loom_target_bundle_t target = {
@@ -536,8 +536,8 @@ TEST(SpirvModuleBuilderTest, EmitsVulkanMemoryModelForDeviceScopeRawBda) {
   };
   const loom_target_config_t config = {
       .name = IREE_SVL("spirv.logical.core"),
-      .schedule_model_key = IREE_SVL("spirv.logical.core"),
-      .contract_set_key = {},
+      .schedule_model_stable_id = UINT64_C(0x5b86e123b2b92ba9),
+      .contract_set = {},
       .contract_feature_bits =
           LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA |
           LOOM_SPIRV_FEATURE_VULKAN_MEMORY_MODEL_DEVICE_SCOPE,
@@ -587,8 +587,8 @@ TEST(SpirvModuleBuilderTest, EmitsCooperativeMatrixRawBdaHalKernelPreamble) {
   };
   const loom_target_config_t config = {
       .name = IREE_SVL("spirv.logical.core"),
-      .schedule_model_key = IREE_SVL("spirv.logical.core"),
-      .contract_set_key = {},
+      .schedule_model_stable_id = UINT64_C(0x5b86e123b2b92ba9),
+      .contract_set = {},
       .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA,
   };
   const loom_target_bundle_t target = {
@@ -713,8 +713,8 @@ TEST(SpirvModuleBuilderTest, RejectsNonSpirvTargetBundle) {
   };
   const loom_target_config_t config = {
       .name = IREE_SVL("config"),
-      .schedule_model_key = IREE_SVL("spirv.logical.core"),
-      .contract_set_key = {},
+      .schedule_model_stable_id = UINT64_C(0x5b86e123b2b92ba9),
+      .contract_set = {},
       .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA,
   };
   const loom_target_bundle_t target = {

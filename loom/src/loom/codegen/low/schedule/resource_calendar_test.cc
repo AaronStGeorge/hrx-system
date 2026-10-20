@@ -24,8 +24,8 @@ class ScheduleResourceCalendarTest : public ::testing::Test {
                                      &block_pool_);
     iree_arena_initialize(&block_pool_, &arena_);
     descriptor_set_ = loom_test_low_core_descriptor_set();
-    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model(
-        descriptor_set_, IREE_SV("test.low.core"));
+    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model_by_id(
+        descriptor_set_, UINT64_C(0x235c515ddcc8fd92));
     ASSERT_NE(schedule_model_, nullptr);
     IREE_ASSERT_OK(loom_low_schedule_resource_calendar_initialize(
         schedule_model_, &arena_, &calendar_));

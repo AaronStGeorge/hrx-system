@@ -472,7 +472,7 @@ TEST_F(LowLowerPassTest, SourceSelectionUsesPerFunctionTargetFacts) {
   EXPECT_EQ(selections.values[0].target_facts->selector,
             LOOM_TEST_TARGET_KIND_QUIRKY);
   EXPECT_TRUE(iree_string_view_equal(
-      selections.values[0].target_facts->storage.config.contract_set_key,
+      selections.values[0].target_facts->storage.config.contract_set.spelling,
       IREE_SV("test.low.core")));
   const loom_target_bundle_t* selected_bundle =
       loom_low_source_selection_target_bundle(&selections.values[0]);
@@ -485,8 +485,9 @@ TEST_F(LowLowerPassTest, SourceSelectionUsesPerFunctionTargetFacts) {
   EXPECT_EQ(selected_bundle->snapshot->subgroup_size, 7u);
   EXPECT_TRUE(iree_string_view_equal(selected_bundle->config->name,
                                      IREE_SV("test.low.core")));
-  EXPECT_TRUE(iree_string_view_equal(selected_bundle->config->contract_set_key,
-                                     IREE_SV("test.low.core")));
+  EXPECT_TRUE(
+      iree_string_view_equal(selected_bundle->config->contract_set.spelling,
+                             IREE_SV("test.low.core")));
   EXPECT_EQ(selections.values[0].target_source,
             LOOM_TARGET_BINDING_SOURCE_SPECIALIZATION);
   iree_arena_deinitialize(&arena);
@@ -884,7 +885,7 @@ TEST_F(LowLowerPassTest,
   };
   const loom_low_lower_policy_registry_entry_t entries[] = {
       {
-          .contract_set_key = IREE_SVL("test.low.core"),
+          .contract_set_stable_id = UINT64_C(0x235c515ddcc8fd92),
           .policy = &policy,
       },
   };
@@ -1063,8 +1064,12 @@ TEST_F(LowLowerPassTest,
   };
   const loom_target_config_t target_config = {
       .name = IREE_SVL("test.low.alt"),
-      .schedule_model_key = IREE_SVL("test.low.core"),
-      .contract_set_key = IREE_SVL("test.low.alt"),
+      .schedule_model_stable_id = UINT64_C(0x235c515ddcc8fd92),
+      .contract_set =
+          {
+              .stable_id = UINT64_C(0x67dfd2b27e045d98),
+              .spelling = IREE_SVL("test.low.alt"),
+          },
   };
   const loom_target_bundle_t target_bundle = {
       .name = IREE_SVL("test-alt"),

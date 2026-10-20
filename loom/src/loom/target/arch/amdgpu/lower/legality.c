@@ -105,23 +105,8 @@ iree_status_t loom_amdgpu_low_legality_verify_full_wave_direct_subgroup_width(
       direct_width_constraint_key);
 }
 
-bool loom_amdgpu_low_legality_bundle_is_amdgpu(
-    const loom_target_bundle_t* bundle) {
-  return bundle != NULL && bundle->config != NULL &&
-         iree_string_view_starts_with(bundle->config->contract_set_key,
-                                      IREE_SV("amdgpu."));
-}
-
-bool loom_amdgpu_low_legality_descriptor_set_is_amdgpu(
-    const loom_low_descriptor_set_t* descriptor_set) {
-  return descriptor_set != NULL &&
-         descriptor_set->target_stable_id == LOOM_AMDGPU_TARGET_STABLE_ID;
-}
-
 bool loom_amdgpu_low_legality_context_is_amdgpu(
     loom_target_low_legality_context_t* context) {
-  return loom_amdgpu_low_legality_bundle_is_amdgpu(
-             loom_target_low_legality_bundle(context)) ||
-         loom_amdgpu_low_legality_descriptor_set_is_amdgpu(
-             loom_target_low_legality_descriptor_set(context));
+  return loom_target_low_legality_descriptor_set(context)->target_stable_id ==
+         LOOM_AMDGPU_TARGET_STABLE_ID;
 }

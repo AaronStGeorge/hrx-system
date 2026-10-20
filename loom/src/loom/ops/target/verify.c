@@ -87,6 +87,7 @@ static iree_status_t loom_target_verify_projection(
   switch (projection->value_kind) {
     case LOOM_TARGET_PROJECTION_VALUE_ENUM_U8:
     case LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW:
+    case LOOM_TARGET_PROJECTION_VALUE_CONTRACT_SET:
       return iree_ok_status();
     case LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32:
       return loom_target_verify_u32_projection(module, op, projection, emitter);

@@ -649,13 +649,10 @@ static void loom_low_lower_source_query_scope_initialize(
 
 iree_status_t loom_low_lower_source_query_scope_allocate(
     loom_module_t* module, loom_func_like_t source_function,
-    const loom_low_lower_options_t* options, iree_arena_allocator_t* arena,
+    const loom_low_lower_options_t* options,
+    loom_target_low_source_binding_t binding, iree_arena_allocator_t* arena,
     loom_low_lower_source_query_scope_t** out_scope) {
   *out_scope = NULL;
-  loom_target_low_source_binding_t binding = {0};
-  IREE_RETURN_IF_ERROR(loom_target_low_source_binding_select(
-      options->descriptor_registry,
-      loom_target_facts_bundle(options->target_facts), &binding));
   loom_low_lower_source_query_scope_t* scope = NULL;
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate(arena, sizeof(*scope), (void**)&scope));

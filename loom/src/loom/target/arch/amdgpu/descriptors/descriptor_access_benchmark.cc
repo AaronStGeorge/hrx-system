@@ -82,8 +82,8 @@ static void RunAccessBenchmark(benchmark::State& state,
   DescriptorAccessFixture fixture(descriptor_set_key, working_descriptor_count);
   const loom_low_descriptor_set_t* descriptor_set = fixture.descriptor_set();
   const loom_low_schedule_model_t* schedule_model =
-      loom_low_descriptor_set_lookup_schedule_model(descriptor_set,
-                                                    IREE_SV("amdgpu.generic"));
+      loom_low_descriptor_set_lookup_schedule_model_by_id(
+          descriptor_set, UINT64_C(0x2a42ccc9fb04b34e));
   IREE_ASSERT(schedule_model != NULL);
   const std::vector<uint32_t>& ordinals = fixture.ordinals();
   benchmark::DoNotOptimize(descriptor_set);

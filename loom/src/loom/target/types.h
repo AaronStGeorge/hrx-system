@@ -284,16 +284,25 @@ typedef struct loom_target_export_plan_t {
   loom_target_hal_kernel_abi_t hal_kernel;
 } loom_target_export_plan_t;
 
+typedef struct loom_target_contract_set_t {
+  // Stable descriptor-set identity used for matching, lookup, and policy
+  // selection. Zero means this config cannot bind a Low contract.
+  uint64_t stable_id;
+  // Human-readable spelling retained for diagnostics and exact target-op
+  // materialization. Internal target dispatch does not use this string.
+  iree_string_view_t spelling;
+} loom_target_contract_set_t;
+
 typedef struct loom_target_config_t {
   // Stable config name for diagnostics and tests.
   iree_string_view_t name;
-  // Exact schedule-model catalog key selected for concrete Low compilation.
-  // Target-family facts establish or rebind this before Low binding; Low never
-  // substitutes a model. Empty is valid only for configs that cannot bind Low.
-  iree_string_view_t schedule_model_key;
-  // Provider-defined target-contract selection key, or empty for default
-  // policy.
-  iree_string_view_t contract_set_key;
+  // Exact schedule-model catalog identity selected for concrete Low
+  // compilation. Target-family facts establish or rebind this before Low
+  // binding; Low never substitutes a model. NONE is valid only for configs
+  // that cannot bind Low.
+  uint64_t schedule_model_stable_id;
+  // Exact target-contract descriptor set selected for compilation.
+  loom_target_contract_set_t contract_set;
   // Provider-defined target-contract feature bitset, or zero for default
   // policy.
   uint64_t contract_feature_bits;

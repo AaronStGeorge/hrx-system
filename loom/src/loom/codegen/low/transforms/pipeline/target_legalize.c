@@ -106,8 +106,8 @@ typedef struct loom_low_target_legalize_function_state_t {
   const loom_low_source_selection_t* selection;
   // Source-to-low query options shared by eager and final legality checks.
   loom_low_lower_options_t lower_options;
-  // Low descriptor set selected by the function target facts.
-  const loom_low_descriptor_set_t* descriptor_set;
+  // Complete Low binding selected once for this function legalization.
+  loom_target_low_source_binding_t source_binding;
   // Active source-to-low contract query scope, rebuilt after IR mutation.
   loom_low_lower_source_query_scope_t* query_scope;
   // Arena receiving query_scope storage for this function run.
@@ -290,7 +290,7 @@ static iree_string_view_t loom_low_target_legalize_report_descriptor_key(
       descriptor->key_string_ref == LOOM_STRING_REF_NONE) {
     return iree_string_view_empty();
   }
-  return loom_low_descriptor_set_string(state->descriptor_set,
+  return loom_low_descriptor_set_string(state->source_binding.descriptor_set,
                                         descriptor->key_string_ref);
 }
 
@@ -1035,7 +1035,7 @@ static iree_status_t loom_low_target_legalize_refresh_query_scope(
   if (state->query_scope == NULL) {
     IREE_RETURN_IF_ERROR(loom_low_lower_source_query_scope_allocate(
         state->module, state->selection->func, &state->lower_options,
-        state->query_scope_arena, &state->query_scope));
+        state->source_binding, state->query_scope_arena, &state->query_scope));
   }
   return iree_ok_status();
 }
@@ -1678,11 +1678,9 @@ IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_low_target_legalize_function(
       .legality_provider_list = legality_provider_list,
       .compile_report = loom_low_pass_capability_compile_report(low_capability),
   };
-  loom_target_low_source_binding_t source_binding = {0};
   IREE_RETURN_IF_ERROR(loom_target_low_source_binding_select(
       descriptor_registry, loom_low_source_selection_target_bundle(selection),
-      &source_binding));
-  state.descriptor_set = source_binding.descriptor_set;
+      &state.source_binding));
   loom_low_target_legalize_preflight_initialize(
       module, selection->func,
       loom_low_source_selection_target_bundle(selection),
@@ -1710,7 +1708,7 @@ IREE_ATTRIBUTE_NOINLINE static iree_status_t loom_low_target_legalize_function(
       .module = module,
       .function = selection->func,
       .target_facts = selection->target_facts,
-      .descriptor_set = state.descriptor_set,
+      .descriptor_set = state.source_binding.descriptor_set,
       .vector_packet_policy = selection->policy->vector_packet_policy,
       .bitstream_policy = selection->policy->bitstream_policy,
       .source_vector_carrier_supported =

@@ -20,15 +20,17 @@ TEST(MathPolicyTest, NativeFmaFamily) {
   struct Profile {
     // Registered contract selecting the production math policy.
     const char* contract;
+    // Stable identity of |contract|.
+    uint64_t contract_stable_id;
     // Largest native F32/F64 vector, in bits.
     int vector_bits;
   };
   const Profile profiles[] = {
-      {"x86.avx2.core", 256},
-      {"x86.avx2_features.core", 256},
-      {"x86.packed_dot.core", 256},
-      {"x86.avx512.core", 512},
-      {"x86.avx512_features.core", 512},
+      {"x86.avx2.core", UINT64_C(0x34e8f11d46a8a495), 256},
+      {"x86.avx2_features.core", UINT64_C(0x4a4769fa07a2ddeb), 256},
+      {"x86.packed_dot.core", UINT64_C(0x6ebbd729aef5811e), 256},
+      {"x86.avx512.core", UINT64_C(0x06092b7cdc8ed7f3), 512},
+      {"x86.avx512_features.core", UINT64_C(0x7ddea86e8df4a0d5), 512},
   };
   const loom_scalar_type_t elements[] = {
       LOOM_SCALAR_TYPE_F16, LOOM_SCALAR_TYPE_BF16, LOOM_SCALAR_TYPE_F32,
@@ -37,7 +39,7 @@ TEST(MathPolicyTest, NativeFmaFamily) {
   for (const Profile& profile : profiles) {
     SCOPED_TRACE(profile.contract);
     const auto* policy = loom_target_math_policy_registry_lookup(
-        &registry, iree_make_cstring_view(profile.contract));
+        &registry, profile.contract_stable_id);
     ASSERT_NE(policy, nullptr);
     const uint64_t feature_sets[] = {
         0,

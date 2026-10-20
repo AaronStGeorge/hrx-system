@@ -200,7 +200,8 @@ static bool loom_target_pass_predicate_match_attr(
     return iree_string_view_equal(storage->config.name, expected);
   }
   if (iree_string_view_equal(name, IREE_SV("contract"))) {
-    return iree_string_view_equal(storage->config.contract_set_key, expected);
+    return iree_string_view_equal(storage->config.contract_set.spelling,
+                                  expected);
   }
   return false;
 }

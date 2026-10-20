@@ -42,7 +42,7 @@ struct DiagnosticCapture {
 };
 
 static loom_target_facts_t MakeScheduleModelFacts(
-    iree_string_view_t schedule_model_key) {
+    uint64_t schedule_model_stable_id) {
   const loom_target_bundle_t* bundle = loom_target_bundle_table_lookup(
       &loom_test_target_bundles, LOOM_TEST_TARGET_KIND_LOW_CORE);
   loom_target_facts_t facts = {
@@ -56,7 +56,7 @@ static loom_target_facts_t MakeScheduleModelFacts(
               .bundle = *bundle,
           },
   };
-  facts.storage.config.schedule_model_key = schedule_model_key;
+  facts.storage.config.schedule_model_stable_id = schedule_model_stable_id;
   return facts;
 }
 
@@ -206,8 +206,8 @@ low.func.def target<test.low.core>(@target) @kernel() {
   EXPECT_EQ(target.feature_bits, 7u);
   ASSERT_NE(target.descriptor_set, nullptr);
   EXPECT_EQ(target.schedule_model,
-            loom_low_descriptor_set_lookup_schedule_model(
-                target.descriptor_set, IREE_SV("test.low.core")));
+            loom_low_descriptor_set_lookup_schedule_model_by_id(
+                target.descriptor_set, UINT64_C(0x235c515ddcc8fd92)));
   EXPECT_TRUE(iree_string_view_equal(target.descriptor_set_key,
                                      IREE_SV("test.low.core")));
 
@@ -255,7 +255,7 @@ low.func.def target<test.low.core> @kernel() {
       .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
   };
 
-  loom_target_facts_t facts = MakeScheduleModelFacts(IREE_SV("test.cpu.named"));
+  loom_target_facts_t facts = MakeScheduleModelFacts(named_model_id);
   loom_target_bundle_storage_rebind(&facts.storage);
   loom_low_resolved_target_t target = {};
   IREE_ASSERT_OK(loom_low_resolve_function_target(
@@ -265,7 +265,8 @@ low.func.def target<test.low.core> @kernel() {
   EXPECT_EQ(target.descriptor_set, &descriptor_set);
   EXPECT_EQ(target.schedule_model, &named_model);
 
-  facts.storage.config.schedule_model_key = IREE_SV("test.cpu.unmodeled");
+  facts.storage.config.schedule_model_stable_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.cpu.unmodeled"));
   DiagnosticCapture capture;
   target = {};
   IREE_ASSERT_OK(loom_low_resolve_function_target(
@@ -482,7 +483,7 @@ low.func.def target<test.low.core>(@exact) @kernel() {
   EXPECT_TRUE(iree_string_view_equal(target.descriptor_set_key,
                                      IREE_SV("test.low.core")));
   EXPECT_TRUE(iree_string_view_equal(
-      loom_low_resolved_target_bundle(&target)->config->contract_set_key,
+      loom_low_resolved_target_bundle(&target)->config->contract_set.spelling,
       IREE_SV("test.low.alt")));
 }
 

@@ -697,7 +697,7 @@ TEST_P(CompileReportLowTest, RecordsPressureSpillAndAllocationFailureRows) {
       .target_name = GetParam() == TargetBinding::kFacts
                          ? target_bundle->name
                          : iree_string_view_empty(),
-      .descriptor_set_key = target_bundle->config->contract_set_key,
+      .descriptor_set_key = target_bundle->config->contract_set.spelling,
       .feature_bits = GetParam() == TargetBinding::kFacts
                           ? target_bundle->config->contract_feature_bits
                           : 0,

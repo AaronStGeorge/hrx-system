@@ -103,8 +103,7 @@ class X86ProviderTest : public ::testing::Test {
     }
     const loom_x86_target_policy_t* policy =
         loom_x86_target_policy_lookup(facts->base.selector);
-    facts->base.storage.config.contract_set_key =
-        policy->feature_contract_set_key;
+    facts->base.storage.config.contract_set = policy->feature_contract_set;
     facts->base.storage.config.contract_feature_bits =
         (facts->base.storage.config.contract_feature_bits | positive_features) &
         ~negative_features;
@@ -189,15 +188,17 @@ TEST_F(X86ProviderTest, SelectsStrongestExecutableCpuProfile) {
   struct SelectionCase {
     uint64_t cpu_features;
     loom_x86_target_kind_t selector;
-    iree_string_view_t contract_set_key;
+    uint64_t contract_set_stable_id;
+    iree_string_view_t contract_set_spelling;
   } cases[] = {
-      {0, LOOM_X86_TARGET_KIND_SCALAR, IREE_SV("x86.scalar.core")},
-      {IREE_CPU_DATA0_X86_64_AVX, LOOM_X86_TARGET_KIND_SCALAR,
+      {0, LOOM_X86_TARGET_KIND_SCALAR, UINT64_C(0x374da30c241d0cea),
        IREE_SV("x86.scalar.core")},
+      {IREE_CPU_DATA0_X86_64_AVX, LOOM_X86_TARGET_KIND_SCALAR,
+       UINT64_C(0x374da30c241d0cea), IREE_SV("x86.scalar.core")},
       {kAvx2CpuFeatures, LOOM_X86_TARGET_KIND_AVX2,
-       IREE_SV("x86.avx2_features.core")},
+       UINT64_C(0x4a4769fa07a2ddeb), IREE_SV("x86.avx2_features.core")},
       {kAvx512CpuFeatures, LOOM_X86_TARGET_KIND_AVX512,
-       IREE_SV("x86.avx512_features.core")},
+       UINT64_C(0x7ddea86e8df4a0d5), IREE_SV("x86.avx512_features.core")},
   };
   for (const auto& selection_case : cases) {
     iree_cpu_data_t cpu_data = {
@@ -210,9 +211,11 @@ TEST_F(X86ProviderTest, SelectsStrongestExecutableCpuProfile) {
     const loom_x86_target_facts_t* facts = Project(selection.profile);
     ASSERT_NE(facts, nullptr);
     EXPECT_EQ(facts->base.selector, selection_case.selector);
+    EXPECT_EQ(facts->base.storage.config.contract_set.stable_id,
+              selection_case.contract_set_stable_id);
     EXPECT_TRUE(
-        iree_string_view_equal(facts->base.storage.config.contract_set_key,
-                               selection_case.contract_set_key));
+        iree_string_view_equal(facts->base.storage.config.contract_set.spelling,
+                               selection_case.contract_set_spelling));
     EXPECT_TRUE(loom_target_facts_field_is_explicit(
         &facts->base, LOOM_TARGET_FACT_FIELD_CONTRACT_SET_KEY));
     EXPECT_FALSE(loom_target_facts_field_is_explicit(
@@ -265,7 +268,7 @@ TEST_F(X86ProviderTest, PreservesAuthoredRequirementIdentity) {
   ASSERT_NE(selected_facts, nullptr);
   EXPECT_EQ(selected_facts->base.selector, LOOM_X86_TARGET_KIND_AVX2);
   EXPECT_TRUE(iree_string_view_equal(
-      selected_facts->base.storage.config.contract_set_key,
+      selected_facts->base.storage.config.contract_set.spelling,
       IREE_SV("x86.avx2_features.core")));
   EXPECT_TRUE(loom_target_facts_field_is_explicit(
       &selected_facts->base, LOOM_TARGET_FACT_FIELD_CONTRACT_SET_KEY));
@@ -366,9 +369,8 @@ TEST_F(X86ProviderTest, ProjectsDetectedTuneIntoTargetConfig) {
     EXPECT_FALSE(facts->tune_is_explicit);
     const loom_x86_target_tune_info_t* tune_info =
         loom_x86_target_tune_info_lookup(tune_case.expected_tune);
-    EXPECT_TRUE(
-        iree_string_view_equal(facts->base.storage.config.schedule_model_key,
-                               tune_info->schedule_model_key));
+    EXPECT_EQ(facts->base.storage.config.schedule_model_stable_id,
+              tune_info->schedule_model_stable_id);
     loom_target_profile_selection_release(&selection, iree_allocator_system());
   }
 }
@@ -385,14 +387,12 @@ TEST_F(X86ProviderTest, AuthoredTuneConstrainsAndMaterializes) {
   ASSERT_NE(detected, nullptr);
   ASSERT_NE(required_zen5, nullptr);
   ASSERT_NE(required_zen6, nullptr);
-  EXPECT_TRUE(iree_string_view_equal(
-      required_zen5->base.storage.config.schedule_model_key,
-      loom_x86_target_tune_info_lookup(LOOM_X86_TARGET_TUNE_ZNVER5)
-          ->schedule_model_key));
-  EXPECT_TRUE(iree_string_view_equal(
-      required_zen6->base.storage.config.schedule_model_key,
-      loom_x86_target_tune_info_lookup(LOOM_X86_TARGET_TUNE_ZNVER6)
-          ->schedule_model_key));
+  EXPECT_EQ(required_zen5->base.storage.config.schedule_model_stable_id,
+            loom_x86_target_tune_info_lookup(LOOM_X86_TARGET_TUNE_ZNVER5)
+                ->schedule_model_stable_id);
+  EXPECT_EQ(required_zen6->base.storage.config.schedule_model_stable_id,
+            loom_x86_target_tune_info_lookup(LOOM_X86_TARGET_TUNE_ZNVER6)
+                ->schedule_model_stable_id);
   EXPECT_TRUE(loom_target_facts_satisfy_specialization_requirement(
       &detected->base, &required_zen5->base));
   EXPECT_FALSE(loom_target_facts_satisfy_specialization_requirement(
@@ -408,10 +408,9 @@ TEST_F(X86ProviderTest, AuthoredTuneConstrainsAndMaterializes) {
   loom_target_facts_builder_apply_requirement(&required_zen5->base,
                                               &detected->base);
   EXPECT_TRUE(detected->tune_is_explicit);
-  EXPECT_TRUE(iree_string_view_equal(
-      detected->base.storage.config.schedule_model_key,
-      loom_x86_target_tune_info_lookup(LOOM_X86_TARGET_TUNE_ZNVER5)
-          ->schedule_model_key));
+  EXPECT_EQ(detected->base.storage.config.schedule_model_stable_id,
+            loom_x86_target_tune_info_lookup(LOOM_X86_TARGET_TUNE_ZNVER5)
+                ->schedule_model_stable_id);
   loom_op_t* specialized_target = nullptr;
   ModulePtr specialized_module =
       Materialize(&detected->base, IREE_SV("specialized"), &specialized_target);

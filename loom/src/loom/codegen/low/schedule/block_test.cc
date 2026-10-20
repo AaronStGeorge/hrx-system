@@ -22,8 +22,9 @@ TEST(ScheduleBlockTest, RetainsOwnedRowsWithShiftedNodeIndices) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&pool, &arena);
   const auto* descriptors = loom_test_low_core_descriptor_set();
-  const auto* schedule_model = loom_low_descriptor_set_lookup_schedule_model(
-      descriptors, IREE_SV("test.low.core"));
+  const auto* schedule_model =
+      loom_low_descriptor_set_lookup_schedule_model_by_id(
+          descriptors, UINT64_C(0x235c515ddcc8fd92));
   ASSERT_NE(schedule_model, nullptr);
   loom_low_schedule_options_t options = {
       .strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,

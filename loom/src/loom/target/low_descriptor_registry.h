@@ -62,7 +62,7 @@ iree_status_t loom_target_low_descriptor_registry_append_to_tables(
 // Selects the complete Low representation into which source IR is lowered.
 //
 // The descriptor set and schedule model are exact lookups of the target
-// configuration keys. A missing or empty model key fails selection; no
+// configuration identities. A missing model identity fails selection; no
 // descriptor-set model is privileged as a fallback. This is not valid for
 // interpreting existing Low IR, whose intrinsic representation binds through
 // loom_low_resolve_function_target.

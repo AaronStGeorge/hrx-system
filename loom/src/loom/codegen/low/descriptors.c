@@ -189,12 +189,6 @@ uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key) {
   return loom_stable_id_from_string(key);
 }
 
-const loom_low_schedule_model_t* loom_low_descriptor_set_lookup_schedule_model(
-    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  return loom_low_descriptor_set_lookup_schedule_model_by_id(
-      descriptor_set, loom_stable_id_from_string(key));
-}
-
 const loom_low_schedule_model_t*
 loom_low_descriptor_set_lookup_schedule_model_by_id(
     const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id) {
@@ -216,11 +210,9 @@ loom_low_descriptor_set_lookup_schedule_model_by_id(
   return NULL;
 }
 
-bool loom_low_descriptor_set_supports_target_contract(
+bool loom_low_descriptor_set_supports_target_contract_id(
     const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_view_t target_contract_key) {
-  const uint64_t target_contract_stable_id =
-      loom_low_descriptor_stable_id_from_key(target_contract_key);
+    uint64_t target_contract_stable_id) {
   if (descriptor_set->stable_id == target_contract_stable_id) {
     return true;
   }
@@ -367,14 +359,28 @@ loom_low_descriptor_registry_descriptor_set_at_trusted(
 
 const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup(
     const loom_low_descriptor_registry_t* registry, iree_string_view_t key) {
+  const loom_target_contract_set_t identity = {
+      .stable_id = loom_low_descriptor_stable_id_from_key(key),
+      .spelling = key,
+  };
+  return loom_low_descriptor_registry_lookup_contract_set(registry, identity);
+}
+
+const loom_low_descriptor_set_t*
+loom_low_descriptor_registry_lookup_contract_set(
+    const loom_low_descriptor_registry_t* registry,
+    loom_target_contract_set_t identity) {
   iree_host_size_t descriptor_set_count =
       loom_low_descriptor_registry_descriptor_set_count(registry);
   for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
     const loom_low_descriptor_set_t* descriptor_set =
         loom_low_descriptor_registry_descriptor_set_at_trusted(registry, i);
+    if (descriptor_set->stable_id != identity.stable_id) {
+      continue;
+    }
     iree_string_view_t candidate_key =
         loom_low_descriptor_set_key(descriptor_set);
-    if (!iree_string_view_equal(candidate_key, key)) {
+    if (!iree_string_view_equal(candidate_key, identity.spelling)) {
       continue;
     }
     return descriptor_set;

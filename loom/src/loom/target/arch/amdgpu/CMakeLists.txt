@@ -494,6 +494,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::analysis::symbol_facts
+    loom::codegen::low::descriptors
     loom::codegen::pass_environment
     loom::format::bytecode::reader
     loom::format::bytecode::writer

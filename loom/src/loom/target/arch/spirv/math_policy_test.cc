@@ -17,7 +17,7 @@ TEST(MathPolicyTest, TrigonometryFamily) {
   loom_target_math_policy_registry_t registry = {};
   loom_spirv_math_policy_registry_initialize(&registry);
   const auto* policy = loom_target_math_policy_registry_lookup(
-      &registry, IREE_SV("spirv.logical.core"));
+      &registry, UINT64_C(0x5b86e123b2b92ba9));
   ASSERT_NE(policy, nullptr);
   const loom_target_config_t config = {};
   const loom_target_bundle_t bundle = {.config = &config};

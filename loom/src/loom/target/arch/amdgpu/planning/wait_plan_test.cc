@@ -73,8 +73,8 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
     descriptors_ = loom_low_descriptor_registry_lookup(
         &registry_.registry, IREE_SV("amdgpu.rdna4.gfx125x.core"));
     ASSERT_NE(descriptors_, nullptr);
-    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model(
-        descriptors_, IREE_SV("amdgpu.generic"));
+    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model_by_id(
+        descriptors_, UINT64_C(0x2a42ccc9fb04b34e));
     ASSERT_NE(schedule_model_, nullptr);
     const loom_amdgpu_processor_info_t* processor = nullptr;
     IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1250"),

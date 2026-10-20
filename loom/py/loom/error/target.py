@@ -1645,18 +1645,18 @@ ERR_TARGET_095 = ErrorDef(
     summary="Target representation lacks the requested schedule model.",
     message=(
         "target '{target_name}' requests machine schedule model "
-        "'{schedule_model}' for '@{function_name}', but representation "
+        "identity {schedule_model_id} for '@{function_name}', but representation "
         "'{descriptor_set}' does not provide it"
     ),
     params=(
         ErrorParam("target_name", ParamKind.STRING),
-        ErrorParam("schedule_model", ParamKind.STRING),
+        ErrorParam("schedule_model_id", ParamKind.U64),
         ErrorParam("function_name", ParamKind.STRING),
         ErrorParam("descriptor_set", ParamKind.STRING),
     ),
     fix_hint=(
         "Select a machine schedule model provided by '{descriptor_set}' or "
-        "use a representation that models '{schedule_model}'."
+        "use a representation that provides the requested model identity."
     ),
 )
 

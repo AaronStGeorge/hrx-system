@@ -106,8 +106,7 @@ static iree_status_t loom_spirv_program_validate_contract(
     const loom_low_resolved_target_t* target) {
   const loom_spirv_module_contract_t contract = loom_spirv_module_contract_make(
       target->target_name, loom_low_resolved_target_bundle(target),
-      target->descriptor_set->stable_id, target->descriptor_set_key,
-      target->feature_bits);
+      target->descriptor_set->stable_id, target->feature_bits);
   if (!build->has_contract) {
     build->contract = contract;
     build->has_contract = true;

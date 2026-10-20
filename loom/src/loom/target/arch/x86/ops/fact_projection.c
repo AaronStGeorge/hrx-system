@@ -33,8 +33,7 @@ static void loom_x86_target_facts_project(
 
   const loom_x86_target_policy_t* policy =
       loom_x86_target_policy_lookup(record->selector);
-  facts->base.storage.config.contract_set_key =
-      policy->feature_contract_set_key;
+  facts->base.storage.config.contract_set = policy->feature_contract_set;
   facts->base.storage.config.contract_feature_bits =
       (facts->base.storage.config.contract_feature_bits |
        facts->positive_feature_assertions) &

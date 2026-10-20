@@ -35,6 +35,7 @@ from loom.target.arch.x86.target_info import (  # noqa: E402
     X86TargetTuneInfo,
     x86_target_profile_info_by_key,
 )
+from loom.target.low_descriptors import descriptor_stable_id, schedule_model_stable_id  # noqa: E402
 
 
 def _c_arg(value: str) -> str:
@@ -109,7 +110,7 @@ def _emit_native_profiles_inl(
         cpu_feature_position = f"LOOM_X86_CPU_FIELD0_BIT_POSITION({info.runtime_cpu_suffix})" if info.runtime_cpu_suffix is not None else "UINT8_MAX"
         lines.append(f"LOOM_X86_CPU_FEATURE_MAPPING({cpu_feature_position})")
     lines.extend(["#endif", "", "#ifdef LOOM_X86_TARGET_TUNE"])
-    lines.extend((f"LOOM_X86_TARGET_TUNE({_enum_suffix(tune.spelling)}, {tune.stable_value}, {_c_arg(tune.spelling)}, {_c_arg(tune.schedule_model_key)})") for tune in tunes)
+    lines.extend(f"LOOM_X86_TARGET_TUNE({_enum_suffix(tune.spelling)}, {tune.stable_value}, UINT64_C(0x{schedule_model_stable_id(tune.schedule_model_key):016x}))" for tune in tunes)
     lines.extend(["#endif", "", "#ifdef LOOM_X86_PROCESSOR_TUNE_MATCH"])
     for tune in tunes:
         for match in tune.processor_matches:
@@ -139,7 +140,9 @@ def _emit_native_profiles_inl(
             f"{_c_arg(native_bundle_key)}, "
             f"{_c_arg(_snapshot_name(native_bundle_key))}, "
             f"{_c_arg(profile.descriptor_set_key)}, "
+            f"UINT64_C(0x{descriptor_stable_id(profile.descriptor_set_key):016x}), "
             f"{_c_arg(feature_contract_set_key)}, "
+            f"UINT64_C(0x{descriptor_stable_id(feature_contract_set_key):016x}), "
             f"{_feature_bits_expr(profile.contract_feature_bits)}, "
             f"{_feature_bits_expr(profile.supported_feature_bits)}, "
             f"{_cpu_feature_bits_expr(profile.required_cpu_features)}, "

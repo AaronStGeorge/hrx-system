@@ -304,19 +304,19 @@ static void loom_test_math_policy_registry_initialize(
   };
   static const loom_target_math_policy_registry_entry_t kEntries[] = {
       {
-          .contract_set_key = IREE_SVL("test.math.widen_f32_round"),
+          .contract_set_stable_id = UINT64_C(0x382977ec10cc5a09),
           .policy = &kWidenF32RoundPolicy,
       },
       {
-          .contract_set_key = IREE_SVL("test.math.grouped_product"),
+          .contract_set_stable_id = UINT64_C(0x145802c242758eb7),
           .policy = &kBf16x16EvaluationPolicy,
       },
       {
-          .contract_set_key = IREE_SVL("test.math.grouped_product_f16x4"),
+          .contract_set_stable_id = UINT64_C(0x23083cb600290ce9),
           .policy = &kF16x4EvaluationPolicy,
       },
       {
-          .contract_set_key = IREE_SVL("test.math.prefer_fma"),
+          .contract_set_stable_id = UINT64_C(0x5ddd1af00c682c82),
           .policy = &kPreferFmaPolicy,
       },
   };

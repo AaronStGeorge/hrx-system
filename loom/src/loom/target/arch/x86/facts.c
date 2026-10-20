@@ -17,9 +17,8 @@ static bool loom_x86_contract_set_satisfies(
           &requirement->base, LOOM_TARGET_FACT_FIELD_CONTRACT_SET_KEY)) {
     return true;
   }
-  if (iree_string_view_equal(
-          effective->base.storage.config.contract_set_key,
-          requirement->base.storage.config.contract_set_key)) {
+  if (effective->base.storage.config.contract_set.stable_id ==
+      requirement->base.storage.config.contract_set.stable_id) {
     return true;
   }
 
@@ -27,11 +26,10 @@ static bool loom_x86_contract_set_satisfies(
       &loom_x86_target_bundles, effective->base.selector);
   const loom_x86_target_policy_t* policy =
       loom_x86_target_policy_lookup(effective->base.selector);
-  return iree_string_view_equal(effective->base.storage.config.contract_set_key,
-                                core_bundle->config->contract_set_key) &&
-         iree_string_view_equal(
-             requirement->base.storage.config.contract_set_key,
-             policy->feature_contract_set_key);
+  return effective->base.storage.config.contract_set.stable_id ==
+             core_bundle->config->contract_set.stable_id &&
+         requirement->base.storage.config.contract_set.stable_id ==
+             policy->feature_contract_set.stable_id;
 }
 
 static bool loom_x86_cpu_data_equal(const iree_cpu_data_t* lhs,
@@ -104,8 +102,8 @@ static void loom_x86_target_facts_apply_specialization_requirement(
 
 static void loom_x86_target_facts_rebind(loom_target_facts_t* base_facts) {
   loom_x86_target_facts_t* facts = (loom_x86_target_facts_t*)base_facts;
-  facts->base.storage.config.schedule_model_key =
-      loom_x86_target_tune_info_lookup(facts->tune)->schedule_model_key;
+  facts->base.storage.config.schedule_model_stable_id =
+      loom_x86_target_tune_info_lookup(facts->tune)->schedule_model_stable_id;
 }
 
 const loom_target_fact_type_t loom_x86_target_fact_type = {
