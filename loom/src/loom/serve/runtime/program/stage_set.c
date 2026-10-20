@@ -113,10 +113,12 @@ static void loom_serve_stage_set_submit(loom_serve_stage_set_job_t* job) {
     iree_atomic_ref_count_inc(&job->ref_count);
     status = declaration->kind == LOOM_SERVE_PREPARATION_STAGE_DISPATCH
                  ? loom_serve_jit_compile_dispatch_async(
-                       job->jit, declaration->root, &declaration->config,
+                       job->jit, loom_serve_jit_task_sink(job->jit),
+                       declaration->root, &declaration->config,
                        loom_serve_stage_set_compiled, entry)
                  : loom_serve_jit_compile_async(
-                       job->jit, declaration->root, &declaration->config,
+                       job->jit, loom_serve_jit_task_sink(job->jit),
+                       declaration->root, &declaration->config,
                        job->layout ? loom_serve_stage_set_layout : NULL,
                        loom_serve_stage_set_compiled, entry);
     // The loop retains job even if callbacks finish inline. Rejection owns

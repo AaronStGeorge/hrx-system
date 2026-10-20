@@ -281,6 +281,8 @@ typedef struct loom_serve_weight_preparer_t {
 typedef struct loom_serve_weight_preparation_t {
   // Initial CPU task; its destruction transfers ownership to the JIT chain.
   loomc_task_t task;
+  // Shared preparation scheduling domain, carried through native children.
+  loomc_task_sink_t sink;
   // Exclusively borrowed unactivated plan through terminal completion.
   loom_serve_weights_t* weights;
   // Borrowed source catalog through terminal completion; other jobs may
@@ -519,9 +521,9 @@ static void loom_serve_weight_preparation_next(
   }
   const loom_serve_preparation_stage_t* stage = loom_serve_preparation_stage(
       job->preparers[job->preparer_index].declaration, 0);
-  iree_status_t status =
-      loom_serve_jit_compile_async(job->jit, stage->root, &stage->config, NULL,
-                                   loom_serve_weight_preparation_compiled, job);
+  iree_status_t status = loom_serve_jit_compile_async(
+      job->jit, job->sink, stage->root, &stage->config, NULL,
+      loom_serve_weight_preparation_compiled, job);
   // An accepted completion may already have destroyed job. Rejection owes no
   // callback and returns the still-exclusive job to this terminal path.
   if (!iree_status_is_ok(status)) {
@@ -606,6 +608,7 @@ iree_status_t loom_serve_weights_prepare_async(
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(weights->host_allocator,
                                              sizeof(*job), (void**)&job));
   loomc_task_initialize(&weight_preparation_vtable, &job->task);
+  job->sink = loom_serve_host_preparation_sink(host);
   job->weights = weights;
   job->jit = jit;
   job->command_mode = command_mode;
@@ -613,8 +616,8 @@ iree_status_t loom_serve_weights_prepare_async(
   job->parameter = parameter;
   job->completion = completion;
   job->user_data = user_data;
-  iree_status_t status = iree_status_from_loomc(
-      loomc_task_sink_submit(loom_serve_host_compiler_sink(host), &job->task));
+  iree_status_t status =
+      iree_status_from_loomc(loomc_task_sink_submit(job->sink, &job->task));
   if (!iree_status_is_ok(status)) {
     iree_allocator_free(weights->host_allocator, job);
   }

@@ -98,6 +98,22 @@ class JitConcurrentTest : public JitTest {
 void JitConcurrentTest::CheckConcurrent(bool direct_dispatch) {
   const loomc_config_options_t config = {
       nullptr, 0, {}, LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED};
+  struct Submissions {
+    // Independent scheduling domain over the catalog's same worker pool.
+    loomc_task_sink_t target;
+    // Includes parents and their newly published native requests.
+    std::atomic<size_t> count = 0;
+  } submissions{
+      loom_serve_host_preparation_sink(loom_serve_device_host(device_owner_))};
+  const loomc_task_sink_t sink = {
+      .submit =
+          [](void* payload, loomc_task_t* task) {
+            auto* submissions = static_cast<Submissions*>(payload);
+            ++submissions->count;
+            return loomc_task_sink_submit(submissions->target, task);
+          },
+      .user_data = &submissions,
+  };
   struct loom_serve_test_jit_result_t {
     // Joins callback publication before the outer test consumes its output.
     std::mutex mutex;
@@ -129,10 +145,10 @@ void JitConcurrentTest::CheckConcurrent(bool direct_dispatch) {
     };
     auto submitted =
         direct_dispatch
-            ? loom_serve_jit_compile_dispatch_async(jit_, roots[i], &config,
-                                                    completion, &results[i])
-            : loom_serve_jit_compile_async(jit_, roots[i], &config, nullptr,
-                                           completion, &results[i]);
+            ? loom_serve_jit_compile_dispatch_async(
+                  jit_, sink, roots[i], &config, completion, &results[i])
+            : loom_serve_jit_compile_async(jit_, sink, roots[i], &config,
+                                           nullptr, completion, &results[i]);
     if (!iree_status_is_ok(submitted)) {
       results[i].complete = true;
     }
@@ -170,6 +186,11 @@ void JitConcurrentTest::CheckConcurrent(bool direct_dispatch) {
   IREE_ASSERT_OK(status);
   EXPECT_EQ(compilation_.commands, direct_dispatch ? 0u : 3u);
   EXPECT_EQ(compilation_.kernels, direct_dispatch ? 1u : 8u);
+  // Direct roots compile in the submitted task; command parents publish
+  // independent native tasks, which must inherit the caller's sink too.
+  EXPECT_EQ(
+      submissions.count,
+      IREE_ARRAYSIZE(results) + (direct_dispatch ? 0 : compilation_.kernels));
   EXPECT_EQ(compilation_.reused_kernels, direct_dispatch ? 1u : 3u);
   EXPECT_EQ(compilation_.entries, direct_dispatch ? 2u : 10u);
   if (direct_dispatch) {
@@ -705,7 +726,7 @@ TEST_P(JitReadinessTest, IndependentCompletionDoesNotWaitForEarlierProduct) {
   // Suspend one real producer at the layout handoff, leaving other workers
   // free. The later independent job must finish before this dependency clears.
   IREE_ASSERT_OK(loom_serve_jit_compile_async(
-      jit_, IREE_SV("advance"), &config,
+      jit_, loom_serve_jit_task_sink(jit_), IREE_SV("advance"), &config,
       [](void* payload, const loom_cmd_program_t* program) {
         auto* result = static_cast<Completion*>(payload);
         std::unique_lock<std::mutex> lock(result->mutex);
@@ -718,8 +739,9 @@ TEST_P(JitReadinessTest, IndependentCompletionDoesNotWaitForEarlierProduct) {
     std::unique_lock<std::mutex> lock(first.mutex);
     first.condition.wait(lock, [&] { return first.program != nullptr; });
   }
-  auto status = loom_serve_jit_compile_async(jit_, IREE_SV("idle"), &config,
-                                             nullptr, completed, &second);
+  auto status = loom_serve_jit_compile_async(
+      jit_, loom_serve_jit_task_sink(jit_), IREE_SV("idle"), &config, nullptr,
+      completed, &second);
   if (iree_status_is_ok(status)) {
     std::unique_lock<std::mutex> lock(second.mutex);
     second.condition.wait(lock, [&] { return second.complete; });

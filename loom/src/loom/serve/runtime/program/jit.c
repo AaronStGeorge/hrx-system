@@ -459,6 +459,10 @@ loom_serve_compilation_report_t* loom_serve_jit_report(loom_serve_jit_t* jit) {
   return jit->publication->report;
 }
 
+loomc_task_sink_t loom_serve_jit_task_sink(const loom_serve_jit_t* jit) {
+  return jit->compilation.sink;
+}
+
 void loom_serve_jit_report_snapshot(
     loom_serve_jit_t* jit, loom_serve_compilation_report_t* out_report) {
   iree_slim_mutex_lock(&jit->publication->mutex);
@@ -737,6 +741,8 @@ struct loom_serve_jit_job_t {
   loomc_task_t base;
   // Retained catalog through compiler retirement before external completion.
   loom_serve_jit_t* jit;
+  // Scheduling domain inherited by this parent's newly published natives.
+  loomc_task_sink_t sink;
   // Retained callback state independent of catalog/device ownership.
   loom_serve_jit_publication_t* publication;
   // Next completed job waiting for callback publication.
@@ -1126,8 +1132,8 @@ static iree_status_t loom_serve_jit_submit_request(
   loomc_task_initialize(&jit_task_vtable, &task->base);
   task->job = job;
   task->request = request;
-  iree_status_t status = iree_status_from_loomc(
-      loomc_task_sink_submit(job->jit->compilation.sink, &task->base));
+  iree_status_t status =
+      iree_status_from_loomc(loomc_task_sink_submit(job->sink, &task->base));
   if (!iree_status_is_ok(status)) {
     // Rejection never executed the task. Its pending entry is terminalized by
     // the publisher, including any concurrent parents already subscribed.
@@ -1376,7 +1382,7 @@ static const loomc_task_vtable_t jit_job_vtable = {
 };
 
 static iree_status_t loom_serve_jit_enqueue(
-    loom_serve_jit_t* jit, iree_string_view_t root,
+    loom_serve_jit_t* jit, loomc_task_sink_t sink, iree_string_view_t root,
     const loomc_config_options_t* config, bool direct_dispatch,
     loom_serve_jit_layout_fn_t layout,
     loom_serve_jit_completion_fn_t completion, void* user_data) {
@@ -1386,6 +1392,7 @@ static iree_status_t loom_serve_jit_enqueue(
   loomc_task_initialize(&jit_job_vtable, &job->base);
   iree_atomic_ref_count_init(&job->ref_count);
   job->jit = jit;
+  job->sink = sink;
   job->publication = jit->publication;
   job->root = root;
   job->direct_dispatch = direct_dispatch;
@@ -1396,8 +1403,8 @@ static iree_status_t loom_serve_jit_enqueue(
   job->start = iree_time_now();
   loom_serve_jit_retain(jit);
   loom_serve_jit_publication_retain(job->publication);
-  iree_status_t status = iree_status_from_loomc(
-      loomc_task_sink_submit(jit->compilation.sink, &job->base));
+  iree_status_t status =
+      iree_status_from_loomc(loomc_task_sink_submit(sink, &job->base));
   if (!iree_status_is_ok(status)) {
     // Rejection retained ownership and never executed product construction.
     // Retire ownership without a callback or compilation evidence.
@@ -1408,18 +1415,18 @@ static iree_status_t loom_serve_jit_enqueue(
 }
 
 iree_status_t loom_serve_jit_compile_async(
-    loom_serve_jit_t* jit, iree_string_view_t root,
+    loom_serve_jit_t* jit, loomc_task_sink_t sink, iree_string_view_t root,
     const loomc_config_options_t* config, loom_serve_jit_layout_fn_t layout,
     loom_serve_jit_completion_fn_t completion, void* user_data) {
-  return loom_serve_jit_enqueue(jit, root, config, false, layout, completion,
-                                user_data);
+  return loom_serve_jit_enqueue(jit, sink, root, config, false, layout,
+                                completion, user_data);
 }
 
 iree_status_t loom_serve_jit_compile_dispatch_async(
-    loom_serve_jit_t* jit, iree_string_view_t root,
+    loom_serve_jit_t* jit, loomc_task_sink_t sink, iree_string_view_t root,
     const loomc_config_options_t* config,
     loom_serve_jit_completion_fn_t completion, void* user_data) {
-  return loom_serve_jit_enqueue(jit, root, config, true, NULL, completion,
+  return loom_serve_jit_enqueue(jit, sink, root, config, true, NULL, completion,
                                 user_data);
 }
 
@@ -1463,8 +1470,9 @@ iree_status_t loom_serve_jit_compile(loom_serve_jit_t* jit,
   loom_serve_jit_join_t join = {0};
   iree_notification_initialize(&join.notification);
   iree_slim_mutex_initialize(&join.mutex);
-  iree_status_t status = loom_serve_jit_compile_async(
-      jit, root, config, NULL, loom_serve_jit_join_complete, &join);
+  iree_status_t status =
+      loom_serve_jit_compile_async(jit, jit->compilation.sink, root, config,
+                                   NULL, loom_serve_jit_join_complete, &join);
   if (iree_status_is_ok(status)) {
     iree_notification_await(&join.notification, loom_serve_jit_join_is_complete,
                             &join, iree_infinite_timeout());

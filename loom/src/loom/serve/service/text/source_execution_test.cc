@@ -132,6 +132,55 @@ TEST_F(SourceTextServiceTest, FailedLinkRetiresAcceptedInitialization) {
   EXPECT_EQ(loom_serve_text_row_token(row), reference.Predict());
 }
 
+TEST_F(SourceTextServiceTest, MissingCheckpointRetiresPublishedLayouts) {
+  const auto before = loom_serve_device_memory_statistics(device_);
+  auto options = ModelOptions();
+  const auto missing = iree::testing::MakeTempFilePath("missing_checkpoint");
+  ASSERT_FALSE(std::filesystem::exists(missing));
+  options.weights_path = iree_make_cstring_view(missing.c_str());
+  iree_notification_t notification;
+  iree_notification_initialize(&notification);
+  loom_serve_text_load_t* load = nullptr;
+  IREE_ASSERT_OK(loom_serve_text_load_allocate(
+      device_, &options,
+      [](void* payload) {
+        iree_notification_post(static_cast<iree_notification_t*>(payload),
+                               IREE_ALL_WAITERS);
+      },
+      &notification, host_allocator_, &load));
+  bool complete = false;
+  iree_status_t status = iree_ok_status();
+  while (!complete) {
+    const auto ticket = iree_notification_prepare_wait(&notification);
+    status = loom_serve_text_load_advance(
+        load, LOOM_SERVE_TEXT_LOAD_FLAG_DEMAND, &complete);
+    if (complete) {
+      iree_notification_cancel_wait(&notification);
+    } else {
+      IREE_ASSERT_OK(status);
+      iree_notification_commit_wait(&notification, ticket, IREE_DURATION_ZERO,
+                                    IREE_TIME_INFINITE_FUTURE);
+    }
+  }
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  auto* partial = loom_serve_text_load_take_model(load);
+  EXPECT_EQ(loom_serve_text_model_weight_activity(partial).activations, 0u);
+  loom_serve_text_load_free(load);
+  EXPECT_TRUE(loom_serve_text_model_is_retired(partial));
+  IREE_ASSERT_OK(loom_serve_text_model_free_retired(partial));
+  iree_notification_deinitialize(&notification);
+  const auto after = loom_serve_device_memory_statistics(device_);
+  EXPECT_EQ(after.retained.reserved_bytes, before.retained.reserved_bytes);
+  EXPECT_EQ(after.retained.committed_bytes, before.retained.committed_bytes);
+  // The failed preparation did not retire shared queues or existing models.
+  auto* row = loom_serve_text_model_row(model_, 0);
+  const int32_t token = Oracle::Id('a');
+  IREE_ASSERT_OK(loom_serve_text_row_prefill(row, 1, &token));
+  Oracle reference;
+  reference.Consume("a");
+  EXPECT_EQ(loom_serve_text_row_token(row), reference.Predict());
+}
+
 TEST_F(SourceTextServiceTest, ChunkingRowsAndForksMatchDenseOracle) {
   const std::string prompt = "abxabbaaxbabx";
   std::vector<int32_t> tokens;
