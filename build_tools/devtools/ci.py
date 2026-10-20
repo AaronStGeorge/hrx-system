@@ -925,6 +925,21 @@ def amdgpu_windows_steps(
         )
     steps.append(
         bazel_test_step(
+            f"Test Windows GPU coherent signals{config_name}",
+            ("//libamdf/cts/gpu/pm4:pm4_dynamic",),
+            config=config,
+            available_resources=ci_config.AMDGPU_WINDOWS_RESOURCES,
+            bazel_options=options
+            + (
+                f"--test_arg=--amdf_gpu_target={target_selector}",
+                "--test_env=GTEST_FAIL_FAST=1",
+                "--test_filter=*Pm4AtomicStoreTest.*:*Pm4WaitTest.*:"
+                "Pm4UnconditionalWaitTest.*",
+            ),
+        )
+    )
+    steps.append(
+        bazel_test_step(
             f"Test IREE / Windows AMDGPU{config_name}",
             targets or ci_config.AMDGPU_WINDOWS_BAZEL_TARGETS,
             config=config,
