@@ -617,6 +617,13 @@ def _expected_numeric_vector_shapes():
     }
 
 
+def _expected_partial_numeric_vector_ranges():
+    return {
+        (element, 1, maximum - 1)
+        for element, maximum in _expected_numeric_vector_shapes()
+    }
+
+
 def test_numeric_constants_cover_every_native_and_partial_carrier() -> None:
     actual = set()
     for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
@@ -643,7 +650,6 @@ def test_full_numeric_carriers_have_complete_structural_rules() -> None:
         (vector.vector_extract, "source"),
         (vector.vector_insert, "dest"),
         (vector.vector_shuffle, "result"),
-        (scf.scf_select, "result"),
     ):
         actual = {
             shape
@@ -654,44 +660,8 @@ def test_full_numeric_carriers_have_complete_structural_rules() -> None:
         assert actual == expected, source_op.name
 
 
-def test_partial_integer_carriers_have_complete_structural_rules() -> None:
-    expected = {
-        (
-            scalar_type_name(kind),
-            1,
-            128 // ScalarType(kind).bitwidth - 1,
-        )
-        for kind in ScalarTypeKind
-        if kind
-        in (
-            ScalarTypeKind.I8,
-            ScalarTypeKind.I16,
-            ScalarTypeKind.I32,
-            ScalarTypeKind.I64,
-        )
-    }
-    for source_op, field, rules_per_shape in (
-        (vector.vector_constant, "result", 1),
-        (vector.vector_splat, "result", 1),
-        (vector.vector_extract, "source", 1),
-        (vector.vector_insert, "dest", 2),
-    ):
-        counts = {}
-        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
-            if not isinstance(rule, DescriptorRule) or rule.source_op is not source_op:
-                continue
-            for shape in _integer_vector_ranges(rule, field):
-                counts[shape] = counts.get(shape, 0) + 1
-        assert counts == {shape: rules_per_shape for shape in expected}, source_op.name
-
-
-def test_partial_narrow_float_carriers_have_complete_structural_rules() -> None:
-    expected = {
-        ("f8E4M3", 1, 15),
-        ("f8E5M2", 1, 15),
-        ("f16", 1, 7),
-        ("bf16", 1, 7),
-    }
+def test_partial_numeric_carriers_have_complete_direct_structural_rules() -> None:
+    expected = _expected_partial_numeric_vector_ranges()
     for source_op, field, rules_per_shape in (
         (vector.vector_constant, "result", 1),
         (vector.vector_splat, "result", 1),
@@ -703,8 +673,6 @@ def test_partial_narrow_float_carriers_have_complete_structural_rules() -> None:
             if not isinstance(rule, DescriptorRule) or rule.source_op is not source_op:
                 continue
             for shape in _numeric_vector_ranges(rule, field):
-                if shape[0] not in ("f8E4M3", "f8E5M2", "f16", "bf16"):
-                    continue
                 counts[shape] = counts.get(shape, 0) + 1
         assert counts == {shape: rules_per_shape for shape in expected}, source_op.name
 
@@ -820,50 +788,20 @@ def test_dynamic_insert_masks_select_exactly_one_complete_physical_lane() -> Non
     assert lane_counts == {2, 4, 8, 16}
 
 
-def test_numeric_bitcasts_alias_every_full_width_shape_pair() -> None:
-    actual = {
-        (source, result)
+def test_structural_planner_exclusively_owns_bitcast_and_numeric_select() -> None:
+    assert not any(
+        isinstance(rule, ValueAliasRule) and rule.source_op is vector.vector_bitcast
         for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
-        if isinstance(rule, ValueAliasRule) and rule.source_op is vector.vector_bitcast
-        for source in _numeric_vector_shapes(rule, "input")
-        for result in _numeric_vector_shapes(rule, "result")
-    }
-    shapes = _expected_numeric_vector_shapes()
-    assert actual == {(source, result) for source in shapes for result in shapes}
-
-
-def test_partial_bitcasts_alias_every_bit_preserving_type_pair() -> None:
-    actual = {
-        (source, result)
-        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
-        if isinstance(rule, ValueAliasRule) and rule.source_op is vector.vector_bitcast
-        for source in _numeric_vector_ranges(rule, "input")
-        for result in _numeric_vector_ranges(rule, "result")
-    }
-    shapes = {
-        (
-            scalar_type_name(kind),
-            1,
-            128 // ScalarType(kind).bitwidth - 1,
-        )
-        for kind in ScalarTypeKind
-        if kind
-        in (
-            ScalarTypeKind.I8,
-            ScalarTypeKind.I16,
-            ScalarTypeKind.I32,
-            ScalarTypeKind.I64,
-        )
-    }
-    shapes.update(
-        {
-            ("f8E4M3", 1, 15),
-            ("f8E5M2", 1, 15),
-            ("f16", 1, 7),
-            ("bf16", 1, 7),
-        }
     )
-    assert actual == {(source, result) for source in shapes for result in shapes}
+    for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
+        if not isinstance(rule, DescriptorRule) or rule.source_op is not scf.scf_select:
+            continue
+        result_type = next(
+            guard.type_pattern
+            for guard in rule.guards
+            if guard.kind is GuardKind.VALUE_TYPE and guard.field == "result"
+        )
+        assert result_type.kind != "vector" or result_type.elements == ("i1",)
 
 
 def test_vector_cast_family_explicitly_rejects_every_unmatched_native_case() -> None:

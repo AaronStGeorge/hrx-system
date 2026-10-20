@@ -126,7 +126,7 @@ _NATIVE_FLOAT_LANE_TYPES = (
     (Vector("f64", minimum_lanes=1, maximum_lanes=2), "f64x2"),
 )
 
-# Transient integer values smaller than one physical SIMD register retain their
+# Transient numeric values smaller than one physical SIMD register retain their
 # source lane count while occupying the low lanes of a v128 carrier. Callable
 # arguments and results remain restricted to the exact shapes above.
 _PARTIAL_I8 = Vector("i8", minimum_lanes=1, maximum_lanes=15)
@@ -155,9 +155,14 @@ _PARTIAL_NARROW_FLOAT_LANE_TYPES = (
         8,
     ),
 )
-_PARTIAL_BIT_PRESERVING_LANE_TYPES = (
+_PARTIAL_WIDE_FLOAT_LANE_TYPES = (
+    (_F32, Vector("f32", minimum_lanes=1, maximum_lanes=3), "f32x4", "", 4),
+    (_F64, Vector("f64", minimum_lanes=1, maximum_lanes=1), "f64x2", "", 2),
+)
+_PARTIAL_NUMERIC_LANE_TYPES = (
     *_PARTIAL_INTEGER_LANE_TYPES,
     *_PARTIAL_NARROW_FLOAT_LANE_TYPES,
+    *_PARTIAL_WIDE_FLOAT_LANE_TYPES,
 )
 
 _I64_ATTR_DIAGNOSTIC = GuardDiagnostic(
@@ -1743,19 +1748,9 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
         _conversion_alias_rule(scalar_conversion.scalar_bitcast, _I16, _F16),
         _conversion_alias_rule(scalar_conversion.scalar_bitcast, _BF16, _I16),
         _conversion_alias_rule(scalar_conversion.scalar_bitcast, _I16, _BF16),
-        *(
-            _conversion_alias_rule(vector.vector_bitcast, source_type, result_type)
-            for source_type in _NUMERIC_V128_TYPES
-            for result_type in _NUMERIC_V128_TYPES
-        ),
-        *(
-            _conversion_alias_rule(vector.vector_bitcast, source_type, result_type)
-            for _, source_type, _, _, _ in _PARTIAL_BIT_PRESERVING_LANE_TYPES
-            for _, result_type, _, _, _ in _PARTIAL_BIT_PRESERVING_LANE_TYPES
-        ),
-        # Wasm has native aliases for the bitcast carrier shapes above. Every
-        # other cast, and every unmatched bitcast shape, deliberately enters
-        # the shared lane-wise reference legalization family.
+        # The structural planner owns every vector.bitcast whose source and
+        # result use equal carrier payloads. Every other vector cast enters the
+        # shared lane-wise reference legalization family.
         *(UnsupportedRule(source_op=source_op) for source_op in vector.VECTOR_CAST_OPS),
         *(
             rule
@@ -1887,7 +1882,6 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
                 (_F64, "f64"),
                 (_INDEX, "i32"),
                 (_OFFSET, "i32"),
-                *((value_type, "v128") for value_type in _NUMERIC_V128_TYPES),
                 (Buffer(), "i32"),
             )
         ),
@@ -1897,18 +1891,8 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
         ),
         *(
             _splat_rule(scalar_type, vector_type, f"wasm.{shape_name}.splat")
-            for (
-                scalar_type,
-                vector_type,
-                shape_name,
-                _,
-                _,
-            ) in _PARTIAL_INTEGER_LANE_TYPES
-        ),
-        *(
-            _splat_rule(scalar_type, vector_type, f"wasm.{shape_name}.splat")
             for scalar_type, vector_type, shape_name, _, _ in (
-                _PARTIAL_NARROW_FLOAT_LANE_TYPES
+                _PARTIAL_NUMERIC_LANE_TYPES
             )
         ),
         *varying_shift_rules(_descriptor, _value_type),
@@ -2078,20 +2062,8 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
             _extract_rule(
                 vector_type, scalar_type, f"wasm.{shape_name}.extract_lane{suffix}"
             )
-            for (
-                scalar_type,
-                vector_type,
-                shape_name,
-                suffix,
-                _,
-            ) in _PARTIAL_INTEGER_LANE_TYPES
-        ),
-        *(
-            _extract_rule(
-                vector_type, scalar_type, f"wasm.{shape_name}.extract_lane{suffix}"
-            )
             for scalar_type, vector_type, shape_name, suffix, _ in (
-                _PARTIAL_NARROW_FLOAT_LANE_TYPES
+                _PARTIAL_NUMERIC_LANE_TYPES
             )
         ),
         *(
@@ -2100,18 +2072,8 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
         ),
         *(
             _insert_rule(scalar_type, vector_type, f"wasm.{shape_name}.replace_lane")
-            for (
-                scalar_type,
-                vector_type,
-                shape_name,
-                _,
-                _,
-            ) in _PARTIAL_INTEGER_LANE_TYPES
-        ),
-        *(
-            _insert_rule(scalar_type, vector_type, f"wasm.{shape_name}.replace_lane")
             for scalar_type, vector_type, shape_name, _, _ in (
-                _PARTIAL_NARROW_FLOAT_LANE_TYPES
+                _PARTIAL_NUMERIC_LANE_TYPES
             )
         ),
         *(
@@ -2131,18 +2093,7 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
                 shape_name,
                 _,
                 physical_lane_count,
-            ) in _PARTIAL_INTEGER_LANE_TYPES
-        ),
-        *(
-            _dynamic_insert_rule(
-                scalar_type,
-                vector_type,
-                f"wasm.{shape_name}.splat",
-                physical_lane_count=physical_lane_count,
-            )
-            for scalar_type, vector_type, shape_name, _, physical_lane_count in (
-                _PARTIAL_NARROW_FLOAT_LANE_TYPES
-            )
+            ) in _PARTIAL_NUMERIC_LANE_TYPES
         ),
         *(_shuffle_rule(value_type) for value_type in _NUMERIC_V128_TYPES),
         *(
