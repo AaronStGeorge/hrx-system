@@ -731,7 +731,9 @@ static iree_status_t loom_boundary_projection_collect_op(
   }
   loom_boundary_projection_function_t* callee_plan =
       &collect->plan->functions[callee_index];
-  if (!callee_plan->signature_changes) {
+  // Rejected signature schemas are planning evidence, not a boundary the
+  // caller may adopt independently of the unchanged callee.
+  if (!callee_plan->selected || !callee_plan->signature_changes) {
     return iree_ok_status();
   }
   if (operands.count != callee_plan->argument_count ||
