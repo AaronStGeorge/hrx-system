@@ -1043,7 +1043,7 @@ static iree_status_t loom_scalar_preserve_reconstructed_facts(
   if (!context->fact_table) {
     return iree_ok_status();
   }
-  loom_predicate_t predicates[2];
+  loom_predicate_t predicates[LOOM_VALUE_FACT_INTEGER_REFINEMENT_CAPACITY];
   const uint16_t predicate_count = loom_value_facts_export_integer_refinements(
       reconstructed_result,
       loom_value_fact_table_lookup(context->fact_table, reconstructed_result),
