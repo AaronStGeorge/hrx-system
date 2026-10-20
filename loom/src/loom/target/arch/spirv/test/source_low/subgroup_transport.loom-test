@@ -1,0 +1,178 @@
+// RUN: emit spirv-low target=spirv:vulkan1.3+bda features=BFLOAT16_TYPE_KHR,-INT16,-SUBGROUP_EXTENDED_TYPES,GROUP_NON_UNIFORM,GROUP_NON_UNIFORM_SHUFFLE,GROUP_NON_UNIFORM_SHUFFLE_RELATIVE,GROUP_NON_UNIFORM_BALLOT,STORAGE_BUFFER_16BIT_ACCESS limits=SUBGROUP_SIZE:32
+
+// Native BF16 group operations are unavailable. Three components exercise
+// pair packing and odd padding without requiring Int16 or extended types.
+kernel.def @odd_bfloat_broadcast() {
+  %unit = index.constant 1 : index
+  %width = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %lane = kernel.subgroup.lane.id : index
+  %base = index.constant 0 : offset
+  %source = buffer.view %input[%base] : buffer -> view<32x3xbf16>
+  %destination = buffer.view %output[%base] : buffer -> view<32x3xbf16>
+  %value = vector.load %source[%lane, 0] : view<32x3xbf16> -> vector<3xbf16>
+  %result = kernel.subgroup.broadcast.first %value : vector<3xbf16>
+  vector.store %result, %destination[%lane, 0] : vector<3xbf16>, view<32x3xbf16>
+  kernel.return
+}
+
+// ----
+low.kernel.def target<spirv.logical.core> abi_layout({signature = (buffer, buffer) -> ()}) workgroup_size(32, 1, 1) workgroup_count(1, 1, 1) @odd_bfloat_broadcast() asm {
+  %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %lane = OpLoadBuiltin.subgroup_local_invocation_id
+  %46 = OpSConvert.i32.offset64 %lane
+  %47 = OpConstant.offset64 6
+  %48 = OpIMul.offset64 %46, %47
+  %49 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %input, %48
+  %50 = OpLoad.storage_buffer.bf16 %49
+  %54 = OpConstant.offset64 2
+  %55 = OpIAdd.offset64 %48, %54
+  %56 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %input, %55
+  %57 = OpLoad.storage_buffer.bf16 %56
+  %61 = OpConstant.offset64 4
+  %62 = OpIAdd.offset64 %48, %61
+  %63 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %input, %62
+  %64 = OpLoad.storage_buffer.bf16 %63
+  %value = OpCompositeConstruct.v3bf16 %50, %57, %64
+  %66 = OpCompositeExtract.v3bf16.bf16 %value, 0 : reg<spirv.id>
+  %67 = OpCompositeExtract.v3bf16.bf16 %value, 1 : reg<spirv.id>
+  %68 = OpCompositeExtract.v3bf16.bf16 %value, 2 : reg<spirv.id>
+  %69 = OpCompositeConstruct.v4bf16 %66, %67, %68, %68 : reg<spirv.id>
+  %70 = OpBitcast.v4bf16.v2i32 %69 : reg<spirv.id>
+  %71 = OpGroupNonUniformBroadcastFirst.v2i32 %70 : reg<spirv.id>
+  %72 = OpBitcast.v2i32.v4bf16 %71 : reg<spirv.id>
+  %73 = OpCompositeExtract.v4bf16.bf16 %72, 0 : reg<spirv.id>
+  %74 = OpCompositeExtract.v4bf16.bf16 %72, 1 : reg<spirv.id>
+  %75 = OpCompositeExtract.v4bf16.bf16 %72, 2 : reg<spirv.id>
+  %result = OpCompositeConstruct.v3bf16 %73, %74, %75
+  %77 = OpCompositeExtract.v3bf16.bf16 %result, 0
+  %78 = OpCompositeExtract.v3bf16.bf16 %result, 1
+  %79 = OpCompositeExtract.v3bf16.bf16 %result, 2
+  %80 = OpSConvert.i32.offset64 %lane
+  %81 = OpConstant.offset64 6
+  %82 = OpIMul.offset64 %80, %81
+  %83 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %output, %82
+  OpStore.storage_buffer.bf16 %83, %77
+  %87 = OpConstant.offset64 2
+  %88 = OpIAdd.offset64 %82, %87
+  %89 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %output, %88
+  OpStore.storage_buffer.bf16 %89, %78
+  %93 = OpConstant.offset64 4
+  %94 = OpIAdd.offset64 %82, %93
+  %95 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %output, %94
+  OpStore.storage_buffer.bf16 %95, %79
+  return
+}
+
+// ====
+// RUN: emit spirv-low target=spirv:vulkan1.3+bda features=BFLOAT16_TYPE_KHR,-INT16,-SUBGROUP_EXTENDED_TYPES,GROUP_NON_UNIFORM,GROUP_NON_UNIFORM_SHUFFLE,GROUP_NON_UNIFORM_SHUFFLE_RELATIVE,GROUP_NON_UNIFORM_BALLOT,STORAGE_BUFFER_16BIT_ACCESS limits=SUBGROUP_SIZE:32
+
+// Wider native BF16 payloads reuse the four-element composite representation.
+// The final singleton has defined padding and shares the first packet's validity.
+kernel.def @wide_native_bfloat_transport() {
+  %unit = index.constant 1 : index
+  %width = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer, %validity: buffer) {
+  %lane = kernel.subgroup.lane.id : index
+  %base = index.constant 0 : offset
+  %source = buffer.view %input[%base] : buffer -> view<32x5xbf16>
+  %destination = buffer.view %output[%base] : buffer -> view<32x5xbf16>
+  %validity_view = buffer.view %validity[%base] : buffer -> view<32xi32>
+  %value = vector.load<volatile> %source[%lane, 0] : view<32x5xbf16> -> vector<5xbf16>
+  %distance = scalar.constant 1 : i32
+  %width = scalar.constant 32 : i32
+  %result, %valid = kernel.subgroup.shuffle<xor> %value, %distance, %width : vector<5xbf16>, i32, i32
+  vector.store %result, %destination[%lane, 0] : vector<5xbf16>, view<32x5xbf16>
+  %valid_integer = scalar.extui %valid : i1 to i32
+  view.store %valid_integer, %validity_view[%lane] : i32, view<32xi32>
+  kernel.return
+}
+
+// ----
+low.kernel.def target<spirv.logical.core> abi_layout({signature = (buffer, buffer, buffer) -> ()}) workgroup_size(32, 1, 1) workgroup_count(1, 1, 1) @wide_native_bfloat_transport() asm {
+  %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %validity = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %lane = OpLoadBuiltin.subgroup_local_invocation_id
+  %88 = OpSConvert.i32.offset64 %lane
+  %89 = OpConstant.offset64 10
+  %90 = OpIMul.offset64 %88, %89
+  %91 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %input, %90
+  %92 = OpLoad.storage_buffer.bf16<volatile> %91
+  %96 = OpConstant.offset64 2
+  %97 = OpIAdd.offset64 %90, %96
+  %98 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %input, %97
+  %99 = OpLoad.storage_buffer.bf16<volatile> %98
+  %103 = OpConstant.offset64 4
+  %104 = OpIAdd.offset64 %90, %103
+  %105 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %input, %104
+  %106 = OpLoad.storage_buffer.bf16<volatile> %105
+  %110 = OpConstant.offset64 6
+  %111 = OpIAdd.offset64 %90, %110
+  %112 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %input, %111
+  %113 = OpLoad.storage_buffer.bf16<volatile> %112
+  %117 = OpConstant.offset64 8
+  %118 = OpIAdd.offset64 %90, %117
+  %119 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %input, %118
+  %120 = OpLoad.storage_buffer.bf16<volatile> %119
+  %distance = OpConstant.i32 1
+  %width = OpConstant.i32 32
+  %123 = OpCompositeConstruct.v4bf16 %92, %99, %106, %113
+  %124 = OpBitcast.v4bf16.v2i32 %123 : reg<spirv.id>
+  %125 = OpBitcast.i32.u32 %distance
+  %126 = OpGroupNonUniformShuffleXor.v2i32 %124, %125 : reg<spirv.id>
+  %127 = OpBitcast.v2i32.v4bf16 %126
+  %128 = OpLoadBuiltin.subgroup_local_invocation_id : reg<spirv.id>
+  %129 = OpBitwiseXor %128, %distance : reg<spirv.id>
+  %130 = OpBitcast.i32.u32 %width
+  %131 = OpULessThan.u32 %125, %130 : reg<spirv.id>
+  %132 = OpBitcast.i32.u32 %129
+  %133 = OpULessThan.u32 %132, %130 : reg<spirv.id>
+  %134 = OpLogicalAnd.bool %131, %133 : reg<spirv.id>
+  %135 = OpSelect %134, %129, %128 : reg<spirv.id>
+  %136 = OpBitcast.i32.u32 %135
+  %137 = OpConstantTrue.bool : reg<spirv.id>
+  %138 = OpGroupNonUniformBallot.v4u32 %137
+  %139 = OpGroupNonUniformBallotBitExtract.bool %138, %136 : reg<spirv.id>
+  %valid = OpLogicalAnd.bool %134, %139
+  %141 = OpCompositeConstruct.v2bf16 %120, %120 : reg<spirv.id>
+  %142 = OpBitcast.v2bf16.i32 %141 : reg<spirv.id>
+  %143 = OpBitcast.i32.u32 %distance
+  %144 = OpGroupNonUniformShuffleXor.i32 %142, %143 : reg<spirv.id>
+  %145 = OpBitcast.i32.v2bf16 %144 : reg<spirv.id>
+  %146 = OpCompositeExtract.v2bf16.bf16 %145, 0
+  %147 = OpCompositeExtract.v4bf16.bf16 %127, 0
+  %148 = OpCompositeExtract.v4bf16.bf16 %127, 1
+  %149 = OpCompositeExtract.v4bf16.bf16 %127, 2
+  %150 = OpCompositeExtract.v4bf16.bf16 %127, 3
+  %151 = OpSConvert.i32.offset64 %lane
+  %152 = OpConstant.offset64 10
+  %153 = OpIMul.offset64 %151, %152
+  %154 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %output, %153
+  OpStore.storage_buffer.bf16 %154, %147
+  %158 = OpConstant.offset64 2
+  %159 = OpIAdd.offset64 %153, %158
+  %160 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %output, %159
+  OpStore.storage_buffer.bf16 %160, %148
+  %164 = OpConstant.offset64 4
+  %165 = OpIAdd.offset64 %153, %164
+  %166 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %output, %165
+  OpStore.storage_buffer.bf16 %166, %149
+  %170 = OpConstant.offset64 6
+  %171 = OpIAdd.offset64 %153, %170
+  %172 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %output, %171
+  OpStore.storage_buffer.bf16 %172, %150
+  %176 = OpConstant.offset64 8
+  %177 = OpIAdd.offset64 %153, %176
+  %178 = OpPtrAccessChain.storage_buffer.bf16.byte_offset %output, %177
+  OpStore.storage_buffer.bf16 %178, %146
+  %179 = OpConstant.i32 0
+  %valid_integer = OpSelect %valid, %distance, %179
+  %183 = OpIMul.offset64 %151, %164
+  %184 = OpPtrAccessChain.storage_buffer.i32.byte_offset %validity, %183
+  OpStore.storage_buffer.i32 %184, %valid_integer
+  return
+}

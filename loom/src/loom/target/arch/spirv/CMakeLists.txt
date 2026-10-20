@@ -399,6 +399,7 @@ loom_cc_library(
     loom::rewrite::rewriter
     loom::target::arch::spirv::descriptors
     loom::target::legalization
+    loom::transforms::kernel::target_legalization
     loom::transforms::scalar::target_legalization
     loom::transforms::vector::packet_legalization
     loom::transforms::vector::shape_legalization
@@ -631,6 +632,7 @@ loom_check_test_suite(
     "test/source_low/subgroup_predicates.loom-test"
     "test/source_low/subgroup_reductions.loom-test"
     "test/source_low/subgroup_shuffle.loom-test"
+    "test/source_low/subgroup_transport.loom-test"
     "test/source_low/target_legalize.loom-test"
     "test/source_low/unbound_low.loom-test"
     "test/source_low/vector_atomic_policy.loom-test"
