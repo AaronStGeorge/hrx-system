@@ -26,6 +26,7 @@ from loom.target.arch.amdgpu.contracts.materializers import (
     ADDRESS_VGPR_MATERIALIZER,
     F32_VGPR_MATERIALIZER,
     I1_NATIVE_MASK_MATERIALIZER,
+    I64_LOW_WORDS_MATERIALIZER,
     REGISTERS_VGPR_MATERIALIZER,
     VOP3_BINARY_RHS_MATERIALIZER,
 )
@@ -681,14 +682,16 @@ def _i64_vector_shift_rule(
         descriptor=descriptor,
         guards=(
             *_typed_guards(("lhs", "rhs", "result"), _VEC_I64_STATIC),
-            Guard.exact_lane_origin_type("rhs", _VEC_I32_STATIC),
+            Guard.value_materializable("rhs", I64_LOW_WORDS_MATERIALIZER.name),
             Guard.descriptor_available(descriptor),
         ),
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
                 operands={
-                    "shift": ValueRef.exact_lane_origin_operand("rhs"),
+                    "shift": ValueRef.operand(
+                        "rhs", materializer=I64_LOW_WORDS_MATERIALIZER.name
+                    ),
                     "value": ValueRef.operand("lhs"),
                 },
                 results={"dst": ValueRef.result("result")},
@@ -5413,6 +5416,7 @@ AMDGPU_ARITHMETIC_CONTRACT_FRAGMENT = ContractFragment(
         ADDRESS_VGPR_MATERIALIZER,
         F32_VGPR_MATERIALIZER,
         I1_NATIVE_MASK_MATERIALIZER,
+        I64_LOW_WORDS_MATERIALIZER,
         REGISTERS_VGPR_MATERIALIZER,
         VOP3_BINARY_RHS_MATERIALIZER,
     ),

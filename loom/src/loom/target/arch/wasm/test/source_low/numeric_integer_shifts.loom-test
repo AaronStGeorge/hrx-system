@@ -182,3 +182,24 @@ low.func.def target<wasm.core.simd128> abi(wasm_function) @partial_i32_tail(%inp
   i32.store %output, %40 {offset = 8}
   return
 }
+
+// ====
+
+// An odd wide vector stays intact until packetization. Count normalization
+// must not cycle with folding the truncate/extend pair to a bitfield extract.
+// RUN: pass target-legalize{mode=eager},dce,canonicalize
+
+wasm.target<simd128> @target
+
+func.def target(@target) @wide_counts(%value: vector<3xi64>, %count: vector<3xi64>) -> (vector<3xi64>) {
+  %result = vector.shrui %value, %count : vector<3xi64>
+  func.return %result : vector<3xi64>
+}
+
+// ----
+wasm.target<simd128> @target
+
+func.def target(@target) @wide_counts(%value: vector<3xi64>, %count: vector<3xi64>) -> (vector<3xi64>) {
+  %result = vector.shrui %value, %count : vector<3xi64>
+  func.return %result : vector<3xi64>
+}
