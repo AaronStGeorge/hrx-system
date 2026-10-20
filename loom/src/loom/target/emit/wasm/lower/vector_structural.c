@@ -31,7 +31,8 @@ enum {
   LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SHUFFLE = 0x506,
   LOOM_WASM_VECTOR_STRUCTURAL_PLAN_DYNAMIC_SLICE = 0x507,
   LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_EXTENSION = 0x508,
-  LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT = 0x509,
+  LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_LOGIC = 0x509,
+  LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT = 0x50A,
 };
 
 typedef struct loom_wasm_vector_slice_plan_t {
@@ -71,6 +72,13 @@ typedef struct loom_wasm_predicate_extension_plan_t {
   // Signed or unsigned Boolean extension semantics.
   loom_wasm_predicate_extension_kind_t kind;
 } loom_wasm_predicate_extension_plan_t;
+
+typedef struct loom_wasm_predicate_logic_plan_t {
+  // Shared physical carrier selected for every predicate value.
+  loom_wasm_vector_carrier_t carrier;
+  // Packet-wise Wasm bitwise instruction.
+  uint16_t descriptor_ref;
+} loom_wasm_predicate_logic_plan_t;
 
 typedef struct loom_wasm_vector_constructor_descriptors_t {
   // Descriptor reference for broadcasting the first packet lane.
@@ -592,6 +600,39 @@ static bool loom_wasm_select_plan_from_op(const loom_module_t* module,
   return loom_wasm_vector_carrier_for_type(result_type).packet_count == 1;
 }
 
+static bool loom_wasm_predicate_logic_plan_from_op(
+    const loom_module_t* module, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_wasm_predicate_logic_plan_t* out_plan) {
+  uint16_t descriptor_ref = 0;
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_ANDI:
+      descriptor_ref = WASM_CORE_SIMD128_DESCRIPTOR_REF_V128_AND;
+      break;
+    case LOOM_OP_VECTOR_ORI:
+      descriptor_ref = WASM_CORE_SIMD128_DESCRIPTOR_REF_V128_OR;
+      break;
+    case LOOM_OP_VECTOR_XORI:
+      descriptor_ref = WASM_CORE_SIMD128_DESCRIPTOR_REF_V128_XOR;
+      break;
+    default:
+      return false;
+  }
+  const loom_value_id_t result = loom_op_const_results(source_op)[0];
+  if (!loom_wasm_predicate_type(loom_module_value_type(module, result), NULL)) {
+    return false;
+  }
+  const loom_wasm_vector_carrier_t carrier =
+      loom_wasm_vector_carrier_for_source_value(module, context, result);
+  if (carrier.packet_count == 0) {
+    return false;
+  }
+  *out_plan = (loom_wasm_predicate_logic_plan_t){
+      .carrier = carrier,
+      .descriptor_ref = descriptor_ref,
+  };
+  return true;
+}
+
 static bool loom_wasm_shuffle_plan_from_op(
     const loom_module_t* module, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_wasm_vector_shuffle_plan_t* out_plan) {
@@ -643,6 +684,7 @@ iree_status_t loom_wasm_query_vector_structural_contract(
   loom_wasm_vector_slice_plan_t slice_plan;
   loom_wasm_vector_dynamic_slice_plan_t dynamic_slice_plan;
   loom_wasm_predicate_extension_plan_t predicate_extension_plan;
+  loom_wasm_predicate_logic_plan_t predicate_logic_plan;
   loom_wasm_vector_shuffle_plan_t shuffle_plan;
   if (loom_wasm_from_elements_plan_from_op(environment->module,
                                            /*context=*/NULL, source_op,
@@ -672,6 +714,9 @@ iree_status_t loom_wasm_query_vector_structural_contract(
   if (loom_wasm_predicate_extension_plan_from_op(environment->module,
                                                  /*context=*/NULL, source_op,
                                                  &predicate_extension_plan) ||
+      loom_wasm_predicate_logic_plan_from_op(environment->module,
+                                             /*context=*/NULL, source_op,
+                                             &predicate_logic_plan) ||
       loom_wasm_select_plan_from_op(environment->module, source_op) ||
       loom_wasm_shuffle_plan_from_op(environment->module, /*context=*/NULL,
                                      source_op, &shuffle_plan) ||
@@ -768,6 +813,17 @@ iree_status_t loom_wasm_select_vector_structural_plan(
         LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_EXTENSION, retained_plan);
     return iree_ok_status();
   }
+  loom_wasm_predicate_logic_plan_t predicate_logic_plan;
+  if (loom_wasm_predicate_logic_plan_from_op(module, context, source_op,
+                                             &predicate_logic_plan)) {
+    loom_wasm_predicate_logic_plan_t* retained_plan = NULL;
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+        context, sizeof(*retained_plan), (void**)&retained_plan));
+    *retained_plan = predicate_logic_plan;
+    *out_plan = loom_low_lower_plan_make(
+        LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_LOGIC, retained_plan);
+    return iree_ok_status();
+  }
   if (loom_wasm_select_plan_from_op(module, source_op)) {
     *out_plan =
         loom_low_lower_plan_make(LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT, NULL);
@@ -843,6 +899,9 @@ void loom_wasm_describe_vector_structural_plan(
               : IREE_SV("predicate.extend-unsigned.v128-packets");
       return;
     }
+    case LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_LOGIC:
+      out_report->plan_key = IREE_SV("predicate.logic.v128-packets");
+      return;
     case LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT:
       out_report->plan_key = IREE_SV("select.v128");
       return;
@@ -1202,6 +1261,33 @@ static iree_status_t loom_wasm_bind_packets(
     low_result = loom_low_concat_result(concat_op);
   }
   return loom_low_lower_bind_value(context, result_value, low_result);
+}
+
+static iree_status_t loom_wasm_emit_predicate_logic(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_wasm_predicate_logic_plan_t* plan) {
+  const loom_value_id_t* operands = loom_op_const_operands(source_op);
+  const loom_wasm_vector_carrier_t carriers[] = {plan->carrier, plan->carrier};
+  loom_wasm_packet_emitter_t emitter;
+  IREE_RETURN_IF_ERROR(loom_wasm_packet_emitter_initialize(
+      context, source_op, operands, carriers, IREE_ARRAYSIZE(carriers),
+      &emitter));
+  loom_value_id_t* packets = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_emission_array(
+      context, plan->carrier.packet_count, sizeof(*packets), (void**)&packets));
+  for (uint16_t packet = 0; packet < plan->carrier.packet_count; ++packet) {
+    loom_value_id_t packet_operands[2];
+    for (uint16_t i = 0; i < IREE_ARRAYSIZE(packet_operands); ++i) {
+      IREE_RETURN_IF_ERROR(loom_wasm_packet_emitter_source_packet(
+          &emitter, i, packet, &packet_operands[i]));
+    }
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_structural_op(
+        context, source_op, plan->descriptor_ref, packet_operands,
+        IREE_ARRAYSIZE(packet_operands), emitter.packet_type,
+        &packets[packet]));
+  }
+  return loom_wasm_bind_packets(context, source_op, packets, plan->carrier,
+                                loom_op_const_results(source_op)[0]);
 }
 
 static iree_status_t loom_wasm_emit_shuffle(
@@ -1879,6 +1965,10 @@ iree_status_t loom_wasm_emit_vector_structural_plan(
       return loom_wasm_emit_predicate_extension(
           context, source_op,
           (const loom_wasm_predicate_extension_plan_t*)plan.target_data);
+    case LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_LOGIC:
+      return loom_wasm_emit_predicate_logic(
+          context, source_op,
+          (const loom_wasm_predicate_logic_plan_t*)plan.target_data);
     case LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT:
       return loom_wasm_emit_select(context, source_op);
     default:

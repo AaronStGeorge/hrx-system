@@ -228,3 +228,53 @@ low.func.def target<wasm.core.simd128> abi(wasm_function) @narrow_predicate_exte
   %unsigned = v128.and %signed, %67
   return %pair, %signed, %unsigned
 }
+
+// ====
+
+// Predicate logic spanning two qword-mask packets preserves every lane while
+// feeding independent qword selections.
+func.def @wide_predicate_logic(%lhs0: vector<2xi64>, %rhs0: vector<2xi64>, %lhs1: vector<2xi64>, %rhs1: vector<2xi64>) -> (vector<2xi64>, vector<2xi64>, vector<2xi64>, vector<2xi64>, vector<2xi64>, vector<2xi64>) {
+  %less0 = vector.cmpi slt, %lhs0, %rhs0 : vector<2xi64> -> vector<2xi1>
+  %less1 = vector.cmpi slt, %lhs1, %rhs1 : vector<2xi64> -> vector<2xi1>
+  %different0 = vector.cmpi ne, %lhs0, %rhs0 : vector<2xi64> -> vector<2xi1>
+  %different1 = vector.cmpi ne, %lhs1, %rhs1 : vector<2xi64> -> vector<2xi1>
+  %less = vector.concat<0> %less0, %less1 : vector<2xi1>, vector<2xi1> -> vector<4xi1>
+  %different = vector.concat<0> %different0, %different1 : vector<2xi1>, vector<2xi1> -> vector<4xi1>
+  %and_condition = vector.andi %less, %different : vector<4xi1>
+  %or_condition = vector.ori %less, %different : vector<4xi1>
+  %xor_condition = vector.xori %less, %different : vector<4xi1>
+  %and_condition0 = vector.slice %and_condition[0] : vector<4xi1> -> vector<2xi1>
+  %and_condition1 = vector.slice %and_condition[2] : vector<4xi1> -> vector<2xi1>
+  %or_condition0 = vector.slice %or_condition[0] : vector<4xi1> -> vector<2xi1>
+  %or_condition1 = vector.slice %or_condition[2] : vector<4xi1> -> vector<2xi1>
+  %xor_condition0 = vector.slice %xor_condition[0] : vector<4xi1> -> vector<2xi1>
+  %xor_condition1 = vector.slice %xor_condition[2] : vector<4xi1> -> vector<2xi1>
+  %and_result0 = vector.select %and_condition0, %lhs0, %rhs0 : vector<2xi64>
+  %and_result1 = vector.select %and_condition1, %lhs1, %rhs1 : vector<2xi64>
+  %or_result0 = vector.select %or_condition0, %lhs0, %rhs0 : vector<2xi64>
+  %or_result1 = vector.select %or_condition1, %lhs1, %rhs1 : vector<2xi64>
+  %xor_result0 = vector.select %xor_condition0, %lhs0, %rhs0 : vector<2xi64>
+  %xor_result1 = vector.select %xor_condition1, %lhs1, %rhs1 : vector<2xi64>
+  func.return %and_result0, %and_result1, %or_result0, %or_result1, %xor_result0, %xor_result1 : vector<2xi64>, vector<2xi64>, vector<2xi64>, vector<2xi64>, vector<2xi64>, vector<2xi64>
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @wide_predicate_logic(%lhs0: reg<wasm.v128>, %rhs0: reg<wasm.v128>, %lhs1: reg<wasm.v128>, %rhs1: reg<wasm.v128>) -> (reg<wasm.v128>, reg<wasm.v128>, reg<wasm.v128>, reg<wasm.v128>, reg<wasm.v128>, reg<wasm.v128>) asm {
+  %less0 = i64x2.lt_s %lhs0, %rhs0
+  %less1 = i64x2.lt_s %lhs1, %rhs1
+  %different0 = i64x2.ne %lhs0, %rhs0
+  %different1 = i64x2.ne %lhs1, %rhs1
+  %49 = v128.and %less0, %different0
+  %52 = v128.and %less1, %different1
+  %56 = v128.or %less0, %different0
+  %59 = v128.or %less1, %different1
+  %63 = v128.xor %less0, %different0
+  %66 = v128.xor %less1, %different1
+  %and_result0 = v128.bitselect %lhs0, %rhs0, %49
+  %and_result1 = v128.bitselect %lhs1, %rhs1, %52
+  %or_result0 = v128.bitselect %lhs0, %rhs0, %56
+  %or_result1 = v128.bitselect %lhs1, %rhs1, %59
+  %xor_result0 = v128.bitselect %lhs0, %rhs0, %63
+  %xor_result1 = v128.bitselect %lhs1, %rhs1, %66
+  return %and_result0, %and_result1, %or_result0, %or_result1, %xor_result0, %xor_result1
+}
