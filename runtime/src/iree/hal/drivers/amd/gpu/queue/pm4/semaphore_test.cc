@@ -147,7 +147,7 @@ class SemaphoreTest : public ::testing::Test {
   // Host-mapped native control cells supplied by the allocation dependency.
   std::array<uint64_t, 8> values_;
   // Independently retained native signal metadata.
-  std::array<Signal, 8> signals_;
+  std::array<Signal, 8> signals_ = {};
   // Three-queue causal snapshots retained by their native signals.
   std::array<uint64_t, 8 * 3> frontiers_;
   // Finite producer storage, reclaimed only after all uses join.

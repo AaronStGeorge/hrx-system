@@ -42,7 +42,7 @@ struct Storage {
   // Native backing, accessed by host threads only in these ownership tests.
   std::array<uint64_t, Capacity> values;
   // Ordinary host metadata, independent of the native allocation.
-  std::array<Signal, Capacity> signals;
+  std::array<Signal, Capacity> signals = {};
   // Immutable native-domain vectors belonging to retained signals.
   std::array<uint64_t, Capacity * QueueCount> frontiers;
   // Publisher-owned free cells and concurrent final returns.
