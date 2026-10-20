@@ -55,7 +55,7 @@ static void BM_Emplace(benchmark::State& state) {
   std::vector<uint8_t> constants(
       native ? layout->native_byte_length : layout->constant_byte_length, 0x5a);
   std::vector<uint64_t> bindings(count, UINT64_C(0x12340000));
-  const iree_hal_amd_gpu_kernarg_inputs_t inputs = {.block_count = {7, 3, 2}};
+  iree_hal_amd_gpu_kernarg_inputs_t inputs = {.block_count = {7, 3, 2}};
   alignas(64) std::array<uint8_t, 1024> target;
   benchmark::DoNotOptimize(layout);
   benchmark::DoNotOptimize(constants.data());

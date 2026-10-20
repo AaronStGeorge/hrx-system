@@ -95,16 +95,16 @@ static void BM_EmplaceDispatchArguments(benchmark::State& state) {
   const iree_hal_amd_gpu_pm4_dispatch_packet_info_t packet = {
       .kernel_object = UINT64_C(0x1234000040),
   };
-  const iree_hal_amd_gpu_pm4_function_t function = {
+  iree_hal_amd_gpu_pm4_function_t function = {
       .metadata = &metadata,
       .kernarg = &layout,
       .packet = state.range(0) ? &packet : nullptr,
   };
-  const iree_hal_amd_gpu_pm4_dispatch_t dispatch = {
+  iree_hal_amd_gpu_pm4_dispatch_t dispatch = {
       .workgroup_size = {32, 1, 1},
       .workgroup_count = {64, 1, 1},
   };
-  const iree_hal_dispatch_flags_t flags =
+  iree_hal_dispatch_flags_t flags =
       (state.range(1) ? IREE_HAL_DISPATCH_FLAG_DYNAMIC_INDIRECT_PARAMETERS
                       : 0) |
       (state.range(2) ? IREE_HAL_DISPATCH_FLAG_DYNAMIC_INDIRECT_ARGUMENTS
@@ -115,8 +115,7 @@ static void BM_EmplaceDispatchArguments(benchmark::State& state) {
   benchmark::DoNotOptimize(dispatch);
   benchmark::DoNotOptimize(flags);
   for (auto _ : state) {
-    const auto storage =
-        iree_hal_amd_gpu_pm4_dispatch_storage(&function, flags);
+    auto storage = iree_hal_amd_gpu_pm4_dispatch_storage(&function, flags);
     if (storage.length) {
       iree_hal_amd_gpu_pm4_dispatch_emplace_arguments(
           &function, &dispatch,

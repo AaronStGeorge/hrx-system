@@ -22,8 +22,8 @@ void BM_Reserve(benchmark::State& state) {
   for (auto _ : state) {
     benchmark::DoNotOptimize(ring);
     iree_hal_amd_gpu_pm4_ring_reservation_t reservation;
-    const bool reserved = iree_hal_amd_gpu_pm4_ring_try_reserve(
-        &ring, consumed, body, &reservation);
+    bool reserved = iree_hal_amd_gpu_pm4_ring_try_reserve(&ring, consumed, body,
+                                                          &reservation);
     benchmark::DoNotOptimize(reserved);
     benchmark::DoNotOptimize(reservation.words);
     benchmark::ClobberMemory();

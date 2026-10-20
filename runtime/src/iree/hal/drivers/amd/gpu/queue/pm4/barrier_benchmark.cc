@@ -33,8 +33,7 @@ static void BM_Prepare(benchmark::State& state) {
   benchmark::DoNotOptimize(profile);
   benchmark::DoNotOptimize(barriers);
   for (auto _ : state) {
-    const auto result =
-        iree_hal_amd_gpu_pm4_barrier_prepare(&profile, barriers);
+    auto result = iree_hal_amd_gpu_pm4_barrier_prepare(&profile, barriers);
     benchmark::DoNotOptimize(result);
     benchmark::ClobberMemory();
   }
