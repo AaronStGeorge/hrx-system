@@ -14,6 +14,7 @@
 #define LOOM_TARGET_EMIT_NATIVE_AMDGPU_HSACO_H_
 
 #include "iree/base/api.h"
+#include "iree/base/byte_sequence.h"
 #include "iree/base/internal/arena.h"
 #include "iree/io/stream.h"
 #include "loom/target/emit/native/elf.h"
@@ -51,6 +52,16 @@ typedef struct loom_amdgpu_hsaco_plan_t {
 iree_status_t loom_amdgpu_hsaco_write_plan(
     const loom_amdgpu_hsaco_plan_t* plan, iree_io_stream_t* stream,
     iree_arena_allocator_t* scratch_arena);
+
+// Serializes trusted |plan| into one exact-size contiguous byte sequence.
+//
+// Generic artifact APIs may preserve segmented producer storage, but native
+// executable loading requires one contiguous span. Producing that span here
+// lets native executable loaders that accept borrowed spans avoid a second
+// complete code-object allocation and copy at load time.
+iree_status_t loom_amdgpu_hsaco_serialize_plan(
+    const loom_amdgpu_hsaco_plan_t* plan, iree_allocator_t allocator,
+    iree_arena_allocator_t* scratch_arena, iree_byte_sequence_t** out_sequence);
 
 #ifdef __cplusplus
 }  // extern "C"

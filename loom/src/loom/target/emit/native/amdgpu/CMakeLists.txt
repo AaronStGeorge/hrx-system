@@ -821,7 +821,6 @@ loom_cc_library(
     ::spill_lowering
     iree::base
     iree::base::internal::arena
-    iree::io::stream
     loom::analysis::symbol_facts
     loom::codegen::low::allocation_materialization
     loom::codegen::low::frame

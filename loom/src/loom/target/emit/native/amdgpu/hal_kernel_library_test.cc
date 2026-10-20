@@ -839,6 +839,11 @@ TEST_F(AmdgpuHalKernelLibraryTest, RetainsRequestedArtifactMetadata) {
   EXPECT_EQ(artifact.target_artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
   ASSERT_NE(artifact.contents, nullptr);
   EXPECT_GT(iree_byte_sequence_length(artifact.contents), 0u);
+  iree_const_byte_span_t contiguous_contents = iree_const_byte_span_empty();
+  EXPECT_TRUE(iree_byte_sequence_try_get_contiguous_span(artifact.contents,
+                                                         &contiguous_contents));
+  EXPECT_EQ(contiguous_contents.data_length,
+            iree_byte_sequence_length(artifact.contents));
   EXPECT_TRUE(iree_string_view_equal(artifact.target_listing_format,
                                      IREE_SV("amdgpu-assembly")));
   ASSERT_NE(artifact.target_listing_contents, nullptr);
