@@ -20,8 +20,9 @@ iree_status_t loom_wasm_legalize_vector_cmpf(
     loom_target_legalization_context_t* context, loom_op_t* op,
     loom_target_legalizer_result_t* out_result);
 
-// Lowers packed narrow floating extrema and clamps through widened comparison
-// predicates while retaining the original narrow result payloads.
+// Lowers floating extrema and clamps on supported Wasm vector carriers through
+// exact comparisons, bit operations, and selects. Narrow comparisons widen to
+// F32 while every result retains its original payload representation.
 iree_status_t loom_wasm_legalize_vector_float_extrema(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,

@@ -140,6 +140,79 @@ func.def @vector_f32_reference_extrema(%value: vector<4xf32>, %lhs: vector<4xf32
 }
 
 // ====
+// RUN: pass target=wasm:simd128 target-legalize{mode=final}
+
+// F64 extrema use the same exact recipe on Wasm's two-lane native carrier.
+// Wider authored vectors reach this shape through ordinary packetization.
+func.def @vector_f64_reference_extrema(%value: vector<2xf64>, %lhs: vector<2xf64>, %rhs: vector<2xf64>) -> (vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>) {
+  %minnum = vector.minnumf %lhs, %rhs : vector<2xf64>
+  %maxnum = vector.maxnumf %lhs, %rhs : vector<2xf64>
+  %ordered = vector.clampf<ordered> %value, %lhs, %rhs : vector<2xf64>
+  %number = vector.clampf<number> %value, %lhs, %rhs : vector<2xf64>
+  %ieee = vector.clampf<ieee> %value, %lhs, %rhs : vector<2xf64>
+  func.return %minnum, %maxnum, %ordered, %number, %ieee : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>
+}
+
+// ----
+func.def @vector_f64_reference_extrema(%value: vector<2xf64>, %lhs: vector<2xf64>, %rhs: vector<2xf64>) -> (vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>) {
+  %55 = vector.bitcast %lhs : vector<2xf64> to vector<2xi64>
+  %56 = vector.bitcast %rhs : vector<2xf64> to vector<2xi64>
+  %57 = vector.ori %55, %56 : vector<2xi64>
+  %58 = vector.bitcast %57 : vector<2xi64> to vector<2xf64>
+  %59 = vector.cmpf olt, %lhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %60 = vector.cmpf olt, %rhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %61 = vector.select %60, %rhs, %58 : vector<2xf64>
+  %62 = vector.select %59, %lhs, %61 : vector<2xf64>
+  %63 = vector.cmpf une, %lhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %64 = vector.cmpf une, %rhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %65 = vector.select %64, %lhs, %62 : vector<2xf64>
+  %minnum = vector.select %63, %rhs, %65 : vector<2xf64>
+  %43 = vector.bitcast %lhs : vector<2xf64> to vector<2xi64>
+  %44 = vector.bitcast %rhs : vector<2xf64> to vector<2xi64>
+  %45 = vector.andi %43, %44 : vector<2xi64>
+  %46 = vector.bitcast %45 : vector<2xi64> to vector<2xf64>
+  %47 = vector.cmpf ogt, %lhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %48 = vector.cmpf ogt, %rhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %49 = vector.select %48, %rhs, %46 : vector<2xf64>
+  %50 = vector.select %47, %lhs, %49 : vector<2xf64>
+  %51 = vector.cmpf une, %lhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %52 = vector.cmpf une, %rhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %53 = vector.select %52, %lhs, %50 : vector<2xf64>
+  %maxnum = vector.select %51, %rhs, %53 : vector<2xf64>
+  %39 = vector.cmpf olt, %value, %lhs : vector<2xf64> -> vector<2xi1>
+  %40 = vector.select %39, %lhs, %value : vector<2xf64>
+  %41 = vector.cmpf ogt, %40, %rhs : vector<2xf64> -> vector<2xi1>
+  %ordered = vector.select %41, %rhs, %40 : vector<2xf64>
+  %15 = vector.bitcast %value : vector<2xf64> to vector<2xi64>
+  %16 = vector.bitcast %lhs : vector<2xf64> to vector<2xi64>
+  %17 = vector.andi %15, %16 : vector<2xi64>
+  %18 = vector.bitcast %17 : vector<2xi64> to vector<2xf64>
+  %19 = vector.cmpf ogt, %value, %lhs : vector<2xf64> -> vector<2xi1>
+  %20 = vector.cmpf ogt, %lhs, %value : vector<2xf64> -> vector<2xi1>
+  %21 = vector.select %20, %lhs, %18 : vector<2xf64>
+  %22 = vector.select %19, %value, %21 : vector<2xf64>
+  %23 = vector.cmpf une, %value, %value : vector<2xf64> -> vector<2xi1>
+  %24 = vector.cmpf une, %lhs, %lhs : vector<2xf64> -> vector<2xi1>
+  %25 = vector.select %24, %value, %22 : vector<2xf64>
+  %26 = vector.select %23, %lhs, %25 : vector<2xf64>
+  %27 = vector.bitcast %26 : vector<2xf64> to vector<2xi64>
+  %28 = vector.bitcast %rhs : vector<2xf64> to vector<2xi64>
+  %29 = vector.ori %27, %28 : vector<2xi64>
+  %30 = vector.bitcast %29 : vector<2xi64> to vector<2xf64>
+  %31 = vector.cmpf olt, %26, %rhs : vector<2xf64> -> vector<2xi1>
+  %32 = vector.cmpf olt, %rhs, %26 : vector<2xf64> -> vector<2xi1>
+  %33 = vector.select %32, %rhs, %30 : vector<2xf64>
+  %34 = vector.select %31, %26, %33 : vector<2xf64>
+  %35 = vector.cmpf une, %26, %26 : vector<2xf64> -> vector<2xi1>
+  %36 = vector.cmpf une, %rhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %37 = vector.select %36, %26, %34 : vector<2xf64>
+  %number = vector.select %35, %rhs, %37 : vector<2xf64>
+  %13 = vector.maximumf %value, %lhs : vector<2xf64>
+  %ieee = vector.minimumf %13, %rhs : vector<2xf64>
+  func.return %minnum, %maxnum, %ordered, %number, %ieee : vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>, vector<2xf64>
+}
+
+// ====
 
 // Narrow comparisons widen exactly to F32 while retaining the canonical
 // four-lane Wasm predicate carrier. Full-width arguments keep the authored

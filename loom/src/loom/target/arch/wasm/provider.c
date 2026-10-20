@@ -395,27 +395,27 @@ static const loom_target_legalizer_rule_t kLoomWasmLegalizerRules[] = {
     },
     {
         .root_kind = LOOM_OP_VECTOR_MINIMUMF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
         .root_kind = LOOM_OP_VECTOR_MAXIMUMF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
         .root_kind = LOOM_OP_VECTOR_MINNUMF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
         .root_kind = LOOM_OP_VECTOR_MAXNUMF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
         .root_kind = LOOM_OP_VECTOR_CLAMPF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT_LE16,
+        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_FLOAT,
         .legalize = loom_wasm_legalize_vector_float_extrema,
     },
     {
