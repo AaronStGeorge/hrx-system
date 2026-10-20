@@ -502,21 +502,26 @@ class CxxExpressionRenderer(CxxRenderContext):
         predicates = resolved.attr("predicates")
         if not isinstance(predicates, PredicateListAttr):
             raise CxxRenderError(operation, "assumption lacks predicate-list metadata")
+        results = resolved.value_ids("results")
+        block = self.definition_blocks[results[0]]
+        # Equivalent assumptions share one statement only when their source
+        # binding refinements inhabit the same lexical block.
+        rendered_assumptions = self.rendered_assumptions_by_block.setdefault(
+            id(block), set()
+        )
         conditions: list[str] = []
         for predicate in predicates:
             key = self._predicate_key(predicate)
-            if key in self.rendered_assumptions:
+            if key in rendered_assumptions:
                 continue
             condition = self._predicate(predicate)
-            self.rendered_assumptions.add(key)
+            rendered_assumptions.add(key)
             if condition is not None:
                 conditions.append(condition)
         if conditions:
             condition = " && ".join(conditions)
             self.writer.line(f"loom::assume({_strip_outer_parentheses(condition)});")
-        for source, result in zip(
-            resolved.value_ids("values"), resolved.value_ids("results"), strict=True
-        ):
+        for source, result in zip(resolved.value_ids("values"), results, strict=True):
             self.expressions[result] = self.expression(source)
             self.expression_types[result] = self.expression_type(source)
             self.value_origins[result] = self.value_origins[source]

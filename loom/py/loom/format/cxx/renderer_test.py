@@ -803,6 +803,29 @@ kernel.def @bounded() {
     assert "loom::assume(loom::predicate::range(bytes, 0, 255));" in result
 
 
+def test_projects_repeated_assumptions_in_each_lexical_scope() -> None:
+    source = """\
+kernel.def @scoped_bounds() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%first: i1, %second: i1, %coordinate: index) {
+  scf.if %first {
+    %bounded = index.assume %coordinate [range(%coordinate, 0, 15)] : index
+    %redundant = index.assume %bounded [range(%bounded, 0, 15)] : index
+  }
+  scf.if %second {
+    %bounded = index.assume %coordinate [range(%coordinate, 0, 15)] : index
+  }
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assumption = "loom::assume(loom::predicate::range(coordinate, 0, 15));"
+    assert result.count(assumption) == 2
+
+
 def test_projects_floating_point_permissions_on_the_exact_expression() -> None:
     source = SOURCE_MODULE.replace(
         "  %value = view.load %slice[0] : view<1xf32> -> f32\n",
