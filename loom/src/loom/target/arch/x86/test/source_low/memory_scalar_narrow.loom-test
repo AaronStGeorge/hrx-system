@@ -142,11 +142,75 @@ func.def @exchange_narrow(%buffer: buffer, %byte_value: i8, %word_value: i16) ->
 
 // ----
 low.func.def target<x86.scalar.core> abi(object_function) abi_layout({signature = (buffer, i8, i16) -> (i32, i32)}) @exchange_narrow(%buffer: reg<x86.gpr64>, %byte_value: reg<x86.gpr32>, %word_value: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.gpr32>) asm {
-  %previous_byte = movzx.load.u8.gpr32 %buffer {disp32 = 0}
-  %previous_word = movzx.load.u16.gpr32 %buffer {disp32 = 1}
+  %byte_bits = movzx.load.u8.gpr32 %buffer {disp32 = 0}
+  %word_bits = movzx.load.u16.gpr32 %buffer {disp32 = 1}
   mov.store.u8.gpr32 %byte_value, %buffer {disp32 = 0}
   mov.store.u16.gpr32 %word_value, %buffer {disp32 = 1}
-  %byte_bits = movzx.u8.gpr32 %previous_byte
-  %word_bits = movzx.u16.gpr32 %previous_word
   return %byte_bits, %word_bits
+}
+
+// ====
+
+func.def @extend_narrow_loads(%input: buffer) -> (i32, i64, i32, i64, i32, i64, i32, i64, i64, i64) {
+  %byte_base = index.constant 0 : offset
+  %word_base = index.constant 4 : offset
+  %dword_base = index.constant 12 : offset
+  %bytes = buffer.view %input[%byte_base] : buffer -> view<4xi8>
+  %words = buffer.view %input[%word_base] : buffer -> view<4xi16, align(1)>
+  %dwords = buffer.view %input[%dword_base] : buffer -> view<2xi32, align(1)>
+  %unsigned_byte32 = view.load %bytes[0] : view<4xi8> -> i8
+  %unsigned_byte64 = view.load %bytes[1] : view<4xi8> -> i8
+  %signed_byte32 = view.load %bytes[2] : view<4xi8> -> i8
+  %signed_byte64 = view.load %bytes[3] : view<4xi8> -> i8
+  %unsigned_word32 = view.load %words[0] : view<4xi16, align(1)> -> i16
+  %unsigned_word64 = view.load %words[1] : view<4xi16, align(1)> -> i16
+  %signed_word32 = view.load %words[2] : view<4xi16, align(1)> -> i16
+  %signed_word64 = view.load %words[3] : view<4xi16, align(1)> -> i16
+  %unsigned_dword64 = view.load %dwords[0] : view<2xi32, align(1)> -> i32
+  %signed_dword64 = view.load %dwords[1] : view<2xi32, align(1)> -> i32
+  %u8_i32 = scalar.extui %unsigned_byte32 : i8 to i32
+  %u8_i64 = scalar.extui %unsigned_byte64 : i8 to i64
+  %s8_i32 = scalar.extsi %signed_byte32 : i8 to i32
+  %s8_i64 = scalar.extsi %signed_byte64 : i8 to i64
+  %u16_i32 = scalar.extui %unsigned_word32 : i16 to i32
+  %u16_i64 = scalar.extui %unsigned_word64 : i16 to i64
+  %s16_i32 = scalar.extsi %signed_word32 : i16 to i32
+  %s16_i64 = scalar.extsi %signed_word64 : i16 to i64
+  %u32_i64 = scalar.extui %unsigned_dword64 : i32 to i64
+  %s32_i64 = scalar.extsi %signed_dword64 : i32 to i64
+  func.return %u8_i32, %u8_i64, %s8_i32, %s8_i64, %u16_i32, %u16_i64, %s16_i32, %s16_i64, %u32_i64, %s32_i64 : i32, i64, i32, i64, i32, i64, i32, i64, i64, i64
+}
+
+// ----
+low.func.def target<x86.scalar.core> abi(object_function) @extend_narrow_loads(%input: reg<x86.gpr64>) -> (reg<x86.gpr32>, reg<x86.gpr64>, reg<x86.gpr32>, reg<x86.gpr64>, reg<x86.gpr32>, reg<x86.gpr64>, reg<x86.gpr32>, reg<x86.gpr64>, reg<x86.gpr64>, reg<x86.gpr64>) asm {
+  %u8_i32 = movzx.load.u8.gpr32 %input {disp32 = 0}
+  %u8_i64 = movzx.load.u8.gpr64 %input {disp32 = 1}
+  %s8_i32 = movsx.load.i8.gpr32 %input {disp32 = 2}
+  %s8_i64 = movsx.load.i8.gpr64 %input {disp32 = 3}
+  %u16_i32 = movzx.load.u16.gpr32 %input {disp32 = 4}
+  %u16_i64 = movzx.load.u16.gpr64 %input {disp32 = 6}
+  %s16_i32 = movsx.load.i16.gpr32 %input {disp32 = 8}
+  %s16_i64 = movsx.load.i16.gpr64 %input {disp32 = 10}
+  %u32_i64 = mov.load.u32.gpr64 %input {disp32 = 12}
+  %s32_i64 = movsxd.load.i32.gpr64 %input {disp32 = 16}
+  return %u8_i32, %u8_i64, %s8_i32, %s8_i64, %u16_i32, %u16_i64, %s16_i32, %s16_i64, %u32_i64, %s32_i64
+}
+
+// ====
+
+func.def @extend_byte_loads_to_words(%input: buffer) -> (i16, i16) {
+  %base = index.constant 0 : offset
+  %bytes = buffer.view %input[%base] : buffer -> view<2xi8>
+  %unsigned_byte = view.load %bytes[0] : view<2xi8> -> i8
+  %signed_byte = view.load %bytes[1] : view<2xi8> -> i8
+  %unsigned_word = scalar.extui %unsigned_byte : i8 to i16
+  %signed_word = scalar.extsi %signed_byte : i8 to i16
+  func.return %unsigned_word, %signed_word : i16, i16
+}
+
+// ----
+low.func.def target<x86.scalar.core> abi(object_function) abi_layout({signature = (buffer) -> (i16, i16)}) @extend_byte_loads_to_words(%input: reg<x86.gpr64>) -> (reg<x86.gpr32>, reg<x86.gpr32>) asm {
+  %unsigned_word = movzx.load.u8.gpr32 %input {disp32 = 0}
+  %signed_word = movsx.load.i8.gpr32 %input {disp32 = 1}
+  return %unsigned_word, %signed_word
 }

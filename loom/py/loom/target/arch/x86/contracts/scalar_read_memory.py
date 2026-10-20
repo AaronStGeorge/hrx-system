@@ -13,12 +13,17 @@ from collections.abc import Iterable, Sequence
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import bitwise as scalar_bitwise
+from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.view import ALL_VIEW_OPS
 from loom.dialect.view import defs as view
 from loom.dsl import Op
 from loom.target.arch.x86.contracts.memory import x86_fused_load_rules
 from loom.target.arch.x86.descriptors import X86_SCALAR_DESCRIPTOR_SET
-from loom.target.arch.x86.scalar_families import X86_SCALAR_READ_MEMORY_FAMILIES
+from loom.target.arch.x86.scalar_families import (
+    X86_SCALAR_MEMORY_EXTENSION_FAMILIES,
+    X86_SCALAR_READ_MEMORY_FAMILIES,
+    ScalarMemoryExtensionFamily,
+)
 from loom.target.contracts import (
     ContractCase,
     ContractFragment,
@@ -97,6 +102,50 @@ def _read_memory_rules(
         )
 
 
+def _memory_extension_rules(
+    family: ScalarMemoryExtensionFamily,
+) -> Iterable[DescriptorRule]:
+    source_type = Scalar(f"i{family.source_bit_count}")
+    result_type = Scalar(
+        tuple(f"i{bit_count}" for bit_count in family.result_bit_counts)
+    )
+    operation = "extsi" if family.signed else "extui"
+    source_prefix = "i" if family.signed else "u"
+    extension = SourceNode.exclusive_user(
+        "extension",
+        source_op=(
+            scalar_conversion.scalar_extsi
+            if family.signed
+            else scalar_conversion.scalar_extui
+        ),
+        parent_result=ValueRef.result("result"),
+        node_operand=ValueRef.operand("input"),
+        guards=(
+            Guard.value_type("input", source_type),
+            Guard.value_type("result", result_type),
+        ),
+    )
+    yield from x86_fused_load_rules(
+        _descriptor,
+        source_op=view.view_load,
+        source_type=source_type,
+        source_nodes=(extension,),
+        result=ValueRef.result("result", source_node="extension"),
+        element_byte_count=family.source_bit_count // 8,
+        lane_count=1,
+        descriptor_key_prefix=f"x86.scalar.{family.mnemonic}",
+        register_suffix=(
+            f"{source_prefix}{family.source_bit_count}.gpr{family.carrier_bit_count}"
+        ),
+        diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
+        report_key=(
+            f"native_memory_extension_{operation}_i{family.source_bit_count}_"
+            + "_".join(f"i{bit_count}" for bit_count in family.result_bit_counts)
+        ),
+        priority=_READ_MEMORY_PRIORITY,
+    )
+
+
 def _cases() -> tuple[ContractCase, ...]:
     source_operations = {
         "addi": scalar_arithmetic.scalar_addi,
@@ -106,7 +155,7 @@ def _cases() -> tuple[ContractCase, ...]:
         "ori": scalar_bitwise.scalar_ori,
         "xori": scalar_bitwise.scalar_xori,
     }
-    return tuple(
+    read_memory_rules = tuple(
         rule
         for type_pattern, register_width in ((_I32, 32), (_I64, 64))
         for family in X86_SCALAR_READ_MEMORY_FAMILIES
@@ -117,6 +166,14 @@ def _cases() -> tuple[ContractCase, ...]:
             register_width,
             loaded_operands=(("lhs", "rhs") if family.commutative else ("rhs",)),
         )
+    )
+    return (
+        *read_memory_rules,
+        *(
+            rule
+            for family in X86_SCALAR_MEMORY_EXTENSION_FAMILIES
+            for rule in _memory_extension_rules(family)
+        ),
     )
 
 
