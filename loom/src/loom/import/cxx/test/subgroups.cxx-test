@@ -42,18 +42,22 @@ void entry(unsigned* output, unsigned long long* masks, Float4* vectors,
 
 // ====
 // Custom declarations and ordinary callable barriers use the same bindings.
+[[loom::op("kernel.subgroup.lane.id")]] unsigned lane_id();
 [[loom::op("kernel.subgroup.vote.ballot")]] unsigned ready_mask(bool);
 template <int Space, int Scope, int Ordering>
 [[loom::op("kernel.barrier")]] void synchronize();
 void workgroup_memory() { synchronize<2, 2, 3>(); }
 [[loom::kernel]] void entry(unsigned* output, bool ready) {
   output[0] = ready_mask(ready);
+  output[1] = lane_id();
   workgroup_memory();
 }
 // ----
 // CHECK: func.def public @workgroup_memory() {
 // CHECK: *kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
 // CHECK: *kernel.subgroup.vote.ballot*-> i32
+// CHECK: *kernel.subgroup.lane.id : index
+// CHECK: *index.cast * : index to i32
 
 // ====
 // Source transport retains a wide payload for the selected target to legalize.

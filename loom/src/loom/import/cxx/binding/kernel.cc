@@ -189,6 +189,8 @@ std::optional<KernelCollectiveIntrinsic> KernelCollectiveIntrinsic::resolve(
   }
 
   auto result_type = types.get(result, owner);
+  const auto& result_partition = types.partition(result, owner);
+  auto index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   auto i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   auto i64 = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
   auto i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
@@ -198,9 +200,11 @@ std::optional<KernelCollectiveIntrinsic> KernelCollectiveIntrinsic::resolve(
     case Operation::Count:
     case Operation::Size:
     case Operation::LaneId:
-      if (!loom_type_equal(result_type, i32) || !types.is_unsigned(result)) {
+      if (!loom_type_equal(result_type, index) &&
+          (!loom_type_equal(result_type, i32) || !types.is_unsigned(result))) {
         diagnostics.reject(unit, owner,
-                           "subgroup topology requires an unsigned i32 result");
+                           "subgroup topology requires a Loom index or "
+                           "unsigned i32 result");
       }
       break;
     case Operation::Any:
@@ -378,21 +382,27 @@ std::optional<KernelCollectiveIntrinsic> KernelCollectiveIntrinsic::resolve(
     }
   }
   if (combining) {
-    return KernelCollectiveIntrinsic(*operation, result_type, *combining);
+    return KernelCollectiveIntrinsic(*operation, result_type, &result_partition,
+                                     *combining);
   }
-  return KernelCollectiveIntrinsic(*operation, result_type);
+  return KernelCollectiveIntrinsic(*operation, result_type, &result_partition);
 }
 
-loom_value_id_t KernelCollectiveIntrinsic::call(
-    std::span<const Value> arguments, loom_builder_t* builder,
-    loom_location_id_t location) const {
+Value KernelCollectiveIntrinsic::call(std::span<const Value> arguments,
+                                      ValueArena& arena,
+                                      loom_builder_t* builder,
+                                      loom_location_id_t location) const {
   loom_op_t* op;
   auto index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   auto index_result = [&] {
     auto value = loom_op_results(op)[0];
+    if (loom_type_equal(result_type_, index_type)) {
+      return arena.capture(*result_partition_, {&value, 1});
+    }
     check(loom_index_cast_build(builder, value, index_type, result_type_,
                                 location, &op));
-    return loom_op_results(op)[0];
+    value = loom_op_results(op)[0];
+    return Value(value);
   };
   switch (operation_) {
     case Operation::Id:
@@ -486,13 +496,14 @@ loom_value_id_t KernelCollectiveIntrinsic::call(
           result_type_, location, &op));
       break;
   }
-  return loom_op_results(op)[0];
+  return Value(loom_op_results(op)[0]);
 }
 
 bool KernelCollectiveIntrinsic::equivalent(
     const KernelCollectiveIntrinsic& other) const {
   if (operation_ != other.operation_ ||
-      !loom_type_equal(result_type_, other.result_type_)) {
+      !loom_type_equal(result_type_, other.result_type_) ||
+      result_partition_ != other.result_partition_) {
     return false;
   }
   if (!combining_) {

@@ -233,3 +233,35 @@ void convert_vectors(const int* integer_input, const float* float_input, float* 
   loom::vector::store(signed_integers, signed_integer_output_view, loom::type::indices{loom::type::index{0}});
   loom::vector::store(unsigned_integers, unsigned_integer_output_view, loom::type::indices{loom::type::index{0}});
 }
+
+// ====
+#include <loomcxx/kernel.h>
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void scoped_bounds(bool first, bool second, unsigned coordinate, unsigned* output) {
+  auto output_view = loom::buffer::view<16>(output, {}, loom::encoding::layout::dense<1>());
+  if (first) {
+    loom::assume(coordinate < 16u);
+    loom::view::store(1u, output_view, loom::index::cast(static_cast<int>(coordinate)));
+  }
+  if (second) {
+    loom::assume(coordinate < 16u);
+    loom::view::store(2u, output_view, loom::index::cast(static_cast<int>(coordinate)));
+  }
+}
+
+// ----
+#include <loomcxx/kernel.h>
+
+[[loom::kernel, loom::workgroup_count(1, 1, 1), loom::workgroup_size(1, 1, 1)]]
+void scoped_bounds(bool first, bool second, unsigned coordinate, unsigned* output) {
+  auto output_view = loom::buffer::view<16>(output, {}, loom::encoding::layout::dense<1>());
+  if (first) {
+    loom::assume(coordinate <= 15u);
+    loom::view::store(1u, output_view, loom::index::cast(static_cast<int>(coordinate)));
+  }
+  if (second) {
+    loom::assume(coordinate <= 15u);
+    loom::view::store(2u, output_view, loom::index::cast(static_cast<int>(coordinate)));
+  }
+}

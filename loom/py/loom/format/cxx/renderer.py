@@ -373,7 +373,8 @@ class CxxRenderer(CxxExpressionRenderer):
             self._declare(
                 operation.results[0],
                 expression,
-                declaration_type="unsigned",
+                declaration_type="auto",
+                expression_type=KERNEL_COORDINATE_CPP_TYPE,
                 inlineable=True,
             )
             return ()
@@ -914,7 +915,7 @@ class CxxRenderer(CxxExpressionRenderer):
     def _render_kernel(self, kernel: Operation) -> None:
         scope = self.operation_scopes[id(kernel)]
         self.temporary_names = set(self.scope_names[scope])
-        self.rendered_assumptions.clear()
+        self.rendered_assumptions_by_block.clear()
         self._validate_projected_attributes(kernel, ("callee", "target"))
         self._analyze_buffers(kernel)
         resolved = self._resolved(kernel)

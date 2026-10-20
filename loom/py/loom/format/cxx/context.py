@@ -164,7 +164,7 @@ class CxxRenderContext:
         self.scoped_noalias_operations: set[int] = set()
         self.targets = self._collect_targets()
         self.value_origins = list(range(len(self.module.values)))
-        self.rendered_assumptions: set[tuple[object, ...]] = set()
+        self.rendered_assumptions_by_block: dict[int, set[tuple[object, ...]]] = {}
         self.assignment_targets: dict[int, str] = {}
         self.target_names: dict[str, str] = {}
 

@@ -70,10 +70,10 @@ class KernelCollectiveIntrinsic {
       cxx::AST* owner);
 
   // Emits the admitted collective from already evaluated arguments. Topology
-  // queries project High's index result to the source's unsigned i32 value.
-  loom_value_id_t call(std::span<const Value> arguments,
-                       loom_builder_t* builder,
-                       loom_location_id_t location) const;
+  // queries retain High's index result or project it to an explicit unsigned
+  // i32 source value.
+  Value call(std::span<const Value> arguments, ValueArena& arena,
+             loom_builder_t* builder, loom_location_id_t location) const;
 
   bool equivalent(const KernelCollectiveIntrinsic& other) const;
 
@@ -119,18 +119,25 @@ class KernelCollectiveIntrinsic {
 
   static std::optional<Operation> find(std::string_view name);
 
-  KernelCollectiveIntrinsic(Operation operation, loom_type_t result_type)
-      : operation_(operation), result_type_(result_type) {}
   KernelCollectiveIntrinsic(Operation operation, loom_type_t result_type,
+                            const Partition* result_partition)
+      : operation_(operation),
+        result_type_(result_type),
+        result_partition_(result_partition) {}
+  KernelCollectiveIntrinsic(Operation operation, loom_type_t result_type,
+                            const Partition* result_partition,
                             Combining combining)
       : operation_(operation),
         result_type_(result_type),
+        result_partition_(result_partition),
         combining_(combining) {}
 
   // Operation selected once at declaration or template-instance admission.
   Operation operation_;
   // Source-selected scalar or rank-one vector representation.
   loom_type_t result_type_;
+  // Admitted source result identity, owned by the source Types instance.
+  const Partition* result_partition_;
   // Combining semantics; present exactly for reduction and scan operations.
   std::optional<Combining> combining_;
 };

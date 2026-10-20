@@ -169,9 +169,17 @@ def test_projects_exposed_kernel_topology_family() -> None:
         "unsigned workgroup_size = "
         "static_cast<unsigned>(loom::kernel::workgroup::size.y);"
     ) in result
-    assert ("unsigned subgroup_count = loom::kernel::subgroup::count();") in result
-    assert ("unsigned subgroup_size = loom::kernel::subgroup::size();") in result
-    assert "unsigned lane = loom::kernel::subgroup::lane_id();" in result
+    assert (
+        "unsigned subgroup_count = "
+        "static_cast<unsigned>(loom::kernel::subgroup::count());"
+    ) in result
+    assert (
+        "unsigned subgroup_size = "
+        "static_cast<unsigned>(loom::kernel::subgroup::size());"
+    ) in result
+    assert (
+        "unsigned lane = static_cast<unsigned>(loom::kernel::subgroup::lane_id());"
+    ) in result
 
 
 def test_projects_loop_carried_ssa_as_mutable_cxx_state() -> None:
@@ -801,6 +809,57 @@ kernel.def @bounded() {
     assert "#include <loomcxx/predicate.h>" in result
     assert "loom::assume(loom::predicate::range(value, 0, 15));" in result
     assert "loom::assume(loom::predicate::range(bytes, 0, 255));" in result
+
+
+def test_preserves_signed_fixed_integer_interpretation_at_index_casts() -> None:
+    source = """\
+kernel.def @mixed_integer_address_uses() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<1xi32>
+  %loaded = view.load %input_view[0] : view<1xi32> -> i32
+  %limit = scalar.constant 16 : i32
+  %below = scalar.cmpi ult, %loaded, %limit : i32
+  %logical = index.cast %loaded : i32 to index
+  %physical = index.cast %loaded : i32 to offset
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assert "unsigned loaded = loom::view::load(input_view, 0);" in result
+    assert "bool below = loaded < 16u;" in result
+    assert (
+        "loom::type::index logical = "
+        "loom::index::cast(static_cast<int>(loaded));" in result
+    )
+    assert "loom::type::offset physical = loom::offset::cast(loaded);" in result
+
+
+def test_projects_repeated_assumptions_in_each_lexical_scope() -> None:
+    source = """\
+kernel.def @scoped_bounds() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%first: i1, %second: i1, %coordinate: index) {
+  scf.if %first {
+    %bounded = index.assume %coordinate [range(%coordinate, 0, 15)] : index
+    %redundant = index.assume %bounded [range(%bounded, 0, 15)] : index
+  }
+  scf.if %second {
+    %bounded = index.assume %coordinate [range(%coordinate, 0, 15)] : index
+  }
+  kernel.return
+}
+"""
+
+    result = render_module(load_module(source.encode()))
+
+    assumption = "loom::assume(loom::predicate::range(coordinate, 0, 15));"
+    assert result.count(assumption) == 2
 
 
 def test_projects_floating_point_permissions_on_the_exact_expression() -> None:
