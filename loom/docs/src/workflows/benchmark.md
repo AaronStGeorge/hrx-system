@@ -131,7 +131,7 @@ can dominate the run. `--scenario-correctness=false` explicitly restores the
 default for benchmark suites. `iree-test-loom` remains the dedicated correctness
 tool.
 
-This flag applies to `check.scenario`, not legacy `check.case`. Case benchmarks
+This flag applies to `check.scenario`, not `check.case`. Case benchmarks
 retain their correctness preflight; `case_end_to_end` also includes reference
 calls and checks in the authored program being timed. Scenario subjects provide
 the separation needed for target-only model benchmarking.

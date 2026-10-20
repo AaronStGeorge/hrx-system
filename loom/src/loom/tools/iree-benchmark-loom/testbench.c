@@ -76,7 +76,7 @@ iree_status_t iree_benchmark_loom_add_runtime_requirements(
       const loom_testbench_invocation_plan_t* invocation =
           case_plan != NULL ? &case_plan->invocations[j]
                             : &scenario->trials[j].action.target;
-      // Legacy function calls and oracle calls run through host providers.
+      // Case function calls and oracle calls run through host providers.
       if (case_plan != NULL &&
           invocation->kind != LOOM_TESTBENCH_INVOCATION_KERNEL_LAUNCH &&
           invocation->kind != LOOM_TESTBENCH_INVOCATION_PIPELINE &&
