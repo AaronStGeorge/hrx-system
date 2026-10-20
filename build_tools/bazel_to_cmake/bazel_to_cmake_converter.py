@@ -73,6 +73,8 @@ _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
 
 _API_CONFIG_CMAKE_OPTIONS = {
     "//libamdf/config:enabled_setting": "AMDF_BUILD",
+    "//runtime/config/base/tracing:provider_console": 'IREE_ENABLE_RUNTIME_TRACING AND IREE_TRACING_MODE GREATER 0 AND IREE_TRACING_PROVIDER STREQUAL "console"',
+    "//runtime/config/base/tracing:provider_tracy": 'IREE_ENABLE_RUNTIME_TRACING AND IREE_TRACING_MODE GREATER 0 AND IREE_TRACING_PROVIDER STREQUAL "tracy"',
     "//runtime/config/net:rdma_enabled": "IREE_NET_RDMA",
     "//build_tools/vulkan/config:available": "IREE_VULKAN_AVAILABLE",
     "//build_tools/d3d12/config:available": "IREE_D3D12_AVAILABLE",

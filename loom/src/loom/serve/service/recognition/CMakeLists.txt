@@ -219,6 +219,7 @@ loom_cc_library(
     loom::serve::runtime::host::wake
     loom::serve::runtime::parameter::residency
     loom::serve::telemetry::record
+    loom::serve::telemetry::tracing
   PUBLIC
 )
 endif()

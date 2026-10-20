@@ -203,6 +203,7 @@ loom_cc_library(
         "//loom/src/loom/serve/telemetry:latency",
         "//loom/src/loom/serve/telemetry:record",
         "//loom/src/loom/serve/telemetry:stream",
+        "//loom/src/loom/serve/telemetry:tracing",
         "//runtime/src/iree/base",
     ],
 )

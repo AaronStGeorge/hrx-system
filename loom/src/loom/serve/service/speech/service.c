@@ -16,6 +16,7 @@
 #include "loom/serve/service/speech/http.h"
 #include "loom/serve/service/speech/stream.h"
 #include "loom/serve/telemetry/latency.h"
+#include "loom/serve/telemetry/tracing.h"
 
 typedef struct loom_serve_speech_job_t {
   // Monotonic request identity within this registration.
@@ -160,6 +161,8 @@ struct loom_serve_speech_service_t {
     loom_serve_execution_frontier_t frontier;
     // Toll-free semaphore handles for the proactor API.
     iree_async_semaphore_t* semaphores[2];
+    // Accepted numerical batch through readiness; zero for admission/release.
+    IREE_TRACE(iree_section_id_t section;)
   } device;
   // Periodic observation and its independently retired cancellation receipt.
   loom_serve_timer_t timer;
@@ -374,6 +377,12 @@ static iree_status_t loom_serve_speech_wait(
   IREE_RETURN_IF_ERROR(
       iree_async_proactor_submit_one(service->proactor, &wait->base));
   service->phase = phase;
+  IREE_TRACE({
+    if (phase == SPEECH_PHASE_GENERATING) {
+      service->device.section = loom_serve_trace_section_enter(
+          LOOM_SERVE_TRACE_SECTION_EXECUTE, service->options.name);
+    }
+  });
   return iree_ok_status();
 }
 
@@ -564,6 +573,8 @@ static void loom_serve_speech_collect(loom_serve_speech_service_t* service,
   *progress = true;
   const loom_serve_speech_phase_t phase = service->phase;
   service->phase = SPEECH_PHASE_IDLE;
+  IREE_TRACE_SECTION_LEAVE(service->device.section);
+  IREE_TRACE(service->device.section = 0);
   if (phase == SPEECH_PHASE_PREPARING &&
       iree_status_is_invalid_argument(cpu_status) &&
       iree_status_is_ok(service->status)) {

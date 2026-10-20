@@ -15,6 +15,7 @@
 #include "loom/serve/service/execution_reconfiguration.h"
 #include "loom/serve/service/finite/result.h"
 #include "loom/serve/service/kind.h"
+#include "loom/serve/telemetry/tracing.h"
 #include "loom/util/json.h"
 
 typedef struct loom_serve_finite_job_t {
@@ -118,6 +119,8 @@ struct loom_serve_finite_service_t {
     loom_serve_execution_frontier_t frontier;
     // Toll-free async handles of the same HAL semaphores.
     iree_async_semaphore_t* semaphores[2];
+    // Accepted batch through readiness collection, including result download.
+    IREE_TRACE(iree_section_id_t section;)
   } device;
   // Independent heartbeat readiness, drained before service destruction.
   loom_serve_timer_t timer;
@@ -438,6 +441,8 @@ static iree_status_t loom_serve_finite_submit(
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_async_proactor_submit_one(service->proactor, &wait->base));
   service->phase = FINITE_RUNNING;
+  IREE_TRACE(service->device.section = loom_serve_trace_section_enter(
+                 LOOM_SERVE_TRACE_SECTION_EXECUTE, service->name));
   loom_serve_finite_batch_event(service, &LOOM_SERVE_TELEMETRY_BATCH_SUBMIT,
                                 service->telemetry.counters.batches + 1);
   IREE_TRACE_ZONE_END(z0);
@@ -643,6 +648,8 @@ static iree_status_t loom_serve_finite_collect(
     return iree_ok_status();
   }
   *progress = true;
+  IREE_TRACE_SECTION_LEAVE(service->device.section);
+  IREE_TRACE(service->device.section = 0);
   if (!iree_status_is_ok(status)) {
     // Model-owned payload/pin survives partial enqueue or failed readiness.
     loom_serve_finite_error(service, 0, status);

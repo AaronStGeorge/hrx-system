@@ -742,6 +742,7 @@ iree_status_t loom_serve_recognition_service_allocate(
   iree_slim_mutex_initialize(&service->events.mutex);
   iree_string_builder_initialize(host_allocator, &service->response);
   const loom_serve_recognition_stream_service_options_t recognition_options = {
+      .name = options->name,
       .request_limit = options->request_limit,
       .document_limit = options->document_limit};
   iree_status_t status = loom_serve_recognition_stream_service_allocate(

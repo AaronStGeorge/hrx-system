@@ -21,6 +21,7 @@
 #include "loom/serve/service/image/output.h"
 #include "loom/serve/service/image/telemetry.h"
 #include "loom/serve/service/kind.h"
+#include "loom/serve/telemetry/tracing.h"
 #include "loom/util/json.h"
 
 typedef struct loom_serve_image_job_t {
@@ -125,6 +126,8 @@ struct loom_serve_image_service_t {
     bool complete;
     // The accepted part performs cancellation cleanup instead of model work.
     bool cancelled;
+    // Accepted model part through readiness; cancellation cleanup is untraced.
+    IREE_TRACE(iree_section_id_t section;)
   } device;
   // Periodic readiness and owned cancellation, independent of device waits.
   loom_serve_timer_t timer;
@@ -504,6 +507,12 @@ static iree_status_t loom_serve_image_service_submit(
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_async_proactor_submit_one(service->proactor, &wait->base));
   service->phase = IMAGE_PHASE_GENERATING;
+  IREE_TRACE({
+    if (!service->device.cancelled) {
+      service->device.section = loom_serve_trace_section_enter(
+          LOOM_SERVE_TRACE_SECTION_EXECUTE, service->options.name);
+    }
+  });
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();
 }
@@ -710,6 +719,12 @@ static void loom_serve_image_collect(loom_serve_image_service_t* service,
     return;
   }
   *progress = true;
+  IREE_TRACE({
+    if (iree_any_bit_set(ready, IMAGE_EVENT_DEVICE)) {
+      IREE_TRACE_SECTION_LEAVE(service->device.section);
+      service->device.section = 0;
+    }
+  });
   if (iree_any_bit_set(ready, IMAGE_EVENT_CPU)) {
     if (service->phase == IMAGE_PHASE_PREPARING ||
         service->phase == IMAGE_PHASE_BATCHING) {

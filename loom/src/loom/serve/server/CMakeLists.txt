@@ -224,6 +224,7 @@ loom_cc_library(
     loom::serve::telemetry::latency
     loom::serve::telemetry::record
     loom::serve::telemetry::stream
+    loom::serve::telemetry::tracing
   PUBLIC
 )
 endif()

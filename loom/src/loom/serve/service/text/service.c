@@ -39,6 +39,7 @@
 #include "loom/serve/service/text/session.h"
 #include "loom/serve/service/text/session_cache.h"
 #include "loom/serve/service/text/telemetry.h"
+#include "loom/serve/telemetry/tracing.h"
 
 // Device work retained until readiness is consumed by the model owner.
 typedef enum loom_serve_text_work_e {
@@ -99,6 +100,8 @@ struct loom_serve_text_service_t {
     loom_serve_execution_frontier_t frontier;
     // Host observation before registering this operation's readiness wait.
     iree_time_t start_time;
+    // Accepted epoch through readiness collection; zero for maintenance work.
+    IREE_TRACE(iree_section_id_t section;)
   } completion;
   // Exclusive host/VM borrow, cleared only after task process release. Input
   // preparation selects among idle rows and may overlap device epoch work on
@@ -157,6 +160,12 @@ static iree_status_t loom_serve_text_await_work(
   IREE_RETURN_IF_ERROR(loom_serve_text_readiness_await(
       &service->readiness, &service->completion.frontier));
   service->completion.work = work;
+  IREE_TRACE({
+    if (work == TEXT_WORK_EPOCH) {
+      service->completion.section = loom_serve_trace_section_enter(
+          LOOM_SERVE_TRACE_SECTION_EXECUTE, service->name);
+    }
+  });
   return iree_ok_status();
 }
 
@@ -1800,6 +1809,8 @@ static iree_status_t loom_serve_text_advance_work(
     }
     const loom_serve_text_work_t work = service->completion.work;
     service->completion.work = TEXT_WORK_NONE;
+    IREE_TRACE_SECTION_LEAVE(service->completion.section);
+    IREE_TRACE(service->completion.section = 0);
     *out_progress = true;
     IREE_RETURN_IF_ERROR(status);
     switch (work) {
