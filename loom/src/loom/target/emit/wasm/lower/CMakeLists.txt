@@ -133,6 +133,7 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::ops::op_defs
+    loom::ops::scf
     loom::ops::vector
     loom::target::arch::wasm::descriptors::descriptors_ids
     loom::target::emit::wasm::contracts

@@ -64,16 +64,6 @@ func.def target(@target) @vector_round_away_rejected_by_math_policy(%input: vect
 
 wasm.target<simd128> @target
 
-func.def target(@target) @wide_roundeven_rejected_by_math_policy(%input: f64) -> (f64) {
-  // ERROR@+1: LOWERING/036 {op_name="scalar.roundevenf", phase_name="legalize-math", policy_name="wasm-math", math_op="roundevenf", lane_domain="scalar", element_type="f64", constraint_key="math.element.f32"}
-  %result = scalar.roundevenf %input : f64
-  func.return %result : f64
-}
-
-// ====
-
-wasm.target<simd128> @target
-
 // The function boundary owns carrier admission before any body operation can
 // select a native descriptor or scalar reference recipe.
 // ERROR@+1: TARGET/031 {op_name="func.def", type_constraint="vector.target_carrier"}

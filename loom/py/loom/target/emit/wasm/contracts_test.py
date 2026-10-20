@@ -7,12 +7,13 @@
 import pytest
 
 from loom.dialect.index import defs as index
-from loom.dialect.scalar import bitwise, conversion
+from loom.dialect.scalar import arithmetic, bitwise, comparison, conversion, math
 from loom.dialect.scf import defs as scf
 from loom.dialect.vector import defs as vector
 from loom.ir import ScalarType
 from loom.scalar_type import ScalarTypeKind, scalar_type_name
 from loom.target.contracts import (
+    DescriptorEmitForm,
     DescriptorRule,
     GuardKind,
     UnsupportedRule,
@@ -474,6 +475,132 @@ def _numeric_vector_ranges(rule, field):
             )
 
 
+def _type_guard(rule: DescriptorRule, field: str):
+    return next(
+        guard.type_pattern
+        for guard in rule.guards
+        if guard.kind is GuardKind.VALUE_TYPE and guard.field == field
+    )
+
+
+def test_native_scalar_float_contracts_cover_both_widths() -> None:
+    operations = {
+        arithmetic.scalar_addf: "add",
+        arithmetic.scalar_subf: "sub",
+        arithmetic.scalar_mulf: "mul",
+        arithmetic.scalar_divf: "div",
+        arithmetic.scalar_minimumf: "min",
+        arithmetic.scalar_maximumf: "max",
+        arithmetic.scalar_copysignf: "copysign",
+        arithmetic.scalar_absf: "abs",
+        arithmetic.scalar_negf: "neg",
+        math.scalar_ceilf: "ceil",
+        math.scalar_floorf: "floor",
+        math.scalar_truncf: "trunc",
+        math.scalar_roundevenf: "nearest",
+        math.scalar_sqrtf: "sqrt",
+    }
+    actual = {
+        (rule.source_op, _type_guard(rule, "result").elements[0]): rule.descriptor.key
+        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
+        if isinstance(rule, DescriptorRule)
+        and rule.source_op in operations
+        and _type_guard(rule, "result").elements[0] in ("f32", "f64")
+    }
+    assert actual == {
+        (source_op, type_name): f"wasm.{type_name}.{operation}"
+        for source_op, operation in operations.items()
+        for type_name in ("f32", "f64")
+    }
+
+    direct_predicates = {
+        "oeq": "eq",
+        "ogt": "gt",
+        "oge": "ge",
+        "olt": "lt",
+        "ole": "le",
+        "une": "ne",
+    }
+    no_nan_predicates = {
+        "one": "ne",
+        "ueq": "eq",
+        "ugt": "gt",
+        "uge": "ge",
+        "ult": "lt",
+        "ule": "le",
+    }
+    actual_comparisons = set()
+    for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
+        if (
+            not isinstance(rule, DescriptorRule)
+            or rule.source_op is not comparison.scalar_cmpf
+        ):
+            continue
+        operand_type = _type_guard(rule, "lhs")
+        if operand_type.elements[0] not in ("f32", "f64"):
+            continue
+        predicate = next(
+            guard.enum_keyword
+            for guard in rule.guards
+            if guard.kind is GuardKind.ENUM_ATTR_EQUALS and guard.field == "predicate"
+        )
+        no_nan = any(
+            guard.kind is GuardKind.INSTANCE_FLAGS_HAS_ALL and guard.field == "fastmath"
+            for guard in rule.guards
+        )
+        actual_comparisons.add(
+            (operand_type.elements[0], predicate, no_nan, rule.descriptor.key)
+        )
+    assert actual_comparisons == {
+        (type_name, predicate, no_nan, f"wasm.{type_name}.{operation}")
+        for type_name in ("f32", "f64")
+        for no_nan, predicates in (
+            (False, direct_predicates),
+            (True, no_nan_predicates),
+        )
+        for predicate, operation in predicates.items()
+    }
+
+
+def test_native_vector_float_contracts_cover_every_carrier_lane() -> None:
+    operations = {
+        vector.vector_addf: "add",
+        vector.vector_subf: "sub",
+        vector.vector_mulf: "mul",
+        vector.vector_divf: "div",
+        vector.vector_minimumf: "min",
+        vector.vector_maximumf: "max",
+        vector.vector_absf: "abs",
+        vector.vector_negf: "neg",
+        vector.vector_ceilf: "ceil",
+        vector.vector_floorf: "floor",
+        vector.vector_truncf: "trunc",
+        vector.vector_roundevenf: "nearest",
+        vector.vector_sqrtf: "sqrt",
+    }
+    actual = {
+        (rule.source_op, element, minimum, maximum): (
+            rule.descriptor.key,
+            rule.emit[0].form,
+        )
+        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
+        if isinstance(rule, DescriptorRule) and rule.source_op in operations
+        for element, minimum, maximum in _numeric_vector_ranges(rule, "result")
+        if element in ("f32", "f64")
+    }
+    assert actual == {
+        (source_op, element, 1, lane_count): (
+            f"wasm.{shape}.{operation}",
+            DescriptorEmitForm.OP,
+        )
+        for source_op, operation in operations.items()
+        for element, lane_count, shape in (
+            ("f32", 4, "f32x4"),
+            ("f64", 2, "f64x2"),
+        )
+    }
+
+
 def _integer_vector_ranges(rule, field):
     yield from (
         shape
@@ -487,6 +614,13 @@ def _expected_numeric_vector_shapes():
         (scalar_type_name(kind), 128 // ScalarType(kind).bitwidth)
         for kind in ScalarTypeKind
         if kind not in (ScalarTypeKind.I1, ScalarTypeKind.INDEX, ScalarTypeKind.OFFSET)
+    }
+
+
+def _expected_partial_numeric_vector_ranges():
+    return {
+        (element, 1, maximum - 1)
+        for element, maximum in _expected_numeric_vector_shapes()
     }
 
 
@@ -516,7 +650,6 @@ def test_full_numeric_carriers_have_complete_structural_rules() -> None:
         (vector.vector_extract, "source"),
         (vector.vector_insert, "dest"),
         (vector.vector_shuffle, "result"),
-        (scf.scf_select, "result"),
     ):
         actual = {
             shape
@@ -527,44 +660,8 @@ def test_full_numeric_carriers_have_complete_structural_rules() -> None:
         assert actual == expected, source_op.name
 
 
-def test_partial_integer_carriers_have_complete_structural_rules() -> None:
-    expected = {
-        (
-            scalar_type_name(kind),
-            1,
-            128 // ScalarType(kind).bitwidth - 1,
-        )
-        for kind in ScalarTypeKind
-        if kind
-        in (
-            ScalarTypeKind.I8,
-            ScalarTypeKind.I16,
-            ScalarTypeKind.I32,
-            ScalarTypeKind.I64,
-        )
-    }
-    for source_op, field, rules_per_shape in (
-        (vector.vector_constant, "result", 1),
-        (vector.vector_splat, "result", 1),
-        (vector.vector_extract, "source", 1),
-        (vector.vector_insert, "dest", 2),
-    ):
-        counts = {}
-        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
-            if not isinstance(rule, DescriptorRule) or rule.source_op is not source_op:
-                continue
-            for shape in _integer_vector_ranges(rule, field):
-                counts[shape] = counts.get(shape, 0) + 1
-        assert counts == {shape: rules_per_shape for shape in expected}, source_op.name
-
-
-def test_partial_narrow_float_carriers_have_complete_structural_rules() -> None:
-    expected = {
-        ("f8E4M3", 1, 15),
-        ("f8E5M2", 1, 15),
-        ("f16", 1, 7),
-        ("bf16", 1, 7),
-    }
+def test_partial_numeric_carriers_have_complete_direct_structural_rules() -> None:
+    expected = _expected_partial_numeric_vector_ranges()
     for source_op, field, rules_per_shape in (
         (vector.vector_constant, "result", 1),
         (vector.vector_splat, "result", 1),
@@ -576,8 +673,6 @@ def test_partial_narrow_float_carriers_have_complete_structural_rules() -> None:
             if not isinstance(rule, DescriptorRule) or rule.source_op is not source_op:
                 continue
             for shape in _numeric_vector_ranges(rule, field):
-                if shape[0] not in ("f8E4M3", "f8E5M2", "f16", "bf16"):
-                    continue
                 counts[shape] = counts.get(shape, 0) + 1
         assert counts == {shape: rules_per_shape for shape in expected}, source_op.name
 
@@ -693,50 +788,20 @@ def test_dynamic_insert_masks_select_exactly_one_complete_physical_lane() -> Non
     assert lane_counts == {2, 4, 8, 16}
 
 
-def test_numeric_bitcasts_alias_every_full_width_shape_pair() -> None:
-    actual = {
-        (source, result)
+def test_structural_planner_exclusively_owns_bitcast_and_numeric_select() -> None:
+    assert not any(
+        isinstance(rule, ValueAliasRule) and rule.source_op is vector.vector_bitcast
         for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
-        if isinstance(rule, ValueAliasRule) and rule.source_op is vector.vector_bitcast
-        for source in _numeric_vector_shapes(rule, "input")
-        for result in _numeric_vector_shapes(rule, "result")
-    }
-    shapes = _expected_numeric_vector_shapes()
-    assert actual == {(source, result) for source in shapes for result in shapes}
-
-
-def test_partial_bitcasts_alias_every_bit_preserving_type_pair() -> None:
-    actual = {
-        (source, result)
-        for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases
-        if isinstance(rule, ValueAliasRule) and rule.source_op is vector.vector_bitcast
-        for source in _numeric_vector_ranges(rule, "input")
-        for result in _numeric_vector_ranges(rule, "result")
-    }
-    shapes = {
-        (
-            scalar_type_name(kind),
-            1,
-            128 // ScalarType(kind).bitwidth - 1,
-        )
-        for kind in ScalarTypeKind
-        if kind
-        in (
-            ScalarTypeKind.I8,
-            ScalarTypeKind.I16,
-            ScalarTypeKind.I32,
-            ScalarTypeKind.I64,
-        )
-    }
-    shapes.update(
-        {
-            ("f8E4M3", 1, 15),
-            ("f8E5M2", 1, 15),
-            ("f16", 1, 7),
-            ("bf16", 1, 7),
-        }
     )
-    assert actual == {(source, result) for source in shapes for result in shapes}
+    for rule in WASM_CORE_SIMD128_CONTRACT_FRAGMENT.cases:
+        if not isinstance(rule, DescriptorRule) or rule.source_op is not scf.scf_select:
+            continue
+        result_type = next(
+            guard.type_pattern
+            for guard in rule.guards
+            if guard.kind is GuardKind.VALUE_TYPE and guard.field == "result"
+        )
+        assert result_type.kind != "vector" or result_type.elements == ("i1",)
 
 
 def test_vector_cast_family_explicitly_rejects_every_unmatched_native_case() -> None:

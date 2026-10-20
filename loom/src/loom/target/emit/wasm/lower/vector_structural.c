@@ -13,6 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/interleave.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/wasm/descriptors/descriptors.h"
@@ -30,6 +31,7 @@ enum {
   LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SHUFFLE = 0x506,
   LOOM_WASM_VECTOR_STRUCTURAL_PLAN_DYNAMIC_SLICE = 0x507,
   LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_EXTENSION = 0x508,
+  LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT = 0x509,
 };
 
 typedef struct loom_wasm_vector_slice_plan_t {
@@ -556,31 +558,6 @@ static bool loom_wasm_from_elements_plan_from_op(
   return true;
 }
 
-static bool loom_wasm_bitcast_has_generated_rule(
-    loom_type_t source_type, loom_type_t result_type,
-    const loom_wasm_vector_carrier_t* source_carrier,
-    const loom_wasm_vector_carrier_t* result_carrier) {
-  if (loom_type_rank(source_type) != 1 || loom_type_rank(result_type) != 1 ||
-      source_carrier->packet_count != 1 || result_carrier->packet_count != 1) {
-    return false;
-  }
-  const loom_scalar_type_t source_element = loom_type_element_type(source_type);
-  const loom_scalar_type_t result_element = loom_type_element_type(result_type);
-  if (source_carrier->payload_byte_count ==
-          LOOM_WASM_VECTOR_CARRIER_PACKET_BYTE_COUNT &&
-      result_carrier->payload_byte_count ==
-          LOOM_WASM_VECTOR_CARRIER_PACKET_BYTE_COUNT) {
-    return loom_wasm_element_type_is_numeric_payload(source_element) &&
-           loom_wasm_element_type_is_numeric_payload(result_element);
-  }
-  const loom_scalar_type_set_t partial_bit_preserving_types =
-      LOOM_SCALAR_TYPE_SET_INTEGER_PAYLOAD | LOOM_SCALAR_TYPE_SET_FLOAT_LE16;
-  return loom_scalar_type_set_contains(partial_bit_preserving_types,
-                                       source_element) &&
-         loom_scalar_type_set_contains(partial_bit_preserving_types,
-                                       result_element);
-}
-
 static bool loom_wasm_bitcast_plan_from_op(const loom_module_t* module,
                                            const loom_op_t* source_op) {
   if (!loom_vector_bitcast_isa(source_op)) {
@@ -597,9 +574,22 @@ static bool loom_wasm_bitcast_plan_from_op(const loom_module_t* module,
   return source_carrier.packet_count != 0 &&
          source_carrier.payload_byte_count ==
              result_carrier.payload_byte_count &&
-         source_carrier.packet_count == result_carrier.packet_count &&
-         !loom_wasm_bitcast_has_generated_rule(
-             source_type, result_type, &source_carrier, &result_carrier);
+         source_carrier.packet_count == result_carrier.packet_count;
+}
+
+static bool loom_wasm_select_plan_from_op(const loom_module_t* module,
+                                          const loom_op_t* source_op) {
+  if (!loom_scf_select_isa(source_op)) {
+    return false;
+  }
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_scf_select_result(source_op));
+  if (loom_type_rank(result_type) != 1 ||
+      !loom_wasm_element_type_is_numeric_payload(
+          loom_type_element_type(result_type))) {
+    return false;
+  }
+  return loom_wasm_vector_carrier_for_type(result_type).packet_count == 1;
 }
 
 static bool loom_wasm_shuffle_plan_from_op(
@@ -611,7 +601,15 @@ static bool loom_wasm_shuffle_plan_from_op(
   }
   const loom_value_id_t source = loom_vector_shuffle_source(source_op);
   const loom_value_id_t result = loom_vector_shuffle_result(source_op);
-  if (!loom_wasm_predicate_type(loom_module_value_type(module, source), NULL)) {
+  const loom_type_t source_type = loom_module_value_type(module, source);
+  const loom_type_t result_type = loom_module_value_type(module, result);
+  const bool source_is_predicate = loom_wasm_predicate_type(source_type, NULL);
+  const bool result_is_predicate = loom_wasm_predicate_type(result_type, NULL);
+  if (source_is_predicate != result_is_predicate ||
+      (!source_is_predicate && (!loom_wasm_element_type_is_numeric_payload(
+                                    loom_type_element_type(source_type)) ||
+                                !loom_wasm_element_type_is_numeric_payload(
+                                    loom_type_element_type(result_type))))) {
     return false;
   }
   const loom_wasm_vector_carrier_t source_carrier =
@@ -619,7 +617,10 @@ static bool loom_wasm_shuffle_plan_from_op(
   const loom_wasm_vector_carrier_t result_carrier =
       loom_wasm_vector_carrier_for_source_value(module, context, result);
   if (source_carrier.packet_count != 1 || result_carrier.packet_count != 1 ||
-      source_carrier.element_bit_count != result_carrier.element_bit_count) {
+      source_carrier.element_bit_count != result_carrier.element_bit_count ||
+      (!source_is_predicate &&
+       source_carrier.payload_byte_count ==
+           LOOM_WASM_VECTOR_CARRIER_PACKET_BYTE_COUNT)) {
     return false;
   }
   out_plan->carrier = source_carrier;
@@ -671,6 +672,7 @@ iree_status_t loom_wasm_query_vector_structural_contract(
   if (loom_wasm_predicate_extension_plan_from_op(environment->module,
                                                  /*context=*/NULL, source_op,
                                                  &predicate_extension_plan) ||
+      loom_wasm_select_plan_from_op(environment->module, source_op) ||
       loom_wasm_shuffle_plan_from_op(environment->module, /*context=*/NULL,
                                      source_op, &shuffle_plan) ||
       loom_wasm_bitcast_plan_from_op(environment->module, source_op)) {
@@ -681,7 +683,7 @@ iree_status_t loom_wasm_query_vector_structural_contract(
 
 bool loom_wasm_vector_structural_plan_isa(loom_low_lower_plan_t plan) {
   return plan.id >= LOOM_WASM_VECTOR_STRUCTURAL_PLAN_INTERLEAVE &&
-         plan.id <= LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_EXTENSION;
+         plan.id <= LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT;
 }
 
 iree_status_t loom_wasm_select_vector_structural_plan(
@@ -766,6 +768,11 @@ iree_status_t loom_wasm_select_vector_structural_plan(
         LOOM_WASM_VECTOR_STRUCTURAL_PLAN_PREDICATE_EXTENSION, retained_plan);
     return iree_ok_status();
   }
+  if (loom_wasm_select_plan_from_op(module, source_op)) {
+    *out_plan =
+        loom_low_lower_plan_make(LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT, NULL);
+    return iree_ok_status();
+  }
   loom_wasm_vector_shuffle_plan_t shuffle_plan;
   if (loom_wasm_shuffle_plan_from_op(module, context, source_op,
                                      &shuffle_plan)) {
@@ -836,6 +843,9 @@ void loom_wasm_describe_vector_structural_plan(
               : IREE_SV("predicate.extend-unsigned.v128-packets");
       return;
     }
+    case LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT:
+      out_report->plan_key = IREE_SV("select.v128");
+      return;
     default:
       IREE_ASSERT_UNREACHABLE("unknown Wasm vector structural plan");
   }
@@ -1814,6 +1824,27 @@ static iree_status_t loom_wasm_emit_bitcast(loom_low_lower_context_t* context,
                                          loom_vector_bitcast_result(source_op));
 }
 
+static iree_status_t loom_wasm_emit_select(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op) {
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_lower_make_register_type(
+      context, WASM_CORE_SIMD128_REG_CLASS_ID_V128, 1, &result_type));
+  const loom_value_id_t operands[] = {
+      loom_low_lower_lookup_value(context,
+                                  loom_scf_select_true_value(source_op)),
+      loom_low_lower_lookup_value(context,
+                                  loom_scf_select_false_value(source_op)),
+      loom_low_lower_lookup_value(context,
+                                  loom_scf_select_condition(source_op)),
+  };
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_structural_op(
+      context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_REF_V128_SELECT,
+      operands, IREE_ARRAYSIZE(operands), result_type, &low_result));
+  return loom_low_lower_bind_value(context, loom_scf_select_result(source_op),
+                                   low_result);
+}
+
 iree_status_t loom_wasm_emit_vector_structural_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t plan) {
@@ -1848,6 +1879,8 @@ iree_status_t loom_wasm_emit_vector_structural_plan(
       return loom_wasm_emit_predicate_extension(
           context, source_op,
           (const loom_wasm_predicate_extension_plan_t*)plan.target_data);
+    case LOOM_WASM_VECTOR_STRUCTURAL_PLAN_SELECT:
+      return loom_wasm_emit_select(context, source_op);
     default:
       IREE_ASSERT_UNREACHABLE("unknown Wasm vector structural plan");
       IREE_BUILTIN_UNREACHABLE();

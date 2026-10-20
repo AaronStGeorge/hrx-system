@@ -232,3 +232,47 @@ low.func.def target<wasm.core.simd128> abi(wasm_function) @vector_f32_comparison
   v128.store %output_buffer, %unordered_less_equal_words {offset = 80}
   return
 }
+
+// ====
+
+func.def @f64_native(%lhs: f64, %rhs: f64) -> (f64, f64, i1) {
+  %sum = scalar.addf %lhs, %rhs : f64
+  %rounded = scalar.roundevenf %sum : f64
+  %root = scalar.sqrtf %rounded : f64
+  %signed = scalar.copysignf %root, %rhs : f64
+  %ordered = scalar.cmpf olt, %lhs, %rhs : f64
+  func.return %root, %signed, %ordered : f64, f64, i1
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @f64_native(%lhs: reg<wasm.f64>, %rhs: reg<wasm.f64>) -> (reg<wasm.f64>, reg<wasm.f64>, reg<wasm.i32>) asm {
+  %sum = f64.add %lhs, %rhs
+  %rounded = f64.nearest %sum
+  %root = f64.sqrt %rounded
+  %signed = f64.copysign %root, %rhs
+  %ordered = f64.lt %lhs, %rhs
+  return %root, %signed, %ordered
+}
+
+// ====
+
+func.def @f64x2_native(%lhs: vector<2xf64>, %rhs: vector<2xf64>) -> (vector<2xf64>) {
+  %sum = vector.addf %lhs, %rhs : vector<2xf64>
+  %rounded = vector.roundevenf %sum : vector<2xf64>
+  %root = vector.sqrtf %rounded : vector<2xf64>
+  %minimum = vector.minimumf %lhs, %rhs : vector<2xf64>
+  %mask = vector.cmpf olt, %lhs, %rhs : vector<2xf64> -> vector<2xi1>
+  %selected = vector.select %mask, %root, %minimum : vector<2xf64>
+  func.return %selected : vector<2xf64>
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @f64x2_native(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) asm {
+  %sum = f64x2.add %lhs, %rhs
+  %rounded = f64x2.nearest %sum
+  %root = f64x2.sqrt %rounded
+  %minimum = f64x2.min %lhs, %rhs
+  %mask = f64x2.lt %lhs, %rhs
+  %selected = v128.bitselect %root, %minimum, %mask
+  return %selected
+}

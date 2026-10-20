@@ -158,3 +158,76 @@ low.func.def target<wasm.core.simd128> abi(wasm_function) @select_cross_packet_s
   %result = v128.bitselect %true_value, %false_value, %condition
   return %result
 }
+
+// ====
+
+// A three-lane F32 value remains in one v128 carrier through lane access,
+// selection, permutation, and bitcast. Dynamic insertion replaces exactly one
+// complete physical lane.
+func.def @partial_f32_carriers(%input: vector<4xf32>, %fallback: vector<4xf32>, %predicate: vector<4xi1>, %value: f32, %condition: i1, %position: index) -> (vector<4xf32>) {
+  %lane = index.assume %position [range(%position, 0, 2)] : index
+  %partial = vector.slice %input[0] : vector<4xf32> -> vector<3xf32>
+  %other = vector.slice %fallback[0] : vector<4xf32> -> vector<3xf32>
+  %mask = vector.slice %predicate[0] : vector<4xi1> -> vector<3xi1>
+  %broadcast = vector.splat %value : vector<3xf32>
+  %last = vector.extract %partial[2] : vector<3xf32> -> f32
+  %static = vector.insert %last into %broadcast[1] : f32, vector<3xf32>
+  %dynamic = vector.insert %value into %static[%lane] : f32, vector<3xf32>
+  %whole = scf.select %condition, %dynamic, %other : vector<3xf32>
+  %lanes = vector.select %mask, %whole, %partial : vector<3xf32>
+  %reversed = vector.shuffle<[2, 1, 0]> %lanes : vector<3xf32>
+  %bits = vector.bitcast %reversed : vector<3xf32> to vector<3xi32>
+  %restored = vector.bitcast %bits : vector<3xi32> to vector<3xf32>
+  %tail = vector.splat %last : vector<1xf32>
+  %result = vector.concat<0> %restored, %tail : vector<3xf32>, vector<1xf32> -> vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @partial_f32_carriers(%partial: reg<wasm.v128>, %other: reg<wasm.v128>, %mask: reg<wasm.v128>, %value: reg<wasm.f32>, %condition: reg<wasm.i32>, %lane: reg<wasm.i32>) -> (reg<wasm.v128>) asm {
+  %last = f32x4.extract_lane %partial, 2
+  %32 = f32x4.splat %value
+  %33 = f32x4.replace_lane %32, %last, 1
+  %static = f32x4.replace_lane %33, %value, 2
+  %35 = v128.const 72340172821233664, 217020518497387010
+  %36 = i8x16.splat %lane
+  %37 = i8x16.eq %35, %36
+  %dynamic = v128.bitselect %32, %static, %37
+  %whole = v128.select %dynamic, %other, %condition
+  %lanes = v128.bitselect %whole, %partial, %mask
+  %reversed = i8x16.shuffle %lanes, %lanes, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3, 0, 0, 0, 0
+  %tail = f32x4.splat %last
+  %result = i8x16.shuffle %reversed, %tail, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19
+  return %result
+}
+
+// ====
+
+// One F64 lane is the lower boundary of the same family. Lane-local no-ops
+// canonicalize away while whole-value and per-lane selection remain native.
+func.def @partial_f64_carriers(%input: vector<2xf64>, %fallback: vector<2xf64>, %predicate: vector<2xi1>, %value: f64, %condition: i1, %position: index) -> (vector<2xf64>) {
+  %lane = index.assume %position [range(%position, 0, 0)] : index
+  %partial = vector.slice %input[0] : vector<2xf64> -> vector<1xf64>
+  %other = vector.slice %fallback[0] : vector<2xf64> -> vector<1xf64>
+  %mask = vector.slice %predicate[0] : vector<2xi1> -> vector<1xi1>
+  %broadcast = vector.splat %value : vector<1xf64>
+  %first = vector.extract %partial[0] : vector<1xf64> -> f64
+  %static = vector.insert %first into %broadcast[0] : f64, vector<1xf64>
+  %dynamic = vector.insert %value into %static[%lane] : f64, vector<1xf64>
+  %whole = scf.select %condition, %dynamic, %other : vector<1xf64>
+  %lanes = vector.select %mask, %whole, %partial : vector<1xf64>
+  %shuffled = vector.shuffle<[0]> %lanes : vector<1xf64>
+  %bits = vector.bitcast %shuffled : vector<1xf64> to vector<1xi64>
+  %restored = vector.bitcast %bits : vector<1xi64> to vector<1xf64>
+  %result = vector.concat<0> %restored, %partial : vector<1xf64>, vector<1xf64> -> vector<2xf64>
+  func.return %result : vector<2xf64>
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @partial_f64_carriers(%partial: reg<wasm.v128>, %other: reg<wasm.v128>, %mask: reg<wasm.v128>, %value: reg<wasm.f64>, %condition: reg<wasm.i32>, %position: reg<wasm.i32>) -> (reg<wasm.v128>) asm {
+  %dynamic = f64x2.splat %value
+  %whole = v128.select %dynamic, %other, %condition
+  %lanes = v128.bitselect %whole, %partial, %mask
+  %result = i8x16.shuffle %lanes, %partial, 0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23
+  return %result
+}
