@@ -2283,9 +2283,14 @@ static iree_status_t iree_hal_amd_gpu_pm4_prepare_native(
           access.atomic_operations_32,
           AMDF_ATOMIC_OPERATION_WAIT | AMDF_ATOMIC_OPERATION_STORE) ||
       pair.atomic_reach.scope_32 < AMDF_ATOMIC_SCOPE_DEVICE) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "PM4 control backing lacks coherent host access "
-                            "or qualified 32-bit native signals");
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "PM4 control backing on '%s' lacks coherent host access or qualified "
+        "32-bit native signals: profile=%u, family=%u, access flags=0x%" PRIx64
+        ", atomic operations=0x%" PRIx64 ", atomic scope=%u",
+        queue->context->endpoint_info.name,
+        queue->options.memory->profile.ordinal, queue->options.family_ordinal,
+        access.flags, access.atomic_operations_32, pair.atomic_reach.scope_32);
   }
   iree_hal_amd_gpu_pm4_retirement_ring_initialize(
       (iree_hal_amd_gpu_pm4_retirement_record_t*)queue->control.contents.data,
