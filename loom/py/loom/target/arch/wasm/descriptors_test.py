@@ -10,6 +10,7 @@ from loom.target.arch.wasm.descriptors import (
     WASM_CORE_SIMD128_DESCRIPTOR_SET,
     WASM_INTEGER_ARITHMETIC_INSTRUCTIONS,
     WASM_INTEGER_EXTENSION_INSTRUCTIONS,
+    WASM_INTEGER_NARROWING_INSTRUCTIONS,
 )
 from loom.target.low_descriptors import ImmediateFlag, ImmediateKind
 
@@ -113,6 +114,40 @@ def test_narrow_lanes_use_unsigned_extract_encodings_and_exact_lane_domains():
             assert immediate.kind is ImmediateKind.UNSIGNED
             assert immediate.unsigned_max == lanes - 1
             assert not immediate.flags
+
+
+def test_integer_narrowing_descriptors_cover_the_native_instruction_matrix():
+    descriptors = {
+        descriptor.key: descriptor
+        for descriptor in WASM_CORE_SIMD128_DESCRIPTOR_SET.descriptors
+    }
+    expected = {
+        ("i8x16", "i16x8", "s"): 0x65,
+        ("i8x16", "i16x8", "u"): 0x66,
+        ("i16x8", "i32x4", "s"): 0x85,
+        ("i16x8", "i32x4", "u"): 0x86,
+    }
+
+    actual = {
+        (
+            instruction.result_shape,
+            instruction.source_shape,
+            instruction.signedness,
+        ): instruction.subopcode
+        for instruction in WASM_INTEGER_NARROWING_INSTRUCTIONS
+    }
+    assert actual == expected
+    for (result_shape, source_shape, signedness), subopcode in expected.items():
+        descriptor = descriptors[
+            f"wasm.{result_shape}.narrow_{source_shape}_{signedness}"
+        ]
+        assert descriptor.encoding_id == (0xFD << 8) | subopcode
+        assert [operand.field_name for operand in descriptor.operands] == [
+            "dst",
+            "low",
+            "high",
+        ]
+        assert not descriptor.immediates
 
 
 def test_simd_compare_descriptors_cover_the_native_instruction_matrix():

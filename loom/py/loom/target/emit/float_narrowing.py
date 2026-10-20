@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import Enum, unique
+from typing import Protocol
 
 from loom.target.contracts import (
     DescriptorEmitForm,
@@ -200,8 +201,70 @@ class FloatNarrowingDescriptors:
     integer: IntegerNarrowingDescriptors
     float_constant: Descriptor
     float_add: Descriptor
-    reinterpret_float_as_integer: Descriptor
-    reinterpret_integer_as_float: Descriptor
+    reinterpret_float_as_integer: Descriptor | None
+    reinterpret_integer_as_float: Descriptor | None
+
+
+class FloatNarrowingRecipe(Protocol):
+    """Descriptor-program interface consumed by exact narrowing formulas."""
+
+    descriptors: IntegerNarrowingDescriptors
+
+    def finish(self) -> tuple[EmitDescriptorOp, ...]: ...
+
+    def integer_constant(self, result_name: str, value: int) -> ValueRef: ...
+
+    def float_constant(
+        self, result_name: str, bits: int, descriptor: Descriptor
+    ) -> ValueRef: ...
+
+    def integer_binary(
+        self,
+        result_name: str,
+        descriptor: Descriptor,
+        lhs: ValueRef,
+        rhs: ValueRef,
+    ) -> ValueRef: ...
+
+    def integer_binary_to(
+        self,
+        result: ValueRef,
+        descriptor: Descriptor,
+        lhs: ValueRef,
+        rhs: ValueRef,
+    ) -> ValueRef: ...
+
+    def float_add(
+        self,
+        result_name: str,
+        descriptor: Descriptor,
+        lhs: ValueRef,
+        rhs: ValueRef,
+    ) -> ValueRef: ...
+
+    def reinterpret_float_as_integer(
+        self, result_name: str, descriptor: Descriptor | None, value: ValueRef
+    ) -> ValueRef: ...
+
+    def reinterpret_integer_as_float(
+        self, result_name: str, descriptor: Descriptor | None, value: ValueRef
+    ) -> ValueRef: ...
+
+    def integer_select(
+        self,
+        result_name: str,
+        true_value: ValueRef,
+        false_value: ValueRef,
+        condition: ValueRef,
+    ) -> ValueRef: ...
+
+    def integer_select_to(
+        self,
+        result: ValueRef,
+        true_value: ValueRef,
+        false_value: ValueRef,
+        condition: ValueRef,
+    ) -> ValueRef: ...
 
 
 class _ScalarRecipe:
@@ -467,8 +530,10 @@ class _ScalarRecipe:
         )
 
     def reinterpret_float_as_integer(
-        self, result_name: str, descriptor: Descriptor, value: ValueRef
+        self, result_name: str, descriptor: Descriptor | None, value: ValueRef
     ) -> ValueRef:
+        if descriptor is None:
+            raise ValueError("scalar narrowing requires a float-to-integer reinterpret")
         return self._operation(
             ValueRef.temporary(result_name),
             descriptor,
@@ -476,8 +541,12 @@ class _ScalarRecipe:
         )
 
     def reinterpret_integer_as_float(
-        self, result_name: str, descriptor: Descriptor, value: ValueRef
+        self, result_name: str, descriptor: Descriptor | None, value: ValueRef
     ) -> ValueRef:
+        if descriptor is None:
+            raise ValueError(
+                "scalar narrowing requires an integer-to-float reinterpret"
+            )
         return self._operation(
             ValueRef.temporary(result_name),
             descriptor,
@@ -533,7 +602,7 @@ def build_f32_to_bf16_emits(
     input_bits = recipe.reinterpret_float_as_integer(
         "input_bits", descriptors.reinterpret_float_as_integer, input_ref
     )
-    return _build_f32_bits_to_bf16_emits(
+    return build_f32_bits_to_bf16_with_recipe(
         recipe,
         input_bits,
         result_ref,
@@ -555,7 +624,7 @@ def build_representable_f32_to_bf16_emits(
     input_bits = recipe.reinterpret_float_as_integer(
         "input_bits", descriptors.reinterpret_float_as_integer, input_ref
     )
-    return _build_f32_bits_to_bf16_emits(
+    return build_f32_bits_to_bf16_with_recipe(
         recipe,
         input_bits,
         result_ref,
@@ -573,7 +642,7 @@ def build_f32_bits_to_bf16_emits(
 ) -> tuple[EmitDescriptorOp, ...]:
     """Rounds integer-carried F32 bits to BF16."""
 
-    return _build_f32_bits_to_bf16_emits(
+    return build_f32_bits_to_bf16_with_recipe(
         _ScalarRecipe(descriptors),
         input_bits_ref,
         result_ref,
@@ -591,7 +660,7 @@ def build_representable_f32_bits_to_bf16_emits(
 ) -> tuple[EmitDescriptorOp, ...]:
     """Narrows integer-carried F32 bits with exact finite values in BF16."""
 
-    return _build_f32_bits_to_bf16_emits(
+    return build_f32_bits_to_bf16_with_recipe(
         _ScalarRecipe(descriptors),
         input_bits_ref,
         result_ref,
@@ -600,8 +669,8 @@ def build_representable_f32_bits_to_bf16_emits(
     )
 
 
-def _build_f32_bits_to_bf16_emits(
-    recipe: _ScalarRecipe,
+def build_f32_bits_to_bf16_with_recipe(
+    recipe: FloatNarrowingRecipe,
     input_bits: ValueRef,
     result_ref: ValueRef,
     *,
@@ -681,7 +750,7 @@ def build_float_to_narrow_float_emits(
     input_bits = recipe.reinterpret_float_as_integer(
         "input_bits", descriptors.reinterpret_float_as_integer, input_ref
     )
-    return _build_float_bits_to_narrow_float_emits(
+    return build_float_bits_to_narrow_float_with_recipe(
         recipe,
         source_format,
         narrow_format,
@@ -708,7 +777,7 @@ def build_integer_bits_to_narrow_float_emits(
     if subnormal_rounding is NarrowFloatSubnormalRounding.RNE_FLOAT_ADD:
         raise ValueError("integer-carried narrowing requires integer rounding")
     recipe = _ScalarRecipe(descriptors)
-    return _build_float_bits_to_narrow_float_emits(
+    return build_float_bits_to_narrow_float_with_recipe(
         recipe,
         source_format,
         narrow_format,
@@ -720,8 +789,8 @@ def build_integer_bits_to_narrow_float_emits(
     )
 
 
-def _build_float_bits_to_narrow_float_emits(
-    recipe: _ScalarRecipe,
+def build_float_bits_to_narrow_float_with_recipe(
+    recipe: FloatNarrowingRecipe,
     source_format: BinaryFloatFormat,
     narrow_format: NarrowFloatFormat,
     input_bits: ValueRef,

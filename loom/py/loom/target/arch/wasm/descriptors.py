@@ -487,6 +487,16 @@ class WasmIntegerExtensionInstruction:
     subopcode: int
 
 
+@dataclass(frozen=True)
+class WasmIntegerNarrowingInstruction:
+    """One direct SIMD128 saturating integer lane-narrowing instruction."""
+
+    result_shape: str
+    source_shape: str
+    signedness: str
+    subopcode: int
+
+
 # Direct SIMD128 cells. Source contracts consume this same table and add compact
 # recipes for the five absent cells: i8 multiplication and i64 extrema.
 WASM_INTEGER_ARITHMETIC_INSTRUCTIONS = (
@@ -549,6 +559,23 @@ WASM_INTEGER_EXTENSION_INSTRUCTIONS = tuple(
     )
     for half, half_offset in (("low", 0), ("high", 1))
     for signedness, signedness_offset in (("s", 0), ("u", 2))
+)
+
+# Saturating integer lane narrowing is a complete 2 widths x 2 signedness
+# family. Float-carrier packing consumes the unsigned cells because every
+# exact destination payload is nonnegative and representable.
+WASM_INTEGER_NARROWING_INSTRUCTIONS = tuple(
+    WasmIntegerNarrowingInstruction(
+        result_shape,
+        source_shape,
+        signedness,
+        subopcode_base + signedness_offset,
+    )
+    for result_shape, source_shape, subopcode_base in (
+        ("i8x16", "i16x8", 0x65),
+        ("i16x8", "i32x4", 0x85),
+    )
+    for signedness, signedness_offset in (("s", 0), ("u", 1))
 )
 
 _TARGET_BLOCK_IMMEDIATE = Immediate(
@@ -789,6 +816,35 @@ def _integer_simd_extension_descriptor(
             if instruction.result_bit_count == 64
             else _SCHEDULE_SIMD_I32X4
         ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _integer_simd_narrowing_descriptor(
+    instruction: WasmIntegerNarrowingInstruction,
+) -> Descriptor:
+    semantic_signedness = "signed" if instruction.signedness == "s" else "unsigned"
+    return Descriptor(
+        key=(
+            f"wasm.{instruction.result_shape}.narrow_"
+            f"{instruction.source_shape}_{instruction.signedness}"
+        ),
+        mnemonic=(
+            f"{instruction.result_shape}.narrow_"
+            f"{instruction.source_shape}_{instruction.signedness}"
+        ),
+        semantic_tag=(
+            f"vector.narrow.{semantic_signedness}."
+            f"{instruction.source_shape}.{instruction.result_shape}"
+        ),
+        encoding_id=_simd_encoding_id(instruction.subopcode),
+        operands=(
+            _v128_result(),
+            _v128_operand("low"),
+            _v128_operand("high"),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("low", "high")),
+        schedule_class=_SCHEDULE_SIMD_I32X4,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -1551,6 +1607,10 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
         *(
             _integer_simd_extension_descriptor(instruction)
             for instruction in WASM_INTEGER_EXTENSION_INSTRUCTIONS
+        ),
+        *(
+            _integer_simd_narrowing_descriptor(instruction)
+            for instruction in WASM_INTEGER_NARROWING_INSTRUCTIONS
         ),
         *(
             Descriptor(

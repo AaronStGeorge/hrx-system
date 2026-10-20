@@ -182,3 +182,197 @@ low.func.def target<wasm.core.simd128> abi(wasm_function) @narrow_f32_to_f8e5m2(
   %result = i32.or %9, %35
   return %result
 }
+
+// ====
+
+func.def @narrow_f32x4_to_bf16(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<4xf32>
+  %output_view = buffer.view %output[%base] : buffer -> view<4xbf16>
+  %value = vector.load %input_view[0] : view<4xf32> -> vector<4xf32>
+  %result = vector.fptrunc %value : vector<4xf32> to vector<4xbf16>
+  vector.store %result, %output_view[0] : vector<4xbf16>, view<4xbf16>
+  func.return
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @narrow_f32x4_to_bf16(%input: reg<wasm.i32>, %output: reg<wasm.i32>) asm {
+  %value = v128.load %input
+  %15 = i32.const 16
+  %16 = i32x4.shr_u %value, %15
+  %17 = v128.const 4294967297, 4294967297
+  %18 = v128.and %16, %17
+  %19 = v128.const 140733193420799, 140733193420799
+  %20 = i32x4.add %19, %18
+  %21 = i32x4.add %value, %20
+  %22 = i32x4.shr_u %21, %15
+  %23 = v128.const 9223372034707292159, 9223372034707292159
+  %24 = v128.and %value, %23
+  %25 = v128.const 9187343241974906880, 9187343241974906880
+  %26 = i32x4.gt_u %24, %25
+  %27 = v128.const 274877907008, 274877907008
+  %28 = v128.or %16, %27
+  %29 = v128.bitselect %28, %22, %26
+  %30 = v128.const 0, 0
+  %result = i16x8.narrow_i32x4_u %29, %30
+  %32 = i64x2.extract_lane %result, 0
+  i64.store %output, %32
+  return
+}
+
+// ====
+
+func.def @narrow_f32x4_to_f16(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<4xf32>
+  %output_view = buffer.view %output[%base] : buffer -> view<4xf16>
+  %value = vector.load %input_view[0] : view<4xf32> -> vector<4xf32>
+  %result = vector.fptrunc %value : vector<4xf32> to vector<4xf16>
+  vector.store %result, %output_view[0] : vector<4xf16>, view<4xf16>
+  func.return
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @narrow_f32x4_to_f16(%input: reg<wasm.i32>, %output: reg<wasm.i32>) asm {
+  %value = v128.load %input
+  %14 = v128.const -9223372034707292160, -9223372034707292160
+  %15 = v128.and %value, %14
+  %17 = i32.const 16
+  %18 = i32x4.shr_u %15, %17
+  %19 = v128.const 9223372034707292159, 9223372034707292159
+  %20 = v128.and %value, %19
+  %21 = v128.const 4539628425446424576, 4539628425446424576
+  %22 = f32x4.add %20, %21
+  %23 = i32x4.sub %22, %21
+  %25 = i32.const 13
+  %26 = i32x4.shr_u %20, %25
+  %27 = v128.const 4294967297, 4294967297
+  %28 = v128.and %26, %27
+  %29 = v128.const -4035207674877440001, -4035207674877440001
+  %30 = i32x4.add %20, %29
+  %31 = i32x4.add %30, %28
+  %32 = i32x4.shr_u %31, %25
+  %33 = v128.const 4071254064090841088, 4071254064090841088
+  %34 = i32x4.lt_u %20, %33
+  %35 = v128.bitselect %23, %32, %34
+  %36 = v128.const 136339441875968, 136339441875968
+  %37 = i32x4.ge_u %35, %36
+  %38 = v128.bitselect %36, %35, %37
+  %39 = v128.const 36028792732385279, 36028792732385279
+  %40 = v128.and %20, %39
+  %41 = i32x4.shr_u %40, %25
+  %42 = v128.or %36, %41
+  %43 = v128.const 2199023256064, 2199023256064
+  %44 = v128.or %42, %43
+  %45 = v128.const 9187343241974906880, 9187343241974906880
+  %46 = i32x4.gt_u %20, %45
+  %47 = v128.bitselect %44, %38, %46
+  %48 = v128.or %18, %47
+  %49 = v128.const 0, 0
+  %result = i16x8.narrow_i32x4_u %48, %49
+  %51 = i64x2.extract_lane %result, 0
+  i64.store %output, %51
+  return
+}
+
+// ====
+
+func.def @narrow_f32x4_to_f8e4m3(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<4xf32>
+  %output_view = buffer.view %output[%base] : buffer -> view<4xf8E4M3>
+  %value = vector.load %input_view[0] : view<4xf32> -> vector<4xf32>
+  %result = vector.fptrunc %value : vector<4xf32> to vector<4xf8E4M3>
+  vector.store %result, %output_view[0] : vector<4xf8E4M3>, view<4xf8E4M3>
+  func.return
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @narrow_f32x4_to_f8e4m3(%input: reg<wasm.i32>, %output: reg<wasm.i32>) asm {
+  %value = v128.load %input
+  %14 = v128.const -9223372034707292160, -9223372034707292160
+  %15 = v128.and %value, %14
+  %17 = i32.const 24
+  %18 = i32x4.shr_u %15, %17
+  %19 = v128.const 9223372034707292159, 9223372034707292159
+  %20 = v128.and %value, %19
+  %21 = v128.const 5080060380856713216, 5080060380856713216
+  %22 = f32x4.add %20, %21
+  %23 = i32x4.sub %22, %21
+  %25 = i32.const 20
+  %26 = i32x4.shr_u %20, %25
+  %27 = v128.const 4294967297, 4294967297
+  %28 = v128.and %26, %27
+  %29 = v128.const -4321203843468099585, -4321203843468099585
+  %30 = i32x4.add %20, %29
+  %31 = i32x4.add %30, %28
+  %32 = i32x4.shr_u %31, %25
+  %33 = v128.const 4359484440309661696, 4359484440309661696
+  %34 = i32x4.lt_u %20, %33
+  %35 = v128.bitselect %23, %32, %34
+  %37 = v128.const 545460846719, 545460846719
+  %38 = v128.const 541165879422, 541165879422
+  %39 = i32x4.ge_u %35, %37
+  %40 = v128.bitselect %38, %35, %39
+  %41 = v128.const 9187343241974906880, 9187343241974906880
+  %42 = i32x4.gt_u %20, %41
+  %43 = v128.bitselect %37, %40, %42
+  %44 = v128.or %18, %43
+  %45 = v128.const 0, 0
+  %46 = i16x8.narrow_i32x4_u %44, %45
+  %result = i8x16.narrow_i16x8_u %46, %45
+  %48 = i32x4.extract_lane %result, 0
+  i32.store %output, %48
+  return
+}
+
+// ====
+
+func.def @narrow_f32x4_to_f8e5m2(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<4xf32>
+  %output_view = buffer.view %output[%base] : buffer -> view<4xf8E5M2>
+  %value = vector.load %input_view[0] : view<4xf32> -> vector<4xf32>
+  %result = vector.fptrunc %value : vector<4xf32> to vector<4xf8E5M2>
+  vector.store %result, %output_view[0] : vector<4xf8E5M2>, view<4xf8E5M2>
+  func.return
+}
+
+// ----
+low.func.def target<wasm.core.simd128> abi(wasm_function) @narrow_f32x4_to_f8e5m2(%input: reg<wasm.i32>, %output: reg<wasm.i32>) asm {
+  %value = v128.load %input
+  %14 = v128.const -9223372034707292160, -9223372034707292160
+  %15 = v128.and %value, %14
+  %17 = i32.const 24
+  %18 = i32x4.shr_u %15, %17
+  %19 = v128.const 9223372034707292159, 9223372034707292159
+  %20 = v128.and %value, %19
+  %21 = v128.const 4827858801665245184, 4827858801665245184
+  %22 = f32x4.add %20, %21
+  %23 = i32x4.sub %22, %21
+  %25 = i32.const 21
+  %26 = i32x4.shr_u %20, %25
+  %27 = v128.const 4294967297, 4294967297
+  %28 = v128.and %26, %27
+  %29 = v128.const -4030721667435069441, -4030721667435069441
+  %30 = i32x4.add %20, %29
+  %31 = i32x4.add %30, %28
+  %32 = i32x4.shr_u %31, %25
+  %33 = v128.const 4071254064090841088, 4071254064090841088
+  %34 = i32x4.lt_u %20, %33
+  %35 = v128.bitselect %23, %32, %34
+  %36 = v128.const 532575944828, 532575944828
+  %37 = i32x4.ge_u %35, %36
+  %38 = v128.bitselect %36, %35, %37
+  %39 = v128.const 545460846719, 545460846719
+  %40 = v128.const 9187343241974906880, 9187343241974906880
+  %41 = i32x4.gt_u %20, %40
+  %42 = v128.bitselect %39, %38, %41
+  %43 = v128.or %18, %42
+  %44 = v128.const 0, 0
+  %45 = i16x8.narrow_i32x4_u %43, %44
+  %result = i8x16.narrow_i16x8_u %45, %44
+  %47 = i32x4.extract_lane %result, 0
+  i32.store %output, %47
+  return
+}

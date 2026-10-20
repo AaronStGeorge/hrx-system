@@ -13,7 +13,6 @@ from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.vector import defs as vector
 from loom.target.contracts import (
     DescriptorEmitForm,
-    DescriptorResultType,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -22,6 +21,7 @@ from loom.target.contracts import (
     ValueRef,
     Vector,
 )
+from loom.target.emit.wasm.packed_i32 import PackedI32Program
 from loom.target.low_descriptors import Descriptor
 
 _I32 = Scalar("i32")
@@ -43,124 +43,6 @@ class _NarrowFloatFormat:
 _F8E4M3 = _NarrowFloatFormat("f8E4M3", 8, 3, 4, 7, False)
 _F8E5M2 = _NarrowFloatFormat("f8E5M2", 8, 2, 5, 15, True)
 _F16 = _NarrowFloatFormat("f16", 16, 10, 5, 15, True)
-
-
-def _repeated_i32_word(value: int) -> int:
-    lane_bits = value & 0xFFFFFFFF
-    return lane_bits | (lane_bits << 32)
-
-
-class _PackedI32Program:
-    """Builds one straight-line i32x4 descriptor program."""
-
-    def __init__(self, descriptor_lookup: Callable[[str], Descriptor]) -> None:
-        self._descriptor_lookup = descriptor_lookup
-        self.emits: list[EmitDescriptorOp] = []
-        self._vector_constants: dict[int, ValueRef] = {}
-        self._scalar_constants: dict[int, ValueRef] = {}
-
-    def _result(self, result_name: str | None) -> ValueRef:
-        return (
-            ValueRef.result("result")
-            if result_name is None
-            else ValueRef.temporary(result_name)
-        )
-
-    def constant(self, result_name: str, value: int) -> ValueRef:
-        if existing := self._vector_constants.get(value):
-            return existing
-        result = self._result(result_name)
-        word = _repeated_i32_word(value)
-        self.emits.append(
-            EmitDescriptorOp(
-                descriptor=self._descriptor_lookup("wasm.v128.const"),
-                results={"dst": result},
-                result_types={"dst": DescriptorResultType()},
-                immediates={"lo64": word, "hi64": word},
-                form=DescriptorEmitForm.CONST,
-            )
-        )
-        self._vector_constants[value] = result
-        return result
-
-    def scalar_constant(self, result_name: str, value: int) -> ValueRef:
-        if existing := self._scalar_constants.get(value):
-            return existing
-        result = self._result(result_name)
-        self.emits.append(
-            EmitDescriptorOp(
-                descriptor=self._descriptor_lookup("wasm.i32.const"),
-                results={"dst": result},
-                result_types={"dst": _I32},
-                immediates={"i32_value": value},
-                form=DescriptorEmitForm.CONST,
-            )
-        )
-        self._scalar_constants[value] = result
-        return result
-
-    def operation(
-        self,
-        result_name: str | None,
-        descriptor_key: str,
-        operands: Mapping[str, ValueRef],
-    ) -> ValueRef:
-        result = self._result(result_name)
-        self.emits.append(
-            EmitDescriptorOp(
-                descriptor=self._descriptor_lookup(descriptor_key),
-                operands=operands,
-                results={"dst": result},
-                result_types=(
-                    None if result_name is None else {"dst": DescriptorResultType()}
-                ),
-                form=DescriptorEmitForm.OP,
-            )
-        )
-        return result
-
-    def binary(
-        self,
-        result_name: str | None,
-        descriptor_key: str,
-        lhs: ValueRef,
-        rhs: ValueRef,
-    ) -> ValueRef:
-        return self.operation(
-            result_name,
-            descriptor_key,
-            {"lhs": lhs, "rhs": rhs},
-        )
-
-    def shift(
-        self,
-        result_name: str | None,
-        descriptor_key: str,
-        value: ValueRef,
-        count: ValueRef,
-    ) -> ValueRef:
-        return self.operation(
-            result_name,
-            descriptor_key,
-            {"value": value, "count": count},
-        )
-
-    def select(
-        self,
-        result_name: str | None,
-        true_value: ValueRef,
-        false_value: ValueRef,
-        condition: ValueRef,
-    ) -> ValueRef:
-        return self.operation(
-            result_name,
-            "wasm.v128.bitselect",
-            {
-                "true_value": true_value,
-                "false_value": false_value,
-                "condition": condition,
-            },
-        )
 
 
 class _ScalarI32Program:
@@ -260,7 +142,7 @@ class _ScalarI32Program:
 
 
 def _extend_to_i32_lanes(
-    program: _PackedI32Program,
+    program: PackedI32Program,
     source_bit_count: int,
 ) -> ValueRef:
     current = ValueRef.operand("input")
@@ -280,7 +162,7 @@ def _extend_to_i32_lanes(
 
 
 def _normalize_mantissa(
-    program: _PackedI32Program,
+    program: PackedI32Program,
     mantissa: ValueRef,
     mantissa_bit_count: int,
     prefix: str,
@@ -343,7 +225,7 @@ def _normalize_mantissa(
 
 
 def _emit_float_widening(
-    program: _PackedI32Program,
+    program: PackedI32Program,
     input_bits: ValueRef,
     source_format: _NarrowFloatFormat,
 ) -> None:
@@ -484,7 +366,7 @@ def _float_widening_rule(
     type_guard: Callable[[str, TypePattern], Guard],
     source_format: _NarrowFloatFormat,
 ) -> DescriptorRule:
-    program = _PackedI32Program(descriptor_lookup)
+    program = PackedI32Program(descriptor_lookup)
     input_bits = _extend_to_i32_lanes(program, source_format.source_bit_count)
     _emit_float_widening(program, input_bits, source_format)
     source_type = Vector(
@@ -511,7 +393,7 @@ def _bf16_widening_rule(
     descriptor_lookup: Callable[[str], Descriptor],
     type_guard: Callable[[str, TypePattern], Guard],
 ) -> DescriptorRule:
-    program = _PackedI32Program(descriptor_lookup)
+    program = PackedI32Program(descriptor_lookup)
     input_bits = _extend_to_i32_lanes(program, 16)
     shift = program.scalar_constant("shift", 16)
     program.shift(None, "wasm.i32x4.shl", input_bits, shift)
