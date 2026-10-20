@@ -44,7 +44,6 @@ iree_runtime_cc_library(
     hdrs = [
         "allocator.h",
         "api.h",
-        "assert.h",
         "bitfield.h",
         "bitmap.h",
         "byte_sequence.h",
@@ -277,6 +276,7 @@ iree_runtime_cc_library(
     name = "core_headers",
     hdrs = [
         "alignment.h",
+        "assert.h",
         "attributes.h",
         "config.h",
         "target_platform.h",

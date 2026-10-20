@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <string>
+#include <thread>
 
 #include "iree/base/tracing.h"
 #include "iree/testing/gtest.h"
@@ -49,6 +50,50 @@ TEST(ConsoleTracingTest, NestedNames) {
   EXPECT_LT(output.find("◄ inner"), output.find("◄ outer"));
 #else
   EXPECT_THAT(output, ::testing::Not(::testing::HasSubstr("◄")));
+#endif  // IREE_TRACING_CONSOLE_TIMING
+}
+
+TEST(ConsoleTracingTest, SectionsOverlapAndMigrateWithoutChangingZoneDepth) {
+  ::testing::internal::CaptureStderr();
+  IREE_TRACE_SECTION_SETUP(42, "model-loading");
+  const char category[] = {'j', 'i', 't'};
+  IREE_TRACE_SECTION_SETUP_DYNAMIC(43, category, sizeof(category));
+  IREE_TRACE_ZONE_BEGIN_NAMED(zone, "synchronous");
+  const iree_section_id_t first = IREE_TRACE_SECTION_ENTER(42, "first");
+  char name[] = {'1', '0', '0', '%'};
+  const iree_section_id_t second =
+      IREE_TRACE_SECTION_ENTER_DYNAMIC(43, name, sizeof(name));
+  const iree_section_id_t tagged =
+      IREE_TRACE_SECTION_ENTER_TAGGED(42, "model-prepare", name, sizeof(name));
+  name[0] = 'x';
+  EXPECT_NE(first, 0u);
+  EXPECT_NE(second, 0u);
+  EXPECT_NE(first, second);
+  std::thread([first] { IREE_TRACE_SECTION_LEAVE(first); }).join();
+  IREE_TRACE_SECTION_LEAVE(second);
+  IREE_TRACE_SECTION_LEAVE(tagged);
+  IREE_TRACE_SECTION_LEAVE(0);
+  IREE_TRACE_ZONE_END(zone);
+  const std::string output = ::testing::internal::GetCapturedStderr();
+  EXPECT_THAT(output,
+              ::testing::HasSubstr("section category=42 model-loading\n"));
+  EXPECT_THAT(output, ::testing::HasSubstr("section category=43 jit\n"));
+  const std::string first_id = "section " + std::to_string(first);
+  const std::string second_id = "section " + std::to_string(second);
+  EXPECT_THAT(output, ::testing::HasSubstr(first_id + " enter category=42 t="));
+  EXPECT_THAT(output,
+              ::testing::HasSubstr(second_id + " enter category=43 t="));
+  EXPECT_THAT(output, ::testing::HasSubstr("ns 100%\n"));
+  EXPECT_THAT(output, ::testing::HasSubstr("ns model-prepare:100%\n"));
+  EXPECT_LT(output.find(second_id + " enter"),
+            output.find(first_id + " leave"));
+  EXPECT_LT(output.find(first_id + " leave"),
+            output.find(second_id + " leave"));
+  EXPECT_THAT(output, ::testing::Not(::testing::HasSubstr("section 0 leave")));
+  EXPECT_THAT(output,
+              ::testing::HasSubstr("] ► synchronous (console_test.cc:"));
+#if IREE_TRACING_CONSOLE_TIMING
+  EXPECT_THAT(output, ::testing::HasSubstr("] ◄ synchronous t = "));
 #endif  // IREE_TRACING_CONSOLE_TIMING
 }
 

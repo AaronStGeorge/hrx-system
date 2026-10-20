@@ -91,6 +91,13 @@ IREE_MUST_USE_RESULT iree_zone_id_t iree_tracing_zone_begin_external_impl(
     size_t name_length);
 void iree_tracing_zone_end(iree_zone_id_t zone_id);
 
+IREE_MUST_USE_RESULT iree_section_id_t iree_tracing_section_enter(
+    uint16_t category, const char* prefix, size_t prefix_length,
+    const char* name, size_t name_length);
+void iree_tracing_section_leave(iree_section_id_t section_id);
+void iree_tracing_section_setup(uint16_t category, const char* name,
+                                size_t name_length);
+
 void iree_tracing_message_cstring(const char* value, const char* symbol,
                                   uint32_t color);
 void iree_tracing_message_string_view(const char* value, size_t value_length,
@@ -226,6 +233,22 @@ void iree_tracing_memory_free(const char* name, size_t name_length, void* ptr);
 #define IREE_TRACE_FRAME_MARK_NAMED(name_literal)
 #define IREE_TRACE_FRAME_MARK_BEGIN_NAMED(name_literal)
 #define IREE_TRACE_FRAME_MARK_END_NAMED(name_literal)
+
+#define IREE_TRACE_SECTION_ENTER(category, name_literal)      \
+  iree_tracing_section_enter(category, NULL, 0, name_literal, \
+                             sizeof(name_literal) - 1)
+#define IREE_TRACE_SECTION_ENTER_DYNAMIC(category, name, name_length) \
+  iree_tracing_section_enter(category, NULL, 0, name, name_length)
+#define IREE_TRACE_SECTION_ENTER_TAGGED(category, name_literal, tag,           \
+                                        tag_length)                            \
+  iree_tracing_section_enter(category, name_literal ":", sizeof(name_literal), \
+                             tag, tag_length)
+#define IREE_TRACE_SECTION_LEAVE(section_id) \
+  iree_tracing_section_leave(section_id)
+#define IREE_TRACE_SECTION_SETUP(category, name_literal) \
+  iree_tracing_section_setup(category, name_literal, sizeof(name_literal) - 1)
+#define IREE_TRACE_SECTION_SETUP_DYNAMIC(category, name, name_length) \
+  iree_tracing_section_setup(category, name, name_length)
 
 #define IREE_TRACE_MESSAGE(level, value_literal)                            \
   iree_tracing_message_cstring(value_literal,                               \

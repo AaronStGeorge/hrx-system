@@ -19,6 +19,7 @@ if(${IREE_TRACING_PROVIDER} STREQUAL "console")
       "console.c"
     DEPS
       iree::base::core_headers
+      iree::base::internal
       iree::base::internal::time
     DEFINES
       "IREE_TRACING_PROVIDER_H=\"iree/base/tracing/console.h\""
@@ -95,5 +96,15 @@ else()
     NAME
       provider
     PUBLIC
+  )
+  iree_cc_test(
+    NAME
+      disabled_test
+    SRCS
+      "disabled_test.cc"
+    DEPS
+      iree::base::core_headers
+      iree::testing::gtest
+      iree::testing::gtest_main
   )
 endif(IREE_ENABLE_RUNTIME_TRACING)

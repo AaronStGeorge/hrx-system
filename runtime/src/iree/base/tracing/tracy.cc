@@ -129,6 +129,26 @@ void iree_tracing_tracy_deinitialize() {
 #endif  // TRACY_MANUAL_LIFETIME
 }
 
+iree_section_id_t iree_tracing_section_enter(uint16_t category,
+                                             const char* prefix,
+                                             size_t prefix_length,
+                                             const char* name,
+                                             size_t name_length) {
+  return tracy::Profiler::SectionEnter(
+      category, "%.*s%.*s", (int)prefix_length, prefix_length ? prefix : "",
+      (int)name_length, name_length ? name : "");
+}
+
+void iree_tracing_section_leave(iree_section_id_t section_id) {
+  tracy::Profiler::SectionLeave(section_id);
+}
+
+void iree_tracing_section_setup(uint16_t category, const char* name,
+                                size_t name_length) {
+  tracy::Profiler::SectionSetup(category, "%.*s", (int)name_length,
+                                name_length ? name : "");
+}
+
 void iree_tracing_publish_source_file(const void* filename,
                                       size_t filename_length,
                                       const void* content,

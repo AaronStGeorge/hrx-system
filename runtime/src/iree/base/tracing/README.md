@@ -120,6 +120,37 @@ duration. Device timelines require instrumentation from the executing HAL
 backend. IREE annotations remain provider-neutral; Tracy packet layout and
 source-lifetime handling belong in the adapter.
 
+### Overlapping lifecycle sections
+
+Sections mark coarse elapsed operations spanning CPU work, queue waits, and
+worker handoffs. They overlap independently: enter A, enter B, leave A, leave B
+is valid, including when a completion callback leaves on another thread.
+
+```c
+IREE_TRACE_SECTION_SETUP(1, "model-loading");
+IREE_TRACE(iree_section_id_t section =
+    IREE_TRACE_SECTION_ENTER(1, "scout"));
+// Retain the ID in the asynchronous operation until its terminal outcome.
+IREE_TRACE_SECTION_LEAVE(section);
+```
+
+`IREE_TRACE_SECTION_ENTER_DYNAMIC(category, name, name_length)` copies a
+runtime label during entry. `IREE_TRACE_SECTION_SETUP_DYNAMIC` accepts the same
+string-view form for a category label.
+`IREE_TRACE_SECTION_ENTER_TAGGED(category, "model-prepare", name, length)`
+produces `model-prepare:<name>` without a caller-side temporary allocation.
+Category IDs share a process-wide
+namespace. Each returned nonzero section ID is left exactly once; zero is an
+inactive ID and leaving it is harmless. Trace-only object fields can be wrapped
+in `IREE_TRACE(...)` so uninstrumented builds carry neither storage nor argument
+evaluation.
+
+Tracy displays sections as independent ranges that can filter analysis time
+windows. Console tracing emits matching IDs and timestamps without retaining
+section storage or disturbing its thread-local zone stack. These ranges measure
+elapsed lifecycle time, not CPU utilization or exact device execution. Ordinary
+CPU zones inside them still identify the work actually running.
+
 Traces are structural evidence: call relationships, worker wakeups, overlap, and
 gaps. Instrumentation and capture traffic affect execution, so throughput claims
 come from separately controlled, non-tracing optimized runs.

@@ -6,11 +6,38 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 
 #include "iree/base/tracing.h"
 #include "iree/testing/gtest.h"
 
 namespace {
+
+TEST(TracyTracingTest, SectionsOverlapAndMigrate) {
+  IREE_TRACE_SECTION_SETUP(42, "model-loading");
+  const char category[] = {'j', 'i', 't'};
+  IREE_TRACE_SECTION_SETUP_DYNAMIC(43, category, sizeof(category));
+  const iree_section_id_t first = IREE_TRACE_SECTION_ENTER(42, "first");
+  char name[] = {'1', '0', '0', '%'};
+  const iree_section_id_t second =
+      IREE_TRACE_SECTION_ENTER_DYNAMIC(43, name, sizeof(name));
+  const iree_section_id_t tagged =
+      IREE_TRACE_SECTION_ENTER_TAGGED(42, "model-prepare", name, sizeof(name));
+  name[0] = 'x';
+  EXPECT_NE(first, 0u);
+  EXPECT_NE(second, 0u);
+  EXPECT_NE(first, second);
+  EXPECT_NE(tagged, first);
+  EXPECT_NE(tagged, second);
+  EXPECT_NE(tagged, 0u);
+  std::thread([first] { IREE_TRACE_SECTION_LEAVE(first); }).join();
+  IREE_TRACE_SECTION_LEAVE(second);
+  IREE_TRACE_SECTION_LEAVE(tagged);
+  const iree_section_id_t empty =
+      IREE_TRACE_SECTION_ENTER_DYNAMIC(0, nullptr, 0);
+  IREE_TRACE_SECTION_LEAVE(empty);
+  IREE_TRACE_SECTION_LEAVE(0);
+}
 
 TEST(TracyTracingTest, ZoneContextsAndEventFamilies) {
   IREE_TRACE_ZONE_BEGIN_NAMED(outer, "outer");
