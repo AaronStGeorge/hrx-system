@@ -109,7 +109,7 @@ check.case @launch_schedule {
   loom_module_free(module);
 }
 
-TEST_F(TestbenchTest, PreservesNestedLaunchScheduleDepth) {
+TEST_F(TestbenchTest, PlansNestedLaunchScheduleEpochs) {
   loom_module_t* module = ParseModule(R"(
 kernel.decl @step() launch(%output: buffer)
 
@@ -118,8 +118,14 @@ check.case @nested_launch_schedule {
   kernel.launch.serial {
     kernel.launch.concurrent {
       kernel.launch @step(%output) : (tensor<1xi32>)
+      kernel.launch.serial {
+        kernel.launch @step(%output) : (tensor<1xi32>)
+        kernel.launch @step(%output) : (tensor<1xi32>)
+      }
     }
+    kernel.launch @step(%output) : (tensor<1xi32>)
   }
+  kernel.launch @step(%output) : (tensor<1xi32>)
   check.return
 }
 )");
@@ -131,10 +137,14 @@ check.case @nested_launch_schedule {
 
   ASSERT_EQ(plan.case_count, 1u);
   const loom_testbench_case_plan_t& case_plan = plan.cases[0];
-  ASSERT_EQ(case_plan.invocation_count, 1u);
-  EXPECT_EQ(case_plan.invocations[0].execution_epoch,
-            LOOM_TESTBENCH_EXECUTION_EPOCH_INVALID);
-  EXPECT_EQ(case_plan.invocations[0].launch_schedule_depth, 2u);
+  ASSERT_EQ(case_plan.invocation_count, 5u);
+  const iree_host_size_t expected_epochs[] = {0, 0, 1, 2, 3};
+  const iree_host_size_t expected_depths[] = {2, 3, 3, 1, 0};
+  for (iree_host_size_t i = 0; i < case_plan.invocation_count; ++i) {
+    EXPECT_EQ(case_plan.invocations[i].execution_epoch, expected_epochs[i]);
+    EXPECT_EQ(case_plan.invocations[i].launch_schedule_depth,
+              expected_depths[i]);
+  }
   EXPECT_EQ(plan.issue_count, 0u);
 
   loom_module_free(module);

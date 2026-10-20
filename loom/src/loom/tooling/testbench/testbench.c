@@ -787,6 +787,19 @@ static bool loom_testbench_parameter_names_have_duplicate(
   return false;
 }
 
+typedef struct loom_testbench_launch_schedule_frame_t {
+  // Next operation awaiting traversal in this schedule region.
+  loom_op_t* next_op;
+  // First execution epoch available to children in this region.
+  iree_host_size_t base_epoch;
+  // Number of execution epochs occupied by children visited so far.
+  iree_host_size_t span;
+  // Number of enclosing launch schedule operations.
+  iree_host_size_t depth;
+  // True when direct children share |base_epoch|.
+  bool is_concurrent;
+} loom_testbench_launch_schedule_frame_t;
+
 typedef struct loom_testbench_invocation_planner_t {
   // Module whose invocation operations are being planned.
   const loom_module_t* module;
@@ -804,9 +817,78 @@ typedef struct loom_testbench_invocation_planner_t {
   iree_host_size_t issue_capacity;
   // Number of initialized entries in |issues|.
   iree_host_size_t* issue_count;
+  // Arena owning the reusable launch-schedule traversal stack.
+  iree_arena_allocator_t* arena;
+  // Active structured launch-schedule traversal frames.
+  loom_testbench_launch_schedule_frame_t* schedule_frames;
+  // Number of active entries in |schedule_frames|.
+  iree_host_size_t schedule_frame_count;
+  // Number of allocated entries in |schedule_frames|.
+  iree_host_size_t schedule_frame_capacity;
   // Epoch assigned to the next ordered kernel launch.
   iree_host_size_t next_execution_epoch;
 } loom_testbench_invocation_planner_t;
+
+static iree_status_t loom_testbench_reserve_launch_schedule_frames(
+    loom_testbench_invocation_planner_t* planner,
+    iree_host_size_t additional_count) {
+  const iree_host_size_t required_count =
+      planner->schedule_frame_count + additional_count;
+  if (required_count <= planner->schedule_frame_capacity) {
+    return iree_ok_status();
+  }
+  return iree_arena_grow_array(
+      planner->arena, planner->schedule_frame_count, required_count,
+      sizeof(*planner->schedule_frames), &planner->schedule_frame_capacity,
+      (void**)&planner->schedule_frames);
+}
+
+static iree_status_t loom_testbench_push_launch_schedule_frame(
+    loom_testbench_invocation_planner_t* planner, const loom_op_t* schedule_op,
+    iree_host_size_t base_epoch, iree_host_size_t depth) {
+  IREE_RETURN_IF_ERROR(
+      loom_testbench_reserve_launch_schedule_frames(planner, 1));
+  loom_region_t* body = loom_testbench_launch_schedule_body(schedule_op);
+  loom_block_t* block =
+      body && body->block_count != 0 ? loom_region_entry_block(body) : NULL;
+  planner->schedule_frames[planner->schedule_frame_count++] =
+      (loom_testbench_launch_schedule_frame_t){
+          .next_op = block ? block->first_op : NULL,
+          .base_epoch = base_epoch,
+          .span = 0,
+          .depth = depth,
+          .is_concurrent = loom_kernel_launch_concurrent_isa(schedule_op),
+      };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_launch_schedule_child_epoch(
+    const loom_testbench_launch_schedule_frame_t* frame,
+    iree_host_size_t* out_epoch) {
+  *out_epoch = frame->base_epoch;
+  if (frame->is_concurrent) {
+    return iree_ok_status();
+  }
+  if (!iree_host_size_checked_add(frame->base_epoch, frame->span, out_epoch)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "launch schedule execution epoch overflow");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_commit_launch_schedule_span(
+    loom_testbench_launch_schedule_frame_t* frame,
+    iree_host_size_t child_span) {
+  if (frame->is_concurrent) {
+    frame->span = iree_max(frame->span, child_span);
+    return iree_ok_status();
+  }
+  if (!iree_host_size_checked_add(frame->span, child_span, &frame->span)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "launch schedule execution span overflow");
+  }
+  return iree_ok_status();
+}
 
 static void loom_testbench_append_invocation_plan(
     loom_testbench_invocation_planner_t* planner, const loom_op_t* op,
@@ -832,29 +914,49 @@ static void loom_testbench_append_invocation_plan(
   }
 }
 
-static void loom_testbench_plan_launch_schedule(
+static iree_status_t loom_testbench_plan_launch_schedule(
     loom_testbench_invocation_planner_t* planner,
     const loom_op_t* schedule_op) {
-  const bool is_concurrent = loom_kernel_launch_concurrent_isa(schedule_op);
-  const iree_host_size_t concurrent_epoch = planner->next_execution_epoch;
-  iree_host_size_t direct_launch_count = 0;
+  IREE_ASSERT_EQ(planner->schedule_frame_count, 0u);
+  IREE_RETURN_IF_ERROR(loom_testbench_push_launch_schedule_frame(
+      planner, schedule_op, planner->next_execution_epoch, /*depth=*/1));
 
-  loom_testbench_launch_schedule_iterator_t iterator;
-  loom_testbench_launch_schedule_iterator_initialize(schedule_op, &iterator);
-  loom_op_t* op = NULL;
-  iree_host_size_t depth = 0;
-  while (loom_testbench_launch_schedule_iterator_next(&iterator, &op, &depth)) {
-    if (loom_kernel_launch_isa(op)) {
-      iree_host_size_t execution_epoch = LOOM_TESTBENCH_EXECUTION_EPOCH_INVALID;
-      if (depth == 1) {
-        execution_epoch =
-            is_concurrent ? concurrent_epoch : planner->next_execution_epoch++;
-        ++direct_launch_count;
+  while (planner->schedule_frame_count != 0) {
+    loom_testbench_launch_schedule_frame_t* frame =
+        &planner->schedule_frames[planner->schedule_frame_count - 1];
+    if (frame->next_op == NULL) {
+      const iree_host_size_t completed_span = frame->span;
+      --planner->schedule_frame_count;
+      if (planner->schedule_frame_count == 0) {
+        if (!iree_host_size_checked_add(planner->next_execution_epoch,
+                                        completed_span,
+                                        &planner->next_execution_epoch)) {
+          return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                  "testbench execution epoch overflow");
+        }
+      } else {
+        IREE_RETURN_IF_ERROR(loom_testbench_commit_launch_schedule_span(
+            &planner->schedule_frames[planner->schedule_frame_count - 1],
+            completed_span));
       }
-      loom_testbench_append_invocation_plan(planner, op, execution_epoch,
-                                            depth);
-    } else if (!loom_testbench_is_launch_schedule_op(op) &&
-               !loom_kernel_launch_yield_isa(op)) {
+      continue;
+    }
+
+    loom_op_t* op = frame->next_op;
+    frame->next_op = op->next_op;
+    iree_host_size_t child_epoch = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_testbench_launch_schedule_child_epoch(frame, &child_epoch));
+    if (loom_kernel_launch_isa(op)) {
+      loom_testbench_append_invocation_plan(planner, op, child_epoch,
+                                            frame->depth);
+      IREE_RETURN_IF_ERROR(
+          loom_testbench_commit_launch_schedule_span(frame, 1));
+    } else if (loom_testbench_is_launch_schedule_op(op)) {
+      const iree_host_size_t child_depth = frame->depth + 1;
+      IREE_RETURN_IF_ERROR(loom_testbench_push_launch_schedule_frame(
+          planner, op, child_epoch, child_depth));
+    } else if (!loom_kernel_launch_yield_isa(op)) {
       loom_testbench_append_issue(
           planner->issues, planner->issue_capacity, planner->issue_count,
           LOOM_TESTBENCH_ISSUE_UNSUPPORTED_CASE_BODY_OP, planner->case_index,
@@ -862,13 +964,10 @@ static void loom_testbench_plan_launch_schedule(
           LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID, op, planner->case_plan->ref);
     }
   }
-
-  if (is_concurrent && direct_launch_count != 0) {
-    ++planner->next_execution_epoch;
-  }
+  return iree_ok_status();
 }
 
-static void loom_testbench_plan_case_body(
+static iree_status_t loom_testbench_plan_case_body(
     const loom_module_t* module, iree_host_size_t case_index,
     iree_host_size_t max_samples_per_case,
     loom_testbench_case_plan_t* case_plan,
@@ -882,7 +981,8 @@ static void loom_testbench_plan_case_body(
     iree_host_size_t* inout_invocation_count,
     loom_testbench_expectation_plan_t* expectations,
     iree_host_size_t* inout_expectation_count, loom_testbench_issue_t* issues,
-    iree_host_size_t issue_capacity, iree_host_size_t* inout_issue_count) {
+    iree_host_size_t issue_capacity, iree_host_size_t* inout_issue_count,
+    iree_arena_allocator_t* arena) {
   case_plan->parameters =
       parameters ? parameters + *inout_parameter_count : NULL;
   case_plan->value_sources =
@@ -908,6 +1008,7 @@ static void loom_testbench_plan_case_body(
       .issues = issues,
       .issue_capacity = issue_capacity,
       .issue_count = inout_issue_count,
+      .arena = arena,
   };
 
   loom_region_t* body = loom_check_case_body(case_plan->op);
@@ -925,7 +1026,8 @@ static void loom_testbench_plan_case_body(
       }
 
       if (loom_testbench_is_launch_schedule_op(op)) {
-        loom_testbench_plan_launch_schedule(&invocation_planner, op);
+        IREE_RETURN_IF_ERROR(
+            loom_testbench_plan_launch_schedule(&invocation_planner, op));
         continue;
       }
 
@@ -1038,6 +1140,7 @@ static void loom_testbench_plan_case_body(
   if (case_plan->issue_count != 0) {
     case_plan->sample_count = 0;
   }
+  return iree_ok_status();
 }
 
 static void loom_testbench_fill_record_index_map(
@@ -1471,11 +1574,11 @@ iree_status_t loom_testbench_plan_module(
   iree_host_size_t expectation_count = 0;
   iree_host_size_t issue_count = 0;
   for (iree_host_size_t i = 0; i < case_count; ++i) {
-    loom_testbench_plan_case_body(
+    IREE_RETURN_IF_ERROR(loom_testbench_plan_case_body(
         module, i, max_samples_per_case, &cases[i], parameters,
         &parameter_count, value_sources, &value_source_count, file_writes,
         &file_write_count, invocations, &invocation_count, expectations,
-        &expectation_count, issues, issue_capacity, &issue_count);
+        &expectation_count, issues, issue_capacity, &issue_count, arena));
   }
 
   const loom_testbench_scenario_plan_t* scenarios = NULL;
