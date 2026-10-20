@@ -131,6 +131,15 @@ bool iree_hal_amd_fabric_memory_constrain_profile(
     iree_hal_external_storage_class_t source_class,
     iree_hal_pool_export_classes_t exports, amdf_memory_profile_t* profile);
 
+// Qualifies CPU writes to one prospective device access before allocation.
+// Options describe owned, host-visible backing and a writable host view.
+// A false result means this placement has no qualified publication path;
+// native query failures propagate independently. This cold query owns no state.
+iree_status_t iree_hal_amd_fabric_memory_query_host_publication(
+    const amdf_api_t* api, const iree_hal_amd_fabric_memory_options_t* options,
+    uint32_t access_ordinal, uint32_t queue_family_ordinal,
+    bool* out_supported);
+
 // Allocates native backing, rounding the extent to the profile granularity.
 // A nonzero host_access creates the requested view before publication.
 // Requested I/O pins are prepared against that view but remain detached. The

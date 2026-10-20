@@ -55,42 +55,7 @@ static iree_status_t iree_hal_amd_gpu_pm4_program_select_memory(
                           AMDF_MEMORY_FLAG_HOST_VISIBLE) &&
         iree_all_bits_set(profile.host_mapping.supported_access,
                           AMDF_MEMORY_MAP_FLAG_WRITE);
-    if (mapped) {
-      // A CPU aperture alone does not qualify publication to command fetch.
-      // Keep local placement when that edge is unavailable and initialize the
-      // resident bytes through the ordinary device-side upload instead.
-      const amdf_memory_profile_pair_query_t query = {
-          .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE_PAIR_QUERY,
-          .structure_size = sizeof(query),
-          .memory_profile_ordinal = profile.ordinal,
-          .access_count = 1,
-          .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE |
-                            (upload ? 0 : AMDF_MEMORY_FLAG_DEVICE_LOCAL),
-          .accesses = &pool->access,
-          .producer = {.kind = AMDF_MEMORY_SITE_KIND_HOST,
-                       .value.host_access = AMDF_MEMORY_MAP_FLAG_WRITE},
-          .consumer = {.kind = AMDF_MEMORY_SITE_KIND_DEVICE,
-                       .value.device = {.access_ordinal = 0,
-                                        .queue_family_ordinal =
-                                            native_family_ordinal}},
-      };
-      amdf_memory_pair_info_t pair = {
-          .type = AMDF_STRUCTURE_TYPE_MEMORY_PAIR_INFO,
-          .structure_size = sizeof(pair),
-      };
-      status = pool->context->api->memory_scope_query_pair_info(scope, &query,
-                                                                &pair);
-      if (status == amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED)) {
-        mapped = false;
-      } else {
-        IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
-            status, "qualify resident program host publication"));
-      }
-    }
-    if (upload && !mapped) {
-      continue;
-    }
-    *out_options = (iree_hal_amd_fabric_memory_options_t){
+    iree_hal_amd_fabric_memory_options_t options = {
         .scope = scope,
         .profile = profile,
         .access_count = 1,
@@ -99,6 +64,21 @@ static iree_status_t iree_hal_amd_gpu_pm4_program_select_memory(
                           (upload ? 0 : AMDF_MEMORY_FLAG_DEVICE_LOCAL),
         .host_access = mapped ? AMDF_MEMORY_MAP_FLAG_WRITE : 0,
     };
+    if (mapped) {
+      // A CPU aperture alone does not qualify publication to command fetch.
+      // Keep local placement when that edge is unavailable and initialize the
+      // resident bytes through the ordinary device-side upload instead.
+      IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_query_host_publication(
+          pool->context->api, &options, 0, native_family_ordinal, &mapped));
+      if (!mapped) {
+        options.required_flags &= ~AMDF_MEMORY_FLAG_HOST_VISIBLE;
+        options.host_access = 0;
+      }
+    }
+    if (upload && !mapped) {
+      continue;
+    }
+    *out_options = options;
     *out_found = true;
     break;
   }

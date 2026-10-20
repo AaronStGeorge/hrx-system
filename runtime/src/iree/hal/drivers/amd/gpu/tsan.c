@@ -37,10 +37,11 @@ iree_status_t iree_hal_amd_gpu_tsan_calculate_config(
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_amd_gpu_tsan_select_memory(
-    const iree_hal_amd_gpu_context_t* context,
-    amdf_memory_device_access_t* access,
-    iree_hal_amd_fabric_memory_options_t* out_options) {
+static iree_status_t iree_hal_amd_gpu_tsan_select_scope(
+    const iree_hal_amd_gpu_context_t* context, uint32_t queue_family_ordinal,
+    amdf_memory_scope_t* scope, amdf_memory_device_access_t* access,
+    iree_hal_amd_fabric_memory_options_t* out_options, bool* out_found) {
+  *out_found = false;
   *access = (amdf_memory_device_access_t){
       .device = context->device,
       .requirements =
@@ -50,10 +51,6 @@ static iree_status_t iree_hal_amd_gpu_tsan_select_memory(
               .address_kinds = UINT64_C(1) << AMDF_MEMORY_ADDRESS_GPU,
           },
   };
-  // Unified-memory devices may expose system storage without a local heap.
-  amdf_memory_scope_t* scope = context->memory_scope_count
-                                   ? context->memory_scopes[0]
-                                   : context->fabric->system_scope;
   amdf_memory_scope_info_t info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_SCOPE_INFO,
       .structure_size = sizeof(info),
@@ -90,7 +87,7 @@ static iree_status_t iree_hal_amd_gpu_tsan_select_memory(
         iree_all_bits_set(
             profile.host_mapping.supported_access,
             AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE)) {
-      *out_options = (iree_hal_amd_fabric_memory_options_t){
+      const iree_hal_amd_fabric_memory_options_t memory = {
           .scope = scope,
           .profile = profile,
           .access_count = 1,
@@ -98,18 +95,21 @@ static iree_status_t iree_hal_amd_gpu_tsan_select_memory(
           .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE,
           .host_access = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
       };
-      found = true;
+      status = iree_hal_amd_fabric_memory_query_host_publication(
+          context->api, &memory, 0, queue_family_ordinal, &found);
+      if (iree_status_is_ok(status) && found) {
+        *out_options = memory;
+      }
     }
   }
-  if (iree_status_is_ok(status) && !found) {
-    status = iree_make_status(IREE_STATUS_UNAVAILABLE,
-                              "GPU TSAN shadow has no host-visible profile");
+  if (iree_status_is_ok(status)) {
+    *out_found = found;
   }
   return status;
 }
 
 iree_status_t iree_hal_amd_gpu_tsan_initialize(
-    const iree_hal_amd_gpu_context_t* context,
+    const iree_hal_amd_gpu_context_t* context, uint32_t queue_family_ordinal,
     const iree_hal_amd_gpu_tsan_options_t* options,
     iree_hal_amd_gpu_tsan_t* out_tsan) {
   *out_tsan = (iree_hal_amd_gpu_tsan_t){0};
@@ -117,8 +117,22 @@ iree_status_t iree_hal_amd_gpu_tsan_initialize(
       iree_hal_amd_gpu_tsan_calculate_config(options, &out_tsan->config));
   amdf_memory_device_access_t access;
   iree_hal_amd_fabric_memory_options_t memory_options;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_amd_gpu_tsan_select_memory(context, &access, &memory_options));
+  bool found = false;
+  // Prefer device-local storage only when its CPU writes can be published.
+  // The system scope also covers devices without a separate local heap.
+  for (uint32_t i = 0; i <= context->memory_scope_count && !found; ++i) {
+    amdf_memory_scope_t* scope = i < context->memory_scope_count
+                                     ? context->memory_scopes[i]
+                                     : context->fabric->system_scope;
+    IREE_RETURN_IF_ERROR(
+        iree_hal_amd_gpu_tsan_select_scope(context, queue_family_ordinal, scope,
+                                           &access, &memory_options, &found));
+  }
+  if (!found) {
+    return iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "GPU TSAN shadow has no host-publishable backing profile");
+  }
   IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_memory_allocate(
       context->api, &memory_options, out_tsan->config.shadow_size, 64,
       context->event_sink, &out_tsan->memory, NULL));

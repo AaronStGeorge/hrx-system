@@ -102,6 +102,40 @@ bool iree_hal_amd_fabric_memory_constrain_profile(
   return true;
 }
 
+iree_status_t iree_hal_amd_fabric_memory_query_host_publication(
+    const amdf_api_t* api, const iree_hal_amd_fabric_memory_options_t* options,
+    uint32_t access_ordinal, uint32_t queue_family_ordinal,
+    bool* out_supported) {
+  *out_supported = false;
+  const amdf_memory_profile_pair_query_t query = {
+      .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE_PAIR_QUERY,
+      .structure_size = sizeof(query),
+      .memory_profile_ordinal = options->profile.ordinal,
+      .access_count = options->access_count,
+      .required_flags = options->required_flags,
+      .accesses = options->accesses,
+      .producer = {.kind = AMDF_MEMORY_SITE_KIND_HOST,
+                   .value.host_access = AMDF_MEMORY_MAP_FLAG_WRITE},
+      .consumer = {.kind = AMDF_MEMORY_SITE_KIND_DEVICE,
+                   .value.device = {.access_ordinal = access_ordinal,
+                                    .queue_family_ordinal =
+                                        queue_family_ordinal}},
+  };
+  amdf_memory_pair_info_t pair = {
+      .type = AMDF_STRUCTURE_TYPE_MEMORY_PAIR_INFO,
+      .structure_size = sizeof(pair),
+  };
+  const amdf_status_t status =
+      api->memory_scope_query_pair_info(options->scope, &query, &pair);
+  if (status == amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      IREE_HAL_AMD_STATUS_FROM_AMDF(status, "qualify host publication"));
+  *out_supported = true;
+  return iree_ok_status();
+}
+
 amdf_memory_release_info_t iree_hal_amd_fabric_memory_deinitialize(
     const amdf_api_t* api, iree_hal_device_event_sink_t event_sink,
     iree_hal_amd_fabric_memory_t* memory) {

@@ -161,12 +161,14 @@ typedef struct iree_hal_amd_fabric_asan_t {
 void iree_hal_amd_fabric_asan_options_initialize(
     iree_hal_amd_fabric_asan_options_t* out_options);
 
-// Prepares native reservations and the selected shadow backing scope. The
+// Prepares native reservations and selects host-publishable shadow backing
+// from the caller's ordered scopes for the exact native queue family. The
 // caller owns out_state before calling and deinitializes it on both success
 // and failure. Native parents remain borrowed until deinitialization succeeds.
 iree_status_t iree_hal_amd_fabric_asan_initialize(
     const amdf_api_t* api, amdf_instance_t* instance, amdf_device_t* device,
-    uint32_t address_domain_ordinal, amdf_memory_scope_t* shadow_scope,
+    uint32_t queue_family_ordinal, uint32_t address_domain_ordinal,
+    uint32_t shadow_scope_count, amdf_memory_scope_t* const* shadow_scopes,
     const iree_hal_amd_fabric_asan_options_t* options,
     iree_hal_device_event_sink_t event_sink, iree_allocator_t host_allocator,
     iree_hal_amd_fabric_asan_t* out_state);

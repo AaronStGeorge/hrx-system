@@ -67,11 +67,12 @@ iree_status_t iree_hal_amd_gpu_tsan_calculate_config(
     iree_hal_amd_gpu_tsan_config_t* out_config);
 
 // Allocates and publishes one queue's shadow on the native allocation owner.
-// Uses host-visible device-local or unified backing for initialization. Native
-// accesses use this context's GPU address domain. Failure leaves
+// Prefers local backing whose host writes can be published to the exact queue
+// family, then system backing. Native accesses use this context's GPU address
+// domain. Failure leaves
 // deinitializable state; the parent joins GPU uses before deinitialization.
 iree_status_t iree_hal_amd_gpu_tsan_initialize(
-    const iree_hal_amd_gpu_context_t* context,
+    const iree_hal_amd_gpu_context_t* context, uint32_t queue_family_ordinal,
     const iree_hal_amd_gpu_tsan_options_t* options,
     iree_hal_amd_gpu_tsan_t* out_tsan);
 

@@ -54,7 +54,10 @@ static iree_status_t iree_hal_amd_fabric_asan_validate_options(
 
 static iree_status_t iree_hal_amd_fabric_asan_prepare_memory(
     iree_hal_amd_fabric_asan_t* state, amdf_memory_scope_t* scope,
-    const amdf_memory_reservation_capabilities_t* capabilities) {
+    uint32_t queue_family_ordinal,
+    const amdf_memory_reservation_capabilities_t* capabilities,
+    bool* out_found) {
+  *out_found = false;
   state->access = (amdf_memory_device_access_t){
       .device = state->device,
       .requirements =
@@ -106,7 +109,7 @@ static iree_status_t iree_hal_amd_fabric_asan_prepare_memory(
         state->config.shadow_slab_size %
                 profile.allocation.byte_length_granularity ==
             0) {
-      state->memory = (iree_hal_amd_fabric_memory_options_t){
+      const iree_hal_amd_fabric_memory_options_t memory = {
           .scope = scope,
           .profile = profile,
           .access_count = 1,
@@ -114,13 +117,15 @@ static iree_status_t iree_hal_amd_fabric_asan_prepare_memory(
           .required_flags = flags,
           .host_access = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
       };
-      found = true;
+      status = iree_hal_amd_fabric_memory_query_host_publication(
+          state->api, &memory, 0, queue_family_ordinal, &found);
+      if (iree_status_is_ok(status) && found) {
+        state->memory = memory;
+      }
     }
   }
-  if (iree_status_is_ok(status) && !found) {
-    status = iree_make_status(
-        IREE_STATUS_UNAVAILABLE,
-        "selected ASAN scope has no host-mapped shadow backing profile");
+  if (iree_status_is_ok(status)) {
+    *out_found = found;
   }
   return status;
 }
@@ -171,7 +176,8 @@ static iree_status_t iree_hal_amd_fabric_asan_premap_shadow(
 
 iree_status_t iree_hal_amd_fabric_asan_initialize(
     const amdf_api_t* api, amdf_instance_t* instance, amdf_device_t* device,
-    uint32_t address_domain_ordinal, amdf_memory_scope_t* shadow_scope,
+    uint32_t queue_family_ordinal, uint32_t address_domain_ordinal,
+    uint32_t shadow_scope_count, amdf_memory_scope_t* const* shadow_scopes,
     const iree_hal_amd_fabric_asan_options_t* options,
     iree_hal_device_event_sink_t event_sink, iree_allocator_t host_allocator,
     iree_hal_amd_fabric_asan_t* out_state) {
@@ -273,8 +279,17 @@ iree_status_t iree_hal_amd_fabric_asan_initialize(
                                                 0, &shadow_info),
       "ASAN shadow address"));
   out_state->config.shadow_base = shadow_info.address;
-  IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_asan_prepare_memory(
-      out_state, shadow_scope, &capabilities));
+  bool found = false;
+  for (uint32_t i = 0; i < shadow_scope_count && !found; ++i) {
+    IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_asan_prepare_memory(
+        out_state, shadow_scopes[i], queue_family_ordinal, &capabilities,
+        &found));
+  }
+  if (!found) {
+    return iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "ASAN shadow has no host-publishable backing profile");
+  }
   if (options->shadow_mode == IREE_HAL_AMD_FABRIC_ASAN_SHADOW_MODE_PREMAPPED) {
     IREE_RETURN_IF_ERROR(iree_hal_amd_fabric_asan_premap_shadow(out_state));
   }

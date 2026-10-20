@@ -564,6 +564,8 @@ typedef struct iree_hal_amd_gpu_device_feedback_prepare_t {
   iree_hal_amd_gpu_device_t* device;
   // Borrowed cold options, consumed before construction returns.
   const iree_hal_amd_gpu_device_options_t* options;
+  // Exact native execution family consuming sanitizer shadow writes.
+  uint32_t queue_family_ordinal;
   // Requested address-sanitizer provisioning.
   bool asan_enabled;
   // Requested queue-local race-sanitizer provisioning.
@@ -597,11 +599,16 @@ static void iree_hal_amd_gpu_device_prepare_feedback(void* user_data) {
   device->feedback.failure_user_data = device;
   const iree_hal_amd_gpu_device_options_t* options = prepare->options;
   if (iree_status_is_ok(prepare->status) && prepare->asan_enabled) {
-    amdf_memory_scope_t* scope = device->context->fabric->system_scope;
+    amdf_memory_scope_t* scopes[2] = {
+        device->context->fabric->system_scope,
+        device->context->fabric->system_scope,
+    };
+    uint32_t scope_count = 1;
     if (options->asan.shadow_backing ==
             IREE_HAL_AMD_GPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL &&
         device->context->memory_scope_count) {
-      scope = device->context->memory_scopes[0];
+      scopes[0] = device->context->memory_scopes[0];
+      scope_count = 2;
     }
     prepare->status = iree_allocator_malloc(device->host_allocator,
                                             sizeof(*device->memory.asan),
@@ -609,9 +616,9 @@ static void iree_hal_amd_gpu_device_prepare_feedback(void* user_data) {
     if (iree_status_is_ok(prepare->status)) {
       prepare->status = iree_hal_amd_fabric_asan_initialize(
           device->context->api, device->context->fabric->instance,
-          device->context->device,
-          device->memory.capabilities.address_domain_ordinal, scope,
-          &options->asan.memory, device->context->event_sink,
+          device->context->device, prepare->queue_family_ordinal,
+          device->memory.capabilities.address_domain_ordinal, scope_count,
+          scopes, &options->asan.memory, device->context->event_sink,
           device->host_allocator, device->memory.asan);
       device->memory.asan->failure_callback = iree_hal_amd_gpu_feedback_fail;
       device->memory.asan->failure_user_data = &device->feedback;
@@ -630,7 +637,8 @@ static void iree_hal_amd_gpu_device_prepare_feedback(void* user_data) {
          i < device->memory.tsan_count && iree_status_is_ok(prepare->status);
          ++i) {
       prepare->status = iree_hal_amd_gpu_tsan_initialize(
-          device->context, &options->tsan.memory, &device->memory.tsan[i]);
+          device->context, prepare->queue_family_ordinal, &options->tsan.memory,
+          &device->memory.tsan[i]);
     }
   }
 }
@@ -824,6 +832,7 @@ iree_status_t iree_hal_amd_gpu_device_create(
     iree_hal_amd_gpu_device_feedback_prepare_t prepare = {
         .device = device,
         .options = options,
+        .queue_family_ordinal = family_ordinal,
         .asan_enabled = asan_enabled,
         .tsan_enabled = tsan_enabled};
     iree_hal_amd_gpu_device_prepare_feedback(&prepare);
