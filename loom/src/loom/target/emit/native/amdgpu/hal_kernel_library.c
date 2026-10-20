@@ -689,6 +689,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel(
   loom_low_planning_statistics_t planning_statistics = {0};
   loom_low_storage_lease_provider_t storage_lease_provider = {0};
   loom_amdgpu_storage_lease_provider(&storage_lease_provider);
+  const loom_low_schedule_structural_model_t storage_address_model =
+      loom_amdgpu_descriptor_storage_address_model(plan->target.descriptor_set);
   const loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &low_registry->registry,
       .function_target_facts = plan->target.target_facts,
@@ -697,6 +699,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel(
       .instruction_preferences =
           loom_amdgpu_placement_instruction_preferences(&plan->target),
       .schedule_structural_state_reads = schedule_state_reads,
+      .schedule_structural_models = {.values = &storage_address_model,
+                                     .count = 1},
       .schedule_flags =
           LOOM_LOW_SCHEDULE_FLAG_RETAIN_VALUE_PRODUCER_NODES |
           LOOM_LOW_SCHEDULE_FLAG_RETAIN_ACYCLIC_MEMORY_COMPLETIONS,

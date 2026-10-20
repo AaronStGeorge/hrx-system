@@ -319,3 +319,72 @@ low.func.def target<amdgpu.rdna3_5.core>(@target) @overlapping_slice_reloads(%bl
   global_store_b32 v1, v0, s[0:1] offset:0
   s_waitcnt_vscnt vscnt(0)
   s_endpgm
+
+// ====
+
+// Storage addresses consume VALU issue and latency just like their emitted
+// moves. The second address fills the first address latency before either
+// LDS read; neither move is a zero-cost alias.
+// RUN: emit amdgpu-assembly @address_issue_wave32 strategy=resource-stall waits=none
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target<amdgpu.rdna3.core>(@target) @address_issue_wave32(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm {
+  %storage = storage {byte_alignment = 4, byte_length = 8192} : low.storage<workgroup>
+  %slow = ds_read_b32 %lhs
+  %first_address = storage_address %storage : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %second_address = storage_address %storage {offset = 4096} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %first = ds_read_b32 %first_address
+  %second = ds_read_b32 %second_address
+  %product = v_mul_f32 %slow, %rhs
+  %sum = v_add_f32 %first, %product
+  %result = v_add_f32 %sum, %second
+  ds_write_b32 %lhs, %result
+  return
+}
+
+// ----
+  ds_read_b32 v2, v1 offset:0
+  v_mov_b32 v3, 0
+  v_mov_b32 v4, 4096
+  ds_read_b32 v3, v3 offset:0
+  ds_read_b32 v4, v4 offset:0
+  v_mul_f32 v0, v2, v0
+  v_add_f32 v0, v3, v0
+  v_add_f32 v0, v0, v4
+  ds_write_b32 v1, v0 offset:0
+  s_endpgm
+
+// ====
+
+// The wave64 model uses the same native address move contract with its own
+// issue interval. Each address feeds a load before opening the next one.
+// RUN: emit amdgpu-assembly @address_issue_wave64 strategy=resource-stall waits=none
+
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) @address_issue_wave64(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm {
+  %storage = storage {byte_alignment = 4, byte_length = 8192} : low.storage<workgroup>
+  %slow = ds_read_b32 %lhs
+  %first_address = storage_address %storage : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %second_address = storage_address %storage {offset = 4096} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %first = ds_read_b32 %first_address
+  %second = ds_read_b32 %second_address
+  %product = v_mul_f32 %slow, %rhs
+  %sum = v_add_f32 %first, %product
+  %result = v_add_f32 %sum, %second
+  ds_write_b32 %lhs, %result
+  return
+}
+
+// ----
+  ds_read_b32 v2, v1 offset:0
+  v_mov_b32 v3, 0
+  ds_read_b32 v3, v3 offset:0
+  v_mov_b32 v4, 4096
+  ds_read_b32 v4, v4 offset:0
+  v_mul_f32 v0, v2, v0
+  v_add_f32 v0, v3, v0
+  v_add_f32 v0, v0, v4
+  ds_write_b32 v1, v0 offset:0
+  s_endpgm

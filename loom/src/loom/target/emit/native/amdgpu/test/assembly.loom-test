@@ -1862,8 +1862,8 @@ low.func.def target<amdgpu.rdna3.core>(@gfx11_target) @gfx11_storage_address() a
 
 // ----
   v_mov_b32 v0, 12
-  v_mov_b32 v0, 148
   v_mov_b32 v0, 4104
+  v_mov_b32 v0, 148
   s_endpgm
 
 // ====
