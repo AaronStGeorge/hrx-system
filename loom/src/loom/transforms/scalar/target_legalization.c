@@ -1359,34 +1359,45 @@ enum loom_scalar_float_extremum_kind_e {
   LOOM_SCALAR_FLOAT_EXTREMUM_MAXIMUM = 1,
 };
 
-// Builds an exact F32 number-preferring extremum from terminal scalar
-// operations. Ordered comparisons select unequal numeric operands. Equal
-// finite operands have identical bits, except for opposing signed zeros: OR
-// selects -0 for minimum and AND selects +0 for maximum. The final selects
-// choose the numeric peer when exactly one operand is NaN.
-static iree_status_t loom_scalar_legalize_build_f32_number_extremum(
+// Builds an exact number-preferring extremum from terminal scalar operations.
+// Ordered comparisons select unequal numeric operands. Equal finite operands
+// have identical bits, except for opposing signed zeros: OR selects -0 for
+// minimum and AND selects +0 for maximum. The final selects choose the numeric
+// peer when exactly one operand is NaN.
+static iree_status_t loom_scalar_legalize_build_number_extremum(
     loom_builder_t* builder, loom_location_id_t location,
     loom_scalar_float_extremum_kind_t kind, uint8_t fastmath,
-    loom_value_id_t lhs, loom_value_id_t rhs, loom_value_id_t* out_result) {
-  const loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-  const loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+    loom_value_id_t lhs, loom_value_id_t rhs, loom_type_t type,
+    loom_value_id_t* out_result) {
+  loom_numeric_float_encoding_t encoding = {0};
+  const bool has_encoding =
+      loom_numeric_float_encoding(loom_type_element_type(type), &encoding);
+  IREE_ASSERT(has_encoding && "floating extremum type must have an encoding");
+  (void)has_encoding;
+  const loom_type_t integer_type = loom_type_scalar(encoding.integer_type);
 
   loom_op_t* lhs_bits_op = NULL;
   IREE_RETURN_IF_ERROR(loom_scalar_bitcast_build(
-      builder, lhs, f32_type, i32_type, location, &lhs_bits_op));
+      builder, lhs, type, integer_type, location, &lhs_bits_op));
   loom_op_t* rhs_bits_op = NULL;
   IREE_RETURN_IF_ERROR(loom_scalar_bitcast_build(
-      builder, rhs, f32_type, i32_type, location, &rhs_bits_op));
-  loom_value_id_t tie_bits = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_binary_i32(
-      builder, location,
-      kind == LOOM_SCALAR_FLOAT_EXTREMUM_MINIMUM ? LOOM_OP_SCALAR_ORI
-                                                 : LOOM_OP_SCALAR_ANDI,
-      loom_scalar_bitcast_result(lhs_bits_op),
-      loom_scalar_bitcast_result(rhs_bits_op), &tie_bits));
+      builder, rhs, type, integer_type, location, &rhs_bits_op));
+  loom_op_t* tie_bits_op = NULL;
+  if (kind == LOOM_SCALAR_FLOAT_EXTREMUM_MINIMUM) {
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_ori_build(builder, loom_scalar_bitcast_result(lhs_bits_op),
+                              loom_scalar_bitcast_result(rhs_bits_op),
+                              integer_type, location, &tie_bits_op));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_andi_build(builder, loom_scalar_bitcast_result(lhs_bits_op),
+                               loom_scalar_bitcast_result(rhs_bits_op),
+                               integer_type, location, &tie_bits_op));
+  }
   loom_op_t* tie_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_bitcast_build(builder, tie_bits, i32_type,
-                                                 f32_type, location, &tie_op));
+  IREE_RETURN_IF_ERROR(
+      loom_scalar_bitcast_build(builder, loom_op_results(tie_bits_op)[0],
+                                integer_type, type, location, &tie_op));
   const loom_value_id_t tie = loom_scalar_bitcast_result(tie_op);
 
   const loom_scalar_cmpf_predicate_t predicate =
@@ -1401,11 +1412,11 @@ static iree_status_t loom_scalar_legalize_build_f32_number_extremum(
                                               lhs, location, &rhs_ordered_op));
   loom_value_id_t rhs_or_tie = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_select(
-      builder, location, f32_type, loom_scalar_cmpf_result(rhs_ordered_op), rhs,
+      builder, location, type, loom_scalar_cmpf_result(rhs_ordered_op), rhs,
       tie, &rhs_or_tie));
   loom_value_id_t numeric = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_select(
-      builder, location, f32_type, loom_scalar_cmpf_result(lhs_ordered_op), lhs,
+      builder, location, type, loom_scalar_cmpf_result(lhs_ordered_op), lhs,
       rhs_or_tie, &numeric));
 
   loom_op_t* lhs_nan_op = NULL;
@@ -1418,14 +1429,14 @@ static iree_status_t loom_scalar_legalize_build_f32_number_extremum(
                                               rhs, rhs, location, &rhs_nan_op));
   loom_value_id_t rhs_checked = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_select(
-      builder, location, f32_type, loom_scalar_cmpf_result(rhs_nan_op), lhs,
+      builder, location, type, loom_scalar_cmpf_result(rhs_nan_op), lhs,
       numeric, &rhs_checked));
-  return loom_scalar_legalize_build_select(builder, location, f32_type,
+  return loom_scalar_legalize_build_select(builder, location, type,
                                            loom_scalar_cmpf_result(lhs_nan_op),
                                            rhs, rhs_checked, out_result);
 }
 
-iree_status_t loom_scalar_legalize_f32_number_extremum(
+iree_status_t loom_scalar_legalize_number_extremum(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
     loom_target_legalizer_result_t* out_result) {
@@ -1434,13 +1445,15 @@ iree_status_t loom_scalar_legalize_f32_number_extremum(
   loom_builder_t* builder = &rewriter->builder;
   loom_builder_set_before(builder, op);
   const loom_value_id_t checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  const loom_type_t type =
+      loom_module_value_type(context->module, loom_op_operands(op)[0]);
   loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_f32_number_extremum(
+  IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_number_extremum(
       builder, op->location,
       loom_scalar_minnumf_isa(op) ? LOOM_SCALAR_FLOAT_EXTREMUM_MINIMUM
                                   : LOOM_SCALAR_FLOAT_EXTREMUM_MAXIMUM,
       op->instance_flags, loom_op_operands(op)[0], loom_op_operands(op)[1],
-      &replacement));
+      type, &replacement));
   IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
       rewriter, op, &replacement, 1, checkpoint));
   IREE_RETURN_IF_ERROR(
@@ -1449,7 +1462,7 @@ iree_status_t loom_scalar_legalize_f32_number_extremum(
   return iree_ok_status();
 }
 
-iree_status_t loom_scalar_legalize_f32_clamp(
+iree_status_t loom_scalar_legalize_clamp(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
     loom_target_legalizer_result_t* out_result) {
@@ -1458,8 +1471,8 @@ iree_status_t loom_scalar_legalize_f32_clamp(
   loom_builder_t* builder = &rewriter->builder;
   loom_builder_set_before(builder, op);
   const loom_value_id_t checkpoint = loom_rewriter_value_checkpoint(rewriter);
-  const loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   const loom_value_id_t value = loom_scalar_clampf_value(op);
+  const loom_type_t type = loom_module_value_type(context->module, value);
   const loom_value_id_t lower = loom_scalar_clampf_lower(op);
   const loom_value_id_t upper = loom_scalar_clampf_upper(op);
   const uint8_t fastmath = op->instance_flags;
@@ -1484,12 +1497,12 @@ iree_status_t loom_scalar_legalize_f32_clamp(
       break;
     }
     case LOOM_SCALAR_CLAMPF_MODE_NUMBER: {
-      IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_f32_number_extremum(
+      IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_number_extremum(
           builder, op->location, LOOM_SCALAR_FLOAT_EXTREMUM_MAXIMUM, fastmath,
-          value, lower, &lower_bounded));
-      IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_f32_number_extremum(
+          value, lower, type, &lower_bounded));
+      IREE_RETURN_IF_ERROR(loom_scalar_legalize_build_number_extremum(
           builder, op->location, LOOM_SCALAR_FLOAT_EXTREMUM_MINIMUM, fastmath,
-          lower_bounded, upper, &replacement));
+          lower_bounded, upper, type, &replacement));
       break;
     }
     case LOOM_SCALAR_CLAMPF_MODE_IEEE: {
@@ -1744,21 +1757,24 @@ static const loom_target_legalizer_rule_t kScalarLegalizerRules[] = {
     },
     {
         .root_kind = LOOM_OP_SCALAR_CLAMPF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_F32,
+        .first_operand_element_types =
+            LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64,
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_UNHANDLED,
-        .legalize = loom_scalar_legalize_f32_clamp,
+        .legalize = loom_scalar_legalize_clamp,
     },
     {
         .root_kind = LOOM_OP_SCALAR_MINNUMF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_F32,
+        .first_operand_element_types =
+            LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64,
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_UNHANDLED,
-        .legalize = loom_scalar_legalize_f32_number_extremum,
+        .legalize = loom_scalar_legalize_number_extremum,
     },
     {
         .root_kind = LOOM_OP_SCALAR_MAXNUMF,
-        .first_operand_element_types = LOOM_SCALAR_TYPE_SET_F32,
+        .first_operand_element_types =
+            LOOM_SCALAR_TYPE_SET_F32 | LOOM_SCALAR_TYPE_SET_F64,
         .flags = LOOM_TARGET_LEGALIZER_ENTRY_FLAG_REQUIRE_CONTRACT_UNHANDLED,
-        .legalize = loom_scalar_legalize_f32_number_extremum,
+        .legalize = loom_scalar_legalize_number_extremum,
     },
     {
         .root_kind = LOOM_OP_SCALAR_CMPF,

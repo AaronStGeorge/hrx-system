@@ -71,6 +71,78 @@ func.def @scalar_f32_reference_extrema(%value: f32, %lhs: f32, %rhs: f32) -> (f3
 // ====
 // RUN: pass target=wasm:simd128 target-legalize{mode=final}
 
+// F64 extrema use the same exact scalar recipe with an I64 tie carrier.
+func.def @scalar_f64_reference_extrema(%value: f64, %lhs: f64, %rhs: f64) -> (f64, f64, f64, f64, f64) {
+  %minnum = scalar.minnumf %lhs, %rhs : f64
+  %maxnum = scalar.maxnumf %lhs, %rhs : f64
+  %ordered = scalar.clampf<ordered> %value, %lhs, %rhs : f64
+  %number = scalar.clampf<number> %value, %lhs, %rhs : f64
+  %ieee = scalar.clampf<ieee> %value, %lhs, %rhs : f64
+  func.return %minnum, %maxnum, %ordered, %number, %ieee : f64, f64, f64, f64, f64
+}
+
+// ----
+func.def @scalar_f64_reference_extrema(%value: f64, %lhs: f64, %rhs: f64) -> (f64, f64, f64, f64, f64) {
+  %55 = scalar.bitcast %lhs : f64 to i64
+  %56 = scalar.bitcast %rhs : f64 to i64
+  %57 = scalar.ori %55, %56 : i64
+  %58 = scalar.bitcast %57 : i64 to f64
+  %59 = scalar.cmpf olt, %lhs, %rhs : f64
+  %60 = scalar.cmpf olt, %rhs, %lhs : f64
+  %61 = scf.select %60, %rhs, %58 : f64
+  %62 = scf.select %59, %lhs, %61 : f64
+  %63 = scalar.cmpf une, %lhs, %lhs : f64
+  %64 = scalar.cmpf une, %rhs, %rhs : f64
+  %65 = scf.select %64, %lhs, %62 : f64
+  %minnum = scf.select %63, %rhs, %65 : f64
+  %43 = scalar.bitcast %lhs : f64 to i64
+  %44 = scalar.bitcast %rhs : f64 to i64
+  %45 = scalar.andi %43, %44 : i64
+  %46 = scalar.bitcast %45 : i64 to f64
+  %47 = scalar.cmpf ogt, %lhs, %rhs : f64
+  %48 = scalar.cmpf ogt, %rhs, %lhs : f64
+  %49 = scf.select %48, %rhs, %46 : f64
+  %50 = scf.select %47, %lhs, %49 : f64
+  %51 = scalar.cmpf une, %lhs, %lhs : f64
+  %52 = scalar.cmpf une, %rhs, %rhs : f64
+  %53 = scf.select %52, %lhs, %50 : f64
+  %maxnum = scf.select %51, %rhs, %53 : f64
+  %39 = scalar.cmpf olt, %value, %lhs : f64
+  %40 = scf.select %39, %lhs, %value : f64
+  %41 = scalar.cmpf ogt, %40, %rhs : f64
+  %ordered = scf.select %41, %rhs, %40 : f64
+  %15 = scalar.bitcast %value : f64 to i64
+  %16 = scalar.bitcast %lhs : f64 to i64
+  %17 = scalar.andi %15, %16 : i64
+  %18 = scalar.bitcast %17 : i64 to f64
+  %19 = scalar.cmpf ogt, %value, %lhs : f64
+  %20 = scalar.cmpf ogt, %lhs, %value : f64
+  %21 = scf.select %20, %lhs, %18 : f64
+  %22 = scf.select %19, %value, %21 : f64
+  %23 = scalar.cmpf une, %value, %value : f64
+  %24 = scalar.cmpf une, %lhs, %lhs : f64
+  %25 = scf.select %24, %value, %22 : f64
+  %26 = scf.select %23, %lhs, %25 : f64
+  %27 = scalar.bitcast %26 : f64 to i64
+  %28 = scalar.bitcast %rhs : f64 to i64
+  %29 = scalar.ori %27, %28 : i64
+  %30 = scalar.bitcast %29 : i64 to f64
+  %31 = scalar.cmpf olt, %26, %rhs : f64
+  %32 = scalar.cmpf olt, %rhs, %26 : f64
+  %33 = scf.select %32, %rhs, %30 : f64
+  %34 = scf.select %31, %26, %33 : f64
+  %35 = scalar.cmpf une, %26, %26 : f64
+  %36 = scalar.cmpf une, %rhs, %rhs : f64
+  %37 = scf.select %36, %26, %34 : f64
+  %number = scf.select %35, %rhs, %37 : f64
+  %13 = scalar.maximumf %value, %lhs : f64
+  %ieee = scalar.minimumf %13, %rhs : f64
+  func.return %minnum, %maxnum, %ordered, %number, %ieee : f64, f64, f64, f64, f64
+}
+
+// ====
+// RUN: pass target=wasm:simd128 target-legalize{mode=final}
+
 func.def @vector_f32_reference_extrema(%value: vector<4xf32>, %lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>) {
   %minnum = vector.minnumf %lhs, %rhs : vector<4xf32>
   %maxnum = vector.maxnumf %lhs, %rhs : vector<4xf32>
