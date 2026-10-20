@@ -165,20 +165,54 @@ static iree_host_size_t iree_benchmark_loom_compare_token_count(
   return count;
 }
 
+static bool iree_benchmark_loom_benchmark_name_less(
+    const loom_testbench_module_plan_t* module_plan,
+    const iree_host_size_t* lhs, const iree_host_size_t* rhs) {
+  const int order = iree_string_view_compare(
+      module_plan->benchmarks[*lhs].name, module_plan->benchmarks[*rhs].name);
+  return order != 0 ? order < 0 : *lhs < *rhs;
+}
+
+LOOM_DEFINE_ADAPTIVE_SORT_WITH_CONTEXT(iree_benchmark_loom_sort_benchmark_names,
+                                       iree_host_size_t,
+                                       const loom_testbench_module_plan_t*,
+                                       iree_benchmark_loom_benchmark_name_less)
+
 static iree_status_t iree_benchmark_loom_find_benchmark_by_name(
     const loom_testbench_module_plan_t* module_plan, iree_string_view_t name,
+    const iree_host_size_t* sorted_indices,
     iree_host_size_t* out_benchmark_index,
     const loom_testbench_benchmark_plan_t** out_benchmark) {
   *out_benchmark_index = IREE_HOST_SIZE_MAX;
   *out_benchmark = NULL;
-  for (iree_host_size_t i = 0; i < module_plan->benchmark_count; ++i) {
-    const loom_testbench_benchmark_plan_t* benchmark =
-        &module_plan->benchmarks[i];
-    if (iree_string_view_equal(benchmark->name, name)) {
-      *out_benchmark_index = i;
-      *out_benchmark = benchmark;
-      return iree_ok_status();
+  if (sorted_indices != NULL) {
+    iree_host_size_t begin = 0;
+    iree_host_size_t end = module_plan->benchmark_count;
+    while (begin < end) {
+      const iree_host_size_t middle = begin + (end - begin) / 2;
+      if (iree_string_view_compare(
+              module_plan->benchmarks[sorted_indices[middle]].name, name) < 0) {
+        begin = middle + 1;
+      } else {
+        end = middle;
+      }
     }
+    if (begin < module_plan->benchmark_count &&
+        iree_string_view_equal(
+            module_plan->benchmarks[sorted_indices[begin]].name, name)) {
+      *out_benchmark_index = sorted_indices[begin];
+    }
+  } else {
+    for (iree_host_size_t i = 0; i < module_plan->benchmark_count; ++i) {
+      if (iree_string_view_equal(module_plan->benchmarks[i].name, name)) {
+        *out_benchmark_index = i;
+        break;
+      }
+    }
+  }
+  if (*out_benchmark_index != IREE_HOST_SIZE_MAX) {
+    *out_benchmark = &module_plan->benchmarks[*out_benchmark_index];
+    return iree_ok_status();
   }
   return iree_make_status(IREE_STATUS_NOT_FOUND,
                           "--compare benchmark '@%.*s' was not found",
@@ -637,6 +671,21 @@ static iree_status_t iree_benchmark_loom_select_compare_benchmarks(
       plan->host_allocator, selection_count, sizeof(*plan->selected_benchmarks),
       (void**)&plan->selected_benchmarks));
 
+  // Small comparison lists need at most eight linear scans. Larger lists
+  // amortize a temporary name index; selections themselves stay in request
+  // order and retain stable addresses for their candidate identifiers.
+  iree_host_size_t* sorted_indices = NULL;
+  if (selection_count > 8) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_allocate_array(
+        plan->host_allocator, module_plan->benchmark_count,
+        sizeof(*sorted_indices), (void**)&sorted_indices));
+    for (iree_host_size_t i = 0; i < module_plan->benchmark_count; ++i) {
+      sorted_indices[i] = i;
+    }
+    iree_benchmark_loom_sort_benchmark_names(module_plan, sorted_indices,
+                                             module_plan->benchmark_count);
+  }
+
   iree_status_t status = iree_ok_status();
   iree_host_size_t selection_index = 0;
   iree_string_view_t remaining = compare;
@@ -652,7 +701,7 @@ static iree_status_t iree_benchmark_loom_select_compare_benchmarks(
     iree_host_size_t benchmark_index = IREE_HOST_SIZE_MAX;
     const loom_testbench_benchmark_plan_t* benchmark = NULL;
     status = iree_benchmark_loom_find_benchmark_by_name(
-        module_plan, token, &benchmark_index, &benchmark);
+        module_plan, token, sorted_indices, &benchmark_index, &benchmark);
     if (iree_status_is_ok(status)) {
       status = iree_benchmark_loom_selected_benchmark_initialize(
           module_plan, benchmark, options, benchmark_index, selection_index,
@@ -661,6 +710,7 @@ static iree_status_t iree_benchmark_loom_select_compare_benchmarks(
     ++selection_index;
     remaining = iree_string_view_trim(remaining);
   }
+  iree_allocator_free(plan->host_allocator, sorted_indices);
   if (iree_status_is_ok(status)) {
     const bool compares_scenarios =
         plan->selected_benchmarks[0].scenario_plan != NULL;

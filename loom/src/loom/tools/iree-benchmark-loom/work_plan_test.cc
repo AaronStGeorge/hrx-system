@@ -28,6 +28,91 @@ namespace {
 using ::iree::testing::status::StatusIs;
 using ::testing::HasSubstr;
 
+TEST(BenchmarkWorkPlanApiTest, CompareLookupPreservesRequestsAndDiagnostics) {
+  const loom_testbench_trial_plan_t trial = {
+      .trial_count = 1,
+      .action = {.kind = LOOM_TESTBENCH_SCENARIO_ACTION_INVOKE},
+  };
+  const loom_testbench_scenario_plan_t scenario = {
+      .name = IREE_SV("subject"),
+      .configuration_count = 1,
+      .trials = &trial,
+      .trial_count = 1,
+  };
+  std::array<std::string, 128> names;
+  std::array<loom_testbench_benchmark_plan_t, 128> benchmarks = {};
+  for (size_t i = 0; i < benchmarks.size(); ++i) {
+    names[i] = "benchmark_" + std::to_string(benchmarks.size() - 1 - i);
+    benchmarks[i] = {
+        .name = iree_make_cstring_view(names[i].c_str()),
+        .case_index = LOOM_TESTBENCH_CASE_INDEX_INVALID,
+        .scenario_index = 0,
+        .cartesian_sample_count = 1,
+        .sample_count = 1,
+    };
+  }
+  const loom_testbench_module_plan_t module_plan = {
+      .scenarios = &scenario,
+      .scenario_count = 1,
+      .benchmarks = benchmarks.data(),
+      .benchmark_count = benchmarks.size(),
+  };
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  // Exercise direct and indexed lookup, and repeated requests after all
+  // names have been selected once. Request order differs from both module
+  // and lexical order.
+  for (size_t selection_count : {2u, 8u, 9u, 256u}) {
+    SCOPED_TRACE(selection_count);
+    std::string compare;
+    for (size_t i = 0; i < selection_count; ++i) {
+      if (i != 0) {
+        compare += ',';
+      }
+      compare += " @" + names[(i * 37) % names.size()] + " ";
+    }
+    options.compare = iree_make_cstring_view(compare.c_str());
+    iree_benchmark_loom_work_plan_t plan = {};
+    IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+        &module_plan, &options, iree_allocator_system(), &plan));
+    ASSERT_EQ(plan.selected_benchmark_count, selection_count);
+    ASSERT_EQ(plan.logical_sample_count, selection_count);
+    ASSERT_EQ(plan.work_item_count, 1u);
+    EXPECT_EQ(plan.work_items[0].representative_selection_index, 0u);
+    for (size_t i = 0; i < selection_count; ++i) {
+      const auto& selection = plan.selected_benchmarks[i];
+      const size_t expected_index = (i * 37) % benchmarks.size();
+      EXPECT_EQ(selection.benchmark_index, expected_index);
+      EXPECT_EQ(selection.benchmark_plan, &benchmarks[expected_index]);
+      EXPECT_EQ(selection.identity.candidate_index, i);
+      const std::string candidate_id = "c" + std::to_string(i);
+      EXPECT_TRUE(
+          iree_string_view_equal(selection.identity.candidate_id,
+                                 iree_make_cstring_view(candidate_id.c_str())));
+      EXPECT_EQ(plan.logical_samples[i].selection_index, i);
+      EXPECT_EQ(plan.logical_samples[i].work_item_index, 0u);
+    }
+    iree_benchmark_loom_work_plan_deinitialize(&plan);
+
+    // Parsing and name failures retain request order even after indexing.
+    for (bool missing_first : {false, true}) {
+      const std::string invalid =
+          compare + (missing_first ? ",@absent,@" : ",@,@absent");
+      options.compare = iree_make_cstring_view(invalid.c_str());
+      iree::Status status = iree_benchmark_loom_work_plan_initialize(
+          &module_plan, &options, iree_allocator_system(), &plan);
+      EXPECT_THAT(status,
+                  StatusIs(missing_first ? iree::StatusCode::kNotFound
+                                         : iree::StatusCode::kInvalidArgument));
+      EXPECT_THAT(status.ToString(),
+                  HasSubstr(missing_first ? "'@absent' was not found"
+                                          : "empty benchmark name"));
+      EXPECT_EQ(plan.selected_benchmarks, nullptr);
+      EXPECT_EQ(plan.selected_benchmark_count, 0u);
+    }
+  }
+}
+
 TEST(BenchmarkWorkPlanApiTest, PreservesScenarioOrderAcrossAliasesAndDomains) {
   // Unequal domains exercise both trial and configuration transitions.
   // Reverse record order exercises sorted grouping without making sorted order
