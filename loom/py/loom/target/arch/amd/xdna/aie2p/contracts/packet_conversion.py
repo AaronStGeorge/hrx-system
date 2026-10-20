@@ -3115,10 +3115,13 @@ def _float_source_i32_chunks(
     program: PacketProgram,
     source_format: FloatPacketFormat,
     rule_shape: FloatPacketRuleShape,
+    *,
+    source: ValueRef | None = None,
 ) -> tuple[ValueRef, ...]:
     """Returns native X carriers containing sixteen source bit patterns each."""
 
-    source = ValueRef.operand("input")
+    if source is None:
+        source = ValueRef.operand("input")
     if source_format.bit_width == 16:
         instruction = (
             _I16_TO_I32_W if rule_shape.native_lane_count == 16 else _I16_TO_I32_X
@@ -3305,6 +3308,8 @@ def _bind_exact_bf16_widening_results(
 
 def _exact_bf16_to_f32_emits(
     rule_shape: FloatPacketRuleShape,
+    *,
+    result_in_accumulator: bool = False,
 ) -> tuple[ContractEmit, ...]:
     """Widens bfloat16 bits exactly, including bfloat16 subnormals."""
 
@@ -3316,18 +3321,35 @@ def _exact_bf16_to_f32_emits(
     results = tuple(
         shift_integer_packet_fixed(
             program,
-            None if direct_result else f"chunk_{index}_result",
+            (
+                None
+                if direct_result and not result_in_accumulator
+                else ("result_vector" if direct_result else f"chunk_{index}_result")
+            ),
             chunk,
             16,
         )
         for index, chunk in enumerate(chunks)
     )
     _bind_exact_bf16_widening_results(program, results, rule_shape)
+    if result_in_accumulator:
+        program.emits.append(
+            EmitDescriptorOp(
+                descriptor=_descriptor(
+                    "amd.xdna.aie2p.move.vector512.to.accumulator512.low"
+                ),
+                operands={"src": results[0]},
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
+            )
+        )
     return tuple(program.emits)
 
 
 def _exact_bf16_to_f32_vector_rule(
     rule_shape: FloatPacketRuleShape,
+    *,
+    result_in_accumulator: bool = False,
 ) -> DescriptorRule:
     return DescriptorRule(
         source_op=vector.vector_extf,
@@ -3335,8 +3357,21 @@ def _exact_bf16_to_f32_vector_rule(
         guards=(
             Guard.value_type("input", rule_shape.vector_type("bf16")),
             Guard.value_type("result", rule_shape.vector_type("f32")),
+            *(
+                (
+                    Guard.low_value_register_class(
+                        "result",
+                        ("aie2p.ebmll" if result_in_accumulator else "aie2p.vec256"),
+                    ),
+                )
+                if rule_shape.native_lane_count == 16
+                else ()
+            ),
         ),
-        emit=_exact_bf16_to_f32_emits(rule_shape),
+        emit=_exact_bf16_to_f32_emits(
+            rule_shape,
+            result_in_accumulator=result_in_accumulator,
+        ),
         report_key="exact_bfloat16_to_binary32_packet",
     )
 
@@ -3380,11 +3415,27 @@ def _exact_f32_chunk_to_bf16(
 
 def _exact_f32_to_bf16_emits(
     rule_shape: FloatPacketRuleShape,
+    *,
+    input_in_accumulator: bool = False,
 ) -> tuple[ContractEmit, ...]:
     """Narrows binary32 packets with exact RNE and NaN preservation."""
 
     program = PacketProgram(32, "bf16_exact_narrow_")
-    chunks = _float_source_i32_chunks(program, _F32_PACKET_FORMAT, rule_shape)
+    source = ValueRef.operand("input")
+    if input_in_accumulator:
+        source = program.operation(
+            "source_vector",
+            "move.accumulator512.to.vector512",
+            "dst",
+            src=ValueRef.operand("input"),
+            copy_operands=("src",),
+        )
+    chunks = _float_source_i32_chunks(
+        program,
+        _F32_PACKET_FORMAT,
+        rule_shape,
+        source=source,
+    )
     program.state("saturation", 0)
     program.state("rounding", 0)
     program.state("srs-mode", 0)
@@ -3425,6 +3476,8 @@ def _exact_f32_to_bf16_emits(
 
 def _exact_f32_to_bf16_vector_rule(
     rule_shape: FloatPacketRuleShape,
+    *,
+    input_in_accumulator: bool = False,
 ) -> DescriptorRule:
     return DescriptorRule(
         source_op=vector.vector_fptrunc,
@@ -3432,8 +3485,21 @@ def _exact_f32_to_bf16_vector_rule(
         guards=(
             Guard.value_type("input", rule_shape.vector_type("f32")),
             Guard.value_type("result", rule_shape.vector_type("bf16")),
+            *(
+                (
+                    Guard.low_value_register_class(
+                        "input",
+                        ("aie2p.ebmll" if input_in_accumulator else "aie2p.vec256"),
+                    ),
+                )
+                if rule_shape.native_lane_count == 16
+                else ()
+            ),
         ),
-        emit=_exact_f32_to_bf16_emits(rule_shape),
+        emit=_exact_f32_to_bf16_emits(
+            rule_shape,
+            input_in_accumulator=input_in_accumulator,
+        ),
         report_key="exact_binary32_to_bfloat16_packet",
     )
 
@@ -4109,9 +4175,18 @@ AIE2P_PACKET_CONVERSION_RULES = (
     *(
         rule
         for rule_shape in _EXACT_FLOAT_PACKET_RULE_SHAPES
+        for carrier_in_accumulator in (
+            (False, True) if rule_shape.native_lane_count == 16 else (False,)
+        )
         for rule in (
-            _exact_f32_to_bf16_vector_rule(rule_shape),
-            _exact_bf16_to_f32_vector_rule(rule_shape),
+            _exact_f32_to_bf16_vector_rule(
+                rule_shape,
+                input_in_accumulator=carrier_in_accumulator,
+            ),
+            _exact_bf16_to_f32_vector_rule(
+                rule_shape,
+                result_in_accumulator=carrier_in_accumulator,
+            ),
         )
     ),
     *(
