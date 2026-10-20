@@ -139,7 +139,8 @@ class SdmaRectangularCopyTest : public GpuCommandTest {
     const uint32_t element_bytes = 1u << element_log2;
     const bool user_gcr =
         (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR) != 0;
-    const size_t words_per_transfer = 17 + (user_gcr ? 10 : 0);
+    const size_t words_per_transfer =
+        (17 + (user_gcr ? 10 : 0) + 7) & ~size_t{7};
     GpuMemory* source = nullptr;
     GpuMemory* target = nullptr;
     GpuMemory* control = nullptr;
@@ -229,6 +230,7 @@ class SdmaRectangularCopyTest : public GpuCommandTest {
           commands.ReleaseToSystem();
         }
         commands.Fence32(control->device_address + kCompletionOffset, marker);
+        commands.PadToEightWords();
         ASSERT_EQ(commands.word_count(), (completed + 1) * words_per_transfer);
         ASSERT_NO_FATAL_FAILURE(
             queue->Publish(api_, gpu_api_, commands.word_count()));
@@ -236,8 +238,11 @@ class SdmaRectangularCopyTest : public GpuCommandTest {
             reinterpret_cast<uintptr_t>(control->host.pointer) +
                 kCompletionOffset,
             marker));
-        // Capture complete backing before diagnostics or retirement can
-        // intervene.
+        if (family_.format_features &
+            AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+          ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+        }
+        // Capture complete backing after the advertised release boundary.
         std::memcpy(observed_source.data(), source->host.pointer,
                     kAllocationBytes);
         std::memcpy(observed_target.data(), target->host.pointer,

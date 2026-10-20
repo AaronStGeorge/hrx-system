@@ -673,6 +673,8 @@ TEST_F(WindowsXdnaMemoryTest, PreservesBackingAfterFinalDestructionFailure) {
 
   state_.failure_point = FailurePoint::kDestroy;
   EXPECT_FALSE(amdf_status_is_ok(amdf_xdna_umd_memory_destroy(memory)));
+  EXPECT_EQ(amdf_xdna_umd_memory_remaining_backing_byte_length(memory),
+            result.native_allocation_byte_length);
   EXPECT_EQ(state_.metadata_free_count, 0u);
   amdf_xdna_umd_memory_abandon(memory);
   EXPECT_EQ(state_.metadata_free_count, 1u);
@@ -698,6 +700,7 @@ TEST_F(WindowsXdnaMemoryTest,
             (std::vector<Operation>{Operation::kCreate, Operation::kMap}));
   EXPECT_EQ(amdf_xdna_umd_memory_destroy(memory),
             amdf_kmt_make_status(kStatusNoMemory));
+  EXPECT_NE(amdf_xdna_umd_memory_remaining_backing_byte_length(memory), 0u);
   EXPECT_EQ(state_.metadata_free_count, 0u);
   amdf_xdna_umd_memory_abandon(memory);
   EXPECT_EQ(state_.metadata_free_count, 1u);

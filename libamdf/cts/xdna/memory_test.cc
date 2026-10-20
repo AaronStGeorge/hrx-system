@@ -23,7 +23,7 @@ class XdnaMemoryTest : public XdnaDeviceFixture {
       EXPECT_TRUE(amdf_status_is_ok(api_->host_mapping_destroy(mapping_)));
     }
     if (memory_ != nullptr) {
-      EXPECT_TRUE(amdf_status_is_ok(api_->memory_destroy(memory_)));
+      EXPECT_TRUE(amdf_status_is_ok(api_->memory_destroy(memory_, nullptr)));
     }
     XdnaDeviceFixture::TearDown();
   }
@@ -51,49 +51,49 @@ class XdnaMemoryTest : public XdnaDeviceFixture {
 TEST_F(XdnaMemoryTest, ValidatesCreationArgumentsWithoutNativeAllocation) {
   amdf_memory_create_info_t create_info = MakeMemoryCreateInfo();
   amdf_memory_t* output = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(nullptr, &create_info, &output)),
-      AMDF_STATUS_CODE_INVALID_ARGUMENT);
-  EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(system_scope_, nullptr, &output)),
-      AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(nullptr, &create_info, &output, nullptr)),
+            AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
   EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, nullptr)),
+                api_->memory_create(system_scope_, nullptr, &output, nullptr)),
+            AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 nullptr, nullptr)),
             AMDF_STATUS_CODE_INVALID_ARGUMENT);
 
   create_info.type = AMDF_STRUCTURE_TYPE_NONE;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 
   create_info = MakeMemoryCreateInfo();
   create_info.byte_length = 0;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 
   create_info = MakeMemoryCreateInfo();
   create_info.minimum_alignment = 3;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 
   create_info = MakeMemoryCreateInfo();
   create_info.required_flags = UINT64_C(1) << 63;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 
   create_info = MakeMemoryCreateInfo();
   create_info.registered_host_pointer = &create_info;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 }
@@ -123,7 +123,7 @@ TEST_F(XdnaMemoryTest, OwnsStableAddressAndExplicitHostMapping) {
        granularity) *
       granularity;
   const amdf_status_t create_status =
-      api_->memory_create(system_scope_, &create_info, &memory_);
+      api_->memory_create(system_scope_, &create_info, &memory_, nullptr);
   ASSERT_TRUE(amdf_status_is_ok(create_status))
       << "domain=" << amdf_status_domain(create_status)
       << " code=" << amdf_status_code(create_status);
@@ -332,8 +332,8 @@ TEST_F(XdnaMemoryTest, OwnsStableAddressAndExplicitHostMapping) {
 
   ASSERT_TRUE(amdf_status_is_ok(api_->host_mapping_destroy(mapping_)));
   mapping_ = nullptr;
-  ASSERT_TRUE(
-      amdf_status_is_ok(api_->memory_destroy(std::exchange(memory_, nullptr))));
+  ASSERT_TRUE(amdf_status_is_ok(
+      api_->memory_destroy(std::exchange(memory_, nullptr), nullptr)));
 }
 
 TEST_F(XdnaMemoryTest, RejectsOversizedBackingWithoutPublishing) {
@@ -352,8 +352,8 @@ TEST_F(XdnaMemoryTest, RejectsOversizedBackingWithoutPublishing) {
   ASSERT_LT(profile.allocation.maximum_byte_length, UINT64_MAX);
   create_info.byte_length = profile.allocation.maximum_byte_length + 1;
   amdf_memory_t* output = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 }
@@ -361,7 +361,7 @@ TEST_F(XdnaMemoryTest, RejectsOversizedBackingWithoutPublishing) {
 TEST_F(XdnaMemoryTest, RejectsInvalidMappingRequestsBeforeNativeMapping) {
   const amdf_memory_create_info_t create_info = MakeMemoryCreateInfo();
   const amdf_status_t create_status =
-      api_->memory_create(system_scope_, &create_info, &memory_);
+      api_->memory_create(system_scope_, &create_info, &memory_, nullptr);
   ASSERT_TRUE(amdf_status_is_ok(create_status));
 
   amdf_memory_map_info_t map_info = {

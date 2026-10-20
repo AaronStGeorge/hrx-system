@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -18,7 +19,8 @@ namespace {
 constexpr uint32_t kGenerationCount = 8;
 constexpr uint64_t kPageLength = 4096;
 constexpr uint64_t kBackingLength = 65536;
-constexpr uint64_t kTargetOffset = (UINT64_C(5) << 30) + kBackingLength;
+constexpr uint64_t kMinimumReservationLength =
+    (UINT64_C(5) << 30) + kBackingLength;
 // The host projection precedes the GPU; caller and native GPU ordinals differ.
 constexpr uint32_t kGpuAccessOrdinal = 1;
 constexpr auto kReadWrite = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE;
@@ -63,7 +65,7 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
       ASSERT_EQ(status, AMDF_STATUS_OK);
     }
     if (host_backing_ != nullptr) {
-      ASSERT_EQ(api_->memory_destroy(host_backing_), AMDF_STATUS_OK);
+      ASSERT_EQ(api_->memory_destroy(host_backing_, nullptr), AMDF_STATUS_OK);
     }
     for (auto& backing : backing_) {
       ASSERT_TRUE(backing.Release(api_));
@@ -115,10 +117,17 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
          kReadWrite | host_capabilities.required_access, kPageLength},
         {device_, capabilities.address_domain_ordinal, access_, 0},
     };
+    const uint64_t granularity =
+        std::max(capabilities.reservation_granularity,
+                 host_capabilities.reservation_granularity);
+    const uint64_t reservation_length =
+        (kMinimumReservationLength + granularity - 1) & ~(granularity - 1);
+    target_offset_ = reservation_length - kPageLength;
     const amdf_memory_reservation_create_info_t create = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_RESERVATION_CREATE_INFO,
         .structure_size = sizeof(create),
-        .byte_length = UINT64_C(8) << 30,
+        // The final page ends exactly at the native reservation boundary.
+        .byte_length = reservation_length,
         .access_count = 2,
         .accesses = consumers,
     };
@@ -133,7 +142,7 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
                   reservation_, kGpuAccessOrdinal, &info),
               AMDF_STATUS_OK);
     ASSERT_EQ(info.mapping_access_ordinal, kGpuAccessOrdinal);
-    target_address_ = info.address + kTargetOffset;
+    target_address_ = info.address + target_offset_;
     ASSERT_NO_FATAL_FAILURE(PrepareHostProjection());
 
     auto* scope = GetParam() == Backing::kLocal ? local_scope_ : system_scope_;
@@ -269,12 +278,13 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
         .required_flags = kFlags,
         .byte_length = kBackingLength,
     };
-    ASSERT_EQ(api_->memory_create(system_scope_, &source, &host_backing_),
-              AMDF_STATUS_OK);
+    ASSERT_EQ(
+        api_->memory_create(system_scope_, &source, &host_backing_, nullptr),
+        AMDF_STATUS_OK);
     const amdf_memory_map_info_t map = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_MAP_INFO,
         .structure_size = sizeof(map),
-        .byte_offset = kTargetOffset,
+        .byte_offset = target_offset_,
         .byte_length = kPageLength,
         .flags = AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
     };
@@ -294,7 +304,7 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
 
   void InstallHostBacking() {
     const amdf_memory_mapping_update_t update = {
-        .target_byte_offset = kTargetOffset,
+        .target_byte_offset = target_offset_,
         .byte_length = kPageLength,
         .memory = host_backing_,
         .access = kReadWrite,
@@ -348,6 +358,8 @@ class Pm4QueuedMappingTest : public Pm4DispatchTest,
   amdf_host_mapping_t* host_view_ = nullptr;
   // CPU sentinel at the same logical offset as the GPU replacement workload.
   uint32_t* host_pointer_ = nullptr;
+  // Last mapping-sized page within the native reservation extent, in bytes.
+  uint64_t target_offset_ = 0;
   // Address beyond four GiB in the reserved interval.
   uint64_t target_address_ = 0;
   // Exact native mapping permissions selected from capabilities.
@@ -420,7 +432,7 @@ TEST_P(Pm4QueuedMappingTest, PendingUseThenReplacementThenComputeAndDetach) {
                                              commands_->info.byte_length),
             AMDF_STATUS_OK);
   const amdf_memory_mapping_update_t initial = {
-      .target_byte_offset = kTargetOffset,
+      .target_byte_offset = target_offset_,
       .byte_length = kPageLength,
       .memory = backing_[1].memory,
       .access = access_,
@@ -436,7 +448,7 @@ TEST_P(Pm4QueuedMappingTest, PendingUseThenReplacementThenComputeAndDetach) {
   ASSERT_NO_FATAL_FAILURE(Submit(0, predecessor.word_count() * 4));
   for (uint32_t generation = 0; generation < kGenerationCount; ++generation) {
     const amdf_memory_mapping_update_t update = {
-        .target_byte_offset = kTargetOffset,
+        .target_byte_offset = target_offset_,
         .byte_length = kPageLength,
         .memory = backing_[generation % 2].memory,
         .access = access_,
@@ -466,7 +478,7 @@ TEST_P(Pm4QueuedMappingTest, PendingUseThenReplacementThenComputeAndDetach) {
     }
   }
   const amdf_memory_mapping_update_t detach = {
-      .target_byte_offset = kTargetOffset,
+      .target_byte_offset = target_offset_,
       .byte_length = kPageLength,
   };
   ASSERT_EQ(

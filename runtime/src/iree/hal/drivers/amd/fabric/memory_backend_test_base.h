@@ -377,7 +377,11 @@ struct FakeNative {
 
   static amdf_status_t AMDF_CALL MemoryCreate(
       amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
-      amdf_memory_t** out_memory) {
+      amdf_memory_t** out_memory,
+      amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* storage = reinterpret_cast<Scope*>(scope);
     auto* self = storage->owner;
     self->created_scope = scope;
@@ -417,7 +421,11 @@ struct FakeNative {
     return AMDF_STATUS_OK;
   }
 
-  static amdf_status_t AMDF_CALL MemoryDestroy(amdf_memory_t* handle) {
+  static amdf_status_t AMDF_CALL MemoryDestroy(
+      amdf_memory_t* handle, amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* memory = reinterpret_cast<Memory*>(handle);
     auto* self = memory->owner;
     if (!memory->registered) {

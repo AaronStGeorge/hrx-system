@@ -238,7 +238,7 @@ class MemoryBenchmark {
 
   void Acquire(size_t byte_length) {
     create_info_.byte_length = byte_length;
-    CheckStatus(api_->memory_create(scope_, &create_info_, &memory_),
+    CheckStatus(api_->memory_create(scope_, &create_info_, &memory_, nullptr),
                 "memory_create");
     amdf_memory_map_info_t map = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_MAP_INFO,
@@ -281,7 +281,7 @@ class MemoryBenchmark {
     CheckStatus(api_->host_mapping_destroy(mapping_), "host_mapping_destroy");
     mapping_ = nullptr;
     pointer_ = nullptr;
-    CheckStatus(api_->memory_destroy(memory_), "memory_destroy");
+    CheckStatus(api_->memory_destroy(memory_, nullptr), "memory_destroy");
     memory_ = nullptr;
   }
 

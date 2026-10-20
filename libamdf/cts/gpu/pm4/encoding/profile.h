@@ -24,6 +24,8 @@ struct Pm4CommandProfile {
   uint32_t system_atomic_scope_control;
   // COMPUTE_PGM_RSRC3 DWORD address in ordinary shader register space.
   uint32_t resource3_register;
+  // COMPUTE_TMPRING_SIZE DWORD address for architected private storage.
+  uint32_t scratch_size_register;
   // Unshifted mask of RSRC3.INST_PREF_SIZE, whose unit is 128 bytes.
   uint32_t instruction_prefetch_mask;
   // Byte length represented by one COMPUTE_PGM_RSRC2.LDS_SIZE unit.

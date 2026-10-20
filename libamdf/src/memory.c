@@ -350,7 +350,8 @@ static amdf_status_t amdf_memory_prepare(
   const uint32_t backing = plan->backing_access_ordinal;
   if (backing == plan->access_count) {
     amdf_status_t status = amdf_host_memory_prepare(
-        memory, &plan->native_profiles[backing], create_info, &memory->info);
+        memory, &plan->native_profiles[backing],
+        plan->shared_external_type != 0, create_info, &memory->info);
     amdf_memory_create_info_t registration = *create_info;
     if (amdf_status_is_ok(status)) {
       registration.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
@@ -433,7 +434,10 @@ static amdf_status_t amdf_memory_prepare(
 
 amdf_status_t AMDF_CALL amdf_memory_create(
     amdf_memory_scope_t* scope, const amdf_memory_create_info_t* create_info,
-    amdf_memory_t** out_memory) {
+    amdf_memory_t** out_memory, amdf_memory_release_info_t* out_release_info) {
+  if (out_release_info != NULL) {
+    *out_release_info = (amdf_memory_release_info_t){0};
+  }
   if (scope == NULL || out_memory == NULL) {
     return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   }
@@ -490,15 +494,18 @@ amdf_status_t AMDF_CALL amdf_memory_create(
     status = amdf_memory_allocate(&plan, create_info->accesses, &memory);
   }
   if (amdf_status_is_ok(status)) {
+    memory->allocated_backing =
+        plan.acquisition_role == AMDF_MEMORY_PROFILE_ROLE_CREATE;
     status = amdf_memory_prepare(memory, &plan, create_info);
   }
   if (amdf_status_is_ok(status)) {
     memory->info.memory_profile_ordinal = plan.profile.ordinal;
     *out_memory = memory;
   } else if (memory != NULL) {
-    const amdf_status_t release_status = amdf_memory_resource_destroy(memory);
-    if (!amdf_status_is_ok(release_status)) {
-      status = release_status;
+    const amdf_memory_release_info_t release_info =
+        amdf_memory_resource_destroy(memory);
+    if (out_release_info != NULL) {
+      *out_release_info = release_info;
     }
   }
   amdf_memory_scope_plan_deinitialize(&plan);
@@ -507,7 +514,11 @@ amdf_status_t AMDF_CALL amdf_memory_create(
 
 amdf_status_t AMDF_CALL amdf_memory_import(
     amdf_memory_scope_t* scope, const amdf_memory_import_info_t* import_info,
-    amdf_external_memory_t* inout_external_memory, amdf_memory_t** out_memory) {
+    amdf_external_memory_t* inout_external_memory, amdf_memory_t** out_memory,
+    amdf_memory_release_info_t* out_release_info) {
+  if (out_release_info != NULL) {
+    *out_release_info = (amdf_memory_release_info_t){0};
+  }
   if (scope == NULL || out_memory == NULL) {
     return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   }
@@ -570,9 +581,10 @@ amdf_status_t AMDF_CALL amdf_memory_import(
     amdf_external_memory_release(inout_external_memory);
     *out_memory = memory;
   } else if (memory != NULL) {
-    const amdf_status_t release_status = amdf_memory_resource_destroy(memory);
-    if (!amdf_status_is_ok(release_status)) {
-      status = release_status;
+    const amdf_memory_release_info_t release_info =
+        amdf_memory_resource_destroy(memory);
+    if (out_release_info != NULL) {
+      *out_release_info = release_info;
     }
   }
   amdf_memory_scope_plan_deinitialize(&plan);
@@ -860,9 +872,18 @@ amdf_status_t AMDF_CALL amdf_memory_map(amdf_memory_t* memory,
   return map_status;
 }
 
-amdf_status_t AMDF_CALL amdf_memory_destroy(amdf_memory_t* memory) {
+amdf_status_t AMDF_CALL amdf_memory_destroy(
+    amdf_memory_t* memory, amdf_memory_release_info_t* out_release_info) {
+  if (out_release_info != NULL) {
+    *out_release_info = (amdf_memory_release_info_t){0};
+  }
   if (memory == NULL) {
     return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
   }
-  return amdf_memory_resource_destroy(memory);
+  const amdf_memory_release_info_t release_info =
+      amdf_memory_resource_destroy(memory);
+  if (out_release_info != NULL) {
+    *out_release_info = release_info;
+  }
+  return release_info.status;
 }

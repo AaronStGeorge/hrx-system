@@ -30,14 +30,112 @@ class SdmaPayloadCopyTest
     : public SdmaCopyTest,
       public ::testing::WithParamInterface<amdf_memory_flags_t> {
  protected:
+  void SetUp() override {
+    SdmaCopyTest::SetUp();
+    if (HasFatalFailure() || IsSkipped()) {
+      return;
+    }
+    scope_ = (GetParam() & AMDF_MEMORY_FLAG_DEVICE_LOCAL) ? local_scope_
+                                                          : system_scope_;
+    if (!scope_) {
+      GTEST_SKIP() << "endpoint has no local memory scope";
+    }
+    profile_ordinal_ = FindMemoryProfileOrdinal(
+        scope_,
+        AMDF_MEMORY_PROFILE_ROLE_CREATE | AMDF_MEMORY_PROFILE_ROLE_HOST_MAP,
+        AMDF_MEMORY_FLAG_HOST_VISIBLE |
+            (GetParam() & AMDF_MEMORY_FLAG_DEVICE_LOCAL),
+        {
+            .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+            .flags = (GetParam() & ~AMDF_MEMORY_FLAG_DEVICE_LOCAL) |
+                     AMDF_MEMORY_FLAG_DEVICE_ADDRESS,
+        });
+    if (profile_ordinal_ == AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN) {
+      GTEST_SKIP() << "requested host-visible payload policy is unavailable";
+    }
+    const amdf_memory_device_access_t attachment = {
+        device_,
+        {
+            .access = AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE,
+            .flags = (GetParam() & ~AMDF_MEMORY_FLAG_DEVICE_LOCAL) |
+                     AMDF_MEMORY_FLAG_DEVICE_ADDRESS,
+        },
+    };
+    const amdf_memory_profile_site_t host = {
+        .kind = AMDF_MEMORY_SITE_KIND_HOST,
+        .value =
+            {
+                .host_access =
+                    AMDF_MEMORY_MAP_FLAG_READ | AMDF_MEMORY_MAP_FLAG_WRITE,
+            },
+    };
+    const amdf_memory_profile_site_t device = {
+        .kind = AMDF_MEMORY_SITE_KIND_DEVICE,
+        .value = {.device = {.queue_family_ordinal = family_.ordinal}},
+    };
+    for (bool host_producer : {true, false}) {
+      const amdf_memory_profile_pair_query_t query = {
+          .type = AMDF_STRUCTURE_TYPE_MEMORY_PROFILE_PAIR_QUERY,
+          .structure_size = sizeof(query),
+          .memory_profile_ordinal = profile_ordinal_,
+          .access_count = 1,
+          .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE |
+                            (GetParam() & AMDF_MEMORY_FLAG_DEVICE_LOCAL),
+          .accesses = &attachment,
+          .producer = host_producer ? host : device,
+          .consumer = host_producer ? device : host,
+      };
+      amdf_memory_pair_info_t pair = {
+          .type = AMDF_STRUCTURE_TYPE_MEMORY_PAIR_INFO,
+          .structure_size = sizeof(pair),
+      };
+      const auto status =
+          api_->memory_scope_query_pair_info(scope_, &query, &pair);
+      if (status == amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED)) {
+        GTEST_SKIP() << "payload profile does not advertise the required "
+                        "host/SDMA visibility edge; host visibility alone is "
+                        "insufficient";
+      }
+      ASSERT_EQ(status, AMDF_STATUS_OK);
+    }
+  }
+
   void CreatePayload(amdf_memory_access_t access, uint64_t byte_length,
                      GpuMemory** out_memory) {
-    ASSERT_NO_FATAL_FAILURE(
-        CreateMemory(access, byte_length, out_memory, GetParam()));
+    const amdf_memory_device_access_t attachment = {
+        device_,
+        {
+            .access = access,
+            .flags = (GetParam() & ~AMDF_MEMORY_FLAG_DEVICE_LOCAL) |
+                     AMDF_MEMORY_FLAG_DEVICE_ADDRESS,
+        }};
+    const amdf_memory_create_info_t creation = {
+        .type = AMDF_STRUCTURE_TYPE_MEMORY_CREATE_INFO,
+        .structure_size = sizeof(creation),
+        .memory_profile_ordinal = profile_ordinal_,
+        .access_count = 1,
+        .required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE |
+                          (GetParam() & AMDF_MEMORY_FLAG_DEVICE_LOCAL),
+        .byte_length = byte_length,
+        .minimum_alignment = 4096,
+        .accesses = &attachment,
+    };
+    ASSERT_NO_FATAL_FAILURE(CreateMemory(scope_, creation, out_memory));
+    RecordProperty("payload_memory_class", (*out_memory)->info.memory_class);
+    if (GetParam() & AMDF_MEMORY_FLAG_DEVICE_LOCAL) {
+      EXPECT_EQ((*out_memory)->info.memory_class, AMDF_MEMORY_CLASS_LOCAL);
+      EXPECT_NE((*out_memory)->info.flags & AMDF_MEMORY_FLAG_HOST_VISIBLE, 0u);
+    }
   }
+
+ private:
+  // Borrowed placement scope selected before any workload is created.
+  amdf_memory_scope_t* scope_ = nullptr;
+  // Available host-visible profile for this case's complete payload policy.
+  uint32_t profile_ordinal_ = AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN;
 };
 
-TEST_P(SdmaPayloadCopyTest, LinearCopyCompletesBeforeFence) {
+TEST_P(SdmaPayloadCopyTest, LinearCopyPublishesAtAdvertisedBoundary) {
   GpuMemory* source = nullptr;
   GpuMemory* target = nullptr;
   GpuMemory* completion = nullptr;
@@ -83,9 +181,12 @@ TEST_P(SdmaPayloadCopyTest, LinearCopyCompletesBeforeFence) {
       queue->Publish(api_, gpu_api_, commands.word_count()));
   ASSERT_TRUE(GpuWaitEqual<uint32_t>(
       reinterpret_cast<uintptr_t>(completion->host.pointer), 1));
+  if (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+    ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+  }
   ASSERT_NO_FATAL_FAILURE(target->TransferHostCache(
       api_, family_.ordinal, AMDF_HOST_CACHE_OPERATION_INVALIDATE));
-  // Capture every observation before diagnostics or retirement can intervene.
+  // Capture every observation after the queue's advertised release boundary.
   std::array<uint32_t, kWordCount + 1> observed_output;
   std::array<uint32_t, kWordCount> observed_input;
   std::memcpy(observed_output.data(), output, sizeof(observed_output));
@@ -160,9 +261,12 @@ TEST_P(SdmaPayloadCopyTest, ByteTailsAndPageCrossingsPreserveSurroundingBytes) {
       queue->Publish(api_, gpu_api_, commands.word_count()));
   ASSERT_TRUE(GpuWaitEqual<uint32_t>(
       reinterpret_cast<uintptr_t>(completion->host.pointer), 1));
+  if (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+    ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+  }
   ASSERT_NO_FATAL_FAILURE(target->TransferHostCache(
       api_, family_.ordinal, AMDF_HOST_CACHE_OPERATION_INVALIDATE));
-  // Capture every observation before diagnostics or retirement can intervene.
+  // Capture every observation after the queue's advertised release boundary.
   std::memcpy(observed_output.data(), output, observed_output.size());
   std::memcpy(observed_input.data(), input, observed_input.size());
   for (uint64_t i = 0; i < kTargetLength; ++i) {
@@ -182,7 +286,8 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(amdf_memory_flags_t{0},
                       amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT},
                       amdf_memory_flags_t{AMDF_MEMORY_FLAG_HOST_COHERENT |
-                                          AMDF_MEMORY_FLAG_QUEUE_STORAGE}));
+                                          AMDF_MEMORY_FLAG_QUEUE_STORAGE},
+                      amdf_memory_flags_t{AMDF_MEMORY_FLAG_DEVICE_LOCAL}));
 
 class SdmaDependencyTest : public SdmaCopyTest {};
 
@@ -196,7 +301,7 @@ TEST_F(SdmaDependencyTest, NopOrdersDependentCopiesAcrossEpochs) {
   constexpr uint32_t kCompletionOffset = 64;
   const bool user_gcr =
       (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR) != 0;
-  const size_t words_per_epoch = 19 + (user_gcr ? 10 : 0);
+  const size_t words_per_epoch = user_gcr ? 32 : 24;
   constexpr std::array<uint32_t, 2> kSeeds = {0x13579bdfu, 0xa5c31f27u};
   GpuMemory* source = nullptr;
   GpuMemory* intermediate = nullptr;
@@ -303,6 +408,7 @@ TEST_F(SdmaDependencyTest, NopOrdersDependentCopiesAcrossEpochs) {
       commands.ReleaseToSystem();
     }
     commands.Fence32(completion->device_address + kCompletionOffset, marker);
+    commands.PadToEightWords();
     ASSERT_EQ(commands.word_count(), (epoch + 1) * words_per_epoch);
     ASSERT_NO_FATAL_FAILURE(
         queue->Publish(api_, gpu_api_, commands.word_count()));
@@ -310,9 +416,12 @@ TEST_F(SdmaDependencyTest, NopOrdersDependentCopiesAcrossEpochs) {
         reinterpret_cast<uintptr_t>(completion->host.pointer) +
             kCompletionOffset,
         marker));
+    if (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+      ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+    }
 
-    // Capture every complete allocation before diagnostics or consumed-frontier
-    // polling can intervene. The marker is the only execution observation.
+    // Capture complete allocations after the advertised release boundary.
+    // Exact bytes expose a missing dependency between the two copies.
     std::memcpy(observed_source.data(), source->host.pointer, kDataLength);
     std::memcpy(observed_intermediate.data(), intermediate->host.pointer,
                 kDataLength);

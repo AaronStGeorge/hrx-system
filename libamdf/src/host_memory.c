@@ -111,8 +111,10 @@ static amdf_status_t amdf_host_backing_destroy_native(amdf_memory_t* memory,
   amdf_platform_host_backing_t* backing = memory->accesses[ordinal].native;
   const amdf_status_t status = amdf_platform_host_backing_destroy(
       backing, memory->info.native_allocation_byte_length);
-  amdf_free(memory->host_allocator, backing);
-  memory->accesses[ordinal].native = NULL;
+  if (amdf_status_is_ok(status)) {
+    amdf_free(memory->host_allocator, backing);
+    memory->accesses[ordinal].native = NULL;
+  }
   return status;
 }
 
@@ -122,10 +124,20 @@ static void amdf_host_backing_abandon_native(amdf_memory_t* memory,
   memory->accesses[ordinal].native = NULL;
 }
 
+static uint64_t amdf_host_backing_remaining_byte_length(
+    const amdf_memory_t* memory, uint32_t ordinal) {
+  const amdf_platform_host_backing_t* backing =
+      memory->accesses[ordinal].native;
+  return backing->handle != UINTPTR_MAX || backing->pointer != NULL
+             ? memory->info.native_allocation_byte_length
+             : 0;
+}
+
 static const amdf_memory_vtable_t amdf_host_backing_vtable = {
     .map = amdf_host_memory_map,
     .host_mapping_source = amdf_host_memory_mapping_source,
     .destroy_native = amdf_host_backing_destroy_native,
+    .remaining_backing_byte_length = amdf_host_backing_remaining_byte_length,
     .abandon_native = amdf_host_backing_abandon_native,
 };
 
@@ -153,9 +165,16 @@ static void amdf_host_memory_abandon_native(amdf_memory_t* memory,
   memory->accesses[access_ordinal].native = NULL;
 }
 
+static uint64_t amdf_host_memory_remaining_byte_length(
+    const amdf_memory_t* memory, uint32_t access_ordinal) {
+  (void)access_ordinal;
+  return memory->info.native_allocation_byte_length;
+}
+
 static const amdf_memory_vtable_t amdf_host_memory_vtable = {
     .map = amdf_host_memory_map,
     .destroy_native = amdf_host_memory_destroy_native,
+    .remaining_backing_byte_length = amdf_host_memory_remaining_byte_length,
     .abandon_native = amdf_host_memory_abandon_native,
 };
 
@@ -178,8 +197,16 @@ amdf_status_t amdf_host_memory_export(
   const amdf_platform_host_backing_t* backing =
       memory->accesses[memory->backing_access_ordinal].native;
   amdf_external_memory_t exported = {0};
-  amdf_status_t status = amdf_platform_host_export_memory(
-      service, backing, memory->info.byte_length, &exported);
+  amdf_status_t status = AMDF_STATUS_OK;
+  if (first_export) {
+    status = amdf_platform_host_backing_populate(
+        backing, memory->info.native_allocation_byte_length,
+        memory->info.placement, memory->host_allocator);
+  }
+  if (amdf_status_is_ok(status)) {
+    status = amdf_platform_host_export_memory(
+        service, backing, memory->info.byte_length, &exported);
+  }
   if (amdf_status_is_ok(status) && first_export) {
     // Export has pinned/populated every page. Retire CPU initialization once
     // before any attachment can install a device-writable alias.
@@ -202,7 +229,7 @@ amdf_status_t amdf_host_memory_export(
 
 amdf_status_t amdf_host_memory_prepare(
     amdf_memory_t* memory, const amdf_memory_native_profile_t* profile,
-    const amdf_memory_create_info_t* create_info,
+    bool export_backing, const amdf_memory_create_info_t* create_info,
     amdf_memory_info_t* out_info) {
   const bool registration =
       (profile->roles & AMDF_MEMORY_PROFILE_ROLE_REGISTER) != 0;
@@ -227,14 +254,11 @@ amdf_status_t amdf_host_memory_prepare(
                          amdf_alignof(amdf_platform_host_backing_t),
                          (void**)&backing);
     if (amdf_status_is_ok(status)) {
-      status = amdf_platform_host_backing_create(native_length, backing);
-      if (amdf_status_is_ok(status)) {
-        memory->accesses[memory->backing_access_ordinal].vtable =
-            &amdf_host_backing_vtable;
-        memory->accesses[memory->backing_access_ordinal].native = backing;
-      } else {
-        amdf_free(memory->host_allocator, backing);
-      }
+      memory->accesses[memory->backing_access_ordinal].vtable =
+          &amdf_host_backing_vtable;
+      memory->accesses[memory->backing_access_ordinal].native = backing;
+      memory->info.native_allocation_byte_length = native_length;
+      status = amdf_platform_host_backing_prepare(native_length, backing);
     }
   } else {
     status = amdf_platform_host_memory_allocate(
@@ -259,7 +283,8 @@ amdf_status_t amdf_host_memory_prepare(
         .native_allocation_granularity = granularity,
         .placement = create_info->placement,
     };
-    if (create_info->placement.kind != AMDF_MEMORY_PLACEMENT_KIND_NONE) {
+    if (!export_backing &&
+        create_info->placement.kind != AMDF_MEMORY_PLACEMENT_KIND_NONE) {
       status = amdf_platform_host_memory_place(
           amdf_host_memory_pointer(memory), native_length,
           create_info->placement, memory->host_allocator);

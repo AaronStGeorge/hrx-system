@@ -228,9 +228,9 @@ TEST_F(HostNumaMemoryTest, RejectsInvalidNodeWithoutPublishingAnOwner) {
   };
   auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   amdf_memory_t* memory = sentinel;
-  EXPECT_EQ(
-      amdf_status_code(api_->memory_create(scope_, &create_info, &memory)),
-      AMDF_STATUS_CODE_OUT_OF_RANGE);
+  EXPECT_EQ(amdf_status_code(
+                api_->memory_create(scope_, &create_info, &memory, nullptr)),
+            AMDF_STATUS_CODE_OUT_OF_RANGE);
   EXPECT_EQ(memory, sentinel);
 }
 

@@ -88,10 +88,10 @@ class XdnaKernelQueueTest : public XdnaContextFixture {
       EXPECT_EQ(api_->host_mapping_destroy(mapping_), AMDF_STATUS_OK);
     }
     if (memory_) {
-      EXPECT_EQ(api_->memory_destroy(memory_), AMDF_STATUS_OK);
+      EXPECT_EQ(api_->memory_destroy(memory_, nullptr), AMDF_STATUS_OK);
     }
     if (sibling_.memory) {
-      EXPECT_EQ(api_->memory_destroy(sibling_.memory), AMDF_STATUS_OK);
+      EXPECT_EQ(api_->memory_destroy(sibling_.memory, nullptr), AMDF_STATUS_OK);
     }
     if (sibling_.context) {
       EXPECT_EQ(xdna_api_->context_destroy(sibling_.context), AMDF_STATUS_OK);
@@ -176,7 +176,8 @@ class XdnaKernelQueueTest : public XdnaContextFixture {
           native_granularity - 1) /
          native_granularity) *
         native_granularity;
-    ASSERT_EQ(api_->memory_create(scope, &create, out_memory), AMDF_STATUS_OK);
+    ASSERT_EQ(api_->memory_create(scope, &create, out_memory, nullptr),
+              AMDF_STATUS_OK);
     amdf_memory_info_t info = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_INFO,
         .structure_size = sizeof(info),
@@ -706,8 +707,9 @@ TEST_F(XdnaKernelQueueTest, PrivateBackingIsQualifiedByExactContext) {
 
   // Destroying the sibling's backing and context cannot release or invalidate
   // this context's instruction allocation or queue.
-  ASSERT_EQ(api_->memory_destroy(std::exchange(sibling_.memory, nullptr)),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api_->memory_destroy(std::exchange(sibling_.memory, nullptr), nullptr),
+      AMDF_STATUS_OK);
   ASSERT_EQ(xdna_api_->context_destroy(sibling_.context), AMDF_STATUS_OK);
   sibling_.context = nullptr;
   command.memory = memory_;

@@ -326,7 +326,8 @@ class GpuFileIoTest
     amdf_queue_format_features_t feature =
         AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR;
     if (family_.command_type == AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA) {
-      feature = AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR;
+      feature = AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR |
+                AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR;
     }
     ASSERT_NE(family_.format_features & feature, 0u);
     ASSERT_NE(family_.cache_operations & (UINT64_C(1) << operation), 0u);
@@ -396,7 +397,10 @@ class GpuFileIoTest
     if (family_.command_type == AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA) {
       SdmaCommandWriter commands(queue->words().data(),
                                  family_.format_features);
-      if (cache_operations & AMDF_CACHE_OPERATIONS_ACQUIRE_FROM_SYSTEM) {
+      const bool user_gcr = (family_.format_features &
+                             AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR) != 0;
+      if (user_gcr &&
+          (cache_operations & AMDF_CACHE_OPERATIONS_ACQUIRE_FROM_SYSTEM)) {
         commands.AcquireFromSystem();
       }
       commands.CopyLinear(source->device_address + block_byte_length,
@@ -405,7 +409,8 @@ class GpuFileIoTest
       commands.CopyLinear(source->device_address + 2 * block_byte_length,
                           target->device_address + block_byte_length,
                           block_byte_length);
-      if (cache_operations & AMDF_CACHE_OPERATIONS_RELEASE_TO_SYSTEM) {
+      if (user_gcr &&
+          (cache_operations & AMDF_CACHE_OPERATIONS_RELEASE_TO_SYSTEM)) {
         commands.ReleaseToSystem();
       }
       commands.Fence32(completion->device_address, 1);
@@ -514,9 +519,11 @@ TEST_P(GpuFileIoTest, IocpAndGpuShareBackingWithoutHostPayloadCopies) {
       static_cast<uint32_t>(block_byte_length), cache_operations));
   ASSERT_TRUE(GpuWaitEqual<uint32_t>(
       reinterpret_cast<uintptr_t>(completion->host.pointer), 1));
+  // A native SDMA epilogue may own the release after the in-stream fence.
+  // File I/O consumes the payload only after that submission has retired.
+  ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
   ASSERT_NO_FATAL_FAILURE(Transfer(true, output + block_byte_length,
                                    payload_byte_length, 5 * block_byte_length));
-  ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
 
   std::vector<uint8_t> expected_source(source->host.byte_length, kGuard);
   std::vector<uint8_t> expected_target(target->host.byte_length, kGuard);

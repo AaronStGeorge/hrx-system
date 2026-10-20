@@ -262,7 +262,7 @@ class XdnaMemoryDiscoveryTest : public XdnaEndpointTest {
       ASSERT_EQ(api_->host_mapping_destroy(mapping_), AMDF_STATUS_OK);
     }
     if (memory_) {
-      ASSERT_EQ(api_->memory_destroy(memory_), AMDF_STATUS_OK);
+      ASSERT_EQ(api_->memory_destroy(memory_, nullptr), AMDF_STATUS_OK);
     }
     XdnaEndpointTest::TearDown();
   }
@@ -387,7 +387,7 @@ TEST_F(XdnaMemoryDiscoveryTest, SelectsLiveProfileAndUsesNativeLimits) {
       .accesses = &device_access,
   };
   ASSERT_LE(create.byte_length, live.allocation.maximum_byte_length);
-  ASSERT_EQ(api_->memory_create(system_scope, &create, &memory_),
+  ASSERT_EQ(api_->memory_create(system_scope, &create, &memory_, nullptr),
             AMDF_STATUS_OK);
   uint64_t address = 0;
   ASSERT_EQ(api_->memory_query_address(memory_, 0, AMDF_MEMORY_ADDRESS_XDNA_DMA,

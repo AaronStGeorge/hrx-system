@@ -155,12 +155,20 @@ static void amdf_gpu_memory_abandon_native(amdf_memory_t* memory,
   memory->accesses[access_ordinal].native = NULL;
 }
 
+static uint64_t amdf_gpu_memory_remaining_backing_byte_length(
+    const amdf_memory_t* memory, uint32_t access_ordinal) {
+  return amdf_gpu_umd_memory_remaining_backing_byte_length(
+      memory->accesses[access_ordinal].native);
+}
+
 static const amdf_memory_vtable_t amdf_gpu_memory_vtable = {
     .export_external = amdf_gpu_memory_export,
     .describe_site = amdf_gpu_memory_describe_site,
     .map = amdf_gpu_memory_map,
     .host_mapping_source = amdf_gpu_memory_host_mapping_source,
     .destroy_native = amdf_gpu_memory_destroy_native,
+    .remaining_backing_byte_length =
+        amdf_gpu_memory_remaining_backing_byte_length,
     .abandon_native = amdf_gpu_memory_abandon_native,
 };
 

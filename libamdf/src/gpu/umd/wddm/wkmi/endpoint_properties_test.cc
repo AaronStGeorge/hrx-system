@@ -57,6 +57,9 @@ TEST(WkmiEndpointPropertiesTest, NormalizesMultiXccTopology) {
             AMDF_QUEUE_COMMAND_TYPE_GPU_PM4);
   EXPECT_EQ(properties.queue_families[0].publication_modes,
             AMDF_QUEUE_PUBLICATION_MODE_KERNEL);
+  EXPECT_EQ(properties.queue_families[0].format_features &
+                AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH,
+            0u);
   EXPECT_EQ(properties.queue_families[1].command_type,
             AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
   EXPECT_EQ(properties.queue_families[1].publication_modes,
@@ -80,6 +83,23 @@ TEST(WkmiEndpointPropertiesTest, NormalizesMissingScratchSlots) {
             32u);
 }
 
+TEST(WkmiEndpointPropertiesTest, MappingOrderingRequiresHardwareQueueHandle) {
+  for (uint32_t hardware : {0u, 1u}) {
+    auto provider = MakeProperties();
+    provider.supports_sdma_hardware_queue = hardware;
+    amdf_gpu_endpoint_properties_t properties = {};
+    ASSERT_TRUE(amdf_gpu_wddm_wkmi_endpoint_properties_translate(&provider,
+                                                                 &properties));
+    ASSERT_EQ(properties.queue_family_count, 2u);
+    EXPECT_NE(properties.queue_families[0].kernel_queue_capabilities &
+                  AMDF_KERNEL_QUEUE_CAPABILITY_VIRTUAL_MEMORY,
+              0u);
+    EXPECT_EQ((properties.queue_families[1].kernel_queue_capabilities &
+               AMDF_KERNEL_QUEUE_CAPABILITY_VIRTUAL_MEMORY) != 0,
+              hardware != 0);
+  }
+}
+
 TEST(WkmiEndpointPropertiesTest, RdnaExposesPm4AndSdmaPacketFeatures) {
   for (uint32_t target :
        {110000u, 110001u, 110002u, 110003u, 110500u, 110501u, 110502u, 110503u,
@@ -89,6 +109,8 @@ TEST(WkmiEndpointPropertiesTest, RdnaExposesPm4AndSdmaPacketFeatures) {
     provider.gfx_ip_major = target / 10000;
     provider.gfx_ip_minor = (target / 100) % 100;
     provider.gfx_ip_stepping = target % 100;
+    provider.xcc_count = 1;
+    provider.shader_engine_count = 4;
     amdf_gpu_endpoint_properties_t properties = {};
     ASSERT_TRUE(amdf_gpu_wddm_wkmi_endpoint_properties_translate(&provider,
                                                                  &properties));
@@ -96,7 +118,8 @@ TEST(WkmiEndpointPropertiesTest, RdnaExposesPm4AndSdmaPacketFeatures) {
     EXPECT_EQ(properties.queue_families[0].command_type,
               AMDF_QUEUE_COMMAND_TYPE_GPU_PM4);
     EXPECT_EQ(properties.queue_families[0].format_features,
-              AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR);
+              AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR |
+                  AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH);
     const auto& sdma = properties.queue_families[1];
     EXPECT_EQ(sdma.command_type, AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
     const amdf_queue_format_features_t fence =
@@ -109,9 +132,14 @@ TEST(WkmiEndpointPropertiesTest, RdnaExposesPm4AndSdmaPacketFeatures) {
         (target >= 120000
              ? AMDF_GPU_SDMA_FORMAT_FEATURE_COPY_LINEAR_RECT_WIDE
              : AMDF_GPU_SDMA_FORMAT_FEATURE_COPY_LINEAR_RECT_EXTENDED_Z);
-    EXPECT_EQ(sdma.format_features, fence | scope | rectangle);
-    EXPECT_EQ(sdma.roles, AMDF_QUEUE_ROLE_TRANSFER);
-    EXPECT_EQ(sdma.cache_operations, 0u);
+    EXPECT_EQ(sdma.format_features,
+              fence | scope | rectangle |
+                  AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR);
+    EXPECT_EQ(sdma.roles,
+              AMDF_QUEUE_ROLE_TRANSFER | AMDF_QUEUE_ROLE_CACHE_CONTROL);
+    EXPECT_EQ(sdma.cache_operations,
+              AMDF_CACHE_OPERATIONS_RELEASE_TO_SYSTEM |
+                  AMDF_CACHE_OPERATIONS_ACQUIRE_FROM_SYSTEM);
   }
 }
 
@@ -144,10 +172,15 @@ TEST(WkmiEndpointPropertiesTest, SdmaFieldsFollowNativeEncoding) {
     ASSERT_EQ(properties.queue_family_count, 2u);
     const auto& family = properties.queue_families[1];
     EXPECT_EQ(family.command_type, AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA);
-    EXPECT_EQ(family.format_features, kFeatures[i]);
-    EXPECT_EQ(family.roles, AMDF_QUEUE_ROLE_TRANSFER);
-    EXPECT_EQ(family.cache_operations, 0u);
-    EXPECT_EQ(family.cache_transition_kinds, 0u);
+    EXPECT_EQ(family.format_features,
+              kFeatures[i] | AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR);
+    EXPECT_EQ(family.roles,
+              AMDF_QUEUE_ROLE_TRANSFER | AMDF_QUEUE_ROLE_CACHE_CONTROL);
+    EXPECT_EQ(family.cache_operations,
+              AMDF_CACHE_OPERATIONS_RELEASE_TO_SYSTEM |
+                  AMDF_CACHE_OPERATIONS_ACQUIRE_FROM_SYSTEM);
+    EXPECT_EQ(family.cache_transition_kinds,
+              AMDF_CACHE_TRANSITION_KINDS_GLOBAL);
   }
 }
 
@@ -165,6 +198,9 @@ TEST(WkmiEndpointPropertiesTest, UnknownFamiliesDoNotInferRectangularLayout) {
                   (AMDF_GPU_SDMA_FORMAT_FEATURE_COPY_LINEAR_RECT |
                    AMDF_GPU_SDMA_FORMAT_FEATURE_COPY_LINEAR_RECT_EXTENDED_Z |
                    AMDF_GPU_SDMA_FORMAT_FEATURE_COPY_LINEAR_RECT_WIDE),
+              0u);
+    EXPECT_EQ(properties.queue_families[0].format_features &
+                  AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH,
               0u);
   }
 }

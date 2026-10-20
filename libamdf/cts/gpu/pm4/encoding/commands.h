@@ -25,8 +25,8 @@ enum class Pm4MemoryComparison : uint32_t {
   kGreater = 6,
 };
 
-// Compiled PM4 compute program with no scratch or hidden runtime inputs. The
-// caller supplies only a kernarg pointer; hardware supplies group/local IDs.
+// Compiled PM4 compute program with no hidden runtime inputs. The caller
+// supplies a kernarg pointer and any required scratch; hardware supplies IDs.
 struct Pm4ComputeProgram {
   // GPU entry address, aligned to 256 bytes and below the 48-bit program limit.
   uint64_t entry_address;
@@ -67,6 +67,8 @@ class Pm4CommandWriter {
 
   // Joins preceding compute waves and acquires code and data from SYSTEM.
   void SystemBarrier();
+  // Joins preceding compute waves without performing cache operations.
+  void WaitCompute();
   // Acquires SYSTEM data while retaining instruction-cache contents. The
   // caller has already published immutable code and joined preceding waves
   // through an independent completion dependency. This emits no shader wait.
@@ -94,6 +96,11 @@ class Pm4CommandWriter {
   // register requirements. The caller separately publishes code and data.
   void BindCompute(const Pm4ComputeProgram& program, uint64_t kernarg_address,
                    amdf_queue_format_features_t format_features);
+  // Programs admitted command-owned scratch after prior users have joined.
+  // Base is 256-byte aligned; each engine owns waves_per_engine slots of
+  // wave_byte_length bytes, a multiple of 256 covering every dispatched lane.
+  void BindScratch(uint64_t base, uint32_t waves_per_engine,
+                   uint32_t wave_byte_length);
   // Launches the bound program in thread units, starting at zero with complete
   // groups. The program supplies the compiled wave size; shader completion and
   // memory visibility require an explicit subsequent completion/cache

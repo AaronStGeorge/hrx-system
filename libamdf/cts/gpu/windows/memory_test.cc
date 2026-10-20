@@ -35,7 +35,7 @@ class GpuMemoryTest : public GpuDeviceFixture {
       }
     }
     if (memory_ != nullptr) {
-      const amdf_status_t status = api_->memory_destroy(memory_);
+      const amdf_status_t status = api_->memory_destroy(memory_, nullptr);
       memory_ = nullptr;
       EXPECT_TRUE(amdf_status_is_ok(status));
     }
@@ -78,15 +78,15 @@ TEST_F(GpuMemoryTest, ValidatesPlacementRequirementsBeforeNativeAllocation) {
   amdf_memory_t* output = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
 
   create_info.required_flags |= AMDF_MEMORY_FLAG_SHAREABLE;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 
   create_info = MakeSystemMemoryCreateInfo();
   create_info.required_flags |= AMDF_MEMORY_FLAG_DEVICE_LOCAL;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 
@@ -96,8 +96,8 @@ TEST_F(GpuMemoryTest, ValidatesPlacementRequirementsBeforeNativeAllocation) {
       local_scope_, AMDF_MEMORY_PROFILE_ROLE_CREATE,
       AMDF_MEMORY_FLAG_DEVICE_LOCAL, memory_access_.requirements);
   create_info.required_flags |= AMDF_MEMORY_FLAG_HOST_VISIBLE;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(local_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(local_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 
@@ -110,8 +110,8 @@ TEST_F(GpuMemoryTest, ValidatesPlacementRequirementsBeforeNativeAllocation) {
   create_info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
   create_info.registered_host_pointer =
       reinterpret_cast<uint8_t*>(&create_info) + 1;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &create_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create_info,
+                                                 &output, nullptr)),
             AMDF_STATUS_CODE_INVALID_ARGUMENT);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
 }
@@ -140,7 +140,7 @@ TEST_F(GpuMemoryTest, OwnsStableSystemAddressAndExplicitHostMapping) {
        granularity) *
       granularity;
   ASSERT_TRUE(amdf_status_is_ok(
-      api_->memory_create(system_scope_, &create_info, &memory_)));
+      api_->memory_create(system_scope_, &create_info, &memory_, nullptr)));
   ASSERT_NE(memory_, nullptr);
 
   amdf_memory_info_t memory_info = {};
@@ -228,8 +228,8 @@ TEST_F(GpuMemoryTest, OwnsStableSystemAddressAndExplicitHostMapping) {
 
   ASSERT_TRUE(amdf_status_is_ok(api_->host_mapping_destroy(mapping_)));
   mapping_ = nullptr;
-  ASSERT_TRUE(
-      amdf_status_is_ok(api_->memory_destroy(std::exchange(memory_, nullptr))));
+  ASSERT_TRUE(amdf_status_is_ok(
+      api_->memory_destroy(std::exchange(memory_, nullptr), nullptr)));
 }
 
 TEST_F(GpuMemoryTest, CreatesDeviceLocalExecutableMemory) {
@@ -274,7 +274,7 @@ TEST_F(GpuMemoryTest, CreatesDeviceLocalExecutableMemory) {
        granularity) *
       granularity;
   ASSERT_TRUE(amdf_status_is_ok(
-      api_->memory_create(local_scope_, &create_info, &memory_)));
+      api_->memory_create(local_scope_, &create_info, &memory_, nullptr)));
   amdf_memory_info_t memory_info = {};
   memory_info.type = AMDF_STRUCTURE_TYPE_MEMORY_INFO;
   memory_info.structure_size = sizeof(memory_info);
@@ -344,7 +344,7 @@ TEST_F(GpuMemoryTest, RegistersCallerOwnedCoherentHostPages) {
   create_info.registered_host_pointer = registered_host_pointer_;
   create_info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
   ASSERT_TRUE(amdf_status_is_ok(
-      api_->memory_create(system_scope_, &create_info, &memory_)));
+      api_->memory_create(system_scope_, &create_info, &memory_, nullptr)));
 
   amdf_memory_map_info_t map_info = {};
   map_info.type = AMDF_STRUCTURE_TYPE_MEMORY_MAP_INFO;
@@ -378,8 +378,8 @@ TEST_F(GpuMemoryTest, RegistersCallerOwnedCoherentHostPages) {
 
   ASSERT_TRUE(amdf_status_is_ok(api_->host_mapping_destroy(mapping_)));
   mapping_ = nullptr;
-  ASSERT_TRUE(
-      amdf_status_is_ok(api_->memory_destroy(std::exchange(memory_, nullptr))));
+  ASSERT_TRUE(amdf_status_is_ok(
+      api_->memory_destroy(std::exchange(memory_, nullptr), nullptr)));
   std::memset(registered_host_pointer_, 0x3C, kByteLength);
 }
 

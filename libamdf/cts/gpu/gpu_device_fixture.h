@@ -61,6 +61,8 @@ inline void RecordGpuEndpointProperties(
 }
 
 // Finds a backing profile qualified for the requested live device access.
+// Returns UNKNOWN when no profile supports the request; native query or
+// availability failures remain test failures.
 inline uint32_t FindGpuMemoryProfileOrdinal(
     const amdf_api_t* api, amdf_memory_scope_t* scope, amdf_device_t* device,
     amdf_memory_profile_roles_t required_roles,
@@ -107,9 +109,11 @@ inline uint32_t FindGpuMemoryProfileOrdinal(
       return ordinal;
     }
   }
-  ADD_FAILURE() << "no available matching memory profile: domain="
-                << amdf_status_domain(unavailable)
-                << " code=" << amdf_status_code(unavailable);
+  if (!amdf_status_is_ok(unavailable)) {
+    ADD_FAILURE() << "matching memory profile is unavailable: domain="
+                  << amdf_status_domain(unavailable)
+                  << " code=" << amdf_status_code(unavailable);
+  }
   return AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN;
 }
 

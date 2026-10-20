@@ -41,6 +41,11 @@ typedef struct amdf_memory_vtable_t {
   // Releases the exact native state owned by a memory implementation.
   amdf_status_t (*destroy_native)(amdf_memory_t* memory,
                                   uint32_t access_ordinal);
+  // Remaining native payload extent before terminal metadata abandonment.
+  // Called only for an allocating backing owner with non-NULL native state.
+  // Reads retained acquisition/release progress without native queries.
+  uint64_t (*remaining_backing_byte_length)(const amdf_memory_t* memory,
+                                            uint32_t access_ordinal);
   // Discards native metadata without native calls. Any surviving
   // native resources retain their dependent backing after terminal failure.
   void (*abandon_native)(amdf_memory_t* memory, uint32_t access_ordinal);
@@ -85,6 +90,9 @@ struct amdf_memory_t {
   // Slot owning backing and its host view. Equals access_count for private
   // host backing; otherwise names the device access that owns native backing.
   uint32_t backing_access_ordinal;
+  // True when this resource allocated its backing; false for REGISTER/IMPORT.
+  // Consumer attachments do not change the origin of the common backing.
+  bool allocated_backing;
   // Host-view limits selected during construction, independent of consumers.
   amdf_host_mapping_capabilities_t host_mapping;
 };
@@ -101,9 +109,10 @@ amdf_status_t amdf_memory_resource_allocate(amdf_allocator_t host_allocator,
                                             amdf_memory_t** out_memory);
 
 // Releases consumers before backing and consumes all library metadata once.
-// Native failure leaves required backing unreclaimed and returns the error;
-// neither published final release nor construction rollback has a retry owner.
-amdf_status_t amdf_memory_resource_destroy(amdf_memory_t* memory);
+// Records the first cleanup error and surviving allocation-owned payload before
+// abandoning native metadata. Neither final release nor rollback has a retry
+// owner; the result only accounts for the consumed operation.
+amdf_memory_release_info_t amdf_memory_resource_destroy(amdf_memory_t* memory);
 
 #ifdef __cplusplus
 }  // extern "C"

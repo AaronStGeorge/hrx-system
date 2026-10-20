@@ -361,6 +361,19 @@ static amdf_status_t amdf_windows_gpu_memory_free_host_storage(
   return AMDF_STATUS_OK;
 }
 
+uint64_t amdf_gpu_umd_memory_remaining_backing_byte_length(
+    const amdf_gpu_umd_memory_t* memory) {
+  // A reserved but uncommitted host interval and empty GPU VA retain no
+  // payload. A partially released allocation group conservatively retains its
+  // full extent, including native alignment and its short final allocation.
+  return memory->resource != 0 || memory->allocation_count != 0 ||
+                 memory->shared_handle != NULL ||
+                 (memory->host_reservation != NULL &&
+                  memory->host_pointer != NULL)
+             ? memory->byte_length
+             : 0;
+}
+
 static amdf_status_t amdf_windows_gpu_memory_release_native(
     amdf_gpu_umd_memory_t* memory) {
   // Allocation destruction removes its mappings and residency, including

@@ -12,7 +12,8 @@
 
 void CtsMappedMemory::Create(const amdf_api_t* api, amdf_memory_scope_t* scope,
                              const amdf_memory_create_info_t& create_info) {
-  ASSERT_EQ(api->memory_create(scope, &create_info, &memory), AMDF_STATUS_OK);
+  ASSERT_EQ(api->memory_create(scope, &create_info, &memory, nullptr),
+            AMDF_STATUS_OK);
   ASSERT_NO_FATAL_FAILURE(Map(api));
   ASSERT_EQ(info.byte_length, create_info.byte_length);
   ASSERT_EQ(info.flags & create_info.required_flags,
@@ -48,7 +49,8 @@ bool CtsMappedMemory::Release(const amdf_api_t* api) {
     }
   }
   if (memory) {
-    const auto status = api->memory_destroy(std::exchange(memory, nullptr));
+    const auto status =
+        api->memory_destroy(std::exchange(memory, nullptr), nullptr);
     EXPECT_EQ(status, AMDF_STATUS_OK);
     if (!amdf_status_is_ok(status)) {
       return false;

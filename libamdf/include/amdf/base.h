@@ -103,8 +103,11 @@ typedef uint32_t amdf_abi_version_t;
 /// Native file-buffer views, optional memory routes, and I/O visibility sites.
 #define AMDF_ABI_VERSION_11 ((amdf_abi_version_t)11)
 
+/// Memory cleanup disposition independent of construction status.
+#define AMDF_ABI_VERSION_12 ((amdf_abi_version_t)12)
+
 /// The most recent ABI version described by this header.
-#define AMDF_ABI_VERSION_LATEST AMDF_ABI_VERSION_11
+#define AMDF_ABI_VERSION_LATEST AMDF_ABI_VERSION_12
 
 /// The unmangled symbol used to acquire the immutable API table.
 #define AMDF_QUERY_API_SYMBOL "amdf_query_api"

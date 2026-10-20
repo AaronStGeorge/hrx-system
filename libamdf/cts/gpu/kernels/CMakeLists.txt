@@ -1849,10 +1849,73 @@ amdf_cts_gpu_kernel_set(
     "gfx941"
     "gfx942"
     "gfx950"
+  TARGET_SRCS
+    "targets/gfx1100/default.loom"
+    "targets/gfx1101/default.loom"
+    "targets/gfx1102/default.loom"
+    "targets/gfx1103/default.loom"
+    "targets/gfx1150/default.loom"
+    "targets/gfx1151/default.loom"
+    "targets/gfx1152/default.loom"
+    "targets/gfx1153/default.loom"
+    "targets/gfx1170/default.loom"
+    "targets/gfx1171/default.loom"
+    "targets/gfx1172/default.loom"
+    "targets/gfx1200/default.loom"
+    "targets/gfx1201/default.loom"
+    "targets/gfx1250/default.loom"
+    "targets/gfx1250-a0/default.loom"
+    "targets/gfx1251/default.loom"
+    "targets/gfx90a/default.loom"
+    "targets/gfx940/default.loom"
+    "targets/gfx941/default.loom"
+    "targets/gfx942/default.loom"
+    "targets/gfx950/default.loom"
   ENTRY_POINT
     "private_roundtrip"
   NAMESPACE
     "kernels::private_roundtrip"
+)
+endif()
+
+if(AMDF_BUILD AND (AMDF_FAMILY_RDNA OR AMDF_FAMILY_CDNA) AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND (LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4M_CORE OR LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE))
+amdf_cts_gpu_kernel_set(
+  NAME
+    "private_roundtrip_wave64_kernels"
+  SRCS
+    "private_roundtrip.loom"
+  TARGETS
+    "gfx1100"
+    "gfx1101"
+    "gfx1102"
+    "gfx1103"
+    "gfx1150"
+    "gfx1151"
+    "gfx1152"
+    "gfx1153"
+    "gfx1170"
+    "gfx1171"
+    "gfx1172"
+    "gfx1200"
+    "gfx1201"
+  TARGET_SRCS
+    "targets/gfx1100/wave64.loom"
+    "targets/gfx1101/wave64.loom"
+    "targets/gfx1102/wave64.loom"
+    "targets/gfx1103/wave64.loom"
+    "targets/gfx1150/wave64.loom"
+    "targets/gfx1151/wave64.loom"
+    "targets/gfx1152/wave64.loom"
+    "targets/gfx1153/wave64.loom"
+    "targets/gfx1170/wave64.loom"
+    "targets/gfx1171/wave64.loom"
+    "targets/gfx1172/wave64.loom"
+    "targets/gfx1200/wave64.loom"
+    "targets/gfx1201/wave64.loom"
+  ENTRY_POINT
+    "private_roundtrip"
+  NAMESPACE
+    "kernels::private_roundtrip_wave64"
 )
 endif()
 

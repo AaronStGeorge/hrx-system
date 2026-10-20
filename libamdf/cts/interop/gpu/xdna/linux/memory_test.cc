@@ -310,12 +310,14 @@ class GpuXdnaMemoryInteropTest : public ::testing::Test {
           AMDF_STATUS_OK);
     }
     if (xdna_memory_ != nullptr) {
-      EXPECT_EQ(api_->memory_destroy(std::exchange(xdna_memory_, nullptr)),
-                AMDF_STATUS_OK);
+      EXPECT_EQ(
+          api_->memory_destroy(std::exchange(xdna_memory_, nullptr), nullptr),
+          AMDF_STATUS_OK);
     }
     if (gpu_memory_ != nullptr) {
-      EXPECT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr)),
-                AMDF_STATUS_OK);
+      EXPECT_EQ(
+          api_->memory_destroy(std::exchange(gpu_memory_, nullptr), nullptr),
+          AMDF_STATUS_OK);
     }
     if (additional_gpu_device_ != nullptr) {
       EXPECT_EQ(api_->device_destroy(additional_gpu_device_), AMDF_STATUS_OK);
@@ -520,8 +522,9 @@ void GpuXdnaMemoryInteropTest::ImportGpuSubrangeAndReleaseAllocation() {
       .minimum_alignment = page_size,
       .accesses = &gpu_access_,
   };
-  ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &gpu_memory_),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api_->memory_create(system_scope_, &create_info, &gpu_memory_, nullptr),
+      AMDF_STATUS_OK);
 
   amdf_memory_info_t gpu_memory_info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_INFO,
@@ -599,16 +602,17 @@ void GpuXdnaMemoryInteropTest::ImportGpuSubrangeAndReleaseAllocation() {
   const auto mismatched_transport = external_memory_;
   auto* sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   auto* rejected = sentinel;
-  EXPECT_EQ(amdf_status_code(api_->memory_import(system_scope_, &import_info,
-                                                 &external_memory_, &rejected)),
-            AMDF_STATUS_CODE_UNSUPPORTED);
+  EXPECT_EQ(
+      amdf_status_code(api_->memory_import(
+          system_scope_, &import_info, &external_memory_, &rejected, nullptr)),
+      AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(rejected, sentinel);
   EXPECT_EQ(std::memcmp(&external_memory_, &mismatched_transport,
                         sizeof(external_memory_)),
             0);
   external_memory_.provenance.words[0] ^= 1;
   ASSERT_EQ(api_->memory_import(system_scope_, &import_info, &external_memory_,
-                                &xdna_memory_),
+                                &xdna_memory_, nullptr),
             AMDF_STATUS_OK);
   const amdf_external_memory_t empty_external_memory = {};
   EXPECT_EQ(std::memcmp(&external_memory_, &empty_external_memory,
@@ -738,7 +742,7 @@ void GpuXdnaMemoryInteropTest::ImportGpuSubrangeAndReleaseAllocation() {
 
   ASSERT_EQ(api_->host_mapping_destroy(gpu_mapping_), AMDF_STATUS_OK);
   gpu_mapping_ = nullptr;
-  ASSERT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr)),
+  ASSERT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr), nullptr),
             AMDF_STATUS_OK);
 }
 
@@ -796,8 +800,9 @@ TEST_F(GpuXdnaMemoryInteropTest,
       .minimum_alignment = 4096,
       .accesses = devices,
   };
-  ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &gpu_memory_),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api_->memory_create(system_scope_, &create_info, &gpu_memory_, nullptr),
+      AMDF_STATUS_OK);
   amdf_memory_info_t info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_INFO,
       .structure_size = sizeof(info),
@@ -986,16 +991,17 @@ TEST_F(GpuXdnaMemoryInteropTest,
           create.registered_host_cacheability = cacheability;
           auto* sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
           amdf_memory_t* rejected = sentinel;
-          EXPECT_EQ(amdf_status_code(
-                        api_->memory_create(system_scope_, &create, &rejected)),
+          EXPECT_EQ(amdf_status_code(api_->memory_create(system_scope_, &create,
+                                                         &rejected, nullptr)),
                     AMDF_STATUS_CODE_UNSUPPORTED);
           EXPECT_EQ(rejected, sentinel);
         }
         create.registered_host_cacheability =
             query.registered_host_cacheability;
       }
-      ASSERT_EQ(api_->memory_create(system_scope_, &create, &gpu_memory_),
-                AMDF_STATUS_OK);
+      ASSERT_EQ(
+          api_->memory_create(system_scope_, &create, &gpu_memory_, nullptr),
+          AMDF_STATUS_OK);
       amdf_host_mapping_info_t mapping = {};
       ASSERT_EQ(Map(gpu_memory_, create.byte_length, &gpu_mapping_, &mapping),
                 AMDF_STATUS_OK);
@@ -1031,8 +1037,9 @@ TEST_F(GpuXdnaMemoryInteropTest,
       }
       ASSERT_EQ(api_->host_mapping_destroy(gpu_mapping_), AMDF_STATUS_OK);
       gpu_mapping_ = nullptr;
-      ASSERT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr)),
-                AMDF_STATUS_OK);
+      ASSERT_EQ(
+          api_->memory_destroy(std::exchange(gpu_memory_, nullptr), nullptr),
+          AMDF_STATUS_OK);
     }
   }
 }
@@ -1105,8 +1112,9 @@ TEST_F(GpuXdnaMemoryInteropTest,
   };
   // An exceptional failed construction may leave native pins behind. Preserve
   // caller pages until process exit unless a published owner can release them.
-  ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &gpu_memory_),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api_->memory_create(system_scope_, &create_info, &gpu_memory_, nullptr),
+      AMDF_STATUS_OK);
   caller_pages_.pointer = static_cast<uint8_t*>(pages);
   caller_pages_.byte_length = reservation_length;
   amdf_memory_info_t info = {
@@ -1139,7 +1147,7 @@ TEST_F(GpuXdnaMemoryInteropTest,
                                        &stable_address),
             AMDF_STATUS_OK);
   EXPECT_EQ(stable_address, gpu_address);
-  ASSERT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr)),
+  ASSERT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr), nullptr),
             AMDF_STATUS_OK);
   EXPECT_EQ(caller_pages_.pointer[2], 0x7B);
   EXPECT_EQ(caller_pages_.pointer[3], 0x39);
@@ -1219,10 +1227,10 @@ TEST_F(GpuXdnaMemoryInteropTest,
   // the joint request, an XDNA quota rejection must unwind that preparation.
   ASSERT_EQ(setrlimit(RLIMIT_MEMLOCK, &restricted_limit), 0);
   const amdf_status_t control_status =
-      api_->memory_create(system_scope_, &create_info, &gpu_memory_);
+      api_->memory_create(system_scope_, &create_info, &gpu_memory_, nullptr);
   ASSERT_EQ(setrlimit(RLIMIT_MEMLOCK, &saved_limit), 0);
   ASSERT_EQ(control_status, AMDF_STATUS_OK);
-  ASSERT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr)),
+  ASSERT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr), nullptr),
             AMDF_STATUS_OK);
   ASSERT_EQ(std::memcmp(pages, expected.data(), expected.size()), 0);
 
@@ -1246,7 +1254,7 @@ TEST_F(GpuXdnaMemoryInteropTest,
         amdf_memory_t* output = sentinel;
         ASSERT_EQ(setrlimit(RLIMIT_MEMLOCK, &restricted_limit), 0);
         const amdf_status_t status =
-            api_->memory_create(system_scope_, &create_info, &output);
+            api_->memory_create(system_scope_, &create_info, &output, nullptr);
         const int restored = setrlimit(RLIMIT_MEMLOCK, &saved_limit);
         if (amdf_status_is_ok(status)) {
           gpu_memory_ = output;
@@ -1262,9 +1270,9 @@ TEST_F(GpuXdnaMemoryInteropTest,
         std::memset(expected.data() + page_size, 0x30 + generation,
                     byte_length);
         std::memcpy(pages, expected.data(), expected.size());
-        ASSERT_EQ(
-            api_->memory_create(system_scope_, &create_info, &gpu_memory_),
-            AMDF_STATUS_OK);
+        ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &gpu_memory_,
+                                      nullptr),
+                  AMDF_STATUS_OK);
         uint64_t gpu_address = 0;
         uint64_t xdna_address = 0;
         ASSERT_EQ(
@@ -1289,8 +1297,9 @@ TEST_F(GpuXdnaMemoryInteropTest,
         ASSERT_EQ(
             api_->host_mapping_destroy(std::exchange(gpu_mapping_, nullptr)),
             AMDF_STATUS_OK);
-        ASSERT_EQ(api_->memory_destroy(std::exchange(gpu_memory_, nullptr)),
-                  AMDF_STATUS_OK);
+        ASSERT_EQ(
+            api_->memory_destroy(std::exchange(gpu_memory_, nullptr), nullptr),
+            AMDF_STATUS_OK);
         ASSERT_EQ(std::memcmp(pages, expected.data(), expected.size()), 0);
       }
     }
@@ -1338,8 +1347,9 @@ TEST_F(GpuXdnaMemoryInteropTest,
       .byte_length = page_size,
       .accesses = &gpu_access_,
   };
-  ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &gpu_memory_),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api_->memory_create(system_scope_, &create_info, &gpu_memory_, nullptr),
+      AMDF_STATUS_OK);
 
   amdf_memory_export_info_t export_info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_EXPORT_INFO,
@@ -1368,9 +1378,10 @@ TEST_F(GpuXdnaMemoryInteropTest,
   };
   auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   amdf_memory_t* output = sentinel;
-  EXPECT_EQ(amdf_status_code(api_->memory_import(system_scope_, &import_info,
-                                                 &external_memory_, &output)),
-            AMDF_STATUS_CODE_FAILED_PRECONDITION);
+  EXPECT_EQ(
+      amdf_status_code(api_->memory_import(
+          system_scope_, &import_info, &external_memory_, &output, nullptr)),
+      AMDF_STATUS_CODE_FAILED_PRECONDITION);
   EXPECT_EQ(output, sentinel);
   EXPECT_EQ(std::memcmp(&external_memory_, &mismatched_external_memory,
                         sizeof(external_memory_)),

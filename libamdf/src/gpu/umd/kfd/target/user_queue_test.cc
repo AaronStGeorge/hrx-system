@@ -178,7 +178,8 @@ TEST(KfdTargetUserQueueTest, Pm4TrapRequirementsFollowNativeGcIdentity) {
     EXPECT_EQ(plans.values[0].family.command_type,
               AMDF_QUEUE_COMMAND_TYPE_GPU_PM4);
     EXPECT_EQ(plans.values[0].family.format_features,
-              AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR | test.features);
+              AMDF_GPU_PM4_FORMAT_FEATURE_ACQUIRE_MEM_GCR |
+                  AMDF_GPU_PM4_FORMAT_FEATURE_DISPATCH_SCRATCH | test.features);
     EXPECT_EQ(plans.values[1].family.command_type,
               AMDF_QUEUE_COMMAND_TYPE_GPU_AQL);
     EXPECT_EQ(plans.values[1].family.format_features,

@@ -93,7 +93,7 @@ class HostReservationTest : public ::testing::TestWithParam<uint64_t> {
       }
     }
     for (amdf_memory_t* memory : sources_) {
-      EXPECT_EQ(api_->memory_destroy(memory), AMDF_STATUS_OK);
+      EXPECT_EQ(api_->memory_destroy(memory, nullptr), AMDF_STATUS_OK);
     }
   }
 
@@ -134,7 +134,8 @@ class HostReservationTest : public ::testing::TestWithParam<uint64_t> {
         .byte_length = length,
     };
     amdf_memory_t* memory = nullptr;
-    ASSERT_EQ(api_->memory_create(scope_, &create, &memory), AMDF_STATUS_OK);
+    ASSERT_EQ(api_->memory_create(scope_, &create, &memory, nullptr),
+              AMDF_STATUS_OK);
     sources_.push_back(memory);
     amdf_memory_map_info_t request = {
         .type = AMDF_STRUCTURE_TYPE_MEMORY_MAP_INFO,
@@ -214,6 +215,84 @@ class HostReservationTest : public ::testing::TestWithParam<uint64_t> {
   // Physical owners retained through checked final detach.
   std::vector<amdf_memory_t*> sources_;
 };
+
+TEST_P(HostReservationTest, CoarseReplacementUnitsPreserveExactShortTail) {
+  const uint64_t tail = std::max(capabilities_.reservation_granularity,
+                                 capabilities_.mapping_granularity);
+  unit_ = std::max(unit_, 4 * tail);
+  const uint64_t length = 2 * unit_ + tail;
+  ASSERT_NO_FATAL_FAILURE(Reserve(length));
+  ASSERT_EQ(address_.byte_length, length);
+  amdf_host_mapping_t* view = nullptr;
+  uint32_t* pointer = nullptr;
+  ASSERT_NO_FATAL_FAILURE(View(0, length, &view, &pointer));
+  amdf_memory_t* original = nullptr;
+  uint32_t* source = nullptr;
+  ASSERT_NO_FATAL_FAILURE(Allocate(length, capabilities_.required_source_flags,
+                                   &original, &source));
+  std::fill_n(source, length / sizeof(uint32_t), 17u);
+  const auto initial = Bind(0, length, original, 0);
+  ASSERT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &initial),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(std::memcmp(pointer, source, length), 0);
+  amdf_memory_t* replacement = nullptr;
+  uint32_t* tail_source = nullptr;
+  ASSERT_NO_FATAL_FAILURE(Allocate(tail, capabilities_.required_source_flags,
+                                   &replacement, &tail_source));
+  std::fill_n(tail_source, tail / sizeof(uint32_t), 29u);
+  auto update = Bind(2 * unit_, tail, replacement, 0);
+  ASSERT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &update),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(std::memcmp(pointer, source, 2 * unit_), 0);
+  EXPECT_EQ(
+      std::memcmp(pointer + 2 * unit_ / sizeof(uint32_t), tail_source, tail),
+      0);
+  update.target_byte_offset = unit_;
+  EXPECT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &update),
+            amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE));
+  source[unit_ / sizeof(uint32_t)] = 37;
+  const auto full_unit = Bind(0, unit_, original, unit_);
+  ASSERT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &full_unit),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(pointer[0], 37u);
+  EXPECT_EQ(pointer[2 * unit_ / sizeof(uint32_t)], 29u);
+  const amdf_memory_mapping_update_t detach = {
+      .target_byte_offset = 2 * unit_,
+      .byte_length = tail,
+  };
+  ASSERT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &detach),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(pointer[0], 37u);
+  update.target_byte_offset = 2 * unit_;
+  ASSERT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &update),
+            AMDF_STATUS_OK);
+  pointer[length / sizeof(uint32_t) - 1] = 41;
+  EXPECT_EQ(tail_source[tail / sizeof(uint32_t) - 1], 41u);
+  ASSERT_EQ(api_->memory_reservation_detach(reservation_, 0), AMDF_STATUS_OK);
+  ASSERT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &initial),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(std::memcmp(pointer, source, length), 0);
+}
+
+TEST_P(HostReservationTest, EntireReservationCanBeShorterThanOneUnit) {
+  const uint64_t length = std::max(capabilities_.reservation_granularity,
+                                   capabilities_.mapping_granularity);
+  unit_ = std::max(unit_, 4 * length);
+  ASSERT_NO_FATAL_FAILURE(Reserve(length));
+  ASSERT_EQ(address_.byte_length, length);
+  amdf_memory_t* memory = nullptr;
+  uint32_t* source = nullptr;
+  ASSERT_NO_FATAL_FAILURE(
+      Allocate(length, capabilities_.required_source_flags, &memory, &source));
+  const auto update = Bind(0, length, memory, 0);
+  ASSERT_EQ(api_->memory_reservation_update(reservation_, 0, 1, &update),
+            AMDF_STATUS_OK);
+  amdf_host_mapping_t* view = nullptr;
+  uint32_t* pointer = nullptr;
+  ASSERT_NO_FATAL_FAILURE(View(0, length, &view, &pointer));
+  pointer[length / sizeof(uint32_t) - 1] = 53;
+  EXPECT_EQ(source[length / sizeof(uint32_t) - 1], 53u);
+}
 
 TEST_P(HostReservationTest, ReplacesBackingThroughAnUnchangedHostView) {
   ASSERT_NO_FATAL_FAILURE(Reserve(3 * unit_));
@@ -443,7 +522,7 @@ TEST_P(HostReservationTest, KeepsTheViewAliveAcrossBackingDestruction) {
     ASSERT_EQ(api_->memory_reservation_detach(reservation_, 0), AMDF_STATUS_OK);
     ASSERT_EQ(api_->host_mapping_destroy(views_.back()), AMDF_STATUS_OK);
     views_.pop_back();
-    const amdf_status_t released = api_->memory_destroy(memory);
+    const amdf_status_t released = api_->memory_destroy(memory, nullptr);
     sources_.pop_back();
     ASSERT_EQ(released, AMDF_STATUS_OK);
     // Both the reservation and its cache-operation handle stay unchanged.

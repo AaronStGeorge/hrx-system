@@ -31,6 +31,8 @@ struct amdf_gpu_umd_kernel_queue_t {
   uint64_t submitted = 0;
   // Outcome of the next native publication attempt.
   amdf_status_t submit_status = AMDF_STATUS_OK;
+  // Native signal publication result after accepting the command stream.
+  amdf_status_t signal_status = AMDF_STATUS_OK;
   // Cached terminal device failure sampled by the shared queue.
   amdf_status_t terminal_status = AMDF_STATUS_OK;
   // Outcome of the next native wait after it publishes completion.
@@ -186,6 +188,27 @@ class GpuKernelQueueTest
   // Canonical projection stores native mutation failure without a registry.
   amdf_memory_reservation_access_state_t target = {};
 };
+
+TEST_P(GpuKernelQueueTest, CommandAlignmentIsCheckedBeforeNativeAdmission) {
+  const uint64_t alignment =
+      GetParam() == AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA ? 32 : 4;
+  for (uint64_t offset = 0; offset <= 64; ++offset) {
+    SCOPED_TRACE(offset);
+    command.byte_offset = offset;
+    const uint64_t prior_submission = device.native.queue.submitted;
+    uint64_t submission = UINT64_MAX;
+    if (offset % alignment == 0) {
+      ASSERT_EQ(Submit(&submission), AMDF_STATUS_OK);
+      EXPECT_GT(submission, prior_submission);
+      device.native.queue.progress = submission;
+    } else {
+      EXPECT_EQ(Submit(&submission),
+                amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+      EXPECT_EQ(submission, UINT64_MAX);
+      EXPECT_EQ(device.native.queue.submitted, prior_submission);
+    }
+  }
+}
 
 TEST_P(GpuKernelQueueTest, MappingAndCommandsShareProgressAndCapacity) {
   ASSERT_EQ(CreateQueue(2), AMDF_STATUS_OK);
@@ -583,6 +606,32 @@ TEST_P(GpuKernelQueueTest, CachedTerminalFailureDoesNotProveRetirement) {
   EXPECT_EQ(Query().retired_submission, submission);
 }
 
+TEST_P(GpuKernelQueueTest,
+       FailedSignalKeepsAcceptedPointUntilCheckedRetirement) {
+  const auto failure =
+      amdf_make_api_status(AMDF_STATUS_CODE_RESOURCE_EXHAUSTED);
+  device.native.queue.signal_status = failure;
+  uint64_t point = 0;
+  ASSERT_EQ(Submit(&point), AMDF_STATUS_OK);
+  ASSERT_NE(point, 0u);
+  EXPECT_EQ(Query().terminal_status, failure);
+  EXPECT_EQ(Query().retired_submission, 0u);
+  uint64_t rejected_point = UINT64_MAX;
+  EXPECT_EQ(Submit(&rejected_point), failure);
+  EXPECT_EQ(rejected_point, UINT64_MAX);
+  EXPECT_EQ(device.native.queue.submitted, point);
+  EXPECT_EQ(amdf_kernel_queue_wait(queue, point, 0, 0), failure);
+  EXPECT_EQ(amdf_kernel_queue_destroy(queue),
+            amdf_make_api_status(AMDF_STATUS_CODE_BUSY));
+  EXPECT_EQ(device.native.queue.destroy_count, 0u);
+  device.native.queue.progress = point;
+  EXPECT_EQ(Refresh().retired_submission, point);
+  EXPECT_EQ(Query().terminal_status, failure);
+  EXPECT_EQ(amdf_kernel_queue_destroy(queue), AMDF_STATUS_OK);
+  queue = nullptr;
+  EXPECT_EQ(device.native.queue.destroy_count, 1u);
+}
+
 TEST_P(GpuKernelQueueTest, NativeWaitErrorDoesNotEraseConfirmedRetirement) {
   uint64_t submission = 0;
   ASSERT_EQ(Submit(&submission), AMDF_STATUS_OK);
@@ -700,6 +749,7 @@ amdf_status_t amdf_gpu_umd_kernel_queue_submit(
   }
   EXPECT_EQ(submission, queue->submitted + 1);
   queue->submitted = submission;
+  queue->terminal_status = queue->signal_status;
   using Phase = amdf_gpu_umd_kernel_queue_t::PublicationPhase;
   std::unique_lock<std::mutex> lock(queue->publication_mutex);
   if (queue->publication_phase == Phase::kPauseOnAccept) {

@@ -1081,7 +1081,7 @@ program-side protocol.
 
 | Platform | Native requirements | Resource admission |
 | --- | --- | --- |
-| Linux KFD, aliasable file backing | Kernel udmabuf support (`CONFIG_UDMABUF`), a loaded service, read/write access to `/dev/udmabuf`, readable `/sys/module/udmabuf/parameters/size_limit_mb`, and the ordinary KFD/render-node access. The AMDGPU driver must accept these exports and the selected exact GPU alias contract. | The profile intersects the export size limit with all consumer limits. Backing pages remain pinned for the allocation lifetime; each attachment also consumes native import and page-table resources. File-buffer registration has its own admission, including the process's locked-memory limit for registered io_uring buffers. |
+| Linux KFD, aliasable file backing | Writable page population (`MADV_POPULATE_WRITE`, Linux 5.14 or newer), kernel udmabuf support (`CONFIG_UDMABUF`), a loaded service, read/write access to `/dev/udmabuf`, readable `/sys/module/udmabuf/parameters/size_limit_mb`, and the ordinary KFD/render-node access. The AMDGPU driver must accept these exports and the selected exact GPU alias contract. | The profile intersects the export size limit with all consumer limits. Backing pages remain pinned for the allocation lifetime; each attachment also consumes native import and page-table resources. File-buffer registration has its own admission, including the process's locked-memory limit for registered io_uring buffers. |
 | Linux KFD, fixed-address file staging | Process native lifetime and an available owned-host profile that registers its pages with KFD. Staging requests a default `DEVICE_ADDRESS`; its GPU access does not require `MAPPING_SOURCE`. This route needs no udmabuf exporter. | GPU page registration and native file-buffer registration admit the bounded pool independently. KFD owns the GPU registration until device uses retire; native file registrations must retire before backing destruction. |
 | Windows WDDM | The native GPU provider's owned system-page allocation and mapping services. No udmabuf service is involved. | Native allocation and page-lock admission can fail independently of file creation. Buffered/unbuffered file alignment and transfer constraints come from the file API. |
 
@@ -1093,6 +1093,23 @@ authoritative if resource admission or policy changes after discovery; failure
 leaves the caller's output unchanged. A new instance discovers newly installed
 or newly permitted services. The library does not load modules, change device
 permissions, or raise resource limits.
+
+The exported host backing is prepared before its first device attachment.
+Explicit NUMA placement is applied before physical allocation. Full 2 MiB
+extents attempt synchronous large-folio promotion where supported. Promotion
+may be unavailable or partial when contiguous physical memory is scarce;
+allocation does not require huge pages. The ordinary host view is populated
+for the entire allocation before export pins it and publishes CPU
+initialization, including every base page that could not be promoted.
+Required placement or population failures remain allocation errors. CPU-only
+allocations and caller-owned imports retain their separate construction
+contracts.
+
+Preparation runs once per physical allocation. Retaining a slab preserves its
+pages across buffer reuse, and a retained native file-buffer registration lets
+I/O continue even if the kernel later reclaims ordinary CPU translations. The
+2 MiB folio geometry does not limit file request size, virtual mapping size, or
+pool growth.
 
 The upstream udmabuf `size_limit_mb` parameter defaults to 64 MiB **per export**,
 not per process or pool. Callers use `maximum_byte_length`, rather than that

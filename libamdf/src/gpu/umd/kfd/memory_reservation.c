@@ -211,7 +211,8 @@ static amdf_status_t amdf_gpu_kfd_reservation_clear(
   const struct drm_amdgpu_bo_list_entry transport = {
       .bo_handle = target->transport_handle,
   };
-  amdf_gpu_kfd_device_lock_memory(target->device);
+  amdf_gpu_kfd_device_lock_memory(target->device,
+                                  AMDF_GPU_KFD_MEMORY_PRIORITY_MAP);
   amdf_status_t status =
       amdf_gpu_kfd_reservation_ioctl(target, DRM_IOCTL_AMDGPU_GEM_VA, &clear);
   if (amdf_status_is_ok(status)) {
@@ -316,9 +317,9 @@ static amdf_status_t amdf_gpu_kfd_reservation_prepare_target(
     target->transport_address = result.device_address;
     memset(result.host_pointer, 0, device->page_size);
     _mm_mfence();
-    status = amdf_gpu_kfd_buffer_export_gem(target->transport,
-                                            device->render_descriptor,
-                                            &target->transport_handle);
+    status = amdf_gpu_kfd_buffer_prepare_gem(target->transport,
+                                             device->render_descriptor,
+                                             &target->transport_handle);
   }
   if (amdf_status_is_ok(status)) {
     union drm_amdgpu_ctx context = {0};
@@ -349,9 +350,19 @@ amdf_status_t amdf_gpu_umd_memory_reservation_create(
   reservation->host_allocator = host_allocator;
   reservation->byte_length = byte_length;
   reservation->target_count = device_count;
-  const size_t alignment = minimum_alignment > devices[0]->page_size
-                               ? (size_t)minimum_alignment
-                               : devices[0]->page_size;
+  size_t alignment = minimum_alignment > devices[0]->page_size
+                         ? (size_t)minimum_alignment
+                         : devices[0]->page_size;
+  // Keep large aliases eligible for native PTE fragments even when their final
+  // physical extent is short. Alignment consumes only reserved address space;
+  // backing length and independently replaceable mapping units stay unchanged.
+  for (uint32_t i = 0; i < device_count; ++i) {
+    const size_t fragment_size =
+        devices[i]->topology.virtual_address.fragment_size;
+    if (byte_length >= fragment_size && alignment < fragment_size) {
+      alignment = fragment_size;
+    }
+  }
   reservation->host_reservation_byte_length =
       (size_t)byte_length + alignment - devices[0]->page_size;
   void* pointer =
@@ -439,7 +450,8 @@ amdf_status_t amdf_gpu_umd_memory_reservation_update(
           amdf_gpu_kfd_memory_mapping_handle(updates[i].memory, target->device);
     }
   }
-  amdf_gpu_kfd_device_lock_memory(target->device);
+  amdf_gpu_kfd_device_lock_memory(target->device,
+                                  AMDF_GPU_KFD_MEMORY_PRIORITY_MAP);
   *mutation_started = true;
   uint32_t source = 1;
   for (uint32_t i = 0; i < update_count && amdf_status_is_ok(status); ++i) {

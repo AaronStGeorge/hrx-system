@@ -340,6 +340,14 @@ amdf_status_t AMDF_CALL amdf_gpu_kernel_queue_submit(
       UINT64_MAX - command->byte_offset) {
     return amdf_make_api_status(AMDF_STATUS_CODE_OUT_OF_RANGE);
   }
+  const uint64_t command_address =
+      access->addresses[AMDF_MEMORY_ADDRESS_GPU] + command->byte_offset;
+  const uint64_t command_alignment =
+      base_queue->info.command_type == AMDF_QUEUE_COMMAND_TYPE_GPU_SDMA ? 32
+                                                                        : 4;
+  if ((command_address & (command_alignment - 1)) != 0) {
+    return amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT);
+  }
 
   amdf_gpu_kernel_queue_t* queue = (amdf_gpu_kernel_queue_t*)base_queue;
   uint64_t submission = 0;
@@ -348,10 +356,8 @@ amdf_status_t AMDF_CALL amdf_gpu_kernel_queue_submit(
   if (!amdf_status_is_ok(status)) {
     return status;
   }
-  status = amdf_gpu_umd_kernel_queue_submit(
-      queue->umd,
-      access->addresses[AMDF_MEMORY_ADDRESS_GPU] + command->byte_offset,
-      command->byte_length, submission);
+  status = amdf_gpu_umd_kernel_queue_submit(queue->umd, command_address,
+                                            command->byte_length, submission);
   if (amdf_status_is_ok(status)) {
     amdf_atomic_uint64_store_release(&queue->submitted, submission);
     *out_submission = submission;

@@ -151,7 +151,8 @@ TEST_P(MemoryGroupTest, NativeGroupUsesOneOwnerWithoutExternalTransport) {
   info.access_count = 2;
   info.accesses = accesses;
   amdf_memory_t* memory = nullptr;
-  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &info, &memory),
+  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &info, &memory,
+                               nullptr),
             AMDF_STATUS_OK);
   EXPECT_EQ(devices[0].create_call_count, 1u);
   EXPECT_EQ(devices[0].prepared_access_count, 2u);
@@ -166,7 +167,7 @@ TEST_P(MemoryGroupTest, NativeGroupUsesOneOwnerWithoutExternalTransport) {
             devices[1].profile.visibility.describe_site);
   EXPECT_EQ(memory->accesses[0].addresses[AMDF_MEMORY_ADDRESS_GPU],
             memory->accesses[1].addresses[AMDF_MEMORY_ADDRESS_GPU]);
-  EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
   EXPECT_EQ(devices[0].destroy_call_count, 1u);
   EXPECT_EQ(devices[1].destroy_call_count, 0u);
 }
@@ -188,7 +189,7 @@ TEST_P(MemoryGroupTest, NativeGroupRejectsIncompatibleContractsBeforeCreate) {
   const auto expect_rejection = [&]() {
     amdf_memory_t* memory = sentinel;
     EXPECT_EQ(amdf_status_code(amdf_memory_create(
-                  &instance_.system_memory_scope, &info, &memory)),
+                  &instance_.system_memory_scope, &info, &memory, nullptr)),
               AMDF_STATUS_CODE_UNSUPPORTED);
     EXPECT_EQ(memory, sentinel);
     EXPECT_EQ(devices[0].create_call_count, 0u);
@@ -258,7 +259,7 @@ TEST_P(MemoryGroupTest, NativeGroupRejectsNarrowedPeerAccess) {
   auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   amdf_memory_t* memory = sentinel;
   EXPECT_EQ(amdf_status_code(amdf_memory_create(&instance_.system_memory_scope,
-                                                &info, &memory)),
+                                                &info, &memory, nullptr)),
             AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(memory, sentinel);
   EXPECT_EQ(devices[0].create_call_count, 0u);
@@ -287,8 +288,8 @@ TEST_F(MemoryConstructionTest,
     info.access_count = 3;
     info.accesses = accesses;
     amdf_memory_t* memory = nullptr;
-    const amdf_status_t status =
-        amdf_memory_create(&instance_.system_memory_scope, &info, &memory);
+    const amdf_status_t status = amdf_memory_create(
+        &instance_.system_memory_scope, &info, &memory, nullptr);
     if (fail_import) {
       EXPECT_EQ(status, devices[0].import_status);
       EXPECT_EQ(memory, nullptr);
@@ -296,7 +297,7 @@ TEST_F(MemoryConstructionTest,
       ASSERT_EQ(status, AMDF_STATUS_OK);
       EXPECT_EQ(memory->backing_access_ordinal, 1u);
       EXPECT_EQ(memory->accesses[2].native_owner_ordinal, 1u);
-      EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+      EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
     }
     EXPECT_EQ(devices[1].prepared_access_count, 2u);
     EXPECT_EQ(devices[1].create_call_count, 1u);
@@ -321,7 +322,8 @@ TEST_P(MemoryGroupTest, NativeGroupFailureRollsBackOneOwner) {
   info.access_count = 2;
   info.accesses = accesses;
   amdf_memory_t* memory = nullptr;
-  EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &info, &memory),
+  EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &info, &memory,
+                               nullptr),
             devices[0].create_status);
   EXPECT_EQ(memory, nullptr);
   EXPECT_EQ(devices[0].prepared_access_count, 2u);
@@ -364,21 +366,22 @@ TEST_F(MemoryConstructionTest, LiveProfileConstrainsTheConstructedAccessSet) {
   create_info.accesses = accesses;
   create_info.byte_length = profile.allocation.maximum_byte_length + 1;
   amdf_memory_t* memory = nullptr;
-  EXPECT_EQ(amdf_status_code(amdf_memory_create(&instance_.system_memory_scope,
-                                                &create_info, &memory)),
-            AMDF_STATUS_CODE_UNSUPPORTED);
+  EXPECT_EQ(
+      amdf_status_code(amdf_memory_create(&instance_.system_memory_scope,
+                                          &create_info, &memory, nullptr)),
+      AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(memory, nullptr);
   EXPECT_EQ(devices[0].create_call_count, 0u);
   EXPECT_EQ(devices[1].import_call_count, 0u);
   create_info.byte_length = profile.allocation.maximum_byte_length;
-  ASSERT_EQ(
-      amdf_memory_create(&instance_.system_memory_scope, &create_info, &memory),
-      AMDF_STATUS_OK);
+  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
+                               &memory, nullptr),
+            AMDF_STATUS_OK);
   EXPECT_EQ(memory->info.byte_length, create_info.byte_length);
   EXPECT_EQ(memory->info.access_count, 2u);
   EXPECT_EQ(devices[0].create_call_count, 1u);
   EXPECT_EQ(devices[1].import_call_count, 1u);
-  EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
 }
 
 TEST_F(MemoryConstructionTest, OptionalAvailabilityPrecedesNativeAcquisition) {
@@ -408,9 +411,9 @@ TEST_F(MemoryConstructionTest, OptionalAvailabilityPrecedesNativeAcquisition) {
   create.accesses = accesses;
   auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   amdf_memory_t* memory = sentinel;
-  EXPECT_EQ(
-      amdf_memory_create(&instance_.system_memory_scope, &create, &memory),
-      devices[1].profile.availability);
+  EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create, &memory,
+                               nullptr),
+            devices[1].profile.availability);
   EXPECT_EQ(memory, sentinel);
   EXPECT_EQ(devices[0].create_call_count, 0u);
   EXPECT_EQ(devices[1].import_call_count, 0u);
@@ -418,10 +421,10 @@ TEST_F(MemoryConstructionTest, OptionalAvailabilityPrecedesNativeAcquisition) {
   // The independent route remains usable; optional absence is not instance
   // failure and does not mutate the native device's other capabilities.
   create.access_count = 1;
-  ASSERT_EQ(
-      amdf_memory_create(&instance_.system_memory_scope, &create, &memory),
-      AMDF_STATUS_OK);
-  EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create, &memory,
+                               nullptr),
+            AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
 }
 
 TEST_F(MemoryConstructionTest, LiveProfilePreservesBackingPayloadGeometry) {
@@ -573,7 +576,7 @@ TEST_F(MemoryConstructionTest,
     create_info.byte_length = length;
     amdf_memory_t* memory = nullptr;
     ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
-                                 &memory),
+                                 &memory, nullptr),
               AMDF_STATUS_OK);
     EXPECT_EQ(memory->info.byte_length, length);
     EXPECT_EQ(memory->info.native_allocation_byte_length, 8192u);
@@ -584,7 +587,7 @@ TEST_F(MemoryConstructionTest,
     EXPECT_EQ(
         amdf_status_code(amdf_memory_export(memory, &export_info, &output)),
         AMDF_STATUS_CODE_INVALID_ARGUMENT);
-    EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+    EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
   }
 }
 
@@ -605,9 +608,9 @@ TEST_F(MemoryConstructionTest,
   create_info.access_count = accesses.size();
   create_info.accesses = accesses.data();
   amdf_memory_t* memory = nullptr;
-  ASSERT_EQ(
-      amdf_memory_create(&instance_.system_memory_scope, &create_info, &memory),
-      AMDF_STATUS_OK);
+  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
+                               &memory, nullptr),
+            AMDF_STATUS_OK);
   EXPECT_EQ(devices[0].create_call_count, 0u);
   EXPECT_EQ(devices[1].create_call_count, 1u);
   EXPECT_EQ(devices[2].create_call_count, 0u);
@@ -648,7 +651,7 @@ TEST_F(MemoryConstructionTest,
   ASSERT_EQ(amdf_memory_query_pair_info(&producer, &consumer, &pair),
             AMDF_STATUS_OK);
   EXPECT_NE(pair.flags & AMDF_MEMORY_PAIR_FLAG_SHARED_BACKING_REACHABLE, 0u);
-  EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
   EXPECT_EQ(release_order, (std::vector<uint64_t>{3, 1, 2}));
   EXPECT_EQ(devices[1].export_release.count, 1u);
 }
@@ -678,10 +681,13 @@ TEST_F(MemoryConstructionTest,
       create_info.accesses = accesses.data();
       auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
       amdf_memory_t* memory = sentinel;
+      amdf_memory_release_info_t release_info;
       EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
-                                   &memory),
-                amdf_status_is_ok(destroy_status) ? devices[2].import_status
-                                                  : destroy_status);
+                                   &memory, &release_info),
+                devices[2].import_status);
+      EXPECT_EQ(release_info.status, destroy_status);
+      EXPECT_EQ(release_info.abandoned_byte_length,
+                amdf_status_is_ok(destroy_status) ? 0u : 4096u);
       EXPECT_EQ(memory, sentinel);
       EXPECT_EQ(devices[1].export_release.count, 1u);
       std::vector<uint64_t> expected_order;
@@ -724,12 +730,16 @@ TEST_F(MemoryConstructionTest,
   create_info.access_count = accesses.size();
   create_info.accesses = accesses.data();
   amdf_memory_t* memory = nullptr;
-  ASSERT_EQ(
-      amdf_memory_create(&instance_.system_memory_scope, &create_info, &memory),
-      AMDF_STATUS_OK);
+  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
+                               &memory, nullptr),
+            AMDF_STATUS_OK);
   EXPECT_EQ(memory->backing_access_ordinal, 1u);
 
-  EXPECT_EQ(amdf_memory_destroy(memory), devices[3].destroy_status);
+  amdf_memory_release_info_t release_info;
+  EXPECT_EQ(amdf_memory_destroy(memory, &release_info),
+            devices[3].destroy_status);
+  EXPECT_EQ(release_info.status, devices[3].destroy_status);
+  EXPECT_EQ(release_info.abandoned_byte_length, 4096u);
 
   // A failure does not suppress independent releases or permit backing reuse.
   // The first native error survives subsequent errors, and all metadata goes.
@@ -796,8 +806,8 @@ TEST_F(MemoryConstructionTest,
       info.accesses = accesses.data();
       auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
       amdf_memory_t* memory = sentinel;
-      const amdf_status_t status =
-          amdf_memory_create(&instance_.system_memory_scope, &info, &memory);
+      const amdf_status_t status = amdf_memory_create(
+          &instance_.system_memory_scope, &info, &memory, nullptr);
       if (failing_consumer == successful_case) {
         ASSERT_EQ(status, AMDF_STATUS_OK);
         EXPECT_EQ(memory->info.byte_length, info.byte_length);
@@ -807,7 +817,7 @@ TEST_F(MemoryConstructionTest,
           EXPECT_EQ(memory->accesses[2].native_owner_ordinal, 1u);
           EXPECT_EQ(memory->accesses[2].native, nullptr);
         }
-        EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+        EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
       } else {
         EXPECT_EQ(amdf_status_code(status),
                   AMDF_STATUS_CODE_RESOURCE_EXHAUSTED);
@@ -845,7 +855,7 @@ TEST_F(MemoryConstructionTest,
       devices[1].base.engine_kind = AMDF_ENGINE_KIND_GPU;
       memory = sentinel;
       EXPECT_EQ(amdf_status_code(amdf_memory_create(
-                    &instance_.system_memory_scope, &info, &memory)),
+                    &instance_.system_memory_scope, &info, &memory, nullptr)),
                 AMDF_STATUS_CODE_UNSUPPORTED);
       EXPECT_EQ(memory, sentinel);
       EXPECT_EQ(release_order, expected_order);
@@ -856,7 +866,7 @@ TEST_F(MemoryConstructionTest,
         EXPECT_EQ(devices[i].create_call_count, prepared ? 1u : 0u);
       }
       if (memory != sentinel) {
-        EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+        EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
       }
       EXPECT_EQ(allocations.live_count, 0u);
     }
@@ -874,16 +884,16 @@ TEST_F(MemoryConstructionTest,
   create_info.accesses = accesses.data();
   auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   amdf_memory_t* memory = sentinel;
-  EXPECT_EQ(
-      amdf_memory_create(&instance_.system_memory_scope, &create_info, &memory),
-      amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
+                               &memory, nullptr),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
   EXPECT_EQ(memory, sentinel);
   amdf_instance_t other_instance = {};
   device.base.provider_instance = &other_instance;
   create_info.access_count = 1;
-  EXPECT_EQ(
-      amdf_memory_create(&instance_.system_memory_scope, &create_info, &memory),
-      amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
+  EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
+                               &memory, nullptr),
+            amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
   EXPECT_EQ(memory, sentinel);
   EXPECT_EQ(device.create_call_count, 0u);
   EXPECT_EQ(device.import_call_count, 0u);
@@ -900,9 +910,13 @@ TEST_F(MemoryConstructionTest, AllocationFailureHasNoNativeReleaseObligation) {
     const amdf_memory_create_info_t create_info = MakeMemoryCreateInfo(device);
     auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
     amdf_memory_t* memory = sentinel;
+    amdf_memory_release_info_t release_info;
+    std::memset(&release_info, 0xA5, sizeof(release_info));
     EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
-                                 &memory),
+                                 &memory, &release_info),
               amdf_make_api_status(AMDF_STATUS_CODE_RESOURCE_EXHAUSTED));
+    EXPECT_EQ(release_info.status, AMDF_STATUS_OK);
+    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
     EXPECT_EQ(memory, sentinel);
     EXPECT_EQ(device.create_call_count, failure_ordinal == 2 ? 1u : 0u);
     EXPECT_EQ(device.destroy_call_count, 0u);
@@ -949,7 +963,7 @@ TEST_F(MemoryConstructionTest,
         create_info.access_count = accesses.size();
         create_info.accesses = accesses.data();
         status = amdf_memory_create(&instance_.system_memory_scope,
-                                    &create_info, &memory);
+                                    &create_info, &memory, nullptr);
         EXPECT_EQ(devices[1].export_release.count,
                   failure_ordinal >= 3 ? 1u : 0u);
       } else {
@@ -958,12 +972,12 @@ TEST_F(MemoryConstructionTest,
         import_info.access_count = accesses.size();
         import_info.accesses = accesses.data();
         status = amdf_memory_import(&instance_.system_memory_scope,
-                                    &import_info, &external, &memory);
+                                    &import_info, &external, &memory, nullptr);
         EXPECT_EQ(release.count, failure_ordinal == 5 ? 1u : 0u);
       }
       if (failure_ordinal == 5) {
         ASSERT_EQ(status, AMDF_STATUS_OK);
-        EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+        EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
       } else {
         EXPECT_EQ(amdf_status_code(status),
                   AMDF_STATUS_CODE_RESOURCE_EXHAUSTED);
@@ -998,16 +1012,82 @@ TEST_F(MemoryConstructionTest, FailedPrepareDiscardsUnpublishedNativeMetadata) {
     const amdf_memory_create_info_t create_info = MakeMemoryCreateInfo(device);
     auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
     amdf_memory_t* memory = sentinel;
+    amdf_memory_release_info_t release_info;
     EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
-                                 &memory),
-              amdf_status_is_ok(destroy_status) ? device.create_status
-                                                : destroy_status);
+                                 &memory, &release_info),
+              device.create_status);
+    EXPECT_EQ(release_info.status, destroy_status);
+    EXPECT_EQ(release_info.abandoned_byte_length,
+              amdf_status_is_ok(destroy_status) ? 0u : 4096u);
     EXPECT_EQ(memory, sentinel);
     EXPECT_EQ(device.destroy_call_count, 1u);
     EXPECT_EQ(device.abandon_call_count,
               amdf_status_is_ok(destroy_status) ? 0u : 1u);
     EXPECT_EQ(allocations.live_count, 0u);
   }
+}
+
+TEST_F(MemoryConstructionTest, ReleaseReportsOnlySurvivingOwnedPayload) {
+  for (uint64_t remaining_bytes : {UINT64_C(0), UINT64_C(8192)}) {
+    FakeDevice device;
+    InitializeFakeDevice(9, &instance_, &device);
+    auto create_info = MakeMemoryCreateInfo(device);
+    create_info.byte_length = 4097;
+    amdf_memory_t* memory = nullptr;
+    amdf_memory_release_info_t release_info;
+    std::memset(&release_info, 0xA5, sizeof(release_info));
+    ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
+                                 &memory, &release_info),
+              AMDF_STATUS_OK);
+    EXPECT_EQ(release_info.status, AMDF_STATUS_OK);
+    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
+    auto* native = static_cast<FakeMemory*>(memory->accesses[0].native);
+    EXPECT_EQ(native->remaining_backing_byte_length, 8192u);
+    // An error releasing empty VA is distinct from retained payload, even
+    // though both consume the public owner and return the same native error.
+    native->remaining_backing_byte_length = remaining_bytes;
+    native->destroy_status = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+    EXPECT_EQ(amdf_memory_destroy(memory, &release_info),
+              amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST));
+    EXPECT_EQ(release_info.status,
+              amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST));
+    EXPECT_EQ(release_info.abandoned_byte_length, remaining_bytes);
+    EXPECT_EQ(device.destroy_call_count, 1u);
+    EXPECT_EQ(device.abandon_call_count, 1u);
+  }
+}
+
+TEST_F(MemoryConstructionTest, FailedRegistrationDoesNotChargeCallerStorage) {
+  FakeDevice device;
+  InitializeFakeDevice(9, &instance_, &device);
+  device.profile.roles = AMDF_MEMORY_PROFILE_ROLE_REGISTER;
+  device.profile.registration = device.profile.allocation;
+  device.profile.registration.registered_host_pointer_alignment = 1;
+  device.profile.registration.registered_host_cacheability =
+      AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  device.profile.allocation = {};
+  device.profile.import = {};
+  device.profile.external_memory_support_count = 0;
+  device.profile.supported_flags &= ~AMDF_MEMORY_FLAG_SHAREABLE;
+  alignas(4096) uint8_t pages[4096] = {};
+  auto create_info = MakeMemoryCreateInfo(device);
+  create_info.memory_profile_ordinal = 1;
+  create_info.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
+  create_info.registered_host_pointer = pages;
+  create_info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
+  device.create_status =
+      amdf_make_api_status(AMDF_STATUS_CODE_RESOURCE_EXHAUSTED);
+  device.destroy_status = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
+  amdf_memory_t* memory = nullptr;
+  amdf_memory_release_info_t release_info;
+  EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create_info,
+                               &memory, &release_info),
+            device.create_status);
+  EXPECT_EQ(memory, nullptr);
+  EXPECT_EQ(device.destroy_call_count, 1u);
+  EXPECT_EQ(device.abandon_call_count, 1u);
+  EXPECT_EQ(release_info.status, device.destroy_status);
+  EXPECT_EQ(release_info.abandoned_byte_length, 0u);
 }
 
 TEST_F(MemoryConstructionTest, FailedImportPreservesInputOnReleaseError) {
@@ -1031,9 +1111,12 @@ TEST_F(MemoryConstructionTest, FailedImportPreservesInputOnReleaseError) {
   const amdf_memory_import_info_t import_info = MakeMemoryImportInfo(device);
   auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
   amdf_memory_t* memory = sentinel;
+  amdf_memory_release_info_t release_info;
   EXPECT_EQ(amdf_memory_import(&instance_.system_memory_scope, &import_info,
-                               &external, &memory),
-            device.destroy_status);
+                               &external, &memory, &release_info),
+            device.import_status);
+  EXPECT_EQ(release_info.status, device.destroy_status);
+  EXPECT_EQ(release_info.abandoned_byte_length, 0u);
   EXPECT_EQ(memory, sentinel);
   EXPECT_EQ(std::memcmp(&external, &original, sizeof(external)), 0);
   EXPECT_EQ(release.count, 0u);
@@ -1113,9 +1196,9 @@ TEST_F(MemoryHostBackingTest, RegistrationsBorrowOnePrivateHostOwner) {
       auto info = MakeHostCreateInfo(accesses);
       info.required_flags |= flags | AMDF_MEMORY_FLAG_HOST_FILE_IO;
       amdf_memory_t* memory = nullptr;
-      ASSERT_EQ(
-          amdf_memory_create(&instance_.system_memory_scope, &info, &memory),
-          AMDF_STATUS_OK);
+      ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &info,
+                                   &memory, nullptr),
+                AMDF_STATUS_OK);
       EXPECT_EQ(memory->info.access_count, 2u);
       EXPECT_EQ(memory->backing_access_ordinal, 2u);
       EXPECT_EQ(devices[0].prepared_access_count, coordinated ? 2u : 1u);
@@ -1141,7 +1224,7 @@ TEST_F(MemoryHostBackingTest, RegistrationsBorrowOnePrivateHostOwner) {
       pointer[0] = 0x5A;
       pointer[65536] = 0xA5;
       EXPECT_EQ(amdf_host_mapping_destroy(mapping), AMDF_STATUS_OK);
-      EXPECT_EQ(amdf_memory_destroy(memory), AMDF_STATUS_OK);
+      EXPECT_EQ(amdf_memory_destroy(memory, nullptr), AMDF_STATUS_OK);
       EXPECT_EQ(devices[0].destroy_call_count, 1u);
       EXPECT_EQ(devices[1].destroy_call_count, coordinated ? 0u : 1u);
     }
@@ -1175,7 +1258,8 @@ TEST_F(MemoryHostBackingTest, FileEligibilityBelongsToTheOwnedView) {
       .byte_length = 4096,
   };
   amdf_memory_t* owned = nullptr;
-  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create, &owned),
+  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create, &owned,
+                               nullptr),
             AMDF_STATUS_OK);
   amdf_memory_map_info_t map = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_MAP_INFO,
@@ -1192,13 +1276,13 @@ TEST_F(MemoryHostBackingTest, FileEligibilityBelongsToTheOwnedView) {
   create.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
   amdf_memory_t* borrowed = nullptr;
   EXPECT_EQ(amdf_status_code(amdf_memory_create(&instance_.system_memory_scope,
-                                                &create, &borrowed)),
+                                                &create, &borrowed, nullptr)),
             AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(borrowed, nullptr);
   create.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
-  ASSERT_EQ(
-      amdf_memory_create(&instance_.system_memory_scope, &create, &borrowed),
-      AMDF_STATUS_OK);
+  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create,
+                               &borrowed, nullptr),
+            AMDF_STATUS_OK);
   amdf_host_mapping_t* borrowed_view = nullptr;
   ASSERT_EQ(amdf_memory_map(borrowed, &map, &borrowed_view), AMDF_STATUS_OK);
   EXPECT_EQ(borrowed_view->info.pointer, view->info.pointer);
@@ -1206,9 +1290,9 @@ TEST_F(MemoryHostBackingTest, FileEligibilityBelongsToTheOwnedView) {
             0u);
   // Equal addresses and declared cacheability cannot recover source provenance.
   EXPECT_EQ(amdf_host_mapping_destroy(borrowed_view), AMDF_STATUS_OK);
-  EXPECT_EQ(amdf_memory_destroy(borrowed), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_memory_destroy(borrowed, nullptr), AMDF_STATUS_OK);
   EXPECT_EQ(amdf_host_mapping_destroy(view), AMDF_STATUS_OK);
-  EXPECT_EQ(amdf_memory_destroy(owned), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_memory_destroy(owned, nullptr), AMDF_STATUS_OK);
 }
 
 TEST_F(MemoryHostBackingTest, FailedRegistrationRollsBackWithoutPublication) {
@@ -1235,9 +1319,9 @@ TEST_F(MemoryHostBackingTest, FailedRegistrationRollsBackWithoutPublication) {
     info.required_flags |= flags;
     auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
     amdf_memory_t* memory = sentinel;
-    EXPECT_EQ(
-        amdf_memory_create(&instance_.system_memory_scope, &info, &memory),
-        devices[1].create_status);
+    EXPECT_EQ(amdf_memory_create(&instance_.system_memory_scope, &info, &memory,
+                                 nullptr),
+              devices[1].create_status);
     EXPECT_EQ(memory, sentinel);
     EXPECT_EQ(devices[0].destroy_call_count, 1u);
     EXPECT_EQ(devices[1].destroy_call_count, 1u);
@@ -1253,13 +1337,17 @@ TEST_F(MemoryHostBackingTest, FailedDetachRetainsStorageAndConsumesMetadata) {
   device.destroy_status = amdf_make_api_status(AMDF_STATUS_CODE_DEVICE_LOST);
   const auto info = MakeHostCreateInfo({&device.request, 1});
   amdf_memory_t* memory = nullptr;
-  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &info, &memory),
+  ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &info, &memory,
+                               nullptr),
             AMDF_STATUS_OK);
   const uint64_t native_byte_length =
       memory->info.native_allocation_byte_length;
   auto* pointer = static_cast<uint8_t*>(device.registered_host_pointer);
   pointer[65536] = 0xA5;
-  EXPECT_EQ(amdf_memory_destroy(memory), device.destroy_status);
+  amdf_memory_release_info_t release_info;
+  EXPECT_EQ(amdf_memory_destroy(memory, &release_info), device.destroy_status);
+  EXPECT_EQ(release_info.status, device.destroy_status);
+  EXPECT_EQ(release_info.abandoned_byte_length, native_byte_length);
   EXPECT_EQ(device.destroy_call_count, 1u);
   EXPECT_EQ(device.abandon_call_count, 1u);
   EXPECT_EQ(allocations.live_count, 0u);
@@ -1300,7 +1388,7 @@ TEST_F(MemoryHostBackingTest,
     auto* const sentinel = reinterpret_cast<amdf_memory_t*>(uintptr_t{1});
     amdf_memory_t* memory = sentinel;
     EXPECT_EQ(amdf_status_code(amdf_memory_create(
-                  &instance_.system_memory_scope, &info, &memory)),
+                  &instance_.system_memory_scope, &info, &memory, nullptr)),
               AMDF_STATUS_CODE_UNSUPPORTED);
     EXPECT_EQ(memory, sentinel);
     EXPECT_EQ(device.create_call_count, 0u);

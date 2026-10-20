@@ -105,9 +105,9 @@ class MemoryReservationTest : public MemoryTest {
     native_.accesses[0].native = &native_;
     auto create = MakeMemoryCreateInfo(devices_[0]);
     create.byte_length = 16384;
-    ASSERT_EQ(
-        amdf_memory_create(&instance_.system_memory_scope, &create, &memory_),
-        AMDF_STATUS_OK);
+    ASSERT_EQ(amdf_memory_create(&instance_.system_memory_scope, &create,
+                                 &memory_, nullptr),
+              AMDF_STATUS_OK);
   }
 
   void TearDown() override {
@@ -116,7 +116,7 @@ class MemoryReservationTest : public MemoryTest {
                 AMDF_STATUS_OK);
     }
     if (memory_ != nullptr) {
-      EXPECT_EQ(amdf_memory_destroy(memory_), AMDF_STATUS_OK);
+      EXPECT_EQ(amdf_memory_destroy(memory_, nullptr), AMDF_STATUS_OK);
     }
   }
 
@@ -287,7 +287,7 @@ TEST_F(MemoryReservationTest,
         failure);
   }
   // The caller can release detached backing while retaining the reservation.
-  ASSERT_EQ(amdf_memory_destroy(memory_), AMDF_STATUS_OK);
+  ASSERT_EQ(amdf_memory_destroy(memory_, nullptr), AMDF_STATUS_OK);
   memory_ = nullptr;
   EXPECT_EQ(amdf_memory_reservation_destroy(native_.reservation),
             AMDF_STATUS_OK);
@@ -427,7 +427,7 @@ TEST_F(MemoryReservationTest,
   import.minimum_alignment = 1;
   amdf_memory_t* imported = nullptr;
   ASSERT_EQ(amdf_memory_import(&instance_.system_memory_scope, &import,
-                               &external, &imported),
+                               &external, &imported, nullptr),
             AMDF_STATUS_OK);
   EXPECT_EQ(released.count, 1u);
   amdf_memory_mapping_update_t update = {
@@ -447,7 +447,7 @@ TEST_F(MemoryReservationTest,
   // The common layer validates native alignment but keeps the logical offset.
   // The GPU provider, not each common handoff, adds the native prefix.
   EXPECT_EQ(native_.updates[0].source_byte_offset, 4096u - 13u);
-  EXPECT_EQ(amdf_memory_destroy(imported), AMDF_STATUS_OK);
+  EXPECT_EQ(amdf_memory_destroy(imported, nullptr), AMDF_STATUS_OK);
 }
 
 TEST_F(MemoryReservationTest,

@@ -202,7 +202,12 @@ TEST_F(LinuxXdnaMemoryRollbackTest,
   ASSERT_NE(alias, MAP_FAILED);
   memory_->host_view.base = alias;
   memory_->host_view.mapped_length = 4096;
-  ReleasePreparedState();
+  EXPECT_EQ(amdf_xdna_umd_memory_destroy(memory_),
+            amdf_make_status(AMDF_STATUS_DOMAIN_ERRNO, native_.close_error));
+  EXPECT_EQ(amdf_xdna_umd_memory_remaining_backing_byte_length(memory_), 4096u);
+  EXPECT_EQ(memory_->host_view.mapped_length, 0u);
+  amdf_xdna_umd_memory_abandon(memory_);
+  memory_ = nullptr;
   unsigned char residency = 0;
   EXPECT_EQ(mincore(alias, 4096, &residency), -1);
   EXPECT_EQ(errno, ENOMEM);

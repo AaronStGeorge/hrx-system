@@ -30,9 +30,9 @@ class XdnaLinuxMemoryTest : public XdnaDeviceFixture {
                   AMDF_STATUS_OK);
       }
       if (memories_[ordinal] != nullptr) {
-        EXPECT_EQ(
-            api_->memory_destroy(std::exchange(memories_[ordinal], nullptr)),
-            AMDF_STATUS_OK);
+        EXPECT_EQ(api_->memory_destroy(
+                      std::exchange(memories_[ordinal], nullptr), nullptr),
+                  AMDF_STATUS_OK);
       }
     }
     for (amdf_external_memory_t& external_memory : external_memories_) {
@@ -106,7 +106,7 @@ TEST_F(XdnaLinuxMemoryTest, PortableImportDoesNotInheritNativeHostProtocol) {
   create.accesses = &memory_access_;
   create.byte_length = 4096;
   create.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
-  ASSERT_EQ(api_->memory_create(system_scope_, &create, &memories_[0]),
+  ASSERT_EQ(api_->memory_create(system_scope_, &create, &memories_[0], nullptr),
             AMDF_STATUS_OK);
   amdf_memory_export_info_t export_info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_EXPORT_INFO,
@@ -128,7 +128,7 @@ TEST_F(XdnaLinuxMemoryTest, PortableImportDoesNotInheritNativeHostProtocol) {
   import.accesses = &memory_access_;
   import.required_flags = AMDF_MEMORY_FLAG_HOST_VISIBLE;
   ASSERT_EQ(api_->memory_import(system_scope_, &import, &external_memories_[0],
-                                &memories_[1]),
+                                &memories_[1], nullptr),
             AMDF_STATUS_OK);
   ASSERT_EQ(MapMemory(memories_[1], 1, create.byte_length), AMDF_STATUS_OK);
   EXPECT_EQ(mapping_infos_[1].cacheability, AMDF_HOST_CACHEABILITY_UNKNOWN);
@@ -183,14 +183,15 @@ TEST_F(XdnaLinuxMemoryTest,
   amdf_memory_device_access_t unsupported_access = memory_access_;
   unsupported_access.requirements.access = AMDF_MEMORY_ACCESS_READ;
   unsupported_info.accesses = &unsupported_access;
-  EXPECT_EQ(amdf_status_code(
-                api_->memory_create(system_scope_, &unsupported_info, &output)),
+  EXPECT_EQ(amdf_status_code(api_->memory_create(
+                system_scope_, &unsupported_info, &output, nullptr)),
             AMDF_STATUS_CODE_UNSUPPORTED);
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
   EXPECT_EQ(caller_pages_[3], 0x5A);
 
-  ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &memories_[0]),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api_->memory_create(system_scope_, &create_info, &memories_[0], nullptr),
+      AMDF_STATUS_OK);
   amdf_memory_info_t first_info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_INFO,
       .structure_size = sizeof(amdf_memory_info_t),
@@ -231,8 +232,9 @@ TEST_F(XdnaLinuxMemoryTest,
   create_info.registered_host_pointer = caller_pages_ + 19;
   create_info.registered_host_cacheability = AMDF_HOST_CACHEABILITY_WRITE_BACK;
   create_info.byte_length = caller_byte_length_ / 2;
-  ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &memories_[1]),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api_->memory_create(system_scope_, &create_info, &memories_[1], nullptr),
+      AMDF_STATUS_OK);
   amdf_memory_info_t second_info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_INFO,
       .structure_size = sizeof(amdf_memory_info_t),
@@ -266,7 +268,7 @@ TEST_F(XdnaLinuxMemoryTest,
 
   ASSERT_EQ(api_->host_mapping_destroy(mappings_[0]), AMDF_STATUS_OK);
   mappings_[0] = nullptr;
-  ASSERT_EQ(api_->memory_destroy(std::exchange(memories_[0], nullptr)),
+  ASSERT_EQ(api_->memory_destroy(std::exchange(memories_[0], nullptr), nullptr),
             AMDF_STATUS_OK);
   EXPECT_EQ(static_cast<const uint8_t*>(mapping_infos_[1].pointer)[0], 0xC3);
   EXPECT_EQ(static_cast<const uint8_t*>(
@@ -275,7 +277,7 @@ TEST_F(XdnaLinuxMemoryTest,
 
   ASSERT_EQ(api_->host_mapping_destroy(mappings_[1]), AMDF_STATUS_OK);
   mappings_[1] = nullptr;
-  ASSERT_EQ(api_->memory_destroy(std::exchange(memories_[1], nullptr)),
+  ASSERT_EQ(api_->memory_destroy(std::exchange(memories_[1], nullptr), nullptr),
             AMDF_STATUS_OK);
   std::memset(caller_pages_, 0x3C, caller_byte_length_);
   EXPECT_EQ(caller_pages_[caller_byte_length_ - 1], 0x3C);
@@ -312,8 +314,9 @@ TEST_F(XdnaLinuxMemoryTest,
       .minimum_alignment = page_size_,
       .accesses = &memory_access_,
   };
-  ASSERT_EQ(api_->memory_create(system_scope_, &create_info, &memories_[0]),
-            AMDF_STATUS_OK);
+  ASSERT_EQ(
+      api_->memory_create(system_scope_, &create_info, &memories_[0], nullptr),
+      AMDF_STATUS_OK);
   amdf_memory_info_t source_info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_INFO,
       .structure_size = sizeof(amdf_memory_info_t),
@@ -370,9 +373,10 @@ TEST_F(XdnaLinuxMemoryTest,
   };
   const amdf_external_memory_t empty_external_memory = {};
   for (size_t i = 0; i < 2; ++i) {
-    ASSERT_EQ(api_->memory_import(system_scope_, &import_info,
-                                  &external_memories_[i], &memories_[i + 1]),
-              AMDF_STATUS_OK);
+    ASSERT_EQ(
+        api_->memory_import(system_scope_, &import_info, &external_memories_[i],
+                            &memories_[i + 1], nullptr),
+        AMDF_STATUS_OK);
     EXPECT_EQ(std::memcmp(&external_memories_[i], &empty_external_memory,
                           sizeof(empty_external_memory)),
               0);
@@ -425,7 +429,7 @@ TEST_F(XdnaLinuxMemoryTest,
 
   ASSERT_EQ(api_->host_mapping_destroy(mappings_[0]), AMDF_STATUS_OK);
   mappings_[0] = nullptr;
-  ASSERT_EQ(api_->memory_destroy(std::exchange(memories_[0], nullptr)),
+  ASSERT_EQ(api_->memory_destroy(std::exchange(memories_[0], nullptr), nullptr),
             AMDF_STATUS_OK);
 
   second_import_bytes[1] = 0x6C;
@@ -460,7 +464,7 @@ TEST_F(XdnaLinuxMemoryTest,
       .accesses = &memory_access_,
   };
   ASSERT_NE(create.memory_profile_ordinal, AMDF_MEMORY_PROFILE_ORDINAL_UNKNOWN);
-  ASSERT_EQ(api_->memory_create(system_scope_, &create, &memories_[0]),
+  ASSERT_EQ(api_->memory_create(system_scope_, &create, &memories_[0], nullptr),
             AMDF_STATUS_OK);
   uint64_t device_address = 0;
   ASSERT_EQ(api_->memory_query_address(

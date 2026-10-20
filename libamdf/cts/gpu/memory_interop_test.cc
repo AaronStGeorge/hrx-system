@@ -142,8 +142,8 @@ class GpuMemoryInteropTest : public GpuDeviceFixture {
     memory_info.registered_host_cacheability =
         is_registration ? AMDF_HOST_CACHEABILITY_WRITE_BACK
                         : AMDF_HOST_CACHEABILITY_UNKNOWN;
-    amdf_status_t status =
-        api_->memory_create(system_scope_, &memory_info, &access.memory);
+    amdf_status_t status = api_->memory_create(system_scope_, &memory_info,
+                                               &access.memory, nullptr);
     if (!amdf_status_is_ok(status)) {
       return status;
     }
@@ -204,7 +204,7 @@ class GpuMemoryInteropTest : public GpuDeviceFixture {
       access.mapping = nullptr;
     }
     if (access.memory != nullptr) {
-      const amdf_status_t status = api_->memory_destroy(access.memory);
+      const amdf_status_t status = api_->memory_destroy(access.memory, nullptr);
       access.memory = nullptr;
       if (!amdf_status_is_ok(status)) {
         return status;

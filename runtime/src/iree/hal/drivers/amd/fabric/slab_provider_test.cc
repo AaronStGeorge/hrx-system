@@ -71,7 +71,11 @@ struct FakeNative {
 
   static amdf_status_t AMDF_CALL MemoryCreate(
       amdf_memory_scope_t* scope, const amdf_memory_create_info_t* info,
-      amdf_memory_t** out_memory) {
+      amdf_memory_t** out_memory,
+      amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* self = reinterpret_cast<FakeNative*>(scope);
     const bool registered = info->registered_host_pointer != nullptr;
     EXPECT_EQ(info->memory_profile_ordinal, registered ? 8u : 7u);
@@ -101,7 +105,11 @@ struct FakeNative {
 
   static amdf_status_t AMDF_CALL MemoryImport(
       amdf_memory_scope_t* scope, const amdf_memory_import_info_t* info,
-      amdf_external_memory_t* storage, amdf_memory_t** out_memory) {
+      amdf_external_memory_t* storage, amdf_memory_t** out_memory,
+      amdf_memory_release_info_t* out_release_info) {
+    if (out_release_info) {
+      *out_release_info = {};
+    }
     auto* self = reinterpret_cast<FakeNative*>(scope);
     EXPECT_EQ(info->memory_profile_ordinal, 8u);
     EXPECT_EQ(info->access_count, 2u);
@@ -215,16 +223,23 @@ struct FakeNative {
     return AMDF_STATUS_OK;
   }
 
-  static amdf_status_t AMDF_CALL MemoryDestroy(amdf_memory_t* base_memory) {
+  static amdf_status_t AMDF_CALL
+  MemoryDestroy(amdf_memory_t* base_memory,
+                amdf_memory_release_info_t* out_release_info) {
     auto* memory = reinterpret_cast<FakeMemory*>(base_memory);
     FakeNative* self = memory->owner;
     ++self->destroy_count;
     self->destroy_threads.emplace_back(memory->registered_pointer != nullptr,
                                        std::this_thread::get_id());
     delete memory;
-    return self->fail_memory_destroy
-               ? amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL)
-               : AMDF_STATUS_OK;
+    const amdf_status_t status =
+        self->fail_memory_destroy
+            ? amdf_make_api_status(AMDF_STATUS_CODE_INTERNAL)
+            : AMDF_STATUS_OK;
+    if (out_release_info) {
+      *out_release_info = {status, 0};
+    }
+    return status;
   }
 
   static amdf_status_t AMDF_CALL

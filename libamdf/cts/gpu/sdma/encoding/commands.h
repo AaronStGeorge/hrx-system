@@ -66,6 +66,9 @@ class SdmaCommandWriter {
   // Emits a one-DWORD NOP. Its pending-transfer ordering contract belongs to
   // the selected native engine; it publishes no completion or cache operation.
   void Noop();
+  // Pads with NOPs so the next indirect buffer starts on a 32-byte boundary.
+  // The caller supplies an eight-DWORD-aligned command storage base.
+  void PadToEightWords();
   // A nonempty range within caller-owned allocations and the admitted limit.
   // Scope follows the family; NPD remains clear independently of that layout.
   void CopyLinear(uint64_t source, uint64_t target, uint32_t byte_length);

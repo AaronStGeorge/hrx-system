@@ -13,40 +13,52 @@
 
 #include "libamdf/src/platform/windows/host_cache.h"
 
-amdf_status_t amdf_platform_host_backing_create(
-    uint64_t byte_length, amdf_platform_host_backing_t* out_backing) {
+amdf_status_t amdf_platform_host_backing_prepare(
+    uint64_t byte_length, amdf_platform_host_backing_t* backing) {
+  *backing = (amdf_platform_host_backing_t){.handle = UINTPTR_MAX};
   HANDLE section =
       CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
                          (DWORD)(byte_length >> 32), (DWORD)byte_length, NULL);
   if (section == NULL) {
     return amdf_make_status(AMDF_STATUS_DOMAIN_WIN32, GetLastError());
   }
+  backing->handle = (uintptr_t)section;
   void* pointer = MapViewOfFile(section, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0,
                                 (SIZE_T)byte_length);
   if (pointer == NULL) {
-    amdf_status_t status =
-        amdf_make_status(AMDF_STATUS_DOMAIN_WIN32, GetLastError());
-    if (!CloseHandle(section)) {
-      status = amdf_make_status(AMDF_STATUS_DOMAIN_WIN32, GetLastError());
-    }
-    return status;
+    return amdf_make_status(AMDF_STATUS_DOMAIN_WIN32, GetLastError());
   }
-  *out_backing = (amdf_platform_host_backing_t){
-      .handle = (uintptr_t)section,
-      .pointer = pointer,
-  };
+  backing->pointer = pointer;
   return AMDF_STATUS_OK;
 }
 
 amdf_status_t amdf_platform_host_backing_destroy(
     amdf_platform_host_backing_t* backing, uint64_t byte_length) {
   (void)byte_length;
-  if (!UnmapViewOfFile(backing->pointer)) {
-    return amdf_make_status(AMDF_STATUS_DOMAIN_WIN32, GetLastError());
+  if (backing->pointer != NULL) {
+    if (!UnmapViewOfFile(backing->pointer)) {
+      return amdf_make_status(AMDF_STATUS_DOMAIN_WIN32, GetLastError());
+    }
+    backing->pointer = NULL;
   }
-  return CloseHandle((HANDLE)backing->handle)
-             ? AMDF_STATUS_OK
-             : amdf_make_status(AMDF_STATUS_DOMAIN_WIN32, GetLastError());
+  if (backing->handle != UINTPTR_MAX) {
+    if (!CloseHandle((HANDLE)backing->handle)) {
+      return amdf_make_status(AMDF_STATUS_DOMAIN_WIN32, GetLastError());
+    }
+    backing->handle = UINTPTR_MAX;
+  }
+  return AMDF_STATUS_OK;
+}
+
+amdf_status_t amdf_platform_host_backing_populate(
+    const amdf_platform_host_backing_t* backing, uint64_t byte_length,
+    amdf_memory_placement_t placement, amdf_allocator_t host_allocator) {
+  (void)backing;
+  (void)byte_length;
+  (void)placement;
+  (void)host_allocator;
+  // Platform-owned host exports are unavailable; WDDM owns its file backing.
+  return amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
 }
 
 amdf_status_t amdf_platform_host_memory_allocate(uint64_t byte_length,

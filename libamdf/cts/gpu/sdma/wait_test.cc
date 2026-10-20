@@ -93,13 +93,21 @@ class SdmaWaitTest : public GpuCommandTest,
     constexpr size_t kOperandWord = 16;
     constexpr size_t kArrivalWord = 32;
     constexpr size_t kCompletionWord = 48;
-    constexpr size_t kMaximumWordsPerEpoch = 31;
+    constexpr size_t kMaximumWordsPerEpoch = 32;
     constexpr size_t kCommandWordCapacity =
         kEpochCount * kMaximumWordsPerEpoch + 1;
     const WaitCase& parameters = GetParam();
     const bool user_gcr =
         (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR) != 0;
-    const size_t words_per_epoch = user_gcr ? 31 : 21;
+    if (publication == OperandPublication::kAfterArrival && !user_gcr &&
+        !(family_.format_features &
+          AMDF_GPU_SDMA_FORMAT_FEATURE_MEMORY_SCOPE) &&
+        (family_.format_features &
+         AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR)) {
+      GTEST_SKIP() << "payload produced after queue arrival requires an "
+                      "in-stream acquire, not a native submission prologue";
+    }
+    const size_t words_per_epoch = user_gcr ? 32 : 24;
 
     GpuMemory* source = nullptr;
     GpuMemory* target = nullptr;
@@ -139,6 +147,7 @@ class SdmaWaitTest : public GpuCommandTest,
       }
       commands.Fence32(
           control->device_address + kCompletionWord * sizeof(uint32_t), marker);
+      commands.PadToEightWords();
     }
     ASSERT_EQ(commands.word_count(), kEpochCount * words_per_epoch);
     std::memcpy(expected_commands.data(), queue->words().data(),
@@ -220,8 +229,12 @@ class SdmaWaitTest : public GpuCommandTest,
       }
       ASSERT_TRUE(GpuWaitEqual<uint32_t>(
           control_host + kCompletionWord * sizeof(uint32_t), marker));
+      if (family_.format_features &
+          AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+        ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+      }
 
-      // Snapshot every oracle before native retirement can add synchronization.
+      // Observe the payload after the queue's advertised release boundary.
       std::memcpy(observed_target.data(), target->host.pointer, kDataLength);
       std::memcpy(observed_source.data(), source->host.pointer, kDataLength);
       std::memcpy(observed_control.data(), control->host.pointer,

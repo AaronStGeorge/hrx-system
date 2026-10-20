@@ -43,8 +43,9 @@ TEST_F(SdmaWriteTest, InlineDataFeedsDependentCopiesAcrossEpochs) {
   constexpr size_t kInlineWordCount = 1 + 3 + 8 + 257;
   const bool user_gcr =
       (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR) != 0;
-  const size_t words_per_epoch =
-      kSpans.size() * (4 + 7) + kInlineWordCount + 1 + 4 + (user_gcr ? 10 : 0);
+  const size_t words_per_epoch = (kSpans.size() * (4 + 7) + kInlineWordCount +
+                                  1 + 4 + (user_gcr ? 10 : 0) + 7) &
+                                 ~size_t{7};
 
   GpuMemory* target = nullptr;
   GpuMemory* output = nullptr;
@@ -138,6 +139,7 @@ TEST_F(SdmaWriteTest, InlineDataFeedsDependentCopiesAcrossEpochs) {
       commands.ReleaseToSystem();
     }
     commands.Fence32(completion->device_address + kCompletionOffset, marker);
+    commands.PadToEightWords();
     ASSERT_EQ(commands.word_count(), (epoch + 1) * words_per_epoch);
     ASSERT_NO_FATAL_FAILURE(
         queue->Publish(api_, gpu_api_, commands.word_count()));
@@ -145,9 +147,12 @@ TEST_F(SdmaWriteTest, InlineDataFeedsDependentCopiesAcrossEpochs) {
         reinterpret_cast<uintptr_t>(completion->host.pointer) +
             kCompletionOffset,
         marker));
+    if (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+      ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+    }
 
-    // Snapshot the final consumer first, before diagnostics or retirement can
-    // add synchronization. Check all untouched backing and control guards too.
+    // Snapshot the final consumer first, after the advertised release boundary.
+    // Check all untouched backing and control guards too.
     std::memcpy(observed_output.data(), output->host.pointer, kDataLength);
     std::memcpy(observed_target.data(), target->host.pointer, kDataLength);
     std::memcpy(observed_completion.data(), completion->host.pointer,

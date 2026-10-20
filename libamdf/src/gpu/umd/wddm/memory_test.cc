@@ -778,6 +778,7 @@ TEST_F(WindowsGpuMemoryTest,
                                     Operation::kCreateAllocation}));
   EXPECT_EQ(amdf_gpu_umd_memory_destroy(memory),
             amdf_kmt_make_status(kStatusNoMemory));
+  EXPECT_EQ(amdf_gpu_umd_memory_remaining_backing_byte_length(memory), 65536u);
   EXPECT_EQ(state_.metadata_free_count, 0u);
   amdf_gpu_umd_memory_abandon(memory);
   EXPECT_EQ(state_.metadata_free_count, 1u);
@@ -863,6 +864,56 @@ TEST_F(WindowsGpuMemoryTest, MalformedUngroupedAllocationReleasesValidHandles) {
                 Operation::kQueryLayout, Operation::kReserveAddress,
                 Operation::kCreateAllocation, Operation::kDestroyAllocation,
                 Operation::kFreeAddress}));
+}
+
+TEST_F(WindowsGpuMemoryTest, EmptyGpuVaFailureDoesNotClaimLostPayload) {
+  amdf_gpu_umd_memory_t* memory = nullptr;
+  amdf_gpu_umd_memory_result_t result = {};
+  ASSERT_EQ(amdf_gpu_umd_memory_prepare(&device_, 0, nullptr, &profile_,
+                                        &create_info_, &memory, &result),
+            AMDF_STATUS_OK);
+  kmt_.free_gpu_virtual_address =
+      [](const D3DKMT_FREEGPUVIRTUALADDRESS* free_address) -> NTSTATUS {
+    EXPECT_EQ(FakeFreeGpuVirtualAddress(free_address), 0);
+    return kStatusNoMemory;
+  };
+  EXPECT_EQ(amdf_gpu_umd_memory_destroy(memory),
+            amdf_kmt_make_status(kStatusNoMemory));
+  EXPECT_EQ(state_.operations.back(), Operation::kFreeAddress);
+  EXPECT_EQ(amdf_gpu_umd_memory_remaining_backing_byte_length(memory), 0u);
+  amdf_gpu_umd_memory_abandon(memory);
+  EXPECT_EQ(state_.metadata_free_count, 1u);
+}
+
+TEST_F(WindowsGpuMemoryTest, FailedGpuVaReleaseRetainsOwnedHostBacking) {
+  state_.allocation_domain = AMDF_WKMI_BRIDGE_GPU_ALLOCATION_DOMAIN_SYSTEM;
+  state_.expected_synchronous_destroy = 1;
+  create_info_.required_flags =
+      AMDF_MEMORY_FLAG_HOST_VISIBLE | AMDF_MEMORY_FLAG_DEVICE_ADDRESS;
+  ASSERT_EQ(amdf_gpu_umd_device_query_memory_profile(&device_, 0, &profile_),
+            AMDF_STATUS_OK);
+  amdf_gpu_umd_memory_t* memory = nullptr;
+  amdf_gpu_umd_memory_result_t result = {};
+  ASSERT_EQ(amdf_gpu_umd_memory_prepare(&device_, 0, nullptr, &profile_,
+                                        &create_info_, &memory, &result),
+            AMDF_STATUS_OK);
+  kmt_.free_gpu_virtual_address =
+      [](const D3DKMT_FREEGPUVIRTUALADDRESS* free_address) -> NTSTATUS {
+    EXPECT_EQ(FakeFreeGpuVirtualAddress(free_address), 0);
+    return kStatusNoMemory;
+  };
+  EXPECT_EQ(amdf_gpu_umd_memory_destroy(memory),
+            amdf_kmt_make_status(kStatusNoMemory));
+  EXPECT_EQ(state_.operations.back(), Operation::kFreeAddress);
+  EXPECT_EQ(amdf_gpu_umd_memory_remaining_backing_byte_length(memory), 65536u);
+  amdf_gpu_umd_memory_abandon(memory);
+  EXPECT_EQ(state_.metadata_free_count, 1u);
+  // The fake driver no longer retains this real host allocation.
+  MEMORY_BASIC_INFORMATION information = {};
+  ASSERT_NE(
+      VirtualQuery(state_.host_pointer, &information, sizeof(information)), 0u);
+  EXPECT_EQ(information.State, MEM_COMMIT);
+  EXPECT_TRUE(VirtualFree(information.AllocationBase, 0, MEM_RELEASE));
 }
 
 TEST_F(WindowsGpuMemoryTest, DestroyReclaimsUnexpectedMapping) {

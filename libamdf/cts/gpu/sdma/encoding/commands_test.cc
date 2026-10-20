@@ -37,6 +37,24 @@ TEST(SdmaEncodingTest, UserGcrUsesWholeCacheDataAcquireAndRelease) {
   EXPECT_EQ(words, expected);
 }
 
+TEST(SdmaEncodingTest, IndirectBufferPaddingPreservesEveryAlignmentResidue) {
+  for (size_t prefix_count = 0; prefix_count <= 16; ++prefix_count) {
+    SCOPED_TRACE(prefix_count);
+    std::array<uint32_t, 17> words;
+    words.fill(0x9ac7135b);
+    SdmaCommandWriter commands(words.data(), 0);
+    for (size_t i = 0; i < prefix_count; ++i) {
+      commands.Noop();
+    }
+    commands.PadToEightWords();
+    const size_t padded_count = (prefix_count + 7) & ~size_t{7};
+    EXPECT_EQ(commands.word_count(), padded_count);
+    for (size_t i = 0; i < words.size(); ++i) {
+      EXPECT_EQ(words[i], i < padded_count ? 0u : 0x9ac7135bu) << i;
+    }
+  }
+}
+
 TEST(SdmaEncodingTest, LinearByteCountAndUncachedCompletion) {
   std::array<uint32_t, 12> words = {};
   words.back() = 0x24681357;

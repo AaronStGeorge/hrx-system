@@ -16,10 +16,14 @@
 
 #include <cstdarg>
 #include <cstring>
+#include <functional>
+#include <semaphore>
+#include <thread>
 #include <vector>
 
 #include "gtest/gtest.h"
 #include "libamdf/src/allocator.h"
+#include "libamdf/src/gpu/umd/kfd/buffer.h"
 #include "libamdf/src/gpu/umd/kfd/device.h"
 #include "libamdf/src/platform/linux/file.h"
 
@@ -29,7 +33,9 @@ namespace {
 // ownership, allocation, host mappings, synchronization and cleanup are real.
 struct NativeReservationState {
   // Shared native connection lock, including the transport buffer's mutations.
-  pthread_mutex_t memory_mutex = PTHREAD_MUTEX_INITIALIZER;
+  amdf_gpu_kfd_memory_lock_t* memory_lock = nullptr;
+  // Optional native-call gate and order observation, under native ownership.
+  std::function<void(unsigned long)> before_mutation;
   // Real memfd supplying the transport's mapped host storage.
   int render_descriptor = -1;
   // Request failing on the selected occurrence, or zero for success.
@@ -67,11 +73,9 @@ struct NativeReservationState {
 thread_local NativeReservationState* native_state = nullptr;
 
 void ExpectMutationLocked() {
-  const int result = pthread_mutex_trylock(&native_state->memory_mutex);
-  EXPECT_EQ(result, EBUSY);
-  if (result == 0) {
-    EXPECT_EQ(pthread_mutex_unlock(&native_state->memory_mutex), 0);
-  }
+  EXPECT_EQ(pthread_mutex_lock(&native_state->memory_lock->mutex), 0);
+  EXPECT_TRUE(native_state->memory_lock->occupied);
+  EXPECT_EQ(pthread_mutex_unlock(&native_state->memory_lock->mutex), 0);
 }
 
 }  // namespace
@@ -87,13 +91,17 @@ extern "C" int __wrap_ioctl(int descriptor, unsigned long request, ...) {
     return __real_ioctl(descriptor, request, argument);
   }
   auto& state = *native_state;
-  if (request == DRM_IOCTL_AMDGPU_GEM_VA || request == DRM_IOCTL_AMDGPU_CS ||
+  if (request == AMDKFD_IOC_ALLOC_MEMORY_OF_GPU ||
+      request == DRM_IOCTL_AMDGPU_GEM_VA || request == DRM_IOCTL_AMDGPU_CS ||
       request == DRM_IOCTL_AMDGPU_FENCE_TO_HANDLE ||
       request == DRM_IOCTL_AMDGPU_WAIT_CS || request == SYNC_IOC_FILE_INFO ||
       request == AMDKFD_IOC_MAP_MEMORY_TO_GPU ||
       request == AMDKFD_IOC_UNMAP_MEMORY_FROM_GPU ||
       request == AMDKFD_IOC_FREE_MEMORY_OF_GPU) {
     ExpectMutationLocked();
+    if (state.before_mutation) {
+      state.before_mutation(request);
+    }
   }
   if (request == state.failure_request && --state.failure_countdown == 0) {
     state.failure_request = 0;
@@ -251,16 +259,19 @@ class KfdMemoryReservationTest : public ::testing::Test {
  protected:
   void SetUp() override {
     native_state = &native_;
+    ASSERT_EQ(amdf_gpu_kfd_memory_lock_initialize(&memory_lock_), 0);
+    native_.memory_lock = &memory_lock_;
     native_.render_descriptor = memfd_create("amdf-publication", MFD_CLOEXEC);
     ASSERT_GE(native_.render_descriptor, 0);
     ASSERT_EQ(ftruncate(native_.render_descriptor, 4096), 0);
     device_.host_allocator = amdf_allocator_system();
     device_.descriptor = native_.render_descriptor;
     device_.render_descriptor = native_.render_descriptor;
-    device_.memory_mutex = &native_.memory_mutex;
+    device_.memory_lock = &memory_lock_;
     device_.page_size = 4096;
     device_.topology.gpu_id = 19;
     device_.topology.virtual_address.end = UINT64_C(1) << 48;
+    device_.topology.virtual_address.fragment_size = 2 * 1024 * 1024;
   }
 
   void TearDown() override {
@@ -277,19 +288,18 @@ class KfdMemoryReservationTest : public ::testing::Test {
     for (const auto& [address, length] : abandoned_intervals_) {
       EXPECT_EQ(munmap(reinterpret_cast<void*>(address), length), 0);
     }
-    EXPECT_EQ(pthread_mutex_trylock(&native_.memory_mutex), 0);
-    EXPECT_EQ(pthread_mutex_unlock(&native_.memory_mutex), 0);
-    EXPECT_EQ(pthread_mutex_destroy(&native_.memory_mutex), 0);
+    EXPECT_FALSE(memory_lock_.occupied);
+    amdf_gpu_kfd_memory_lock_deinitialize(&memory_lock_);
     EXPECT_EQ(close(native_.render_descriptor), 0);
     native_state = nullptr;
   }
 
-  void Create() {
+  void Create(uint64_t byte_length = 32768, uint64_t minimum_alignment = 4096) {
     amdf_gpu_umd_device_t* devices[] = {&device_};
-    ASSERT_EQ(
-        amdf_gpu_umd_memory_reservation_create(
-            amdf_allocator_system(), 1, devices, 32768, 4096, &reservation_),
-        AMDF_STATUS_OK);
+    ASSERT_EQ(amdf_gpu_umd_memory_reservation_create(
+                  amdf_allocator_system(), 1, devices, byte_length,
+                  minimum_alignment, &reservation_),
+              AMDF_STATUS_OK);
     uint32_t owner = 0;
     uint64_t granularity = 0;
     amdf_memory_access_t required_access = 0;
@@ -306,8 +316,7 @@ class KfdMemoryReservationTest : public ::testing::Test {
     const auto status = amdf_gpu_umd_memory_reservation_update(
         reservation_, 0, 1, &update, &mutation_started);
     EXPECT_TRUE(mutation_started);
-    EXPECT_EQ(pthread_mutex_trylock(&native_.memory_mutex), 0);
-    EXPECT_EQ(pthread_mutex_unlock(&native_.memory_mutex), 0);
+    EXPECT_FALSE(memory_lock_.occupied);
     if (native_.fence_descriptor >= 0) {
       EXPECT_EQ(fcntl(native_.fence_descriptor, F_GETFD), -1);
       EXPECT_EQ(errno, EBADF);
@@ -315,6 +324,8 @@ class KfdMemoryReservationTest : public ::testing::Test {
     return status;
   }
 
+  // Shared connection admission, borrowed by every modeled native caller.
+  amdf_gpu_kfd_memory_lock_t memory_lock_;
   // Native dependency state for this test only.
   NativeReservationState native_;
   // Concrete native device passed through the production provider.
@@ -327,6 +338,69 @@ class KfdMemoryReservationTest : public ::testing::Test {
   std::vector<std::pair<uintptr_t, size_t>> abandoned_intervals_;
 };
 
+struct ReservationGeometry {
+  // Exact usable virtual extent, without physical padding.
+  uint64_t byte_length;
+  // Caller-requested base alignment in bytes.
+  uint64_t minimum_alignment;
+  // Native page-table fragment size reported by the device.
+  uint32_t fragment_size;
+  // Base alignment selected without changing page-level replacement.
+  uint64_t expected_alignment;
+};
+
+class KfdReservationGeometryTest
+    : public KfdMemoryReservationTest,
+      public ::testing::WithParamInterface<ReservationGeometry> {};
+
+TEST_P(KfdReservationGeometryTest, PreservesShortExtentAndPageReplacements) {
+  const auto geometry = GetParam();
+  device_.topology.virtual_address.fragment_size = geometry.fragment_size;
+  ASSERT_NO_FATAL_FAILURE(
+      Create(geometry.byte_length, geometry.minimum_alignment));
+  EXPECT_EQ(address_ % geometry.expected_alignment, 0u);
+  uint64_t address = 0;
+  uint32_t owner = 0;
+  uint64_t granularity = 0;
+  amdf_memory_access_t required_access = 0;
+  amdf_gpu_umd_memory_reservation_query_access(
+      reservation_, 0, &address, &owner, &granularity, &required_access);
+  EXPECT_EQ(granularity, device_.page_size);
+
+  const amdf_gpu_umd_mapping_update_t update = {
+      .target_byte_offset = geometry.byte_length - device_.page_size,
+      .byte_length = device_.page_size,
+  };
+  bool mutation_started = false;
+  ASSERT_EQ(amdf_gpu_umd_memory_reservation_update(reservation_, 0, 1, &update,
+                                                   &mutation_started),
+            AMDF_STATUS_OK);
+  ASSERT_TRUE(mutation_started);
+  ASSERT_EQ(native_.mutations.size(), 1u);
+  EXPECT_EQ(native_.mutations[0].va_address,
+            address_ + geometry.byte_length - device_.page_size);
+  EXPECT_EQ(native_.mutations[0].map_size, device_.page_size);
+  const auto status = amdf_gpu_umd_memory_reservation_destroy(reservation_);
+  reservation_ = nullptr;
+  ASSERT_EQ(status, AMDF_STATUS_OK);
+  ASSERT_EQ(native_.mutations.size(), 2u);
+  EXPECT_EQ(native_.mutations[1].va_address, address_);
+  EXPECT_EQ(native_.mutations[1].map_size, geometry.byte_length);
+  EXPECT_EQ(native_.allocation_count, 0u);
+  EXPECT_EQ(native_.context_count, 0u);
+  EXPECT_EQ(native_.gem_count, 0u);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    NativePageGeometry, KfdReservationGeometryTest,
+    ::testing::Values(ReservationGeometry{3 * 4096, 4096, 65536, 4096},
+                      ReservationGeometry{65536 + 4096, 4096, 65536, 65536},
+                      ReservationGeometry{2 * 1024 * 1024 + 4096, 4096,
+                                          2 * 1024 * 1024, 2 * 1024 * 1024},
+                      ReservationGeometry{2 * 1024 * 1024 + 4096,
+                                          4 * 1024 * 1024, 2 * 1024 * 1024,
+                                          4 * 1024 * 1024}));
+
 TEST_F(KfdMemoryReservationTest, ResumesBothNativeWaitProtocols) {
   ASSERT_NO_FATAL_FAILURE(Create());
   native_.wait_interruptions = 1;
@@ -338,6 +412,115 @@ TEST_F(KfdMemoryReservationTest, ResumesBothNativeWaitProtocols) {
   ASSERT_EQ(native_.mutations.size(), 1u);
   EXPECT_EQ(native_.mutations[0].va_address, address_ + 4096);
   EXPECT_EQ(native_.mutations[0].map_size, 4096u);
+}
+
+TEST_F(KfdMemoryReservationTest,
+       ExistingReservationPublicationOvertakesOtherCallersBackingWork) {
+  ASSERT_NO_FATAL_FAILURE(Create());
+  NativeReservationState held_native, acquire_native, release_native;
+  for (auto* state : {&held_native, &acquire_native, &release_native}) {
+    state->memory_lock = &memory_lock_;
+    state->render_descriptor = native_.render_descriptor;
+  }
+  // Separate calling threads model NUMA workers borrowing one connection.
+  // Real buffer and reservation implementations select their own priorities.
+  const amdf_gpu_kfd_buffer_create_info_t info = {
+      .native_flags = KFD_IOC_ALLOC_MEM_FLAGS_GTT,
+      .byte_length = 4096,
+      .alignment = 4096,
+  };
+  auto allocate = [&](NativeReservationState* state,
+                      amdf_gpu_kfd_buffer_t** out_buffer) {
+    native_state = state;
+    amdf_gpu_kfd_buffer_result_t result;
+    EXPECT_EQ(amdf_gpu_kfd_buffer_create(&device_, &info, out_buffer, &result),
+              AMDF_STATUS_OK);
+    native_state = nullptr;
+  };
+  auto release = [&](NativeReservationState* state,
+                     amdf_gpu_kfd_buffer_t* buffer) {
+    native_state = state;
+    EXPECT_EQ(amdf_gpu_kfd_buffer_destroy(buffer), AMDF_STATUS_OK);
+    native_state = nullptr;
+  };
+  amdf_gpu_kfd_buffer_t* retired = nullptr;
+  allocate(&release_native, &retired);
+
+  std::vector<char> order;
+  std::binary_semaphore entered{0}, resume{0};
+  held_native.before_mutation = [&](unsigned long request) {
+    if (request == AMDKFD_IOC_ALLOC_MEMORY_OF_GPU) {
+      order.push_back('H');
+      entered.release();
+      resume.acquire();
+    }
+  };
+  acquire_native.before_mutation = [&](unsigned long request) {
+    if (request == AMDKFD_IOC_ALLOC_MEMORY_OF_GPU) {
+      order.push_back('A');
+    }
+  };
+  release_native.before_mutation = [&](unsigned long request) {
+    if (request == AMDKFD_IOC_UNMAP_MEMORY_FROM_GPU) {
+      order.push_back('R');
+    }
+  };
+  native_.before_mutation = [&](unsigned long request) {
+    if (request == DRM_IOCTL_AMDGPU_GEM_VA) {
+      order.push_back('M');
+    } else if (request == AMDKFD_IOC_MAP_MEMORY_TO_GPU) {
+      order.push_back('P');
+    }
+  };
+  auto await_enrollment = [&](amdf_gpu_kfd_memory_priority_t priority) {
+    while (true) {
+      EXPECT_EQ(pthread_mutex_lock(&memory_lock_.mutex), 0);
+      const bool enrolled = memory_lock_.buckets[priority].head != nullptr;
+      EXPECT_EQ(pthread_mutex_unlock(&memory_lock_.mutex), 0);
+      if (enrolled) {
+        break;
+      }
+      std::this_thread::yield();
+    }
+  };
+  amdf_gpu_kfd_buffer_t* held = nullptr;
+  amdf_gpu_kfd_buffer_t* acquired = nullptr;
+  std::thread holding([&] { allocate(&held_native, &held); });
+  entered.acquire();
+  std::thread acquiring([&] { allocate(&acquire_native, &acquired); });
+  await_enrollment(AMDF_GPU_KFD_MEMORY_PRIORITY_ACQUIRE);
+  std::thread releasing([&] { release(&release_native, retired); });
+  await_enrollment(AMDF_GPU_KFD_MEMORY_PRIORITY_RELEASE);
+  std::thread mapping([&] {
+    native_state = &native_;
+    const amdf_gpu_umd_mapping_update_t updates[] = {
+        {.target_byte_offset = 0, .byte_length = 4096},
+        {.target_byte_offset = 4096, .byte_length = 4096},
+    };
+    bool mutation_started = false;
+    EXPECT_EQ(amdf_gpu_umd_memory_reservation_update(
+                  reservation_, 0, 2, updates, &mutation_started),
+              AMDF_STATUS_OK);
+    EXPECT_TRUE(mutation_started);
+    native_state = nullptr;
+  });
+  await_enrollment(AMDF_GPU_KFD_MEMORY_PRIORITY_MAP);
+  resume.release();
+  holding.join();
+  acquiring.join();
+  releasing.join();
+  mapping.join();
+  EXPECT_EQ(order, (std::vector<char>{'H', 'M', 'M', 'P', 'R', 'A'}));
+  EXPECT_EQ(native_.sequence, 1u);
+  EXPECT_EQ(native_.ready_count, 1u);
+  EXPECT_EQ(release_native.allocation_count, 0u);
+
+  held_native.before_mutation = {};
+  acquire_native.before_mutation = {};
+  native_.before_mutation = {};
+  release(&held_native, held);
+  release(&acquire_native, acquired);
+  native_state = &native_;
 }
 
 TEST_F(KfdMemoryReservationTest, RejectsFailedPublicationFence) {

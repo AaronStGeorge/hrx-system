@@ -91,6 +91,12 @@ static amdf_status_t FakeMemoryDestroyNative(amdf_memory_t* base_memory,
   return AMDF_STATUS_OK;
 }
 
+static uint64_t FakeMemoryRemainingBackingByteLength(
+    const amdf_memory_t* memory, uint32_t access_ordinal) {
+  return static_cast<const FakeMemory*>(memory->accesses[access_ordinal].native)
+      ->remaining_backing_byte_length;
+}
+
 static void FakeMemoryAbandonNative(amdf_memory_t* memory,
                                     uint32_t access_ordinal) {
   ++static_cast<FakeMemory*>(memory->accesses[access_ordinal].native)
@@ -104,6 +110,7 @@ static const amdf_memory_vtable_t kFakeMemoryVtable = {
     .describe_site = FakeMemoryDescribeSite,
     .map = FakeMemoryMap,
     .destroy_native = FakeMemoryDestroyNative,
+    .remaining_backing_byte_length = FakeMemoryRemainingBackingByteLength,
     .abandon_native = FakeMemoryAbandonNative,
 };
 
@@ -129,6 +136,7 @@ static amdf_status_t PrepareFakeMemory(
   memory->map_status = amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED);
   memory->site_status = AMDF_STATUS_OK;
   memory->destroy_status = device->destroy_status;
+  memory->remaining_backing_byte_length = source_byte_offset + byte_length;
   memory->export_release_state = &device->export_release;
   memory->site_description.capabilities =
       AMDF_MEMORY_SITE_CAPABILITY_READ | AMDF_MEMORY_SITE_CAPABILITY_WRITE |

@@ -30,7 +30,7 @@ class GpuMemoryGroupTest
       mapping_ = nullptr;
     }
     if (memory_ != nullptr) {
-      ASSERT_EQ(api_->memory_destroy(std::exchange(memory_, nullptr)),
+      ASSERT_EQ(api_->memory_destroy(std::exchange(memory_, nullptr), nullptr),
                 AMDF_STATUS_OK);
     }
     if (!HasFailure()) {
@@ -160,7 +160,8 @@ TEST_P(GpuMemoryGroupTest, OneBackingForTwoPhysicalConsumers) {
   }
   // Failed native rollback can retain pins. Only a published registration
   // establishes a teardown path that permits this fixture to free the pages.
-  ASSERT_EQ(api_->memory_create(scope, &create_info, &memory_), AMDF_STATUS_OK);
+  ASSERT_EQ(api_->memory_create(scope, &create_info, &memory_, nullptr),
+            AMDF_STATUS_OK);
   caller_storage_ = caller_storage;
   amdf_memory_info_t memory_info = {
       .type = AMDF_STRUCTURE_TYPE_MEMORY_INFO,
@@ -212,7 +213,7 @@ TEST_P(GpuMemoryGroupTest, OneBackingForTwoPhysicalConsumers) {
   if (registered) {
     ASSERT_EQ(api_->host_mapping_destroy(mapping_), AMDF_STATUS_OK);
     mapping_ = nullptr;
-    ASSERT_EQ(api_->memory_destroy(std::exchange(memory_, nullptr)),
+    ASSERT_EQ(api_->memory_destroy(std::exchange(memory_, nullptr), nullptr),
               AMDF_STATUS_OK);
     for (size_t i = 0; i < caller_length; ++i) {
       const uint8_t expected =

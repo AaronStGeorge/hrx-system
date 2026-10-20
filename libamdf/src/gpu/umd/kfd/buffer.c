@@ -34,6 +34,8 @@ struct amdf_gpu_kfd_buffer_t {
     void* base;
     // Complete reserved interval length, including alignment padding.
     size_t byte_length;
+    // True after a shared backing view replaced part of the empty reservation.
+    bool contains_backing;
   } reservation;
   // Immutable unique GPU IDs in owner-first native map order.
   uint32_t gpu_ids[];
@@ -44,8 +46,9 @@ struct amdf_gpu_kfd_buffer_t {
 // interrupted before consuming its handle. Other native failures remain
 // terminal results of this call, not reasons to retry.
 static int amdf_gpu_kfd_buffer_ioctl(amdf_gpu_umd_device_t* device,
+                                     amdf_gpu_kfd_memory_priority_t priority,
                                      unsigned long request, void* arguments) {
-  amdf_gpu_kfd_device_lock_memory(device);
+  amdf_gpu_kfd_device_lock_memory(device, priority);
   int result;
   do {
     result = ioctl(device->descriptor, request, arguments);
@@ -66,7 +69,8 @@ static amdf_status_t amdf_gpu_kfd_buffer_release_native(
         .n_success = buffer->unmap_success_count,
     };
     const int result = amdf_gpu_kfd_buffer_ioctl(
-        buffer->device, AMDKFD_IOC_UNMAP_MEMORY_FROM_GPU, &unmap);
+        buffer->device, AMDF_GPU_KFD_MEMORY_PRIORITY_RELEASE,
+        AMDKFD_IOC_UNMAP_MEMORY_FROM_GPU, &unmap);
     buffer->unmap_success_count = unmap.n_success;
     if (result != 0) {
       return amdf_linux_error(errno);
@@ -80,8 +84,9 @@ static amdf_status_t amdf_gpu_kfd_buffer_release_native(
     struct kfd_ioctl_free_memory_of_gpu_args release = {
         .handle = buffer->handle,
     };
-    if (amdf_gpu_kfd_buffer_ioctl(buffer->device, AMDKFD_IOC_FREE_MEMORY_OF_GPU,
-                                  &release) != 0) {
+    if (amdf_gpu_kfd_buffer_ioctl(
+            buffer->device, AMDF_GPU_KFD_MEMORY_PRIORITY_RELEASE,
+            AMDKFD_IOC_FREE_MEMORY_OF_GPU, &release) != 0) {
       return amdf_linux_error(errno);
     }
     buffer->handle = 0;
@@ -92,6 +97,7 @@ static amdf_status_t amdf_gpu_kfd_buffer_release_native(
       return amdf_linux_error(errno);
     }
     buffer->reservation.base = NULL;
+    buffer->reservation.contains_backing = false;
   }
   return AMDF_STATUS_OK;
 }
@@ -134,8 +140,8 @@ amdf_status_t amdf_gpu_kfd_buffer_prepare_import(
       .gpu_id = device->topology.gpu_id,
       .dmabuf_fd = (uint32_t)descriptor,
   };
-  if (amdf_gpu_kfd_buffer_ioctl(device, AMDKFD_IOC_IMPORT_DMABUF, &import) !=
-      0) {
+  if (amdf_gpu_kfd_buffer_ioctl(device, AMDF_GPU_KFD_MEMORY_PRIORITY_ACQUIRE,
+                                AMDKFD_IOC_IMPORT_DMABUF, &import) != 0) {
     status = amdf_linux_error(errno);
   } else {
     buffer->handle = import.handle;
@@ -229,7 +235,8 @@ amdf_status_t amdf_gpu_kfd_buffer_prepare(
         (uintptr_t)create_info->host_pointer - create_info->host_byte_offset;
   }
   if (amdf_status_is_ok(status)) {
-    amdf_gpu_kfd_device_lock_memory(device);
+    amdf_gpu_kfd_device_lock_memory(device,
+                                    AMDF_GPU_KFD_MEMORY_PRIORITY_ACQUIRE);
     if (ioctl(device->descriptor, AMDKFD_IOC_ALLOC_MEMORY_OF_GPU, &allocate) !=
         0) {
       status = amdf_linux_error(errno);
@@ -254,6 +261,7 @@ amdf_status_t amdf_gpu_kfd_buffer_prepare(
       status = amdf_linux_error(errno);
     } else {
       host_pointer = mapping;
+      buffer->reservation.contains_backing = true;
     }
   }
 
@@ -264,7 +272,8 @@ amdf_status_t amdf_gpu_kfd_buffer_prepare(
         .n_devices = gpu_count,
     };
     const int result =
-        amdf_gpu_kfd_buffer_ioctl(device, AMDKFD_IOC_MAP_MEMORY_TO_GPU, &map);
+        amdf_gpu_kfd_buffer_ioctl(device, AMDF_GPU_KFD_MEMORY_PRIORITY_ACQUIRE,
+                                  AMDKFD_IOC_MAP_MEMORY_TO_GPU, &map);
     // Mapping can succeed before the final residency/page-table wait fails.
     buffer->mapped_gpu_count = map.n_success;
     if (result != 0) {
@@ -314,9 +323,16 @@ size_t amdf_gpu_kfd_buffer_byte_length(const amdf_gpu_kfd_buffer_t* buffer) {
   return buffer->byte_length;
 }
 
-amdf_status_t amdf_gpu_kfd_buffer_export_gem(amdf_gpu_kfd_buffer_t* buffer,
-                                             int render_descriptor,
-                                             uint32_t* out_handle) {
+size_t amdf_gpu_kfd_buffer_remaining_backing_byte_length(
+    const amdf_gpu_kfd_buffer_t* buffer) {
+  return buffer->handle != 0 || buffer->reservation.contains_backing
+             ? buffer->byte_length
+             : 0;
+}
+
+amdf_status_t amdf_gpu_kfd_buffer_prepare_gem(amdf_gpu_kfd_buffer_t* buffer,
+                                              int render_descriptor,
+                                              uint32_t* handle) {
   struct kfd_ioctl_export_dmabuf_args export = {
       .handle = buffer->handle,
       .flags = O_CLOEXEC,
@@ -329,18 +345,12 @@ amdf_status_t amdf_gpu_kfd_buffer_export_gem(amdf_gpu_kfd_buffer_t* buffer,
   amdf_status_t status = AMDF_STATUS_OK;
   if (ioctl(render_descriptor, DRM_IOCTL_PRIME_FD_TO_HANDLE, &import) != 0) {
     status = amdf_linux_error(errno);
+  } else {
+    *handle = import.handle;
   }
   const amdf_status_t close_status = amdf_linux_file_close(&import.fd);
-  if (!amdf_status_is_ok(close_status)) {
-    status = close_status;
-  }
   if (amdf_status_is_ok(status)) {
-    *out_handle = import.handle;
-  } else if (import.handle != 0) {
-    struct drm_gem_close release = {.handle = import.handle};
-    if (ioctl(render_descriptor, DRM_IOCTL_GEM_CLOSE, &release) != 0) {
-      status = amdf_linux_error(errno);
-    }
+    status = close_status;
   }
   return status;
 }

@@ -106,7 +106,7 @@ class WindowsGpuXdnaMemoryTest
                 AMDF_STATUS_OK);
     }
     if (memory_) {
-      ASSERT_EQ(api_->memory_destroy(std::exchange(memory_, nullptr)),
+      ASSERT_EQ(api_->memory_destroy(std::exchange(memory_, nullptr), nullptr),
                 AMDF_STATUS_OK);
     }
     if (pages_) {
@@ -233,25 +233,25 @@ TEST_P(WindowsGpuXdnaMemoryTest, RejectsInvalidRegistrationWithoutOutput) {
   const auto original = MakeCreateInfo();
   auto create = original;
   create.registered_host_pointer = pages_ + 4096;
-  EXPECT_EQ(api_->memory_create(system_scope_, &create, &output),
+  EXPECT_EQ(api_->memory_create(system_scope_, &create, &output, nullptr),
             amdf_make_api_status(AMDF_STATUS_CODE_INVALID_ARGUMENT));
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
   create = original;
   --create.byte_length;
-  EXPECT_EQ(api_->memory_create(system_scope_, &create, &output),
+  EXPECT_EQ(api_->memory_create(system_scope_, &create, &output, nullptr),
             amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
   for (auto cacheability : {AMDF_HOST_CACHEABILITY_UNKNOWN,
                             AMDF_HOST_CACHEABILITY_WRITE_COMBINED}) {
     create = original;
     create.registered_host_cacheability = cacheability;
-    EXPECT_EQ(api_->memory_create(system_scope_, &create, &output),
+    EXPECT_EQ(api_->memory_create(system_scope_, &create, &output, nullptr),
               amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
     EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
   }
   create = original;
   accesses_[xdna_ordinal_].requirements.access |= AMDF_MEMORY_ACCESS_EXECUTE;
-  EXPECT_EQ(api_->memory_create(system_scope_, &create, &output),
+  EXPECT_EQ(api_->memory_create(system_scope_, &create, &output, nullptr),
             amdf_make_api_status(AMDF_STATUS_CODE_UNSUPPORTED));
   EXPECT_EQ(reinterpret_cast<uintptr_t>(output), uintptr_t{1});
   std::memset(pages_, 0x3C, kByteLength);
@@ -265,7 +265,7 @@ TEST_P(WindowsGpuXdnaMemoryTest,
     SCOPED_TRACE(generation);
     const uint8_t marker = static_cast<uint8_t>(0x51 + generation);
     std::memset(pages_, marker, kByteLength);
-    ASSERT_EQ(api_->memory_create(system_scope_, &create, &memory_),
+    ASSERT_EQ(api_->memory_create(system_scope_, &create, &memory_, nullptr),
               AMDF_STATUS_OK);
     amdf_memory_info_t info = {};
     info.type = AMDF_STRUCTURE_TYPE_MEMORY_INFO;
@@ -313,7 +313,7 @@ TEST_P(WindowsGpuXdnaMemoryTest,
               marker);
     ASSERT_EQ(api_->host_mapping_destroy(std::exchange(mapping_, nullptr)),
               AMDF_STATUS_OK);
-    ASSERT_EQ(api_->memory_destroy(std::exchange(memory_, nullptr)),
+    ASSERT_EQ(api_->memory_destroy(std::exchange(memory_, nullptr), nullptr),
               AMDF_STATUS_OK);
     MEMORY_BASIC_INFORMATION native = {};
     ASSERT_NE(VirtualQuery(pages_, &native, sizeof(native)), 0u);
