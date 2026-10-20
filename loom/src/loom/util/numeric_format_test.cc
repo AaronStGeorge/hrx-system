@@ -155,27 +155,29 @@ TEST(NumericFormatTest, DescribesDirectFloatClassificationEncodings) {
     loom_numeric_float_special_layout_t special_layout;
     uint64_t magnitude_mask;
     uint64_t special_magnitude;
+    uint64_t one_magnitude;
     uint64_t quiet_nan_bit;
   };
   const EncodingCase cases[] = {
       {LOOM_SCALAR_TYPE_F8E4M3, LOOM_SCALAR_TYPE_I8,
        LOOM_NUMERIC_FLOAT_SPECIAL_LAYOUT_FINITE_NAN, UINT64_C(0x7F),
-       UINT64_C(0x7F), UINT64_C(0x00)},
+       UINT64_C(0x7F), UINT64_C(0x38), UINT64_C(0x00)},
       {LOOM_SCALAR_TYPE_F8E5M2, LOOM_SCALAR_TYPE_I8,
        LOOM_NUMERIC_FLOAT_SPECIAL_LAYOUT_IEEE, UINT64_C(0x7F), UINT64_C(0x7C),
-       UINT64_C(0x02)},
+       UINT64_C(0x3C), UINT64_C(0x02)},
       {LOOM_SCALAR_TYPE_F16, LOOM_SCALAR_TYPE_I16,
        LOOM_NUMERIC_FLOAT_SPECIAL_LAYOUT_IEEE, UINT64_C(0x7FFF),
-       UINT64_C(0x7C00), UINT64_C(0x0200)},
+       UINT64_C(0x7C00), UINT64_C(0x3C00), UINT64_C(0x0200)},
       {LOOM_SCALAR_TYPE_BF16, LOOM_SCALAR_TYPE_I16,
        LOOM_NUMERIC_FLOAT_SPECIAL_LAYOUT_IEEE, UINT64_C(0x7FFF),
-       UINT64_C(0x7F80), UINT64_C(0x0040)},
+       UINT64_C(0x7F80), UINT64_C(0x3F80), UINT64_C(0x0040)},
       {LOOM_SCALAR_TYPE_F32, LOOM_SCALAR_TYPE_I32,
        LOOM_NUMERIC_FLOAT_SPECIAL_LAYOUT_IEEE, UINT64_C(0x7FFFFFFF),
-       UINT64_C(0x7F800000), UINT64_C(0x00400000)},
+       UINT64_C(0x7F800000), UINT64_C(0x3F800000), UINT64_C(0x00400000)},
       {LOOM_SCALAR_TYPE_F64, LOOM_SCALAR_TYPE_I64,
        LOOM_NUMERIC_FLOAT_SPECIAL_LAYOUT_IEEE, UINT64_C(0x7FFFFFFFFFFFFFFF),
-       UINT64_C(0x7FF0000000000000), UINT64_C(0x0008000000000000)},
+       UINT64_C(0x7FF0000000000000), UINT64_C(0x3FF0000000000000),
+       UINT64_C(0x0008000000000000)},
   };
 
   for (const EncodingCase& test_case : cases) {
@@ -185,6 +187,7 @@ TEST(NumericFormatTest, DescribesDirectFloatClassificationEncodings) {
     EXPECT_EQ(encoding.special_layout, test_case.special_layout);
     EXPECT_EQ(encoding.magnitude_mask, test_case.magnitude_mask);
     EXPECT_EQ(encoding.special_magnitude, test_case.special_magnitude);
+    EXPECT_EQ(encoding.one_magnitude, test_case.one_magnitude);
     EXPECT_EQ(encoding.quiet_nan_bit, test_case.quiet_nan_bit);
   }
 

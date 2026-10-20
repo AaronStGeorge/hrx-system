@@ -110,3 +110,56 @@ CHECK: COMPILE-REPORT: target_legalization[*] function=vector_fp8_signs source_o
 CHECK: COMPILE-REPORT: target_legalization[*] function=vector_bf16_signs source_op=vector.absf * action=rewritten * legalizer=math strategy=reference * scalarized=true *
 CHECK: COMPILE-REPORT: target_legalization[*] function=vector_bf16_signs source_op=vector.negf * action=rewritten * legalizer=math strategy=reference * scalarized=true *
 CHECK: COMPILE-REPORT: target_legalization[*] function=vector_bf16_signs source_op=vector.copysignf * action=rewritten * legalizer=math strategy=reference * scalarized=true *
+
+// ====
+
+// RUN: pass target-legalize{mode=eager,policy=reference-only},canonicalize,dce
+
+test.target<low_core> @test_target
+
+// E4M3 exercises the finite terminal-NaN layout. F32 exercises the IEEE
+// infinity boundary without narrow-integer widening obscuring the recipe.
+func.def target(@test_target) @scalar_signum_layouts(%finite: f8E4M3, %ieee: f32) -> (f8E4M3, f32) {
+  %finite_result = scalar.signf %finite : f8E4M3
+  %ieee_result = scalar.signf %ieee : f32
+  func.return %finite_result, %ieee_result : f8E4M3, f32
+}
+
+// ----
+test.target<low_core> @test_target
+
+func.def target(@test_target) @scalar_signum_layouts(%finite: f8E4M3, %ieee: f32) -> (f8E4M3, f32) {
+  %20 = scalar.bitcast %finite : f8E4M3 to i8
+  %51 = scalar.extui %20 : i8 to i32
+  %67 = scalar.constant 127 : i32
+  %53 = scalar.andi %51, %67 : i32
+  %23 = scalar.constant 0 : i8
+  %66 = scalar.constant 0 : i32
+  %65 = scalar.cmpi ne, %53, %66 : i32
+  %64 = scalar.constant 126 : i32
+  %47 = scalar.cmpi ule, %53, %64 : i32
+  %38 = scalar.extui %20 : i8 to i32
+  %63 = scalar.constant 128 : i32
+  %40 = scalar.andi %38, %63 : i32
+  %62 = scalar.constant 56 : i32
+  %36 = scalar.ori %40, %62 : i32
+  %37 = scalar.trunci %36 : i32 to i8
+  %31 = scf.select %47, %37, %23 : i8
+  %32 = scf.select %65, %31, %23 : i8
+  %finite_result = scalar.bitcast %32 : i8 to f8E4M3
+  %6 = scalar.bitcast %ieee : f32 to i32
+  %7 = scalar.constant 2147483647 : i32
+  %8 = scalar.andi %6, %7 : i32
+  %9 = scalar.constant 0 : i32
+  %10 = scalar.constant 2139095040 : i32
+  %61 = scalar.cmpi ne, %8, %9 : i32
+  %12 = scalar.cmpi ule, %8, %10 : i32
+  %13 = scalar.constant -2147483648 : i32
+  %14 = scalar.andi %6, %13 : i32
+  %15 = scalar.constant 1065353216 : i32
+  %16 = scalar.ori %14, %15 : i32
+  %17 = scf.select %12, %16, %9 : i32
+  %18 = scf.select %61, %17, %9 : i32
+  %ieee_result = scalar.bitcast %18 : i32 to f32
+  func.return %finite_result, %ieee_result : f8E4M3, f32
+}

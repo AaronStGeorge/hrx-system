@@ -56,6 +56,7 @@ loom_cc_library(
         "//loom/src/loom/target:pass_environment",
         "//loom/src/loom/target/reporting:report",
         "//loom/src/loom/util:fact_table_api",
+        "//loom/src/loom/util:numeric_format",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

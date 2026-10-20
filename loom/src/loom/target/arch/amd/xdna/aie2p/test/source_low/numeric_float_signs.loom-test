@@ -63,22 +63,48 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @vector_f32_4_sign
 
 // ====
 
-// RUN: with-checks emit source-low target=amd.xdna.aie2p:core output=low
-func.def @vector_bf16_8_signs(%magnitude: vector<8xbf16>, %sign: vector<8xbf16>) -> (vector<8xbf16>, vector<8xbf16>, vector<8xbf16>) {
+// RUN: emit source-low target=amd.xdna.aie2p:core output=low
+func.def @vector_bf16_8_signs(%magnitude: vector<8xbf16>, %sign: vector<8xbf16>) -> (vector<8xbf16>, vector<8xbf16>, vector<8xbf16>, vector<8xbf16>) {
   %absolute = vector.absf %magnitude : vector<8xbf16>
   %negated = vector.negf %magnitude : vector<8xbf16>
   %copied = vector.copysignf %magnitude, %sign : vector<8xbf16>
-  func.return %absolute, %negated, %copied : vector<8xbf16>, vector<8xbf16>, vector<8xbf16>
+  %signum = vector.signf %magnitude : vector<8xbf16>
+  func.return %absolute, %negated, %copied, %signum : vector<8xbf16>, vector<8xbf16>, vector<8xbf16>, vector<8xbf16>
 }
 
 // ----
-CHECK: * = mov.i32 2147450879
-CHECK: * = mov.i32 -2147450880
-CHECK: %absolute = vband %magnitude, *
-CHECK: %negated = vsub.32 *
-CHECK: %copied = vbor %absolute, *
-CHECK-NOT: *vbroadcast.bf16x8*
-CHECK-NOT: *reg<aie2p.ewl>*
+low.func.def target<amd.xdna.aie2p.core> abi(object_function) @vector_bf16_8_signs(%magnitude: reg<aie2p.vec256 x2>, %sign: reg<aie2p.vec256 x2>) -> (reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>, reg<aie2p.vec256 x2>) asm {
+  %30 = mov.i32 2147450879
+  %31 = vbcst.32 %30
+  %absolute = vband %magnitude, %31
+  %33 = mov.i32 -2147450880
+  %34 = vbcst.32 %33
+  %35 = vbor %magnitude, %34
+  %36 = vband %magnitude, %34
+  %negated = vsub.32 %35, %36
+  %43 = vband %sign, %34
+  %copied = vbor %absolute, %43
+  %45 = mov.i32 32767
+  %46 = vbcst.16 %45
+  %47 = vband %magnitude, %46
+  %48 = mov.short 0
+  %49 = vbcst.16 %48
+  %50 = mov.i32 32640
+  %51 = vbcst.16 %50
+  %52 = vlt.u16x32.el.low32 %49, %47
+  %53 = predicate.complete.zero.high32 %52, 0
+  %54 = vge.u16x32.el.low32 %51, %47
+  %55 = predicate.complete.zero.high32 %54, 0
+  %56 = mov.i32 -32768
+  %57 = vbcst.16 %56
+  %58 = vband %magnitude, %57
+  %59 = mov.i32 16256
+  %60 = vbcst.16 %59
+  %61 = vbor %58, %60
+  %62 = vsel.16.mask64 %49, %61, %55
+  %signum = vsel.16.mask64 %49, %62, %53
+  return %absolute, %negated, %copied, %signum
+}
 
 // ====
 
