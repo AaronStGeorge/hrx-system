@@ -95,6 +95,36 @@ low.func.def target<x86.avx2.core> abi(object_function) abi_layout({signature = 
 
 // ====
 
+func.def @convert_bounded_unsigned(%input: buffer) -> (f32, f64, f32, f64) {
+  %word_base = index.constant 0 : offset
+  %dword_base = index.constant 4 : offset
+  %words = buffer.view %input[%word_base] : buffer -> view<1xi16, align(1)>
+  %dwords = buffer.view %input[%dword_base] : buffer -> view<1xi32, align(1)>
+  %word = view.load %words[0] : view<1xi16, align(1)> -> i16
+  %dword = view.load %dwords[0] : view<1xi32, align(1)> -> i32
+  %bounded_word = scalar.extui %word : i16 to i32
+  %bounded_wide = scalar.extui %dword : i32 to i64
+  %word_single = scalar.uitofp %bounded_word : i32 to f32
+  %word_double = scalar.uitofp %bounded_word : i32 to f64
+  %wide_single = scalar.uitofp %bounded_wide : i64 to f32
+  %wide_double = scalar.uitofp %bounded_wide : i64 to f64
+  func.return %word_single, %word_double, %wide_single, %wide_double : f32, f64, f32, f64
+}
+
+// ----
+low.func.def target<x86.avx2.core> abi(object_function) abi_layout({signature = (buffer) -> (f32, f64, f32, f64)}) @convert_bounded_unsigned(%input: reg<x86.gpr64>) -> (reg<x86.xmm>, reg<x86.xmm>, reg<x86.xmm>, reg<x86.xmm>) asm {
+  %bounded_word = movzx.load.u16.gpr32 %input {disp32 = 0}
+  %bounded_wide = mov.load.u32.gpr64 %input {disp32 = 4}
+  %24 = vxorps.zero.xmm
+  %word_single = vcvtsi2ss.xmm.gpr32 %24, %bounded_word
+  %word_double = vcvtsi2sd.xmm.gpr32 %24, %bounded_word
+  %wide_single = vcvtsi2ss.xmm.gpr64 %24, %bounded_wide
+  %wide_double = vcvtsi2sd.xmm.gpr64 %24, %bounded_wide
+  return %word_single, %word_double, %wide_single, %wide_double
+}
+
+// ====
+
 func.def @convert_wide(%input: i64) -> (f32, f64, f32, f64) {
   %signed32 = scalar.sitofp %input : i64 to f32
   %signed64 = scalar.sitofp %input : i64 to f64

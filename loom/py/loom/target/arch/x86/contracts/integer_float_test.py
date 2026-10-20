@@ -59,6 +59,15 @@ def _cell(rule: DescriptorRule):
     )
 
 
+def _value_range(rule: DescriptorRule) -> tuple[int, int] | None:
+    for guard in rule.guards:
+        if guard.kind is GuardKind.VALUE_I64_RANGE:
+            assert guard.minimum is not None
+            assert guard.maximum is not None
+            return guard.minimum, guard.maximum
+    return None
+
+
 def _vector_cell(source_op, form: IntegerFloatVectorForm):
     return (
         source_op,
@@ -75,11 +84,24 @@ def test_scalar_rules_cover_signed_unsigned_types_and_native_overlays() -> None:
     for rule in native_rules:
         rule.validate(X86_AVX512_CORE_DESCRIPTOR_SET)
 
+    generic_rules = [rule for rule in base_rules if _value_range(rule) is None]
+    signed_domain_rules = [
+        rule for rule in base_rules if _value_range(rule) is not None
+    ]
     operations = (scalar_conversion.scalar_sitofp, scalar_conversion.scalar_uitofp)
-    assert {_cell(rule) for rule in base_rules} == {
+    assert {_cell(rule) for rule in generic_rules} == {
         (source_op, Scalar(f"i{source_width}"), Scalar(f"f{result_width}"))
         for source_op in operations
         for source_width in (1, 8, 16, 32, 64)
+        for result_width in (32, 64)
+    }
+    assert {_cell(rule) for rule in signed_domain_rules} == {
+        (
+            scalar_conversion.scalar_uitofp,
+            Scalar(f"i{source_width}"),
+            Scalar(f"f{result_width}"),
+        )
+        for source_width in (32, 64)
         for result_width in (32, 64)
     }
     assert {_cell(rule) for rule in native_rules} == {
@@ -91,9 +113,24 @@ def test_scalar_rules_cover_signed_unsigned_types_and_native_overlays() -> None:
         for source_width in (32, 64)
         for result_width in (32, 64)
     }
-    base_by_cell = {_cell(rule): rule for rule in base_rules}
+    base_by_cell = {_cell(rule): rule for rule in generic_rules}
+    signed_domain_by_cell = {_cell(rule): rule for rule in signed_domain_rules}
+    for rule in signed_domain_rules:
+        source_width = int(_value_type(rule, "input").element[1:])
+        result_width = int(_value_type(rule, "result").element[1:])
+        assert _value_range(rule) == (0, (1 << (source_width - 1)) - 1)
+        assert rule.priority > base_by_cell[_cell(rule)].priority
+        assert rule.descriptor.key == (
+            f"x86.avx2.vcvtsi2{'ss' if result_width == 32 else 'sd'}."
+            f"xmm.gpr{source_width}"
+        )
+        assert [emit.descriptor.mnemonic for emit in rule.emit] == [
+            "vxorps",
+            "vcvtsi2ss" if result_width == 32 else "vcvtsi2sd",
+        ]
     for rule in native_rules:
         assert rule.priority > base_by_cell[_cell(rule)].priority
+        assert rule.priority > signed_domain_by_cell[_cell(rule)].priority
         assert [emit.descriptor.mnemonic for emit in rule.emit] == [
             "vxorps",
             "vcvtusi2ss"

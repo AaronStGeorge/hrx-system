@@ -93,19 +93,28 @@ def _conversion_rule(
     float_width: int,
     *,
     native_unsigned: bool,
+    unsigned_within_signed_domain: bool = False,
     descriptor_lookup: DescriptorLookup,
 ) -> DescriptorRule:
     unsigned = source_op is conversion.scalar_uitofp
     float_type = Scalar(f"f{float_width}")
     suffix = "ss" if float_width == 32 else "sd"
+    signed_domain_guards = ()
     if native_unsigned:
         prefix, normalized = (), ValueRef.operand("input")
         descriptor_key = f"x86.avx512.vcvtusi2{suffix}.xmm.gpr{width}"
     else:
         native_width = 64 if width == 64 or (unsigned and width == 32) else 32
-        prefix, normalized = _normalize_integer(
-            width, unsigned=unsigned, descriptor_lookup=descriptor_lookup
-        )
+        if unsigned_within_signed_domain:
+            native_width = width
+            prefix, normalized = (), ValueRef.operand("input")
+            signed_domain_guards = (
+                Guard.value_i64_range("input", 0, (1 << (width - 1)) - 1),
+            )
+        else:
+            prefix, normalized = _normalize_integer(
+                width, unsigned=unsigned, descriptor_lookup=descriptor_lookup
+            )
         descriptor_key = f"x86.avx2.vcvtsi2{suffix}.xmm.gpr{native_width}"
     convert = descriptor_lookup(descriptor_key)
     passthrough = ValueRef.temporary("passthrough")
@@ -119,7 +128,12 @@ def _conversion_rule(
             result_types={"dst": float_type},
         ),
     ]
-    composed_unsigned64 = unsigned and width == 64 and not native_unsigned
+    composed_unsigned64 = (
+        unsigned
+        and width == 64
+        and not native_unsigned
+        and not unsigned_within_signed_domain
+    )
     direct = (
         ValueRef.temporary("direct")
         if composed_unsigned64
@@ -199,16 +213,17 @@ def _conversion_rule(
         guards=(
             Guard.value_type("input", Scalar(f"i{width}")),
             Guard.value_type("result", float_type),
+            *signed_domain_guards,
         ),
         emit=tuple(emits),
-        priority=1 if native_unsigned else 0,
+        priority=2 if native_unsigned else int(unsigned_within_signed_domain),
     )
 
 
 def avx2_integer_float_rules(
     descriptor_lookup: DescriptorLookup,
 ) -> tuple[DescriptorRule, ...]:
-    return tuple(
+    generic_rules = tuple(
         _conversion_rule(
             source_op,
             width,
@@ -220,6 +235,19 @@ def avx2_integer_float_rules(
         for source_op in (conversion.scalar_sitofp, conversion.scalar_uitofp)
         for element in FLOAT_ELEMENTS
     )
+    signed_domain_rules = tuple(
+        _conversion_rule(
+            conversion.scalar_uitofp,
+            width,
+            element.bit_width,
+            native_unsigned=False,
+            unsigned_within_signed_domain=True,
+            descriptor_lookup=descriptor_lookup,
+        )
+        for width in (32, 64)
+        for element in FLOAT_ELEMENTS
+    )
+    return (*generic_rules, *signed_domain_rules)
 
 
 def avx512_integer_float_rules(
