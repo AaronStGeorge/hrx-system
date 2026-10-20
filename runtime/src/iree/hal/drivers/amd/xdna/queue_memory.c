@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "iree/hal/drivers/amd/fabric/transient_buffer.h"
 #include "iree/hal/drivers/amd/xdna/queue_admission.h"
 #include "iree/hal/drivers/amd/xdna/queue_state.h"
-#include "iree/hal/drivers/amd/fabric/transient_buffer.h"
 
 void iree_hal_amd_xdna_operation_release_alloca_reservations(
     iree_hal_amd_xdna_operation_t* operation) {
