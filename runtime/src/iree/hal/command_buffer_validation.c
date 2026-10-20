@@ -106,6 +106,14 @@ static iree_status_t iree_hal_command_buffer_validate_binding_requirements(
   // Ensure the offset and length have an alignment matching the value length.
   const iree_device_size_t absolute_binding_offset =
       iree_hal_buffer_byte_offset(binding.buffer) + binding.offset;
+  if (requirements.min_byte_length_alignment &&
+      (binding_length % requirements.min_byte_length_alignment) != 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "resolved binding length does not match the required fill alignment "
+        "(length=%" PRIdsz ", alignment=%" PRIdsz ")",
+        binding_length, requirements.min_byte_length_alignment);
+  }
   if (requirements.min_byte_alignment &&
       (absolute_binding_offset % requirements.min_byte_alignment) != 0) {
     return iree_make_status(
@@ -182,6 +190,9 @@ static iree_status_t iree_hal_command_buffer_validate_buffer_requirements(
   table_requirements->type |= requirements.type;
   table_requirements->min_byte_length = iree_max(
       table_requirements->min_byte_length, requirements.min_byte_length);
+  table_requirements->min_byte_length_alignment =
+      iree_max(table_requirements->min_byte_length_alignment,
+               requirements.min_byte_length_alignment);
   if (requirements.min_byte_alignment) {
     table_requirements->min_byte_alignment =
         table_requirements->min_byte_alignment
@@ -410,7 +421,8 @@ iree_status_t iree_hal_command_buffer_fill_buffer_validation(
   }
 
   if ((target_ref.offset % pattern_length) != 0 ||
-      (target_ref.length % pattern_length) != 0) {
+      (target_ref.length != IREE_HAL_WHOLE_BUFFER &&
+       (target_ref.length % pattern_length) != 0)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "binding offset and/or length do not match the required alignment of "
@@ -424,6 +436,8 @@ iree_status_t iree_hal_command_buffer_fill_buffer_validation(
       .access = IREE_HAL_MEMORY_ACCESS_WRITE,
       .type = IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE,
       .min_byte_alignment = pattern_length,
+      .min_byte_length_alignment =
+          target_ref.length == IREE_HAL_WHOLE_BUFFER ? pattern_length : 0,
   };
   IREE_RETURN_IF_ERROR(iree_hal_command_buffer_validate_buffer_requirements(
       command_buffer, validation_state, target_ref, target_reqs));
@@ -438,6 +452,17 @@ iree_status_t iree_hal_command_buffer_update_buffer_validation(
     iree_hal_buffer_ref_t target_ref, iree_hal_update_flags_t flags) {
   IREE_RETURN_IF_ERROR(iree_hal_command_buffer_validate_categories(
       command_buffer, validation_state, IREE_HAL_COMMAND_CATEGORY_TRANSFER));
+
+  if (target_ref.length == IREE_HAL_WHOLE_BUFFER) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "recorded updates require an explicit byte count");
+  }
+  if (target_ref.length > IREE_HAL_COMMAND_BUFFER_MAX_UPDATE_SIZE ||
+      source_offset > IREE_HOST_SIZE_MAX - target_ref.length) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "recorded update exceeds the capture or host range "
+                            "limit");
+  }
 
   const iree_hal_buffer_binding_requirements_t target_reqs = {
       .usage = IREE_HAL_BUFFER_USAGE_TRANSFER_TARGET,

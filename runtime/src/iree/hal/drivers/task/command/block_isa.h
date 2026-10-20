@@ -76,6 +76,26 @@ enum iree_hal_cmd_flag_bits_e {
 // independent work to use the available CPU workers.
 #define IREE_HAL_CMD_TRANSFER_TILE_LENGTH_BYTES ((iree_device_size_t)64 * 1024)
 
+// Computes the external grid volume without wrapping the 32-bit tile counter.
+// A zero axis has no work regardless of the other dimensions.
+static inline bool iree_hal_cmd_dispatch_calculate_tile_count(
+    const uint32_t workgroup_count[3], uint32_t* out_tile_count) {
+  *out_tile_count = 0;
+  if (!workgroup_count[0] || !workgroup_count[1] || !workgroup_count[2]) {
+    return true;
+  }
+  uint64_t count = (uint64_t)workgroup_count[0] * workgroup_count[1];
+  if (count > UINT32_MAX) {
+    return false;
+  }
+  count *= workgroup_count[2];
+  if (count > UINT32_MAX) {
+    return false;
+  }
+  *out_tile_count = (uint32_t)count;
+  return true;
+}
+
 // Returns the number of transfer tiles required to cover |length| bytes.
 static inline uint64_t iree_hal_cmd_transfer_tile_count_u64(
     iree_device_size_t length) {
@@ -119,6 +139,9 @@ static inline iree_device_size_t iree_hal_cmd_transfer_tile_length(
 // Command header
 //===----------------------------------------------------------------------===//
 
+// The byte-sized qword count bounds each command, including its inline payload.
+enum { IREE_HAL_CMD_MAX_BYTE_LENGTH = UINT8_MAX * 8 };
+
 // Prefix of every command. Commands are 8-byte aligned; the next command is at
 // (uint8_t*)header + header->size_qwords * 8.
 typedef struct iree_hal_cmd_header_t {
@@ -151,21 +174,28 @@ static_assert(sizeof(iree_hal_cmd_header_t) == 4,
 
 // Indirect dispatch: workgroup count read from a buffer.
 typedef struct iree_hal_dispatch_params_t {
+  // Dispatch grid dimensions; their product must fit the 32-bit tile count.
   uint32_t workgroup_count[3];
 } iree_hal_dispatch_params_t;
 
 // Indirect copy: source/target offsets and length read from a buffer.
 typedef struct iree_hal_copy_params_t {
+  // Byte offset relative to the resolved source binding.
   iree_device_size_t source_offset;
+  // Byte offset relative to the resolved target binding.
   iree_device_size_t target_offset;
+  // Byte count, or WHOLE_BUFFER for equal remaining source and target ranges.
   iree_device_size_t length;
 } iree_hal_copy_params_t;
 
 // Indirect fill: target offset, length, and pattern read from a buffer.
 typedef struct iree_hal_fill_params_t {
+  // Byte offset relative to the resolved target binding.
   iree_device_size_t target_offset;
+  // Byte count, or WHOLE_BUFFER for the remaining target range.
   iree_device_size_t length;
-  uint64_t pattern;  // Zero-extended from actual pattern width.
+  // Pattern bits, zero-extended from the actual pattern width.
+  uint64_t pattern;
 } iree_hal_fill_params_t;
 
 //===----------------------------------------------------------------------===//
@@ -215,8 +245,9 @@ typedef struct iree_hal_cmd_fixup_t {
   // For indirect fixups: per-reference offset within the binding.
   // For direct inline fixups: 0 (map_range already applied the offset).
   iree_device_size_t offset;
-  // Length of the accessible buffer region in bytes. Populates .data
-  // binding_lengths[] at block entry alongside binding_ptrs[].
+  // Exact accessible byte length, or WHOLE_BUFFER for an indirect reference
+  // extending to the end of the invocation's binding. Block entry resolves
+  // this into binding_lengths[] alongside binding_ptrs[].
   iree_device_size_t length;
   // .data binding_ptrs[] slot to write the resolved pointer into.
   uint16_t data_index;
@@ -234,7 +265,9 @@ static_assert(sizeof(iree_hal_cmd_fixup_t) == 32, "fixup entries are 4 qwords");
 //     if (!f->host_ptr) {
 //       binding_ptrs[f->data_index] =
 //           (uint8_t*)table[f->slot].base + f->offset;
-//       binding_lengths[f->data_index] = f->length;
+//       binding_lengths[f->data_index] =
+//           f->length == IREE_HAL_WHOLE_BUFFER
+//               ? table[f->slot].length - f->offset : f->length;
 //     } else if (!iree_any_bit_set(f->flags, IREE_HAL_CMD_FIXUP_FLAG_SPAN)) {
 //       binding_ptrs[f->data_index] = (uint8_t*)f->host_ptr + f->offset;
 //       binding_lengths[f->data_index] = f->length;
@@ -430,16 +463,17 @@ typedef struct iree_hal_cmd_dispatch_t {
       uint16_t reserved;
       // Byte offset to iree_hal_dispatch_params_t within the buffer.
       uint32_t params_offset;
-      // Scheduling hint: expected total tile count for wake budget
-      // computation. Overwritten at execution time with the actual value.
+      // Immutable expected tile count used for initial wake budgeting.
+      // Execution resolves the actual grid from the parameter binding.
       uint32_t tile_count_hint;
     } indirect;
   } params;
 
   // Tile decomposition. For direct dispatches, precomputed from
-  // workgroup_count at recording time. For indirect dispatches, these are
-  // scheduling hints overwritten at execution after reading actual params.
+  // workgroup_count at recording time. For indirect dispatches, these remain
+  // immutable scheduling hints; invocation state owns the resolved counts.
   uint32_t tile_count;
+  // Workgroups claimed together, or zero for automatic reservation sizing.
   uint32_t tiles_per_reservation;
 
   // Transient local memory size in bytes. Each worker maintains a local memory

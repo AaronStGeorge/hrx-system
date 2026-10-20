@@ -63,6 +63,8 @@ typedef struct iree_hal_slab_cache_t {
   iree_allocator_t host_allocator;
   // Immutable class acquired for compatible requests.
   iree_hal_pool_reservation_request_t slab;
+  // Lower bound on request size eligible for this class.
+  iree_device_size_t minimum_cached_size;
   // Captured source capabilities for validation and bypass routing.
   iree_hal_pool_capabilities_t capabilities;
   // Stable logical allocation trace identity.
@@ -182,7 +184,8 @@ static bool iree_hal_slab_cache_frontier_is_satisfied(
 static bool iree_hal_slab_cache_request_is_cacheable(
     const iree_hal_slab_cache_t* cache,
     const iree_hal_pool_reservation_request_t* request) {
-  return request->allocation_size <= cache->slab.allocation_size &&
+  return request->allocation_size >= cache->minimum_cached_size &&
+         request->allocation_size <= cache->slab.allocation_size &&
          request->min_alignment <= cache->slab.min_alignment;
 }
 
@@ -488,6 +491,10 @@ iree_status_t iree_hal_slab_cache_create(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "cache target_count exceeds max_count");
   }
+  if (options->minimum_cached_size > options->slab.allocation_size) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "minimum cached size exceeds slab size");
+  }
   iree_hal_slab_cache_t* cache = NULL;
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, sizeof(*cache), (void**)&cache));
@@ -514,6 +521,7 @@ iree_status_t iree_hal_slab_cache_create(
   cache->base.allocation_interceptor = backing_pool->allocation_interceptor;
   cache->slab = options->slab;
   cache->slab.min_alignment = iree_max(1, cache->slab.min_alignment);
+  cache->minimum_cached_size = options->minimum_cached_size;
   cache->target_count = options->target_count;
   cache->max_count = options->max_count;
   iree_slim_mutex_initialize(&cache->mutex);

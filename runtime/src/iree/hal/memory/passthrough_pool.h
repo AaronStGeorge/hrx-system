@@ -51,13 +51,16 @@ typedef struct iree_hal_passthrough_pool_options_t {
 // Creates a pass-through pool that acquires one native slab per reservation.
 // Acquisition captures native batch state and completes inline or later on the
 // provider-selected context. All output reservations publish together; failed
-// batches return their native storage before reporting failure.
+// batches consume their native owners and account for cleanup loss before
+// reporting failure.
 //
 // Returning the reservation token and every view registers its exact release
 // frontier. Actual completion permits native release using descriptor storage
 // secured during acquisition. A failed prerequisite quarantines the slab until
 // caller-quiescent destruction and is reported by later acquisition. Native
-// bytes remain charged until the provider completes their release.
+// bytes remain charged until provider release completes; reported abandoned
+// backing remains charged for the lifetime of this pool. Its recorded cause
+// is available for capacity diagnostics without poisoning later acquisition.
 //
 // Final public release requires returned reservations/views and
 // caller-quiescent execution. It cancels pending retirement records and submits

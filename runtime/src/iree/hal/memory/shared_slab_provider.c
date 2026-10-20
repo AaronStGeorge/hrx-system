@@ -45,7 +45,9 @@ static void iree_hal_shared_slab_provider_destroy(
 
 static iree_status_t iree_hal_shared_slab_provider_acquire(
     iree_hal_slab_provider_t* base, iree_device_size_t min_length,
-    iree_device_size_t min_alignment, iree_hal_slab_t* out_slab) {
+    iree_device_size_t min_alignment, iree_hal_slab_t* out_slab,
+    iree_hal_slab_release_info_t* out_release_info) {
+  *out_release_info = (iree_hal_slab_release_info_t){0};
   iree_hal_shared_slab_provider_t* provider =
       (iree_hal_shared_slab_provider_t*)base;
   memset(out_slab, 0, sizeof(*out_slab));
@@ -93,7 +95,7 @@ static iree_status_t iree_hal_shared_slab_provider_acquire(
   return status;
 }
 
-static void iree_hal_shared_slab_provider_release(
+static iree_hal_slab_release_info_t iree_hal_shared_slab_provider_release(
     iree_hal_slab_provider_t* base, const iree_hal_slab_t* slab) {
   iree_hal_shared_slab_provider_t* provider =
       (iree_hal_shared_slab_provider_t*)base;
@@ -102,6 +104,7 @@ static void iree_hal_shared_slab_provider_release(
   iree_shm_close(&storage->mapping);
   iree_hal_memory_trace_free(&provider->trace, storage);
   iree_allocator_free(provider->base.host_allocator, storage);
+  return (iree_hal_slab_release_info_t){0};
 }
 
 static iree_status_t iree_hal_shared_slab_provider_wrap(

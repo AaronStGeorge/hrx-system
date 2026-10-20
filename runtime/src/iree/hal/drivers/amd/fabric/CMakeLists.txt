@@ -154,8 +154,12 @@ iree_cc_test(
   DEPS
     ::slab_provider
     amdf::headers
+    iree::async
+    iree::async::platform
+    iree::async::util::proactor_thread
     iree::base
     iree::hal
+    iree::hal::memory::passthrough_pool
     iree::hal::memory::slab_provider
     iree::hal::testing::mock_device
     iree::testing::gtest

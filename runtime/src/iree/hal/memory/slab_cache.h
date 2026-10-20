@@ -17,9 +17,13 @@ extern "C" {
 // Explicit retention and preparation policy for one reusable slab class.
 typedef struct iree_hal_slab_cache_options_t {
   // Geometry acquired from the backing pool. Compatible requests receive the
-  // entire entry; larger or more aligned requests use the same backing pool
-  // without entering the idle cache.
+  // entire entry; requests outside the size/alignment class use the same
+  // backing pool without entering the idle cache.
   iree_hal_pool_reservation_request_t slab;
+  // Smallest request eligible for rounding to the slab class. Zero allows all
+  // smaller requests; matching slab.allocation_size selects an exact class.
+  // Smaller requests remain valid and pass to the backing pool unchanged.
+  iree_device_size_t minimum_cached_size;
   // Ready idle entries proactively acquired from the backing pool.
   // Zero disables prefill. Pending entries also consume the idle limit.
   uint32_t target_count;
@@ -30,7 +34,8 @@ typedef struct iree_hal_slab_cache_options_t {
   iree_string_view_t trace_name;
 } iree_hal_slab_cache_options_t;
 
-// Selects target_count=0, max_count=4 and an unset slab class.
+// Selects minimum_cached_size=0, target_count=0, max_count=4, and an unset
+// class.
 void iree_hal_slab_cache_options_initialize(
     iree_hal_slab_cache_options_t* out_options);
 

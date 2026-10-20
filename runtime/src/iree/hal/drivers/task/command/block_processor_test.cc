@@ -131,6 +131,18 @@ static int kernel_copy_elements(
   return 0;
 }
 
+// Reports the exact accessible ranges supplied through the dispatch ABI.
+static int kernel_binding_lengths(
+    const iree_hal_executable_environment_v0_t* environment,
+    const iree_hal_executable_dispatch_state_v0_t* dispatch_state,
+    const iree_hal_executable_workgroup_state_v0_t* workgroup_state) {
+  auto* output = static_cast<size_t*>(dispatch_state->binding_ptrs[3]);
+  for (size_t i = 0; i < 3; ++i) {
+    output[i] = dispatch_state->binding_lengths[i];
+  }
+  return 0;
+}
+
 // Returns an error code.
 static int kernel_fail(
     const iree_hal_executable_environment_v0_t* environment,
@@ -1063,6 +1075,50 @@ TEST_P(BlockProcessorTest, DirectFixup) {
   iree_hal_cmd_block_builder_deinitialize(&builder);
 }
 
+TEST_P(BlockProcessorTest, BindingExtentsRemainExactAcrossInvocations) {
+  uint8_t source[80] = {};
+  size_t lengths[3] = {};
+  iree_hal_cmd_fixup_t fixups[4] = {};
+  fixups[0].offset = 4;
+  fixups[0].length = 16;
+  fixups[1].data_index = 1;
+  fixups[1].offset = 8;
+  fixups[1].length = IREE_HAL_WHOLE_BUFFER;
+  fixups[2].data_index = 2;
+  fixups[2].offset = 20;
+  fixups[2].length = 0;
+  fixups[3].data_index = 3;
+  fixups[3].host_ptr = lengths;
+  fixups[3].length = sizeof(lengths);
+
+  iree_hal_cmd_block_builder_t builder;
+  iree_hal_cmd_block_builder_initialize(&block_pool_, &builder);
+  IREE_ASSERT_OK(iree_hal_cmd_block_builder_begin(&builder));
+  DispatchDesc desc = {.function = kernel_binding_lengths};
+  desc.workgroup_count[0] = desc.workgroup_count[1] = desc.workgroup_count[2] =
+      1;
+  desc.binding_count = 4;
+  IREE_ASSERT_OK(record_dispatch(&builder, desc, fixups, 4));
+  iree_hal_cmd_block_recording_t recording;
+  IREE_ASSERT_OK(iree_hal_cmd_block_builder_end(&builder, &recording));
+
+  for (size_t offset : {0u, 8u}) {
+    for (size_t length : {20u, 32u, 64u}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "offset=" << offset << " length=" << length);
+      const iree_hal_cmd_binding_entry_t binding = {source + offset, length};
+      std::memset(lengths, 0xff, sizeof(lengths));
+      IREE_ASSERT_OK(execute(&recording, &binding, 1));
+      EXPECT_EQ(lengths[0], 16u);
+      EXPECT_EQ(lengths[1], length - 8u);
+      EXPECT_EQ(lengths[2], 0u);
+    }
+  }
+
+  iree_hal_cmd_block_recording_release(&recording);
+  iree_hal_cmd_block_builder_deinitialize(&builder);
+}
+
 TEST_P(BlockProcessorTest, KernelFailurePropagates) {
   iree_hal_cmd_block_builder_t builder;
   iree_hal_cmd_block_builder_initialize(&block_pool_, &builder);
@@ -1293,6 +1349,181 @@ TEST_P(BlockProcessorTest, ThreeDimensionalDispatch) {
 
   iree_hal_cmd_block_recording_release(&recording);
   iree_hal_cmd_block_builder_deinitialize(&builder);
+}
+
+TEST_P(BlockProcessorTest, RemainingTransfersReuseInvocationExtents) {
+  constexpr size_t kCapacity = 2 * 65536 + 32;
+  for (uint8_t pattern_length : {1, 2, 4}) {
+    SCOPED_TRACE(pattern_length);
+    iree_hal_cmd_block_builder_t builder;
+    iree_hal_cmd_block_builder_initialize(&block_pool_, &builder);
+    IREE_ASSERT_OK(iree_hal_cmd_block_builder_begin(&builder));
+    const uint32_t pattern = 0xAABBCCDDu;
+    iree_hal_cmd_build_token_t fill_token;
+    iree_hal_cmd_fixup_t* fill_fixup = nullptr;
+    IREE_ASSERT_OK(iree_hal_cmd_build_fill(&builder, IREE_HAL_WHOLE_BUFFER,
+                                           &pattern, pattern_length,
+                                           &fill_fixup, &fill_token));
+    fill_fixup->host_ptr = nullptr;
+    fill_fixup->flags = IREE_HAL_CMD_FIXUP_FLAG_NONE;
+    fill_fixup->slot = 0;
+    fill_fixup->offset = 8;
+    fill_fixup->length = IREE_HAL_WHOLE_BUFFER;
+    IREE_ASSERT_OK(iree_hal_cmd_block_builder_barrier(&builder));
+    iree_hal_cmd_build_token_t copy_token;
+    iree_hal_cmd_fixup_t* copy_fixups = nullptr;
+    IREE_ASSERT_OK(iree_hal_cmd_build_copy(&builder, IREE_HAL_WHOLE_BUFFER,
+                                           &copy_fixups, &copy_token));
+    for (uint16_t i = 0; i < 2; ++i) {
+      copy_fixups[i].host_ptr = nullptr;
+      copy_fixups[i].flags = IREE_HAL_CMD_FIXUP_FLAG_NONE;
+      copy_fixups[i].slot = i;
+      copy_fixups[i].offset = 8;
+      copy_fixups[i].length = IREE_HAL_WHOLE_BUFFER;
+    }
+    iree_hal_cmd_block_recording_t recording;
+    IREE_ASSERT_OK(iree_hal_cmd_block_builder_end(&builder, &recording));
+
+    for (size_t length : {0, 12, 65536 + 12, 2 * 65536 + 12}) {
+      SCOPED_TRACE(length);
+      std::vector<uint8_t> source(kCapacity, 0);
+      std::vector<uint8_t> target(kCapacity, 0);
+      iree_hal_cmd_binding_entry_t table[] = {{source.data(), 8 + length},
+                                              {target.data(), 8 + length}};
+      uint64_t tiles = 0;
+      IREE_ASSERT_OK(execute(&recording, table, IREE_ARRAYSIZE(table), &tiles));
+      EXPECT_EQ(tiles, 2 * iree_hal_cmd_transfer_tile_count(length));
+      std::vector<uint8_t> expected(kCapacity, 0);
+      for (size_t i = 0; i < length; ++i) {
+        expected[8 + i] =
+            static_cast<uint8_t>(pattern >> (8 * (i % pattern_length)));
+      }
+      EXPECT_EQ(source, expected);
+      EXPECT_EQ(target, expected);
+    }
+    EXPECT_EQ(reinterpret_cast<iree_hal_cmd_fill_t*>(fill_token.command)
+                  ->params.direct.length,
+              IREE_HAL_WHOLE_BUFFER);
+    EXPECT_EQ(reinterpret_cast<iree_hal_cmd_copy_t*>(copy_token.command)
+                  ->params.direct.length,
+              IREE_HAL_WHOLE_BUFFER);
+    iree_hal_cmd_block_recording_release(&recording);
+    iree_hal_cmd_block_builder_deinitialize(&builder);
+  }
+}
+
+TEST_P(BlockProcessorTest, RemainingCopyRejectsUnequalBindings) {
+  iree_hal_cmd_block_builder_t builder;
+  iree_hal_cmd_block_builder_initialize(&block_pool_, &builder);
+  IREE_ASSERT_OK(iree_hal_cmd_block_builder_begin(&builder));
+  iree_hal_cmd_build_token_t token;
+  iree_hal_cmd_fixup_t* fixups = nullptr;
+  IREE_ASSERT_OK(iree_hal_cmd_build_copy(&builder, IREE_HAL_WHOLE_BUFFER,
+                                         &fixups, &token));
+  for (uint16_t i = 0; i < 2; ++i) {
+    fixups[i].host_ptr = nullptr;
+    fixups[i].flags = IREE_HAL_CMD_FIXUP_FLAG_NONE;
+    fixups[i].slot = i;
+    fixups[i].offset = 0;
+    fixups[i].length = IREE_HAL_WHOLE_BUFFER;
+  }
+  iree_hal_cmd_block_recording_t recording;
+  IREE_ASSERT_OK(iree_hal_cmd_block_builder_end(&builder, &recording));
+  uint8_t source[16] = {1};
+  uint8_t target[16] = {0};
+  for (size_t source_length : {8, 16}) {
+    iree_hal_cmd_binding_entry_t table[] = {{source, source_length},
+                                            {target, 24 - source_length}};
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                          execute(&recording, table, IREE_ARRAYSIZE(table)));
+    EXPECT_EQ(target[0], 0);
+  }
+  iree_hal_cmd_binding_entry_t table[] = {{source, sizeof(source)},
+                                          {target, sizeof(target)}};
+  IREE_ASSERT_OK(execute(&recording, table, IREE_ARRAYSIZE(table)));
+  EXPECT_EQ(target[0], 1);
+  iree_hal_cmd_block_recording_release(&recording);
+  iree_hal_cmd_block_builder_deinitialize(&builder);
+}
+
+TEST_P(BlockProcessorTest, InvalidDynamicExtentAtRegionAndBlockBoundaries) {
+  // The same external grid is rejected before initial publication, after a
+  // barrier, and after a block transition. Each recording remains reusable.
+  // Multiple workers also require the combined region count to fit, even when
+  // each individual grid is representable. The sequential path has no region
+  // counter and therefore no aggregate limit.
+  for (uint32_t command_count : {1, 2}) {
+    if (worker_count() == 1 && command_count == 2) {
+      continue;
+    }
+    SCOPED_TRACE(command_count);
+    for (int boundary : {0, 1, 2}) {
+      SCOPED_TRACE(boundary);
+      iree_hal_cmd_block_builder_t builder;
+      iree_hal_cmd_block_builder_initialize(&block_pool_, &builder);
+      IREE_ASSERT_OK(iree_hal_cmd_block_builder_begin(&builder));
+      iree_atomic_int32_t counter = IREE_ATOMIC_VAR_INIT(0);
+      if (boundary) {
+        iree_hal_cmd_fixup_t counter_fixup = {
+            .host_ptr = &counter,
+            .length = sizeof(counter),
+        };
+        DispatchDesc desc = {.function = kernel_count_tiles};
+        desc.workgroup_count[0] = desc.workgroup_count[1] =
+            desc.workgroup_count[2] = 1;
+        desc.binding_count = 1;
+        IREE_ASSERT_OK(record_dispatch(&builder, desc, &counter_fixup, 1));
+        if (boundary == 1) {
+          IREE_ASSERT_OK(iree_hal_cmd_block_builder_barrier(&builder));
+        } else {
+          while (builder.block_count == 1) {
+            IREE_ASSERT_OK(iree_hal_cmd_block_builder_barrier(&builder));
+          }
+        }
+      }
+      iree_hal_dispatch_params_t params = {
+          {command_count == 1 ? 65536u : 0x80000000u,
+           command_count == 1 ? 65536u : 1u, 1}};
+      for (uint32_t i = 0; i < command_count; ++i) {
+        iree_hal_cmd_dispatch_t* dispatch = nullptr;
+        iree_hal_cmd_fixup_t* fixups = nullptr;
+        IREE_ASSERT_OK(iree_hal_cmd_block_builder_append_cmd(
+            &builder, IREE_HAL_CMD_DISPATCH, IREE_HAL_CMD_FLAG_INDIRECT,
+            sizeof(*dispatch), 2, 2, 1, reinterpret_cast<void**>(&dispatch),
+            &fixups));
+        const uint16_t binding_base = builder.total_binding_count - 2;
+        memset(fixups, 0, 2 * sizeof(*fixups));
+        fixups[0].host_ptr = &counter;
+        fixups[0].length = sizeof(counter);
+        fixups[0].data_index = binding_base;
+        fixups[1].host_ptr = &params;
+        fixups[1].length = sizeof(params);
+        fixups[1].data_index = binding_base + 1;
+        dispatch->function = kernel_count_tiles;
+        dispatch->executable = &mock_executable_;
+        dispatch->binding_count = 1;
+        dispatch->binding_data_base = binding_base;
+        dispatch->workgroup_size[0] = dispatch->workgroup_size[1] =
+            dispatch->workgroup_size[2] = 1;
+        dispatch->params.indirect.params_binding = binding_base + 1;
+        dispatch->tile_count = 1;
+        dispatch->tiles_per_reservation = 1;
+      }
+      iree_hal_cmd_block_recording_t recording;
+      IREE_ASSERT_OK(iree_hal_cmd_block_builder_end(&builder, &recording));
+      IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                            execute(&recording, nullptr, 0));
+      EXPECT_EQ(iree_atomic_load(&counter, iree_memory_order_relaxed),
+                boundary ? 1 : 0);
+      params.workgroup_count[0] = 3;
+      params.workgroup_count[1] = 1;
+      IREE_ASSERT_OK(execute(&recording, nullptr, 0));
+      EXPECT_EQ(iree_atomic_load(&counter, iree_memory_order_relaxed),
+                (boundary ? 2 : 0) + 3 * command_count);
+      iree_hal_cmd_block_recording_release(&recording);
+      iree_hal_cmd_block_builder_deinitialize(&builder);
+    }
+  }
 }
 
 TEST_P(BlockProcessorTest, MixedCommandSequence) {

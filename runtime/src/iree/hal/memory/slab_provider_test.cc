@@ -68,7 +68,7 @@ TEST(SlabProviderTest, CPUAlignmentMatchesActualStorage) {
       EXPECT_GE(properties.max_allocation_alignment, requested_alignment);
       iree_hal_slab_t slab = {};
       IREE_ASSERT_OK(iree_hal_slab_provider_acquire_slab_sync(
-          provider, 127, requested_alignment, &slab));
+          provider, 127, requested_alignment, &slab, nullptr));
       EXPECT_EQ(
           reinterpret_cast<uintptr_t>(slab.base_ptr) %
               iree_max(requested_alignment, properties.allocation_alignment),
@@ -84,7 +84,7 @@ TEST(SlabProviderTest, CPUAlignmentMatchesActualStorage) {
       for (iree_host_size_t i = 0; i < 127; ++i) {
         EXPECT_EQ(slab.base_ptr[i], 0x6B);
       }
-      iree_hal_slab_provider_release_slab_sync(provider, &slab);
+      iree_hal_slab_provider_release_slab_sync(provider, &slab, nullptr);
     }
     iree_hal_slab_provider_release(provider);
   }
@@ -120,7 +120,7 @@ TEST(SlabProviderTest, CPUImportPreservesSourceFactsWithoutInventingGeometry) {
     EXPECT_EQ(imported.slab.maintenance_range.byte_length, maintenance_length);
     EXPECT_EQ(imported.slab.physical_backing_id.words[0], 0xCu);
     EXPECT_EQ(imported.slab.physical_backing_id.words[1], 0x1234u);
-    iree_hal_slab_provider_release_slab_sync(provider, &imported.slab);
+    iree_hal_slab_provider_release_slab_sync(provider, &imported.slab, nullptr);
     EXPECT_EQ(storage.payload.host_pointer, bytes + 64);
     EXPECT_EQ(storage.byte_length, 128u);
   }
@@ -209,7 +209,10 @@ TEST_P(SlabProviderBatchTest,
       .completion =
           {
               .fn =
-                  [](void* user_data, iree_status_t status) {
+                  [](void* user_data, iree_status_t status,
+                     iree_hal_slab_release_info_t release_info) {
+                    IREE_EXPECT_OK(release_info.status);
+                    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
                     IREE_EXPECT_OK(status);
                     ++*static_cast<int*>(user_data);
                   },
@@ -235,7 +238,13 @@ TEST_P(SlabProviderBatchTest,
       .slabs = slabs,
       .completion =
           {
-              .fn = [](void* user_data) { ++*static_cast<int*>(user_data); },
+              .fn =
+                  [](void* user_data,
+                     iree_hal_slab_release_info_t release_info) {
+                    IREE_EXPECT_OK(release_info.status);
+                    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
+                    ++*static_cast<int*>(user_data);
+                  },
               .user_data = &released,
           },
   };
@@ -258,7 +267,10 @@ TEST_P(SlabProviderBatchTest, FailureReturnsNativePrefixBeforeCompletion) {
       .completion =
           {
               .fn =
-                  [](void* user_data, iree_status_t status) {
+                  [](void* user_data, iree_status_t status,
+                     iree_hal_slab_release_info_t release_info) {
+                    IREE_EXPECT_OK(release_info.status);
+                    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
                     IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
                                           status);
                     ++*static_cast<int*>(user_data);
@@ -273,7 +285,10 @@ TEST_P(SlabProviderBatchTest, FailureReturnsNativePrefixBeforeCompletion) {
   EXPECT_EQ(memcmp(slabs, zeroed, sizeof(slabs)), 0);
 
   allocator_.allocations_remaining = -1;
-  acquire.completion.fn = [](void* user_data, iree_status_t status) {
+  acquire.completion.fn = [](void* user_data, iree_status_t status,
+                             iree_hal_slab_release_info_t release_info) {
+    IREE_EXPECT_OK(release_info.status);
+    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
     IREE_EXPECT_OK(status);
     ++*static_cast<int*>(user_data);
   };
@@ -285,7 +300,13 @@ TEST_P(SlabProviderBatchTest, FailureReturnsNativePrefixBeforeCompletion) {
       .slabs = slabs,
       .completion =
           {
-              .fn = [](void* user_data) { ++*static_cast<int*>(user_data); },
+              .fn =
+                  [](void* user_data,
+                     iree_hal_slab_release_info_t release_info) {
+                    IREE_EXPECT_OK(release_info.status);
+                    EXPECT_EQ(release_info.abandoned_byte_length, 0u);
+                    ++*static_cast<int*>(user_data);
+                  },
               .user_data = &released,
           },
   };

@@ -172,7 +172,9 @@ static void iree_hal_vulkan_slab_provider_destroy(
 
 static iree_status_t iree_hal_vulkan_slab_provider_acquire_slab(
     iree_hal_slab_provider_t* base_provider, iree_device_size_t min_length,
-    iree_device_size_t alignment, iree_hal_slab_t* out_slab) {
+    iree_device_size_t alignment, iree_hal_slab_t* out_slab,
+    iree_hal_slab_release_info_t* out_release_info) {
+  *out_release_info = (iree_hal_slab_release_info_t){0};
   IREE_ASSERT_ARGUMENT(out_slab);
   iree_hal_vulkan_slab_provider_t* provider =
       iree_hal_vulkan_slab_provider_cast(base_provider);
@@ -330,7 +332,7 @@ static bool iree_hal_vulkan_slab_provider_query_import_requirements(
   return true;
 }
 
-static void iree_hal_vulkan_slab_provider_release_slab(
+static iree_hal_slab_release_info_t iree_hal_vulkan_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   IREE_ASSERT_ARGUMENT(slab);
   iree_hal_vulkan_slab_provider_t* provider =
@@ -344,6 +346,7 @@ static void iree_hal_vulkan_slab_provider_release_slab(
                           iree_memory_order_relaxed);
   }
   IREE_TRACE_ZONE_END(z0);
+  return (iree_hal_slab_release_info_t){0};
 }
 
 static iree_status_t iree_hal_vulkan_slab_provider_wrap_buffer(
@@ -477,8 +480,9 @@ static void iree_hal_vulkan_slab_provider_release_slabs(
     const iree_hal_buffer_t* buffer =
         (const iree_hal_buffer_t*)(uintptr_t)request->slabs[i].provider_handle;
     if (buffer && iree_hal_vulkan_buffer_native(buffer)->host_allocation) {
-      iree_hal_vulkan_slab_provider_release_slab(base_provider,
-                                                 &request->slabs[i]);
+      request->release_info = iree_hal_slab_release_info_join(
+          request->release_info, iree_hal_vulkan_slab_provider_release_slab(
+                                     base_provider, &request->slabs[i]));
     } else {
       if (owned_count != i) {
         request->slabs[owned_count] = request->slabs[i];
@@ -488,7 +492,8 @@ static void iree_hal_vulkan_slab_provider_release_slabs(
   }
   request->count = owned_count;
   if (!owned_count) {
-    request->completion.fn(request->completion.user_data);
+    request->completion.fn(request->completion.user_data,
+                           request->release_info);
     return;
   }
   iree_hal_vulkan_slab_provider_t* provider =

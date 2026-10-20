@@ -686,7 +686,9 @@ static void iree_hal_amdgpu_slab_provider_destroy(
 
 static iree_status_t iree_hal_amdgpu_slab_provider_acquire_slab(
     iree_hal_slab_provider_t* base_provider, iree_device_size_t min_length,
-    iree_device_size_t alignment, iree_hal_slab_t* out_slab) {
+    iree_device_size_t alignment, iree_hal_slab_t* out_slab,
+    iree_hal_slab_release_info_t* out_release_info) {
+  *out_release_info = (iree_hal_slab_release_info_t){0};
   (void)alignment;
   IREE_ASSERT_ARGUMENT(out_slab);
   iree_hal_amdgpu_slab_provider_t* provider =
@@ -906,7 +908,7 @@ static bool iree_hal_amdgpu_slab_provider_query_import_requirements(
   return true;
 }
 
-static void iree_hal_amdgpu_slab_provider_release_slab(
+static iree_hal_slab_release_info_t iree_hal_amdgpu_slab_provider_release_slab(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab) {
   IREE_ASSERT_ARGUMENT(slab);
   iree_hal_amdgpu_slab_provider_t* provider =
@@ -921,7 +923,7 @@ static void iree_hal_amdgpu_slab_provider_release_slab(
       iree_atomic_fetch_add(&provider->total_released, 1,
                             iree_memory_order_relaxed);
       IREE_TRACE_ZONE_END(z0);
-      return;
+      return (iree_hal_slab_release_info_t){0};
     }
     iree_hal_amdgpu_slab_provider_record_memory_event(
         provider, IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_SLAB_RELEASE, slab_handle,
@@ -948,6 +950,7 @@ static void iree_hal_amdgpu_slab_provider_release_slab(
                           iree_memory_order_relaxed);
   }
   IREE_TRACE_ZONE_END(z0);
+  return (iree_hal_slab_release_info_t){0};
 }
 
 static void iree_hal_amdgpu_slab_provider_borrowed_buffer_release(
@@ -1123,11 +1126,13 @@ static void iree_hal_amdgpu_slab_provider_acquire_slabs_native(
   }
   memset(request->slabs, 0, request->count * sizeof(*request->slabs));
   iree_status_t status = iree_ok_status();
+  iree_hal_slab_release_info_t release_info = {0};
   iree_host_size_t acquired = 0;
   while (acquired < request->count && iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_slab_provider_acquire_slab(
         provider, request->requests[acquired].min_length,
-        request->requests[acquired].min_alignment, &request->slabs[acquired]);
+        request->requests[acquired].min_alignment, &request->slabs[acquired],
+        &release_info);
     if (iree_status_is_ok(status)) {
       ++acquired;
     }
@@ -1139,11 +1144,13 @@ static void iree_hal_amdgpu_slab_provider_acquire_slabs_native(
   }
   if (!iree_status_is_ok(status)) {
     for (iree_host_size_t i = 0; i < acquired; ++i) {
-      iree_hal_amdgpu_slab_provider_release_slab(provider, &request->slabs[i]);
+      release_info = iree_hal_slab_release_info_join(
+          release_info, iree_hal_amdgpu_slab_provider_release_slab(
+                            provider, &request->slabs[i]));
     }
     memset(request->slabs, 0, request->count * sizeof(*request->slabs));
   }
-  request->completion.fn(request->completion.user_data, status);
+  request->completion.fn(request->completion.user_data, status, release_info);
 }
 
 static void iree_hal_amdgpu_slab_provider_release_slabs_native(
@@ -1190,7 +1197,9 @@ static void iree_hal_amdgpu_slab_provider_release_slabs(
         (const iree_hal_amdgpu_slab_handle_t*)(uintptr_t)request->slabs[i]
             .provider_handle;
     if (handle && handle->imported_buffer) {
-      iree_hal_amdgpu_slab_provider_release_slab(base, &request->slabs[i]);
+      request->release_info = iree_hal_slab_release_info_join(
+          request->release_info,
+          iree_hal_amdgpu_slab_provider_release_slab(base, &request->slabs[i]));
     } else {
       if (owned_count != i) {
         request->slabs[owned_count] = request->slabs[i];
@@ -1200,7 +1209,8 @@ static void iree_hal_amdgpu_slab_provider_release_slabs(
   }
   request->count = owned_count;
   if (!owned_count) {
-    request->completion.fn(request->completion.user_data);
+    request->completion.fn(request->completion.user_data,
+                           request->release_info);
     return;
   }
   if (provider->allocation_queue) {

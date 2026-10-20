@@ -326,6 +326,14 @@ IREE_API_EXPORT void iree_hal_pool_query_stats(
   _VTABLE_DISPATCH(pool, query_stats)(pool, out_stats);
 }
 
+IREE_API_EXPORT iree_status_t
+iree_hal_pool_query_abandonment_status(const iree_hal_pool_t* pool) {
+  IREE_ASSERT_ARGUMENT(pool);
+  return _VTABLE_DISPATCH(pool, query_abandonment_status)
+             ? _VTABLE_DISPATCH(pool, query_abandonment_status)(pool)
+             : iree_ok_status();
+}
+
 IREE_API_EXPORT iree_status_t iree_hal_pool_validate_asan_options(
     const iree_hal_pool_t* pool, const iree_hal_asan_pool_options_t* options) {
   IREE_RETURN_IF_ERROR(iree_hal_asan_pool_options_validate(options));

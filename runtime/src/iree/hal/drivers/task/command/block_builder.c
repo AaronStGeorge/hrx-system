@@ -458,10 +458,11 @@ iree_status_t iree_hal_cmd_block_builder_append_cmd(
         IREE_STATUS_INVALID_ARGUMENT,
         "command size (%" PRIhsz ") must be a multiple of 8", cmd_bytes);
   }
-  if (IREE_UNLIKELY(cmd_bytes > 255 * 8)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "command size (%" PRIhsz ") exceeds maximum (2040 bytes)", cmd_bytes);
+  if (IREE_UNLIKELY(cmd_bytes > IREE_HAL_CMD_MAX_BYTE_LENGTH)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "command size (%" PRIhsz
+                            ") exceeds maximum (%u bytes)",
+                            cmd_bytes, IREE_HAL_CMD_MAX_BYTE_LENGTH);
   }
   if (IREE_UNLIKELY(opcode == IREE_HAL_CMD_BARRIER ||
                     opcode == IREE_HAL_CMD_BRANCH ||
@@ -478,9 +479,10 @@ iree_status_t iree_hal_cmd_block_builder_append_cmd(
   const iree_host_size_t total_needed = cmd_bytes + fixup_bytes;
 
   // Region-local work command indices and barrier dispatch counts are 8-bit.
-  // Split before appending the 256th command so the encoded count cannot wrap
-  // while the tile count continues accumulating.
-  if (builder->region_dispatch_count >= UINT8_MAX) {
+  // Split before either the command count or known tile total can wrap.
+  // Invocation-dependent tile totals are checked before activating a region.
+  if (builder->region_dispatch_count >= UINT8_MAX ||
+      tile_count > UINT32_MAX - builder->current_region_tiles) {
     IREE_RETURN_IF_ERROR(iree_hal_cmd_block_builder_split_block(builder));
   }
 
