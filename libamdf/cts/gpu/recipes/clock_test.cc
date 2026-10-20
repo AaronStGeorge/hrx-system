@@ -132,6 +132,10 @@ TEST_P(QueueClockRecipeTest, NominalDurationsAndHostBounds) {
     ASSERT_NO_FATAL_FAILURE(queue->Publish(api_, gpu_api_, published_words));
     ASSERT_TRUE(
         GpuWaitEqual<uint32_t>(reinterpret_cast<uintptr_t>(samples + 32), 1));
+    if (!is_pm4 && (family_.format_features &
+                    AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR)) {
+      ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+    }
     uint64_t host_after = 0;
     ASSERT_EQ(host_clock.Read(&host_after), AMDF_STATUS_OK);
     const uint64_t begin = samples[0];

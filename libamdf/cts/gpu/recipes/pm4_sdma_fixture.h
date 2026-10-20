@@ -72,6 +72,7 @@ class Pm4SdmaTest : public Pm4DispatchTest {
 
   amdf_status_t MatchGpuEndpoint(amdf_endpoint_t* endpoint,
                                  bool* out_matches) override;
+  void SetUp() override;
 
   // Selects exact descriptors, creates the seven native allocations, checks
   // their retained properties and queries the caller's actual visibility edges.

@@ -83,6 +83,13 @@ class SdmaTimestampStreamTest
 
 TEST_P(SdmaTimestampStreamTest,
        ConsumesAndReusesSamplesBeforeStreamRetirement) {
+  if ((family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) &&
+      !(family_.format_features &
+        (AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR |
+         AMDF_GPU_SDMA_FORMAT_FEATURE_MEMORY_SCOPE))) {
+    GTEST_SKIP() << "streaming samples before retirement requires in-stream "
+                    "release operations, not a native submission epilogue";
+  }
   constexpr amdf_memory_access_t kReadWrite =
       AMDF_MEMORY_ACCESS_READ | AMDF_MEMORY_ACCESS_WRITE;
   GpuMemory* source = nullptr;

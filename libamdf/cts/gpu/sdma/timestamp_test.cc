@@ -96,7 +96,10 @@ TEST_F(SdmaTimestampTest, GlobalTimestampsOrderDependentCopies) {
       queue->Publish(api_, gpu_api_, commands.word_count()));
   ASSERT_TRUE(GpuWaitEqual<uint32_t>(
       reinterpret_cast<uintptr_t>(completion->host.pointer), 1));
-  // Capture every observation before diagnostics or retirement can intervene.
+  if (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+    ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+  }
+  // Capture every observation after the queue's advertised release boundary.
   std::memcpy(observed_staging.data(), staging, kByteLength);
   std::memcpy(observed_output.data(), output, kByteLength);
   std::memcpy(observed_input.data(), input, kByteLength);

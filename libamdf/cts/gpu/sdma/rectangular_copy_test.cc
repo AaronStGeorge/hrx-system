@@ -238,8 +238,11 @@ class SdmaRectangularCopyTest : public GpuCommandTest {
             reinterpret_cast<uintptr_t>(control->host.pointer) +
                 kCompletionOffset,
             marker));
-        // Capture complete backing before diagnostics or retirement can
-        // intervene.
+        if (family_.format_features &
+            AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+          ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+        }
+        // Capture complete backing after the advertised release boundary.
         std::memcpy(observed_source.data(), source->host.pointer,
                     kAllocationBytes);
         std::memcpy(observed_target.data(), target->host.pointer,

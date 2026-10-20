@@ -62,6 +62,22 @@ amdf_status_t Pm4SdmaTest::MatchGpuEndpoint(amdf_endpoint_t* endpoint,
   return AMDF_STATUS_OK;
 }
 
+void Pm4SdmaTest::SetUp() {
+  Pm4DispatchTest::SetUp();
+  if (HasFatalFailure() || IsSkipped()) {
+    return;
+  }
+  if ((sdma_family_.format_features &
+       AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) != 0 &&
+      (sdma_family_.format_features &
+       (AMDF_GPU_SDMA_FORMAT_FEATURE_USER_GCR |
+        AMDF_GPU_SDMA_FORMAT_FEATURE_MEMORY_SCOPE)) == 0) {
+    GTEST_SKIP()
+        << "in-stream PM4/SDMA handoffs require queue-encoded cache "
+           "operations; native submission boundaries cannot supply them";
+  }
+}
+
 void Pm4SdmaTest::SelectCreation(Backing& backing, amdf_memory_flags_t flags) {
   backing.attachment = {device_,
                         {

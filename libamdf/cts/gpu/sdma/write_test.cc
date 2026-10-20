@@ -147,9 +147,12 @@ TEST_F(SdmaWriteTest, InlineDataFeedsDependentCopiesAcrossEpochs) {
         reinterpret_cast<uintptr_t>(completion->host.pointer) +
             kCompletionOffset,
         marker));
+    if (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+      ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+    }
 
-    // Snapshot the final consumer first, before diagnostics or retirement can
-    // add synchronization. Check all untouched backing and control guards too.
+    // Snapshot the final consumer first, after the advertised release boundary.
+    // Check all untouched backing and control guards too.
     std::memcpy(observed_output.data(), output->host.pointer, kDataLength);
     std::memcpy(observed_target.data(), target->host.pointer, kDataLength);
     std::memcpy(observed_completion.data(), completion->host.pointer,

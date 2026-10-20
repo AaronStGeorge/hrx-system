@@ -159,9 +159,12 @@ TEST_F(SdmaFillTest, ConstantFillFeedsCopiesAcrossEpochs) {
         reinterpret_cast<uintptr_t>(completion->host.pointer) +
             kCompletionWord * sizeof(uint32_t),
         marker));
+    if (family_.format_features & AMDF_GPU_SDMA_FORMAT_FEATURE_SUBMISSION_GCR) {
+      ASSERT_NO_FATAL_FAILURE(queue->WaitRetired(api_));
+    }
 
-    // Observe the final consumer first. Native retirement and host cache
-    // services cannot repair a missing fill-to-copy dependency before this.
+    // Observe the final consumer first. Its bytes establish the fill-to-copy
+    // dependency even when native retirement supplies the final release.
     std::memcpy(observed_output.data(), output->host.pointer, kDataLength);
     std::memcpy(observed_target.data(), target->host.pointer, kDataLength);
     std::memcpy(observed_completion.data(), completion->host.pointer,
