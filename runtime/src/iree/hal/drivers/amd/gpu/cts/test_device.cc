@@ -7,6 +7,7 @@
 #include "iree/hal/drivers/amd/gpu/cts/test_device.h"
 
 #include "iree/hal/device_group.h"
+#include "iree/hal/drivers/amd/gpu/queue/pm4/queue.h"
 #include "iree/hal/drivers/amd/status.h"
 #include "iree/testing/status_matchers.h"
 
@@ -265,13 +266,23 @@ void GpuNativeTest::SetUp() {
                                             iree_allocator_system(), &context_);
       if (status.code() == iree::StatusCode::kUnimplemented ||
           status.code() == iree::StatusCode::kUnavailable) {
-        GTEST_SKIP() << status.ToString();
+        continue;
       }
       IREE_ASSERT_OK(status);
+      bool supported = false;
+      for (uint32_t family = 0;
+           family < context_->endpoint_info.queue_family_count; ++family) {
+        supported |= iree_hal_amd_gpu_pm4_queue_publication_modes(
+                         &context_->families[family]) != 0;
+      }
+      if (!supported) {
+        iree_hal_amd_gpu_context_free(context_);
+        context_ = nullptr;
+      }
     }
   }
   if (!context_) {
-    GTEST_SKIP() << "No native AMD GPU endpoint";
+    GTEST_SKIP() << "No native AMD GPU endpoint with a supported PM4 family";
   }
   iree_hal_amd_gpu_device_options_initialize(&options_);
   options_.queue_count = 2;

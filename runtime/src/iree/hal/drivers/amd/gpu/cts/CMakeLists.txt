@@ -451,6 +451,7 @@ iree_cc_binary_benchmark(
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::gpu::device
     iree::hal::drivers::amd::gpu::image::hip_images
+    iree::hal::drivers::amd::gpu::queue::pm4::queue
     iree::hal::drivers::amd::status
     iree::hal::utils::statistics_sink
     iree::testing::benchmark_main
@@ -522,6 +523,7 @@ iree_cc_library(
     iree::hal::drivers::amd::fabric
     iree::hal::drivers::amd::gpu::context
     iree::hal::drivers::amd::gpu::device
+    iree::hal::drivers::amd::gpu::queue::pm4::queue
     iree::hal::drivers::amd::status
     iree::testing::gtest
   TESTONLY

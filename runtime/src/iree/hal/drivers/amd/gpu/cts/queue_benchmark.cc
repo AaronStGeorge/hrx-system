@@ -19,6 +19,7 @@
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/amd/gpu/device.h"
 #include "iree/hal/drivers/amd/gpu/image/hip_images.h"
+#include "iree/hal/drivers/amd/gpu/queue/pm4/queue.h"
 #include "iree/hal/drivers/amd/status.h"
 #include "iree/hal/slab_pool.h"
 #include "iree/hal/utils/statistics_sink.h"
@@ -56,8 +57,22 @@ class NativeQueue {
     iree_hal_profile_statistics_sink_release(capture_);
   }
 
-  iree_status_t Initialize(size_t producer_count = 1,
-                           size_t buffer_length = 2 * sizeof(uint32_t)) {
+  bool Initialize(benchmark::State& state, size_t producer_count = 1,
+                  size_t buffer_length = 2 * sizeof(uint32_t)) {
+    iree::Status status = InitializeDevice(producer_count, buffer_length);
+    if (!status.ok()) {
+      state.SkipWithError(status.ToString().c_str());
+      return false;
+    }
+    if (!device_) {
+      state.SkipWithMessage(
+          "No native AMD GPU endpoint with a supported PM4 family");
+      return false;
+    }
+    return true;
+  }
+
+  iree_status_t InitializeDevice(size_t producer_count, size_t buffer_length) {
     lanes_.resize(producer_count);
     const amdf_api_t* api = nullptr;
     IREE_RETURN_IF_ERROR(IREE_HAL_AMD_STATUS_FROM_AMDF(
@@ -71,12 +86,21 @@ class NativeQueue {
             fabric_, &fabric_->endpoints[i].id,
             iree_hal_device_event_sink_stderr(), iree_allocator_system(),
             &context_));
-        break;
+        bool supported = false;
+        for (uint32_t family = 0;
+             family < context_->endpoint_info.queue_family_count; ++family) {
+          supported |= iree_hal_amd_gpu_pm4_queue_publication_modes(
+                           &context_->families[family]) != 0;
+        }
+        if (supported) {
+          break;
+        }
+        iree_hal_amd_gpu_context_free(context_);
+        context_ = nullptr;
       }
     }
     if (!context_) {
-      return iree_make_status(IREE_STATUS_UNAVAILABLE,
-                              "no native AMD GPU endpoint");
+      return iree_ok_status();
     }
     const uint32_t gfx_major = context_->target_info.gfx_ip.major;
     iree_hal_amd_gpu_device_options_t options;
@@ -577,9 +601,7 @@ class NativeQueue {
 static void BM_Dispatch(benchmark::State& state, Arguments arguments,
                         Barriers barriers, Timing timing) {
   NativeQueue dispatch;
-  iree::Status status = dispatch.Initialize();
-  if (!status.ok()) {
-    state.SkipWithError(status.ToString().c_str());
+  if (!dispatch.Initialize(state)) {
     return;
   }
   const size_t count = state.range(0);
@@ -650,9 +672,7 @@ DISPATCH_CASE(NativeEmptyLatency, kNative, kExplicitEmpty, kSampledSubmit);
 static void BM_Record(benchmark::State& state, BindingMode bindings,
                       Program program) {
   NativeQueue queue;
-  iree::Status status = queue.Initialize();
-  if (!status.ok()) {
-    state.SkipWithError(status.ToString().c_str());
+  if (!queue.Initialize(state)) {
     return;
   }
   const uint32_t count = state.range(0);
@@ -708,9 +728,7 @@ static void BM_Execute(benchmark::State& state, BindingMode bindings,
                        Timing timing, Program program, uint32_t burst_count,
                        Capture capture) {
   NativeQueue queue;
-  iree::Status status = queue.Initialize();
-  if (!status.ok()) {
-    state.SkipWithError(status.ToString().c_str());
+  if (!queue.Initialize(state)) {
     return;
   }
   const uint32_t count = state.range(0);
@@ -869,9 +887,7 @@ static void BM_Transfer(benchmark::State& state,
                         iree_hal_transfer_operation_type_t type,
                         Barriers barriers, Timing timing) {
   NativeQueue queue;
-  iree::Status status = queue.Initialize();
-  if (!status.ok()) {
-    state.SkipWithError(status.ToString().c_str());
+  if (!queue.Initialize(state)) {
     return;
   }
   IREE_CHECK_OK(queue.PrepareTransfers());
@@ -929,9 +945,7 @@ static void BM_BulkTransfer(benchmark::State& state,
                             iree_hal_transfer_operation_type_t type) {
   const size_t length = state.range(0);
   NativeQueue queue;
-  iree::Status status = queue.Initialize(1, length);
-  if (!status.ok()) {
-    state.SkipWithError(status.ToString().c_str());
+  if (!queue.Initialize(state, 1, length)) {
     return;
   }
   std::vector<uint8_t> source(length), target(length);
@@ -994,9 +1008,7 @@ static void BM_ConcurrentDispatch(benchmark::State& state) {
   const size_t producer_count = state.range(0);
   const size_t count = state.range(1);
   NativeQueue dispatch;
-  iree::Status status = dispatch.Initialize(producer_count);
-  if (!status.ok()) {
-    state.SkipWithError(status.ToString().c_str());
+  if (!dispatch.Initialize(state, producer_count)) {
     return;
   }
   struct alignas(64) Producer {
