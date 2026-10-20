@@ -48,6 +48,17 @@ typedef enum loom_aie2p_block_alignment_e {
 // NOPs. This is distinct from JL's five architectural delay positions.
 enum { LOOM_AIE2P_RETURN_CONTROL_GAP_CYCLES = 2 };
 
+// AIE2P requires each JL return address to be 16-byte aligned. The direct call
+// has five architectural delay positions, giving the alignment pass six
+// existing issue positions whose variable-width packets can absorb padding.
+enum {
+  LOOM_AIE2P_CALL_RETURN_ALIGNMENT = 16,
+  LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT = 6,
+  LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT =
+      (LOOM_AIE2P_ENCODING_MAX_PACKET_SIZE - 2) *
+      LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT,
+};
+
 typedef struct loom_aie2p_block_analysis_t {
   // Structural terminator packet ending this block.
   uint32_t terminator_packet_index;
@@ -92,6 +103,36 @@ typedef union loom_aie2p_slot_realization_t {
 
 static_assert(sizeof(loom_aie2p_slot_realization_t) == sizeof(uint32_t),
               "native slot bindings must remain four bytes");
+
+// One packet in a direct call and its five architectural delay positions.
+// Original slots are snapshotted separately so the region can be rebuilt with
+// wider formats without perturbing its issue cycles.
+typedef struct loom_aie2p_call_alignment_packet_t {
+  // Original bundle metadata, or synthesized metadata for an implicit NOP.
+  loom_aie2p_planned_bundle_t bundle;
+  // First original slot in the bounded region snapshot.
+  uint8_t original_slot_start;
+  // Number of original slot records in the packet.
+  uint8_t original_slot_count;
+  // Number of original slots with behavior other than alignment padding.
+  uint8_t useful_slot_count;
+  // Original encoded packet byte length.
+  uint8_t byte_length;
+  // Wider format selected to align the continuation.
+  loom_aie2p_bundle_format_id_t selected_format;
+} loom_aie2p_call_alignment_packet_t;
+
+// Best predecessor reaching one exact count of bytes added to a call region.
+typedef struct loom_aie2p_call_alignment_state_t {
+  // Format selected for the current packet.
+  loom_aie2p_bundle_format_id_t format;
+  // Added-byte state before selecting |format|.
+  uint8_t previous_added_byte_count;
+  // Total slot records required by the selected formats so far.
+  uint8_t slot_record_count;
+  // Whether this exact added-byte count is reachable.
+  bool reachable;
+} loom_aie2p_call_alignment_state_t;
 
 // Encoded instructions already admitted in semantic order, awaiting closure
 // of the bounded native issue window. No compiler analysis is repeated when
@@ -1039,6 +1080,328 @@ static uint8_t loom_aie2p_bundle_plan_format_byte_length(
   return format_info.bit_count / 8;
 }
 
+static loom_aie2p_encoded_slot_t loom_aie2p_bundle_plan_encode_slot_nop(
+    loom_aie2p_slot_t slot) {
+  iree_string_view_t instruction_name = iree_string_view_empty();
+  switch (slot) {
+    case LOOM_AIE2P_SLOT_ALU:
+      instruction_name = IREE_SV("NOPX");
+      break;
+    case LOOM_AIE2P_SLOT_LDA:
+      instruction_name = IREE_SV("NOPA");
+      break;
+    case LOOM_AIE2P_SLOT_LDB:
+      instruction_name = IREE_SV("NOPB");
+      break;
+    case LOOM_AIE2P_SLOT_LNG:
+      instruction_name = IREE_SV("NOPXM");
+      break;
+    case LOOM_AIE2P_SLOT_MV:
+      instruction_name = IREE_SV("NOPM");
+      break;
+    case LOOM_AIE2P_SLOT_NOP:
+      instruction_name = IREE_SV("NOP");
+      break;
+    case LOOM_AIE2P_SLOT_ST:
+      instruction_name = IREE_SV("NOPS");
+      break;
+    case LOOM_AIE2P_SLOT_VEC:
+      instruction_name = IREE_SV("NOPV");
+      break;
+    default:
+      IREE_ASSERT(false && "AIE2P bundle format must contain physical slots");
+      return (loom_aie2p_encoded_slot_t){0};
+  }
+  const loom_aie2p_instruction_id_t instruction =
+      loom_aie2p_encoding_find_instruction(instruction_name);
+  loom_aie2p_instruction_info_t instruction_info;
+  const bool found = loom_aie2p_encoding_query_instruction_info(
+      instruction, &instruction_info);
+  IREE_ASSERT(found && instruction_info.slot == slot &&
+              instruction_info.field_count == 0 &&
+              "AIE2P physical slot must have a native NOP encoding");
+  return loom_aie2p_encoding_pack_verified_instruction(instruction, NULL, 0);
+}
+
+static bool loom_aie2p_bundle_plan_call_format_accepts_packet(
+    loom_aie2p_bundle_format_id_t format,
+    const loom_aie2p_call_alignment_packet_t* packet,
+    const loom_aie2p_planned_slot_t* original_slots,
+    loom_aie2p_bundle_format_info_t* out_format_info) {
+  if (!loom_aie2p_encoding_query_bundle_format_info(format, out_format_info) ||
+      out_format_info->bit_count % 8 != 0) {
+    return false;
+  }
+  loom_aie2p_slot_t format_slots[LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT];
+  const iree_host_size_t format_slot_count =
+      loom_aie2p_encoding_query_bundle_format_slots(
+          format, IREE_ARRAYSIZE(format_slots), format_slots);
+  if (format_slot_count != out_format_info->slot_count) {
+    return false;
+  }
+  for (uint8_t i = 0; i < packet->original_slot_count; ++i) {
+    const loom_aie2p_planned_slot_t* original_slot =
+        &original_slots[packet->original_slot_start + i];
+    if (iree_any_bit_set(original_slot->flags,
+                         LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP)) {
+      continue;
+    }
+    bool found = false;
+    for (iree_host_size_t j = 0; j < format_slot_count; ++j) {
+      found |= format_slots[j] == original_slot->encoded_slot.slot;
+    }
+    if (!found) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_aie2p_bundle_plan_select_call_alignment_formats(
+    loom_aie2p_call_alignment_packet_t* packets,
+    const loom_aie2p_planned_slot_t* original_slots,
+    iree_host_size_t encoded_byte_length) {
+  loom_aie2p_call_alignment_state_t
+      states[LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT + 1]
+            [LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT + 1];
+  memset(states, 0, sizeof(states));
+  states[0][0].reachable = true;
+
+  const iree_host_size_t format_count =
+      loom_aie2p_encoding_bundle_format_count();
+  for (iree_host_size_t packet_index = 0;
+       packet_index < LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT; ++packet_index) {
+    const loom_aie2p_call_alignment_packet_t* packet = &packets[packet_index];
+    for (iree_host_size_t added_byte_count = 0;
+         added_byte_count <= LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT;
+         ++added_byte_count) {
+      const loom_aie2p_call_alignment_state_t* state =
+          &states[packet_index][added_byte_count];
+      if (!state->reachable) {
+        continue;
+      }
+      for (iree_host_size_t format_ordinal = 1; format_ordinal <= format_count;
+           ++format_ordinal) {
+        const loom_aie2p_bundle_format_id_t format =
+            (loom_aie2p_bundle_format_id_t)format_ordinal;
+        loom_aie2p_bundle_format_info_t format_info;
+        if (!loom_aie2p_bundle_plan_call_format_accepts_packet(
+                format, packet, original_slots, &format_info)) {
+          continue;
+        }
+        const uint8_t format_byte_length = format_info.bit_count / 8;
+        if (format_byte_length < packet->byte_length) {
+          continue;
+        }
+        const iree_host_size_t next_added_byte_count =
+            added_byte_count + format_byte_length - packet->byte_length;
+        if (next_added_byte_count >
+            LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT) {
+          continue;
+        }
+        const uint8_t next_slot_record_count =
+            state->slot_record_count + format_info.slot_count;
+        loom_aie2p_call_alignment_state_t* next_state =
+            &states[packet_index + 1][next_added_byte_count];
+        if (next_state->reachable &&
+            next_state->slot_record_count <= next_slot_record_count) {
+          continue;
+        }
+        *next_state = (loom_aie2p_call_alignment_state_t){
+            .format = format,
+            .previous_added_byte_count = (uint8_t)added_byte_count,
+            .slot_record_count = next_slot_record_count,
+            .reachable = true,
+        };
+      }
+    }
+  }
+
+  const iree_host_size_t required_added_byte_count =
+      (LOOM_AIE2P_CALL_RETURN_ALIGNMENT -
+       encoded_byte_length % LOOM_AIE2P_CALL_RETURN_ALIGNMENT) %
+      LOOM_AIE2P_CALL_RETURN_ALIGNMENT;
+  iree_host_size_t selected_added_byte_count = required_added_byte_count;
+  while (
+      selected_added_byte_count <=
+          LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT &&
+      !states[LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT][selected_added_byte_count]
+           .reachable) {
+    selected_added_byte_count += LOOM_AIE2P_CALL_RETURN_ALIGNMENT;
+  }
+  if (selected_added_byte_count >
+      LOOM_AIE2P_CALL_ALIGNMENT_MAX_ADDED_BYTE_COUNT) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AIE2P call packets cannot form an aligned return address");
+  }
+  for (iree_host_size_t packet_index = LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT;
+       packet_index != 0; --packet_index) {
+    const loom_aie2p_call_alignment_state_t* state =
+        &states[packet_index][selected_added_byte_count];
+    packets[packet_index - 1].selected_format = state->format;
+    selected_added_byte_count = state->previous_added_byte_count;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_aie2p_bundle_plan_align_call_continuation(
+    loom_aie2p_bundle_plan_builder_t* builder,
+    iree_host_size_t call_bundle_index, uint32_t continuation_cycle) {
+  if (builder->encoded_byte_length % LOOM_AIE2P_CALL_RETURN_ALIGNMENT == 0) {
+    return iree_ok_status();
+  }
+  const loom_aie2p_planned_bundle_t call_bundle =
+      builder->bundles[call_bundle_index];
+  IREE_ASSERT_EQ(continuation_cycle - call_bundle.issue_cycle,
+                 LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT);
+
+  loom_aie2p_call_alignment_packet_t
+      packets[LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT];
+  loom_aie2p_planned_slot_t
+      original_slots[LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT *
+                     LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT];
+  loom_aie2p_slot_realization_t
+      original_realizations[LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT *
+                            LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT];
+  const loom_aie2p_slot_t nop_slot = LOOM_AIE2P_SLOT_NOP;
+  const loom_aie2p_bundle_format_id_t nop_format =
+      loom_aie2p_encoding_find_bundle_format_for_slots(&nop_slot, 1);
+  const uint8_t nop_byte_length =
+      loom_aie2p_bundle_plan_format_byte_length(nop_format, 1);
+
+  const iree_host_size_t region_slot_start = call_bundle.slot_start;
+  iree_host_size_t original_slot_count = 0;
+  iree_host_size_t bundle_index = call_bundle_index;
+  uint32_t byte_offset = call_bundle.byte_offset;
+  for (uint8_t packet_index = 0;
+       packet_index < LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT; ++packet_index) {
+    const uint32_t issue_cycle = call_bundle.issue_cycle + packet_index;
+    loom_aie2p_call_alignment_packet_t* packet = &packets[packet_index];
+    *packet = (loom_aie2p_call_alignment_packet_t){
+        .bundle =
+            {
+                .issue_cycle = issue_cycle,
+                .block_index = call_bundle.block_index,
+                .logical_issue_cycle = call_bundle.logical_issue_cycle,
+                .byte_offset = byte_offset,
+                .format = nop_format,
+            },
+        .original_slot_start = (uint8_t)original_slot_count,
+        .byte_length = nop_byte_length,
+    };
+    if (bundle_index < builder->bundle_count &&
+        builder->bundles[bundle_index].issue_cycle == issue_cycle) {
+      packet->bundle = builder->bundles[bundle_index++];
+      packet->original_slot_count = packet->bundle.slot_count;
+      packet->byte_length = loom_aie2p_bundle_plan_format_byte_length(
+          packet->bundle.format, packet->bundle.slot_count);
+      IREE_ASSERT_EQ(packet->bundle.byte_offset, byte_offset);
+      IREE_ASSERT_EQ(packet->bundle.slot_start,
+                     region_slot_start + original_slot_count);
+      for (uint8_t i = 0; i < packet->original_slot_count; ++i) {
+        const iree_host_size_t source_slot_index =
+            packet->bundle.slot_start + i;
+        original_slots[original_slot_count] = builder->slots[source_slot_index];
+        original_realizations[original_slot_count] =
+            builder->slot_realizations[source_slot_index];
+        packet->useful_slot_count +=
+            !iree_any_bit_set(builder->slots[source_slot_index].flags,
+                              LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP);
+        ++original_slot_count;
+      }
+    }
+    byte_offset += packet->byte_length;
+  }
+  IREE_ASSERT_EQ(bundle_index, builder->bundle_count);
+  IREE_ASSERT_EQ(region_slot_start + original_slot_count, builder->slot_count);
+  IREE_ASSERT_EQ(byte_offset, builder->encoded_byte_length);
+
+  IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_select_call_alignment_formats(
+      packets, original_slots, builder->encoded_byte_length));
+  iree_host_size_t aligned_byte_length = call_bundle.byte_offset;
+  for (uint8_t i = 0; i < LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT; ++i) {
+    loom_aie2p_bundle_format_info_t format_info;
+    const bool found = loom_aie2p_encoding_query_bundle_format_info(
+        packets[i].selected_format, &format_info);
+    IREE_ASSERT(found && format_info.bit_count % 8 == 0);
+    aligned_byte_length += format_info.bit_count / 8;
+  }
+  if (aligned_byte_length > LOOM_AIE2P_CORE_PROGRAM_MEMORY_SIZE) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "AIE2P encoded leaf exceeds 16 KiB of core program memory");
+  }
+
+  builder->bundle_count = call_bundle_index;
+  builder->slot_count = region_slot_start;
+  builder->encoded_byte_length = call_bundle.byte_offset;
+  for (uint8_t packet_index = 0;
+       packet_index < LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT; ++packet_index) {
+    loom_aie2p_call_alignment_packet_t* packet = &packets[packet_index];
+    loom_aie2p_slot_t format_slots[LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT];
+    const iree_host_size_t format_slot_count =
+        loom_aie2p_encoding_query_bundle_format_slots(
+            packet->selected_format, IREE_ARRAYSIZE(format_slots),
+            format_slots);
+    IREE_ASSERT_LE(format_slot_count,
+                   LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT);
+    const iree_host_size_t slot_start = builder->slot_count;
+    for (iree_host_size_t i = 0; i < format_slot_count; ++i) {
+      const loom_aie2p_slot_t physical_slot = format_slots[i];
+      bool retained = false;
+      for (uint8_t j = 0; j < packet->original_slot_count; ++j) {
+        const iree_host_size_t original_slot_index =
+            packet->original_slot_start + j;
+        const loom_aie2p_planned_slot_t* original_slot =
+            &original_slots[original_slot_index];
+        if (iree_any_bit_set(original_slot->flags,
+                             LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP) ||
+            original_slot->encoded_slot.slot != physical_slot) {
+          continue;
+        }
+        loom_aie2p_bundle_plan_append_slot(
+            builder, *original_slot,
+            original_realizations[original_slot_index]);
+        retained = true;
+        break;
+      }
+      if (!retained) {
+        loom_aie2p_bundle_plan_append_slot(
+            builder,
+            (loom_aie2p_planned_slot_t){
+                .encoded_slot =
+                    loom_aie2p_bundle_plan_encode_slot_nop(physical_slot),
+                .scheduled_packet_index = LOOM_AIE2P_BUNDLE_PLAN_PACKET_NONE,
+                .flags = LOOM_AIE2P_PLANNED_SLOT_FLAG_SYNTHETIC_NOP,
+            },
+            (loom_aie2p_slot_realization_t){.descriptor_ordinal =
+                                                AIE2P_CORE_DESCRIPTOR_REF_NOP});
+      }
+    }
+    loom_aie2p_bundle_format_info_t format_info;
+    const bool found = loom_aie2p_encoding_query_bundle_format_info(
+        packet->selected_format, &format_info);
+    IREE_ASSERT(found && format_info.slot_count == format_slot_count &&
+                format_info.bit_count % 8 == 0);
+    const uint8_t format_byte_length = format_info.bit_count / 8;
+    packet->bundle.byte_offset = (uint32_t)builder->encoded_byte_length;
+    packet->bundle.slot_start = (uint32_t)slot_start;
+    packet->bundle.format = packet->selected_format;
+    packet->bundle.slot_count = (uint8_t)format_slot_count;
+    builder->bundles[builder->bundle_count++] = packet->bundle;
+    builder->encoded_byte_length += format_byte_length;
+    builder->trailing_nop_byte_length =
+        packet->useful_slot_count == 0
+            ? builder->trailing_nop_byte_length + format_byte_length
+            : 0;
+  }
+  IREE_ASSERT_EQ(builder->encoded_byte_length, aligned_byte_length);
+  IREE_ASSERT_EQ(
+      builder->encoded_byte_length % LOOM_AIE2P_CALL_RETURN_ALIGNMENT, 0u);
+  return iree_ok_status();
+}
+
 // Resolves only this selected instruction's bindings. The shared issue owner
 // consumes these views; neither instruction decoding nor an IR walk is needed
 // to recover allocation-generated accesses.
@@ -1778,6 +2141,8 @@ static iree_status_t loom_aie2p_bundle_plan_append_call(
     IREE_RETURN_IF_ERROR(
         loom_aie2p_bundle_plan_append_nop_bundle(builder, logical_issue_cycle));
   }
+  IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_align_call_continuation(
+      builder, call_bundle_index, continuation_cycle));
 
   loom_aie2p_planned_call_fixup_t* fixup =
       &builder->call_fixups[builder->call_fixup_count++];
@@ -2118,10 +2483,25 @@ static iree_status_t loom_aie2p_bundle_plan_build_impl(
         IREE_STATUS_OUT_OF_RANGE,
         "AIE2P bundle-plan storage capacity exceeds host size");
   }
-  // The same upper bound covers slots: scheduled nodes and native allocation
-  // move parts contribute one slot each. Control delays and alignment reserve
-  // their synthetic slots; other timing gaps have no stored records.
-  const iree_host_size_t slot_capacity = bundle_capacity;
+  // Scheduled nodes and native allocation move parts contribute one slot each.
+  // Control capacity reserves one slot per issue position; call alignment may
+  // fill every remaining physical slot in all six retained JL packets.
+  iree_host_size_t call_alignment_slot_capacity = 0;
+  if (!iree_host_size_checked_mul(
+          analysis.call_fixup_count,
+          LOOM_AIE2P_CALL_ALIGNMENT_PACKET_COUNT *
+              (LOOM_AIE2P_ENCODING_MAX_BUNDLE_SLOT_COUNT - 1u),
+          &call_alignment_slot_capacity)) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AIE2P call-alignment slot capacity exceeds host size");
+  }
+  iree_host_size_t slot_capacity = bundle_capacity;
+  if (!iree_host_size_checked_add(slot_capacity, call_alignment_slot_capacity,
+                                  &slot_capacity)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AIE2P slot capacity exceeds host size");
+  }
   if (frame->schedule.block_count > IREE_HOST_SIZE_MAX / 2u) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "AIE2P branch-fixup capacity exceeds host size");

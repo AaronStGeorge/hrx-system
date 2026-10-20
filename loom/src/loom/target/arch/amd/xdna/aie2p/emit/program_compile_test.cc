@@ -446,6 +446,7 @@ TEST_F(Aie2pProgramCompileTest,
   }
   EXPECT_EQ(useful_delay_slot_count, 2u);
   ASSERT_GT(entry_bundles.size(), call_bundle + 6u);
+  EXPECT_EQ(entry_bundles[call_bundle + 6u].byte_offset % 16u, 0u);
   EXPECT_TRUE(BundleHasUsefulInstruction(entry_bundles[call_bundle + 6u]));
   EXPECT_TRUE(std::any_of(helper_bundles.begin(), helper_bundles.end(),
                           [return_instruction](const auto& bundle) {
