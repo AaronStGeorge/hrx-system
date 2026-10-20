@@ -477,7 +477,8 @@ static iree_status_t loom_math_legalize_emit_missing_policy(
   const loom_diagnostic_param_t params[] = {
       loom_param_string(loom_op_name(state->module, op)),
       loom_param_string(state->pass->info->name),
-      loom_param_string(state->target_facts->storage.config.contract_set_key),
+      loom_param_string(
+          state->target_facts->storage.config.contract_set.spelling),
   };
   return loom_math_legalize_emit(state, op, LOOM_ERR_LOWERING_034, params,
                                  IREE_ARRAYSIZE(params));

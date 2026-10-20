@@ -373,6 +373,7 @@ _FP16_DESCRIPTORS = _descriptors()
 
 X86_AVX512_FP16_DESCRIPTOR_SET = DescriptorSet(
     key="x86.avx512_fp16.core",
+    inline_schedule_model_key="x86.generic",
     target_key="x86",
     feature_key="x86.avx512_fp16.v1",
     c_header_path=Path(

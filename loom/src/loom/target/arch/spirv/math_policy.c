@@ -325,7 +325,7 @@ static const loom_target_math_policy_t kSpirvMathPolicy = {
 
 static const loom_target_math_policy_registry_entry_t
     kSpirvMathPolicyEntries[] = {
-        {/*.contract_set_key=*/IREE_SVL("spirv.logical.core"),
+        {/*.contract_set_stable_id=*/UINT64_C(0x5b86e123b2b92ba9),
          /*.policy=*/&kSpirvMathPolicy},
 };
 

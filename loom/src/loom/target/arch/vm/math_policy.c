@@ -280,7 +280,8 @@ static const loom_target_math_policy_t kVmMathPolicy = {
 void loom_vm_math_policy_registry_initialize(
     loom_target_math_policy_registry_t* out_registry) {
   static const loom_target_math_policy_registry_entry_t kEntries[] = {
-      {.contract_set_key = IREE_SVL("vm.core"), .policy = &kVmMathPolicy},
+      {.contract_set_stable_id = UINT64_C(0x32476f14332ccb19),
+       .policy = &kVmMathPolicy},
   };
   loom_target_math_policy_registry_initialize_from_entries(
       out_registry, kEntries, IREE_ARRAYSIZE(kEntries));

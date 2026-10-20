@@ -56,7 +56,7 @@ iree_status_t loom_target_emit_artifact_retain_metadata(
       offsetof(loom_target_bundle_storage_t, export_plan.export_symbol),
       offsetof(loom_target_bundle_storage_t, export_plan.calling_convention),
       offsetof(loom_target_bundle_storage_t, config.name),
-      offsetof(loom_target_bundle_storage_t, config.contract_set_key),
+      offsetof(loom_target_bundle_storage_t, config.contract_set.spelling),
   };
   iree_host_size_t descriptor_bytes = 0;
   iree_host_size_t allocation_size = 0;

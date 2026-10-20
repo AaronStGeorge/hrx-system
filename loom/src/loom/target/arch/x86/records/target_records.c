@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
+#include "iree/schemas/cpu_data.h"
 #include "loom/target/arch/x86/feature_bits.h"
 
 // File-scope immutable tables require integer constant expressions. Derive bit
@@ -26,6 +27,96 @@ enum {
   LOOM_CPU_FEATURE_BIT_POSITION_X86_64_0_##bit_name
 #define LOOM_X86_CPU_FIELD0_BIT(bit_name) \
   (UINT64_C(1) << LOOM_X86_CPU_FIELD0_BIT_POSITION(bit_name))
+
+static const loom_x86_target_tune_info_t kX86TargetTuneInfos[] = {
+    [LOOM_X86_TARGET_TUNE_NONE] =
+        {
+            .schedule_model_stable_id =
+                LOOM_X86_GENERIC_SCHEDULE_MODEL_STABLE_ID,
+        },
+#define LOOM_X86_TARGET_TUNE(enum_suffix, stable_value,         \
+                             schedule_model_stable_id_arg)      \
+  [LOOM_X86_TARGET_TUNE_##enum_suffix] = {                      \
+      .schedule_model_stable_id = schedule_model_stable_id_arg, \
+  },
+#include "loom/target/arch/x86/records/target_profiles.inl"
+#undef LOOM_X86_TARGET_TUNE
+};
+static_assert(IREE_ARRAYSIZE(kX86TargetTuneInfos) ==
+                  LOOM_X86_TARGET_TUNE_COUNT_,
+              "x86 target tune metadata must cover every tune");
+
+typedef struct loom_x86_processor_tune_match_t {
+  uint64_t vendor_low;
+  uint32_t vendor_high;
+  uint16_t family;
+  uint8_t first_model;
+  uint8_t last_model;
+  loom_x86_target_tune_t tune;
+} loom_x86_processor_tune_match_t;
+
+static const loom_x86_processor_tune_match_t kX86ProcessorTuneMatches[] = {
+#define LOOM_X86_PROCESSOR_TUNE_MATCH(enum_suffix, vendor_low_arg,     \
+                                      vendor_high_arg, family_arg,     \
+                                      first_model_arg, last_model_arg) \
+  {                                                                    \
+      .vendor_low = vendor_low_arg,                                    \
+      .vendor_high = vendor_high_arg,                                  \
+      .family = family_arg,                                            \
+      .first_model = first_model_arg,                                  \
+      .last_model = last_model_arg,                                    \
+      .tune = LOOM_X86_TARGET_TUNE_##enum_suffix,                      \
+  },
+#include "loom/target/arch/x86/records/target_profiles.inl"
+#undef LOOM_X86_PROCESSOR_TUNE_MATCH
+};
+
+const loom_x86_target_tune_info_t* loom_x86_target_tune_info_lookup(
+    loom_x86_target_tune_t tune) {
+  IREE_ASSERT(tune < LOOM_X86_TARGET_TUNE_COUNT_);
+  return &kX86TargetTuneInfos[tune];
+}
+
+loom_x86_target_tune_t loom_x86_target_tune_select_cpu(
+    const iree_cpu_data_t* cpu_data) {
+  if (cpu_data->architecture != IREE_CPU_ARCHITECTURE_X86_64) {
+    return LOOM_X86_TARGET_TUNE_NONE;
+  }
+  const uint64_t vendor_low =
+      (cpu_data->fields[1] & IREE_CPU_DATA1_X86_64_VENDOR_ID_LOW_MASK) >>
+      IREE_CPU_DATA1_X86_64_VENDOR_ID_LOW_SHIFT;
+  const uint32_t vendor_high =
+      (uint32_t)((cpu_data->fields[2] &
+                  IREE_CPU_DATA2_X86_64_VENDOR_ID_HIGH_MASK) >>
+                 IREE_CPU_DATA2_X86_64_VENDOR_ID_HIGH_SHIFT);
+  const uint32_t signature =
+      (uint32_t)((cpu_data->fields[2] &
+                  IREE_CPU_DATA2_X86_64_PROCESSOR_SIGNATURE_MASK) >>
+                 IREE_CPU_DATA2_X86_64_PROCESSOR_SIGNATURE_SHIFT);
+  if (vendor_low == 0 || vendor_high == 0 || signature == 0) {
+    return LOOM_X86_TARGET_TUNE_NONE;
+  }
+
+  const uint8_t base_family = (uint8_t)((signature >> 8) & 0x0F);
+  const uint8_t extended_family = (uint8_t)((signature >> 20) & 0xFF);
+  const uint16_t family =
+      base_family == 0x0F ? base_family + extended_family : base_family;
+  const uint8_t base_model = (uint8_t)((signature >> 4) & 0x0F);
+  const uint8_t extended_model = (uint8_t)((signature >> 16) & 0x0F);
+  const uint8_t model = base_family == 0x06 || base_family == 0x0F
+                            ? base_model | (extended_model << 4)
+                            : base_model;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kX86ProcessorTuneMatches);
+       ++i) {
+    const loom_x86_processor_tune_match_t* match = &kX86ProcessorTuneMatches[i];
+    if (vendor_low == match->vendor_low && vendor_high == match->vendor_high &&
+        family == match->family && model >= match->first_model &&
+        model <= match->last_model) {
+      return match->tune;
+    }
+  }
+  return LOOM_X86_TARGET_TUNE_NONE;
+}
 
 #define LOOM_X86_LOW_SNAPSHOT(symbol, snapshot_name)           \
   static const loom_target_snapshot_t symbol = {               \
@@ -52,7 +143,8 @@ enum {
 
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
     symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,            \
+    feature_contract_set_key, feature_contract_set_stable_id,               \
     default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
     automatic_priority)                                                     \
   LOOM_X86_LOW_SNAPSHOT(kX86##symbol_suffix##Snapshot, snapshot_name);
@@ -67,22 +159,29 @@ static const loom_target_export_plan_t kX86_64ObjectExportPlan = {
     .linkage = LOOM_TARGET_LINKAGE_DSO_LOCAL,
 };
 
-#define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
-    symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
-    default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
-    automatic_priority)                                                     \
-  static const loom_target_config_t kX86##symbol_suffix##Config = {         \
-      .name = IREE_SVL(descriptor_set_key),                                 \
-      .contract_set_key = IREE_SVL(descriptor_set_key),                     \
-      .contract_feature_bits = default_feature_bits,                        \
+#define LOOM_X86_NATIVE_TARGET_PROFILE(                                      \
+    symbol_suffix, target_kind, selector_name, native_bundle_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,             \
+    feature_contract_set_key, feature_contract_set_stable_id,                \
+    default_feature_bits, supported_feature_bits, required_cpu_field0_bits,  \
+    automatic_priority)                                                      \
+  static const loom_target_config_t kX86##symbol_suffix##Config = {          \
+      .name = IREE_SVL(descriptor_set_key),                                  \
+      .schedule_model_stable_id = LOOM_X86_GENERIC_SCHEDULE_MODEL_STABLE_ID, \
+      .contract_set =                                                        \
+          {                                                                  \
+              .stable_id = descriptor_set_stable_id,                         \
+              .spelling = IREE_SVL(descriptor_set_key),                      \
+          },                                                                 \
+      .contract_feature_bits = default_feature_bits,                         \
   };
 #include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_NATIVE_TARGET_PROFILE
 
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
     symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,            \
+    feature_contract_set_key, feature_contract_set_stable_id,               \
     default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
     automatic_priority)                                                     \
   const loom_target_bundle_t kX86LowTargetBundle##symbol_suffix = {         \
@@ -98,7 +197,8 @@ static const loom_target_bundle_t* const kX86TargetBundleValues[] = {
     NULL,
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                     \
     symbol_suffix, target_kind, selector_name, native_bundle_key,           \
-    snapshot_name, descriptor_set_key, feature_contract_set_key,            \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,            \
+    feature_contract_set_key, feature_contract_set_stable_id,               \
     default_feature_bits, supported_feature_bits, required_cpu_field0_bits, \
     automatic_priority)                                                     \
   &kX86LowTargetBundle##symbol_suffix,
@@ -112,14 +212,19 @@ const loom_target_bundle_table_t loom_x86_target_bundles = {
 };
 
 static const loom_x86_target_policy_t kX86TargetPolicies[] = {
-    {.feature_contract_set_key = {0}},
+    {.feature_contract_set = {0}},
 #define LOOM_X86_NATIVE_TARGET_PROFILE(                                  \
     symbol_suffix, target_kind, selector_name, native_bundle_key,        \
-    snapshot_name, descriptor_set_key, feature_contract_key_arg,         \
+    snapshot_name, descriptor_set_key, descriptor_set_stable_id,         \
+    feature_contract_key_arg, feature_contract_stable_id_arg,            \
     default_feature_bits, supported_features_arg, required_cpu_bits_arg, \
     automatic_priority_arg)                                              \
   [target_kind] = {                                                      \
-      .feature_contract_set_key = IREE_SVL(feature_contract_key_arg),    \
+      .feature_contract_set =                                            \
+          {                                                              \
+              .stable_id = feature_contract_stable_id_arg,               \
+              .spelling = IREE_SVL(feature_contract_key_arg),            \
+          },                                                             \
       .supported_feature_bits = supported_features_arg,                  \
       .required_cpu_field0_bits = required_cpu_bits_arg,                 \
       .automatic_priority = automatic_priority_arg,                      \

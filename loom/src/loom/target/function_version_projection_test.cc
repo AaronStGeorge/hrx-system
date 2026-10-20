@@ -96,7 +96,8 @@ static iree_status_t MaterializeTestTargetDefinition(
   if (iree_any_bit_set(build_flags,
                        LOOM_TEST_TARGET_BUILD_FLAG_HAS_CONTRACT_SET_KEY)) {
     IREE_RETURN_IF_ERROR(loom_builder_intern_string(
-        builder, facts->storage.config.contract_set_key, &contract_set_key));
+        builder, facts->storage.config.contract_set.spelling,
+        &contract_set_key));
   }
 
   const loom_target_snapshot_t* snapshot = &facts->storage.snapshot;
@@ -602,6 +603,9 @@ func.def public target(@exact) @entry() {
                                      IREE_SV("exact")));
   EXPECT_EQ(cloned_version->function_target_facts->selector,
             LOOM_TEST_TARGET_KIND_LOW_CORE);
+  EXPECT_EQ(cloned_version->function_target_facts->storage.config
+                .schedule_model_stable_id,
+            UINT64_C(0x235c515ddcc8fd92));
   EXPECT_TRUE(cloned_version->authored_target_is_exact);
   EXPECT_EQ(projected->symbols.count, source_symbol_count);
   EXPECT_EQ(CountTestTargets(projected.get()), 1u);

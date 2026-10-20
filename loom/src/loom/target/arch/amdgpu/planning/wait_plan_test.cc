@@ -73,6 +73,9 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
     descriptors_ = loom_low_descriptor_registry_lookup(
         &registry_.registry, IREE_SV("amdgpu.rdna4.gfx125x.core"));
     ASSERT_NE(descriptors_, nullptr);
+    schedule_model_ = loom_low_descriptor_set_lookup_schedule_model_by_id(
+        descriptors_, UINT64_C(0x2a42ccc9fb04b34e));
+    ASSERT_NE(schedule_model_, nullptr);
     const loom_amdgpu_processor_info_t* processor = nullptr;
     IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1250"),
                                                             &processor));
@@ -108,6 +111,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
     schedule_.module = module_;
     schedule_.function_op = function;
     schedule_.target.descriptor_set = descriptors_;
+    schedule_.target.schedule_model = schedule_model_;
     schedule_.target.target_facts = &facts_.base;
     schedule_.blocks = &block_;
     schedule_.block_count = 1;
@@ -375,7 +379,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
         loom_low_descriptor_set_descriptor_ordinal(descriptors_, descriptor);
     node.schedule_class_id = view->schedule_class_id;
     node.schedule_class =
-        loom_low_descriptor_set_schedule_class(descriptors_, view);
+        loom_low_schedule_model_schedule_class(schedule_model_, view);
     node.operand_count = layout->minimum_packet_operand_count;
     for (uint16_t i = 0; i < node.operand_count; ++i) {
       loom_low_schedule_node_operand_ordinals(&node)[i] = i;
@@ -437,6 +441,8 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
   loom_target_low_descriptor_registry_t registry_ = {};
   // Descriptor contract used by every scheduled node.
   const loom_low_descriptor_set_t* descriptors_ = nullptr;
+  // Explicit baseline schedule model selected for this target fixture.
+  const loom_low_schedule_model_t* schedule_model_ = nullptr;
   // Canonical processor properties selecting the issue constraint.
   loom_amdgpu_target_facts_t facts_ = {};
   // Single straight-line block under test.

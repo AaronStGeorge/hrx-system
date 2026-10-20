@@ -1637,6 +1637,29 @@ ERR_TARGET_094 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_095: Target representation lacks the requested schedule model.
+ERR_TARGET_095 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=95,
+    severity=Severity.ERROR,
+    summary="Target representation lacks the requested schedule model.",
+    message=(
+        "target '{target_name}' requests machine schedule model "
+        "identity {schedule_model_id} for '@{function_name}', but representation "
+        "'{descriptor_set}' does not provide it"
+    ),
+    params=(
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("schedule_model_id", ParamKind.U64),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("descriptor_set", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Select a machine schedule model provided by '{descriptor_set}' or "
+        "use a representation that provides the requested model identity."
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1716,4 +1739,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_092,
     ERR_TARGET_093,
     ERR_TARGET_094,
+    ERR_TARGET_095,
 )

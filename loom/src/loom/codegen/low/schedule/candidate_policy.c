@@ -505,6 +505,18 @@ static bool loom_low_schedule_candidate_score_less(
         lhs->source_ordinal != rhs->source_ordinal) {
       return lhs->source_ordinal < rhs->source_ordinal;
     }
+    // When candidates reach the same issue cycle, keep work on the longer
+    // dependency path ahead of the incidental split between data, hazard, and
+    // resource stalls. Preserve that split for paths reaching unspillable
+    // storage: opening another hard-capacity chain cannot be repaired by
+    // spilling if its later lifetimes become infeasible.
+    const bool has_unspillable_activation = iree_any_bit_set(
+        lhs->flags | rhs->flags,
+        LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION);
+    if (!has_unspillable_activation &&
+        lhs->critical_path_cycles != rhs->critical_path_cycles) {
+      return lhs->critical_path_cycles > rhs->critical_path_cycles;
+    }
     if (lhs->hazard_stall_cycles != rhs->hazard_stall_cycles) {
       return lhs->hazard_stall_cycles < rhs->hazard_stall_cycles;
     }

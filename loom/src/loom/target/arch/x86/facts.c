@@ -17,9 +17,8 @@ static bool loom_x86_contract_set_satisfies(
           &requirement->base, LOOM_TARGET_FACT_FIELD_CONTRACT_SET_KEY)) {
     return true;
   }
-  if (iree_string_view_equal(
-          effective->base.storage.config.contract_set_key,
-          requirement->base.storage.config.contract_set_key)) {
+  if (effective->base.storage.config.contract_set.stable_id ==
+      requirement->base.storage.config.contract_set.stable_id) {
     return true;
   }
 
@@ -27,11 +26,10 @@ static bool loom_x86_contract_set_satisfies(
       &loom_x86_target_bundles, effective->base.selector);
   const loom_x86_target_policy_t* policy =
       loom_x86_target_policy_lookup(effective->base.selector);
-  return iree_string_view_equal(effective->base.storage.config.contract_set_key,
-                                core_bundle->config->contract_set_key) &&
-         iree_string_view_equal(
-             requirement->base.storage.config.contract_set_key,
-             policy->feature_contract_set_key);
+  return effective->base.storage.config.contract_set.stable_id ==
+             core_bundle->config->contract_set.stable_id &&
+         requirement->base.storage.config.contract_set.stable_id ==
+             policy->feature_contract_set.stable_id;
 }
 
 static bool loom_x86_cpu_data_equal(const iree_cpu_data_t* lhs,
@@ -61,6 +59,9 @@ static bool loom_x86_target_facts_satisfy_specialization_requirement(
           requirement->base.storage.config.contract_feature_bits)) {
     return false;
   }
+  if (requirement->tune_is_explicit && effective->tune != requirement->tune) {
+    return false;
+  }
   return requirement->cpu_data.architecture == IREE_CPU_ARCHITECTURE_UNKNOWN ||
          loom_x86_cpu_data_equal(&effective->cpu_data, &requirement->cpu_data);
 }
@@ -70,7 +71,9 @@ static bool loom_x86_target_facts_family_state_equivalent(
   const loom_x86_target_facts_t* lhs = (const loom_x86_target_facts_t*)lhs_base;
   const loom_x86_target_facts_t* rhs = (const loom_x86_target_facts_t*)rhs_base;
   return lhs->positive_feature_assertions == rhs->positive_feature_assertions &&
-         lhs->negative_feature_assertions == rhs->negative_feature_assertions;
+         lhs->negative_feature_assertions == rhs->negative_feature_assertions &&
+         lhs->tune == rhs->tune &&
+         lhs->tune_is_explicit == rhs->tune_is_explicit;
 }
 
 static void loom_x86_target_facts_apply_specialization_requirement(
@@ -91,6 +94,16 @@ static void loom_x86_target_facts_apply_specialization_requirement(
       (effective->base.storage.config.contract_feature_bits &
        ~requirement->negative_feature_assertions) |
       requirement->positive_feature_assertions;
+  if (requirement->tune_is_explicit) {
+    effective->tune = requirement->tune;
+    effective->tune_is_explicit = true;
+  }
+}
+
+static void loom_x86_target_facts_rebind(loom_target_facts_t* base_facts) {
+  loom_x86_target_facts_t* facts = (loom_x86_target_facts_t*)base_facts;
+  facts->base.storage.config.schedule_model_stable_id =
+      loom_x86_target_tune_info_lookup(facts->tune)->schedule_model_stable_id;
 }
 
 const loom_target_fact_type_t loom_x86_target_fact_type = {
@@ -103,4 +116,5 @@ const loom_target_fact_type_t loom_x86_target_fact_type = {
     .family_state_equivalent = loom_x86_target_facts_family_state_equivalent,
     .apply_specialization_requirement =
         loom_x86_target_facts_apply_specialization_requirement,
+    .rebind = loom_x86_target_facts_rebind,
 };

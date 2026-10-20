@@ -22,6 +22,7 @@ iree_py_library(
     loom::py::loom::gen::target::low::low_descriptors
     loom::py::loom::target::descriptor_sets
     loom::py::loom::target::arch::x86::descriptors
+    loom::py::loom::target::arch::x86::machine_models
     loom::py::loom::target::arch::x86::target_info
 )
 
@@ -53,6 +54,7 @@ iree_py_library(
     "x86_target_profiles.py"
   DEPS
     loom::py::loom::gen::support::support
+    loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::x86::feature_catalog
     loom::py::loom::target::arch::x86::target_info
 )

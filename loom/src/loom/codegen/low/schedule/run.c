@@ -216,8 +216,8 @@ static iree_status_t loom_low_schedule_initialize_storage(
     memset(state->node_ready_issue_cycles, 0,
            node_count * sizeof(*state->node_ready_issue_cycles));
     if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
-      if (loom_low_descriptor_set_has_completion_wait(
-              state->target.descriptor_set)) {
+      if (loom_low_schedule_model_has_completion_wait(
+              state->target.schedule_model)) {
         IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
             state->scratch_arena, node_count,
             sizeof(*state->node_completion_cost_cycles),
@@ -735,8 +735,10 @@ static iree_status_t loom_low_schedule_initialize_descriptor_tables(
   iree_host_size_t max_descriptor_operand_count = 0;
   const loom_low_descriptor_set_t* descriptor_set =
       state->target.descriptor_set;
+  const loom_low_schedule_model_t* schedule_model =
+      state->target.schedule_model;
   const iree_host_size_t reg_class_count = descriptor_set->reg_class_count;
-  const iree_host_size_t resource_count = descriptor_set->resource_count;
+  const iree_host_size_t resource_count = schedule_model->resource_count;
   if (reg_class_count != 0) {
     IREE_RETURN_IF_ERROR(
         iree_arena_allocate_array(state->scratch_arena, reg_class_count,
@@ -854,7 +856,7 @@ static iree_status_t loom_low_schedule_initialize_descriptor_tables(
     memset(state->resource_summaries, 0,
            resource_count * sizeof(*state->resource_summaries));
     for (iree_host_size_t i = 0; i < resource_count; ++i) {
-      const loom_low_resource_t* resource = &descriptor_set->resources[i];
+      const loom_low_resource_t* resource = &schedule_model->resources[i];
       IREE_ASSERT(resource->capacity_per_cycle != 0);
       iree_string_view_t resource_name = loom_low_descriptor_set_string(
           descriptor_set, resource->name_string_ref);
@@ -869,7 +871,7 @@ static iree_status_t loom_low_schedule_initialize_descriptor_tables(
     }
   }
   IREE_RETURN_IF_ERROR(loom_low_schedule_resource_calendar_initialize(
-      descriptor_set, state->scratch_arena, &state->resource_calendar));
+      schedule_model, state->scratch_arena, &state->resource_calendar));
   if (effect_use_capacity != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->arena, effect_use_capacity, sizeof(*state->effect_uses),
@@ -1364,8 +1366,8 @@ static void loom_low_schedule_apply_candidate_descriptor(
       loom_low_descriptor_set_descriptor_view_at(
           state->target.descriptor_set, score->selected_descriptor_ordinal);
   node->schedule_class_id = descriptor_view->schedule_class_id;
-  node->schedule_class = loom_low_descriptor_set_schedule_class(
-      state->target.descriptor_set, descriptor_view);
+  node->schedule_class = loom_low_schedule_model_schedule_class(
+      state->target.schedule_model, descriptor_view);
 }
 
 static iree_status_t loom_low_schedule_run_list_scheduler(
@@ -1590,7 +1592,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
         const loom_low_schedule_class_t* schedule_class =
             state->nodes[chosen_node].schedule_class;
         has_wait_counter_hazard = loom_low_schedule_class_query_completion_wait(
-            state->target.descriptor_set, schedule_class,
+            state->target.schedule_model, schedule_class,
             &completion_wait_cycles);
         completion_ready_issue_cycle = iree_math_saturating_add_u32(
             producer_available_issue_cycle,
@@ -2054,6 +2056,7 @@ iree_status_t loom_low_schedule_function(
     const loom_low_function_model_t* model,
     const loom_low_schedule_options_t* options, iree_arena_allocator_t* arena,
     loom_low_schedule_table_t* out_table) {
+  IREE_ASSERT(model->context.target.schedule_model != NULL);
   iree_arena_allocator_t scratch_arena;
   iree_arena_initialize(arena->block_pool, &scratch_arena);
   iree_status_t status =

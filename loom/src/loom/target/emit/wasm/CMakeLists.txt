@@ -70,6 +70,7 @@ loom_cc_library(
   DEPS
     ::types
     iree::base
+    loom::codegen::low::descriptors
     loom::ir
   PUBLIC
 )
@@ -140,6 +141,7 @@ loom_cc_library(
     loom::target::arch::wasm::descriptors
     loom::target::arch::wasm::ops
     loom::target::arch::wasm::provider
+    loom::target::function_version
     loom::target::provider
     loom::target::registers
   PUBLIC

@@ -92,7 +92,7 @@ static void loom_target_facts_builder_apply_field(
     LOOM_COPY_FIELD(ABI, export_plan, abi_kind)
     LOOM_COPY_FIELD(EXPORT_SYMBOL, export_plan, export_symbol)
     LOOM_COPY_FIELD(LINKAGE, export_plan, linkage)
-    LOOM_COPY_FIELD(CONTRACT_SET_KEY, config, contract_set_key)
+    LOOM_COPY_FIELD(CONTRACT_SET_KEY, config, contract_set)
     LOOM_COPY_FIELD(CONTRACT_FEATURE_BITS, config, contract_feature_bits)
 #undef LOOM_COPY_FIELD
     case LOOM_TARGET_FACT_FIELD_COUNT_:

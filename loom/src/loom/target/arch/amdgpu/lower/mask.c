@@ -503,8 +503,7 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_select(
   (void)provider;
   *out_handled = false;
   if (!loom_vector_select_isa(op) ||
-      !loom_amdgpu_low_legality_bundle_is_amdgpu(
-          loom_target_low_legality_bundle(context))) {
+      !loom_amdgpu_low_legality_context_is_amdgpu(context)) {
     return iree_ok_status();
   }
 

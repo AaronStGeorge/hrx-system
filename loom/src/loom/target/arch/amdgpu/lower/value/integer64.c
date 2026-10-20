@@ -711,8 +711,7 @@ iree_status_t loom_amdgpu_low_legality_verify_address_compare(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
   (void)provider;
-  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
-  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+  if (!loom_amdgpu_low_legality_context_is_amdgpu(context)) {
     return iree_ok_status();
   }
 
@@ -757,8 +756,7 @@ iree_status_t loom_amdgpu_low_legality_verify_scalar_cmpi_i64(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
   (void)provider;
-  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
-  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+  if (!loom_amdgpu_low_legality_context_is_amdgpu(context)) {
     return iree_ok_status();
   }
 

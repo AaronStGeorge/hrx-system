@@ -17,17 +17,23 @@ static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {
   return registry;
 }
 
-TEST(LowLowerPolicyRegistryTest, LooksUpPolicyByContractKey) {
+TEST(LowLowerPolicyRegistryTest, LooksUpPolicyByContractIdentity) {
   loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
 
   const loom_low_lower_policy_t* policy = loom_low_lower_policy_registry_lookup(
-      &registry, IREE_SV("test.low.core"));
+      &registry, UINT64_C(0x235c515ddcc8fd92));
   EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 
 TEST(LowLowerPolicyRegistryTest, LooksUpPolicyForTargetBundle) {
   loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
-  loom_target_config_t config = {.contract_set_key = IREE_SV("test.low.core")};
+  loom_target_config_t config = {
+      .contract_set =
+          {
+              .stable_id = UINT64_C(0x235c515ddcc8fd92),
+              .spelling = IREE_SV("test.low.core"),
+          },
+  };
   loom_target_bundle_t bundle = {
       .name = IREE_SV("test-low"),
       .config = &config,
@@ -38,22 +44,22 @@ TEST(LowLowerPolicyRegistryTest, LooksUpPolicyForTargetBundle) {
   EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 
-TEST(LowLowerPolicyRegistryTest, RejectsMissingContractKey) {
+TEST(LowLowerPolicyRegistryTest, RejectsMissingContractIdentity) {
   loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
 
   EXPECT_EQ(loom_low_lower_policy_registry_lookup(&registry,
-                                                  IREE_SV("missing-target")),
+                                                  UINT64_C(0x54c0f4e693d256cf)),
             nullptr);
 }
 
-TEST(LowLowerPolicyRegistryTest, ReturnsFirstDuplicateContractKey) {
+TEST(LowLowerPolicyRegistryTest, ReturnsFirstDuplicateContractIdentity) {
   const loom_low_lower_policy_registry_entry_t entries[] = {
       {
-          .contract_set_key = IREE_SVL("test.low.core"),
+          .contract_set_stable_id = UINT64_C(0x235c515ddcc8fd92),
           .policy = loom_test_low_lower_policy(),
       },
       {
-          .contract_set_key = IREE_SVL("test.low.core"),
+          .contract_set_stable_id = UINT64_C(0x235c515ddcc8fd92),
           .policy = loom_test_low_lower_policy(),
       },
   };
@@ -62,7 +68,7 @@ TEST(LowLowerPolicyRegistryTest, ReturnsFirstDuplicateContractKey) {
       &registry, entries, IREE_ARRAYSIZE(entries));
 
   const loom_low_lower_policy_t* policy = loom_low_lower_policy_registry_lookup(
-      &registry, IREE_SV("test.low.core"));
+      &registry, UINT64_C(0x235c515ddcc8fd92));
   EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 

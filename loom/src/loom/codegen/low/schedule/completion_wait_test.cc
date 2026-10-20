@@ -16,20 +16,20 @@ namespace {
 class ScheduleCompletionWaitTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    descriptor_set_.hazards = hazards_;
-    descriptor_set_.hazard_count = IREE_ARRAYSIZE(hazards_);
+    schedule_model_.hazards = hazards_;
+    schedule_model_.hazard_count = IREE_ARRAYSIZE(hazards_);
   }
 
   // Target hazard rows selected by schedule_class_.
   loom_low_hazard_t hazards_[3] = {};
-  // Target descriptor set owning hazards_.
-  loom_low_descriptor_set_t descriptor_set_ = {};
+  // Target schedule model owning hazards_.
+  loom_low_schedule_model_t schedule_model_ = {};
   // Schedule class queried by each test.
   loom_low_schedule_class_t schedule_class_ = {};
 };
 
 TEST_F(ScheduleCompletionWaitTest, MissingTargetModelHasNoCompletionWait) {
-  EXPECT_FALSE(loom_low_descriptor_set_has_completion_wait(nullptr));
+  EXPECT_FALSE(loom_low_schedule_model_has_completion_wait(nullptr));
 
   uint16_t wait_cycles = 7;
   EXPECT_FALSE(loom_low_schedule_class_query_completion_wait(
@@ -38,7 +38,7 @@ TEST_F(ScheduleCompletionWaitTest, MissingTargetModelHasNoCompletionWait) {
 
   wait_cycles = 7;
   EXPECT_FALSE(loom_low_schedule_class_query_completion_wait(
-      &descriptor_set_, nullptr, &wait_cycles));
+      &schedule_model_, nullptr, &wait_cycles));
   EXPECT_EQ(wait_cycles, 0u);
 }
 
@@ -52,10 +52,10 @@ TEST_F(ScheduleCompletionWaitTest,
   hazards_[1].distance = 5;
   schedule_class_.hazard_count = 2;
 
-  EXPECT_FALSE(loom_low_descriptor_set_has_completion_wait(&descriptor_set_));
+  EXPECT_FALSE(loom_low_schedule_model_has_completion_wait(&schedule_model_));
   uint16_t wait_cycles = 7;
   EXPECT_FALSE(loom_low_schedule_class_query_completion_wait(
-      &descriptor_set_, &schedule_class_, &wait_cycles));
+      &schedule_model_, &schedule_class_, &wait_cycles));
   EXPECT_EQ(wait_cycles, 0u);
 }
 
@@ -65,10 +65,10 @@ TEST_F(ScheduleCompletionWaitTest, ZeroCostCounterStillRequiresCompletion) {
   hazards_[0].distance = 0;
   schedule_class_.hazard_count = 1;
 
-  EXPECT_TRUE(loom_low_descriptor_set_has_completion_wait(&descriptor_set_));
+  EXPECT_TRUE(loom_low_schedule_model_has_completion_wait(&schedule_model_));
   uint16_t wait_cycles = 7;
   EXPECT_TRUE(loom_low_schedule_class_query_completion_wait(
-      &descriptor_set_, &schedule_class_, &wait_cycles));
+      &schedule_model_, &schedule_class_, &wait_cycles));
   EXPECT_EQ(wait_cycles, 0u);
 }
 
@@ -87,7 +87,7 @@ TEST_F(ScheduleCompletionWaitTest, UsesCounterCostInScheduleClassHazardSlice) {
 
   uint16_t wait_cycles = 0;
   EXPECT_TRUE(loom_low_schedule_class_query_completion_wait(
-      &descriptor_set_, &schedule_class_, &wait_cycles));
+      &schedule_model_, &schedule_class_, &wait_cycles));
   EXPECT_EQ(wait_cycles, 5u);
 }
 

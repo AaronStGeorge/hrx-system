@@ -390,8 +390,15 @@ static iree_status_t loom_low_emission_frame_build_impl(
   iree_status_t status = loom_low_function_context_initialize(
       module, low_func_op, options->resolved_target,
       options->function_target_facts, options->descriptor_registry,
-      options->emitter, LOOM_LOW_FUNCTION_MODEL_FLAG_REGION_TREE,
+      options->emitter,
+      LOOM_LOW_FUNCTION_MODEL_FLAG_REGION_TREE |
+          LOOM_LOW_FUNCTION_MODEL_FLAG_REQUIRE_SCHEDULE_MODEL,
       options->allocation_fixed_value_count, arena, &context);
+  if (iree_status_is_ok(status) && context.target.schedule_model == NULL) {
+    out_frame->target = context.target;
+    loom_low_function_context_deinitialize(&context);
+    return status;
+  }
   iree_arena_allocator_t preparation_arena;
   iree_arena_initialize(arena->block_pool, &preparation_arena);
   if (iree_status_is_ok(status)) {
@@ -883,7 +890,8 @@ iree_status_t loom_low_emission_frame_build(
   iree_arena_initialize(arena->block_pool, &repair_arena);
   iree_arena_allocator_t scratch_arena;
   iree_arena_initialize(arena->block_pool, &scratch_arena);
-  if (iree_status_is_ok(status) && out_frame->schedule.error_count == 0 &&
+  if (iree_status_is_ok(status) && out_frame->target.schedule_model != NULL &&
+      out_frame->schedule.error_count == 0 &&
       out_frame->allocation.error_count == 0 &&
       out_frame->allocation.spill_plan_count == 0 &&
       out_frame->allocation.spill_count == 0) {
@@ -899,7 +907,8 @@ iree_status_t loom_low_emission_frame_build(
   if (iree_status_is_ok(status)) {
     status = loom_low_emission_frame_emit_diagnostics(options, out_frame);
   }
-  if (iree_status_is_ok(status) && out_frame->schedule.error_count == 0 &&
+  if (iree_status_is_ok(status) && out_frame->target.schedule_model != NULL &&
+      out_frame->schedule.error_count == 0 &&
       out_frame->allocation.error_count == 0) {
     *out_accepted = true;
   }
@@ -1006,6 +1015,10 @@ static iree_status_t loom_low_emission_frame_build_spill_free_impl(
         loom_low_placement_pair_use_list_empty(), required_register_values,
         expanded_execution_values, rematerialization.per_user_values, arena,
         statistics, &frame));
+    if (frame.target.schedule_model == NULL) {
+      *out_frame = frame;
+      return iree_ok_status();
+    }
     if (value_repair_iteration_limit == 0) {
       // Use the initial function-local value population as the convergence
       // budget. Allocation repair can retire a complete batch in one pass;

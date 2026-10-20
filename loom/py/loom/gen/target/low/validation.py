@@ -669,6 +669,11 @@ def validate_u16(value: int, description: str) -> None:
         raise ValueError(f"{description} does not fit u16")
 
 
+def validate_u8(value: int, description: str) -> None:
+    if value < 0 or value > 0xFF:
+        raise ValueError(f"{description} does not fit u8")
+
+
 def validate_u32(value: int, description: str) -> None:
     if value < 0 or value > 0xFFFFFFFF:
         raise ValueError(f"{description} does not fit u32")
@@ -725,6 +730,10 @@ def validate_schedule_model(descriptor_set: DescriptorSet) -> tuple[frozenset[st
             if group_capacity != resource.capacity_per_cycle:
                 raise ValueError(f"{description} capacity {resource.capacity_per_cycle} does not match contention group {resource.contention_group_id} capacity {group_capacity}")
         resources[resource.name] = resource
+    validate_u16_table_count(
+        len(resources),
+        f"descriptor set '{descriptor_set.key}' schedule resource",
+    )
 
     timing_event_names: set[str] = set()
     for timing_event in descriptor_set.timing_events:
@@ -772,6 +781,18 @@ def validate_schedule_model(descriptor_set: DescriptorSet) -> tuple[frozenset[st
         validate_i32(
             schedule_class.minimum_issue_separation_cycles,
             f"{description} minimum issue separation",
+        )
+        validate_u8(
+            len(schedule_class.issue_uses),
+            f"{description} issue-use count",
+        )
+        validate_u8(
+            len(schedule_class.hazards),
+            f"{description} hazard count",
+        )
+        validate_u8(
+            len(schedule_class.pressure_deltas),
+            f"{description} pressure-delta count",
         )
 
         required_units: dict[tuple[str, int], int] = {}

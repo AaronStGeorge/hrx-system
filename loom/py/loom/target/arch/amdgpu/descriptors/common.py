@@ -475,6 +475,7 @@ def _amdgpu_core_descriptor_set(
     feature_stem = key.removesuffix(".core")
     return DescriptorSet(
         key=key,
+        inline_schedule_model_key="amdgpu.generic",
         target_key="amdgpu",
         feature_key=f"{feature_stem}.v1",
         c_header_path=_AMDGPU_DESCRIPTOR_SOURCE_DIR / f"{file_stem}_descriptors.h",

@@ -15,6 +15,7 @@ from loom.gen.target.low import compiler, validation
 from loom.gen.target.low.compiled import (
     CompiledAsmForm,
     CompiledDescriptorSet,
+    CompiledNamedScheduleModel,
     CompiledOperandForm,
     CompiledScheduleModel,
     DescriptorSetView,
@@ -26,8 +27,48 @@ from loom.target.low_descriptors import (
     InstructionClass,
     RegClass,
     ScheduleClassFlag,
+    ScheduleModel,
     descriptor_stable_id,
 )
+
+
+def _named_schedule_model_view_spec(
+    view_spec: DescriptorSet,
+    model: ScheduleModel,
+) -> DescriptorSet:
+    """Projects a complete named model over one structural descriptor view."""
+
+    model_resources = {resource.name: resource for resource in model.resources}
+    missing_resources = sorted(resource.name for resource in view_spec.resources if resource.name not in model_resources)
+    if missing_resources:
+        raise ValueError(f"descriptor set view '{view_spec.key}' schedule model '{model.key}' omits structural resources: {', '.join(missing_resources)}")
+    for structural_resource in view_spec.resources:
+        model_resource = model_resources[structural_resource.name]
+        if model_resource.kind != structural_resource.kind or model_resource.flags != structural_resource.flags:
+            raise ValueError(f"descriptor set view '{view_spec.key}' schedule model '{model.key}' changes semantic resource properties for '{model_resource.name}'")
+
+    model_schedule_classes = {schedule_class.name: schedule_class for schedule_class in model.schedule_classes}
+    missing_schedule_classes = sorted(schedule_class.name for schedule_class in view_spec.schedule_classes if schedule_class.name not in model_schedule_classes)
+    if missing_schedule_classes:
+        raise ValueError(f"descriptor set view '{view_spec.key}' schedule model '{model.key}' omits structural schedule classes: {', '.join(missing_schedule_classes)}")
+    for structural_class in view_spec.schedule_classes:
+        model_class = model_schedule_classes[structural_class.name]
+        if model_class.flags != structural_class.flags or model_class.instruction_classes != structural_class.instruction_classes:
+            raise ValueError(f"descriptor set view '{view_spec.key}' schedule model '{model.key}' changes semantic class properties for '{model_class.name}'")
+
+    model_timing_event_names = {event.name for event in model.timing_events}
+    missing_timing_events = sorted(event.name for event in view_spec.timing_events if event.name not in model_timing_event_names)
+    if missing_timing_events:
+        raise ValueError(f"descriptor set view '{view_spec.key}' schedule model '{model.key}' omits structural timing events: {', '.join(missing_timing_events)}")
+
+    return replace(
+        view_spec,
+        resources=model.resources,
+        schedule_classes=model.schedule_classes,
+        timing_events=model.timing_events,
+        event_separations=model.event_separations,
+        schedule_models=(),
+    )
 
 
 def _descriptor_refs_for_ordinals(
@@ -116,21 +157,41 @@ def _compile_view_schedule_model(
     compiled: CompiledDescriptorSet,
     view_spec: DescriptorSet,
     descriptors: Sequence[Descriptor],
+    model_spec: ScheduleModel | None = None,
 ) -> CompiledScheduleModel:
     """Compiles a view's model in the family's canonical ID namespaces."""
 
-    disjoint_schedule_classes, minimum_issue_cycles_by_class = validation.validate_schedule_model(view_spec)
-    schedule_inputs = {schedule_class.name: schedule_class for schedule_class in view_spec.schedule_classes}
-    used_schedule_names = {descriptor.schedule_class for descriptor in descriptors}
-    unknown_schedule_names = sorted(used_schedule_names - schedule_inputs.keys())
+    schedule_view_spec = _named_schedule_model_view_spec(view_spec, model_spec) if model_spec is not None else view_spec
+    if model_spec is not None:
+        model_resource_names = tuple(resource.name for resource in schedule_view_spec.resources)
+        canonical_resource_names = tuple(resource.name for resource in compiled.resources)
+        if model_resource_names != canonical_resource_names:
+            raise ValueError(f"descriptor set view '{view_spec.key}' schedule model '{model_spec.key}' must define the canonical family resource namespace")
+        model_schedule_names = tuple(schedule_class.name for schedule_class in schedule_view_spec.schedule_classes)
+        canonical_schedule_names = tuple(schedule_class.name for schedule_class in compiled.schedule_classes)
+        if model_schedule_names != canonical_schedule_names:
+            raise ValueError(f"descriptor set view '{view_spec.key}' schedule model '{model_spec.key}' must define the canonical family schedule-class namespace")
+        model_timing_event_names = tuple(event.name for event in schedule_view_spec.timing_events)
+        canonical_timing_event_names = tuple(event.name for event in compiled.timing_events)
+        if model_timing_event_names != canonical_timing_event_names:
+            raise ValueError(f"descriptor set view '{view_spec.key}' schedule model '{model_spec.key}' must define the canonical family timing-event namespace")
+        schedule_view_spec = replace(
+            schedule_view_spec,
+            reg_classes=compiled.reg_classes,
+        )
+    disjoint_schedule_classes, minimum_issue_cycles_by_class = validation.validate_schedule_model(schedule_view_spec)
+    schedule_inputs = {schedule_class.name: schedule_class for schedule_class in schedule_view_spec.schedule_classes}
+    descriptor_schedule_names = {descriptor.schedule_class for descriptor in descriptors}
+    unknown_schedule_names = sorted(descriptor_schedule_names - schedule_inputs.keys())
     if unknown_schedule_names:
         raise ValueError(f"descriptor set view '{view_spec.key}' references unknown schedule classes: {', '.join(unknown_schedule_names)}")
-    missing_storage_schedule_names = sorted(used_schedule_names - compiled.schedule_class_ids.keys())
+    missing_storage_schedule_names = sorted(descriptor_schedule_names - compiled.schedule_class_ids.keys())
     if missing_storage_schedule_names:
         raise ValueError(f"descriptor set view '{view_spec.key}' references schedule classes absent from storage set '{compiled.spec.key}': {', '.join(missing_storage_schedule_names)}")
 
+    active_schedule_names = set(schedule_inputs) if model_spec is not None else descriptor_schedule_names
     used_resource_names: set[str] = set()
-    for schedule_name in used_schedule_names:
+    for schedule_name in active_schedule_names:
         schedule_class = schedule_inputs[schedule_name]
         used_resource_names.update(issue_use.resource for issue_use in schedule_class.issue_uses)
         used_resource_names.update(hazard.resource for hazard in schedule_class.hazards if hazard.resource is not None)
@@ -146,17 +207,24 @@ def _compile_view_schedule_model(
     missing_storage_resource_names = sorted(used_resource_names - compiled.resource_ids.keys())
     if missing_storage_resource_names:
         raise ValueError(f"descriptor set view '{view_spec.key}' references resources absent from storage set '{compiled.spec.key}': {', '.join(missing_storage_resource_names)}")
-    view_resources = {resource.name: resource for resource in view_spec.resources}
-    resources = tuple(view_resources[resource.name] if resource.name in used_resource_names else resource for resource in compiled.resources)
+    view_resources = {resource.name: resource for resource in schedule_view_spec.resources}
+    resources = tuple(view_resources[resource.name] if model_spec is not None or resource.name in used_resource_names else resource for resource in compiled.resources)
 
-    used_timing_event_names = {event_name for descriptor in descriptors for operand in descriptor.operands for event_name in (operand.read_event, operand.write_event) if event_name is not None}
-    used_timing_event_names.update(event_name for descriptor in descriptors for effect in descriptor.effects for event_name in (effect.producer_event, effect.consumer_event) if event_name is not None)
+    used_timing_event_names = (
+        {event.name for event in schedule_view_spec.timing_events}
+        if model_spec is not None
+        else {event_name for descriptor in descriptors for operand in descriptor.operands for event_name in (operand.read_event, operand.write_event) if event_name is not None}
+    )
+    if model_spec is None:
+        used_timing_event_names.update(
+            event_name for descriptor in descriptors for effect in descriptor.effects for event_name in (effect.producer_event, effect.consumer_event) if event_name is not None
+        )
     missing_timing_event_names = sorted(used_timing_event_names - compiled.timing_event_ids.keys())
     if missing_timing_event_names:
         raise ValueError(f"descriptor set view '{view_spec.key}' references timing events absent from storage set '{compiled.spec.key}': {', '.join(missing_timing_event_names)}")
     event_separations = tuple(
         sorted(
-            (separation for separation in view_spec.event_separations if separation.producer_event in used_timing_event_names and separation.consumer_event in used_timing_event_names),
+            (separation for separation in schedule_view_spec.event_separations if separation.producer_event in used_timing_event_names and separation.consumer_event in used_timing_event_names),
             key=lambda separation: (
                 compiled.timing_event_ids[separation.producer_event],
                 compiled.timing_event_ids[separation.consumer_event],
@@ -166,9 +234,9 @@ def _compile_view_schedule_model(
 
     # Descriptors retain family-canonical schedule-class IDs. Complete each
     # view's table in that same namespace so family emission can pool equal
-    # rows and assign direct physical row IDs only where values differ. Rows
-    # unreachable from the selected descriptor surface retain the storage
-    # model.
+    # rows and assign direct physical row IDs only where values differ. Named
+    # processor models describe the complete namespace and therefore remain
+    # shareable across structural descriptor views.
     schedule_classes = tuple(
         (
             replace(
@@ -181,7 +249,7 @@ def _compile_view_schedule_model(
             if schedule_class.name in disjoint_schedule_classes
             else schedule_inputs[schedule_class.name]
         )
-        if schedule_class.name in used_schedule_names
+        if schedule_class.name in active_schedule_names
         else schedule_class
         for schedule_class in compiled.schedule_classes
     )
@@ -216,7 +284,7 @@ def _compile_view_schedule_model(
                 "hazard_start": hazard_start,
                 "hazard_count": len(schedule_class.hazards),
                 "minimum_issue_cycles": (
-                    minimum_issue_cycles_by_class[schedule_class.name] if schedule_class.name in used_schedule_names else compiled.schedule_rows[schedule_class_id]["minimum_issue_cycles"]
+                    minimum_issue_cycles_by_class[schedule_class.name] if schedule_class.name in active_schedule_names else compiled.schedule_rows[schedule_class_id]["minimum_issue_cycles"]
                 ),
                 "pressure_delta_start": pressure_delta_start,
                 "pressure_delta_count": len(schedule_class.pressure_deltas),
@@ -258,6 +326,43 @@ def _compile_view_schedule_model(
         pressure_deltas=tuple(pressure_deltas),
         schedule_rows=tuple(schedule_rows),
     )
+
+
+def _compile_named_schedule_models(
+    compiled: CompiledDescriptorSet,
+    view_spec: DescriptorSet,
+    compiled_models_by_key: dict[str, tuple[ScheduleModel, CompiledScheduleModel]],
+) -> tuple[CompiledNamedScheduleModel, ...]:
+    """Validates one view and reuses family-wide named model compilation."""
+
+    compiled_models = []
+    for model_spec in view_spec.schedule_models:
+        # Named models use the complete family namespace, but each public view
+        # still establishes that their semantic resources and classes agree.
+        _named_schedule_model_view_spec(view_spec, model_spec)
+        cached_model = compiled_models_by_key.get(model_spec.key)
+        if cached_model is None:
+            compiled_model = _compile_view_schedule_model(
+                compiled,
+                compiled.spec,
+                compiled.descriptors,
+                model_spec,
+            )
+            compiled_models_by_key[model_spec.key] = (
+                model_spec,
+                compiled_model,
+            )
+        else:
+            cached_spec, compiled_model = cached_model
+            if cached_spec is not model_spec and cached_spec != model_spec:
+                raise ValueError(f"descriptor set view '{view_spec.key}' defines schedule model '{model_spec.key}' differently from another view in the same family")
+        compiled_models.append(
+            CompiledNamedScheduleModel(
+                key=model_spec.key,
+                schedule_model=compiled_model,
+            )
+        )
+    return tuple(compiled_models)
 
 
 def _schedule_alternative_rows_for_view(
@@ -450,9 +555,10 @@ def _view_register_classes(
     return tuple(classes_by_name.get(reg_class.name) for reg_class in compiled.reg_classes)
 
 
-def descriptor_set_view_for_spec(
+def _descriptor_set_view_for_spec(
     compiled: CompiledDescriptorSet,
     view_spec: DescriptorSet,
+    compiled_models_by_key: dict[str, tuple[ScheduleModel, CompiledScheduleModel]],
 ) -> DescriptorSetView:
     if not view_spec.descriptors:
         raise ValueError(f"descriptor set view '{view_spec.key}' selects no descriptors")
@@ -480,6 +586,11 @@ def descriptor_set_view_for_spec(
         compiled,
         view_spec,
         descriptors,
+    )
+    schedule_models = _compile_named_schedule_models(
+        compiled,
+        view_spec,
+        compiled_models_by_key,
     )
     instruction_classes = _view_instruction_classes(
         view_spec,
@@ -583,6 +694,7 @@ def descriptor_set_view_for_spec(
         instruction_classes=instruction_classes,
         schedule_model=schedule_model,
         schedule_class_row_ids=(),
+        schedule_models=schedule_models,
         storage_descriptor_ordinals=descriptor_ordinal_tuple,
         descriptor_ordinal_count=descriptor_ordinal_count,
         descriptor_membership_words=descriptor_membership_words,
@@ -602,4 +714,30 @@ def descriptor_set_view_for_spec(
         uses_storage_asm_form_tables=uses_storage_asm_form_tables,
         uses_storage_operand_form_tables=uses_storage_operand_form_tables,
         uses_storage_schedule_alternative_tables=(schedule_alternative_rows == compiled.schedule_alternative_rows[: len(schedule_alternative_rows)]),
+    )
+
+
+def descriptor_set_view_for_spec(
+    compiled: CompiledDescriptorSet,
+    view_spec: DescriptorSet,
+) -> DescriptorSetView:
+    """Compiles one structural descriptor-set view."""
+
+    return _descriptor_set_view_for_spec(compiled, view_spec, {})
+
+
+def descriptor_set_views_for_specs(
+    compiled: CompiledDescriptorSet,
+    view_specs: Sequence[DescriptorSet],
+) -> tuple[DescriptorSetView, ...]:
+    """Compiles views while sharing each complete named machine model."""
+
+    compiled_models_by_key: dict[str, tuple[ScheduleModel, CompiledScheduleModel]] = {}
+    return tuple(
+        _descriptor_set_view_for_spec(
+            compiled,
+            view_spec,
+            compiled_models_by_key,
+        )
+        for view_spec in view_specs
     )

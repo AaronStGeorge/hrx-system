@@ -122,6 +122,7 @@ def _descriptor(
 def _descriptor_set(*descriptors: Descriptor) -> DescriptorSet:
     return DescriptorSet(
         key="amdgpu.test.core",
+        inline_schedule_model_key="amdgpu.generic",
         target_key="amdgpu",
         feature_key=None,
         c_header_path=Path("test.h"),
@@ -937,6 +938,7 @@ def test_descriptor_traits_reject_missing_schedule_class() -> None:
 def test_descriptor_traits_reject_missing_issue_resource() -> None:
     descriptor_set = DescriptorSet(
         key="amdgpu.test.core",
+        inline_schedule_model_key="amdgpu.generic",
         target_key="amdgpu",
         feature_key=None,
         c_header_path=Path("test.h"),

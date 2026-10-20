@@ -25,6 +25,7 @@ def _descriptor(semantic_tag: str | None) -> Descriptor:
 def _descriptor_set(key: str, *descriptors: Descriptor) -> DescriptorSet:
     return DescriptorSet(
         key=key,
+        inline_schedule_model_key="amdgpu.generic",
         target_key="amdgpu",
         feature_key=None,
         c_header_path=Path("test.h"),

@@ -10,6 +10,7 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/target/ops.h"
+#include "loom/util/stable_id.h"
 
 static void loom_target_symbol_fact_initialize_storage(
     const loom_target_bundle_t* bundle, iree_string_view_t record_name,
@@ -52,6 +53,13 @@ static void loom_target_symbol_fact_project_attr(
       *(iree_string_view_t*)destination =
           loom_target_record_view_string(record, attr);
       break;
+    case LOOM_TARGET_PROJECTION_VALUE_CONTRACT_SET: {
+      loom_target_contract_set_t* contract_set = destination;
+      contract_set->spelling = loom_target_record_view_string(record, attr);
+      contract_set->stable_id =
+          loom_stable_id_from_string(contract_set->spelling);
+      break;
+    }
   }
 }
 
@@ -131,6 +139,9 @@ void loom_target_facts_project_record(const loom_target_record_view_t* record,
       record, row_bundle, &out_facts->storage, &out_facts->explicit_fields);
   if (descriptor->fact_projector != NULL) {
     descriptor->fact_projector->project(record, out_facts);
+  }
+  if (fact_type->rebind != NULL) {
+    fact_type->rebind(out_facts);
   }
 }
 

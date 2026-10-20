@@ -30,6 +30,7 @@ from loom.target.arch.x86.target_info import (
     sorted_descriptor_set_infos,
     x86_descriptor_set_info_by_generator_target,
     x86_descriptor_set_ordinal,
+    x86_descriptor_set_view_infos_by_storage_generator_target,
 )
 from loom.target.arch.x86.vector_encoding import (
     VECTOR_ENCODING_FORMAT_MARKER,
@@ -493,6 +494,26 @@ def test_scalar_read_memory_binary_forms_are_shared_by_scalar_profiles() -> None
                     assert effect.flags == (EffectFlag.DEPENDENCY,)
                     assert effect.width_bits == width
                     assert descriptor.schedule_class == schedule_name
+
+
+def test_processor_schedule_models_span_shared_descriptor_family() -> None:
+    storage_info = x86_descriptor_set_info_by_generator_target("avx512_features")
+    view_infos = x86_descriptor_set_view_infos_by_storage_generator_target(storage_info.generator_target)
+    storage, views = x86_descriptors.descriptor_set_family_specs(
+        storage_info,
+        view_infos,
+    )
+    canonical_schedule_names = tuple(schedule_class.name for schedule_class in storage.schedule_classes)
+    canonical_resource_names = tuple(resource.name for resource in storage.resources)
+
+    assert storage.schedule_models
+    for model in storage.schedule_models:
+        assert tuple(schedule_class.name for schedule_class in model.schedule_classes) == canonical_schedule_names
+        assert tuple(resource.name for resource in model.resources) == canonical_resource_names
+    assert all(view.schedule_models == storage.schedule_models for view in views)
+
+    resources_by_view = {view.key: {resource.name: resource for resource in view.resources} for view in views}
+    assert resources_by_view["x86.avx2.core"]["x86.vector"] != resources_by_view["x86.avx512.core"]["x86.vector"]
 
 
 def test_storage_generation_emits_current_public_views() -> None:

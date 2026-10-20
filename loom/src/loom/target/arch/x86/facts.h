@@ -11,6 +11,7 @@
 
 #include "iree/base/cpu_data.h"
 #include "loom/target/arch/x86/feature_bits.h"
+#include "loom/target/arch/x86/records/target_records.h"
 #include "loom/target/facts.h"
 
 #ifdef __cplusplus
@@ -29,6 +30,12 @@ typedef struct loom_x86_target_facts_t {
 
   // Optional instruction features explicitly disabled by the source facts.
   loom_x86_feature_bits_t negative_feature_assertions;
+
+  // Processor scheduling model selected by authored IR or exact CPU identity.
+  loom_x86_target_tune_t tune;
+
+  // Whether |tune| is an authored specialization requirement.
+  bool tune_is_explicit;
 } loom_x86_target_facts_t;
 
 // Static fact type used by x86 target projection and structured profiles.

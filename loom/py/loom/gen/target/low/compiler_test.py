@@ -356,7 +356,7 @@ def test_schedule_spans_share_exact_sequences(field, span, rows, change) -> None
         ("pressure_deltas", "pressure delta", PressureDelta("test.i32", 1)),
     ],
 )
-@pytest.mark.parametrize("count", [65535, 65536])
+@pytest.mark.parametrize("count", [255, 256])
 def test_schedule_spans_validate_compact_storage_after_sharing(field, description, row, count) -> None:
     schedule = ScheduleClass("test.first", latency_kind=LatencyKind.EXACT, model_quality=ModelQuality.EXACT, **{field: (row,) * count})
     descriptor_set = replace(
@@ -365,8 +365,8 @@ def test_schedule_spans_validate_compact_storage_after_sharing(field, descriptio
         schedule_classes=(schedule, replace(schedule, name="test.copy")),
         descriptors=(replace(TEST_LOW_ADD_I32_DESCRIPTOR, schedule_class=schedule.name, instruction_classes=(InstructionClass.SCALAR_ALU,)),),
     )
-    if count == 65536:
-        with pytest.raises(ValueError, match=f"{description} count does not fit a u16-indexed table"):
+    if count == 256:
+        with pytest.raises(ValueError, match=f"{description.replace(' ', '-')} count does not fit u8"):
             compiler.compile_descriptor_set(descriptor_set, required_schedule_class_names=("test.copy",))
     else:
         compiled = compiler.compile_descriptor_set(descriptor_set, required_schedule_class_names=("test.copy",))

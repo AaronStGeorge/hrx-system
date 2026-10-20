@@ -106,7 +106,8 @@ static iree_status_t loom_aie2p_configuration_schedule(
   iree_status_t status = loom_low_function_model_initialize(
       request->module, function,
       version ? version->function_target_facts : NULL,
-      request->low_descriptor_registry, request->diagnostic_emitter, 0,
+      request->low_descriptor_registry, request->diagnostic_emitter,
+      LOOM_LOW_FUNCTION_MODEL_FLAG_REQUIRE_SCHEDULE_MODEL,
       request->scratch_arena, &model);
   emitter->error_count += model.context.error_count;
   if (iree_status_is_ok(status) && !emitter->error_count) {

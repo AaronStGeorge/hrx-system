@@ -384,6 +384,7 @@ iree_status_t loom_low_lower_source_query_environment_initialize(
       .function = context->source_function,
       .target_facts = context->options->target_facts,
       .descriptor_set = descriptor_set,
+      .schedule_model = context->schedule_model,
       .fact_table = context->fact_table,
       .storage_access = context->storage_access,
       .value_domain = &context->lowering->value_domain,
@@ -614,7 +615,7 @@ struct loom_low_lower_source_query_scope_t {
 static void loom_low_lower_source_query_scope_initialize(
     loom_low_lower_source_query_scope_t* scope, loom_module_t* module,
     loom_func_like_t source_function, const loom_low_lower_options_t* options,
-    const loom_low_descriptor_set_t* descriptor_set) {
+    loom_target_low_source_binding_t binding) {
   memset(scope, 0, sizeof(*scope));
   scope->result = (loom_low_lower_result_t){
       .low_func_ref = loom_symbol_ref_null(),
@@ -628,7 +629,8 @@ static void loom_low_lower_source_query_scope_initialize(
       .source_function = source_function,
       .options = options,
       .policy = options->policy,
-      .descriptor_set = descriptor_set,
+      .descriptor_set = binding.descriptor_set,
+      .schedule_model = binding.schedule_model,
       .result = &scope->result,
       .storage_access = &scope->storage_access,
   };
@@ -647,19 +649,15 @@ static void loom_low_lower_source_query_scope_initialize(
 
 iree_status_t loom_low_lower_source_query_scope_allocate(
     loom_module_t* module, loom_func_like_t source_function,
-    const loom_low_lower_options_t* options, iree_arena_allocator_t* arena,
+    const loom_low_lower_options_t* options,
+    loom_target_low_source_binding_t binding, iree_arena_allocator_t* arena,
     loom_low_lower_source_query_scope_t** out_scope) {
   *out_scope = NULL;
-  const loom_low_descriptor_set_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_descriptor_set_select_for_source_lowering(
-          options->descriptor_registry,
-          loom_target_facts_bundle(options->target_facts), &descriptor_set));
   loom_low_lower_source_query_scope_t* scope = NULL;
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate(arena, sizeof(*scope), (void**)&scope));
   loom_low_lower_source_query_scope_initialize(scope, module, source_function,
-                                               options, descriptor_set);
+                                               options, binding);
   *out_scope = scope;
   return iree_ok_status();
 }
@@ -685,9 +683,15 @@ void loom_low_lower_source_query_scope_reset(
   const loom_low_lower_options_t* options = scope->context.options;
   const loom_low_descriptor_set_t* descriptor_set =
       scope->context.descriptor_set;
+  const loom_low_schedule_model_t* schedule_model =
+      scope->context.schedule_model;
   loom_low_lower_source_query_scope_deinitialize(scope);
-  loom_low_lower_source_query_scope_initialize(scope, module, source_function,
-                                               options, descriptor_set);
+  loom_low_lower_source_query_scope_initialize(
+      scope, module, source_function, options,
+      (loom_target_low_source_binding_t){
+          .descriptor_set = descriptor_set,
+          .schedule_model = schedule_model,
+      });
 }
 
 loom_target_contract_query_callback_t

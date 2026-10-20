@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 63u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 66u
 
 // Sentinel for absent target-family or descriptor-set stable IDs.
 #define LOOM_LOW_STABLE_ID_NONE UINT64_C(0)
@@ -381,7 +381,7 @@ typedef enum loom_low_operand_form_immediate_action_e {
   LOOM_LOW_OPERAND_FORM_IMMEDIATE_ADD_MATCHED_I64 = 2,
 } loom_low_operand_form_immediate_action_t;
 
-typedef enum loom_low_latency_kind_e {
+enum loom_low_latency_kind_e {
   // Unknown or uninitialized latency kind.
   LOOM_LOW_LATENCY_KIND_UNKNOWN = 0,
   // Latency is exact for this target model.
@@ -390,9 +390,10 @@ typedef enum loom_low_latency_kind_e {
   LOOM_LOW_LATENCY_KIND_ESTIMATE = 2,
   // Latency is intentionally variable or data dependent.
   LOOM_LOW_LATENCY_KIND_VARIABLE = 3,
-} loom_low_latency_kind_t;
+};
+typedef uint8_t loom_low_latency_kind_t;
 
-typedef enum loom_low_model_quality_e {
+enum loom_low_model_quality_e {
   // Unknown or uninitialized schedule model quality.
   LOOM_LOW_MODEL_QUALITY_UNKNOWN = 0,
   // Schedule model is exact enough to enforce.
@@ -403,7 +404,8 @@ typedef enum loom_low_model_quality_e {
   LOOM_LOW_MODEL_QUALITY_ESTIMATED = 3,
   // Schedule model is an explicit fallback.
   LOOM_LOW_MODEL_QUALITY_FALLBACK = 4,
-} loom_low_model_quality_t;
+};
+typedef uint8_t loom_low_model_quality_t;
 
 enum loom_low_issue_use_kind_e {
   // Resource capacity is consumed and accumulates with other required uses.
@@ -1168,8 +1170,6 @@ typedef struct loom_low_hazard_t {
 } loom_low_hazard_t;
 
 typedef struct loom_low_schedule_class_t {
-  // String-pool reference for the stable schedule-class name.
-  loom_string_ref_t name_string_ref;
   // Latency in cycles when latency_kind is exact or estimated.
   uint16_t latency_cycles;
   // Scheduler dependency distance in cycles, or zero to use latency_cycles.
@@ -1179,16 +1179,6 @@ typedef struct loom_low_schedule_class_t {
   // Default signed issue separation for dependencies without an event-pair
   // timing rule. This is independent of result latency.
   int32_t minimum_issue_separation_cycles;
-  // Latency interpretation for scheduling and diagnostics.
-  loom_low_latency_kind_t latency_kind;
-  // First issue-use row for this schedule class.
-  uint16_t issue_use_start;
-  // Number of issue-use rows for this schedule class.
-  uint16_t issue_use_count;
-  // First hazard row for this schedule class.
-  uint16_t hazard_start;
-  // Number of hazard rows for this schedule class.
-  uint16_t hazard_count;
   // Schedule-class behavior and generated resource-use proofs.
   loom_low_schedule_class_flags_t flags;
   // Additive resource demand per instruction, rounded up to whole cycles.
@@ -1197,15 +1187,25 @@ typedef struct loom_low_schedule_class_t {
   // Reservations can overlap across instructions and are not additive demand.
   // Stage placement, dependency latency, and hazards are excluded.
   uint16_t minimum_issue_cycles;
-  // Quality of the schedule model data.
-  loom_low_model_quality_t model_quality;
+  // First issue-use row for this schedule class.
+  uint16_t issue_use_start;
+  // First hazard row for this schedule class.
+  uint16_t hazard_start;
   // First pressure-delta row for this schedule class.
   uint16_t pressure_delta_start;
+  // Latency interpretation for scheduling and diagnostics.
+  loom_low_latency_kind_t latency_kind;
+  // Quality of the schedule model data.
+  loom_low_model_quality_t model_quality;
+  // Number of issue-use rows for this schedule class.
+  uint8_t issue_use_count;
+  // Number of hazard rows for this schedule class.
+  uint8_t hazard_count;
   // Number of pressure-delta rows for this schedule class.
-  uint16_t pressure_delta_count;
+  uint8_t pressure_delta_count;
 } loom_low_schedule_class_t;
 
-static_assert(sizeof(loom_low_schedule_class_t) == 36,
+static_assert(sizeof(loom_low_schedule_class_t) == 24,
               "schedule classes must remain compact table rows");
 
 // Returns the scheduler dependency distance for |schedule_class|.
@@ -1541,22 +1541,81 @@ typedef enum loom_low_descriptor_set_flag_bits_e {
   // Emitters consume the shared schedule without downstream reordering and
   // support native instruction-order constraints.
   LOOM_LOW_DESCRIPTOR_SET_FLAG_NATIVE_SCHEDULING = 1u << 0,
-  // Selected effect endpoints have at least one positive issue separation.
-  // Operand-only timing does not require cross-block effect traversal.
-  LOOM_LOW_DESCRIPTOR_SET_FLAG_POSITIVE_EFFECT_SEPARATIONS = 1u << 1,
   // Function bodies use structured regions instead of explicit CFG blocks.
   // Source legality establishes this before lowering; authored Low is checked
   // at its input boundary. Emitters consume the established representation.
-  LOOM_LOW_DESCRIPTOR_SET_FLAG_REQUIRES_STRUCTURED_CONTROL_FLOW = 1u << 2,
+  LOOM_LOW_DESCRIPTOR_SET_FLAG_REQUIRES_STRUCTURED_CONTROL_FLOW = 1u << 1,
 } loom_low_descriptor_set_flag_bits_t;
 typedef uint8_t loom_low_descriptor_set_flags_t;
+
+typedef enum loom_low_schedule_model_flag_bits_e {
+  // Selected effect endpoints have at least one positive issue separation.
+  // Operand-only timing does not require cross-block effect traversal.
+  LOOM_LOW_SCHEDULE_MODEL_FLAG_POSITIVE_EFFECT_SEPARATIONS = 1u << 0,
+} loom_low_schedule_model_flag_bits_t;
+typedef uint8_t loom_low_schedule_model_flags_t;
+
+// Immutable machine scheduling behavior selected for one Low function.
+//
+// Descriptor views retain canonical schedule-class IDs. The optional row map
+// projects those semantic IDs into a compact pool of physical behavior rows.
+// Resources and subordinate rows belong to the same model and use model-local
+// indices. Pointers precede scalar counts to keep generated model records
+// compact and shareable across descriptor-set views.
+typedef struct loom_low_schedule_model_t {
+  // Physical schedule-class behavior rows.
+  const loom_low_schedule_class_t* schedule_classes;
+  // Optional physical row IDs indexed by canonical schedule-class ID. A NULL
+  // pointer means canonical IDs index |schedule_classes| directly.
+  const uint16_t* schedule_class_row_ids;
+  // Dense named timing events referenced by operands and effects.
+  const loom_low_timing_event_t* timing_events;
+  // Sorted event-pair minimum issue separations.
+  const loom_low_event_separation_t* event_separations;
+  // Dense issue-use rows referenced by schedule classes.
+  const loom_low_issue_use_t* issue_uses;
+  // Dense target resources referenced by issue-use rows.
+  const loom_low_resource_t* resources;
+  // Dense hazard rows referenced by schedule classes.
+  const loom_low_hazard_t* hazards;
+  // Dense pressure-delta rows referenced by schedule classes.
+  const loom_low_pressure_delta_t* pressure_deltas;
+  // Number of timing-event rows.
+  uint16_t timing_event_count;
+  // Number of event-separation rows.
+  uint32_t event_separation_count;
+  // Number of issue-use rows.
+  uint16_t issue_use_count;
+  // Number of target resources.
+  uint16_t resource_count;
+  // Total occupancy slots for the generated resource calendars.
+  uint32_t resource_calendar_slot_count;
+  // Maximum earlier issue distance retained by the resource calendars.
+  uint32_t resource_calendar_lookback_cycles;
+  // Number of hazard rows.
+  uint16_t hazard_count;
+  // Number of pressure-delta rows.
+  uint16_t pressure_delta_count;
+  // Number of physical schedule-class behavior rows.
+  uint16_t schedule_class_row_count;
+  // Machine-model properties derived while generating the tables.
+  loom_low_schedule_model_flags_t flags;
+} loom_low_schedule_model_t;
+
+// Stable machine schedule-model identity resolved once at target binding.
+typedef struct loom_low_schedule_model_entry_t {
+  // Durable identity derived from the authored model key.
+  uint64_t stable_id;
+  // Immutable scheduling tables selected by this identity.
+  const loom_low_schedule_model_t* model;
+} loom_low_schedule_model_entry_t;
 
 typedef struct loom_low_descriptor_set_t {
   // Descriptor table ABI version.
   uint32_t abi_version;
   // Generator or hand-authored schema version.
   uint32_t generator_version;
-  // Representation capabilities and timing properties of the selected view.
+  // Representation capabilities of the selected view.
   loom_low_descriptor_set_flags_t flags;
   // Durable descriptor-set identity derived from the descriptor-set key.
   uint64_t stable_id;
@@ -1740,46 +1799,16 @@ typedef struct loom_low_descriptor_set_t {
   uint32_t register_part_count;
   // Dense register-class alternative rows referenced by operands.
   const loom_low_reg_class_alt_t* reg_class_alts;
-  // Family schedule-class row pool: canonical rows followed by view variants.
-  const loom_low_schedule_class_t* schedule_classes;
-  // Optional physical row IDs indexed by canonical schedule-class ID. A NULL
-  // pointer means canonical IDs index |schedule_classes| directly.
-  const uint16_t* schedule_class_row_ids;
+  // Stable schedule-class names indexed by canonical schedule-class ID.
+  const loom_string_ref_t* schedule_class_name_string_refs;
+  // Machine schedule models ordered by stable identity.
+  const loom_low_schedule_model_entry_t* schedule_models;
   // Number of register-class alternative rows owned by this set.
   uint32_t reg_class_alt_count;
   // Number of canonical schedule-class IDs addressable by descriptor views.
   uint16_t schedule_class_count;
-  // Number of physical rows in |schedule_classes|, including view variants.
-  uint16_t schedule_class_row_count;
-  // Dense named timing events referenced by operands and effects.
-  const loom_low_timing_event_t* timing_events;
-  // Number of timing-event rows owned by this set.
-  uint32_t timing_event_count;
-  // Sorted event-pair minimum issue separations.
-  const loom_low_event_separation_t* event_separations;
-  // Number of event-separation rows owned by this set.
-  uint32_t event_separation_count;
-  // Dense issue-use rows referenced by schedule classes.
-  const loom_low_issue_use_t* issue_uses;
-  // Number of issue-use rows owned by this set.
-  uint32_t issue_use_count;
-  // Dense target resources referenced by issue-use rows.
-  const loom_low_resource_t* resources;
-  // Number of resources owned by this set.
-  uint32_t resource_count;
-  // Total occupancy slots for the generated resource calendars.
-  uint32_t resource_calendar_slot_count;
-  // Maximum earlier issue distance retained by the resource calendars,
-  // derived from the largest negative event-separation magnitude.
-  uint32_t resource_calendar_lookback_cycles;
-  // Dense hazard rows referenced by schedule classes.
-  const loom_low_hazard_t* hazards;
-  // Number of hazard rows owned by this set.
-  uint32_t hazard_count;
-  // Dense pressure-delta rows referenced by schedule classes.
-  const loom_low_pressure_delta_t* pressure_deltas;
-  // Number of pressure-delta rows owned by this set.
-  uint32_t pressure_delta_count;
+  // Number of rows in |schedule_models|.
+  uint16_t schedule_model_count;
   // Dense feature-mask words referenced by descriptors.
   const uint64_t* feature_mask_words;
   // Number of feature-mask words owned by this set.
@@ -1866,24 +1895,31 @@ loom_low_descriptor_set_descriptor_view(
                                                     descriptor_ordinal);
 }
 
-// Resolves a canonical schedule-class ID into the shared physical row pool.
+// Resolves a canonical schedule-class ID into a model's physical row pool.
 IREE_ATTRIBUTE_ALWAYS_INLINE static inline uint16_t
-loom_low_descriptor_set_schedule_class_row_id(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t canonical_id) {
-  return descriptor_set->schedule_class_row_ids == NULL
+loom_low_schedule_model_schedule_class_row_id(
+    const loom_low_schedule_model_t* schedule_model, uint16_t canonical_id) {
+  return schedule_model->schedule_class_row_ids == NULL
              ? canonical_id
-             : descriptor_set->schedule_class_row_ids[canonical_id];
+             : schedule_model->schedule_class_row_ids[canonical_id];
 }
 
-// Returns the schedule class owned by |descriptor_set| for a verified
+// Returns the schedule behavior selected by |schedule_model| for a verified
 // descriptor view.
 IREE_ATTRIBUTE_ALWAYS_INLINE static inline const loom_low_schedule_class_t*
-loom_low_descriptor_set_schedule_class(
-    const loom_low_descriptor_set_t* descriptor_set,
+loom_low_schedule_model_schedule_class(
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_descriptor_view_t* descriptor_view) {
-  const uint16_t row_id = loom_low_descriptor_set_schedule_class_row_id(
-      descriptor_set, descriptor_view->schedule_class_id);
-  return &descriptor_set->schedule_classes[row_id];
+  const uint16_t row_id = loom_low_schedule_model_schedule_class_row_id(
+      schedule_model, descriptor_view->schedule_class_id);
+  return &schedule_model->schedule_classes[row_id];
+}
+
+// Returns the stable semantic name for |canonical_id|.
+IREE_ATTRIBUTE_ALWAYS_INLINE static inline loom_string_ref_t
+loom_low_descriptor_set_schedule_class_name_string_ref(
+    const loom_low_descriptor_set_t* descriptor_set, uint16_t canonical_id) {
+  return descriptor_set->schedule_class_name_string_refs[canonical_id];
 }
 
 // Returns the target-storage identity key for |reg_class_id|. Explicit
@@ -1967,14 +2003,15 @@ loom_low_descriptor_set_physical_register_view_unit_candidate_ordinals(
     const loom_low_physical_register_view_t* view);
 
 // Returns the stable name of |timing_event_id|, or an empty view for NONE.
-iree_string_view_t loom_low_descriptor_set_timing_event_name(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t timing_event_id);
+iree_string_view_t loom_low_schedule_model_timing_event_name(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model, uint16_t timing_event_id);
 
 // Finds the signed separation rule for an event pair, or NULL when the target
 // model uses its schedule-class default for the dependency.
 const loom_low_event_separation_t*
-loom_low_descriptor_set_lookup_event_separation(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t producer_event_id,
+loom_low_schedule_model_lookup_event_separation(
+    const loom_low_schedule_model_t* schedule_model, uint16_t producer_event_id,
     uint16_t consumer_event_id);
 
 // Returns a borrowed descriptor set linked into a target package. Providers
@@ -2014,6 +2051,14 @@ const loom_low_descriptor_set_t* loom_low_descriptor_registry_descriptor_set_at(
 // ordering and returns the first matching entry.
 const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup(
     const loom_low_descriptor_registry_t* registry, iree_string_view_t key);
+
+// Looks up |identity| in |registry|, or returns NULL when no set matches both
+// its stable ID and spelling. Use this at textual target-contract boundaries;
+// trusted compiled identities can use the ID-only lookup below.
+const loom_low_descriptor_set_t*
+loom_low_descriptor_registry_lookup_contract_set(
+    const loom_low_descriptor_registry_t* registry,
+    loom_target_contract_set_t identity);
 
 // Looks up |stable_id| in |registry|, or returns NULL when no set matches. The
 // registry table is target-owned static data; production lookup trusts its row
@@ -2068,15 +2113,21 @@ uint32_t loom_low_descriptor_set_descriptor_ordinal(
 // Returns the durable descriptor identity derived from a descriptor key.
 uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key);
 
+// Finds a named machine schedule model by durable identity, or NULL when this
+// descriptor-set view does not provide it.
+const loom_low_schedule_model_t*
+loom_low_descriptor_set_lookup_schedule_model_by_id(
+    const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id);
+
 // Returns whether |descriptor_set| can represent low IR for the native target
-// descriptor contract named by |target_contract_key|.
+// descriptor contract identified by |target_contract_stable_id|.
 //
 // Every descriptor set supports its own key. Portable representation
 // contracts additionally carry a generated, directional set of native target
 // contracts whose encodings and semantics they conservatively represent.
-bool loom_low_descriptor_set_supports_target_contract(
+bool loom_low_descriptor_set_supports_target_contract_id(
     const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_view_t target_contract_key);
+    uint64_t target_contract_stable_id);
 
 // Returns true if |lhs_operand_index| and |rhs_operand_index| form a tied
 // result/packet-operand pair in |descriptor|. Callers must pass a verified

@@ -12,14 +12,16 @@
 
 iree_status_t loom_low_schedule_event_frontier_initialize(
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     iree_arena_allocator_t* arena,
     loom_low_schedule_event_frontier_t* out_frontier) {
   *out_frontier = (loom_low_schedule_event_frontier_t){
       .descriptor_set = descriptor_set,
+      .schedule_model = schedule_model,
   };
   const iree_host_size_t count =
       (iree_host_size_t)descriptor_set->physical_register_unit_count *
-      descriptor_set->timing_event_count;
+      schedule_model->timing_event_count;
   if (count == 0) {
     return iree_ok_status();
   }
@@ -37,6 +39,7 @@ uint32_t loom_low_schedule_event_frontier_query(
     return 0;
   }
   const loom_low_descriptor_set_t* descriptor_set = frontier->descriptor_set;
+  const loom_low_schedule_model_t* schedule_model = frontier->schedule_model;
   const loom_low_physical_register_t* physical_register =
       &descriptor_set->physical_registers[physical_register_id];
   uint32_t issue_cycle = 0;
@@ -45,7 +48,7 @@ uint32_t loom_low_schedule_event_frontier_query(
                               [physical_register->atomic_unit_start + i];
     const uint32_t deadline =
         frontier->deadlines[(iree_host_size_t)unit *
-                                descriptor_set->timing_event_count +
+                                schedule_model->timing_event_count +
                             event_id];
     issue_cycle = iree_max(issue_cycle, deadline);
   }
@@ -59,8 +62,9 @@ iree_status_t loom_low_schedule_event_frontier_commit(
     return iree_ok_status();
   }
   const loom_low_descriptor_set_t* descriptor_set = frontier->descriptor_set;
+  const loom_low_schedule_model_t* schedule_model = frontier->schedule_model;
   const loom_low_timing_event_t* event =
-      &descriptor_set->timing_events[event_id];
+      &schedule_model->timing_events[event_id];
   if (issue_cycle > UINT32_MAX - event->maximum_issue_separation_cycles) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "physical event exceeds the issue-cycle domain");
@@ -75,10 +79,10 @@ iree_status_t loom_low_schedule_event_frontier_commit(
                               [physical_register->atomic_unit_start + i];
     uint32_t* deadlines =
         frontier->deadlines +
-        (iree_host_size_t)unit * descriptor_set->timing_event_count;
+        (iree_host_size_t)unit * schedule_model->timing_event_count;
     for (uint16_t j = 0; j < event->separation_count; ++j) {
       const loom_low_event_separation_t* separation =
-          &descriptor_set->event_separations[event->separation_start + j];
+          &schedule_model->event_separations[event->separation_start + j];
       const uint32_t deadline = loom_low_schedule_add_signed_issue_separation(
           issue_cycle, separation->minimum_issue_separation_cycles);
       uint32_t* retained = &deadlines[separation->consumer_event_id];

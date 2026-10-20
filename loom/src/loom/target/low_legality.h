@@ -220,6 +220,10 @@ const loom_target_facts_t* loom_target_low_legality_target_facts(
 const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
     const loom_target_low_legality_context_t* context);
 
+// Returns the machine schedule model selected with the descriptor set.
+const loom_low_schedule_model_t* loom_target_low_legality_schedule_model(
+    const loom_target_low_legality_context_t* context);
+
 // Returns source value facts available to target-specific legality providers.
 const loom_value_fact_table_t* loom_target_low_legality_fact_table(
     const loom_target_low_legality_context_t* context);

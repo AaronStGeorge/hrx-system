@@ -97,13 +97,50 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsMismatchedDescriptorView) {
           &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
+TEST(LowDescriptorRegistryTest, BundleSelectionBindsExactScheduleModel) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
+
+  const loom_target_config_t config = {
+      .name = IREE_SVL("test.low.core"),
+      .schedule_model_stable_id =
+          loom_low_descriptor_stable_id_from_key(IREE_SV("test.low.core")),
+      .contract_set =
+          {
+              .stable_id = loom_low_descriptor_stable_id_from_key(
+                  IREE_SV("test.low.core")),
+              .spelling = IREE_SVL("test.low.core"),
+          },
+  };
+  const loom_target_bundle_t bundle = {
+      .name = IREE_SVL("test-low"),
+      .snapshot = {},
+      .export_plan = {},
+      .config = &config,
+  };
+  loom_target_low_source_binding_t binding = {};
+  IREE_ASSERT_OK(loom_target_low_source_binding_select(&registry.registry,
+                                                       &bundle, &binding));
+  ASSERT_NE(binding.descriptor_set, nullptr);
+  EXPECT_EQ(binding.schedule_model,
+            loom_low_descriptor_set_lookup_schedule_model_by_id(
+                binding.descriptor_set, config.schedule_model_stable_id));
+}
+
 TEST(LowDescriptorRegistryTest, BundleSelectionFailsWhenLinkedSetIsMissing) {
   loom_target_low_descriptor_registry_t registry = {};
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   const loom_target_config_t missing_config = {
       .name = IREE_SVL("missing"),
-      .contract_set_key = IREE_SVL("target.missing"),
+      .schedule_model_stable_id =
+          loom_low_descriptor_stable_id_from_key(IREE_SV("test.low.core")),
+      .contract_set =
+          {
+              .stable_id = loom_low_descriptor_stable_id_from_key(
+                  IREE_SV("target.missing")),
+              .spelling = IREE_SVL("target.missing"),
+          },
   };
   const loom_target_bundle_t missing_bundle = {
       .name = IREE_SVL("missing-bundle"),
@@ -111,12 +148,45 @@ TEST(LowDescriptorRegistryTest, BundleSelectionFailsWhenLinkedSetIsMissing) {
       .export_plan = {},
       .config = &missing_config,
   };
-  const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_NOT_FOUND,
-      loom_target_low_descriptor_set_select_for_source_lowering(
-          &registry.registry, &missing_bundle, &descriptor_set));
-  EXPECT_EQ(descriptor_set, nullptr);
+  loom_target_low_source_binding_t binding = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        loom_target_low_source_binding_select(
+                            &registry.registry, &missing_bundle, &binding));
+  EXPECT_EQ(binding.descriptor_set, nullptr);
+  EXPECT_EQ(binding.schedule_model, nullptr);
+}
+
+TEST(LowDescriptorRegistryTest,
+     BundleSelectionFailsWithoutAnExactScheduleModel) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
+
+  for (uint64_t schedule_model_stable_id :
+       {UINT64_C(0), loom_low_descriptor_stable_id_from_key(
+                         IREE_SV("test.model.missing"))}) {
+    const loom_target_config_t config = {
+        .name = IREE_SVL("missing-model"),
+        .schedule_model_stable_id = schedule_model_stable_id,
+        .contract_set =
+            {
+                .stable_id = loom_low_descriptor_stable_id_from_key(
+                    IREE_SV("test.low.core")),
+                .spelling = IREE_SVL("test.low.core"),
+            },
+    };
+    const loom_target_bundle_t bundle = {
+        .name = IREE_SVL("missing-model-bundle"),
+        .snapshot = {},
+        .export_plan = {},
+        .config = &config,
+    };
+    loom_target_low_source_binding_t binding = {};
+    IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                          loom_target_low_source_binding_select(
+                              &registry.registry, &bundle, &binding));
+    EXPECT_EQ(binding.descriptor_set, nullptr);
+    EXPECT_EQ(binding.schedule_model, nullptr);
+  }
 }
 
 }  // namespace

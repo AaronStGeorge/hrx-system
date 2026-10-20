@@ -18,7 +18,9 @@ low.func.def target<amd.xdna.aie2p.core> @predicate_update(%lhs: reg<aie2p.elpre
 // Direct native emission must realize the same required predicate copy.
 // RUN: emit aie2p-leaf @predicate_update report=code
 
-low.func.def target<amd.xdna.aie2p.core> @predicate_update(%lhs: reg<aie2p.elpredicate>, %rhs: reg<aie2p.elpredicate>) -> (reg<aie2p.elpredicate>, reg<aie2p.elpredicate>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @predicate_update(%lhs: reg<aie2p.elpredicate>, %rhs: reg<aie2p.elpredicate>) -> (reg<aie2p.elpredicate>, reg<aie2p.elpredicate>) asm {
   %result = predicate.and.low32.rhs_tied %lhs, %rhs : reg<aie2p.elpredicate>
   return %rhs, %result
 }

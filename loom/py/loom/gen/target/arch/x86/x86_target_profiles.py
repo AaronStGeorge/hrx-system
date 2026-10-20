@@ -30,9 +30,12 @@ from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.x86.feature_catalog import X86_FEATURE_INFOS  # noqa: E402
 from loom.target.arch.x86.target_info import (  # noqa: E402
     X86_NATIVE_TARGET_SELECTOR_PROFILE_KEYS,
+    X86_TARGET_TUNE_INFOS,
     X86TargetProfileInfo,
+    X86TargetTuneInfo,
     x86_target_profile_info_by_key,
 )
+from loom.target.low_descriptors import descriptor_stable_id, schedule_model_stable_id  # noqa: E402
 
 
 def _c_arg(value: str) -> str:
@@ -42,6 +45,20 @@ def _c_arg(value: str) -> str:
 def _symbol_suffix(profile_key: str) -> str:
     stem = profile_key.removeprefix("x86.")
     return "".join(part.capitalize() for part in re.split(r"[^0-9A-Za-z]+", stem))
+
+
+def _enum_suffix(spelling: str) -> str:
+    return re.sub(r"[^0-9A-Za-z]+", "_", spelling).upper()
+
+
+def _processor_vendor_words(vendor: str) -> tuple[int, int]:
+    vendor_bytes = vendor.encode("ascii")
+    if len(vendor_bytes) != 12:
+        raise ValueError(f"x86 processor vendor {vendor!r} must be 12 ASCII bytes")
+    return (
+        int.from_bytes(vendor_bytes[:8], "little"),
+        int.from_bytes(vendor_bytes[8:], "little"),
+    )
 
 
 def _feature_bits_expr(feature_bits: int) -> str:
@@ -77,7 +94,10 @@ def _native_target_profiles() -> tuple[X86TargetProfileInfo, ...]:
     return tuple(profiles)
 
 
-def _emit_native_profiles_inl(profiles: tuple[X86TargetProfileInfo, ...]) -> str:
+def _emit_native_profiles_inl(
+    profiles: tuple[X86TargetProfileInfo, ...],
+    tunes: tuple[X86TargetTuneInfo, ...] = X86_TARGET_TUNE_INFOS,
+) -> str:
     lines = [
         *line_comment_header("//", generator="loom.gen.target.arch.x86.x86_target_profiles"),
         "// clang-format off",
@@ -89,6 +109,21 @@ def _emit_native_profiles_inl(profiles: tuple[X86TargetProfileInfo, ...]) -> str
     for info in X86_FEATURE_INFOS:
         cpu_feature_position = f"LOOM_X86_CPU_FIELD0_BIT_POSITION({info.runtime_cpu_suffix})" if info.runtime_cpu_suffix is not None else "UINT8_MAX"
         lines.append(f"LOOM_X86_CPU_FEATURE_MAPPING({cpu_feature_position})")
+    lines.extend(["#endif", "", "#ifdef LOOM_X86_TARGET_TUNE"])
+    lines.extend(f"LOOM_X86_TARGET_TUNE({_enum_suffix(tune.spelling)}, {tune.stable_value}, UINT64_C(0x{schedule_model_stable_id(tune.schedule_model_key):016x}))" for tune in tunes)
+    lines.extend(["#endif", "", "#ifdef LOOM_X86_PROCESSOR_TUNE_MATCH"])
+    for tune in tunes:
+        for match in tune.processor_matches:
+            vendor_low, vendor_high = _processor_vendor_words(match.vendor)
+            lines.append(
+                "LOOM_X86_PROCESSOR_TUNE_MATCH("
+                f"{_enum_suffix(tune.spelling)}, "
+                f"UINT64_C(0x{vendor_low:016x}), "
+                f"UINT32_C(0x{vendor_high:08x}), "
+                f"UINT16_C(0x{match.family:03x}), "
+                f"UINT8_C(0x{match.first_model:02x}), "
+                f"UINT8_C(0x{match.last_model:02x}))"
+            )
     lines.extend(["#endif", "", "#ifdef LOOM_X86_NATIVE_TARGET_PROFILE"])
     for target_kind, profile in enumerate(profiles, start=1):
         native_bundle_key = profile.native_bundle_key
@@ -105,7 +140,9 @@ def _emit_native_profiles_inl(profiles: tuple[X86TargetProfileInfo, ...]) -> str
             f"{_c_arg(native_bundle_key)}, "
             f"{_c_arg(_snapshot_name(native_bundle_key))}, "
             f"{_c_arg(profile.descriptor_set_key)}, "
+            f"UINT64_C(0x{descriptor_stable_id(profile.descriptor_set_key):016x}), "
             f"{_c_arg(feature_contract_set_key)}, "
+            f"UINT64_C(0x{descriptor_stable_id(feature_contract_set_key):016x}), "
             f"{_feature_bits_expr(profile.contract_feature_bits)}, "
             f"{_feature_bits_expr(profile.supported_feature_bits)}, "
             f"{_cpu_feature_bits_expr(profile.required_cpu_features)}, "

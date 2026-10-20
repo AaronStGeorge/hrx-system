@@ -82,7 +82,7 @@ TEST(AmdgpuTargetProfileTest, ProjectsCompilerOwnedTypedFacts) {
   EXPECT_EQ(facts->base.storage.snapshot.subgroup_size, 0u);
   EXPECT_EQ(facts->base.storage.snapshot.subgroup_partition,
             LOOM_TARGET_SUBGROUP_PARTITION_DENSE);
-  EXPECT_FALSE(facts->contract_set_key_explicit);
+  EXPECT_FALSE(facts->contract_set_explicit);
 
   // A structured profile can override the preset without changing processor
   // identity. Those values must become explicit before standalone IR emission.
@@ -95,7 +95,10 @@ TEST(AmdgpuTargetProfileTest, ProjectsCompilerOwnedTypedFacts) {
   };
   loom_target_bundle_storage_rebind(&storage);
   storage.snapshot.subgroup_size = 64;
-  storage.config.contract_set_key = IREE_SV("custom_contract");
+  storage.config.contract_set = {
+      .stable_id = UINT64_C(0x519bd790e926888d),
+      .spelling = IREE_SV("custom_contract"),
+  };
   profile.base.target_bundle = &storage.bundle;
   loom_target_fact_field_set_insert(&profile.base.explicit_fields,
                                     LOOM_TARGET_FACT_FIELD_SUBGROUP_SIZE);
@@ -110,10 +113,10 @@ TEST(AmdgpuTargetProfileTest, ProjectsCompilerOwnedTypedFacts) {
   EXPECT_EQ(overridden->base.storage.snapshot.subgroup_size, 64u);
   EXPECT_EQ(overridden->base.storage.snapshot.subgroup_partition,
             LOOM_TARGET_SUBGROUP_PARTITION_DENSE);
-  EXPECT_TRUE(overridden->contract_set_key_explicit);
-  EXPECT_TRUE(
-      iree_string_view_equal(overridden->base.storage.config.contract_set_key,
-                             IREE_SV("custom_contract")));
+  EXPECT_TRUE(overridden->contract_set_explicit);
+  EXPECT_TRUE(iree_string_view_equal(
+      overridden->base.storage.config.contract_set.spelling,
+      IREE_SV("custom_contract")));
   EXPECT_FALSE(loom_target_facts_field_is_explicit(
       overridden_facts, LOOM_TARGET_FACT_FIELD_INDEX_BITWIDTH));
   EXPECT_FALSE(facts->subgroup_size_explicit);

@@ -6,13 +6,13 @@
 
 #include "loom/codegen/low/schedule/completion_wait.h"
 
-bool loom_low_descriptor_set_has_completion_wait(
-    const loom_low_descriptor_set_t* descriptor_set) {
-  if (descriptor_set == NULL) {
+bool loom_low_schedule_model_has_completion_wait(
+    const loom_low_schedule_model_t* schedule_model) {
+  if (schedule_model == NULL) {
     return false;
   }
-  for (uint32_t i = 0; i < descriptor_set->hazard_count; ++i) {
-    if (descriptor_set->hazards[i].kind == LOOM_LOW_HAZARD_KIND_WAIT_COUNTER) {
+  for (uint32_t i = 0; i < schedule_model->hazard_count; ++i) {
+    if (schedule_model->hazards[i].kind == LOOM_LOW_HAZARD_KIND_WAIT_COUNTER) {
       return true;
     }
   }
@@ -20,17 +20,17 @@ bool loom_low_descriptor_set_has_completion_wait(
 }
 
 bool loom_low_schedule_class_query_completion_wait(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_schedule_class_t* schedule_class,
     uint16_t* out_wait_cycles) {
   *out_wait_cycles = 0;
-  if (descriptor_set == NULL || schedule_class == NULL) {
+  if (schedule_model == NULL || schedule_class == NULL) {
     return false;
   }
   bool has_wait_counter_hazard = false;
   for (uint16_t i = 0; i < schedule_class->hazard_count; ++i) {
     const loom_low_hazard_t* hazard =
-        &descriptor_set->hazards[schedule_class->hazard_start + i];
+        &schedule_model->hazards[schedule_class->hazard_start + i];
     if (hazard->kind != LOOM_LOW_HAZARD_KIND_WAIT_COUNTER) {
       continue;
     }

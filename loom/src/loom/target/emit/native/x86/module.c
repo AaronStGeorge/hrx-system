@@ -9,6 +9,7 @@
 #include "loom/analysis/symbol_facts.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/error/error_catalog.h"
+#include "loom/target/arch/x86/facts.h"
 #include "loom/target/emit/native/x86/abi.h"
 #include "loom/target/emit/native/x86/function.h"
 #include "loom/target/reporting/low.h"
@@ -109,6 +110,10 @@ static iree_status_t loom_x86_module_encode_function(
   loom_low_allocation_reserved_range_t reserved_ranges[2] = {{{0}}};
   const iree_host_size_t reserved_range_count =
       loom_x86_function_reserved_ranges(abi, reserved_ranges);
+  const loom_x86_target_facts_t* target_facts =
+      loom_x86_target_facts_cast(abi->target.target_facts);
+  const bool has_processor_schedule_model =
+      target_facts != NULL && target_facts->tune != LOOM_X86_TARGET_TUNE_NONE;
   loom_target_compile_report_t* report = request->compile_report;
   loom_low_planning_statistics_t planning_statistics;
   const loom_low_emission_frame_options_t frame_options = {
@@ -120,7 +125,11 @@ static iree_status_t loom_x86_module_encode_function(
       .loop_execution = entry->function_version
                             ? entry->function_version->loop_execution
                             : NULL,
-      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
+      // A selected processor model authorizes scheduling against its calibrated
+      // latency and throughput. Generic targets preserve source order.
+      .schedule_strategy = has_processor_schedule_model
+                               ? LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL
+                               : LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_entry_locations = abi->call_contract.arguments,
       .allocation_entry_location_count = abi->call_contract.argument_count,
       .allocation_exit_locations = abi->call_contract.results,

@@ -67,6 +67,8 @@ typedef struct loom_amdgpu_fragment_memory_environment_t {
   const loom_target_bundle_t* bundle;
   // Low descriptor set selected by the target bundle.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Machine schedule model selected with |descriptor_set|.
+  const loom_low_schedule_model_t* schedule_model;
   // Optional function-local matrix contract candidate list.
   const loom_amdgpu_matrix_fragment_contract_candidates_t* contract_candidates;
   // Function-local source allocation layout analysis.
@@ -1618,6 +1620,7 @@ static bool loom_amdgpu_fragment_memory_evaluate_prepared(
     }
     const loom_amdgpu_fragment_memory_publication_query_t publication_query = {
         .descriptor_set = environment->descriptor_set,
+        .schedule_model = environment->schedule_model,
         .layout = layout,
         .address_layout = &address_layout,
         .runtime_axes = runtime_axes,
@@ -1704,6 +1707,7 @@ static bool loom_amdgpu_analyze_vector_fragment_memory_plan_impl(
     loom_amdgpu_source_value_analysis_t* value_analysis,
     const loom_target_bundle_t* bundle,
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_amdgpu_matrix_fragment_contract_candidates_t*
         contract_candidates,
     const loom_amdgpu_source_alloca_layout_t* alloca_layout,
@@ -1722,6 +1726,7 @@ static bool loom_amdgpu_analyze_vector_fragment_memory_plan_impl(
       .value_analysis = value_analysis,
       .bundle = bundle,
       .descriptor_set = descriptor_set,
+      .schedule_model = schedule_model,
       .contract_candidates = contract_candidates,
       .alloca_layout = alloca_layout,
       .feature_bits =
@@ -1844,6 +1849,7 @@ iree_status_t loom_amdgpu_query_accumulator_fragment_memory_coordinates(
       .value_analysis = value_analysis,
       .bundle = loom_low_lower_context_bundle(context),
       .descriptor_set = loom_low_lower_context_descriptor_set(context),
+      .schedule_model = loom_low_lower_context_schedule_model(context),
       .contract_candidates = contract_candidates,
       .alloca_layout = alloca_layout,
       .feature_bits = contract_candidates->feature_bits,
@@ -1984,7 +1990,8 @@ static iree_status_t loom_amdgpu_fragment_memory_select(
   *out_selected = loom_amdgpu_analyze_vector_fragment_memory_plan_impl(
       module, loom_low_lower_context_fact_table(context), source_access,
       view_regions, value_analysis, loom_low_lower_context_bundle(context),
-      loom_low_lower_context_descriptor_set(context), contract_candidates,
+      loom_low_lower_context_descriptor_set(context),
+      loom_low_lower_context_schedule_model(context), contract_candidates,
       alloca_layout,
       loom_amdgpu_target_facts_cast(
           loom_low_lower_context_target_facts(context)),
@@ -2042,7 +2049,7 @@ iree_status_t loom_amdgpu_low_legality_verify_fragment_memory(
     bool* out_handled) {
   (void)provider;
   const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
-  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+  if (!loom_amdgpu_low_legality_context_is_amdgpu(context)) {
     return iree_ok_status();
   }
   *out_handled = true;
@@ -2078,6 +2085,7 @@ iree_status_t loom_amdgpu_low_legality_verify_fragment_memory(
       .value_analysis = value_analysis,
       .bundle = bundle,
       .descriptor_set = loom_target_low_legality_descriptor_set(context),
+      .schedule_model = loom_target_low_legality_schedule_model(context),
       .alloca_layout = alloca_layout,
       .feature_bits = loom_amdgpu_matrix_fragment_feature_bits(
           loom_amdgpu_target_facts_cast(

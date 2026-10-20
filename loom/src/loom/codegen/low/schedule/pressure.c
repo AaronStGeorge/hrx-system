@@ -54,7 +54,7 @@ typedef struct loom_low_schedule_pressure_demand_t {
   // candidate opens, or UINT32_MAX when it opens none.
   uint32_t opened_unspillable_completion_capacity;
   // Candidate properties discovered while traversing the ready frontier.
-  uint8_t candidate_flags;
+  uint16_t candidate_flags;
 } loom_low_schedule_pressure_demand_t;
 
 static uint32_t loom_low_schedule_positive_delta_u32(uint32_t lhs,
@@ -1034,7 +1034,7 @@ static void loom_low_schedule_score_candidate_hazards(
   }
   for (uint16_t i = 0; i < schedule_class->hazard_count; ++i) {
     const loom_low_hazard_t* hazard =
-        &state->target.descriptor_set
+        &state->target.schedule_model
              ->hazards[schedule_class->hazard_start + i];
     if (hazard->kind != LOOM_LOW_HAZARD_KIND_MIN_DISTANCE) {
       continue;
@@ -1127,7 +1127,7 @@ static void loom_low_schedule_select_candidate_schedule_class(
         loom_low_descriptor_set_descriptor_view_at(
             descriptor_set, alternative->alternative_descriptor_ordinal);
     const loom_low_schedule_class_t* alternative_schedule_class =
-        loom_low_descriptor_set_schedule_class(descriptor_set,
+        loom_low_schedule_model_schedule_class(state->target.schedule_model,
                                                alternative_descriptor_view);
     loom_low_schedule_candidate_score_t alternative_score = *score;
     loom_low_schedule_score_candidate_schedule_class(
@@ -1567,9 +1567,15 @@ loom_low_schedule_score_candidate_pressure_demand(
           ->candidate_unspillable_activation_units[completion_domain_id] =
           iree_max(node_activation[completion_domain_id],
                    unlock_activation[completion_domain_id]);
+      if (pressure_state
+              ->candidate_unspillable_activation_units[completion_domain_id] !=
+          0) {
+        demand.candidate_flags |=
+            LOOM_LOW_SCHEDULE_CANDIDATE_FLAG_HAS_UNSPILLABLE_ACTIVATION;
+      }
     }
   }
-  demand.candidate_flags = unlock_record->candidate_flags;
+  demand.candidate_flags |= unlock_record->candidate_flags;
   if (pressure_state->unlocks.descriptor_heads != NULL &&
       unlock_record->descriptor_count != 0 &&
       unlock_record->descriptor_count <=

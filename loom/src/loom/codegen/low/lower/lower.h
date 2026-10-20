@@ -1019,14 +1019,15 @@ typedef struct loom_low_lower_policy_t {
 } loom_low_lower_policy_t;
 
 typedef struct loom_low_lower_policy_registry_entry_t {
-  // Target contract-set key that selects |policy|.
-  iree_string_view_t contract_set_key;
-  // Borrowed lowering policy used for bundles naming |contract_set_key|.
+  // Stable target contract-set identity that selects |policy|.
+  uint64_t contract_set_stable_id;
+  // Borrowed lowering policy used for matching target bundles.
   const loom_low_lower_policy_t* policy;
 } loom_low_lower_policy_registry_entry_t;
 
 typedef struct loom_low_lower_policy_registry_t {
-  // Borrowed contract-set key to policy table linked into the target package.
+  // Borrowed contract-set identity to policy table linked into the target
+  // package.
   const loom_low_lower_policy_registry_entry_t* entries;
   // Number of rows in |entries|.
   iree_host_size_t entry_count;
@@ -1039,15 +1040,16 @@ void loom_low_lower_policy_registry_initialize_from_entries(
     const loom_low_lower_policy_registry_entry_t* entries,
     iree_host_size_t entry_count);
 
-// Looks up the lowering policy for |contract_set_key|, or returns NULL when no
-// row matches. The registry table is target-owned static data; production
-// lookup trusts its row ordering and returns the first matching entry.
+// Looks up the lowering policy for |contract_set_stable_id|, or returns NULL
+// when no row matches. The registry table is target-owned static data;
+// production lookup trusts its row ordering and returns the first matching
+// entry.
 const loom_low_lower_policy_t* loom_low_lower_policy_registry_lookup(
     const loom_low_lower_policy_registry_t* registry,
-    iree_string_view_t contract_set_key);
+    uint64_t contract_set_stable_id);
 
-// Looks up the lowering policy for |bundle|'s target-contract key, or returns
-// NULL when no row matches.
+// Looks up the lowering policy for |bundle|'s target-contract identity, or
+// returns NULL when no row matches.
 const loom_low_lower_policy_t* loom_low_lower_policy_registry_lookup_for_bundle(
     const loom_low_lower_policy_registry_t* registry,
     const loom_target_bundle_t* bundle);
@@ -1298,6 +1300,10 @@ iree_string_view_t loom_low_lower_context_config_key(
 
 // Returns the selected descriptor set.
 const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
+    const loom_low_lower_context_t* context);
+
+// Returns the machine schedule model selected with the descriptor set.
+const loom_low_schedule_model_t* loom_low_lower_context_schedule_model(
     const loom_low_lower_context_t* context);
 
 // Returns source value facts computed before planning. Valid only during

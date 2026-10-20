@@ -163,6 +163,24 @@ static iree_status_t loom_low_emit_unsupported_representation_contract(
                        IREE_ARRAYSIZE(params), NULL, 0);
 }
 
+static iree_status_t loom_low_emit_unavailable_schedule_model(
+    iree_diagnostic_emitter_t emitter, const loom_module_t* module,
+    const loom_op_t* low_func_op, uint16_t repr_contract_attr_index,
+    iree_string_view_t descriptor_set_key, iree_string_view_t target_name,
+    uint64_t schedule_model_stable_id) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(target_name),
+      loom_param_u64(schedule_model_stable_id),
+      loom_param_string(loom_low_function_name(module, low_func_op)),
+      loom_param_with_field_ref(
+          loom_param_string(descriptor_set_key),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    repr_contract_attr_index)),
+  };
+  return loom_low_emit(emitter, low_func_op, LOOM_ERR_TARGET_095, params,
+                       IREE_ARRAYSIZE(params), NULL, 0);
+}
+
 static bool loom_low_get_function_target_ref(const loom_op_t* low_func_op,
                                              loom_symbol_ref_t* out_target_ref,
                                              uint16_t* out_target_attr_index) {
@@ -263,16 +281,29 @@ static iree_status_t loom_low_resolve_function_target_facts(
     return iree_ok_status();
   }
 
-  const iree_string_view_t target_contract_key =
-      loom_low_resolved_target_bundle(out_target)->config->contract_set_key;
-  if (!loom_low_descriptor_set_supports_target_contract(descriptor_set,
-                                                        target_contract_key)) {
+  const loom_target_contract_set_t target_contract =
+      loom_low_resolved_target_bundle(out_target)->config->contract_set;
+  if (!loom_low_descriptor_set_supports_target_contract_id(
+          descriptor_set, target_contract.stable_id)) {
     return loom_low_emit_unsupported_representation_contract(
         emitter, module, low_func_op, low_func.vtable->repr_contract_attr_index,
         out_target->descriptor_set_key, out_target->target_name,
-        target_contract_key);
+        target_contract.spelling);
+  }
+  const uint64_t schedule_model_stable_id =
+      loom_low_resolved_target_bundle(out_target)
+          ->config->schedule_model_stable_id;
+  const loom_low_schedule_model_t* schedule_model =
+      loom_low_descriptor_set_lookup_schedule_model_by_id(
+          descriptor_set, schedule_model_stable_id);
+  if (schedule_model == NULL) {
+    return loom_low_emit_unavailable_schedule_model(
+        emitter, module, low_func_op, low_func.vtable->repr_contract_attr_index,
+        out_target->descriptor_set_key, out_target->target_name,
+        schedule_model_stable_id);
   }
   out_target->descriptor_set = descriptor_set;
+  out_target->schedule_model = schedule_model;
   return iree_ok_status();
 }
 

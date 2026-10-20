@@ -63,6 +63,7 @@ loom_cc_library(
     visibility = ["//loom/src/loom/tooling/target/wasm:__pkg__"],
     deps = [
         ":types",
+        "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base",
     ],
@@ -120,6 +121,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:function_version",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/arch/wasm:provider",

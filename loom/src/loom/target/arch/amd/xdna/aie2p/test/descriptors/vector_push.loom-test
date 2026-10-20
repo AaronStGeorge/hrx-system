@@ -2,7 +2,9 @@
 // native lane width, including paired 64-bit scalar storage.
 // RUN: emit aie2p-leaf @push_lanes report=code
 
-low.func.def target<amd.xdna.aie2p.core> @push_lanes(%input: reg<aie2p.vec256 x2>, %small: reg<aie2p.er>, %wide: reg<aie2p.er x2>) -> (reg<aie2p.vec256 x2>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @push_lanes(%input: reg<aie2p.vec256 x2>, %small: reg<aie2p.er>, %wide: reg<aie2p.er x2>) -> (reg<aie2p.vec256 x2>) asm {
   %high8 = vpush.hi.8 %input, %small
   %low8 = vpush.lo.8 %small, %high8
   %high16 = vpush.hi.16 %low8, %small

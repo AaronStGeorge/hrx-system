@@ -37,6 +37,25 @@ low.func.def target<x86.avx2.core>(@target) abi(object_function) abi_layout({sig
 
 // ====
 
+// Register-source double splats use the ISA's distinct XMM duplicate and YMM
+// broadcast instructions.
+x86.target<avx2> @target
+
+func.def target(@target) @splat_dynamic_f64(%value: f64) -> (vector<2xf64>, vector<4xf64>) {
+  %xmm = vector.splat %value : vector<2xf64>
+  %ymm = vector.splat %value : vector<4xf64>
+  func.return %xmm, %ymm : vector<2xf64>, vector<4xf64>
+}
+
+// ----
+low.func.def target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (f64) -> (vector<2xf64>, vector<4xf64>)}) @splat_dynamic_f64(%value: reg<x86.xmm>) -> (reg<x86.xmm>, reg<x86.ymm>) asm {
+  %xmm = vmovddup.xmm %value
+  %ymm = vbroadcastsd.ymm %value
+  return %xmm, %ymm
+}
+
+// ====
+
 // Constant lane access projects a YMM lane into its 128-bit half and local
 // lane once, then reuses the complete XMM lane-movement family.
 x86.target<avx2> @target

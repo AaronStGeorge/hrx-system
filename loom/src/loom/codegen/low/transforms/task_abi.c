@@ -406,10 +406,11 @@ iree_status_t loom_low_task_materialize_query(
   const loom_low_descriptor_registry_t* registry =
       loom_low_pass_capability_descriptor_registry(
           loom_low_pass_capability_from_pass(pass));
-  const iree_string_view_t descriptor_key =
-      entry->function_target_facts->storage.config.contract_set_key;
+  const loom_target_contract_set_t contract_set =
+      entry->function_target_facts->storage.config.contract_set;
   const loom_low_descriptor_set_t* descriptors =
-      loom_low_descriptor_registry_lookup(registry, descriptor_key);
+      loom_low_descriptor_registry_lookup_by_id(registry,
+                                                contract_set.stable_id);
   loom_low_task_entry_builder_t builder;
   if (!loom_low_task_entry_builder_initialize(
           module, descriptors, entry->base.function.op->location, lowering,
@@ -428,8 +429,8 @@ iree_status_t loom_low_task_materialize_query(
         builder.location, &declaration));
   }
   loom_string_id_t descriptor_name;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(module, descriptor_key, &descriptor_name));
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(module, contract_set.spelling,
+                                                 &descriptor_name));
   loom_op_t* query = NULL;
   IREE_RETURN_IF_ERROR(loom_low_task_entry_build_query(
       &builder, lowering, (loom_symbol_ref_t){.symbol_id = query_id},

@@ -45,7 +45,11 @@ TEST(TargetArtifactTest, MetadataOutlivesItsSourceStorage) {
   target.export_plan.abi_kind = LOOM_TARGET_ABI_HAL_KERNEL;
   target.export_plan.hal_kernel.required_workgroup_size = {1, 1, 1};
   target.config.name = iree_make_cstring_view(strings[5]);
-  target.config.contract_set_key = iree_make_cstring_view(strings[6]);
+  target.config.schedule_model_stable_id = UINT64_C(0x123456789abcdef0);
+  target.config.contract_set = {
+      .stable_id = UINT64_C(0x23456789abcdef01),
+      .spelling = iree_make_cstring_view(strings[6]),
+  };
   target.config.contract_feature_bits = 7;
   loom_target_bundle_storage_rebind(&target);
 
@@ -78,6 +82,10 @@ TEST(TargetArtifactTest, MetadataOutlivesItsSourceStorage) {
   EXPECT_EQ(retained->export_plan->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
   EXPECT_EQ(retained->export_plan->hal_kernel.required_workgroup_size.x, 1u);
   EXPECT_EQ(retained->config->contract_feature_bits, 7u);
+  EXPECT_EQ(retained->config->schedule_model_stable_id,
+            UINT64_C(0x123456789abcdef0));
+  EXPECT_EQ(retained->config->contract_set.stable_id,
+            UINT64_C(0x23456789abcdef01));
   ASSERT_EQ(artifact.sidecar_count, 2u);
   const iree_string_view_t retained_strings[] = {
       retained->name,
@@ -86,7 +94,7 @@ TEST(TargetArtifactTest, MetadataOutlivesItsSourceStorage) {
       retained->export_plan->export_symbol,
       retained->export_plan->calling_convention,
       retained->config->name,
-      retained->config->contract_set_key,
+      retained->config->contract_set.spelling,
       artifact.sidecars[0].identifier,
       artifact.sidecars[1].identifier,
   };

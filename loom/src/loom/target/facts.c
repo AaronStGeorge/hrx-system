@@ -56,6 +56,8 @@ bool loom_target_facts_are_equivalent(const loom_target_facts_t* lhs,
   }
   if (lhs->fact_type != rhs->fact_type ||
       lhs->explicit_fields != rhs->explicit_fields ||
+      lhs->storage.config.schedule_model_stable_id !=
+          rhs->storage.config.schedule_model_stable_id ||
       !loom_target_facts_satisfy_specialization_requirement(lhs, rhs) ||
       !loom_target_facts_satisfy_specialization_requirement(rhs, lhs)) {
     return false;
@@ -75,8 +77,8 @@ bool loom_target_facts_structural_satisfy_specialization_requirement(
   }
   return loom_target_snapshot_satisfies_specialization_requirement(
              &effective->storage.snapshot, &requirement->storage.snapshot) &&
-         iree_string_view_equal(effective->storage.config.contract_set_key,
-                                requirement->storage.config.contract_set_key) &&
+         effective->storage.config.contract_set.stable_id ==
+             requirement->storage.config.contract_set.stable_id &&
          iree_all_bits_set(effective->storage.config.contract_feature_bits,
                            requirement->storage.config.contract_feature_bits);
 }

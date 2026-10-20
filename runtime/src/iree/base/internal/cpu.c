@@ -308,7 +308,7 @@ static void iree_cpu_initialize_from_platform(iree_allocator_t temp_allocator,
 #if defined(IREE_ARCH_ARM_64)
   iree_cpu_initialize_from_platform_arm_64(out_fields);
 #elif defined(IREE_ARCH_X86_64)
-  out_fields[0] = iree_cpu_x86_64_query_features();
+  iree_cpu_x86_64_query_data(out_fields);
 #elif defined(IREE_ARCH_RISCV_64)
   iree_cpu_initialize_from_platform_riscv_64(out_fields);
 #else

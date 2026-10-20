@@ -10,6 +10,9 @@
 
 #include "loom/target/facts_builder.h"
 
+#define LOOM_TEST_LOW_CORE_SCHEDULE_MODEL_STABLE_ID UINT64_C(0x235c515ddcc8fd92)
+#define LOOM_TEST_LOW_CORE_CONTRACT_SET_STABLE_ID UINT64_C(0x235c515ddcc8fd92)
+
 static const loom_target_snapshot_t kTestLowSnapshot = {
     .name = IREE_SVL("test-low"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
@@ -57,7 +60,12 @@ static const loom_target_export_plan_t kTestLowExportPlan = {
 
 static const loom_target_config_t kTestLowConfig = {
     .name = IREE_SVL("test.low.core"),
-    .contract_set_key = IREE_SVL("test.low.core"),
+    .schedule_model_stable_id = LOOM_TEST_LOW_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_TEST_LOW_CORE_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("test.low.core"),
+        },
 };
 
 static const loom_target_bundle_t kTestLowTargetBundleCore = {
@@ -82,7 +90,12 @@ static const loom_target_export_plan_t kTestDeviceExportPlan = {
 
 static const loom_target_config_t kTestDeviceConfig = {
     .name = IREE_SVL("test.device"),
-    .contract_set_key = IREE_SVL("test.device"),
+    .schedule_model_stable_id = LOOM_TEST_LOW_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = UINT64_C(0x21009ae69c3322bf),
+            .spelling = IREE_SVL("test.device"),
+        },
 };
 
 static const loom_target_bundle_t kTestDeviceTargetBundle = {

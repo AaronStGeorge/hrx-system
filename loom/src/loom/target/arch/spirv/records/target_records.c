@@ -6,6 +6,11 @@
 
 #include "loom/target/arch/spirv/records/target_records.h"
 
+#define LOOM_SPIRV_LOGICAL_CORE_SCHEDULE_MODEL_STABLE_ID \
+  UINT64_C(0x5b86e123b2b92ba9)
+#define LOOM_SPIRV_LOGICAL_CORE_CONTRACT_SET_STABLE_ID \
+  UINT64_C(0x5b86e123b2b92ba9)
+
 #include <stdint.h>
 
 #include "loom/target/arch/spirv/features.h"
@@ -59,7 +64,13 @@ static const loom_target_export_plan_t kSpirvVulkan13ExportPlan = {
 
 static const loom_target_config_t kSpirvVulkan13Config = {
     .name = IREE_SVL("spirv.logical.core"),
-    .contract_set_key = IREE_SVL("spirv.logical.core"),
+    .schedule_model_stable_id =
+        LOOM_SPIRV_LOGICAL_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_SPIRV_LOGICAL_CORE_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("spirv.logical.core"),
+        },
     .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA,
 };
 
@@ -72,7 +83,13 @@ const loom_target_bundle_t loom_spirv_low_target_bundle_vulkan1_3 = {
 
 static const loom_target_config_t kSpirvExtendedTypesConfig = {
     .name = IREE_SVL("spirv.logical.core"),
-    .contract_set_key = IREE_SVL("spirv.logical.core"),
+    .schedule_model_stable_id =
+        LOOM_SPIRV_LOGICAL_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_SPIRV_LOGICAL_CORE_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("spirv.logical.core"),
+        },
     .contract_feature_bits =
         LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA | LOOM_SPIRV_FEATURE_FLOAT16 |
         LOOM_SPIRV_FEATURE_FLOAT64 | LOOM_SPIRV_FEATURE_INT8 |
@@ -105,7 +122,13 @@ const loom_target_bundle_t loom_spirv_low_target_bundle_hal_kernel = {
 
 static const loom_target_config_t kSpirvSubgroup32BallotConfig = {
     .name = IREE_SVL("spirv.logical.core.subgroup32.ballot"),
-    .contract_set_key = IREE_SVL("spirv.logical.core"),
+    .schedule_model_stable_id =
+        LOOM_SPIRV_LOGICAL_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_SPIRV_LOGICAL_CORE_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("spirv.logical.core"),
+        },
     .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA |
                              LOOM_SPIRV_FEATURE_GROUP_NON_UNIFORM_BALLOT,
 };
@@ -120,7 +143,13 @@ const loom_target_bundle_t loom_spirv_low_target_bundle_subgroup32_ballot_hal =
 
 static const loom_target_config_t kSpirvSubgroup32PredicateConfig = {
     .name = IREE_SVL("spirv.logical.core.subgroup32.predicates"),
-    .contract_set_key = IREE_SVL("spirv.logical.core"),
+    .schedule_model_stable_id =
+        LOOM_SPIRV_LOGICAL_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_SPIRV_LOGICAL_CORE_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("spirv.logical.core"),
+        },
     .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA |
                              LOOM_SPIRV_FEATURE_GROUP_NON_UNIFORM_BALLOT |
                              LOOM_SPIRV_FEATURE_GROUP_NON_UNIFORM_VOTE,
@@ -136,7 +165,13 @@ const loom_target_bundle_t
 
 static const loom_target_config_t kSpirvSubgroup32ReductionConfig = {
     .name = IREE_SVL("spirv.logical.core.subgroup32.reductions"),
-    .contract_set_key = IREE_SVL("spirv.logical.core"),
+    .schedule_model_stable_id =
+        LOOM_SPIRV_LOGICAL_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_SPIRV_LOGICAL_CORE_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("spirv.logical.core"),
+        },
     .contract_feature_bits =
         LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA |
         LOOM_SPIRV_FEATURE_GROUP_NON_UNIFORM_ARITHMETIC |

@@ -191,6 +191,7 @@ def _descriptor_set(
 ) -> DescriptorSet:
     return DescriptorSet(
         key=key,
+        inline_schedule_model_key="x86.generic",
         target_key="x86",
         feature_key=feature_key,
         c_header_path=_packed_dot_file_name(stem, "h"),

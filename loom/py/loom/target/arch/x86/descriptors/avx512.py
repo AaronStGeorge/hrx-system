@@ -293,6 +293,7 @@ def _mask_move_descriptor(
 
 X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="x86.avx512.core",
+    inline_schedule_model_key="x86.generic",
     target_key="x86",
     feature_key="x86.avx512.v1",
     c_header_path=Path(

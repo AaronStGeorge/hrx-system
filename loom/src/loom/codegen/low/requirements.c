@@ -59,10 +59,20 @@ static iree_status_t loom_low_requirements_verify_core_tables(
                             "low descriptor set '%.*s' has no schedule classes",
                             (int)set_key.size, set_key.data);
   }
-  if (descriptor_set->resource_count == 0) {
+  if (descriptor_set->schedule_model_count == 0) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low descriptor set '%.*s' has no resources",
+                            "low descriptor set '%.*s' has no schedule models",
                             (int)set_key.size, set_key.data);
+  }
+  for (uint16_t i = 0; i < descriptor_set->schedule_model_count; ++i) {
+    if (descriptor_set->schedule_models[i].model->resource_count == 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low descriptor set '%.*s' schedule model 0x%016" PRIx64
+          " has no resources",
+          (int)set_key.size, set_key.data,
+          descriptor_set->schedule_models[i].stable_id);
+    }
   }
   return iree_ok_status();
 }
@@ -117,12 +127,13 @@ static iree_status_t loom_low_requirements_verify_operand_reg_classes(
 
 static iree_status_t loom_low_requirements_verify_descriptor_schedule(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t set_key,
+    const loom_low_schedule_model_t* schedule_model,
     const loom_low_descriptor_t* descriptor,
     iree_string_view_t descriptor_key) {
+  const loom_low_descriptor_view_t* descriptor_view =
+      loom_low_descriptor_set_descriptor_view(descriptor_set, descriptor);
   const loom_low_schedule_class_t* schedule_class =
-      loom_low_descriptor_set_schedule_class(
-          descriptor_set,
-          loom_low_descriptor_set_descriptor_view(descriptor_set, descriptor));
+      loom_low_schedule_model_schedule_class(schedule_model, descriptor_view);
   const bool has_effect_or_control_payload =
       loom_low_descriptor_layout(descriptor_set, descriptor)->effect_count !=
           0 ||
@@ -139,8 +150,10 @@ static iree_status_t loom_low_requirements_verify_descriptor_schedule(
 
   iree_string_view_t schedule_name = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_low_requirements_get_string(
-      descriptor_set, schedule_class->name_string_ref, "schedule class name",
-      &schedule_name));
+      descriptor_set,
+      loom_low_descriptor_set_schedule_class_name_string_ref(
+          descriptor_set, descriptor_view->schedule_class_id),
+      "schedule class name", &schedule_name));
   return iree_make_status(
       IREE_STATUS_FAILED_PRECONDITION,
       "low descriptor set '%.*s' descriptor '%.*s' uses schedule class '%.*s' "
@@ -184,8 +197,11 @@ static iree_status_t loom_low_requirements_verify_descriptor(
   }
   if (iree_any_bit_set(requirements,
                        LOOM_LOW_DESCRIPTOR_REQUIREMENT_ISSUE_RESOURCES)) {
-    IREE_RETURN_IF_ERROR(loom_low_requirements_verify_descriptor_schedule(
-        descriptor_set, set_key, descriptor, descriptor_key));
+    for (uint16_t i = 0; i < descriptor_set->schedule_model_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_low_requirements_verify_descriptor_schedule(
+          descriptor_set, set_key, descriptor_set->schedule_models[i].model,
+          descriptor, descriptor_key));
+    }
   }
   return iree_ok_status();
 }

@@ -988,12 +988,13 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
   iree_status_t status = loom_low_function_model_initialize(
       module, low_function,
       /*function_target_facts=*/NULL, descriptor_registry, emitter,
-      /*flags=*/0, analysis_arena, &model);
-  if (iree_status_is_ok(status)) {
+      LOOM_LOW_FUNCTION_MODEL_FLAG_REQUIRE_SCHEDULE_MODEL, analysis_arena,
+      &model);
+  if (iree_status_is_ok(status) && model.context.error_count == 0) {
     status =
         loom_low_schedule_function(&model, &options, analysis_arena, &table);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && model.context.error_count == 0) {
     status = loom_low_schedule_format_json(&table, &result->actual_output);
   }
   loom_low_function_model_deinitialize(&model);

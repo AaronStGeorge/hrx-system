@@ -115,6 +115,19 @@ uint64_t iree_cpu_x86_64_decode_features(
   return features;
 }
 
+void iree_cpu_x86_64_decode_data(
+    const iree_cpu_x86_64_capabilities_t* capabilities,
+    uint64_t out_fields[IREE_CPU_DATA_FIELD_COUNT]) {
+  for (iree_host_size_t i = 0; i < IREE_CPU_DATA_FIELD_COUNT; ++i) {
+    out_fields[i] = 0;
+  }
+  out_fields[0] = iree_cpu_x86_64_decode_features(capabilities);
+  out_fields[1] = (uint64_t)capabilities->leaf0.ebx |
+                  ((uint64_t)capabilities->leaf0.edx << 32);
+  out_fields[2] = (uint64_t)capabilities->leaf0.ecx |
+                  ((uint64_t)capabilities->leaf1.eax << 32);
+}
+
 #if defined(IREE_ARCH_X86_64)
 
 #if defined(__GNUC__)
@@ -170,9 +183,11 @@ static uint64_t iree_cpu_x86_64_read_xcr0(void) {
 #endif
 }
 
-uint64_t iree_cpu_x86_64_query_features(void) {
+void iree_cpu_x86_64_query_data(
+    uint64_t out_fields[IREE_CPU_DATA_FIELD_COUNT]) {
   iree_cpu_x86_64_capabilities_t capabilities = {0};
-  const uint32_t max_leaf = iree_cpu_x86_64_cpuid(0, 0).eax;
+  capabilities.leaf0 = iree_cpu_x86_64_cpuid(0, 0);
+  const uint32_t max_leaf = capabilities.leaf0.eax;
   const uint32_t max_extended_leaf = iree_cpu_x86_64_cpuid(0x80000000u, 0).eax;
   if (max_leaf >= 1) {
     capabilities.leaf1 = iree_cpu_x86_64_cpuid(1, 0);
@@ -216,7 +231,7 @@ uint64_t iree_cpu_x86_64_query_features(void) {
     }
 #endif
   }
-  return iree_cpu_x86_64_decode_features(&capabilities);
+  iree_cpu_x86_64_decode_data(&capabilities, out_fields);
 }
 
 #endif  // IREE_ARCH_X86_64

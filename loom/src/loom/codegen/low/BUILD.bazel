@@ -313,6 +313,7 @@ loom_cc_test(
         "//loom/src/loom/target:function_contract",
         "//loom/src/loom/target/test:alt_descriptors",
         "//loom/src/loom/target/test:descriptors",
+        "//loom/src/loom/target/test:target_record_table",
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -352,6 +353,7 @@ loom_cc_library(
     hdrs = ["function_model.h"],
     deps = [
         ":descriptors",
+        ":diagnostics",
         ":function",
         ":function_requirements",
         ":storage_identity",

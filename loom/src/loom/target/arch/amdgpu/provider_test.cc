@@ -14,6 +14,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/pass_environment.h"
 #include "loom/format/bytecode/reader.h"
 #include "loom/format/bytecode/writer.h"
@@ -226,9 +227,11 @@ static void ExpectTargetFactsEqual(const loom_amdgpu_target_facts_t& expected,
   EXPECT_EQ(actual_export.hal_kernel.flat_workgroup_size_max,
             expected_export.hal_kernel.flat_workgroup_size_max);
 
-  EXPECT_TRUE(
-      iree_string_view_equal(actual.base.storage.config.contract_set_key,
-                             expected.base.storage.config.contract_set_key));
+  EXPECT_TRUE(iree_string_view_equal(
+      actual.base.storage.config.contract_set.spelling,
+      expected.base.storage.config.contract_set.spelling));
+  EXPECT_EQ(actual.base.storage.config.contract_set.stable_id,
+            expected.base.storage.config.contract_set.stable_id);
   EXPECT_EQ(actual.base.storage.config.contract_feature_bits,
             expected.base.storage.config.contract_feature_bits);
   EXPECT_TRUE(
@@ -518,9 +521,10 @@ TEST_F(AmdgpuProviderTest, ProvidesLoweringPolicyForEveryDescriptorSet) {
     const loom_amdgpu_descriptor_set_info_t* descriptor_set =
         loom_amdgpu_target_info_descriptor_set_at((uint16_t)i);
     ASSERT_NE(descriptor_set, nullptr);
-    EXPECT_NE(
-        loom_low_lower_policy_registry_lookup(&registry, descriptor_set->key),
-        nullptr)
+    EXPECT_NE(loom_low_lower_policy_registry_lookup(
+                  &registry,
+                  loom_low_descriptor_stable_id_from_key(descriptor_set->key)),
+              nullptr)
         << "descriptor set ordinal " << i;
   }
 }
@@ -763,8 +767,8 @@ TEST_F(AmdgpuProviderTest, SeparatesIdentityAndSpecializationRequirements) {
             32u);
   EXPECT_FALSE(gfx1151_a_facts->subgroup_size_explicit);
   EXPECT_TRUE(gfx1151_explicit_wave32_facts->subgroup_size_explicit);
-  EXPECT_FALSE(gfx11_generic_facts->contract_set_key_explicit);
-  EXPECT_TRUE(gfx11_explicit_contract_facts->contract_set_key_explicit);
+  EXPECT_FALSE(gfx11_generic_facts->contract_set_explicit);
+  EXPECT_TRUE(gfx11_explicit_contract_facts->contract_set_explicit);
   EXPECT_TRUE(loom_target_facts_are_equivalent(gfx1151_a->projection,
                                                gfx1151_b->projection));
   EXPECT_FALSE(loom_target_facts_are_equivalent(

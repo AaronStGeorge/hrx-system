@@ -811,7 +811,8 @@ static iree_status_t loom_low_packet_json_write_packet(
   iree_string_view_t schedule_class_name = iree_string_view_empty();
   if (schedule_class != NULL) {
     schedule_class_name = loom_low_descriptor_set_string(
-        descriptor_set, schedule_class->name_string_ref);
+        descriptor_set, loom_low_descriptor_set_schedule_class_name_string_ref(
+                            descriptor_set, node->schedule_class_id));
   }
   IREE_RETURN_IF_ERROR(
       loom_json_object_begin_field(&object, IREE_SV("schedule_class")));

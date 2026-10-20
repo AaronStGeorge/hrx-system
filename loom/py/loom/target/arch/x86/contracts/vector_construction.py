@@ -84,6 +84,10 @@ _INTEGER_BROADCAST_MNEMONICS = {
     32: "vpbroadcastd",
     64: "vpbroadcastq",
 }
+_FLOAT_BROADCAST_MNEMONICS = {
+    32: {128: "vbroadcastss", 256: "vbroadcastss", 512: "vbroadcastss"},
+    64: {128: "vmovddup", 256: "vbroadcastsd", 512: "vbroadcastsd"},
+}
 
 
 class _IntegerBroadcastSource(Enum):
@@ -280,12 +284,12 @@ def _vector_splat_rules(
             )
             for carrier in vector_carriers(element, integer_vector_bit_widths)
         )
-    for element, mnemonic in (
-        (FLOAT_ELEMENTS[0], "vbroadcastss"),
-        (FLOAT_ELEMENTS[1], "vbroadcastsd"),
-    ):
-        rules.extend(
-            (
+    for element in FLOAT_ELEMENTS:
+        for carrier in vector_carriers(element, float_vector_bit_widths):
+            mnemonic = _FLOAT_BROADCAST_MNEMONICS[element.bit_width][
+                carrier.register_bit_width
+            ]
+            rules.append(
                 _splat_rule(
                     Scalar(element.name),
                     carrier.value_type,
@@ -294,8 +298,6 @@ def _vector_splat_rules(
                     result_register_class=carrier.register_class,
                 )
             )
-            for carrier in vector_carriers(element, float_vector_bit_widths)
-        )
     return tuple(rules)
 
 

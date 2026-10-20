@@ -405,7 +405,9 @@ scheduled pressure test.special: peak-live-units=1 peak-live-values=1
 // captured input must remain available to ordinary pressure scheduling.
 // RUN: emit low-schedule-query @required_late_input kind=order consumer=* per-user-placement-values=%private required-register-values=%source,%private
 
-low.func.def target<x86.avx2.core> @required_late_input(%source: reg<x86.gpr32>, %other: reg<x86.xmm>) -> (reg<x86.gpr32 x2>) asm {
+x86.target<avx2> @target
+
+low.func.def target<x86.avx2.core>(@target) @required_late_input(%source: reg<x86.gpr32>, %other: reg<x86.xmm>) -> (reg<x86.gpr32 x2>) asm {
   %private = sub.if_uge.imm.gpr32 %source, 17
   %dependency = copy %other : reg<x86.xmm> -> reg<x86.gpr32>
   %result = concat(%private, %dependency) : (reg<x86.gpr32>, reg<x86.gpr32>) -> reg<x86.gpr32 x2>

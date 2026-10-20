@@ -17,6 +17,7 @@
 #include "loom/target/arch/wasm/descriptors/descriptors.h"
 #include "loom/target/arch/wasm/ops/ops.h"
 #include "loom/target/arch/wasm/provider.h"
+#include "loom/target/function_version.h"
 #include "loom/target/registers.h"
 
 typedef struct loom_wasm_local_entry_t {
@@ -33,6 +34,8 @@ typedef struct loom_wasm_local_entry_t {
 typedef struct loom_wasm_program_build_t {
   // Module being planned.
   loom_module_t* module;
+  // Compiler function versions observed against this module symbol snapshot.
+  loom_target_function_version_snapshot_t function_versions;
   // Mutable function plan storage.
   loom_wasm_function_plan_t* functions;
   // Number of initialized function plans.
@@ -204,6 +207,7 @@ static iree_status_t loom_wasm_program_intern_function_type(
 
 static iree_status_t loom_wasm_program_build_function_allocation(
     loom_module_t* module, loom_op_t* function_op,
+    const loom_target_facts_t* function_target_facts,
     const loom_low_descriptor_registry_t* descriptor_registry,
     iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
     loom_low_allocation_table_t* out_allocation, bool* out_accepted) {
@@ -217,21 +221,27 @@ static iree_status_t loom_wasm_program_build_function_allocation(
   }
   loom_low_function_model_t model = {0};
   iree_status_t status = loom_low_function_model_initialize(
-      module, function_op,
-      /*function_target_facts=*/NULL, descriptor_registry, diagnostic_emitter,
-      LOOM_LOW_FUNCTION_MODEL_FLAG_REGION_TREE, arena, &model);
-  if (iree_status_is_ok(status)) {
+      module, function_op, function_target_facts, descriptor_registry,
+      diagnostic_emitter,
+      LOOM_LOW_FUNCTION_MODEL_FLAG_REGION_TREE |
+          LOOM_LOW_FUNCTION_MODEL_FLAG_REQUIRE_SCHEDULE_MODEL,
+      arena, &model);
+  if (iree_status_is_ok(status) && model.context.error_count == 0) {
     const loom_low_allocation_options_t allocation_options = {
         .emitter = diagnostic_emitter,
     };
     status = loom_low_allocate_function(&model, &allocation_options, arena,
                                         out_allocation);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && model.context.error_count == 0) {
     status = loom_low_allocation_diagnostics_emit(out_allocation, /*flags=*/0,
                                                   diagnostic_emitter);
   }
+  const uint32_t context_error_count = model.context.error_count;
   loom_low_function_model_deinitialize(&model);
+  if (iree_status_is_ok(status) && context_error_count != 0) {
+    return iree_ok_status();
+  }
   if (iree_status_is_ok(status) && out_allocation->error_count != 0) {
     return iree_ok_status();
   }
@@ -466,6 +476,7 @@ static iree_status_t loom_wasm_program_project_function_allocation(
   loom_low_allocation_release_value_scratch(&value_scratch);
 
   if (iree_status_is_ok(status)) {
+    function->schedule_model = allocation->target.schedule_model;
     function->value_ids = allocation->liveness.value_ids;
     function->local_indices_by_value_ordinal = local_indices_by_value_ordinal;
     function->value_count =
@@ -479,6 +490,7 @@ static iree_status_t loom_wasm_program_project_function_allocation(
 
 static iree_status_t loom_wasm_program_build_function(
     loom_wasm_program_build_t* build, loom_op_t* function_op,
+    const loom_target_facts_t* function_target_facts,
     loom_wasm_function_plan_t* function,
     const loom_low_descriptor_registry_t* descriptor_registry,
     iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
@@ -487,8 +499,8 @@ static iree_status_t loom_wasm_program_build_function(
   loom_low_allocation_table_t allocation = {0};
   bool allocation_accepted = false;
   IREE_RETURN_IF_ERROR(loom_wasm_program_build_function_allocation(
-      build->module, function_op, descriptor_registry, diagnostic_emitter,
-      arena, &allocation, &allocation_accepted));
+      build->module, function_op, function_target_facts, descriptor_registry,
+      diagnostic_emitter, arena, &allocation, &allocation_accepted));
   if (!allocation_accepted) {
     return iree_ok_status();
   }
@@ -504,6 +516,7 @@ static iree_status_t loom_wasm_program_build_function(
 
 iree_status_t loom_wasm_program_plan_build(
     loom_module_t* module,
+    const loom_function_version_list_t* function_versions,
     const loom_low_descriptor_registry_t* descriptor_registry,
     iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
     bool* out_accepted, loom_wasm_program_plan_t* out_plan) {
@@ -522,6 +535,8 @@ iree_status_t loom_wasm_program_plan_build(
   loom_wasm_program_build_t build = {
       .module = module,
   };
+  IREE_RETURN_IF_ERROR(loom_target_function_version_snapshot_build(
+      module, function_versions, arena, &build.function_versions));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, module->symbols.count,
                                                  sizeof(*build.functions),
                                                  (void**)&build.functions));
@@ -575,9 +590,15 @@ iree_status_t loom_wasm_program_plan_build(
       ++build.export_count;
     }
     bool function_accepted = false;
+    const loom_target_function_version_t* function_version =
+        loom_target_function_version_snapshot_at(
+            &build.function_versions, (loom_symbol_id_t)symbol_index);
     IREE_RETURN_IF_ERROR(loom_wasm_program_build_function(
-        &build, defining_op, function, descriptor_registry, diagnostic_emitter,
-        arena, &function_accepted));
+        &build, defining_op,
+        function_version != NULL ? function_version->function_target_facts
+                                 : NULL,
+        function, descriptor_registry, diagnostic_emitter, arena,
+        &function_accepted));
     if (!function_accepted) {
       return iree_ok_status();
     }
@@ -605,6 +626,7 @@ iree_status_t loom_wasm_program_plan_build(
 
 iree_status_t loom_wasm_compile_module_binary(
     loom_module_t* module,
+    const loom_function_version_list_t* function_versions,
     const loom_low_descriptor_registry_t* descriptor_registry,
     iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
     iree_allocator_t allocator, bool* out_emitted,
@@ -616,9 +638,9 @@ iree_status_t loom_wasm_compile_module_binary(
 
   loom_wasm_program_plan_t plan = {0};
   bool accepted = false;
-  IREE_RETURN_IF_ERROR(loom_wasm_program_plan_build(module, descriptor_registry,
-                                                    diagnostic_emitter, arena,
-                                                    &accepted, &plan));
+  IREE_RETURN_IF_ERROR(loom_wasm_program_plan_build(
+      module, function_versions, descriptor_registry, diagnostic_emitter, arena,
+      &accepted, &plan));
   if (!accepted) {
     return iree_ok_status();
   }
@@ -643,9 +665,9 @@ static iree_status_t loom_wasm_module_emit(
   loom_wasm_module_binary_t module = {0};
   bool module_emitted = false;
   IREE_RETURN_IF_ERROR(loom_wasm_compile_module_binary(
-      request->module, request->low_descriptor_registry,
-      request->diagnostic_emitter, request->scratch_arena, request->allocator,
-      &module_emitted, &module));
+      request->module, request->function_versions,
+      request->low_descriptor_registry, request->diagnostic_emitter,
+      request->scratch_arena, request->allocator, &module_emitted, &module));
   if (!module_emitted) {
     return iree_ok_status();
   }

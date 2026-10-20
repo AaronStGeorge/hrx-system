@@ -335,7 +335,7 @@ static const loom_target_math_policy_t kAie2pMathPolicy = {
 static const loom_target_math_policy_registry_entry_t
     kAie2pMathPolicyEntries[] = {
         {
-            .contract_set_key = IREE_SVL("amd.xdna.aie2p.core"),
+            .contract_set_stable_id = UINT64_C(0x25ed3c7d25a1452a),
             .policy = &kAie2pMathPolicy,
         },
 };

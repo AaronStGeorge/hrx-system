@@ -246,7 +246,9 @@ low.func.def target<amd.xdna.aie2p.core> abi(object_function) @i1x128_whole_sele
 
 // RUN: emit aie2p-leaf @i8x65_direct_select report=code
 
-low.func.def target<amd.xdna.aie2p.core> abi(object_function) @i8x65_direct_select(%condition: reg<aie2p.elpredicate x2>, %true_value: reg<aie2p.vec256 x4>, %false_value: reg<aie2p.vec256 x4>) -> (reg<aie2p.vec256 x4>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) abi(object_function) @i8x65_direct_select(%condition: reg<aie2p.elpredicate x2>, %true_value: reg<aie2p.vec256 x4>, %false_value: reg<aie2p.vec256 x4>) -> (reg<aie2p.vec256 x4>) asm {
   %condition_low = slice %condition[0] : reg<aie2p.elpredicate x2> -> reg<aie2p.elpredicate>
   %true_low = slice %true_value[0] : reg<aie2p.vec256 x4> -> reg<aie2p.vec256 x2>
   %false_low = slice %false_value[0] : reg<aie2p.vec256 x4> -> reg<aie2p.vec256 x2>

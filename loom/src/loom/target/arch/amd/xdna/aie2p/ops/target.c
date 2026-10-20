@@ -70,7 +70,7 @@ iree_status_t loom_aie2p_target_materialize_definition(
   if (iree_any_bit_set(build_flags,
                        LOOM_AIE2P_TARGET_BUILD_FLAG_HAS_CONTRACT_SET_KEY)) {
     IREE_RETURN_IF_ERROR(loom_builder_intern_string(
-        builder, facts->base.storage.config.contract_set_key,
+        builder, facts->base.storage.config.contract_set.spelling,
         &contract_set_key));
   }
   loom_string_id_t device_profile = LOOM_STRING_ID_INVALID;

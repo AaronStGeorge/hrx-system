@@ -21,6 +21,7 @@ _REGISTER_CLASSES, _RESOURCES, _SCHEDULE_CLASSES = _descriptor_support_tables(
 
 X86_F16C_DESCRIPTOR_SET = DescriptorSet(
     key="x86.f16c.core",
+    inline_schedule_model_key="x86.generic",
     target_key="x86",
     feature_key="x86.f16c.v1",
     c_header_path=Path("loom/src/loom/target/arch/x86/descriptors/f16c_descriptors.h"),

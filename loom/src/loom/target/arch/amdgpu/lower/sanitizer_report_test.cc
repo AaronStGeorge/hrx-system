@@ -24,13 +24,14 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/op_registry.h"
-#include "loom/ops/target/ops.h"
 #include "loom/target/arch/amdgpu/abi/feedback.h"
 #include "loom/target/arch/amdgpu/abi/ubsan.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/lower/feedback.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_ubsan_report.h"
+#include "loom/target/arch/amdgpu/ops/ops.h"
+#include "loom/target/arch/amdgpu/ops/registry.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/registers.h"
 #include "loom/verify/verify.h"
@@ -66,6 +67,7 @@ class AmdgpuSanitizerReportTest : public ::testing::Test {
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
     IREE_ASSERT_OK(loom_op_registry_register_all_dialects(&context_));
+    IREE_ASSERT_OK(loom_amdgpu_ops_register_dialect(&context_));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, NULL,
@@ -106,14 +108,9 @@ class AmdgpuSanitizerReportTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_builder_intern_string(
         &builder_, IREE_SV("amdgpu.rdna3.core"), &contract_set_key));
     loom_op_t* target_op = NULL;
-    IREE_ASSERT_OK(loom_target_generic_build(
-        &builder_,
-        LOOM_TARGET_GENERIC_BUILD_FLAG_HAS_CODEGEN_FORMAT |
-            LOOM_TARGET_GENERIC_BUILD_FLAG_HAS_ARTIFACT_FORMAT |
-            LOOM_TARGET_GENERIC_BUILD_FLAG_HAS_ABI |
-            LOOM_TARGET_GENERIC_BUILD_FLAG_HAS_CONTRACT_SET_KEY,
-        LOOM_TARGET_GENERIC_KIND_REFERENCE, target,
-        LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE, LOOM_TARGET_ARTIFACT_FORMAT_ELF,
+    IREE_ASSERT_OK(loom_amdgpu_target_build(
+        &builder_, /*build_flags=*/0, LOOM_AMDGPU_TARGET_KIND_GFX1100, target,
+        /*codegen_format=*/0, /*artifact_format=*/0,
         /*default_pointer_bitwidth=*/0, /*index_bitwidth=*/0,
         /*offset_bitwidth=*/0, /*max_workgroup_size_x=*/0,
         /*max_workgroup_size_y=*/0, /*max_workgroup_size_z=*/0,
@@ -126,10 +123,11 @@ class AmdgpuSanitizerReportTest : public ::testing::Test {
         /*memory_space_global=*/0, /*memory_space_workgroup=*/0,
         /*memory_space_constant=*/0, /*memory_space_private=*/0,
         /*memory_space_host=*/0, /*memory_space_descriptor=*/0,
-        LOOM_TARGET_ABI_OBJECT_FUNCTION,
+        /*abi=*/0,
         /*export_symbol=*/LOOM_STRING_ID_INVALID,
-        /*linkage=*/0, contract_set_key,
-        /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &target_op));
+        /*linkage=*/0, /*contract_set_key=*/LOOM_STRING_ID_INVALID,
+        /*contract_feature_bits=*/0, loom_signed_enum_set_empty(),
+        LOOM_LOCATION_UNKNOWN, &target_op));
     loom_symbol_ref_t callee = AddSymbol(IREE_SV("test_fn"));
     loom_op_t* function_op = NULL;
     IREE_ASSERT_OK(loom_low_func_def_build(

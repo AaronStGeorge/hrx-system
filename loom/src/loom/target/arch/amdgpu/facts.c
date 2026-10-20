@@ -157,10 +157,9 @@ static bool loom_amdgpu_target_facts_satisfy_specialization_requirement(
   // Processor refinement deliberately replaces a generic descriptor contract
   // with the exact processor contract. Only an explicit override constrains
   // the effective contract key.
-  if (requirement->contract_set_key_explicit &&
-      !iree_string_view_equal(
-          effective->base.storage.config.contract_set_key,
-          requirement->base.storage.config.contract_set_key)) {
+  if (requirement->contract_set_explicit &&
+      effective->base.storage.config.contract_set.stable_id !=
+          requirement->base.storage.config.contract_set.stable_id) {
     return false;
   }
 
@@ -185,7 +184,7 @@ static void loom_amdgpu_target_facts_rebind(loom_target_facts_t* base_facts) {
           : NULL;
   facts->subgroup_size_explicit = loom_target_facts_field_is_explicit(
       &facts->base, LOOM_TARGET_FACT_FIELD_SUBGROUP_SIZE);
-  facts->contract_set_key_explicit = loom_target_facts_field_is_explicit(
+  facts->contract_set_explicit = loom_target_facts_field_is_explicit(
       &facts->base, LOOM_TARGET_FACT_FIELD_CONTRACT_SET_KEY);
 }
 

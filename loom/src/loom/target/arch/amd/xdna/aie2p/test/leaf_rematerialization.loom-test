@@ -3,8 +3,10 @@
 // the running sum instead of retaining the entire invariant set.
 // RUN: emit aie2p-leaf @broadcast_pressure diagnostics=predicted-spills
 
+aie2p.target<core> @target
+
 // REMARK@+1: BACKEND/045 {function_name="broadcast_pressure", trigger_kind="allocation-failure", repaired_value_count="13", cloned_packet_count="13", rewritten_operand_count="13", retained_placement_count="0"}
-low.func.def target<amd.xdna.aie2p.core> @broadcast_pressure(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
+low.func.def target<amd.xdna.aie2p.core>(@target) @broadcast_pressure(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
   %scalar0 = mov.i32 1
   %vector0 = vbcst.32 %scalar0
   %scalar1 = mov.i32 2
@@ -60,8 +62,10 @@ low.func.def target<amd.xdna.aie2p.core> @broadcast_pressure(%input: reg<aie2p.e
 // their own short-lived vector setup within the same allocation repair.
 // RUN: emit aie2p-leaf @dependent_cross_block diagnostics=predicted-spills
 
+aie2p.target<core> @target
+
 // REMARK@+1: BACKEND/045 {function_name="dependent_cross_block", trigger_kind="allocation-failure", repaired_value_count="42", cloned_packet_count="42", rewritten_operand_count="42", retained_placement_count="0"}
-low.func.def target<amd.xdna.aie2p.core> @dependent_cross_block(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
+low.func.def target<amd.xdna.aie2p.core>(@target) @dependent_cross_block(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
   %scalar0 = mov.i32 1
   %vector0 = vbcst.32 %scalar0
   %scalar1 = mov.i32 2
@@ -185,8 +189,10 @@ low.func.def target<amd.xdna.aie2p.core> @dependent_cross_block(%input: reg<aie2
 // while keeping the rematerialized broadcasts out of persistent vector storage.
 // RUN: emit aie2p-leaf @bounded_padding diagnostics=predicted-spills
 
+aie2p.target<core> @target
+
 // REMARK@+1: BACKEND/045 {function_name="bounded_padding", trigger_kind="allocation-failure", repaired_value_count="13", cloned_packet_count="13", rewritten_operand_count="13", retained_placement_count="0"}
-low.func.def target<amd.xdna.aie2p.core> @bounded_padding(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
+low.func.def target<amd.xdna.aie2p.core>(@target) @bounded_padding(%input: reg<aie2p.ep>, %output: reg<aie2p.ep>) asm {
   %zeros = acc.clear.f32x64
   %mode = mova.i32 60
   %scalar0 = mov.i32 1065353216
@@ -325,8 +331,10 @@ low.func.def target<amd.xdna.aie2p.core> @bounded_padding(%input: reg<aie2p.ep>,
 // are blocked, or rescheduling exceeds the same 32-register bank again.
 // RUN: emit aie2p-leaf @retained_scalar_stream diagnostics=predicted-spills uses=retained0,retained1,retained2,retained3,retained4,retained5,retained6,retained7,retained8,retained9,retained10,retained11,retained12,retained13,retained14,retained15,retained16,retained17,retained18,retained19,retained20,retained21,retained22,retained23,retained24,retained25,value0,value1,value2,value3,value4,value5,value6,scaled0,scaled1,scaled2,scaled3,scaled4,scaled5,scaled6,index0,index1,index2,index3,index4,index5,index6
 
+aie2p.target<core> @target
+
 // REMARK@+1: BACKEND/045 {function_name="retained_scalar_stream", trigger_kind="allocation-failure", repaired_value_count="8", cloned_packet_count="14", rewritten_operand_count="14", retained_placement_count="0"}
-low.func.def target<amd.xdna.aie2p.core> @retained_scalar_stream(%record_input: reg<aie2p.ep>, %stream_input: reg<aie2p.ep>, %stream_output: reg<aie2p.ep>, %record_output: reg<aie2p.ep>) asm {
+low.func.def target<amd.xdna.aie2p.core>(@target) @retained_scalar_stream(%record_input: reg<aie2p.ep>, %stream_input: reg<aie2p.ep>, %stream_output: reg<aie2p.ep>, %record_output: reg<aie2p.ep>) asm {
   %retained0, %read1 = lda.i32.post %record_input, 4
   %retained1, %read2 = lda.i32.post %read1, 4
   %retained2, %read3 = lda.i32.post %read2, 4
@@ -511,11 +519,13 @@ low.func.def target<amd.xdna.aie2p.core> @irreducible_private_indices(%position0
 
 // Each failed frontier contributes a consumer-first batch. Rebuilding
 // allocation exposes the next set of extraction and extension repairs.
+aie2p.target<core> @target
+
 // REMARK@+4: BACKEND/045 {function_name="packed_extract_extend_pressure", trigger_kind="allocation-failure", repaired_value_count="2", cloned_packet_count="2", rewritten_operand_count="2", retained_placement_count="0"}
 // REMARK@+3: BACKEND/045 {function_name="packed_extract_extend_pressure", trigger_kind="allocation-failure", repaired_value_count="2", cloned_packet_count="2", rewritten_operand_count="2", retained_placement_count="0"}
 // REMARK@+2: BACKEND/045 {function_name="packed_extract_extend_pressure", trigger_kind="allocation-failure", repaired_value_count="1", cloned_packet_count="1", rewritten_operand_count="1", retained_placement_count="0"}
 // REMARK@+1: BACKEND/045 {function_name="packed_extract_extend_pressure", trigger_kind="allocation-failure", repaired_value_count="1", cloned_packet_count="1", rewritten_operand_count="1", retained_placement_count="0"}
-low.func.def schedule(locked) target<amd.xdna.aie2p.core> @packed_extract_extend_pressure(%packed: reg<aie2p.vec256 x2>, %keep0: reg<aie2p.er x2>, %keep1: reg<aie2p.er x2>, %keep2: reg<aie2p.er x2>, %keep3: reg<aie2p.er x2>, %keep4: reg<aie2p.er x2>, %keep5: reg<aie2p.er x2>, %keep6: reg<aie2p.er x2>, %keep7: reg<aie2p.er x2>, %keep8: reg<aie2p.er x2>, %keep9: reg<aie2p.er x2>, %keep10: reg<aie2p.er x2>, %keep11: reg<aie2p.er x2>, %keep12: reg<aie2p.er x2>, %keep13: reg<aie2p.er x2>, %keep14: reg<aie2p.er x2>) -> (reg<aie2p.er>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>) asm {
+low.func.def schedule(locked) target<amd.xdna.aie2p.core>(@target) @packed_extract_extend_pressure(%packed: reg<aie2p.vec256 x2>, %keep0: reg<aie2p.er x2>, %keep1: reg<aie2p.er x2>, %keep2: reg<aie2p.er x2>, %keep3: reg<aie2p.er x2>, %keep4: reg<aie2p.er x2>, %keep5: reg<aie2p.er x2>, %keep6: reg<aie2p.er x2>, %keep7: reg<aie2p.er x2>, %keep8: reg<aie2p.er x2>, %keep9: reg<aie2p.er x2>, %keep10: reg<aie2p.er x2>, %keep11: reg<aie2p.er x2>, %keep12: reg<aie2p.er x2>, %keep13: reg<aie2p.er x2>, %keep14: reg<aie2p.er x2>) -> (reg<aie2p.er>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>, reg<aie2p.er x2>) asm {
   %byte0 = vextract.8.imm %packed, 0
   %wide0 = extend.u8 %byte0
   %byte1 = vextract.8.imm %packed, 1
@@ -538,7 +548,9 @@ low.func.def schedule(locked) target<amd.xdna.aie2p.core> @packed_extract_extend
 // fixed copy alone does not make that setup actionable while it incurs debt.
 // RUN: emit aie2p-leaf @retained_scale_select report=emission
 
-low.func.def target<amd.xdna.aie2p.core> @retained_scale_select(%record_input: reg<aie2p.ep>, %record_output: reg<aie2p.ep>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @retained_scale_select(%record_input: reg<aie2p.ep>, %record_output: reg<aie2p.ep>) asm {
   %retained0, %read1 = lda.i32.post %record_input, 4
   %retained1, %read2 = lda.i32.post %read1, 4
   %retained2, %read3 = lda.i32.post %read2, 4
@@ -728,7 +740,9 @@ coissued components: 80
 // Recreate each constant address near its store without retaining all bases.
 // RUN: emit aie2p-leaf @literal_address_pressure report=code uses=payload
 
-low.func.def target<amd.xdna.aie2p.core> @literal_address_pressure(%payload: reg<aie2p.er>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @literal_address_pressure(%payload: reg<aie2p.er>) asm {
   %endpoint0 = mov.local-address 458752
   %endpoint1 = mov.local-address 458816
   %endpoint2 = mov.local-address 458880

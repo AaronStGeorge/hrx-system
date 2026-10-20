@@ -70,6 +70,7 @@ from loom.target.low_descriptors import (
     RegisterPackingResourceFlag,
     RegisterPackingResourceMember,
     RegisterPackingResourceMemberFlag,
+    ScheduleModel,
     StorageLease,
     StorageLeaseAttachment,
     StorageLeaseFlag,
@@ -105,6 +106,11 @@ def _assert_emitted_string_reference(
     label: str,
 ) -> None:
     assert f".{field_name} = {string_pool.ref(label)}," in source
+
+
+def _emitted_initializer(source: str, declaration: str) -> str:
+    start = source.index(declaration)
+    return source[start : source.index("\n};", start)]
 
 
 def _explicit_physical_descriptor_set():
@@ -179,6 +185,22 @@ def test_descriptor_set_validates_category_membership() -> None:
 
     assert descriptor_set.categories == (category,)
     assert descriptor_set.descriptors[0].category == category
+
+
+def test_descriptor_set_rejects_duplicate_inline_schedule_model_key() -> None:
+    duplicate_model = ScheduleModel(
+        key=TEST_LOW_CORE_DESCRIPTOR_SET.inline_schedule_model_key,
+        resources=TEST_LOW_CORE_DESCRIPTOR_SET.resources,
+        schedule_classes=TEST_LOW_CORE_DESCRIPTOR_SET.schedule_classes,
+        timing_events=TEST_LOW_CORE_DESCRIPTOR_SET.timing_events,
+        event_separations=TEST_LOW_CORE_DESCRIPTOR_SET.event_separations,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="duplicates or collides with another catalog key",
+    ):
+        replace(TEST_LOW_CORE_DESCRIPTOR_SET, schedule_models=(duplicate_model,))
 
 
 def test_descriptor_set_rejects_unknown_default_category() -> None:
@@ -416,11 +438,15 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
     emitted_references = (
         ("key_string_ref", "descriptor_test.add.i32"),
         ("name_string_ref", "reg_test.i32"),
-        ("name_string_ref", "schedule_test.scalar.alu"),
         ("name_string_ref", "resource_test.scalar"),
     )
     for field_name, label in emitted_references:
         _assert_emitted_string_reference(generated.source, compiled.string_pool, field_name, label)
+    schedule_class_names = _emitted_initializer(
+        generated.source,
+        "static const loom_string_ref_t kTestLowCoreScheduleClassNames[] = {",
+    )
+    assert f"  {compiled.string_pool.ref('schedule_test.scalar.alu')}," in schedule_class_names
 
 
 def test_compiler_descriptor_rows_span_source_tables() -> None:
@@ -2074,6 +2100,7 @@ def test_descriptor_set_view_reuses_schedule_independent_storage_tables() -> Non
 
 def test_descriptor_set_view_pools_schedule_model_variants() -> None:
     vector_schedule = TEST_LOW_CORE_DESCRIPTOR_SET.schedule_classes[2]
+    unused_schedule = TEST_LOW_CORE_DESCRIPTOR_SET.schedule_classes[0]
     vector_multiply = replace(
         TEST_LOW_MUL_I32_DESCRIPTOR,
         schedule_class=vector_schedule.name,
@@ -2097,6 +2124,14 @@ def test_descriptor_set_view_pools_schedule_model_variants() -> None:
             capacity_per_cycle=2,
         ),
     )
+    named_schedule_classes = tuple(
+        replace(schedule_class, latency_cycles=7)
+        if schedule_class.name == vector_schedule.name
+        else replace(schedule_class, latency_cycles=11)
+        if schedule_class.name == unused_schedule.name
+        else schedule_class
+        for schedule_class in view_schedule_classes
+    )
     storage_set = replace(
         TEST_LOW_CORE_DESCRIPTOR_SET,
         resources=(
@@ -2116,6 +2151,15 @@ def test_descriptor_set_view_pools_schedule_model_variants() -> None:
         c_enum_prefix="TEST_LOW_SCHEDULE_VIEW_CORE",
         resources=view_resources,
         schedule_classes=view_schedule_classes,
+        schedule_models=(
+            ScheduleModel(
+                key="test.cpu.vector",
+                resources=view_resources,
+                schedule_classes=named_schedule_classes,
+                timing_events=TEST_LOW_CORE_DESCRIPTOR_SET.timing_events,
+                event_separations=TEST_LOW_CORE_DESCRIPTOR_SET.event_separations,
+            ),
+        ),
         descriptors=(
             replace(
                 TEST_LOW_ADD_I32_DESCRIPTOR,
@@ -2137,9 +2181,25 @@ def test_descriptor_set_view_pools_schedule_model_variants() -> None:
     assert compiled_view.uses_storage_descriptor_tables
     assert not compiled_view.uses_storage_descriptor_view_tables
     canonical_schedule_class_id = compiled.schedule_class_ids[vector_schedule.name]
-    assert compiled_view.schedule_class_row_ids[canonical_schedule_class_id] == len(compiled.schedule_classes)
     assert compiled.schedule_class_table.canonical_count == len(compiled.schedule_classes)
-    assert len(compiled.schedule_class_table.schedule_classes) == len(compiled.schedule_classes) + 1
+    assert len(compiled_view.schedule_models) == 1
+    named_model = compiled_view.schedule_models[0]
+    assert named_model.key == "test.cpu.vector"
+    assert named_model.schedule_model.schedule_classes[canonical_schedule_class_id].latency_cycles == 7
+    unused_schedule_class_id = compiled.schedule_class_ids[unused_schedule.name]
+    assert named_model.schedule_model.schedule_classes[unused_schedule_class_id].latency_cycles == 11
+
+    def physical_row_id(row_ids: tuple[int, ...]) -> int:
+        return row_ids[canonical_schedule_class_id] if row_ids else canonical_schedule_class_id
+
+    view_row_id = physical_row_id(compiled_view.schedule_class_row_ids)
+    named_row_id = physical_row_id(named_model.schedule_class_row_ids)
+    assert view_row_id != named_row_id
+    assert compiled.schedule_class_table.schedule_classes[view_row_id].latency_cycles == 3
+    assert compiled.schedule_class_table.schedule_classes[named_row_id].latency_cycles == 7
+    unused_row_id = named_model.schedule_class_row_ids[unused_schedule_class_id]
+    assert compiled.schedule_class_table.schedule_classes[unused_row_id].latency_cycles == 11
+    assert len(compiled.schedule_class_table.schedule_classes) < (2 * len(compiled.schedule_classes))
 
     alias = replace(
         view,
@@ -2148,14 +2208,47 @@ def test_descriptor_set_view_pools_schedule_model_variants() -> None:
         c_table_prefix="TestLowScheduleAliasCore",
         c_enum_prefix="TEST_LOW_SCHEDULE_ALIAS_CORE",
     )
-    source = generate_descriptor_set_family(storage_set, (view, alias)).source
-    assert "kTestLowScheduleViewCoreResources[]" in source
-    assert "kTestLowScheduleAliasCoreResources[]" not in source
-    assert source.count(".resources = kTestLowScheduleViewCoreResources,") == 2
-    assert source.count(".schedule_classes = kTestLowCoreScheduleClasses,") == 2
-    assert "kTestLowScheduleViewCoreScheduleClassRowIds[]" in source
-    assert "kTestLowScheduleAliasCoreScheduleClassRowIds[]" not in source
-    assert source.count(".schedule_class_row_ids = kTestLowScheduleViewCoreScheduleClassRowIds,") == 2
+    _, (compiled_view, compiled_alias) = compile_descriptor_set_family(
+        storage_set,
+        (view, alias),
+    )
+    assert compiled_view.schedule_model == compiled_alias.schedule_model
+    assert compiled_view.schedule_models[0].schedule_model is compiled_alias.schedule_models[0].schedule_model
+
+    standalone_source = generate_descriptor_set(
+        view,
+        DescriptorAllowlist(keys=(view.descriptors[0].key,)),
+    ).source
+    assert "kTestLowScheduleViewCoreScheduleModels[]" in standalone_source
+    assert ".schedule_models = kTestLowScheduleViewCoreScheduleModels," in standalone_source
+
+
+def test_descriptor_set_family_pools_schedule_names_with_same_physical_row() -> None:
+    source_schedule = next(schedule_class for schedule_class in TEST_LOW_CORE_DESCRIPTOR_SET.schedule_classes if schedule_class.name == TEST_LOW_ADD_I32_DESCRIPTOR.schedule_class)
+    alias_schedule = replace(source_schedule, name="test.scalar.alias")
+    alias_descriptor = replace(
+        TEST_LOW_MUL_I32_DESCRIPTOR,
+        schedule_class=alias_schedule.name,
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        schedule_classes=(
+            *TEST_LOW_CORE_DESCRIPTOR_SET.schedule_classes,
+            alias_schedule,
+        ),
+        descriptors=(TEST_LOW_ADD_I32_DESCRIPTOR, alias_descriptor),
+    )
+
+    compiled, (view,) = compile_descriptor_set_family(
+        descriptor_set,
+        (descriptor_set,),
+    )
+    source_id = compiled.schedule_class_ids[source_schedule.name]
+    alias_id = compiled.schedule_class_ids[alias_schedule.name]
+
+    assert source_id != alias_id
+    assert view.schedule_class_row_ids[source_id] == view.schedule_class_row_ids[alias_id]
+    assert len(compiled.schedule_class_table.schedule_classes) < len(compiled.schedule_classes)
 
 
 @pytest.mark.parametrize("segmented_operands", [False, True])
@@ -2417,7 +2510,8 @@ def test_descriptor_set_family_shares_exact_sibling_view_tables() -> None:
     assert source.count(".descriptor_count = 2,") == 2
     assert source.count(".descriptor_ordinal_count = 3,") == 2
     assert "ScheduleClassRowIds" not in source
-    assert source.count(".schedule_classes = kTestLowCoreScheduleClasses,") == 2
+    assert source.count(".schedule_classes = kTestLowCoreScheduleClasses,") == 1
+    assert source.count(".schedule_models = kTestLowFirstCoreScheduleModels,") == 2
     assert "#define TEST_LOW_FIRST_CORE_DESCRIPTOR_REF_TEST_STATE_ADD_I32 1u" in generated.view_headers[0]
     assert "#define TEST_LOW_SECOND_CORE_DESCRIPTOR_REF_TEST_STATE_ADD_I32_RHS_ZERO 2u" in generated.view_headers[1]
 

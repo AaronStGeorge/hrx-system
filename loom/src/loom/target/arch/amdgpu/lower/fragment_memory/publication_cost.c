@@ -24,30 +24,31 @@
 // gate rather than pulling the complete encoding tables into source lowering.
 IREE_ATTRIBUTE_NOINLINE static const loom_low_schedule_class_t*
 loom_amdgpu_fragment_publication_schedule_class(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_fragment_memory_publication_query_t* query,
     loom_amdgpu_descriptor_ref_t descriptor_ref) {
   const loom_low_descriptor_t* descriptor =
-      loom_amdgpu_descriptor_ref_descriptor(descriptor_set, descriptor_ref);
+      loom_amdgpu_descriptor_ref_descriptor(query->descriptor_set,
+                                            descriptor_ref);
   if (descriptor == NULL) {
     return NULL;
   }
   const loom_low_descriptor_view_t* descriptor_view =
-      loom_low_descriptor_set_descriptor_view(descriptor_set, descriptor);
-  return loom_low_descriptor_set_schedule_class(descriptor_set,
+      loom_low_descriptor_set_descriptor_view(query->descriptor_set,
+                                              descriptor);
+  return loom_low_schedule_model_schedule_class(query->schedule_model,
                                                 descriptor_view);
 }
 
 IREE_ATTRIBUTE_NOINLINE static bool
 loom_amdgpu_fragment_publication_add_descriptor(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_fragment_memory_publication_query_t* query,
     loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t count,
     loom_low_representation_cost_t* inout_cost) {
   if (count == 0) {
     return true;
   }
   const loom_low_schedule_class_t* schedule_class =
-      loom_amdgpu_fragment_publication_schedule_class(descriptor_set,
-                                                      descriptor_ref);
+      loom_amdgpu_fragment_publication_schedule_class(query, descriptor_ref);
   if (schedule_class == NULL) {
     return false;
   }
@@ -61,17 +62,16 @@ loom_amdgpu_fragment_publication_add_descriptor(
 
 IREE_ATTRIBUTE_NOINLINE static uint16_t
 loom_amdgpu_fragment_publication_schedule_distance(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_fragment_memory_publication_query_t* query,
     loom_amdgpu_descriptor_ref_t descriptor_ref) {
   const loom_low_schedule_class_t* schedule_class =
-      loom_amdgpu_fragment_publication_schedule_class(descriptor_set,
-                                                      descriptor_ref);
+      loom_amdgpu_fragment_publication_schedule_class(query, descriptor_ref);
   return loom_low_schedule_class_schedule_distance_cycles(schedule_class);
 }
 
 IREE_ATTRIBUTE_NOINLINE static bool
 loom_amdgpu_fragment_publication_add_vgpr_immediate(
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_fragment_memory_publication_query_t* query,
     loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t immediate,
     uint32_t count, loom_low_representation_cost_t* inout_cost) {
   if (count == 0) {
@@ -79,34 +79,33 @@ loom_amdgpu_fragment_publication_add_vgpr_immediate(
   }
   const loom_amdgpu_descriptor_ref_t selected_descriptor_ref =
       loom_amdgpu_select_vgpr_binary_immediate_descriptor_ref(
-          descriptor_set, descriptor_ref, immediate);
+          query->descriptor_set, descriptor_ref, immediate);
   return selected_descriptor_ref != LOOM_AMDGPU_DESCRIPTOR_REF_NONE &&
          loom_amdgpu_fragment_publication_add_descriptor(
-             descriptor_set, selected_descriptor_ref, count, inout_cost);
+             query, selected_descriptor_ref, count, inout_cost);
 }
 
 IREE_ATTRIBUTE_NOINLINE static bool
 loom_amdgpu_fragment_publication_add_compare_immediate(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t immediate,
-    loom_low_representation_cost_t* inout_cost,
+    const loom_amdgpu_fragment_memory_publication_query_t* query,
+    uint32_t immediate, loom_low_representation_cost_t* inout_cost,
     loom_amdgpu_descriptor_ref_t* out_compare_descriptor_ref) {
   const loom_amdgpu_descriptor_ref_t inline_descriptor_ref =
       kLoomAmdgpuVectorCmpiCompareDescriptorCandidates
           [LOOM_VECTOR_CMPI_PREDICATE_EQ]
               .src1_inline_descriptor_ref;
   if (immediate <= LOOM_AMDGPU_SOURCE_INLINE_U32_MAX &&
-      loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+      loom_amdgpu_descriptor_set_has_ref(query->descriptor_set,
                                          inline_descriptor_ref)) {
     *out_compare_descriptor_ref = inline_descriptor_ref;
     return loom_amdgpu_fragment_publication_add_descriptor(
-        descriptor_set, inline_descriptor_ref, 1, inout_cost);
+        query, inline_descriptor_ref, 1, inout_cost);
   }
   *out_compare_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32;
   return loom_amdgpu_fragment_publication_add_descriptor(
-             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, 1,
-             inout_cost) &&
+             query, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, 1, inout_cost) &&
          loom_amdgpu_fragment_publication_add_descriptor(
-             descriptor_set, *out_compare_descriptor_ref, 1, inout_cost);
+             query, *out_compare_descriptor_ref, 1, inout_cost);
 }
 
 IREE_ATTRIBUTE_NOINLINE static bool
@@ -117,7 +116,7 @@ loom_amdgpu_fragment_publication_add_conversions(
     loom_low_representation_cost_t* inout_cost) {
   const loom_low_descriptor_set_t* descriptor_set = query->descriptor_set;
   if (!loom_amdgpu_fragment_publication_add_vgpr_immediate(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 16,
+          query, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 16,
           packed_shift_count, inout_cost)) {
     return false;
   }
@@ -126,8 +125,8 @@ loom_amdgpu_fragment_publication_add_conversions(
   if (iree_any_bit_set(query->source_flags,
                        LOOM_AMDGPU_FRAGMENT_PUBLICATION_SOURCE_FLAG_SCALED) &&
       !loom_amdgpu_fragment_publication_add_descriptor(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_F32,
-          converted_lane_count, inout_cost)) {
+          query, LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_F32, converted_lane_count,
+          inout_cost)) {
     return false;
   }
 
@@ -136,7 +135,7 @@ loom_amdgpu_fragment_publication_add_conversions(
   if (query->payload_form ==
       LOOM_AMDGPU_FRAGMENT_MEMORY_PAYLOAD_FORM_STORE_NARROW_F32_TO_F16) {
     if (!loom_amdgpu_fragment_publication_add_descriptor(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F16_F32,
+            query, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_F16_F32,
             converted_lane_count, inout_cost)) {
       return false;
     }
@@ -144,8 +143,8 @@ loom_amdgpu_fragment_publication_add_conversions(
       if (loom_amdgpu_descriptor_set_has_ref(
               descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_PACK_B32_F16)) {
         if (!loom_amdgpu_fragment_publication_add_descriptor(
-                descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_PACK_B32_F16,
-                pair_count, inout_cost)) {
+                query, LOOM_AMDGPU_DESCRIPTOR_REF_V_PACK_B32_F16, pair_count,
+                inout_cost)) {
           return false;
         }
       } else {
@@ -157,8 +156,8 @@ loom_amdgpu_fragment_publication_add_conversions(
     if (loom_amdgpu_descriptor_set_has_ref(
             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_BF16_F32)) {
       if (!loom_amdgpu_fragment_publication_add_descriptor(
-              descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_BF16_F32,
-              pair_count, inout_cost)) {
+              query, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_BF16_F32, pair_count,
+              inout_cost)) {
         return false;
       }
     } else {
@@ -169,33 +168,33 @@ loom_amdgpu_fragment_publication_add_conversions(
 
   if (bf16_lane_count != 0 &&
       (!loom_amdgpu_fragment_publication_add_vgpr_immediate(
-           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 16,
+           query, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 16,
            bf16_lane_count, inout_cost) ||
        !loom_amdgpu_fragment_publication_add_vgpr_immediate(
-           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, 1,
-           bf16_lane_count, inout_cost))) {
+           query, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, 1, bf16_lane_count,
+           inout_cost))) {
     return false;
   }
   if (bf16_lane_count != 0 &&
       loom_amdgpu_descriptor_set_has_ref(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD3_U32_SRC2_LIT)) {
     if (!loom_amdgpu_fragment_publication_add_descriptor(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD3_U32_SRC2_LIT,
+            query, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD3_U32_SRC2_LIT,
             bf16_lane_count, inout_cost)) {
       return false;
     }
   } else if (bf16_lane_count != 0 &&
              (!loom_amdgpu_fragment_publication_add_vgpr_immediate(
-                  descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT,
+                  query, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT,
                   UINT32_C(0x7FFF), bf16_lane_count, inout_cost) ||
               !loom_amdgpu_fragment_publication_add_descriptor(
-                  descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32,
-                  bf16_lane_count, inout_cost))) {
+                  query, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32, bf16_lane_count,
+                  inout_cost))) {
     return false;
   }
   if (bf16_lane_count != 0 &&
       !loom_amdgpu_fragment_publication_add_vgpr_immediate(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 16,
+          query, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 16,
           bf16_lane_count, inout_cost)) {
     return false;
   }
@@ -206,18 +205,18 @@ loom_amdgpu_fragment_publication_add_conversions(
   if (loom_amdgpu_descriptor_set_has_ref(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_U16_U32)) {
     return loom_amdgpu_fragment_publication_add_descriptor(
-        descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_U16_U32,
-        pack_u16_count, inout_cost);
+        query, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_U16_U32, pack_u16_count,
+        inout_cost);
   }
   return loom_amdgpu_fragment_publication_add_vgpr_immediate(
-             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
-             UINT16_MAX, pack_u16_count, inout_cost) &&
+             query, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, UINT16_MAX,
+             pack_u16_count, inout_cost) &&
          loom_amdgpu_fragment_publication_add_vgpr_immediate(
-             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 16,
+             query, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 16,
              pack_u16_count, inout_cost) &&
          loom_amdgpu_fragment_publication_add_descriptor(
-             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32,
-             pack_u16_count, inout_cost);
+             query, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, pack_u16_count,
+             inout_cost);
 }
 
 static const uint64_t kLoomAmdgpuLaneIndexBitMasks[] = {
@@ -299,7 +298,7 @@ bool loom_amdgpu_fragment_publication_cost_direct(
   // packet is scalar and the repeated entry can be costed as one batch.
   if (packet_count == query->register_count) {
     if (!loom_amdgpu_fragment_publication_add_descriptor(
-            query->descriptor_set,
+            query,
             loom_amdgpu_fragment_memory_publication_packet_descriptor_ref(
                 packets[0]),
             packet_count, &recipe_cost) ||
@@ -364,7 +363,7 @@ bool loom_amdgpu_fragment_publication_cost_direct(
       continue;
     }
     if (!loom_amdgpu_fragment_publication_add_descriptor(
-            query->descriptor_set, descriptor_refs[result_register_count],
+            query, descriptor_refs[result_register_count],
             packet_counts[result_register_count], &recipe_cost)) {
       return false;
     }
@@ -398,26 +397,24 @@ bool loom_amdgpu_fragment_publication_cost_crosslane(
       LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   bool available =
       loom_amdgpu_fragment_publication_add_vgpr_immediate(
-          query->descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+          query, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
           publication->publishing_participant_and_mask, 1, &recipe_cost) &&
       loom_amdgpu_fragment_publication_add_compare_immediate(
-          query->descriptor_set,
-          publication->publishing_participant_equal_value, &recipe_cost,
+          query, publication->publishing_participant_equal_value, &recipe_cost,
           &compare_descriptor_ref) &&
       loom_amdgpu_fragment_publication_add_descriptor(
-          query->descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64,
-          1, &recipe_cost) &&
+          query, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64, 1,
+          &recipe_cost) &&
       loom_amdgpu_fragment_publication_add_descriptor(
-          query->descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC, 1,
-          &recipe_cost);
+          query, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC, 1, &recipe_cost);
   if (available && !uses_dpp) {
     available =
         loom_amdgpu_fragment_publication_add_vgpr_immediate(
-            query->descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_XOR_B32_LIT,
+            query, LOOM_AMDGPU_DESCRIPTOR_REF_V_XOR_B32_LIT,
             publication->paired_participant_xor_mask, 1, &recipe_cost) &&
         loom_amdgpu_fragment_publication_add_vgpr_immediate(
-            query->descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-            2, 1, &recipe_cost);
+            query, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 2, 1,
+            &recipe_cost);
   }
   const bool pre_narrow_bf16 =
       query->payload_form ==
@@ -438,13 +435,11 @@ bool loom_amdgpu_fragment_publication_cost_crosslane(
   }
   if (available) {
     available = loom_amdgpu_fragment_publication_add_descriptor(
-        query->descriptor_set, exchange_descriptor_ref, query->register_count,
-        &recipe_cost);
+        query, exchange_descriptor_ref, query->register_count, &recipe_cost);
   }
   if (available) {
     available = loom_amdgpu_fragment_publication_add_descriptor(
-        query->descriptor_set, store_descriptor_ref, query->register_count,
-        &recipe_cost);
+        query, store_descriptor_ref, query->register_count, &recipe_cost);
   }
   if (!available) {
     return false;
@@ -452,10 +447,10 @@ bool loom_amdgpu_fragment_publication_cost_crosslane(
 
   const uint32_t compare_distance =
       loom_amdgpu_fragment_publication_schedule_distance(
-          query->descriptor_set, compare_descriptor_ref);
+          query, compare_descriptor_ref);
   const uint32_t exchange_distance =
       loom_amdgpu_fragment_publication_schedule_distance(
-          query->descriptor_set, exchange_descriptor_ref);
+          query, exchange_descriptor_ref);
   const uint32_t dependency_distance = compare_distance > exchange_distance
                                            ? compare_distance
                                            : exchange_distance;

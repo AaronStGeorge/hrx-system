@@ -124,6 +124,15 @@ class CompiledScheduleClassTable:
 
 
 @dataclass(frozen=True, slots=True)
+class CompiledNamedScheduleModel:
+    """Named machine model and its projection into pooled behavior rows."""
+
+    key: str
+    schedule_model: CompiledScheduleModel
+    schedule_class_row_ids: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class DescriptorAllowlist:
     keys: tuple[str, ...] = ()
     semantic_tags: tuple[str, ...] = ()
@@ -286,6 +295,8 @@ class DescriptorSetView:
     schedule_model: CompiledScheduleModel
     # Runtime row IDs indexed by canonical schedule-class ID. Empty is identity.
     schedule_class_row_ids: tuple[int, ...]
+    # Named machine models selected from target facts at function binding.
+    schedule_models: tuple[CompiledNamedScheduleModel, ...]
     storage_descriptor_ordinals: tuple[int, ...]
     descriptor_ordinal_count: int
     descriptor_membership_words: tuple[int, ...]

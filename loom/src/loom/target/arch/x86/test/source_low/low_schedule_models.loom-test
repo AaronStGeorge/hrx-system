@@ -42,3 +42,26 @@ low.func.def target<x86.avx512.core>(@target) abi(object_function) @avx512_vecto
   %d0 = vaddps %d, %d
   return %a0, %b0, %c0, %d0
 }
+
+// ====
+// RUN: emit low-schedule-query @znver5_sqrt_chains strategy=resource-stall order=* issue=*
+
+x86.target<avx2> @target {tune = znver5}
+
+// Zen 5 can begin one YMM square root every five cycles, while each result has
+// a 15-cycle dependency latency. Open both chains before either continuation.
+low.func.def target<x86.avx2.core>(@target) @znver5_sqrt_chains(%a: reg<x86.ymm>, %b: reg<x86.ymm>) -> (reg<x86.ymm>, reg<x86.ymm>) asm {
+  %a0 = vsqrtps.ymm %a
+  %a1 = vsqrtps.ymm %a0
+  %b0 = vsqrtps.ymm %b
+  %b1 = vsqrtps.ymm %b0
+  return %a1, %b1
+}
+
+// ----
+block 0 order: 0, 2, 1, 3, 4
+node 0 issue-cycle: 0
+node 1 issue-cycle: 15
+node 2 issue-cycle: 5
+node 3 issue-cycle: 20
+node 4 issue-cycle: 35

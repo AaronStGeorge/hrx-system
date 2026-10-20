@@ -32,6 +32,10 @@ from loom.gen.target.low.low_descriptors import (  # noqa: E402
     write_descriptor_set_to_paths,
 )
 from loom.target.arch.x86.descriptors.encoding import validate_descriptor_encoding  # noqa: E402
+from loom.target.arch.x86.machine_models import (  # noqa: E402
+    attach_x86_machine_schedule_models,
+    project_x86_machine_schedule_classes,
+)
 from loom.target.arch.x86.target_info import (  # noqa: E402
     X86DescriptorSetInfo,
     x86_descriptor_set_info_by_generator_target,
@@ -64,7 +68,7 @@ def _parse_view_headers(values: Sequence[str]) -> dict[str, Path]:
 
 
 def _descriptor_set_for_info(info: X86DescriptorSetInfo) -> DescriptorSet:
-    descriptor_set = resolve_descriptor_set(info.key)
+    descriptor_set = project_x86_machine_schedule_classes(resolve_descriptor_set(info.key))
     for descriptor in descriptor_set.descriptors:
         validate_descriptor_encoding(descriptor)
     return replace(
@@ -131,11 +135,21 @@ def descriptor_set_family_specs(
     """Builds the shared storage spec and ordered public view specs."""
     descriptor_set = _descriptor_set_for_info(storage_info)
     view_descriptor_sets = tuple(_descriptor_set_for_info(info) for info in view_infos)
-    storage_descriptor_set = _shared_storage_descriptor_set(
-        descriptor_set,
-        view_descriptor_sets,
+    storage_descriptor_set = attach_x86_machine_schedule_models(
+        _shared_storage_descriptor_set(
+            descriptor_set,
+            view_descriptor_sets,
+        )
     )
-    return storage_descriptor_set, (*view_descriptor_sets, descriptor_set)
+
+    shared_views = tuple(
+        replace(
+            view,
+            schedule_models=storage_descriptor_set.schedule_models,
+        )
+        for view in (*view_descriptor_sets, descriptor_set)
+    )
+    return storage_descriptor_set, shared_views
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -191,7 +205,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             write_text_file(view_header_path, view_header)
         return 0
 
-    descriptor_set = _descriptor_set_for_info(descriptor_set_info)
+    descriptor_set = attach_x86_machine_schedule_models(_descriptor_set_for_info(descriptor_set_info))
     write_descriptor_set_to_paths(
         descriptor_set,
         header_path=args.header,

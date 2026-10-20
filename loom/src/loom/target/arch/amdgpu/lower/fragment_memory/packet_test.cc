@@ -248,8 +248,13 @@ TEST(AmdgpuFragmentMemoryPacketTest,
       LOOM_CONTRACT_OPERAND_ROLE_RESULT, &layout->result, representation->flags,
       2, axis_strides, &address_layout, runtime_axes, nullptr));
   const uint32_t static_axis_byte_strides[2] = {32, 2};
+  const loom_low_schedule_model_t* schedule_model =
+      loom_low_descriptor_set_lookup_schedule_model_by_id(
+          descriptor_set, UINT64_C(0x2a42ccc9fb04b34e));
+  ASSERT_NE(schedule_model, nullptr);
   const loom_amdgpu_fragment_memory_publication_query_t query = {
       .descriptor_set = descriptor_set,
+      .schedule_model = schedule_model,
       .layout = layout,
       .address_layout = &address_layout,
       .runtime_axes = runtime_axes,

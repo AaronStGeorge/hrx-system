@@ -368,7 +368,12 @@ TEST_F(TargetFunctionContractTest,
   };
   const loom_target_config_t module_config = {
       .name = IREE_SVL("spirv.logical.core"),
-      .contract_set_key = IREE_SVL("spirv.logical.core"),
+      .schedule_model_stable_id = UINT64_C(0x5b86e123b2b92ba9),
+      .contract_set =
+          {
+              .stable_id = UINT64_C(0x5b86e123b2b92ba9),
+              .spelling = IREE_SVL("spirv.logical.core"),
+          },
       .contract_feature_bits = 1,
   };
   const loom_target_bundle_t module_bundle = {
@@ -416,7 +421,12 @@ TEST_F(TargetFunctionContractTest, BundleCompatibilityRejectsContractShape) {
   };
   loom_target_config_t module_config = {
       .name = IREE_SVL("spirv.logical.core"),
-      .contract_set_key = IREE_SVL("spirv.logical.core"),
+      .schedule_model_stable_id = UINT64_C(0x5b86e123b2b92ba9),
+      .contract_set =
+          {
+              .stable_id = UINT64_C(0x5b86e123b2b92ba9),
+              .spelling = IREE_SVL("spirv.logical.core"),
+          },
   };
   const loom_target_bundle_t module_bundle = {
       .name = IREE_SVL("spirv-vulkan1.3"),
@@ -445,7 +455,10 @@ TEST_F(TargetFunctionContractTest, BundleCompatibilityRejectsContractShape) {
       &module_bundle, &selected_bundle));
   selected_snapshot = module_snapshot;
 
-  selected_config.contract_set_key = IREE_SV("other.contract");
+  selected_config.contract_set = {
+      .stable_id = UINT64_C(0x48d1e60884bd8fff),
+      .spelling = IREE_SV("other.contract"),
+  };
   EXPECT_FALSE(loom_target_function_contract_bundles_compatible(
       &module_bundle, &selected_bundle));
 }

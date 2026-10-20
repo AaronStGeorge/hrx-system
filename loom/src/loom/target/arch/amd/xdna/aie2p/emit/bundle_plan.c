@@ -108,6 +108,8 @@ typedef struct loom_aie2p_bundle_plan_builder_t {
   const loom_low_emission_frame_t* frame;
   // Exact AIE2P descriptor set selected by the frame.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Machine schedule model selected by the frame.
+  const loom_low_schedule_model_t* schedule_model;
   // Arena-backed bundle storage owned by the final plan.
   loom_aie2p_planned_bundle_t* bundles;
   // Number of populated records in |bundles|.
@@ -1010,7 +1012,7 @@ static void loom_aie2p_bundle_plan_instruction(
       builder->instruction_registers +
       group_index * descriptor_set->maximum_descriptor_operand_count;
   builder->instructions[group_index] = loom_low_physical_instruction_make(
-      descriptor_set, descriptor_ordinal, registers);
+      descriptor_set, builder->schedule_model, descriptor_ordinal, registers);
   for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
     const loom_low_operand_t* operand =
         loom_low_descriptor_operand(descriptor_set, descriptor, i);
@@ -1234,7 +1236,7 @@ static iree_status_t loom_aie2p_bundle_plan_admit_instruction(
   loom_aie2p_bundle_format_id_t format;
   do {
     const uint32_t lookback =
-        builder->descriptor_set->resource_calendar_lookback_cycles;
+        builder->schedule_model->resource_calendar_lookback_cycles;
     IREE_RETURN_IF_ERROR(loom_aie2p_bundle_plan_flush_pending(
         builder, cycle > lookback ? cycle - lookback : 0));
     pending = &builder->pending.bundles[cycle % builder->pending.capacity];
@@ -1335,9 +1337,9 @@ static iree_status_t loom_aie2p_bundle_plan_try_place_control(
       builder, &control_slot,
       (loom_aie2p_slot_realization_t){.descriptor_ordinal = descriptor_ordinal},
       (uint16_t)retained_slot_count);
-  if (!loom_low_physical_issue_group_fits(builder->descriptor_set,
-                                          builder->instructions,
-                                          (uint16_t)candidate_slot_count) ||
+  if (!loom_low_physical_issue_group_fits(
+          builder->descriptor_set, builder->schedule_model,
+          builder->instructions, (uint16_t)candidate_slot_count) ||
       loom_low_physical_issue_register_ready_cycle(
           &builder->issue, &builder->instructions[retained_slot_count], 1) >
           candidate_cycle) {
@@ -1808,8 +1810,11 @@ static iree_status_t loom_aie2p_bundle_plan_build_impl(
   loom_aie2p_bundle_plan_builder_t builder = {
       .frame = frame,
       .descriptor_set = descriptor_set,
+      .schedule_model = frame->schedule.target.schedule_model,
       .block_count = frame->schedule.block_count,
-      .pending.capacity = descriptor_set->resource_calendar_lookback_cycles + 1,
+      .pending.capacity = frame->schedule.target.schedule_model
+                              ->resource_calendar_lookback_cycles +
+                          1,
   };
   IREE_RETURN_IF_ERROR(loom_low_physical_issue_initialize(
       &frame->schedule, scratch_arena, &builder.issue));

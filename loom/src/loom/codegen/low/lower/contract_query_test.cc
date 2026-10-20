@@ -90,7 +90,7 @@ iree_status_t ResolveDescriptorFromArray(
 
 const loom_target_config_t kTargetConfig = {
     .name = IREE_SV("test-config"),
-    .contract_set_key = {},
+    .contract_set = {},
     .contract_feature_bits = 0,
 };
 

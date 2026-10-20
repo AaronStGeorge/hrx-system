@@ -444,7 +444,7 @@ void loom_aie2p_low_lower_policy_registry_initialize(
     loom_low_lower_policy_registry_t* out_registry) {
   static const loom_low_lower_policy_registry_entry_t kEntries[] = {
       {
-          .contract_set_key = IREE_SVL("amd.xdna.aie2p.core"),
+          .contract_set_stable_id = UINT64_C(0x25ed3c7d25a1452a),
           .policy = &kAie2pCoreLowLowerPolicy,
       },
   };

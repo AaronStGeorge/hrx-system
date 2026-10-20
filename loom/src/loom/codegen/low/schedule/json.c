@@ -442,7 +442,9 @@ iree_status_t loom_low_schedule_format_json(
     iree_string_view_t schedule_class_name = iree_string_view_empty();
     if (schedule_class != NULL) {
       schedule_class_name = loom_low_descriptor_set_string(
-          table->target.descriptor_set, schedule_class->name_string_ref);
+          table->target.descriptor_set,
+          loom_low_descriptor_set_schedule_class_name_string_ref(
+              table->target.descriptor_set, node->schedule_class_id));
     }
     IREE_RETURN_IF_ERROR(
         loom_json_object_begin_field(&node_object, IREE_SV("schedule_class")));
@@ -590,8 +592,9 @@ iree_status_t loom_low_schedule_format_json(
         dependency->producer_attachment_index, LOOM_LOW_ID_NONE));
     IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_nullable_string_field(
         &dependency_object, IREE_SV("producer_event"),
-        loom_low_descriptor_set_timing_event_name(
-            table->target.descriptor_set, dependency->producer_event_id)));
+        loom_low_schedule_model_timing_event_name(
+            table->target.descriptor_set, table->target.schedule_model,
+            dependency->producer_event_id)));
     IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
         &dependency_object, IREE_SV("consumer_attachment_kind"),
         iree_make_cstring_view(
@@ -602,8 +605,9 @@ iree_status_t loom_low_schedule_format_json(
         dependency->consumer_attachment_index, LOOM_LOW_ID_NONE));
     IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_nullable_string_field(
         &dependency_object, IREE_SV("consumer_event"),
-        loom_low_descriptor_set_timing_event_name(
-            table->target.descriptor_set, dependency->consumer_event_id)));
+        loom_low_schedule_model_timing_event_name(
+            table->target.descriptor_set, table->target.schedule_model,
+            dependency->consumer_event_id)));
     IREE_RETURN_IF_ERROR(loom_json_object_write_int32_field(
         &dependency_object, IREE_SV("minimum_issue_separation_cycles"),
         dependency->minimum_issue_separation_cycles));
@@ -794,6 +798,8 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_json_array_begin(&stream, &resource_uses));
     const loom_low_descriptor_set_t* descriptor_set =
         table->target.descriptor_set;
+    const loom_low_schedule_model_t* schedule_model =
+        table->target.schedule_model;
     for (iree_host_size_t scheduled_index = 0;
          scheduled_index < table->scheduled_node_count; ++scheduled_index) {
       const uint32_t node_index =
@@ -807,11 +813,11 @@ iree_status_t loom_low_schedule_format_json(
            issue_use_ordinal < schedule_class->issue_use_count;
            ++issue_use_ordinal) {
         const loom_low_issue_use_t* issue_use =
-            &descriptor_set->issue_uses[schedule_class->issue_use_start +
+            &schedule_model->issue_uses[schedule_class->issue_use_start +
                                         issue_use_ordinal];
-        IREE_ASSERT_LT(issue_use->resource_id, descriptor_set->resource_count);
+        IREE_ASSERT_LT(issue_use->resource_id, schedule_model->resource_count);
         const loom_low_resource_t* resource =
-            &descriptor_set->resources[issue_use->resource_id];
+            &schedule_model->resources[issue_use->resource_id];
         IREE_RETURN_IF_ERROR(loom_json_array_begin_element(&resource_uses));
         loom_json_object_writer_t use_object;
         IREE_RETURN_IF_ERROR(loom_json_object_begin(&stream, &use_object));
@@ -922,13 +928,15 @@ iree_status_t loom_low_schedule_format_json(
           &table->nodes[hazard_use->node_index];
       const loom_low_descriptor_set_t* descriptor_set =
           table->target.descriptor_set;
+      const loom_low_schedule_model_t* schedule_model =
+          table->target.schedule_model;
       const loom_low_hazard_t* hazard =
-          &descriptor_set->hazards[hazard_use->hazard_index];
+          &schedule_model->hazards[hazard_use->hazard_index];
       iree_string_view_t resource_name = iree_string_view_empty();
       if (hazard->reference_kind == LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE) {
         resource_name = loom_low_descriptor_set_string(
             descriptor_set,
-            descriptor_set->resources[hazard->reference_id].name_string_ref);
+            schedule_model->resources[hazard->reference_id].name_string_ref);
       }
       iree_string_view_t hazard_kind_name =
           loom_low_hazard_kind_name(hazard->kind);

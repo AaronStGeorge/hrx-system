@@ -173,6 +173,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:frame",
         "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/target/arch/x86:facts",
         "//loom/src/loom/target/emit/native:module",
         "//loom/src/loom/target/reporting:low",
         "//loom/src/loom/target/reporting:report",
@@ -228,10 +229,12 @@ iree_py_test(
         "$(rootpath //loom/src/loom/tools/loom-compile:loom-compile)",
         "$(rootpath test/callable.loom)",
         "$(rootpath test/hal_dispatch.loom)",
+        "$(rootpath test/schedule_model_callable.loom)",
     ],
     data = [
         "test/callable.loom",
         "test/hal_dispatch.loom",
+        "test/schedule_model_callable.loom",
         "//loom/src/loom/tools/loom-compile",
     ],
     target_compatible_with = loom_config_compatible_with([

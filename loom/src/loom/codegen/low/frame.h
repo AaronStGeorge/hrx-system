@@ -227,6 +227,8 @@ typedef struct loom_low_emission_frame_spill_free_options_t {
 // only functions with an absent or virtual allocation mode. Assigned or fixed
 // modes emit a semantic diagnostic and return OK with |out_accepted| false;
 // a caller accepting those modes must carry their retained allocation table.
+// Targetless Low has no machine schedule model and is likewise rejected before
+// scheduling; callers must provide authored or invocation-refined target facts.
 // |arena| must outlive |out_frame|. Schedule or allocation diagnostics return a
 // partial frame with the corresponding table |error_count| set and
 // |out_accepted| false; later emission stages have not consumed that frame.

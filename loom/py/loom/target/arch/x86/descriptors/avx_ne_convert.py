@@ -176,6 +176,7 @@ _AVX_NE_CONVERT_DESCRIPTORS = (
 
 X86_AVX_NE_CONVERT_DESCRIPTOR_SET = DescriptorSet(
     key="x86.avx_ne_convert.core",
+    inline_schedule_model_key="x86.generic",
     target_key="x86",
     feature_key="x86.avx_ne_convert.v1",
     c_header_path=Path(

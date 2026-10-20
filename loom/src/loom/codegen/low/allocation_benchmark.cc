@@ -953,7 +953,9 @@ class AllocationBenchmark {
                        loom_low_function_model_t* model) {
     IREE_CHECK_OK(loom_low_function_model_initialize(
         module_, function_, nullptr, &registry_.registry, {},
-        LOOM_LOW_FUNCTION_MODEL_FLAG_REGION_TREE, arena, model));
+        LOOM_LOW_FUNCTION_MODEL_FLAG_REGION_TREE |
+            LOOM_LOW_FUNCTION_MODEL_FLAG_REQUIRE_SCHEDULE_MODEL,
+        arena, model));
     Require(model->context.error_count == 0, "Function model failed");
   }
 

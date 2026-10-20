@@ -535,15 +535,15 @@ static const loom_target_math_policy_t kX86Avx512MathPolicy = {
 
 static const loom_target_math_policy_registry_entry_t kX86MathPolicyEntries[] =
     {
-        {/*.contract_set_key=*/IREE_SVL("x86.avx512.core"),
+        {/*.contract_set_stable_id=*/UINT64_C(0x06092b7cdc8ed7f3),
          /*.policy=*/&kX86Avx512MathPolicy},
-        {/*.contract_set_key=*/IREE_SVL("x86.avx2.core"),
+        {/*.contract_set_stable_id=*/UINT64_C(0x34e8f11d46a8a495),
          /*.policy=*/&kX86Avx2MathPolicy},
-        {/*.contract_set_key=*/IREE_SVL("x86.avx2_features.core"),
+        {/*.contract_set_stable_id=*/UINT64_C(0x4a4769fa07a2ddeb),
          /*.policy=*/&kX86Avx2MathPolicy},
-        {/*.contract_set_key=*/IREE_SVL("x86.packed_dot.core"),
+        {/*.contract_set_stable_id=*/UINT64_C(0x6ebbd729aef5811e),
          /*.policy=*/&kX86Avx2MathPolicy},
-        {/*.contract_set_key=*/IREE_SVL("x86.avx512_features.core"),
+        {/*.contract_set_stable_id=*/UINT64_C(0x7ddea86e8df4a0d5),
          /*.policy=*/&kX86Avx512MathPolicy},
 };
 

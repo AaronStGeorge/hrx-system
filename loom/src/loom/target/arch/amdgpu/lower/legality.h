@@ -75,14 +75,6 @@ iree_status_t loom_amdgpu_low_legality_verify_full_wave_direct_subgroup_width(
     iree_string_view_t direct_width_constraint_key,
     uint32_t* out_wavefront_size);
 
-// Returns true when the target bundle belongs to an AMDGPU contract set.
-bool loom_amdgpu_low_legality_bundle_is_amdgpu(
-    const loom_target_bundle_t* bundle);
-
-// Returns true when the descriptor set belongs to the AMDGPU target.
-bool loom_amdgpu_low_legality_descriptor_set_is_amdgpu(
-    const loom_low_descriptor_set_t* descriptor_set);
-
 // Returns true when source-to-low legality is evaluating an AMDGPU target.
 bool loom_amdgpu_low_legality_context_is_amdgpu(
     loom_target_low_legality_context_t* context);

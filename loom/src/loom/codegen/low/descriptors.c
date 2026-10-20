@@ -36,33 +36,34 @@ static iree_string_view_t loom_low_descriptor_set_string_view(
   return loom_string_pool_get(&descriptor_set->string_pool, string_ref);
 }
 
-iree_string_view_t loom_low_descriptor_set_timing_event_name(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t timing_event_id) {
+iree_string_view_t loom_low_schedule_model_timing_event_name(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_model_t* schedule_model, uint16_t timing_event_id) {
   if (timing_event_id == LOOM_LOW_TIMING_EVENT_NONE) {
     return iree_string_view_empty();
   }
-  IREE_ASSERT_LT(timing_event_id, descriptor_set->timing_event_count);
+  IREE_ASSERT_LT(timing_event_id, schedule_model->timing_event_count);
   return loom_low_descriptor_set_string_view(
       descriptor_set,
-      descriptor_set->timing_events[timing_event_id].name_string_ref);
+      schedule_model->timing_events[timing_event_id].name_string_ref);
 }
 
 const loom_low_event_separation_t*
-loom_low_descriptor_set_lookup_event_separation(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t producer_event_id,
+loom_low_schedule_model_lookup_event_separation(
+    const loom_low_schedule_model_t* schedule_model, uint16_t producer_event_id,
     uint16_t consumer_event_id) {
   if (producer_event_id == LOOM_LOW_TIMING_EVENT_NONE ||
       consumer_event_id == LOOM_LOW_TIMING_EVENT_NONE) {
     return NULL;
   }
-  IREE_ASSERT_LT(producer_event_id, descriptor_set->timing_event_count);
-  IREE_ASSERT_LT(consumer_event_id, descriptor_set->timing_event_count);
+  IREE_ASSERT_LT(producer_event_id, schedule_model->timing_event_count);
+  IREE_ASSERT_LT(consumer_event_id, schedule_model->timing_event_count);
   uint32_t begin = 0;
-  uint32_t end = descriptor_set->event_separation_count;
+  uint32_t end = schedule_model->event_separation_count;
   while (begin < end) {
     const uint32_t middle = begin + (end - begin) / 2;
     const loom_low_event_separation_t* candidate =
-        &descriptor_set->event_separations[middle];
+        &schedule_model->event_separations[middle];
     if (candidate->producer_event_id < producer_event_id ||
         (candidate->producer_event_id == producer_event_id &&
          candidate->consumer_event_id < consumer_event_id)) {
@@ -71,11 +72,11 @@ loom_low_descriptor_set_lookup_event_separation(
       end = middle;
     }
   }
-  if (begin == descriptor_set->event_separation_count) {
+  if (begin == schedule_model->event_separation_count) {
     return NULL;
   }
   const loom_low_event_separation_t* candidate =
-      &descriptor_set->event_separations[begin];
+      &schedule_model->event_separations[begin];
   return candidate->producer_event_id == producer_event_id &&
                  candidate->consumer_event_id == consumer_event_id
              ? candidate
@@ -188,11 +189,30 @@ uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key) {
   return loom_stable_id_from_string(key);
 }
 
-bool loom_low_descriptor_set_supports_target_contract(
+const loom_low_schedule_model_t*
+loom_low_descriptor_set_lookup_schedule_model_by_id(
+    const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id) {
+  uint32_t low = 0;
+  uint32_t high = descriptor_set->schedule_model_count;
+  while (low < high) {
+    const uint32_t mid = low + (high - low) / 2;
+    const loom_low_schedule_model_entry_t* entry =
+        &descriptor_set->schedule_models[mid];
+    if (entry->stable_id == stable_id) {
+      return entry->model;
+    }
+    if (entry->stable_id < stable_id) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return NULL;
+}
+
+bool loom_low_descriptor_set_supports_target_contract_id(
     const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_view_t target_contract_key) {
-  const uint64_t target_contract_stable_id =
-      loom_low_descriptor_stable_id_from_key(target_contract_key);
+    uint64_t target_contract_stable_id) {
   if (descriptor_set->stable_id == target_contract_stable_id) {
     return true;
   }
@@ -339,14 +359,28 @@ loom_low_descriptor_registry_descriptor_set_at_trusted(
 
 const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup(
     const loom_low_descriptor_registry_t* registry, iree_string_view_t key) {
+  const loom_target_contract_set_t identity = {
+      .stable_id = loom_low_descriptor_stable_id_from_key(key),
+      .spelling = key,
+  };
+  return loom_low_descriptor_registry_lookup_contract_set(registry, identity);
+}
+
+const loom_low_descriptor_set_t*
+loom_low_descriptor_registry_lookup_contract_set(
+    const loom_low_descriptor_registry_t* registry,
+    loom_target_contract_set_t identity) {
   iree_host_size_t descriptor_set_count =
       loom_low_descriptor_registry_descriptor_set_count(registry);
   for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
     const loom_low_descriptor_set_t* descriptor_set =
         loom_low_descriptor_registry_descriptor_set_at_trusted(registry, i);
+    if (descriptor_set->stable_id != identity.stable_id) {
+      continue;
+    }
     iree_string_view_t candidate_key =
         loom_low_descriptor_set_key(descriptor_set);
-    if (!iree_string_view_equal(candidate_key, key)) {
+    if (!iree_string_view_equal(candidate_key, identity.spelling)) {
       continue;
     }
     return descriptor_set;

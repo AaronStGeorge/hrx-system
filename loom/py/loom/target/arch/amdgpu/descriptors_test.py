@@ -467,6 +467,7 @@ def test_v_readlane_b32_reserves_unused_vop3_source() -> None:
 def _descriptor_set(*descriptors: Descriptor) -> DescriptorSet:
     return DescriptorSet(
         key="amdgpu.test.core",
+        inline_schedule_model_key="amdgpu.generic",
         target_key="amdgpu.test",
         feature_key="amdgpu.test",
         c_header_path=Path("test.h"),

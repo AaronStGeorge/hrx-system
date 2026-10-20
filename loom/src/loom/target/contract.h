@@ -539,6 +539,8 @@ typedef struct loom_target_contract_query_environment_t {
   const loom_target_facts_t* target_facts;
   // Low descriptor set selected for this query.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Machine schedule model selected with |descriptor_set|.
+  const loom_low_schedule_model_t* schedule_model;
   // Source value facts visible to the query.
   const loom_value_fact_table_t* fact_table;
   // Shared reference/access scope valid for this immutable source snapshot.

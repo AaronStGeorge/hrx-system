@@ -10,6 +10,7 @@
 #define LOOM_TARGET_EMIT_WASM_PROGRAM_H_
 
 #include "iree/base/api.h"
+#include "loom/codegen/low/descriptors.h"
 #include "loom/ir/ir.h"
 #include "loom/target/emit/wasm/types.h"
 
@@ -38,6 +39,8 @@ typedef struct loom_wasm_function_type_t {
 typedef struct loom_wasm_function_plan_t {
   // Structured Low function body walked by the WebAssembly writer.
   const loom_region_t* body;
+  // Machine schedule model resolved from this function's target facts.
+  const loom_low_schedule_model_t* schedule_model;
   // Function-local value IDs indexed by planned value ordinal.
   const loom_value_id_t* value_ids;
   // WebAssembly local index by planned value ordinal. Entries without a

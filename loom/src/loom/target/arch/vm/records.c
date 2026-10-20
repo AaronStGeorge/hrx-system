@@ -6,6 +6,9 @@
 
 #include "loom/target/arch/vm/records.h"
 
+#define LOOM_VM_CORE_SCHEDULE_MODEL_STABLE_ID UINT64_C(0x32476f14332ccb19)
+#define LOOM_VM_CORE_CONTRACT_SET_STABLE_ID UINT64_C(0x32476f14332ccb19)
+
 static const loom_target_snapshot_t kCoreSnapshot = {
     .name = IREE_SVL("vm.core"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_VM,
@@ -22,7 +25,12 @@ static const loom_target_export_plan_t kCoreExportPlan = {
 
 static const loom_target_config_t kCoreConfig = {
     .name = IREE_SVL("vm.core"),
-    .contract_set_key = IREE_SVL("vm.core"),
+    .schedule_model_stable_id = LOOM_VM_CORE_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_VM_CORE_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("vm.core"),
+        },
 };
 
 const loom_target_bundle_t loom_vm_core_target_bundle = {

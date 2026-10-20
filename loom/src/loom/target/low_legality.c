@@ -335,6 +335,11 @@ const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
   return context->descriptor_set;
 }
 
+const loom_low_schedule_model_t* loom_target_low_legality_schedule_model(
+    const loom_target_low_legality_context_t* context) {
+  return context->options->environment->schedule_model;
+}
+
 const loom_value_fact_table_t* loom_target_low_legality_fact_table(
     const loom_target_low_legality_context_t* context) {
   return context->options->environment->fact_table;

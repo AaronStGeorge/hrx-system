@@ -13,7 +13,7 @@ static iree_status_t loom_low_schedule_note_resource_use(
     const loom_low_issue_use_t* issue_use) {
   IREE_ASSERT(state->resource_summaries != NULL);
   IREE_ASSERT(issue_use->resource_id <
-              state->target.descriptor_set->resource_count);
+              state->target.schedule_model->resource_count);
   loom_low_schedule_resource_summary_t* summary =
       &state->resource_summaries[issue_use->resource_id];
   if (summary->use_count == UINT32_MAX) {
@@ -140,7 +140,7 @@ static iree_status_t loom_low_schedule_note_min_distance_hazard(
       iree_string_view_t resource_name = iree_string_view_empty();
       if (hazard->reference_kind == LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE) {
         const loom_low_resource_t* resource =
-            &state->target.descriptor_set->resources[hazard->reference_id];
+            &state->target.schedule_model->resources[hazard->reference_id];
         resource_name = loom_low_descriptor_set_string(
             state->target.descriptor_set, resource->name_string_ref);
       }
@@ -181,7 +181,7 @@ void loom_low_schedule_compact_resource_summaries(
   }
   iree_host_size_t write_index = 0;
   for (iree_host_size_t read_index = 0;
-       read_index < state->target.descriptor_set->resource_count;
+       read_index < state->target.schedule_model->resource_count;
        ++read_index) {
     if (state->resource_summaries[read_index].use_count == 0) {
       continue;
@@ -238,7 +238,9 @@ iree_status_t loom_low_schedule_note_descriptor_rows_for_node(
     }
     if (model_summary->use_count == 0) {
       iree_string_view_t schedule_class_name = loom_low_descriptor_set_string(
-          state->target.descriptor_set, schedule_class->name_string_ref);
+          state->target.descriptor_set,
+          loom_low_descriptor_set_schedule_class_name_string_ref(
+              state->target.descriptor_set, schedule_class_id));
       *model_summary = (loom_low_schedule_model_summary_t){
           .first_node = node_index,
           .schedule_class_id = schedule_class_id,
@@ -280,10 +282,10 @@ iree_status_t loom_low_schedule_note_descriptor_rows_for_node(
       state->current_issue_cycle));
   for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
     const loom_low_issue_use_t* issue_use =
-        &state->target.descriptor_set
+        &state->target.schedule_model
              ->issue_uses[schedule_class->issue_use_start + i];
     IREE_ASSERT(issue_use->resource_id <
-                state->target.descriptor_set->resource_count);
+                state->target.schedule_model->resource_count);
     IREE_RETURN_IF_ERROR(loom_low_schedule_note_resource_use(state, issue_use));
   }
   for (uint16_t i = 0; i < schedule_class->hazard_count; ++i) {
@@ -297,7 +299,7 @@ iree_status_t loom_low_schedule_note_descriptor_rows_for_node(
         };
     IREE_RETURN_IF_ERROR(loom_low_schedule_note_min_distance_hazard(
         state, node_index, i,
-        &state->target.descriptor_set->hazards[hazard_index]));
+        &state->target.schedule_model->hazards[hazard_index]));
   }
   return iree_ok_status();
 }

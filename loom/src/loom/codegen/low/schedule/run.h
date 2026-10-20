@@ -20,8 +20,9 @@ extern "C" {
 // table. Scheduler working storage is released before returning; the table
 // borrows no frontier, pressure, or dependency-index scratch. |model| must
 // remain live and its function semantically immutable until this function
-// returns. The model's arena-owned results must outlive consumers of the
-// returned table. Diagnosed schedule failures are reported through
+// returns, and its resolved target must select a machine schedule model. The
+// model's arena-owned results must outlive consumers of the returned table.
+// Diagnosed schedule failures are reported through
 // |options->emitter| and recorded in |out_table->error_count|; status failures
 // are reserved for infrastructure failures.
 //

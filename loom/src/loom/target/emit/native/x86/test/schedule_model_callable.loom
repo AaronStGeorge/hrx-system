@@ -1,0 +1,13 @@
+x86.target<avx2> @target {tune = znver5}
+
+low.func.def public target<x86.avx2.core>(@target) abi(object_function) abi_layout({signature = (buffer, buffer, buffer) -> ()}) @sqrt_chains(%a_ptr: reg<x86.gpr64>, %b_ptr: reg<x86.gpr64>, %output_ptr: reg<x86.gpr64>) asm {
+  %a = vmovdqu32.load.ymm %a_ptr {disp32 = 0}
+  %b = vmovdqu32.load.ymm %b_ptr {disp32 = 0}
+  %a0 = vsqrtps.ymm %a
+  %a1 = vsqrtps.ymm %a0
+  %b0 = vsqrtps.ymm %b
+  %b1 = vsqrtps.ymm %b0
+  %sum = vaddps.ymm %a1, %b1
+  vmovdqu32.store.ymm %sum, %output_ptr {disp32 = 0}
+  return
+}

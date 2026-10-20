@@ -24,8 +24,8 @@ bool loom_target_function_contract_bundles_compatible(
              requirement_bundle->snapshot->codegen_format &&
          effective_bundle->snapshot->artifact_format ==
              requirement_bundle->snapshot->artifact_format &&
-         iree_string_view_equal(effective_bundle->config->contract_set_key,
-                                requirement_bundle->config->contract_set_key);
+         effective_bundle->config->contract_set.stable_id ==
+             requirement_bundle->config->contract_set.stable_id;
 }
 
 static iree_string_view_t loom_target_function_contract_string_from_id(

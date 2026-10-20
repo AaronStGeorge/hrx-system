@@ -29,6 +29,9 @@ enum loom_target_projection_value_bits_e {
   LOOM_TARGET_PROJECTION_VALUE_I64_TO_U64 = 3,
   // String attr projected into an iree_string_view_t field.
   LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW = 4,
+  // String attr projected into a stable target-contract identity alongside
+  // its human-readable spelling.
+  LOOM_TARGET_PROJECTION_VALUE_CONTRACT_SET = 5,
 };
 typedef uint8_t loom_target_projection_value_kind_t;
 

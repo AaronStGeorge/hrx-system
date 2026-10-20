@@ -412,6 +412,7 @@ def _constant_descriptor(instruction: Instruction) -> Descriptor:
 
 VM_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="vm.core",
+    inline_schedule_model_key="vm.core",
     target_key="vm",
     feature_key=None,
     c_header_path=Path("loom/src/loom/target/arch/vm/descriptors/descriptors.h"),

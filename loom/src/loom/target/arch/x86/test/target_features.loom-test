@@ -6,4 +6,8 @@ x86.target<avx512> @inverse_feature_vocabulary {features = [-avx512vnni, avx512v
 
 x86.target<avx2> @explicit_empty {features = []}
 
+x86.target<avx2> @zen5 {tune = znver5}
+
+x86.target<avx512> @zen6 {tune = znver6}
+
 x86.target<scalar> @omitted

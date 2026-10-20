@@ -135,6 +135,9 @@ iree_status_t loom_x86_target_materialize_definition(
   if (has_features) {
     build_flags |= LOOM_X86_TARGET_BUILD_FLAG_HAS_FEATURES;
   }
+  if (facts->tune_is_explicit) {
+    build_flags |= LOOM_X86_TARGET_BUILD_FLAG_HAS_TUNE;
+  }
 
   uint64_t feature_words[2] = {
       facts->positive_feature_assertions,
@@ -172,6 +175,6 @@ iree_status_t loom_x86_target_materialize_definition(
       snapshot->memory_spaces.workgroup, snapshot->memory_spaces.constant,
       snapshot->memory_spaces.private_memory, snapshot->memory_spaces.host,
       snapshot->memory_spaces.descriptor, export_plan->abi_kind, export_symbol,
-      export_plan->linkage, LOOM_STRING_ID_INVALID, 0, features, location,
-      &target_op);
+      export_plan->linkage, LOOM_STRING_ID_INVALID, 0, facts->tune, features,
+      location, &target_op);
 }

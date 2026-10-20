@@ -51,7 +51,9 @@ low.func.def target<amd.xdna.aie2p.core> @native_controls(%left: reg<aie2p.vec25
 // MAC results clobber a complete accumulator and chain without a storage copy.
 // RUN: emit aie2p-leaf @partial_accumulation report=code
 
-low.func.def target<amd.xdna.aie2p.core> @partial_accumulation(%left: reg<aie2p.vec256 x2>, %right: reg<aie2p.vec256 x2>, %initial: reg<aie2p.ebmll>, %mode: reg<aie2p.er>) -> (reg<aie2p.mbms x4>) asm {
+aie2p.target<core> @target
+
+low.func.def target<amd.xdna.aie2p.core>(@target) @partial_accumulation(%left: reg<aie2p.vec256 x2>, %right: reg<aie2p.vec256 x2>, %initial: reg<aie2p.ebmll>, %mode: reg<aie2p.er>) -> (reg<aie2p.mbms x4>) asm {
   %first = vmac.bf16x16 %initial, %left, %right, %mode
   %second = vmac.bf16x32 %first, %left, %right, %mode
   return %second

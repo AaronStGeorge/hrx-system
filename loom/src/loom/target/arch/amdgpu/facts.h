@@ -64,8 +64,8 @@ typedef struct loom_amdgpu_target_facts_t {
   // choice; a callee cannot replace it with another supported mode.
   bool subgroup_size_explicit;
 
-  // True when contract_set_key was supplied as an explicit semantic input.
-  bool contract_set_key_explicit;
+  // True when the contract set was supplied as an explicit semantic input.
+  bool contract_set_explicit;
 } loom_amdgpu_target_facts_t;
 
 // Static fact type used by AMDGPU target projection and structured profiles.

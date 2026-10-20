@@ -793,7 +793,7 @@ void loom_low_schedule_pressure_compute_node_priorities(
         has_effect_consumer) {
       uint16_t completion_wait_cycles = 0;
       if (loom_low_schedule_class_query_completion_wait(
-              state->target.descriptor_set, node->schedule_class,
+              state->target.schedule_model, node->schedule_class,
               &completion_wait_cycles)) {
         state->node_opened_completion_latency_cycles[node_index] =
             node->schedule_class->latency_cycles;

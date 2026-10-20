@@ -301,7 +301,7 @@ iree_status_t loom_low_lower_source_invoke_plan(
     const iree_string_view_t callee_contract = loom_low_descriptor_set_string(
         callee_descriptor_set, callee_descriptor_set->key_string_ref);
     const iree_string_view_t caller_target_contract =
-        loom_low_lower_context_bundle(context)->config->contract_set_key;
+        loom_low_lower_context_bundle(context)->config->contract_set.spelling;
     return loom_low_source_call_emit_representation_error(
         context, source_op, callee_name, callee_contract,
         caller_target_contract);

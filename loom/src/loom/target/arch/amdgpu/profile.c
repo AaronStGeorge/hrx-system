@@ -13,9 +13,9 @@
 
 // Target bundles are defined by target_records.c and intentionally remain an
 // implementation detail shared with this generated preset table.
-#define LOOM_AMDGPU_TARGET_DESCRIPTOR_SET(                                \
-    symbol_suffix, bundle_name, snapshot_name, key, descriptor_set_flags, \
-    wavefront_size, workgroup_storage_byte_limit)                         \
+#define LOOM_AMDGPU_TARGET_DESCRIPTOR_SET(                              \
+    symbol_suffix, bundle_name, snapshot_name, key, stable_id,          \
+    descriptor_set_flags, wavefront_size, workgroup_storage_byte_limit) \
   extern const loom_target_bundle_t kAmdgpuLowTargetBundle##symbol_suffix##Core;
 #include "loom/target/arch/amdgpu/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_DESCRIPTOR_SET

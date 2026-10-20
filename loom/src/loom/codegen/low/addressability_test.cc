@@ -112,7 +112,7 @@ void InitializeAddressabilityTestState(
   const loom_low_resolved_target_t target = {
       .target_facts = &state->target_facts,
       .target_name = target_bundle->name,
-      .descriptor_set_key = target_bundle->config->contract_set_key,
+      .descriptor_set_key = target_bundle->config->contract_set.spelling,
       .feature_bits = target_bundle->config->contract_feature_bits,
       .descriptor_set = &state->descriptor_set,
   };

@@ -32,8 +32,8 @@ typedef struct loom_spirv_module_contract_t {
   loom_target_abi_kind_t abi_kind;
   // Descriptor set stable ID selected by the function.
   uint64_t descriptor_set_stable_id;
-  // Borrowed target-contract descriptor-set key.
-  iree_string_view_t contract_set_key;
+  // Stable target-contract descriptor-set identity.
+  uint64_t contract_set_stable_id;
   // Target-contract feature bits selected by the function.
   uint64_t contract_feature_bits;
 } loom_spirv_module_contract_t;
@@ -41,8 +41,7 @@ typedef struct loom_spirv_module_contract_t {
 // Captures the SPIR-V module contract implied by a prepared function binding.
 loom_spirv_module_contract_t loom_spirv_module_contract_make(
     iree_string_view_t target_name, const loom_target_bundle_t* target_bundle,
-    uint64_t descriptor_set_stable_id, iree_string_view_t contract_set_key,
-    uint64_t contract_feature_bits);
+    uint64_t descriptor_set_stable_id, uint64_t contract_feature_bits);
 
 // Returns true when both contracts can be emitted into one SPIR-V module.
 bool loom_spirv_module_contract_equal(const loom_spirv_module_contract_t* lhs,

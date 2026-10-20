@@ -33,6 +33,14 @@ typedef struct loom_target_low_descriptor_registry_t {
   loom_low_descriptor_registry_t registry;
 } loom_target_low_descriptor_registry_t;
 
+// Concrete Low representation selected for source lowering.
+typedef struct loom_target_low_source_binding_t {
+  // Descriptor set selected by the target's representation contract.
+  const loom_low_descriptor_set_t* descriptor_set;
+  // Schedule model selected by the target's explicit machine identity.
+  const loom_low_schedule_model_t* schedule_model;
+} loom_target_low_source_binding_t;
+
 // Initializes |out_registry| from linked package tables. The provider and
 // bundle tables are borrowed and must outlive |out_registry|.
 void loom_target_low_descriptor_registry_initialize_from_tables(
@@ -51,15 +59,17 @@ iree_status_t loom_target_low_descriptor_registry_append_to_tables(
     iree_host_size_t descriptor_set_provider_capacity,
     iree_host_size_t* descriptor_set_provider_count);
 
-// Selects the descriptor set into which source IR is lowered for |bundle|.
+// Selects the complete Low representation into which source IR is lowered.
 //
-// This is an exact lookup of |bundle->config->contract_set_key|. It is not
-// valid for interpreting existing Low IR, whose intrinsic representation
-// contract selects its descriptor set through loom_low_resolve_function_target.
-iree_status_t loom_target_low_descriptor_set_select_for_source_lowering(
+// The descriptor set and schedule model are exact lookups of the target
+// configuration identities. A missing model identity fails selection; no
+// descriptor-set model is privileged as a fallback. This is not valid for
+// interpreting existing Low IR, whose intrinsic representation binds through
+// loom_low_resolve_function_target.
+iree_status_t loom_target_low_source_binding_select(
     const loom_low_descriptor_registry_t* registry,
     const loom_target_bundle_t* bundle,
-    const loom_low_descriptor_set_t** out_descriptor_set);
+    loom_target_low_source_binding_t* out_binding);
 
 #ifdef __cplusplus
 }  // extern "C"

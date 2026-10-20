@@ -6,6 +6,11 @@
 
 #include "loom/target/arch/wasm/records/target_records.h"
 
+#define LOOM_WASM_CORE_SIMD128_SCHEDULE_MODEL_STABLE_ID \
+  UINT64_C(0x49e70aa103499a7e)
+#define LOOM_WASM_CORE_SIMD128_CONTRACT_SET_STABLE_ID \
+  UINT64_C(0x49e70aa103499a7e)
+
 #include <stdint.h>
 
 static const loom_target_snapshot_t kWasmCoreSimd128Snapshot = {
@@ -35,7 +40,12 @@ static const loom_target_export_plan_t kWasmCoreSimd128ExportPlan = {
 
 static const loom_target_config_t kWasmCoreSimd128Config = {
     .name = IREE_SVL("wasm.core.simd128"),
-    .contract_set_key = IREE_SVL("wasm.core.simd128"),
+    .schedule_model_stable_id = LOOM_WASM_CORE_SIMD128_SCHEDULE_MODEL_STABLE_ID,
+    .contract_set =
+        {
+            .stable_id = LOOM_WASM_CORE_SIMD128_CONTRACT_SET_STABLE_ID,
+            .spelling = IREE_SVL("wasm.core.simd128"),
+        },
 };
 
 const loom_target_bundle_t loom_wasm_low_target_bundle_core_simd128 = {

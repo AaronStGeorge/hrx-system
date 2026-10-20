@@ -326,7 +326,7 @@ void loom_test_low_lower_policy_registry_initialize(
     loom_low_lower_policy_registry_t* out_registry) {
   static const loom_low_lower_policy_registry_entry_t kEntries[] = {
       {
-          .contract_set_key = IREE_SVL("test.low.core"),
+          .contract_set_stable_id = UINT64_C(0x235c515ddcc8fd92),
           .policy = &kTestLowLowerPolicy,
       },
   };
