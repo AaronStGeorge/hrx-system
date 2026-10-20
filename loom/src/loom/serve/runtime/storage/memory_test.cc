@@ -9,8 +9,11 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <thread>
 #include <vector>
 
+#include "iree/async/frontier_tracker.h"
+#include "iree/base/threading/notification.h"
 #include "iree/hal/memory/fixed_block_pool.h"
 #include "iree/hal/memory/tlsf_pool.h"
 #include "iree/hal/testing/deferred_pool.h"
@@ -18,6 +21,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/serve/runtime/device/device.h"
 #include "loom/serve/runtime/execution/execution.h"
+#include "loom/serve/runtime/storage/virtual_pool.h"
 #include "loom/serve/testing/device.h"
 #include "loom/serve/testing/native_allocator.h"
 
@@ -156,9 +160,27 @@ class MemoryTest : public ::testing::Test {
       deferred_backing->CompleteReturns();
     }
     iree_hal_buffer_release(workspace);
+    if (virtual_pool) {
+      const auto frontier = loom_serve_execution_frontier(execution);
+      for (size_t i = 0; i < IREE_ARRAYSIZE(frontier.semaphores); ++i) {
+        iree_status_ignore(loom_serve_virtual_pool_wait(
+            virtual_pool, frontier.semaphores[i], frontier.values[i]));
+      }
+      AwaitVirtualPool();
+    }
     if (execution) {
       IREE_ASSERT_OK(loom_serve_execution_drain(execution));
     }
+    if (logical_pool) {
+      // Raw queue captures can retire after timeline readiness.
+      while (iree_atomic_ref_count_load(&logical_pool->resource.ref_count) >
+             1) {
+        loom_serve_workspace_statistics(loom_serve_device_workspace(device));
+        std::this_thread::yield();
+      }
+      iree_hal_pool_release(logical_pool);
+    }
+    IREE_ASSERT_OK(loom_serve_virtual_pool_free(virtual_pool));
     IREE_ASSERT_OK(loom_serve_virtual_buffer_free(first));
     IREE_ASSERT_OK(loom_serve_virtual_buffer_free(second));
     IREE_ASSERT_OK(loom_serve_virtual_buffer_free(third));
@@ -285,10 +307,56 @@ class MemoryTest : public ::testing::Test {
         loom_serve_execution_transfer(execution, 1, operations, &completion));
     IREE_ASSERT_OK(loom_serve_execution_transfer(execution, 1, operations + 1,
                                                  &completion));
-    IREE_ASSERT_OK(loom_serve_execution_wait(execution, completion));
+    if (virtual_pool) {
+      const auto frontier = loom_serve_execution_frontier(execution);
+      IREE_ASSERT_OK(loom_serve_virtual_pool_wait(
+          virtual_pool, frontier.semaphores[0], completion));
+    } else {
+      IREE_ASSERT_OK(loom_serve_execution_wait(execution, completion));
+    }
     for (const auto word : observed) {
       EXPECT_EQ(word, value);
     }
+  }
+
+  void CreateVirtualPool() {
+    IREE_ASSERT_OK(loom_serve_virtual_pool_allocate(
+        pool, loom_serve_device_weight_geometry(device),
+        iree_allocator_system(), &virtual_pool));
+    const iree_hal_tlsf_pool_options_t options = {
+        .tlsf_options = {.range_length = kSlabSize, .alignment = 256},
+    };
+    IREE_ASSERT_OK(iree_hal_tlsf_pool_create(
+        loom_serve_virtual_pool_handle(virtual_pool), &options,
+        iree_allocator_system(), &logical_pool));
+  }
+
+  void AwaitVirtualPool() {
+    iree_notification_t notification;
+    iree_notification_initialize(&notification);
+    loom_serve_virtual_pool_set_observer(
+        virtual_pool, {[](void* user_data) {
+                         iree_notification_post(
+                             static_cast<iree_notification_t*>(user_data),
+                             IREE_ALL_WAITERS);
+                       },
+                       &notification});
+    iree_status_t status = iree_ok_status();
+    bool pending = true;
+    while (pending && iree_status_is_ok(status)) {
+      const auto token = iree_notification_prepare_wait(&notification);
+      status = loom_serve_virtual_pool_advance(virtual_pool);
+      pending = loom_serve_virtual_pool_is_pending(virtual_pool);
+      if (pending && iree_status_is_ok(status)) {
+        iree_notification_commit_wait(&notification, token, IREE_DURATION_ZERO,
+                                      IREE_TIME_INFINITE_FUTURE);
+      } else {
+        iree_notification_cancel_wait(&notification);
+      }
+    }
+    loom_serve_virtual_pool_set_observer(virtual_pool, {});
+    iree_notification_deinitialize(&notification);
+    IREE_EXPECT_OK(status);
   }
 
   void CheckRetained(iree_hal_buffer_t* buffer, uint64_t offset,
@@ -344,6 +412,10 @@ class MemoryTest : public ::testing::Test {
   loom_serve_virtual_buffer_t* third = nullptr;
   // Private command allocation retained until its queue release is submitted.
   iree_hal_buffer_t* workspace = nullptr;
+  // Queue-facing source whose cold work advances on this test's owner.
+  loom_serve_virtual_pool_t* virtual_pool = nullptr;
+  // Persistent logical allocator above virtual_pool.
+  iree_hal_pool_t* logical_pool = nullptr;
 };
 
 // These cases hold a native allocation worker while other device work proceeds.
@@ -592,6 +664,270 @@ TEST_F(MemoryTest, VirtualCommandPoolReusesRetainedSlabsAcrossTrimAndRegrowth) {
   iree_hal_pool_stats_t regrown;
   iree_hal_pool_query_stats(deferred_backing, &regrown);
   EXPECT_EQ(regrown.reserve_count, baseline.reserve_count + 2);
+}
+
+TEST_F(MemoryTest, QueueDrivenVirtualBackingReusesRetainedSlabs) {
+  ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
+  const auto geometry = loom_serve_device_weight_geometry(device);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_allocate(
+      pool, geometry, 2 * kSlabSize, 256, &statistics[0], &first));
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 2 * kSlabSize));
+  ASSERT_NO_FATAL_FAILURE(
+      RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x13579bdf));
+  loom_serve_virtual_buffer_begin_trim(first);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
+  iree_hal_pool_stats_t baseline;
+  iree_hal_pool_query_stats(deferred_backing, &baseline);
+  ASSERT_NO_FATAL_FAILURE(CreateVirtualPool());
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        loom_serve_virtual_pool_free(virtual_pool));
+  const iree_hal_buffer_backing_facts_t* address_owner = nullptr;
+  auto execute = [&] {
+    // A dedicated logical extent still obtains two ordinary physical slabs.
+    const auto request =
+        iree_hal_make_pool_reservation_request(3 * kSlabSize / 2, 256);
+    iree_hal_buffer_t* buffer = nullptr;
+    IREE_ASSERT_OK(loom_serve_execution_alloca_from_pool(
+        execution, logical_pool, 1, &request, &buffer));
+    std::unique_ptr<iree_hal_buffer_t, decltype(&iree_hal_buffer_release)>
+        allocation(buffer, iree_hal_buffer_release);
+    ASSERT_NO_FATAL_FAILURE(RoundTrip(buffer, kSlabSize - 128, 0xabcdef01));
+    const auto* backing = iree_hal_buffer_memory_view(buffer).backing;
+    if (!address_owner) {
+      address_owner = backing;
+    }
+    EXPECT_EQ(backing, address_owner);
+    uint64_t completion = 0;
+    IREE_ASSERT_OK(
+        loom_serve_execution_dealloca(execution, buffer, &completion));
+    allocation.reset();
+    const auto frontier = loom_serve_execution_frontier(execution);
+    IREE_ASSERT_OK(loom_serve_virtual_pool_wait(
+        virtual_pool, frontier.semaphores[0], completion));
+    IREE_ASSERT_OK(loom_serve_execution_drain(execution));
+    while (true) {
+      loom_serve_workspace_statistics(loom_serve_device_workspace(device));
+      iree_hal_pool_stats_t logical;
+      iree_hal_pool_query_stats(logical_pool, &logical);
+      if (!logical.reservation_count) {
+        break;
+      }
+      std::this_thread::yield();
+    }
+  };
+  ASSERT_NO_FATAL_FAILURE(execute());
+  ASSERT_NO_FATAL_FAILURE(execute());
+  iree_hal_pool_stats_t reused;
+  iree_hal_pool_query_stats(deferred_backing, &reused);
+  EXPECT_EQ(reused.reserve_count, baseline.reserve_count);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes,
+            2 * kSlabSize);
+
+  iree_hal_pool_trim(loom_serve_virtual_pool_handle(virtual_pool),
+                     IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
+  ASSERT_NO_FATAL_FAILURE(AwaitVirtualPool());
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_commit(first, 0, 2 * kSlabSize));
+  ASSERT_NO_FATAL_FAILURE(
+      RoundTrip(loom_serve_virtual_buffer_handle(first), 0, 0x2468ace0));
+  iree_hal_pool_query_stats(deferred_backing, &reused);
+  EXPECT_EQ(reused.reserve_count, baseline.reserve_count);
+  loom_serve_virtual_buffer_begin_trim(first);
+  IREE_ASSERT_OK(loom_serve_virtual_buffer_trim(first));
+  loom_serve_memory_pool_trim(pool, 0);
+  IREE_ASSERT_OK(loom_serve_memory_pool_await(pool));
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes, 0u);
+  ASSERT_NO_FATAL_FAILURE(execute());
+  iree_hal_pool_query_stats(deferred_backing, &reused);
+  EXPECT_EQ(reused.reserve_count, baseline.reserve_count + 2);
+}
+
+TEST_F(MemoryTest, VirtualBackingBatchDenialPreservesWarmPrefix) {
+  ASSERT_NO_FATAL_FAILURE(UseDeferredBacking());
+  ASSERT_NO_FATAL_FAILURE(CreateVirtualPool());
+  auto* source = loom_serve_virtual_pool_handle(virtual_pool);
+  struct Completion {
+    // Number of accepted callbacks, including inline warm completion.
+    size_t count = 0;
+    // Capacity outcome from the most recent completion.
+    iree_hal_pool_acquire_result_t result = IREE_HAL_POOL_ACQUIRE_EXHAUSTED;
+    // Owned failure, consumed by the test after completion.
+    iree_status_t status = iree_ok_status();
+  } completion;
+  const iree_hal_pool_acquire_callback_t callback = {
+      .fn =
+          [](void* user_data, iree_status_t status,
+             iree_hal_pool_acquire_result_t result) {
+            auto* completion = static_cast<Completion*>(user_data);
+            ++completion->count;
+            completion->result = result;
+            completion->status = status;
+          },
+      .user_data = &completion,
+  };
+  const iree_hal_pool_reservation_request_t requests[] = {
+      iree_hal_make_pool_reservation_request(2 * kSlabSize, 256),
+      iree_hal_make_pool_reservation_request(2 * kSlabSize, 256),
+  };
+  iree_hal_pool_reservation_t reservations[2] = {};
+  iree_hal_pool_acquire_info_t infos[2] = {};
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      source, 1, requests, nullptr, reservations, infos, callback,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  ASSERT_NO_FATAL_FAILURE(AwaitVirtualPool());
+  IREE_ASSERT_OK(completion.status);
+  const auto original = reservations[0];
+  iree_hal_pool_reservation_view_t view;
+  ASSERT_TRUE(
+      iree_hal_pool_query_reservation_views(source, 1, reservations, &view));
+  ASSERT_NO_FATAL_FAILURE(RoundTrip(view.buffer, 0, 0x12345678));
+  iree_hal_pool_release_reservations(source, 1, reservations,
+                                     infos[0].reuse_frontier);
+
+  // The warm first range must roll back when the complete four-slab request
+  // cannot fit the three-slab budget. Caller output slots stay untouched.
+  reservations[0].block_handle = 17;
+  reservations[1].block_handle = 29;
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      source, 2, requests, nullptr, reservations, infos, callback,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  ASSERT_NO_FATAL_FAILURE(AwaitVirtualPool());
+  IREE_ASSERT_OK(completion.status);
+  EXPECT_EQ(completion.result, IREE_HAL_POOL_ACQUIRE_OVER_BUDGET);
+  EXPECT_EQ(reservations[0].block_handle, 17u);
+  EXPECT_EQ(reservations[1].block_handle, 29u);
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes,
+            2 * kSlabSize);
+
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      source, 1, requests, nullptr, reservations, infos, callback,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  // No owner pass is needed for a warm hit after rollback.
+  EXPECT_EQ(completion.count, 3u);
+  IREE_ASSERT_OK(completion.status);
+  EXPECT_EQ(reservations[0].block_handle, original.block_handle);
+  ASSERT_TRUE(
+      iree_hal_pool_query_reservation_views(source, 1, reservations, &view));
+  ASSERT_NO_FATAL_FAILURE(CheckRetained(view.buffer, 0, 0x12345678));
+  iree_hal_buffer_t* owned = nullptr;
+  IREE_ASSERT_OK(iree_hal_pool_materialize_reservations(
+      source, 1, requests, reservations,
+      IREE_HAL_POOL_MATERIALIZE_FLAG_TRANSFER_RESERVATION_OWNERSHIP, &owned));
+  iree_hal_buffer_release(owned);
+  iree_hal_pool_stats_t statistics;
+  iree_hal_pool_query_stats(source, &statistics);
+  EXPECT_EQ(statistics.reservation_count, 0u);
+}
+
+TEST_F(MemoryTest,
+       VirtualBackingMappingFailureCompletesWithoutPublishingViews) {
+  mapping_queue.Initialize(loom_serve_device_transfer_queue(device));
+  ASSERT_NO_FATAL_FAILURE(UseDeferredBacking(3 * kSlabSize, &mapping_queue));
+  ASSERT_NO_FATAL_FAILURE(CreateVirtualPool());
+  mapping_queue.fail_next_map = true;
+  struct Completion {
+    // Accepted transaction has delivered its one terminal callback.
+    bool complete = false;
+    // Owned failure delivered independently of physical cleanup.
+    iree_status_t status = iree_ok_status();
+  } completion;
+  const iree_hal_pool_acquire_callback_t callback = {
+      .fn =
+          [](void* user_data, iree_status_t status,
+             iree_hal_pool_acquire_result_t result) {
+            auto* completion = static_cast<Completion*>(user_data);
+            completion->complete = true;
+            completion->status = status;
+          },
+      .user_data = &completion,
+  };
+  const auto request = iree_hal_make_pool_reservation_request(kSlabSize, 256);
+  iree_hal_pool_reservation_t reservation = {.block_handle = 17};
+  iree_hal_pool_acquire_info_t info = {};
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      loom_serve_virtual_pool_handle(virtual_pool), 1, &request, nullptr,
+      &reservation, &info, callback, IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  ASSERT_NO_FATAL_FAILURE(AwaitVirtualPool());
+  ASSERT_TRUE(completion.complete);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, completion.status);
+  EXPECT_EQ(reservation.block_handle, 17u);
+  // The failed range still owns its physical storage. Checked outer cleanup,
+  // not callback failure, is what permits reuse.
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes, kSlabSize);
+}
+
+TEST_F(MemoryTest, VirtualBackingTrimWaitsForActualHistoryCompletion) {
+  ASSERT_NO_FATAL_FAILURE(CreateVirtualPool());
+  auto* source = loom_serve_virtual_pool_handle(virtual_pool);
+  struct Completion {
+    // Accepted acquisitions deliver their terminal result on the owner.
+    size_t count = 0;
+    // Owned status consumed immediately after each completed acquisition.
+    iree_status_t status = iree_ok_status();
+  } completion;
+  const iree_hal_pool_acquire_callback_t callback = {
+      .fn =
+          [](void* user_data, iree_status_t status,
+             iree_hal_pool_acquire_result_t result) {
+            auto* completion = static_cast<Completion*>(user_data);
+            ++completion->count;
+            completion->status = status;
+          },
+      .user_data = &completion,
+  };
+  const auto request = iree_hal_make_pool_reservation_request(kSlabSize, 256);
+  iree_hal_pool_reservation_t reservation = {};
+  iree_hal_pool_acquire_info_t info = {};
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      source, 1, &request, nullptr, &reservation, &info, callback,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  ASSERT_NO_FATAL_FAILURE(AwaitVirtualPool());
+  IREE_ASSERT_OK(completion.status);
+  iree_hal_pool_reservation_view_t view;
+  ASSERT_TRUE(
+      iree_hal_pool_query_reservation_views(source, 1, &reservation, &view));
+  ASSERT_NO_FATAL_FAILURE(RoundTrip(view.buffer, 0, 0x23571113));
+
+  // An unpublished immutable join supplies a real pending completion point
+  // without registering a colliding native queue axis or creating a thread.
+  iree_async_frontier_timeline_t* timeline = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_tracker_acquire_timeline(
+      source->frontier_tracker, &timeline));
+  std::unique_ptr<iree_async_frontier_timeline_t,
+                  decltype(&iree_async_frontier_timeline_release)>
+      timeline_owner(timeline, iree_async_frontier_timeline_release);
+  iree_async_frontier_join_t* join = nullptr;
+  IREE_ASSERT_OK(iree_async_frontier_join_allocate(timeline, &join));
+  const auto point = iree_async_frontier_join_begin(join);
+  std::unique_ptr<iree_async_frontier_join_t,
+                  decltype(&iree_async_frontier_join_publish)>
+      completion_gate(join, iree_async_frontier_join_publish);
+  IREE_ASYNC_FIXED_FRONTIER_TYPE(Frontier, 1);
+  const Frontier history = {.entry_count = 1, .entries = {point}};
+  const auto* frontier = iree_async_fixed_frontier_as_const_frontier(&history);
+  iree_hal_pool_release_reservations(source, 1, &reservation, frontier);
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservations(
+      source, 1, &request, frontier, &reservation, &info, callback,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE));
+  EXPECT_EQ(completion.count, 2u);
+  IREE_ASSERT_OK(completion.status);
+  EXPECT_EQ(info.result, IREE_HAL_POOL_ACQUIRE_OK);
+  // Dominance licenses ordered logical reuse, not physical detach.
+  iree_hal_pool_release_reservations(source, 1, &reservation,
+                                     info.reuse_frontier);
+  iree_hal_pool_trim(source, IREE_HAL_POOL_TRIM_FLAG_ALL, 0);
+  IREE_ASSERT_OK(loom_serve_virtual_pool_advance(virtual_pool));
+  EXPECT_TRUE(loom_serve_virtual_pool_is_pending(virtual_pool));
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).committed_bytes, kSlabSize);
+  ASSERT_NO_FATAL_FAILURE(CheckRetained(view.buffer, 0, 0x23571113));
+
+  completion_gate.reset();
+  timeline_owner.reset();
+  ASSERT_NO_FATAL_FAILURE(AwaitVirtualPool());
+  iree_hal_pool_stats_t detached;
+  iree_hal_pool_query_stats(source, &detached);
+  EXPECT_EQ(detached.bytes_committed, 0u);
+  // The common cache still owns the physical slab, available to any role.
+  EXPECT_EQ(loom_serve_memory_pool_statistics(pool).cached_bytes, kSlabSize);
 }
 
 TEST_F(MemoryTest, WeightTailReusesStateClassAcrossTwoCompleteSwaps) {

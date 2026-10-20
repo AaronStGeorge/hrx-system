@@ -21,6 +21,21 @@ exports_files(
 )
 
 loom_cc_library(
+    name = "virtual_pool",
+    srcs = ["virtual_pool.c"],
+    hdrs = ["virtual_pool.h"],
+    deps = [
+        ":memory",
+        "//loom/src/loom/serve/runtime/host:wake",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/memory:buffer_range",
+    ],
+)
+
+loom_cc_library(
     name = "memory",
     srcs = ["memory.c"],
     hdrs = ["memory.h"],
@@ -94,11 +109,14 @@ loom_cc_library(
     srcs = ["memory_test.cc"],
     deps = [
         ":memory",
+        ":virtual_pool",
         "//loom/src/loom/serve/runtime/device",
         "//loom/src/loom/serve/runtime/execution",
         "//loom/src/loom/serve/testing:device",
         "//loom/src/loom/serve/testing:native_allocator",
+        "//runtime/src/iree/async",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/memory:fixed_block_pool",
         "//runtime/src/iree/hal/memory:tlsf_pool",

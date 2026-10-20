@@ -1348,9 +1348,15 @@ iree_status_t loom_serve_virtual_buffer_free(
   loom_serve_memory_pool_t* pool = buffer->pool;
   loom_serve_memory_pool_collect(pool);
   // Checked removal remains available after a partial failed mapping batch.
-  // Sources stay owned if detach fails, so the caller can retry cleanup.
-  IREE_RETURN_IF_ERROR(
-      iree_hal_virtual_buffer_detach(buffer->handle, pool->mapping_scope));
+  // Sources stay owned if detach fails, so the caller can retry cleanup. A
+  // clean, empty reservation has no mapping to remove; in particular its
+  // construction failure cleanup needs no native edit.
+  if (buffer->backed_regular_count ||
+      buffer->slabs[buffer->slab_count - 1].physical ||
+      !iree_status_is_ok(buffer->failure)) {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_virtual_buffer_detach(buffer->handle, pool->mapping_scope));
+  }
   for (iree_host_size_t i = 0; i < buffer->slab_count; ++i) {
     IREE_ASSERT(!buffer->slabs[i].in_flight);
     iree_hal_buffer_release(buffer->slabs[i].physical);

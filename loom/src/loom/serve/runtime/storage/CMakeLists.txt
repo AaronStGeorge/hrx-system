@@ -12,6 +12,26 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_VM)
 loom_cc_library(
   NAME
+    virtual_pool
+  HDRS
+    "virtual_pool.h"
+  SRCS
+    "virtual_pool.c"
+  DEPS
+    ::memory
+    iree::async
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::memory::buffer_range
+    loom::serve::runtime::host::wake
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_VM)
+loom_cc_library(
+  NAME
     memory
   HDRS
     "memory.h"
@@ -117,7 +137,10 @@ loom_cc_library(
     "memory_test.cc"
   DEPS
     ::memory
+    ::virtual_pool
+    iree::async
     iree::base
+    iree::base::threading
     iree::hal
     iree::hal::memory::fixed_block_pool
     iree::hal::memory::tlsf_pool
