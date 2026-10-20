@@ -865,9 +865,10 @@ TEST_F(MemoryBackendTest, PrivateTransferViewsFollowEachStorageRoute) {
   }
   native_.required_flags = 0;
   native_.registration_enabled = true;
-  const iree_hal_external_storage_class_t storage_class = {
+  static constexpr iree_hal_external_storage_class_t storage_class = {
       IREE_HAL_EXTERNAL_STORAGE_TYPE_HOST_POINTER, {0, 0}};
-  const iree_hal_pool_import_class_t import_class = {storage_class, {}};
+  static constexpr iree_hal_pool_import_class_t import_class = {storage_class,
+                                                                {}};
   pool_options_.imports = {1, &import_class};
   for (auto [host_visible, file_capable] :
        {std::pair{false, false}, std::pair{false, true}, std::pair{true, false},
